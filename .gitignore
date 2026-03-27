@@ -1,0 +1,18 @@
+node_modules/
+dist/
+dist-electron/
+release/
+*.log
+*.local
+.env
+.env.*
+.DS_Store
+Thumbs.db
+
+# TypeScript
+*.tsbuildinfo
+
+# Test outputs
+playwright-report/
+test-results/
+coverage/
