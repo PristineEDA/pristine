@@ -1,5 +1,5 @@
 import {
-  Files, Search, GitBranch, Bug, Puzzle, Settings, ChevronRight,
+  Files, Search, GitBranch, Bug, Puzzle, Settings,
 } from 'lucide-react';
 
 interface ActivityBarProps {

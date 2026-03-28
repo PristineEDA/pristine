@@ -14,5 +14,5 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["electron", "vite.config.ts", "vite.config.web.ts", "vitest.config.ts", "playwright.config.ts"]
+  "include": ["electron", "e2e", "vite.config.ts", "vite.config.web.ts", "vitest.config.ts", "playwright.config.ts"]
 }

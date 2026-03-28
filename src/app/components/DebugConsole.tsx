@@ -1,5 +1,3 @@
-import { Bug } from 'lucide-react';
-
 export function DebugConsole() {
   const logs = [
     { type: 'info', text: 'Debug session not started' },

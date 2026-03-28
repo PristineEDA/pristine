@@ -3,7 +3,7 @@ import {
   FilePlus, FolderPlus, RefreshCw, ChevronsUpDown,
   AlertCircle, AlertTriangle, Info, Circle,
 } from 'lucide-react';
-import { FileNode, Problem, initialFileTree, problemsList, fileOutlines } from '../../data/mockData';
+import { Problem, initialFileTree, problemsList, fileOutlines } from '../../data/mockData';
 import { FileTreeNode } from './FileTreeNode';
 import { OutlineNode } from './OutlineNode';
 

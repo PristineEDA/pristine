@@ -7,7 +7,7 @@ import {
 import { staticChecks } from "../../data/mockData";
 
 const severityConfig: Record<
-  string,
+  "critical" | "high" | "medium" | "low",
   { color: string; bg: string; label: string }
 > = {
   critical: {
@@ -40,7 +40,12 @@ export function StaticCheckPanel({
     filter === "all"
       ? staticChecks
       : staticChecks.filter((c) => c.severity === filter);
-  const counts = { critical: 0, high: 0, medium: 0, low: 0 };
+  const counts: Record<"critical" | "high" | "medium" | "low", number> = {
+    critical: 0,
+    high: 0,
+    medium: 0,
+    low: 0,
+  };
   staticChecks.forEach((c) => counts[c.severity]++);
 
   return (

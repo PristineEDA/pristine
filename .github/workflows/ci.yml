@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+          - macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type check
+        run: pnpm typecheck
+
+      - name: Build
+        run: pnpm build
+
+      - name: Run unit tests with coverage
+        run: pnpm test:coverage
+
+      - name: Run E2E tests on Linux
+        if: runner.os == 'Linux'
+        run: xvfb-run -a pnpm test:e2e
+
+      - name: Run E2E tests on Windows and macOS
+        if: runner.os != 'Linux'
+        run: pnpm test:e2e
+
+      - name: Upload Playwright report
+        if: failure() && hashFiles('playwright-report/**') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ matrix.os }}
+          path: playwright-report
+          if-no-files-found: ignore
+
+      - name: Upload coverage report
+        if: runner.os == 'Linux' && always() && hashFiles('coverage/**') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage
+          if-no-files-found: ignore

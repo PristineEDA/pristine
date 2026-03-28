@@ -58,3 +58,15 @@ test('close button closes the main window', async () => {
 
   await expect.poll(() => app.windows().length).toBe(0);
 });
+
+test('explorer opens a file into a new editor tab', async () => {
+  const { app, window } = await launchApp();
+
+  const fileNode = window.getByTestId('file-tree-node-reg_file');
+  await expect(fileNode).toBeVisible();
+  await fileNode.click();
+
+  await expect(window.getByTestId('editor-tab-reg_file')).toBeVisible();
+
+  await app.close();
+});

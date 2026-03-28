@@ -66,7 +66,7 @@ export function TerminalPanel() {
       e.preventDefault();
       const next = Math.max(histIdx - 1, -1);
       setHistIdx(next);
-      setInput(next === -1 ? '' : cmdHistory[next]);
+      setInput(next === -1 ? '' : (cmdHistory[next] ?? ''));
     } else if (e.key === 'Tab') {
       e.preventDefault();
     }

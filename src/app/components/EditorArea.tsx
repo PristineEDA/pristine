@@ -1,7 +1,7 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useEffect } from 'react';
 import Editor, { useMonaco } from '@monaco-editor/react';
 import {
-  X, ChevronRight, AlertCircle, AlertTriangle, Split,
+  X, ChevronRight, Split,
   MoreHorizontal, Circle,
 } from 'lucide-react';
 import { fileContents, problemsList } from '../../data/mockData';
@@ -181,6 +181,7 @@ function EditorTab({
 
   return (
     <div
+      data-testid={`editor-tab-${tab.id}`}
       className={`flex items-center gap-1 px-3 h-full cursor-pointer group border-r border-ide-sidebar-bg transition-colors shrink-0 min-w-[100px] max-w-[200px] ${
         isActive
           ? 'bg-ide-bg text-white border-t-2 border-t-ide-accent'
@@ -199,6 +200,7 @@ function EditorTab({
       </span>
       {tab.modified && <Circle size={7} className="fill-white text-white shrink-0" />}
       <button
+        data-testid={`editor-tab-close-${tab.id}`}
         className="shrink-0 p-0.5 rounded hover:bg-ide-border opacity-0 group-hover:opacity-100 transition-opacity"
         onClick={(e) => { e.stopPropagation(); onClose(); }}
       >

@@ -1,6 +1,6 @@
 import {
   GitBranch, AlertCircle, AlertTriangle, Bell, CheckCircle2,
-  Cpu, Wifi, ChevronRight, Zap,
+  Zap,
 } from 'lucide-react';
 import { problemsList } from '../../data/mockData';
 

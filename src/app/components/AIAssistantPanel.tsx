@@ -62,7 +62,7 @@ export function AIAssistantPanel() {
     el.style.height = Math.min(el.scrollHeight, 120) + "px";
   };
 
-  const simulatedResponses: Record<string, string> = {
+  const simulatedResponses = {
     default:
       "I understand your question. Based on the current RTL code context, I recommend checking the signal drive logic and timing constraints. Would you like me to generate a specific code example?",
   };

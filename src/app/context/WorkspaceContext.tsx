@@ -73,7 +73,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       const next = prev.filter((t) => t.id !== fileId);
       if (fileId === activeTabId && next.length > 0) {
         const newActive = next[Math.min(idx, next.length - 1)];
-        setActiveTabId(newActive.id);
+        if (newActive) {
+          setActiveTabId(newActive.id);
+        }
       }
       return next;
     });

@@ -90,6 +90,7 @@ export const FileTreeNode = memo(function FileTreeNode({
   return (
     <div>
       <div
+        data-testid={`file-tree-node-${node.id}`}
         className={`flex items-center gap-1 h-6 cursor-pointer group hover:bg-ide-hover transition-colors ${
           isActive ? 'bg-ide-selection text-white' : 'text-ide-text'
         }`}
