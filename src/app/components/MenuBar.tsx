@@ -81,9 +81,9 @@ export function MenuBar() {
       {/* App icon / title */}
       <div className="flex items-center gap-1.5 px-3 pr-4" style={noDrag as React.CSSProperties}>
         <div className="w-4 h-4 rounded-sm bg-[#0e639c] flex items-center justify-center">
-          <span className="text-white" style={{ fontSize: '9px', fontWeight: 700 }}>R</span>
+          <span className="text-white" style={{ fontSize: '9px', fontWeight: 700 }}>P</span>
         </div>
-        <span className="text-[#cccccc]" style={{ fontSize: '12px' }}>ECOS Studio</span>
+        <span className="text-[#cccccc]" style={{ fontSize: '12px' }}>Pristine</span>
       </div>
 
       {/* Menu items */}

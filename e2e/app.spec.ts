@@ -10,7 +10,7 @@ test('app launches and shows main UI', async () => {
   await window.waitForLoadState('domcontentloaded');
 
   const title = await window.title();
-  expect(title).toContain('RTL Code Editor');
+  expect(title).toContain('Pristine');
 
   await app.close();
 });
