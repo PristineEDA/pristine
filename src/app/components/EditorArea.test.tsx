@@ -2,6 +2,7 @@ import { createRef } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { EditorArea } from './EditorArea';
+import { draculaThemeDefinition } from '../editor/draculaTheme';
 
 const { mockEditorInstance, mockModel, mockMonaco, mockEditorComponent } = vi.hoisted(() => {
   const editorInstance = {
@@ -208,6 +209,83 @@ describe('EditorArea', () => {
     expect(mockMonaco.languages.setMonarchTokensProvider).toHaveBeenCalledWith('constraints', expect.any(Object));
   });
 
+  it('routes Makefile and .mk files to dedicated makefile highlighting', async () => {
+    const { rerender } = render(
+      <EditorArea
+        tabs={[{ id: 'build/Makefile', name: 'Makefile' }]}
+        activeTabId="build/Makefile"
+        onTabChange={vi.fn()}
+        onTabClose={vi.fn()}
+        editorRef={createRef()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(window.electronAPI!.fs.readFile).toHaveBeenCalledWith('build/Makefile', 'utf-8');
+    });
+    expect(screen.getByTestId('editor-tab-badge-build/Makefile')).toHaveTextContent('MK');
+    expect(screen.getByTestId('monaco-editor')).toHaveAttribute('data-language', 'makefile');
+    expect(mockMonaco.languages.register).toHaveBeenCalledWith({ id: 'makefile', extensions: ['.mk'], filenames: ['Makefile'] });
+    expect(mockMonaco.languages.setMonarchTokensProvider).toHaveBeenCalledWith('makefile', expect.any(Object));
+    expect(mockMonaco.languages.registerCompletionItemProvider).toHaveBeenCalledWith('makefile', expect.any(Object));
+
+    const makefileProviderCall = mockMonaco.languages.setMonarchTokensProvider.mock.calls.find(
+      ([languageId]) => languageId === 'makefile',
+    );
+    const makefileProvider = makefileProviderCall?.[1] as any;
+    expect(makefileProvider.tokenizer.makeVariable).toEqual(
+      expect.arrayContaining([
+        [/\$\(/, 'variable', '@push'],
+        [/\)/, 'variable', '@pop'],
+      ]),
+    );
+    expect(makefileProvider.tokenizer.root).toEqual(
+      expect.arrayContaining([
+        [/^\t+/, 'meta.recipe', '@recipeCommand'],
+        [/^(\s*)([A-Za-z0-9_.%/\-]+)(\s*)(:=)/, ['', 'variable', '', 'operator.assignment.immediate'], '@assignmentValue'],
+        [/^(\s*)([A-Za-z0-9_.%/\-]+)(\s*)(\+=)/, ['', 'variable', '', 'operator.assignment.append'], '@assignmentValue'],
+        [/^(\s*)([A-Za-z0-9_.%/\-]+)(\s*)(\?=)/, ['', 'variable', '', 'operator.assignment.conditional'], '@assignmentValue'],
+        [/^(\s*)([A-Za-z0-9_.%/\-]+)(\s*)(=)/, ['', 'variable', '', 'operator.assignment.recursive'], '@assignmentValue'],
+      ]),
+    );
+    expect(makefileProvider.tokenizer.prerequisites).toEqual(
+      expect.arrayContaining([
+        [/[A-Za-z0-9_.%/\-]+/, 'identifier'],
+      ]),
+    );
+    expect(makefileProvider.tokenizer.recipeCommand).toEqual(
+      expect.arrayContaining([
+        [/\$(?:[@%<?^*+|])/, 'variable.automatic'],
+        [/\$\$\{?[A-Za-z_][\w]*\}?/, 'variable.shell'],
+      ]),
+    );
+    expect(draculaThemeDefinition.rules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ token: 'variable.automatic', foreground: 'ffb86c' }),
+        expect.objectContaining({ token: 'support.function.shell', foreground: '50fa7b' }),
+        expect.objectContaining({ token: 'operator.assignment.immediate', foreground: 'ff79c6' }),
+        expect.objectContaining({ token: 'operator.assignment.append', foreground: '50fa7b' }),
+        expect.objectContaining({ token: 'operator.assignment.conditional', foreground: 'bd93f9' }),
+        expect.objectContaining({ token: 'operator.assignment.recursive', foreground: 'ffb86c' }),
+      ]),
+    );
+
+    rerender(
+      <EditorArea
+        tabs={[{ id: 'scripts/common.mk', name: 'common.mk' }]}
+        activeTabId="scripts/common.mk"
+        onTabChange={vi.fn()}
+        onTabClose={vi.fn()}
+        editorRef={createRef()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(window.electronAPI!.fs.readFile).toHaveBeenCalledWith('scripts/common.mk', 'utf-8');
+    });
+    expect(screen.getByTestId('monaco-editor')).toHaveAttribute('data-language', 'makefile');
+  });
+
   it('configures monaco, loads file content, reacts to cursor changes, and jumps to the target line', async () => {
     const onCursorChange = vi.fn();
     const editorRef = createRef<any>();
@@ -232,7 +310,7 @@ describe('EditorArea', () => {
     expect(screen.getByText('retroSoC')).toBeInTheDocument();
     expect(screen.getAllByText('tb_cpu_top.sv')).toHaveLength(2);
     expect(mockMonaco.languages.register).toHaveBeenCalled();
-    expect(mockMonaco.languages.setMonarchTokensProvider).toHaveBeenCalledTimes(6);
+    expect(mockMonaco.languages.setMonarchTokensProvider).toHaveBeenCalledTimes(7);
     expect(mockMonaco.editor.defineTheme).toHaveBeenCalled();
     expect(mockMonaco.editor.setModelMarkers).toHaveBeenCalledWith(
       mockModel,

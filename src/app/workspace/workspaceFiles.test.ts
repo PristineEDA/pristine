@@ -2,6 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { getEditorLanguage, getEditorLanguageLabel } from './workspaceFiles';
 
 describe('workspaceFiles language helpers', () => {
+  it('routes Makefile and .mk files to the makefile editor language', () => {
+    expect(getEditorLanguage('Makefile')).toBe('makefile');
+    expect(getEditorLanguage('build/Makefile')).toBe('makefile');
+    expect(getEditorLanguage('scripts/common.mk')).toBe('makefile');
+  });
+
   it('routes .s and .S files to the assembly editor language', () => {
     expect(getEditorLanguage('startup/crt0.s')).toBe('assembly');
     expect(getEditorLanguage('startup/boot.S')).toBe('assembly');
@@ -17,6 +23,12 @@ describe('workspaceFiles language helpers', () => {
   it('returns Assembly as the status-bar label for .s and .S files', () => {
     expect(getEditorLanguageLabel('startup/crt0.s')).toBe('Assembly');
     expect(getEditorLanguageLabel('startup/boot.S')).toBe('Assembly');
+  });
+
+  it('returns Makefile as the status-bar label for Makefile and .mk files', () => {
+    expect(getEditorLanguageLabel('Makefile')).toBe('Makefile');
+    expect(getEditorLanguageLabel('build/Makefile')).toBe('Makefile');
+    expect(getEditorLanguageLabel('scripts/common.mk')).toBe('Makefile');
   });
 
   it('returns specialized labels for shell, Tcl, XDC, and SDC files', () => {

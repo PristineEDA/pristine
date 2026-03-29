@@ -55,6 +55,20 @@ const constraintKeywords = [
   'get_ports', 'get_pins', 'get_cells', 'get_nets', 'get_clocks', 'current_design', 'current_instance',
 ];
 
+const makefileKeywords = [
+  'include', 'ifdef', 'ifndef', 'ifeq', 'ifneq', 'else', 'endif', 'override', 'export', 'unexport',
+  'define', 'endef', 'undefine', 'private', 'vpath', 'load', 'sinclude', '-include', 'call', 'eval',
+  'foreach', 'if', 'or', 'and', 'shell', 'wildcard', 'patsubst', 'subst', 'filter', 'filter-out',
+  'sort', 'word', 'wordlist', 'words', 'firstword', 'lastword', 'dir', 'notdir', 'basename', 'suffix',
+  'addprefix', 'addsuffix', 'join', 'abspath', 'realpath', 'origin', 'flavor', 'value',
+];
+
+const shellCommandKeywords = [
+  'if', 'then', 'else', 'elif', 'fi', 'for', 'while', 'until', 'do', 'done', 'case', 'esac',
+  'in', 'function', 'select', 'time', 'coproc', 'break', 'continue', 'return', 'export',
+  'unset', 'readonly', 'local', 'alias', 'eval', 'exec', 'exit', 'test',
+];
+
 function createRange(model: any, position: any) {
   const currentWord = model.getWordUntilPosition(position);
   return {
@@ -98,6 +112,9 @@ export function registerEditorLanguages(monaco: any): void {
   }
   if (!languages.find((language: any) => language.id === 'constraints')) {
     monaco.languages.register({ id: 'constraints', extensions: ['.xdc', '.sdc'] });
+  }
+  if (!languages.find((language: any) => language.id === 'makefile')) {
+    monaco.languages.register({ id: 'makefile', extensions: ['.mk'], filenames: ['Makefile'] });
   }
 
   const verilogTokenProvider = {
@@ -227,12 +244,112 @@ export function registerEditorLanguages(monaco: any): void {
     },
   };
 
+  const makefileTokenProvider = {
+    defaultToken: '',
+    keywords: makefileKeywords,
+    shellCommandKeywords,
+    tokenizer: {
+      root: [
+        [/^\s*#.*$/, 'comment'],
+        [/^\t+/, 'meta.recipe', '@recipeCommand'],
+        [/^(\s*)([A-Za-z0-9_.%/\-]+)(\s*)(:=)/, ['', 'variable', '', 'operator.assignment.immediate'], '@assignmentValue'],
+        [/^(\s*)([A-Za-z0-9_.%/\-]+)(\s*)(\+=)/, ['', 'variable', '', 'operator.assignment.append'], '@assignmentValue'],
+        [/^(\s*)([A-Za-z0-9_.%/\-]+)(\s*)(\?=)/, ['', 'variable', '', 'operator.assignment.conditional'], '@assignmentValue'],
+        [/^(\s*)([A-Za-z0-9_.%/\-]+)(\s*)(=)/, ['', 'variable', '', 'operator.assignment.recursive'], '@assignmentValue'],
+        [/^(\s*)([A-Za-z0-9_.%/\-]+)(\s*)(::?)/, ['', 'type', '', 'delimiter'], '@prerequisites'],
+        [/\$\(/, 'variable', '@makeVariable'],
+        [/\$\{/, 'variable', '@makeBracedVariable'],
+        [/\$(?:[@%<?^*+|])/, 'variable.automatic'],
+        [/\b\d+\b/, 'number'],
+        [/"([^"\\]|\\.)*$/, 'string.invalid'],
+        [/"/, 'string', '@string'],
+        [/-[A-Za-z_][\w-]*/, 'type'],
+        [/[A-Za-z_][\w-]*/, { cases: { '@keywords': 'keyword', '@default': 'identifier' } }],
+        [/[|&;()<>]+/, 'operator'],
+      ],
+      prerequisites: [
+        [/\$\(/, 'variable', '@makeVariable'],
+        [/\$\{/, 'variable', '@makeBracedVariable'],
+        [/\$(?:[@%<?^*+|])/, 'variable.automatic'],
+        [/\|/, 'operator'],
+        [/^\s*#.*$/, 'comment', '@pop'],
+        [/[A-Za-z0-9_.%/\-]+/, 'identifier'],
+        [/\s+/, ''],
+        [/$/, '', '@pop'],
+      ],
+      assignmentValue: [
+        [/\$\(/, 'variable', '@makeVariable'],
+        [/\$\{/, 'variable', '@makeBracedVariable'],
+        [/\$(?:[@%<?^*+|])/, 'variable.automatic'],
+        [/^\s*#.*$/, 'comment', '@pop'],
+        [/"([^"\\]|\\.)*$/, 'string.invalid'],
+        [/"/, 'string', '@string'],
+        [/'[^']*'/, 'string'],
+        [/\b\d+\b/, 'number'],
+        [/[A-Za-z_][\w./-]*/, { cases: { '@keywords': 'keyword', '@default': 'identifier' } }],
+        [/[|&;()<>]+/, 'operator'],
+        [/\s+/, ''],
+        [/$/, '', '@pop'],
+      ],
+      makeVariable: [
+        [/\$\(/, 'variable', '@push'],
+        [/\$\{/, 'variable', '@makeBracedVariable'],
+        [/\)/, 'variable', '@pop'],
+        [/[^$(){}]+/, 'variable'],
+        [/[$(){}]/, 'variable'],
+      ],
+      makeBracedVariable: [
+        [/\$\{/, 'variable', '@push'],
+        [/\$\(/, 'variable', '@makeVariable'],
+        [/\}/, 'variable', '@pop'],
+        [/[^$(){}]+/, 'variable'],
+        [/[$(){}]/, 'variable'],
+      ],
+      recipeCommand: [
+        [/\$\(/, 'variable', '@makeVariable'],
+        [/\$\{/, 'variable', '@makeBracedVariable'],
+        [/\$(?:[@%<?^*+|])/, 'variable.automatic'],
+        [/\$\$\{?[A-Za-z_][\w]*\}?/, 'variable.shell'],
+        [/^\s*#.*$/, 'comment', '@pop'],
+        [/"([^"\\]|\\.)*$/, 'string.invalid'],
+        [/"/, 'string', '@string'],
+        [/'[^']*'/, 'string'],
+        [/\b\d+\b/, 'number'],
+        [/[A-Za-z_][\w./-]*/, { cases: { '@shellCommandKeywords': 'keyword', '@default': 'support.function.shell' } }, '@recipe'],
+        [/[;&|]+/, 'operator'],
+        [/\s+/, ''],
+        [/$/, '', '@pop'],
+      ],
+      recipe: [
+        [/\$\(/, 'variable', '@makeVariable'],
+        [/\$\{/, 'variable', '@makeBracedVariable'],
+        [/\$(?:[@%<?^*+|])/, 'variable.automatic'],
+        [/\$\$\{?[A-Za-z_][\w]*\}?/, 'variable.shell'],
+        [/^\s*#.*$/, 'comment', '@pop'],
+        [/"([^"\\]|\\.)*$/, 'string.invalid'],
+        [/"/, 'string', '@string'],
+        [/'[^']*'/, 'string'],
+        [/\b\d+\b/, 'number'],
+        [/[A-Za-z_][\w./-]*/, { cases: { '@shellCommandKeywords': 'keyword', '@default': 'identifier' } }],
+        [/[;&|]+/, 'operator', '@recipeCommand'],
+        [/\s+/, ''],
+        [/$/, '', '@pop'],
+      ],
+      string: [
+        [/[^\\"]+/, 'string'],
+        [/\\./, 'string.escape'],
+        [/"/, 'string', '@pop'],
+      ],
+    },
+  };
+
   monaco.languages.setMonarchTokensProvider('verilog', verilogTokenProvider as any);
   monaco.languages.setMonarchTokensProvider('systemverilog', verilogTokenProvider as any);
   monaco.languages.setMonarchTokensProvider('assembly', assemblyTokenProvider as any);
   monaco.languages.setMonarchTokensProvider('shell', shellTokenProvider as any);
   monaco.languages.setMonarchTokensProvider('tcl', tclTokenProvider as any);
   monaco.languages.setMonarchTokensProvider('constraints', constraintsTokenProvider as any);
+  monaco.languages.setMonarchTokensProvider('makefile', makefileTokenProvider as any);
 
   monaco.languages.registerCompletionItemProvider('verilog', {
     provideCompletionItems: (model: any, position: any) => ({ suggestions: createKeywordSuggestions(monaco, verilogKeywords, model, position) }),
@@ -267,6 +384,10 @@ export function registerEditorLanguages(monaco: any): void {
 
   monaco.languages.registerCompletionItemProvider('constraints', {
     provideCompletionItems: (model: any, position: any) => ({ suggestions: createKeywordSuggestions(monaco, constraintKeywords, model, position) }),
+  });
+
+  monaco.languages.registerCompletionItemProvider('makefile', {
+    provideCompletionItems: (model: any, position: any) => ({ suggestions: createKeywordSuggestions(monaco, makefileKeywords, model, position) }),
   });
 }
 

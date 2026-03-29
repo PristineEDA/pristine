@@ -56,6 +56,10 @@ export function getEditorLanguage(filePath: string): string {
   const normalized = normalizeWorkspacePath(filePath);
   const lowerCased = normalized.toLowerCase();
 
+  if (lowerCased === 'makefile' || lowerCased.endsWith('/makefile') || lowerCased.endsWith('.mk')) {
+    return 'makefile';
+  }
+
   if (lowerCased.endsWith('.s')) {
     return 'assembly';
   }
@@ -121,6 +125,10 @@ export function getEditorLanguage(filePath: string): string {
 
 export function getEditorLanguageLabel(filePath: string): string {
   const normalized = normalizeWorkspacePath(filePath).toLowerCase();
+
+  if (normalized === 'makefile' || normalized.endsWith('/makefile') || normalized.endsWith('.mk')) {
+    return 'Makefile';
+  }
 
   if (normalized.endsWith('.s')) {
     return 'Assembly';

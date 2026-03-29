@@ -33,5 +33,8 @@ describe('StatusBar', () => {
 
     rerender(<StatusBar activeFileId="startup/crt0.s" cursorLine={1} cursorCol={1} />);
     expect(screen.getByText('Assembly')).toBeInTheDocument();
+
+    rerender(<StatusBar activeFileId="build/Makefile" cursorLine={1} cursorCol={1} />);
+    expect(screen.getByText('Makefile')).toBeInTheDocument();
   });
 });
