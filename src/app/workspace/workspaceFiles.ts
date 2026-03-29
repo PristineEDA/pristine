@@ -52,6 +52,23 @@ export function getWorkspaceSegments(filePath: string): string[] {
   return [DEFAULT_STARTUP_PROJECT_NAME, ...normalized.split('/')];
 }
 
+export function getWorkspaceAncestorPaths(filePath: string): string[] {
+  const normalized = normalizeWorkspacePath(filePath);
+
+  if (normalized === WORKSPACE_ROOT_PATH) {
+    return [WORKSPACE_ROOT_PATH];
+  }
+
+  const folders = normalized.split('/').slice(0, -1);
+  const ancestorPaths = [WORKSPACE_ROOT_PATH];
+
+  for (let index = 0; index < folders.length; index += 1) {
+    ancestorPaths.push(folders.slice(0, index + 1).join('/'));
+  }
+
+  return ancestorPaths;
+}
+
 export function getEditorLanguage(filePath: string): string {
   const normalized = normalizeWorkspacePath(filePath);
   const lowerCased = normalized.toLowerCase();

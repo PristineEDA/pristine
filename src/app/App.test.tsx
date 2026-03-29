@@ -39,10 +39,11 @@ vi.mock('./components/ActivityBar', () => ({
 }));
 
 vi.mock('./components/LeftSidePanel', () => ({
-  LeftSidePanel: ({ activeFileId, currentOutlineId, onFileOpen, onLineJump }: any) => (
+  LeftSidePanel: ({ activeFileId, currentOutlineId, onFileOpen, onLineJump, revealRequest }: any) => (
     <div data-testid="left-panel">
       <span data-testid="left-active-file">{activeFileId}</span>
       <span data-testid="left-outline-file">{currentOutlineId}</span>
+      <span data-testid="left-reveal-path">{revealRequest?.path ?? ''}</span>
       <button onClick={() => { onFileOpen('rtl/core/reg_file.v', 'reg_file.v'); onLineJump(77); }}>left-open</button>
     </div>
   ),
@@ -81,6 +82,19 @@ vi.mock('./components/BottomPanel', () => ({
 vi.mock('./components/StatusBar', () => ({
   StatusBar: ({ activeFileId, cursorLine, cursorCol }: any) => (
     <div data-testid="status-bar">{`${activeFileId}:${cursorLine}:${cursorCol}`}</div>
+  ),
+}));
+
+vi.mock('./components/QuickOpenPalette', () => ({
+  QuickOpenPalette: ({ isOpen, query, onQueryChange, onSelectResult, onClose }: any) => (
+    isOpen ? (
+      <div data-testid="quick-open-overlay">
+        <span data-testid="quick-open-query">{query}</span>
+        <button onClick={() => onQueryChange('alu')}>quick-open-set-query</button>
+        <button onClick={() => onSelectResult({ path: 'rtl/core/alu.v', name: 'alu.v', score: 100 })}>quick-open-select-alu</button>
+        <button onClick={onClose}>quick-open-close</button>
+      </div>
+    ) : null
   ),
 }));
 
@@ -136,5 +150,35 @@ describe('App', () => {
     expect(screen.getByTestId('activity-view')).toHaveTextContent('explorer');
     expect(screen.getByTestId('menu-left-state')).toHaveTextContent('true');
     expect(screen.getByTestId('left-panel')).toBeInTheDocument();
+  });
+
+  it('opens quick open with Ctrl+P, resets the query on reopen, and selects a file', async () => {
+    vi.mocked(window.electronAPI!.fs.listFiles).mockResolvedValue([
+      'README.md',
+      'rtl/core/alu.v',
+      '.gitignore',
+    ]);
+
+    render(<App />);
+
+    fireEvent.keyDown(document, { key: 'p', ctrlKey: true });
+
+    await screen.findByTestId('quick-open-overlay');
+    expect(window.electronAPI?.fs.listFiles).toHaveBeenCalledWith('.');
+
+    fireEvent.click(screen.getByText('quick-open-set-query'));
+    expect(screen.getByTestId('quick-open-query')).toHaveTextContent('alu');
+
+    fireEvent.click(screen.getByText('quick-open-select-alu'));
+
+    expect(screen.queryByTestId('quick-open-overlay')).not.toBeInTheDocument();
+    expect(screen.getByTestId('editor-active-tab')).toHaveTextContent('rtl/core/alu.v');
+    expect(screen.getByTestId('left-reveal-path')).toHaveTextContent('rtl/core/alu.v');
+
+    fireEvent.keyDown(document, { key: 'p', ctrlKey: true });
+    expect(await screen.findByTestId('quick-open-query')).toHaveTextContent('');
+
+    fireEvent.keyDown(document, { key: 'p', ctrlKey: true });
+    expect(screen.queryByTestId('quick-open-overlay')).not.toBeInTheDocument();
   });
 });

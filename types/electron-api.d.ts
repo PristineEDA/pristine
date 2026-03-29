@@ -17,6 +17,7 @@ export interface ElectronAPI {
   // File system (project-dir scoped)
   fs: {
     readFile: (filePath: string, encoding?: string) => Promise<string>;
+    listFiles: (dirPath?: string) => Promise<string[]>;
     writeFile: (filePath: string, content: string) => Promise<void>;
     readDir: (dirPath: string) => Promise<Array<{
       name: string;

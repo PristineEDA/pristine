@@ -7,13 +7,15 @@ import { Problem, problemsList, fileOutlines } from '../../data/mockData';
 import { FileTreeNode } from './FileTreeNode';
 import { OutlineNode } from './OutlineNode';
 import { DEFAULT_STARTUP_PROJECT_NAME } from '../workspace/workspaceFiles';
-import { useWorkspaceTree } from '../workspace/useWorkspaceTree';
+import { useWorkspaceTree, type WorkspaceRevealRequest } from '../workspace/useWorkspaceTree';
 
 interface LeftSidePanelProps {
   activeFileId: string;
   onFileOpen: (fileId: string, fileName: string) => void;
   onLineJump: (line: number) => void;
   currentOutlineId: string;
+  revealRequest?: WorkspaceRevealRequest | null;
+  onWorkspaceRefresh?: () => void;
 }
 
 function SeverityIcon({ severity }: { severity: Problem['severity'] }) {
@@ -23,7 +25,14 @@ function SeverityIcon({ severity }: { severity: Problem['severity'] }) {
   return <Circle size={10} className="text-ide-text-muted shrink-0" />;
 }
 
-export function LeftSidePanel({ activeFileId, onFileOpen, onLineJump, currentOutlineId }: LeftSidePanelProps) {
+export function LeftSidePanel({
+  activeFileId,
+  onFileOpen,
+  onLineJump,
+  currentOutlineId,
+  revealRequest,
+  onWorkspaceRefresh,
+}: LeftSidePanelProps) {
   const [tab, setTab] = useState<'explorer' | 'outline' | 'problems'>('explorer');
   const [problemFilter, setProblemFilter] = useState<'all' | 'error' | 'warning'>('all');
   const {
@@ -33,7 +42,7 @@ export function LeftSidePanel({ activeFileId, onFileOpen, onLineJump, currentOut
     toggleFolder,
     refreshTree,
     collapseAll,
-  } = useWorkspaceTree();
+  } = useWorkspaceTree(revealRequest);
 
   const outline = fileOutlines[currentOutlineId] || [];
   const filteredProblems = useMemo(() =>
@@ -84,7 +93,14 @@ export function LeftSidePanel({ activeFileId, onFileOpen, onLineJump, currentOut
             <div className="flex items-center gap-1">
               <button title="New File" className="p-0.5 text-ide-text-muted hover:text-white transition-colors"><FilePlus size={14} /></button>
               <button title="New Folder" className="p-0.5 text-ide-text-muted hover:text-white transition-colors"><FolderPlus size={14} /></button>
-              <button title="Refresh" className="p-0.5 text-ide-text-muted hover:text-white transition-colors" onClick={refreshTree}><RefreshCw size={13} /></button>
+              <button
+                title="Refresh"
+                className="p-0.5 text-ide-text-muted hover:text-white transition-colors"
+                onClick={() => {
+                  onWorkspaceRefresh?.();
+                  refreshTree();
+                }}
+              ><RefreshCw size={13} /></button>
               <button title="Collapse All" className="p-0.5 text-ide-text-muted hover:text-white transition-colors" onClick={collapseAll}><ChevronsUpDown size={13} /></button>
             </div>
           </div>
@@ -104,6 +120,7 @@ export function LeftSidePanel({ activeFileId, onFileOpen, onLineJump, currentOut
                 onFileOpen={onFileOpen}
                 expandedFolders={expandedFolders}
                 onToggleFolder={toggleFolder}
+                revealRequest={revealRequest}
               />
             ))}
           </div>

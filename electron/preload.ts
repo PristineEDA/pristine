@@ -37,6 +37,8 @@ const electronAPI = {
   fs: {
     readFile: (filePath: string, encoding?: string) =>
       ipcRenderer.invoke(AsyncChannels.FS_READ_FILE, filePath, encoding) as Promise<string>,
+    listFiles: (dirPath = '.') =>
+      ipcRenderer.invoke(AsyncChannels.FS_LIST_FILES, dirPath) as Promise<string[]>,
     writeFile: (filePath: string, content: string) =>
       ipcRenderer.invoke(AsyncChannels.FS_WRITE_FILE, filePath, content) as Promise<void>,
     readDir: (dirPath: string) =>

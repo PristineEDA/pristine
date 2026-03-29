@@ -15,6 +15,7 @@ export const AsyncChannels = {
   WINDOW_MAXIMIZE: 'async:window:maximize',
   WINDOW_CLOSE: 'async:window:close',
   FS_READ_FILE: 'async:fs:read-file',
+  FS_LIST_FILES: 'async:fs:list-files',
   FS_WRITE_FILE: 'async:fs:write-file',
   FS_READ_DIR: 'async:fs:read-dir',
   FS_STAT: 'async:fs:stat',

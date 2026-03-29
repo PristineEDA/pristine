@@ -30,6 +30,14 @@ function getHandler(channel: string): (...args: unknown[]) => Promise<unknown> {
   return call[1];
 }
 
+function createDirent(name: string, type: 'file' | 'directory') {
+  return {
+    name,
+    isDirectory: () => type === 'directory',
+    isFile: () => type === 'file',
+  };
+}
+
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
 describe('filesystem IPC handlers', () => {
@@ -97,6 +105,50 @@ describe('filesystem IPC handlers', () => {
       mockFs.access.mockRejectedValue(new Error('ENOENT'));
       const handler = getHandler('async:fs:exists');
       expect(await handler({}, 'missing.v')).toBe(false);
+    });
+  });
+
+  describe('FS_LIST_FILES', () => {
+    it('returns recursively discovered workspace files including dotfiles', async () => {
+      mockFs.readdir.mockImplementation(async (resolvedPath: string) => {
+        const normalized = resolvedPath.replace(/\\/g, '/');
+
+        if (normalized.endsWith('/safe/project')) {
+          return [
+            createDirent('README.md', 'file'),
+            createDirent('.gitignore', 'file'),
+            createDirent('rtl', 'directory'),
+          ];
+        }
+
+        if (normalized.endsWith('/safe/project/rtl')) {
+          return [
+            createDirent('core', 'directory'),
+            createDirent('top.sv', 'file'),
+          ];
+        }
+
+        if (normalized.endsWith('/safe/project/rtl/core')) {
+          return [
+            createDirent('alu.v', 'file'),
+          ];
+        }
+
+        return [];
+      });
+
+      const handler = getHandler('async:fs:list-files');
+      await expect(handler({}, '.')).resolves.toEqual([
+        '.gitignore',
+        'README.md',
+        'rtl/core/alu.v',
+        'rtl/top.sv',
+      ]);
+    });
+
+    it('rejects path traversal for recursive file listing', async () => {
+      const handler = getHandler('async:fs:list-files');
+      await expect(handler({}, '../outside')).rejects.toThrow('Path traversal denied');
     });
   });
 });

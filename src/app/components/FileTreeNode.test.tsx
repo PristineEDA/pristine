@@ -186,4 +186,31 @@ describe('FileTreeNode', () => {
     expect(screen.queryByRole('button', { name: /Open in Editor/i })).not.toBeInTheDocument();
     expect(screen.getByText('cpu_top.v')).toBeInTheDocument();
   });
+
+  it('scrolls a revealed file node into view when requested', () => {
+    const onToggleFolder = vi.fn();
+    const onFileOpen = vi.fn();
+    const scrollIntoView = vi.spyOn(HTMLElement.prototype, 'scrollIntoView');
+
+    render(
+      <FileTreeNode
+        node={{
+          id: 'rtl/core/reg_file.v',
+          path: 'rtl/core/reg_file.v',
+          name: 'reg_file.v',
+          type: 'file',
+          hasLoadedChildren: true,
+          isLoading: false,
+        }}
+        depth={2}
+        activeFileId="rtl/core/reg_file.v"
+        onFileOpen={onFileOpen}
+        expandedFolders={new Set()}
+        onToggleFolder={onToggleFolder}
+        revealRequest={{ path: 'rtl/core/reg_file.v', token: 1 }}
+      />,
+    );
+
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' });
+  });
 });

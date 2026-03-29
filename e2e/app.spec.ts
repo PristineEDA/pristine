@@ -77,6 +77,30 @@ test('explorer opens a file into a new editor tab', async () => {
   await app.close();
 });
 
+test('ctrl+p quick open searches files, navigates results, and reveals the selected file', async () => {
+  const { app, window } = await launchApp();
+
+  await window.keyboard.press('Control+P');
+
+  const quickOpen = window.getByTestId('quick-open-overlay');
+  const quickOpenInput = window.getByTestId('quick-open-input');
+  await expect(quickOpen).toBeVisible();
+  await expect(quickOpenInput).toBeFocused();
+  await expect(window.getByTestId('quick-open-result-rtl_core_reg_file_v')).toBeVisible();
+
+  await quickOpenInput.fill('reg');
+  await expect(window.getByTestId('quick-open-result-rtl_core_reg_file_v')).toBeVisible();
+  await quickOpenInput.press('Enter');
+
+  await expect(quickOpen).toHaveCount(0);
+  await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toBeVisible();
+  await expect(window.getByTestId('file-tree-node-rtl')).toBeVisible();
+  await expect(window.getByTestId('file-tree-node-rtl_core')).toBeVisible();
+  await expect(window.getByTestId('file-tree-node-rtl_core_reg_file_v')).toBeVisible();
+
+  await app.close();
+});
+
 test('explorer root supports toggle and collapse all behaviors', async () => {
   const { app, window } = await launchApp();
 

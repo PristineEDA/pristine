@@ -18,6 +18,7 @@ function createElectronApiMock() {
     onMaximizedChange: vi.fn(() => vi.fn()),
     fs: {
       readFile: vi.fn().mockResolvedValue(''),
+      listFiles: vi.fn().mockResolvedValue([]),
       writeFile: vi.fn(),
       readDir: vi.fn().mockResolvedValue([]),
       stat: vi.fn(),

@@ -1,8 +1,9 @@
-import { useState, memo } from 'react';
+import { useEffect, useRef, useState, memo } from 'react';
 import {
   ChevronRight, ChevronDown, Folder, FolderOpen,
 } from 'lucide-react';
 import { WorkspaceTreeNode, toTreeTestId } from '../workspace/workspaceFiles';
+import type { WorkspaceRevealRequest } from '../workspace/useWorkspaceTree';
 import { FileTypeBadge } from './FileTypeBadge';
 
 // ─── File Icon ────────────────────────────────────────────────────────────────
@@ -47,6 +48,7 @@ export const FileTreeNode = memo(function FileTreeNode({
   onFileOpen,
   expandedFolders,
   onToggleFolder,
+  revealRequest,
 }: {
   node: WorkspaceTreeNode;
   depth: number;
@@ -54,10 +56,20 @@ export const FileTreeNode = memo(function FileTreeNode({
   onFileOpen: (id: string, name: string) => void;
   expandedFolders: Set<string>;
   onToggleFolder: (id: string) => void;
+  revealRequest?: WorkspaceRevealRequest | null;
 }) {
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
+  const rowRef = useRef<HTMLDivElement | null>(null);
   const isExpanded = expandedFolders.has(node.id);
   const isActive = node.id === activeFileId;
+
+  useEffect(() => {
+    if (revealRequest?.path !== node.path) {
+      return;
+    }
+
+    rowRef.current?.scrollIntoView({ block: 'nearest' });
+  }, [node.path, revealRequest]);
 
   const contextItems = node.type === 'folder'
     ? [
@@ -84,6 +96,7 @@ export const FileTreeNode = memo(function FileTreeNode({
   return (
     <div>
       <div
+        ref={rowRef}
         data-testid={`file-tree-node-${toTreeTestId(node.path)}`}
         className={`flex items-center gap-1 h-6 cursor-pointer group hover:bg-ide-hover transition-colors ${
           isActive ? 'bg-ide-selection text-white' : 'text-ide-text'
@@ -142,6 +155,7 @@ export const FileTreeNode = memo(function FileTreeNode({
           onFileOpen={onFileOpen}
           expandedFolders={expandedFolders}
           onToggleFolder={onToggleFolder}
+          revealRequest={revealRequest}
         />
       ))}
     </div>

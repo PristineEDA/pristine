@@ -1,11 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  getWorkspaceAncestorPaths,
   WORKSPACE_ROOT_PATH,
   WorkspaceTreeNode,
   createRootNode,
   createWorkspaceNode,
   sortDirectoryEntries,
 } from './workspaceFiles';
+
+export interface WorkspaceRevealRequest {
+  path: string;
+  token: number;
+}
 
 function updateNode(
   node: WorkspaceTreeNode,
@@ -59,7 +65,7 @@ function findNode(node: WorkspaceTreeNode | null, targetPath: string): Workspace
   return null;
 }
 
-export function useWorkspaceTree() {
+export function useWorkspaceTree(revealRequest?: WorkspaceRevealRequest | null) {
   const [rootNode, setRootNode] = useState<WorkspaceTreeNode | null>(null);
   const [workspaceAvailable, setWorkspaceAvailable] = useState<boolean | null>(null);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(() => new Set([WORKSPACE_ROOT_PATH]));
@@ -86,7 +92,8 @@ export function useWorkspaceTree() {
       const children = entries.map((entry) => createWorkspaceNode(dirPath, entry));
 
       if (dirPath === WORKSPACE_ROOT_PATH) {
-        setRootNode(createRootNode(children));
+        const nextRootNode = createRootNode(children);
+        setRootNode(nextRootNode);
         setExpandedFolders(new Set([WORKSPACE_ROOT_PATH]));
         setWorkspaceAvailable(true);
         return;
@@ -97,12 +104,13 @@ export function useWorkspaceTree() {
           return current;
         }
 
-        return updateNode(current, dirPath, (node) => ({
+        const nextRootNode = updateNode(current, dirPath, (node) => ({
           ...node,
           children,
           hasLoadedChildren: true,
           isLoading: false,
         }));
+        return nextRootNode;
       });
     } catch {
       if (dirPath === WORKSPACE_ROOT_PATH) {
@@ -117,12 +125,13 @@ export function useWorkspaceTree() {
           return current;
         }
 
-        return updateNode(current, dirPath, (node) => ({
+        const nextRootNode = updateNode(current, dirPath, (node) => ({
           ...node,
           children: [],
           hasLoadedChildren: true,
           isLoading: false,
         }));
+        return nextRootNode;
       });
     }
   }, []);
@@ -157,6 +166,33 @@ export function useWorkspaceTree() {
   useEffect(() => {
     void initializeTree();
   }, [initializeTree]);
+
+  useEffect(() => {
+    if (!revealRequest?.path || workspaceAvailable !== true) {
+      return;
+    }
+
+    const ancestorPaths = getWorkspaceAncestorPaths(revealRequest.path);
+
+    setExpandedFolders((current) => {
+      const next = new Set(current);
+      ancestorPaths.forEach((ancestorPath) => next.add(ancestorPath));
+      return next;
+    });
+
+    const nextAncestorToLoad = ancestorPaths.find((ancestorPath) => {
+      if (ancestorPath === WORKSPACE_ROOT_PATH) {
+        return false;
+      }
+
+      const currentNode = findNode(rootNode, ancestorPath);
+      return !!currentNode && currentNode.type === 'folder' && !currentNode.hasLoadedChildren && !currentNode.isLoading;
+    });
+
+    if (nextAncestorToLoad) {
+      void loadDirectory(nextAncestorToLoad);
+    }
+  }, [loadDirectory, revealRequest, rootNode, workspaceAvailable]);
 
   const toggleFolder = useCallback((path: string) => {
     setExpandedFolders((current) => {
