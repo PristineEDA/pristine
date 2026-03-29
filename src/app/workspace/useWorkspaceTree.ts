@@ -162,7 +162,7 @@ export function useWorkspaceTree() {
     setExpandedFolders((current) => {
       const next = new Set(current);
 
-      if (next.has(path) && path !== WORKSPACE_ROOT_PATH) {
+      if (next.has(path)) {
         next.delete(path);
         return next;
       }
@@ -182,7 +182,7 @@ export function useWorkspaceTree() {
   }, [initializeTree]);
 
   const collapseAll = useCallback(() => {
-    setExpandedFolders(new Set([WORKSPACE_ROOT_PATH]));
+    setExpandedFolders(new Set());
   }, []);
 
   const treeNodes = useMemo(() => (rootNode ? [rootNode] : []), [rootNode]);

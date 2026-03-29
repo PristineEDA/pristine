@@ -107,11 +107,11 @@ export function MenuBar({
       {isMacOS && <div className="w-20 shrink-0" />}
 
       {/* App icon / title */}
-      <div className="flex items-center gap-1.5 px-3 pr-4" style={noDrag as React.CSSProperties}>
+      <div className="flex items-center gap-1.5 px-3 pr-2" style={noDrag as React.CSSProperties}>
         <div className="w-4 h-4 rounded-sm bg-ide-accent flex items-center justify-center">
           <span className="text-white text-[9px] font-bold">P</span>
         </div>
-        <span className="text-ide-text text-[12px]">Pristine</span>
+        {/* <span className="text-ide-text text-[12px]">Pristine</span> */}
       </div>
 
       {/* Menu items */}

@@ -62,4 +62,42 @@ describe('LeftSidePanel', () => {
 
     expect(onFileOpen).toHaveBeenCalledWith('rtl/peripherals/uart_rx.v', 'uart_rx.v');
   });
+
+  it('allows the workspace root row to collapse and expand', async () => {
+    render(
+      <LeftSidePanel
+        activeFileId="cpu_top"
+        onFileOpen={vi.fn()}
+        onLineJump={vi.fn()}
+        currentOutlineId="cpu_top"
+      />,
+    );
+
+    const rootNode = await screen.findByTestId('file-tree-node-root');
+    expect(await screen.findByTestId('file-tree-node-rtl')).toBeInTheDocument();
+
+    fireEvent.click(rootNode);
+    expect(screen.queryByTestId('file-tree-node-rtl')).not.toBeInTheDocument();
+
+    fireEvent.click(rootNode);
+    expect(await screen.findByTestId('file-tree-node-rtl')).toBeInTheDocument();
+  });
+
+  it('collapses the workspace root when using collapse all', async () => {
+    render(
+      <LeftSidePanel
+        activeFileId="cpu_top"
+        onFileOpen={vi.fn()}
+        onLineJump={vi.fn()}
+        currentOutlineId="cpu_top"
+      />,
+    );
+
+    expect(await screen.findByTestId('file-tree-node-rtl')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTitle('Collapse All'));
+
+    expect(screen.getByTestId('file-tree-node-root')).toBeInTheDocument();
+    expect(screen.queryByTestId('file-tree-node-rtl')).not.toBeInTheDocument();
+  });
 });

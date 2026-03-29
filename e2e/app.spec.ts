@@ -77,6 +77,35 @@ test('explorer opens a file into a new editor tab', async () => {
   await app.close();
 });
 
+test('explorer root supports toggle and collapse all behaviors', async () => {
+  const { app, window } = await launchApp();
+
+  const collapseAllButton = window.getByTitle('Collapse All');
+  const rootNode = window.getByTestId('file-tree-node-root');
+  const rtlNode = window.getByTestId('file-tree-node-rtl');
+
+  await expect(collapseAllButton).toBeVisible();
+  await expect(rootNode).toBeVisible();
+  await expect(rtlNode).toBeVisible();
+
+  await test.step('root row collapses and expands first-level children', async () => {
+    await rootNode.click();
+    await expect(rtlNode).toHaveCount(0);
+
+    await rootNode.click();
+    await expect(rtlNode).toBeVisible();
+  });
+
+  await test.step('collapse all hides root children while keeping root visible', async () => {
+    await collapseAllButton.click();
+
+    await expect(rootNode).toBeVisible();
+    await expect(rtlNode).toHaveCount(0);
+  });
+
+  await app.close();
+});
+
 test('activity bar removes search and extensions and toggles the left sidebar', async () => {
   const { app, window } = await launchApp();
 
