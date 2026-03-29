@@ -9,6 +9,10 @@ function getFileTypeBadgeInfo(name: string): FileTypeBadgeInfo {
   const lowerName = name.toLowerCase();
   const ext = lowerName.includes('.') ? lowerName.split('.').pop() : '';
 
+  if (lowerName === '.gitignore') return { label: 'IG', className: 'text-ide-file-git' };
+  if (lowerName === '.gitmodules') return { label: 'GM', className: 'text-ide-file-git' };
+  if (lowerName === 'license') return { label: 'LC', className: 'text-ide-file-license' };
+
   if (ext === 'v') return { label: 'V', className: 'text-ide-file-v' };
   if (ext === 'sv') return { label: 'SV', className: 'text-ide-file-sv' };
   if (ext === 'vh') return { label: 'VH', className: 'text-ide-file-hdl-header' };
@@ -19,6 +23,7 @@ function getFileTypeBadgeInfo(name: string): FileTypeBadgeInfo {
   if (ext === 'xdc') return { label: 'X', className: 'text-ide-file-xdc' };
   if (ext === 'sdc') return { label: 'SD', className: 'text-ide-file-xdc' };
   if (ext === 'tcl') return { label: 'TC', className: 'text-ide-file-script' };
+  if (ext === 'sh') return { label: 'SH', className: 'text-ide-file-shell' };
   if (lowerName === 'makefile' || ext === 'mk') return { label: 'MK', className: 'text-ide-file-build' };
   if (ext === 'ys') return { label: 'YS', className: 'text-ide-file-build' };
   if (ext === 's') return { label: 'AS', className: 'text-ide-file-asm' };

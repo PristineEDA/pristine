@@ -25,6 +25,18 @@ describe('FileIcon', () => {
     rerender(<FileIcon name="cocotb_test.py" />);
     expect(screen.getByText('Py')).toBeInTheDocument();
 
+    rerender(<FileIcon name=".gitignore" />);
+    expect(screen.getByText('IG')).toHaveClass('text-ide-file-git');
+
+    rerender(<FileIcon name=".gitmodules" />);
+    expect(screen.getByText('GM')).toHaveClass('text-ide-file-git');
+
+    rerender(<FileIcon name="LICENSE" />);
+    expect(screen.getByText('LC')).toHaveClass('text-ide-file-license');
+
+    rerender(<FileIcon name="deploy.sh" />);
+    expect(screen.getByText('SH')).toHaveClass('text-ide-file-shell');
+
     rerender(<FileIcon name="timing.xdc" />);
     expect(screen.getByText('X')).toBeInTheDocument();
 

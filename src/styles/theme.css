@@ -131,6 +131,9 @@
   --ide-file-filelist: oklch(0.755 0.1 186.5);  /* #68bfd0 */
   --ide-file-config: oklch(0.765 0.09 210.6);   /* #74b8d4 */
   --ide-file-script: oklch(0.741 0.092 167.2);  /* #55b7a0 */
+  --ide-file-git: oklch(0.731 0.125 27.8);      /* #db7a5c */
+  --ide-file-license: oklch(0.81 0.089 95.1);  /* #d7c374 */
+  --ide-file-shell: oklch(0.748 0.115 145.4);   /* #5dc685 */
   --ide-file-yaml: oklch(0.762 0.144 65.8);      /* #ef9d3f */
   --ide-file-md: oklch(0.794 0.083 223.3);       /* #7ec8e3 */
 
@@ -204,6 +207,9 @@
   --color-ide-file-filelist: var(--ide-file-filelist);
   --color-ide-file-config: var(--ide-file-config);
   --color-ide-file-script: var(--ide-file-script);
+  --color-ide-file-git: var(--ide-file-git);
+  --color-ide-file-license: var(--ide-file-license);
+  --color-ide-file-shell: var(--ide-file-shell);
   --color-ide-file-yaml: var(--ide-file-yaml);
   --color-ide-file-md: var(--ide-file-md);
   --color-ide-syntax-keyword: var(--ide-syntax-keyword);
