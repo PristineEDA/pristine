@@ -1,18 +1,13 @@
 import { useState, memo } from 'react';
 import {
-  ChevronRight, ChevronDown, File, Folder, FolderOpen,
+  ChevronRight, ChevronDown, Folder, FolderOpen,
 } from 'lucide-react';
 import { WorkspaceTreeNode, toTreeTestId } from '../workspace/workspaceFiles';
+import { FileTypeBadge } from './FileTypeBadge';
 
 // ─── File Icon ────────────────────────────────────────────────────────────────
 export function FileIcon({ name }: { name: string; language?: string }) {
-  const ext = name.split('.').pop()?.toLowerCase();
-  if (ext === 'v') return <span className="text-ide-file-v text-[10px] font-bold font-mono">V</span>;
-  if (ext === 'sv') return <span className="text-ide-file-sv text-[10px] font-bold font-mono">SV</span>;
-  if (ext === 'xdc') return <span className="text-ide-file-xdc text-[10px] font-bold font-mono">X</span>;
-  if (ext === 'yml' || ext === 'yaml') return <span className="text-ide-file-yaml text-[10px] font-bold font-mono">Y</span>;
-  if (ext === 'md') return <span className="text-ide-file-md text-[10px] font-bold font-mono">M</span>;
-  return <File size={13} className="text-ide-text" />;
+  return <FileTypeBadge name={name} className="text-[10px] font-bold font-mono" />;
 }
 
 // ─── Context Menu ─────────────────────────────────────────────────────────────

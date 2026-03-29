@@ -121,7 +121,16 @@
   /* File icon colors */
   --ide-file-v: oklch(0.742 0.127 244.8);        /* #5fb3f6 */
   --ide-file-sv: oklch(0.709 0.159 293.5);       /* #a78bfa */
+  --ide-file-hdl-header: oklch(0.79 0.092 226.4); /* #86c7e8 */
+  --ide-file-software: oklch(0.76 0.118 152.9); /* #63c892 */
+  --ide-file-python: oklch(0.81 0.118 95.7);    /* #b6d36a */
   --ide-file-xdc: oklch(0.779 0.131 56.4);       /* #f6a05f */
+  --ide-file-build: oklch(0.729 0.038 248.3);   /* #8a94b0 */
+  --ide-file-asm: oklch(0.724 0.094 14.9);      /* #d38a6c */
+  --ide-file-linker: oklch(0.775 0.114 79.2);   /* #dfb35d */
+  --ide-file-filelist: oklch(0.755 0.1 186.5);  /* #68bfd0 */
+  --ide-file-config: oklch(0.765 0.09 210.6);   /* #74b8d4 */
+  --ide-file-script: oklch(0.741 0.092 167.2);  /* #55b7a0 */
   --ide-file-yaml: oklch(0.762 0.144 65.8);      /* #ef9d3f */
   --ide-file-md: oklch(0.794 0.083 223.3);       /* #7ec8e3 */
 
@@ -185,7 +194,16 @@
   --color-ide-success: var(--ide-success);
   --color-ide-file-v: var(--ide-file-v);
   --color-ide-file-sv: var(--ide-file-sv);
+  --color-ide-file-hdl-header: var(--ide-file-hdl-header);
+  --color-ide-file-software: var(--ide-file-software);
+  --color-ide-file-python: var(--ide-file-python);
   --color-ide-file-xdc: var(--ide-file-xdc);
+  --color-ide-file-build: var(--ide-file-build);
+  --color-ide-file-asm: var(--ide-file-asm);
+  --color-ide-file-linker: var(--ide-file-linker);
+  --color-ide-file-filelist: var(--ide-file-filelist);
+  --color-ide-file-config: var(--ide-file-config);
+  --color-ide-file-script: var(--ide-file-script);
   --color-ide-file-yaml: var(--ide-file-yaml);
   --color-ide-file-md: var(--ide-file-md);
   --color-ide-syntax-keyword: var(--ide-syntax-keyword);

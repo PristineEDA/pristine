@@ -106,8 +106,31 @@ describe('EditorArea', () => {
     fireEvent.click(screen.getByTestId('editor-tab-rtl/core/alu.v'));
     fireEvent.click(screen.getByTestId('editor-tab-close-rtl/core/cpu_top.v'));
 
+    expect(screen.getByTestId('editor-tab-badge-rtl/core/cpu_top.v')).toHaveTextContent('V');
+    expect(screen.getByTestId('editor-tab-badge-rtl/core/alu.v')).toHaveTextContent('V');
+
     expect(onTabChange).toHaveBeenCalledWith('rtl/core/alu.v');
     expect(onTabClose).toHaveBeenCalledWith('rtl/core/cpu_top.v');
+  });
+
+  it('uses the same file type badge mapping in editor tabs as the explorer', () => {
+    render(
+      <EditorArea
+        tabs={[
+          { id: 'scripts/build.tcl', name: 'build.tcl' },
+          { id: 'config/project.json', name: 'project.json' },
+          { id: 'build/Makefile', name: 'Makefile' },
+        ]}
+        activeTabId="scripts/build.tcl"
+        onTabChange={vi.fn()}
+        onTabClose={vi.fn()}
+        editorRef={createRef()}
+      />,
+    );
+
+    expect(screen.getByTestId('editor-tab-badge-scripts/build.tcl')).toHaveTextContent('TC');
+    expect(screen.getByTestId('editor-tab-badge-config/project.json')).toHaveTextContent('J');
+    expect(screen.getByTestId('editor-tab-badge-build/Makefile')).toHaveTextContent('MK');
   });
 
   it('configures monaco, loads file content, reacts to cursor changes, and jumps to the target line', async () => {
@@ -146,5 +169,70 @@ describe('EditorArea', () => {
     expect(mockEditorInstance.revealLineInCenter).toHaveBeenCalledWith(24);
     expect(mockEditorInstance.setPosition).toHaveBeenCalledWith({ lineNumber: 24, column: 1 });
     expect(mockEditorInstance.focus).toHaveBeenCalled();
+  });
+
+  it('does not get stuck in loading when switching away from a file before its first read completes', async () => {
+    let resolveFirstRead: ((content: string) => void) | undefined;
+
+    vi.mocked(window.electronAPI!.fs.readFile)
+      .mockImplementationOnce(() => new Promise((resolve) => {
+        resolveFirstRead = resolve;
+      }))
+      .mockResolvedValueOnce('// alu content');
+
+    const { rerender } = render(
+      <EditorArea
+        tabs={[
+          { id: 'rtl/core/cpu_top.v', name: 'cpu_top.v' },
+          { id: 'rtl/core/alu.v', name: 'alu.v' },
+        ]}
+        activeTabId="rtl/core/cpu_top.v"
+        onTabChange={vi.fn()}
+        onTabClose={vi.fn()}
+        editorRef={createRef()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(window.electronAPI!.fs.readFile).toHaveBeenCalledWith('rtl/core/cpu_top.v', 'utf-8');
+    });
+
+    rerender(
+      <EditorArea
+        tabs={[
+          { id: 'rtl/core/cpu_top.v', name: 'cpu_top.v' },
+          { id: 'rtl/core/alu.v', name: 'alu.v' },
+        ]}
+        activeTabId="rtl/core/alu.v"
+        onTabChange={vi.fn()}
+        onTabClose={vi.fn()}
+        editorRef={createRef()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(window.electronAPI!.fs.readFile).toHaveBeenCalledWith('rtl/core/alu.v', 'utf-8');
+    });
+
+    rerender(
+      <EditorArea
+        tabs={[
+          { id: 'rtl/core/cpu_top.v', name: 'cpu_top.v' },
+          { id: 'rtl/core/alu.v', name: 'alu.v' },
+        ]}
+        activeTabId="rtl/core/cpu_top.v"
+        onTabChange={vi.fn()}
+        onTabClose={vi.fn()}
+        editorRef={createRef()}
+      />,
+    );
+
+    expect(screen.getByTestId('monaco-editor')).toHaveTextContent('Loading file contents...');
+
+    resolveFirstRead?.('// cpu_top content');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('monaco-editor')).toHaveTextContent('// cpu_top content');
+    });
   });
 });

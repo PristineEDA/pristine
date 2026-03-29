@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Editor, { useMonaco } from '@monaco-editor/react';
 import {
   X, ChevronRight, Split,
@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { problemsList } from '../../data/mockData';
 import { getEditorLanguage, getWorkspaceSegments } from '../workspace/workspaceFiles';
+import { FileTypeBadge } from './FileTypeBadge';
 
 interface Tab {
   id: string;
@@ -177,9 +178,6 @@ function useVerilogLanguage(monaco: any) {
 function EditorTab({
   tab, isActive, onActivate, onClose,
 }: { tab: Tab; isActive: boolean; onActivate: () => void; onClose: () => void }) {
-  const ext = tab.name.split('.').pop()?.toLowerCase();
-  const langColor = ext === 'v' ? '#5fb3f6' : ext === 'sv' ? '#a78bfa' : '#cccccc';
-
   return (
     <div
       data-testid={`editor-tab-${tab.id}`}
@@ -190,12 +188,12 @@ function EditorTab({
       }`}
       onClick={onActivate}
     >
-      <span
+      <FileTypeBadge
+        name={tab.name}
+        testId={`editor-tab-badge-${tab.id}`}
         className="shrink-0 text-[10px] font-bold font-mono"
-        style={{ color: langColor }}
-      >
-        {ext?.toUpperCase()}
-      </span>
+        fallbackClassName="text-ide-text"
+      />
       <span className="flex-1 truncate text-[12px]">
         {tab.name}
       </span>
@@ -242,6 +240,8 @@ export function EditorArea({
   const [contentCache, setContentCache] = useState<Record<string, string>>({});
   const [loadingFiles, setLoadingFiles] = useState<Record<string, boolean>>({});
   const [loadErrors, setLoadErrors] = useState<Record<string, string>>({});
+  const inFlightLoadsRef = useRef<Set<string>>(new Set());
+  const isMountedRef = useRef(true);
 
   const activeTab = tabs.find((t) => t.id === activeTabId);
   const code = activeTabId
@@ -252,8 +252,12 @@ export function EditorArea({
       : contentCache[activeTabId] ?? `// ${activeTab?.name ?? activeTabId}\n// Loading file contents...\n`
     : '';
 
+  useEffect(() => () => {
+    isMountedRef.current = false;
+  }, []);
+
   useEffect(() => {
-    if (!activeTabId || contentCache[activeTabId] || loadingFiles[activeTabId]) {
+    if (!activeTabId || contentCache[activeTabId] || inFlightLoadsRef.current.has(activeTabId)) {
       return;
     }
 
@@ -263,12 +267,11 @@ export function EditorArea({
       return;
     }
 
-    let cancelled = false;
-
+    inFlightLoadsRef.current.add(activeTabId);
     setLoadingFiles((current) => ({ ...current, [activeTabId]: true }));
     void fsApi.readFile(activeTabId, 'utf-8')
       .then((content) => {
-        if (cancelled) {
+        if (!isMountedRef.current) {
           return;
         }
 
@@ -284,7 +287,7 @@ export function EditorArea({
         });
       })
       .catch((error: unknown) => {
-        if (cancelled) {
+        if (!isMountedRef.current) {
           return;
         }
 
@@ -292,17 +295,15 @@ export function EditorArea({
         setLoadErrors((current) => ({ ...current, [activeTabId]: message }));
       })
       .finally(() => {
-        if (cancelled) {
+        inFlightLoadsRef.current.delete(activeTabId);
+
+        if (!isMountedRef.current) {
           return;
         }
 
         setLoadingFiles((current) => ({ ...current, [activeTabId]: false }));
       });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeTabId]);
+  }, [activeTabId, contentCache]);
 
   // Build markers from problems
   useEffect(() => {

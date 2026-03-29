@@ -3,15 +3,57 @@ import { describe, expect, it, vi } from 'vitest';
 import { ContextMenu, FileIcon, FileTreeNode } from './FileTreeNode';
 
 describe('FileIcon', () => {
-  it('renders extension-specific glyphs and falls back to the generic file icon', () => {
+  it('renders extension-specific glyphs for supported workspace file types and falls back to the generic file icon', () => {
     const { rerender, container } = render(<FileIcon name="uart_tx.v" />);
     expect(screen.getByText('V')).toBeInTheDocument();
 
     rerender(<FileIcon name="tb_uart.sv" />);
     expect(screen.getByText('SV')).toBeInTheDocument();
 
+    rerender(<FileIcon name="defs.vh" />);
+    expect(screen.getByText('VH')).toBeInTheDocument();
+
+    rerender(<FileIcon name="tb_defs.svh" />);
+    expect(screen.getByText('SH')).toBeInTheDocument();
+
+    rerender(<FileIcon name="startup.c" />);
+    expect(screen.getByText('C')).toBeInTheDocument();
+
+    rerender(<FileIcon name="startup.hpp" />);
+    expect(screen.getByText('H')).toBeInTheDocument();
+
+    rerender(<FileIcon name="cocotb_test.py" />);
+    expect(screen.getByText('Py')).toBeInTheDocument();
+
     rerender(<FileIcon name="timing.xdc" />);
     expect(screen.getByText('X')).toBeInTheDocument();
+
+    rerender(<FileIcon name="timing.sdc" />);
+    expect(screen.getByText('SD')).toBeInTheDocument();
+
+    rerender(<FileIcon name="build.tcl" />);
+    expect(screen.getByText('TC')).toBeInTheDocument();
+
+    rerender(<FileIcon name="Makefile" />);
+    expect(screen.getByText('MK')).toBeInTheDocument();
+
+    rerender(<FileIcon name="synth.ys" />);
+    expect(screen.getByText('YS')).toBeInTheDocument();
+
+    rerender(<FileIcon name="crt0.S" />);
+    expect(screen.getByText('AS')).toBeInTheDocument();
+
+    rerender(<FileIcon name="memory.lds" />);
+    expect(screen.getByText('LD')).toBeInTheDocument();
+
+    rerender(<FileIcon name="sources.FL" />);
+    expect(screen.getByText('FL')).toBeInTheDocument();
+
+    rerender(<FileIcon name="manifest.json" />);
+    expect(screen.getByText('J')).toBeInTheDocument();
+
+    rerender(<FileIcon name="layout.xml" />);
+    expect(screen.getByText('XM')).toBeInTheDocument();
 
     rerender(<FileIcon name="project.yml" />);
     expect(screen.getByText('Y')).toBeInTheDocument();
