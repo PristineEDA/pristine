@@ -45,6 +45,7 @@ const mocks = vi.hoisted(() => {
     }),
     mockQuit: vi.fn(),
     mockRegisterAllHandlers: vi.fn(),
+    mockSetProjectRoot: vi.fn(),
     mockSetupWindowStreams: vi.fn(),
   };
 });
@@ -60,13 +61,15 @@ vi.mock('electron', () => ({
 
 vi.mock('../ipc/register.js', () => ({
   registerAllHandlers: (...args: unknown[]) => mocks.mockRegisterAllHandlers(...args),
+  setProjectRoot: (...args: unknown[]) => mocks.mockSetProjectRoot(...args),
   setupWindowStreams: (...args: unknown[]) => mocks.mockSetupWindowStreams(...args),
 }));
 
 const originalPlatform = process.platform;
 const originalDevServerUrl = process.env.VITE_DEV_SERVER_URL;
+const originalProjectRoot = process.env.PRISTINE_PROJECT_ROOT;
 
-async function importMain(options?: { platform?: NodeJS.Platform; devServerUrl?: string }) {
+async function importMain(options?: { platform?: NodeJS.Platform; devServerUrl?: string; projectRoot?: string }) {
   vi.resetModules();
   mocks.appHandlers.clear();
   mocks.browserWindowInstances.length = 0;
@@ -74,6 +77,7 @@ async function importMain(options?: { platform?: NodeJS.Platform; devServerUrl?:
   mocks.mockAppOn.mockClear();
   mocks.mockQuit.mockClear();
   mocks.mockRegisterAllHandlers.mockClear();
+  mocks.mockSetProjectRoot.mockClear();
   mocks.mockSetupWindowStreams.mockClear();
   mocks.BrowserWindowMock.getAllWindows.mockClear();
 
@@ -81,6 +85,12 @@ async function importMain(options?: { platform?: NodeJS.Platform; devServerUrl?:
     process.env.VITE_DEV_SERVER_URL = options.devServerUrl;
   } else {
     delete process.env.VITE_DEV_SERVER_URL;
+  }
+
+  if (options?.projectRoot) {
+    process.env.PRISTINE_PROJECT_ROOT = options.projectRoot;
+  } else {
+    delete process.env.PRISTINE_PROJECT_ROOT;
   }
 
   Object.defineProperty(process, 'platform', {
@@ -109,6 +119,12 @@ describe('electron main entry', () => {
       delete process.env.VITE_DEV_SERVER_URL;
     }
 
+    if (originalProjectRoot) {
+      process.env.PRISTINE_PROJECT_ROOT = originalProjectRoot;
+    } else {
+      delete process.env.PRISTINE_PROJECT_ROOT;
+    }
+
     Object.defineProperty(process, 'platform', { value: originalPlatform });
   });
 
@@ -119,6 +135,7 @@ describe('electron main entry', () => {
     });
 
     expect(mocks.mockRegisterAllHandlers).toHaveBeenCalledTimes(1);
+    expect(mocks.mockSetProjectRoot).toHaveBeenCalledWith('C:\\Users\\maksy\\Desktop\\fpga\\retroSoC');
     expect(browserWindowInstances).toHaveLength(1);
     expect(getMainWindow?.()).toBe(browserWindowInstances[0]);
 
@@ -183,5 +200,11 @@ describe('electron main entry', () => {
 
     appHandlers.get('window-all-closed')?.();
     expect(mocks.mockQuit).not.toHaveBeenCalled();
+  });
+
+  it('allows tests to override the startup project root via environment variable', async () => {
+    await importMain({ projectRoot: 'D:\\fixture-workspace' });
+
+    expect(mocks.mockSetProjectRoot).toHaveBeenCalledWith('D:\\fixture-workspace');
   });
 });

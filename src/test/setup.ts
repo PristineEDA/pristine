@@ -17,11 +17,11 @@ function createElectronApiMock() {
     isMaximized: vi.fn(() => false),
     onMaximizedChange: vi.fn(() => vi.fn()),
     fs: {
-      readFile: vi.fn(),
+      readFile: vi.fn().mockResolvedValue(''),
       writeFile: vi.fn(),
-      readDir: vi.fn(),
+      readDir: vi.fn().mockResolvedValue([]),
       stat: vi.fn(),
-      exists: vi.fn(),
+      exists: vi.fn().mockResolvedValue(false),
     },
     shell: {
       exec: vi.fn(),

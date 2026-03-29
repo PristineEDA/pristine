@@ -1,10 +1,14 @@
 import path from 'node:path';
 
 export function validatePathWithinRoot(projectRoot: string, targetPath: string): string {
-  const resolved = path.resolve(projectRoot, targetPath);
-  if (!resolved.startsWith(projectRoot + path.sep) && resolved !== projectRoot) {
+  const normalizedRoot = path.resolve(projectRoot);
+  const resolved = path.resolve(normalizedRoot, targetPath);
+  const relative = path.relative(normalizedRoot, resolved);
+
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
     throw new Error(`Path traversal denied: ${targetPath}`);
   }
+
   return resolved;
 }
 

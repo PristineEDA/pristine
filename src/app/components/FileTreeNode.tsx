@@ -1,9 +1,8 @@
 import { useState, memo } from 'react';
 import {
   ChevronRight, ChevronDown, File, Folder, FolderOpen,
-  AlertCircle, AlertTriangle,
 } from 'lucide-react';
-import { FileNode } from '../../data/mockData';
+import { WorkspaceTreeNode, toTreeTestId } from '../workspace/workspaceFiles';
 
 // ─── File Icon ────────────────────────────────────────────────────────────────
 export function FileIcon({ name }: { name: string; language?: string }) {
@@ -54,7 +53,7 @@ export const FileTreeNode = memo(function FileTreeNode({
   expandedFolders,
   onToggleFolder,
 }: {
-  node: FileNode;
+  node: WorkspaceTreeNode;
   depth: number;
   activeFileId: string;
   onFileOpen: (id: string, name: string) => void;
@@ -77,7 +76,7 @@ export const FileTreeNode = memo(function FileTreeNode({
         { label: 'Copy Path', action: () => {} },
       ]
     : [
-        { label: 'Open in Editor', action: () => onFileOpen(node.id, node.name) },
+      { label: 'Open in Editor', action: () => onFileOpen(node.path, node.name) },
         { label: '---', action: () => {} },
         { label: 'Rename', action: () => {} },
         { label: 'Delete', action: () => {} },
@@ -90,14 +89,14 @@ export const FileTreeNode = memo(function FileTreeNode({
   return (
     <div>
       <div
-        data-testid={`file-tree-node-${node.id}`}
+        data-testid={`file-tree-node-${toTreeTestId(node.path)}`}
         className={`flex items-center gap-1 h-6 cursor-pointer group hover:bg-ide-hover transition-colors ${
           isActive ? 'bg-ide-selection text-white' : 'text-ide-text'
         }`}
         style={{ paddingLeft: depth * 12 + 4 }}
         onClick={() => {
           if (node.type === 'folder') onToggleFolder(node.id);
-          else onFileOpen(node.id, node.name);
+          else onFileOpen(node.path, node.name);
         }}
         onContextMenu={(e) => {
           e.preventDefault();
@@ -118,15 +117,9 @@ export const FileTreeNode = memo(function FileTreeNode({
           <>
             <span className="w-3.5" />
             <span className="w-4 h-4 flex items-center justify-center shrink-0">
-              <FileIcon name={node.name} language={node.language} />
+              <FileIcon name={node.name} />
             </span>
             <span className="text-[13px] flex-1 truncate ml-1">{node.name}</span>
-            {(node.hasError || node.hasWarning) && (
-              <span className="flex items-center pr-1 shrink-0">
-                {node.hasError && <AlertCircle size={11} className="text-ide-error" />}
-                {!node.hasError && node.hasWarning && <AlertTriangle size={11} className="text-ide-warning" />}
-              </span>
-            )}
           </>
         )}
       </div>
@@ -137,6 +130,12 @@ export const FileTreeNode = memo(function FileTreeNode({
           onClose={() => setCtxMenu(null)}
           items={contextItems}
         />
+      )}
+
+      {node.type === 'folder' && isExpanded && node.isLoading && (
+        <div className="text-[12px] text-ide-text-muted pl-8 py-1">
+          Loading...
+        </div>
       )}
 
       {node.type === 'folder' && isExpanded && node.children?.map((child) => (

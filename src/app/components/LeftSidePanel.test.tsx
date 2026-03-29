@@ -1,8 +1,29 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { LeftSidePanel } from './LeftSidePanel';
 
 describe('LeftSidePanel', () => {
+  beforeEach(() => {
+    const electronApi = window.electronAPI!;
+
+    vi.mocked(electronApi.fs.exists).mockResolvedValue(true);
+    vi.mocked(electronApi.fs.readDir).mockImplementation(async (dirPath: string) => {
+      if (dirPath === '.') {
+        return [{ name: 'rtl', isDirectory: true, isFile: false }];
+      }
+
+      if (dirPath === 'rtl') {
+        return [{ name: 'peripherals', isDirectory: true, isFile: false }];
+      }
+
+      if (dirPath === 'rtl/peripherals') {
+        return [{ name: 'uart_rx.v', isDirectory: false, isFile: true }];
+      }
+
+      return [];
+    });
+  });
+
   it('opens a file and jumps to the selected problem line', () => {
     const onFileOpen = vi.fn();
     const onLineJump = vi.fn();
@@ -23,7 +44,7 @@ describe('LeftSidePanel', () => {
     expect(onLineJump).toHaveBeenCalledWith(56);
   });
 
-  it('expands explorer items and opens a clicked file', () => {
+  it('expands explorer items and opens a clicked file', async () => {
     const onFileOpen = vi.fn();
 
     render(
@@ -35,9 +56,10 @@ describe('LeftSidePanel', () => {
       />,
     );
 
-    fireEvent.click(screen.getByTestId('file-tree-node-peripherals'));
-    fireEvent.click(screen.getByTestId('file-tree-node-uart_rx'));
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl'));
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals'));
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals_uart_rx_v'));
 
-    expect(onFileOpen).toHaveBeenCalledWith('uart_rx', 'uart_rx.v');
+    expect(onFileOpen).toHaveBeenCalledWith('rtl/peripherals/uart_rx.v', 'uart_rx.v');
   });
 });

@@ -3,12 +3,17 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const fixtureWorkspace = path.join(__dirname, '..', 'test', 'fixtures', 'workspace');
 
 test.skip(process.platform === 'darwin', 'Custom window controls are hidden on macOS');
 
 async function launchApp() {
   const app = await electron.launch({
     args: [path.join(__dirname, '..', 'dist-electron', 'main.js')],
+    env: {
+      ...process.env,
+      PRISTINE_PROJECT_ROOT: fixtureWorkspace,
+    },
   });
 
   const window = await app.firstWindow();
@@ -62,11 +67,12 @@ test('close button closes the main window', async () => {
 test('explorer opens a file into a new editor tab', async () => {
   const { app, window } = await launchApp();
 
-  const fileNode = window.getByTestId('file-tree-node-reg_file');
+  const fileNode = window.getByTestId('file-tree-node-README_md');
   await expect(fileNode).toBeVisible();
   await fileNode.click();
 
-  await expect(window.getByTestId('editor-tab-reg_file')).toBeVisible();
+  await expect(window.getByTestId('editor-tab-README.md')).toBeVisible();
+  await expect(window.locator('.monaco-editor .view-lines')).toContainText('Fixture Workspace');
 
   await app.close();
 });

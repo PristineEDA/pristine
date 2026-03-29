@@ -1,11 +1,13 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import {
   FilePlus, FolderPlus, RefreshCw, ChevronsUpDown,
   AlertCircle, AlertTriangle, Info, Circle,
 } from 'lucide-react';
-import { Problem, initialFileTree, problemsList, fileOutlines } from '../../data/mockData';
+import { Problem, problemsList, fileOutlines } from '../../data/mockData';
 import { FileTreeNode } from './FileTreeNode';
 import { OutlineNode } from './OutlineNode';
+import { DEFAULT_STARTUP_PROJECT_NAME } from '../workspace/workspaceFiles';
+import { useWorkspaceTree } from '../workspace/useWorkspaceTree';
 
 interface LeftSidePanelProps {
   activeFileId: string;
@@ -23,18 +25,15 @@ function SeverityIcon({ severity }: { severity: Problem['severity'] }) {
 
 export function LeftSidePanel({ activeFileId, onFileOpen, onLineJump, currentOutlineId }: LeftSidePanelProps) {
   const [tab, setTab] = useState<'explorer' | 'outline' | 'problems'>('explorer');
-  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(
-    () => new Set(['root', 'rtl', 'core'])
-  );
   const [problemFilter, setProblemFilter] = useState<'all' | 'error' | 'warning'>('all');
-
-  const toggleFolder = useCallback((id: string) => {
-    setExpandedFolders((prev) => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
-  }, []);
+  const {
+    treeNodes,
+    workspaceAvailable,
+    expandedFolders,
+    toggleFolder,
+    refreshTree,
+    collapseAll,
+  } = useWorkspaceTree();
 
   const outline = fileOutlines[currentOutlineId] || [];
   const filteredProblems = useMemo(() =>
@@ -80,17 +79,23 @@ export function LeftSidePanel({ activeFileId, onFileOpen, onLineJump, currentOut
         <div className="flex flex-col flex-1 overflow-hidden">
           <div className="flex items-center px-3 py-1.5 shrink-0">
             <span className="flex-1 text-ide-text-section uppercase text-[11px] font-bold tracking-wide">
-              MY_SOC_PROJECT
+              {DEFAULT_STARTUP_PROJECT_NAME}
             </span>
             <div className="flex items-center gap-1">
               <button title="New File" className="p-0.5 text-ide-text-muted hover:text-white transition-colors"><FilePlus size={14} /></button>
               <button title="New Folder" className="p-0.5 text-ide-text-muted hover:text-white transition-colors"><FolderPlus size={14} /></button>
-              <button title="Refresh" className="p-0.5 text-ide-text-muted hover:text-white transition-colors"><RefreshCw size={13} /></button>
-              <button title="Collapse All" className="p-0.5 text-ide-text-muted hover:text-white transition-colors"><ChevronsUpDown size={13} /></button>
+              <button title="Refresh" className="p-0.5 text-ide-text-muted hover:text-white transition-colors" onClick={refreshTree}><RefreshCw size={13} /></button>
+              <button title="Collapse All" className="p-0.5 text-ide-text-muted hover:text-white transition-colors" onClick={collapseAll}><ChevronsUpDown size={13} /></button>
             </div>
           </div>
           <div className="flex-1 overflow-y-auto overflow-x-hidden">
-            {initialFileTree.map((node) => (
+            {workspaceAvailable === null && (
+              <div className="px-4 py-3 text-ide-text-muted text-[12px]">Loading workspace...</div>
+            )}
+            {workspaceAvailable === false && (
+              <div className="px-4 py-3 text-ide-text-muted text-[12px]">No workspace files available</div>
+            )}
+            {workspaceAvailable && treeNodes.map((node) => (
               <FileTreeNode
                 key={node.id}
                 node={node}

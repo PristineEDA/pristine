@@ -43,16 +43,10 @@ export function useWorkspace(): WorkspaceState {
 
 // ─── Provider ───────────────────────────────────────────────────────────────
 
-const DEFAULT_TABS: Tab[] = [
-  { id: 'uart_tx', name: 'uart_tx.v' },
-  { id: 'alu', name: 'alu.v' },
-  { id: 'cpu_top', name: 'cpu_top.v', modified: true },
-];
-
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [activeView, setActiveView] = useState('explorer');
-  const [tabs, setTabs] = useState<Tab[]>(DEFAULT_TABS);
-  const [activeTabId, setActiveTabId] = useState('uart_tx');
+  const [tabs, setTabs] = useState<Tab[]>([]);
+  const [activeTabId, setActiveTabId] = useState('');
   const [showBottomPanel, setShowBottomPanel] = useState(true);
   const [jumpToLine, setJumpToLine] = useState<number | undefined>();
   const [cursorLine, setCursorLine] = useState(1);
@@ -76,6 +70,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         if (newActive) {
           setActiveTabId(newActive.id);
         }
+      } else if (fileId === activeTabId) {
+        setActiveTabId('');
       }
       return next;
     });

@@ -1,7 +1,8 @@
 import { app, BrowserWindow } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { registerAllHandlers, setupWindowStreams } from './ipc/register.js';
+import { registerAllHandlers, setProjectRoot, setupWindowStreams } from './ipc/register.js';
+import { DEFAULT_STARTUP_PROJECT_ROOT } from '../src/app/workspace/workspaceFiles.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -46,8 +47,7 @@ function createWindow(): void {
   });
 }
 
-// Project root is not set by default — user must open a project via the UI.
-// setProjectRoot() will be called when the user selects a project directory.
+setProjectRoot(process.env['PRISTINE_PROJECT_ROOT'] ?? DEFAULT_STARTUP_PROJECT_ROOT);
 
 // Register all IPC handlers before window creation
 registerAllHandlers(getMainWindow);

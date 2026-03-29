@@ -1,5 +1,5 @@
 import { createRef } from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { EditorArea } from './EditorArea';
 
@@ -63,9 +63,12 @@ vi.mock('@monaco-editor/react', () => ({
 
 describe('EditorArea', () => {
   beforeEach(() => {
+    const electronApi = window.electronAPI!;
+
     vi.clearAllMocks();
     mockMonaco.languages.getLanguages.mockReturnValue([]);
     mockMonaco.editor.getModels.mockReturnValue([mockModel]);
+    vi.mocked(electronApi.fs.readFile).mockResolvedValue('// fixture content');
   });
 
   it('renders the empty state when no tabs are open', () => {
@@ -90,31 +93,31 @@ describe('EditorArea', () => {
     render(
       <EditorArea
         tabs={[
-          { id: 'cpu_top', name: 'cpu_top.v', modified: true },
-          { id: 'alu', name: 'alu.v' },
+          { id: 'rtl/core/cpu_top.v', name: 'cpu_top.v', modified: true },
+          { id: 'rtl/core/alu.v', name: 'alu.v' },
         ]}
-        activeTabId="cpu_top"
+        activeTabId="rtl/core/cpu_top.v"
         onTabChange={onTabChange}
         onTabClose={onTabClose}
         editorRef={createRef()}
       />,
     );
 
-    fireEvent.click(screen.getByTestId('editor-tab-alu'));
-    fireEvent.click(screen.getByTestId('editor-tab-close-cpu_top'));
+    fireEvent.click(screen.getByTestId('editor-tab-rtl/core/alu.v'));
+    fireEvent.click(screen.getByTestId('editor-tab-close-rtl/core/cpu_top.v'));
 
-    expect(onTabChange).toHaveBeenCalledWith('alu');
-    expect(onTabClose).toHaveBeenCalledWith('cpu_top');
+    expect(onTabChange).toHaveBeenCalledWith('rtl/core/alu.v');
+    expect(onTabClose).toHaveBeenCalledWith('rtl/core/cpu_top.v');
   });
 
-  it('configures monaco, updates markers, reacts to cursor changes, and jumps to the target line', () => {
+  it('configures monaco, loads file content, reacts to cursor changes, and jumps to the target line', async () => {
     const onCursorChange = vi.fn();
     const editorRef = createRef<any>();
 
     render(
       <EditorArea
-        tabs={[{ id: 'tb_cpu', name: 'tb_cpu_top.sv' }]}
-        activeTabId="tb_cpu"
+        tabs={[{ id: 'rtl/tb/tb_cpu_top.sv', name: 'tb_cpu_top.sv' }]}
+        activeTabId="rtl/tb/tb_cpu_top.sv"
         onTabChange={vi.fn()}
         onTabClose={vi.fn()}
         editorRef={editorRef}
@@ -123,7 +126,13 @@ describe('EditorArea', () => {
       />,
     );
 
+    await waitFor(() => {
+      expect(window.electronAPI!.fs.readFile).toHaveBeenCalledWith('rtl/tb/tb_cpu_top.sv', 'utf-8');
+    });
+
     expect(screen.getByTestId('monaco-editor')).toHaveAttribute('data-language', 'systemverilog');
+    expect(screen.getByText('retroSoC')).toBeInTheDocument();
+    expect(screen.getAllByText('tb_cpu_top.sv')).toHaveLength(2);
     expect(mockMonaco.languages.register).toHaveBeenCalled();
     expect(mockMonaco.languages.setMonarchTokensProvider).toHaveBeenCalledTimes(2);
     expect(mockMonaco.editor.defineTheme).toHaveBeenCalled();

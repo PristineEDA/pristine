@@ -55,9 +55,12 @@ describe('FileTreeNode', () => {
       <FileTreeNode
         node={{
           id: 'rtl',
+          path: 'rtl',
           name: 'rtl',
           type: 'folder',
-          children: [{ id: 'uart_tx', name: 'uart_tx.v', type: 'file', hasWarning: true }],
+          children: [{ id: 'rtl/uart_tx.v', path: 'rtl/uart_tx.v', name: 'uart_tx.v', type: 'file', hasLoadedChildren: true, isLoading: false }],
+          hasLoadedChildren: true,
+          isLoading: false,
         }}
         depth={0}
         activeFileId=""
@@ -67,7 +70,7 @@ describe('FileTreeNode', () => {
       />,
     );
 
-    expect(screen.queryByTestId('file-tree-node-uart_tx')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('file-tree-node-rtl_uart_tx_v')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId('file-tree-node-rtl'));
     expect(onToggleFolder).toHaveBeenCalledWith('rtl');
@@ -76,9 +79,12 @@ describe('FileTreeNode', () => {
       <FileTreeNode
         node={{
           id: 'rtl',
+          path: 'rtl',
           name: 'rtl',
           type: 'folder',
-          children: [{ id: 'uart_tx', name: 'uart_tx.v', type: 'file', hasWarning: true }],
+          children: [{ id: 'rtl/uart_tx.v', path: 'rtl/uart_tx.v', name: 'uart_tx.v', type: 'file', hasLoadedChildren: true, isLoading: false }],
+          hasLoadedChildren: true,
+          isLoading: false,
         }}
         depth={0}
         activeFileId=""
@@ -88,7 +94,7 @@ describe('FileTreeNode', () => {
       />,
     );
 
-    expect(screen.getByTestId('file-tree-node-uart_tx')).toBeInTheDocument();
+    expect(screen.getByTestId('file-tree-node-rtl_uart_tx_v')).toBeInTheDocument();
   });
 
   it('opens files from clicks and context-menu actions, including active error nodes', () => {
@@ -98,24 +104,26 @@ describe('FileTreeNode', () => {
     render(
       <FileTreeNode
         node={{
-          id: 'cpu_top',
+          id: 'rtl/core/cpu_top.v',
+          path: 'rtl/core/cpu_top.v',
           name: 'cpu_top.v',
           type: 'file',
-          hasError: true,
+          hasLoadedChildren: true,
+          isLoading: false,
         }}
         depth={1}
-        activeFileId="cpu_top"
+        activeFileId="rtl/core/cpu_top.v"
         onFileOpen={onFileOpen}
         expandedFolders={new Set()}
         onToggleFolder={onToggleFolder}
       />,
     );
 
-    const node = screen.getByTestId('file-tree-node-cpu_top');
+    const node = screen.getByTestId('file-tree-node-rtl_core_cpu_top_v');
     expect(node.className).toContain('bg-ide-selection');
 
     fireEvent.click(node);
-    expect(onFileOpen).toHaveBeenCalledWith('cpu_top', 'cpu_top.v');
+    expect(onFileOpen).toHaveBeenCalledWith('rtl/core/cpu_top.v', 'cpu_top.v');
 
     fireEvent.contextMenu(node, { clientX: 100, clientY: 120 });
     fireEvent.click(screen.getByRole('button', { name: /Open in Editor/i }));

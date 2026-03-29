@@ -15,10 +15,11 @@ function WorkspaceHarness() {
       <div data-testid="bottom-panel">{workspace.showBottomPanel ? 'open' : 'closed'}</div>
 
       <button onClick={() => workspace.setActiveView('problems')}>set-view</button>
-      <button onClick={() => workspace.openFile('reg_file', 'reg_file.v')}>open-reg</button>
-      <button onClick={() => workspace.openFile('uart_tx', 'uart_tx.v')}>open-existing</button>
-      <button onClick={() => workspace.setActiveTabId('alu')}>activate-alu</button>
-      <button onClick={() => workspace.closeFile('alu')}>close-alu</button>
+      <button onClick={() => workspace.openFile('rtl/core/reg_file.v', 'reg_file.v')}>open-reg</button>
+      <button onClick={() => workspace.openFile('rtl/core/reg_file.v', 'reg_file.v')}>open-existing</button>
+      <button onClick={() => workspace.openFile('rtl/core/alu.v', 'alu.v')}>open-alu</button>
+      <button onClick={() => workspace.setActiveTabId('rtl/core/alu.v')}>activate-alu</button>
+      <button onClick={() => workspace.closeFile('rtl/core/alu.v')}>close-alu</button>
       <button onClick={() => workspace.jumpTo(42)}>jump</button>
       <button onClick={() => workspace.setCursorPos(8, 16)}>cursor</button>
       <button onClick={() => workspace.setShowBottomPanel(false)}>hide-bottom</button>
@@ -36,8 +37,8 @@ describe('WorkspaceContext', () => {
 
     fireEvent.click(screen.getByText('open-reg'));
 
-    expect(screen.getByTestId('tabs')).toHaveTextContent('uart_tx,alu,cpu_top,reg_file');
-    expect(screen.getByTestId('active-tab')).toHaveTextContent('reg_file');
+    expect(screen.getByTestId('tabs')).toHaveTextContent('rtl/core/reg_file.v');
+    expect(screen.getByTestId('active-tab')).toHaveTextContent('rtl/core/reg_file.v');
   });
 
   it('does not duplicate an existing tab', () => {
@@ -47,10 +48,11 @@ describe('WorkspaceContext', () => {
       </WorkspaceProvider>,
     );
 
+    fireEvent.click(screen.getByText('open-reg'));
     fireEvent.click(screen.getByText('open-existing'));
 
-    expect(screen.getByTestId('tabs')).toHaveTextContent('uart_tx,alu,cpu_top');
-    expect(screen.getByTestId('active-tab')).toHaveTextContent('uart_tx');
+    expect(screen.getByTestId('tabs')).toHaveTextContent('rtl/core/reg_file.v');
+    expect(screen.getByTestId('active-tab')).toHaveTextContent('rtl/core/reg_file.v');
   });
 
   it('closes the active tab and selects the nearest neighbor', () => {
@@ -60,11 +62,13 @@ describe('WorkspaceContext', () => {
       </WorkspaceProvider>,
     );
 
+    fireEvent.click(screen.getByText('open-reg'));
+    fireEvent.click(screen.getByText('open-alu'));
     fireEvent.click(screen.getByText('activate-alu'));
     fireEvent.click(screen.getByText('close-alu'));
 
-    expect(screen.getByTestId('tabs')).toHaveTextContent('uart_tx,cpu_top');
-    expect(screen.getByTestId('active-tab')).toHaveTextContent('cpu_top');
+    expect(screen.getByTestId('tabs')).toHaveTextContent('rtl/core/reg_file.v');
+    expect(screen.getByTestId('active-tab')).toHaveTextContent('rtl/core/reg_file.v');
   });
 
   it('updates cursor position, active view, and bottom panel state', () => {

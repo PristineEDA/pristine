@@ -1,10 +1,11 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import Editor, { useMonaco } from '@monaco-editor/react';
 import {
   X, ChevronRight, Split,
   MoreHorizontal, Circle,
 } from 'lucide-react';
-import { fileContents, problemsList } from '../../data/mockData';
+import { problemsList } from '../../data/mockData';
+import { getEditorLanguage, getWorkspaceSegments } from '../workspace/workspaceFiles';
 
 interface Tab {
   id: string;
@@ -211,14 +212,8 @@ function EditorTab({
 }
 
 // ─── Breadcrumb ───────────────────────────────────────────────────────────────
-function Breadcrumb({ fileId }: { fileId: string }) {
-  const paths: Record<string, string[]> = {
-    uart_tx: ['my_soc_project', 'rtl', 'peripherals', 'uart_tx.v'],
-    alu: ['my_soc_project', 'rtl', 'core', 'alu.v'],
-    cpu_top: ['my_soc_project', 'rtl', 'core', 'cpu_top.v'],
-    reg_file: ['my_soc_project', 'rtl', 'core', 'reg_file.v'],
-  };
-  const segments = paths[fileId] || ['my_soc_project', `${fileId}.v`];
+function Breadcrumb({ filePath }: { filePath: string }) {
+  const segments = getWorkspaceSegments(filePath);
 
   return (
     <div className="flex items-center gap-0.5 px-3 h-6 bg-ide-bg border-b border-ide-border shrink-0">
@@ -244,9 +239,70 @@ export function EditorArea({
 }: EditorAreaProps) {
   const monaco = useMonaco();
   useVerilogLanguage(monaco);
+  const [contentCache, setContentCache] = useState<Record<string, string>>({});
+  const [loadingFiles, setLoadingFiles] = useState<Record<string, boolean>>({});
+  const [loadErrors, setLoadErrors] = useState<Record<string, string>>({});
 
   const activeTab = tabs.find((t) => t.id === activeTabId);
-  const code = fileContents[activeTabId] || `// ${activeTabId}\n// 文件内容加载中...\n`;
+  const code = activeTabId
+    ? loadErrors[activeTabId]
+      ? `// Failed to load ${activeTab?.name ?? activeTabId}\n// ${loadErrors[activeTabId]}\n`
+      : loadingFiles[activeTabId]
+      ? `// ${activeTab?.name ?? activeTabId}\n// Loading file contents...\n`
+      : contentCache[activeTabId] ?? `// ${activeTab?.name ?? activeTabId}\n// Loading file contents...\n`
+    : '';
+
+  useEffect(() => {
+    if (!activeTabId || contentCache[activeTabId] || loadingFiles[activeTabId]) {
+      return;
+    }
+
+    const fsApi = window.electronAPI?.fs;
+    if (!fsApi) {
+      setLoadErrors((current) => ({ ...current, [activeTabId]: 'Filesystem API unavailable' }));
+      return;
+    }
+
+    let cancelled = false;
+
+    setLoadingFiles((current) => ({ ...current, [activeTabId]: true }));
+    void fsApi.readFile(activeTabId, 'utf-8')
+      .then((content) => {
+        if (cancelled) {
+          return;
+        }
+
+        setContentCache((current) => ({ ...current, [activeTabId]: content }));
+        setLoadErrors((current) => {
+          if (!current[activeTabId]) {
+            return current;
+          }
+
+          const next = { ...current };
+          delete next[activeTabId];
+          return next;
+        });
+      })
+      .catch((error: unknown) => {
+        if (cancelled) {
+          return;
+        }
+
+        const message = error instanceof Error ? error.message : 'Unable to load file';
+        setLoadErrors((current) => ({ ...current, [activeTabId]: message }));
+      })
+      .finally(() => {
+        if (cancelled) {
+          return;
+        }
+
+        setLoadingFiles((current) => ({ ...current, [activeTabId]: false }));
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTabId]);
 
   // Build markers from problems
   useEffect(() => {
@@ -279,11 +335,6 @@ export function EditorArea({
     editorRef.current.setPosition({ lineNumber: jumpToLine, column: 1 });
     editorRef.current.focus();
   }, [jumpToLine, editorRef]);
-
-  const getLanguage = (fileId: string) => {
-    if (['tb_cpu', 'tb_uart', 'tb_alu'].includes(fileId)) return 'systemverilog';
-    return 'verilog';
-  };
 
   if (tabs.length === 0) {
     return (
@@ -337,13 +388,13 @@ export function EditorArea({
       </div>
 
       {/* Breadcrumb */}
-      {activeTab && <Breadcrumb fileId={activeTabId} />}
+      {activeTab && <Breadcrumb filePath={activeTabId} />}
 
       {/* Monaco Editor */}
       <div className="flex-1 overflow-hidden bg-ide-editor-bg">
         <Editor
           height="100%"
-          language={getLanguage(activeTabId)}
+          language={getEditorLanguage(activeTabId)}
           value={code}
           theme="dracula"
           beforeMount={(monaco) => {
