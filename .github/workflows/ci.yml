@@ -43,6 +43,14 @@ jobs:
       - name: Run unit tests with coverage
         run: pnpm test:coverage
 
+      - name: Configure Electron sandbox on Linux
+        if: runner.os == 'Linux'
+        run: |
+          sandbox_path="$(readlink -f node_modules/electron/dist/chrome-sandbox)"
+          sudo chown root:root "$sandbox_path"
+          sudo chmod 4755 "$sandbox_path"
+          echo "CHROME_DEVEL_SANDBOX=$sandbox_path" >> "$GITHUB_ENV"
+
       - name: Run E2E tests on Linux
         if: runner.os == 'Linux'
         run: xvfb-run -a pnpm test:e2e
