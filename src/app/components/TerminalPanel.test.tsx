@@ -1,36 +1,135 @@
-import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { render, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TerminalPanel } from './TerminalPanel';
+import type { ElectronAPI } from '../../../types/electron-api';
+
+const terminalInstances: Array<{
+  cols: number;
+  rows: number;
+  loadAddon: ReturnType<typeof vi.fn>;
+  open: ReturnType<typeof vi.fn>;
+  focus: ReturnType<typeof vi.fn>;
+  write: ReturnType<typeof vi.fn>;
+  dispose: ReturnType<typeof vi.fn>;
+  onData: ReturnType<typeof vi.fn>;
+  emitData: (data: string) => void;
+}> = [];
+
+const fitMock = vi.fn();
+
+vi.mock('@xterm/addon-fit', () => ({
+  FitAddon: class {
+    fit = fitMock;
+  },
+}));
+
+vi.mock('@xterm/xterm', () => ({
+  Terminal: class {
+    cols = 80;
+    rows = 24;
+    loadAddon = vi.fn();
+    open = vi.fn();
+    focus = vi.fn();
+    write = vi.fn();
+    dispose = vi.fn();
+    private onDataHandler: ((data: string) => void) | null = null;
+    onData = vi.fn((callback: (data: string) => void) => {
+      this.onDataHandler = callback;
+      return { dispose: vi.fn() };
+    });
+
+    constructor() {
+      terminalInstances.push({
+        cols: this.cols,
+        rows: this.rows,
+        loadAddon: this.loadAddon,
+        open: this.open,
+        focus: this.focus,
+        write: this.write,
+        dispose: this.dispose,
+        onData: this.onData,
+        emitData: (data: string) => this.onDataHandler?.(data),
+      });
+    }
+  },
+}));
 
 describe('TerminalPanel', () => {
-  it('runs a known command and appends simulated output', () => {
-    render(<TerminalPanel />);
-
-    const input = screen.getByRole('textbox');
-    fireEvent.change(input, { target: { value: 'make lint' } });
-    fireEvent.keyDown(input, { key: 'Enter' });
-
-    expect(screen.getByText('make lint')).toBeInTheDocument();
-    expect(screen.getByText(/Running Verilator lint pass/i)).toBeInTheDocument();
-    expect(screen.getByText(/Unconnected port alu_src_b/i)).toBeInTheDocument();
-    expect(screen.getByText(/Lint completed: 1 error, 1 warning/i)).toBeInTheDocument();
+  beforeEach(() => {
+    terminalInstances.length = 0;
+    fitMock.mockClear();
   });
 
-  it('supports history navigation and clear command', () => {
+  it('creates a terminal session and writes streamed output to xterm', async () => {
+    const createMock = vi.fn().mockResolvedValue({ id: 'term-1', pid: 101, shell: 'powershell.exe' });
+    let onDataCallback: ((payload: { id: string; data: string }) => void) | undefined;
+    const onDataMock = vi.fn((callback: (payload: { id: string; data: string }) => void) => {
+      onDataCallback = callback;
+      return vi.fn();
+    });
+    const onExitMock = vi.fn(() => vi.fn());
+    const baseApi = window.electronAPI as ElectronAPI;
+
+    window.electronAPI = {
+      ...baseApi,
+      terminal: {
+        ...baseApi.terminal,
+        create: createMock,
+        onData: onDataMock,
+        onExit: onExitMock,
+      },
+    };
+
     render(<TerminalPanel />);
 
-    const input = screen.getByRole('textbox') as HTMLInputElement;
+    await waitFor(() => expect(createMock).toHaveBeenCalled());
+    expect(terminalInstances[0]?.open).toHaveBeenCalled();
 
-    fireEvent.change(input, { target: { value: 'help' } });
-    fireEvent.keyDown(input, { key: 'Enter' });
+    onDataCallback?.({ id: 'term-1', data: 'PS> dir\r\n' });
+    expect(terminalInstances[0]?.write).toHaveBeenCalledWith('PS> dir\r\n');
+  });
 
-    const activeInput = screen.getByRole('textbox') as HTMLInputElement;
-    fireEvent.keyDown(activeInput, { key: 'ArrowUp' });
-    expect(activeInput.value).toBe('help');
+  it('forwards terminal input to the backend session', async () => {
+    const createMock = vi.fn().mockResolvedValue({ id: 'term-2', pid: 202, shell: 'powershell.exe' });
+    const writeMock = vi.fn().mockResolvedValue(true);
+    const baseApi = window.electronAPI as ElectronAPI;
 
-    fireEvent.change(activeInput, { target: { value: 'clear' } });
-    fireEvent.keyDown(activeInput, { key: 'Enter' });
+    window.electronAPI = {
+      ...baseApi,
+      terminal: {
+        ...baseApi.terminal,
+        create: createMock,
+        write: writeMock,
+      },
+    };
 
-    expect(screen.queryByText(/Available commands:/i)).not.toBeInTheDocument();
+    render(<TerminalPanel />);
+
+    await waitFor(() => expect(createMock).toHaveBeenCalled());
+    terminalInstances[0]?.emitData('dir\r');
+
+    await waitFor(() => expect(writeMock).toHaveBeenCalledWith('term-2', 'dir\r'));
+  });
+
+  it('kills the terminal session on unmount', async () => {
+    const createMock = vi.fn().mockResolvedValue({ id: 'term-3', pid: 303, shell: 'powershell.exe' });
+    const killMock = vi.fn().mockResolvedValue(true);
+    const baseApi = window.electronAPI as ElectronAPI;
+
+    window.electronAPI = {
+      ...baseApi,
+      terminal: {
+        ...baseApi.terminal,
+        create: createMock,
+        kill: killMock,
+      },
+    };
+
+    const view = render(<TerminalPanel />);
+    await waitFor(() => expect(createMock).toHaveBeenCalled());
+    view.unmount();
+
+    await waitFor(() => expect(killMock).toHaveBeenCalledWith('term-3'));
+    expect(terminalInstances[0]?.dispose).toHaveBeenCalled();
   });
 });

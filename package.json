@@ -21,8 +21,11 @@
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
     "ignore": "^7.0.5",
     "lucide-react": "0.487.0",
+    "node-pty": "^1.1.0",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "react-resizable-panels": "2.1.7"
@@ -56,7 +59,8 @@
     "onlyBuiltDependencies": [
       "@tailwindcss/oxide",
       "electron",
-      "esbuild"
+      "esbuild",
+      "node-pty"
     ]
   }
 }

@@ -22,6 +22,10 @@ export const AsyncChannels = {
   FS_EXISTS: 'async:fs:exists',
   SHELL_EXEC: 'async:shell:exec',
   SHELL_KILL: 'async:shell:kill',
+  TERMINAL_CREATE: 'async:terminal:create',
+  TERMINAL_WRITE: 'async:terminal:write',
+  TERMINAL_RESIZE: 'async:terminal:resize',
+  TERMINAL_KILL: 'async:terminal:kill',
   CONFIG_SET: 'async:config:set',
 } as const;
 
@@ -29,5 +33,7 @@ export const StreamChannels = {
   SHELL_STDOUT: 'stream:shell:stdout',
   SHELL_STDERR: 'stream:shell:stderr',
   SHELL_EXIT: 'stream:shell:exit',
+  TERMINAL_DATA: 'stream:terminal:data',
+  TERMINAL_EXIT: 'stream:terminal:exit',
   WINDOW_MAXIMIZED_CHANGE: 'stream:window:maximized-change',
 } as const;

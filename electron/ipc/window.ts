@@ -1,5 +1,6 @@
 import { BrowserWindow, ipcMain } from 'electron';
 import { SyncChannels, AsyncChannels, StreamChannels } from './channels.js';
+import { disposeAllTerminalSessions } from './terminal.js';
 
 export function registerWindowHandlers(getMainWindow: () => BrowserWindow | null): void {
   ipcMain.on(SyncChannels.WINDOW_IS_MAXIMIZED, (event) => {
@@ -28,6 +29,7 @@ export function registerWindowHandlers(getMainWindow: () => BrowserWindow | null
   ipcMain.handle(AsyncChannels.WINDOW_CLOSE, () => {
     const win = getMainWindow();
     if (!win) return false;
+    disposeAllTerminalSessions();
     win.close();
     return true;
   });

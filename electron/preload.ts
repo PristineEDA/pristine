@@ -12,6 +12,7 @@ function syncSend<T>(channel: string, ...args: unknown[]): T {
 const platformInfo = syncSend<{
   platform: string;
   arch: string;
+  isE2E: boolean;
   versions: { electron: string; node: string; chrome: string };
 }>(SyncChannels.PLATFORM);
 
@@ -21,6 +22,7 @@ const electronAPI = {
   platform: platformInfo.platform,
   arch: platformInfo.arch,
   versions: platformInfo.versions,
+  isE2E: platformInfo.isE2E,
 
   // ── Window Control (async) ──
   minimize: () => ipcRenderer.invoke(AsyncChannels.WINDOW_MINIMIZE),
@@ -85,6 +87,35 @@ const electronAPI = {
       ) => callback(payload);
       ipcRenderer.on(StreamChannels.SHELL_EXIT, handler);
       return () => { ipcRenderer.removeListener(StreamChannels.SHELL_EXIT, handler); };
+    },
+  },
+
+  terminal: {
+    create: (options?: { cwd?: string; cols?: number; rows?: number }) =>
+      ipcRenderer.invoke(AsyncChannels.TERMINAL_CREATE, options) as Promise<{
+        id: string;
+        pid: number;
+        shell: string;
+      }>,
+    write: (id: string, data: string) =>
+      ipcRenderer.invoke(AsyncChannels.TERMINAL_WRITE, id, data) as Promise<boolean>,
+    resize: (id: string, cols: number, rows: number) =>
+      ipcRenderer.invoke(AsyncChannels.TERMINAL_RESIZE, id, cols, rows) as Promise<boolean>,
+    kill: (id: string) =>
+      ipcRenderer.invoke(AsyncChannels.TERMINAL_KILL, id) as Promise<boolean>,
+    onData: (callback: (data: { id: string; data: string }) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, payload: { id: string; data: string }) =>
+        callback(payload);
+      ipcRenderer.on(StreamChannels.TERMINAL_DATA, handler);
+      return () => { ipcRenderer.removeListener(StreamChannels.TERMINAL_DATA, handler); };
+    },
+    onExit: (callback: (data: { id: string; exitCode: number; signal: number }) => void) => {
+      const handler = (
+        _event: Electron.IpcRendererEvent,
+        payload: { id: string; exitCode: number; signal: number },
+      ) => callback(payload);
+      ipcRenderer.on(StreamChannels.TERMINAL_EXIT, handler);
+      return () => { ipcRenderer.removeListener(StreamChannels.TERMINAL_EXIT, handler); };
     },
   },
 

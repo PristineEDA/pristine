@@ -2,6 +2,7 @@ import { app, BrowserWindow } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { registerAllHandlers, setProjectRoot, setupWindowStreams } from './ipc/register.js';
+import { disposeAllTerminalSessions } from './ipc/terminal.js';
 import { DEFAULT_STARTUP_PROJECT_ROOT } from '../src/app/workspace/workspaceFiles.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -42,7 +43,12 @@ function createWindow(): void {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
 
+  mainWindow.on('close', () => {
+    disposeAllTerminalSessions();
+  });
+
   mainWindow.on('closed', () => {
+    disposeAllTerminalSessions();
     mainWindow = null;
   });
 }
@@ -60,6 +66,10 @@ app.whenReady().then(() => {
       createWindow();
     }
   });
+});
+
+app.on('before-quit', () => {
+  disposeAllTerminalSessions();
 });
 
 app.on('window-all-closed', () => {

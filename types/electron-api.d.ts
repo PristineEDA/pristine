@@ -1,6 +1,7 @@
 export interface ElectronAPI {
   platform: string;
   arch: string;
+  isE2E: boolean;
   versions: {
     electron: string;
     node: string;
@@ -44,6 +45,19 @@ export interface ElectronAPI {
     onStdout: (callback: (data: { id: string; data: string }) => void) => () => void;
     onStderr: (callback: (data: { id: string; data: string }) => void) => () => void;
     onExit: (callback: (data: { id: string; code: number | null; error?: string }) => void) => () => void;
+  };
+
+  terminal: {
+    create: (options?: { cwd?: string; cols?: number; rows?: number }) => Promise<{
+      id: string;
+      pid: number;
+      shell: string;
+    }>;
+    write: (id: string, data: string) => Promise<boolean>;
+    resize: (id: string, cols: number, rows: number) => Promise<boolean>;
+    kill: (id: string) => Promise<boolean>;
+    onData: (callback: (data: { id: string; data: string }) => void) => () => void;
+    onExit: (callback: (data: { id: string; exitCode: number; signal: number }) => void) => () => void;
   };
 
   // Config

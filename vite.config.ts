@@ -14,6 +14,9 @@ export default defineConfig(async () => ({
         vite: {
           build: {
             outDir: 'dist-electron',
+            rollupOptions: {
+              external: ['node-pty'],
+            },
           },
         },
       },

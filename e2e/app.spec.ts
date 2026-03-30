@@ -12,6 +12,7 @@ async function launchApp() {
     args: [path.join(__dirname, '..', 'dist-electron', 'main.js')],
     env: {
       ...process.env,
+      PRISTINE_E2E: '1',
       PRISTINE_PROJECT_ROOT: fixtureWorkspace,
     },
   });
@@ -27,6 +28,43 @@ async function openNestedWorkspaceFile(window: Awaited<ReturnType<typeof launchA
     const node = window.getByTestId(testId);
     await expect(node).toBeVisible();
     await node.click();
+  }
+}
+
+async function openBottomTerminal(window: Awaited<ReturnType<typeof launchApp>>['window']) {
+  const toggleBottomPanel = window.getByTestId('toggle-bottom-panel');
+  await expect(toggleBottomPanel).toBeVisible();
+
+  if ((await toggleBottomPanel.getAttribute('aria-pressed')) !== 'true') {
+    await toggleBottomPanel.click();
+  }
+
+  const terminalHost = window.getByTestId('terminal-host');
+  await expect(terminalHost).toBeVisible();
+  await expect(window.locator('[data-testid="terminal-host"] .xterm')).toBeVisible();
+
+  return terminalHost;
+}
+
+async function readTerminalText(window: Awaited<ReturnType<typeof launchApp>>['window']) {
+  return window.getByTestId('terminal-host').getAttribute('data-terminal-text');
+}
+
+async function readTerminalPid(window: Awaited<ReturnType<typeof launchApp>>['window']) {
+  const value = await window.getByTestId('terminal-host').getAttribute('data-terminal-pid');
+  return value ? Number(value) : NaN;
+}
+
+function isProcessRunning(pid: number) {
+  if (!Number.isFinite(pid) || pid <= 0) {
+    return false;
+  }
+
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code !== 'ESRCH';
   }
 }
 
@@ -296,5 +334,48 @@ test('closing the last tab removes an empty split group', async () => {
   await expect(window.getByTestId('editor-group-group-1')).toHaveCount(0);
   await expect(window.getByTestId('editor-group-group-2')).toBeVisible();
 
+  await app.close();
+});
+
+test('terminal tab creates a real shell session and shows command output', async () => {
+  const { app, window } = await launchApp();
+  const marker = '__PRISTINE_TERMINAL_E2E__';
+
+  await openBottomTerminal(window);
+
+  const terminalInput = window.locator('[data-testid="terminal-host"] .xterm-helper-textarea');
+  await expect(terminalInput).toHaveCount(1);
+  await terminalInput.click();
+  await terminalInput.pressSequentially(`echo ${marker}`);
+  await terminalInput.press('Enter');
+
+  await expect.poll(async () => readTerminalText(window), {
+    timeout: 15000,
+  }).toContain(marker);
+
+  await app.close();
+});
+
+test('close button terminates the active terminal shell process', async () => {
+  const { app, window } = await launchApp();
+
+  await openBottomTerminal(window);
+
+  await expect.poll(async () => readTerminalPid(window), {
+    timeout: 15000,
+  }).toBeGreaterThan(0);
+
+  const pid = await readTerminalPid(window);
+  expect(isProcessRunning(pid)).toBe(true);
+
+  const closePromise = window.waitForEvent('close');
+  await window.getByTestId('window-control-close').click();
+  await closePromise;
+
+  await expect.poll(() => isProcessRunning(pid), {
+    timeout: 15000,
+  }).toBe(false);
+
+  await expect.poll(() => app.windows().length).toBe(0);
   await app.close();
 });

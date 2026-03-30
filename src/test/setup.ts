@@ -6,6 +6,7 @@ function createElectronApiMock() {
   return {
     platform: 'win32',
     arch: 'x64',
+    isE2E: false,
     versions: {
       electron: '33.0.0',
       node: process.versions.node,
@@ -31,6 +32,14 @@ function createElectronApiMock() {
       onStderr: vi.fn(() => vi.fn()),
       onExit: vi.fn(() => vi.fn()),
     },
+    terminal: {
+      create: vi.fn().mockResolvedValue({ id: 'terminal-1', pid: 100, shell: 'powershell.exe' }),
+      write: vi.fn().mockResolvedValue(true),
+      resize: vi.fn().mockResolvedValue(true),
+      kill: vi.fn().mockResolvedValue(true),
+      onData: vi.fn(() => vi.fn()),
+      onExit: vi.fn(() => vi.fn()),
+    },
     config: {
       get: vi.fn(),
       set: vi.fn(),
@@ -48,6 +57,20 @@ beforeEach(() => {
       configurable: true,
       writable: true,
       value: vi.fn(),
+    });
+  }
+
+  if (typeof ResizeObserver === 'undefined') {
+    class ResizeObserverMock {
+      observe = vi.fn();
+      unobserve = vi.fn();
+      disconnect = vi.fn();
+    }
+
+    Object.defineProperty(globalThis, 'ResizeObserver', {
+      configurable: true,
+      writable: true,
+      value: ResizeObserverMock,
     });
   }
 
