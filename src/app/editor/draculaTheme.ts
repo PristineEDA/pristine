@@ -1,61 +1,73 @@
-export const draculaThemeDefinition = {
-  base: 'vs-dark',
-  inherit: true,
-  rules: [
-    { token: 'keyword', foreground: 'ff79c6', fontStyle: 'bold' },
-    { token: 'keyword.control', foreground: 'ff79c6' },
-    { token: 'support.function', foreground: '50fa7b' },
-    { token: 'support.function.shell', foreground: '50fa7b' },
-    { token: 'comment', foreground: '6272a4', fontStyle: 'italic' },
-    { token: 'string', foreground: 'f1fa8c' },
-    { token: 'string.invalid', foreground: 'ff5555' },
-    { token: 'number', foreground: 'bd93f9' },
-    { token: 'identifier', foreground: 'f8f8f2' },
-    { token: 'variable', foreground: 'ffb86c' },
-    { token: 'variable.automatic', foreground: 'ffb86c', fontStyle: 'bold' },
-    { token: 'variable.shell', foreground: '8be9fd' },
-    { token: 'delimiter', foreground: 'f8f8f2' },
-    { token: 'operator', foreground: 'ff79c6' },
-    { token: 'operator.assignment.immediate', foreground: 'ff79c6', fontStyle: 'bold' },
-    { token: 'operator.assignment.append', foreground: '50fa7b', fontStyle: 'bold' },
-    { token: 'operator.assignment.conditional', foreground: 'bd93f9', fontStyle: 'bold' },
-    { token: 'operator.assignment.recursive', foreground: 'ffb86c', fontStyle: 'bold' },
-    { token: 'meta.recipe', foreground: '6272a4' },
-    { token: 'type', foreground: '8be9fd', fontStyle: 'italic' },
-  ],
-  colors: {
-    'editor.background': '#282a36',
-    'editor.foreground': '#f8f8f2',
-    'editorLineNumber.foreground': '#6272a4',
-    'editorLineNumber.activeForeground': '#f8f8f2',
-    'editor.selectionBackground': '#44475a',
-    'editor.inactiveSelectionBackground': '#44475a88',
-    'editor.lineHighlightBackground': '#44475a55',
-    'editorCursor.foreground': '#f8f8f2',
-    'editorWhitespace.foreground': '#44475a',
-    'editorWidget.background': '#21222c',
-    'editorWidget.border': '#6272a4',
-    'editorSuggestWidget.background': '#21222c',
-    'editorSuggestWidget.border': '#6272a4',
-    'editorSuggestWidget.selectedBackground': '#44475a',
-    'editorGutter.background': '#282a36',
-    'editorError.foreground': '#ff5555',
-    'editorWarning.foreground': '#ffb86c',
-    'editorIndentGuide.background1': '#44475a',
-    'editorIndentGuide.activeBackground1': '#6272a4',
-    'editorBracketMatch.background': '#44475a',
-    'editorBracketMatch.border': '#f8f8f2',
-    'scrollbar.shadow': '#21222c',
-    'scrollbarSlider.background': '#44475a88',
-    'scrollbarSlider.hoverBackground': '#44475acc',
-    'scrollbarSlider.activeBackground': '#6272a4',
-  },
-} as const;
+import { getRootThemeStyles, resolveDraculaPalette, type StyleReader } from './themeSource';
+
+function stripHash(color: string) {
+  return color.replace(/^#/, '');
+}
+
+export function createDraculaThemeDefinition(styles: StyleReader | null = getRootThemeStyles()) {
+  const palette = resolveDraculaPalette(styles);
+
+  return {
+    base: 'vs-dark',
+    inherit: true,
+    rules: [
+      { token: 'keyword', foreground: stripHash(palette.pink), fontStyle: 'bold' },
+      { token: 'keyword.control', foreground: stripHash(palette.pink) },
+      { token: 'support.function', foreground: stripHash(palette.green) },
+      { token: 'support.function.shell', foreground: stripHash(palette.green) },
+      { token: 'comment', foreground: stripHash(palette.comment), fontStyle: 'italic' },
+      { token: 'string', foreground: stripHash(palette.yellow) },
+      { token: 'string.invalid', foreground: stripHash(palette.red) },
+      { token: 'number', foreground: stripHash(palette.purple) },
+      { token: 'identifier', foreground: stripHash(palette.foreground) },
+      { token: 'variable', foreground: stripHash(palette.orange) },
+      { token: 'variable.automatic', foreground: stripHash(palette.orange), fontStyle: 'bold' },
+      { token: 'variable.shell', foreground: stripHash(palette.cyan) },
+      { token: 'delimiter', foreground: stripHash(palette.foreground) },
+      { token: 'operator', foreground: stripHash(palette.pink) },
+      { token: 'operator.assignment.immediate', foreground: stripHash(palette.pink), fontStyle: 'bold' },
+      { token: 'operator.assignment.append', foreground: stripHash(palette.green), fontStyle: 'bold' },
+      { token: 'operator.assignment.conditional', foreground: stripHash(palette.purple), fontStyle: 'bold' },
+      { token: 'operator.assignment.recursive', foreground: stripHash(palette.orange), fontStyle: 'bold' },
+      { token: 'meta.recipe', foreground: stripHash(palette.comment) },
+      { token: 'type', foreground: stripHash(palette.cyan), fontStyle: 'italic' },
+    ],
+    colors: {
+      'editor.background': palette.background,
+      'editor.foreground': palette.foreground,
+      'editorLineNumber.foreground': palette.comment,
+      'editorLineNumber.activeForeground': palette.foreground,
+      'editor.selectionBackground': palette.selection,
+      'editor.inactiveSelectionBackground': `${palette.selection}88`,
+      'editor.lineHighlightBackground': `${palette.selection}55`,
+      'editorCursor.foreground': palette.foreground,
+      'editorWhitespace.foreground': palette.selection,
+      'editorWidget.background': palette.surface,
+      'editorWidget.border': palette.comment,
+      'editorSuggestWidget.background': palette.surface,
+      'editorSuggestWidget.border': palette.comment,
+      'editorSuggestWidget.selectedBackground': palette.selection,
+      'editorGutter.background': palette.background,
+      'editorError.foreground': palette.red,
+      'editorWarning.foreground': palette.orange,
+      'editorIndentGuide.background1': palette.selection,
+      'editorIndentGuide.activeBackground1': palette.comment,
+      'editorBracketMatch.background': palette.selection,
+      'editorBracketMatch.border': palette.foreground,
+      'scrollbar.shadow': palette.surface,
+      'scrollbarSlider.background': `${palette.selection}88`,
+      'scrollbarSlider.hoverBackground': `${palette.selection}cc`,
+      'scrollbarSlider.activeBackground': palette.comment,
+    },
+  } as const;
+}
+
+export const draculaThemeDefinition = createDraculaThemeDefinition(null);
 
 export function defineDraculaTheme(monaco: any): void {
   if (!monaco) {
     return;
   }
 
-  monaco.editor.defineTheme('dracula', draculaThemeDefinition as any);
+  monaco.editor.defineTheme('dracula', createDraculaThemeDefinition() as any);
 }

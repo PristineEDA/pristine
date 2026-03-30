@@ -150,19 +150,35 @@
   --ide-online: oklch(0.673 0.162 144.2);         /* #4caf50 */
   --ide-close: oklch(0.536 0.191 30.1);          /* #c42b1c */
 
+  /* Dracula palette source */
+  --ide-dracula-surface: #21222c;
+  --ide-dracula-background: #282a36;
+  --ide-dracula-input: #2d2f3e;
+  --ide-dracula-selection: #44475a;
+  --ide-dracula-comment: #6272a4;
+  --ide-dracula-foreground: #f8f8f2;
+  --ide-dracula-bright-foreground: #fcfcfc;
+  --ide-dracula-pink: #ff79c6;
+  --ide-dracula-purple: #bd93f9;
+  --ide-dracula-cyan: #8be9fd;
+  --ide-dracula-green: #50fa7b;
+  --ide-dracula-yellow: #f1fa8c;
+  --ide-dracula-red: #ff5555;
+  --ide-dracula-orange: #ffb86c;
+
   /* Chat / Dracula theme */
   --ide-chat-bg: oklch(0.243 0.019 280.4);       /* #1e1f29 */
-  --ide-chat-dropdown: oklch(0.255 0.019 280.5); /* #21222c */
-  --ide-chat-hover: oklch(0.288 0.022 277.5);    /* #282a36 */
-  --ide-chat-input: oklch(0.310 0.027 278.8);    /* #2d2f3e */
-  --ide-chat-border: oklch(0.403 0.032 277.8);   /* #44475a */
-  --ide-chat-muted: oklch(0.560 0.080 270.1);    /* #6272a4 */
-  --ide-chat-text: oklch(0.977 0.008 106.5);     /* #f8f8f2 */
-  --ide-chat-purple: oklch(0.742 0.149 301.9);   /* #bd93f9 */
-  --ide-chat-purple-hover: oklch(0.793 0.125 301.6); /* #caa8ff */
-  --ide-chat-cyan: oklch(0.883 0.093 212.8);     /* #8be9fd */
-  --ide-chat-text-bright: oklch(0.991 0.000 89.9); /* #fcfcfc */
-  --ide-chat-input-border: oklch(0.358 0.004 219.6); /* #3a3d3e */
+  --ide-chat-dropdown: var(--ide-dracula-surface);
+  --ide-chat-hover: var(--ide-dracula-background);
+  --ide-chat-input: var(--ide-dracula-input);
+  --ide-chat-border: var(--ide-dracula-selection);
+  --ide-chat-muted: var(--ide-dracula-comment);
+  --ide-chat-text: var(--ide-dracula-foreground);
+  --ide-chat-purple: var(--ide-dracula-purple);
+  --ide-chat-purple-hover: #caa8ff;
+  --ide-chat-cyan: var(--ide-dracula-cyan);
+  --ide-chat-text-bright: var(--ide-dracula-bright-foreground);
+  --ide-chat-input-border: #3a3d3e;
 }
 
 @theme inline {

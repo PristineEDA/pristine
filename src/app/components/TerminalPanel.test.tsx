@@ -2,6 +2,7 @@ import { render, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TerminalPanel } from './TerminalPanel';
 import type { ElectronAPI } from '../../../types/electron-api';
+import { createTerminalTheme, IDE_MONO_FONT_FAMILY } from '../editor/appearance';
 
 const terminalInstances: Array<{
   cols: number;
@@ -14,6 +15,7 @@ const terminalInstances: Array<{
   onData: ReturnType<typeof vi.fn>;
   emitData: (data: string) => void;
 }> = [];
+const terminalConstructorOptions: Array<Record<string, unknown>> = [];
 
 const fitMock = vi.fn();
 
@@ -38,7 +40,8 @@ vi.mock('@xterm/xterm', () => ({
       return { dispose: vi.fn() };
     });
 
-    constructor() {
+    constructor(options: Record<string, unknown>) {
+      terminalConstructorOptions.push(options);
       terminalInstances.push({
         cols: this.cols,
         rows: this.rows,
@@ -57,6 +60,7 @@ vi.mock('@xterm/xterm', () => ({
 describe('TerminalPanel', () => {
   beforeEach(() => {
     terminalInstances.length = 0;
+    terminalConstructorOptions.length = 0;
     fitMock.mockClear();
   });
 
@@ -84,6 +88,8 @@ describe('TerminalPanel', () => {
 
     await waitFor(() => expect(createMock).toHaveBeenCalled());
     expect(terminalInstances[0]?.open).toHaveBeenCalled();
+    expect(terminalConstructorOptions[0]?.fontFamily).toBe(IDE_MONO_FONT_FAMILY);
+    expect(terminalConstructorOptions[0]?.theme).toEqual(createTerminalTheme(null));
 
     onDataCallback?.({ id: 'term-1', data: 'PS> dir\r\n' });
     expect(terminalInstances[0]?.write).toHaveBeenCalledWith('PS> dir\r\n');

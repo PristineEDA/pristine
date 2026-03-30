@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { problemsList } from '../../data/mockData';
 import { getEditorLanguage, getWorkspaceSegments } from '../workspace/workspaceFiles';
+import { IDE_MONO_FONT_FAMILY } from '../editor/appearance';
 import { defineDraculaTheme } from '../editor/draculaTheme';
 import { useRegisterEditorLanguages } from '../editor/registerLanguages';
 import { FileTypeBadge } from './FileTypeBadge';
@@ -347,7 +348,7 @@ export function EditorArea({
           }}
           options={{
             fontSize: 13,
-            fontFamily: '"JetBrains Mono", "Cascadia Code", "Fira Code", Consolas, monospace',
+            fontFamily: IDE_MONO_FONT_FAMILY,
             fontLigatures: true,
             lineNumbers: 'on',
             lineNumbersMinChars: 4,

@@ -55,6 +55,27 @@ async function readTerminalPid(window: Awaited<ReturnType<typeof launchApp>>['wi
   return value ? Number(value) : NaN;
 }
 
+async function readTerminalThemeSnapshot(window: Awaited<ReturnType<typeof launchApp>>['window']) {
+  return window.getByTestId('terminal-host').evaluate((host) => {
+    const terminalHost = host as HTMLElement;
+    const fontSamples = Array.from(host.querySelectorAll('.xterm, .xterm-screen, .xterm-helpers, .xterm-char-measure-element'))
+      .map((element) => getComputedStyle(element as HTMLElement).fontFamily)
+      .filter(Boolean);
+
+    const probe = document.createElement('div');
+    probe.style.backgroundColor = 'var(--ide-dracula-background)';
+    document.body.appendChild(probe);
+    const expectedBackground = getComputedStyle(probe).backgroundColor;
+    probe.remove();
+
+    return {
+      terminalBackground: getComputedStyle(terminalHost.parentElement ?? terminalHost).backgroundColor,
+      terminalFontFamilies: fontSamples,
+      expectedBackground,
+    };
+  });
+}
+
 function isProcessRunning(pid: number) {
   if (!Number.isFinite(pid) || pid <= 0) {
     return false;
@@ -352,6 +373,21 @@ test('terminal tab creates a real shell session and shows command output', async
   await expect.poll(async () => readTerminalText(window), {
     timeout: 15000,
   }).toContain(marker);
+
+  await app.close();
+});
+
+test('terminal uses the shared dracula theme and mono font at runtime', async () => {
+  const { app, window } = await launchApp();
+
+  await openBottomTerminal(window);
+
+  const themeState = await readTerminalThemeSnapshot(window);
+  expect(themeState.terminalBackground).toBeTruthy();
+  expect(themeState.terminalFontFamilies.length).toBeGreaterThan(0);
+  expect(themeState.expectedBackground).toBeTruthy();
+  expect(themeState.terminalBackground).toBe(themeState.expectedBackground);
+  expect(themeState.terminalFontFamilies.some((value) => value.toLowerCase().includes('jetbrains mono'))).toBe(true);
 
   await app.close();
 });

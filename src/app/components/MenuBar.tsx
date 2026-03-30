@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import {
   ChevronDown, Folder, GitBranch, Globe,
-  ChevronLeft, ChevronRight, PanelLeft, PanelBottom, Columns2,
+  ChevronRight, PanelLeft, PanelBottom, Columns2,
   Settings, CircleUser, Minus, Square, X, Zap,
 } from 'lucide-react';
 
@@ -184,17 +184,6 @@ export function MenuBar({
           <span>Upgrade to </span>
           <span className="text-ide-pro font-[600]">Pro</span>
           <ChevronRight size={12} />
-        </button>
-
-        {/* Divider */}
-        <div className="w-px h-4 bg-ide-text-dim mx-1" />
-
-        {/* Navigation arrows */}
-        <button className="w-8 h-full flex items-center justify-center text-ide-text-muted hover:text-ide-text hover:bg-ide-btn-hover transition-colors">
-          <ChevronLeft size={16} />
-        </button>
-        <button className="w-8 h-full flex items-center justify-center text-ide-text-muted hover:text-ide-text hover:bg-ide-btn-hover transition-colors">
-          <ChevronRight size={16} />
         </button>
 
         {/* Divider */}

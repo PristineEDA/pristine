@@ -2,12 +2,14 @@ import { useEffect, useRef, useState } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
+import { createTerminalTheme, IDE_MONO_FONT_FAMILY } from '../editor/appearance';
 
 export function TerminalPanel() {
   const [error, setError] = useState<string | null>(null);
   const [isStarting, setIsStarting] = useState(true);
   const [shellLabel, setShellLabel] = useState<string>('shell');
   const isE2E = window.electronAPI?.isE2E === true;
+  const terminalTheme = createTerminalTheme();
   const hostRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -46,30 +48,9 @@ export function TerminalPanel() {
     const term = new Terminal({
       convertEol: true,
       cursorBlink: true,
-      fontFamily: 'JetBrains Mono, monospace',
+      fontFamily: IDE_MONO_FONT_FAMILY,
       fontSize: 12,
-      theme: {
-        background: '#1e1e1e',
-        foreground: '#d4d4d4',
-        cursor: '#aeafad',
-        selectionBackground: '#264f78',
-        black: '#1e1e1e',
-        red: '#f14c4c',
-        green: '#23d18b',
-        yellow: '#f5f543',
-        blue: '#3b8eea',
-        magenta: '#d670d6',
-        cyan: '#29b8db',
-        white: '#e5e5e5',
-        brightBlack: '#666666',
-        brightRed: '#f14c4c',
-        brightGreen: '#23d18b',
-        brightYellow: '#f5f543',
-        brightBlue: '#3b8eea',
-        brightMagenta: '#d670d6',
-        brightCyan: '#29b8db',
-        brightWhite: '#e5e5e5',
-      },
+      theme: terminalTheme,
     });
     const fitAddon = new FitAddon();
     let disposed = false;
@@ -167,7 +148,10 @@ export function TerminalPanel() {
   }, [isE2E]);
 
   return (
-    <div className="relative flex h-full bg-ide-bg cursor-text overflow-hidden">
+    <div
+      className="relative flex h-full cursor-text overflow-hidden"
+      style={{ backgroundColor: terminalTheme.background }}
+    >
       <div
         ref={hostRef}
         data-testid="terminal-host"
@@ -175,7 +159,10 @@ export function TerminalPanel() {
         onClick={() => terminalRef.current?.focus()}
       />
       {error && (
-        <div className="absolute inset-0 flex items-center justify-center bg-ide-bg/90 px-6 text-center">
+        <div
+          className="absolute inset-0 flex items-center justify-center px-6 text-center"
+          style={{ backgroundColor: `${terminalTheme.background}e6` }}
+        >
           <div>
             <div className="text-sm font-medium text-ide-error">Terminal failed to start</div>
             <div className="mt-2 text-xs text-ide-text-muted">{error}</div>
