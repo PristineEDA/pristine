@@ -177,7 +177,8 @@ test('activity bar removes search and extensions and toggles the left sidebar', 
   const explorerButton = window.getByTestId('activity-item-explorer');
   await explorerButton.click();
   await expect(explorerFileNode).toHaveCount(0);
-  await expect(explorerButton).toHaveClass(/border-ide-accent/);
+    await expect(explorerButton).toHaveClass(/border-transparent/);
+    await expect(explorerButton).not.toHaveClass(/border-ide-accent/);
 
   const sourceControlButton = window.getByTestId('activity-item-git');
   await sourceControlButton.click();
@@ -186,7 +187,8 @@ test('activity bar removes search and extensions and toggles the left sidebar', 
 
   await sourceControlButton.click();
   await expect(explorerFileNode).toHaveCount(0);
-  await expect(sourceControlButton).toHaveClass(/border-ide-accent/);
+    await expect(sourceControlButton).toHaveClass(/border-transparent/);
+    await expect(sourceControlButton).not.toHaveClass(/border-ide-accent/);
 
   await app.close();
 });
