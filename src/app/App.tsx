@@ -8,9 +8,11 @@ import { RightSidePanel } from './components/RightSidePanel';
 import { BottomPanel } from './components/BottomPanel';
 import { StatusBar } from './components/StatusBar';
 import { QuickOpenPalette } from './components/QuickOpenPalette';
-import { createQuickOpenFileEntries, searchQuickOpenFiles, type QuickOpenFileEntry, type QuickOpenSearchResult } from './quickOpen/quickOpenSearch';
+import { createQuickOpenFileEntries, getRecentQuickOpenFiles, searchQuickOpenFiles, type QuickOpenFileEntry, type QuickOpenSearchResult } from './quickOpen/quickOpenSearch';
 import type { WorkspaceRevealRequest } from './workspace/useWorkspaceTree';
 import { WorkspaceProvider, useWorkspace } from './context/WorkspaceContext';
+
+const QUICK_OPEN_RECENT_LIMIT = 20;
 
 // ─── ResizeHandle ────────────────────────────────────────────────────────────
 const ResizeHandle = ({ direction = 'vertical' }: { direction?: 'vertical' | 'horizontal' }) => (
@@ -43,6 +45,7 @@ function AppLayout() {
   const [workspaceFiles, setWorkspaceFiles] = useState<QuickOpenFileEntry[] | null>(null);
   const [isQuickOpenLoading, setIsQuickOpenLoading] = useState(false);
   const [quickOpenError, setQuickOpenError] = useState<string | null>(null);
+  const [recentQuickOpenFiles, setRecentQuickOpenFiles] = useState<QuickOpenFileEntry[]>([]);
   const [revealRequest, setRevealRequest] = useState<WorkspaceRevealRequest | null>(null);
   const revealTokenRef = useRef(0);
 
@@ -74,6 +77,18 @@ function AppLayout() {
     setWorkspaceFiles(null);
     setQuickOpenError(null);
   }, []);
+
+  const recordRecentFile = useCallback((filePath: string, fileName: string) => {
+    setRecentQuickOpenFiles((current) => {
+      const entry = { path: filePath, name: fileName };
+      return [entry, ...current.filter((item) => item.path !== filePath)].slice(0, QUICK_OPEN_RECENT_LIMIT);
+    });
+  }, []);
+
+  const openWorkspaceFile = useCallback((filePath: string, fileName: string) => {
+    recordRecentFile(filePath, fileName);
+    openFile(filePath, fileName);
+  }, [openFile, recordRecentFile]);
 
   useEffect(() => {
     if (!isQuickOpenVisible || workspaceFiles !== null) {
@@ -116,10 +131,15 @@ function AppLayout() {
     };
   }, [isQuickOpenVisible, workspaceFiles]);
 
-  const quickOpenResults = useMemo(
-    () => searchQuickOpenFiles(workspaceFiles ?? [], quickOpenQuery),
-    [quickOpenQuery, workspaceFiles],
-  );
+  const isQuickOpenRecentMode = quickOpenQuery.trim().length === 0;
+
+  const quickOpenResults = useMemo(() => {
+    if (isQuickOpenRecentMode) {
+      return getRecentQuickOpenFiles(recentQuickOpenFiles, workspaceFiles);
+    }
+
+    return searchQuickOpenFiles(workspaceFiles ?? [], quickOpenQuery);
+  }, [isQuickOpenRecentMode, quickOpenQuery, recentQuickOpenFiles, workspaceFiles]);
 
   useEffect(() => {
     setQuickOpenSelectedIndex((current) => {
@@ -132,13 +152,15 @@ function AppLayout() {
   }, [quickOpenResults]);
 
   const handleQuickOpenSelect = useCallback((result: QuickOpenSearchResult) => {
-    setActiveView('explorer');
-    setShowLeftPanel(true);
+    if (showLeftPanel) {
+      setActiveView('explorer');
+    }
+
     revealTokenRef.current += 1;
     setRevealRequest({ path: result.path, token: revealTokenRef.current });
-    openFile(result.path, result.name);
+    openWorkspaceFile(result.path, result.name);
     closeQuickOpen();
-  }, [closeQuickOpen, openFile, setActiveView, setShowLeftPanel]);
+  }, [closeQuickOpen, openWorkspaceFile, setActiveView, showLeftPanel]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -184,7 +206,7 @@ function AppLayout() {
               <Panel defaultSize={12} minSize={12} maxSize={35} id="left-panel" order={1}>
                 <LeftSidePanel
                   activeFileId={activeTabId}
-                  onFileOpen={openFile}
+                  onFileOpen={openWorkspaceFile}
                   onLineJump={jumpTo}
                   currentOutlineId={activeTabId}
                   revealRequest={revealRequest}
@@ -200,11 +222,13 @@ function AppLayout() {
             <div className="relative h-full">
               <QuickOpenPalette
                 isOpen={isQuickOpenVisible}
+                mode={isQuickOpenRecentMode ? 'recent' : 'search'}
                 query={quickOpenQuery}
                 results={quickOpenResults}
                 selectedIndex={quickOpenSelectedIndex}
                 isLoading={isQuickOpenLoading}
                 errorMessage={quickOpenError}
+                emptyMessage={isQuickOpenRecentMode ? 'No recently opened files' : 'No matching files'}
                 onClose={closeQuickOpen}
                 onQueryChange={setQuickOpenQuery}
                 onSelectedIndexChange={setQuickOpenSelectedIndex}
@@ -244,7 +268,7 @@ function AppLayout() {
 
               <Panel defaultSize={18} minSize={18} maxSize={45} id="right-panel" order={3}>
                 <RightSidePanel
-                  onFileOpen={openFile}
+                  onFileOpen={openWorkspaceFile}
                   onLineJump={jumpTo}
                 />
               </Panel>

@@ -80,16 +80,24 @@ test('explorer opens a file into a new editor tab', async () => {
 test('ctrl+p quick open searches files, navigates results, and reveals the selected file', async () => {
   const { app, window } = await launchApp();
 
+  await window.getByTestId('file-tree-node-README_md').click();
+  await expect(window.getByTestId('editor-tab-README.md')).toBeVisible();
+
   await window.keyboard.press('Control+P');
 
   const quickOpen = window.getByTestId('quick-open-overlay');
   const quickOpenInput = window.getByTestId('quick-open-input');
   await expect(quickOpen).toBeVisible();
   await expect(quickOpenInput).toBeFocused();
-  await expect(window.getByTestId('quick-open-result-rtl_core_reg_file_v')).toBeVisible();
+  await expect(window.getByTestId('quick-open-result-README_md')).toBeVisible();
+  await expect(quickOpen).not.toContainText('RECENT');
+  await expect(quickOpen).not.toContainText('Recently opened');
 
   await quickOpenInput.fill('reg');
   await expect(window.getByTestId('quick-open-result-rtl_core_reg_file_v')).toBeVisible();
+  await expect(window.getByTestId('quick-open-path-rtl_core_reg_file_v')).toHaveText('rtl/core');
+  await expect(window.getByTestId('quick-open-result-ignored_secret_txt')).toHaveCount(0);
+  await expect(window.getByTestId('quick-open-result-_git_config')).toHaveCount(0);
   await quickOpenInput.press('Enter');
 
   await expect(quickOpen).toHaveCount(0);
@@ -97,6 +105,30 @@ test('ctrl+p quick open searches files, navigates results, and reveals the selec
   await expect(window.getByTestId('file-tree-node-rtl')).toBeVisible();
   await expect(window.getByTestId('file-tree-node-rtl_core')).toBeVisible();
   await expect(window.getByTestId('file-tree-node-rtl_core_reg_file_v')).toBeVisible();
+
+  await window.keyboard.press('Control+P');
+  await expect(window.getByTestId('quick-open-result-rtl_core_reg_file_v')).toBeVisible();
+
+  await app.close();
+});
+
+test('ctrl+p quick open opens files without forcing the hidden explorer visible', async () => {
+  const { app, window } = await launchApp();
+
+  const explorerButton = window.getByTestId('activity-item-explorer');
+  await explorerButton.click();
+  await expect(window.getByTestId('file-tree-node-README_md')).toHaveCount(0);
+
+  await window.keyboard.press('Control+P');
+
+  const quickOpenInput = window.getByTestId('quick-open-input');
+  await expect(quickOpenInput).toBeFocused();
+  await quickOpenInput.fill('reg');
+  await expect(window.getByTestId('quick-open-result-rtl_core_reg_file_v')).toBeVisible();
+  await quickOpenInput.press('Enter');
+
+  await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toBeVisible();
+  await expect(window.getByTestId('file-tree-node-README_md')).toHaveCount(0);
 
   await app.close();
 });

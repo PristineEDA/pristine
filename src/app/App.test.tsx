@@ -86,10 +86,12 @@ vi.mock('./components/StatusBar', () => ({
 }));
 
 vi.mock('./components/QuickOpenPalette', () => ({
-  QuickOpenPalette: ({ isOpen, query, onQueryChange, onSelectResult, onClose }: any) => (
+  QuickOpenPalette: ({ isOpen, mode, query, results, onQueryChange, onSelectResult, onClose }: any) => (
     isOpen ? (
       <div data-testid="quick-open-overlay">
+        <span data-testid="quick-open-mode">{mode}</span>
         <span data-testid="quick-open-query">{query}</span>
+        <span data-testid="quick-open-result-paths">{results.map((result: any) => result.path).join('|')}</span>
         <button onClick={() => onQueryChange('alu')}>quick-open-set-query</button>
         <button onClick={() => onSelectResult({ path: 'rtl/core/alu.v', name: 'alu.v', score: 100 })}>quick-open-select-alu</button>
         <button onClick={onClose}>quick-open-close</button>
@@ -165,6 +167,7 @@ describe('App', () => {
 
     await screen.findByTestId('quick-open-overlay');
     expect(window.electronAPI?.fs.listFiles).toHaveBeenCalledWith('.');
+    expect(screen.getByTestId('quick-open-mode')).toHaveTextContent('recent');
 
     fireEvent.click(screen.getByText('quick-open-set-query'));
     expect(screen.getByTestId('quick-open-query')).toHaveTextContent('alu');
@@ -177,8 +180,34 @@ describe('App', () => {
 
     fireEvent.keyDown(document, { key: 'p', ctrlKey: true });
     expect(await screen.findByTestId('quick-open-query')).toHaveTextContent('');
+    expect(screen.getByTestId('quick-open-mode')).toHaveTextContent('recent');
+    expect(screen.getByTestId('quick-open-result-paths')).toHaveTextContent('rtl/core/alu.v');
 
     fireEvent.keyDown(document, { key: 'p', ctrlKey: true });
     expect(screen.queryByTestId('quick-open-overlay')).not.toBeInTheDocument();
+  });
+
+  it('keeps the left sidebar hidden when quick open selects a file', async () => {
+    vi.mocked(window.electronAPI!.fs.listFiles).mockResolvedValue([
+      'README.md',
+      'rtl/core/alu.v',
+    ]);
+
+    render(<App />);
+
+    fireEvent.click(screen.getByText('select-git'));
+    fireEvent.click(screen.getByText('select-git'));
+    expect(screen.getByTestId('menu-left-state')).toHaveTextContent('false');
+    expect(screen.getByTestId('activity-view')).toHaveTextContent('git');
+
+    fireEvent.keyDown(document, { key: 'p', ctrlKey: true });
+    await screen.findByTestId('quick-open-overlay');
+
+    fireEvent.click(screen.getByText('quick-open-select-alu'));
+
+    expect(screen.getByTestId('menu-left-state')).toHaveTextContent('false');
+    expect(screen.getByTestId('activity-view')).toHaveTextContent('git');
+    expect(screen.getByTestId('editor-active-tab')).toHaveTextContent('rtl/core/alu.v');
+    expect(screen.queryByTestId('left-panel')).not.toBeInTheDocument();
   });
 });

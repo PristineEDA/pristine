@@ -43,6 +43,13 @@ function createDirent(name: string, type: 'file' | 'directory') {
 describe('filesystem IPC handlers', () => {
   beforeEach(() => {
     mockHandle.mockClear();
+    mockFs.readFile.mockReset();
+    mockFs.writeFile.mockReset();
+    mockFs.mkdir.mockReset();
+    mockFs.readdir.mockReset();
+    mockFs.stat.mockReset();
+    mockFs.access.mockReset();
+    mockFs.readFile.mockResolvedValue('');
     setProjectRoot('/safe/project');
     registerFilesystemHandlers();
   });
@@ -143,6 +150,69 @@ describe('filesystem IPC handlers', () => {
         'README.md',
         'rtl/core/alu.v',
         'rtl/top.sv',
+      ]);
+    });
+
+    it('skips .git contents and applies root and nested .gitignore rules', async () => {
+      mockFs.readdir.mockImplementation(async (resolvedPath: string) => {
+        const normalized = resolvedPath.replace(/\\/g, '/');
+
+        if (normalized.endsWith('/safe/project')) {
+          return [
+            createDirent('.git', 'directory'),
+            createDirent('.gitignore', 'file'),
+            createDirent('README.md', 'file'),
+            createDirent('ignored', 'directory'),
+            createDirent('notes.tmp', 'file'),
+            createDirent('rtl', 'directory'),
+          ];
+        }
+
+        if (normalized.endsWith('/safe/project/ignored')) {
+          return [createDirent('secret.txt', 'file')];
+        }
+
+        if (normalized.endsWith('/safe/project/rtl')) {
+          return [
+            createDirent('.gitignore', 'file'),
+            createDirent('debug.tmp', 'file'),
+            createDirent('keep.tmp', 'file'),
+            createDirent('core', 'directory'),
+          ];
+        }
+
+        if (normalized.endsWith('/safe/project/rtl/core')) {
+          return [createDirent('alu.v', 'file')];
+        }
+
+        if (normalized.endsWith('/safe/project/.git')) {
+          return [createDirent('config', 'file')];
+        }
+
+        return [];
+      });
+
+      mockFs.readFile.mockImplementation(async (resolvedPath: string) => {
+        const normalized = resolvedPath.replace(/\\/g, '/');
+
+        if (normalized.endsWith('/safe/project/.gitignore')) {
+          return 'ignored/\nnotes.tmp\n';
+        }
+
+        if (normalized.endsWith('/safe/project/rtl/.gitignore')) {
+          return '*.tmp\n!keep.tmp\n';
+        }
+
+        throw new Error(`Unexpected read: ${resolvedPath}`);
+      });
+
+      const handler = getHandler('async:fs:list-files');
+      await expect(handler({}, '.')).resolves.toEqual([
+        '.gitignore',
+        'README.md',
+        'rtl/.gitignore',
+        'rtl/core/alu.v',
+        'rtl/keep.tmp',
       ]);
     });
 

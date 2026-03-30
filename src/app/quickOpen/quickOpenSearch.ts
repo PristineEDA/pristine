@@ -93,10 +93,7 @@ export function searchQuickOpenFiles(
   const normalizedQuery = query.trim().toLowerCase();
 
   if (normalizedQuery.length === 0) {
-    return [...files]
-      .sort((left, right) => left.path.localeCompare(right.path, undefined, { numeric: true, sensitivity: 'base' }))
-      .slice(0, limit)
-      .map((file) => ({ ...file, score: 0 }));
+    return [];
   }
 
   return files
@@ -117,4 +114,22 @@ export function searchQuickOpenFiles(
       return left.path.localeCompare(right.path, undefined, { numeric: true, sensitivity: 'base' });
     })
     .slice(0, limit);
+}
+
+export function getRecentQuickOpenFiles(
+  recentFiles: QuickOpenFileEntry[],
+  availableFiles?: QuickOpenFileEntry[] | null,
+  limit = 20,
+): QuickOpenSearchResult[] {
+  const availablePaths = availableFiles
+    ? new Set(availableFiles.map((file) => file.path))
+    : null;
+
+  return recentFiles
+    .filter((file) => availablePaths === null || availablePaths.has(file.path))
+    .slice(0, limit)
+    .map((file, index) => ({
+      ...file,
+      score: limit - index,
+    }));
 }
