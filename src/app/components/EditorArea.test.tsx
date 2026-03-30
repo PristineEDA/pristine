@@ -156,7 +156,7 @@ describe('EditorArea', () => {
     expect(mockMonaco.languages.registerCompletionItemProvider).toHaveBeenCalledWith('assembly', expect.any(Object));
   });
 
-  it('routes shell, Tcl, and constraint files to dedicated highlighted editor languages', async () => {
+  it('routes shell, Tcl, linker script, file list, and constraint files to dedicated highlighted editor languages', async () => {
     const { rerender } = render(
       <EditorArea
         tabs={[{ id: 'scripts/deploy.sh', name: 'deploy.sh' }]}
@@ -190,6 +190,40 @@ describe('EditorArea', () => {
     expect(screen.getByTestId('monaco-editor')).toHaveAttribute('data-language', 'tcl');
     expect(mockMonaco.languages.register).toHaveBeenCalledWith({ id: 'tcl', extensions: ['.tcl'] });
     expect(mockMonaco.languages.setMonarchTokensProvider).toHaveBeenCalledWith('tcl', expect.any(Object));
+
+    rerender(
+      <EditorArea
+        tabs={[{ id: 'linker/memory.lds', name: 'memory.lds' }]}
+        activeTabId="linker/memory.lds"
+        onTabChange={vi.fn()}
+        onTabClose={vi.fn()}
+        editorRef={createRef()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(window.electronAPI!.fs.readFile).toHaveBeenCalledWith('linker/memory.lds', 'utf-8');
+    });
+    expect(screen.getByTestId('monaco-editor')).toHaveAttribute('data-language', 'linker-script');
+    expect(mockMonaco.languages.register).toHaveBeenCalledWith({ id: 'linker-script', extensions: ['.ld', '.lds'] });
+    expect(mockMonaco.languages.setMonarchTokensProvider).toHaveBeenCalledWith('linker-script', expect.any(Object));
+
+    rerender(
+      <EditorArea
+        tabs={[{ id: 'sim/sources.fl', name: 'sources.fl' }]}
+        activeTabId="sim/sources.fl"
+        onTabChange={vi.fn()}
+        onTabClose={vi.fn()}
+        editorRef={createRef()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(window.electronAPI!.fs.readFile).toHaveBeenCalledWith('sim/sources.fl', 'utf-8');
+    });
+    expect(screen.getByTestId('monaco-editor')).toHaveAttribute('data-language', 'filelist');
+    expect(mockMonaco.languages.register).toHaveBeenCalledWith({ id: 'filelist', extensions: ['.f', '.fl'] });
+    expect(mockMonaco.languages.setMonarchTokensProvider).toHaveBeenCalledWith('filelist', expect.any(Object));
 
     rerender(
       <EditorArea
@@ -310,7 +344,7 @@ describe('EditorArea', () => {
     expect(screen.getByText('retroSoC')).toBeInTheDocument();
     expect(screen.getAllByText('tb_cpu_top.sv')).toHaveLength(2);
     expect(mockMonaco.languages.register).toHaveBeenCalled();
-    expect(mockMonaco.languages.setMonarchTokensProvider).toHaveBeenCalledTimes(7);
+    expect(mockMonaco.languages.setMonarchTokensProvider).toHaveBeenCalledTimes(9);
     expect(mockMonaco.editor.defineTheme).toHaveBeenCalled();
     expect(mockMonaco.editor.setModelMarkers).toHaveBeenCalledWith(
       mockModel,
@@ -322,6 +356,47 @@ describe('EditorArea', () => {
     expect(mockEditorInstance.revealLineInCenter).toHaveBeenCalledWith(24);
     expect(mockEditorInstance.setPosition).toHaveBeenCalledWith({ lineNumber: 24, column: 1 });
     expect(mockEditorInstance.focus).toHaveBeenCalled();
+  });
+
+  it('keeps Dracula token styling for linker script and file list syntax categories', async () => {
+    render(
+      <EditorArea
+        tabs={[{ id: 'linker/startup.ld', name: 'startup.ld' }]}
+        activeTabId="linker/startup.ld"
+        onTabChange={vi.fn()}
+        onTabClose={vi.fn()}
+        editorRef={createRef()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(window.electronAPI!.fs.readFile).toHaveBeenCalledWith('linker/startup.ld', 'utf-8');
+    });
+
+    const linkerProviderCall = mockMonaco.languages.setMonarchTokensProvider.mock.calls.find(
+      ([languageId]) => languageId === 'linker-script',
+    );
+    const linkerProvider = linkerProviderCall?.[1] as any;
+    expect(linkerProvider.tokenizer.root).toEqual(
+      expect.arrayContaining([
+        [/[A-Za-z_][\w.]*/, { cases: { '@keywords': 'keyword', '@default': 'identifier' } }],
+      ]),
+    );
+
+    const filelistProviderCall = mockMonaco.languages.setMonarchTokensProvider.mock.calls.find(
+      ([languageId]) => languageId === 'filelist',
+    );
+    expect(filelistProviderCall).toBeDefined();
+
+    expect(draculaThemeDefinition.rules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ token: 'keyword', foreground: 'ff79c6' }),
+        expect.objectContaining({ token: 'comment', foreground: '6272a4' }),
+        expect.objectContaining({ token: 'string', foreground: 'f1fa8c' }),
+        expect.objectContaining({ token: 'variable', foreground: 'ffb86c' }),
+        expect.objectContaining({ token: 'type', foreground: '8be9fd' }),
+      ]),
+    );
   });
 
   it('does not get stuck in loading when switching away from a file before its first read completes', async () => {

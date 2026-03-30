@@ -89,6 +89,14 @@ export function getEditorLanguage(filePath: string): string {
     return 'tcl';
   }
 
+  if (lowerCased.endsWith('.ld') || lowerCased.endsWith('.lds')) {
+    return 'linker-script';
+  }
+
+  if (lowerCased.endsWith('.f') || lowerCased.endsWith('.fl')) {
+    return 'filelist';
+  }
+
   if (lowerCased.endsWith('.sdc') || lowerCased.endsWith('.xdc')) {
     return 'constraints';
   }
@@ -165,6 +173,14 @@ export function getEditorLanguageLabel(filePath: string): string {
 
   if (normalized.endsWith('.tcl')) {
     return 'Tcl';
+  }
+
+  if (normalized.endsWith('.ld') || normalized.endsWith('.lds')) {
+    return 'Linker Script';
+  }
+
+  if (normalized.endsWith('.f') || normalized.endsWith('.fl')) {
+    return 'File List';
   }
 
   const language = getEditorLanguage(filePath);

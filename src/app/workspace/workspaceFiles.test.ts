@@ -16,6 +16,10 @@ describe('workspaceFiles language helpers', () => {
   it('routes shell, Tcl, and constraint files to dedicated editor languages', () => {
     expect(getEditorLanguage('scripts/deploy.sh')).toBe('shell');
     expect(getEditorLanguage('scripts/build.tcl')).toBe('tcl');
+    expect(getEditorLanguage('linker/memory.ld')).toBe('linker-script');
+    expect(getEditorLanguage('linker/memory.lds')).toBe('linker-script');
+    expect(getEditorLanguage('sim/files.f')).toBe('filelist');
+    expect(getEditorLanguage('sim/files.fl')).toBe('filelist');
     expect(getEditorLanguage('constraints/top.xdc')).toBe('constraints');
     expect(getEditorLanguage('constraints/top.sdc')).toBe('constraints');
   });
@@ -31,9 +35,11 @@ describe('workspaceFiles language helpers', () => {
     expect(getEditorLanguageLabel('scripts/common.mk')).toBe('Makefile');
   });
 
-  it('returns specialized labels for shell, Tcl, XDC, and SDC files', () => {
+  it('returns specialized labels for shell, Tcl, linker script, file list, XDC, and SDC files', () => {
     expect(getEditorLanguageLabel('scripts/deploy.sh')).toBe('Shell');
     expect(getEditorLanguageLabel('scripts/build.tcl')).toBe('Tcl');
+    expect(getEditorLanguageLabel('linker/memory.lds')).toBe('Linker Script');
+    expect(getEditorLanguageLabel('sim/files.fl')).toBe('File List');
     expect(getEditorLanguageLabel('constraints/top.xdc')).toBe('XDC');
     expect(getEditorLanguageLabel('constraints/top.sdc')).toBe('SDC');
   });

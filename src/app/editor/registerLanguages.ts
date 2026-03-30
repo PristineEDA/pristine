@@ -63,6 +63,19 @@ const makefileKeywords = [
   'addprefix', 'addsuffix', 'join', 'abspath', 'realpath', 'origin', 'flavor', 'value',
 ];
 
+const linkerKeywords = [
+  'SECTIONS', 'MEMORY', 'PHDRS', 'OVERLAY', 'ENTRY', 'INCLUDE', 'OUTPUT', 'OUTPUT_FORMAT', 'OUTPUT_ARCH',
+  'SEARCH_DIR', 'STARTUP', 'INPUT', 'GROUP', 'TARGET', 'EXTERN', 'ASSERT', 'FILL', 'PROVIDE',
+  'PROVIDE_HIDDEN', 'KEEP', 'ONLY_IF_RO', 'ONLY_IF_RW', 'SORT', 'SORT_BY_NAME', 'SORT_BY_ALIGNMENT',
+  'SORT_BY_INIT_PRIORITY', 'ALIGN', 'ALIGNOF', 'BLOCK', 'SIZEOF', 'ADDR', 'LOADADDR', 'ABSOLUTE',
+  'DEFINED', 'ORIGIN', 'LENGTH', 'MAX', 'MIN', 'NEXT', 'SEGMENT_START', 'BYTE', 'SHORT', 'LONG', 'QUAD',
+];
+
+const filelistKeywords = [
+  '+incdir+', '+libext+', '+define+', '+define', '-f', '-F', '-v', '-y', '-work', '-top', '-file',
+  '-l', '-vlog01compat', '-sverilog', '-sv', '-mfcu', '-timescale', '-include', '-define', '-incdir',
+];
+
 const shellCommandKeywords = [
   'if', 'then', 'else', 'elif', 'fi', 'for', 'while', 'until', 'do', 'done', 'case', 'esac',
   'in', 'function', 'select', 'time', 'coproc', 'break', 'continue', 'return', 'export',
@@ -115,6 +128,12 @@ export function registerEditorLanguages(monaco: any): void {
   }
   if (!languages.find((language: any) => language.id === 'makefile')) {
     monaco.languages.register({ id: 'makefile', extensions: ['.mk'], filenames: ['Makefile'] });
+  }
+  if (!languages.find((language: any) => language.id === 'linker-script')) {
+    monaco.languages.register({ id: 'linker-script', extensions: ['.ld', '.lds'] });
+  }
+  if (!languages.find((language: any) => language.id === 'filelist')) {
+    monaco.languages.register({ id: 'filelist', extensions: ['.f', '.fl'] });
   }
 
   const verilogTokenProvider = {
@@ -343,6 +362,64 @@ export function registerEditorLanguages(monaco: any): void {
     },
   };
 
+  const linkerScriptTokenProvider = {
+    defaultToken: '',
+    keywords: linkerKeywords,
+    tokenizer: {
+      root: [
+        [/\/\*/, 'comment', '@comment'],
+        [/\/\/.*$/, 'comment'],
+        [/#.*$/, 'comment'],
+        [/0x[0-9a-fA-F]+/, 'number'],
+        [/\b\d+[KkMmGg]?\b/, 'number'],
+        [/'[^']*'/, 'string'],
+        [/"([^"\\]|\\.)*$/, 'string.invalid'],
+        [/"/, 'string', '@string'],
+        [/[A-Za-z_][\w.]*/, { cases: { '@keywords': 'keyword', '@default': 'identifier' } }],
+        [/[{}()\[\]]/, '@brackets'],
+        [/[,:;]/, 'delimiter'],
+        [/[+\-/*%&|^~!=<>?.:]+/, 'operator'],
+      ],
+      comment: [
+        [/[^/*]+/, 'comment'],
+        [/\*\//, 'comment', '@pop'],
+        [/[/*]/, 'comment'],
+      ],
+      string: [
+        [/[^\\"]+/, 'string'],
+        [/\\./, 'string.escape'],
+        [/"/, 'string', '@pop'],
+      ],
+    },
+  };
+
+  const filelistTokenProvider = {
+    defaultToken: '',
+    keywords: filelistKeywords,
+    tokenizer: {
+      root: [
+        [/\/\/.*$/, 'comment'],
+        [/#.*$/, 'comment'],
+        [/\+incdir\+[^\s]+/, 'type'],
+        [/\+define\+[^\s]+/, 'variable'],
+        [/\+libext\+[^\s]+/, 'type'],
+        [/-[A-Za-z][\w-]*/, { cases: { '@keywords': 'keyword', '@default': 'keyword.control' } }],
+        [/\+\w+\+?/, { cases: { '@keywords': 'keyword', '@default': 'keyword.control' } }],
+        [/"([^"\\]|\\.)*$/, 'string.invalid'],
+        [/"/, 'string', '@string'],
+        [/'[^']*'/, 'string'],
+        [/\$\{?[A-Za-z_][\w]*\}?/, 'variable'],
+        [/[A-Za-z]:\\[^\s]+/, 'string'],
+        [/(?:\.\.?\/|\/)?[\w./\\-]+/, 'identifier'],
+      ],
+      string: [
+        [/[^\\"]+/, 'string'],
+        [/\\./, 'string.escape'],
+        [/"/, 'string', '@pop'],
+      ],
+    },
+  };
+
   monaco.languages.setMonarchTokensProvider('verilog', verilogTokenProvider as any);
   monaco.languages.setMonarchTokensProvider('systemverilog', verilogTokenProvider as any);
   monaco.languages.setMonarchTokensProvider('assembly', assemblyTokenProvider as any);
@@ -350,6 +427,8 @@ export function registerEditorLanguages(monaco: any): void {
   monaco.languages.setMonarchTokensProvider('tcl', tclTokenProvider as any);
   monaco.languages.setMonarchTokensProvider('constraints', constraintsTokenProvider as any);
   monaco.languages.setMonarchTokensProvider('makefile', makefileTokenProvider as any);
+  monaco.languages.setMonarchTokensProvider('linker-script', linkerScriptTokenProvider as any);
+  monaco.languages.setMonarchTokensProvider('filelist', filelistTokenProvider as any);
 
   monaco.languages.registerCompletionItemProvider('verilog', {
     provideCompletionItems: (model: any, position: any) => ({ suggestions: createKeywordSuggestions(monaco, verilogKeywords, model, position) }),
@@ -388,6 +467,14 @@ export function registerEditorLanguages(monaco: any): void {
 
   monaco.languages.registerCompletionItemProvider('makefile', {
     provideCompletionItems: (model: any, position: any) => ({ suggestions: createKeywordSuggestions(monaco, makefileKeywords, model, position) }),
+  });
+
+  monaco.languages.registerCompletionItemProvider('linker-script', {
+    provideCompletionItems: (model: any, position: any) => ({ suggestions: createKeywordSuggestions(monaco, linkerKeywords, model, position) }),
+  });
+
+  monaco.languages.registerCompletionItemProvider('filelist', {
+    provideCompletionItems: (model: any, position: any) => ({ suggestions: createKeywordSuggestions(monaco, filelistKeywords, model, position) }),
   });
 }
 
