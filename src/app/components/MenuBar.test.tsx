@@ -58,12 +58,14 @@ describe('MenuBar', () => {
     expect(screen.getByTestId('toggle-right-panel')).toHaveAttribute('aria-pressed', 'true');
   });
 
-  it('marks the centered view switcher as a non-draggable interactive region', () => {
+  it('keeps the centered view switcher interactive inside the title bar', () => {
     render(<MenuBar />);
 
     const switcher = screen.getByTestId('center-view-switcher') as HTMLDivElement;
 
-    expect(switcher.style.WebkitAppRegion).toBe('no-drag');
     expect(switcher.style.pointerEvents).toBe('auto');
+    expect(screen.getByTitle('Code')).toHaveClass('cursor-pointer');
+    expect(screen.getByTitle('Whiteboard')).toHaveClass('cursor-pointer');
+    expect(screen.getByTitle('Workflow')).toHaveClass('cursor-pointer');
   });
 });
