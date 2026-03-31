@@ -1,8 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import {
-  ChevronDown, Folder, GitBranch, Globe,
-  ChevronRight, PanelLeft, PanelBottom, Columns2,
-  Settings, CircleUser, Minus, Square, X, Zap,
+  PanelLeft, PanelBottom, Columns2,
+  Settings, CircleUser, Minus, Square, X,
 } from 'lucide-react';
 
 const menus = [
@@ -73,29 +72,17 @@ export function MenuBar({
   onToggleRightPanel,
 }: MenuBarProps) {
   const [openMenu, setOpenMenu] = useState<number | null>(null);
-  const [projectOpen, setProjectOpen] = useState(false);
-  const [selectedProject, setSelectedProject] = useState('Select Project');
   const ref = useRef<HTMLDivElement>(null);
-  const projectRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) {
         setOpenMenu(null);
       }
-      if (projectRef.current && !projectRef.current.contains(e.target as Node)) {
-        setProjectOpen(false);
-      }
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
-
-  const projectOptions = [
-    { id: 'folder', label: 'Folder', icon: Folder },
-    { id: 'git', label: 'Git Repo', icon: GitBranch },
-    { id: 'remote', label: 'Remote Host', icon: Globe },
-  ];
 
   return (
     <div
@@ -149,45 +136,6 @@ export function MenuBar({
 
       {/* Right side controls */}
       <div className="ml-auto flex items-center h-full" style={noDrag as React.CSSProperties}>
-
-        {/* Select Project dropdown */}
-        <div ref={projectRef} className="relative flex items-center h-full">
-          <button
-            className="flex items-center gap-1.5 px-3 h-full text-ide-text hover:bg-ide-btn-hover transition-colors text-[12px]"
-            onClick={() => setProjectOpen(!projectOpen)}
-          >
-            <span>{selectedProject}</span>
-            <ChevronDown size={12} />
-          </button>
-          {projectOpen && (
-            <div className="absolute top-full left-0 mt-0 bg-ide-sidebar-bg border border-ide-border-light shadow-2xl z-50 min-w-44 py-1">
-              {projectOptions.map(({ id, label, icon: Icon }) => (
-                <button
-                  key={id}
-                  className="w-full flex items-center gap-2.5 px-3 py-1.5 text-ide-text hover:bg-ide-accent-dark hover:text-white transition-colors text-[12px]"
-                  onClick={() => { setSelectedProject(label); setProjectOpen(false); }}
-                >
-                  <Icon size={14} className="shrink-0" />
-                  <span>{label}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Divider */}
-        <div className="w-px h-4 bg-ide-text-dim mx-1" />
-
-        {/* Upgrade to Pro */}
-        <button className="flex items-center gap-1 px-2.5 h-full text-ide-text hover:bg-ide-btn-hover transition-colors text-[12px]">
-          <Zap size={12} className="text-ide-pro" />
-          <span>Upgrade to </span>
-          <span className="text-ide-pro font-[600]">Pro</span>
-          <ChevronRight size={12} />
-        </button>
-
-        {/* Divider */}
-        <div className="w-px h-4 bg-ide-text-dim mx-1" />
 
         {/* Layout icons */}
         <button

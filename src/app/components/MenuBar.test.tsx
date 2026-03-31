@@ -15,13 +15,11 @@ describe('MenuBar', () => {
     expect(window.electronAPI?.close).toHaveBeenCalledTimes(1);
   });
 
-  it('updates the selected project from the dropdown', () => {
+  it('does not render the select project dropdown or upgrade button', () => {
     render(<MenuBar />);
 
-    fireEvent.click(screen.getByRole('button', { name: /select project/i }));
-    fireEvent.click(screen.getByRole('button', { name: /git repo/i }));
-
-    expect(screen.getByRole('button', { name: /git repo/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /select project/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /upgrade to pro/i })).not.toBeInTheDocument();
   });
 
   it('calls the panel toggle callbacks from the layout icons', () => {

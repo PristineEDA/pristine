@@ -57,19 +57,34 @@ async function readTerminalPid(window: Awaited<ReturnType<typeof launchApp>>['wi
 
 async function readTerminalThemeSnapshot(window: Awaited<ReturnType<typeof launchApp>>['window']) {
   return window.getByTestId('terminal-host').evaluate((host) => {
-    const terminalHost = host as HTMLElement;
-    const fontSamples = Array.from(host.querySelectorAll('.xterm, .xterm-screen, .xterm-helpers, .xterm-char-measure-element'))
-      .map((element) => getComputedStyle(element as HTMLElement).fontFamily)
+    const browserGlobal = globalThis as unknown as {
+      document: {
+        body: { appendChild: (node: unknown) => void };
+        createElement: (tagName: string) => {
+          style: { backgroundColor: string };
+          remove: () => void;
+        };
+      };
+      getComputedStyle: (element: unknown) => { backgroundColor: string; fontFamily: string };
+    };
+    const terminalHost = host as {
+      parentElement: unknown;
+      querySelectorAll: (selectors: string) => ArrayLike<unknown>;
+    };
+    const fontSamples = Array.from(
+      terminalHost.querySelectorAll('.xterm, .xterm-screen, .xterm-helpers, .xterm-char-measure-element'),
+    )
+      .map((element) => browserGlobal.getComputedStyle(element).fontFamily)
       .filter(Boolean);
 
-    const probe = document.createElement('div');
+    const probe = browserGlobal.document.createElement('div');
     probe.style.backgroundColor = 'var(--ide-dracula-background)';
-    document.body.appendChild(probe);
-    const expectedBackground = getComputedStyle(probe).backgroundColor;
+    browserGlobal.document.body.appendChild(probe);
+    const expectedBackground = browserGlobal.getComputedStyle(probe).backgroundColor;
     probe.remove();
 
     return {
-      terminalBackground: getComputedStyle(terminalHost.parentElement ?? terminalHost).backgroundColor,
+      terminalBackground: browserGlobal.getComputedStyle(terminalHost.parentElement ?? terminalHost).backgroundColor,
       terminalFontFamilies: fontSamples,
       expectedBackground,
     };
