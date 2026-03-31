@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import {
   PanelLeft, PanelBottom, Columns2,
-  Settings, CircleUser, Minus, Square, X,
+  Settings, CircleUser, Minus, Square, X, Code2, Presentation, Workflow,
 } from 'lucide-react';
 
 const menus = [
@@ -72,6 +72,7 @@ export function MenuBar({
   onToggleRightPanel,
 }: MenuBarProps) {
   const [openMenu, setOpenMenu] = useState<number | null>(null);
+  const [activeView, setActiveView] = useState<'code' | 'whiteboard' | 'workflow'>('code');
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -134,6 +135,48 @@ export function MenuBar({
         </div>
       ))}
 
+
+      {/* Center view switcher — absolutely centered */}
+      <div
+        data-testid="center-view-switcher"
+        className="absolute left-1/2 -translate-x-1/2 flex items-center gap-0.5 bg-[#2d2d2d] rounded p-0.5"
+        style={noDragInteractive as React.CSSProperties}
+      >
+        <button
+          title="Code"
+          onClick={() => setActiveView('code')}
+          className={`w-7 h-6 flex cursor-pointer items-center justify-center rounded transition-colors ${
+            activeView === 'code'
+              ? 'bg-[#505050] text-[#cccccc]'
+              : 'text-[#858585] hover:text-[#cccccc] hover:bg-[#404040]'
+          }`}
+        >
+          <Code2 size={13} />
+        </button>
+        <button
+          title="Whiteboard"
+          onClick={() => setActiveView('whiteboard')}
+          className={`w-7 h-6 flex cursor-pointer items-center justify-center rounded transition-colors ${
+            activeView === 'whiteboard'
+              ? 'bg-[#505050] text-[#cccccc]'
+              : 'text-[#858585] hover:text-[#cccccc] hover:bg-[#404040]'
+          }`}
+        >
+          <Presentation size={13} />
+        </button>
+        <button
+          title="Workflow"
+          onClick={() => setActiveView('workflow')}
+          className={`w-7 h-6 flex cursor-pointer items-center justify-center rounded transition-colors ${
+            activeView === 'workflow'
+              ? 'bg-[#505050] text-[#cccccc]'
+              : 'text-[#858585] hover:text-[#cccccc] hover:bg-[#404040]'
+          }`}
+        >
+          <Workflow size={13} />
+        </button>
+      </div>
+
       {/* Right side controls */}
       <div className="ml-auto flex items-center h-full" style={noDrag as React.CSSProperties}>
 
@@ -143,7 +186,7 @@ export function MenuBar({
           aria-label="Toggle left sidebar"
           aria-pressed={showLeftPanel}
           data-testid="toggle-left-panel"
-          className={getLayoutButtonClass(showLeftPanel)}
+          className={`${getLayoutButtonClass(showLeftPanel)} cursor-pointer`}
           onClick={onToggleLeftPanel}
         >
           <PanelLeft size={15} />
@@ -153,7 +196,7 @@ export function MenuBar({
           aria-label="Toggle bottom panel"
           aria-pressed={showBottomPanel}
           data-testid="toggle-bottom-panel"
-          className={getLayoutButtonClass(showBottomPanel)}
+          className={`${getLayoutButtonClass(showBottomPanel)} cursor-pointer`}
           onClick={onToggleBottomPanel}
         >
           <PanelBottom size={15} />
@@ -163,7 +206,7 @@ export function MenuBar({
           aria-label="Toggle right sidebar"
           aria-pressed={showRightPanel}
           data-testid="toggle-right-panel"
-          className={getLayoutButtonClass(showRightPanel)}
+          className={`${getLayoutButtonClass(showRightPanel)} cursor-pointer`}
           onClick={onToggleRightPanel}
         >
           <Columns2 size={15} />
@@ -173,12 +216,12 @@ export function MenuBar({
         <div className="w-px h-4 bg-ide-text-dim mx-1" />
 
         {/* Settings */}
-        <button className="w-8 h-full flex items-center justify-center text-ide-text-muted hover:text-ide-text hover:bg-ide-btn-hover transition-colors">
+        <button className="w-8 h-full flex cursor-pointer items-center justify-center text-ide-text-muted hover:text-ide-text hover:bg-ide-btn-hover transition-colors">
           <Settings size={15} />
         </button>
 
         {/* User avatar */}
-        <button className="w-8 h-full flex items-center justify-center hover:bg-ide-btn-hover transition-colors relative">
+        <button className="w-8 h-full flex cursor-pointer items-center justify-center hover:bg-ide-btn-hover transition-colors relative">
           <CircleUser size={16} className="text-ide-text-muted" />
           <span className="absolute bottom-1.5 right-1.5 w-2 h-2 rounded-full bg-ide-online border border-ide-menubar-bg" />
         </button>

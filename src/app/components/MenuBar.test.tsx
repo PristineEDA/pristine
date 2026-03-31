@@ -57,4 +57,13 @@ describe('MenuBar', () => {
     expect(screen.getByTestId('toggle-bottom-panel')).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getByTestId('toggle-right-panel')).toHaveAttribute('aria-pressed', 'true');
   });
+
+  it('marks the centered view switcher as a non-draggable interactive region', () => {
+    render(<MenuBar />);
+
+    const switcher = screen.getByTestId('center-view-switcher') as HTMLDivElement;
+
+    expect(switcher.style.WebkitAppRegion).toBe('no-drag');
+    expect(switcher.style.pointerEvents).toBe('auto');
+  });
 });
