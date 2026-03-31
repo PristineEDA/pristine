@@ -1,6 +1,9 @@
 import { defineConfig } from 'vitest/config'
 import path from 'path'
 
+const isCoverageRun = process.argv.some((arg) => arg === '--coverage' || arg.startsWith('--coverage.'))
+const isWindowsCoverageRun = process.platform === 'win32' && isCoverageRun
+
 export default defineConfig({
   resolve: {
     alias: {
@@ -11,6 +14,9 @@ export default defineConfig({
     setupFiles: ['./src/test/setup.ts'],
     environment: 'jsdom',
     include: ['src/**/*.test.{ts,tsx}', 'electron/**/*.test.ts'],
+    fileParallelism: !isWindowsCoverageRun,
+    maxWorkers: isWindowsCoverageRun ? 1 : undefined,
+    minWorkers: isWindowsCoverageRun ? 1 : undefined,
     environmentMatchGlobs: [
       ['electron/**', 'node'],
     ],
