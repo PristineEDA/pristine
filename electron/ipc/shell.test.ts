@@ -19,7 +19,7 @@ vi.mock('node:child_process', () => {
   };
 });
 
-import { registerShellHandlers, setShellProjectRoot } from '../shell.js';
+import { registerShellHandlers, setShellProjectRoot } from './shell.js';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 

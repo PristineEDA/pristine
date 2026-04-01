@@ -59,7 +59,7 @@ vi.mock('electron', () => ({
   BrowserWindow: mocks.BrowserWindowMock,
 }));
 
-vi.mock('../ipc/register.js', () => ({
+vi.mock('./ipc/register.js', () => ({
   registerAllHandlers: (...args: unknown[]) => mocks.mockRegisterAllHandlers(...args),
   setProjectRoot: (...args: unknown[]) => mocks.mockSetProjectRoot(...args),
   setupWindowStreams: (...args: unknown[]) => mocks.mockSetupWindowStreams(...args),
@@ -97,7 +97,7 @@ async function importMain(options?: { platform?: NodeJS.Platform; devServerUrl?:
     value: options?.platform ?? 'win32',
   });
 
-  await import('../main.ts');
+  await import('./main.ts');
   await Promise.resolve();
 
   return {

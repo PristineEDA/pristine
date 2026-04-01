@@ -1,12 +1,12 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import Konva from 'konva';
-import type { VeConfig, VeSystem, VeSystemLayer } from '../types';
-import { defaultVeConfig } from '../constants';
+import type { VeConfig, VeSystem, VeSystemLayer } from './types';
+import { defaultVeConfig } from './constants';
 import {
   createCircle, createTriangle, createRect, createText,
   createShape, deleteObj, copyObj, pasteObj,
   getPolygonName,
-} from '../shapeFactory';
+} from './shapeFactory';
 
 function makeSystemLayer(): VeSystemLayer {
   const stage = new Konva.Stage({ container: document.createElement('div'), width: 800, height: 600 });

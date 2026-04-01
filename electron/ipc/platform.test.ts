@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { SyncChannels } from '../channels.js';
+import { SyncChannels } from './channels.js';
 
 const mockOn = vi.fn();
 
@@ -9,7 +9,7 @@ vi.mock('electron', () => ({
   },
 }));
 
-import { registerPlatformHandler } from '../platform.js';
+import { registerPlatformHandler } from './platform.js';
 
 describe('platform IPC handler', () => {
   beforeEach(() => {

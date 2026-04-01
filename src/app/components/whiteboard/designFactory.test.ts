@@ -1,8 +1,8 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import Konva from 'konva';
-import type { VeConfig, VeSystemLayer } from '../types';
-import { defaultVeConfig } from '../constants';
-import { createBlockTemplate, createSoC1Template } from '../designFactory';
+import type { VeConfig, VeSystemLayer } from './types';
+import { defaultVeConfig } from './constants';
+import { createBlockTemplate, createSoC1Template } from './designFactory';
 
 function makeSystemLayer(): VeSystemLayer {
   const stage = new Konva.Stage({ container: document.createElement('div'), width: 800, height: 600 });

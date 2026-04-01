@@ -19,7 +19,7 @@ import {
   getTerminalLaunchConfig,
   registerTerminalHandlers,
   setTerminalProjectRoot,
-} from '../terminal.js';
+} from './terminal.js';
 
 function getHandler(channel: string): (...args: unknown[]) => Promise<unknown> {
   const call = mockHandle.mock.calls.find((entry) => entry[0] === channel);

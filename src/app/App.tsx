@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels';
 import { MenuBar } from './components/MenuBar';
 import { ActivityBar } from './components/ActivityBar';
@@ -11,10 +11,10 @@ import { QuickOpenPalette } from './components/QuickOpenPalette';
 import { createQuickOpenFileEntries, getRecentQuickOpenFiles, searchQuickOpenFiles, type QuickOpenFileEntry, type QuickOpenSearchResult } from './quickOpen/quickOpenSearch';
 import type { WorkspaceRevealRequest } from './workspace/useWorkspaceTree';
 import { WorkspaceProvider, useWorkspace } from './context/WorkspaceContext';
-import { WorkflowPlaceholder } from './components/WorkflowPlaceholder';
-import { WhiteboardView } from './components/whiteboard/WhiteboardView';
 
 const QUICK_OPEN_RECENT_LIMIT = 20;
+const WhiteboardView = lazy(() => import('./components/whiteboard/WhiteboardView').then((module) => ({ default: module.WhiteboardView })));
+const WorkflowPlaceholder = lazy(() => import('./components/WorkflowPlaceholder').then((module) => ({ default: module.WorkflowPlaceholder })));
 
 // ─── ResizeHandle ────────────────────────────────────────────────────────────
 const ResizeHandle = ({ direction = 'vertical' }: { direction?: 'vertical' | 'horizontal' }) => (
@@ -27,6 +27,12 @@ const ResizeHandle = ({ direction = 'vertical' }: { direction?: 'vertical' | 'ho
       direction === 'vertical' ? 'w-0.5 h-8' : 'h-0.5 w-8'
     } bg-ide-border group-hover:bg-ide-accent-vivid rounded transition-colors`} />
   </PanelResizeHandle>
+);
+
+const MainContentFallback = () => (
+  <div className="flex flex-1 items-center justify-center bg-ide-bg text-ide-text-muted text-sm">
+    Loading view...
+  </div>
 );
 
 // ─── AppLayout (consumes context) ────────────────────────────────────────────
@@ -281,9 +287,13 @@ function AppLayout() {
       />
       </>
       ) : mainContentView === 'whiteboard' ? (
-        <WhiteboardView />
+        <Suspense fallback={<MainContentFallback />}>
+          <WhiteboardView />
+        </Suspense>
       ) : (
-        <WorkflowPlaceholder />
+        <Suspense fallback={<MainContentFallback />}>
+          <WorkflowPlaceholder />
+        </Suspense>
       )}
     </div>
   );

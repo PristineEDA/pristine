@@ -38,7 +38,7 @@ vi.mock('electron', () => ({
 
 async function importPreload() {
   vi.resetModules();
-  await import('../preload.ts');
+  await import('./preload.ts');
 }
 
 describe('preload bridge', () => {

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { AsyncChannels, StreamChannels, SyncChannels } from '../channels.js';
+import { AsyncChannels, StreamChannels, SyncChannels } from './channels.js';
 
 const { mockOn, mockHandle } = vi.hoisted(() => ({
   mockOn: vi.fn(),
@@ -14,7 +14,7 @@ vi.mock('electron', () => ({
   BrowserWindow: class {},
 }));
 
-import { registerWindowHandlers, setupWindowStreams } from '../window.js';
+import { registerWindowHandlers, setupWindowStreams } from './window.js';
 
 function getOnListener(channel: string): (...args: unknown[]) => void {
   const call = mockOn.mock.calls.find((entry) => entry[0] === channel);

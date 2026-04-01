@@ -20,7 +20,7 @@ vi.mock('electron', () => ({
 
 vi.mock('node:fs/promises', () => ({ default: mockFs }));
 
-import { registerFilesystemHandlers, setProjectRoot } from '../filesystem.js';
+import { registerFilesystemHandlers, setProjectRoot } from './filesystem.js';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 

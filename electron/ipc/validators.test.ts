@@ -6,7 +6,7 @@ import {
   assertNumber,
   assertOptionalString,
   assertValidEncoding,
-} from '../validators.js';
+} from './validators.js';
 
 // ─── validatePathWithinRoot ─────────────────────────────────────────────────
 

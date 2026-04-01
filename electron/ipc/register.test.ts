@@ -24,35 +24,35 @@ const {
   mockRegisterPlatformHandler: vi.fn(),
 }));
 
-vi.mock('../window.js', () => ({
+vi.mock('./window.js', () => ({
   registerWindowHandlers: (...args: unknown[]) => mockRegisterWindowHandlers(...args),
   setupWindowStreams: (...args: unknown[]) => mockSetupWindowStreams(...args),
 }));
 
-vi.mock('../filesystem.js', () => ({
+vi.mock('./filesystem.js', () => ({
   registerFilesystemHandlers: () => mockRegisterFilesystemHandlers(),
   setProjectRoot: (root: string) => mockSetFsRoot(root),
 }));
 
-vi.mock('../shell.js', () => ({
+vi.mock('./shell.js', () => ({
   registerShellHandlers: (...args: unknown[]) => mockRegisterShellHandlers(...args),
   setShellProjectRoot: (root: string) => mockSetShellProjectRoot(root),
 }));
 
-vi.mock('../terminal.js', () => ({
+vi.mock('./terminal.js', () => ({
   registerTerminalHandlers: (...args: unknown[]) => mockRegisterTerminalHandlers(...args),
   setTerminalProjectRoot: (root: string) => mockSetTerminalProjectRoot(root),
 }));
 
-vi.mock('../config.js', () => ({
+vi.mock('./config.js', () => ({
   registerConfigHandlers: () => mockRegisterConfigHandlers(),
 }));
 
-vi.mock('../platform.js', () => ({
+vi.mock('./platform.js', () => ({
   registerPlatformHandler: () => mockRegisterPlatformHandler(),
 }));
 
-import { registerAllHandlers, setProjectRoot, setupWindowStreams } from '../register.js';
+import { registerAllHandlers, setProjectRoot, setupWindowStreams } from './register.js';
 
 describe('register helpers', () => {
   beforeEach(() => {

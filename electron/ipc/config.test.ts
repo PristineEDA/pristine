@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { AsyncChannels, SyncChannels } from '../channels.js';
+import { AsyncChannels, SyncChannels } from './channels.js';
 
 const { mockOn, mockHandle, mockFs, mockGetPath } = vi.hoisted(() => ({
   mockOn: vi.fn(),
@@ -29,7 +29,7 @@ vi.mock('node:fs', () => ({
 
 async function importModule() {
   vi.resetModules();
-  return import('../config.js');
+  return import('./config.js');
 }
 
 function getSyncListener(channel: string): (...args: unknown[]) => void {
