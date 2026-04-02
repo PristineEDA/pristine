@@ -1,10 +1,17 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { forwardRef, useImperativeHandle } from 'react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import App from './App';
 
+const panelResizeMock = vi.fn();
+
 vi.mock('react-resizable-panels', () => ({
   PanelGroup: ({ children }: { children: React.ReactNode }) => <div data-testid="panel-group">{children}</div>,
-  Panel: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  Panel: forwardRef(({ children, id, minSize, defaultSize }: any, ref) => {
+    useImperativeHandle(ref, () => ({ resize: panelResizeMock }));
+
+    return <div data-testid={`panel-${id}`} data-min-size={minSize} data-default-size={defaultSize}>{children}</div>;
+  }),
   PanelResizeHandle: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
 }));
 
@@ -109,6 +116,39 @@ vi.mock('./components/QuickOpenPalette', () => ({
 }));
 
 describe('App', () => {
+  it('keeps the left panel minimum size fixed and resizes the current panel width from the container', async () => {
+    class ResizeObserverMock {
+      private readonly callback: ResizeObserverCallback;
+
+      constructor(callback: ResizeObserverCallback) {
+        this.callback = callback;
+      }
+
+      observe = (target: Element) => {
+        Object.defineProperty(target, 'clientWidth', {
+          configurable: true,
+          value: 1280,
+        });
+
+        this.callback([{ target, contentRect: { width: 1280 } as DOMRectReadOnly }] as ResizeObserverEntry[], this as unknown as ResizeObserver);
+      };
+
+      disconnect = vi.fn();
+      unobserve = vi.fn();
+    }
+
+    vi.stubGlobal('ResizeObserver', ResizeObserverMock);
+
+    render(<App />);
+
+    expect(screen.getByTestId('panel-left-panel')).toHaveAttribute('data-min-size', '12');
+    expect(screen.getByTestId('panel-left-panel')).toHaveAttribute('data-default-size', '12');
+
+    await waitFor(() => {
+      expect(panelResizeMock).toHaveBeenCalledWith(18.13);
+    });
+  });
+
   it('wires shared workspace state across panels', () => {
     render(<App />);
 

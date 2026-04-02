@@ -139,6 +139,7 @@ function EditorGroupLeaf({
   const {
     editorGroups,
     setActiveTabIdInGroup,
+    pinTabInGroup,
     closeFileInGroup,
     splitGroup,
     setCursorPos,
@@ -192,6 +193,7 @@ function EditorGroupLeaf({
         activeTabId={group.activeTabId}
         onTabChange={(tabId) => setActiveTabIdInGroup(group.id, tabId)}
         onTabClose={(tabId) => closeFileInGroup(group.id, tabId)}
+        onTabPin={(tabId) => pinTabInGroup(group.id, tabId)}
         editorRef={editorRef}
         jumpToLine={focused ? jumpToLine : undefined}
         onCursorChange={(line, col) => setCursorPos(line, col, group.id)}

@@ -1,5 +1,5 @@
 import {
-  Files, GitBranch, Bug, Hammer, Play,
+  Files, Bug, Hammer, Play,
 } from 'lucide-react';
 
 interface ActivityBarProps {
@@ -10,7 +10,6 @@ interface ActivityBarProps {
 
 const topItems = [
   { id: 'explorer', icon: Files, label: 'Explorer' },
-  { id: 'git', icon: GitBranch, label: 'Source Control' },
   { id: 'debug', icon: Bug, label: 'Run & Debug' },
 ];
 
@@ -38,7 +37,7 @@ export function ActivityBar({ activeView, onItemSelect, isLeftSidebarHidden = fa
                 : 'text-ide-text-muted hover:text-ide-text border-l-2 border-transparent'
             }`}
           >
-            <Icon size={22} strokeWidth={1.5} />
+            <Icon size={20} strokeWidth={1.5} />
             {/* Tooltip */}
             <div className="absolute left-full ml-2 px-2 py-1 bg-ide-sidebar-bg border border-ide-border-light text-ide-text rounded text-xs whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none z-50 transition-opacity">
               {label}

@@ -159,6 +159,39 @@ test('explorer opens a file into a new editor tab', async () => {
   await app.close();
 });
 
+test('single-clicked explorer files stay in preview style until double-clicked to pin', async () => {
+  const { app, window } = await launchApp();
+
+  const readmeNode = window.getByTestId('file-tree-node-README_md');
+  await readmeNode.click();
+
+  const previewTitle = window.getByTestId('editor-tab-title-README.md');
+  await expect(previewTitle).toHaveClass(/italic/);
+  await expect(window.getByTestId('editor-tab-preview-indicator-README.md')).toBeVisible();
+
+  await openNestedWorkspaceFile(window, [
+    'file-tree-node-rtl',
+    'file-tree-node-rtl_core',
+    'file-tree-node-rtl_core_reg_file_v',
+  ]);
+
+  await expect(window.getByTestId('editor-tab-README.md')).toHaveCount(0);
+  await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toBeVisible();
+  await expect(window.getByTestId('editor-tab-title-rtl/core/reg_file.v')).toHaveClass(/italic/);
+
+  const regFileNode = window.getByTestId('file-tree-node-rtl_core_reg_file_v');
+  await regFileNode.dblclick();
+
+  await expect(window.getByTestId('editor-tab-title-rtl/core/reg_file.v')).not.toHaveClass(/italic/);
+  await expect(window.getByTestId('editor-tab-preview-indicator-rtl/core/reg_file.v')).toHaveCount(0);
+
+  await readmeNode.click();
+  await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toBeVisible();
+  await expect(window.getByTestId('editor-tab-README.md')).toBeVisible();
+
+  await app.close();
+});
+
 test('ctrl+p quick open searches files, navigates results, and reveals the selected file', async () => {
   const { app, window } = await launchApp();
 
@@ -248,8 +281,8 @@ test('activity bar removes search and extensions and toggles the left sidebar', 
   const { app, window } = await launchApp();
 
   await expect(window.getByTestId('activity-item-explorer')).toBeVisible();
-  await expect(window.getByTestId('activity-item-git')).toBeVisible();
   await expect(window.getByTestId('activity-item-debug')).toBeVisible();
+  await expect(window.getByTestId('activity-item-git')).toHaveCount(0);
   await expect(window.getByTestId('activity-item-search')).toHaveCount(0);
   await expect(window.getByTestId('activity-item-extensions')).toHaveCount(0);
 
@@ -259,18 +292,54 @@ test('activity bar removes search and extensions and toggles the left sidebar', 
   const explorerButton = window.getByTestId('activity-item-explorer');
   await explorerButton.click();
   await expect(explorerFileNode).toHaveCount(0);
-    await expect(explorerButton).toHaveClass(/border-transparent/);
-    await expect(explorerButton).not.toHaveClass(/border-ide-accent/);
+  await expect(explorerButton).toHaveClass(/border-transparent/);
+  await expect(explorerButton).not.toHaveClass(/border-ide-accent/);
 
-  const sourceControlButton = window.getByTestId('activity-item-git');
-  await sourceControlButton.click();
+  const debugButton = window.getByTestId('activity-item-debug');
+  await debugButton.click();
   await expect(explorerFileNode).toBeVisible();
-  await expect(sourceControlButton).toHaveClass(/border-ide-accent/);
+  await expect(debugButton).toHaveClass(/border-ide-accent/);
 
-  await sourceControlButton.click();
+  await debugButton.click();
   await expect(explorerFileNode).toHaveCount(0);
-    await expect(sourceControlButton).toHaveClass(/border-transparent/);
-    await expect(sourceControlButton).not.toHaveClass(/border-ide-accent/);
+  await expect(debugButton).toHaveClass(/border-transparent/);
+  await expect(debugButton).not.toHaveClass(/border-ide-accent/);
+
+  await app.close();
+});
+
+test('left sidebar width is resized to keep tab labels readable when the window size changes', async () => {
+  const { app, window } = await launchApp();
+  const browserWindow = await app.browserWindow(window);
+  const leftPanel = window.locator('#left-panel');
+
+  await browserWindow.evaluate((win) => win.setSize(1600, 900));
+
+  await expect.poll(async () => {
+    const box = await leftPanel.boundingBox();
+    return Math.round(box?.width ?? 0);
+  }).toBeGreaterThan(220);
+  await expect.poll(async () => {
+    const box = await leftPanel.boundingBox();
+    return Math.round(box?.width ?? 0);
+  }).toBeLessThan(260);
+
+  const wideWidth = Math.round((await leftPanel.boundingBox())?.width ?? 0);
+
+  await browserWindow.evaluate((win) => win.setSize(1100, 900));
+
+  await expect.poll(async () => {
+    const box = await leftPanel.boundingBox();
+    return Math.round(box?.width ?? 0);
+  }).toBeGreaterThan(220);
+  await expect.poll(async () => {
+    const box = await leftPanel.boundingBox();
+    return Math.round(box?.width ?? 0);
+  }).toBeLessThan(260);
+
+  const narrowWidth = Math.round((await leftPanel.boundingBox())?.width ?? 0);
+
+  expect(Math.abs(wideWidth - narrowWidth)).toBeLessThanOrEqual(16);
 
   await app.close();
 });

@@ -26,12 +26,14 @@ describe('LeftSidePanel', () => {
 
   it('opens a file and jumps to the selected problem line', async () => {
     const onFileOpen = vi.fn();
+    const onFilePreview = vi.fn();
     const onLineJump = vi.fn();
 
     render(
       <LeftSidePanel
         activeFileId="cpu_top"
         onFileOpen={onFileOpen}
+        onFilePreview={onFilePreview}
         onLineJump={onLineJump}
         currentOutlineId="cpu_top"
       />,
@@ -46,11 +48,13 @@ describe('LeftSidePanel', () => {
 
   it('expands explorer items and opens a clicked file', async () => {
     const onFileOpen = vi.fn();
+    const onFilePreview = vi.fn();
 
     render(
       <LeftSidePanel
         activeFileId="cpu_top"
         onFileOpen={onFileOpen}
+        onFilePreview={onFilePreview}
         onLineJump={vi.fn()}
         currentOutlineId="cpu_top"
       />,
@@ -60,7 +64,30 @@ describe('LeftSidePanel', () => {
     fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals'));
     fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals_uart_rx_v'));
 
+    expect(onFilePreview).toHaveBeenCalledWith('rtl/peripherals/uart_rx.v', 'uart_rx.v');
+  });
+
+  it('pins a file on explorer double click and applies the explorer hover scrollbar class', async () => {
+    const onFileOpen = vi.fn();
+
+    const { container } = render(
+      <LeftSidePanel
+        activeFileId="cpu_top"
+        onFileOpen={onFileOpen}
+        onFilePreview={vi.fn()}
+        onLineJump={vi.fn()}
+        currentOutlineId="cpu_top"
+      />,
+    );
+
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl'));
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals'));
+
+    const fileNode = await screen.findByTestId('file-tree-node-rtl_peripherals_uart_rx_v');
+    fireEvent.doubleClick(fileNode);
+
     expect(onFileOpen).toHaveBeenCalledWith('rtl/peripherals/uart_rx.v', 'uart_rx.v');
+    expect(container.querySelector('.explorer-tree-scrollbar')).not.toBeNull();
   });
 
   it('allows the workspace root row to collapse and expand', async () => {
@@ -68,6 +95,7 @@ describe('LeftSidePanel', () => {
       <LeftSidePanel
         activeFileId="cpu_top"
         onFileOpen={vi.fn()}
+        onFilePreview={vi.fn()}
         onLineJump={vi.fn()}
         currentOutlineId="cpu_top"
       />,
@@ -88,6 +116,7 @@ describe('LeftSidePanel', () => {
       <LeftSidePanel
         activeFileId="cpu_top"
         onFileOpen={vi.fn()}
+        onFilePreview={vi.fn()}
         onLineJump={vi.fn()}
         currentOutlineId="cpu_top"
       />,

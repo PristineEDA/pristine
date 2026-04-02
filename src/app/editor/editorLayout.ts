@@ -5,12 +5,14 @@ export interface EditorTab {
   id: string;
   name: string;
   modified?: boolean;
+  isPinned: boolean;
 }
 
 export interface EditorGroup {
   id: string;
   tabs: EditorTab[];
   activeTabId: string;
+  previewTabId: string | null;
 }
 
 export interface EditorLayoutGroupNode {
@@ -38,10 +40,13 @@ function createGroupNode(groupId: string): EditorLayoutGroupNode {
 }
 
 export function createEditorGroup(id: string, tabs: EditorTab[] = [], activeTabId?: string): EditorGroup {
+  const previewTab = tabs.find((tab) => !tab.isPinned);
+
   return {
     id,
     tabs,
     activeTabId: activeTabId ?? tabs[0]?.id ?? '',
+    previewTabId: previewTab?.id ?? null,
   };
 }
 
@@ -159,19 +164,78 @@ export function openFileInEditorGroup(
   groupId: string,
   fileId: string,
   fileName: string,
+  options?: { preview?: boolean },
 ): EditorWorkspaceModel {
   const group = model.groups[groupId];
   if (!group) {
     return model;
   }
 
+  const isPreview = options?.preview === true;
   const existingTab = group.tabs.find((tab) => tab.id === fileId);
+
+  if (isPreview) {
+    const previewTabId = group.previewTabId;
+    const hasExistingPreview = previewTabId !== null && previewTabId !== fileId;
+    const nextTabs = group.tabs
+      .filter((tab) => tab.id !== previewTabId)
+      .map((tab) => (
+        tab.id === fileId
+          ? { ...tab, isPinned: false }
+          : tab
+      ));
+
+    const targetExists = nextTabs.some((tab) => tab.id === fileId);
+    const previewTab: EditorTab = existingTab
+      ? { ...existingTab, isPinned: false }
+      : { id: fileId, name: fileName, isPinned: false };
+
+    const nextGroup: EditorGroup = {
+      ...group,
+      tabs: targetExists ? nextTabs : [...nextTabs, previewTab],
+      activeTabId: fileId,
+      previewTabId: fileId,
+    };
+
+    if (!hasExistingPreview && targetExists && existingTab?.isPinned) {
+      return {
+        ...model,
+        groups: {
+          ...model.groups,
+          [groupId]: {
+            ...nextGroup,
+            tabs: group.tabs,
+            previewTabId: null,
+          },
+        },
+        focusedGroupId: groupId,
+      };
+    }
+
+    return {
+      ...model,
+      groups: {
+        ...model.groups,
+        [groupId]: nextGroup,
+      },
+      focusedGroupId: groupId,
+    };
+  }
+
   const nextGroup: EditorGroup = existingTab
-    ? { ...group, activeTabId: fileId }
+    ? {
+        ...group,
+        tabs: existingTab.isPinned
+          ? group.tabs
+          : group.tabs.map((tab) => tab.id === fileId ? { ...tab, isPinned: true } : tab),
+        activeTabId: fileId,
+        previewTabId: group.previewTabId === fileId ? null : group.previewTabId,
+      }
     : {
         ...group,
-        tabs: [...group.tabs, { id: fileId, name: fileName }],
+        tabs: [...group.tabs, { id: fileId, name: fileName, isPinned: true }],
         activeTabId: fileId,
+        previewTabId: group.previewTabId,
       };
 
   return {
@@ -207,6 +271,35 @@ export function setActiveTabInEditorGroup(
   };
 }
 
+export function pinTabInEditorGroup(
+  model: EditorWorkspaceModel,
+  groupId: string,
+  tabId: string,
+): EditorWorkspaceModel {
+  const group = model.groups[groupId];
+  const tab = group?.tabs.find((currentTab) => currentTab.id === tabId);
+
+  if (!group || !tab || tab.isPinned) {
+    return tab ? setActiveTabInEditorGroup(model, groupId, tabId) : model;
+  }
+
+  return {
+    ...model,
+    groups: {
+      ...model.groups,
+      [groupId]: {
+        ...group,
+        tabs: group.tabs.map((currentTab) => (
+          currentTab.id === tabId ? { ...currentTab, isPinned: true } : currentTab
+        )),
+        activeTabId: tabId,
+        previewTabId: group.previewTabId === tabId ? null : group.previewTabId,
+      },
+    },
+    focusedGroupId: groupId,
+  };
+}
+
 export function closeFileInEditorGroup(
   model: EditorWorkspaceModel,
   groupId: string,
@@ -235,6 +328,7 @@ export function closeFileInEditorGroup(
         ...group,
         tabs: nextTabs,
         activeTabId: nextActiveTabId,
+        previewTabId: group.previewTabId === fileId ? null : group.previewTabId,
       },
     },
   };
@@ -285,7 +379,7 @@ export function splitEditorGroup(
     layout: insertSplitAroundGroup(model.layout, targetGroupId, newGroupId, splitId, direction, true),
     groups: {
       ...model.groups,
-      [newGroupId]: createEditorGroup(newGroupId, [{ ...activeTab }], activeTab.id),
+      [newGroupId]: createEditorGroup(newGroupId, [{ ...activeTab, isPinned: true }], activeTab.id),
     },
     focusedGroupId: newGroupId,
   };
@@ -308,7 +402,7 @@ function addTabToGroup(
       ...model.groups,
       [groupId]: existingTab
         ? { ...group, activeTabId: tab.id }
-        : { ...group, tabs: [...group.tabs, tab], activeTabId: tab.id },
+        : { ...group, tabs: [...group.tabs, tab], activeTabId: tab.id, previewTabId: group.previewTabId },
     },
     focusedGroupId: groupId,
   };
@@ -360,7 +454,11 @@ export function moveEditorTab(
       return setActiveTabInEditorGroup(model, sourceGroupId, tabId);
     }
 
-    const nextModel = addTabToGroup(removeTabFromGroup(model, sourceGroupId, tabId), targetGroupId, tab);
+    const nextModel = addTabToGroup(
+      removeTabFromGroup(model, sourceGroupId, tabId),
+      targetGroupId,
+      { ...tab, isPinned: true },
+    );
     return normalizeFocusedGroup(nextModel);
   }
 
@@ -371,7 +469,7 @@ export function moveEditorTab(
     layout: insertSplitAroundGroup(baseModel.layout, targetGroupId, newGroupId, splitId, direction, placeAfter),
     groups: {
       ...baseModel.groups,
-      [newGroupId]: createEditorGroup(newGroupId, [{ ...tab }], tab.id),
+      [newGroupId]: createEditorGroup(newGroupId, [{ ...tab, isPinned: true }], tab.id),
     },
     focusedGroupId: newGroupId,
   };

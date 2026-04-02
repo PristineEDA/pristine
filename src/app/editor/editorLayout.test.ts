@@ -5,6 +5,7 @@ import {
   createInitialEditorWorkspace,
   moveEditorTab,
   openFileInEditorGroup,
+  pinTabInEditorGroup,
   splitEditorGroup,
   type EditorWorkspaceModel,
 } from './editorLayout';
@@ -20,6 +21,44 @@ describe('editorLayout', () => {
     expect(state.groups['group-1']?.activeTabId).toBe('rtl/core/reg_file.v');
   });
 
+  it('replaces the existing preview tab when previewing another file in the same group', () => {
+    let state = createInitialEditorWorkspace('group-1');
+
+    state = openFileInEditorGroup(state, 'group-1', 'rtl/core/reg_file.v', 'reg_file.v', { preview: true });
+    state = openFileInEditorGroup(state, 'group-1', 'rtl/core/alu.v', 'alu.v', { preview: true });
+
+    expect(state.groups['group-1']?.tabs.map((tab) => ({ id: tab.id, isPinned: tab.isPinned }))).toEqual([
+      { id: 'rtl/core/alu.v', isPinned: false },
+    ]);
+    expect(state.groups['group-1']?.previewTabId).toBe('rtl/core/alu.v');
+    expect(state.groups['group-1']?.activeTabId).toBe('rtl/core/alu.v');
+  });
+
+  it('pins an existing preview tab when the same file is opened permanently', () => {
+    let state = createInitialEditorWorkspace('group-1');
+
+    state = openFileInEditorGroup(state, 'group-1', 'rtl/core/reg_file.v', 'reg_file.v', { preview: true });
+    state = openFileInEditorGroup(state, 'group-1', 'rtl/core/reg_file.v', 'reg_file.v');
+
+    expect(state.groups['group-1']?.tabs.map((tab) => ({ id: tab.id, isPinned: tab.isPinned }))).toEqual([
+      { id: 'rtl/core/reg_file.v', isPinned: true },
+    ]);
+    expect(state.groups['group-1']?.previewTabId).toBeNull();
+  });
+
+  it('pins an existing preview tab directly without duplicating it', () => {
+    let state = createInitialEditorWorkspace('group-1');
+
+    state = openFileInEditorGroup(state, 'group-1', 'rtl/core/reg_file.v', 'reg_file.v', { preview: true });
+    state = pinTabInEditorGroup(state, 'group-1', 'rtl/core/reg_file.v');
+
+    expect(state.groups['group-1']?.tabs).toEqual([
+      { id: 'rtl/core/reg_file.v', name: 'reg_file.v', isPinned: true },
+    ]);
+    expect(state.groups['group-1']?.previewTabId).toBeNull();
+    expect(state.groups['group-1']?.activeTabId).toBe('rtl/core/reg_file.v');
+  });
+
   it('creates a second group when splitting the active tab', () => {
     let state = createInitialEditorWorkspace('group-1');
     state = openFileInEditorGroup(state, 'group-1', 'rtl/core/reg_file.v', 'reg_file.v');
@@ -27,6 +66,7 @@ describe('editorLayout', () => {
     state = splitEditorGroup(state, 'group-1', 'group-2', 'split-1', 'horizontal');
 
     expect(state.groups['group-2']?.tabs.map((tab) => tab.id)).toEqual(['rtl/core/reg_file.v']);
+    expect(state.groups['group-2']?.tabs[0]?.isPinned).toBe(true);
     expect(state.focusedGroupId).toBe('group-2');
     expect(state.layout?.type).toBe('split');
   });
@@ -57,11 +97,23 @@ describe('editorLayout', () => {
     expect(state.layout?.type).toBe('split');
   });
 
+  it('pins a preview tab when it is moved into another group', () => {
+    let state = createInitialEditorWorkspace('group-1');
+    state = openFileInEditorGroup(state, 'group-1', 'rtl/core/reg_file.v', 'reg_file.v');
+    state = splitEditorGroup(state, 'group-1', 'group-2', 'split-1', 'horizontal');
+    state = openFileInEditorGroup(state, 'group-1', 'rtl/core/alu.v', 'alu.v', { preview: true });
+
+    state = moveEditorTab(state, 'group-1', 'rtl/core/alu.v', 'group-2', 'center', 'group-3', 'split-2');
+
+    expect(state.groups['group-1']?.previewTabId).toBeNull();
+    expect(state.groups['group-2']?.tabs.find((tab) => tab.id === 'rtl/core/alu.v')?.isPinned).toBe(true);
+  });
+
   it('removes an empty group after its last tab closes', () => {
     let state: EditorWorkspaceModel = {
       ...createInitialEditorWorkspace('group-1'),
       groups: {
-        'group-1': createEditorGroup('group-1', [{ id: 'rtl/core/reg_file.v', name: 'reg_file.v' }], 'rtl/core/reg_file.v'),
+        'group-1': createEditorGroup('group-1', [{ id: 'rtl/core/reg_file.v', name: 'reg_file.v', isPinned: true }], 'rtl/core/reg_file.v'),
       },
     };
 

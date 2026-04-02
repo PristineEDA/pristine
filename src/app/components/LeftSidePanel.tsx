@@ -13,6 +13,7 @@ import type { Problem } from '../../data/mockData';
 interface LeftSidePanelProps {
   activeFileId: string;
   onFileOpen: (fileId: string, fileName: string) => void;
+  onFilePreview: (fileId: string, fileName: string) => void;
   onLineJump: (line: number) => void;
   currentOutlineId: string;
   revealRequest?: WorkspaceRevealRequest | null;
@@ -29,6 +30,7 @@ function SeverityIcon({ severity }: { severity: Problem['severity'] }) {
 export function LeftSidePanel({
   activeFileId,
   onFileOpen,
+  onFilePreview,
   onLineJump,
   currentOutlineId,
   revealRequest,
@@ -107,7 +109,7 @@ export function LeftSidePanel({
               <button title="Collapse All" className="p-0.5 text-ide-text-muted hover:text-white transition-colors" onClick={collapseAll}><ChevronsUpDown size={13} /></button>
             </div>
           </div>
-          <div className="flex-1 overflow-y-auto overflow-x-hidden">
+          <div className="explorer-tree-scrollbar flex-1 overflow-y-auto overflow-x-hidden">
             {workspaceAvailable === null && (
               <div className="px-4 py-3 text-ide-text-muted text-[12px]">Loading workspace...</div>
             )}
@@ -121,6 +123,7 @@ export function LeftSidePanel({
                 depth={0}
                 activeFileId={activeFileId}
                 onFileOpen={onFileOpen}
+                onFilePreview={onFilePreview}
                 expandedFolders={expandedFolders}
                 onToggleFolder={toggleFolder}
                 revealRequest={revealRequest}

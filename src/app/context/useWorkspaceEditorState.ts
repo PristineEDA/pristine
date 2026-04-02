@@ -4,6 +4,7 @@ import {
   focusEditorGroup,
   moveEditorTab,
   openFileInEditorGroup,
+  pinTabInEditorGroup,
   setActiveTabInEditorGroup,
   closeFileInEditorGroup,
   splitEditorGroup,
@@ -42,6 +43,10 @@ export function useWorkspaceEditorState() {
     setEditorState((current) => openFileInEditorGroup(current, groupId, fileId, fileName));
   }, []);
 
+  const openPreviewFileInGroup = useCallback((fileId: string, fileName: string, groupId: string) => {
+    setEditorState((current) => openFileInEditorGroup(current, groupId, fileId, fileName, { preview: true }));
+  }, []);
+
   const openFile = useCallback((fileId: string, fileName: string) => {
     setEditorState((current) => {
       const targetGroupId = current.focusedGroupId ?? nextGeneratedId('group');
@@ -50,6 +55,17 @@ export function useWorkspaceEditorState() {
         : createInitialEditorWorkspace(targetGroupId);
 
       return openFileInEditorGroup(baseState, targetGroupId, fileId, fileName);
+    });
+  }, [nextGeneratedId]);
+
+  const openPreviewFile = useCallback((fileId: string, fileName: string) => {
+    setEditorState((current) => {
+      const targetGroupId = current.focusedGroupId ?? nextGeneratedId('group');
+      const baseState = current.groups[targetGroupId]
+        ? current
+        : createInitialEditorWorkspace(targetGroupId);
+
+      return openFileInEditorGroup(baseState, targetGroupId, fileId, fileName, { preview: true });
     });
   }, [nextGeneratedId]);
 
@@ -76,6 +92,21 @@ export function useWorkspaceEditorState() {
     setEditorState((current) => {
       const targetGroupId = current.focusedGroupId ?? Object.values(current.groups).find((group) => group.tabs.some((tab) => tab.id === id))?.id;
       return targetGroupId ? setActiveTabInEditorGroup(current, targetGroupId, id) : current;
+    });
+  }, []);
+
+  const pinTabInGroup = useCallback((groupId: string, tabId: string) => {
+    setEditorState((current) => pinTabInEditorGroup(current, groupId, tabId));
+    focusGroup(groupId);
+  }, [focusGroup]);
+
+  const pinTab = useCallback((tabId: string) => {
+    setEditorState((current) => {
+      const targetGroupId = current.focusedGroupId && current.groups[current.focusedGroupId]?.tabs.some((tab) => tab.id === tabId)
+        ? current.focusedGroupId
+        : Object.values(current.groups).find((group) => group.tabs.some((tab) => tab.id === tabId))?.id;
+
+      return targetGroupId ? pinTabInEditorGroup(current, targetGroupId, tabId) : current;
     });
   }, []);
 
@@ -140,6 +171,10 @@ export function useWorkspaceEditorState() {
     moveTab,
     openFile,
     openFileInGroup,
+    openPreviewFile,
+    openPreviewFileInGroup,
+    pinTab,
+    pinTabInGroup,
     closeFile,
     closeFileInGroup,
     registerEditorRef,

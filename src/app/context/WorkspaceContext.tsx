@@ -32,6 +32,10 @@ interface WorkspaceState {
   activeTabId: string;
   openFile: (fileId: string, fileName: string) => void;
   openFileInGroup: (fileId: string, fileName: string, groupId: string) => void;
+  openPreviewFile: (fileId: string, fileName: string) => void;
+  openPreviewFileInGroup: (fileId: string, fileName: string, groupId: string) => void;
+  pinTab: (tabId: string) => void;
+  pinTabInGroup: (groupId: string, tabId: string) => void;
   closeFile: (fileId: string) => void;
   closeFileInGroup: (groupId: string, fileId: string) => void;
   setActiveTabId: (id: string) => void;
@@ -100,6 +104,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       activeTabId: editorWorkspace.activeTabId,
       openFile: editorWorkspace.openFile,
       openFileInGroup: editorWorkspace.openFileInGroup,
+      openPreviewFile: editorWorkspace.openPreviewFile,
+      openPreviewFileInGroup: editorWorkspace.openPreviewFileInGroup,
+      pinTab: editorWorkspace.pinTab,
+      pinTabInGroup: editorWorkspace.pinTabInGroup,
       closeFile: editorWorkspace.closeFile,
       closeFileInGroup: editorWorkspace.closeFileInGroup,
       setActiveTabId: editorWorkspace.setActiveTabId,

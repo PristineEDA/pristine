@@ -83,8 +83,8 @@ describe('EditorArea', () => {
       />,
     );
 
-    expect(screen.getByText('RTL Studio')).toBeInTheDocument();
-    expect(screen.getByText(/Open a file to start editing/i)).toBeInTheDocument();
+    expect(screen.getByText('R')).toBeInTheDocument();
+    expect(screen.queryByTestId('monaco-editor')).not.toBeInTheDocument();
   });
 
   it('switches tabs and closes a tab through the tab strip', () => {
@@ -94,8 +94,8 @@ describe('EditorArea', () => {
     render(
       <EditorArea
         tabs={[
-          { id: 'rtl/core/cpu_top.v', name: 'cpu_top.v', modified: true },
-          { id: 'rtl/core/alu.v', name: 'alu.v' },
+          { id: 'rtl/core/cpu_top.v', name: 'cpu_top.v', modified: true, isPinned: true },
+          { id: 'rtl/core/alu.v', name: 'alu.v', isPinned: true },
         ]}
         activeTabId="rtl/core/cpu_top.v"
         onTabChange={onTabChange}
@@ -112,6 +112,65 @@ describe('EditorArea', () => {
 
     expect(onTabChange).toHaveBeenCalledWith('rtl/core/alu.v');
     expect(onTabClose).toHaveBeenCalledWith('rtl/core/cpu_top.v');
+  });
+
+  it('renders preview tabs with italic titles and a visible temporary-state marker', () => {
+    render(
+      <EditorArea
+        tabs={[
+          { id: 'rtl/core/reg_file.v', name: 'reg_file.v', isPinned: false },
+          { id: 'rtl/core/alu.v', name: 'alu.v', isPinned: true },
+        ]}
+        activeTabId="rtl/core/reg_file.v"
+        onTabChange={vi.fn()}
+        onTabClose={vi.fn()}
+        onTabPin={vi.fn()}
+        editorRef={createRef()}
+      />,
+    );
+
+    expect(screen.getByTestId('editor-tab-title-rtl/core/reg_file.v')).toHaveClass('italic');
+    expect(screen.getByTestId('editor-tab-preview-indicator-rtl/core/reg_file.v')).toBeInTheDocument();
+    expect(screen.getByTestId('editor-tab-rtl/core/reg_file.v')).toHaveAttribute('title', 'rtl/core/reg_file.v (Preview tab)');
+    expect(screen.getByTestId('editor-tab-close-rtl/core/reg_file.v')).toHaveClass('opacity-50');
+    expect(screen.getByTestId('editor-tab-rtl/core/alu.v')).toHaveAttribute('title', 'rtl/core/alu.v');
+    expect(screen.queryByTestId('editor-tab-preview-indicator-rtl/core/alu.v')).not.toBeInTheDocument();
+  });
+
+  it('pins a preview tab on double-click and before dragging begins', () => {
+    const onTabChange = vi.fn();
+    const onTabPin = vi.fn();
+    const onTabDragStart = vi.fn();
+
+    render(
+      <EditorArea
+        tabs={[
+          { id: 'rtl/core/reg_file.v', name: 'reg_file.v', isPinned: false },
+        ]}
+        activeTabId="rtl/core/reg_file.v"
+        onTabChange={onTabChange}
+        onTabClose={vi.fn()}
+        onTabPin={onTabPin}
+        onTabDragStart={onTabDragStart}
+        editorRef={createRef()}
+      />,
+    );
+
+    const previewTab = screen.getByTestId('editor-tab-rtl/core/reg_file.v');
+    fireEvent.doubleClick(previewTab);
+
+    expect(onTabChange).toHaveBeenCalledWith('rtl/core/reg_file.v');
+    expect(onTabPin).toHaveBeenCalledTimes(1);
+
+    fireEvent.dragStart(previewTab, {
+      dataTransfer: {
+        effectAllowed: '',
+        setData: vi.fn(),
+      },
+    });
+
+    expect(onTabPin).toHaveBeenCalledTimes(2);
+    expect(onTabDragStart).toHaveBeenCalledWith('rtl/core/reg_file.v');
   });
 
   it('uses the same file type badge mapping in editor tabs as the explorer', () => {

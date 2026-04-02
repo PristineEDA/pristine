@@ -46,6 +46,7 @@ export const FileTreeNode = memo(function FileTreeNode({
   depth,
   activeFileId,
   onFileOpen,
+  onFilePreview,
   expandedFolders,
   onToggleFolder,
   revealRequest,
@@ -54,6 +55,7 @@ export const FileTreeNode = memo(function FileTreeNode({
   depth: number;
   activeFileId: string;
   onFileOpen: (id: string, name: string) => void;
+  onFilePreview: (id: string, name: string) => void;
   expandedFolders: Set<string>;
   onToggleFolder: (id: string) => void;
   revealRequest?: WorkspaceRevealRequest | null;
@@ -104,7 +106,12 @@ export const FileTreeNode = memo(function FileTreeNode({
         style={{ paddingLeft: depth * 12 + 4 }}
         onClick={() => {
           if (node.type === 'folder') onToggleFolder(node.id);
-          else onFileOpen(node.path, node.name);
+          else onFilePreview(node.path, node.name);
+        }}
+        onDoubleClick={() => {
+          if (node.type === 'file') {
+            onFileOpen(node.path, node.name);
+          }
         }}
         onContextMenu={(e) => {
           e.preventDefault();
@@ -153,6 +160,7 @@ export const FileTreeNode = memo(function FileTreeNode({
           depth={depth + 1}
           activeFileId={activeFileId}
           onFileOpen={onFileOpen}
+          onFilePreview={onFilePreview}
           expandedFolders={expandedFolders}
           onToggleFolder={onToggleFolder}
           revealRequest={revealRequest}

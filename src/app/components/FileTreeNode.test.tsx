@@ -104,6 +104,7 @@ describe('FileTreeNode', () => {
   it('toggles folders and renders nested children only when expanded', () => {
     const onToggleFolder = vi.fn();
     const onFileOpen = vi.fn();
+    const onFilePreview = vi.fn();
 
     const { rerender } = render(
       <FileTreeNode
@@ -119,6 +120,7 @@ describe('FileTreeNode', () => {
         depth={0}
         activeFileId=""
         onFileOpen={onFileOpen}
+        onFilePreview={onFilePreview}
         expandedFolders={new Set()}
         onToggleFolder={onToggleFolder}
       />,
@@ -143,6 +145,7 @@ describe('FileTreeNode', () => {
         depth={0}
         activeFileId=""
         onFileOpen={onFileOpen}
+        onFilePreview={onFilePreview}
         expandedFolders={new Set(['rtl'])}
         onToggleFolder={onToggleFolder}
       />,
@@ -151,9 +154,10 @@ describe('FileTreeNode', () => {
     expect(screen.getByTestId('file-tree-node-rtl_uart_tx_v')).toBeInTheDocument();
   });
 
-  it('opens files from clicks and context-menu actions, including active error nodes', () => {
+  it('previews on single click, pins on double click, and opens from the context menu', () => {
     const onToggleFolder = vi.fn();
     const onFileOpen = vi.fn();
+    const onFilePreview = vi.fn();
 
     render(
       <FileTreeNode
@@ -168,6 +172,7 @@ describe('FileTreeNode', () => {
         depth={1}
         activeFileId="rtl/core/cpu_top.v"
         onFileOpen={onFileOpen}
+        onFilePreview={onFilePreview}
         expandedFolders={new Set()}
         onToggleFolder={onToggleFolder}
       />,
@@ -177,7 +182,10 @@ describe('FileTreeNode', () => {
     expect(node.className).toContain('bg-ide-selection');
 
     fireEvent.click(node);
-    expect(onFileOpen).toHaveBeenCalledWith('rtl/core/cpu_top.v', 'cpu_top.v');
+  expect(onFilePreview).toHaveBeenCalledWith('rtl/core/cpu_top.v', 'cpu_top.v');
+
+  fireEvent.doubleClick(node);
+  expect(onFileOpen).toHaveBeenCalledWith('rtl/core/cpu_top.v', 'cpu_top.v');
 
     fireEvent.contextMenu(node, { clientX: 100, clientY: 120 });
     fireEvent.click(screen.getByRole('button', { name: /Open in Editor/i }));
@@ -190,6 +198,7 @@ describe('FileTreeNode', () => {
   it('scrolls a revealed file node into view when requested', () => {
     const onToggleFolder = vi.fn();
     const onFileOpen = vi.fn();
+    const onFilePreview = vi.fn();
     const scrollIntoView = vi.spyOn(HTMLElement.prototype, 'scrollIntoView');
 
     render(
@@ -205,6 +214,7 @@ describe('FileTreeNode', () => {
         depth={2}
         activeFileId="rtl/core/reg_file.v"
         onFileOpen={onFileOpen}
+        onFilePreview={onFilePreview}
         expandedFolders={new Set()}
         onToggleFolder={onToggleFolder}
         revealRequest={{ path: 'rtl/core/reg_file.v', token: 1 }}

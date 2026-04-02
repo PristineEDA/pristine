@@ -9,6 +9,7 @@ vi.mock('./EditorArea', () => ({
     activeTabId,
     onTabChange,
     onTabClose,
+    onTabPin,
     onSplitEditor,
     onTabDragStart,
     onTabDragEnd,
@@ -19,6 +20,7 @@ vi.mock('./EditorArea', () => ({
     <div data-testid="mock-editor-area" onMouseDown={onFocus}>
       <div data-testid="mock-active-tab">{activeTabId}</div>
       <div data-testid="mock-tabs">{tabs.map((tab: { id: string }) => tab.id).join(',')}</div>
+      <div data-testid="mock-preview-tabs">{tabs.filter((tab: { isPinned?: boolean }) => tab.isPinned === false).map((tab: { id: string }) => tab.id).join(',')}</div>
       {showDragInteractionShield ? <div data-testid={dragInteractionShieldTestId} /> : null}
       {onSplitEditor ? <button onClick={() => onSplitEditor('horizontal')}>split-editor</button> : null}
       {onSplitEditor ? <button onClick={() => onSplitEditor('vertical')}>split-editor-down</button> : null}
@@ -28,7 +30,11 @@ vi.mock('./EditorArea', () => ({
             data-testid={`mock-tab-${tab.id}`}
             draggable
             onClick={() => onTabChange(tab.id)}
-            onDragStart={() => onTabDragStart?.(tab.id)}
+            onDoubleClick={() => onTabPin?.(tab.id)}
+            onDragStart={() => {
+              onTabPin?.(tab.id);
+              onTabDragStart?.(tab.id);
+            }}
             onDragEnd={() => onTabDragEnd?.()}
           >
             {tab.name}
@@ -43,12 +49,13 @@ vi.mock('./EditorArea', () => ({
 }));
 
 function LayoutHarness() {
-  const { openFile } = useWorkspace();
+  const { openFile, openPreviewFile } = useWorkspace();
 
   return (
     <div>
       <button onClick={() => openFile('rtl/core/reg_file.v', 'reg_file.v')}>open-reg</button>
       <button onClick={() => openFile('rtl/core/alu.v', 'alu.v')}>open-alu</button>
+      <button onClick={() => openPreviewFile('rtl/core/reg_file.v', 'reg_file.v')}>preview-reg</button>
       <EditorSplitLayout />
     </div>
   );
@@ -140,6 +147,40 @@ describe('EditorSplitLayout', () => {
     expect(screen.getByTestId('editor-group-group-2')).toBeInTheDocument();
     expect(within(screen.getByTestId('editor-group-group-2')).getByTestId('mock-tabs')).toHaveTextContent('rtl/core/reg_file.v');
     expect(screen.queryByTestId('editor-drag-shield-group-1')).not.toBeInTheDocument();
+  });
+
+  it('pins a preview tab when the tab itself is double-clicked', () => {
+    render(
+      <WorkspaceProvider>
+        <LayoutHarness />
+      </WorkspaceProvider>,
+    );
+
+    fireEvent.click(screen.getByText('preview-reg'));
+    const group = screen.getByTestId('editor-group-group-1');
+    const previewTab = within(group).getByTestId('mock-tab-rtl/core/reg_file.v');
+
+    fireEvent.doubleClick(previewTab);
+
+    expect(within(group).getByTestId('mock-active-tab')).toHaveTextContent('rtl/core/reg_file.v');
+    expect(within(group).getByTestId('mock-preview-tabs')).toHaveTextContent('');
+  });
+
+  it('pins a preview tab before drag state starts so cancelled drags still keep it', () => {
+    render(
+      <WorkspaceProvider>
+        <LayoutHarness />
+      </WorkspaceProvider>,
+    );
+
+    fireEvent.click(screen.getByText('preview-reg'));
+    const group = screen.getByTestId('editor-group-group-1');
+    const previewTab = within(group).getByTestId('mock-tab-rtl/core/reg_file.v');
+
+    fireEvent.dragStart(previewTab);
+
+    expect(within(group).getByTestId('mock-preview-tabs')).toHaveTextContent('');
+    expect(screen.getByTestId('editor-drag-shield-group-1')).toBeInTheDocument();
   });
 
   it('moves a tab into an existing group when dropped in the center', () => {

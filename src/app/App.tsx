@@ -1,5 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels';
+import { PanelGroup, Panel, PanelResizeHandle, type ImperativePanelHandle } from 'react-resizable-panels';
 import { MenuBar } from './components/MenuBar';
 import { ActivityBar } from './components/ActivityBar';
 import { LeftSidePanel } from './components/LeftSidePanel';
@@ -11,6 +11,7 @@ import { QuickOpenPalette } from './components/QuickOpenPalette';
 import { createQuickOpenFileEntries, getRecentQuickOpenFiles, searchQuickOpenFiles, type QuickOpenFileEntry, type QuickOpenSearchResult } from './quickOpen/quickOpenSearch';
 import type { WorkspaceRevealRequest } from './workspace/useWorkspaceTree';
 import { WorkspaceProvider, useWorkspace } from './context/WorkspaceContext';
+import { getLeftPanelTargetSizePercent } from './layout/panelSizing';
 
 const QUICK_OPEN_RECENT_LIMIT = 20;
 const WhiteboardView = lazy(() => import('./components/whiteboard/WhiteboardView').then((module) => ({ default: module.WhiteboardView })));
@@ -42,6 +43,7 @@ function AppLayout() {
     mainContentView,
     activeTabId,
     openFile,
+    openPreviewFile,
     jumpToLine, jumpTo,
     showLeftPanel, setShowLeftPanel,
     showBottomPanel, setShowBottomPanel,
@@ -56,6 +58,8 @@ function AppLayout() {
   const [quickOpenError, setQuickOpenError] = useState<string | null>(null);
   const [recentQuickOpenFiles, setRecentQuickOpenFiles] = useState<QuickOpenFileEntry[]>([]);
   const [revealRequest, setRevealRequest] = useState<WorkspaceRevealRequest | null>(null);
+  const panelGroupContainerRef = useRef<HTMLDivElement | null>(null);
+  const leftPanelRef = useRef<ImperativePanelHandle | null>(null);
   const revealTokenRef = useRef(0);
 
   const handleActivityItemSelect = (nextView: string) => {
@@ -98,6 +102,37 @@ function AppLayout() {
     recordRecentFile(filePath, fileName);
     openFile(filePath, fileName);
   }, [openFile, recordRecentFile]);
+
+  const openWorkspacePreviewFile = useCallback((filePath: string, fileName: string) => {
+    recordRecentFile(filePath, fileName);
+    openPreviewFile(filePath, fileName);
+  }, [openPreviewFile, recordRecentFile]);
+
+  useEffect(() => {
+    const panelGroupContainer = panelGroupContainerRef.current;
+    if (!panelGroupContainer) {
+      return;
+    }
+
+    const updateLeftPanelWidth = () => {
+      const nextSize = getLeftPanelTargetSizePercent(panelGroupContainer.clientWidth);
+      leftPanelRef.current?.resize(nextSize);
+    };
+
+    updateLeftPanelWidth();
+
+    const resizeObserver = typeof ResizeObserver !== 'undefined'
+      ? new ResizeObserver(updateLeftPanelWidth)
+      : null;
+
+    resizeObserver?.observe(panelGroupContainer);
+    window.addEventListener('resize', updateLeftPanelWidth);
+
+    return () => {
+      resizeObserver?.disconnect();
+      window.removeEventListener('resize', updateLeftPanelWidth);
+    };
+  }, []);
 
   useEffect(() => {
     if (!isQuickOpenVisible || workspaceFiles !== null) {
@@ -211,13 +246,15 @@ function AppLayout() {
           isLeftSidebarHidden={!showLeftPanel}
         />
 
+        <div ref={panelGroupContainerRef} className="flex-1 min-w-0">
         <PanelGroup direction="horizontal" className="flex-1">
           {showLeftPanel && (
             <>
-              <Panel defaultSize={12} minSize={12} maxSize={35} id="left-panel" order={1}>
+              <Panel ref={leftPanelRef} defaultSize={12} minSize={12} maxSize={35} id="left-panel" order={1}>
                 <LeftSidePanel
                   activeFileId={activeTabId}
                   onFileOpen={openWorkspaceFile}
+                  onFilePreview={openWorkspacePreviewFile}
                   onLineJump={jumpTo}
                   currentOutlineId={activeTabId}
                   revealRequest={revealRequest}
@@ -278,6 +315,7 @@ function AppLayout() {
             </>
           )}
         </PanelGroup>
+        </div>
       </div>
 
       <StatusBar

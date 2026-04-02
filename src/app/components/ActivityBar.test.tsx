@@ -15,7 +15,6 @@ describe('ActivityBar', () => {
     expect(buttons.map((button) => button.getAttribute('aria-label'))).toEqual(['Compile', 'Run', 'Debug']);
     expect(screen.queryByTitle('Settings')).not.toBeInTheDocument();
     expect(screen.getByTitle('Explorer')).toBeInTheDocument();
-    expect(screen.getByTitle('Source Control')).toBeInTheDocument();
     expect(screen.getByTitle('Run & Debug')).toBeInTheDocument();
     expect(screen.queryByTitle('Search')).not.toBeInTheDocument();
     expect(screen.queryByTitle('Extensions')).not.toBeInTheDocument();
@@ -48,10 +47,10 @@ describe('ActivityBar', () => {
 
     render(<ActivityBar activeView="explorer" onItemSelect={onItemSelect} />);
 
-    fireEvent.click(screen.getByTestId('activity-item-git'));
+    fireEvent.click(screen.getByTestId('activity-item-debug'));
     fireEvent.click(screen.getByTestId('activity-item-explorer'));
 
-    expect(onItemSelect).toHaveBeenNthCalledWith(1, 'git');
+    expect(onItemSelect).toHaveBeenNthCalledWith(1, 'debug');
     expect(onItemSelect).toHaveBeenNthCalledWith(2, 'explorer');
   });
 

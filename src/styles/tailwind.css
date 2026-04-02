@@ -28,6 +28,18 @@
   background: #555;
 }
 
+.explorer-tree-scrollbar::-webkit-scrollbar-thumb {
+  background: transparent;
+}
+
+.explorer-tree-scrollbar:hover::-webkit-scrollbar-thumb {
+  background: #424242;
+}
+
+.explorer-tree-scrollbar:hover::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
 /* Prevent default margins/paddings that break the layout */
 body {
   margin: 0;

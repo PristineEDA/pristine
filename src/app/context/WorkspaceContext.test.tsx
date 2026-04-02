@@ -12,12 +12,16 @@ function WorkspaceHarness() {
       <div data-testid="active-tab">{workspace.activeTabId}</div>
       <div data-testid="groups">{workspace.editorGroups.map((group) => `${group.id}:${group.tabs.map((tab) => tab.id).join('|')}`).join(';')}</div>
       <div data-testid="focused-group">{workspace.focusedGroupId ?? 'none'}</div>
+      <div data-testid="preview-tab">{workspace.editorGroups.find((group) => group.id === (workspace.focusedGroupId ?? ''))?.previewTabId ?? 'none'}</div>
       <div data-testid="jump-line">{workspace.jumpToLine ?? 'none'}</div>
       <div data-testid="cursor">{`${workspace.cursorLine}:${workspace.cursorCol}`}</div>
       <div data-testid="bottom-panel">{workspace.showBottomPanel ? 'open' : 'closed'}</div>
 
       <button onClick={() => workspace.setActiveView('problems')}>set-view</button>
       <button onClick={() => workspace.openFile('rtl/core/reg_file.v', 'reg_file.v')}>open-reg</button>
+      <button onClick={() => workspace.openPreviewFile('rtl/core/reg_file.v', 'reg_file.v')}>preview-reg</button>
+      <button onClick={() => workspace.openPreviewFile('rtl/core/alu.v', 'alu.v')}>preview-alu</button>
+      <button onClick={() => workspace.pinTab('rtl/core/alu.v')}>pin-alu</button>
       <button onClick={() => workspace.openFile('rtl/core/reg_file.v', 'reg_file.v')}>open-existing</button>
       <button onClick={() => workspace.openFile('rtl/core/alu.v', 'alu.v')}>open-alu</button>
       <button onClick={() => workspace.splitGroup('group-1')}>split-group-1</button>
@@ -58,6 +62,46 @@ describe('WorkspaceContext', () => {
 
     expect(screen.getByTestId('tabs')).toHaveTextContent('rtl/core/reg_file.v');
     expect(screen.getByTestId('active-tab')).toHaveTextContent('rtl/core/reg_file.v');
+  });
+
+  it('replaces the current preview tab and clears preview state when pinned later', () => {
+    render(
+      <WorkspaceProvider>
+        <WorkspaceHarness />
+      </WorkspaceProvider>,
+    );
+
+    fireEvent.click(screen.getByText('preview-reg'));
+    expect(screen.getByTestId('tabs')).toHaveTextContent('rtl/core/reg_file.v');
+    expect(screen.getByTestId('preview-tab')).toHaveTextContent('rtl/core/reg_file.v');
+
+    fireEvent.click(screen.getByText('preview-alu'));
+    expect(screen.getByTestId('tabs')).toHaveTextContent('rtl/core/alu.v');
+    expect(screen.getByTestId('preview-tab')).toHaveTextContent('rtl/core/alu.v');
+
+    fireEvent.click(screen.getByText('open-existing'));
+    expect(screen.getByTestId('tabs')).toHaveTextContent('rtl/core/alu.v,rtl/core/reg_file.v');
+    expect(screen.getByTestId('preview-tab')).toHaveTextContent('rtl/core/alu.v');
+
+    fireEvent.click(screen.getByText('open-alu'));
+    expect(screen.getByTestId('preview-tab')).toHaveTextContent('none');
+  });
+
+  it('pins a preview tab without changing the tab order', () => {
+    render(
+      <WorkspaceProvider>
+        <WorkspaceHarness />
+      </WorkspaceProvider>,
+    );
+
+    fireEvent.click(screen.getByText('preview-alu'));
+    expect(screen.getByTestId('preview-tab')).toHaveTextContent('rtl/core/alu.v');
+
+    fireEvent.click(screen.getByText('pin-alu'));
+
+    expect(screen.getByTestId('tabs')).toHaveTextContent('rtl/core/alu.v');
+    expect(screen.getByTestId('active-tab')).toHaveTextContent('rtl/core/alu.v');
+    expect(screen.getByTestId('preview-tab')).toHaveTextContent('none');
   });
 
   it('opens files into the last focused split group', () => {

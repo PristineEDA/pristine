@@ -14,6 +14,7 @@ interface Tab {
   id: string;
   name: string;
   modified?: boolean;
+  isPinned?: boolean;
 }
 
 interface EditorAreaProps {
@@ -21,6 +22,7 @@ interface EditorAreaProps {
   activeTabId: string;
   onTabChange: (id: string) => void;
   onTabClose: (id: string) => void;
+  onTabPin?: (id: string) => void;
   editorRef: React.MutableRefObject<any>;
   jumpToLine?: number;
   onCursorChange?: (line: number, col: number) => void;
@@ -40,27 +42,41 @@ interface EditorAreaProps {
 
 // ─── Tab Component ─────────────────────────────────────────────────────────────
 function EditorTab({
-  tab, isActive, onActivate, onClose, onDragStart, onDragEnd,
+  tab, isActive, onActivate, onClose, onPin, onDragStart, onDragEnd,
 }: {
   tab: Tab;
   isActive: boolean;
   onActivate: () => void;
   onClose: () => void;
+  onPin?: () => void;
   onDragStart?: () => void;
   onDragEnd?: () => void;
 }) {
+  const isPreview = tab.isPinned === false;
+  const tooltipText = isPreview ? `${tab.id} (Preview tab)` : tab.id;
+
   return (
     <div
       draggable={Boolean(onDragStart)}
       data-testid={`editor-tab-${tab.id}`}
+      title={tooltipText}
       className={`flex items-center gap-1 px-3 h-full cursor-pointer group border-r border-ide-sidebar-bg transition-colors shrink-0 min-w-[100px] max-w-[200px] ${
         isActive
           ? 'bg-ide-bg text-white border-t-2 border-t-ide-accent'
           : 'bg-ide-tab-bg text-ide-text-muted hover:bg-ide-tab-hover border-t-2 border-t-transparent'
       }`}
       onClick={onActivate}
+      onDoubleClick={() => {
+        onActivate();
+        if (isPreview) {
+          onPin?.();
+        }
+      }}
       onDragStart={(event) => {
         event.dataTransfer.effectAllowed = 'move';
+        if (isPreview) {
+          onPin?.();
+        }
         onDragStart?.();
       }}
       onDragEnd={() => onDragEnd?.()}
@@ -71,13 +87,23 @@ function EditorTab({
         className="shrink-0 text-[10px] font-bold font-mono"
         fallbackClassName="text-ide-text"
       />
-      <span className="flex-1 truncate text-[12px]">
+      <span
+        data-testid={`editor-tab-title-${tab.id}`}
+        className={`flex-1 truncate text-[12px] ${isPreview ? 'italic text-ide-text' : ''}`}
+      >
         {tab.name}
       </span>
       {tab.modified && <Circle size={7} className="fill-white text-white shrink-0" />}
+      {!tab.modified && isPreview && (
+        <span
+          data-testid={`editor-tab-preview-indicator-${tab.id}`}
+          className="h-2 w-2 shrink-0 rounded-full border border-ide-accent-vivid/80 bg-transparent"
+          title="Preview tab"
+        />
+      )}
       <button
         data-testid={`editor-tab-close-${tab.id}`}
-        className="shrink-0 p-0.5 rounded hover:bg-ide-border opacity-0 group-hover:opacity-100 transition-opacity"
+        className={`shrink-0 p-0.5 rounded hover:bg-ide-border transition-opacity ${isPreview ? 'opacity-50 hover:opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
         onClick={(e) => { e.stopPropagation(); onClose(); }}
       >
         <X size={12} />
@@ -114,6 +140,7 @@ export function EditorArea({
   activeTabId,
   onTabChange,
   onTabClose,
+  onTabPin,
   editorRef,
   jumpToLine,
   onCursorChange,
@@ -155,20 +182,6 @@ export function EditorArea({
           <div className="w-16 h-16 rounded-full bg-ide-sidebar-bg flex items-center justify-center mx-auto mb-4">
             <span className="text-ide-accent text-[28px] font-bold">R</span>
           </div>
-          <div className="text-ide-text mb-1 text-[20px]">RTL Studio</div>
-          <div className="text-ide-text-muted text-[13px]">Open a file to start editing, or select one from the Explorer</div>
-          <div className="mt-6 flex flex-col gap-1 text-left">
-            {[
-              ['Ctrl+P', 'Quick Open File'],
-              ['Ctrl+Shift+P', 'Command Palette'],
-              ['Ctrl+`', 'Open Terminal'],
-            ].map(([key, label]) => (
-              <div key={key} className="flex items-center gap-3">
-                <kbd className="px-2 py-0.5 bg-ide-border rounded text-ide-text border border-ide-text-dim text-[11px]">{key}</kbd>
-                <span className="text-ide-text-muted text-[12px]">{label}</span>
-              </div>
-            ))}
-          </div>
         </div>
       </div>
     );
@@ -185,6 +198,7 @@ export function EditorArea({
             isActive={tab.id === activeTabId}
             onActivate={() => onTabChange(tab.id)}
             onClose={() => onTabClose(tab.id)}
+            onPin={onTabPin ? () => onTabPin(tab.id) : undefined}
             onDragStart={onTabDragStart ? () => onTabDragStart(tab.id) : undefined}
             onDragEnd={onTabDragEnd}
           />
