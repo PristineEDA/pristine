@@ -41,6 +41,8 @@ jobs:
         run: pnpm build
 
       - name: Run unit tests with coverage report
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
         run: >-
           pnpm exec vitest run --coverage
           --coverage.thresholds.lines=0

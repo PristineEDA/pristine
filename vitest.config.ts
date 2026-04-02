@@ -3,6 +3,7 @@ import path from 'path'
 
 const isCoverageRun = process.argv.some((arg) => arg === '--coverage' || arg.startsWith('--coverage.'))
 const isCiCoverageRun = process.env['CI'] === 'true' && isCoverageRun
+const coverageReporters = isCiCoverageRun ? ['text', 'json-summary', 'lcovonly'] : ['text', 'html']
 
 export default defineConfig({
   resolve: {
@@ -34,7 +35,7 @@ export default defineConfig({
     ],
     coverage: {
       provider: 'v8',
-      reporter: ['text', 'html'],
+      reporter: coverageReporters,
       reportsDirectory: './coverage',
       exclude: [
         'dist/**',
