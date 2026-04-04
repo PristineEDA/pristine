@@ -1,5 +1,11 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import { staticChecks } from '../../data/mockData';
+
+vi.mock('../../data/mockDataLoader', () => ({
+  useStaticChecks: () => staticChecks,
+}));
+
 import { StaticCheckPanel } from './StaticCheckPanel';
 
 describe('StaticCheckPanel', () => {

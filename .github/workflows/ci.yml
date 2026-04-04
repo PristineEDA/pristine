@@ -82,7 +82,7 @@ jobs:
             runner: &platform_runner_macos_14_arm64 macos-14
           - &platform_macos_14_x64
             id: &platform_id_macos_14_x64 macos-14-x64
-            runner: &platform_runner_macos_14_x64 macos-14-intel
+            runner: &platform_runner_macos_14_x64 macos-14-large
 
     steps:
       - name: Checkout
