@@ -9,13 +9,13 @@ describe('WhiteboardView', () => {
     expect(screen.getByTestId('whiteboard-view')).toBeInTheDocument();
     expect(screen.getByTestId('whiteboard-view')).toHaveClass('bg-[#f8fafc]', 'text-slate-900');
     expect(screen.getByTestId('whiteboard-controls-wrapper')).toBeInTheDocument();
-    expect(screen.getByTestId('rf__minimap')).toBeInTheDocument();
-    expect(screen.getByTestId('rf__background')).toBeInTheDocument();
     expect(screen.getByTestId('whiteboard-node-count')).toHaveTextContent('Nodes: 0');
     expect(screen.getByTestId('whiteboard-last-dragged-node')).toHaveTextContent('Last drag: none');
     expect(container.querySelector('.react-flow')).not.toBeNull();
     expect(screen.getByTestId('whiteboard-react-flow')).toHaveClass('light');
     expect(container.querySelector('.react-flow__controls')).not.toBeNull();
+    expect(screen.getByTestId('rf__minimap')).toBeInTheDocument();
+    expect(screen.getByTestId('rf__background')).toBeInTheDocument();
     expect(container.querySelector('.react-flow__minimap')).not.toBeNull();
     expect(container.querySelector('.react-flow__background')).not.toBeNull();
     expect(container.querySelector('.react-flow__background-pattern.lines')).not.toBeNull();

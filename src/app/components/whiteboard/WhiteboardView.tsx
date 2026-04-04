@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import {
   Background,
+  BackgroundVariant,
   Controls,
   MiniMap,
   type Edge,
@@ -88,6 +89,10 @@ export function WhiteboardView() {
         <MiniMap data-testid="whiteboard-minimap" pannable zoomable />
         <Background
           data-testid="whiteboard-background"
+          variant={BackgroundVariant.Lines}
+          gap={24}
+          size={1}
+          color="rgba(148, 163, 184, 0.4)"
         />
       </ReactFlow>
     </div>

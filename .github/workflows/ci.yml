@@ -5,12 +5,68 @@ on:
     branches:
       - dev
       - main
+    tags:
+      - '*'
   pull_request:
+  release:
+    types:
+      - published
 
 jobs:
-  test:
-    name: Test Suite
+  package-gate:
+    name: Package Gate
+    if: github.event_name == 'push' || github.event_name == 'release'
     runs-on: ubuntu-24.04
+    outputs:
+      enabled: ${{ steps.check.outputs.enabled }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check package eligibility
+        id: check
+        shell: bash
+        run: |
+          enabled=false
+
+          if [[ "${GITHUB_EVENT_NAME}" == "release" ]]; then
+            if [[ "${{ github.event.release.target_commitish }}" == "main" ]]; then
+              enabled=true
+            fi
+          elif [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            git fetch origin main --depth=1
+            if git merge-base --is-ancestor "${GITHUB_SHA}" "origin/main"; then
+              enabled=true
+            fi
+          fi
+
+          echo "enabled=${enabled}" >> "$GITHUB_OUTPUT"
+
+  test:
+    name: Test Suite ${{ matrix.id }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: ubuntu-22.04-x64
+            runner: ubuntu-22.04
+            enable_coverage: false
+          - id: ubuntu-24.04-x64
+            runner: ubuntu-24.04
+            enable_coverage: true
+          - id: windows-2022-x64
+            runner: windows-2022
+            enable_coverage: false
+          - id: macos-13-x64
+            runner: macos-13
+            enable_coverage: false
+          - id: macos-14-arm64
+            runner: macos-14
+            enable_coverage: false
 
     steps:
       - name: Checkout
@@ -37,6 +93,7 @@ jobs:
         run: pnpm build
 
       - name: Run unit tests with coverage report
+        if: matrix.enable_coverage
         env:
           NODE_OPTIONS: --max-old-space-size=4096
         run: >-
@@ -46,7 +103,12 @@ jobs:
           --coverage.thresholds.branches=0
           --coverage.thresholds.functions=0
 
+      - name: Run unit tests
+        if: ${{ !matrix.enable_coverage }}
+        run: pnpm test:unit
+
       - name: Configure Electron sandbox on Linux
+        if: runner.os == 'Linux'
         run: |
           sandbox_path="$(readlink -f node_modules/electron/dist/chrome-sandbox)"
           sudo chown root:root "$sandbox_path"
@@ -54,34 +116,42 @@ jobs:
           echo "CHROME_DEVEL_SANDBOX=$sandbox_path" >> "$GITHUB_ENV"
 
       - name: Install Linux window manager for E2E
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y openbox
 
-      - name: Run E2E tests
+      - name: Run E2E tests on Linux
+        if: runner.os == 'Linux'
         run: |
           xvfb-run -a --server-args="-screen 0 1280x720x24" sh -c 'openbox >/tmp/openbox.log 2>&1 & pnpm test:e2e'
+
+      - name: Run E2E tests on macOS and Windows
+        if: runner.os != 'Linux'
+        run: pnpm test:e2e
 
       - name: Upload Playwright report
         if: failure() && hashFiles('playwright-report/**') != ''
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report-test-suite
+          name: playwright-report-${{ matrix.id }}
           path: playwright-report
           if-no-files-found: ignore
 
       - name: Upload coverage report
-        if: always() && hashFiles('coverage/**') != ''
+        if: always() && matrix.enable_coverage && hashFiles('coverage/**') != ''
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-report
+          name: coverage-report-${{ matrix.id }}
           path: coverage
           if-no-files-found: ignore
 
   package:
     name: Package ${{ matrix.id }}
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: test
+    if: needs.package-gate.outputs.enabled == 'true'
+    needs:
+      - test
+      - package-gate
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
