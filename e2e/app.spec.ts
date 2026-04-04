@@ -1,9 +1,59 @@
 import { test, expect, _electron as electron } from '@playwright/test';
+import fs from 'node:fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const fixtureWorkspace = path.join(__dirname, '..', 'test', 'fixtures', 'workspace');
+const releaseRoot = path.join(__dirname, '..', 'release');
+
+async function resolveStartupWindows(app: Awaited<ReturnType<typeof electron.launch>>) {
+  await expect.poll(() => app.windows().length, {
+    timeout: 10000,
+  }).toBeGreaterThan(1);
+
+  const startupWindows = app.windows();
+  await Promise.all(startupWindows.map((page) => page.waitForLoadState('domcontentloaded')));
+
+  const titledWindows = await Promise.all(
+    startupWindows.map(async (page) => ({
+      page,
+      title: await page.title(),
+    })),
+  );
+
+  const splashWindow = titledWindows.find((entry) => entry.title === 'Pristine Loading')?.page;
+  const window = titledWindows.find((entry) => entry.title !== 'Pristine Loading')?.page;
+
+  if (!splashWindow || !window) {
+    throw new Error('Expected splash and main windows during startup');
+  }
+
+  return { splashWindow, window };
+}
+
+function findPackagedWindowsExecutablePath() {
+  if (process.platform !== 'win32' || !fs.existsSync(releaseRoot)) {
+    return null;
+  }
+
+  const releaseVersions = fs
+    .readdirSync(releaseRoot, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort((left, right) => right.localeCompare(left, undefined, { numeric: true }));
+
+  for (const version of releaseVersions) {
+    const candidatePath = path.join(releaseRoot, version, 'win-unpacked', 'Pristine.exe');
+    if (fs.existsSync(candidatePath)) {
+      return candidatePath;
+    }
+  }
+
+  return null;
+}
+
+const packagedWindowsExecutablePath = findPackagedWindowsExecutablePath();
 
 test.skip(process.platform === 'darwin', 'Custom window controls are hidden on macOS');
 
@@ -17,10 +67,28 @@ async function launchApp() {
     },
   });
 
-  const window = await app.firstWindow();
-  await window.waitForLoadState('domcontentloaded');
+  const { splashWindow, window } = await resolveStartupWindows(app);
 
-  return { app, window };
+  return { app, window, splashWindow };
+}
+
+async function launchPackagedWindowsApp() {
+  if (!packagedWindowsExecutablePath) {
+    throw new Error('Packaged Windows executable not found');
+  }
+
+  const app = await electron.launch({
+    executablePath: packagedWindowsExecutablePath,
+    env: {
+      ...process.env,
+      PRISTINE_E2E: '1',
+      PRISTINE_PROJECT_ROOT: fixtureWorkspace,
+    },
+  });
+
+  const { splashWindow, window } = await resolveStartupWindows(app);
+
+  return { app, window, splashWindow };
 }
 
 async function openNestedWorkspaceFile(window: Awaited<ReturnType<typeof launchApp>>['window'], pathTestIds: string[]) {
@@ -109,6 +177,55 @@ test('app launches and shows main UI', async () => {
 
   const title = await window.title();
   expect(title).toContain('Pristine');
+
+  await app.close();
+});
+
+test('splash window hands off to the main window after the startup delay', async () => {
+  const launchStartedAt = Date.now();
+  const { app, window, splashWindow } = await launchApp();
+  const splashBrowserWindow = await app.browserWindow(splashWindow);
+  const mainBrowserWindow = await app.browserWindow(window);
+  const splashClosePromise = splashWindow.waitForEvent('close');
+
+  await expect(splashWindow.getByTestId('splash-screen')).toBeVisible();
+  await expect.poll(async () => splashBrowserWindow.evaluate((browserWindow) => browserWindow.isVisible())).toBe(true);
+  await expect.poll(async () => mainBrowserWindow.evaluate((browserWindow) => browserWindow.isVisible())).toBe(false);
+
+  await window.waitForTimeout(1000);
+
+  await expect.poll(async () => splashBrowserWindow.evaluate((browserWindow) => browserWindow.isVisible())).toBe(true);
+  await expect.poll(async () => mainBrowserWindow.evaluate((browserWindow) => browserWindow.isVisible())).toBe(false);
+
+  await splashClosePromise;
+
+  expect(Date.now() - launchStartedAt).toBeGreaterThanOrEqual(3000);
+
+  await expect.poll(() => app.windows().length).toBe(1);
+  await expect.poll(async () => mainBrowserWindow.evaluate((browserWindow) => browserWindow.isVisible())).toBe(true);
+  await expect(window.getByTestId('activity-item-explorer')).toBeVisible();
+
+  await app.close();
+});
+
+test('packaged Windows app keeps the splash handoff working during startup', async () => {
+  test.skip(process.platform !== 'win32', 'Packaged splash E2E runs on Windows only');
+  test.skip(!packagedWindowsExecutablePath, 'Run pnpm run package:win before executing packaged splash E2E');
+
+  const { app, window, splashWindow } = await launchPackagedWindowsApp();
+  const splashBrowserWindow = await app.browserWindow(splashWindow);
+  const mainBrowserWindow = await app.browserWindow(window);
+  const splashClosePromise = splashWindow.waitForEvent('close');
+
+  await expect(splashWindow.getByTestId('splash-screen')).toBeVisible();
+  await expect.poll(async () => splashBrowserWindow.evaluate((browserWindow) => browserWindow.isVisible())).toBe(true);
+  await expect.poll(async () => mainBrowserWindow.evaluate((browserWindow) => browserWindow.isVisible())).toBe(false);
+
+  await splashClosePromise;
+
+  await expect.poll(() => app.windows().length).toBe(1);
+  await expect.poll(async () => mainBrowserWindow.evaluate((browserWindow) => browserWindow.isVisible())).toBe(true);
+  await expect(window.getByTestId('activity-item-explorer')).toBeVisible();
 
   await app.close();
 });

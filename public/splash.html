@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pristine Loading</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        background: #0b1020;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #0b1020;
+      }
+
+      body {
+        display: grid;
+        place-items: center;
+        font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      }
+
+      .frame {
+        position: relative;
+        width: 100%;
+        height: 100%;
+      }
+
+      .image {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        user-select: none;
+        -webkit-user-drag: none;
+      }
+
+      .label {
+        position: absolute;
+        left: 28px;
+        bottom: 22px;
+        color: rgba(255, 255, 255, 0.88);
+        font-size: 13px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="frame" data-testid="splash-screen" aria-label="Pristine splash screen">
+      <!-- <img class="image" src="./splash.png" alt="Pristine splash image" /> -->
+      <div class="label">Pristine IDE</div>
+    </main>
+  </body>
+  </html>

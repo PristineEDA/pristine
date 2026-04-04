@@ -5,6 +5,9 @@ type BrowserWindowInstance = {
   loadURL: ReturnType<typeof vi.fn>;
   loadFile: ReturnType<typeof vi.fn>;
   on: ReturnType<typeof vi.fn>;
+  once: ReturnType<typeof vi.fn>;
+  show: ReturnType<typeof vi.fn>;
+  close: ReturnType<typeof vi.fn>;
   emit: (event: string, ...args: unknown[]) => void;
 };
 
@@ -18,7 +21,9 @@ const mocks = vi.hoisted(() => {
     options: Record<string, unknown>;
     loadURL = vi.fn();
     loadFile = vi.fn();
+    show = vi.fn();
     private handlers = new Map<string, (...args: unknown[]) => void>();
+    private onceHandlers = new Map<string, (...args: unknown[]) => void>();
 
     constructor(options: Record<string, unknown>) {
       this.options = options;
@@ -30,8 +35,31 @@ const mocks = vi.hoisted(() => {
       return this;
     });
 
+    once = vi.fn((event: string, handler: (...args: unknown[]) => void) => {
+      this.onceHandlers.set(event, handler);
+      return this;
+    });
+
+    close = vi.fn(() => {
+      this.emit('close');
+      this.emit('closed');
+    });
+
     emit(event: string, ...args: unknown[]) {
       this.handlers.get(event)?.(...args);
+
+      const onceHandler = this.onceHandlers.get(event);
+      if (onceHandler) {
+        this.onceHandlers.delete(event);
+        onceHandler(...args);
+      }
+
+      if (event === 'closed') {
+        const index = browserWindowInstances.indexOf(this as unknown as BrowserWindowInstance);
+        if (index >= 0) {
+          browserWindowInstances.splice(index, 1);
+        }
+      }
     }
   }
 
@@ -110,9 +138,12 @@ async function importMain(options?: { platform?: NodeJS.Platform; devServerUrl?:
 describe('electron main entry', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useFakeTimers();
   });
 
   afterEach(() => {
+    vi.useRealTimers();
+
     if (originalDevServerUrl) {
       process.env.VITE_DEV_SERVER_URL = originalDevServerUrl;
     } else {
@@ -128,7 +159,7 @@ describe('electron main entry', () => {
     Object.defineProperty(process, 'platform', { value: originalPlatform });
   });
 
-  it('registers handlers, creates a browser window, and loads the dev server when available', async () => {
+  it('registers handlers, creates splash and main windows, and loads the dev server when available', async () => {
     const { browserWindowInstances, getMainWindow } = await importMain({
       platform: 'win32',
       devServerUrl: 'http://127.0.0.1:5173',
@@ -136,10 +167,21 @@ describe('electron main entry', () => {
 
     expect(mocks.mockRegisterAllHandlers).toHaveBeenCalledTimes(1);
     expect(mocks.mockSetProjectRoot).toHaveBeenCalledWith('C:\\Users\\maksy\\Desktop\\fpga\\retroSoC');
-    expect(browserWindowInstances).toHaveLength(1);
-    expect(getMainWindow?.()).toBe(browserWindowInstances[0]);
+    expect(browserWindowInstances).toHaveLength(2);
 
-    const mainWindow = browserWindowInstances[0];
+    const splashWindow = browserWindowInstances[0];
+    const mainWindow = browserWindowInstances[1];
+
+    expect(getMainWindow?.()).toBe(mainWindow);
+    expect(splashWindow.options).toMatchObject({
+      width: 720,
+      height: 405,
+      frame: false,
+      resizable: false,
+      skipTaskbar: true,
+      backgroundColor: '#0b1020',
+    });
+    expect(splashWindow.loadFile).toHaveBeenCalledWith(expect.stringMatching(/public[\\/]splash\.html$/));
 
     expect(mainWindow.options).toMatchObject({
       width: 1440,
@@ -147,6 +189,7 @@ describe('electron main entry', () => {
       minWidth: 800,
       minHeight: 600,
       frame: false,
+      show: false,
       webPreferences: expect.objectContaining({
         nodeIntegration: false,
         contextIsolation: true,
@@ -158,34 +201,47 @@ describe('electron main entry', () => {
     expect(mocks.mockSetupWindowStreams).toHaveBeenCalledWith(mainWindow);
     expect(mainWindow.loadURL).toHaveBeenCalledWith('http://127.0.0.1:5173');
     expect(mainWindow.loadFile).not.toHaveBeenCalled();
+    expect(mainWindow.show).not.toHaveBeenCalled();
+
+    mainWindow.emit('ready-to-show');
+    await vi.advanceTimersByTimeAsync(999);
+    expect(mainWindow.show).not.toHaveBeenCalled();
+    expect(splashWindow.close).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(mainWindow.show).toHaveBeenCalledTimes(1);
+    expect(splashWindow.close).toHaveBeenCalledTimes(1);
 
     mainWindow.emit('closed');
     expect(getMainWindow?.()).toBeNull();
   });
 
-  it('uses macOS window chrome and loads the built index file in production', async () => {
+  it('uses macOS window chrome and loads the built index and splash files in production', async () => {
     const { browserWindowInstances } = await importMain({ platform: 'darwin' });
 
-    const mainWindow = browserWindowInstances[0];
+    const splashWindow = browserWindowInstances[0];
+    const mainWindow = browserWindowInstances[1];
 
     expect(mainWindow.options).toMatchObject({
       frame: true,
+      show: false,
       titleBarStyle: 'hiddenInset',
       trafficLightPosition: { x: 12, y: 10 },
     });
     expect(mainWindow.loadFile).toHaveBeenCalledWith(expect.stringMatching(/dist[\\/]index\.html$/));
     expect(mainWindow.loadURL).not.toHaveBeenCalled();
+    expect(splashWindow.loadFile).toHaveBeenCalledWith(expect.stringMatching(/dist[\\/]splash\.html$/));
   });
 
-  it('recreates the main window on activate when all windows are closed', async () => {
+  it('recreates splash and main windows on activate when all windows are closed', async () => {
     const { appHandlers, browserWindowInstances } = await importMain({ platform: 'darwin' });
 
-    expect(browserWindowInstances).toHaveLength(1);
+    expect(browserWindowInstances).toHaveLength(2);
 
     mocks.BrowserWindowMock.getAllWindows.mockReturnValueOnce([]);
     appHandlers.get('activate')?.();
 
-    expect(browserWindowInstances).toHaveLength(2);
+    expect(browserWindowInstances).toHaveLength(4);
   });
 
   it('quits the app when all windows are closed on non-macOS platforms', async () => {
