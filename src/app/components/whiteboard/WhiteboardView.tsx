@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import {
   Background,
-  BackgroundVariant,
   Controls,
   MiniMap,
   type Edge,
