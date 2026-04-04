@@ -17,7 +17,12 @@
     "test": "vitest",
     "test:unit": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:whiteboard:perf": "playwright test --config playwright.perf.config.ts e2e/whiteboard.perf.spec.ts",
+    "package:linux:x64": "vite build && electron-builder --linux AppImage deb --x64 --config electron-builder.yml",
+    "package:win:x64": "vite build && electron-builder --win nsis portable --x64 --config electron-builder.yml",
+    "package:mac:x64": "vite build && electron-builder --mac dmg --x64 --config electron-builder.yml",
+    "package:mac:arm64": "vite build && electron-builder --mac dmg --arm64 --config electron-builder.yml"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",

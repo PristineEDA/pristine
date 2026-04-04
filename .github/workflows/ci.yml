@@ -2,19 +2,87 @@ name: CI
 
 on:
   push:
+    branches:
+      - dev
+      - main
+    tags:
+      - '*'
   pull_request:
+  release:
+    types:
+      - published
 
 jobs:
+  package-gate:
+    name: Package Gate
+    if: github.event_name == 'push' || github.event_name == 'release'
+    runs-on: ubuntu-24.04
+    outputs:
+      enabled: ${{ steps.check.outputs.enabled }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check package eligibility
+        id: check
+        shell: bash
+        run: |
+          enabled=false
+
+          if [[ "${GITHUB_EVENT_NAME}" == "release" ]]; then
+            if [[ "${{ github.event.release.target_commitish }}" == "main" ]]; then
+              enabled=true
+            fi
+          elif [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            git fetch origin main --depth=1
+            if git merge-base --is-ancestor "${GITHUB_SHA}" "origin/main"; then
+              enabled=true
+            fi
+          fi
+
+          echo "enabled=${enabled}" >> "$GITHUB_OUTPUT"
+
   test:
-    name: ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
+    name: Test Suite ${{ matrix.id }}
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - ubuntu-latest
-          - windows-latest
-          - macos-latest
+        include:
+          - &platform_ubuntu_2204_x64
+            id: &platform_id_ubuntu_2204_x64 ubuntu-22.04-x64
+            runner: &platform_runner_ubuntu_2204_x64 ubuntu-22.04
+          - &platform_ubuntu_2404_x64
+            id: &platform_id_ubuntu_2404_x64 ubuntu-24.04-x64
+            runner: &platform_runner_ubuntu_2404_x64 ubuntu-24.04
+            enable_coverage: true
+          - &platform_windows_2025_x64
+            id: &platform_id_windows_2025_x64 windows-2025-x64
+            runner: &platform_runner_windows_2025_x64 windows-2025
+          - &platform_windows_2022_x64
+            id: &platform_id_windows_2022_x64 windows-2022-x64
+            runner: &platform_runner_windows_2022_x64 windows-2022
+          - &platform_macos_26_arm64
+            id: &platform_id_macos_26_arm64 macos-26-arm64
+            runner: &platform_runner_macos_26_arm64 macos-26
+          - &platform_macos_26_x64
+            id: &platform_id_macos_26_x64 macos-26-x64
+            runner: &platform_runner_macos_26_x64 macos-26-intel
+          - &platform_macos_15_arm64
+            id: &platform_id_macos_15_arm64 macos-15-arm64
+            runner: &platform_runner_macos_15_arm64 macos-15
+          - &platform_macos_15_x64
+            id: &platform_id_macos_15_x64 macos-15-x64
+            runner: &platform_runner_macos_15_x64 macos-15-intel
+          - &platform_macos_14_arm64
+            id: &platform_id_macos_14_arm64 macos-14-arm64
+            runner: &platform_runner_macos_14_arm64 macos-14
+          - &platform_macos_14_x64
+            id: &platform_id_macos_14_x64 macos-14-x64
+            runner: &platform_runner_macos_14_x64 macos-14-intel
 
     steps:
       - name: Checkout
@@ -41,6 +109,7 @@ jobs:
         run: pnpm build
 
       - name: Run unit tests with coverage report
+        if: matrix.enable_coverage == true
         env:
           NODE_OPTIONS: --max-old-space-size=4096
         run: >-
@@ -49,6 +118,10 @@ jobs:
           --coverage.thresholds.statements=0
           --coverage.thresholds.branches=0
           --coverage.thresholds.functions=0
+
+      - name: Run unit tests
+        if: matrix.enable_coverage != true
+        run: pnpm test:unit
 
       - name: Configure Electron sandbox on Linux
         if: runner.os == 'Linux'
@@ -69,7 +142,7 @@ jobs:
         run: |
           xvfb-run -a --server-args="-screen 0 1280x720x24" sh -c 'openbox >/tmp/openbox.log 2>&1 & pnpm test:e2e'
 
-      - name: Run E2E tests on Windows and macOS
+      - name: Run E2E tests on macOS and Windows
         if: runner.os != 'Linux'
         run: pnpm test:e2e
 
@@ -77,14 +150,87 @@ jobs:
         if: failure() && hashFiles('playwright-report/**') != ''
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report-${{ matrix.os }}
+          name: playwright-report-${{ matrix.id }}
           path: playwright-report
           if-no-files-found: ignore
 
       - name: Upload coverage report
-        if: runner.os == 'Linux' && always() && hashFiles('coverage/**') != ''
+        if: always() && matrix.enable_coverage == true && hashFiles('coverage/**') != ''
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-report
+          name: coverage-report-${{ matrix.id }}
           path: coverage
           if-no-files-found: ignore
+
+  package:
+    name: Package ${{ matrix.id }}
+    if: needs.package-gate.outputs.enabled == 'true'
+    needs:
+      - test
+      - package-gate
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: *platform_id_ubuntu_2204_x64
+            runner: *platform_runner_ubuntu_2204_x64
+            package_script: package:linux:x64
+          - id: *platform_id_ubuntu_2404_x64
+            runner: *platform_runner_ubuntu_2404_x64
+            package_script: package:linux:x64
+          - id: *platform_id_windows_2025_x64
+            runner: *platform_runner_windows_2025_x64
+            package_script: package:win:x64
+          - id: *platform_id_windows_2022_x64
+            runner: *platform_runner_windows_2022_x64
+            package_script: package:win:x64
+          - id: *platform_id_macos_26_x64
+            runner: *platform_runner_macos_26_x64
+            package_script: package:mac:x64
+          - id: *platform_id_macos_26_arm64
+            runner: *platform_runner_macos_26_arm64
+            package_script: package:mac:arm64
+          - id: *platform_id_macos_15_x64
+            runner: *platform_runner_macos_15_x64
+            package_script: package:mac:x64
+          - id: *platform_id_macos_15_arm64
+            runner: *platform_runner_macos_15_arm64
+            package_script: package:mac:arm64
+          - id: *platform_id_macos_14_x64
+            runner: *platform_runner_macos_14_x64
+            package_script: package:mac:x64
+          - id: *platform_id_macos_14_arm64
+            runner: *platform_runner_macos_14_arm64
+            package_script: package:mac:arm64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Package application
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: pnpm run ${{ matrix.package_script }}
+
+      - name: Upload package artifacts
+        if: always() && hashFiles('release/**') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: pristine-${{ matrix.id }}
+          path: release/**
+          if-no-files-found: error

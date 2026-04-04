@@ -4,18 +4,22 @@ import {
   BackgroundVariant,
   Controls,
   MiniMap,
+  type Edge,
+  type Node,
   ReactFlow,
   useEdgesState,
   useNodesState,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
+type WhiteboardNode = Node<{ label: string }>;
+
 
 const proOptions = { hideAttribution: true };
 
 export function WhiteboardView() {
-  const [nodes, setNodes, onNodesChange] = useNodesState([]);
-  const [edges, , onEdgesChange] = useEdgesState([]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<WhiteboardNode>([]);
+  const [edges, , onEdgesChange] = useEdgesState<Edge>([]);
   const [lastDraggedNodePosition, setLastDraggedNodePosition] = useState('none');
 
   const createNode = () => {
@@ -85,9 +89,10 @@ export function WhiteboardView() {
         <MiniMap data-testid="whiteboard-minimap" pannable zoomable />
         <Background
           data-testid="whiteboard-background"
-          // variant={BackgroundVariant.grid}
-          // gap={24}
-          // size={1}
+          variant={BackgroundVariant.Lines}
+          gap={24}
+          size={1}
+          color="rgba(148, 163, 184, 0.4)"
         />
       </ReactFlow>
     </div>
