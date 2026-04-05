@@ -4,7 +4,7 @@ import { createDraculaThemeDefinition } from './draculaTheme';
 
 describe('appearance', () => {
   it('falls back to editor-aligned defaults when CSS variables are unavailable', () => {
-    const theme = createTerminalTheme(null);
+    const theme = createTerminalTheme('dark', null);
 
     expect(theme.background).toBe('#282a36');
     expect(theme.foreground).toBe('#f8f8f2');
@@ -36,7 +36,7 @@ describe('appearance', () => {
       },
     };
 
-    const theme = createTerminalTheme(styleReader);
+    const theme = createTerminalTheme('dark', styleReader);
 
     expect(theme.background).toBe('#101010');
     expect(theme.foreground).toBe('#f0f0f0');

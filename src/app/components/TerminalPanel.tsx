@@ -6,7 +6,7 @@ export function TerminalPanel() {
   return (
     <Suspense
       fallback={(
-        <div className="flex h-full items-center justify-center bg-ide-editor-bg text-ide-text-muted text-[12px]">
+        <div className="flex h-full items-center justify-center bg-background text-muted-foreground text-[12px]">
           Initializing terminal...
         </div>
       )}

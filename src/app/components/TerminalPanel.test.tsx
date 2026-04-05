@@ -27,6 +27,10 @@ vi.mock('@xterm/addon-fit', () => ({
   },
 }));
 
+vi.mock('../context/ThemeContext', () => ({
+  useTheme: () => ({ theme: 'dark', setTheme: vi.fn(), toggleTheme: vi.fn() }),
+}));
+
 vi.mock('@xterm/xterm', () => ({
   Terminal: class {
     cols = 80;
@@ -94,7 +98,7 @@ describe('TerminalPanel', () => {
     await waitFor(() => expect(createMock).toHaveBeenCalled());
     expect(terminalInstances[0]?.open).toHaveBeenCalled();
     expect(terminalConstructorOptions[0]?.fontFamily).toBe(IDE_MONO_FONT_FAMILY);
-    expect(terminalConstructorOptions[0]?.theme).toEqual(createTerminalTheme(null));
+    expect(terminalConstructorOptions[0]?.theme).toEqual(createTerminalTheme('dark', null));
 
     onDataCallback?.({ id: 'term-1', data: 'PS> dir\r\n' });
     await waitFor(() => expect(terminalInstances[0]?.write).toHaveBeenCalledWith('PS> dir\r\n'));

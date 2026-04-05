@@ -179,7 +179,7 @@ describe('FileTreeNode', () => {
     );
 
     const node = screen.getByTestId('file-tree-node-rtl_core_cpu_top_v');
-    expect(node.className).toContain('bg-ide-selection');
+    expect(node.className).toContain('bg-primary/20');
 
     fireEvent.click(node);
   expect(onFilePreview).toHaveBeenCalledWith('rtl/core/cpu_top.v', 'cpu_top.v');

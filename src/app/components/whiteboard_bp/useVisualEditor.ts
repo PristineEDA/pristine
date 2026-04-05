@@ -1,5 +1,6 @@
 import { useRef, useCallback, useState, useEffect, type ChangeEvent } from 'react';
 import Konva from 'konva';
+import { useTheme } from '../../context/ThemeContext';
 import type {
   LayerControl,
   PicUploadData,
@@ -98,9 +99,8 @@ export function useVisualEditor() {
   const selectedToolRef = useRef<VeSelectedBtn>('select');
   const [veIsGrabbing, setVeIsGrabbing] = useState(false);
   const [veIsCodeFreeze, setVeIsCodeFreeze] = useState(false);
-  const [wbTheme, setWbTheme] = useState<'light' | 'dark'>('dark');
-  const wbThemeRef = useRef<'light' | 'dark'>('dark');
-  const toggleWbTheme = useCallback(() => setWbTheme((theme) => (theme === 'light' ? 'dark' : 'light')), []);
+  const { theme: wbTheme } = useTheme();
+  const wbThemeRef = useRef<'light' | 'dark'>(wbTheme);
   const [, setVeKeyboardKey] = useState('none');
   const [isTopBarLeftHomeBtnClick, setIsTopBarLeftHomeBtnClick] = useState(false);
 
@@ -1066,7 +1066,6 @@ export function useVisualEditor() {
     veIsCodeFreeze,
     setVeIsCodeFreeze,
     wbTheme,
-    toggleWbTheme,
     isTopBarLeftHomeBtnClick,
     setIsTopBarLeftHomeBtnClick,
     veGridLayerControl,

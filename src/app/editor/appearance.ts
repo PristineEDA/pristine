@@ -25,7 +25,32 @@ export interface TerminalThemePalette {
 
 export { IDE_MONO_FONT_FAMILY };
 
-export function createTerminalTheme(styles: StyleReader | null = getRootThemeStyles()): TerminalThemePalette {
+const lightTerminalTheme: TerminalThemePalette = {
+  background: '#ffffff',
+  foreground: '#1f2937',
+  cursor: '#1f2937',
+  selectionBackground: '#dbeafe',
+  black: '#1f2937',
+  red: '#dc2626',
+  green: '#16a34a',
+  yellow: '#ca8a04',
+  blue: '#2563eb',
+  magenta: '#9333ea',
+  cyan: '#0891b2',
+  white: '#f3f4f6',
+  brightBlack: '#6b7280',
+  brightRed: '#ef4444',
+  brightGreen: '#22c55e',
+  brightYellow: '#eab308',
+  brightBlue: '#3b82f6',
+  brightMagenta: '#a855f7',
+  brightCyan: '#06b6d4',
+  brightWhite: '#ffffff',
+};
+
+export function createTerminalTheme(theme: 'light' | 'dark' = 'dark', styles: StyleReader | null = getRootThemeStyles()): TerminalThemePalette {
+  if (theme === 'light') return lightTerminalTheme;
+
   const palette = resolveDraculaPalette(styles);
 
   return {

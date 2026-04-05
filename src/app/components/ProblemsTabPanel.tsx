@@ -20,15 +20,15 @@ export function ProblemsTabPanel() {
           <div key={label}>
             <div className="flex items-center gap-2 px-3 py-1 text-[11px]">
               <Icon size={12} style={{ color }} />
-              <span className="text-ide-text">{label}</span>
-              <span className="text-ide-text-muted">({items.length})</span>
+              <span className="text-foreground">{label}</span>
+              <span className="text-muted-foreground">({items.length})</span>
             </div>
             {items.map((p) => (
-              <div key={p.id} className="flex items-start gap-2 px-4 py-1 hover:bg-ide-hover cursor-pointer">
+              <div key={p.id} className="flex items-start gap-2 px-4 py-1 hover:bg-accent cursor-pointer">
                 <Icon size={12} style={{ color }} className="mt-0.5 shrink-0" />
                 <div className="flex-1 min-w-0">
-                  <div className="text-ide-text truncate text-[12px]">{p.message}</div>
-                  <div className="text-ide-text-muted text-[11px]">
+                  <div className="text-foreground truncate text-[12px]">{p.message}</div>
+                  <div className="text-muted-foreground text-[11px]">
                     {p.file} L{p.line}:{p.column}
                   </div>
                 </div>

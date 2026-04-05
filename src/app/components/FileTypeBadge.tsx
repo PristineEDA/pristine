@@ -40,7 +40,7 @@ function getFileTypeBadgeInfo(name: string): FileTypeBadgeInfo {
 export function FileTypeBadge({
   name,
   className = '',
-  fallbackClassName = 'text-ide-text',
+  fallbackClassName = 'text-foreground',
   testId,
 }: {
   name: string;

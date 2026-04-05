@@ -19,16 +19,16 @@ export function ContextMenu({
     <>
       <div className="fixed inset-0 z-40" onClick={onClose} />
       <div
-        className="fixed bg-ide-sidebar-bg border border-ide-border-light shadow-2xl z-50 py-1 min-w-44"
+        className="fixed bg-muted/40 border border-border shadow-2xl z-50 py-1 min-w-44"
         style={{ left: x, top: y }}
       >
         {items.map((item, i) =>
           item.label === '---' ? (
-            <div key={i} className="h-px bg-ide-border-light my-1" />
+            <div key={i} className="h-px bg-border my-1" />
           ) : (
             <button
               key={i}
-              className="w-full text-left px-3 py-1 text-ide-text hover:bg-ide-accent-dark hover:text-white transition-colors text-[12px]"
+              className="w-full text-left px-3 py-1 text-foreground hover:bg-primary hover:text-primary-foreground transition-colors text-[12px]"
               onClick={() => { item.action(); onClose(); }}
             >
               {item.label}
@@ -100,8 +100,8 @@ export const FileTreeNode = memo(function FileTreeNode({
       <div
         ref={rowRef}
         data-testid={`file-tree-node-${toTreeTestId(node.path)}`}
-        className={`flex items-center gap-1 h-6 cursor-pointer group hover:bg-ide-hover transition-colors ${
-          isActive ? 'bg-ide-selection text-white' : 'text-ide-text'
+        className={`flex items-center gap-1 h-6 cursor-pointer group hover:bg-accent transition-colors ${
+          isActive ? 'bg-primary/20 text-foreground' : 'text-foreground'
         }`}
         style={{ paddingLeft: depth * 12 + 4 }}
         onClick={() => {
@@ -120,7 +120,7 @@ export const FileTreeNode = memo(function FileTreeNode({
       >
         {node.type === 'folder' ? (
           <>
-            <span className="text-ide-text-chevron">
+            <span className="text-muted-foreground">
               {isExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
             </span>
             {isExpanded
@@ -148,7 +148,7 @@ export const FileTreeNode = memo(function FileTreeNode({
       )}
 
       {node.type === 'folder' && isExpanded && node.isLoading && (
-        <div className="text-[12px] text-ide-text-muted pl-8 py-1">
+        <div className="text-[12px] text-muted-foreground pl-8 py-1">
           Loading...
         </div>
       )}

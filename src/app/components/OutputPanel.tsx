@@ -21,14 +21,14 @@ export function OutputPanel() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center gap-2 px-3 py-1 border-b border-ide-border shrink-0">
-        <div className="flex items-center gap-1 bg-ide-menubar-bg rounded px-2 py-0.5 flex-1 max-w-48">
-          <Search size={11} className="text-ide-text-muted" />
+      <div className="flex items-center gap-2 px-3 py-1 border-b border-border shrink-0">
+        <div className="flex items-center gap-1 bg-muted/50 rounded px-2 py-0.5 flex-1 max-w-48">
+          <Search size={11} className="text-muted-foreground" />
           <input
             value={filterText}
             onChange={(e) => setFilterText(e.target.value)}
             placeholder="Filter output..."
-            className="bg-transparent outline-none text-ide-text flex-1 text-[11px]"
+            className="bg-transparent outline-none text-foreground flex-1 text-[11px]"
           />
         </div>
         {(['all', 'info', 'warn', 'error'] as const).map((l) => (
@@ -36,13 +36,13 @@ export function OutputPanel() {
             key={l}
             onClick={() => setLevelFilter(l)}
             className={`px-2 py-0.5 rounded transition-colors ${
-              levelFilter === l ? 'bg-ide-accent-dark text-white' : 'text-ide-text-muted hover:text-ide-text'
+              levelFilter === l ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
             } text-[10px]`}
           >
             {l === 'all' ? 'All' : l.toUpperCase()}
           </button>
         ))}
-        <button className="ml-auto p-1 text-ide-text-muted hover:text-ide-text transition-colors" title="Clear">
+        <button className="ml-auto p-1 text-muted-foreground hover:text-foreground transition-colors" title="Clear">
           <Trash2 size={12} />
         </button>
       </div>
@@ -50,8 +50,8 @@ export function OutputPanel() {
         {filtered.map((entry, i) => {
           const cfg = levelConfig[entry.level as keyof typeof levelConfig];
           return (
-            <div key={i} className="flex items-start gap-2 hover:bg-ide-hover px-1 py-0.5 rounded">
-              <span className="text-ide-text-dim shrink-0 text-[11px]">{entry.time}</span>
+            <div key={i} className="flex items-start gap-2 hover:bg-accent px-1 py-0.5 rounded">
+              <span className="text-muted-foreground/70 shrink-0 text-[11px]">{entry.time}</span>
               <span
                 className="px-1 rounded shrink-0 text-[9px] font-bold bg-[#2d2d2d] leading-[16px]"
                 style={{ color: cfg?.color || '#cccccc' }}

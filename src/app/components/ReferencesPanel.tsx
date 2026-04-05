@@ -28,36 +28,36 @@ export function ReferencesPanel({
 
   return (
     <div className="flex flex-col h-full">
-      <div className="px-3 py-2 border-b border-ide-border shrink-0">
+      <div className="px-3 py-2 border-b border-border shrink-0">
         <div className="flex items-center gap-2">
-          <ExternalLink size={13} className="text-ide-info" />
+          <ExternalLink size={13} className="text-blue-400" />
           <span
-            className="text-ide-text text-[12px] font-[600]"
+            className="text-foreground text-[12px] font-[600]"
           >
             References
           </span>
           <span
-            className="text-ide-text-muted ml-1 text-[11px]"
+            className="text-muted-foreground ml-1 text-[11px]"
           >
             shift_reg
           </span>
         </div>
         <div
-          className="text-ide-text-muted mt-1 text-[11px]"
+          className="text-muted-foreground mt-1 text-[11px]"
         >
           {references.length} references · uart_tx.v
         </div>
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        <div className="px-3 py-1.5 border-b border-ide-tab-bg">
+        <div className="px-3 py-1.5 border-b border-muted">
           <div
-            className="flex items-center gap-1.5 text-ide-text text-[12px]"
+            className="flex items-center gap-1.5 text-foreground text-[12px]"
           >
             <FileCode2 size={12} className="text-ide-syntax-folder" />
             uart_tx.v
             <span
-              className="text-ide-text-muted text-[11px]"
+              className="text-muted-foreground text-[11px]"
             >
               ({references.length})
             </span>
@@ -66,7 +66,7 @@ export function ReferencesPanel({
         {references.map((ref) => (
           <div
             key={ref.id}
-            className="flex items-start gap-2 px-3 py-1.5 hover:bg-ide-hover cursor-pointer border-b border-ide-bg transition-colors"
+            className="flex items-start gap-2 px-3 py-1.5 hover:bg-accent cursor-pointer border-b border-background transition-colors"
             onClick={() => {
               onFileOpen(ref.fileId, ref.file);
               onLineJump(ref.line);
@@ -81,13 +81,13 @@ export function ReferencesPanel({
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
                 <span
-                   className="text-ide-text-muted text-[11px] font-mono"
+                   className="text-muted-foreground text-[11px] font-mono"
                 >
                   L{ref.line}
                 </span>
               </div>
               <div
-                className="text-ide-text font-mono truncate text-[11px]"
+                className="text-foreground font-mono truncate text-[11px]"
               >
                 {ref.preview.split(/(shift_reg)/g).map((part, i) =>
                   part === 'shift_reg' ? (

@@ -1,15 +1,12 @@
 import React from 'react';
-import type { WhiteboardTheme } from './types';
 import { topBarLeft, topBarRight } from './constants';
 
 interface TopBarProps {
   isTopBarLeftHomeBtnClick: boolean;
   veIsCodeFreeze: boolean;
-  wbTheme: WhiteboardTheme;
   onTopBarLeftBtnClick: (tooltip: string) => void;
   onTopBarHomeBtnClick: (name: string) => void;
   onCodeFreezeToggle: () => void;
-  onToggleTheme: () => void;
 }
 
 const topSubBarHome = [
@@ -23,11 +20,9 @@ const topSubBarHome = [
 export const TopBar: React.FC<TopBarProps> = ({
   isTopBarLeftHomeBtnClick,
   veIsCodeFreeze,
-  wbTheme,
   onTopBarLeftBtnClick,
   onTopBarHomeBtnClick,
   onCodeFreezeToggle,
-  onToggleTheme,
 }) => {
   return (
     <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[100] w-fit h-fit bg-[var(--wb-panel-bg)] text-[var(--wb-panel-text)] rounded-xl flex justify-center items-center gap-2 shadow-md border border-[var(--wb-panel-border)] py-2">
@@ -59,14 +54,6 @@ export const TopBar: React.FC<TopBarProps> = ({
             <i className={item.name} />
           </button>
         ))}
-        {/* Theme toggle button */}
-        <button
-          className="rounded-lg p-1 text-xl hover:bg-[var(--wb-panel-hover)] outline-none"
-          title={wbTheme === 'light' ? 'Switch to dark theme' : 'Switch to light theme'}
-          onClick={onToggleTheme}
-        >
-          <i className={wbTheme === 'light' ? 'ri-moon-line' : 'ri-sun-line'} />
-        </button>
         <div
           className={`absolute top-14 left-0 w-24 h-36 bg-[var(--wb-panel-secondary)] border border-[var(--wb-panel-border)] shadow-md rounded-xl ${isTopBarLeftHomeBtnClick ? '' : 'hidden'}`}
         >

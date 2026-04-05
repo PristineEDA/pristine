@@ -44,18 +44,16 @@ export const WhiteboardView: React.FC = () => {
   else if (ve.veSelectedBtn === 'shape') cursorClass = 'cursor-crosshair';
 
   return (
-    <div className={`w-full h-full flex justify-center items-center overflow-hidden relative ${ve.wbTheme === 'dark' ? 'wb-theme-dark' : 'wb-theme-light'}`} ref={ve.canvasContainerRef}>
+    <div className="w-full h-full flex justify-center items-center overflow-hidden relative" ref={ve.canvasContainerRef}>
       {/* Konva stage mount point */}
       <div id="konva-veStage" className={`w-full h-full overflow-hidden bg-[var(--wb-canvas-bg)] ${cursorClass}`} />
 
       <TopBar
         isTopBarLeftHomeBtnClick={ve.isTopBarLeftHomeBtnClick}
         veIsCodeFreeze={ve.veIsCodeFreeze}
-        wbTheme={ve.wbTheme}
         onTopBarLeftBtnClick={handleTopBarLeftBtnClick}
         onTopBarHomeBtnClick={handleTopBarHomeBtnClick}
         onCodeFreezeToggle={handleCodeFreezeToggle}
-        onToggleTheme={ve.toggleWbTheme}
       />
 
       <BottomBar

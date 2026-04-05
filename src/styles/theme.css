@@ -78,8 +78,112 @@
   --sidebar-ring: oklch(0.439 0 0);
 }
 
-/* ─── IDE Semantic Colors (oklch) ─────────────────────────────────────────── */
+/* ─── IDE Semantic Colors ──────────────────────────────────────────────────── */
+/* Light theme (default) */
 :root {
+  /* Layout backgrounds */
+  --ide-bg: #ffffff;
+  --ide-sidebar-bg: #f3f4f6;
+  --ide-activitybar-bg: #e5e7eb;
+  --ide-menubar-bg: #f9fafb;
+  --ide-tab-bg: #e5e7eb;
+  --ide-selection: #dbeafe;
+  --ide-hover: #f3f4f6;
+  --ide-tab-hover: #e5e7eb;
+  --ide-editor-bg: #ffffff;
+
+  /* Text */
+  --ide-text: #1f2937;
+  --ide-text-muted: #6b7280;
+  --ide-text-section: #374151;
+  --ide-text-chevron: #4b5563;
+  --ide-text-dim: #9ca3af;
+  --ide-text-dimmer: #d1d5db;
+
+  /* Borders */
+  --ide-border: #e5e7eb;
+  --ide-border-light: #d1d5db;
+  --ide-btn-hover: #e5e7eb;
+
+  /* Accent */
+  --ide-accent: #2563eb;
+  --ide-accent-dark: #1d4ed8;
+  --ide-accent-vivid: #3b82f6;
+  --ide-accent-hover: #1d4ed8;
+  --ide-status-hover: #1e40af;
+
+  /* Diagnostics */
+  --ide-error: #dc2626;
+  --ide-warning: #d97706;
+  --ide-info: #2563eb;
+  --ide-info-bright: #3b82f6;
+  --ide-success: #059669;
+
+  /* File icon colors (light — slightly deeper for white bg readability) */
+  --ide-file-v: #2563eb;
+  --ide-file-sv: #7c3aed;
+  --ide-file-hdl-header: #0284c7;
+  --ide-file-software: #059669;
+  --ide-file-python: #65a30d;
+  --ide-file-xdc: #ea580c;
+  --ide-file-build: #6366f1;
+  --ide-file-asm: #c2410c;
+  --ide-file-linker: #ca8a04;
+  --ide-file-filelist: #0891b2;
+  --ide-file-config: #0ea5e9;
+  --ide-file-script: #0d9488;
+  --ide-file-git: #dc2626;
+  --ide-file-license: #a16207;
+  --ide-file-shell: #16a34a;
+  --ide-file-yaml: #ea580c;
+  --ide-file-md: #0284c7;
+
+  /* Syntax token colors (light) */
+  --ide-syntax-keyword: #a21caf;
+  --ide-syntax-function: #854d0e;
+  --ide-syntax-number: #15803d;
+  --ide-syntax-string: #b45309;
+  --ide-syntax-folder: #ca8a04;
+
+  /* Special */
+  --ide-cursor: #6b7280;
+  --ide-pro: #ca8a04;
+  --ide-online: #16a34a;
+  --ide-close: #dc2626;
+
+  /* Dracula palette source (always available for Monaco) */
+  --ide-dracula-surface: #21222c;
+  --ide-dracula-background: #282a36;
+  --ide-dracula-input: #2d2f3e;
+  --ide-dracula-selection: #44475a;
+  --ide-dracula-comment: #6272a4;
+  --ide-dracula-foreground: #f8f8f2;
+  --ide-dracula-bright-foreground: #fcfcfc;
+  --ide-dracula-pink: #ff79c6;
+  --ide-dracula-purple: #bd93f9;
+  --ide-dracula-cyan: #8be9fd;
+  --ide-dracula-green: #50fa7b;
+  --ide-dracula-yellow: #f1fa8c;
+  --ide-dracula-red: #ff5555;
+  --ide-dracula-orange: #ffb86c;
+
+  /* Chat theme (light) */
+  --ide-chat-bg: #f9fafb;
+  --ide-chat-dropdown: #ffffff;
+  --ide-chat-hover: #f3f4f6;
+  --ide-chat-input: #ffffff;
+  --ide-chat-border: #e5e7eb;
+  --ide-chat-muted: #6b7280;
+  --ide-chat-text: #1f2937;
+  --ide-chat-purple: #7c3aed;
+  --ide-chat-purple-hover: #6d28d9;
+  --ide-chat-cyan: #0891b2;
+  --ide-chat-text-bright: #111827;
+  --ide-chat-input-border: #d1d5db;
+}
+
+/* Dark theme */
+.dark {
   /* Layout backgrounds */
   --ide-bg: oklch(0.235 0.000 89.9);             /* #1e1e1e */
   --ide-sidebar-bg: oklch(0.265 0.002 286.3);    /* #252526 */
@@ -118,7 +222,7 @@
   --ide-info-bright: oklch(0.779 0.119 246.9);   /* #75beff */
   --ide-success: oklch(0.760 0.115 177.2);       /* #4ec9b0 */
 
-  /* File icon colors */
+  /* File icon colors (dark — bright for dark bg) */
   --ide-file-v: oklch(0.742 0.127 244.8);        /* #5fb3f6 */
   --ide-file-sv: oklch(0.709 0.159 293.5);       /* #a78bfa */
   --ide-file-hdl-header: oklch(0.79 0.092 226.4); /* #86c7e8 */
@@ -149,22 +253,6 @@
   --ide-pro: oklch(0.829 0.149 87.4);            /* #f0c040 */
   --ide-online: oklch(0.673 0.162 144.2);         /* #4caf50 */
   --ide-close: oklch(0.536 0.191 30.1);          /* #c42b1c */
-
-  /* Dracula palette source */
-  --ide-dracula-surface: #21222c;
-  --ide-dracula-background: #282a36;
-  --ide-dracula-input: #2d2f3e;
-  --ide-dracula-selection: #44475a;
-  --ide-dracula-comment: #6272a4;
-  --ide-dracula-foreground: #f8f8f2;
-  --ide-dracula-bright-foreground: #fcfcfc;
-  --ide-dracula-pink: #ff79c6;
-  --ide-dracula-purple: #bd93f9;
-  --ide-dracula-cyan: #8be9fd;
-  --ide-dracula-green: #50fa7b;
-  --ide-dracula-yellow: #f1fa8c;
-  --ide-dracula-red: #ff5555;
-  --ide-dracula-orange: #ffb86c;
 
   /* Chat / Dracula theme */
   --ide-chat-bg: oklch(0.243 0.019 280.4);       /* #1e1f29 */

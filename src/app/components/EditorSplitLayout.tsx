@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from './ui/resizable';
 import { EditorArea } from './EditorArea';
 import { useWorkspace } from '../context/WorkspaceContext';
 import type { EditorDropPosition, EditorLayoutNode, SplitDirection } from '../editor/editorLayout';
@@ -31,26 +31,26 @@ const DROP_ZONE_CLASS_NAMES: Record<EditorDropPosition, string> = {
 };
 
 const DROP_PREVIEW_CLASS_NAMES: Record<EditorDropPosition, string> = {
-  center: 'left-[20%] right-[20%] top-[20%] bottom-[20%] rounded-sm border border-ide-text-muted/70 bg-ide-selection/70',
-  left: 'left-1/2 top-3 bottom-3 w-px -translate-x-1/2 bg-ide-text-section/75',
-  right: 'right-1/2 top-3 bottom-3 w-px translate-x-1/2 bg-ide-text-section/75',
-  top: 'left-3 right-3 top-1/2 h-px -translate-y-1/2 bg-ide-text-section/75',
-  bottom: 'left-3 right-3 bottom-1/2 h-px translate-y-1/2 bg-ide-text-section/75',
+  center: 'left-[20%] right-[20%] top-[20%] bottom-[20%] rounded-sm border border-muted-foreground/70 bg-primary/20',
+  left: 'left-1/2 top-3 bottom-3 w-px -translate-x-1/2 bg-muted-foreground/75',
+  right: 'right-1/2 top-3 bottom-3 w-px translate-x-1/2 bg-muted-foreground/75',
+  top: 'left-3 right-3 top-1/2 h-px -translate-y-1/2 bg-muted-foreground/75',
+  bottom: 'left-3 right-3 bottom-1/2 h-px translate-y-1/2 bg-muted-foreground/75',
 };
 
 function ResizeHandle({ direction }: { direction: SplitDirection }) {
   return (
-    <PanelResizeHandle
+    <ResizableHandle
       className={`group relative flex items-center justify-center ${
         direction === 'horizontal' ? 'w-1 cursor-col-resize' : 'h-1 cursor-row-resize'
-      } bg-ide-sidebar-bg hover:bg-ide-accent-vivid transition-colors z-10`}
+      } bg-border hover:bg-primary transition-colors z-10`}
     >
       <div
         className={`${
           direction === 'horizontal' ? 'w-0.5 h-8' : 'h-0.5 w-8'
-        } bg-ide-border group-hover:bg-ide-accent-vivid rounded transition-colors`}
+        } bg-border group-hover:bg-primary rounded transition-colors`}
       />
-    </PanelResizeHandle>
+    </ResizableHandle>
   );
 }
 
@@ -83,7 +83,7 @@ function DropIndicator({ position }: { position: EditorDropPosition }) {
 
   return (
     <div className="pointer-events-none absolute inset-0 z-20">
-      <div className="absolute inset-2 rounded-sm border border-ide-border-light/55 bg-ide-selection/12 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.02)]" />
+      <div className="absolute inset-2 rounded-sm border border-border/55 bg-primary/12 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.02)]" />
       {orderedPositions.map((candidatePosition) => {
         const isActive = candidatePosition === position;
 
@@ -92,8 +92,8 @@ function DropIndicator({ position }: { position: EditorDropPosition }) {
             key={candidatePosition}
             className={`absolute rounded-sm border transition-all duration-150 ease-out ${DROP_ZONE_CLASS_NAMES[candidatePosition]} ${
               isActive
-                ? 'border-ide-text-muted/65 bg-ide-selection/80 opacity-100 scale-100'
-                : 'border-ide-border-light/18 bg-ide-border-light/8 opacity-0 scale-[0.985]'
+                ? 'border-muted-foreground/65 bg-primary/30 opacity-100 scale-100'
+                : 'border-border/18 bg-border/8 opacity-0 scale-[0.985]'
             }`}
           />
         );
@@ -104,7 +104,7 @@ function DropIndicator({ position }: { position: EditorDropPosition }) {
           position === 'center' ? 'shadow-[0_0_0_1px_rgba(0,0,0,0.18)]' : 'shadow-[0_0_6px_rgba(204,204,204,0.16)]'
         }`}
       />
-      <div className="absolute bottom-3 right-3 rounded-sm border border-ide-border-light/70 bg-ide-sidebar-bg/95 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-ide-text-section transition-all duration-150 ease-out">
+      <div className="absolute bottom-3 right-3 rounded-sm border border-border/70 bg-popover/95 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground transition-all duration-150 ease-out">
         {DROP_POSITION_LABELS[position]}
       </div>
     </div>
@@ -157,11 +157,13 @@ function EditorGroupLeaf({
     return null;
   }
 
+  const showFocusRing = focused && group.tabs.length > 0;
+
   return (
     <div
       data-testid={`editor-group-${group.id}`}
       data-focused={focused ? 'true' : 'false'}
-      className={`relative h-full min-w-0 ${focused ? 'ring-1 ring-inset ring-ide-accent-vivid/50' : ''} ${dropPosition ? 'ring-1 ring-inset ring-ide-border-light/80' : ''}`}
+      className={`relative h-full min-w-0 ${showFocusRing ? 'ring-1 ring-inset ring-primary/50' : ''} ${dropPosition ? 'ring-1 ring-inset ring-border/80' : ''}`}
       onMouseDown={() => onFocus(group.id)}
       onDragOver={(event) => {
         if (!dragState) {
@@ -281,15 +283,15 @@ export function EditorSplitLayout({ jumpToLine }: { jumpToLine?: number }) {
 
     const direction = node.direction;
     return (
-      <PanelGroup direction={direction} className="h-full min-w-0">
-        <Panel defaultSize={50} minSize={15}>
+      <ResizablePanelGroup orientation={direction} className="h-full min-w-0">
+        <ResizablePanel defaultSize={50} minSize={15}>
           {renderNode(node.children[0])}
-        </Panel>
+        </ResizablePanel>
         <ResizeHandle direction={direction} />
-        <Panel defaultSize={50} minSize={15}>
+        <ResizablePanel defaultSize={50} minSize={15}>
           {renderNode(node.children[1])}
-        </Panel>
-      </PanelGroup>
+        </ResizablePanel>
+      </ResizablePanelGroup>
     );
   };
 

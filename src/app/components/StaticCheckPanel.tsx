@@ -56,16 +56,16 @@ export function StaticCheckPanel({
 
   return (
     <div className="flex flex-col h-full">
-      <div className="px-3 py-1.5 border-b border-ide-border shrink-0">
+      <div className="px-3 py-1.5 border-b border-border shrink-0">
         <div className="flex items-center gap-1 mb-1.5">
-          <AlertCircle size={13} className="text-ide-error" />
+          <AlertCircle size={13} className="text-destructive" />
           <span
-            className="text-ide-text text-[12px] font-[600]"
+            className="text-foreground text-[12px] font-[600]"
           >
             Static Check Report
           </span>
           <span
-            className="ml-auto text-ide-text-muted text-[11px]"
+            className="ml-auto text-muted-foreground text-[11px]"
           >
             {staticChecks.length} rules
           </span>
@@ -85,8 +85,8 @@ export function StaticCheckPanel({
               onClick={() => setFilter(f)}
               className={`px-1.5 py-0.5 rounded transition-colors text-[10px] ${
                 filter === f
-                  ? "bg-ide-accent-dark text-white"
-                  : "text-ide-text-muted hover:bg-ide-tab-bg"
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:bg-muted"
               }`}
             >
               {f === "all"
@@ -104,7 +104,7 @@ export function StaticCheckPanel({
           return (
             <div
               key={item.id}
-              className={`border-b border-ide-tab-bg px-3 py-2 transition-colors ${isFixed ? "opacity-40" : "hover:bg-ide-hover"}`}
+              className={`border-b border-muted px-3 py-2 transition-colors ${isFixed ? "opacity-40" : "hover:bg-accent"}`}
             >
               <div className="flex items-start gap-2">
                 <span
@@ -116,13 +116,13 @@ export function StaticCheckPanel({
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1">
                     <span
-                      className="text-ide-text-muted text-[10px]"
+                      className="text-muted-foreground text-[10px]"
                     >
                       {item.rule}
                     </span>
                   </div>
                   <div
-                    className="text-ide-text mt-0.5 text-[11px] leading-[1.4]"
+                    className="text-foreground mt-0.5 text-[11px] leading-[1.4]"
                   >
                     {isFixed ? (
                       <s>{item.description}</s>
@@ -132,7 +132,7 @@ export function StaticCheckPanel({
                   </div>
                   <div className="flex items-center gap-2 mt-1">
                     <button
-                      className="flex items-center gap-1 text-ide-text-muted hover:text-ide-text transition-colors text-[10px]"
+                      className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors text-[10px]"
                       onClick={() => {
                         onFileOpen(item.fileId, item.file);
                         onLineJump(item.line);
@@ -143,7 +143,7 @@ export function StaticCheckPanel({
                     </button>
                     {item.fixable && !isFixed && (
                       <button
-                        className="flex items-center gap-1 px-1.5 py-0.5 bg-ide-accent hover:bg-ide-accent-hover text-white rounded transition-colors text-[10px]"
+                        className="flex items-center gap-1 px-1.5 py-0.5 bg-primary hover:bg-primary/90 text-primary-foreground rounded transition-colors text-[10px]"
                         onClick={() =>
                           setFixedIds(
                             (prev) =>
@@ -157,7 +157,7 @@ export function StaticCheckPanel({
                     )}
                     {isFixed && (
                       <span
-                        className="text-ide-success text-[10px]"
+                        className="text-emerald-500 text-[10px]"
                       >
                         ✓ Fixed
                       </span>

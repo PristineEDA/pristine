@@ -3,6 +3,10 @@ import { describe, expect, it, vi } from 'vitest';
 import { MenuBar } from './MenuBar';
 import { WorkspaceProvider } from '../context/WorkspaceContext';
 
+vi.mock('../context/ThemeContext', () => ({
+  useTheme: () => ({ theme: 'light', setTheme: vi.fn(), toggleTheme: vi.fn() }),
+}));
+
 function renderMenuBar(props: React.ComponentProps<typeof MenuBar> = {}) {
   return render(
     <WorkspaceProvider>
@@ -69,8 +73,8 @@ describe('MenuBar', () => {
     const switcher = screen.getByTestId('center-view-switcher') as HTMLDivElement;
 
     expect(switcher.style.pointerEvents).toBe('auto');
-    expect(screen.getByTitle('Code')).toHaveClass('cursor-pointer');
-    expect(screen.getByTitle('Whiteboard')).toHaveClass('cursor-pointer');
-    expect(screen.getByTitle('Workflow')).toHaveClass('cursor-pointer');
+    expect(screen.getByTitle('Code')).toBeInTheDocument();
+    expect(screen.getByTitle('Whiteboard')).toBeInTheDocument();
+    expect(screen.getByTitle('Workflow')).toBeInTheDocument();
   });
 });

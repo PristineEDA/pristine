@@ -130,16 +130,16 @@ export function QuickOpenPalette({
     <div className="pointer-events-none absolute inset-x-0 top-[60px] z-50 flex justify-center px-4">
       <div
         data-testid="quick-open-overlay"
-        className="pointer-events-auto w-full max-w-[42rem] overflow-hidden rounded-none border border-ide-border bg-ide-sidebar-bg shadow-[0_18px_48px_rgba(0,0,0,0.42)]"
+        className="pointer-events-auto w-full max-w-[42rem] overflow-hidden rounded-none border border-border bg-muted shadow-[0_18px_48px_rgba(0,0,0,0.42)]"
       >
-        <div className="flex items-center gap-2 border-b border-ide-border bg-ide-sidebar-bg px-3 py-2">
-          <Search size={14} className="shrink-0 text-ide-text-muted" />
+        <div className="flex items-center gap-2 border-b border-border bg-muted px-3 py-2">
+          <Search size={14} className="shrink-0 text-muted-foreground" />
           <input
             ref={inputRef}
             data-testid="quick-open-input"
             value={query}
             placeholder="Type the name of a file to open"
-            className="w-full bg-transparent text-[12px] text-ide-text outline-none placeholder:text-ide-text-muted"
+            className="w-full bg-transparent text-[12px] text-foreground outline-none placeholder:text-muted-foreground"
             spellCheck={false}
             autoCorrect="off"
             autoCapitalize="off"
@@ -176,7 +176,7 @@ export function QuickOpenPalette({
               }
             }}
           />
-          <div className="hidden items-center gap-1 rounded-none border border-ide-border bg-ide-tab-bg px-2 py-1 text-[10px] text-ide-text-muted md:flex">
+          <div className="hidden items-center gap-1 rounded-none border border-border bg-muted px-2 py-1 text-[10px] text-muted-foreground md:flex">
             <CornerDownLeft size={12} />
             Open
           </div>
@@ -184,15 +184,15 @@ export function QuickOpenPalette({
 
         <div ref={resultsContainerRef} className="max-h-[22rem] overflow-y-auto overflow-x-hidden py-1">
           {isLoading && (
-            <div className="px-4 py-3 text-[12px] text-ide-text-muted">Indexing workspace files...</div>
+            <div className="px-4 py-3 text-[12px] text-muted-foreground">Indexing workspace files...</div>
           )}
 
           {!isLoading && errorMessage && (
-            <div className="px-4 py-3 text-[12px] text-ide-error">{errorMessage}</div>
+            <div className="px-4 py-3 text-[12px] text-destructive">{errorMessage}</div>
           )}
 
           {!isLoading && !errorMessage && !hasResults && (
-            <div data-testid="quick-open-empty" className="px-4 py-3 text-[11px] text-ide-text-muted">{emptyMessage}</div>
+            <div data-testid="quick-open-empty" className="px-4 py-3 text-[11px] text-muted-foreground">{emptyMessage}</div>
           )}
 
           {!isLoading && !errorMessage && results.map((result, index) => {
@@ -207,8 +207,8 @@ export function QuickOpenPalette({
                 data-testid={`quick-open-result-${toTreeTestId(result.path)}`}
                 className={`flex w-full cursor-pointer items-center gap-3 px-3 py-1.5 text-left transition-colors ${
                   isSelected
-                    ? 'bg-ide-selection text-ide-text'
-                    : 'text-ide-text hover:bg-ide-hover'
+                    ? 'bg-primary/20 text-foreground'
+                    : 'text-foreground hover:bg-accent'
                 }`}
                 onMouseEnter={() => onSelectedIndexChange(index)}
                 onClick={() => onSelectResult(result)}
@@ -217,18 +217,18 @@ export function QuickOpenPalette({
                   <FileTypeBadge
                     name={result.name}
                     className="text-[10px] leading-none"
-                    fallbackClassName="text-ide-text-muted"
+                    fallbackClassName="text-muted-foreground"
                     testId={`quick-open-icon-${toTreeTestId(result.path)}`}
                   />
                 </div>
                 <div className="flex min-w-0 flex-1 items-center gap-3 overflow-hidden whitespace-nowrap">
-                  <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-ide-text">
+                  <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-foreground">
                     {renderHighlightedText(result.name, query, `quick-open-match-name-${toTreeTestId(result.path)}`)}
                   </span>
                   {directoryPath.length > 0 && (
                     <span
                       data-testid={`quick-open-path-${toTreeTestId(result.path)}`}
-                      className="max-w-[45%] shrink-0 truncate text-right text-[11px] text-ide-text-muted"
+                      className="max-w-[45%] shrink-0 truncate text-right text-[11px] text-muted-foreground"
                     >
                       {renderHighlightedText(directoryPath, query, `quick-open-match-path-${toTreeTestId(result.path)}`)}
                     </span>

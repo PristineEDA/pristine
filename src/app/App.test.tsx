@@ -1,18 +1,24 @@
-import { forwardRef, useImperativeHandle } from 'react';
+
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import App from './App';
 
 const panelResizeMock = vi.fn();
 
-vi.mock('react-resizable-panels', () => ({
-  PanelGroup: ({ children }: { children: React.ReactNode }) => <div data-testid="panel-group">{children}</div>,
-  Panel: forwardRef(({ children, id, minSize, defaultSize }: any, ref) => {
-    useImperativeHandle(ref, () => ({ resize: panelResizeMock }));
+vi.mock('./components/ui/resizable', () => ({
+  ResizablePanelGroup: ({ children }: { children: React.ReactNode }) => <div data-testid="panel-group">{children}</div>,
+  ResizablePanel: ({ children, id, minSize, defaultSize, panelRef, collapsed }: any) => {
+    if (collapsed) {
+      return null;
+    }
+
+    if (panelRef && typeof panelRef === 'object') {
+      panelRef.current = { resize: panelResizeMock };
+    }
 
     return <div data-testid={`panel-${id}`} data-min-size={minSize} data-default-size={defaultSize}>{children}</div>;
-  }),
-  PanelResizeHandle: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
+  },
+  ResizableHandle: ({ hidden }: { hidden?: boolean }) => (hidden ? null : <div data-testid="panel-handle" />),
 }));
 
 vi.mock('./components/MenuBar', () => ({
@@ -116,7 +122,7 @@ vi.mock('./components/QuickOpenPalette', () => ({
 }));
 
 describe('App', () => {
-  it('keeps the left panel minimum size fixed and resizes the current panel width from the container', async () => {
+  it('opens the left panel on demand and resizes it from the container width', async () => {
     class ResizeObserverMock {
       private readonly callback: ResizeObserverCallback;
 
@@ -141,11 +147,15 @@ describe('App', () => {
 
     render(<App />);
 
+  expect(screen.queryByTestId('panel-left-panel')).not.toBeInTheDocument();
+
+  fireEvent.click(screen.getByText('toggle-left-panel'));
+
     expect(screen.getByTestId('panel-left-panel')).toHaveAttribute('data-min-size', '12');
-    expect(screen.getByTestId('panel-left-panel')).toHaveAttribute('data-default-size', '12');
+    expect(screen.getByTestId('panel-left-panel')).toHaveAttribute('data-default-size', '18');
 
     await waitFor(() => {
-      expect(panelResizeMock).toHaveBeenCalledWith(18.13);
+      expect(panelResizeMock).toHaveBeenCalledWith('18.13%');
     });
   });
 
@@ -153,16 +163,22 @@ describe('App', () => {
     render(<App />);
 
     expect(screen.getByTestId('menu-bar')).toBeInTheDocument();
-    expect(screen.getByTestId('menu-left-state')).toHaveTextContent('true');
+    expect(screen.getByTestId('menu-left-state')).toHaveTextContent('false');
     expect(screen.getByTestId('menu-bottom-state')).toHaveTextContent('false');
     expect(screen.getByTestId('menu-right-state')).toHaveTextContent('false');
     expect(screen.getByTestId('activity-view')).toHaveTextContent('explorer');
-    expect(screen.getByTestId('left-panel')).toBeInTheDocument();
+    expect(screen.queryByTestId('panel-left-panel')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('left-panel')).not.toBeInTheDocument();
     expect(screen.queryByTestId('bottom-panel')).not.toBeInTheDocument();
     expect(screen.queryByTestId('right-panel')).not.toBeInTheDocument();
-    expect(screen.getByTestId('left-active-file')).toHaveTextContent('');
     expect(screen.getByTestId('editor-tab-count')).toHaveTextContent('0');
     expect(screen.getByTestId('status-bar')).toHaveTextContent(':1:1');
+
+    fireEvent.click(screen.getByText('toggle-left-panel'));
+    expect(screen.getByTestId('menu-left-state')).toHaveTextContent('true');
+    expect(screen.getByTestId('panel-left-panel')).toHaveAttribute('data-default-size', '18');
+    expect(screen.getByTestId('left-panel')).toBeInTheDocument();
+    expect(screen.getByTestId('left-active-file')).toHaveTextContent('');
 
     fireEvent.click(screen.getByText('select-git'));
     expect(screen.getByTestId('activity-view')).toHaveTextContent('git');
@@ -177,6 +193,7 @@ describe('App', () => {
 
     fireEvent.click(screen.getByText('toggle-right-panel'));
     expect(screen.getByTestId('menu-right-state')).toHaveTextContent('true');
+    expect(screen.getByTestId('panel-right-panel')).toHaveAttribute('data-default-size', '22');
     expect(screen.getByTestId('right-panel')).toBeInTheDocument();
 
     fireEvent.click(screen.getByText('right-open'));
@@ -187,6 +204,7 @@ describe('App', () => {
 
     fireEvent.click(screen.getByText('toggle-bottom-panel'));
     expect(screen.getByTestId('menu-bottom-state')).toHaveTextContent('true');
+    expect(screen.getByTestId('panel-bottom-panel')).toHaveAttribute('data-default-size', '40');
     expect(screen.getByTestId('bottom-panel')).toBeInTheDocument();
 
     fireEvent.click(screen.getByText('close-bottom'));
@@ -200,6 +218,29 @@ describe('App', () => {
     expect(screen.getByTestId('activity-view')).toHaveTextContent('explorer');
     expect(screen.getByTestId('menu-left-state')).toHaveTextContent('true');
     expect(screen.getByTestId('left-panel')).toBeInTheDocument();
+  });
+
+  it('toggles the left and bottom panels with Ctrl+B and Ctrl+J', () => {
+    render(<App />);
+
+    expect(screen.getByTestId('menu-left-state')).toHaveTextContent('false');
+    expect(screen.getByTestId('menu-bottom-state')).toHaveTextContent('false');
+
+    fireEvent.keyDown(document, { key: 'b', ctrlKey: true });
+    expect(screen.getByTestId('menu-left-state')).toHaveTextContent('true');
+    expect(screen.getByTestId('left-panel')).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: 'j', ctrlKey: true });
+    expect(screen.getByTestId('menu-bottom-state')).toHaveTextContent('true');
+    expect(screen.getByTestId('bottom-panel')).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: 'b', ctrlKey: true });
+    expect(screen.getByTestId('menu-left-state')).toHaveTextContent('false');
+    expect(screen.queryByTestId('left-panel')).not.toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: 'j', ctrlKey: true });
+    expect(screen.getByTestId('menu-bottom-state')).toHaveTextContent('false');
+    expect(screen.queryByTestId('bottom-panel')).not.toBeInTheDocument();
   });
 
   it('opens quick open with Ctrl+P, resets the query on reopen, and selects a file', async () => {
@@ -224,6 +265,8 @@ describe('App', () => {
 
     expect(screen.queryByTestId('quick-open-overlay')).not.toBeInTheDocument();
     expect(screen.getByTestId('editor-active-tab')).toHaveTextContent('rtl/core/alu.v');
+
+    fireEvent.click(screen.getByText('toggle-left-panel'));
     expect(screen.getByTestId('left-reveal-path')).toHaveTextContent('rtl/core/alu.v');
 
     fireEvent.keyDown(document, { key: 'p', ctrlKey: true });

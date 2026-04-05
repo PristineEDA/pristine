@@ -1,5 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { PanelGroup, Panel, PanelResizeHandle, type ImperativePanelHandle } from 'react-resizable-panels';
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle, type PanelImperativeHandle } from './components/ui/resizable';
 import { MenuBar } from './components/MenuBar';
 import { ActivityBar } from './components/ActivityBar';
 import { LeftSidePanel } from './components/LeftSidePanel';
@@ -18,20 +18,9 @@ const WhiteboardView = lazy(() => import('./components/whiteboard/WhiteboardView
 const WorkflowPlaceholder = lazy(() => import('./components/WorkflowPlaceholder').then((module) => ({ default: module.WorkflowPlaceholder })));
 
 // ─── ResizeHandle ────────────────────────────────────────────────────────────
-const ResizeHandle = ({ direction = 'vertical' }: { direction?: 'vertical' | 'horizontal' }) => (
-  <PanelResizeHandle
-    className={`group relative flex items-center justify-center ${
-      direction === 'vertical' ? 'w-1 cursor-col-resize' : 'h-1 cursor-row-resize'
-    } bg-ide-sidebar-bg hover:bg-ide-accent-vivid transition-colors z-10`}
-  >
-    <div className={`${
-      direction === 'vertical' ? 'w-0.5 h-8' : 'h-0.5 w-8'
-    } bg-ide-border group-hover:bg-ide-accent-vivid rounded transition-colors`} />
-  </PanelResizeHandle>
-);
 
 const MainContentFallback = () => (
-  <div className="flex flex-1 items-center justify-center bg-ide-bg text-ide-text-muted text-sm">
+  <div className="flex flex-1 items-center justify-center bg-background text-muted-foreground text-sm">
     Loading view...
   </div>
 );
@@ -59,8 +48,18 @@ function AppLayout() {
   const [recentQuickOpenFiles, setRecentQuickOpenFiles] = useState<QuickOpenFileEntry[]>([]);
   const [revealRequest, setRevealRequest] = useState<WorkspaceRevealRequest | null>(null);
   const panelGroupContainerRef = useRef<HTMLDivElement | null>(null);
-  const leftPanelRef = useRef<ImperativePanelHandle | null>(null);
+  const leftPanelRef = useRef<PanelImperativeHandle | null>(null);
   const revealTokenRef = useRef(0);
+
+  const syncLeftPanelWidth = useCallback(() => {
+    const panelGroupContainer = panelGroupContainerRef.current;
+    if (!panelGroupContainer) {
+      return;
+    }
+
+    const nextSize = getLeftPanelTargetSizePercent(panelGroupContainer.clientWidth);
+    leftPanelRef.current?.resize(`${nextSize}%`);
+  }, []);
 
   const handleActivityItemSelect = (nextView: string) => {
     if (nextView === activeView) {
@@ -114,25 +113,26 @@ function AppLayout() {
       return;
     }
 
-    const updateLeftPanelWidth = () => {
-      const nextSize = getLeftPanelTargetSizePercent(panelGroupContainer.clientWidth);
-      leftPanelRef.current?.resize(nextSize);
-    };
-
-    updateLeftPanelWidth();
+    syncLeftPanelWidth();
 
     const resizeObserver = typeof ResizeObserver !== 'undefined'
-      ? new ResizeObserver(updateLeftPanelWidth)
+      ? new ResizeObserver(syncLeftPanelWidth)
       : null;
 
     resizeObserver?.observe(panelGroupContainer);
-    window.addEventListener('resize', updateLeftPanelWidth);
+    window.addEventListener('resize', syncLeftPanelWidth);
 
     return () => {
       resizeObserver?.disconnect();
-      window.removeEventListener('resize', updateLeftPanelWidth);
+      window.removeEventListener('resize', syncLeftPanelWidth);
     };
-  }, []);
+  }, [syncLeftPanelWidth]);
+
+  useEffect(() => {
+    if (showLeftPanel) {
+      syncLeftPanelWidth();
+    }
+  }, [showLeftPanel, syncLeftPanelWidth]);
 
   useEffect(() => {
     if (!isQuickOpenVisible || workspaceFiles !== null) {
@@ -208,7 +208,13 @@ function AppLayout() {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === 'p') {
+      if (!(event.ctrlKey || event.metaKey) || event.shiftKey) {
+        return;
+      }
+
+      const key = event.key.toLowerCase();
+
+      if (key === 'p') {
         event.preventDefault();
 
         if (isQuickOpenVisible) {
@@ -217,6 +223,18 @@ function AppLayout() {
         }
 
         openQuickOpen();
+        return;
+      }
+
+      if (key === 'j') {
+        event.preventDefault();
+        setShowBottomPanel(!showBottomPanel);
+        return;
+      }
+
+      if (key === 'b') {
+        event.preventDefault();
+        setShowLeftPanel(!showLeftPanel);
       }
     };
 
@@ -224,10 +242,10 @@ function AppLayout() {
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [closeQuickOpen, isQuickOpenVisible, openQuickOpen]);
+  }, [closeQuickOpen, isQuickOpenVisible, openQuickOpen, setShowBottomPanel, setShowLeftPanel, showBottomPanel, showLeftPanel]);
 
   return (
-    <div className="flex flex-col h-screen bg-ide-bg text-ide-text overflow-hidden">
+    <div className="flex flex-col h-screen bg-background text-foreground overflow-hidden">
       <MenuBar
         showLeftPanel={showLeftPanel}
         showBottomPanel={showBottomPanel}
@@ -247,26 +265,26 @@ function AppLayout() {
         />
 
         <div ref={panelGroupContainerRef} className="flex-1 min-w-0">
-        <PanelGroup direction="horizontal" className="flex-1">
-          {showLeftPanel && (
-            <>
-              <Panel ref={leftPanelRef} defaultSize={12} minSize={12} maxSize={35} id="left-panel" order={1}>
-                <LeftSidePanel
-                  activeFileId={activeTabId}
-                  onFileOpen={openWorkspaceFile}
-                  onFilePreview={openWorkspacePreviewFile}
-                  onLineJump={jumpTo}
-                  currentOutlineId={activeTabId}
-                  revealRequest={revealRequest}
-                  onWorkspaceRefresh={invalidateWorkspaceFiles}
-                />
-              </Panel>
+        <ResizablePanelGroup orientation="horizontal">
+          <ResizablePanel panelRef={leftPanelRef} defaultSize={18} minSize={12} maxSize={35} id="left-panel" collapsed={!showLeftPanel}>
+            {showLeftPanel ? (
+              <LeftSidePanel
+                activeFileId={activeTabId}
+                onFileOpen={openWorkspaceFile}
+                onFilePreview={openWorkspacePreviewFile}
+                onLineJump={jumpTo}
+                currentOutlineId={activeTabId}
+                revealRequest={revealRequest}
+                onWorkspaceRefresh={invalidateWorkspaceFiles}
+              />
+            ) : (
+              <div className="h-full" />
+            )}
+          </ResizablePanel>
 
-              <ResizeHandle direction="vertical" />
-            </>
-          )}
+          <ResizableHandle hidden={!showLeftPanel} />
 
-          <Panel defaultSize={55} minSize={30} id="center-panel" order={2}>
+          <ResizablePanel defaultSize={55} minSize={30} id="center-panel">
             <div className="relative h-full">
               <QuickOpenPalette
                 isOpen={isQuickOpenVisible}
@@ -283,38 +301,36 @@ function AppLayout() {
                 onSelectResult={handleQuickOpenSelect}
               />
 
-              <PanelGroup direction="vertical">
-                <Panel defaultSize={65} minSize={25} id="editor-panel" order={1}>
+              <ResizablePanelGroup orientation="vertical">
+                <ResizablePanel defaultSize={60} minSize={25} id="editor-panel">
                   <EditorSplitLayout jumpToLine={jumpToLine} />
-                </Panel>
+                </ResizablePanel>
 
-                {showBottomPanel && (
-                  <>
-                    <PanelResizeHandle
-                      className="h-1 group cursor-row-resize bg-ide-sidebar-bg hover:bg-ide-accent-vivid transition-colors z-10"
-                    />
-                    <Panel defaultSize={35} minSize={15} maxSize={60} id="bottom-panel" order={2}>
-                      <BottomPanel onClose={() => setShowBottomPanel(false)} />
-                    </Panel>
-                  </>
-                )}
-              </PanelGroup>
+                <ResizableHandle hidden={!showBottomPanel} />
+                <ResizablePanel defaultSize={40} minSize={15} maxSize={60} id="bottom-panel" collapsed={!showBottomPanel}>
+                  {showBottomPanel ? (
+                    <BottomPanel onClose={() => setShowBottomPanel(false)} />
+                  ) : (
+                    <div className="h-full" />
+                  )}
+                </ResizablePanel>
+              </ResizablePanelGroup>
             </div>
-          </Panel>
+          </ResizablePanel>
 
-          {showRightPanel && (
-            <>
-              <ResizeHandle direction="vertical" />
+          <ResizableHandle hidden={!showRightPanel} />
 
-              <Panel defaultSize={18} minSize={18} maxSize={45} id="right-panel" order={3}>
-                <RightSidePanel
-                  onFileOpen={openWorkspaceFile}
-                  onLineJump={jumpTo}
-                />
-              </Panel>
-            </>
-          )}
-        </PanelGroup>
+          <ResizablePanel defaultSize={22} minSize={18} maxSize={45} id="right-panel" collapsed={!showRightPanel}>
+            {showRightPanel ? (
+              <RightSidePanel
+                onFileOpen={openWorkspaceFile}
+                onLineJump={jumpTo}
+              />
+            ) : (
+              <div className="h-full" />
+            )}
+          </ResizablePanel>
+        </ResizablePanelGroup>
         </div>
       </div>
 

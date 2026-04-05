@@ -59,7 +59,7 @@ export function MonacoEditorPane({
   }, [activeTabId, monaco, problemsList]);
 
   return (
-    <div className="relative flex-1 overflow-hidden bg-ide-editor-bg">
+    <div className="relative flex-1 overflow-hidden bg-background">
       {showDragInteractionShield && (
         <div
           data-testid={dragInteractionShieldTestId}

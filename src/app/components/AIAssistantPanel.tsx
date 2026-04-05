@@ -77,16 +77,16 @@ export function AIAssistantPanel() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-ide-border shrink-0">
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-border shrink-0">
         <Sparkles size={14} className="text-ide-syntax-keyword" />
         <span
-          className="text-ide-text text-[12px] font-[600]"
+          className="text-foreground text-[12px] font-[600]"
         >
           AI Assistant
         </span>
         <div className="ml-auto">
           <button
-            className="p-1 text-ide-text-muted hover:text-ide-text transition-colors"
+            className="p-1 text-muted-foreground hover:text-foreground transition-colors"
             title="Clear conversation"
             onClick={() => {
               clearConversation();
@@ -101,11 +101,11 @@ export function AIAssistantPanel() {
       </div>
 
       {/* Quick actions */}
-      <div className="flex flex-wrap gap-1 px-2 py-1.5 border-b border-ide-border shrink-0">
+      <div className="flex flex-wrap gap-1 px-2 py-1.5 border-b border-border shrink-0">
         {QUICK_ACTIONS.map(({ label, icon: Icon }) => (
           <button
             key={label}
-            className="flex items-center gap-1 px-2 py-0.5 bg-ide-tab-bg hover:bg-ide-accent-dark text-ide-text-muted hover:text-white rounded transition-colors text-[11px]"
+            className="flex items-center gap-1 px-2 py-0.5 bg-muted hover:bg-primary text-muted-foreground hover:text-primary-foreground rounded transition-colors text-[11px]"
             onClick={() => setInput(label)}
           >
             <Icon size={10} />
@@ -117,37 +117,37 @@ export function AIAssistantPanel() {
       <MessageThread messages={messages} isTyping={isTyping} bottomRef={bottomRef} />
 
       {/* ── Copilot-style Input Box ── */}
-      <div className="px-2 pb-2 pt-1.5 border-t border-ide-border shrink-0">
+      <div className="px-2 pb-2 pt-1.5 border-t border-border shrink-0">
         {/* Current task context chip */}
         <div className="flex items-center gap-1 mb-1.5 flex-wrap">
           <div
-            className="flex items-center gap-1 px-2 py-0.5 bg-ide-hover rounded border border-ide-chat-input-border text-ide-text-muted cursor-pointer hover:border-ide-text-dim transition-colors text-[10px]"
+            className="flex items-center gap-1 px-2 py-0.5 bg-accent rounded border border-ide-chat-input-border text-muted-foreground cursor-pointer hover:border-muted-foreground/70 transition-colors text-[10px]"
           >
-            <FileCode2 size={9} className="text-ide-success" />
-            <span className="text-ide-info">uart_tx.v</span>
-            <span className="text-ide-text-dim">·</span>
+            <FileCode2 size={9} className="text-emerald-500" />
+            <span className="text-blue-400">uart_tx.v</span>
+            <span className="text-muted-foreground/70">·</span>
             <span>CLINT pipeline</span>
-            <span className="text-ide-text-dim mx-0.5">1/9</span>
+            <span className="text-muted-foreground/70 mx-0.5">1/9</span>
             <X
               size={8}
-              className="hover:text-ide-text ml-0.5"
+              className="hover:text-foreground ml-0.5"
             />
           </div>
           <div
-            className="flex items-center gap-1 px-2 py-0.5 bg-ide-hover rounded border border-ide-chat-input-border text-ide-text-muted cursor-pointer hover:border-ide-text-dim transition-colors text-[10px]"
+            className="flex items-center gap-1 px-2 py-0.5 bg-accent rounded border border-ide-chat-input-border text-muted-foreground cursor-pointer hover:border-muted-foreground/70 transition-colors text-[10px]"
           >
             <FileCode2 size={9} className="text-ide-syntax-folder" />
             <span className="text-ide-syntax-function">cpu_top.v</span>
             <X
               size={8}
-              className="hover:text-ide-text ml-0.5"
+              className="hover:text-foreground ml-0.5"
             />
           </div>
         </div>
 
         {/* Main prompt card */}
         <div
-          className="rounded-lg border border-ide-border-light bg-ide-chat-bg focus-within:border-ide-chat-muted transition-colors"
+          className="rounded-lg border border-border bg-ide-chat-bg focus-within:border-ide-chat-muted transition-colors"
           onMouseDown={(e) => e.stopPropagation()}
         >
           {/* Textarea */}

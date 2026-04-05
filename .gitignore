@@ -16,3 +16,5 @@ Thumbs.db
 playwright-report/
 test-results/
 coverage/
+tmp-*.png
+.tmp-*.cjs

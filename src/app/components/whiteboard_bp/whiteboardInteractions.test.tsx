@@ -2,6 +2,10 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Konva from 'konva';
 
+vi.mock('../../../context/ThemeContext', () => ({
+  useTheme: () => ({ theme: 'light', setTheme: vi.fn(), toggleTheme: vi.fn() }),
+}));
+
 const createdStages: any[] = [];
 
 vi.mock('konva', async () => {

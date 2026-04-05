@@ -80,7 +80,7 @@ export function useWorkspace(): WorkspaceState {
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [activeView, setActiveView] = useState('explorer');
   const [mainContentView, setMainContentView] = useState<MainContentView>('code');
-  const [showLeftPanel, setShowLeftPanel] = useState(true);
+  const [showLeftPanel, setShowLeftPanel] = useState(false);
   const [showBottomPanel, setShowBottomPanel] = useState(false);
   const [showRightPanel, setShowRightPanel] = useState(false);
   const editorWorkspace = useWorkspaceEditorState();

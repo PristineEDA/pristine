@@ -2,6 +2,10 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BottomPanel } from './BottomPanel';
 
+vi.mock('../context/ThemeContext', () => ({
+  useTheme: () => ({ theme: 'dark', setTheme: vi.fn(), toggleTheme: vi.fn() }),
+}));
+
 const terminateTerminalSessionMock = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('./terminalSessionStore', async (importOriginal) => {

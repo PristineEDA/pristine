@@ -3,6 +3,7 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import { createTerminalTheme, IDE_MONO_FONT_FAMILY } from '../editor/appearance';
+import { useTheme } from '../context/ThemeContext';
 import {
   ensureTerminalSession,
   getTerminalSessionSnapshot,
@@ -14,7 +15,8 @@ import {
 export function TerminalSurface() {
   const [sessionState, setSessionState] = useState(() => getTerminalSessionSnapshot());
   const isE2E = window.electronAPI?.isE2E === true;
-  const terminalTheme = useMemo(() => createTerminalTheme(), []);
+  const { theme } = useTheme();
+  const terminalTheme = useMemo(() => createTerminalTheme(theme), [theme]);
   const hostRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const renderedBufferRef = useRef(0);
@@ -127,13 +129,13 @@ export function TerminalSurface() {
           style={{ backgroundColor: `${terminalTheme.background}e6` }}
         >
           <div>
-            <div className="text-sm font-medium text-ide-error">Terminal failed to start</div>
-            <div className="mt-2 text-xs text-ide-text-muted">{sessionState.error}</div>
+            <div className="text-sm font-medium text-destructive">Terminal failed to start</div>
+            <div className="mt-2 text-xs text-muted-foreground">{sessionState.error}</div>
           </div>
         </div>
       )}
       {!sessionState.error && sessionState.isStarting && (
-        <div className="pointer-events-none absolute right-3 top-2 text-[11px] text-ide-text-muted">
+        <div className="pointer-events-none absolute right-3 top-2 text-[11px] text-muted-foreground">
           Starting {sessionState.shellLabel}...
         </div>
       )}

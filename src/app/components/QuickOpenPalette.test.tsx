@@ -110,6 +110,8 @@ describe('QuickOpenPalette', () => {
       />,
     );
 
+    expect(screen.getByTestId('quick-open-overlay')).toHaveClass('bg-muted');
+    expect(screen.getByTestId('quick-open-overlay')).not.toHaveClass('bg-muted/40');
     expect(screen.queryByText('recent')).not.toBeInTheDocument();
     expect(screen.queryByText('Recently opened')).not.toBeInTheDocument();
     expect(screen.getByText('alu.v')).toBeInTheDocument();
