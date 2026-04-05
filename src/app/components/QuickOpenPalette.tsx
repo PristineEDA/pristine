@@ -130,9 +130,9 @@ export function QuickOpenPalette({
     <div className="pointer-events-none absolute inset-x-0 top-[60px] z-50 flex justify-center px-4">
       <div
         data-testid="quick-open-overlay"
-        className="pointer-events-auto w-full max-w-[42rem] overflow-hidden rounded-none border border-border bg-muted/40 shadow-[0_18px_48px_rgba(0,0,0,0.42)]"
+        className="pointer-events-auto w-full max-w-[42rem] overflow-hidden rounded-none border border-border bg-muted shadow-[0_18px_48px_rgba(0,0,0,0.42)]"
       >
-        <div className="flex items-center gap-2 border-b border-border bg-muted/40 px-3 py-2">
+        <div className="flex items-center gap-2 border-b border-border bg-muted px-3 py-2">
           <Search size={14} className="shrink-0 text-muted-foreground" />
           <input
             ref={inputRef}

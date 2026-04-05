@@ -88,6 +88,16 @@ function fireDragEvent(element: HTMLElement, type: 'dragover' | 'drop', clientX:
 }
 
 describe('EditorSplitLayout', () => {
+  it('does not show the focused editor ring when the initial group is empty', () => {
+    render(
+      <WorkspaceProvider>
+        <LayoutHarness />
+      </WorkspaceProvider>,
+    );
+
+    expect(screen.getByTestId('editor-group-group-1')).not.toHaveClass('ring-1', 'ring-inset', 'ring-primary/50');
+  });
+
   it('creates a second editor group from the split action', () => {
     render(
       <WorkspaceProvider>

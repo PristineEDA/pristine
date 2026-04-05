@@ -3,16 +3,16 @@ import { describe, expect, it, vi } from 'vitest';
 import { ActivityBar } from './ActivityBar';
 
 describe('ActivityBar', () => {
-  it('renders compile, run, and debug action buttons and removes settings', () => {
+  it('renders compile and run action buttons and removes settings', () => {
     render(<ActivityBar activeView="explorer" onItemSelect={vi.fn()} />);
 
     const buttons = [
       screen.getByTestId('activity-action-compile'),
       screen.getByTestId('activity-action-run'),
-      screen.getByTestId('activity-action-debug-action'),
     ];
 
-    expect(buttons.map((button) => button.getAttribute('aria-label'))).toEqual(['Compile', 'Run', 'Debug']);
+    expect(buttons.map((button) => button.getAttribute('aria-label'))).toEqual(['Compile', 'Run']);
+    expect(screen.queryByTestId('activity-action-debug-action')).not.toBeInTheDocument();
     expect(screen.queryByTitle('Settings')).not.toBeInTheDocument();
     expect(screen.getByTitle('Explorer')).toBeInTheDocument();
     expect(screen.getByTitle('Run & Debug')).toBeInTheDocument();
@@ -20,25 +20,21 @@ describe('ActivityBar', () => {
     expect(screen.queryByTitle('Extensions')).not.toBeInTheDocument();
   });
 
-  it('does not apply pressed state or call the shared navigation handler when compile, run, and debug are clicked', () => {
+  it('does not apply pressed state or call the shared navigation handler when compile and run are clicked', () => {
     const onItemSelect = vi.fn();
 
     render(<ActivityBar activeView="explorer" onItemSelect={onItemSelect} />);
 
     const compileButton = screen.getByTestId('activity-action-compile');
     const runButton = screen.getByTestId('activity-action-run');
-    const debugButton = screen.getByTestId('activity-action-debug-action');
 
     expect(compileButton).not.toHaveAttribute('aria-pressed');
     expect(runButton).not.toHaveAttribute('aria-pressed');
-    expect(debugButton).not.toHaveAttribute('aria-pressed');
 
     fireEvent.click(runButton);
-    fireEvent.click(debugButton);
 
     expect(compileButton).not.toHaveAttribute('aria-pressed');
     expect(runButton).not.toHaveAttribute('aria-pressed');
-    expect(debugButton).not.toHaveAttribute('aria-pressed');
     expect(onItemSelect).not.toHaveBeenCalled();
   });
 

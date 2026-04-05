@@ -157,11 +157,13 @@ function EditorGroupLeaf({
     return null;
   }
 
+  const showFocusRing = focused && group.tabs.length > 0;
+
   return (
     <div
       data-testid={`editor-group-${group.id}`}
       data-focused={focused ? 'true' : 'false'}
-      className={`relative h-full min-w-0 ${focused ? 'ring-1 ring-inset ring-primary/50' : ''} ${dropPosition ? 'ring-1 ring-inset ring-border/80' : ''}`}
+      className={`relative h-full min-w-0 ${showFocusRing ? 'ring-1 ring-inset ring-primary/50' : ''} ${dropPosition ? 'ring-1 ring-inset ring-border/80' : ''}`}
       onMouseDown={() => onFocus(group.id)}
       onDragOver={(event) => {
         if (!dragState) {

@@ -528,27 +528,23 @@ test('left sidebar width is resized to keep tab labels readable when the window 
   await app.close();
 });
 
-test('activity bar shows compile, run, and debug action buttons with local selection only', async () => {
+test('activity bar shows compile and run action buttons with local selection only', async () => {
   const { app, window } = await launchApp();
 
   const compileButton = window.getByTestId('activity-action-compile');
   const runButton = window.getByTestId('activity-action-run');
-  const debugButton = window.getByTestId('activity-action-debug-action');
 
   await expect(window.getByTitle('Settings')).toHaveCount(0);
   await expect(compileButton).toBeVisible();
   await expect(runButton).toBeVisible();
-  await expect(debugButton).toBeVisible();
+  await expect(window.getByTestId('activity-action-debug-action')).toHaveCount(0);
 
   await expect(compileButton).not.toHaveAttribute('aria-pressed', /.+/);
   await expect(runButton).not.toHaveAttribute('aria-pressed', /.+/);
-  await expect(debugButton).not.toHaveAttribute('aria-pressed', /.+/);
 
   await runButton.click();
-  await debugButton.click();
   await expect(compileButton).not.toHaveAttribute('aria-pressed', /.+/);
   await expect(runButton).not.toHaveAttribute('aria-pressed', /.+/);
-  await expect(debugButton).not.toHaveAttribute('aria-pressed', /.+/);
 
   await app.close();
 });

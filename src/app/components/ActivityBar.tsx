@@ -26,7 +26,6 @@ const topItems = [
 const actionItems = [
   { id: 'compile', icon: Hammer, label: 'Compile' },
   { id: 'run', icon: Play, label: 'Run' },
-  { id: 'debug-action', icon: Bug, label: 'Debug' }
 ] as const;
 
 const activityBarButtonBaseClass = 'relative h-10 w-12 flex items-center justify-center rounded-none p-0 transition-colors group-data-[collapsible=icon]:h-10! group-data-[collapsible=icon]:w-12! group-data-[collapsible=icon]:p-0!';

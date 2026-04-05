@@ -7,6 +7,7 @@ import { getWorkspaceSegments } from '../workspace/workspaceFiles';
 import { FileTypeBadge } from './FileTypeBadge';
 import { useEditorDocumentState } from './useEditorDocumentState';
 import type { SplitDirection } from '../editor/editorLayout';
+import { EmptyProject } from './EmptyProject';
 
 const MonacoEditorPane = lazy(() => import('./MonacoEditorPane').then((module) => ({ default: module.MonacoEditorPane })));
 
@@ -177,13 +178,7 @@ export function EditorArea({
 
   if (tabs.length === 0) {
     return (
-      <div className="flex flex-col h-full bg-background items-center justify-center">
-        <div className="text-center">
-          <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
-            <span className="text-primary text-[28px] font-bold">R</span>
-          </div>
-        </div>
-      </div>
+      <EmptyProject></EmptyProject>
     );
   }
 

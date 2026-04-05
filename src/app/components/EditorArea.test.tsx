@@ -83,7 +83,12 @@ describe('EditorArea', () => {
       />,
     );
 
-    expect(screen.getByText('R')).toBeInTheDocument();
+    const emptyState = screen.getByText('No Projects Yet').closest('[data-slot="empty"]');
+
+    expect(emptyState).toHaveClass('h-full', 'w-full', 'items-center', 'justify-center');
+    expect(emptyState).not.toHaveClass('border-dashed');
+    expect(screen.getByRole('button', { name: 'Create Project' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open Project' })).toBeInTheDocument();
     expect(screen.queryByTestId('monaco-editor')).not.toBeInTheDocument();
   });
 
