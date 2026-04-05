@@ -462,7 +462,9 @@ test('activity bar removes search and extensions and toggles the left sidebar', 
   const { app, window } = await launchApp();
 
   await expect(window.getByTestId('activity-item-explorer')).toBeVisible();
-  await expect(window.getByTestId('activity-item-debug')).toBeVisible();
+  await expect(window.getByTestId('activity-item-sim-debug')).toBeVisible();
+  await expect(window.getByTestId('activity-item-synthesis')).toBeVisible();
+  await expect(window.getByTestId('activity-item-physical')).toBeVisible();
   await expect(window.getByTestId('activity-item-git')).toHaveCount(0);
   await expect(window.getByTestId('activity-item-search')).toHaveCount(0);
   await expect(window.getByTestId('activity-item-extensions')).toHaveCount(0);
@@ -478,11 +480,11 @@ test('activity bar removes search and extensions and toggles the left sidebar', 
   await expect(explorerFileNode).toHaveCount(0);
   await expect(leftPanel).toHaveCount(0);
 
-  const debugButton = window.getByTestId('activity-item-debug');
-  await debugButton.click();
+  const simulationDebugButton = window.getByTestId('activity-item-sim-debug');
+  await simulationDebugButton.click();
   await expect(leftPanel).toBeVisible();
 
-  await debugButton.click();
+  await simulationDebugButton.click();
   await expect(explorerFileNode).toHaveCount(0);
   await expect(leftPanel).toHaveCount(0);
 
