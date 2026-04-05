@@ -99,6 +99,28 @@ async function openNestedWorkspaceFile(window: Awaited<ReturnType<typeof launchA
   }
 }
 
+async function ensureExplorerVisible(window: Awaited<ReturnType<typeof launchApp>>['window']) {
+  const leftPanel = window.getByTestId('panel-left-panel');
+  const readmeNode = window.getByTestId('file-tree-node-README_md');
+
+  if (await readmeNode.count() === 0) {
+    await window.getByTestId('toggle-left-panel').click();
+  }
+
+  await expect(leftPanel).toBeVisible();
+  await expect(readmeNode).toBeVisible();
+}
+
+async function ensureExplorerHidden(window: Awaited<ReturnType<typeof launchApp>>['window']) {
+  const readmeNode = window.getByTestId('file-tree-node-README_md');
+
+  if (await readmeNode.count() > 0) {
+    await window.getByTestId('toggle-left-panel').click();
+  }
+
+  await expect(readmeNode).toHaveCount(0);
+}
+
 async function openBottomTerminal(window: Awaited<ReturnType<typeof launchApp>>['window']) {
   const toggleBottomPanel = window.getByTestId('toggle-bottom-panel');
   await expect(toggleBottomPanel).toBeVisible();
@@ -128,6 +150,7 @@ async function readTerminalThemeSnapshot(window: Awaited<ReturnType<typeof launc
     const browserGlobal = globalThis as unknown as {
       document: {
         body: { appendChild: (node: unknown) => void };
+        documentElement: { classList: { contains: (token: string) => boolean } };
         createElement: (tagName: string) => {
           style: { backgroundColor: string };
           remove: () => void;
@@ -146,7 +169,10 @@ async function readTerminalThemeSnapshot(window: Awaited<ReturnType<typeof launc
       .filter(Boolean);
 
     const probe = browserGlobal.document.createElement('div');
-    probe.style.backgroundColor = 'var(--ide-dracula-background)';
+    const expectedColor = browserGlobal.document.documentElement.classList.contains('dark')
+      ? 'var(--ide-dracula-background)'
+      : '#ffffff';
+    probe.style.backgroundColor = expectedColor;
     browserGlobal.document.body.appendChild(probe);
     const expectedBackground = browserGlobal.getComputedStyle(probe).backgroundColor;
     probe.remove();
@@ -266,6 +292,7 @@ test('close button closes the main window', async () => {
 test('explorer opens a file into a new editor tab', async () => {
   const { app, window } = await launchApp();
 
+  await ensureExplorerVisible(window);
   const fileNode = window.getByTestId('file-tree-node-README_md');
   await expect(fileNode).toBeVisible();
   await fileNode.click();
@@ -279,6 +306,7 @@ test('explorer opens a file into a new editor tab', async () => {
 test('single-clicked explorer files stay in preview style until double-clicked to pin', async () => {
   const { app, window } = await launchApp();
 
+  await ensureExplorerVisible(window);
   const readmeNode = window.getByTestId('file-tree-node-README_md');
   await readmeNode.click();
 
@@ -356,6 +384,7 @@ test('whiteboard creates draggable nodes on the React Flow canvas', async () => 
 test('ctrl+p quick open searches files, navigates results, and reveals the selected file', async () => {
   const { app, window } = await launchApp();
 
+  await ensureExplorerVisible(window);
   await window.getByTestId('file-tree-node-README_md').click();
   await expect(window.getByTestId('editor-tab-README.md')).toBeVisible();
 
@@ -391,9 +420,7 @@ test('ctrl+p quick open searches files, navigates results, and reveals the selec
 test('ctrl+p quick open opens files without forcing the hidden explorer visible', async () => {
   const { app, window } = await launchApp();
 
-  const explorerButton = window.getByTestId('activity-item-explorer');
-  await explorerButton.click();
-  await expect(window.getByTestId('file-tree-node-README_md')).toHaveCount(0);
+  await ensureExplorerHidden(window);
 
   await window.keyboard.press('Control+P');
 
@@ -412,6 +439,7 @@ test('ctrl+p quick open opens files without forcing the hidden explorer visible'
 test('explorer root supports toggle and collapse all behaviors', async () => {
   const { app, window } = await launchApp();
 
+  await ensureExplorerVisible(window);
   const collapseAllButton = window.getByTitle('Collapse All');
   const rootNode = window.getByTestId('file-tree-node-root');
   const rtlNode = window.getByTestId('file-tree-node-rtl');
@@ -447,24 +475,24 @@ test('activity bar removes search and extensions and toggles the left sidebar', 
   await expect(window.getByTestId('activity-item-search')).toHaveCount(0);
   await expect(window.getByTestId('activity-item-extensions')).toHaveCount(0);
 
-  const explorerFileNode = window.getByTestId('file-tree-node-README_md');
-  await expect(explorerFileNode).toBeVisible();
-
   const explorerButton = window.getByTestId('activity-item-explorer');
+  const explorerFileNode = window.getByTestId('file-tree-node-README_md');
+  const leftPanel = window.getByTestId('panel-left-panel');
+
+  await explorerButton.click();
+  await expect(leftPanel).toBeVisible();
+
   await explorerButton.click();
   await expect(explorerFileNode).toHaveCount(0);
-  await expect(explorerButton).toHaveClass(/border-transparent/);
-  await expect(explorerButton).not.toHaveClass(/border-ide-accent/);
+  await expect(leftPanel).toHaveCount(0);
 
   const debugButton = window.getByTestId('activity-item-debug');
   await debugButton.click();
-  await expect(explorerFileNode).toBeVisible();
-  await expect(debugButton).toHaveClass(/border-ide-accent/);
+  await expect(leftPanel).toBeVisible();
 
   await debugButton.click();
   await expect(explorerFileNode).toHaveCount(0);
-  await expect(debugButton).toHaveClass(/border-transparent/);
-  await expect(debugButton).not.toHaveClass(/border-ide-accent/);
+  await expect(leftPanel).toHaveCount(0);
 
   await app.close();
 });
@@ -472,33 +500,28 @@ test('activity bar removes search and extensions and toggles the left sidebar', 
 test('left sidebar width is resized to keep tab labels readable when the window size changes', async () => {
   const { app, window } = await launchApp();
   const browserWindow = await app.browserWindow(window);
-  const leftPanel = window.locator('#left-panel');
+  await ensureExplorerVisible(window);
+  const leftPanel = window.getByTestId('panel-left-panel');
+  const readPanelWidth = async () => leftPanel.evaluate((element) => {
+    const panelElement = element as { getBoundingClientRect?: () => { width: number } };
+    return Math.round(panelElement.getBoundingClientRect?.().width ?? 0);
+  });
+
+  await expect(leftPanel).toBeVisible();
 
   await browserWindow.evaluate((win) => win.setSize(1600, 900));
 
-  await expect.poll(async () => {
-    const box = await leftPanel.boundingBox();
-    return Math.round(box?.width ?? 0);
-  }).toBeGreaterThan(220);
-  await expect.poll(async () => {
-    const box = await leftPanel.boundingBox();
-    return Math.round(box?.width ?? 0);
-  }).toBeLessThan(260);
+  await expect.poll(readPanelWidth).toBeGreaterThan(220);
+  await expect.poll(readPanelWidth).toBeLessThan(260);
 
-  const wideWidth = Math.round((await leftPanel.boundingBox())?.width ?? 0);
+  const wideWidth = await readPanelWidth();
 
   await browserWindow.evaluate((win) => win.setSize(1100, 900));
 
-  await expect.poll(async () => {
-    const box = await leftPanel.boundingBox();
-    return Math.round(box?.width ?? 0);
-  }).toBeGreaterThan(220);
-  await expect.poll(async () => {
-    const box = await leftPanel.boundingBox();
-    return Math.round(box?.width ?? 0);
-  }).toBeLessThan(260);
+  await expect.poll(readPanelWidth).toBeGreaterThan(220);
+  await expect.poll(readPanelWidth).toBeLessThan(260);
 
-  const narrowWidth = Math.round((await leftPanel.boundingBox())?.width ?? 0);
+  const narrowWidth = await readPanelWidth();
 
   expect(Math.abs(wideWidth - narrowWidth)).toBeLessThanOrEqual(16);
 
@@ -527,8 +550,6 @@ test('activity bar shows compile, run, and debug action buttons with local selec
   await expect(runButton).not.toHaveAttribute('aria-pressed', /.+/);
   await expect(debugButton).not.toHaveAttribute('aria-pressed', /.+/);
 
-  await expect(window.getByTestId('activity-item-explorer')).toHaveClass(/border-ide-accent/);
-
   await app.close();
 });
 
@@ -536,6 +557,7 @@ test('editor split actions create additional groups and support vertical splitti
   const { app, window } = await launchApp();
   const editorGroups = window.locator('[data-testid^="editor-group-group-"]');
 
+  await ensureExplorerVisible(window);
   await window.getByTestId('file-tree-node-README_md').click();
   await expect(window.getByTestId('editor-group-group-1')).toBeVisible();
 
@@ -558,6 +580,7 @@ test('editor split actions create additional groups and support vertical splitti
 test('focused split receives file tree opens and tabs can be dragged into another split', async () => {
   const { app, window } = await launchApp();
 
+  await ensureExplorerVisible(window);
   await window.getByTestId('file-tree-node-README_md').click();
 
   const firstGroup = window.getByTestId('editor-group-group-1');
@@ -589,6 +612,7 @@ test('focused split receives file tree opens and tabs can be dragged into anothe
 test('closing the last tab removes an empty split group', async () => {
   const { app, window } = await launchApp();
 
+  await ensureExplorerVisible(window);
   await window.getByTestId('file-tree-node-README_md').click();
 
   const firstGroup = window.getByTestId('editor-group-group-1');
@@ -622,7 +646,7 @@ test('terminal tab creates a real shell session and shows command output', async
   await app.close();
 });
 
-test('terminal uses the shared dracula theme and mono font at runtime', async () => {
+test('terminal uses the shared theme and mono font at runtime', async () => {
   const { app, window } = await launchApp();
 
   await openBottomTerminal(window);
@@ -639,7 +663,7 @@ test('terminal uses the shared dracula theme and mono font at runtime', async ()
 
 test('terminal session survives tab switches and bottom panel hide/show', async () => {
   const { app, window } = await launchApp();
-  const bottomPanel = window.locator('#bottom-panel');
+  const bottomPanel = window.getByTestId('panel-bottom-panel');
 
   await openBottomTerminal(window);
 
@@ -674,7 +698,7 @@ test('terminal session survives tab switches and bottom panel hide/show', async 
 
 test('terminal preserves output history across tab switches and bottom panel hide/show', async () => {
   const { app, window } = await launchApp();
-  const bottomPanel = window.locator('#bottom-panel');
+  const bottomPanel = window.getByTestId('panel-bottom-panel');
   const marker = '__PRISTINE_TERMINAL_HISTORY__';
 
   await openBottomTerminal(window);

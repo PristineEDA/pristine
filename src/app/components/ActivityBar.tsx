@@ -26,7 +26,7 @@ const topItems = [
 const actionItems = [
   { id: 'compile', icon: Hammer, label: 'Compile' },
   { id: 'run', icon: Play, label: 'Run' },
-  { id: 'debug-action', icon: Bug, label: 'Debug' },
+  { id: 'debug-action', icon: Bug, label: 'Debug' }
 ] as const;
 
 export function ActivityBar({ activeView, onItemSelect, isLeftSidebarHidden = false }: ActivityBarProps) {
@@ -42,7 +42,6 @@ export function ActivityBar({ activeView, onItemSelect, isLeftSidebarHidden = fa
             {topItems.map(({ id, icon: Icon, label }) => (
               <SidebarMenuItem key={id}>
                 <SidebarMenuButton
-                  tooltip={label}
                   isActive={activeView === id && !isLeftSidebarHidden}
                   title={label}
                   aria-label={label}
@@ -69,7 +68,6 @@ export function ActivityBar({ activeView, onItemSelect, isLeftSidebarHidden = fa
             {actionItems.map(({ id, icon: Icon, label }) => (
               <SidebarMenuItem key={id}>
                 <SidebarMenuButton
-                  tooltip={label}
                   title={label}
                   aria-label={label}
                   data-testid={`activity-action-${id}`}
