@@ -1,18 +1,18 @@
-import { useState, useRef, useEffect } from 'react';
+import { useRef, useEffect } from 'react';
 import {
-  PanelLeft, PanelBottom, Columns2,
   Settings, CircleUser, Minus, Square, X, Code2, Presentation, Workflow,
   Sun, Moon,
 } from 'lucide-react';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { useTheme } from '../context/ThemeContext';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from './ui/dropdown-menu';
+  Menubar,
+  MenubarMenu,
+  MenubarTrigger,
+  MenubarContent,
+  MenubarItem,
+  MenubarSeparator,
+} from './ui/menubar';
 import { ToggleGroup, ToggleGroupItem } from './ui/toggle-group';
 import { Toggle } from './ui/toggle';
 import { Separator } from './ui/separator';
@@ -56,6 +56,31 @@ const noDragInteractive = {
 };
 const isMacOS = window.electronAPI?.platform === 'darwin';
 
+/* Custom panel-toggle icons with optional rectangle fill */
+const PanelLeftIcon = ({ size = 15, filled = false }: { size?: number; filled?: boolean }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    {filled && <rect x="3" y="3" width="6" height="18" rx="2" fill="currentColor" stroke="none" />}
+    <rect width="18" height="18" x="3" y="3" rx="2" />
+    <path d="M9 3v18" />
+  </svg>
+);
+
+const PanelBottomIcon = ({ size = 15, filled = false }: { size?: number; filled?: boolean }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    {filled && <rect x="3" y="15" width="18" height="6" rx="2" fill="currentColor" stroke="none" />}
+    <rect width="18" height="18" x="3" y="3" rx="2" />
+    <path d="M3 15h18" />
+  </svg>
+);
+
+const PanelRightIcon = ({ size = 15, filled = false }: { size?: number; filled?: boolean }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    {filled && <rect x="12" y="3" width="9" height="18" rx="2" fill="currentColor" stroke="none" />}
+    <rect width="18" height="18" x="3" y="3" rx="2" />
+    <path d="M12 3v18" />
+  </svg>
+);
+
 interface MenuBarProps {
   showLeftPanel?: boolean;
   showBottomPanel?: boolean;
@@ -73,20 +98,9 @@ export function MenuBar({
   onToggleBottomPanel,
   onToggleRightPanel,
 }: MenuBarProps) {
-  const [openMenu, setOpenMenu] = useState<number | null>(null);
   const { mainContentView, setMainContentView } = useWorkspace();
   const { theme, toggleTheme } = useTheme();
   const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpenMenu(null);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
 
   return (
     <div
@@ -104,37 +118,27 @@ export function MenuBar({
         </div>
       </div>
 
-      {/* Menu items */}
-      {menus.map((menu, idx) => (
-        <DropdownMenu key={menu.label} open={openMenu === idx} onOpenChange={(open) => setOpenMenu(open ? idx : null)}>
-          <DropdownMenuTrigger asChild>
-            <button
-              className={`px-2.5 h-8 text-foreground hover:bg-accent transition-colors text-[12px] outline-none ${
-                openMenu === idx ? 'bg-primary text-primary-foreground' : ''
-              }`}
-              style={noDrag as React.CSSProperties}
-              onMouseEnter={() => openMenu !== null && setOpenMenu(idx)}
-            >
+      {/* Menu items — shadcn Menubar */}
+      <Menubar className="h-8 border-0 rounded-none bg-transparent p-0 shadow-none" style={noDrag as React.CSSProperties}>
+        {menus.map((menu) => (
+          <MenubarMenu key={menu.label}>
+            <MenubarTrigger className="px-2.5 h-7 text-[12px] font-normal rounded-sm">
               {menu.label}
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" sideOffset={0} className="min-w-48">
-            {menu.items.map((item, i) =>
-              item === '---' ? (
-                <DropdownMenuSeparator key={i} />
-              ) : (
-                <DropdownMenuItem
-                  key={i}
-                  className="text-[12px]"
-                  onSelect={() => setOpenMenu(null)}
-                >
-                  {item}
-                </DropdownMenuItem>
-              )
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      ))}
+            </MenubarTrigger>
+            <MenubarContent align="start" sideOffset={4} className="min-w-48">
+              {menu.items.map((item, i) =>
+                item === '---' ? (
+                  <MenubarSeparator key={i} />
+                ) : (
+                  <MenubarItem key={i} className="text-[12px]">
+                    {item}
+                  </MenubarItem>
+                )
+              )}
+            </MenubarContent>
+          </MenubarMenu>
+        ))}
+      </Menubar>
 
 
       {/* Center view switcher — absolutely centered */}
@@ -169,28 +173,28 @@ export function MenuBar({
           aria-label="Toggle left sidebar"
           pressed={showLeftPanel}
           data-testid="toggle-left-panel"
-          className="w-8 h-full rounded-none border-0 data-[state=on]:bg-accent data-[state=on]:text-foreground text-muted-foreground hover:text-foreground hover:bg-accent"
+          className="w-8 h-full rounded-none border-0 data-[state=on]:text-foreground text-muted-foreground hover:text-foreground hover:bg-accent"
           onPressedChange={() => onToggleLeftPanel?.()}
         >
-          <PanelLeft size={15} />
+          <PanelLeftIcon size={15} filled={showLeftPanel} />
         </Toggle>
         <Toggle
           aria-label="Toggle bottom panel"
           pressed={showBottomPanel}
           data-testid="toggle-bottom-panel"
-          className="w-8 h-full rounded-none border-0 data-[state=on]:bg-accent data-[state=on]:text-foreground text-muted-foreground hover:text-foreground hover:bg-accent"
+          className="w-8 h-full rounded-none border-0 data-[state=on]:text-foreground text-muted-foreground hover:text-foreground hover:bg-accent"
           onPressedChange={() => onToggleBottomPanel?.()}
         >
-          <PanelBottom size={15} />
+          <PanelBottomIcon size={15} filled={showBottomPanel} />
         </Toggle>
         <Toggle
           aria-label="Toggle right sidebar"
           pressed={showRightPanel}
           data-testid="toggle-right-panel"
-          className="w-8 h-full rounded-none border-0 data-[state=on]:bg-accent data-[state=on]:text-foreground text-muted-foreground hover:text-foreground hover:bg-accent"
+          className="w-8 h-full rounded-none border-0 data-[state=on]:text-foreground text-muted-foreground hover:text-foreground hover:bg-accent"
           onPressedChange={() => onToggleRightPanel?.()}
         >
-          <Columns2 size={15} />
+          <PanelRightIcon size={15} filled={showRightPanel} />
         </Toggle>
 
         <Separator orientation="vertical" className="h-4 mx-1" />
