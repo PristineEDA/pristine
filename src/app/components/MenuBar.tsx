@@ -57,6 +57,7 @@ const noDragInteractive = {
   pointerEvents: 'auto' as const,
 };
 const isMacOS = window.electronAPI?.platform === 'darwin';
+const centerViewSwitchItemClassName = 'w-7 h-6 border border-transparent p-0 text-muted-foreground hover:cursor-pointer hover:bg-accent/70 hover:text-foreground data-[state=on]:border-border data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-xs';
 
 function TooltipIconButton({
   content,
@@ -189,25 +190,31 @@ export function MenuBar({
           >
             <Tooltip>
               <TooltipTrigger asChild>
-                <ToggleGroupItem aria-label="Code" data-testid="center-view-code" value="code" className="w-7 h-6 p-0 data-[state=on]:bg-background data-[state=on]:text-foreground text-muted-foreground hover:cursor-pointer">
-                  <Code2 size={13} />
-                </ToggleGroupItem>
+                <span className="inline-flex">
+                  <ToggleGroupItem aria-label="Code" data-testid="center-view-code" value="code" className={centerViewSwitchItemClassName}>
+                    <Code2 size={13} />
+                  </ToggleGroupItem>
+                </span>
               </TooltipTrigger>
               <TooltipContent side="bottom" sideOffset={6}>Code</TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
-                <ToggleGroupItem aria-label="Whiteboard" data-testid="center-view-whiteboard" value="whiteboard" className="w-7 h-6 p-0 data-[state=on]:bg-background data-[state=on]:text-foreground text-muted-foreground hover:cursor-pointer">
-                  <Presentation size={13} />
-                </ToggleGroupItem>
+                <span className="inline-flex">
+                  <ToggleGroupItem aria-label="Whiteboard" data-testid="center-view-whiteboard" value="whiteboard" className={centerViewSwitchItemClassName}>
+                    <Presentation size={13} />
+                  </ToggleGroupItem>
+                </span>
               </TooltipTrigger>
               <TooltipContent side="bottom" sideOffset={6}>Whiteboard</TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
-                <ToggleGroupItem aria-label="Workflow" data-testid="center-view-workflow" value="workflow" className="w-7 h-6 p-0 data-[state=on]:bg-background data-[state=on]:text-foreground text-muted-foreground hover:cursor-pointer">
-                  <Workflow size={13} />
-                </ToggleGroupItem>
+                <span className="inline-flex">
+                  <ToggleGroupItem aria-label="Workflow" data-testid="center-view-workflow" value="workflow" className={centerViewSwitchItemClassName}>
+                    <Workflow size={13} />
+                  </ToggleGroupItem>
+                </span>
               </TooltipTrigger>
               <TooltipContent side="bottom" sideOffset={6}>Workflow</TooltipContent>
             </Tooltip>

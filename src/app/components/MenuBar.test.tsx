@@ -141,6 +141,22 @@ describe('MenuBar', () => {
     expect(screen.getByLabelText('Workflow')).toBeInTheDocument();
   });
 
+  it('shows a visible selected style on the active center view button and updates it after switching', () => {
+    renderMenuBar();
+
+    const codeButton = screen.getByTestId('center-view-code');
+    const whiteboardButton = screen.getByTestId('center-view-whiteboard');
+
+    expect(codeButton).toHaveAttribute('data-state', 'on');
+    expect(codeButton).toHaveClass('data-[state=on]:bg-background', 'data-[state=on]:shadow-xs', 'data-[state=on]:border-border');
+    expect(whiteboardButton).toHaveAttribute('data-state', 'off');
+
+    fireEvent.click(whiteboardButton);
+
+    expect(codeButton).toHaveAttribute('data-state', 'off');
+    expect(whiteboardButton).toHaveAttribute('data-state', 'on');
+  });
+
   it('adds a pointer cursor on hover to the interactive menubar controls', () => {
     renderMenuBar();
 
