@@ -20,7 +20,7 @@ interface ActivityBarProps {
 
 const topItems = [
   { id: 'explorer', icon: FileCode, label: 'Explorer' },
-  { id: 'sim-debug', icon: BugPlay, label: 'Simulation & Debug' },
+  { id: 'simulation', icon: BugPlay, label: 'Simulation' },
   { id: 'synthesis', icon: Cog, label: 'Synthesis' },
   { id: 'physical', icon: LucideLayers3, label: 'Physical Design' },
   { id: 'factory', icon: Grid2X2Plus, label: 'Factory' },
