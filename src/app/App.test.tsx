@@ -21,33 +21,58 @@ vi.mock('./components/ui/resizable', () => ({
   ResizableHandle: ({ hidden }: { hidden?: boolean }) => (hidden ? null : <div data-testid="panel-handle" />),
 }));
 
-vi.mock('./components/MenuBar', () => ({
-  MenuBar: ({
+vi.mock('./components/MenuBar', async () => {
+  const actual = await vi.importActual<typeof import('./context/WorkspaceContext')>('./context/WorkspaceContext');
+
+  return {
+    MenuBar: ({
     showLeftPanel,
     showBottomPanel,
     showRightPanel,
     onToggleLeftPanel,
     onToggleBottomPanel,
     onToggleRightPanel,
-  }: any) => (
-    <div data-testid="menu-bar">
-      <span data-testid="menu-left-state">{String(showLeftPanel)}</span>
-      <span data-testid="menu-bottom-state">{String(showBottomPanel)}</span>
-      <span data-testid="menu-right-state">{String(showRightPanel)}</span>
-      <button onClick={onToggleLeftPanel}>toggle-left-panel</button>
-      <button onClick={onToggleBottomPanel}>toggle-bottom-panel</button>
-      <button onClick={onToggleRightPanel}>toggle-right-panel</button>
+  }: any) => {
+    const workspace = actual.useWorkspace();
+
+    return (
+      <div data-testid="menu-bar">
+        <span data-testid="menu-left-state">{String(showLeftPanel)}</span>
+        <span data-testid="menu-bottom-state">{String(showBottomPanel)}</span>
+        <span data-testid="menu-right-state">{String(showRightPanel)}</span>
+        <span data-testid="main-content-view">{workspace.mainContentView}</span>
+        <button onClick={onToggleLeftPanel}>toggle-left-panel</button>
+        <button onClick={onToggleBottomPanel}>toggle-bottom-panel</button>
+        <button onClick={onToggleRightPanel}>toggle-right-panel</button>
+        <button onClick={() => workspace.setMainContentView('code')}>switch-code</button>
+        <button onClick={() => workspace.setMainContentView('whiteboard')}>switch-whiteboard</button>
+        <button onClick={() => workspace.setMainContentView('workflow')}>switch-workflow</button>
+      </div>
+    );
+  },
+  };
+});
+
+vi.mock('./components/ActivityBar', () => ({
+  ActivityBar: ({ activeView, onItemSelect }: { activeView: string; onItemSelect: (view: string) => void }) => (
+    <div data-testid="activity-bar">
+      <span data-testid="activity-view">{activeView}</span>
+      <button onClick={() => onItemSelect('simulation')}>select-simulation</button>
+      <button onClick={() => onItemSelect('synthesis')}>select-synthesis</button>
+      <button onClick={() => onItemSelect('physical')}>select-physical</button>
+      <button onClick={() => onItemSelect('factory')}>select-factory</button>
+      <button onClick={() => onItemSelect('explorer')}>select-explorer</button>
     </div>
   ),
 }));
 
-vi.mock('./components/ActivityBar', () => ({
-  ActivityBar: ({ activeView, onItemSelect }: { activeView: string; onItemSelect: (view: string) => void }) => (
-    <div>
-      <span data-testid="activity-view">{activeView}</span>
-      <button onClick={() => onItemSelect('git')}>select-git</button>
-      <button onClick={() => onItemSelect('explorer')}>select-explorer</button>
-    </div>
+vi.mock('./components/whiteboard/WhiteboardView', () => ({
+  WhiteboardView: () => <div data-testid="whiteboard-view">whiteboard</div>,
+}));
+
+vi.mock('./components/WorkflowPlaceholder', () => ({
+  WorkflowPlaceholder: ({ title = 'Workflow', testId = 'workflow-view' }: { title?: string; testId?: string }) => (
+    <div data-testid={testId}>{title}</div>
   ),
 }));
 
@@ -159,14 +184,16 @@ describe('App', () => {
     });
   });
 
-  it('wires shared workspace state across panels', () => {
+  it('wires shared workspace state across panels', async () => {
     render(<App />);
 
     expect(screen.getByTestId('menu-bar')).toBeInTheDocument();
     expect(screen.getByTestId('menu-left-state')).toHaveTextContent('false');
     expect(screen.getByTestId('menu-bottom-state')).toHaveTextContent('false');
     expect(screen.getByTestId('menu-right-state')).toHaveTextContent('false');
+    expect(screen.getByTestId('main-content-view')).toHaveTextContent('code');
     expect(screen.getByTestId('activity-view')).toHaveTextContent('explorer');
+    expect(screen.getByTestId('activity-bar')).toBeInTheDocument();
     expect(screen.queryByTestId('panel-left-panel')).not.toBeInTheDocument();
     expect(screen.queryByTestId('left-panel')).not.toBeInTheDocument();
     expect(screen.queryByTestId('bottom-panel')).not.toBeInTheDocument();
@@ -179,9 +206,6 @@ describe('App', () => {
     expect(screen.getByTestId('panel-left-panel')).toHaveAttribute('data-default-size', '18');
     expect(screen.getByTestId('left-panel')).toBeInTheDocument();
     expect(screen.getByTestId('left-active-file')).toHaveTextContent('');
-
-    fireEvent.click(screen.getByText('select-git'));
-    expect(screen.getByTestId('activity-view')).toHaveTextContent('git');
 
     fireEvent.click(screen.getByText('left-open'));
     expect(screen.getByTestId('editor-active-tab')).toHaveTextContent('rtl/core/reg_file.v');
@@ -210,14 +234,43 @@ describe('App', () => {
     fireEvent.click(screen.getByText('close-bottom'));
     expect(screen.queryByTestId('bottom-panel')).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByText('select-git'));
-    expect(screen.getByTestId('menu-left-state')).toHaveTextContent('false');
+    fireEvent.click(screen.getByText('select-simulation'));
+    expect(screen.getByTestId('activity-view')).toHaveTextContent('simulation');
+    expect(await screen.findByTestId('code-view-simulation')).toHaveTextContent('Simulation');
+    expect(screen.queryByTestId('panel-left-panel')).not.toBeInTheDocument();
     expect(screen.queryByTestId('left-panel')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('right-panel')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('bottom-panel')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByText('select-explorer'));
     expect(screen.getByTestId('activity-view')).toHaveTextContent('explorer');
     expect(screen.getByTestId('menu-left-state')).toHaveTextContent('true');
     expect(screen.getByTestId('left-panel')).toBeInTheDocument();
+    expect(screen.getByTestId('right-panel')).toBeInTheDocument();
+  });
+
+  it('hides the activity bar outside code and restores the last selected code subview', async () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByText('select-synthesis'));
+    expect(await screen.findByTestId('code-view-synthesis')).toHaveTextContent('Synthesis');
+
+    fireEvent.click(screen.getByText('switch-whiteboard'));
+    expect(screen.getByTestId('main-content-view')).toHaveTextContent('whiteboard');
+    expect(screen.queryByTestId('activity-bar')).not.toBeInTheDocument();
+    expect(await screen.findByTestId('whiteboard-view')).toBeInTheDocument();
+    expect(screen.getByTestId('status-bar')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('switch-workflow'));
+    expect(screen.getByTestId('main-content-view')).toHaveTextContent('workflow');
+    expect(screen.queryByTestId('activity-bar')).not.toBeInTheDocument();
+    expect(await screen.findByTestId('workflow-view')).toHaveTextContent('Workflow');
+
+    fireEvent.click(screen.getByText('switch-code'));
+    expect(screen.getByTestId('main-content-view')).toHaveTextContent('code');
+    expect(screen.getByTestId('activity-bar')).toBeInTheDocument();
+    expect(screen.getByTestId('activity-view')).toHaveTextContent('synthesis');
+    expect(await screen.findByTestId('code-view-synthesis')).toHaveTextContent('Synthesis');
   });
 
   it('toggles the left and bottom panels with Ctrl+B and Ctrl+J', () => {
@@ -286,10 +339,8 @@ describe('App', () => {
 
     render(<App />);
 
-    fireEvent.click(screen.getByText('select-git'));
-    fireEvent.click(screen.getByText('select-git'));
     expect(screen.getByTestId('menu-left-state')).toHaveTextContent('false');
-    expect(screen.getByTestId('activity-view')).toHaveTextContent('git');
+    expect(screen.getByTestId('activity-view')).toHaveTextContent('explorer');
 
     fireEvent.keyDown(document, { key: 'p', ctrlKey: true });
     await screen.findByTestId('quick-open-overlay');
@@ -297,7 +348,7 @@ describe('App', () => {
     fireEvent.click(screen.getByText('quick-open-select-alu'));
 
     expect(screen.getByTestId('menu-left-state')).toHaveTextContent('false');
-    expect(screen.getByTestId('activity-view')).toHaveTextContent('git');
+    expect(screen.getByTestId('activity-view')).toHaveTextContent('explorer');
     expect(screen.getByTestId('editor-active-tab')).toHaveTextContent('rtl/core/alu.v');
     expect(screen.queryByTestId('left-panel')).not.toBeInTheDocument();
   });

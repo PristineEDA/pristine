@@ -458,7 +458,7 @@ test('explorer root supports toggle and collapse all behaviors', async () => {
   await app.close();
 });
 
-test('activity bar removes search and extensions and toggles the left sidebar', async () => {
+test('activity bar switches code subpages and menu bar keeps higher-priority page navigation', async () => {
   const { app, window } = await launchApp();
 
   await expect(window.getByTestId('activity-item-explorer')).toBeVisible();
@@ -470,24 +470,37 @@ test('activity bar removes search and extensions and toggles the left sidebar', 
   await expect(window.getByTestId('activity-item-search')).toHaveCount(0);
   await expect(window.getByTestId('activity-item-extensions')).toHaveCount(0);
 
-  const explorerButton = window.getByTestId('activity-item-explorer');
-  const explorerFileNode = window.getByTestId('file-tree-node-README_md');
-  const leftPanel = window.getByTestId('panel-left-panel');
+  await expect(window.getByTestId('panel-center-panel')).toBeVisible();
 
-  await explorerButton.click();
-  await expect(leftPanel).toBeVisible();
+  await window.getByTestId('activity-item-simulation').click();
+  await expect(window.getByTestId('code-view-simulation')).toBeVisible();
+  await expect(window.getByTestId('panel-center-panel')).toHaveCount(0);
+  await expect(window.getByTestId('panel-left-panel')).toHaveCount(0);
 
-  await explorerButton.click();
-  await expect(explorerFileNode).toHaveCount(0);
-  await expect(leftPanel).toHaveCount(0);
+  await window.getByTestId('activity-item-synthesis').click();
+  await expect(window.getByTestId('code-view-synthesis')).toBeVisible();
 
-  const simulationDebugButton = window.getByTestId('activity-item-simulation');
-  await simulationDebugButton.click();
-  await expect(leftPanel).toBeVisible();
+  await window.getByTestId('activity-item-physical').click();
+  await expect(window.getByTestId('code-view-physical')).toBeVisible();
 
-  await simulationDebugButton.click();
-  await expect(explorerFileNode).toHaveCount(0);
-  await expect(leftPanel).toHaveCount(0);
+  await window.getByTestId('activity-item-factory').click();
+  await expect(window.getByTestId('code-view-factory')).toBeVisible();
+
+  await window.getByTitle('Whiteboard').click();
+  await expect(window.getByTestId('whiteboard-view')).toBeVisible();
+  await expect(window.getByTestId('activity-item-explorer')).toHaveCount(0);
+
+  await window.getByTitle('Workflow').click();
+  await expect(window.getByTestId('workflow-view')).toBeVisible();
+  await expect(window.getByTestId('activity-item-explorer')).toHaveCount(0);
+
+  await window.getByTitle('Code').click();
+  await expect(window.getByTestId('activity-item-explorer')).toBeVisible();
+  await expect(window.getByTestId('code-view-factory')).toBeVisible();
+
+  await window.getByTestId('activity-item-explorer').click();
+  await expect(window.getByTestId('panel-center-panel')).toBeVisible();
+  await expect(window.getByTestId('code-view-factory')).toHaveCount(0);
 
   await app.close();
 });

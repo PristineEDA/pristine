@@ -15,7 +15,6 @@ import {
 interface ActivityBarProps {
   activeView: string;
   onItemSelect: (view: string) => void;
-  isLeftSidebarHidden?: boolean;
 }
 
 const topItems = [
@@ -33,7 +32,7 @@ const actionItems = [
 
 const activityBarButtonBaseClass = 'relative h-10 w-12 flex items-center justify-center rounded-none p-0 transition-colors hover:cursor-pointer group-data-[collapsible=icon]:h-10! group-data-[collapsible=icon]:w-12! group-data-[collapsible=icon]:p-0!';
 
-export function ActivityBar({ activeView, onItemSelect, isLeftSidebarHidden = false }: ActivityBarProps) {
+export function ActivityBar({ activeView, onItemSelect }: ActivityBarProps) {
   return (
     <SidebarProvider
       open={false}
@@ -46,14 +45,14 @@ export function ActivityBar({ activeView, onItemSelect, isLeftSidebarHidden = fa
             {topItems.map(({ id, icon: Icon, label }) => (
               <SidebarMenuItem key={id}>
                 <SidebarMenuButton
-                  isActive={activeView === id && !isLeftSidebarHidden}
+                  isActive={activeView === id}
                   title={label}
                   aria-label={label}
                   data-testid={`activity-item-${id}`}
                   onClick={() => onItemSelect(id)}
                   size="lg"
                   className={`${activityBarButtonBaseClass} [&>svg]:size-5 ${
-                    activeView === id && !isLeftSidebarHidden
+                    activeView === id
                       ? 'text-foreground border-l-2 border-primary bg-transparent hover:bg-sidebar-accent'
                       : 'text-muted-foreground hover:text-foreground border-l-2 border-transparent hover:bg-sidebar-accent'
                   }`}

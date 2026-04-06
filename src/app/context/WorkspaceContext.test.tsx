@@ -17,7 +17,7 @@ function WorkspaceHarness() {
       <div data-testid="cursor">{`${workspace.cursorLine}:${workspace.cursorCol}`}</div>
       <div data-testid="bottom-panel">{workspace.showBottomPanel ? 'open' : 'closed'}</div>
 
-      <button onClick={() => workspace.setActiveView('problems')}>set-view</button>
+      <button onClick={() => workspace.setActiveView('simulation')}>set-view</button>
       <button onClick={() => workspace.openFile('rtl/core/reg_file.v', 'reg_file.v')}>open-reg</button>
       <button onClick={() => workspace.openPreviewFile('rtl/core/reg_file.v', 'reg_file.v')}>preview-reg</button>
       <button onClick={() => workspace.openPreviewFile('rtl/core/alu.v', 'alu.v')}>preview-alu</button>
@@ -147,7 +147,7 @@ describe('WorkspaceContext', () => {
     fireEvent.click(screen.getByText('cursor'));
     fireEvent.click(screen.getByText('hide-bottom'));
 
-    expect(screen.getByTestId('active-view')).toHaveTextContent('problems');
+    expect(screen.getByTestId('active-view')).toHaveTextContent('simulation');
     expect(screen.getByTestId('cursor')).toHaveTextContent('8:16');
     expect(screen.getByTestId('bottom-panel')).toHaveTextContent('closed');
   });

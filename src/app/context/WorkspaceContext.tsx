@@ -13,10 +13,11 @@ import { useWorkspaceFileStore } from './useWorkspaceFileStore';
 export type Tab = EditorTab;
 
 export type MainContentView = 'code' | 'whiteboard' | 'workflow';
+export type CodeView = 'explorer' | 'simulation' | 'synthesis' | 'physical' | 'factory';
 
 interface WorkspaceState {
-  activeView: string;
-  setActiveView: (view: string) => void;
+  activeView: CodeView;
+  setActiveView: (view: CodeView) => void;
 
   mainContentView: MainContentView;
   setMainContentView: (view: MainContentView) => void;
@@ -78,7 +79,7 @@ export function useWorkspace(): WorkspaceState {
 // ─── Provider ───────────────────────────────────────────────────────────────
 
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
-  const [activeView, setActiveView] = useState('explorer');
+  const [activeView, setActiveView] = useState<CodeView>('explorer');
   const [mainContentView, setMainContentView] = useState<MainContentView>('code');
   const [showLeftPanel, setShowLeftPanel] = useState(false);
   const [showBottomPanel, setShowBottomPanel] = useState(false);
