@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { MenuBar } from './MenuBar';
-import { WorkspaceProvider } from '../context/WorkspaceContext';
+import { WorkspaceProvider, useWorkspace } from '../context/WorkspaceContext';
 
 vi.mock('../context/ThemeContext', () => ({
   useTheme: () => ({ theme: 'light', setTheme: vi.fn(), toggleTheme: vi.fn() }),
@@ -12,6 +12,28 @@ function renderMenuBar(props: React.ComponentProps<typeof MenuBar> = {}) {
     <WorkspaceProvider>
       <MenuBar {...props} />
     </WorkspaceProvider>,
+  );
+}
+
+function renderMenuBarWithControls(props: React.ComponentProps<typeof MenuBar> = {}) {
+  return render(
+    <WorkspaceProvider>
+      <WorkspaceControls />
+      <MenuBar {...props} />
+    </WorkspaceProvider>,
+  );
+}
+
+function WorkspaceControls() {
+  const { setActiveView, setMainContentView } = useWorkspace();
+
+  return (
+    <div>
+      <button onClick={() => setActiveView('simulation')}>set-simulation</button>
+      <button onClick={() => setActiveView('synthesis')}>set-synthesis</button>
+      <button onClick={() => setMainContentView('whiteboard')}>set-whiteboard</button>
+      <button onClick={() => setMainContentView('code')}>set-code</button>
+    </div>
   );
 }
 
@@ -55,6 +77,46 @@ describe('MenuBar', () => {
     expect(onToggleRightPanel).toHaveBeenCalledTimes(1);
   });
 
+  it('disables layout icons on unsupported pages and suppresses callbacks', () => {
+    const onToggleLeftPanel = vi.fn();
+    const onToggleBottomPanel = vi.fn();
+    const onToggleRightPanel = vi.fn();
+
+    renderMenuBarWithControls({
+      onToggleLeftPanel,
+      onToggleBottomPanel,
+      onToggleRightPanel,
+    });
+
+    fireEvent.click(screen.getByText('set-synthesis'));
+
+    expect(screen.getByTestId('toggle-left-panel')).toBeDisabled();
+    expect(screen.getByTestId('toggle-bottom-panel')).toBeDisabled();
+    expect(screen.getByTestId('toggle-right-panel')).toBeDisabled();
+    expect(screen.getByTestId('toggle-left-panel')).toHaveClass('cursor-not-allowed');
+    expect(screen.getByTestId('toggle-bottom-panel')).toHaveClass('cursor-not-allowed');
+    expect(screen.getByTestId('toggle-right-panel')).toHaveClass('cursor-not-allowed');
+
+    fireEvent.click(screen.getByTestId('toggle-left-panel'));
+    fireEvent.click(screen.getByTestId('toggle-bottom-panel'));
+    fireEvent.click(screen.getByTestId('toggle-right-panel'));
+
+    expect(onToggleLeftPanel).not.toHaveBeenCalled();
+    expect(onToggleBottomPanel).not.toHaveBeenCalled();
+    expect(onToggleRightPanel).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByText('set-simulation'));
+
+    expect(screen.getByTestId('toggle-left-panel')).not.toBeDisabled();
+    expect(screen.getByTestId('toggle-bottom-panel')).not.toBeDisabled();
+    expect(screen.getByTestId('toggle-right-panel')).not.toBeDisabled();
+
+    fireEvent.click(screen.getByText('set-whiteboard'));
+    expect(screen.getByTestId('toggle-left-panel')).toBeDisabled();
+    expect(screen.getByTestId('toggle-bottom-panel')).toBeDisabled();
+    expect(screen.getByTestId('toggle-right-panel')).toBeDisabled();
+  });
+
   it('reflects active panel visibility on the layout buttons', () => {
     renderMenuBar({
       showLeftPanel: true,
@@ -76,5 +138,18 @@ describe('MenuBar', () => {
     expect(screen.getByTitle('Code')).toBeInTheDocument();
     expect(screen.getByTitle('Whiteboard')).toBeInTheDocument();
     expect(screen.getByTitle('Workflow')).toBeInTheDocument();
+  });
+
+  it('adds a pointer cursor on hover to the interactive menubar controls', () => {
+    renderMenuBar();
+
+    expect(screen.getByTitle('Code')).toHaveClass('hover:cursor-pointer');
+    expect(screen.getByTitle('Whiteboard')).toHaveClass('hover:cursor-pointer');
+    expect(screen.getByTitle('Workflow')).toHaveClass('hover:cursor-pointer');
+    expect(screen.getByTestId('toggle-left-panel')).toHaveClass('hover:cursor-pointer');
+    expect(screen.getByTestId('toggle-bottom-panel')).toHaveClass('hover:cursor-pointer');
+    expect(screen.getByTestId('toggle-right-panel')).toHaveClass('hover:cursor-pointer');
+    expect(screen.getByTestId('toggle-theme')).toHaveClass('hover:cursor-pointer');
+    expect(screen.getByTestId('user-avatar-button')).toHaveClass('hover:cursor-pointer');
   });
 });

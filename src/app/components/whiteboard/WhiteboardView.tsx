@@ -51,7 +51,7 @@ export function WhiteboardView() {
   };
 
   return (
-    <div data-testid="whiteboard-view" className="h-screen bg-[#f8fafc] text-slate-900">
+    <div data-testid="whiteboard-view" className="h-full bg-[#f8fafc] text-slate-900">
       <div className="absolute left-5 top-5 z-20 flex items-center gap-3 rounded-2xl border border-slate-200/80 bg-white/88 px-4 py-3 shadow-[0_20px_45px_rgba(148,163,184,0.16)] backdrop-blur">
         <button
           type="button"

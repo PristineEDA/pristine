@@ -96,6 +96,10 @@ function normalizeSize(value: number | undefined, fallback: number): number {
   return Math.max(1, Math.floor(value));
 }
 
+function hasSessionAlreadyExited(error: unknown): boolean {
+  return error instanceof Error && /already exited/i.test(error.message);
+}
+
 function sendToMainWindow(
   getMainWindow: () => BrowserWindow | null,
   channel: string,
@@ -187,7 +191,17 @@ export function registerTerminalHandlers(getMainWindow: () => BrowserWindow | nu
       return false;
     }
 
-    session.resize(normalizeSize(cols, DEFAULT_COLS), normalizeSize(rows, DEFAULT_ROWS));
+    try {
+      session.resize(normalizeSize(cols, DEFAULT_COLS), normalizeSize(rows, DEFAULT_ROWS));
+    } catch (error) {
+      if (hasSessionAlreadyExited(error)) {
+        sessions.delete(id);
+        return false;
+      }
+
+      throw error;
+    }
+
     return true;
   });
 

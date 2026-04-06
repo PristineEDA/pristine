@@ -19,7 +19,7 @@ export function ContextMenu({
     <>
       <div className="fixed inset-0 z-40" onClick={onClose} />
       <div
-        className="fixed bg-muted/40 border border-border shadow-2xl z-50 py-1 min-w-44"
+        className="fixed bg-popover border border-border shadow-2xl z-50 py-1 min-w-44"
         style={{ left: x, top: y }}
       >
         {items.map((item, i) =>

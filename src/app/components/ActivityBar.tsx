@@ -1,5 +1,5 @@
 import {
-  Files, Bug, Hammer, Play,
+  FileCode, BugPlay, Cog, LucideLayers3, Grid2X2Plus, Hammer, Play,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -15,12 +15,14 @@ import {
 interface ActivityBarProps {
   activeView: string;
   onItemSelect: (view: string) => void;
-  isLeftSidebarHidden?: boolean;
 }
 
 const topItems = [
-  { id: 'explorer', icon: Files, label: 'Explorer' },
-  { id: 'debug', icon: Bug, label: 'Run & Debug' },
+  { id: 'explorer', icon: FileCode, label: 'Explorer' },
+  { id: 'simulation', icon: BugPlay, label: 'Simulation' },
+  { id: 'synthesis', icon: Cog, label: 'Synthesis' },
+  { id: 'physical', icon: LucideLayers3, label: 'Physical Design' },
+  { id: 'factory', icon: Grid2X2Plus, label: 'Factory' },
 ];
 
 const actionItems = [
@@ -28,9 +30,9 @@ const actionItems = [
   { id: 'run', icon: Play, label: 'Run' },
 ] as const;
 
-const activityBarButtonBaseClass = 'relative h-10 w-12 flex items-center justify-center rounded-none p-0 transition-colors group-data-[collapsible=icon]:h-10! group-data-[collapsible=icon]:w-12! group-data-[collapsible=icon]:p-0!';
+const activityBarButtonBaseClass = 'relative h-10 w-12 flex items-center justify-center rounded-none p-0 transition-colors hover:cursor-pointer group-data-[collapsible=icon]:h-10! group-data-[collapsible=icon]:w-12! group-data-[collapsible=icon]:p-0!';
 
-export function ActivityBar({ activeView, onItemSelect, isLeftSidebarHidden = false }: ActivityBarProps) {
+export function ActivityBar({ activeView, onItemSelect }: ActivityBarProps) {
   return (
     <SidebarProvider
       open={false}
@@ -43,14 +45,14 @@ export function ActivityBar({ activeView, onItemSelect, isLeftSidebarHidden = fa
             {topItems.map(({ id, icon: Icon, label }) => (
               <SidebarMenuItem key={id}>
                 <SidebarMenuButton
-                  isActive={activeView === id && !isLeftSidebarHidden}
+                  isActive={activeView === id}
                   title={label}
                   aria-label={label}
                   data-testid={`activity-item-${id}`}
                   onClick={() => onItemSelect(id)}
                   size="lg"
                   className={`${activityBarButtonBaseClass} [&>svg]:size-5 ${
-                    activeView === id && !isLeftSidebarHidden
+                    activeView === id
                       ? 'text-foreground border-l-2 border-primary bg-transparent hover:bg-sidebar-accent'
                       : 'text-muted-foreground hover:text-foreground border-l-2 border-transparent hover:bg-sidebar-accent'
                   }`}

@@ -1,11 +1,12 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ResizablePanelGroup, ResizablePanel, ResizableHandle, type PanelImperativeHandle } from './components/ui/resizable';
+import { type PanelImperativeHandle } from './components/ui/resizable';
 import { MenuBar } from './components/MenuBar';
 import { ActivityBar } from './components/ActivityBar';
 import { LeftSidePanel } from './components/LeftSidePanel';
 import { EditorSplitLayout } from './components/EditorSplitLayout';
 import { RightSidePanel } from './components/RightSidePanel';
 import { BottomPanel } from './components/BottomPanel';
+import { CodeWorkspaceShell } from './components/CodeWorkspaceShell';
 import { StatusBar } from './components/StatusBar';
 import { QuickOpenPalette } from './components/QuickOpenPalette';
 import { createQuickOpenFileEntries, getRecentQuickOpenFiles, searchQuickOpenFiles, type QuickOpenFileEntry, type QuickOpenSearchResult } from './quickOpen/quickOpenSearch';
@@ -25,10 +26,30 @@ const MainContentFallback = () => (
   </div>
 );
 
+const codeViewPlaceholderConfig = {
+  simulation: {
+    title: 'Simulation',
+    testId: 'code-view-simulation',
+  },
+  synthesis: {
+    title: 'Synthesis',
+    testId: 'code-view-synthesis',
+  },
+  physical: {
+    title: 'Physical Design',
+    testId: 'code-view-physical',
+  },
+  factory: {
+    title: 'Factory',
+    testId: 'code-view-factory',
+  },
+} as const;
+
 // ─── AppLayout (consumes context) ────────────────────────────────────────────
 function AppLayout() {
   const {
     activeView, setActiveView,
+    canToggleLayoutPanels,
     mainContentView,
     activeTabId,
     openFile,
@@ -53,24 +74,16 @@ function AppLayout() {
 
   const syncLeftPanelWidth = useCallback(() => {
     const panelGroupContainer = panelGroupContainerRef.current;
-    if (!panelGroupContainer) {
+    if (!panelGroupContainer || !showLeftPanel) {
       return;
     }
 
     const nextSize = getLeftPanelTargetSizePercent(panelGroupContainer.clientWidth);
     leftPanelRef.current?.resize(`${nextSize}%`);
-  }, []);
+  }, [showLeftPanel]);
 
   const handleActivityItemSelect = (nextView: string) => {
-    if (nextView === activeView) {
-      setShowLeftPanel(!showLeftPanel);
-      return;
-    }
-
-    setActiveView(nextView);
-    if (!showLeftPanel) {
-      setShowLeftPanel(true);
-    }
+    setActiveView(nextView as typeof activeView);
   };
 
   const closeQuickOpen = useCallback(() => {
@@ -129,10 +142,10 @@ function AppLayout() {
   }, [syncLeftPanelWidth]);
 
   useEffect(() => {
-    if (showLeftPanel) {
+    if (showLeftPanel && canToggleLayoutPanels) {
       syncLeftPanelWidth();
     }
-  }, [showLeftPanel, syncLeftPanelWidth]);
+  }, [canToggleLayoutPanels, showLeftPanel, syncLeftPanelWidth]);
 
   useEffect(() => {
     if (!isQuickOpenVisible || workspaceFiles !== null) {
@@ -196,15 +209,150 @@ function AppLayout() {
   }, [quickOpenResults]);
 
   const handleQuickOpenSelect = useCallback((result: QuickOpenSearchResult) => {
-    if (showLeftPanel) {
-      setActiveView('explorer');
-    }
-
     revealTokenRef.current += 1;
     setRevealRequest({ path: result.path, token: revealTokenRef.current });
     openWorkspaceFile(result.path, result.name);
     closeQuickOpen();
-  }, [closeQuickOpen, openWorkspaceFile, setActiveView, showLeftPanel]);
+  }, [closeQuickOpen, openWorkspaceFile]);
+
+  const renderPanelPlaceholder = (title: string, testId: string) => (
+    <WorkflowPlaceholder title={title} testId={testId} />
+  );
+
+  const activityBar = (
+    <ActivityBar
+      activeView={activeView}
+      onItemSelect={handleActivityItemSelect}
+    />
+  );
+
+  const renderWorkspaceShell = ({
+    shellTestId,
+    leftPanelId,
+    centerPanelId,
+    topPanelId,
+    bottomPanelId,
+    rightPanelId,
+    leftContent,
+    topContent,
+    bottomContent,
+    rightContent,
+    overlay,
+  }: {
+    shellTestId?: string;
+    leftPanelId: string;
+    centerPanelId: string;
+    topPanelId: string;
+    bottomPanelId: string;
+    rightPanelId: string;
+    leftContent: React.ReactNode;
+    topContent: React.ReactNode;
+    bottomContent: React.ReactNode;
+    rightContent: React.ReactNode;
+    overlay?: React.ReactNode;
+  }) => (
+    <CodeWorkspaceShell
+      shellTestId={shellTestId}
+      activityBar={activityBar}
+      overlay={overlay}
+      containerRef={panelGroupContainerRef}
+      leftPanelRef={leftPanelRef}
+      showLeftPanel={showLeftPanel}
+      showBottomPanel={showBottomPanel}
+      showRightPanel={showRightPanel}
+      leftPanelId={leftPanelId}
+      centerPanelId={centerPanelId}
+      topPanelId={topPanelId}
+      bottomPanelId={bottomPanelId}
+      rightPanelId={rightPanelId}
+      leftContent={leftContent}
+      topContent={topContent}
+      bottomContent={bottomContent}
+      rightContent={rightContent}
+    />
+  );
+
+  const renderExplorerWorkspace = () => (
+    renderWorkspaceShell({
+      leftPanelId: 'left-panel',
+      centerPanelId: 'center-panel',
+      topPanelId: 'editor-panel',
+      bottomPanelId: 'bottom-panel',
+      rightPanelId: 'right-panel',
+      leftContent: (
+        <LeftSidePanel
+          activeFileId={activeTabId}
+          onFileOpen={openWorkspaceFile}
+          onFilePreview={openWorkspacePreviewFile}
+          onLineJump={jumpTo}
+          currentOutlineId={activeTabId}
+          revealRequest={revealRequest}
+          onWorkspaceRefresh={invalidateWorkspaceFiles}
+        />
+      ),
+      topContent: <EditorSplitLayout jumpToLine={jumpToLine} />,
+      bottomContent: <BottomPanel onClose={() => setShowBottomPanel(false)} />,
+      rightContent: (
+        <RightSidePanel
+          onFileOpen={openWorkspaceFile}
+          onLineJump={jumpTo}
+        />
+      ),
+      overlay: (
+        <QuickOpenPalette
+          isOpen={isQuickOpenVisible}
+          mode={isQuickOpenRecentMode ? 'recent' : 'search'}
+          query={quickOpenQuery}
+          results={quickOpenResults}
+          selectedIndex={quickOpenSelectedIndex}
+          isLoading={isQuickOpenLoading}
+          errorMessage={quickOpenError}
+          emptyMessage={isQuickOpenRecentMode ? 'No recently opened files' : 'No matching files'}
+          onClose={closeQuickOpen}
+          onQueryChange={setQuickOpenQuery}
+          onSelectedIndexChange={setQuickOpenSelectedIndex}
+          onSelectResult={handleQuickOpenSelect}
+        />
+      ),
+    })
+  );
+
+  const renderSimulationWorkspace = () => (
+    renderWorkspaceShell({
+      shellTestId: 'code-view-simulation',
+      leftPanelId: 'simulation-left-panel',
+      centerPanelId: 'simulation-center-panel',
+      topPanelId: 'simulation-main-panel',
+      bottomPanelId: 'simulation-bottom-panel',
+      rightPanelId: 'simulation-right-panel',
+      leftContent: renderPanelPlaceholder('Left Panel', 'simulation-left-panel-content'),
+      topContent: renderPanelPlaceholder('Simulation Workspace', 'simulation-main-panel-content'),
+      bottomContent: renderPanelPlaceholder('Bottom Panel', 'simulation-bottom-panel-content'),
+      rightContent: renderPanelPlaceholder('Right Panel', 'simulation-right-panel-content'),
+    })
+  );
+
+  const renderCodePlaceholder = () => {
+    const placeholder = codeViewPlaceholderConfig[activeView as keyof typeof codeViewPlaceholderConfig];
+
+    if (!placeholder) {
+      return renderExplorerWorkspace();
+    }
+
+    return (
+      <div className="flex flex-1 overflow-hidden">
+        <ActivityBar
+          activeView={activeView}
+          onItemSelect={handleActivityItemSelect}
+        />
+        <div className="flex-1 min-h-0">
+          <Suspense fallback={<MainContentFallback />}>
+            <WorkflowPlaceholder title={placeholder.title} testId={placeholder.testId} />
+          </Suspense>
+        </div>
+      </div>
+    );
+  };
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -227,12 +375,20 @@ function AppLayout() {
       }
 
       if (key === 'j') {
+        if (!canToggleLayoutPanels) {
+          return;
+        }
+
         event.preventDefault();
         setShowBottomPanel(!showBottomPanel);
         return;
       }
 
       if (key === 'b') {
+        if (!canToggleLayoutPanels) {
+          return;
+        }
+
         event.preventDefault();
         setShowLeftPanel(!showLeftPanel);
       }
@@ -242,7 +398,7 @@ function AppLayout() {
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [closeQuickOpen, isQuickOpenVisible, openQuickOpen, setShowBottomPanel, setShowLeftPanel, showBottomPanel, showLeftPanel]);
+  }, [canToggleLayoutPanels, closeQuickOpen, isQuickOpenVisible, openQuickOpen, setShowBottomPanel, setShowLeftPanel, showBottomPanel, showLeftPanel]);
 
   return (
     <div className="flex flex-col h-screen bg-background text-foreground overflow-hidden">
@@ -255,100 +411,31 @@ function AppLayout() {
         onToggleRightPanel={() => setShowRightPanel(!showRightPanel)}
       />
 
-      {mainContentView === 'code' ? (
-      <>
-      <div className="flex flex-1 overflow-hidden">
-        <ActivityBar
-          activeView={activeView}
-          onItemSelect={handleActivityItemSelect}
-          isLeftSidebarHidden={!showLeftPanel}
-        />
-
-        <div ref={panelGroupContainerRef} className="flex-1 min-w-0">
-        <ResizablePanelGroup orientation="horizontal">
-          <ResizablePanel panelRef={leftPanelRef} defaultSize={18} minSize={12} maxSize={35} id="left-panel" collapsed={!showLeftPanel}>
-            {showLeftPanel ? (
-              <LeftSidePanel
-                activeFileId={activeTabId}
-                onFileOpen={openWorkspaceFile}
-                onFilePreview={openWorkspacePreviewFile}
-                onLineJump={jumpTo}
-                currentOutlineId={activeTabId}
-                revealRequest={revealRequest}
-                onWorkspaceRefresh={invalidateWorkspaceFiles}
-              />
-            ) : (
-              <div className="h-full" />
-            )}
-          </ResizablePanel>
-
-          <ResizableHandle hidden={!showLeftPanel} />
-
-          <ResizablePanel defaultSize={55} minSize={30} id="center-panel">
-            <div className="relative h-full">
-              <QuickOpenPalette
-                isOpen={isQuickOpenVisible}
-                mode={isQuickOpenRecentMode ? 'recent' : 'search'}
-                query={quickOpenQuery}
-                results={quickOpenResults}
-                selectedIndex={quickOpenSelectedIndex}
-                isLoading={isQuickOpenLoading}
-                errorMessage={quickOpenError}
-                emptyMessage={isQuickOpenRecentMode ? 'No recently opened files' : 'No matching files'}
-                onClose={closeQuickOpen}
-                onQueryChange={setQuickOpenQuery}
-                onSelectedIndexChange={setQuickOpenSelectedIndex}
-                onSelectResult={handleQuickOpenSelect}
-              />
-
-              <ResizablePanelGroup orientation="vertical">
-                <ResizablePanel defaultSize={60} minSize={25} id="editor-panel">
-                  <EditorSplitLayout jumpToLine={jumpToLine} />
-                </ResizablePanel>
-
-                <ResizableHandle hidden={!showBottomPanel} />
-                <ResizablePanel defaultSize={40} minSize={15} maxSize={60} id="bottom-panel" collapsed={!showBottomPanel}>
-                  {showBottomPanel ? (
-                    <BottomPanel onClose={() => setShowBottomPanel(false)} />
-                  ) : (
-                    <div className="h-full" />
-                  )}
-                </ResizablePanel>
-              </ResizablePanelGroup>
-            </div>
-          </ResizablePanel>
-
-          <ResizableHandle hidden={!showRightPanel} />
-
-          <ResizablePanel defaultSize={22} minSize={18} maxSize={45} id="right-panel" collapsed={!showRightPanel}>
-            {showRightPanel ? (
-              <RightSidePanel
-                onFileOpen={openWorkspaceFile}
-                onLineJump={jumpTo}
-              />
-            ) : (
-              <div className="h-full" />
-            )}
-          </ResizablePanel>
-        </ResizablePanelGroup>
-        </div>
-      </div>
+      {mainContentView === 'code'
+        ? (activeView === 'explorer'
+          ? renderExplorerWorkspace()
+          : activeView === 'simulation'
+            ? renderSimulationWorkspace()
+            : renderCodePlaceholder())
+        : mainContentView === 'whiteboard' ? (
+          <div className="flex-1 min-h-0">
+            <Suspense fallback={<MainContentFallback />}>
+              <WhiteboardView />
+            </Suspense>
+          </div>
+        ) : (
+          <div className="flex-1 min-h-0">
+            <Suspense fallback={<MainContentFallback />}>
+              <WorkflowPlaceholder />
+            </Suspense>
+          </div>
+        )}
 
       <StatusBar
         activeFileId={activeTabId}
         cursorLine={cursorLine}
         cursorCol={cursorCol}
       />
-      </>
-      ) : mainContentView === 'whiteboard' ? (
-        <Suspense fallback={<MainContentFallback />}>
-          <WhiteboardView />
-        </Suspense>
-      ) : (
-        <Suspense fallback={<MainContentFallback />}>
-          <WorkflowPlaceholder />
-        </Suspense>
-      )}
     </div>
   );
 }

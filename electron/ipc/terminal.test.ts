@@ -138,6 +138,23 @@ describe('terminal IPC handlers', () => {
     expect(fakeTerminal.kill).toHaveBeenCalled();
   });
 
+  it('swallows resize requests for sessions that have already exited', async () => {
+    const fakeTerminal = createFakeTerminal();
+    fakeTerminal.resize.mockImplementation(() => {
+      throw new Error('Cannot resize a pty that has already exited');
+    });
+    mockSpawn.mockReturnValue(fakeTerminal);
+
+    const createHandler = getHandler('async:terminal:create');
+    const resizeHandler = getHandler('async:terminal:resize');
+
+    const result = await createHandler({}, {});
+    const sessionId = (result as { id: string }).id;
+
+    await expect(resizeHandler({}, sessionId, 90, 28)).resolves.toBe(false);
+    await expect(resizeHandler({}, sessionId, 90, 28)).resolves.toBe(false);
+  });
+
   it('kills all active sessions during shutdown cleanup', async () => {
     const firstTerminal = createFakeTerminal();
     const secondTerminal = createFakeTerminal();
