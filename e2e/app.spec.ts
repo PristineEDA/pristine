@@ -465,6 +465,7 @@ test('activity bar removes search and extensions and toggles the left sidebar', 
   await expect(window.getByTestId('activity-item-sim-debug')).toBeVisible();
   await expect(window.getByTestId('activity-item-synthesis')).toBeVisible();
   await expect(window.getByTestId('activity-item-physical')).toBeVisible();
+  await expect(window.getByTestId('activity-item-factory')).toBeVisible();
   await expect(window.getByTestId('activity-item-git')).toHaveCount(0);
   await expect(window.getByTestId('activity-item-search')).toHaveCount(0);
   await expect(window.getByTestId('activity-item-extensions')).toHaveCount(0);

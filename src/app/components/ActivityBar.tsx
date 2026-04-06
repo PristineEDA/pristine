@@ -1,5 +1,5 @@
 import {
-  FileCode, BugPlay, Cog, LucideLayers3, Hammer, Play,
+  FileCode, BugPlay, Cog, LucideLayers3, Grid2X2Plus, Hammer, Play,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -23,6 +23,7 @@ const topItems = [
   { id: 'sim-debug', icon: BugPlay, label: 'Simulation & Debug' },
   { id: 'synthesis', icon: Cog, label: 'Synthesis' },
   { id: 'physical', icon: LucideLayers3, label: 'Physical Design' },
+  { id: 'factory', icon: Grid2X2Plus, label: 'Factory' },
 ];
 
 const actionItems = [
