@@ -12,6 +12,7 @@ import type { Problem } from '../../data/mockData';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { ScrollArea } from './ui/scroll-area';
+import { TooltipIconButton } from './ui/tooltip-icon-button';
 
 interface LeftSidePanelProps {
   activeFileId: string;
@@ -96,19 +97,27 @@ export function LeftSidePanel({
               {DEFAULT_STARTUP_PROJECT_NAME}
             </span>
             <div className="flex items-center gap-1">
-              <Button variant="ghost" size="icon" title="New File" className="text-muted-foreground hover:text-foreground"><FilePlus size={14} /></Button>
-              <Button variant="ghost" size="icon" title="New Folder" className="text-muted-foreground hover:text-foreground"><FolderPlus size={14} /></Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                title="Refresh"
-                className="text-muted-foreground hover:text-foreground"
-                onClick={() => {
-                  onWorkspaceRefresh?.();
-                  refreshTree();
-                }}
-              ><RefreshCw size={13} /></Button>
-              <Button variant="ghost" size="icon" title="Collapse All" className="text-muted-foreground hover:text-foreground" onClick={collapseAll}><ChevronsUpDown size={13} /></Button>
+              <TooltipIconButton content="New File">
+                <Button variant="ghost" size="icon" aria-label="New File" className="text-muted-foreground hover:text-foreground"><FilePlus size={14} /></Button>
+              </TooltipIconButton>
+              <TooltipIconButton content="New Folder">
+                <Button variant="ghost" size="icon" aria-label="New Folder" className="text-muted-foreground hover:text-foreground"><FolderPlus size={14} /></Button>
+              </TooltipIconButton>
+              <TooltipIconButton content="Refresh">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Refresh"
+                  className="text-muted-foreground hover:text-foreground"
+                  onClick={() => {
+                    onWorkspaceRefresh?.();
+                    refreshTree();
+                  }}
+                ><RefreshCw size={13} /></Button>
+              </TooltipIconButton>
+              <TooltipIconButton content="Collapse All">
+                <Button variant="ghost" size="icon" aria-label="Collapse All" className="text-muted-foreground hover:text-foreground" onClick={collapseAll}><ChevronsUpDown size={13} /></Button>
+              </TooltipIconButton>
             </div>
           </div>
           <div className="explorer-tree-scrollbar flex-1 overflow-y-auto overflow-x-hidden">

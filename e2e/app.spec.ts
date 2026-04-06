@@ -332,7 +332,7 @@ test('single-clicked explorer files stay in preview style until double-clicked t
 test('menu bar switches to the whiteboard view and renders the React Flow UI chrome', async () => {
   const { app, window } = await launchApp();
 
-  await window.getByTitle('Whiteboard').click();
+  await window.getByLabel('Whiteboard').click();
 
   await expect(window.getByTestId('whiteboard-view')).toBeVisible();
   await expect(window.getByTestId('whiteboard-react-flow')).toHaveClass(/light/);
@@ -346,7 +346,7 @@ test('menu bar switches to the whiteboard view and renders the React Flow UI chr
 test('whiteboard creates draggable nodes on the React Flow canvas', async () => {
   const { app, window } = await launchApp();
 
-  await window.getByTitle('Whiteboard').click();
+  await window.getByLabel('Whiteboard').click();
 
   const addNodeButton = window.getByTestId('whiteboard-add-node');
   await expect(addNodeButton).toBeVisible();
@@ -432,7 +432,7 @@ test('explorer root supports toggle and collapse all behaviors', async () => {
   const { app, window } = await launchApp();
 
   await ensureExplorerVisible(window);
-  const collapseAllButton = window.getByTitle('Collapse All');
+  const collapseAllButton = window.getByRole('button', { name: 'Collapse All' });
   const rootNode = window.getByTestId('file-tree-node-root');
   const rtlNode = window.getByTestId('file-tree-node-rtl');
 
@@ -502,21 +502,21 @@ test('activity bar switches code subpages and menu bar keeps higher-priority pag
   await window.getByTestId('activity-item-factory').click();
   await expect(window.getByTestId('code-view-factory')).toBeVisible();
 
-  await window.getByTitle('Whiteboard').click();
+  await window.getByLabel('Whiteboard').click();
   await expect(window.getByTestId('whiteboard-view')).toBeVisible();
   await expect(window.getByTestId('activity-item-explorer')).toHaveCount(0);
   await expect(window.getByTestId('toggle-left-panel')).toBeDisabled();
   await expect(window.getByTestId('toggle-bottom-panel')).toBeDisabled();
   await expect(window.getByTestId('toggle-right-panel')).toBeDisabled();
 
-  await window.getByTitle('Workflow').click();
+  await window.getByLabel('Workflow').click();
   await expect(window.getByTestId('workflow-view')).toBeVisible();
   await expect(window.getByTestId('activity-item-explorer')).toHaveCount(0);
   await expect(window.getByTestId('toggle-left-panel')).toBeDisabled();
   await expect(window.getByTestId('toggle-bottom-panel')).toBeDisabled();
   await expect(window.getByTestId('toggle-right-panel')).toBeDisabled();
 
-  await window.getByTitle('Code').click();
+  await window.getByLabel('Code').click();
   await expect(window.getByTestId('activity-item-explorer')).toBeVisible();
   await expect(window.getByTestId('code-view-factory')).toBeVisible();
   await expect(window.getByTestId('toggle-left-panel')).toBeDisabled();
@@ -589,7 +589,6 @@ test('activity bar shows compile and run action buttons with local selection onl
   const compileButton = window.getByTestId('activity-action-compile');
   const runButton = window.getByTestId('activity-action-run');
 
-  await expect(window.getByTitle('Settings')).toHaveCount(0);
   await expect(compileButton).toBeVisible();
   await expect(runButton).toBeVisible();
   await expect(window.getByTestId('activity-action-debug-action')).toHaveCount(0);
@@ -793,7 +792,7 @@ test('terminal bottom panel close button terminates the shell and reopening crea
   const originalPid = await readTerminalPid(window);
   expect(isProcessRunning(originalPid)).toBe(true);
 
-  await window.getByTitle('Close Panel').click();
+  await window.getByRole('button', { name: 'Close Panel' }).click();
   await expect(window.getByTestId('terminal-host')).toHaveCount(0);
 
   await expect.poll(() => isProcessRunning(originalPid), {
@@ -810,6 +809,18 @@ test('terminal bottom panel close button terminates the shell and reopening crea
   const reopenedPid = await readTerminalPid(window);
   expect(reopenedPid).not.toBe(originalPid);
   expect(isProcessRunning(reopenedPid)).toBe(true);
+
+  await app.close();
+});
+
+test('menu bar right-side controls render shadcn tooltip content at runtime', async () => {
+  const { app, window } = await launchApp();
+
+  const userAvatarButton = window.getByTestId('user-avatar-button');
+  await expect(userAvatarButton).toBeVisible();
+
+  await userAvatarButton.hover();
+  await expect(window.getByRole('tooltip', { name: 'User profile' })).toBeVisible();
 
   await app.close();
 });

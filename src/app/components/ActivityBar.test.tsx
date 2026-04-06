@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { ActivityBar } from './ActivityBar';
 
@@ -13,11 +14,11 @@ describe('ActivityBar', () => {
 
     expect(buttons.map((button) => button.getAttribute('aria-label'))).toEqual(['Compile', 'Run']);
     expect(screen.queryByTestId('activity-action-debug-action')).not.toBeInTheDocument();
-    expect(screen.queryByTitle('Settings')).not.toBeInTheDocument();
-    expect(screen.getByTitle('Explorer')).toBeInTheDocument();
-    expect(screen.getByTitle('Simulation')).toBeInTheDocument();
-    expect(screen.queryByTitle('Search')).not.toBeInTheDocument();
-    expect(screen.queryByTitle('Extensions')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Settings' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Explorer' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Simulation' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Search' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Extensions' })).not.toBeInTheDocument();
   });
 
   it('does not apply pressed state or call the shared navigation handler when compile and run are clicked', () => {
@@ -64,5 +65,14 @@ describe('ActivityBar', () => {
 
     expect(screen.getByTestId('activity-item-explorer')).toHaveClass('hover:cursor-pointer');
     expect(screen.getByTestId('activity-action-compile')).toHaveClass('hover:cursor-pointer');
+  });
+
+  it('renders shadcn tooltip content for navigation and action buttons on hover', async () => {
+    const user = userEvent.setup();
+
+    render(<ActivityBar activeView="explorer" onItemSelect={vi.fn()} />);
+
+    await user.hover(screen.getByTestId('activity-item-explorer'));
+    expect(await screen.findByRole('tooltip', { name: 'Explorer' })).toBeInTheDocument();
   });
 });

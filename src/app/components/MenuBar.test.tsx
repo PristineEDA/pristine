@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { MenuBar } from './MenuBar';
 import { WorkspaceProvider, useWorkspace } from '../context/WorkspaceContext';
@@ -135,21 +136,30 @@ describe('MenuBar', () => {
     const switcher = screen.getByTestId('center-view-switcher') as HTMLDivElement;
 
     expect(switcher.style.pointerEvents).toBe('auto');
-    expect(screen.getByTitle('Code')).toBeInTheDocument();
-    expect(screen.getByTitle('Whiteboard')).toBeInTheDocument();
-    expect(screen.getByTitle('Workflow')).toBeInTheDocument();
+    expect(screen.getByLabelText('Code')).toBeInTheDocument();
+    expect(screen.getByLabelText('Whiteboard')).toBeInTheDocument();
+    expect(screen.getByLabelText('Workflow')).toBeInTheDocument();
   });
 
   it('adds a pointer cursor on hover to the interactive menubar controls', () => {
     renderMenuBar();
 
-    expect(screen.getByTitle('Code')).toHaveClass('hover:cursor-pointer');
-    expect(screen.getByTitle('Whiteboard')).toHaveClass('hover:cursor-pointer');
-    expect(screen.getByTitle('Workflow')).toHaveClass('hover:cursor-pointer');
+    expect(screen.getByLabelText('Code')).toHaveClass('hover:cursor-pointer');
+    expect(screen.getByLabelText('Whiteboard')).toHaveClass('hover:cursor-pointer');
+    expect(screen.getByLabelText('Workflow')).toHaveClass('hover:cursor-pointer');
     expect(screen.getByTestId('toggle-left-panel')).toHaveClass('hover:cursor-pointer');
     expect(screen.getByTestId('toggle-bottom-panel')).toHaveClass('hover:cursor-pointer');
     expect(screen.getByTestId('toggle-right-panel')).toHaveClass('hover:cursor-pointer');
     expect(screen.getByTestId('toggle-theme')).toHaveClass('hover:cursor-pointer');
     expect(screen.getByTestId('user-avatar-button')).toHaveClass('hover:cursor-pointer');
+  });
+
+  it('renders shadcn tooltip content for the center view switcher on hover', async () => {
+    const user = userEvent.setup();
+
+    renderMenuBar();
+
+    await user.hover(screen.getByLabelText('Code'));
+    expect(await screen.findByRole('tooltip', { name: 'Code' })).toBeInTheDocument();
   });
 });

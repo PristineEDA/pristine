@@ -46,7 +46,7 @@ export function ActivityBar({ activeView, onItemSelect }: ActivityBarProps) {
               <SidebarMenuItem key={id}>
                 <SidebarMenuButton
                   isActive={activeView === id}
-                  title={label}
+                  tooltip={label}
                   aria-label={label}
                   data-testid={`activity-item-${id}`}
                   onClick={() => onItemSelect(id)}
@@ -71,7 +71,7 @@ export function ActivityBar({ activeView, onItemSelect }: ActivityBarProps) {
             {actionItems.map(({ id, icon: Icon, label }) => (
               <SidebarMenuItem key={id}>
                 <SidebarMenuButton
-                  title={label}
+                  tooltip={label}
                   aria-label={label}
                   data-testid={`activity-action-${id}`}
                   className={`${activityBarButtonBaseClass} text-emerald-500 hover:bg-sidebar-accent hover:text-emerald-400 [&>svg]:size-[18px]`}

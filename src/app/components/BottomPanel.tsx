@@ -9,6 +9,7 @@ import { TerminalPanel } from './TerminalPanel';
 import { DebugConsole } from './DebugConsole';
 import { terminateTerminalSession } from './terminalSessionStore';
 import { Button } from './ui/button';
+import { TooltipIconButton } from './ui/tooltip-icon-button';
 
 const OutputPanel = lazy(() => import('./OutputPanel').then((module) => ({ default: module.OutputPanel })));
 const ProblemsTabPanel = lazy(() => import('./ProblemsTabPanel').then((module) => ({ default: module.ProblemsTabPanel })));
@@ -59,24 +60,28 @@ export function BottomPanel({ onClose }: BottomPanelProps) {
         ))}
 
         <div className="flex items-center gap-1 ml-auto pr-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            title="New Terminal"
-            className="text-muted-foreground hover:text-foreground"
-            onClick={() => setTab('terminal')}
-          >
-            <Plus size={13} />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            title="Close Panel"
-            className="text-muted-foreground hover:text-foreground"
-            onClick={handleClose}
-          >
-            <X size={13} />
-          </Button>
+          <TooltipIconButton content="New Terminal">
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="New Terminal"
+              className="text-muted-foreground hover:text-foreground"
+              onClick={() => setTab('terminal')}
+            >
+              <Plus size={13} />
+            </Button>
+          </TooltipIconButton>
+          <TooltipIconButton content="Close Panel">
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Close Panel"
+              className="text-muted-foreground hover:text-foreground"
+              onClick={handleClose}
+            >
+              <X size={13} />
+            </Button>
+          </TooltipIconButton>
         </div>
       </div>
 

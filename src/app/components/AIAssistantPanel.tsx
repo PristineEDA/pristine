@@ -23,6 +23,7 @@ import {
 } from './aiAssistant/config';
 import { MessageThread } from './aiAssistant/MessageThread';
 import { useAIConversation } from './aiAssistant/useAIConversation';
+import { TooltipIconButton } from './ui/tooltip-icon-button';
 
 // ─── AI Assistant Panel ────────────────────────────────────────────────────────
 export function AIAssistantPanel() {
@@ -85,18 +86,20 @@ export function AIAssistantPanel() {
           AI Assistant
         </span>
         <div className="ml-auto">
-          <button
-            className="p-1 text-muted-foreground hover:text-foreground transition-colors"
-            title="Clear conversation"
-            onClick={() => {
-              clearConversation();
-              if (textareaRef.current) {
-                textareaRef.current.style.height = 'auto';
-              }
-            }}
-          >
-            <RefreshCw size={12} />
-          </button>
+          <TooltipIconButton content="Clear conversation">
+            <button
+              aria-label="Clear conversation"
+              className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+              onClick={() => {
+                clearConversation();
+                if (textareaRef.current) {
+                  textareaRef.current.style.height = 'auto';
+                }
+              }}
+            >
+              <RefreshCw size={12} />
+            </button>
+          </TooltipIconButton>
         </div>
       </div>
 
@@ -179,17 +182,19 @@ export function AIAssistantPanel() {
               className="relative"
               onMouseDown={(e) => e.stopPropagation()}
             >
-              <button
-                onClick={() => {
-                  setAttachOpen((v) => !v);
-                  setAgentOpen(false);
-                  setModelOpen(false);
-                }}
-                className="flex items-center justify-center w-6 h-6 rounded text-ide-chat-muted hover:text-ide-chat-text hover:bg-ide-chat-input transition-colors"
-                title="Add attachment"
-              >
-                <Plus size={13} />
-              </button>
+              <TooltipIconButton content="Add attachment">
+                <button
+                  aria-label="Add attachment"
+                  onClick={() => {
+                    setAttachOpen((v) => !v);
+                    setAgentOpen(false);
+                    setModelOpen(false);
+                  }}
+                  className="flex items-center justify-center w-6 h-6 rounded text-ide-chat-muted hover:text-ide-chat-text hover:bg-ide-chat-input transition-colors"
+                >
+                  <Plus size={13} />
+                </button>
+              </TooltipIconButton>
               {attachOpen && (
                 <div className="absolute bottom-full mb-1.5 left-0 z-50 w-44 bg-ide-chat-dropdown border border-ide-chat-border rounded-lg shadow-xl overflow-hidden">
                   <div className="px-2 py-1 border-b border-ide-chat-border">
@@ -412,23 +417,25 @@ export function AIAssistantPanel() {
             </div>
 
             {/* Send button */}
-            <button
-              onClick={() => {
-                sendMessage();
-                if (textareaRef.current) {
-                  textareaRef.current.style.height = 'auto';
-                }
-              }}
-              disabled={!input.trim()}
-              className={`flex items-center justify-center w-6 h-6 rounded transition-all ${
-                input.trim()
-                  ? "bg-ide-chat-purple hover:bg-ide-chat-purple-hover text-ide-chat-hover shadow-md"
-                  : "bg-ide-chat-input text-ide-chat-border cursor-not-allowed"
-              }`}
-              title="Send (Enter)"
-            >
-              <ArrowUp size={13} />
-            </button>
+            <TooltipIconButton content="Send (Enter)" wrapTrigger>
+              <button
+                aria-label="Send (Enter)"
+                onClick={() => {
+                  sendMessage();
+                  if (textareaRef.current) {
+                    textareaRef.current.style.height = 'auto';
+                  }
+                }}
+                disabled={!input.trim()}
+                className={`flex items-center justify-center w-6 h-6 rounded transition-all ${
+                  input.trim()
+                    ? "bg-ide-chat-purple hover:bg-ide-chat-purple-hover text-ide-chat-hover shadow-md"
+                    : "bg-ide-chat-input text-ide-chat-border cursor-not-allowed"
+                }`}
+              >
+                <ArrowUp size={13} />
+              </button>
+            </TooltipIconButton>
           </div>
         </div>
 
