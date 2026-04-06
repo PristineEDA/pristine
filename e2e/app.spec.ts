@@ -471,14 +471,30 @@ test('activity bar switches code subpages and menu bar keeps higher-priority pag
   await expect(window.getByTestId('activity-item-extensions')).toHaveCount(0);
 
   await expect(window.getByTestId('panel-center-panel')).toBeVisible();
+  await expect(window.getByTestId('toggle-left-panel')).toBeEnabled();
+  await expect(window.getByTestId('toggle-bottom-panel')).toBeEnabled();
+  await expect(window.getByTestId('toggle-right-panel')).toBeEnabled();
 
   await window.getByTestId('activity-item-simulation').click();
   await expect(window.getByTestId('code-view-simulation')).toBeVisible();
-  await expect(window.getByTestId('panel-center-panel')).toHaveCount(0);
-  await expect(window.getByTestId('panel-left-panel')).toHaveCount(0);
+  await expect(window.getByTestId('panel-simulation-center-panel')).toBeVisible();
+  await expect(window.getByTestId('panel-simulation-left-panel')).toBeVisible();
+  await expect(window.getByTestId('panel-simulation-bottom-panel')).toBeVisible();
+  await expect(window.getByTestId('panel-simulation-right-panel')).toBeVisible();
+  await expect(window.getByTestId('simulation-left-panel-content')).toContainText('Left Panel');
+  await expect(window.getByTestId('simulation-main-panel-content')).toContainText('Simulation Workspace');
+
+  await window.getByTestId('toggle-left-panel').click();
+  await window.getByTestId('toggle-bottom-panel').click();
+  await expect(window.getByTestId('panel-simulation-left-panel')).toHaveCount(0);
+  await expect(window.getByTestId('panel-simulation-bottom-panel')).toHaveCount(0);
+  await expect(window.getByTestId('panel-simulation-right-panel')).toBeVisible();
 
   await window.getByTestId('activity-item-synthesis').click();
   await expect(window.getByTestId('code-view-synthesis')).toBeVisible();
+  await expect(window.getByTestId('toggle-left-panel')).toBeDisabled();
+  await expect(window.getByTestId('toggle-bottom-panel')).toBeDisabled();
+  await expect(window.getByTestId('toggle-right-panel')).toBeDisabled();
 
   await window.getByTestId('activity-item-physical').click();
   await expect(window.getByTestId('code-view-physical')).toBeVisible();
@@ -489,18 +505,49 @@ test('activity bar switches code subpages and menu bar keeps higher-priority pag
   await window.getByTitle('Whiteboard').click();
   await expect(window.getByTestId('whiteboard-view')).toBeVisible();
   await expect(window.getByTestId('activity-item-explorer')).toHaveCount(0);
+  await expect(window.getByTestId('toggle-left-panel')).toBeDisabled();
+  await expect(window.getByTestId('toggle-bottom-panel')).toBeDisabled();
+  await expect(window.getByTestId('toggle-right-panel')).toBeDisabled();
 
   await window.getByTitle('Workflow').click();
   await expect(window.getByTestId('workflow-view')).toBeVisible();
   await expect(window.getByTestId('activity-item-explorer')).toHaveCount(0);
+  await expect(window.getByTestId('toggle-left-panel')).toBeDisabled();
+  await expect(window.getByTestId('toggle-bottom-panel')).toBeDisabled();
+  await expect(window.getByTestId('toggle-right-panel')).toBeDisabled();
 
   await window.getByTitle('Code').click();
   await expect(window.getByTestId('activity-item-explorer')).toBeVisible();
   await expect(window.getByTestId('code-view-factory')).toBeVisible();
+  await expect(window.getByTestId('toggle-left-panel')).toBeDisabled();
+  await expect(window.getByTestId('toggle-bottom-panel')).toBeDisabled();
+  await expect(window.getByTestId('toggle-right-panel')).toBeDisabled();
+
+  await window.getByTestId('activity-item-simulation').click();
+  await expect(window.getByTestId('panel-simulation-left-panel')).toHaveCount(0);
+  await expect(window.getByTestId('panel-simulation-bottom-panel')).toHaveCount(0);
+  await expect(window.getByTestId('panel-simulation-right-panel')).toBeVisible();
+  await expect(window.getByTestId('toggle-left-panel')).toBeEnabled();
+  await expect(window.getByTestId('toggle-bottom-panel')).toBeEnabled();
+  await expect(window.getByTestId('toggle-right-panel')).toBeEnabled();
 
   await window.getByTestId('activity-item-explorer').click();
   await expect(window.getByTestId('panel-center-panel')).toBeVisible();
   await expect(window.getByTestId('code-view-factory')).toHaveCount(0);
+  await expect(window.getByTestId('panel-left-panel')).toHaveCount(0);
+  await expect(window.getByTestId('panel-right-panel')).toHaveCount(0);
+
+  await window.getByTestId('toggle-left-panel').click();
+  await window.getByTestId('toggle-right-panel').click();
+  await expect(window.getByTestId('panel-left-panel')).toBeVisible();
+  await expect(window.getByTestId('panel-right-panel')).toBeVisible();
+
+  await window.getByTestId('activity-item-simulation').click();
+  await expect(window.getByTestId('panel-simulation-right-panel')).toBeVisible();
+
+  await window.getByTestId('activity-item-explorer').click();
+  await expect(window.getByTestId('panel-left-panel')).toBeVisible();
+  await expect(window.getByTestId('panel-right-panel')).toBeVisible();
 
   await app.close();
 });

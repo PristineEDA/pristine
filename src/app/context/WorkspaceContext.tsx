@@ -5,6 +5,14 @@ import {
   type EditorLayoutNode,
   type EditorTab,
 } from '../editor/editorLayout';
+import {
+  canToggleLayoutPanels,
+  type CodeView,
+  DEFAULT_PANEL_STATE_BY_CODE_VIEW,
+  EMPTY_PANEL_STATE,
+  type MainContentView,
+  type PanelVisibilityState,
+} from '../codeViewPanels';
 import { useWorkspaceEditorState } from './useWorkspaceEditorState';
 import { useWorkspaceFileStore } from './useWorkspaceFileStore';
 
@@ -12,15 +20,13 @@ import { useWorkspaceFileStore } from './useWorkspaceFileStore';
 
 export type Tab = EditorTab;
 
-export type MainContentView = 'code' | 'whiteboard' | 'workflow';
-export type CodeView = 'explorer' | 'simulation' | 'synthesis' | 'physical' | 'factory';
-
 interface WorkspaceState {
   activeView: CodeView;
   setActiveView: (view: CodeView) => void;
 
   mainContentView: MainContentView;
   setMainContentView: (view: MainContentView) => void;
+  canToggleLayoutPanels: boolean;
 
   editorGroups: EditorGroup[];
   editorLayout: EditorLayoutNode | null;
@@ -81,11 +87,27 @@ export function useWorkspace(): WorkspaceState {
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [activeView, setActiveView] = useState<CodeView>('explorer');
   const [mainContentView, setMainContentView] = useState<MainContentView>('code');
-  const [showLeftPanel, setShowLeftPanel] = useState(false);
-  const [showBottomPanel, setShowBottomPanel] = useState(false);
-  const [showRightPanel, setShowRightPanel] = useState(false);
+  const [panelStateByView, setPanelStateByView] = useState<Record<CodeView, PanelVisibilityState>>({
+    ...DEFAULT_PANEL_STATE_BY_CODE_VIEW,
+  });
   const editorWorkspace = useWorkspaceEditorState();
   const fileStore = useWorkspaceFileStore();
+  const layoutPanelsEnabled = canToggleLayoutPanels(mainContentView, activeView);
+  const visiblePanelState = layoutPanelsEnabled ? panelStateByView[activeView] : EMPTY_PANEL_STATE;
+
+  const setPanelStateForActiveView = (nextState: Partial<PanelVisibilityState>) => {
+    if (!layoutPanelsEnabled) {
+      return;
+    }
+
+    setPanelStateByView((currentState) => ({
+      ...currentState,
+      [activeView]: {
+        ...currentState[activeView],
+        ...nextState,
+      },
+    }));
+  };
 
   useEffect(() => {
     editorWorkspace.syncFocusedEditorRef();
@@ -95,6 +117,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     <WorkspaceContext.Provider value={{
       activeView, setActiveView,
       mainContentView, setMainContentView,
+      canToggleLayoutPanels: layoutPanelsEnabled,
       editorGroups: editorWorkspace.editorGroups,
       editorLayout: editorWorkspace.editorLayout,
       focusedGroupId: editorWorkspace.focusedGroupId,
@@ -118,9 +141,12 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       cursorLine: editorWorkspace.cursorLine,
       cursorCol: editorWorkspace.cursorCol,
       setCursorPos: editorWorkspace.setCursorPos,
-      showLeftPanel, setShowLeftPanel,
-      showBottomPanel, setShowBottomPanel,
-      showRightPanel, setShowRightPanel,
+      showLeftPanel: visiblePanelState.showLeftPanel,
+      setShowLeftPanel: (show) => setPanelStateForActiveView({ showLeftPanel: show }),
+      showBottomPanel: visiblePanelState.showBottomPanel,
+      setShowBottomPanel: (show) => setPanelStateForActiveView({ showBottomPanel: show }),
+      showRightPanel: visiblePanelState.showRightPanel,
+      setShowRightPanel: (show) => setPanelStateForActiveView({ showRightPanel: show }),
       fileContents: fileStore.fileContents,
       loadingFiles: fileStore.loadingFiles,
       loadErrors: fileStore.loadErrors,

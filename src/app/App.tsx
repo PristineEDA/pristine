@@ -48,6 +48,7 @@ const codeViewPlaceholderConfig = {
 function AppLayout() {
   const {
     activeView, setActiveView,
+    canToggleLayoutPanels,
     mainContentView,
     activeTabId,
     openFile,
@@ -72,13 +73,13 @@ function AppLayout() {
 
   const syncLeftPanelWidth = useCallback(() => {
     const panelGroupContainer = panelGroupContainerRef.current;
-    if (!panelGroupContainer) {
+    if (!panelGroupContainer || !showLeftPanel) {
       return;
     }
 
     const nextSize = getLeftPanelTargetSizePercent(panelGroupContainer.clientWidth);
     leftPanelRef.current?.resize(`${nextSize}%`);
-  }, []);
+  }, [showLeftPanel]);
 
   const handleActivityItemSelect = (nextView: string) => {
     setActiveView(nextView as typeof activeView);
@@ -140,10 +141,10 @@ function AppLayout() {
   }, [syncLeftPanelWidth]);
 
   useEffect(() => {
-    if (showLeftPanel) {
+    if (showLeftPanel && canToggleLayoutPanels) {
       syncLeftPanelWidth();
     }
-  }, [showLeftPanel, syncLeftPanelWidth]);
+  }, [canToggleLayoutPanels, showLeftPanel, syncLeftPanelWidth]);
 
   useEffect(() => {
     if (!isQuickOpenVisible || workspaceFiles !== null) {
@@ -213,36 +214,52 @@ function AppLayout() {
     closeQuickOpen();
   }, [closeQuickOpen, openWorkspaceFile]);
 
-  const renderExplorerWorkspace = () => (
-    <>
-      <div className="flex flex-1 overflow-hidden">
-        <ActivityBar
-          activeView={activeView}
-          onItemSelect={handleActivityItemSelect}
-        />
+  const renderPanelPlaceholder = (title: string, testId: string) => (
+    <WorkflowPlaceholder title={title} testId={testId} />
+  );
 
-        <div ref={panelGroupContainerRef} className="flex-1 min-w-0">
-          <ResizablePanelGroup orientation="horizontal">
-            <ResizablePanel panelRef={leftPanelRef} defaultSize={18} minSize={12} maxSize={35} id="left-panel" collapsed={!showLeftPanel}>
-              {showLeftPanel ? (
-                <LeftSidePanel
-                  activeFileId={activeTabId}
-                  onFileOpen={openWorkspaceFile}
-                  onFilePreview={openWorkspacePreviewFile}
-                  onLineJump={jumpTo}
-                  currentOutlineId={activeTabId}
-                  revealRequest={revealRequest}
-                  onWorkspaceRefresh={invalidateWorkspaceFiles}
-                />
-              ) : (
-                <div className="h-full" />
-              )}
-            </ResizablePanel>
+  const renderWorkspaceShell = ({
+    shellTestId,
+    leftPanelId,
+    centerPanelId,
+    topPanelId,
+    bottomPanelId,
+    rightPanelId,
+    leftContent,
+    topContent,
+    bottomContent,
+    rightContent,
+    includeQuickOpen = false,
+  }: {
+    shellTestId?: string;
+    leftPanelId: string;
+    centerPanelId: string;
+    topPanelId: string;
+    bottomPanelId: string;
+    rightPanelId: string;
+    leftContent: React.ReactNode;
+    topContent: React.ReactNode;
+    bottomContent: React.ReactNode;
+    rightContent: React.ReactNode;
+    includeQuickOpen?: boolean;
+  }) => (
+    <div data-testid={shellTestId} className="flex flex-1 overflow-hidden">
+      <ActivityBar
+        activeView={activeView}
+        onItemSelect={handleActivityItemSelect}
+      />
 
-            <ResizableHandle hidden={!showLeftPanel} />
+      <div ref={panelGroupContainerRef} className="flex-1 min-w-0">
+        <ResizablePanelGroup orientation="horizontal">
+          <ResizablePanel panelRef={leftPanelRef} defaultSize={18} minSize={12} maxSize={35} id={leftPanelId} collapsed={!showLeftPanel}>
+            {showLeftPanel ? leftContent : <div className="h-full" />}
+          </ResizablePanel>
 
-            <ResizablePanel defaultSize={55} minSize={30} id="center-panel">
-              <div className="relative h-full">
+          <ResizableHandle hidden={!showLeftPanel} />
+
+          <ResizablePanel defaultSize={55} minSize={30} id={centerPanelId}>
+            <div className="relative h-full">
+              {includeQuickOpen && (
                 <QuickOpenPalette
                   isOpen={isQuickOpenVisible}
                   mode={isQuickOpenRecentMode ? 'recent' : 'search'}
@@ -257,40 +274,74 @@ function AppLayout() {
                   onSelectedIndexChange={setQuickOpenSelectedIndex}
                   onSelectResult={handleQuickOpenSelect}
                 />
-
-                <ResizablePanelGroup orientation="vertical">
-                  <ResizablePanel defaultSize={60} minSize={25} id="editor-panel">
-                    <EditorSplitLayout jumpToLine={jumpToLine} />
-                  </ResizablePanel>
-
-                  <ResizableHandle hidden={!showBottomPanel} />
-                  <ResizablePanel defaultSize={40} minSize={15} maxSize={60} id="bottom-panel" collapsed={!showBottomPanel}>
-                    {showBottomPanel ? (
-                      <BottomPanel onClose={() => setShowBottomPanel(false)} />
-                    ) : (
-                      <div className="h-full" />
-                    )}
-                  </ResizablePanel>
-                </ResizablePanelGroup>
-              </div>
-            </ResizablePanel>
-
-            <ResizableHandle hidden={!showRightPanel} />
-
-            <ResizablePanel defaultSize={22} minSize={18} maxSize={45} id="right-panel" collapsed={!showRightPanel}>
-              {showRightPanel ? (
-                <RightSidePanel
-                  onFileOpen={openWorkspaceFile}
-                  onLineJump={jumpTo}
-                />
-              ) : (
-                <div className="h-full" />
               )}
-            </ResizablePanel>
-          </ResizablePanelGroup>
-        </div>
+
+              <ResizablePanelGroup orientation="vertical">
+                <ResizablePanel defaultSize={60} minSize={25} id={topPanelId}>
+                  {topContent}
+                </ResizablePanel>
+
+                <ResizableHandle hidden={!showBottomPanel} />
+                <ResizablePanel defaultSize={40} minSize={15} maxSize={60} id={bottomPanelId} collapsed={!showBottomPanel}>
+                  {showBottomPanel ? bottomContent : <div className="h-full" />}
+                </ResizablePanel>
+              </ResizablePanelGroup>
+            </div>
+          </ResizablePanel>
+
+          <ResizableHandle hidden={!showRightPanel} />
+
+          <ResizablePanel defaultSize={22} minSize={18} maxSize={45} id={rightPanelId} collapsed={!showRightPanel}>
+            {showRightPanel ? rightContent : <div className="h-full" />}
+          </ResizablePanel>
+        </ResizablePanelGroup>
       </div>
-    </>
+    </div>
+  );
+
+  const renderExplorerWorkspace = () => (
+    renderWorkspaceShell({
+      leftPanelId: 'left-panel',
+      centerPanelId: 'center-panel',
+      topPanelId: 'editor-panel',
+      bottomPanelId: 'bottom-panel',
+      rightPanelId: 'right-panel',
+      leftContent: (
+        <LeftSidePanel
+          activeFileId={activeTabId}
+          onFileOpen={openWorkspaceFile}
+          onFilePreview={openWorkspacePreviewFile}
+          onLineJump={jumpTo}
+          currentOutlineId={activeTabId}
+          revealRequest={revealRequest}
+          onWorkspaceRefresh={invalidateWorkspaceFiles}
+        />
+      ),
+      topContent: <EditorSplitLayout jumpToLine={jumpToLine} />,
+      bottomContent: <BottomPanel onClose={() => setShowBottomPanel(false)} />,
+      rightContent: (
+        <RightSidePanel
+          onFileOpen={openWorkspaceFile}
+          onLineJump={jumpTo}
+        />
+      ),
+      includeQuickOpen: true,
+    })
+  );
+
+  const renderSimulationWorkspace = () => (
+    renderWorkspaceShell({
+      shellTestId: 'code-view-simulation',
+      leftPanelId: 'simulation-left-panel',
+      centerPanelId: 'simulation-center-panel',
+      topPanelId: 'simulation-main-panel',
+      bottomPanelId: 'simulation-bottom-panel',
+      rightPanelId: 'simulation-right-panel',
+      leftContent: renderPanelPlaceholder('Left Panel', 'simulation-left-panel-content'),
+      topContent: renderPanelPlaceholder('Simulation Workspace', 'simulation-main-panel-content'),
+      bottomContent: renderPanelPlaceholder('Bottom Panel', 'simulation-bottom-panel-content'),
+      rightContent: renderPanelPlaceholder('Right Panel', 'simulation-right-panel-content'),
+    })
   );
 
   const renderCodePlaceholder = () => {
@@ -336,12 +387,20 @@ function AppLayout() {
       }
 
       if (key === 'j') {
+        if (!canToggleLayoutPanels) {
+          return;
+        }
+
         event.preventDefault();
         setShowBottomPanel(!showBottomPanel);
         return;
       }
 
       if (key === 'b') {
+        if (!canToggleLayoutPanels) {
+          return;
+        }
+
         event.preventDefault();
         setShowLeftPanel(!showLeftPanel);
       }
@@ -351,7 +410,7 @@ function AppLayout() {
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [closeQuickOpen, isQuickOpenVisible, openQuickOpen, setShowBottomPanel, setShowLeftPanel, showBottomPanel, showLeftPanel]);
+  }, [canToggleLayoutPanels, closeQuickOpen, isQuickOpenVisible, openQuickOpen, setShowBottomPanel, setShowLeftPanel, showBottomPanel, showLeftPanel]);
 
   return (
     <div className="flex flex-col h-screen bg-background text-foreground overflow-hidden">
@@ -365,7 +424,11 @@ function AppLayout() {
       />
 
       {mainContentView === 'code'
-        ? (activeView === 'explorer' ? renderExplorerWorkspace() : renderCodePlaceholder())
+        ? (activeView === 'explorer'
+          ? renderExplorerWorkspace()
+          : activeView === 'simulation'
+            ? renderSimulationWorkspace()
+            : renderCodePlaceholder())
         : mainContentView === 'whiteboard' ? (
           <div className="flex-1 min-h-0">
             <Suspense fallback={<MainContentFallback />}>

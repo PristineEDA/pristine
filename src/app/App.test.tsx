@@ -41,9 +41,10 @@ vi.mock('./components/MenuBar', async () => {
         <span data-testid="menu-bottom-state">{String(showBottomPanel)}</span>
         <span data-testid="menu-right-state">{String(showRightPanel)}</span>
         <span data-testid="main-content-view">{workspace.mainContentView}</span>
-        <button onClick={onToggleLeftPanel}>toggle-left-panel</button>
-        <button onClick={onToggleBottomPanel}>toggle-bottom-panel</button>
-        <button onClick={onToggleRightPanel}>toggle-right-panel</button>
+        <span data-testid="menu-layout-enabled">{String(workspace.canToggleLayoutPanels)}</span>
+        <button disabled={!workspace.canToggleLayoutPanels} onClick={onToggleLeftPanel}>toggle-left-panel</button>
+        <button disabled={!workspace.canToggleLayoutPanels} onClick={onToggleBottomPanel}>toggle-bottom-panel</button>
+        <button disabled={!workspace.canToggleLayoutPanels} onClick={onToggleRightPanel}>toggle-right-panel</button>
         <button onClick={() => workspace.setMainContentView('code')}>switch-code</button>
         <button onClick={() => workspace.setMainContentView('whiteboard')}>switch-whiteboard</button>
         <button onClick={() => workspace.setMainContentView('workflow')}>switch-workflow</button>
@@ -192,6 +193,7 @@ describe('App', () => {
     expect(screen.getByTestId('menu-bottom-state')).toHaveTextContent('false');
     expect(screen.getByTestId('menu-right-state')).toHaveTextContent('false');
     expect(screen.getByTestId('main-content-view')).toHaveTextContent('code');
+    expect(screen.getByTestId('menu-layout-enabled')).toHaveTextContent('true');
     expect(screen.getByTestId('activity-view')).toHaveTextContent('explorer');
     expect(screen.getByTestId('activity-bar')).toBeInTheDocument();
     expect(screen.queryByTestId('panel-left-panel')).not.toBeInTheDocument();
@@ -235,12 +237,17 @@ describe('App', () => {
     expect(screen.queryByTestId('bottom-panel')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByText('select-simulation'));
-    expect(screen.getByTestId('activity-view')).toHaveTextContent('simulation');
-    expect(await screen.findByTestId('code-view-simulation')).toHaveTextContent('Simulation');
-    expect(screen.queryByTestId('panel-left-panel')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('left-panel')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('right-panel')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('bottom-panel')).not.toBeInTheDocument();
+    expect(await screen.findByTestId('code-view-simulation')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByTestId('activity-view')).toHaveTextContent('simulation');
+    });
+    expect(screen.getByTestId('panel-simulation-left-panel')).toBeInTheDocument();
+    expect(screen.getByTestId('panel-simulation-bottom-panel')).toBeInTheDocument();
+    expect(screen.getByTestId('panel-simulation-right-panel')).toBeInTheDocument();
+    expect(screen.getByTestId('simulation-left-panel-content')).toHaveTextContent('Left Panel');
+    expect(screen.getByTestId('simulation-main-panel-content')).toHaveTextContent('Simulation Workspace');
+    expect(screen.getByTestId('simulation-bottom-panel-content')).toHaveTextContent('Bottom Panel');
+    expect(screen.getByTestId('simulation-right-panel-content')).toHaveTextContent('Right Panel');
 
     fireEvent.click(screen.getByText('select-explorer'));
     expect(screen.getByTestId('activity-view')).toHaveTextContent('explorer');
@@ -294,6 +301,62 @@ describe('App', () => {
     fireEvent.keyDown(document, { key: 'j', ctrlKey: true });
     expect(screen.getByTestId('menu-bottom-state')).toHaveTextContent('false');
     expect(screen.queryByTestId('bottom-panel')).not.toBeInTheDocument();
+  });
+
+  it('remembers panel visibility per code subview and disables layout interactions on unsupported pages', async () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByText('toggle-left-panel'));
+    fireEvent.click(screen.getByText('toggle-right-panel'));
+
+    expect(screen.getByTestId('menu-left-state')).toHaveTextContent('true');
+    expect(screen.getByTestId('menu-right-state')).toHaveTextContent('true');
+    expect(screen.getByTestId('left-panel')).toBeInTheDocument();
+    expect(screen.getByTestId('right-panel')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('select-simulation'));
+    expect(await screen.findByTestId('menu-layout-enabled')).toHaveTextContent('true');
+    expect(screen.getByTestId('menu-left-state')).toHaveTextContent('true');
+    expect(screen.getByTestId('menu-bottom-state')).toHaveTextContent('true');
+    expect(screen.getByTestId('menu-right-state')).toHaveTextContent('true');
+
+    fireEvent.click(screen.getByText('toggle-left-panel'));
+    fireEvent.click(screen.getByText('toggle-bottom-panel'));
+    expect(screen.getByTestId('menu-left-state')).toHaveTextContent('false');
+    expect(screen.getByTestId('menu-bottom-state')).toHaveTextContent('false');
+    expect(screen.queryByTestId('panel-simulation-left-panel')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('panel-simulation-bottom-panel')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('select-synthesis'));
+    expect(await screen.findByTestId('menu-layout-enabled')).toHaveTextContent('false');
+    expect(screen.getByText('toggle-left-panel')).toBeDisabled();
+    expect(screen.getByText('toggle-bottom-panel')).toBeDisabled();
+    expect(screen.getByText('toggle-right-panel')).toBeDisabled();
+    expect(screen.getByTestId('menu-left-state')).toHaveTextContent('false');
+    expect(screen.getByTestId('menu-bottom-state')).toHaveTextContent('false');
+    expect(screen.getByTestId('menu-right-state')).toHaveTextContent('false');
+
+    fireEvent.keyDown(document, { key: 'b', ctrlKey: true });
+    fireEvent.keyDown(document, { key: 'j', ctrlKey: true });
+    expect(screen.getByTestId('menu-left-state')).toHaveTextContent('false');
+    expect(screen.getByTestId('menu-bottom-state')).toHaveTextContent('false');
+
+    fireEvent.click(screen.getByText('switch-whiteboard'));
+    expect(screen.getByTestId('menu-layout-enabled')).toHaveTextContent('false');
+
+    fireEvent.click(screen.getByText('switch-code'));
+    expect(screen.getByTestId('activity-view')).toHaveTextContent('synthesis');
+    expect(screen.getByTestId('menu-layout-enabled')).toHaveTextContent('false');
+
+    fireEvent.click(screen.getByText('select-simulation'));
+    expect(await screen.findByTestId('menu-left-state')).toHaveTextContent('false');
+    expect(screen.getByTestId('menu-bottom-state')).toHaveTextContent('false');
+    expect(screen.getByTestId('menu-right-state')).toHaveTextContent('true');
+
+    fireEvent.click(screen.getByText('select-explorer'));
+    expect(screen.getByTestId('menu-left-state')).toHaveTextContent('true');
+    expect(screen.getByTestId('menu-right-state')).toHaveTextContent('true');
+    expect(screen.getByTestId('menu-bottom-state')).toHaveTextContent('false');
   });
 
   it('opens quick open with Ctrl+P, resets the query on reopen, and selects a file', async () => {

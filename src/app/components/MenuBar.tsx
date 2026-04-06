@@ -3,6 +3,7 @@ import {
   Settings, CircleUser, Minus, Square, X, Code2, Presentation, Workflow,
   Sun, Moon,
 } from 'lucide-react';
+import { canToggleLayoutPanels as canUseLayoutPanels } from '../codeViewPanels';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { useTheme } from '../context/ThemeContext';
 import {
@@ -98,9 +99,17 @@ export function MenuBar({
   onToggleBottomPanel,
   onToggleRightPanel,
 }: MenuBarProps) {
-  const { mainContentView, setMainContentView } = useWorkspace();
+  const { activeView, mainContentView, setMainContentView } = useWorkspace();
   const { theme, toggleTheme } = useTheme();
   const ref = useRef<HTMLDivElement>(null);
+  const layoutIconsEnabled = canUseLayoutPanels(mainContentView, activeView);
+  const layoutIconClassName = [
+    'w-8 h-full rounded-none border-0 text-muted-foreground',
+    'data-[state=on]:text-foreground',
+    layoutIconsEnabled
+      ? 'hover:cursor-pointer hover:text-foreground hover:bg-accent'
+      : 'cursor-not-allowed opacity-40',
+  ].join(' ');
 
   return (
     <div
@@ -175,28 +184,52 @@ export function MenuBar({
         {/* Layout icons */}
         <Toggle
           aria-label="Toggle left sidebar"
-          pressed={showLeftPanel}
+          aria-disabled={!layoutIconsEnabled}
+          pressed={layoutIconsEnabled ? showLeftPanel : false}
           data-testid="toggle-left-panel"
-          className="w-8 h-full rounded-none border-0 data-[state=on]:text-foreground text-muted-foreground hover:cursor-pointer hover:text-foreground hover:bg-accent"
-          onPressedChange={() => onToggleLeftPanel?.()}
+          disabled={!layoutIconsEnabled}
+          className={layoutIconClassName}
+          onPressedChange={() => {
+            if (!layoutIconsEnabled) {
+              return;
+            }
+
+            onToggleLeftPanel?.();
+          }}
         >
           <PanelLeftIcon size={15} filled={showLeftPanel} />
         </Toggle>
         <Toggle
           aria-label="Toggle bottom panel"
-          pressed={showBottomPanel}
+          aria-disabled={!layoutIconsEnabled}
+          pressed={layoutIconsEnabled ? showBottomPanel : false}
           data-testid="toggle-bottom-panel"
-          className="w-8 h-full rounded-none border-0 data-[state=on]:text-foreground text-muted-foreground hover:cursor-pointer hover:text-foreground hover:bg-accent"
-          onPressedChange={() => onToggleBottomPanel?.()}
+          disabled={!layoutIconsEnabled}
+          className={layoutIconClassName}
+          onPressedChange={() => {
+            if (!layoutIconsEnabled) {
+              return;
+            }
+
+            onToggleBottomPanel?.();
+          }}
         >
           <PanelBottomIcon size={15} filled={showBottomPanel} />
         </Toggle>
         <Toggle
           aria-label="Toggle right sidebar"
-          pressed={showRightPanel}
+          aria-disabled={!layoutIconsEnabled}
+          pressed={layoutIconsEnabled ? showRightPanel : false}
           data-testid="toggle-right-panel"
-          className="w-8 h-full rounded-none border-0 data-[state=on]:text-foreground text-muted-foreground hover:cursor-pointer hover:text-foreground hover:bg-accent"
-          onPressedChange={() => onToggleRightPanel?.()}
+          disabled={!layoutIconsEnabled}
+          className={layoutIconClassName}
+          onPressedChange={() => {
+            if (!layoutIconsEnabled) {
+              return;
+            }
+
+            onToggleRightPanel?.();
+          }}
         >
           <PanelRightIcon size={15} filled={showRightPanel} />
         </Toggle>
