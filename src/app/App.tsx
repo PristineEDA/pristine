@@ -13,6 +13,7 @@ import { createQuickOpenFileEntries, getRecentQuickOpenFiles, searchQuickOpenFil
 import type { WorkspaceRevealRequest } from './workspace/useWorkspaceTree';
 import { WorkspaceProvider, useWorkspace } from './context/WorkspaceContext';
 import { getLeftPanelTargetSizePercent } from './layout/panelSizing';
+import { SidebarProvider } from './components/ui/sidebar';
 
 const QUICK_OPEN_RECENT_LIMIT = 20;
 const WhiteboardView = lazy(() => import('./components/whiteboard/WhiteboardView').then((module) => ({ default: module.WhiteboardView })));
@@ -401,7 +402,12 @@ function AppLayout() {
   }, [canToggleLayoutPanels, closeQuickOpen, isQuickOpenVisible, openQuickOpen, setShowBottomPanel, setShowLeftPanel, showBottomPanel, showLeftPanel]);
 
   return (
-    <div className="flex flex-col h-screen bg-background text-foreground overflow-hidden">
+    <SidebarProvider
+      defaultOpen={false}
+      keyboardShortcut={false}
+      style={{ '--sidebar-width': '13rem' } as React.CSSProperties}
+      className="flex h-screen min-h-0 flex-col bg-background text-foreground overflow-hidden"
+    >
       <MenuBar
         showLeftPanel={showLeftPanel}
         showBottomPanel={showBottomPanel}
@@ -436,7 +442,7 @@ function AppLayout() {
         cursorLine={cursorLine}
         cursorCol={cursorCol}
       />
-    </div>
+    </SidebarProvider>
   );
 }
 

@@ -124,7 +124,7 @@ describe('LeftSidePanel', () => {
 
     expect(await screen.findByTestId('file-tree-node-rtl')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByTitle('Collapse All'));
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse All' }));
 
     expect(screen.getByTestId('file-tree-node-root')).toBeInTheDocument();
     expect(screen.queryByTestId('file-tree-node-rtl')).not.toBeInTheDocument();

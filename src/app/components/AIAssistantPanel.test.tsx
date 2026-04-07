@@ -20,7 +20,7 @@ describe('AIAssistantPanel', () => {
     const textarea = screen.getByPlaceholderText(/Ask a question about your RTL code/i);
     expect(textarea).toHaveValue('Generate Testbench');
 
-    fireEvent.click(screen.getByTitle(/Send \(Enter\)/i));
+    fireEvent.click(screen.getByRole('button', { name: /Send \(Enter\)/i }));
     expect(textarea).toHaveValue('');
 
     act(() => {
@@ -46,7 +46,7 @@ describe('AIAssistantPanel', () => {
   it('opens and closes the attachment menu', () => {
     render(<AIAssistantPanel />);
 
-    fireEvent.click(screen.getByTitle(/Add attachment/i));
+    fireEvent.click(screen.getByRole('button', { name: /Add attachment/i }));
     expect(screen.getByRole('button', { name: /Add Image/i })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /Add Image/i }));

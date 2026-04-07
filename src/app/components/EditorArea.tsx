@@ -8,6 +8,7 @@ import { FileTypeBadge } from './FileTypeBadge';
 import { useEditorDocumentState } from './useEditorDocumentState';
 import type { SplitDirection } from '../editor/editorLayout';
 import { EmptyProject } from './EmptyProject';
+import { TooltipIconButton } from './ui/tooltip-icon-button';
 
 const MonacoEditorPane = lazy(() => import('./MonacoEditorPane').then((module) => ({ default: module.MonacoEditorPane })));
 
@@ -199,24 +200,26 @@ export function EditorArea({
           />
         ))}
         <div className="flex-1" />
-        <button
-          data-testid="editor-split-right"
-          aria-label="Split Editor Right"
-          onClick={() => onSplitEditor?.('horizontal')}
-          className="px-2 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors shrink-0"
-          title="Split Editor Right"
-        >
-          <Split size={14} />
-        </button>
-        <button
-          data-testid="editor-split-down"
-          aria-label="Split Editor Down"
-          onClick={() => onSplitEditor?.('vertical')}
-          className="px-2 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors shrink-0"
-          title="Split Editor Down"
-        >
-          <Split size={14} className="rotate-90" />
-        </button>
+        <TooltipIconButton content="Split Editor Right">
+          <button
+            data-testid="editor-split-right"
+            aria-label="Split Editor Right"
+            onClick={() => onSplitEditor?.('horizontal')}
+            className="px-2 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors shrink-0"
+          >
+            <Split size={14} />
+          </button>
+        </TooltipIconButton>
+        <TooltipIconButton content="Split Editor Down">
+          <button
+            data-testid="editor-split-down"
+            aria-label="Split Editor Down"
+            onClick={() => onSplitEditor?.('vertical')}
+            className="px-2 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors shrink-0"
+          >
+            <Split size={14} className="rotate-90" />
+          </button>
+        </TooltipIconButton>
         <button className="px-2 text-muted-foreground hover:text-foreground transition-colors shrink-0">
           <MoreHorizontal size={14} />
         </button>

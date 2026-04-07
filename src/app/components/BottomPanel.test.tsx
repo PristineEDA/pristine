@@ -26,7 +26,7 @@ describe('BottomPanel', () => {
 
     render(<BottomPanel onClose={onClose} />);
 
-    fireEvent.click(screen.getByTitle(/close panel/i));
+    fireEvent.click(screen.getByRole('button', { name: /close panel/i }));
 
     await waitFor(() => expect(terminateTerminalSessionMock).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
@@ -45,7 +45,7 @@ describe('BottomPanel', () => {
     expect(screen.getByRole('button', { name: /start debugging/i })).toBeInTheDocument();
     expect(screen.getByText(/Debug session not started/i)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByTitle(/close panel/i));
+    fireEvent.click(screen.getByRole('button', { name: /close panel/i }));
     expect(terminateTerminalSessionMock).toHaveBeenCalled();
   });
 

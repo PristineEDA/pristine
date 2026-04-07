@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Search, Trash2 } from 'lucide-react';
 import { useOutputLog } from '../../data/mockDataLoader';
+import { TooltipIconButton } from './ui/tooltip-icon-button';
 
 const levelConfig = {
   info: { color: '#9cdcfe', label: 'INFO' },
@@ -42,9 +43,11 @@ export function OutputPanel() {
             {l === 'all' ? 'All' : l.toUpperCase()}
           </button>
         ))}
-        <button className="ml-auto p-1 text-muted-foreground hover:text-foreground transition-colors" title="Clear">
-          <Trash2 size={12} />
-        </button>
+        <TooltipIconButton content="Clear">
+          <button aria-label="Clear" className="ml-auto p-1 text-muted-foreground hover:text-foreground transition-colors">
+            <Trash2 size={12} />
+          </button>
+        </TooltipIconButton>
       </div>
       <div className="flex-1 overflow-y-auto px-2 py-1 font-mono text-[12px]">
         {filtered.map((entry, i) => {
