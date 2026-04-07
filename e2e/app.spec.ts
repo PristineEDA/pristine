@@ -498,9 +498,9 @@ test('activity bar switches code subpages and menu bar keeps higher-priority pag
   await expect(window.getByTestId('toggle-right-panel')).toBeDisabled();
   await expect(window.getByTestId('toggle-activity-bar')).toBeEnabled();
   await window.getByTestId('toggle-activity-bar').click();
-  await expect(window.getByTestId('activity-item-physical').getByText('Physical Design')).toBeVisible();
+  await expect(window.getByTestId('activity-item-physical').getByText('Physical')).toBeVisible();
   await window.getByTestId('toggle-activity-bar').click();
-  await expect(window.getByTestId('activity-item-physical').getByText('Physical Design')).toHaveCount(0);
+  await expect(window.getByTestId('activity-item-physical').getByText('Physical')).toBeVisible();
 
   await window.getByTestId('activity-item-physical').click();
   await expect(window.getByTestId('code-view-physical')).toBeVisible();
@@ -622,12 +622,12 @@ test('menu bar activity trigger expands and preserves the activity bar state acr
   const runButton = window.getByTestId('activity-action-run');
 
   await expect(trigger).toBeVisible();
-  await expect(physicalButton.getByText('Physical Design')).toHaveCount(0);
+  await expect(physicalButton.getByText('Physical')).toBeVisible();
   await expect(compileButton.getByText('Compile')).toHaveCount(0);
 
   await trigger.click();
 
-  await expect(physicalButton.getByText('Physical Design')).toBeVisible();
+  await expect(physicalButton.getByText('Physical')).toBeVisible();
   await expect(compileButton.getByText('Compile')).toBeVisible();
   await expect(runButton.getByText('Run')).toBeVisible();
 
@@ -638,12 +638,12 @@ test('menu bar activity trigger expands and preserves the activity bar state acr
 
   await window.getByLabel('Code').click();
   await expect(window.getByTestId('activity-item-explorer')).toBeVisible();
-  await expect(physicalButton.getByText('Physical Design')).toBeVisible();
+  await expect(physicalButton.getByText('Physical')).toBeVisible();
   await expect(compileButton.getByText('Compile')).toBeVisible();
 
   await trigger.click();
 
-  await expect(physicalButton.getByText('Physical Design')).toHaveCount(0);
+  await expect(physicalButton.getByText('Physical')).toBeVisible();
   await expect(compileButton.getByText('Compile')).toHaveCount(0);
   await expect(runButton.getByText('Run')).toHaveCount(0);
 

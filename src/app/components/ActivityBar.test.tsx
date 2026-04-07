@@ -32,7 +32,7 @@ describe('ActivityBar', () => {
     expect(buttons.map((button) => button.getAttribute('aria-label'))).toEqual(['Compile', 'Run']);
     expect(screen.queryByTestId('activity-action-debug-action')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Settings' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Explorer' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Editor' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Simulation' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Search' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Extensions' })).not.toBeInTheDocument();
@@ -101,7 +101,7 @@ describe('ActivityBar', () => {
     renderActivityBar();
 
     await user.hover(screen.getByTestId('activity-item-explorer'));
-    expect(await screen.findByRole('tooltip', { name: 'Explorer' })).toBeInTheDocument();
+    expect(await screen.findByRole('tooltip', { name: 'Editor' })).toBeInTheDocument();
   });
 
   it('keeps labels hidden while collapsed and shows them when expanded', () => {
