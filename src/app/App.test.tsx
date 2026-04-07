@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import App from './App';
 
 const panelResizeMock = vi.fn();
+let renderRealActivityBar = false;
 
 vi.mock('./components/ui/resizable', () => ({
   ResizablePanelGroup: ({ children }: { children: React.ReactNode }) => <div data-testid="panel-group">{children}</div>,
@@ -23,6 +24,7 @@ vi.mock('./components/ui/resizable', () => ({
 
 vi.mock('./components/MenuBar', async () => {
   const actual = await vi.importActual<typeof import('./context/WorkspaceContext')>('./context/WorkspaceContext');
+  const sidebar = await vi.importActual<typeof import('./components/ui/sidebar')>('./components/ui/sidebar');
 
   return {
     MenuBar: ({
@@ -34,6 +36,7 @@ vi.mock('./components/MenuBar', async () => {
     onToggleRightPanel,
   }: any) => {
     const workspace = actual.useWorkspace();
+    const activityBar = sidebar.useSidebar();
 
     return (
       <div data-testid="menu-bar">
@@ -42,9 +45,11 @@ vi.mock('./components/MenuBar', async () => {
         <span data-testid="menu-right-state">{String(showRightPanel)}</span>
         <span data-testid="main-content-view">{workspace.mainContentView}</span>
         <span data-testid="menu-layout-enabled">{String(workspace.canToggleLayoutPanels)}</span>
+        <span data-testid="menu-activity-bar-state">{activityBar.state}</span>
         <button disabled={!workspace.canToggleLayoutPanels} onClick={onToggleLeftPanel}>toggle-left-panel</button>
         <button disabled={!workspace.canToggleLayoutPanels} onClick={onToggleBottomPanel}>toggle-bottom-panel</button>
         <button disabled={!workspace.canToggleLayoutPanels} onClick={onToggleRightPanel}>toggle-right-panel</button>
+        <button onClick={activityBar.toggleSidebar}>toggle-activity-bar</button>
         <button onClick={() => workspace.setMainContentView('code')}>switch-code</button>
         <button onClick={() => workspace.setMainContentView('whiteboard')}>switch-whiteboard</button>
         <button onClick={() => workspace.setMainContentView('workflow')}>switch-workflow</button>
@@ -54,18 +59,32 @@ vi.mock('./components/MenuBar', async () => {
   };
 });
 
-vi.mock('./components/ActivityBar', () => ({
-  ActivityBar: ({ activeView, onItemSelect }: { activeView: string; onItemSelect: (view: string) => void }) => (
-    <div data-testid="activity-bar">
-      <span data-testid="activity-view">{activeView}</span>
-      <button onClick={() => onItemSelect('simulation')}>select-simulation</button>
-      <button onClick={() => onItemSelect('synthesis')}>select-synthesis</button>
-      <button onClick={() => onItemSelect('physical')}>select-physical</button>
-      <button onClick={() => onItemSelect('factory')}>select-factory</button>
-      <button onClick={() => onItemSelect('explorer')}>select-explorer</button>
-    </div>
-  ),
-}));
+vi.mock('./components/ActivityBar', async () => {
+  const sidebar = await vi.importActual<typeof import('./components/ui/sidebar')>('./components/ui/sidebar');
+  const actualActivityBar = await vi.importActual<typeof import('./components/ActivityBar')>('./components/ActivityBar');
+
+  return {
+    ActivityBar: ({ activeView, onItemSelect }: { activeView: string; onItemSelect: (view: string) => void }) => {
+      if (renderRealActivityBar) {
+        return <actualActivityBar.ActivityBar activeView={activeView} onItemSelect={onItemSelect} />;
+      }
+
+      const activityBar = sidebar.useSidebar();
+
+      return (
+        <div data-testid="activity-bar">
+          <span data-testid="activity-view">{activeView}</span>
+          <span data-testid="activity-bar-state">{activityBar.state}</span>
+          <button onClick={() => onItemSelect('simulation')}>select-simulation</button>
+          <button onClick={() => onItemSelect('synthesis')}>select-synthesis</button>
+          <button onClick={() => onItemSelect('physical')}>select-physical</button>
+          <button onClick={() => onItemSelect('factory')}>select-factory</button>
+          <button onClick={() => onItemSelect('explorer')}>select-explorer</button>
+        </div>
+      );
+    },
+  };
+});
 
 vi.mock('./components/whiteboard/WhiteboardView', () => ({
   WhiteboardView: () => <div data-testid="whiteboard-view">whiteboard</div>,
@@ -196,6 +215,8 @@ describe('App', () => {
     expect(screen.getByTestId('menu-layout-enabled')).toHaveTextContent('true');
     expect(screen.getByTestId('activity-view')).toHaveTextContent('explorer');
     expect(screen.getByTestId('activity-bar')).toBeInTheDocument();
+    expect(screen.getByTestId('menu-activity-bar-state')).toHaveTextContent('collapsed');
+    expect(screen.getByTestId('activity-bar-state')).toHaveTextContent('collapsed');
     expect(screen.queryByTestId('panel-left-panel')).not.toBeInTheDocument();
     expect(screen.queryByTestId('left-panel')).not.toBeInTheDocument();
     expect(screen.queryByTestId('bottom-panel')).not.toBeInTheDocument();
@@ -278,6 +299,46 @@ describe('App', () => {
     expect(screen.getByTestId('activity-bar')).toBeInTheDocument();
     expect(screen.getByTestId('activity-view')).toHaveTextContent('synthesis');
     expect(await screen.findByTestId('code-view-synthesis')).toHaveTextContent('Synthesis');
+  });
+
+  it('keeps the activity bar collapse state when switching away from and back to code', async () => {
+    render(<App />);
+
+    expect(screen.getByTestId('menu-activity-bar-state')).toHaveTextContent('collapsed');
+    expect(screen.getByTestId('activity-bar-state')).toHaveTextContent('collapsed');
+
+    fireEvent.click(screen.getByText('toggle-activity-bar'));
+    expect(screen.getByTestId('menu-activity-bar-state')).toHaveTextContent('expanded');
+    expect(screen.getByTestId('activity-bar-state')).toHaveTextContent('expanded');
+
+    fireEvent.click(screen.getByText('switch-whiteboard'));
+    expect(screen.getByTestId('main-content-view')).toHaveTextContent('whiteboard');
+    expect(screen.queryByTestId('activity-bar')).not.toBeInTheDocument();
+    expect(screen.getByTestId('menu-activity-bar-state')).toHaveTextContent('expanded');
+
+    fireEvent.click(screen.getByText('switch-code'));
+    expect(screen.getByTestId('main-content-view')).toHaveTextContent('code');
+    expect(screen.getByTestId('activity-bar')).toBeInTheDocument();
+    expect(screen.getByTestId('activity-bar-state')).toHaveTextContent('expanded');
+  });
+
+  it('switches the actual code view when a real ActivityBar item is clicked', async () => {
+    renderRealActivityBar = true;
+
+    try {
+      render(<App />);
+
+      fireEvent.click(screen.getByTestId('activity-item-simulation'));
+
+      expect(await screen.findByTestId('code-view-simulation')).toBeInTheDocument();
+      expect(screen.getByTestId('simulation-main-panel-content')).toHaveTextContent('Simulation Workspace');
+
+      fireEvent.click(screen.getByTestId('activity-item-physical'));
+
+      expect(await screen.findByTestId('code-view-physical')).toHaveTextContent('Physical Design');
+    } finally {
+      renderRealActivityBar = false;
+    }
   });
 
   it('toggles the left and bottom panels with Ctrl+B and Ctrl+J', () => {

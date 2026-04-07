@@ -2,10 +2,27 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { ActivityBar } from './ActivityBar';
+import { SidebarProvider } from './ui/sidebar';
+
+function renderActivityBar({
+  activeView = 'explorer',
+  onItemSelect = vi.fn(),
+  defaultOpen = false,
+}: {
+  activeView?: string;
+  onItemSelect?: (view: string) => void;
+  defaultOpen?: boolean;
+} = {}) {
+  return render(
+    <SidebarProvider defaultOpen={defaultOpen} keyboardShortcut={false}>
+      <ActivityBar activeView={activeView} onItemSelect={onItemSelect} />
+    </SidebarProvider>,
+  );
+}
 
 describe('ActivityBar', () => {
   it('renders compile and run action buttons and removes settings', () => {
-    render(<ActivityBar activeView="explorer" onItemSelect={vi.fn()} />);
+    renderActivityBar();
 
     const buttons = [
       screen.getByTestId('activity-action-compile'),
@@ -24,7 +41,7 @@ describe('ActivityBar', () => {
   it('does not apply pressed state or call the shared navigation handler when compile and run are clicked', () => {
     const onItemSelect = vi.fn();
 
-    render(<ActivityBar activeView="explorer" onItemSelect={onItemSelect} />);
+    renderActivityBar({ onItemSelect });
 
     const compileButton = screen.getByTestId('activity-action-compile');
     const runButton = screen.getByTestId('activity-action-run');
@@ -42,7 +59,7 @@ describe('ActivityBar', () => {
   it('forwards clicked item ids to the shared selection handler', () => {
     const onItemSelect = vi.fn();
 
-    render(<ActivityBar activeView="explorer" onItemSelect={onItemSelect} />);
+    renderActivityBar({ onItemSelect });
 
     fireEvent.click(screen.getByTestId('activity-item-simulation'));
     fireEvent.click(screen.getByTestId('activity-item-explorer'));
@@ -51,28 +68,54 @@ describe('ActivityBar', () => {
     expect(onItemSelect).toHaveBeenNthCalledWith(2, 'explorer');
   });
 
+  it('forwards the id for collapsible top-level items to the shared selection handler', () => {
+    const onItemSelect = vi.fn();
+
+    renderActivityBar({ onItemSelect });
+
+    fireEvent.click(screen.getByTestId('activity-item-physical'));
+
+    expect(onItemSelect).toHaveBeenCalledWith('physical');
+  });
+
   it('uses the selected button style for the active item', () => {
-    render(<ActivityBar activeView="explorer" onItemSelect={vi.fn()} />);
+    renderActivityBar();
 
     const explorerButton = screen.getByTestId('activity-item-explorer');
 
-    expect(explorerButton).toHaveClass('text-foreground', 'border-primary');
-    expect(explorerButton).not.toHaveClass('text-muted-foreground', 'border-transparent');
+    expect(explorerButton).toHaveAttribute('data-active', 'true');
+    expect(explorerButton).toHaveClass('rounded-md', 'data-[active=true]:bg-sidebar-accent', 'data-[active=true]:text-sidebar-accent-foreground');
   });
 
   it('adds a pointer cursor on hover for navigation and action buttons', () => {
-    render(<ActivityBar activeView="explorer" onItemSelect={vi.fn()} />);
+    renderActivityBar();
 
-    expect(screen.getByTestId('activity-item-explorer')).toHaveClass('hover:cursor-pointer');
-    expect(screen.getByTestId('activity-action-compile')).toHaveClass('hover:cursor-pointer');
+    expect(screen.getByTestId('activity-item-explorer')).toHaveClass('cursor-pointer');
+    expect(screen.getByTestId('activity-item-simulation')).toHaveClass('hover:bg-sidebar-accent');
+    expect(screen.getByTestId('activity-action-compile')).toHaveClass('hover:cursor-pointer', 'hover:bg-muted');
   });
 
   it('renders shadcn tooltip content for navigation and action buttons on hover', async () => {
     const user = userEvent.setup();
 
-    render(<ActivityBar activeView="explorer" onItemSelect={vi.fn()} />);
+    renderActivityBar();
 
     await user.hover(screen.getByTestId('activity-item-explorer'));
     expect(await screen.findByRole('tooltip', { name: 'Explorer' })).toBeInTheDocument();
+  });
+
+  it('keeps labels hidden while collapsed and shows them when expanded', () => {
+    const { unmount } = renderActivityBar({ defaultOpen: false });
+
+    expect(screen.queryByText('Compile')).not.toBeInTheDocument();
+    expect(screen.queryByText('Run')).not.toBeInTheDocument();
+    expect(screen.getByText('Physical')).toBeInTheDocument();
+
+    unmount();
+    renderActivityBar({ defaultOpen: true });
+
+    expect(screen.getByText('Physical')).toBeInTheDocument();
+    expect(screen.getByText('Compile')).toBeInTheDocument();
+    expect(screen.getByText('Run')).toBeInTheDocument();
   });
 });

@@ -19,6 +19,7 @@ import { Toggle } from './ui/toggle';
 import { Separator } from './ui/separator';
 import { Button } from './ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
+import { useSidebar } from './ui/sidebar';
 
 const menus = [
   {
@@ -126,14 +127,23 @@ export function MenuBar({
 }: MenuBarProps) {
   const { activeView, mainContentView, setMainContentView } = useWorkspace();
   const { theme, toggleTheme } = useTheme();
+  const { state: activityBarState, toggleSidebar } = useSidebar();
   const ref = useRef<HTMLDivElement>(null);
   const layoutIconsEnabled = canUseLayoutPanels(mainContentView, activeView);
+  const activityBarToggleEnabled = mainContentView === 'code';
   const layoutIconClassName = [
     'w-8 h-full rounded-none border-0 text-muted-foreground',
     'data-[state=on]:text-foreground',
     layoutIconsEnabled
       ? 'hover:cursor-pointer hover:text-foreground hover:bg-accent'
       : 'cursor-not-allowed opacity-40',
+  ].join(' ');
+  const activityBarTriggerClassName = [
+    'ml-1 w-8 h-full rounded-none border-0 text-muted-foreground',
+    'data-[state=on]:text-foreground',
+    activityBarToggleEnabled
+      ? 'hover:cursor-pointer hover:text-foreground hover:bg-accent'
+      : 'opacity-40',
   ].join(' ');
 
   return (
@@ -175,6 +185,27 @@ export function MenuBar({
           ))}
         </Menubar>
 
+
+        <TooltipIconButton content="Toggle activity bar" wrapTrigger={false}>
+          <Toggle
+            aria-label="Toggle activity bar"
+            aria-disabled={!activityBarToggleEnabled}
+            data-testid="toggle-activity-bar"
+            disabled={!activityBarToggleEnabled}
+            pressed={activityBarToggleEnabled ? activityBarState === 'expanded' : false}
+            className={activityBarTriggerClassName}
+            onPressedChange={() => {
+              if (!activityBarToggleEnabled) {
+                return;
+              }
+
+              toggleSidebar();
+            }}
+            style={noDragInteractive as React.CSSProperties}
+          >
+            <PanelLeftIcon size={15} filled={activityBarState === 'expanded'} />
+          </Toggle>
+        </TooltipIconButton>
 
         {/* Center view switcher — absolutely centered */}
         <div
