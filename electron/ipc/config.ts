@@ -10,6 +10,12 @@ let configPath = '';
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 const SAVE_DEBOUNCE_MS = 300;
 
+function ensureConfigLoaded(): void {
+  if (!configPath) {
+    loadConfig();
+  }
+}
+
 function loadConfig(): void {
   configPath = path.join(app.getPath('userData'), 'config.json');
   try {
@@ -34,16 +40,32 @@ function debouncedSave(): void {
 }
 
 export function registerConfigHandlers(): void {
-  loadConfig();
+  ensureConfigLoaded();
 
   ipcMain.on(SyncChannels.CONFIG_GET, (event, key: unknown) => {
     assertString(key, 'key');
-    event.returnValue = configData[key] ?? null;
+    event.returnValue = getConfigValue(key);
   });
 
   ipcMain.handle(AsyncChannels.CONFIG_SET, async (_event, key: unknown, value: unknown) => {
     assertString(key, 'key');
-    configData[key] = value;
-    debouncedSave();
+    setConfigValue(key, value);
   });
+}
+
+export function getConfigValue(key: string): unknown {
+  ensureConfigLoaded();
+  return configData[key] ?? null;
+}
+
+export function setConfigValue(key: string, value: unknown): void {
+  ensureConfigLoaded();
+
+  if (value === null || value === undefined) {
+    delete configData[key];
+  } else {
+    configData[key] = value;
+  }
+
+  debouncedSave();
 }

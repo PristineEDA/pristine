@@ -34,11 +34,18 @@ const electronAPI = {
   show: () => ipcRenderer.invoke(AsyncChannels.WINDOW_SHOW),
   hide: () => ipcRenderer.invoke(AsyncChannels.WINDOW_HIDE),
   close: () => ipcRenderer.invoke(AsyncChannels.WINDOW_CLOSE),
+  resolveCloseRequest: (action: 'quit' | 'tray', remember: boolean) =>
+    ipcRenderer.invoke(AsyncChannels.WINDOW_RESOLVE_CLOSE, action, remember),
   isMaximized: (): boolean => syncSend(SyncChannels.WINDOW_IS_MAXIMIZED),
   onMaximizedChange: (callback: (maximized: boolean) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, maximized: boolean) => callback(maximized);
     ipcRenderer.on(StreamChannels.WINDOW_MAXIMIZED_CHANGE, handler);
     return () => { ipcRenderer.removeListener(StreamChannels.WINDOW_MAXIMIZED_CHANGE, handler); };
+  },
+  onCloseRequested: (callback: () => void) => {
+    const handler = () => callback();
+    ipcRenderer.on(StreamChannels.WINDOW_CLOSE_REQUESTED, handler);
+    return () => { ipcRenderer.removeListener(StreamChannels.WINDOW_CLOSE_REQUESTED, handler); };
   },
 
   // ── File System (async, project-dir scoped) ──

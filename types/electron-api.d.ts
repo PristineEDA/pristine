@@ -14,8 +14,10 @@ export interface ElectronAPI {
   show: () => Promise<void>;
   hide: () => Promise<void>;
   close: () => Promise<void>;
+  resolveCloseRequest: (action: 'quit' | 'tray', remember: boolean) => Promise<void>;
   isMaximized: () => boolean;
   onMaximizedChange: (callback: (maximized: boolean) => void) => () => void;
+  onCloseRequested: (callback: () => void) => () => void;
 
   // File system (project-dir scoped)
   fs: {

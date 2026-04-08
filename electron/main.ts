@@ -2,15 +2,19 @@ import { app, BrowserWindow, Menu, Tray, nativeImage } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { registerAllHandlers, setProjectRoot, setupWindowStreams } from './ipc/register.js';
+import { getConfigValue } from './ipc/config.js';
 import { disposeAllTerminalSessions } from './ipc/terminal.js';
+import { StreamChannels } from './ipc/channels.js';
 import { DEFAULT_STARTUP_PROJECT_ROOT } from '../src/app/workspace/workspaceFiles.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MINIMUM_SPLASH_DURATION_MS = 3000;
+const CLOSE_ACTION_CONFIG_KEY = 'window.closeActionPreference';
 
 let mainWindow: BrowserWindow | null = null;
 let splashWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
+let isQuitting = false;
 
 function getMainWindow(): BrowserWindow | null {
   return mainWindow;
@@ -61,6 +65,29 @@ function hideMainWindowToTray(): void {
   }
 
   mainWindow.hide();
+}
+
+function requestCloseConfirmation(window: BrowserWindow): void {
+  if (window.isDestroyed() || window.webContents.isDestroyed()) {
+    return;
+  }
+
+  window.webContents.send(StreamChannels.WINDOW_CLOSE_REQUESTED);
+}
+
+function getRememberedCloseAction(): 'quit' | 'tray' | null {
+  const value = getConfigValue(CLOSE_ACTION_CONFIG_KEY);
+  return value === 'quit' || value === 'tray' ? value : null;
+}
+
+function executeRememberedCloseAction(action: 'quit' | 'tray'): void {
+  if (action === 'tray') {
+    hideMainWindowToTray();
+    return;
+  }
+
+  isQuitting = true;
+  app.quit();
 }
 
 function createTrayMenu(): Menu {
@@ -164,6 +191,22 @@ function createMainWindow(): BrowserWindow {
     window.loadFile(getMainRendererPath());
   }
 
+  window.on('close', (event) => {
+    if (isQuitting) {
+      return;
+    }
+
+    event.preventDefault();
+
+    const rememberedCloseAction = getRememberedCloseAction();
+    if (rememberedCloseAction) {
+      executeRememberedCloseAction(rememberedCloseAction);
+      return;
+    }
+
+    requestCloseConfirmation(window);
+  });
+
   window.on('closed', () => {
     if (mainWindow === window) {
       mainWindow = null;
@@ -228,6 +271,7 @@ app.whenReady().then(() => {
 });
 
 app.on('before-quit', () => {
+  isQuitting = true;
   disposeAllTerminalSessions();
   tray?.destroy();
   tray = null;

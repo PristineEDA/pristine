@@ -113,6 +113,26 @@ describe('config IPC handlers', () => {
     );
   });
 
+  it('removes config keys when a setting is reset', async () => {
+    mockFs.readFileSync.mockReturnValue('{"window.closeActionPreference":"tray","theme":"dracula"}');
+
+    const { registerConfigHandlers } = await importModule();
+    registerConfigHandlers();
+
+    const handler = getAsyncHandler(AsyncChannels.CONFIG_SET);
+    await handler({}, 'window.closeActionPreference', null);
+
+    vi.advanceTimersByTime(300);
+
+    const configFile = path.join('/tmp/pristine-user-data', 'config.json');
+
+    expect(mockFs.writeFileSync).toHaveBeenCalledWith(
+      configFile,
+      JSON.stringify({ theme: 'dracula' }, null, 2),
+      'utf-8',
+    );
+  });
+
   it('validates config keys before saving', async () => {
     mockFs.readFileSync.mockImplementation(() => {
       throw new Error('ENOENT');

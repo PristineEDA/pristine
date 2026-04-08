@@ -1,5 +1,8 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import { SyncChannels, AsyncChannels, StreamChannels } from './channels.js';
+import { setConfigValue } from './config.js';
+
+const CLOSE_ACTION_CONFIG_KEY = 'window.closeActionPreference';
 
 export function registerWindowHandlers(getMainWindow: () => BrowserWindow | null): void {
   ipcMain.on(SyncChannels.WINDOW_IS_MAXIMIZED, (event) => {
@@ -46,6 +49,31 @@ export function registerWindowHandlers(getMainWindow: () => BrowserWindow | null
   ipcMain.handle(AsyncChannels.WINDOW_CLOSE, () => {
     const win = getMainWindow();
     if (!win) return false;
+    win.close();
+    return true;
+  });
+
+  ipcMain.handle(AsyncChannels.WINDOW_RESOLVE_CLOSE, async (_event, action: unknown, remember: unknown) => {
+    const win = getMainWindow();
+    if (!win) return false;
+
+    if (action !== 'quit' && action !== 'tray') {
+      throw new Error('Expected close action to be "quit" or "tray"');
+    }
+
+    if (typeof remember !== 'boolean') {
+      throw new Error('Expected remember to be boolean');
+    }
+
+    if (remember) {
+      setConfigValue(CLOSE_ACTION_CONFIG_KEY, action);
+    }
+
+    if (action === 'tray') {
+      win.hide();
+      return true;
+    }
+
     app.quit();
     return true;
   });

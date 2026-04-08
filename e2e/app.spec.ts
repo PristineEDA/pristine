@@ -185,6 +185,24 @@ async function readTerminalThemeSnapshot(window: Awaited<ReturnType<typeof launc
   });
 }
 
+async function clearRememberedCloseBehavior(window: Awaited<ReturnType<typeof launchApp>>['window']) {
+  await window.evaluate(async () => {
+    const browserGlobal = globalThis as typeof globalThis & {
+      electronAPI?: {
+        config: {
+          set: (key: string, value: unknown) => Promise<void>;
+        };
+      };
+    };
+
+    await browserGlobal.electronAPI?.config.set('window.closeActionPreference', null);
+  });
+}
+
+async function requestWindowClose(window: Awaited<ReturnType<typeof launchApp>>['window']) {
+  await window.getByTestId('window-control-close').click();
+}
+
 function isProcessRunning(pid: number) {
   if (!Number.isFinite(pid) || pid <= 0) {
     return false;
@@ -275,7 +293,9 @@ test('close button confirms and can minimize the app to tray', async () => {
   const { app, window } = await launchApp();
   const browserWindow = await app.browserWindow(window);
 
-  await window.getByTestId('window-control-close').click();
+  await clearRememberedCloseBehavior(window);
+
+  await requestWindowClose(window);
   await expect(window.getByTestId('close-confirmation-dialog')).toBeVisible();
   await expect(window.getByText('Close Pristine?')).toBeVisible();
 
@@ -926,6 +946,7 @@ test('menu bar right-side controls render shadcn tooltip content at runtime', as
 test('close button terminates the active terminal shell process', async () => {
   const { app, window } = await launchApp();
 
+  await clearRememberedCloseBehavior(window);
   await openBottomTerminal(window);
 
   await expect.poll(async () => readTerminalPid(window), {
@@ -936,7 +957,9 @@ test('close button terminates the active terminal shell process', async () => {
   expect(isProcessRunning(pid)).toBe(true);
 
   const closePromise = window.waitForEvent('close');
-  await window.getByTestId('window-control-close').click();
+  await requestWindowClose(window);
+  await expect(window.getByTestId('close-confirmation-dialog')).toBeVisible();
+  await window.getByTestId('close-action-quit').click();
   await closePromise;
 
   await expect.poll(() => isProcessRunning(pid), {
@@ -945,4 +968,107 @@ test('close button terminates the active terminal shell process', async () => {
 
   await expect.poll(() => app.windows().length).toBe(0);
   await app.close();
+});
+
+test('remembered close behavior persists through Settings reset flow', async () => {
+  const { app, window } = await launchApp();
+  const browserWindow = await app.browserWindow(window);
+
+  await clearRememberedCloseBehavior(window);
+
+  await requestWindowClose(window);
+  await expect(window.getByTestId('close-confirmation-dialog')).toBeVisible();
+  await window.getByTestId('close-action-remember-choice').click();
+  await window.getByTestId('close-action-minimize-to-tray').click();
+
+  await expect.poll(async () => browserWindow.evaluate((win) => win.isVisible())).toBe(false);
+
+  await browserWindow.evaluate((win) => {
+    win.show();
+    win.focus();
+  });
+
+  await expect.poll(async () => browserWindow.evaluate((win) => win.isVisible())).toBe(true);
+
+  await window.getByTestId('menu-settings-button').click();
+  await expect(window.getByTestId('settings-dialog')).toBeVisible();
+  await expect(window.getByTestId('close-behavior-current-value')).toContainText('Current setting: Minimize to tray');
+
+  await window.getByTestId('settings-close-button').click();
+  await expect(window.getByTestId('settings-dialog')).toHaveCount(0);
+
+  await requestWindowClose(window);
+  await expect(window.getByTestId('close-confirmation-dialog')).toHaveCount(0);
+  await expect.poll(async () => browserWindow.evaluate((win) => win.isVisible())).toBe(false);
+
+  await browserWindow.evaluate((win) => {
+    win.show();
+    win.focus();
+  });
+
+  await expect.poll(async () => browserWindow.evaluate((win) => win.isVisible())).toBe(true);
+
+  await window.getByTestId('menu-settings-button').click();
+  await expect(window.getByTestId('settings-dialog')).toBeVisible();
+  await window.getByTestId('reset-close-behavior').click();
+  await expect(window.getByTestId('close-behavior-current-value')).toContainText('Current setting: Ask every time');
+
+  await window.getByTestId('settings-close-button').click();
+  await expect(window.getByTestId('settings-dialog')).toHaveCount(0);
+
+  await requestWindowClose(window);
+  await expect(window.getByTestId('close-confirmation-dialog')).toBeVisible();
+  await window.getByTestId('close-action-cancel').click();
+  await expect(window.getByTestId('close-confirmation-dialog')).toHaveCount(0);
+
+  await app.close();
+});
+
+test('remembered close behavior can quit directly on the next close request', async () => {
+  const { app, window } = await launchApp();
+
+  await clearRememberedCloseBehavior(window);
+  await openBottomTerminal(window);
+
+  await expect.poll(async () => readTerminalPid(window), {
+    timeout: 15000,
+  }).toBeGreaterThan(0);
+
+  const pid = await readTerminalPid(window);
+  expect(isProcessRunning(pid)).toBe(true);
+
+  await requestWindowClose(window);
+  await expect(window.getByTestId('close-confirmation-dialog')).toBeVisible();
+  await window.getByTestId('close-action-remember-choice').click();
+
+  const rememberedQuitClosePromise = window.waitForEvent('close');
+  await window.getByTestId('close-action-quit').click();
+  await rememberedQuitClosePromise;
+
+  await expect.poll(() => isProcessRunning(pid), {
+    timeout: 15000,
+  }).toBe(false);
+
+  await expect.poll(() => app.windows().length).toBe(0);
+
+  const { app: reopenedApp, window: reopenedWindow } = await launchApp();
+  await openBottomTerminal(reopenedWindow);
+
+  await expect.poll(async () => readTerminalPid(reopenedWindow), {
+    timeout: 15000,
+  }).toBeGreaterThan(0);
+
+  const reopenedPid = await readTerminalPid(reopenedWindow);
+  expect(isProcessRunning(reopenedPid)).toBe(true);
+
+  const directClosePromise = reopenedWindow.waitForEvent('close');
+  await requestWindowClose(reopenedWindow);
+  await directClosePromise;
+
+  await expect.poll(() => isProcessRunning(reopenedPid), {
+    timeout: 15000,
+  }).toBe(false);
+
+  await expect.poll(() => reopenedApp.windows().length).toBe(0);
+  await reopenedApp.close();
 });

@@ -1,27 +1,31 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
 type BrowserWindowInstance = {
   options: Record<string, unknown>;
-  loadURL: ReturnType<typeof vi.fn>;
-  loadFile: ReturnType<typeof vi.fn>;
-  on: ReturnType<typeof vi.fn>;
-  once: ReturnType<typeof vi.fn>;
-  show: ReturnType<typeof vi.fn>;
-  hide: ReturnType<typeof vi.fn>;
-  focus: ReturnType<typeof vi.fn>;
-  restore: ReturnType<typeof vi.fn>;
-  isMinimized: ReturnType<typeof vi.fn>;
-  isDestroyed: ReturnType<typeof vi.fn>;
-  close: ReturnType<typeof vi.fn>;
+  loadURL: Mock<(url: string) => void>;
+  loadFile: Mock<(filePath: string) => void>;
+  webContents: {
+    send: Mock<(channel: string, ...args: unknown[]) => void>;
+    isDestroyed: Mock<() => boolean>;
+  };
+  on: Mock<(event: string, handler: (...args: unknown[]) => void) => BrowserWindowInstance>;
+  once: Mock<(event: string, handler: (...args: unknown[]) => void) => BrowserWindowInstance>;
+  show: Mock<() => void>;
+  hide: Mock<() => void>;
+  focus: Mock<() => void>;
+  restore: Mock<() => void>;
+  isMinimized: Mock<() => boolean>;
+  isDestroyed: Mock<() => boolean>;
+  close: Mock<() => void>;
   emit: (event: string, ...args: unknown[]) => void;
 };
 
 type TrayInstance = {
-  setToolTip: ReturnType<typeof vi.fn>;
-  setContextMenu: ReturnType<typeof vi.fn>;
-  popUpContextMenu: ReturnType<typeof vi.fn>;
-  on: ReturnType<typeof vi.fn>;
-  destroy: ReturnType<typeof vi.fn>;
+  setToolTip: Mock<(tooltip: string) => void>;
+  setContextMenu: Mock<(menu: unknown) => void>;
+  popUpContextMenu: Mock<(menu?: unknown) => void>;
+  on: Mock<(event: string, handler: (...args: unknown[]) => void) => TrayInstance>;
+  destroy: Mock<() => void>;
   emit: (event: string, ...args: unknown[]) => void;
 };
 
@@ -36,6 +40,10 @@ const mocks = vi.hoisted(() => {
     options: Record<string, unknown>;
     loadURL = vi.fn();
     loadFile = vi.fn();
+    webContents = {
+      send: vi.fn(),
+      isDestroyed: vi.fn(() => false),
+    };
     show = vi.fn();
     hide = vi.fn();
     focus = vi.fn();
@@ -61,8 +69,18 @@ const mocks = vi.hoisted(() => {
     });
 
     close = vi.fn(() => {
-      this.emit('close');
-      this.emit('closed');
+      const closeEvent = {
+        defaultPrevented: false,
+        preventDefault() {
+          this.defaultPrevented = true;
+        },
+      };
+
+      this.emit('close', closeEvent);
+
+      if (!closeEvent.defaultPrevented) {
+        this.emit('closed');
+      }
     });
 
     emit(event: string, ...args: unknown[]) {
@@ -118,6 +136,7 @@ const mocks = vi.hoisted(() => {
     mockBuildFromTemplate: vi.fn((template: unknown[]) => ({ template })),
     mockCreateFromDataURL: vi.fn(() => ({ kind: 'native-image' })),
     mockDisposeAllTerminalSessions: vi.fn(),
+    mockGetConfigValue: vi.fn<(key: string) => unknown>(() => null),
     mockRegisterAllHandlers: vi.fn(),
     mockSetProjectRoot: vi.fn(),
     mockSetupWindowStreams: vi.fn(),
@@ -150,6 +169,10 @@ vi.mock('./ipc/terminal.js', () => ({
   disposeAllTerminalSessions: (...args: unknown[]) => mocks.mockDisposeAllTerminalSessions(...args),
 }));
 
+vi.mock('./ipc/config.js', () => ({
+  getConfigValue: (key: string) => mocks.mockGetConfigValue(key),
+}));
+
 const originalPlatform = process.platform;
 const originalDevServerUrl = process.env.VITE_DEV_SERVER_URL;
 const originalProjectRoot = process.env.PRISTINE_PROJECT_ROOT;
@@ -165,6 +188,7 @@ async function importMain(options?: { platform?: NodeJS.Platform; devServerUrl?:
   mocks.mockBuildFromTemplate.mockClear();
   mocks.mockCreateFromDataURL.mockClear();
   mocks.mockDisposeAllTerminalSessions.mockClear();
+  mocks.mockGetConfigValue.mockClear();
   mocks.mockRegisterAllHandlers.mockClear();
   mocks.mockSetProjectRoot.mockClear();
   mocks.mockSetupWindowStreams.mockClear();
@@ -351,6 +375,38 @@ describe('electron main entry', () => {
     expect(mainWindow.focus).toHaveBeenCalledTimes(1);
 
     quitItem?.click?.();
+    expect(mocks.mockQuit).toHaveBeenCalledTimes(1);
+  });
+
+  it('intercepts native close and requests renderer confirmation when no remembered choice exists', async () => {
+    const { browserWindowInstances } = await importMain({ platform: 'win32' });
+
+    const mainWindow = browserWindowInstances[1];
+    mainWindow.close();
+
+    expect(mainWindow.webContents.send).toHaveBeenCalledWith('stream:window:close-requested');
+    expect(mainWindow.hide).not.toHaveBeenCalled();
+    expect(mocks.mockQuit).not.toHaveBeenCalled();
+  });
+
+  it('hides to tray on native close when the remembered choice is tray', async () => {
+    mocks.mockGetConfigValue.mockReturnValue('tray');
+    const { browserWindowInstances } = await importMain({ platform: 'win32' });
+
+    const mainWindow = browserWindowInstances[1];
+    mainWindow.close();
+
+    expect(mainWindow.hide).toHaveBeenCalledTimes(1);
+    expect(mainWindow.webContents.send).not.toHaveBeenCalled();
+    expect(mocks.mockQuit).not.toHaveBeenCalled();
+  });
+
+  it('quits on native close when the remembered choice is quit', async () => {
+    mocks.mockGetConfigValue.mockReturnValue('quit');
+    const { browserWindowInstances } = await importMain({ platform: 'win32' });
+
+    browserWindowInstances[1].close();
+
     expect(mocks.mockQuit).toHaveBeenCalledTimes(1);
   });
 

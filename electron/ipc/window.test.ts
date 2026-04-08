@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AsyncChannels, StreamChannels, SyncChannels } from './channels.js';
 
-const { mockOn, mockHandle, mockQuit } = vi.hoisted(() => ({
+const { mockOn, mockHandle, mockQuit, mockSetConfigValue } = vi.hoisted(() => ({
   mockOn: vi.fn(),
   mockHandle: vi.fn(),
   mockQuit: vi.fn(),
+  mockSetConfigValue: vi.fn(),
 }));
 
 vi.mock('electron', () => ({
@@ -16,6 +17,10 @@ vi.mock('electron', () => ({
     handle: (...args: unknown[]) => mockHandle(...args),
   },
   BrowserWindow: class {},
+}));
+
+vi.mock('./config.js', () => ({
+  setConfigValue: (...args: unknown[]) => mockSetConfigValue(...args),
 }));
 
 import { registerWindowHandlers, setupWindowStreams } from './window.js';
@@ -37,6 +42,7 @@ describe('window IPC handlers', () => {
     mockOn.mockClear();
     mockHandle.mockClear();
     mockQuit.mockClear();
+    mockSetConfigValue.mockClear();
   });
 
   it('returns maximized state via sync channel', () => {
@@ -57,7 +63,7 @@ describe('window IPC handlers', () => {
     expect(handler({})).toBe(false);
   });
 
-  it('toggles maximize state, changes visibility, and closes the app', async () => {
+  it('toggles maximize state, changes visibility, requests window close, and resolves close actions', async () => {
     let maximized = false;
     let minimized = false;
     const win = {
@@ -70,6 +76,7 @@ describe('window IPC handlers', () => {
       show: vi.fn(),
       focus: vi.fn(),
       hide: vi.fn(),
+      close: vi.fn(),
     };
 
     registerWindowHandlers(() => win as any);
@@ -79,6 +86,7 @@ describe('window IPC handlers', () => {
     const show = getHandleListener(AsyncChannels.WINDOW_SHOW);
     const hide = getHandleListener(AsyncChannels.WINDOW_HIDE);
     const close = getHandleListener(AsyncChannels.WINDOW_CLOSE);
+    const resolveClose = getHandleListener(AsyncChannels.WINDOW_RESOLVE_CLOSE);
 
     expect(minimize({})).toBe(true);
     minimized = true;
@@ -87,6 +95,8 @@ describe('window IPC handlers', () => {
     expect(show({})).toBe(true);
     expect(hide({})).toBe(true);
     expect(close({})).toBe(true);
+    await expect(resolveClose({}, 'tray', true)).resolves.toBe(true);
+    await expect(resolveClose({}, 'quit', false)).resolves.toBe(true);
 
     expect(win.minimize).toHaveBeenCalledTimes(1);
     expect(win.maximize).toHaveBeenCalledTimes(1);
@@ -94,7 +104,9 @@ describe('window IPC handlers', () => {
     expect(win.restore).toHaveBeenCalledTimes(1);
     expect(win.show).toHaveBeenCalledTimes(1);
     expect(win.focus).toHaveBeenCalledTimes(1);
-    expect(win.hide).toHaveBeenCalledTimes(1);
+    expect(win.hide).toHaveBeenCalledTimes(2);
+    expect(win.close).toHaveBeenCalledTimes(1);
+    expect(mockSetConfigValue).toHaveBeenCalledWith('window.closeActionPreference', 'tray');
     expect(mockQuit).toHaveBeenCalledTimes(1);
   });
 
