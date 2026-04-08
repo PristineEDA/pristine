@@ -206,9 +206,7 @@ async function requestWindowClose(window: Awaited<ReturnType<typeof launchApp>>[
 async function chooseQuitFromCloseDialog(window: Awaited<ReturnType<typeof launchApp>>['window']) {
   const quitButton = window.getByTestId('close-action-quit');
   await expect(quitButton).toBeVisible();
-  await quitButton.evaluate((button) => {
-    (button as { click: () => void }).click();
-  });
+  await quitButton.click({ noWaitAfter: true });
 }
 
 function isProcessRunning(pid: number) {
