@@ -133,6 +133,28 @@ describe('config IPC handlers', () => {
     );
   });
 
+  it('flushes pending config writes immediately when requested', async () => {
+    mockFs.readFileSync.mockImplementation(() => {
+      throw new Error('ENOENT');
+    });
+
+    const { flushPendingConfigSave, setConfigValue } = await importModule();
+
+    setConfigValue('window.closeActionPreference', 'quit');
+
+    expect(mockFs.writeFileSync).not.toHaveBeenCalled();
+
+    flushPendingConfigSave();
+
+    const configFile = path.join('/tmp/pristine-user-data', 'config.json');
+
+    expect(mockFs.writeFileSync).toHaveBeenCalledWith(
+      configFile,
+      JSON.stringify({ 'window.closeActionPreference': 'quit' }, null, 2),
+      'utf-8',
+    );
+  });
+
   it('validates config keys before saving', async () => {
     mockFs.readFileSync.mockImplementation(() => {
       throw new Error('ENOENT');

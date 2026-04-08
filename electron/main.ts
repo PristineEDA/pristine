@@ -2,7 +2,7 @@ import { app, BrowserWindow, Menu, Tray, nativeImage } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { registerAllHandlers, setProjectRoot, setupWindowStreams } from './ipc/register.js';
-import { getConfigValue } from './ipc/config.js';
+import { flushPendingConfigSave, getConfigValue } from './ipc/config.js';
 import { disposeAllTerminalSessions } from './ipc/terminal.js';
 import { StreamChannels } from './ipc/channels.js';
 import { DEFAULT_STARTUP_PROJECT_ROOT } from '../src/app/workspace/workspaceFiles.js';
@@ -272,6 +272,7 @@ app.whenReady().then(() => {
 
 app.on('before-quit', () => {
   isQuitting = true;
+  flushPendingConfigSave();
   disposeAllTerminalSessions();
   tray?.destroy();
   tray = null;

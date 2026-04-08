@@ -136,6 +136,7 @@ const mocks = vi.hoisted(() => {
     mockBuildFromTemplate: vi.fn((template: unknown[]) => ({ template })),
     mockCreateFromDataURL: vi.fn(() => ({ kind: 'native-image' })),
     mockDisposeAllTerminalSessions: vi.fn(),
+    mockFlushPendingConfigSave: vi.fn(),
     mockGetConfigValue: vi.fn<(key: string) => unknown>(() => null),
     mockRegisterAllHandlers: vi.fn(),
     mockSetProjectRoot: vi.fn(),
@@ -170,6 +171,7 @@ vi.mock('./ipc/terminal.js', () => ({
 }));
 
 vi.mock('./ipc/config.js', () => ({
+  flushPendingConfigSave: (...args: unknown[]) => mocks.mockFlushPendingConfigSave(...args),
   getConfigValue: (key: string) => mocks.mockGetConfigValue(key),
 }));
 
@@ -188,6 +190,7 @@ async function importMain(options?: { platform?: NodeJS.Platform; devServerUrl?:
   mocks.mockBuildFromTemplate.mockClear();
   mocks.mockCreateFromDataURL.mockClear();
   mocks.mockDisposeAllTerminalSessions.mockClear();
+  mocks.mockFlushPendingConfigSave.mockClear();
   mocks.mockGetConfigValue.mockClear();
   mocks.mockRegisterAllHandlers.mockClear();
   mocks.mockSetProjectRoot.mockClear();
@@ -429,6 +432,7 @@ describe('electron main entry', () => {
 
     appHandlers.get('before-quit')?.();
 
+    expect(mocks.mockFlushPendingConfigSave).toHaveBeenCalledTimes(1);
     expect(mocks.mockDisposeAllTerminalSessions).toHaveBeenCalledTimes(1);
     expect(trayInstances[0].destroy).toHaveBeenCalledTimes(1);
   });

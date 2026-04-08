@@ -39,6 +39,16 @@ function debouncedSave(): void {
   }, SAVE_DEBOUNCE_MS);
 }
 
+export function flushPendingConfigSave(): void {
+  ensureConfigLoaded();
+
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+    saveConfig();
+  }
+}
+
 export function registerConfigHandlers(): void {
   ensureConfigLoaded();
 
