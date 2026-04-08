@@ -186,7 +186,7 @@ export function EditorArea({
   return (
     <div className="flex flex-col h-full bg-background overflow-hidden" onMouseDown={() => onFocus?.()}>
       {/* Tab bar */}
-      <div className="flex items-stretch h-9 bg-muted overflow-x-auto shrink-0 border-b border-border">
+      <div data-testid="editor-tab-bar" className="flex items-stretch h-[27px] bg-muted overflow-x-auto shrink-0 border-b border-border">
         {tabs.map((tab) => (
           <EditorTab
             key={tab.id}
@@ -205,7 +205,7 @@ export function EditorArea({
             data-testid="editor-split-right"
             aria-label="Split Editor Right"
             onClick={() => onSplitEditor?.('horizontal')}
-            className="px-2 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors shrink-0"
+            className="px-1 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors shrink-0 cursor-pointer"
           >
             <Split size={14} />
           </button>
@@ -215,12 +215,12 @@ export function EditorArea({
             data-testid="editor-split-down"
             aria-label="Split Editor Down"
             onClick={() => onSplitEditor?.('vertical')}
-            className="px-2 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors shrink-0"
+            className="px-1 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors shrink-0 cursor-pointer"
           >
             <Split size={14} className="rotate-90" />
           </button>
         </TooltipIconButton>
-        <button className="px-2 text-muted-foreground hover:text-foreground transition-colors shrink-0">
+        <button className="px-2 text-muted-foreground hover:text-foreground transition-colors shrink-0 cursor-pointer">
           <MoreHorizontal size={14} />
         </button>
       </div>

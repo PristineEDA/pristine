@@ -116,6 +116,9 @@ describe('EditorArea', () => {
     fireEvent.click(screen.getByTestId('editor-tab-rtl/core/alu.v'));
     fireEvent.click(screen.getByTestId('editor-tab-close-rtl/core/cpu_top.v'));
 
+    expect(screen.getByTestId('editor-tab-bar')).toHaveClass('h-[27px]');
+    expect(screen.getByTestId('editor-split-right')).toHaveClass('px-1', 'cursor-pointer');
+    expect(screen.getByTestId('editor-split-down')).toHaveClass('px-1', 'cursor-pointer');
     expect(screen.getByTestId('editor-tab-badge-rtl/core/cpu_top.v')).toHaveTextContent('V');
     expect(screen.getByTestId('editor-tab-badge-rtl/core/alu.v')).toHaveTextContent('V');
 
