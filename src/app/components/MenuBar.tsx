@@ -20,6 +20,7 @@ import { Separator } from './ui/separator';
 import { Button } from './ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 import { useSidebar } from './ui/sidebar';
+import { centerViewSwitchItemClassName } from './viewSwitcherStyles';
 
 const menus = [
   {
@@ -58,7 +59,6 @@ const noDragInteractive = {
   pointerEvents: 'auto' as const,
 };
 const isMacOS = window.electronAPI?.platform === 'darwin';
-const centerViewSwitchItemClassName = 'w-7 h-6 border border-transparent p-0 text-muted-foreground hover:cursor-pointer hover:bg-accent/70 hover:text-foreground data-[state=on]:border-border/80 data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_1px_2px_rgba(15,23,42,0.08)] dark:data-[state=on]:shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_1px_2px_rgba(0,0,0,0.35)]';
 
 function TooltipIconButton({
   content,

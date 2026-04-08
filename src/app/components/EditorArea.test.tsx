@@ -87,6 +87,10 @@ describe('EditorArea', () => {
 
     expect(emptyState).toHaveClass('h-full', 'w-full', 'items-center', 'justify-center');
     expect(emptyState).not.toHaveClass('border-dashed');
+    expect(screen.getByTestId('empty-project-tabs')).toBeInTheDocument();
+    expect(screen.getByTestId('empty-project-tab-info')).toHaveAttribute('data-state', 'on');
+    expect(screen.getByTestId('empty-project-tab-image')).toBeInTheDocument();
+    expect(screen.getByTestId('empty-project-tab-summary')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Create Project' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Open Project' })).toBeInTheDocument();
     expect(screen.queryByTestId('monaco-editor')).not.toBeInTheDocument();
