@@ -12,6 +12,9 @@ on:
     types:
       - published
 
+env:
+  PRISTINE_EMPTY_WALLPAPER_URL: https://raw.githubusercontent.com/PristineEDA/Pristine-res/main/images/empty-wallpaper.png
+
 jobs:
   package-gate:
     name: Package Gate
@@ -98,6 +101,9 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Prepare external assets
+        run: pnpm run prepare:assets
 
       - name: Type check
         run: pnpm typecheck
@@ -215,6 +221,9 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Prepare external assets
+        run: pnpm run prepare:assets
 
       - name: Package application
         env:

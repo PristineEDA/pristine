@@ -11,12 +11,12 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "./ui/empty"
-import emptyImageSrc from "../../assets/images/empty/tmp.png"
 import { centerViewSwitchItemClassName } from "./viewSwitcherStyles"
 
 type EmptyProjectTab = 'info' | 'image' | 'summary'
 
 const emptyProjectTabClassName = `${centerViewSwitchItemClassName} w-8 h-8 rounded-md`
+const emptyWallpaperPath = "/generated/empty-wallpaper.png"
 
 function InfoContent() {
   return (
@@ -49,15 +49,24 @@ function InfoContent() {
 }
 
 function ImageContent() {
+  const [imageUnavailable, setImageUnavailable] = useState(false)
+
   return (
     <div className="absolute inset-0" data-testid="empty-project-image-panel">
-      <div className="h-full w-full overflow-hidden bg-background">
-        <img
-          alt="Empty project preview"
-          className="h-full w-full object-cover"
-          data-testid="empty-project-image"
-          src={emptyImageSrc}
+      <div className="relative h-full w-full overflow-hidden bg-background">
+        <div
+          className={`absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(96,165,250,0.3),_transparent_45%),linear-gradient(135deg,_rgba(15,23,42,0.96),_rgba(30,41,59,0.88)_48%,_rgba(51,65,85,0.92))] transition-opacity ${imageUnavailable ? 'opacity-100' : 'opacity-30'}`}
+          data-testid="empty-project-image-fallback"
         />
+        {!imageUnavailable && (
+          <img
+            alt="Empty project preview"
+            className="relative h-full w-full object-cover"
+            data-testid="empty-project-image"
+            src={emptyWallpaperPath}
+            onError={() => setImageUnavailable(true)}
+          />
+        )}
       </div>
     </div>
   )

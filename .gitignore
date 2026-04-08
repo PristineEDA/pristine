@@ -19,3 +19,4 @@ coverage/
 tmp-*.png
 tmp*
 .tmp-*.cjs
+public/generated/
