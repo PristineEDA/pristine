@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Settings, CircleUser, Minus, Square, X, Code2, Presentation, Workflow,
   Sun, Moon,
@@ -18,6 +18,15 @@ import { ToggleGroup, ToggleGroupItem } from './ui/toggle-group';
 import { Toggle } from './ui/toggle';
 import { Separator } from './ui/separator';
 import { Button } from './ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from './ui/dialog';
+import { Switch } from './ui/switch';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 import { useSidebar } from './ui/sidebar';
 import { centerViewSwitchItemClassName } from './viewSwitcherStyles';
@@ -59,6 +68,12 @@ const noDragInteractive = {
   pointerEvents: 'auto' as const,
 };
 const isMacOS = window.electronAPI?.platform === 'darwin';
+const CLOSE_ACTION_CONFIG_KEY = 'window.closeActionPreference';
+
+function getRememberedCloseAction(): 'quit' | 'tray' | null {
+  const value = window.electronAPI?.config.get(CLOSE_ACTION_CONFIG_KEY);
+  return value === 'quit' || value === 'tray' ? value : null;
+}
 
 function TooltipIconButton({
   content,
@@ -129,6 +144,10 @@ export function MenuBar({
   const { theme, toggleTheme } = useTheme();
   const { state: activityBarState, toggleSidebar } = useSidebar();
   const ref = useRef<HTMLDivElement>(null);
+  const [closeDialogOpen, setCloseDialogOpen] = useState(false);
+  const [rememberCloseChoice, setRememberCloseChoice] = useState(false);
+  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
+  const [rememberedCloseAction, setRememberedCloseAction] = useState<'quit' | 'tray' | null>(() => getRememberedCloseAction());
   const layoutIconsEnabled = canUseLayoutPanels(mainContentView, activeView);
   const activityBarToggleEnabled = mainContentView === 'code';
   const layoutIconClassName = [
@@ -146,73 +165,108 @@ export function MenuBar({
       : 'opacity-40',
   ].join(' ');
 
+  useEffect(() => {
+    return window.electronAPI?.onCloseRequested(() => {
+      setRememberCloseChoice(false);
+      setCloseDialogOpen(true);
+    });
+  }, []);
+
+  const handleMinimizeToTray = () => {
+    setCloseDialogOpen(false);
+    if (rememberCloseChoice) {
+      setRememberedCloseAction('tray');
+    }
+    void window.electronAPI?.resolveCloseRequest('tray', rememberCloseChoice);
+  };
+
+  const handleQuitPristine = () => {
+    setCloseDialogOpen(false);
+    if (rememberCloseChoice) {
+      setRememberedCloseAction('quit');
+    }
+    void window.electronAPI?.resolveCloseRequest('quit', rememberCloseChoice);
+  };
+
+  const handleResetCloseBehavior = () => {
+    setRememberedCloseAction(null);
+    void window.electronAPI?.config.set(CLOSE_ACTION_CONFIG_KEY, null);
+  };
+
+  const rememberedCloseActionLabel = rememberedCloseAction === 'tray'
+    ? 'Minimize to tray'
+    : rememberedCloseAction === 'quit'
+      ? 'Quit Pristine'
+      : 'Ask every time';
+
   return (
     <TooltipProvider delayDuration={0}>
-      <div
-        ref={ref}
-        className="flex items-center h-8 bg-muted/50 border-b border-border select-none shrink-0 z-50"
-        style={{ userSelect: 'none', WebkitAppRegion: 'drag' } as React.CSSProperties}
-      >
-        {/* macOS traffic light clearance */}
-        {isMacOS && <div className="w-20 shrink-0" />}
+      <>
+        <div
+          ref={ref}
+          className="flex items-center h-8 bg-muted/50 border-b border-border select-none shrink-0 z-50"
+          style={{ userSelect: 'none', WebkitAppRegion: 'drag' } as React.CSSProperties}
+        >
+          {/* macOS traffic light clearance */}
+          {isMacOS && <div className="w-20 shrink-0" />}
 
-        {/* App icon / title */}
-        <div className="flex items-center gap-1.5 px-3 pr-2" style={noDrag as React.CSSProperties}>
-          <div className="w-4 h-4 rounded-sm bg-primary flex items-center justify-center">
-            <span className="text-primary-foreground text-[9px] font-bold">P</span>
+          {/* App icon / title */}
+          <div className="flex items-center gap-1.5 px-3 pr-2" style={noDrag as React.CSSProperties}>
+            <div className="w-4 h-4 rounded-sm bg-primary flex items-center justify-center">
+              <span className="text-primary-foreground text-[9px] font-bold">P</span>
+            </div>
           </div>
-        </div>
 
-        {/* Menu items — shadcn Menubar */}
-        <Menubar className="h-8 border-0 rounded-none bg-transparent p-0 shadow-none" style={noDrag as React.CSSProperties}>
-          {menus.map((menu) => (
-            <MenubarMenu key={menu.label}>
-              <MenubarTrigger className="px-2.5 h-7 text-[12px] font-normal rounded-sm">
-                {menu.label}
-              </MenubarTrigger>
-              <MenubarContent align="start" sideOffset={4} className="min-w-48">
-                {menu.items.map((item, i) =>
-                  item === '---' ? (
-                    <MenubarSeparator key={i} />
-                  ) : (
-                    <MenubarItem key={i} className="text-[12px]">
-                      {item}
-                    </MenubarItem>
-                  )
-                )}
-              </MenubarContent>
-            </MenubarMenu>
-          ))}
-        </Menubar>
+          {/* Menu items — shadcn Menubar */}
+          <Menubar className="h-8 border-0 rounded-none bg-transparent p-0 shadow-none" style={noDrag as React.CSSProperties}>
+            {menus.map((menu) => (
+              <MenubarMenu key={menu.label}>
+                <MenubarTrigger className="px-2.5 h-7 text-[12px] font-normal rounded-sm">
+                  {menu.label}
+                </MenubarTrigger>
+                <MenubarContent align="start" sideOffset={4} className="min-w-48">
+                  {menu.items.map((item, i) =>
+                    item === '---' ? (
+                      <MenubarSeparator key={i} />
+                    ) : (
+                      <MenubarItem key={i} className="text-[12px]">
+                        {item}
+                      </MenubarItem>
+                    )
+                  )}
+                </MenubarContent>
+              </MenubarMenu>
+            ))}
+          </Menubar>
 
 
-        <TooltipIconButton content="Toggle activity bar" wrapTrigger={false}>
-          <Toggle
-            aria-label="Toggle activity bar"
-            aria-disabled={!activityBarToggleEnabled}
-            data-testid="toggle-activity-bar"
-            disabled={!activityBarToggleEnabled}
-            pressed={activityBarToggleEnabled ? activityBarState === 'expanded' : false}
-            className={activityBarTriggerClassName}
-            onPressedChange={() => {
-              if (!activityBarToggleEnabled) {
-                return;
-              }
+          <TooltipIconButton content="Toggle activity bar" wrapTrigger={false}>
+            <Toggle
+              aria-label="Toggle activity bar"
+              aria-disabled={!activityBarToggleEnabled}
+              data-testid="toggle-activity-bar"
+              disabled={!activityBarToggleEnabled}
+              pressed={activityBarToggleEnabled ? activityBarState === 'expanded' : false}
+              className={activityBarTriggerClassName}
+              onPressedChange={() => {
+                if (!activityBarToggleEnabled) {
+                  return;
+                }
 
-              toggleSidebar();
-            }}
+                toggleSidebar();
+              }}
+              style={noDragInteractive as React.CSSProperties}
+            >
+              <PanelLeftIcon size={15} filled={activityBarState === 'expanded'} />
+            </Toggle>
+          </TooltipIconButton>
+
+          {/* Center view switcher — absolutely centered */}
+          <div
+            data-testid="center-view-switcher"
+            className="absolute left-1/2 -translate-x-1/2"
             style={noDragInteractive as React.CSSProperties}
           >
-            <PanelLeftIcon size={15} filled={activityBarState === 'expanded'} />
-          </Toggle>
-        </TooltipIconButton>
-
-        {/* Center view switcher — absolutely centered */}
-        <div
-          data-testid="center-view-switcher"
-          className="absolute left-1/2 -translate-x-1/2"
-          style={noDragInteractive as React.CSSProperties}
-        >
           <ToggleGroup
             type="single"
             value={mainContentView}
@@ -250,14 +304,14 @@ export function MenuBar({
               <TooltipContent side="bottom" sideOffset={6}>Workflow</TooltipContent>
             </Tooltip>
           </ToggleGroup>
-        </div>
+          </div>
 
-        {/* Right side controls */}
-        <div
-          data-testid="right-side-controls"
-          className="ml-auto flex items-center h-full"
-          style={noDrag as React.CSSProperties}
-        >
+          {/* Right side controls */}
+          <div
+            data-testid="right-side-controls"
+            className="ml-auto flex items-center h-full"
+            style={noDrag as React.CSSProperties}
+          >
 
           {/* Layout icons */}
           <TooltipIconButton content="Toggle left sidebar">
@@ -342,6 +396,7 @@ export function MenuBar({
               aria-label="Settings"
               data-testid="menu-settings-button"
               className="w-8 h-full rounded-none text-muted-foreground hover:cursor-pointer hover:text-foreground"
+              onClick={() => setSettingsDialogOpen(true)}
             >
               <Settings size={15} />
             </Button>
@@ -386,15 +441,106 @@ export function MenuBar({
                 data-testid="window-control-close"
                 className="w-9 h-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-destructive/80 transition-colors"
                 style={noDragInteractive as React.CSSProperties}
-                onClick={() => window.electronAPI?.close()}
+                onClick={() => void window.electronAPI?.close()}
               >
                 <X size={14} />
               </button>
             </>
           )}
 
+          </div>
         </div>
-      </div>
+
+        <Dialog open={closeDialogOpen} onOpenChange={setCloseDialogOpen}>
+          <DialogContent data-testid="close-confirmation-dialog" style={noDragInteractive as React.CSSProperties}>
+            <DialogHeader>
+              <DialogTitle>Close Pristine?</DialogTitle>
+              <DialogDescription>
+                You can quit the app now or keep it running in the system tray and reopen it later.
+              </DialogDescription>
+            </DialogHeader>
+            <label className="flex items-center justify-between gap-4 rounded-md border border-border/70 bg-muted/30 px-3 py-2 text-sm" style={noDragInteractive as React.CSSProperties}>
+              <span>Remember my choice</span>
+              <Switch
+                checked={rememberCloseChoice}
+                data-testid="close-action-remember-choice"
+                onCheckedChange={setRememberCloseChoice}
+              />
+            </label>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                data-testid="close-action-cancel"
+                onClick={() => {
+                  setCloseDialogOpen(false);
+                  setRememberCloseChoice(false);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                data-testid="close-action-minimize-to-tray"
+                onClick={handleMinimizeToTray}
+              >
+                Minimize to Tray
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                data-testid="close-action-quit"
+                onClick={handleQuitPristine}
+              >
+                Quit Pristine
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={settingsDialogOpen} onOpenChange={setSettingsDialogOpen}>
+          <DialogContent data-testid="settings-dialog" style={noDragInteractive as React.CSSProperties}>
+            <DialogHeader>
+              <DialogTitle>Settings</DialogTitle>
+              <DialogDescription>
+                Manage how Pristine handles future close requests.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div className="rounded-md border border-border/70 bg-muted/30 px-3 py-3">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium">Close behavior</p>
+                    <p className="text-sm text-muted-foreground" data-testid="close-behavior-current-value">
+                      Current setting: {rememberedCloseActionLabel}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    data-testid="reset-close-behavior"
+                    disabled={rememberedCloseAction === null}
+                    onClick={handleResetCloseBehavior}
+                  >
+                    Reset close behavior
+                  </Button>
+                </div>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                data-testid="settings-close-button"
+                onClick={() => setSettingsDialogOpen(false)}
+              >
+                Close
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </>
     </TooltipProvider>
   );
 }

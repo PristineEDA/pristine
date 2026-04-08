@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { MenuBar } from './MenuBar';
@@ -52,16 +52,66 @@ function WorkspaceControls() {
 }
 
 describe('MenuBar', () => {
-  it('calls electron window controls when titlebar buttons are clicked', () => {
+  it('calls electron window controls and routes close through a confirmation dialog', async () => {
+    const user = userEvent.setup();
+
     renderMenuBar();
+    const onCloseRequestedMock = vi.mocked(window.electronAPI!.onCloseRequested);
+    const firstOnCloseRequestedCall = onCloseRequestedMock.mock.calls[0];
+    const closeRequestedHandler = firstOnCloseRequestedCall?.[0];
+
+    expect(closeRequestedHandler).toBeTypeOf('function');
+    if (!closeRequestedHandler) {
+      throw new Error('Expected onCloseRequested handler to be registered');
+    }
 
     fireEvent.click(screen.getByTestId('window-control-minimize'));
     fireEvent.click(screen.getByTestId('window-control-maximize'));
-    fireEvent.click(screen.getByTestId('window-control-close'));
+    await user.click(screen.getByTestId('window-control-close'));
 
     expect(window.electronAPI?.minimize).toHaveBeenCalledTimes(1);
     expect(window.electronAPI?.maximize).toHaveBeenCalledTimes(1);
     expect(window.electronAPI?.close).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      closeRequestedHandler();
+    });
+
+    expect(await screen.findByTestId('close-confirmation-dialog')).toBeVisible();
+    expect(screen.getByText('Close Pristine?')).toBeVisible();
+    expect(screen.getByText('You can quit the app now or keep it running in the system tray and reopen it later.')).toBeVisible();
+
+    await user.click(screen.getByTestId('close-action-minimize-to-tray'));
+    expect(window.electronAPI?.resolveCloseRequest).toHaveBeenCalledWith('tray', false);
+    expect(screen.queryByTestId('close-confirmation-dialog')).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId('window-control-close'));
+    await act(async () => {
+      closeRequestedHandler();
+    });
+    await user.click(screen.getByTestId('close-action-remember-choice'));
+    await user.click(screen.getByTestId('close-action-quit'));
+    expect(window.electronAPI?.resolveCloseRequest).toHaveBeenCalledWith('quit', true);
+  });
+
+  it('shows the remembered close behavior in Settings and lets the user reset it', async () => {
+    const user = userEvent.setup();
+    vi.mocked(window.electronAPI!.config.get).mockImplementation((key: string) =>
+      key === 'window.closeActionPreference' ? 'tray' : null,
+    );
+
+    renderMenuBar();
+
+    await user.click(screen.getByTestId('menu-settings-button'));
+
+    expect(await screen.findByTestId('settings-dialog')).toBeVisible();
+    expect(screen.getByTestId('close-behavior-current-value')).toHaveTextContent('Current setting: Minimize to tray');
+
+    await user.click(screen.getByTestId('reset-close-behavior'));
+
+    expect(window.electronAPI?.config.set).toHaveBeenCalledWith('window.closeActionPreference', null);
+    expect(screen.getByTestId('close-behavior-current-value')).toHaveTextContent('Current setting: Ask every time');
+    expect(screen.getByTestId('reset-close-behavior')).toBeDisabled();
   });
 
   it('does not render the select project dropdown or upgrade button', () => {

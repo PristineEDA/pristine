@@ -13,7 +13,10 @@ export const SyncChannels = {
 export const AsyncChannels = {
   WINDOW_MINIMIZE: 'async:window:minimize',
   WINDOW_MAXIMIZE: 'async:window:maximize',
+  WINDOW_SHOW: 'async:window:show',
+  WINDOW_HIDE: 'async:window:hide',
   WINDOW_CLOSE: 'async:window:close',
+  WINDOW_RESOLVE_CLOSE: 'async:window:resolve-close',
   FS_READ_FILE: 'async:fs:read-file',
   FS_LIST_FILES: 'async:fs:list-files',
   FS_WRITE_FILE: 'async:fs:write-file',
@@ -36,4 +39,5 @@ export const StreamChannels = {
   TERMINAL_DATA: 'stream:terminal:data',
   TERMINAL_EXIT: 'stream:terminal:exit',
   WINDOW_MAXIMIZED_CHANGE: 'stream:window:maximized-change',
+  WINDOW_CLOSE_REQUESTED: 'stream:window:close-requested',
 } as const;

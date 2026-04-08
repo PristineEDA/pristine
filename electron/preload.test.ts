@@ -58,27 +58,42 @@ describe('preload bridge', () => {
 
     const [, api] = mockExposeInMainWorld.mock.calls[0];
     const onMaximizedChange = vi.fn();
+    const onCloseRequested = vi.fn();
 
     api.minimize();
     api.maximize();
+    api.show();
+    api.hide();
     api.close();
+    api.resolveCloseRequest('tray', true);
     api.fs.readFile('src/main.v', 'utf-8');
     api.shell.exec('make', ['lint'], { cwd: 'rtl' });
 
     const dispose = api.onMaximizedChange(onMaximizedChange);
+    const disposeCloseRequested = api.onCloseRequested(onCloseRequested);
 
     expect(mockInvoke).toHaveBeenCalledWith('async:window:minimize');
     expect(mockInvoke).toHaveBeenCalledWith('async:window:maximize');
+    expect(mockInvoke).toHaveBeenCalledWith('async:window:show');
+    expect(mockInvoke).toHaveBeenCalledWith('async:window:hide');
     expect(mockInvoke).toHaveBeenCalledWith('async:window:close');
+    expect(mockInvoke).toHaveBeenCalledWith('async:window:resolve-close', 'tray', true);
     expect(mockInvoke).toHaveBeenCalledWith('async:fs:read-file', 'src/main.v', 'utf-8');
     expect(mockInvoke).toHaveBeenCalledWith('async:shell:exec', 'make', ['lint'], { cwd: 'rtl' });
     expect(mockOn).toHaveBeenCalledWith('stream:window:maximized-change', expect.any(Function));
+    expect(mockOn).toHaveBeenCalledWith('stream:window:close-requested', expect.any(Function));
 
     const handler = mockOn.mock.calls.find((call) => call[0] === 'stream:window:maximized-change')?.[1];
     handler({}, true);
     expect(onMaximizedChange).toHaveBeenCalledWith(true);
 
+    const closeHandler = mockOn.mock.calls.find((call) => call[0] === 'stream:window:close-requested')?.[1];
+    closeHandler();
+    expect(onCloseRequested).toHaveBeenCalledTimes(1);
+
     dispose();
+    disposeCloseRequested();
     expect(mockRemoveListener).toHaveBeenCalledWith('stream:window:maximized-change', handler);
+    expect(mockRemoveListener).toHaveBeenCalledWith('stream:window:close-requested', closeHandler);
   });
 });
