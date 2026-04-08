@@ -1,6 +1,20 @@
 export type MainContentView = 'code' | 'whiteboard' | 'workflow';
 export type CodeView = 'explorer' | 'simulation' | 'synthesis' | 'physical' | 'factory';
 
+export const MAIN_CONTENT_VIEW_LABELS: Record<MainContentView, string> = {
+  code: 'Code',
+  whiteboard: 'Whiteboard',
+  workflow: 'Workflow',
+};
+
+export const CODE_VIEW_LABELS: Record<CodeView, string> = {
+  explorer: 'Editor',
+  simulation: 'Simulation',
+  synthesis: 'Synthesis',
+  physical: 'Physical',
+  factory: 'Factory',
+};
+
 export interface PanelVisibilityState {
   showLeftPanel: boolean;
   showBottomPanel: boolean;

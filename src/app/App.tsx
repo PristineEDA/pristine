@@ -7,7 +7,7 @@ import { EditorSplitLayout } from './components/EditorSplitLayout';
 import { RightSidePanel } from './components/RightSidePanel';
 import { BottomPanel } from './components/BottomPanel';
 import { CodeWorkspaceShell } from './components/CodeWorkspaceShell';
-import { StatusBar } from './components/StatusBar';
+import { AppStatusBar } from './components/statusBars/AppStatusBar';
 import { QuickOpenPalette } from './components/QuickOpenPalette';
 import { createQuickOpenFileEntries, getRecentQuickOpenFiles, searchQuickOpenFiles, type QuickOpenFileEntry, type QuickOpenSearchResult } from './quickOpen/quickOpenSearch';
 import type { WorkspaceRevealRequest } from './workspace/useWorkspaceTree';
@@ -437,7 +437,9 @@ function AppLayout() {
           </div>
         )}
 
-      <StatusBar
+      <AppStatusBar
+        mainContentView={mainContentView}
+        activeView={activeView}
         activeFileId={activeTabId}
         cursorLine={cursorLine}
         cursorCol={cursorCol}
