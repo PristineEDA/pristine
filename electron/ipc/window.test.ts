@@ -1,12 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AsyncChannels, StreamChannels, SyncChannels } from './channels.js';
 
-const { mockOn, mockHandle } = vi.hoisted(() => ({
+const { mockOn, mockHandle, mockQuit } = vi.hoisted(() => ({
   mockOn: vi.fn(),
   mockHandle: vi.fn(),
+  mockQuit: vi.fn(),
 }));
 
 vi.mock('electron', () => ({
+  app: {
+    quit: (...args: unknown[]) => mockQuit(...args),
+  },
   ipcMain: {
     on: (...args: unknown[]) => mockOn(...args),
     handle: (...args: unknown[]) => mockHandle(...args),
@@ -32,6 +36,7 @@ describe('window IPC handlers', () => {
   beforeEach(() => {
     mockOn.mockClear();
     mockHandle.mockClear();
+    mockQuit.mockClear();
   });
 
   it('returns maximized state via sync channel', () => {
@@ -52,31 +57,45 @@ describe('window IPC handlers', () => {
     expect(handler({})).toBe(false);
   });
 
-  it('toggles maximize state and closes the window', async () => {
+  it('toggles maximize state, changes visibility, and closes the app', async () => {
     let maximized = false;
+    let minimized = false;
     const win = {
       minimize: vi.fn(),
       maximize: vi.fn(() => { maximized = true; }),
       unmaximize: vi.fn(() => { maximized = false; }),
       isMaximized: vi.fn(() => maximized),
-      close: vi.fn(),
+      isMinimized: vi.fn(() => minimized),
+      restore: vi.fn(() => { minimized = false; }),
+      show: vi.fn(),
+      focus: vi.fn(),
+      hide: vi.fn(),
     };
 
     registerWindowHandlers(() => win as any);
 
     const minimize = getHandleListener(AsyncChannels.WINDOW_MINIMIZE);
     const maximize = getHandleListener(AsyncChannels.WINDOW_MAXIMIZE);
+    const show = getHandleListener(AsyncChannels.WINDOW_SHOW);
+    const hide = getHandleListener(AsyncChannels.WINDOW_HIDE);
     const close = getHandleListener(AsyncChannels.WINDOW_CLOSE);
 
     expect(minimize({})).toBe(true);
+    minimized = true;
     expect(maximize({})).toBe(true);
     expect(maximize({})).toBe(false);
+    expect(show({})).toBe(true);
+    expect(hide({})).toBe(true);
     expect(close({})).toBe(true);
 
     expect(win.minimize).toHaveBeenCalledTimes(1);
     expect(win.maximize).toHaveBeenCalledTimes(1);
     expect(win.unmaximize).toHaveBeenCalledTimes(1);
-    expect(win.close).toHaveBeenCalledTimes(1);
+    expect(win.restore).toHaveBeenCalledTimes(1);
+    expect(win.show).toHaveBeenCalledTimes(1);
+    expect(win.focus).toHaveBeenCalledTimes(1);
+    expect(win.hide).toHaveBeenCalledTimes(1);
+    expect(mockQuit).toHaveBeenCalledTimes(1);
   });
 
   it('emits maximize and unmaximize stream events', () => {

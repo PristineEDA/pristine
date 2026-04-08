@@ -107,6 +107,8 @@ function createElectronApiMock() {
     },
     minimize: vi.fn(),
     maximize: vi.fn(),
+    show: vi.fn(),
+    hide: vi.fn(),
     close: vi.fn(),
     isMaximized: vi.fn(() => false),
     onMaximizedChange: vi.fn(() => vi.fn()),

@@ -13,6 +13,8 @@ export const SyncChannels = {
 export const AsyncChannels = {
   WINDOW_MINIMIZE: 'async:window:minimize',
   WINDOW_MAXIMIZE: 'async:window:maximize',
+  WINDOW_SHOW: 'async:window:show',
+  WINDOW_HIDE: 'async:window:hide',
   WINDOW_CLOSE: 'async:window:close',
   FS_READ_FILE: 'async:fs:read-file',
   FS_LIST_FILES: 'async:fs:list-files',

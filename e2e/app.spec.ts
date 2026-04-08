@@ -271,14 +271,25 @@ test('window controls toggle minimize and maximize state', async () => {
   await app.close();
 });
 
-test('close button closes the main window', async () => {
+test('close button confirms and can minimize the app to tray', async () => {
   const { app, window } = await launchApp();
+  const browserWindow = await app.browserWindow(window);
 
-  const closePromise = window.waitForEvent('close');
   await window.getByTestId('window-control-close').click();
-  await closePromise;
+  await expect(window.getByTestId('close-confirmation-dialog')).toBeVisible();
+  await expect(window.getByText('Close Pristine?')).toBeVisible();
 
-  await expect.poll(() => app.windows().length).toBe(0);
+  await window.getByTestId('close-action-minimize-to-tray').click();
+  await expect.poll(async () => browserWindow.evaluate((win) => win.isVisible())).toBe(false);
+  await expect.poll(() => app.windows().length).toBe(1);
+
+  await browserWindow.evaluate((win) => {
+    win.show();
+    win.focus();
+  });
+  await expect.poll(async () => browserWindow.evaluate((win) => win.isVisible())).toBe(true);
+
+  await app.close();
 });
 
 test('explorer opens a file into a new editor tab', async () => {

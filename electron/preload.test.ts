@@ -61,6 +61,8 @@ describe('preload bridge', () => {
 
     api.minimize();
     api.maximize();
+    api.show();
+    api.hide();
     api.close();
     api.fs.readFile('src/main.v', 'utf-8');
     api.shell.exec('make', ['lint'], { cwd: 'rtl' });
@@ -69,6 +71,8 @@ describe('preload bridge', () => {
 
     expect(mockInvoke).toHaveBeenCalledWith('async:window:minimize');
     expect(mockInvoke).toHaveBeenCalledWith('async:window:maximize');
+    expect(mockInvoke).toHaveBeenCalledWith('async:window:show');
+    expect(mockInvoke).toHaveBeenCalledWith('async:window:hide');
     expect(mockInvoke).toHaveBeenCalledWith('async:window:close');
     expect(mockInvoke).toHaveBeenCalledWith('async:fs:read-file', 'src/main.v', 'utf-8');
     expect(mockInvoke).toHaveBeenCalledWith('async:shell:exec', 'make', ['lint'], { cwd: 'rtl' });

@@ -52,15 +52,29 @@ function WorkspaceControls() {
 }
 
 describe('MenuBar', () => {
-  it('calls electron window controls when titlebar buttons are clicked', () => {
+  it('calls electron window controls and routes close through a confirmation dialog', async () => {
+    const user = userEvent.setup();
+
     renderMenuBar();
 
     fireEvent.click(screen.getByTestId('window-control-minimize'));
     fireEvent.click(screen.getByTestId('window-control-maximize'));
-    fireEvent.click(screen.getByTestId('window-control-close'));
+    await user.click(screen.getByTestId('window-control-close'));
 
     expect(window.electronAPI?.minimize).toHaveBeenCalledTimes(1);
     expect(window.electronAPI?.maximize).toHaveBeenCalledTimes(1);
+
+    expect(screen.getByTestId('close-confirmation-dialog')).toBeVisible();
+    expect(screen.getByText('Close Pristine?')).toBeVisible();
+    expect(screen.getByText('You can quit the app now or keep it running in the system tray and reopen it later.')).toBeVisible();
+    expect(window.electronAPI?.close).not.toHaveBeenCalled();
+
+    await user.click(screen.getByTestId('close-action-minimize-to-tray'));
+    expect(window.electronAPI?.hide).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('close-confirmation-dialog')).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId('window-control-close'));
+    await user.click(screen.getByTestId('close-action-quit'));
     expect(window.electronAPI?.close).toHaveBeenCalledTimes(1);
   });
 

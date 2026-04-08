@@ -7,13 +7,28 @@ type BrowserWindowInstance = {
   on: ReturnType<typeof vi.fn>;
   once: ReturnType<typeof vi.fn>;
   show: ReturnType<typeof vi.fn>;
+  hide: ReturnType<typeof vi.fn>;
+  focus: ReturnType<typeof vi.fn>;
+  restore: ReturnType<typeof vi.fn>;
+  isMinimized: ReturnType<typeof vi.fn>;
+  isDestroyed: ReturnType<typeof vi.fn>;
   close: ReturnType<typeof vi.fn>;
+  emit: (event: string, ...args: unknown[]) => void;
+};
+
+type TrayInstance = {
+  setToolTip: ReturnType<typeof vi.fn>;
+  setContextMenu: ReturnType<typeof vi.fn>;
+  popUpContextMenu: ReturnType<typeof vi.fn>;
+  on: ReturnType<typeof vi.fn>;
+  destroy: ReturnType<typeof vi.fn>;
   emit: (event: string, ...args: unknown[]) => void;
 };
 
 const mocks = vi.hoisted(() => {
   const appHandlers = new Map<string, (...args: unknown[]) => void>();
   const browserWindowInstances: BrowserWindowInstance[] = [];
+  const trayInstances: TrayInstance[] = [];
 
   class BrowserWindowMock {
     static getAllWindows = vi.fn(() => browserWindowInstances);
@@ -22,6 +37,11 @@ const mocks = vi.hoisted(() => {
     loadURL = vi.fn();
     loadFile = vi.fn();
     show = vi.fn();
+    hide = vi.fn();
+    focus = vi.fn();
+    restore = vi.fn();
+    isMinimized = vi.fn(() => false);
+    isDestroyed = vi.fn(() => false);
     private handlers = new Map<string, (...args: unknown[]) => void>();
     private onceHandlers = new Map<string, (...args: unknown[]) => void>();
 
@@ -63,15 +83,41 @@ const mocks = vi.hoisted(() => {
     }
   }
 
+  class TrayMock {
+    setToolTip = vi.fn();
+    setContextMenu = vi.fn();
+    popUpContextMenu = vi.fn();
+    destroy = vi.fn();
+    private handlers = new Map<string, (...args: unknown[]) => void>();
+
+    constructor() {
+      trayInstances.push(this as unknown as TrayInstance);
+    }
+
+    on = vi.fn((event: string, handler: (...args: unknown[]) => void) => {
+      this.handlers.set(event, handler);
+      return this;
+    });
+
+    emit(event: string, ...args: unknown[]) {
+      this.handlers.get(event)?.(...args);
+    }
+  }
+
   return {
     appHandlers,
     browserWindowInstances,
+    trayInstances,
     BrowserWindowMock,
+    TrayMock,
     mockWhenReady: vi.fn(() => Promise.resolve()),
     mockAppOn: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
       appHandlers.set(event, handler);
     }),
     mockQuit: vi.fn(),
+    mockBuildFromTemplate: vi.fn((template: unknown[]) => ({ template })),
+    mockCreateFromDataURL: vi.fn(() => ({ kind: 'native-image' })),
+    mockDisposeAllTerminalSessions: vi.fn(),
     mockRegisterAllHandlers: vi.fn(),
     mockSetProjectRoot: vi.fn(),
     mockSetupWindowStreams: vi.fn(),
@@ -85,12 +131,23 @@ vi.mock('electron', () => ({
     quit: mocks.mockQuit,
   },
   BrowserWindow: mocks.BrowserWindowMock,
+  Menu: {
+    buildFromTemplate: mocks.mockBuildFromTemplate,
+  },
+  Tray: mocks.TrayMock,
+  nativeImage: {
+    createFromDataURL: mocks.mockCreateFromDataURL,
+  },
 }));
 
 vi.mock('./ipc/register.js', () => ({
   registerAllHandlers: (...args: unknown[]) => mocks.mockRegisterAllHandlers(...args),
   setProjectRoot: (...args: unknown[]) => mocks.mockSetProjectRoot(...args),
   setupWindowStreams: (...args: unknown[]) => mocks.mockSetupWindowStreams(...args),
+}));
+
+vi.mock('./ipc/terminal.js', () => ({
+  disposeAllTerminalSessions: (...args: unknown[]) => mocks.mockDisposeAllTerminalSessions(...args),
 }));
 
 const originalPlatform = process.platform;
@@ -101,9 +158,13 @@ async function importMain(options?: { platform?: NodeJS.Platform; devServerUrl?:
   vi.resetModules();
   mocks.appHandlers.clear();
   mocks.browserWindowInstances.length = 0;
+  mocks.trayInstances.length = 0;
   mocks.mockWhenReady.mockClear();
   mocks.mockAppOn.mockClear();
   mocks.mockQuit.mockClear();
+  mocks.mockBuildFromTemplate.mockClear();
+  mocks.mockCreateFromDataURL.mockClear();
+  mocks.mockDisposeAllTerminalSessions.mockClear();
   mocks.mockRegisterAllHandlers.mockClear();
   mocks.mockSetProjectRoot.mockClear();
   mocks.mockSetupWindowStreams.mockClear();
@@ -131,6 +192,7 @@ async function importMain(options?: { platform?: NodeJS.Platform; devServerUrl?:
   return {
     appHandlers: mocks.appHandlers,
     browserWindowInstances: mocks.browserWindowInstances,
+    trayInstances: mocks.trayInstances,
     getMainWindow: mocks.mockRegisterAllHandlers.mock.calls[0]?.[0] as (() => BrowserWindowInstance | null) | undefined,
   };
 }
@@ -159,20 +221,28 @@ describe('electron main entry', () => {
     Object.defineProperty(process, 'platform', { value: originalPlatform });
   });
 
-  it('registers handlers, creates splash and main windows, and loads the dev server when available', async () => {
-    const { browserWindowInstances, getMainWindow } = await importMain({
+  it('registers handlers, creates tray and startup windows, and loads the dev server when available', async () => {
+    const { browserWindowInstances, trayInstances, getMainWindow } = await importMain({
       platform: 'win32',
       devServerUrl: 'http://127.0.0.1:5173',
     });
 
     expect(mocks.mockRegisterAllHandlers).toHaveBeenCalledTimes(1);
     expect(mocks.mockSetProjectRoot).toHaveBeenCalledWith('C:\\Users\\maksy\\Desktop\\fpga\\retroSoC');
+    expect(trayInstances).toHaveLength(1);
     expect(browserWindowInstances).toHaveLength(2);
 
     const splashWindow = browserWindowInstances[0];
     const mainWindow = browserWindowInstances[1];
 
     expect(getMainWindow?.()).toBe(mainWindow);
+    expect(trayInstances[0].setToolTip).toHaveBeenCalledWith('Pristine');
+    expect(mocks.mockCreateFromDataURL).toHaveBeenCalledTimes(1);
+    expect(mocks.mockBuildFromTemplate).toHaveBeenCalledWith([
+      expect.objectContaining({ label: 'Open Pristine' }),
+      { type: 'separator' },
+      expect.objectContaining({ label: 'Quit Pristine' }),
+    ]);
     expect(splashWindow.options).toMatchObject({
       width: 720,
       height: 405,
@@ -215,6 +285,7 @@ describe('electron main entry', () => {
 
     mainWindow.emit('closed');
     expect(getMainWindow?.()).toBeNull();
+    expect(mocks.mockDisposeAllTerminalSessions).not.toHaveBeenCalled();
   });
 
   it('uses macOS window chrome and loads the built index and splash files in production', async () => {
@@ -239,10 +310,48 @@ describe('electron main entry', () => {
 
     expect(browserWindowInstances).toHaveLength(2);
 
+    browserWindowInstances[1].emit('closed');
     mocks.BrowserWindowMock.getAllWindows.mockReturnValueOnce([]);
     appHandlers.get('activate')?.();
 
-    expect(browserWindowInstances).toHaveLength(4);
+    expect(browserWindowInstances).toHaveLength(3);
+  });
+
+  it('shows the existing main window on activate when it is already available', async () => {
+    const { appHandlers, browserWindowInstances } = await importMain({ platform: 'win32' });
+
+    const mainWindow = browserWindowInstances[1];
+    mainWindow.show.mockClear();
+    mainWindow.focus.mockClear();
+
+    appHandlers.get('activate')?.();
+
+    expect(mainWindow.show).toHaveBeenCalledTimes(1);
+    expect(mainWindow.focus).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens the tray menu on click and tray actions can show or quit the app', async () => {
+    const { browserWindowInstances, trayInstances } = await importMain({ platform: 'win32' });
+
+    const tray = trayInstances[0];
+    const mainWindow = browserWindowInstances[1];
+    const { template } = mocks.mockBuildFromTemplate.mock.results[0].value as {
+      template: Array<{ label?: string; click?: () => void }>;
+    };
+    const openItem = template.find((item) => item.label === 'Open Pristine');
+    const quitItem = template.find((item) => item.label === 'Quit Pristine');
+
+    tray.emit('click');
+    expect(tray.popUpContextMenu).toHaveBeenCalledTimes(1);
+
+    mainWindow.show.mockClear();
+    mainWindow.focus.mockClear();
+    openItem?.click?.();
+    expect(mainWindow.show).toHaveBeenCalledTimes(1);
+    expect(mainWindow.focus).toHaveBeenCalledTimes(1);
+
+    quitItem?.click?.();
+    expect(mocks.mockQuit).toHaveBeenCalledTimes(1);
   });
 
   it('quits the app when all windows are closed on non-macOS platforms', async () => {
@@ -259,9 +368,12 @@ describe('electron main entry', () => {
     expect(mocks.mockQuit).not.toHaveBeenCalled();
   });
 
-  it('allows tests to override the startup project root via environment variable', async () => {
-    await importMain({ projectRoot: 'D:\\fixture-workspace' });
+  it('disposes terminal sessions and destroys the tray only during app quit', async () => {
+    const { appHandlers, trayInstances } = await importMain({ platform: 'win32' });
 
-    expect(mocks.mockSetProjectRoot).toHaveBeenCalledWith('D:\\fixture-workspace');
+    appHandlers.get('before-quit')?.();
+
+    expect(mocks.mockDisposeAllTerminalSessions).toHaveBeenCalledTimes(1);
+    expect(trayInstances[0].destroy).toHaveBeenCalledTimes(1);
   });
 });

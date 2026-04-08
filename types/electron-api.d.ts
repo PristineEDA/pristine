@@ -11,6 +11,8 @@ export interface ElectronAPI {
   // Window control
   minimize: () => Promise<void>;
   maximize: () => Promise<void>;
+  show: () => Promise<void>;
+  hide: () => Promise<void>;
   close: () => Promise<void>;
   isMaximized: () => boolean;
   onMaximizedChange: (callback: (maximized: boolean) => void) => () => void;

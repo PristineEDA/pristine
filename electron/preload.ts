@@ -31,6 +31,8 @@ const electronAPI = {
   // ── Window Control (async) ──
   minimize: () => ipcRenderer.invoke(AsyncChannels.WINDOW_MINIMIZE),
   maximize: () => ipcRenderer.invoke(AsyncChannels.WINDOW_MAXIMIZE),
+  show: () => ipcRenderer.invoke(AsyncChannels.WINDOW_SHOW),
+  hide: () => ipcRenderer.invoke(AsyncChannels.WINDOW_HIDE),
   close: () => ipcRenderer.invoke(AsyncChannels.WINDOW_CLOSE),
   isMaximized: (): boolean => syncSend(SyncChannels.WINDOW_IS_MAXIMIZED),
   onMaximizedChange: (callback: (maximized: boolean) => void) => {
