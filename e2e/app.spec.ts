@@ -562,6 +562,46 @@ test('activity bar switches code subpages and menu bar keeps higher-priority pag
   await app.close();
 });
 
+test('status bar switches across primary and secondary navigation views', async () => {
+  const { app, window } = await launchApp();
+
+  const statusBar = window.getByTestId('status-bar');
+
+  await expect(statusBar).toHaveAttribute('data-status-bar-id', 'code-explorer');
+
+  await window.getByTestId('activity-item-simulation').click();
+  await expect(window.getByTestId('code-view-simulation')).toBeVisible();
+  await expect(statusBar).toHaveAttribute('data-status-bar-id', 'code-simulation');
+  await expect(statusBar).toContainText('Simulation');
+  await expect(statusBar).toContainText('Placeholder');
+
+  await window.getByTestId('activity-item-physical').click();
+  await expect(window.getByTestId('code-view-physical')).toBeVisible();
+  await expect(statusBar).toHaveAttribute('data-status-bar-id', 'code-physical');
+  await expect(statusBar).toContainText('Physical');
+
+  await window.getByLabel('Whiteboard').click();
+  await expect(window.getByTestId('whiteboard-view')).toBeVisible();
+  await expect(statusBar).toHaveAttribute('data-status-bar-id', 'whiteboard');
+  await expect(statusBar).toContainText('Whiteboard');
+
+  await window.getByLabel('Workflow').click();
+  await expect(window.getByTestId('workflow-view')).toBeVisible();
+  await expect(statusBar).toHaveAttribute('data-status-bar-id', 'workflow');
+  await expect(statusBar).toContainText('Workflow');
+
+  await window.getByLabel('Code').click();
+  await expect(window.getByTestId('code-view-physical')).toBeVisible();
+  await expect(statusBar).toHaveAttribute('data-status-bar-id', 'code-physical');
+
+  await window.getByTestId('activity-item-explorer').click();
+  await expect(window.getByTestId('panel-center-panel')).toBeVisible();
+  await expect(statusBar).toHaveAttribute('data-status-bar-id', 'code-explorer');
+  await expect(statusBar).toContainText('Ln 1, Col 1');
+
+  await app.close();
+});
+
 test('left sidebar width is resized to keep tab labels readable when the window size changes', async () => {
   const { app, window } = await launchApp();
   const browserWindow = await app.browserWindow(window);

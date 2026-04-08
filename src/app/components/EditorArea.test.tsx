@@ -87,6 +87,10 @@ describe('EditorArea', () => {
 
     expect(emptyState).toHaveClass('h-full', 'w-full', 'items-center', 'justify-center');
     expect(emptyState).not.toHaveClass('border-dashed');
+    expect(screen.getByTestId('empty-project-tabs')).toBeInTheDocument();
+    expect(screen.getByTestId('empty-project-tab-info')).toHaveAttribute('data-state', 'on');
+    expect(screen.getByTestId('empty-project-tab-image')).toBeInTheDocument();
+    expect(screen.getByTestId('empty-project-tab-summary')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Create Project' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Open Project' })).toBeInTheDocument();
     expect(screen.queryByTestId('monaco-editor')).not.toBeInTheDocument();
@@ -112,6 +116,9 @@ describe('EditorArea', () => {
     fireEvent.click(screen.getByTestId('editor-tab-rtl/core/alu.v'));
     fireEvent.click(screen.getByTestId('editor-tab-close-rtl/core/cpu_top.v'));
 
+    expect(screen.getByTestId('editor-tab-bar')).toHaveClass('h-[27px]');
+    expect(screen.getByTestId('editor-split-right')).toHaveClass('px-1', 'cursor-pointer');
+    expect(screen.getByTestId('editor-split-down')).toHaveClass('px-1', 'cursor-pointer');
     expect(screen.getByTestId('editor-tab-badge-rtl/core/cpu_top.v')).toHaveTextContent('V');
     expect(screen.getByTestId('editor-tab-badge-rtl/core/alu.v')).toHaveTextContent('V');
 

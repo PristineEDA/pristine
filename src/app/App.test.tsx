@@ -145,9 +145,14 @@ vi.mock('./components/BottomPanel', () => ({
   ),
 }));
 
-vi.mock('./components/StatusBar', () => ({
-  StatusBar: ({ activeFileId, cursorLine, cursorCol }: any) => (
-    <div data-testid="status-bar">{`${activeFileId}:${cursorLine}:${cursorCol}`}</div>
+vi.mock('./components/statusBars/AppStatusBar', () => ({
+  AppStatusBar: ({ mainContentView, activeView, activeFileId, cursorLine, cursorCol }: any) => (
+    <div data-testid="status-bar">
+      <span data-testid="status-bar-main-view">{mainContentView}</span>
+      <span data-testid="status-bar-code-view">{activeView}</span>
+      <span data-testid="status-bar-active-file">{activeFileId}</span>
+      <span data-testid="status-bar-cursor">{`${cursorLine}:${cursorCol}`}</span>
+    </div>
   ),
 }));
 
@@ -222,7 +227,10 @@ describe('App', () => {
     expect(screen.queryByTestId('bottom-panel')).not.toBeInTheDocument();
     expect(screen.queryByTestId('right-panel')).not.toBeInTheDocument();
     expect(screen.getByTestId('editor-tab-count')).toHaveTextContent('0');
-    expect(screen.getByTestId('status-bar')).toHaveTextContent(':1:1');
+    expect(screen.getByTestId('status-bar-main-view')).toHaveTextContent('code');
+    expect(screen.getByTestId('status-bar-code-view')).toHaveTextContent('explorer');
+    expect(screen.getByTestId('status-bar-active-file')).toHaveTextContent('');
+    expect(screen.getByTestId('status-bar-cursor')).toHaveTextContent('1:1');
 
     fireEvent.click(screen.getByText('toggle-left-panel'));
     expect(screen.getByTestId('menu-left-state')).toHaveTextContent('true');
@@ -236,7 +244,8 @@ describe('App', () => {
     expect(screen.getByTestId('editor-jump-line')).toHaveTextContent('77');
 
     fireEvent.click(screen.getByText('editor-cursor'));
-    expect(screen.getByTestId('status-bar')).toHaveTextContent('rtl/core/reg_file.v:9:3');
+    expect(screen.getByTestId('status-bar-active-file')).toHaveTextContent('rtl/core/reg_file.v');
+    expect(screen.getByTestId('status-bar-cursor')).toHaveTextContent('9:3');
 
     fireEvent.click(screen.getByText('toggle-right-panel'));
     expect(screen.getByTestId('menu-right-state')).toHaveTextContent('true');
@@ -262,6 +271,8 @@ describe('App', () => {
     await waitFor(() => {
       expect(screen.getByTestId('activity-view')).toHaveTextContent('simulation');
     });
+    expect(screen.getByTestId('status-bar-main-view')).toHaveTextContent('code');
+    expect(screen.getByTestId('status-bar-code-view')).toHaveTextContent('simulation');
     expect(screen.getByTestId('panel-simulation-left-panel')).toBeInTheDocument();
     expect(screen.getByTestId('panel-simulation-bottom-panel')).toBeInTheDocument();
     expect(screen.getByTestId('panel-simulation-right-panel')).toBeInTheDocument();
@@ -272,6 +283,7 @@ describe('App', () => {
 
     fireEvent.click(screen.getByText('select-explorer'));
     expect(screen.getByTestId('activity-view')).toHaveTextContent('explorer');
+    expect(screen.getByTestId('status-bar-code-view')).toHaveTextContent('explorer');
     expect(screen.getByTestId('menu-left-state')).toHaveTextContent('true');
     expect(screen.getByTestId('left-panel')).toBeInTheDocument();
     expect(screen.getByTestId('right-panel')).toBeInTheDocument();
@@ -287,17 +299,20 @@ describe('App', () => {
     expect(screen.getByTestId('main-content-view')).toHaveTextContent('whiteboard');
     expect(screen.queryByTestId('activity-bar')).not.toBeInTheDocument();
     expect(await screen.findByTestId('whiteboard-view')).toBeInTheDocument();
-    expect(screen.getByTestId('status-bar')).toBeInTheDocument();
+    expect(screen.getByTestId('status-bar-main-view')).toHaveTextContent('whiteboard');
 
     fireEvent.click(screen.getByText('switch-workflow'));
     expect(screen.getByTestId('main-content-view')).toHaveTextContent('workflow');
     expect(screen.queryByTestId('activity-bar')).not.toBeInTheDocument();
     expect(await screen.findByTestId('workflow-view')).toHaveTextContent('Workflow');
+    expect(screen.getByTestId('status-bar-main-view')).toHaveTextContent('workflow');
 
     fireEvent.click(screen.getByText('switch-code'));
     expect(screen.getByTestId('main-content-view')).toHaveTextContent('code');
     expect(screen.getByTestId('activity-bar')).toBeInTheDocument();
     expect(screen.getByTestId('activity-view')).toHaveTextContent('synthesis');
+    expect(screen.getByTestId('status-bar-main-view')).toHaveTextContent('code');
+    expect(screen.getByTestId('status-bar-code-view')).toHaveTextContent('synthesis');
     expect(await screen.findByTestId('code-view-synthesis')).toHaveTextContent('Synthesis');
   });
 
