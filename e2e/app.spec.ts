@@ -203,10 +203,25 @@ async function requestWindowClose(window: Awaited<ReturnType<typeof launchApp>>[
   await window.getByTestId('window-control-close').click();
 }
 
+function isPageClosedDuringQuitAction(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  return /Target page, context or browser has been closed/i.test(error.message);
+}
+
 async function chooseQuitFromCloseDialog(window: Awaited<ReturnType<typeof launchApp>>['window']) {
   const quitButton = window.getByTestId('close-action-quit');
   await expect(quitButton).toBeVisible();
-  await quitButton.click({ noWaitAfter: true });
+
+  try {
+    await quitButton.click({ noWaitAfter: true });
+  } catch (error) {
+    if (!isPageClosedDuringQuitAction(error)) {
+      throw error;
+    }
+  }
 }
 
 function isProcessRunning(pid: number) {
@@ -965,8 +980,7 @@ test('close button terminates the active terminal shell process', async () => {
   const closePromise = window.waitForEvent('close');
   await requestWindowClose(window);
   await expect(window.getByTestId('close-confirmation-dialog')).toBeVisible();
-  await chooseQuitFromCloseDialog(window);
-  await closePromise;
+  await Promise.all([closePromise, chooseQuitFromCloseDialog(window)]);
 
   await expect.poll(() => isProcessRunning(pid), {
     timeout: 15000,
@@ -1048,8 +1062,7 @@ test('remembered close behavior can quit directly on the next close request', as
   await window.getByTestId('close-action-remember-choice').click();
 
   const rememberedQuitClosePromise = window.waitForEvent('close');
-  await chooseQuitFromCloseDialog(window);
-  await rememberedQuitClosePromise;
+  await Promise.all([rememberedQuitClosePromise, chooseQuitFromCloseDialog(window)]);
 
   await expect.poll(() => isProcessRunning(pid), {
     timeout: 15000,
