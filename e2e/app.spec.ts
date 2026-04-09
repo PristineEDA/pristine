@@ -366,6 +366,69 @@ test('close button hides the app to tray when close-to-tray is enabled', async (
   await app.close();
 });
 
+test('close-to-tray keeps the active terminal session alive and restores it after reopening', async () => {
+  const { app, window } = await launchApp();
+  const browserWindow = await app.browserWindow(window);
+  const marker = '__PRISTINE_TRAY_TERMINAL__';
+
+  await clearRememberedCloseBehavior(window);
+  await window.getByTestId('menu-settings-button').click();
+  await expect(window.getByTestId('settings-dialog')).toBeVisible();
+  await setSwitchChecked(window.getByTestId('settings-close-to-tray-switch'), true);
+  await expect.poll(async () => readConfigValue(window, 'window.closeActionPreference')).toBe('tray');
+  await window.getByTestId('settings-close-button').click();
+
+  await openBottomTerminal(window);
+  await expect.poll(async () => readTerminalPid(window), {
+    timeout: 15000,
+  }).toBeGreaterThan(0);
+
+  const terminalInput = window.locator('[data-testid="terminal-host"] .xterm-helper-textarea');
+  await expect(terminalInput).toHaveCount(1);
+  await terminalInput.click();
+  await terminalInput.pressSequentially(`echo ${marker}`);
+  await terminalInput.press('Enter');
+
+  await expect.poll(async () => readTerminalText(window), {
+    timeout: 15000,
+  }).toContain(marker);
+
+  const originalPid = await readTerminalPid(window);
+  expect(isProcessRunning(originalPid)).toBe(true);
+
+  await requestWindowClose(window);
+  await expect.poll(async () => browserWindow.evaluate((win) => win.isVisible())).toBe(false);
+  expect(isProcessRunning(originalPid)).toBe(true);
+
+  await browserWindow.evaluate((win) => {
+    win.show();
+    win.focus();
+  });
+
+  await expect.poll(async () => browserWindow.evaluate((win) => win.isVisible())).toBe(true);
+  await openBottomTerminal(window);
+  await expect.poll(async () => readTerminalPid(window), {
+    timeout: 15000,
+  }).toBe(originalPid);
+  await expect.poll(async () => readTerminalText(window), {
+    timeout: 15000,
+  }).toContain(marker);
+
+  await window.evaluate(async () => {
+    const browserGlobal = globalThis as typeof globalThis & {
+      electronAPI?: {
+        config: {
+          set: (key: string, value: unknown) => Promise<void>;
+        };
+      };
+    };
+
+    await browserGlobal.electronAPI?.config.set('window.closeActionPreference', null);
+  });
+
+  await app.close();
+});
+
 test('explorer opens a file into a new editor tab', async () => {
   const { app, window } = await launchApp();
 
@@ -509,6 +572,130 @@ test('ctrl+p quick open opens files without forcing the hidden explorer visible'
 
   await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toBeVisible();
   await expect(window.getByTestId('file-tree-node-README_md')).toHaveCount(0);
+
+  await app.close();
+});
+
+test('ctrl+p quick open shows recent files in recency order and deduplicates reopened entries', async () => {
+  const { app, window } = await launchApp();
+
+  await ensureExplorerVisible(window);
+
+  const readmeNode = window.getByTestId('file-tree-node-README_md');
+  await readmeNode.click();
+  await expect(window.getByTestId('editor-tab-README.md')).toBeVisible();
+
+  await openNestedWorkspaceFile(window, [
+    'file-tree-node-rtl',
+    'file-tree-node-rtl_core',
+    'file-tree-node-rtl_core_reg_file_v',
+  ]);
+  await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toBeVisible();
+
+  await readmeNode.click();
+  await expect(window.getByTestId('editor-tab-README.md')).toBeVisible();
+
+  await window.keyboard.press('Control+P');
+  await expect(window.getByTestId('quick-open-input')).toBeFocused();
+
+  const recentOrder = await window.locator('[data-testid^="quick-open-result-"]').evaluateAll((elements) => {
+    return elements.map((element) => {
+      const htmlElement = element as { getAttribute: (name: string) => string | null };
+      return htmlElement.getAttribute('data-testid') ?? '';
+    });
+  });
+
+  expect(recentOrder.slice(0, 2)).toEqual([
+    'quick-open-result-README_md',
+    'quick-open-result-rtl_core_reg_file_v',
+  ]);
+  expect(recentOrder.filter((value) => value === 'quick-open-result-README_md')).toHaveLength(1);
+
+  await window.keyboard.press('Escape');
+  await expect(window.getByTestId('quick-open-overlay')).toHaveCount(0);
+
+  await app.close();
+});
+
+test('ctrl+p quick open keyboard navigation opens the selected recent file', async () => {
+  const { app, window } = await launchApp();
+
+  await ensureExplorerVisible(window);
+
+  const readmeNode = window.getByTestId('file-tree-node-README_md');
+  await readmeNode.click();
+  await expect(window.getByTestId('editor-tab-README.md')).toBeVisible();
+
+  await openNestedWorkspaceFile(window, [
+    'file-tree-node-rtl',
+    'file-tree-node-rtl_core',
+    'file-tree-node-rtl_core_reg_file_v',
+  ]);
+  await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toBeVisible();
+
+  await readmeNode.click();
+  await expect(window.getByTestId('editor-tab-README.md')).toHaveClass(/bg-background/);
+
+  await window.keyboard.press('Control+P');
+  const quickOpenInput = window.getByTestId('quick-open-input');
+  await expect(quickOpenInput).toBeFocused();
+
+  await quickOpenInput.press('ArrowDown');
+  await quickOpenInput.press('Enter');
+
+  await expect(window.getByTestId('quick-open-overlay')).toHaveCount(0);
+  await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toHaveClass(/bg-background/);
+  await expect(window.getByTestId('editor-tab-README.md')).not.toHaveClass(/bg-background/);
+
+  await app.close();
+});
+
+test('ctrl+p quick open search keyboard navigation opens the selected filtered file', async () => {
+  const { app, window } = await launchApp();
+
+  await ensureExplorerVisible(window);
+
+  await window.keyboard.press('Control+P');
+  const quickOpenInput = window.getByTestId('quick-open-input');
+  await expect(quickOpenInput).toBeFocused();
+
+  await quickOpenInput.fill('r');
+  await expect(window.getByTestId('quick-open-result-README_md')).toBeVisible();
+  await expect(window.getByTestId('quick-open-result-rtl_core_reg_file_v')).toBeVisible();
+
+  await quickOpenInput.press('ArrowDown');
+  await quickOpenInput.press('Enter');
+
+  await expect(window.getByTestId('quick-open-overlay')).toHaveCount(0);
+  await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toBeVisible();
+  await expect(window.getByTestId('editor-tab-preview-indicator-rtl/core/reg_file.v')).toHaveCount(0);
+  await expect(window.locator('.monaco-editor .view-lines')).toContainText('module reg_file');
+
+  await app.close();
+});
+
+test('ctrl+p quick open escape closes the palette and reopening resets the query', async () => {
+  const { app, window } = await launchApp();
+
+  await ensureExplorerVisible(window);
+  await window.getByTestId('file-tree-node-README_md').click();
+  await expect(window.getByTestId('editor-tab-README.md')).toBeVisible();
+
+  await window.keyboard.press('Control+P');
+  const quickOpenInput = window.getByTestId('quick-open-input');
+  await expect(quickOpenInput).toBeFocused();
+
+  await quickOpenInput.fill('reg');
+  await expect(window.getByTestId('quick-open-result-rtl_core_reg_file_v')).toBeVisible();
+
+  await quickOpenInput.press('Escape');
+  await expect(window.getByTestId('quick-open-overlay')).toHaveCount(0);
+
+  await window.keyboard.press('Control+P');
+  const reopenedInput = window.getByTestId('quick-open-input');
+  await expect(reopenedInput).toBeFocused();
+  await expect(reopenedInput).toHaveValue('');
+  await expect(window.getByTestId('quick-open-result-README_md')).toBeVisible();
 
   await app.close();
 });
@@ -1056,6 +1243,149 @@ test('floating info window stays visible after hiding the main window to tray', 
   });
 
   await app.close();
+});
+
+test('tray and floating info settings persist across app relaunch', async () => {
+  const firstLaunch = await launchApp();
+  const { app: firstApp, window: firstWindow } = firstLaunch;
+
+  await clearRememberedCloseBehavior(firstWindow);
+  await setFloatingInfoWindowVisibility(firstWindow, false);
+
+  await firstWindow.getByTestId('menu-settings-button').click();
+  await expect(firstWindow.getByTestId('settings-dialog')).toBeVisible();
+
+  await setSwitchChecked(firstWindow.getByTestId('settings-close-to-tray-switch'), true);
+  await setSwitchChecked(firstWindow.getByTestId('settings-floating-info-window-switch'), true);
+
+  await expect.poll(async () => readConfigValue(firstWindow, 'window.closeActionPreference')).toBe('tray');
+  await expect.poll(async () => readConfigValue(firstWindow, 'ui.floatingInfoWindow.visible')).toBe(true);
+
+  await firstWindow.getByTestId('settings-close-button').click();
+  await expect(firstWindow.getByTestId('settings-dialog')).toHaveCount(0);
+
+  await firstApp.close();
+
+  const secondLaunch = await launchApp();
+  const { app: secondApp, window: secondWindow } = secondLaunch;
+
+  await expect.poll(async () => (await getWindowByTitle(secondApp, 'Pristine Floating Info')) !== null).toBe(true);
+  const floatingInfoWindow = await getWindowByTitle(secondApp, 'Pristine Floating Info');
+
+  if (!floatingInfoWindow) {
+    throw new Error('Expected floating info window after relaunch');
+  }
+
+  await expect(floatingInfoWindow.getByTestId('floating-info-window')).toBeVisible();
+
+  await secondWindow.getByTestId('menu-settings-button').click();
+  await expect(secondWindow.getByTestId('settings-dialog')).toBeVisible();
+  await expect(secondWindow.getByTestId('settings-close-to-tray-switch')).toHaveAttribute('data-state', 'checked');
+  await expect(secondWindow.getByTestId('settings-floating-info-window-switch')).toHaveAttribute('data-state', 'checked');
+
+  await setSwitchChecked(secondWindow.getByTestId('settings-floating-info-window-switch'), false);
+  await setSwitchChecked(secondWindow.getByTestId('settings-close-to-tray-switch'), false);
+
+  await expect.poll(async () => readConfigValue(secondWindow, 'ui.floatingInfoWindow.visible')).toBe(false);
+  await expect.poll(async () => readConfigValue(secondWindow, 'window.closeActionPreference')).toBe('quit');
+
+  await secondWindow.getByTestId('settings-close-button').click();
+  await expect(secondWindow.getByTestId('settings-dialog')).toHaveCount(0);
+
+  await secondApp.close();
+});
+
+test('theme toggle persists across app relaunch', async () => {
+  const firstLaunch = await launchApp();
+  const { app: firstApp, window: firstWindow } = firstLaunch;
+
+  const initialTheme = await firstWindow.evaluate(() => {
+    const browserGlobal = globalThis as typeof globalThis & {
+      document: {
+        documentElement: {
+          classList: {
+            contains: (token: string) => boolean;
+          };
+        };
+      };
+      localStorage: {
+        getItem: (key: string) => string | null;
+      };
+    };
+    const root = browserGlobal.document.documentElement;
+    const stored = browserGlobal.localStorage.getItem('pristine-theme');
+
+    return {
+      isDark: root.classList.contains('dark'),
+      stored,
+    };
+  });
+
+  await firstWindow.getByTestId('toggle-theme').click();
+
+  await expect.poll(async () => firstWindow.evaluate(() => {
+    const browserGlobal = globalThis as typeof globalThis & {
+      document: {
+        documentElement: {
+          classList: {
+            contains: (token: string) => boolean;
+          };
+        };
+      };
+      localStorage: {
+        getItem: (key: string) => string | null;
+      };
+    };
+    const root = browserGlobal.document.documentElement;
+    const stored = browserGlobal.localStorage.getItem('pristine-theme');
+
+    return {
+      isDark: root.classList.contains('dark'),
+      stored,
+    };
+  })).not.toEqual(initialTheme);
+
+  const toggledTheme = await firstWindow.evaluate(() => {
+    const browserGlobal = globalThis as typeof globalThis & {
+      document: {
+        documentElement: {
+          classList: {
+            contains: (token: string) => boolean;
+          };
+        };
+      };
+      localStorage: {
+        getItem: (key: string) => string | null;
+      };
+    };
+    const root = browserGlobal.document.documentElement;
+    const stored = browserGlobal.localStorage.getItem('pristine-theme');
+
+    return {
+      isDark: root.classList.contains('dark'),
+      stored,
+    };
+  });
+
+  await firstApp.close();
+
+  const secondLaunch = await launchApp();
+  const { app: secondApp, window: secondWindow } = secondLaunch;
+
+  await expect.poll(async () => secondWindow.evaluate(() => ({
+    isDark: (globalThis as typeof globalThis & { document: { documentElement: { classList: { contains: (token: string) => boolean } } } }).document.documentElement.classList.contains('dark'),
+    stored: (globalThis as typeof globalThis & { localStorage: { getItem: (key: string) => string | null } }).localStorage.getItem('pristine-theme'),
+  }))).toEqual(toggledTheme);
+
+  if (toggledTheme.isDark !== initialTheme.isDark) {
+    await secondWindow.getByTestId('toggle-theme').click();
+    await expect.poll(async () => secondWindow.evaluate(() => ({
+      isDark: (globalThis as typeof globalThis & { document: { documentElement: { classList: { contains: (token: string) => boolean } } } }).document.documentElement.classList.contains('dark'),
+      stored: (globalThis as typeof globalThis & { localStorage: { getItem: (key: string) => string | null } }).localStorage.getItem('pristine-theme'),
+    }))).toEqual(initialTheme);
+  }
+
+  await secondApp.close();
 });
 
 test('close button terminates the active terminal shell process', async () => {

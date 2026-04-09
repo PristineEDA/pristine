@@ -86,6 +86,15 @@ describe('terminal IPC handlers', () => {
     });
   });
 
+  it('rejects invalid create parameters before spawning a session', async () => {
+    const createHandler = getHandler('async:terminal:create');
+
+    await expect(createHandler({}, { cwd: 42 })).rejects.toThrow('Expected string or undefined for "cwd", got number');
+    await expect(createHandler({}, { cols: 'wide' })).rejects.toThrow('Expected number for "cols", got string');
+    await expect(createHandler({}, { rows: 'tall' })).rejects.toThrow('Expected number for "rows", got string');
+    expect(mockSpawn).not.toHaveBeenCalled();
+  });
+
   it('creates a terminal session and forwards data/exit streams', async () => {
     const fakeTerminal = createFakeTerminal();
     mockSpawn.mockReturnValue(fakeTerminal);
@@ -138,6 +147,39 @@ describe('terminal IPC handlers', () => {
     expect(fakeTerminal.kill).toHaveBeenCalled();
   });
 
+  it('returns false for write, resize, and kill when the session is missing', async () => {
+    const writeHandler = getHandler('async:terminal:write');
+    const resizeHandler = getHandler('async:terminal:resize');
+    const killHandler = getHandler('async:terminal:kill');
+
+    await expect(writeHandler({}, 'missing-session', 'dir\r')).resolves.toBe(false);
+    await expect(resizeHandler({}, 'missing-session', 90, 28)).resolves.toBe(false);
+    await expect(killHandler({}, 'missing-session')).resolves.toBe(false);
+  });
+
+  it('routes terminal actions only to the targeted session', async () => {
+    const firstTerminal = createFakeTerminal();
+    const secondTerminal = createFakeTerminal();
+    mockSpawn
+      .mockReturnValueOnce(firstTerminal)
+      .mockReturnValueOnce(secondTerminal);
+
+    const createHandler = getHandler('async:terminal:create');
+    const writeHandler = getHandler('async:terminal:write');
+    const resizeHandler = getHandler('async:terminal:resize');
+
+    await createHandler({}, {});
+    const second = await createHandler({}, {});
+
+    await writeHandler({}, (second as { id: string }).id, 'help\r');
+    await resizeHandler({}, (second as { id: string }).id, 120, 50);
+
+    expect(firstTerminal.write).not.toHaveBeenCalled();
+    expect(firstTerminal.resize).not.toHaveBeenCalled();
+    expect(secondTerminal.write).toHaveBeenCalledWith('help\r');
+    expect(secondTerminal.resize).toHaveBeenCalledWith(120, 50);
+  });
+
   it('swallows resize requests for sessions that have already exited', async () => {
     const fakeTerminal = createFakeTerminal();
     fakeTerminal.resize.mockImplementation(() => {
@@ -180,6 +222,22 @@ describe('terminal IPC handlers', () => {
     await createHandler({}, {});
 
     mainWindow.isDestroyed.mockReturnValue(true);
+
+    expect(() => {
+      fakeTerminal.handlers.data?.('late output');
+      fakeTerminal.handlers.exit?.({ exitCode: 0, signal: 0 });
+    }).not.toThrow();
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it('ignores late terminal events after webContents is destroyed', async () => {
+    const fakeTerminal = createFakeTerminal();
+    mockSpawn.mockReturnValue(fakeTerminal);
+
+    const createHandler = getHandler('async:terminal:create');
+    await createHandler({}, {});
+
+    mainWindow.webContents.isDestroyed.mockReturnValue(true);
 
     expect(() => {
       fakeTerminal.handlers.data?.('late output');

@@ -145,11 +145,12 @@ export async function resizeTerminalSession(cols: number, rows: number) {
 
 export async function terminateTerminalSession() {
   const api = getTerminalApi();
-  const sessionId = snapshot.sessionId;
 
   if (createPromise) {
     await createPromise;
   }
+
+  const sessionId = snapshot.sessionId;
 
   if (api && sessionId) {
     await api.kill(sessionId);
