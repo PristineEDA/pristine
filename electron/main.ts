@@ -1,18 +1,22 @@
-import { app, BrowserWindow, Menu, Tray, nativeImage } from 'electron';
+import { app, BrowserWindow, Menu, Tray, nativeImage, screen } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { registerAllHandlers, setProjectRoot, setupWindowStreams } from './ipc/register.js';
 import { flushPendingConfigSave, getConfigValue } from './ipc/config.js';
 import { disposeAllTerminalSessions } from './ipc/terminal.js';
-import { StreamChannels } from './ipc/channels.js';
 import { DEFAULT_STARTUP_PROJECT_ROOT } from '../src/app/workspace/workspaceFiles.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MINIMUM_SPLASH_DURATION_MS = 3000;
 const CLOSE_ACTION_CONFIG_KEY = 'window.closeActionPreference';
+const FLOATING_INFO_VISIBLE_CONFIG_KEY = 'ui.floatingInfoWindow.visible';
+const FLOATING_INFO_WINDOW_TITLE = 'Pristine Floating Info';
+const FLOATING_INFO_WINDOW_WIDTH = 60;
+const FLOATING_INFO_WINDOW_HEIGHT = 24;
 
 let mainWindow: BrowserWindow | null = null;
 let splashWindow: BrowserWindow | null = null;
+let floatingInfoWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let isQuitting = false;
 
@@ -28,10 +32,18 @@ function getMainRendererPath(): string {
   return path.join(__dirname, '../dist/index.html');
 }
 
+function getFloatingInfoRendererPath(): string {
+  return path.join(__dirname, '../dist/floating-info.html');
+}
+
 function getSplashHtmlPath(): string {
   return process.env['VITE_DEV_SERVER_URL']
     ? path.join(__dirname, '../public/splash.html')
     : path.join(__dirname, '../dist/splash.html');
+}
+
+function getFloatingInfoRendererUrl(): string {
+  return new URL('floating-info.html', process.env['VITE_DEV_SERVER_URL']).toString();
 }
 
 function createTrayIcon() {
@@ -67,20 +79,91 @@ function hideMainWindowToTray(): void {
   mainWindow.hide();
 }
 
-function requestCloseConfirmation(window: BrowserWindow): void {
-  if (window.isDestroyed() || window.webContents.isDestroyed()) {
-    return;
+function shouldShowFloatingInfoWindow(): boolean {
+  return getConfigValue(FLOATING_INFO_VISIBLE_CONFIG_KEY) === true;
+}
+
+function getFloatingInfoWindowPosition() {
+  const { workArea } = screen.getPrimaryDisplay();
+
+  return {
+    x: workArea.x + workArea.width - FLOATING_INFO_WINDOW_WIDTH - 24,
+    y: workArea.y + 24,
+  };
+}
+
+function createFloatingInfoWindow(): BrowserWindow {
+  if (floatingInfoWindow && !floatingInfoWindow.isDestroyed()) {
+    return floatingInfoWindow;
   }
 
-  window.webContents.send(StreamChannels.WINDOW_CLOSE_REQUESTED);
+  const { x, y } = getFloatingInfoWindowPosition();
+  const window = new BrowserWindow({
+    width: FLOATING_INFO_WINDOW_WIDTH,
+    height: FLOATING_INFO_WINDOW_HEIGHT,
+    minWidth: FLOATING_INFO_WINDOW_WIDTH,
+    maxWidth: FLOATING_INFO_WINDOW_WIDTH,
+    minHeight: FLOATING_INFO_WINDOW_HEIGHT,
+    maxHeight: FLOATING_INFO_WINDOW_HEIGHT,
+    x,
+    y,
+    frame: false,
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    focusable: true,
+    show: false,
+    title: FLOATING_INFO_WINDOW_TITLE,
+    backgroundColor: '#111827',
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: true,
+      webSecurity: true,
+    },
+  });
+
+  if (process.env['VITE_DEV_SERVER_URL']) {
+    window.loadURL(getFloatingInfoRendererUrl());
+  } else {
+    window.loadFile(getFloatingInfoRendererPath());
+  }
+
+  window.setAlwaysOnTop(true, 'screen-saver');
+  window.on('closed', () => {
+    if (floatingInfoWindow === window) {
+      floatingInfoWindow = null;
+    }
+  });
+
+  floatingInfoWindow = window;
+  return window;
 }
 
-function getRememberedCloseAction(): 'quit' | 'tray' | null {
+function setFloatingInfoWindowVisible(visible: boolean): boolean {
+  if (visible) {
+    const window = createFloatingInfoWindow();
+    window.show();
+    return true;
+  }
+
+  if (!floatingInfoWindow || floatingInfoWindow.isDestroyed()) {
+    return false;
+  }
+
+  floatingInfoWindow.hide();
+  return true;
+}
+
+function getConfiguredCloseAction(): 'quit' | 'tray' {
   const value = getConfigValue(CLOSE_ACTION_CONFIG_KEY);
-  return value === 'quit' || value === 'tray' ? value : null;
+  return value === 'tray' ? 'tray' : 'quit';
 }
 
-function executeRememberedCloseAction(action: 'quit' | 'tray'): void {
+function executeCloseAction(action: 'quit' | 'tray'): void {
   if (action === 'tray') {
     hideMainWindowToTray();
     return;
@@ -197,14 +280,7 @@ function createMainWindow(): BrowserWindow {
     }
 
     event.preventDefault();
-
-    const rememberedCloseAction = getRememberedCloseAction();
-    if (rememberedCloseAction) {
-      executeRememberedCloseAction(rememberedCloseAction);
-      return;
-    }
-
-    requestCloseConfirmation(window);
+    executeCloseAction(getConfiguredCloseAction());
   });
 
   window.on('closed', () => {
@@ -252,11 +328,15 @@ function createStartupWindows(): void {
 setProjectRoot(process.env['PRISTINE_PROJECT_ROOT'] ?? DEFAULT_STARTUP_PROJECT_ROOT);
 
 // Register all IPC handlers before window creation
-registerAllHandlers(getMainWindow);
+registerAllHandlers(getMainWindow, setFloatingInfoWindowVisible);
 
 app.whenReady().then(() => {
   createTray();
   createStartupWindows();
+
+   if (shouldShowFloatingInfoWindow()) {
+    setFloatingInfoWindowVisible(true);
+  }
 
   app.on('activate', () => {
     if (mainWindow) {

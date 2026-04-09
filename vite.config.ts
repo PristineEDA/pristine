@@ -5,6 +5,14 @@ import react from '@vitejs/plugin-react'
 import electron from 'vite-plugin-electron'
 
 export default defineConfig(() => ({
+  build: {
+    rollupOptions: {
+      input: {
+        main: path.resolve(__dirname, 'index.html'),
+        floatingInfo: path.resolve(__dirname, 'floating-info.html'),
+      },
+    },
+  },
   plugins: [
     react(),
     tailwindcss(),

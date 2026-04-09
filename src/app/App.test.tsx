@@ -22,7 +22,7 @@ vi.mock('./components/ui/resizable', () => ({
   ResizableHandle: ({ hidden }: { hidden?: boolean }) => (hidden ? null : <div data-testid="panel-handle" />),
 }));
 
-vi.mock('./components/MenuBar', async () => {
+vi.mock('./components/code/shared/MenuBar', async () => {
   const actual = await vi.importActual<typeof import('./context/WorkspaceContext')>('./context/WorkspaceContext');
   const sidebar = await vi.importActual<typeof import('./components/ui/sidebar')>('./components/ui/sidebar');
 
@@ -59,9 +59,9 @@ vi.mock('./components/MenuBar', async () => {
   };
 });
 
-vi.mock('./components/ActivityBar', async () => {
+vi.mock('./components/code/shared/ActivityBar', async () => {
   const sidebar = await vi.importActual<typeof import('./components/ui/sidebar')>('./components/ui/sidebar');
-  const actualActivityBar = await vi.importActual<typeof import('./components/ActivityBar')>('./components/ActivityBar');
+  const actualActivityBar = await vi.importActual<typeof import('./components/code/shared/ActivityBar')>('./components/code/shared/ActivityBar');
 
   return {
     ActivityBar: ({ activeView, onItemSelect }: { activeView: string; onItemSelect: (view: string) => void }) => {
@@ -90,13 +90,13 @@ vi.mock('./components/whiteboard/WhiteboardView', () => ({
   WhiteboardView: () => <div data-testid="whiteboard-view">whiteboard</div>,
 }));
 
-vi.mock('./components/WorkflowPlaceholder', () => ({
-  WorkflowPlaceholder: ({ title = 'Workflow', testId = 'workflow-view' }: { title?: string; testId?: string }) => (
+vi.mock('./components/workflow/WorkflowView', () => ({
+  WorkflowView: ({ title = 'Workflow', testId = 'workflow-view' }: { title?: string; testId?: string }) => (
     <div data-testid={testId}>{title}</div>
   ),
 }));
 
-vi.mock('./components/LeftSidePanel', () => ({
+vi.mock('./components/code/explorer/LeftSidePanel', () => ({
   LeftSidePanel: ({ activeFileId, currentOutlineId, onFileOpen, onLineJump, revealRequest }: any) => (
     <div data-testid="left-panel">
       <span data-testid="left-active-file">{activeFileId}</span>
@@ -107,7 +107,7 @@ vi.mock('./components/LeftSidePanel', () => ({
   ),
 }));
 
-vi.mock('./components/EditorSplitLayout', async () => {
+vi.mock('./components/code/shared/EditorSplitLayout', async () => {
   const actual = await vi.importActual<typeof import('./context/WorkspaceContext')>('./context/WorkspaceContext');
 
   return {
@@ -128,7 +128,7 @@ vi.mock('./components/EditorSplitLayout', async () => {
   };
 });
 
-vi.mock('./components/RightSidePanel', () => ({
+vi.mock('./components/code/explorer/RightSidePanel', () => ({
   RightSidePanel: ({ onFileOpen, onLineJump }: any) => (
     <div data-testid="right-panel">
       <button onClick={() => { onFileOpen('rtl/core/alu.v', 'alu.v'); onLineJump(33); }}>right-open</button>
@@ -136,7 +136,7 @@ vi.mock('./components/RightSidePanel', () => ({
   ),
 }));
 
-vi.mock('./components/BottomPanel', () => ({
+vi.mock('./components/code/explorer/BottomPanel', () => ({
   BottomPanel: ({ onClose }: { onClose?: () => void }) => (
     <div>
       <span data-testid="bottom-panel">bottom</span>
@@ -145,7 +145,7 @@ vi.mock('./components/BottomPanel', () => ({
   ),
 }));
 
-vi.mock('./components/statusBars/AppStatusBar', () => ({
+vi.mock('./components/code/shared/statusBars/AppStatusBar', () => ({
   AppStatusBar: ({ mainContentView, activeView, activeFileId, cursorLine, cursorCol }: any) => (
     <div data-testid="status-bar">
       <span data-testid="status-bar-main-view">{mainContentView}</span>
@@ -156,7 +156,7 @@ vi.mock('./components/statusBars/AppStatusBar', () => ({
   ),
 }));
 
-vi.mock('./components/QuickOpenPalette', () => ({
+vi.mock('./components/code/shared/QuickOpenPalette', () => ({
   QuickOpenPalette: ({ isOpen, mode, query, results, onQueryChange, onSelectResult, onClose }: any) => (
     isOpen ? (
       <div data-testid="quick-open-overlay">

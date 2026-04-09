@@ -1,26 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AsyncChannels, StreamChannels, SyncChannels } from './channels.js';
 
-const { mockOn, mockHandle, mockQuit, mockSetConfigValue } = vi.hoisted(() => ({
+const { mockOn, mockHandle, mockSetFloatingInfoWindowVisible } = vi.hoisted(() => ({
   mockOn: vi.fn(),
   mockHandle: vi.fn(),
-  mockQuit: vi.fn(),
-  mockSetConfigValue: vi.fn(),
+  mockSetFloatingInfoWindowVisible: vi.fn(),
 }));
 
 vi.mock('electron', () => ({
-  app: {
-    quit: (...args: unknown[]) => mockQuit(...args),
-  },
   ipcMain: {
     on: (...args: unknown[]) => mockOn(...args),
     handle: (...args: unknown[]) => mockHandle(...args),
   },
   BrowserWindow: class {},
-}));
-
-vi.mock('./config.js', () => ({
-  setConfigValue: (...args: unknown[]) => mockSetConfigValue(...args),
 }));
 
 import { registerWindowHandlers, setupWindowStreams } from './window.js';
@@ -41,8 +33,7 @@ describe('window IPC handlers', () => {
   beforeEach(() => {
     mockOn.mockClear();
     mockHandle.mockClear();
-    mockQuit.mockClear();
-    mockSetConfigValue.mockClear();
+    mockSetFloatingInfoWindowVisible.mockClear();
   });
 
   it('returns maximized state via sync channel', () => {
@@ -63,7 +54,7 @@ describe('window IPC handlers', () => {
     expect(handler({})).toBe(false);
   });
 
-  it('toggles maximize state, changes visibility, requests window close, and resolves close actions', async () => {
+  it('toggles maximize state, changes visibility, and requests window close', async () => {
     let maximized = false;
     let minimized = false;
     const win = {
@@ -79,14 +70,17 @@ describe('window IPC handlers', () => {
       close: vi.fn(),
     };
 
-    registerWindowHandlers(() => win as any);
+    registerWindowHandlers(() => win as any, (visible: boolean) => {
+      mockSetFloatingInfoWindowVisible(visible);
+      return true;
+    });
 
     const minimize = getHandleListener(AsyncChannels.WINDOW_MINIMIZE);
     const maximize = getHandleListener(AsyncChannels.WINDOW_MAXIMIZE);
     const show = getHandleListener(AsyncChannels.WINDOW_SHOW);
     const hide = getHandleListener(AsyncChannels.WINDOW_HIDE);
     const close = getHandleListener(AsyncChannels.WINDOW_CLOSE);
-    const resolveClose = getHandleListener(AsyncChannels.WINDOW_RESOLVE_CLOSE);
+    const setFloatingInfoVisibility = getHandleListener(AsyncChannels.WINDOW_SET_FLOATING_INFO_VISIBILITY);
 
     expect(minimize({})).toBe(true);
     minimized = true;
@@ -95,8 +89,7 @@ describe('window IPC handlers', () => {
     expect(show({})).toBe(true);
     expect(hide({})).toBe(true);
     expect(close({})).toBe(true);
-    await expect(resolveClose({}, 'tray', true)).resolves.toBe(true);
-    await expect(resolveClose({}, 'quit', false)).resolves.toBe(true);
+    await expect(setFloatingInfoVisibility({}, true)).resolves.toBe(true);
 
     expect(win.minimize).toHaveBeenCalledTimes(1);
     expect(win.maximize).toHaveBeenCalledTimes(1);
@@ -104,10 +97,9 @@ describe('window IPC handlers', () => {
     expect(win.restore).toHaveBeenCalledTimes(1);
     expect(win.show).toHaveBeenCalledTimes(1);
     expect(win.focus).toHaveBeenCalledTimes(1);
-    expect(win.hide).toHaveBeenCalledTimes(2);
+    expect(win.hide).toHaveBeenCalledTimes(1);
     expect(win.close).toHaveBeenCalledTimes(1);
-    expect(mockSetConfigValue).toHaveBeenCalledWith('window.closeActionPreference', 'tray');
-    expect(mockQuit).toHaveBeenCalledTimes(1);
+    expect(mockSetFloatingInfoWindowVisible).toHaveBeenCalledWith(true);
   });
 
   it('emits maximize and unmaximize stream events', () => {

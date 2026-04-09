@@ -58,42 +58,100 @@ describe('preload bridge', () => {
 
     const [, api] = mockExposeInMainWorld.mock.calls[0];
     const onMaximizedChange = vi.fn();
-    const onCloseRequested = vi.fn();
+    const onStdout = vi.fn();
+    const onStderr = vi.fn();
+    const onShellExit = vi.fn();
+    const onTerminalData = vi.fn();
+    const onTerminalExit = vi.fn();
 
     api.minimize();
     api.maximize();
     api.show();
     api.hide();
     api.close();
-    api.resolveCloseRequest('tray', true);
+    api.setFloatingInfoWindowVisible(true);
     api.fs.readFile('src/main.v', 'utf-8');
+    api.fs.listFiles('rtl');
+    api.fs.writeFile('rtl/main.v', 'module main; endmodule');
+    api.fs.readDir('rtl');
+    api.fs.stat('rtl/main.v');
+    api.fs.exists('rtl/main.v');
     api.shell.exec('make', ['lint'], { cwd: 'rtl' });
+    api.shell.kill('shell-1');
+    api.terminal.create({ cwd: 'rtl', cols: 120, rows: 40 });
+    api.terminal.write('terminal-1', 'help');
+    api.terminal.resize('terminal-1', 160, 50);
+    api.terminal.kill('terminal-1');
+    api.config.set('theme', 'dracula');
 
     const dispose = api.onMaximizedChange(onMaximizedChange);
-    const disposeCloseRequested = api.onCloseRequested(onCloseRequested);
+    const disposeStdout = api.shell.onStdout(onStdout);
+    const disposeStderr = api.shell.onStderr(onStderr);
+    const disposeShellExit = api.shell.onExit(onShellExit);
+    const disposeTerminalData = api.terminal.onData(onTerminalData);
+    const disposeTerminalExit = api.terminal.onExit(onTerminalExit);
 
     expect(mockInvoke).toHaveBeenCalledWith('async:window:minimize');
     expect(mockInvoke).toHaveBeenCalledWith('async:window:maximize');
     expect(mockInvoke).toHaveBeenCalledWith('async:window:show');
     expect(mockInvoke).toHaveBeenCalledWith('async:window:hide');
     expect(mockInvoke).toHaveBeenCalledWith('async:window:close');
-    expect(mockInvoke).toHaveBeenCalledWith('async:window:resolve-close', 'tray', true);
+    expect(mockInvoke).toHaveBeenCalledWith('async:window:set-floating-info-visibility', true);
     expect(mockInvoke).toHaveBeenCalledWith('async:fs:read-file', 'src/main.v', 'utf-8');
+    expect(mockInvoke).toHaveBeenCalledWith('async:fs:list-files', 'rtl');
+    expect(mockInvoke).toHaveBeenCalledWith('async:fs:write-file', 'rtl/main.v', 'module main; endmodule');
+    expect(mockInvoke).toHaveBeenCalledWith('async:fs:read-dir', 'rtl');
+    expect(mockInvoke).toHaveBeenCalledWith('async:fs:stat', 'rtl/main.v');
+    expect(mockInvoke).toHaveBeenCalledWith('async:fs:exists', 'rtl/main.v');
     expect(mockInvoke).toHaveBeenCalledWith('async:shell:exec', 'make', ['lint'], { cwd: 'rtl' });
+    expect(mockInvoke).toHaveBeenCalledWith('async:shell:kill', 'shell-1');
+    expect(mockInvoke).toHaveBeenCalledWith('async:terminal:create', { cwd: 'rtl', cols: 120, rows: 40 });
+    expect(mockInvoke).toHaveBeenCalledWith('async:terminal:write', 'terminal-1', 'help');
+    expect(mockInvoke).toHaveBeenCalledWith('async:terminal:resize', 'terminal-1', 160, 50);
+    expect(mockInvoke).toHaveBeenCalledWith('async:terminal:kill', 'terminal-1');
+    expect(mockInvoke).toHaveBeenCalledWith('async:config:set', 'theme', 'dracula');
     expect(mockOn).toHaveBeenCalledWith('stream:window:maximized-change', expect.any(Function));
-    expect(mockOn).toHaveBeenCalledWith('stream:window:close-requested', expect.any(Function));
+    expect(mockOn).toHaveBeenCalledWith('stream:shell:stdout', expect.any(Function));
+    expect(mockOn).toHaveBeenCalledWith('stream:shell:stderr', expect.any(Function));
+    expect(mockOn).toHaveBeenCalledWith('stream:shell:exit', expect.any(Function));
+    expect(mockOn).toHaveBeenCalledWith('stream:terminal:data', expect.any(Function));
+    expect(mockOn).toHaveBeenCalledWith('stream:terminal:exit', expect.any(Function));
 
     const handler = mockOn.mock.calls.find((call) => call[0] === 'stream:window:maximized-change')?.[1];
     handler({}, true);
     expect(onMaximizedChange).toHaveBeenCalledWith(true);
 
-    const closeHandler = mockOn.mock.calls.find((call) => call[0] === 'stream:window:close-requested')?.[1];
-    closeHandler();
-    expect(onCloseRequested).toHaveBeenCalledTimes(1);
+    const stdoutHandler = mockOn.mock.calls.find((call) => call[0] === 'stream:shell:stdout')?.[1];
+    stdoutHandler({}, { id: 'shell-1', data: 'ok' });
+    expect(onStdout).toHaveBeenCalledWith({ id: 'shell-1', data: 'ok' });
+
+    const stderrHandler = mockOn.mock.calls.find((call) => call[0] === 'stream:shell:stderr')?.[1];
+    stderrHandler({}, { id: 'shell-1', data: 'warn' });
+    expect(onStderr).toHaveBeenCalledWith({ id: 'shell-1', data: 'warn' });
+
+    const shellExitHandler = mockOn.mock.calls.find((call) => call[0] === 'stream:shell:exit')?.[1];
+    shellExitHandler({}, { id: 'shell-1', code: 0, error: undefined });
+    expect(onShellExit).toHaveBeenCalledWith({ id: 'shell-1', code: 0, error: undefined });
+
+    const terminalDataHandler = mockOn.mock.calls.find((call) => call[0] === 'stream:terminal:data')?.[1];
+    terminalDataHandler({}, { id: 'terminal-1', data: 'prompt' });
+    expect(onTerminalData).toHaveBeenCalledWith({ id: 'terminal-1', data: 'prompt' });
+
+    const terminalExitHandler = mockOn.mock.calls.find((call) => call[0] === 'stream:terminal:exit')?.[1];
+    terminalExitHandler({}, { id: 'terminal-1', exitCode: 0, signal: 15 });
+    expect(onTerminalExit).toHaveBeenCalledWith({ id: 'terminal-1', exitCode: 0, signal: 15 });
 
     dispose();
-    disposeCloseRequested();
+    disposeStdout();
+    disposeStderr();
+    disposeShellExit();
+    disposeTerminalData();
+    disposeTerminalExit();
     expect(mockRemoveListener).toHaveBeenCalledWith('stream:window:maximized-change', handler);
-    expect(mockRemoveListener).toHaveBeenCalledWith('stream:window:close-requested', closeHandler);
+    expect(mockRemoveListener).toHaveBeenCalledWith('stream:shell:stdout', stdoutHandler);
+    expect(mockRemoveListener).toHaveBeenCalledWith('stream:shell:stderr', stderrHandler);
+    expect(mockRemoveListener).toHaveBeenCalledWith('stream:shell:exit', shellExitHandler);
+    expect(mockRemoveListener).toHaveBeenCalledWith('stream:terminal:data', terminalDataHandler);
+    expect(mockRemoveListener).toHaveBeenCalledWith('stream:terminal:exit', terminalExitHandler);
   });
 });

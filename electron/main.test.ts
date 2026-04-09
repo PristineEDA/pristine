@@ -13,6 +13,7 @@ type BrowserWindowInstance = {
   show: Mock<() => void>;
   hide: Mock<() => void>;
   focus: Mock<() => void>;
+  setAlwaysOnTop: Mock<(flag: boolean, level?: string) => void>;
   restore: Mock<() => void>;
   isMinimized: Mock<() => boolean>;
   isDestroyed: Mock<() => boolean>;
@@ -47,6 +48,7 @@ const mocks = vi.hoisted(() => {
     show = vi.fn();
     hide = vi.fn();
     focus = vi.fn();
+    setAlwaysOnTop = vi.fn();
     restore = vi.fn();
     isMinimized = vi.fn(() => false);
     isDestroyed = vi.fn(() => false);
@@ -158,6 +160,16 @@ vi.mock('electron', () => ({
   nativeImage: {
     createFromDataURL: mocks.mockCreateFromDataURL,
   },
+  screen: {
+    getPrimaryDisplay: () => ({
+      workArea: {
+        x: 0,
+        y: 0,
+        width: 1920,
+        height: 1080,
+      },
+    }),
+  },
 }));
 
 vi.mock('./ipc/register.js', () => ({
@@ -179,7 +191,12 @@ const originalPlatform = process.platform;
 const originalDevServerUrl = process.env.VITE_DEV_SERVER_URL;
 const originalProjectRoot = process.env.PRISTINE_PROJECT_ROOT;
 
-async function importMain(options?: { platform?: NodeJS.Platform; devServerUrl?: string; projectRoot?: string }) {
+async function importMain(options?: {
+  platform?: NodeJS.Platform;
+  devServerUrl?: string;
+  projectRoot?: string;
+  configValues?: Record<string, unknown>;
+}) {
   vi.resetModules();
   mocks.appHandlers.clear();
   mocks.browserWindowInstances.length = 0;
@@ -191,7 +208,8 @@ async function importMain(options?: { platform?: NodeJS.Platform; devServerUrl?:
   mocks.mockCreateFromDataURL.mockClear();
   mocks.mockDisposeAllTerminalSessions.mockClear();
   mocks.mockFlushPendingConfigSave.mockClear();
-  mocks.mockGetConfigValue.mockClear();
+  mocks.mockGetConfigValue.mockReset();
+  mocks.mockGetConfigValue.mockImplementation((key: string) => options?.configValues?.[key] ?? null);
   mocks.mockRegisterAllHandlers.mockClear();
   mocks.mockSetProjectRoot.mockClear();
   mocks.mockSetupWindowStreams.mockClear();
@@ -332,6 +350,30 @@ describe('electron main entry', () => {
     expect(splashWindow.loadFile).toHaveBeenCalledWith(expect.stringMatching(/dist[\\/]splash\.html$/));
   });
 
+  it('creates the detached floating info window when enabled in config', async () => {
+    const { browserWindowInstances } = await importMain({
+      platform: 'win32',
+      configValues: {
+        'ui.floatingInfoWindow.visible': true,
+      },
+    });
+
+    expect(browserWindowInstances).toHaveLength(3);
+
+    const floatingInfoWindow = browserWindowInstances[2];
+    expect(floatingInfoWindow.options).toMatchObject({
+      width: 60,
+      height: 24,
+      frame: false,
+      skipTaskbar: true,
+      alwaysOnTop: true,
+      title: 'Pristine Floating Info',
+    });
+    expect(floatingInfoWindow.show).toHaveBeenCalledTimes(1);
+    expect(floatingInfoWindow.setAlwaysOnTop).toHaveBeenCalledWith(true, 'screen-saver');
+    expect(floatingInfoWindow.loadFile).toHaveBeenCalledWith(expect.stringMatching(/dist[\\/]floating-info\.html$/));
+  });
+
   it('recreates splash and main windows on activate when all windows are closed', async () => {
     const { appHandlers, browserWindowInstances } = await importMain({ platform: 'darwin' });
 
@@ -381,32 +423,38 @@ describe('electron main entry', () => {
     expect(mocks.mockQuit).toHaveBeenCalledTimes(1);
   });
 
-  it('intercepts native close and requests renderer confirmation when no remembered choice exists', async () => {
+  it('quits on native close when close-to-tray is not enabled', async () => {
     const { browserWindowInstances } = await importMain({ platform: 'win32' });
 
     const mainWindow = browserWindowInstances[1];
     mainWindow.close();
 
-    expect(mainWindow.webContents.send).toHaveBeenCalledWith('stream:window:close-requested');
     expect(mainWindow.hide).not.toHaveBeenCalled();
-    expect(mocks.mockQuit).not.toHaveBeenCalled();
+    expect(mocks.mockQuit).toHaveBeenCalledTimes(1);
   });
 
-  it('hides to tray on native close when the remembered choice is tray', async () => {
-    mocks.mockGetConfigValue.mockReturnValue('tray');
-    const { browserWindowInstances } = await importMain({ platform: 'win32' });
+  it('hides to tray on native close when the configured choice is tray', async () => {
+    const { browserWindowInstances } = await importMain({
+      platform: 'win32',
+      configValues: {
+        'window.closeActionPreference': 'tray',
+      },
+    });
 
     const mainWindow = browserWindowInstances[1];
     mainWindow.close();
 
     expect(mainWindow.hide).toHaveBeenCalledTimes(1);
-    expect(mainWindow.webContents.send).not.toHaveBeenCalled();
     expect(mocks.mockQuit).not.toHaveBeenCalled();
   });
 
-  it('quits on native close when the remembered choice is quit', async () => {
-    mocks.mockGetConfigValue.mockReturnValue('quit');
-    const { browserWindowInstances } = await importMain({ platform: 'win32' });
+  it('quits on native close when the configured choice is quit', async () => {
+    const { browserWindowInstances } = await importMain({
+      platform: 'win32',
+      configValues: {
+        'window.closeActionPreference': 'quit',
+      },
+    });
 
     browserWindowInstances[1].close();
 
