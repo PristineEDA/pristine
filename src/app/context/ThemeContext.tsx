@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 
-type Theme = 'light' | 'dark';
+export type Theme = 'light' | 'dark';
 
 interface ThemeContextValue {
   theme: Theme;
@@ -11,13 +11,40 @@ interface ThemeContextValue {
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 const STORAGE_KEY = 'pristine-theme';
+const THEME_CONFIG_KEY = 'ui.theme';
 
-function getInitialTheme(): Theme {
+function isTheme(value: unknown): value is Theme {
+  return value === 'light' || value === 'dark';
+}
+
+function getConfiguredTheme(): Theme | null {
+  try {
+    const configured = window.electronAPI?.config.get(THEME_CONFIG_KEY);
+    if (isTheme(configured)) {
+      return configured;
+    }
+  } catch {
+    /* ignore */
+  }
+
+  return null;
+}
+
+function getStoredTheme(): Theme | null {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored === 'light' || stored === 'dark') return stored;
-  } catch { /* ignore */ }
-  return 'light';
+    if (isTheme(stored)) {
+      return stored;
+    }
+  } catch {
+    /* ignore */
+  }
+
+  return null;
+}
+
+function getInitialTheme(): Theme {
+  return getConfiguredTheme() ?? getStoredTheme() ?? 'light';
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
@@ -27,25 +54,38 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     document.documentElement.classList.toggle('dark', t === 'dark');
   }, []);
 
+  const persistTheme = useCallback((t: Theme) => {
+    try {
+      void window.electronAPI?.config.set(THEME_CONFIG_KEY, t);
+    } catch {
+      /* ignore */
+    }
+
+    try {
+      localStorage.setItem(STORAGE_KEY, t);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   const setTheme = useCallback((t: Theme) => {
     setThemeState(t);
-    try { localStorage.setItem(STORAGE_KEY, t); } catch { /* ignore */ }
-    applyTheme(t);
-  }, [applyTheme]);
+    persistTheme(t);
+  }, [persistTheme]);
 
   const toggleTheme = useCallback(() => {
-    setThemeState((prev) => {
-      const next = prev === 'light' ? 'dark' : 'light';
-      try { localStorage.setItem(STORAGE_KEY, next); } catch { /* ignore */ }
-      applyTheme(next);
-      return next;
-    });
-  }, [applyTheme]);
+    setTheme(theme === 'light' ? 'dark' : 'light');
+  }, [setTheme, theme]);
 
-  // Apply on mount
   useEffect(() => {
     applyTheme(theme);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [applyTheme, theme]);
+
+  useEffect(() => {
+    if (!getConfiguredTheme()) {
+      persistTheme(theme);
+    }
+  }, [persistTheme, theme]);
 
   return (
     <ThemeContext value={{ theme, setTheme, toggleTheme }}>

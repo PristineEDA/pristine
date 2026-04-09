@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { canToggleLayoutPanels as canUseLayoutPanels } from '../../../codeViewPanels';
 import { useWorkspace } from '../../../context/WorkspaceContext';
-import { useTheme } from '../../../context/ThemeContext';
+import { useTheme, type Theme } from '../../../context/ThemeContext';
 import {
   Menubar,
   MenubarMenu,
@@ -64,6 +64,7 @@ const noDragInteractive = {
 const isMacOS = window.electronAPI?.platform === 'darwin';
 const CLOSE_ACTION_CONFIG_KEY = 'window.closeActionPreference';
 const FLOATING_INFO_VISIBLE_CONFIG_KEY = 'ui.floatingInfoWindow.visible';
+const THEME_CONFIG_KEY = 'ui.theme';
 
 function getConfiguredCloseAction(): 'quit' | 'tray' {
   const value = window.electronAPI?.config.get(CLOSE_ACTION_CONFIG_KEY);
@@ -72,6 +73,10 @@ function getConfiguredCloseAction(): 'quit' | 'tray' {
 
 function getFloatingInfoWindowVisible(): boolean {
   return window.electronAPI?.config.get(FLOATING_INFO_VISIBLE_CONFIG_KEY) === true;
+}
+
+function getConfiguredTheme(): Theme {
+  return window.electronAPI?.config.get(THEME_CONFIG_KEY) === 'dark' ? 'dark' : 'light';
 }
 
 function TooltipIconButton({
@@ -140,12 +145,13 @@ export function MenuBar({
   onToggleRightPanel,
 }: MenuBarProps) {
   const { activeView, mainContentView, setMainContentView } = useWorkspace();
-  const { theme, toggleTheme } = useTheme();
+  const { theme, setTheme, toggleTheme } = useTheme();
   const { state: activityBarState, toggleSidebar } = useSidebar();
   const ref = useRef<HTMLDivElement>(null);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [closeToTrayEnabled, setCloseToTrayEnabled] = useState(() => getConfiguredCloseAction() === 'tray');
   const [floatingInfoWindowVisible, setFloatingInfoWindowVisible] = useState(() => getFloatingInfoWindowVisible());
+  const [settingsTheme, setSettingsTheme] = useState<Theme>(() => getConfiguredTheme());
   const layoutIconsEnabled = canUseLayoutPanels(mainContentView, activeView);
   const activityBarToggleEnabled = mainContentView === 'code';
   const layoutIconClassName = [
@@ -166,7 +172,12 @@ export function MenuBar({
   const syncPersistedSettingsState = () => {
     setCloseToTrayEnabled(getConfiguredCloseAction() === 'tray');
     setFloatingInfoWindowVisible(getFloatingInfoWindowVisible());
+    setSettingsTheme(getConfiguredTheme());
   };
+
+  useEffect(() => {
+    setSettingsTheme(theme);
+  }, [theme]);
 
   useEffect(() => {
     if (!settingsDialogOpen) {
@@ -185,6 +196,12 @@ export function MenuBar({
     setFloatingInfoWindowVisible(checked);
     void window.electronAPI?.config.set(FLOATING_INFO_VISIBLE_CONFIG_KEY, checked);
     void window.electronAPI?.setFloatingInfoWindowVisible(checked);
+  };
+
+  const handleThemeModeChange = (checked: boolean) => {
+    const nextTheme = checked ? 'dark' : 'light';
+    setSettingsTheme(nextTheme);
+    setTheme(nextTheme);
   };
 
   return (
@@ -447,10 +464,25 @@ export function MenuBar({
             <DialogHeader>
               <DialogTitle>Settings</DialogTitle>
               <DialogDescription>
-                Manage how Pristine handles future close requests.
+                Manage appearance and window behavior preferences.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-3">
+              <div className="rounded-md border border-border/70 bg-muted/30 px-3 py-3">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium">Dark mode</p>
+                    <p className="text-sm text-muted-foreground" data-testid="theme-mode-description">
+                      Switch between the default light theme and the dark theme.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={settingsTheme === 'dark'}
+                    data-testid="settings-theme-switch"
+                    onCheckedChange={handleThemeModeChange}
+                  />
+                </div>
+              </div>
               <div className="rounded-md border border-border/70 bg-muted/30 px-3 py-3">
                 <div className="flex items-center justify-between gap-4">
                   <div className="space-y-1">

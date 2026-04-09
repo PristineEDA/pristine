@@ -1,13 +1,26 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MenuBar } from './MenuBar';
 import { WorkspaceProvider, useWorkspace } from '../../../context/WorkspaceContext';
 import { SidebarProvider, useSidebar } from '../../ui/sidebar';
 
+const setThemeMock = vi.fn();
+const toggleThemeMock = vi.fn();
+let mockedTheme: 'light' | 'dark' = 'light';
+
 vi.mock('../../../context/ThemeContext', () => ({
-  useTheme: () => ({ theme: 'light', setTheme: vi.fn(), toggleTheme: vi.fn() }),
+  useTheme: () => ({ theme: mockedTheme, setTheme: setThemeMock, toggleTheme: toggleThemeMock }),
 }));
+
+beforeEach(() => {
+  mockedTheme = 'light';
+  setThemeMock.mockReset();
+  toggleThemeMock.mockReset();
+  vi.mocked(window.electronAPI!.config.get).mockReset();
+  vi.mocked(window.electronAPI!.config.set).mockReset();
+  vi.mocked(window.electronAPI!.setFloatingInfoWindowVisible).mockReset();
+});
 
 function renderMenuBar(props: React.ComponentProps<typeof MenuBar> = {}) {
   return render(
@@ -66,9 +79,12 @@ describe('MenuBar', () => {
     expect(window.electronAPI?.close).toHaveBeenCalledTimes(1);
   });
 
-  it('shows settings switches for close-to-tray and floating info window visibility', async () => {
+  it('shows settings switches for theme, close-to-tray and floating info window visibility', async () => {
     const user = userEvent.setup();
     vi.mocked(window.electronAPI!.config.get).mockImplementation((key: string) =>
+      key === 'ui.theme'
+        ? 'dark'
+        :
       key === 'window.closeActionPreference'
         ? 'tray'
         : key === 'ui.floatingInfoWindow.visible'
@@ -81,12 +97,15 @@ describe('MenuBar', () => {
     await user.click(screen.getByTestId('menu-settings-button'));
 
     expect(await screen.findByTestId('settings-dialog')).toBeVisible();
+  expect(screen.getByTestId('settings-theme-switch')).toHaveAttribute('data-state', 'checked');
     expect(screen.getByTestId('settings-close-to-tray-switch')).toHaveAttribute('data-state', 'checked');
     expect(screen.getByTestId('settings-floating-info-window-switch')).toHaveAttribute('data-state', 'checked');
 
+  await user.click(screen.getByTestId('settings-theme-switch'));
     await user.click(screen.getByTestId('settings-close-to-tray-switch'));
     await user.click(screen.getByTestId('settings-floating-info-window-switch'));
 
+  expect(setThemeMock).toHaveBeenCalledWith('light');
     expect(window.electronAPI?.config.set).toHaveBeenCalledWith('window.closeActionPreference', 'quit');
     expect(window.electronAPI?.config.set).toHaveBeenCalledWith('ui.floatingInfoWindow.visible', false);
     expect(window.electronAPI?.setFloatingInfoWindowVisible).toHaveBeenCalledWith(false);
@@ -97,6 +116,9 @@ describe('MenuBar', () => {
     const configGetMock = vi.mocked(window.electronAPI!.config.get);
 
     configGetMock.mockImplementation((key: string) =>
+      key === 'ui.theme'
+        ? 'dark'
+        :
       key === 'window.closeActionPreference'
         ? 'tray'
         : key === 'ui.floatingInfoWindow.visible'
@@ -109,12 +131,16 @@ describe('MenuBar', () => {
     await user.click(screen.getByTestId('menu-settings-button'));
 
     expect(await screen.findByTestId('settings-dialog')).toBeVisible();
+  expect(screen.getByTestId('settings-theme-switch')).toHaveAttribute('data-state', 'checked');
     expect(screen.getByTestId('settings-close-to-tray-switch')).toHaveAttribute('data-state', 'checked');
     expect(screen.getByTestId('settings-floating-info-window-switch')).toHaveAttribute('data-state', 'checked');
 
     await user.click(screen.getByTestId('settings-close-button'));
 
     configGetMock.mockImplementation((key: string) =>
+      key === 'ui.theme'
+        ? 'light'
+        :
       key === 'window.closeActionPreference'
         ? 'quit'
         : key === 'ui.floatingInfoWindow.visible'
@@ -125,8 +151,19 @@ describe('MenuBar', () => {
     await user.click(screen.getByTestId('menu-settings-button'));
 
     expect(await screen.findByTestId('settings-dialog')).toBeVisible();
+    expect(screen.getByTestId('settings-theme-switch')).toHaveAttribute('data-state', 'unchecked');
     expect(screen.getByTestId('settings-close-to-tray-switch')).toHaveAttribute('data-state', 'unchecked');
     expect(screen.getByTestId('settings-floating-info-window-switch')).toHaveAttribute('data-state', 'unchecked');
+  });
+
+  it('keeps the menubar theme toggle wired to the shared theme action', async () => {
+    const user = userEvent.setup();
+
+    renderMenuBar();
+
+    await user.click(screen.getByTestId('toggle-theme'));
+
+    expect(toggleThemeMock).toHaveBeenCalledTimes(1);
   });
 
   it('does not render the select project dropdown or upgrade button', () => {

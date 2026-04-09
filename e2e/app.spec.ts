@@ -1301,94 +1301,112 @@ test('tray and floating info settings persist across app relaunch', async () => 
   await secondApp.close();
 });
 
-test('theme toggle persists across app relaunch', async () => {
+test('settings theme switch persists across app relaunch', async () => {
+  test.slow();
+
+  const readThemeSnapshot = async (page: Awaited<ReturnType<typeof launchApp>>['window']) => ({
+    isDark: await page.evaluate(() => {
+      const browserGlobal = globalThis as typeof globalThis & {
+        document: {
+          documentElement: {
+            classList: {
+              contains: (token: string) => boolean;
+            };
+          };
+        };
+      };
+
+      return browserGlobal.document.documentElement.classList.contains('dark');
+    }),
+    stored: await readConfigValue(page, 'ui.theme'),
+  });
+
   const firstLaunch = await launchApp();
   const { app: firstApp, window: firstWindow } = firstLaunch;
 
-  const initialTheme = await firstWindow.evaluate(() => {
-    const browserGlobal = globalThis as typeof globalThis & {
-      document: {
-        documentElement: {
-          classList: {
-            contains: (token: string) => boolean;
-          };
-        };
-      };
-      localStorage: {
-        getItem: (key: string) => string | null;
-      };
-    };
-    const root = browserGlobal.document.documentElement;
-    const stored = browserGlobal.localStorage.getItem('pristine-theme');
+  await firstWindow.getByTestId('menu-settings-button').click();
+  await expect(firstWindow.getByTestId('settings-dialog')).toBeVisible();
 
-    return {
-      isDark: root.classList.contains('dark'),
-      stored,
-    };
+  const firstThemeSwitch = firstWindow.getByTestId('settings-theme-switch');
+  await setSwitchChecked(firstThemeSwitch, false);
+  await setSwitchChecked(firstThemeSwitch, true);
+
+  await expect.poll(async () => readThemeSnapshot(firstWindow)).toEqual({
+    isDark: true,
+    stored: 'dark',
   });
 
-  await firstWindow.getByTestId('toggle-theme').click();
-
-  await expect.poll(async () => firstWindow.evaluate(() => {
-    const browserGlobal = globalThis as typeof globalThis & {
-      document: {
-        documentElement: {
-          classList: {
-            contains: (token: string) => boolean;
-          };
-        };
-      };
-      localStorage: {
-        getItem: (key: string) => string | null;
-      };
-    };
-    const root = browserGlobal.document.documentElement;
-    const stored = browserGlobal.localStorage.getItem('pristine-theme');
-
-    return {
-      isDark: root.classList.contains('dark'),
-      stored,
-    };
-  })).not.toEqual(initialTheme);
-
-  const toggledTheme = await firstWindow.evaluate(() => {
-    const browserGlobal = globalThis as typeof globalThis & {
-      document: {
-        documentElement: {
-          classList: {
-            contains: (token: string) => boolean;
-          };
-        };
-      };
-      localStorage: {
-        getItem: (key: string) => string | null;
-      };
-    };
-    const root = browserGlobal.document.documentElement;
-    const stored = browserGlobal.localStorage.getItem('pristine-theme');
-
-    return {
-      isDark: root.classList.contains('dark'),
-      stored,
-    };
-  });
+  await firstWindow.getByTestId('settings-close-button').click();
+  await expect(firstWindow.getByTestId('settings-dialog')).toHaveCount(0);
 
   await firstApp.close();
 
   const secondLaunch = await launchApp();
   const { app: secondApp, window: secondWindow } = secondLaunch;
 
-  await expect.poll(async () => secondWindow.evaluate(() => ({
-    isDark: (globalThis as typeof globalThis & { document: { documentElement: { classList: { contains: (token: string) => boolean } } } }).document.documentElement.classList.contains('dark'),
-    stored: (globalThis as typeof globalThis & { localStorage: { getItem: (key: string) => string | null } }).localStorage.getItem('pristine-theme'),
-  }))).toEqual(toggledTheme);
+  await expect.poll(async () => readThemeSnapshot(secondWindow)).toEqual({
+    isDark: true,
+    stored: 'dark',
+  });
+
+  await secondWindow.getByTestId('menu-settings-button').click();
+  await expect(secondWindow.getByTestId('settings-dialog')).toBeVisible();
+
+  const secondThemeSwitch = secondWindow.getByTestId('settings-theme-switch');
+  await expect(secondThemeSwitch).toHaveAttribute('data-state', 'checked');
+
+  await setSwitchChecked(secondThemeSwitch, false);
+
+  await expect.poll(async () => readThemeSnapshot(secondWindow)).toEqual({
+    isDark: false,
+    stored: 'light',
+  });
+
+  await secondWindow.getByTestId('settings-close-button').click();
+  await expect(secondWindow.getByTestId('settings-dialog')).toHaveCount(0);
+
+  await secondApp.close();
+});
+
+test('theme toggle persists across app relaunch', async () => {
+  const firstLaunch = await launchApp();
+  const { app: firstApp, window: firstWindow } = firstLaunch;
+
+  const readThemeSnapshot = async (page: typeof firstWindow) => ({
+    isDark: await page.evaluate(() => {
+      const browserGlobal = globalThis as typeof globalThis & {
+        document: {
+          documentElement: {
+            classList: {
+              contains: (token: string) => boolean;
+            };
+          };
+        };
+      };
+
+      return browserGlobal.document.documentElement.classList.contains('dark');
+    }),
+    stored: await readConfigValue(page, 'ui.theme'),
+  });
+
+  const initialTheme = await readThemeSnapshot(firstWindow);
+
+  await firstWindow.getByTestId('toggle-theme').click();
+
+  await expect.poll(async () => readThemeSnapshot(firstWindow)).not.toEqual(initialTheme);
+
+  const toggledTheme = await readThemeSnapshot(firstWindow);
+
+  await firstApp.close();
+
+  const secondLaunch = await launchApp();
+  const { app: secondApp, window: secondWindow } = secondLaunch;
+
+  await expect.poll(async () => readThemeSnapshot(secondWindow)).toEqual(toggledTheme);
 
   if (toggledTheme.isDark !== initialTheme.isDark) {
     await secondWindow.getByTestId('toggle-theme').click();
-    await expect.poll(async () => secondWindow.evaluate(() => ({
-      isDark: (globalThis as typeof globalThis & { document: { documentElement: { classList: { contains: (token: string) => boolean } } } }).document.documentElement.classList.contains('dark'),
-      stored: (globalThis as typeof globalThis & { localStorage: { getItem: (key: string) => string | null } }).localStorage.getItem('pristine-theme'),
-    }))).toEqual(initialTheme);
+    await expect.poll(async () => readThemeSnapshot(secondWindow)).toEqual(initialTheme);
   }
 
   await secondApp.close();
