@@ -208,6 +208,8 @@ async function clearRememberedCloseBehavior(window: Awaited<ReturnType<typeof la
 
     await browserGlobal.electronAPI?.config.set('window.closeActionPreference', null);
   });
+
+  await expect.poll(async () => readConfigValue(window, 'window.closeActionPreference')).toBe(null);
 }
 
 async function setFloatingInfoWindowVisibility(
@@ -249,6 +251,7 @@ async function setSwitchChecked(locator: Locator, checked: boolean) {
 
   if (currentlyChecked !== checked) {
     await locator.click();
+    await expect(locator).toHaveAttribute('data-state', checked ? 'checked' : 'unchecked');
   }
 }
 
@@ -349,6 +352,7 @@ test('close button hides the app to tray when close-to-tray is enabled', async (
   await clearRememberedCloseBehavior(window);
   await window.getByTestId('menu-settings-button').click();
   await expect(window.getByTestId('settings-dialog')).toBeVisible();
+  await setSwitchChecked(window.getByTestId('settings-close-to-tray-switch'), false);
   await setSwitchChecked(window.getByTestId('settings-close-to-tray-switch'), true);
   await expect.poll(async () => readConfigValue(window, 'window.closeActionPreference')).toBe('tray');
   await window.getByTestId('settings-close-button').click();
@@ -374,6 +378,7 @@ test('close-to-tray keeps the active terminal session alive and restores it afte
   await clearRememberedCloseBehavior(window);
   await window.getByTestId('menu-settings-button').click();
   await expect(window.getByTestId('settings-dialog')).toBeVisible();
+  await setSwitchChecked(window.getByTestId('settings-close-to-tray-switch'), false);
   await setSwitchChecked(window.getByTestId('settings-close-to-tray-switch'), true);
   await expect.poll(async () => readConfigValue(window, 'window.closeActionPreference')).toBe('tray');
   await window.getByTestId('settings-close-button').click();
@@ -1255,6 +1260,7 @@ test('tray and floating info settings persist across app relaunch', async () => 
   await firstWindow.getByTestId('menu-settings-button').click();
   await expect(firstWindow.getByTestId('settings-dialog')).toBeVisible();
 
+  await setSwitchChecked(firstWindow.getByTestId('settings-close-to-tray-switch'), false);
   await setSwitchChecked(firstWindow.getByTestId('settings-close-to-tray-switch'), true);
   await setSwitchChecked(firstWindow.getByTestId('settings-floating-info-window-switch'), true);
 

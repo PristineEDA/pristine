@@ -1,14 +1,14 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { type PanelImperativeHandle } from './components/ui/resizable';
-import { MenuBar } from './components/MenuBar';
-import { ActivityBar } from './components/ActivityBar';
-import { LeftSidePanel } from './components/LeftSidePanel';
-import { EditorSplitLayout } from './components/EditorSplitLayout';
-import { RightSidePanel } from './components/RightSidePanel';
-import { BottomPanel } from './components/BottomPanel';
-import { CodeWorkspaceShell } from './components/CodeWorkspaceShell';
-import { AppStatusBar } from './components/statusBars/AppStatusBar';
-import { QuickOpenPalette } from './components/QuickOpenPalette';
+import { MenuBar } from './components/code/shared/MenuBar';
+import { ActivityBar } from './components/code/shared/ActivityBar';
+import { LeftSidePanel } from './components/code/explorer/LeftSidePanel';
+import { EditorSplitLayout } from './components/code/shared/EditorSplitLayout';
+import { RightSidePanel } from './components/code/explorer/RightSidePanel';
+import { BottomPanel } from './components/code/explorer/BottomPanel';
+import { CodeWorkspaceShell } from './components/code/shared/CodeWorkspaceShell';
+import { AppStatusBar } from './components/code/shared/statusBars/AppStatusBar';
+import { QuickOpenPalette } from './components/code/shared/QuickOpenPalette';
 import { createQuickOpenFileEntries, getRecentQuickOpenFiles, searchQuickOpenFiles, type QuickOpenFileEntry, type QuickOpenSearchResult } from './quickOpen/quickOpenSearch';
 import type { WorkspaceRevealRequest } from './workspace/useWorkspaceTree';
 import { WorkspaceProvider, useWorkspace } from './context/WorkspaceContext';
@@ -17,7 +17,7 @@ import { SidebarProvider } from './components/ui/sidebar';
 
 const QUICK_OPEN_RECENT_LIMIT = 20;
 const WhiteboardView = lazy(() => import('./components/whiteboard/WhiteboardView').then((module) => ({ default: module.WhiteboardView })));
-const WorkflowPlaceholder = lazy(() => import('./components/WorkflowPlaceholder').then((module) => ({ default: module.WorkflowPlaceholder })));
+const WorkflowView = lazy(() => import('./components/workflow/WorkflowView').then((module) => ({ default: module.WorkflowView })));
 
 // ─── ResizeHandle ────────────────────────────────────────────────────────────
 
@@ -217,7 +217,7 @@ function AppLayout() {
   }, [closeQuickOpen, openWorkspaceFile]);
 
   const renderPanelPlaceholder = (title: string, testId: string) => (
-    <WorkflowPlaceholder title={title} testId={testId} />
+    <WorkflowView title={title} testId={testId} />
   );
 
   const activityBar = (
@@ -348,7 +348,7 @@ function AppLayout() {
         />
         <div className="flex-1 min-h-0">
           <Suspense fallback={<MainContentFallback />}>
-            <WorkflowPlaceholder title={placeholder.title} testId={placeholder.testId} />
+            <WorkflowView title={placeholder.title} testId={placeholder.testId} />
           </Suspense>
         </div>
       </div>
@@ -432,7 +432,7 @@ function AppLayout() {
         ) : (
           <div className="flex-1 min-h-0">
             <Suspense fallback={<MainContentFallback />}>
-              <WorkflowPlaceholder />
+              <WorkflowView />
             </Suspense>
           </div>
         )}

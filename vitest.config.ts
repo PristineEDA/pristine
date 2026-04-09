@@ -15,7 +15,7 @@ export default defineConfig({
     setupFiles: ['./src/test/setup.ts'],
     fileParallelism: !isCiCoverageRun,
     maxWorkers: isCiCoverageRun ? 1 : undefined,
-    exclude: ['src/app/components/whiteboard_bp/**'],
+    exclude: ['src/app/components/whiteboard/legacy/**'],
     projects: [
       {
         extends: true,
@@ -42,7 +42,7 @@ export default defineConfig({
         'dist/**',
         'dist-electron/**',
         '**/*.config.*',
-        'src/app/components/whiteboard_bp/**',
+        'src/app/components/whiteboard/legacy/**',
         'src/main.tsx',
       ],
       thresholds: {
