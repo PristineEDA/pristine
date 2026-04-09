@@ -1,4 +1,4 @@
-import { test, expect, _electron as electron } from '@playwright/test';
+import { test, expect, _electron as electron, type Locator } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -23,13 +23,24 @@ async function resolveStartupWindows(app: Awaited<ReturnType<typeof electron.lau
   );
 
   const splashWindow = titledWindows.find((entry) => entry.title === 'Pristine Loading')?.page;
-  const window = titledWindows.find((entry) => entry.title !== 'Pristine Loading')?.page;
+  const window = titledWindows.find((entry) => entry.title === 'Pristine')?.page;
 
   if (!splashWindow || !window) {
     throw new Error('Expected splash and main windows during startup');
   }
 
   return { splashWindow, window };
+}
+
+async function getWindowByTitle(app: Awaited<ReturnType<typeof electron.launch>>, title: string) {
+  const titledWindows = await Promise.all(
+    app.windows().map(async (page) => ({
+      page,
+      title: await page.title(),
+    })),
+  );
+
+  return titledWindows.find((entry) => entry.title === title)?.page ?? null;
 }
 
 function findPackagedWindowsExecutablePath() {
@@ -199,29 +210,50 @@ async function clearRememberedCloseBehavior(window: Awaited<ReturnType<typeof la
   });
 }
 
+async function setFloatingInfoWindowVisibility(
+  window: Awaited<ReturnType<typeof launchApp>>['window'],
+  visible: boolean,
+) {
+  await window.evaluate(async ({ nextVisible }) => {
+    const browserGlobal = globalThis as typeof globalThis & {
+      electronAPI?: {
+        config: {
+          set: (key: string, value: unknown) => Promise<void>;
+        };
+        setFloatingInfoWindowVisible: (visible: boolean) => Promise<boolean>;
+      };
+    };
+
+    await browserGlobal.electronAPI?.config.set('ui.floatingInfoWindow.visible', nextVisible);
+    await browserGlobal.electronAPI?.setFloatingInfoWindowVisible(nextVisible);
+  }, { nextVisible: visible });
+}
+
+async function readConfigValue(window: Awaited<ReturnType<typeof launchApp>>['window'], key: string) {
+  return window.evaluate((configKey) => {
+    const browserGlobal = globalThis as typeof globalThis & {
+      electronAPI?: {
+        config: {
+          get: (key: string) => unknown;
+        };
+      };
+    };
+
+    return browserGlobal.electronAPI?.config.get(configKey) ?? null;
+  }, key);
+}
+
+async function setSwitchChecked(locator: Locator, checked: boolean) {
+  const dataState = await locator.getAttribute('data-state');
+  const currentlyChecked = dataState === 'checked';
+
+  if (currentlyChecked !== checked) {
+    await locator.click();
+  }
+}
+
 async function requestWindowClose(window: Awaited<ReturnType<typeof launchApp>>['window']) {
   await window.getByTestId('window-control-close').click();
-}
-
-function isPageClosedDuringQuitAction(error: unknown): boolean {
-  if (!(error instanceof Error)) {
-    return false;
-  }
-
-  return /Target page, context or browser has been closed/i.test(error.message);
-}
-
-async function chooseQuitFromCloseDialog(window: Awaited<ReturnType<typeof launchApp>>['window']) {
-  const quitButton = window.getByTestId('close-action-quit');
-  await expect(quitButton).toBeVisible();
-
-  try {
-    await quitButton.click({ noWaitAfter: true });
-  } catch (error) {
-    if (!isPageClosedDuringQuitAction(error)) {
-      throw error;
-    }
-  }
 }
 
 function isProcessRunning(pid: number) {
@@ -310,17 +342,18 @@ test('window controls toggle minimize and maximize state', async () => {
   await app.close();
 });
 
-test('close button confirms and can minimize the app to tray', async () => {
+test('close button hides the app to tray when close-to-tray is enabled', async () => {
   const { app, window } = await launchApp();
   const browserWindow = await app.browserWindow(window);
 
   await clearRememberedCloseBehavior(window);
+  await window.getByTestId('menu-settings-button').click();
+  await expect(window.getByTestId('settings-dialog')).toBeVisible();
+  await setSwitchChecked(window.getByTestId('settings-close-to-tray-switch'), true);
+  await expect.poll(async () => readConfigValue(window, 'window.closeActionPreference')).toBe('tray');
+  await window.getByTestId('settings-close-button').click();
 
   await requestWindowClose(window);
-  await expect(window.getByTestId('close-confirmation-dialog')).toBeVisible();
-  await expect(window.getByText('Close Pristine?')).toBeVisible();
-
-  await window.getByTestId('close-action-minimize-to-tray').click();
   await expect.poll(async () => browserWindow.evaluate((win) => win.isVisible())).toBe(false);
   await expect.poll(() => app.windows().length).toBe(1);
 
@@ -964,6 +997,67 @@ test('menu bar right-side controls render shadcn tooltip content at runtime', as
   await app.close();
 });
 
+test('floating info window stays visible after hiding the main window to tray', async () => {
+  const { app, window } = await launchApp();
+  const browserWindow = await app.browserWindow(window);
+
+  await expect.poll(async () => browserWindow.evaluate((win) => win.isVisible())).toBe(true);
+
+  await setFloatingInfoWindowVisibility(window, false);
+  const existingFloatingInfoWindow = await getWindowByTitle(app, 'Pristine Floating Info');
+
+  if (existingFloatingInfoWindow) {
+    const existingFloatingBrowserWindow = await app.browserWindow(existingFloatingInfoWindow);
+    await expect.poll(async () => existingFloatingBrowserWindow.evaluate((win) => win.isVisible())).toBe(false);
+  }
+
+  await window.getByTestId('menu-settings-button').click();
+  await expect(window.getByTestId('settings-dialog')).toBeVisible();
+
+  const closeToTraySwitch = window.getByTestId('settings-close-to-tray-switch');
+  const floatingInfoSwitch = window.getByTestId('settings-floating-info-window-switch');
+
+  await setSwitchChecked(closeToTraySwitch, false);
+  await setSwitchChecked(closeToTraySwitch, true);
+  await setSwitchChecked(floatingInfoSwitch, false);
+  await setSwitchChecked(floatingInfoSwitch, true);
+
+  await expect.poll(async () => readConfigValue(window, 'window.closeActionPreference')).toBe('tray');
+  await expect.poll(async () => readConfigValue(window, 'ui.floatingInfoWindow.visible')).toBe(true);
+
+  await window.getByTestId('settings-close-button').click();
+  await expect(window.getByTestId('settings-dialog')).toHaveCount(0);
+
+  await expect.poll(async () => (await getWindowByTitle(app, 'Pristine Floating Info')) !== null).toBe(true);
+  const floatingInfoWindow = await getWindowByTitle(app, 'Pristine Floating Info');
+
+  if (!floatingInfoWindow) {
+    throw new Error('Expected floating info window to be available');
+  }
+
+  await expect(floatingInfoWindow.getByTestId('floating-info-window')).toBeVisible();
+
+  await window.getByTestId('window-control-close').click();
+
+  await expect.poll(async () => browserWindow.evaluate((win) => win.isVisible())).toBe(false);
+  await expect(floatingInfoWindow.getByTestId('floating-info-window')).toBeVisible();
+
+  await setFloatingInfoWindowVisibility(window, false);
+  await window.evaluate(async () => {
+    const browserGlobal = globalThis as typeof globalThis & {
+      electronAPI?: {
+        config: {
+          set: (key: string, value: unknown) => Promise<void>;
+        };
+      };
+    };
+
+    await browserGlobal.electronAPI?.config.set('window.closeActionPreference', null);
+  });
+
+  await app.close();
+});
+
 test('close button terminates the active terminal shell process', async () => {
   const { app, window } = await launchApp();
 
@@ -979,8 +1073,7 @@ test('close button terminates the active terminal shell process', async () => {
 
   const closePromise = window.waitForEvent('close');
   await requestWindowClose(window);
-  await expect(window.getByTestId('close-confirmation-dialog')).toBeVisible();
-  await Promise.all([closePromise, chooseQuitFromCloseDialog(window)]);
+  await closePromise;
 
   await expect.poll(() => isProcessRunning(pid), {
     timeout: 15000,
@@ -990,17 +1083,25 @@ test('close button terminates the active terminal shell process', async () => {
   await app.close();
 });
 
-test('remembered close behavior persists through Settings reset flow', async () => {
+test('settings tray switch controls whether close hides to tray or quits', async () => {
   const { app, window } = await launchApp();
   const browserWindow = await app.browserWindow(window);
 
   await clearRememberedCloseBehavior(window);
 
-  await requestWindowClose(window);
-  await expect(window.getByTestId('close-confirmation-dialog')).toBeVisible();
-  await window.getByTestId('close-action-remember-choice').click();
-  await window.getByTestId('close-action-minimize-to-tray').click();
+  await window.getByTestId('menu-settings-button').click();
+  await expect(window.getByTestId('settings-dialog')).toBeVisible();
 
+  const closeToTraySwitch = window.getByTestId('settings-close-to-tray-switch');
+  await expect(closeToTraySwitch).toHaveAttribute('data-state', 'unchecked');
+
+  await closeToTraySwitch.click();
+  await expect.poll(async () => readConfigValue(window, 'window.closeActionPreference')).toBe('tray');
+
+  await window.getByTestId('settings-close-button').click();
+  await expect(window.getByTestId('settings-dialog')).toHaveCount(0);
+
+  await requestWindowClose(window);
   await expect.poll(async () => browserWindow.evaluate((win) => win.isVisible())).toBe(false);
 
   await browserWindow.evaluate((win) => {
@@ -1012,82 +1113,17 @@ test('remembered close behavior persists through Settings reset flow', async () 
 
   await window.getByTestId('menu-settings-button').click();
   await expect(window.getByTestId('settings-dialog')).toBeVisible();
-  await expect(window.getByTestId('close-behavior-current-value')).toContainText('Current setting: Minimize to tray');
+  await expect(closeToTraySwitch).toHaveAttribute('data-state', 'checked');
+  await closeToTraySwitch.click();
+  await expect.poll(async () => readConfigValue(window, 'window.closeActionPreference')).toBe('quit');
 
   await window.getByTestId('settings-close-button').click();
   await expect(window.getByTestId('settings-dialog')).toHaveCount(0);
 
+  const closePromise = window.waitForEvent('close');
   await requestWindowClose(window);
-  await expect(window.getByTestId('close-confirmation-dialog')).toHaveCount(0);
-  await expect.poll(async () => browserWindow.evaluate((win) => win.isVisible())).toBe(false);
-
-  await browserWindow.evaluate((win) => {
-    win.show();
-    win.focus();
-  });
-
-  await expect.poll(async () => browserWindow.evaluate((win) => win.isVisible())).toBe(true);
-
-  await window.getByTestId('menu-settings-button').click();
-  await expect(window.getByTestId('settings-dialog')).toBeVisible();
-  await window.getByTestId('reset-close-behavior').click();
-  await expect(window.getByTestId('close-behavior-current-value')).toContainText('Current setting: Ask every time');
-
-  await window.getByTestId('settings-close-button').click();
-  await expect(window.getByTestId('settings-dialog')).toHaveCount(0);
-
-  await requestWindowClose(window);
-  await expect(window.getByTestId('close-confirmation-dialog')).toBeVisible();
-  await window.getByTestId('close-action-cancel').click();
-  await expect(window.getByTestId('close-confirmation-dialog')).toHaveCount(0);
-
-  await app.close();
-});
-
-test('remembered close behavior can quit directly on the next close request', async () => {
-  const { app, window } = await launchApp();
-
-  await clearRememberedCloseBehavior(window);
-  await openBottomTerminal(window);
-
-  await expect.poll(async () => readTerminalPid(window), {
-    timeout: 15000,
-  }).toBeGreaterThan(0);
-
-  const pid = await readTerminalPid(window);
-  expect(isProcessRunning(pid)).toBe(true);
-
-  await requestWindowClose(window);
-  await expect(window.getByTestId('close-confirmation-dialog')).toBeVisible();
-  await window.getByTestId('close-action-remember-choice').click();
-
-  const rememberedQuitClosePromise = window.waitForEvent('close');
-  await Promise.all([rememberedQuitClosePromise, chooseQuitFromCloseDialog(window)]);
-
-  await expect.poll(() => isProcessRunning(pid), {
-    timeout: 15000,
-  }).toBe(false);
+  await closePromise;
 
   await expect.poll(() => app.windows().length).toBe(0);
-
-  const { app: reopenedApp, window: reopenedWindow } = await launchApp();
-  await openBottomTerminal(reopenedWindow);
-
-  await expect.poll(async () => readTerminalPid(reopenedWindow), {
-    timeout: 15000,
-  }).toBeGreaterThan(0);
-
-  const reopenedPid = await readTerminalPid(reopenedWindow);
-  expect(isProcessRunning(reopenedPid)).toBe(true);
-
-  const directClosePromise = reopenedWindow.waitForEvent('close');
-  await requestWindowClose(reopenedWindow);
-  await directClosePromise;
-
-  await expect.poll(() => isProcessRunning(reopenedPid), {
-    timeout: 15000,
-  }).toBe(false);
-
-  await expect.poll(() => reopenedApp.windows().length).toBe(0);
-  await reopenedApp.close();
+  await app.close();
 });

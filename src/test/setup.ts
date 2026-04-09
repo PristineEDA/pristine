@@ -110,10 +110,9 @@ function createElectronApiMock() {
     show: vi.fn(),
     hide: vi.fn(),
     close: vi.fn(),
-    resolveCloseRequest: vi.fn(),
+    setFloatingInfoWindowVisible: vi.fn(),
     isMaximized: vi.fn(() => false),
     onMaximizedChange: vi.fn(() => vi.fn()),
-    onCloseRequested: vi.fn(() => vi.fn()),
     fs: {
       readFile: vi.fn().mockResolvedValue(''),
       listFiles: vi.fn().mockResolvedValue([]),

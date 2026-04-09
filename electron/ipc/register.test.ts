@@ -69,11 +69,12 @@ describe('register helpers', () => {
 
   it('registers all handler groups with the expected dependencies', () => {
     const getMainWindow = vi.fn(() => null);
+    const setFloatingInfoWindowVisible = vi.fn(() => false);
 
-    registerAllHandlers(getMainWindow);
+    registerAllHandlers(getMainWindow, setFloatingInfoWindowVisible);
 
     expect(mockRegisterPlatformHandler).toHaveBeenCalledTimes(1);
-    expect(mockRegisterWindowHandlers).toHaveBeenCalledWith(getMainWindow);
+    expect(mockRegisterWindowHandlers).toHaveBeenCalledWith(getMainWindow, setFloatingInfoWindowVisible);
     expect(mockRegisterFilesystemHandlers).toHaveBeenCalledTimes(1);
     expect(mockRegisterShellHandlers).toHaveBeenCalledWith(getMainWindow);
     expect(mockRegisterTerminalHandlers).toHaveBeenCalledWith(getMainWindow);

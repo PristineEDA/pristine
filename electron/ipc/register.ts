@@ -14,9 +14,12 @@ export function setProjectRoot(root: string): void {
   setTerminalProjectRoot(resolved);
 }
 
-export function registerAllHandlers(getMainWindow: () => BrowserWindow | null): void {
+export function registerAllHandlers(
+  getMainWindow: () => BrowserWindow | null,
+  setFloatingInfoWindowVisible: (visible: boolean) => boolean = () => false,
+): void {
   registerPlatformHandler();
-  registerWindowHandlers(getMainWindow);
+  registerWindowHandlers(getMainWindow, setFloatingInfoWindowVisible);
   registerFilesystemHandlers();
   registerShellHandlers(getMainWindow);
   registerTerminalHandlers(getMainWindow);

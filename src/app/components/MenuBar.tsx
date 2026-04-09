@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   Settings, CircleUser, Minus, Square, X, Code2, Presentation, Workflow,
   Sun, Moon,
@@ -18,14 +18,7 @@ import { ToggleGroup, ToggleGroupItem } from './ui/toggle-group';
 import { Toggle } from './ui/toggle';
 import { Separator } from './ui/separator';
 import { Button } from './ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from './ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
 import { Switch } from './ui/switch';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 import { useSidebar } from './ui/sidebar';
@@ -69,10 +62,15 @@ const noDragInteractive = {
 };
 const isMacOS = window.electronAPI?.platform === 'darwin';
 const CLOSE_ACTION_CONFIG_KEY = 'window.closeActionPreference';
+const FLOATING_INFO_VISIBLE_CONFIG_KEY = 'ui.floatingInfoWindow.visible';
 
-function getRememberedCloseAction(): 'quit' | 'tray' | null {
+function getConfiguredCloseAction(): 'quit' | 'tray' {
   const value = window.electronAPI?.config.get(CLOSE_ACTION_CONFIG_KEY);
-  return value === 'quit' || value === 'tray' ? value : null;
+  return value === 'tray' ? 'tray' : 'quit';
+}
+
+function getFloatingInfoWindowVisible(): boolean {
+  return window.electronAPI?.config.get(FLOATING_INFO_VISIBLE_CONFIG_KEY) === true;
 }
 
 function TooltipIconButton({
@@ -144,10 +142,9 @@ export function MenuBar({
   const { theme, toggleTheme } = useTheme();
   const { state: activityBarState, toggleSidebar } = useSidebar();
   const ref = useRef<HTMLDivElement>(null);
-  const [closeDialogOpen, setCloseDialogOpen] = useState(false);
-  const [rememberCloseChoice, setRememberCloseChoice] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
-  const [rememberedCloseAction, setRememberedCloseAction] = useState<'quit' | 'tray' | null>(() => getRememberedCloseAction());
+  const [closeToTrayEnabled, setCloseToTrayEnabled] = useState(() => getConfiguredCloseAction() === 'tray');
+  const [floatingInfoWindowVisible, setFloatingInfoWindowVisible] = useState(() => getFloatingInfoWindowVisible());
   const layoutIconsEnabled = canUseLayoutPanels(mainContentView, activeView);
   const activityBarToggleEnabled = mainContentView === 'code';
   const layoutIconClassName = [
@@ -165,39 +162,16 @@ export function MenuBar({
       : 'opacity-40',
   ].join(' ');
 
-  useEffect(() => {
-    return window.electronAPI?.onCloseRequested(() => {
-      setRememberCloseChoice(false);
-      setCloseDialogOpen(true);
-    });
-  }, []);
-
-  const handleMinimizeToTray = () => {
-    setCloseDialogOpen(false);
-    if (rememberCloseChoice) {
-      setRememberedCloseAction('tray');
-    }
-    void window.electronAPI?.resolveCloseRequest('tray', rememberCloseChoice);
+  const handleCloseToTrayChange = (checked: boolean) => {
+    setCloseToTrayEnabled(checked);
+    void window.electronAPI?.config.set(CLOSE_ACTION_CONFIG_KEY, checked ? 'tray' : 'quit');
   };
 
-  const handleQuitPristine = () => {
-    setCloseDialogOpen(false);
-    if (rememberCloseChoice) {
-      setRememberedCloseAction('quit');
-    }
-    void window.electronAPI?.resolveCloseRequest('quit', rememberCloseChoice);
+  const handleFloatingInfoWindowVisibleChange = (checked: boolean) => {
+    setFloatingInfoWindowVisible(checked);
+    void window.electronAPI?.config.set(FLOATING_INFO_VISIBLE_CONFIG_KEY, checked);
+    void window.electronAPI?.setFloatingInfoWindowVisible(checked);
   };
-
-  const handleResetCloseBehavior = () => {
-    setRememberedCloseAction(null);
-    void window.electronAPI?.config.set(CLOSE_ACTION_CONFIG_KEY, null);
-  };
-
-  const rememberedCloseActionLabel = rememberedCloseAction === 'tray'
-    ? 'Minimize to tray'
-    : rememberedCloseAction === 'quit'
-      ? 'Quit Pristine'
-      : 'Ask every time';
 
   return (
     <TooltipProvider delayDuration={0}>
@@ -451,54 +425,6 @@ export function MenuBar({
           </div>
         </div>
 
-        <Dialog open={closeDialogOpen} onOpenChange={setCloseDialogOpen}>
-          <DialogContent data-testid="close-confirmation-dialog" style={noDragInteractive as React.CSSProperties}>
-            <DialogHeader>
-              <DialogTitle>Close Pristine?</DialogTitle>
-              <DialogDescription>
-                You can quit the app now or keep it running in the system tray and reopen it later.
-              </DialogDescription>
-            </DialogHeader>
-            <label className="flex items-center justify-between gap-4 rounded-md border border-border/70 bg-muted/30 px-3 py-2 text-sm" style={noDragInteractive as React.CSSProperties}>
-              <span>Remember my choice</span>
-              <Switch
-                checked={rememberCloseChoice}
-                data-testid="close-action-remember-choice"
-                onCheckedChange={setRememberCloseChoice}
-              />
-            </label>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                data-testid="close-action-cancel"
-                onClick={() => {
-                  setCloseDialogOpen(false);
-                  setRememberCloseChoice(false);
-                }}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                data-testid="close-action-minimize-to-tray"
-                onClick={handleMinimizeToTray}
-              >
-                Minimize to Tray
-              </Button>
-              <Button
-                type="button"
-                variant="destructive"
-                data-testid="close-action-quit"
-                onClick={handleQuitPristine}
-              >
-                Quit Pristine
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
         <Dialog open={settingsDialogOpen} onOpenChange={setSettingsDialogOpen}>
           <DialogContent data-testid="settings-dialog" style={noDragInteractive as React.CSSProperties}>
             <DialogHeader>
@@ -511,20 +437,31 @@ export function MenuBar({
               <div className="rounded-md border border-border/70 bg-muted/30 px-3 py-3">
                 <div className="flex items-center justify-between gap-4">
                   <div className="space-y-1">
-                    <p className="text-sm font-medium">Close behavior</p>
-                    <p className="text-sm text-muted-foreground" data-testid="close-behavior-current-value">
-                      Current setting: {rememberedCloseActionLabel}
+                    <p className="text-sm font-medium">Close to tray</p>
+                    <p className="text-sm text-muted-foreground" data-testid="close-behavior-description">
+                      Keep Pristine running in the tray when the window is closed.
                     </p>
                   </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    data-testid="reset-close-behavior"
-                    disabled={rememberedCloseAction === null}
-                    onClick={handleResetCloseBehavior}
-                  >
-                    Reset close behavior
-                  </Button>
+                  <Switch
+                    checked={closeToTrayEnabled}
+                    data-testid="settings-close-to-tray-switch"
+                    onCheckedChange={handleCloseToTrayChange}
+                  />
+                </div>
+              </div>
+              <div className="rounded-md border border-border/70 bg-muted/30 px-3 py-3">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium">Show floating info window</p>
+                    <p className="text-sm text-muted-foreground" data-testid="floating-info-window-description">
+                      Display a detached always-on-top info window even while Pristine is hidden to tray.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={floatingInfoWindowVisible}
+                    data-testid="settings-floating-info-window-switch"
+                    onCheckedChange={handleFloatingInfoWindowVisibleChange}
+                  />
                 </div>
               </div>
             </div>

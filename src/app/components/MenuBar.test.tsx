@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { MenuBar } from './MenuBar';
@@ -52,18 +52,10 @@ function WorkspaceControls() {
 }
 
 describe('MenuBar', () => {
-  it('calls electron window controls and routes close through a confirmation dialog', async () => {
+  it('calls electron window controls directly', async () => {
     const user = userEvent.setup();
 
     renderMenuBar();
-    const onCloseRequestedMock = vi.mocked(window.electronAPI!.onCloseRequested);
-    const firstOnCloseRequestedCall = onCloseRequestedMock.mock.calls[0];
-    const closeRequestedHandler = firstOnCloseRequestedCall?.[0];
-
-    expect(closeRequestedHandler).toBeTypeOf('function');
-    if (!closeRequestedHandler) {
-      throw new Error('Expected onCloseRequested handler to be registered');
-    }
 
     fireEvent.click(screen.getByTestId('window-control-minimize'));
     fireEvent.click(screen.getByTestId('window-control-maximize'));
@@ -72,32 +64,16 @@ describe('MenuBar', () => {
     expect(window.electronAPI?.minimize).toHaveBeenCalledTimes(1);
     expect(window.electronAPI?.maximize).toHaveBeenCalledTimes(1);
     expect(window.electronAPI?.close).toHaveBeenCalledTimes(1);
-
-    await act(async () => {
-      closeRequestedHandler();
-    });
-
-    expect(await screen.findByTestId('close-confirmation-dialog')).toBeVisible();
-    expect(screen.getByText('Close Pristine?')).toBeVisible();
-    expect(screen.getByText('You can quit the app now or keep it running in the system tray and reopen it later.')).toBeVisible();
-
-    await user.click(screen.getByTestId('close-action-minimize-to-tray'));
-    expect(window.electronAPI?.resolveCloseRequest).toHaveBeenCalledWith('tray', false);
-    expect(screen.queryByTestId('close-confirmation-dialog')).not.toBeInTheDocument();
-
-    await user.click(screen.getByTestId('window-control-close'));
-    await act(async () => {
-      closeRequestedHandler();
-    });
-    await user.click(screen.getByTestId('close-action-remember-choice'));
-    await user.click(screen.getByTestId('close-action-quit'));
-    expect(window.electronAPI?.resolveCloseRequest).toHaveBeenCalledWith('quit', true);
   });
 
-  it('shows the remembered close behavior in Settings and lets the user reset it', async () => {
+  it('shows settings switches for close-to-tray and floating info window visibility', async () => {
     const user = userEvent.setup();
     vi.mocked(window.electronAPI!.config.get).mockImplementation((key: string) =>
-      key === 'window.closeActionPreference' ? 'tray' : null,
+      key === 'window.closeActionPreference'
+        ? 'tray'
+        : key === 'ui.floatingInfoWindow.visible'
+          ? true
+          : null,
     );
 
     renderMenuBar();
@@ -105,13 +81,15 @@ describe('MenuBar', () => {
     await user.click(screen.getByTestId('menu-settings-button'));
 
     expect(await screen.findByTestId('settings-dialog')).toBeVisible();
-    expect(screen.getByTestId('close-behavior-current-value')).toHaveTextContent('Current setting: Minimize to tray');
+    expect(screen.getByTestId('settings-close-to-tray-switch')).toHaveAttribute('data-state', 'checked');
+    expect(screen.getByTestId('settings-floating-info-window-switch')).toHaveAttribute('data-state', 'checked');
 
-    await user.click(screen.getByTestId('reset-close-behavior'));
+    await user.click(screen.getByTestId('settings-close-to-tray-switch'));
+    await user.click(screen.getByTestId('settings-floating-info-window-switch'));
 
-    expect(window.electronAPI?.config.set).toHaveBeenCalledWith('window.closeActionPreference', null);
-    expect(screen.getByTestId('close-behavior-current-value')).toHaveTextContent('Current setting: Ask every time');
-    expect(screen.getByTestId('reset-close-behavior')).toBeDisabled();
+    expect(window.electronAPI?.config.set).toHaveBeenCalledWith('window.closeActionPreference', 'quit');
+    expect(window.electronAPI?.config.set).toHaveBeenCalledWith('ui.floatingInfoWindow.visible', false);
+    expect(window.electronAPI?.setFloatingInfoWindowVisible).toHaveBeenCalledWith(false);
   });
 
   it('does not render the select project dropdown or upgrade button', () => {

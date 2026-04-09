@@ -1,10 +1,10 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { BrowserWindow, ipcMain } from 'electron';
 import { SyncChannels, AsyncChannels, StreamChannels } from './channels.js';
-import { setConfigValue } from './config.js';
 
-const CLOSE_ACTION_CONFIG_KEY = 'window.closeActionPreference';
-
-export function registerWindowHandlers(getMainWindow: () => BrowserWindow | null): void {
+export function registerWindowHandlers(
+  getMainWindow: () => BrowserWindow | null,
+  setFloatingInfoWindowVisible: (visible: boolean) => boolean = () => false,
+): void {
   ipcMain.on(SyncChannels.WINDOW_IS_MAXIMIZED, (event) => {
     const win = getMainWindow();
     event.returnValue = win ? win.isMaximized() : false;
@@ -53,29 +53,12 @@ export function registerWindowHandlers(getMainWindow: () => BrowserWindow | null
     return true;
   });
 
-  ipcMain.handle(AsyncChannels.WINDOW_RESOLVE_CLOSE, async (_event, action: unknown, remember: unknown) => {
-    const win = getMainWindow();
-    if (!win) return false;
-
-    if (action !== 'quit' && action !== 'tray') {
-      throw new Error('Expected close action to be "quit" or "tray"');
+  ipcMain.handle(AsyncChannels.WINDOW_SET_FLOATING_INFO_VISIBILITY, async (_event, visible: unknown) => {
+    if (typeof visible !== 'boolean') {
+      throw new Error('Expected floating info visibility to be boolean');
     }
 
-    if (typeof remember !== 'boolean') {
-      throw new Error('Expected remember to be boolean');
-    }
-
-    if (remember) {
-      setConfigValue(CLOSE_ACTION_CONFIG_KEY, action);
-    }
-
-    if (action === 'tray') {
-      win.hide();
-      return true;
-    }
-
-    app.quit();
-    return true;
+    return setFloatingInfoWindowVisible(visible);
   });
 }
 
