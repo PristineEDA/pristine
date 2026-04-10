@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
 type BrowserWindowInstance = {
@@ -34,10 +35,11 @@ const mocks = vi.hoisted(() => {
   const appHandlers = new Map<string, (...args: unknown[]) => void>();
   const browserWindowInstances: BrowserWindowInstance[] = [];
   const trayInstances: TrayInstance[] = [];
+  const mockAppDataPath = 'mock-home/AppData/Roaming';
   const appPaths = new Map<string, string>([
-    ['appData', 'C:\\Users\\maksy\\AppData\\Roaming'],
-    ['userData', 'C:\\Users\\maksy\\AppData\\Roaming\\Pristine'],
-    ['sessionData', 'C:\\Users\\maksy\\AppData\\Roaming\\Pristine\\session-data'],
+    ['appData', mockAppDataPath],
+    ['userData', `${mockAppDataPath}/Pristine`],
+    ['sessionData', `${mockAppDataPath}/Pristine/session-data`],
   ]);
 
   class BrowserWindowMock {
@@ -131,6 +133,7 @@ const mocks = vi.hoisted(() => {
 
   return {
     appHandlers,
+    mockAppDataPath,
     appPaths,
     browserWindowInstances,
     trayInstances,
@@ -223,9 +226,9 @@ async function importMain(options?: {
   mocks.browserWindowInstances.length = 0;
   mocks.trayInstances.length = 0;
   mocks.appPaths.clear();
-  mocks.appPaths.set('appData', 'C:\\Users\\maksy\\AppData\\Roaming');
-  mocks.appPaths.set('userData', 'C:\\Users\\maksy\\AppData\\Roaming\\Pristine');
-  mocks.appPaths.set('sessionData', 'C:\\Users\\maksy\\AppData\\Roaming\\Pristine\\session-data');
+  mocks.appPaths.set('appData', mocks.mockAppDataPath);
+  mocks.appPaths.set('userData', path.join(mocks.mockAppDataPath, 'Pristine'));
+  mocks.appPaths.set('sessionData', path.join(mocks.mockAppDataPath, 'Pristine', 'session-data'));
   mocks.mockMkdirSync.mockClear();
   mocks.mockWhenReady.mockClear();
   mocks.mockAppOn.mockClear();
@@ -304,11 +307,11 @@ describe('electron main entry', () => {
     expect(mocks.mockRegisterAllHandlers).toHaveBeenCalledTimes(1);
     expect(mocks.mockSetProjectRoot).toHaveBeenCalledWith('C:\\Users\\maksy\\Desktop\\fpga\\retroSoC');
     expect(mocks.mockMkdirSync).toHaveBeenCalledWith(
-      'C:\\Users\\maksy\\AppData\\Roaming\\Pristine\\dev-profile\\session-data',
+      path.join(mocks.mockAppDataPath, 'Pristine', 'dev-profile', 'session-data'),
       { recursive: true },
     );
-    expect(mocks.mockSetPath).toHaveBeenCalledWith('userData', 'C:\\Users\\maksy\\AppData\\Roaming\\Pristine\\dev-profile');
-    expect(mocks.mockSetPath).toHaveBeenCalledWith('sessionData', 'C:\\Users\\maksy\\AppData\\Roaming\\Pristine\\dev-profile\\session-data');
+    expect(mocks.mockSetPath).toHaveBeenCalledWith('userData', path.join(mocks.mockAppDataPath, 'Pristine', 'dev-profile'));
+    expect(mocks.mockSetPath).toHaveBeenCalledWith('sessionData', path.join(mocks.mockAppDataPath, 'Pristine', 'dev-profile', 'session-data'));
     expect(trayInstances).toHaveLength(1);
     expect(browserWindowInstances).toHaveLength(2);
 
@@ -372,11 +375,11 @@ describe('electron main entry', () => {
     const { browserWindowInstances } = await importMain({ platform: 'darwin' });
 
     expect(mocks.mockMkdirSync).toHaveBeenCalledWith(
-      'C:\\Users\\maksy\\AppData\\Roaming\\Pristine\\session-data',
+      path.join(mocks.mockAppDataPath, 'Pristine', 'session-data'),
       { recursive: true },
     );
-    expect(mocks.mockSetPath).toHaveBeenCalledWith('userData', 'C:\\Users\\maksy\\AppData\\Roaming\\Pristine');
-    expect(mocks.mockSetPath).toHaveBeenCalledWith('sessionData', 'C:\\Users\\maksy\\AppData\\Roaming\\Pristine\\session-data');
+    expect(mocks.mockSetPath).toHaveBeenCalledWith('userData', path.join(mocks.mockAppDataPath, 'Pristine'));
+    expect(mocks.mockSetPath).toHaveBeenCalledWith('sessionData', path.join(mocks.mockAppDataPath, 'Pristine', 'session-data'));
 
     const splashWindow = browserWindowInstances[0];
     const mainWindow = browserWindowInstances[1];
