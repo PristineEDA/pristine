@@ -17,7 +17,7 @@ export const editorThemeOptions = [
 ] as const
 
 export type EditorThemeId = (typeof editorThemeOptions)[number]['value']
-export const DEFAULT_EDITOR_THEME: EditorThemeId = 'dracula'
+export const DEFAULT_EDITOR_THEME = 'dracula' as const satisfies EditorThemeId
 
 export function isEditorThemeId(value: unknown): value is EditorThemeId {
   return editorThemeOptions.some((option) => option.value === value)

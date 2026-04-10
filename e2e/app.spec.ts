@@ -201,13 +201,26 @@ async function readMonacoAppearanceSnapshot(
   expectedColors?: { background?: string; lineNumber?: string },
 ) {
   return window.evaluate(({ background, lineNumber }) => {
+    type StyleLike = {
+      backgroundColor: string;
+      color: string;
+      fontFamily: string;
+      fontSize: string;
+    };
+
+    type ElementLike = {
+      querySelector: (selectors: string) => ElementLike | null;
+      remove: () => void;
+      style: Record<string, string>;
+    };
+
     const browserGlobal = globalThis as typeof globalThis & {
       document: {
-        body: { appendChild: (node: HTMLElement) => void };
-        createElement: (tagName: string) => HTMLDivElement;
-        querySelector: (selectors: string) => Element | null;
+        body: { appendChild: (node: ElementLike) => void };
+        createElement: (tagName: string) => ElementLike;
+        querySelector: (selectors: string) => ElementLike | null;
       };
-      getComputedStyle: (element: Element) => CSSStyleDeclaration;
+      getComputedStyle: (element: ElementLike) => StyleLike;
     };
 
     const editorRoot = browserGlobal.document.querySelector('.monaco-editor');
