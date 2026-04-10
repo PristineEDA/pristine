@@ -29,7 +29,6 @@
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
-    "@radix-ui/react-dialog": "^1.1.15",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
     "@xyflow/react": "^12.10.2",
@@ -42,7 +41,6 @@
     "radix-ui": "^1.4.3",
     "react": "19.2.4",
     "react-dom": "19.2.4",
-    "remixicon": "^4.9.1",
     "tailwind-merge": "^3.5.0"
   },
   "devDependencies": {
@@ -71,14 +69,11 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "6.0.1",
     "@vitest/coverage-v8": "4.1.2",
-    "adm-zip": "^0.5.17",
     "electron": "^33.0.0",
     "electron-builder": "^25.0.0",
     "jsdom": "^29.0.1",
     "tailwindcss": "4.2.2",
-    "tar": "^7.5.13",
     "typescript": "^5.6.0",
-    "undici": "^8.0.2",
     "vite": "8.0.3",
     "vite-plugin-electron": "^0.29.1",
     "vitest": "4.1.2"

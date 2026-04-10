@@ -142,22 +142,10 @@ export const editorFontFamilyOptions = [
     description: 'Technical monospace with exceptional Unicode and math support.',
   },
   {
-    value: 'liberation-mono',
-    label: 'Liberation Mono',
-    fontFamily: '"Liberation Mono", monospace',
-    description: 'Classic open-source monospace with office-friendly metrics.',
-  },
-  {
     value: 'm-plus-code-latin',
     label: 'M PLUS Code Latin',
     fontFamily: '"M PLUS Code Latin", monospace',
     description: 'M+ project code-oriented Latin monospace variant.',
-  },
-  {
-    value: 'meslo-lg-s',
-    label: 'Meslo LG S',
-    fontFamily: '"Meslo LG S", monospace',
-    description: 'Menlo-inspired developer font popular in terminal setups.',
   },
   {
     value: 'monaspace-argon',
@@ -213,16 +201,25 @@ export type EditorThemeId = (typeof editorThemeOptions)[number]['value']
 export const DEFAULT_EDITOR_FONT_FAMILY = 'jetbrains-mono' as const satisfies EditorFontFamilyId
 export const DEFAULT_EDITOR_THEME = 'dracula' as const satisfies EditorThemeId
 
+const editorFontFamilyValues = new Set<EditorFontFamilyId>(editorFontFamilyOptions.map((option) => option.value))
+const editorFontFamilyOptionsById = new Map<EditorFontFamilyId, (typeof editorFontFamilyOptions)[number]>(
+  editorFontFamilyOptions.map((option) => [option.value, option]),
+)
+const editorThemeValues = new Set<EditorThemeId>(editorThemeOptions.map((option) => option.value))
+const editorThemeOptionsById = new Map<EditorThemeId, (typeof editorThemeOptions)[number]>(
+  editorThemeOptions.map((option) => [option.value, option]),
+)
+
 export function isEditorFontFamilyId(value: unknown): value is EditorFontFamilyId {
-  return editorFontFamilyOptions.some((option) => option.value === value)
+  return typeof value === 'string' && editorFontFamilyValues.has(value as EditorFontFamilyId)
 }
 
 export function getEditorFontFamilyLabel(fontFamilyId: EditorFontFamilyId): string {
-  return editorFontFamilyOptions.find((option) => option.value === fontFamilyId)?.label ?? 'JetBrains Mono'
+  return editorFontFamilyOptionsById.get(fontFamilyId)?.label ?? 'JetBrains Mono'
 }
 
 export function getEditorFontFamilyStack(fontFamilyId: EditorFontFamilyId): string {
-  return editorFontFamilyOptions.find((option) => option.value === fontFamilyId)?.fontFamily ?? IDE_MONO_FONT_FAMILY
+  return editorFontFamilyOptionsById.get(fontFamilyId)?.fontFamily ?? IDE_MONO_FONT_FAMILY
 }
 
 export function parseEditorFontFamily(value: unknown): EditorFontFamilyId {
@@ -230,11 +227,11 @@ export function parseEditorFontFamily(value: unknown): EditorFontFamilyId {
 }
 
 export function isEditorThemeId(value: unknown): value is EditorThemeId {
-  return editorThemeOptions.some((option) => option.value === value)
+  return typeof value === 'string' && editorThemeValues.has(value as EditorThemeId)
 }
 
 export function getEditorThemeLabel(themeId: EditorThemeId): string {
-  return editorThemeOptions.find((option) => option.value === themeId)?.label ?? 'Dracula'
+  return editorThemeOptionsById.get(themeId)?.label ?? 'Dracula'
 }
 
 export function parseEditorTheme(value: unknown): EditorThemeId {

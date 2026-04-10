@@ -2,6 +2,12 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { EditorSettingsProvider, useEditorSettings } from './EditorSettingsContext'
 
+const ensureEditorFontFamilyLoadedMock = vi.fn(() => Promise.resolve())
+
+vi.mock('../editor/fontLoader', () => ({
+  ensureEditorFontFamilyLoaded: (fontFamily: string) => ensureEditorFontFamilyLoadedMock(fontFamily),
+}))
+
 function EditorSettingsProbe() {
   const { fontFamily, fontSize, setFontFamily, setFontSize, setTheme, theme } = useEditorSettings()
 
@@ -30,6 +36,8 @@ describe('EditorSettingsContext', () => {
   beforeEach(() => {
     vi.mocked(window.electronAPI!.config.get).mockReset()
     vi.mocked(window.electronAPI!.config.set).mockReset()
+    ensureEditorFontFamilyLoadedMock.mockReset()
+    ensureEditorFontFamilyLoadedMock.mockResolvedValue(undefined)
   })
 
   it('defaults to Dracula and 13px when persisted config is missing', () => {
@@ -42,6 +50,7 @@ describe('EditorSettingsContext', () => {
     expect(screen.getByTestId('editor-font-size')).toHaveTextContent('13')
     expect(screen.getByTestId('editor-font-family')).toHaveTextContent('jetbrains-mono')
     expect(screen.getByTestId('editor-theme')).toHaveTextContent('dracula')
+    expect(ensureEditorFontFamilyLoadedMock).toHaveBeenCalledWith('jetbrains-mono')
   })
 
   it('reads persisted editor settings from config', () => {
@@ -64,6 +73,7 @@ describe('EditorSettingsContext', () => {
     expect(screen.getByTestId('editor-font-family')).toHaveTextContent('fira-code')
     expect(screen.getByTestId('editor-font-size')).toHaveTextContent('17')
     expect(screen.getByTestId('editor-theme')).toHaveTextContent('night-owl')
+    expect(ensureEditorFontFamilyLoadedMock).toHaveBeenCalledWith('fira-code')
   })
 
   it('persists font family, font size and theme updates and clamps invalid values', () => {
@@ -76,6 +86,7 @@ describe('EditorSettingsContext', () => {
     fireEvent.click(screen.getByTestId('set-font-family'))
     expect(screen.getByTestId('editor-font-family')).toHaveTextContent('monaspace-neon')
     expect(window.electronAPI?.config.set).toHaveBeenCalledWith('editor.fontFamily', 'monaspace-neon')
+    expect(ensureEditorFontFamilyLoadedMock).toHaveBeenCalledWith('monaspace-neon')
 
     fireEvent.click(screen.getByTestId('set-font-size'))
     expect(screen.getByTestId('editor-font-size')).toHaveTextContent('18')

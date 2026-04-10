@@ -8,22 +8,19 @@ import {
   EDITOR_THEME_CONFIG_KEY,
   type EditorFontFamilyId,
   type EditorThemeId,
-  editorFontFamilyOptions,
-  editorThemeOptions,
   parseEditorFontFamily,
   parseEditorFontSize,
   parseEditorTheme,
 } from '../editor/editorSettings'
+import { ensureEditorFontFamilyLoaded } from '../editor/fontLoader'
 
 interface EditorSettingsContextValue {
-  fontFamilies: typeof editorFontFamilyOptions
   fontFamily: EditorFontFamilyId
   fontSize: number
   setFontFamily: (fontFamily: EditorFontFamilyId) => void
   setFontSize: (fontSize: number) => void
   setTheme: (theme: EditorThemeId) => void
   theme: EditorThemeId
-  themes: typeof editorThemeOptions
 }
 
 const EditorSettingsContext = createContext<EditorSettingsContextValue | null>(null)
@@ -113,15 +110,17 @@ export function EditorSettingsProvider({ children }: { children: ReactNode }) {
     }
   }, [fontFamily, fontSize, persistFontFamily, persistFontSize, persistTheme, theme])
 
+  useEffect(() => {
+    void ensureEditorFontFamilyLoaded(fontFamily)
+  }, [fontFamily])
+
   const value = {
-    fontFamilies: editorFontFamilyOptions,
     fontFamily,
     fontSize,
     setFontFamily,
     setFontSize,
     setTheme,
     theme,
-    themes: editorThemeOptions,
   }
 
   return (

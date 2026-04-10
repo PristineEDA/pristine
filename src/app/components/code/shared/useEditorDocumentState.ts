@@ -33,6 +33,7 @@ export function useEditorDocumentState({
   const resolvedContentCache = contentCache ?? localContentCache;
   const resolvedLoadingFiles = loadingFiles ?? localLoadingFiles;
   const resolvedLoadErrors = loadErrors ?? localLoadErrors;
+  const activeTabContent = activeTabId ? resolvedContentCache[activeTabId] : undefined;
   const activeTab = tabs.find((tab) => tab.id === activeTabId);
   const code = activeTabId
     ? resolvedLoadErrors[activeTabId]
@@ -47,7 +48,7 @@ export function useEditorDocumentState({
   }, []);
 
   useEffect(() => {
-    if (!activeTabId || resolvedContentCache[activeTabId] || inFlightLoadsRef.current.has(activeTabId)) {
+    if (!activeTabId || activeTabContent !== undefined || inFlightLoadsRef.current.has(activeTabId)) {
       return;
     }
 
@@ -98,7 +99,7 @@ export function useEditorDocumentState({
 
         setLocalLoadingFiles((current) => ({ ...current, [activeTabId]: false }));
       });
-  }, [activeTabId, onLoadFile, resolvedContentCache]);
+  }, [activeTabContent, activeTabId, onLoadFile]);
 
   const updateContent = (value: string) => {
     if (!activeTabId) {

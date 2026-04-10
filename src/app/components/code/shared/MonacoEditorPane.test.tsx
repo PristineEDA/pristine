@@ -17,12 +17,15 @@ const { mockEditorInstance, mockModels, mockMonaco, mockEditorComponent } = vi.h
     onDidChangeCursorPosition: vi.fn((callback: (event: { position: { lineNumber: number; column: number } }) => void) => {
       callback({ position: { lineNumber: 5, column: 10 } });
     }),
+    updateOptions: vi.fn(),
+    layout: vi.fn(),
   };
 
   const models = [{ id: 'model-a' }, { id: 'model-b' }];
   const monaco = {
     editor: {
       getModels: vi.fn(() => models),
+      remeasureFonts: vi.fn(),
       setModelMarkers: vi.fn(),
     },
     MarkerSeverity: {
@@ -153,6 +156,12 @@ describe('MonacoEditorPane', () => {
     expect(lastEditorProps.options.fontFamily).toBe(getEditorFontFamilyStack('monaspace-neon'));
     expect(lastEditorProps.options.fontSize).toBe(18);
     expect(lastEditorProps.theme).toBe('github-dark');
+    expect(mockEditorInstance.updateOptions).toHaveBeenCalledWith({
+      fontFamily: getEditorFontFamilyStack('monaspace-neon'),
+      fontSize: 18,
+    });
+    expect(mockEditorInstance.layout).toHaveBeenCalled();
+    expect(mockMonaco.editor.remeasureFonts).toHaveBeenCalled();
   });
 
   it('maps matching problems to monaco markers for every model', () => {
