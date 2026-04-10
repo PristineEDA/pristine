@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
 import {
+  DEFAULT_EDITOR_THEME,
   DEFAULT_EDITOR_FONT_SIZE,
   EDITOR_FONT_SIZE_CONFIG_KEY,
   EDITOR_THEME_CONFIG_KEY,
@@ -31,7 +32,7 @@ function getConfiguredEditorTheme(): EditorThemeId {
   try {
     return parseEditorTheme(window.electronAPI?.config.get(EDITOR_THEME_CONFIG_KEY))
   } catch {
-    return 'dracula'
+    return DEFAULT_EDITOR_THEME
   }
 }
 
@@ -77,8 +78,16 @@ export function EditorSettingsProvider({ children }: { children: ReactNode }) {
     }
   }, [fontSize, persistFontSize, persistTheme, theme])
 
+  const value = {
+    fontSize,
+    setFontSize,
+    setTheme,
+    theme,
+    themes: editorThemeOptions,
+  }
+
   return (
-    <EditorSettingsContext.Provider value={{ fontSize, setFontSize, setTheme, theme, themes: editorThemeOptions }}>
+    <EditorSettingsContext.Provider value={value}>
       {children}
     </EditorSettingsContext.Provider>
   )

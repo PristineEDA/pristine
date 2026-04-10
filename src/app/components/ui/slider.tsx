@@ -13,10 +13,7 @@ function Slider({
   max = 100,
   ...props
 }: React.ComponentProps<typeof SliderPrimitive.Root>) {
-  const values = React.useMemo(
-    () => value ?? defaultValue ?? [min, max],
-    [defaultValue, max, min, value],
-  )
+  const thumbValues = value ?? defaultValue ?? [min, max]
 
   return (
     <SliderPrimitive.Root
@@ -40,7 +37,7 @@ function Slider({
           className="absolute h-full bg-primary"
         />
       </SliderPrimitive.Track>
-      {values.map((_, index) => (
+      {thumbValues.map((_, index) => (
         <SliderPrimitive.Thumb
           key={index}
           data-slot="slider-thumb"

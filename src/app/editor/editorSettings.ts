@@ -17,6 +17,7 @@ export const editorThemeOptions = [
 ] as const
 
 export type EditorThemeId = (typeof editorThemeOptions)[number]['value']
+export const DEFAULT_EDITOR_THEME: EditorThemeId = 'dracula'
 
 export function isEditorThemeId(value: unknown): value is EditorThemeId {
   return editorThemeOptions.some((option) => option.value === value)
@@ -27,7 +28,7 @@ export function getEditorThemeLabel(themeId: EditorThemeId): string {
 }
 
 export function parseEditorTheme(value: unknown): EditorThemeId {
-  return isEditorThemeId(value) ? value : 'dracula'
+  return isEditorThemeId(value) ? value : DEFAULT_EDITOR_THEME
 }
 
 export function clampEditorFontSize(value: number): number {

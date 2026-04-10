@@ -1,10 +1,10 @@
 import { createDraculaThemeDefinition } from './draculaTheme'
+import { DEFAULT_EDITOR_THEME, type EditorThemeId, editorThemeOptions } from './editorSettings'
 import {
   type DraculaPalette,
   getRootThemeStyles,
   type StyleReader,
 } from './themeSource'
-import { type EditorThemeId, editorThemeOptions } from './editorSettings'
 
 type MonacoBaseTheme = 'vs' | 'vs-dark'
 
@@ -224,7 +224,7 @@ export function getEditorThemeDefinition(
   themeId: EditorThemeId,
   styles: StyleReader | null = getRootThemeStyles(),
 ) {
-  if (themeId === 'dracula') {
+  if (themeId === DEFAULT_EDITOR_THEME) {
     return createDraculaThemeDefinition(styles)
   }
 
