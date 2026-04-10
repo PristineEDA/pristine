@@ -1,7 +1,7 @@
 import Editor, { useMonaco } from '@monaco-editor/react';
 import { useEffect } from 'react';
 import { useProblemsList } from '../../../../data/mockDataLoader';
-import { IDE_MONO_FONT_FAMILY } from '../../../editor/appearance';
+import { getEditorFontFamilyStack } from '../../../editor/editorSettings';
 import { registerEditorThemes } from '../../../editor/monacoThemes';
 import { useRegisterEditorLanguages } from '../../../editor/registerLanguages';
 import { getEditorLanguage } from '../../../workspace/workspaceFiles';
@@ -30,7 +30,7 @@ export function MonacoEditorPane({
 }: MonacoEditorPaneProps) {
   const monaco = useMonaco();
   const problemsList = useProblemsList();
-  const { fontSize, theme } = useEditorSettings();
+  const { fontFamily, fontSize, theme } = useEditorSettings();
 
   useRegisterEditorLanguages(monaco);
 
@@ -70,6 +70,7 @@ export function MonacoEditorPane({
         />
       )}
       <Editor
+        key={fontFamily}
         height="100%"
         language={getEditorLanguage(activeTabId)}
         value={code}
@@ -89,7 +90,7 @@ export function MonacoEditorPane({
         }}
         options={{
           fontSize,
-          fontFamily: IDE_MONO_FONT_FAMILY,
+          fontFamily: getEditorFontFamilyStack(fontFamily),
           fontLigatures: true,
           lineNumbers: 'on',
           lineNumbersMinChars: 4,

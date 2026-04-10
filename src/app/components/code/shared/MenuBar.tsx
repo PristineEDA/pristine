@@ -9,9 +9,13 @@ import { useEditorSettings } from '../../../context/EditorSettingsContext';
 import { useWorkspace } from '../../../context/WorkspaceContext';
 import { useTheme, type Theme } from '../../../context/ThemeContext';
 import {
+  EDITOR_FONT_FAMILY_CONFIG_KEY,
   EDITOR_FONT_SIZE_CONFIG_KEY,
   EDITOR_THEME_CONFIG_KEY,
+  editorFontFamilyOptions,
+  getEditorFontFamilyLabel,
   editorThemeOptions,
+  parseEditorFontFamily,
   getEditorThemeLabel,
   parseEditorFontSize,
   parseEditorTheme,
@@ -94,6 +98,10 @@ function getConfiguredEditorFontSize(): number {
   return parseEditorFontSize(window.electronAPI?.config.get(EDITOR_FONT_SIZE_CONFIG_KEY));
 }
 
+function getConfiguredEditorFontFamily() {
+  return parseEditorFontFamily(window.electronAPI?.config.get(EDITOR_FONT_FAMILY_CONFIG_KEY));
+}
+
 function getConfiguredEditorTheme() {
   return parseEditorTheme(window.electronAPI?.config.get(EDITOR_THEME_CONFIG_KEY));
 }
@@ -165,7 +173,9 @@ export function MenuBar({
 }: MenuBarProps) {
   const { activeView, mainContentView, setMainContentView } = useWorkspace();
   const {
+    fontFamily: editorFontFamily,
     fontSize: editorFontSize,
+    setFontFamily: setEditorFontFamily,
     setFontSize: setEditorFontSize,
     setTheme: setEditorTheme,
     theme: editorTheme,
@@ -177,6 +187,7 @@ export function MenuBar({
   const [closeToTrayEnabled, setCloseToTrayEnabled] = useState(() => getConfiguredCloseAction() === 'tray');
   const [floatingInfoWindowVisible, setFloatingInfoWindowVisible] = useState(() => getFloatingInfoWindowVisible());
   const [settingsTheme, setSettingsTheme] = useState<Theme>(() => getConfiguredTheme());
+  const [settingsEditorFontFamily, setSettingsEditorFontFamily] = useState(() => getConfiguredEditorFontFamily());
   const [settingsEditorFontSize, setSettingsEditorFontSize] = useState(() => getConfiguredEditorFontSize());
   const [settingsEditorTheme, setSettingsEditorTheme] = useState(() => getConfiguredEditorTheme());
   const layoutIconsEnabled = canUseLayoutPanels(mainContentView, activeView);
@@ -200,6 +211,7 @@ export function MenuBar({
     setCloseToTrayEnabled(getConfiguredCloseAction() === 'tray');
     setFloatingInfoWindowVisible(getFloatingInfoWindowVisible());
     setSettingsTheme(getConfiguredTheme());
+    setSettingsEditorFontFamily(getConfiguredEditorFontFamily());
     setSettingsEditorFontSize(getConfiguredEditorFontSize());
     setSettingsEditorTheme(getConfiguredEditorTheme());
   };
@@ -207,6 +219,10 @@ export function MenuBar({
   useEffect(() => {
     setSettingsTheme(theme);
   }, [theme]);
+
+  useEffect(() => {
+    setSettingsEditorFontFamily(editorFontFamily);
+  }, [editorFontFamily]);
 
   useEffect(() => {
     setSettingsEditorFontSize(editorFontSize);
@@ -250,6 +266,12 @@ export function MenuBar({
     const nextValue = value[0] ?? settingsEditorFontSize;
     setSettingsEditorFontSize(nextValue);
     setEditorFontSize(nextValue);
+  };
+
+  const handleEditorFontFamilyChange = (value: string) => {
+    const nextFontFamily = parseEditorFontFamily(value);
+    setSettingsEditorFontFamily(nextFontFamily);
+    setEditorFontFamily(nextFontFamily);
   };
 
   const handleEditorThemeChange = (value: string) => {
@@ -548,6 +570,30 @@ export function MenuBar({
                       {settingsEditorFontSize}px
                     </span>
                   </div>
+                </div>
+              </div>
+              <div className="rounded-md border border-border/70 bg-muted/30 px-3 py-3">
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium">Code editor font</p>
+                    <p className="text-sm text-muted-foreground" data-testid="editor-font-family-description">
+                      Choose the bundled monospace font used in Monaco editor tabs.
+                    </p>
+                  </div>
+                  <Combobox
+                    value={settingsEditorFontFamily}
+                    onValueChange={handleEditorFontFamilyChange}
+                    options={editorFontFamilyOptions.map((option) => ({
+                      value: option.value,
+                      label: option.label,
+                      description: option.description,
+                    }))}
+                    placeholder={getEditorFontFamilyLabel(settingsEditorFontFamily)}
+                    searchPlaceholder="Search editor fonts..."
+                    emptyText="No editor font found."
+                    triggerTestId="settings-editor-font-family-combobox"
+                    getOptionTestId={(value) => `settings-editor-font-family-option-${value}`}
+                  />
                 </div>
               </div>
               <div className="rounded-md border border-border/70 bg-muted/30 px-3 py-3">

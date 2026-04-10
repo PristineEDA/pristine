@@ -3,12 +3,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { EditorSettingsProvider, useEditorSettings } from './EditorSettingsContext'
 
 function EditorSettingsProbe() {
-  const { fontSize, setFontSize, setTheme, theme } = useEditorSettings()
+  const { fontFamily, fontSize, setFontFamily, setFontSize, setTheme, theme } = useEditorSettings()
 
   return (
     <div>
+      <span data-testid="editor-font-family">{fontFamily}</span>
       <span data-testid="editor-font-size">{fontSize}</span>
       <span data-testid="editor-theme">{theme}</span>
+      <button data-testid="set-font-family" onClick={() => setFontFamily('monaspace-neon')}>
+        Set font family
+      </button>
       <button data-testid="set-font-size" onClick={() => setFontSize(18)}>
         Set font size
       </button>
@@ -36,12 +40,19 @@ describe('EditorSettingsContext', () => {
     )
 
     expect(screen.getByTestId('editor-font-size')).toHaveTextContent('13')
+    expect(screen.getByTestId('editor-font-family')).toHaveTextContent('jetbrains-mono')
     expect(screen.getByTestId('editor-theme')).toHaveTextContent('dracula')
   })
 
   it('reads persisted editor settings from config', () => {
     vi.mocked(window.electronAPI!.config.get).mockImplementation((key: string) =>
-      key === 'editor.fontSize' ? 17 : key === 'editor.theme' ? 'night-owl' : null,
+      key === 'editor.fontFamily'
+        ? 'fira-code'
+        : key === 'editor.fontSize'
+          ? 17
+          : key === 'editor.theme'
+            ? 'night-owl'
+            : null,
     )
 
     render(
@@ -50,16 +61,21 @@ describe('EditorSettingsContext', () => {
       </EditorSettingsProvider>,
     )
 
+    expect(screen.getByTestId('editor-font-family')).toHaveTextContent('fira-code')
     expect(screen.getByTestId('editor-font-size')).toHaveTextContent('17')
     expect(screen.getByTestId('editor-theme')).toHaveTextContent('night-owl')
   })
 
-  it('persists font size and theme updates and clamps invalid values', () => {
+  it('persists font family, font size and theme updates and clamps invalid values', () => {
     render(
       <EditorSettingsProvider>
         <EditorSettingsProbe />
       </EditorSettingsProvider>,
     )
+
+    fireEvent.click(screen.getByTestId('set-font-family'))
+    expect(screen.getByTestId('editor-font-family')).toHaveTextContent('monaspace-neon')
+    expect(window.electronAPI?.config.set).toHaveBeenCalledWith('editor.fontFamily', 'monaspace-neon')
 
     fireEvent.click(screen.getByTestId('set-font-size'))
     expect(screen.getByTestId('editor-font-size')).toHaveTextContent('18')

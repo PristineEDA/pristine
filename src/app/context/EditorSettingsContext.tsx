@@ -1,17 +1,25 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
 import {
+  DEFAULT_EDITOR_FONT_FAMILY,
   DEFAULT_EDITOR_THEME,
   DEFAULT_EDITOR_FONT_SIZE,
+  EDITOR_FONT_FAMILY_CONFIG_KEY,
   EDITOR_FONT_SIZE_CONFIG_KEY,
   EDITOR_THEME_CONFIG_KEY,
+  type EditorFontFamilyId,
   type EditorThemeId,
+  editorFontFamilyOptions,
   editorThemeOptions,
+  parseEditorFontFamily,
   parseEditorFontSize,
   parseEditorTheme,
 } from '../editor/editorSettings'
 
 interface EditorSettingsContextValue {
+  fontFamilies: typeof editorFontFamilyOptions
+  fontFamily: EditorFontFamilyId
   fontSize: number
+  setFontFamily: (fontFamily: EditorFontFamilyId) => void
   setFontSize: (fontSize: number) => void
   setTheme: (theme: EditorThemeId) => void
   theme: EditorThemeId
@@ -28,6 +36,14 @@ function getConfiguredEditorFontSize(): number {
   }
 }
 
+function getConfiguredEditorFontFamily(): EditorFontFamilyId {
+  try {
+    return parseEditorFontFamily(window.electronAPI?.config.get(EDITOR_FONT_FAMILY_CONFIG_KEY))
+  } catch {
+    return DEFAULT_EDITOR_FONT_FAMILY
+  }
+}
+
 function getConfiguredEditorTheme(): EditorThemeId {
   try {
     return parseEditorTheme(window.electronAPI?.config.get(EDITOR_THEME_CONFIG_KEY))
@@ -37,8 +53,17 @@ function getConfiguredEditorTheme(): EditorThemeId {
 }
 
 export function EditorSettingsProvider({ children }: { children: ReactNode }) {
+  const [fontFamily, setFontFamilyState] = useState<EditorFontFamilyId>(getConfiguredEditorFontFamily)
   const [fontSize, setFontSizeState] = useState<number>(getConfiguredEditorFontSize)
   const [theme, setThemeState] = useState<EditorThemeId>(getConfiguredEditorTheme)
+
+  const persistFontFamily = useCallback((value: EditorFontFamilyId) => {
+    try {
+      void window.electronAPI?.config.set(EDITOR_FONT_FAMILY_CONFIG_KEY, parseEditorFontFamily(value))
+    } catch {
+      /* ignore */
+    }
+  }, [])
 
   const persistFontSize = useCallback((value: number) => {
     try {
@@ -62,6 +87,12 @@ export function EditorSettingsProvider({ children }: { children: ReactNode }) {
     persistFontSize(nextValue)
   }, [persistFontSize])
 
+  const setFontFamily = useCallback((value: EditorFontFamilyId) => {
+    const nextValue = parseEditorFontFamily(value)
+    setFontFamilyState(nextValue)
+    persistFontFamily(nextValue)
+  }, [persistFontFamily])
+
   const setTheme = useCallback((value: EditorThemeId) => {
     const nextValue = parseEditorTheme(value)
     setThemeState(nextValue)
@@ -69,6 +100,10 @@ export function EditorSettingsProvider({ children }: { children: ReactNode }) {
   }, [persistTheme])
 
   useEffect(() => {
+    if (parseEditorFontFamily(window.electronAPI?.config.get(EDITOR_FONT_FAMILY_CONFIG_KEY)) !== fontFamily) {
+      persistFontFamily(fontFamily)
+    }
+
     if (parseEditorFontSize(window.electronAPI?.config.get(EDITOR_FONT_SIZE_CONFIG_KEY)) !== fontSize) {
       persistFontSize(fontSize)
     }
@@ -76,10 +111,13 @@ export function EditorSettingsProvider({ children }: { children: ReactNode }) {
     if (parseEditorTheme(window.electronAPI?.config.get(EDITOR_THEME_CONFIG_KEY)) !== theme) {
       persistTheme(theme)
     }
-  }, [fontSize, persistFontSize, persistTheme, theme])
+  }, [fontFamily, fontSize, persistFontFamily, persistFontSize, persistTheme, theme])
 
   const value = {
+    fontFamilies: editorFontFamilyOptions,
+    fontFamily,
     fontSize,
+    setFontFamily,
     setFontSize,
     setTheme,
     theme,

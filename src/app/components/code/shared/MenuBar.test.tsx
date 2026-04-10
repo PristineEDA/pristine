@@ -4,18 +4,24 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MenuBar } from './MenuBar';
 import { WorkspaceProvider, useWorkspace } from '../../../context/WorkspaceContext';
 import { SidebarProvider, useSidebar } from '../../ui/sidebar';
+import { getEditorFontFamilyLabel } from '../../../editor/editorSettings';
 
 const setEditorFontSizeMock = vi.fn();
+const setEditorFontFamilyMock = vi.fn();
 const setEditorThemeMock = vi.fn();
 const setThemeMock = vi.fn();
 const toggleThemeMock = vi.fn();
+let mockedEditorFontFamily = 'jetbrains-mono';
 let mockedEditorFontSize = 13;
 let mockedEditorTheme = 'dracula';
 let mockedTheme: 'light' | 'dark' = 'light';
 
 vi.mock('../../../context/EditorSettingsContext', () => ({
   useEditorSettings: () => ({
+    fontFamilies: [],
+    fontFamily: mockedEditorFontFamily,
     fontSize: mockedEditorFontSize,
+    setFontFamily: setEditorFontFamilyMock,
     setFontSize: setEditorFontSizeMock,
     setTheme: setEditorThemeMock,
     theme: mockedEditorTheme,
@@ -28,9 +34,11 @@ vi.mock('../../../context/ThemeContext', () => ({
 }));
 
 beforeEach(() => {
+  mockedEditorFontFamily = 'jetbrains-mono';
   mockedEditorFontSize = 13;
   mockedEditorTheme = 'dracula';
   mockedTheme = 'light';
+  setEditorFontFamilyMock.mockReset();
   setEditorFontSizeMock.mockReset();
   setEditorThemeMock.mockReset();
   setThemeMock.mockReset();
@@ -102,6 +110,8 @@ describe('MenuBar', () => {
     vi.mocked(window.electronAPI!.config.get).mockImplementation((key: string) =>
       key === 'ui.theme'
         ? 'dark'
+        : key === 'editor.fontFamily'
+          ? 'fira-code'
         : key === 'editor.fontSize'
           ? 18
           : key === 'editor.theme'
@@ -119,18 +129,22 @@ describe('MenuBar', () => {
     await user.click(screen.getByTestId('menu-settings-button'));
 
     expect(await screen.findByTestId('settings-dialog')).toBeVisible();
+    expect(screen.getByTestId('settings-editor-font-family-combobox')).toHaveTextContent(getEditorFontFamilyLabel('fira-code'));
     expect(screen.getByTestId('settings-editor-font-size-value')).toHaveTextContent('18px');
     expect(screen.getByTestId('settings-editor-theme-combobox')).toHaveTextContent('Night Owl');
     expect(screen.getByTestId('settings-theme-switch')).toHaveAttribute('data-state', 'checked');
     expect(screen.getByTestId('settings-close-to-tray-switch')).toHaveAttribute('data-state', 'checked');
     expect(screen.getByTestId('settings-floating-info-window-switch')).toHaveAttribute('data-state', 'checked');
 
+    await user.click(screen.getByTestId('settings-editor-font-family-combobox'));
+    await user.click(await screen.findByTestId('settings-editor-font-family-option-victor-mono'));
     await user.click(screen.getByTestId('settings-editor-theme-combobox'));
     await user.click(await screen.findByTestId('settings-editor-theme-option-github-dark'));
     await user.click(screen.getByTestId('settings-theme-switch'));
     await user.click(screen.getByTestId('settings-close-to-tray-switch'));
     await user.click(screen.getByTestId('settings-floating-info-window-switch'));
 
+    expect(setEditorFontFamilyMock).toHaveBeenCalledWith('victor-mono');
     expect(setEditorThemeMock).toHaveBeenCalledWith('github-dark');
     expect(setThemeMock).toHaveBeenCalledWith('light');
     expect(window.electronAPI?.config.set).toHaveBeenCalledWith('window.closeActionPreference', 'quit');
@@ -145,6 +159,8 @@ describe('MenuBar', () => {
     configGetMock.mockImplementation((key: string) =>
       key === 'ui.theme'
         ? 'dark'
+        : key === 'editor.fontFamily'
+          ? 'fira-code'
         : key === 'editor.fontSize'
           ? 18
           : key === 'editor.theme'
@@ -162,6 +178,7 @@ describe('MenuBar', () => {
     await user.click(screen.getByTestId('menu-settings-button'));
 
     expect(await screen.findByTestId('settings-dialog')).toBeVisible();
+    expect(screen.getByTestId('settings-editor-font-family-combobox')).toHaveTextContent(getEditorFontFamilyLabel('fira-code'));
     expect(screen.getByTestId('settings-editor-font-size-value')).toHaveTextContent('18px');
     expect(screen.getByTestId('settings-editor-theme-combobox')).toHaveTextContent('Night Owl');
     expect(screen.getByTestId('settings-theme-switch')).toHaveAttribute('data-state', 'checked');
@@ -173,6 +190,8 @@ describe('MenuBar', () => {
     configGetMock.mockImplementation((key: string) =>
       key === 'ui.theme'
         ? 'light'
+        : key === 'editor.fontFamily'
+          ? 'jetbrains-mono'
         : key === 'editor.fontSize'
           ? 12
           : key === 'editor.theme'
@@ -188,11 +207,25 @@ describe('MenuBar', () => {
     await user.click(screen.getByTestId('menu-settings-button'));
 
     expect(await screen.findByTestId('settings-dialog')).toBeVisible();
-  expect(screen.getByTestId('settings-editor-font-size-value')).toHaveTextContent('12px');
-  expect(screen.getByTestId('settings-editor-theme-combobox')).toHaveTextContent('GitHub Light');
+    expect(screen.getByTestId('settings-editor-font-family-combobox')).toHaveTextContent('JetBrains Mono');
+    expect(screen.getByTestId('settings-editor-font-size-value')).toHaveTextContent('12px');
+    expect(screen.getByTestId('settings-editor-theme-combobox')).toHaveTextContent('GitHub Light');
     expect(screen.getByTestId('settings-theme-switch')).toHaveAttribute('data-state', 'unchecked');
     expect(screen.getByTestId('settings-close-to-tray-switch')).toHaveAttribute('data-state', 'unchecked');
     expect(screen.getByTestId('settings-floating-info-window-switch')).toHaveAttribute('data-state', 'unchecked');
+  });
+
+  it('renders newly downloaded Monaco font options in the settings combobox', async () => {
+    const user = userEvent.setup();
+
+    renderMenuBar();
+
+    await user.click(screen.getByTestId('menu-settings-button'));
+    await user.click(screen.getByTestId('settings-editor-font-family-combobox'));
+
+    expect(await screen.findByTestId('settings-editor-font-family-option-monaspace-neon')).toHaveTextContent('Monaspace Neon');
+    expect(screen.getByTestId('settings-editor-font-family-option-0xproto')).toHaveTextContent('0xProto');
+    expect(screen.getByTestId('settings-editor-font-family-option-julia-mono')).toHaveTextContent('JuliaMono');
   });
 
   it('keeps the menubar theme toggle wired to the shared theme action', async () => {
