@@ -34,6 +34,11 @@ const mocks = vi.hoisted(() => {
   const appHandlers = new Map<string, (...args: unknown[]) => void>();
   const browserWindowInstances: BrowserWindowInstance[] = [];
   const trayInstances: TrayInstance[] = [];
+  const appPaths = new Map<string, string>([
+    ['appData', 'C:\\Users\\maksy\\AppData\\Roaming'],
+    ['userData', 'C:\\Users\\maksy\\AppData\\Roaming\\Pristine'],
+    ['sessionData', 'C:\\Users\\maksy\\AppData\\Roaming\\Pristine\\session-data'],
+  ]);
 
   class BrowserWindowMock {
     static getAllWindows = vi.fn(() => browserWindowInstances);
@@ -126,14 +131,21 @@ const mocks = vi.hoisted(() => {
 
   return {
     appHandlers,
+    appPaths,
     browserWindowInstances,
     trayInstances,
     BrowserWindowMock,
     TrayMock,
+    mockMkdirSync: vi.fn(),
     mockWhenReady: vi.fn(() => Promise.resolve()),
     mockAppOn: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
       appHandlers.set(event, handler);
     }),
+    mockGetPath: vi.fn((name: string) => appPaths.get(name) ?? `mock-${name}`),
+    mockSetPath: vi.fn((name: string, value: string) => {
+      appPaths.set(name, value);
+    }),
+    mockGetName: vi.fn(() => 'Pristine'),
     mockQuit: vi.fn(),
     mockBuildFromTemplate: vi.fn((template: unknown[]) => ({ template })),
     mockCreateFromDataURL: vi.fn(() => ({ kind: 'native-image' })),
@@ -146,8 +158,17 @@ const mocks = vi.hoisted(() => {
   };
 });
 
+vi.mock('node:fs', () => ({
+  default: {
+    mkdirSync: (...args: unknown[]) => mocks.mockMkdirSync(...args),
+  },
+}));
+
 vi.mock('electron', () => ({
   app: {
+    getName: mocks.mockGetName,
+    getPath: mocks.mockGetPath,
+    setPath: mocks.mockSetPath,
     whenReady: mocks.mockWhenReady,
     on: mocks.mockAppOn,
     quit: mocks.mockQuit,
@@ -201,8 +222,16 @@ async function importMain(options?: {
   mocks.appHandlers.clear();
   mocks.browserWindowInstances.length = 0;
   mocks.trayInstances.length = 0;
+  mocks.appPaths.clear();
+  mocks.appPaths.set('appData', 'C:\\Users\\maksy\\AppData\\Roaming');
+  mocks.appPaths.set('userData', 'C:\\Users\\maksy\\AppData\\Roaming\\Pristine');
+  mocks.appPaths.set('sessionData', 'C:\\Users\\maksy\\AppData\\Roaming\\Pristine\\session-data');
+  mocks.mockMkdirSync.mockClear();
   mocks.mockWhenReady.mockClear();
   mocks.mockAppOn.mockClear();
+  mocks.mockGetName.mockClear();
+  mocks.mockGetPath.mockClear();
+  mocks.mockSetPath.mockClear();
   mocks.mockQuit.mockClear();
   mocks.mockBuildFromTemplate.mockClear();
   mocks.mockCreateFromDataURL.mockClear();
@@ -274,6 +303,12 @@ describe('electron main entry', () => {
 
     expect(mocks.mockRegisterAllHandlers).toHaveBeenCalledTimes(1);
     expect(mocks.mockSetProjectRoot).toHaveBeenCalledWith('C:\\Users\\maksy\\Desktop\\fpga\\retroSoC');
+    expect(mocks.mockMkdirSync).toHaveBeenCalledWith(
+      'C:\\Users\\maksy\\AppData\\Roaming\\Pristine\\dev-profile\\session-data',
+      { recursive: true },
+    );
+    expect(mocks.mockSetPath).toHaveBeenCalledWith('userData', 'C:\\Users\\maksy\\AppData\\Roaming\\Pristine\\dev-profile');
+    expect(mocks.mockSetPath).toHaveBeenCalledWith('sessionData', 'C:\\Users\\maksy\\AppData\\Roaming\\Pristine\\dev-profile\\session-data');
     expect(trayInstances).toHaveLength(1);
     expect(browserWindowInstances).toHaveLength(2);
 
@@ -335,6 +370,13 @@ describe('electron main entry', () => {
 
   it('uses macOS window chrome and loads the built index and splash files in production', async () => {
     const { browserWindowInstances } = await importMain({ platform: 'darwin' });
+
+    expect(mocks.mockMkdirSync).toHaveBeenCalledWith(
+      'C:\\Users\\maksy\\AppData\\Roaming\\Pristine\\session-data',
+      { recursive: true },
+    );
+    expect(mocks.mockSetPath).toHaveBeenCalledWith('userData', 'C:\\Users\\maksy\\AppData\\Roaming\\Pristine');
+    expect(mocks.mockSetPath).toHaveBeenCalledWith('sessionData', 'C:\\Users\\maksy\\AppData\\Roaming\\Pristine\\session-data');
 
     const splashWindow = browserWindowInstances[0];
     const mainWindow = browserWindowInstances[1];
