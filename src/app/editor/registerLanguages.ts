@@ -1,5 +1,7 @@
 import { useEffect } from 'react';
 
+const LANGUAGE_REGISTRATION_MARKER = '__pristineLanguagesRegistered';
+
 const verilogKeywords = [
   'module', 'endmodule', 'input', 'output', 'inout', 'wire', 'reg', 'logic',
   'always', 'always_ff', 'always_comb', 'always_latch', 'assign', 'begin', 'end',
@@ -106,6 +108,12 @@ export function registerEditorLanguages(monaco: any): void {
   if (!monaco) {
     return;
   }
+
+  if (monaco[LANGUAGE_REGISTRATION_MARKER] === true) {
+    return;
+  }
+
+  monaco[LANGUAGE_REGISTRATION_MARKER] = true;
 
   const languages = monaco.languages.getLanguages();
   if (!languages.find((language: any) => language.id === 'verilog')) {

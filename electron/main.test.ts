@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
 type BrowserWindowInstance = {
@@ -34,6 +35,12 @@ const mocks = vi.hoisted(() => {
   const appHandlers = new Map<string, (...args: unknown[]) => void>();
   const browserWindowInstances: BrowserWindowInstance[] = [];
   const trayInstances: TrayInstance[] = [];
+  const mockAppDataPath = 'mock-home/AppData/Roaming';
+  const appPaths = new Map<string, string>([
+    ['appData', mockAppDataPath],
+    ['userData', `${mockAppDataPath}/Pristine`],
+    ['sessionData', `${mockAppDataPath}/Pristine/session-data`],
+  ]);
 
   class BrowserWindowMock {
     static getAllWindows = vi.fn(() => browserWindowInstances);
@@ -126,14 +133,22 @@ const mocks = vi.hoisted(() => {
 
   return {
     appHandlers,
+    mockAppDataPath,
+    appPaths,
     browserWindowInstances,
     trayInstances,
     BrowserWindowMock,
     TrayMock,
+    mockMkdirSync: vi.fn(),
     mockWhenReady: vi.fn(() => Promise.resolve()),
     mockAppOn: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
       appHandlers.set(event, handler);
     }),
+    mockGetPath: vi.fn((name: string) => appPaths.get(name) ?? `mock-${name}`),
+    mockSetPath: vi.fn((name: string, value: string) => {
+      appPaths.set(name, value);
+    }),
+    mockGetName: vi.fn(() => 'Pristine'),
     mockQuit: vi.fn(),
     mockBuildFromTemplate: vi.fn((template: unknown[]) => ({ template })),
     mockCreateFromDataURL: vi.fn(() => ({ kind: 'native-image' })),
@@ -146,8 +161,17 @@ const mocks = vi.hoisted(() => {
   };
 });
 
+vi.mock('node:fs', () => ({
+  default: {
+    mkdirSync: (...args: unknown[]) => mocks.mockMkdirSync(...args),
+  },
+}));
+
 vi.mock('electron', () => ({
   app: {
+    getName: mocks.mockGetName,
+    getPath: mocks.mockGetPath,
+    setPath: mocks.mockSetPath,
     whenReady: mocks.mockWhenReady,
     on: mocks.mockAppOn,
     quit: mocks.mockQuit,
@@ -201,8 +225,16 @@ async function importMain(options?: {
   mocks.appHandlers.clear();
   mocks.browserWindowInstances.length = 0;
   mocks.trayInstances.length = 0;
+  mocks.appPaths.clear();
+  mocks.appPaths.set('appData', mocks.mockAppDataPath);
+  mocks.appPaths.set('userData', path.join(mocks.mockAppDataPath, 'Pristine'));
+  mocks.appPaths.set('sessionData', path.join(mocks.mockAppDataPath, 'Pristine', 'session-data'));
+  mocks.mockMkdirSync.mockClear();
   mocks.mockWhenReady.mockClear();
   mocks.mockAppOn.mockClear();
+  mocks.mockGetName.mockClear();
+  mocks.mockGetPath.mockClear();
+  mocks.mockSetPath.mockClear();
   mocks.mockQuit.mockClear();
   mocks.mockBuildFromTemplate.mockClear();
   mocks.mockCreateFromDataURL.mockClear();
@@ -274,6 +306,12 @@ describe('electron main entry', () => {
 
     expect(mocks.mockRegisterAllHandlers).toHaveBeenCalledTimes(1);
     expect(mocks.mockSetProjectRoot).toHaveBeenCalledWith('C:\\Users\\maksy\\Desktop\\fpga\\retroSoC');
+    expect(mocks.mockMkdirSync).toHaveBeenCalledWith(
+      path.join(mocks.mockAppDataPath, 'Pristine', 'dev-profile', 'session-data'),
+      { recursive: true },
+    );
+    expect(mocks.mockSetPath).toHaveBeenCalledWith('userData', path.join(mocks.mockAppDataPath, 'Pristine', 'dev-profile'));
+    expect(mocks.mockSetPath).toHaveBeenCalledWith('sessionData', path.join(mocks.mockAppDataPath, 'Pristine', 'dev-profile', 'session-data'));
     expect(trayInstances).toHaveLength(1);
     expect(browserWindowInstances).toHaveLength(2);
 
@@ -335,6 +373,13 @@ describe('electron main entry', () => {
 
   it('uses macOS window chrome and loads the built index and splash files in production', async () => {
     const { browserWindowInstances } = await importMain({ platform: 'darwin' });
+
+    expect(mocks.mockMkdirSync).toHaveBeenCalledWith(
+      path.join(mocks.mockAppDataPath, 'Pristine', 'session-data'),
+      { recursive: true },
+    );
+    expect(mocks.mockSetPath).toHaveBeenCalledWith('userData', path.join(mocks.mockAppDataPath, 'Pristine'));
+    expect(mocks.mockSetPath).toHaveBeenCalledWith('sessionData', path.join(mocks.mockAppDataPath, 'Pristine', 'session-data'));
 
     const splashWindow = browserWindowInstances[0];
     const mainWindow = browserWindowInstances[1];

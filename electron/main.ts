@@ -1,4 +1,5 @@
 import { app, BrowserWindow, Menu, Tray, nativeImage, screen } from 'electron';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { registerAllHandlers, setProjectRoot, setupWindowStreams } from './ipc/register.js';
@@ -19,6 +20,18 @@ let splashWindow: BrowserWindow | null = null;
 let floatingInfoWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let isQuitting = false;
+
+function configureElectronStoragePaths(): void {
+  const isDev = Boolean(process.env['VITE_DEV_SERVER_URL']);
+  const userDataPath = isDev
+    ? path.join(app.getPath('appData'), 'Pristine', 'dev-profile')
+    : path.join(app.getPath('appData'), app.getName());
+  const sessionDataPath = path.join(userDataPath, 'session-data');
+
+  fs.mkdirSync(sessionDataPath, { recursive: true });
+  app.setPath('userData', userDataPath);
+  app.setPath('sessionData', sessionDataPath);
+}
 
 function getMainWindow(): BrowserWindow | null {
   return mainWindow;
@@ -326,6 +339,7 @@ function createStartupWindows(): void {
 }
 
 setProjectRoot(process.env['PRISTINE_PROJECT_ROOT'] ?? DEFAULT_STARTUP_PROJECT_ROOT);
+configureElectronStoragePaths();
 
 // Register all IPC handlers before window creation
 registerAllHandlers(getMainWindow, setFloatingInfoWindowVisible);

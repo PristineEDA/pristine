@@ -5,8 +5,17 @@ import {
   Sun, Moon,
 } from 'lucide-react';
 import { canToggleLayoutPanels as canUseLayoutPanels } from '../../../codeViewPanels';
+import { useEditorSettings } from '../../../context/EditorSettingsContext';
 import { useWorkspace } from '../../../context/WorkspaceContext';
 import { useTheme, type Theme } from '../../../context/ThemeContext';
+import {
+  EDITOR_FONT_SIZE_CONFIG_KEY,
+  EDITOR_THEME_CONFIG_KEY,
+  editorThemeOptions,
+  getEditorThemeLabel,
+  parseEditorFontSize,
+  parseEditorTheme,
+} from '../../../editor/editorSettings';
 import {
   Menubar,
   MenubarMenu,
@@ -19,7 +28,9 @@ import { ToggleGroup, ToggleGroupItem } from '../../ui/toggle-group';
 import { Toggle } from '../../ui/toggle';
 import { Separator } from '../../ui/separator';
 import { Button } from '../../ui/button';
+import { Combobox } from '../../ui/combobox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../../ui/dialog';
+import { Slider } from '../../ui/slider';
 import { Switch } from '../../ui/switch';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../../ui/tooltip';
 import { useSidebar } from '../../ui/sidebar';
@@ -77,6 +88,14 @@ function getFloatingInfoWindowVisible(): boolean {
 
 function getConfiguredTheme(): Theme {
   return window.electronAPI?.config.get(THEME_CONFIG_KEY) === 'dark' ? 'dark' : 'light';
+}
+
+function getConfiguredEditorFontSize(): number {
+  return parseEditorFontSize(window.electronAPI?.config.get(EDITOR_FONT_SIZE_CONFIG_KEY));
+}
+
+function getConfiguredEditorTheme() {
+  return parseEditorTheme(window.electronAPI?.config.get(EDITOR_THEME_CONFIG_KEY));
 }
 
 function TooltipIconButton({
@@ -145,6 +164,12 @@ export function MenuBar({
   onToggleRightPanel,
 }: MenuBarProps) {
   const { activeView, mainContentView, setMainContentView } = useWorkspace();
+  const {
+    fontSize: editorFontSize,
+    setFontSize: setEditorFontSize,
+    setTheme: setEditorTheme,
+    theme: editorTheme,
+  } = useEditorSettings();
   const { theme, setTheme, toggleTheme } = useTheme();
   const { state: activityBarState, toggleSidebar } = useSidebar();
   const ref = useRef<HTMLDivElement>(null);
@@ -152,6 +177,8 @@ export function MenuBar({
   const [closeToTrayEnabled, setCloseToTrayEnabled] = useState(() => getConfiguredCloseAction() === 'tray');
   const [floatingInfoWindowVisible, setFloatingInfoWindowVisible] = useState(() => getFloatingInfoWindowVisible());
   const [settingsTheme, setSettingsTheme] = useState<Theme>(() => getConfiguredTheme());
+  const [settingsEditorFontSize, setSettingsEditorFontSize] = useState(() => getConfiguredEditorFontSize());
+  const [settingsEditorTheme, setSettingsEditorTheme] = useState(() => getConfiguredEditorTheme());
   const layoutIconsEnabled = canUseLayoutPanels(mainContentView, activeView);
   const activityBarToggleEnabled = mainContentView === 'code';
   const layoutIconClassName = [
@@ -173,11 +200,21 @@ export function MenuBar({
     setCloseToTrayEnabled(getConfiguredCloseAction() === 'tray');
     setFloatingInfoWindowVisible(getFloatingInfoWindowVisible());
     setSettingsTheme(getConfiguredTheme());
+    setSettingsEditorFontSize(getConfiguredEditorFontSize());
+    setSettingsEditorTheme(getConfiguredEditorTheme());
   };
 
   useEffect(() => {
     setSettingsTheme(theme);
   }, [theme]);
+
+  useEffect(() => {
+    setSettingsEditorFontSize(editorFontSize);
+  }, [editorFontSize]);
+
+  useEffect(() => {
+    setSettingsEditorTheme(editorTheme);
+  }, [editorTheme]);
 
   useEffect(() => {
     if (!settingsDialogOpen) {
@@ -202,6 +239,23 @@ export function MenuBar({
     const nextTheme = checked ? 'dark' : 'light';
     setSettingsTheme(nextTheme);
     setTheme(nextTheme);
+  };
+
+  const handleEditorFontSizeChange = (value: number[]) => {
+    const nextValue = value[0] ?? settingsEditorFontSize;
+    setSettingsEditorFontSize(nextValue);
+  };
+
+  const handleEditorFontSizeCommit = (value: number[]) => {
+    const nextValue = value[0] ?? settingsEditorFontSize;
+    setSettingsEditorFontSize(nextValue);
+    setEditorFontSize(nextValue);
+  };
+
+  const handleEditorThemeChange = (value: string) => {
+    const nextTheme = parseEditorTheme(value);
+    setSettingsEditorTheme(nextTheme);
+    setEditorTheme(nextTheme);
   };
 
   return (
@@ -468,6 +522,58 @@ export function MenuBar({
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-3">
+              <div className="rounded-md border border-border/70 bg-muted/30 px-3 py-3">
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium">Code editor font size</p>
+                    <p className="text-sm text-muted-foreground" data-testid="editor-font-size-description">
+                      Adjust the Monaco editor font size used in code tabs.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Slider
+                      aria-label="Code editor font size"
+                      data-testid="settings-editor-font-size-slider"
+                      min={10}
+                      max={24}
+                      step={1}
+                      value={[settingsEditorFontSize]}
+                      onValueChange={handleEditorFontSizeChange}
+                      onValueCommit={handleEditorFontSizeCommit}
+                    />
+                    <span
+                      className="min-w-10 text-right text-sm font-medium text-foreground"
+                      data-testid="settings-editor-font-size-value"
+                    >
+                      {settingsEditorFontSize}px
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div className="rounded-md border border-border/70 bg-muted/30 px-3 py-3">
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium">Code editor theme</p>
+                    <p className="text-sm text-muted-foreground" data-testid="editor-theme-description">
+                      Choose the Monaco color theme used for source files.
+                    </p>
+                  </div>
+                  <Combobox
+                    value={settingsEditorTheme}
+                    onValueChange={handleEditorThemeChange}
+                    options={editorThemeOptions.map((option) => ({
+                      value: option.value,
+                      label: option.label,
+                      description: option.description,
+                    }))}
+                    placeholder={getEditorThemeLabel(settingsEditorTheme)}
+                    searchPlaceholder="Search editor themes..."
+                    emptyText="No editor theme found."
+                    triggerTestId="settings-editor-theme-combobox"
+                    getOptionTestId={(value) => `settings-editor-theme-option-${value}`}
+                  />
+                </div>
+              </div>
               <div className="rounded-md border border-border/70 bg-muted/30 px-3 py-3">
                 <div className="flex items-center justify-between gap-4">
                   <div className="space-y-1">

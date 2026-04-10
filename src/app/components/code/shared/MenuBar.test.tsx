@@ -5,16 +5,34 @@ import { MenuBar } from './MenuBar';
 import { WorkspaceProvider, useWorkspace } from '../../../context/WorkspaceContext';
 import { SidebarProvider, useSidebar } from '../../ui/sidebar';
 
+const setEditorFontSizeMock = vi.fn();
+const setEditorThemeMock = vi.fn();
 const setThemeMock = vi.fn();
 const toggleThemeMock = vi.fn();
+let mockedEditorFontSize = 13;
+let mockedEditorTheme = 'dracula';
 let mockedTheme: 'light' | 'dark' = 'light';
+
+vi.mock('../../../context/EditorSettingsContext', () => ({
+  useEditorSettings: () => ({
+    fontSize: mockedEditorFontSize,
+    setFontSize: setEditorFontSizeMock,
+    setTheme: setEditorThemeMock,
+    theme: mockedEditorTheme,
+    themes: [],
+  }),
+}));
 
 vi.mock('../../../context/ThemeContext', () => ({
   useTheme: () => ({ theme: mockedTheme, setTheme: setThemeMock, toggleTheme: toggleThemeMock }),
 }));
 
 beforeEach(() => {
+  mockedEditorFontSize = 13;
+  mockedEditorTheme = 'dracula';
   mockedTheme = 'light';
+  setEditorFontSizeMock.mockReset();
+  setEditorThemeMock.mockReset();
   setThemeMock.mockReset();
   toggleThemeMock.mockReset();
   vi.mocked(window.electronAPI!.config.get).mockReset();
@@ -79,12 +97,16 @@ describe('MenuBar', () => {
     expect(window.electronAPI?.close).toHaveBeenCalledTimes(1);
   });
 
-  it('shows settings switches for theme, close-to-tray and floating info window visibility', async () => {
+  it('shows editor settings plus theme, close-to-tray and floating info window visibility', async () => {
     const user = userEvent.setup();
     vi.mocked(window.electronAPI!.config.get).mockImplementation((key: string) =>
       key === 'ui.theme'
         ? 'dark'
-        :
+        : key === 'editor.fontSize'
+          ? 18
+          : key === 'editor.theme'
+            ? 'night-owl'
+            :
       key === 'window.closeActionPreference'
         ? 'tray'
         : key === 'ui.floatingInfoWindow.visible'
@@ -97,15 +119,20 @@ describe('MenuBar', () => {
     await user.click(screen.getByTestId('menu-settings-button'));
 
     expect(await screen.findByTestId('settings-dialog')).toBeVisible();
-  expect(screen.getByTestId('settings-theme-switch')).toHaveAttribute('data-state', 'checked');
+    expect(screen.getByTestId('settings-editor-font-size-value')).toHaveTextContent('18px');
+    expect(screen.getByTestId('settings-editor-theme-combobox')).toHaveTextContent('Night Owl');
+    expect(screen.getByTestId('settings-theme-switch')).toHaveAttribute('data-state', 'checked');
     expect(screen.getByTestId('settings-close-to-tray-switch')).toHaveAttribute('data-state', 'checked');
     expect(screen.getByTestId('settings-floating-info-window-switch')).toHaveAttribute('data-state', 'checked');
 
-  await user.click(screen.getByTestId('settings-theme-switch'));
+    await user.click(screen.getByTestId('settings-editor-theme-combobox'));
+    await user.click(await screen.findByTestId('settings-editor-theme-option-github-dark'));
+    await user.click(screen.getByTestId('settings-theme-switch'));
     await user.click(screen.getByTestId('settings-close-to-tray-switch'));
     await user.click(screen.getByTestId('settings-floating-info-window-switch'));
 
-  expect(setThemeMock).toHaveBeenCalledWith('light');
+    expect(setEditorThemeMock).toHaveBeenCalledWith('github-dark');
+    expect(setThemeMock).toHaveBeenCalledWith('light');
     expect(window.electronAPI?.config.set).toHaveBeenCalledWith('window.closeActionPreference', 'quit');
     expect(window.electronAPI?.config.set).toHaveBeenCalledWith('ui.floatingInfoWindow.visible', false);
     expect(window.electronAPI?.setFloatingInfoWindowVisible).toHaveBeenCalledWith(false);
@@ -118,7 +145,11 @@ describe('MenuBar', () => {
     configGetMock.mockImplementation((key: string) =>
       key === 'ui.theme'
         ? 'dark'
-        :
+        : key === 'editor.fontSize'
+          ? 18
+          : key === 'editor.theme'
+            ? 'night-owl'
+            :
       key === 'window.closeActionPreference'
         ? 'tray'
         : key === 'ui.floatingInfoWindow.visible'
@@ -131,7 +162,9 @@ describe('MenuBar', () => {
     await user.click(screen.getByTestId('menu-settings-button'));
 
     expect(await screen.findByTestId('settings-dialog')).toBeVisible();
-  expect(screen.getByTestId('settings-theme-switch')).toHaveAttribute('data-state', 'checked');
+    expect(screen.getByTestId('settings-editor-font-size-value')).toHaveTextContent('18px');
+    expect(screen.getByTestId('settings-editor-theme-combobox')).toHaveTextContent('Night Owl');
+    expect(screen.getByTestId('settings-theme-switch')).toHaveAttribute('data-state', 'checked');
     expect(screen.getByTestId('settings-close-to-tray-switch')).toHaveAttribute('data-state', 'checked');
     expect(screen.getByTestId('settings-floating-info-window-switch')).toHaveAttribute('data-state', 'checked');
 
@@ -140,7 +173,11 @@ describe('MenuBar', () => {
     configGetMock.mockImplementation((key: string) =>
       key === 'ui.theme'
         ? 'light'
-        :
+        : key === 'editor.fontSize'
+          ? 12
+          : key === 'editor.theme'
+            ? 'github-light'
+            :
       key === 'window.closeActionPreference'
         ? 'quit'
         : key === 'ui.floatingInfoWindow.visible'
@@ -151,6 +188,8 @@ describe('MenuBar', () => {
     await user.click(screen.getByTestId('menu-settings-button'));
 
     expect(await screen.findByTestId('settings-dialog')).toBeVisible();
+  expect(screen.getByTestId('settings-editor-font-size-value')).toHaveTextContent('12px');
+  expect(screen.getByTestId('settings-editor-theme-combobox')).toHaveTextContent('GitHub Light');
     expect(screen.getByTestId('settings-theme-switch')).toHaveAttribute('data-state', 'unchecked');
     expect(screen.getByTestId('settings-close-to-tray-switch')).toHaveAttribute('data-state', 'unchecked');
     expect(screen.getByTestId('settings-floating-info-window-switch')).toHaveAttribute('data-state', 'unchecked');

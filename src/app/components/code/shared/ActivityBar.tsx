@@ -1,8 +1,7 @@
 import {
   FileCode, BugPlay, Cog, LucideLayers3, Grid2X2Plus, Hammer, Play,
-  AudioWaveform,
   // BookOpen,
-  Command,
+  Package,
   Frame,
   GalleryVerticalEnd,
   PieChart,
@@ -19,7 +18,7 @@ import {
   useSidebar,
   SidebarHeader,
 } from '../../ui/sidebar';
-import { NavTeamSwitcher } from './NavTeamSwitcher';
+import { NavDesignSwitcher } from './NavDesignSwitcher';
 import { NavMain } from './NavMain';
 import { NavProjects } from './NavProjects';
 import type { CodeView } from '../../../codeViewPanels';
@@ -36,26 +35,21 @@ const actionItems = [
 ] as const;
 
 const data = {
-  user: {
-    name: "shadcn",
-    email: "m@example.com",
-    avatar: "/avatars/shadcn.jpg",
-  },
-  teams: [
+  designs: [
     {
-      name: "Acme Inc",
+      name: "retroSoC",
       logo: GalleryVerticalEnd,
-      plan: "Enterprise",
+      plan: "SoC",
     },
     {
-      name: "Acme Corp.",
-      logo: AudioWaveform,
-      plan: "Startup",
+      name: "demo",
+      logo: Package,
+      plan: "module",
     },
     {
-      name: "Evil Corp.",
-      logo: Command,
-      plan: "Free",
+      name: "gcd",
+      logo: Package,
+      plan: "module",
     },
   ],
   navMain: [
@@ -148,7 +142,7 @@ export function ActivityBar({ activeView, onItemSelect }: ActivityBarProps) {
       side="left"
     >
       <SidebarHeader>
-        <NavTeamSwitcher teams={data.teams} />
+        <NavDesignSwitcher designs={data.designs} />
       </SidebarHeader>
       <SidebarContent>
         <NavMain items={data.navMain} activeView={activeView} onItemSelect={onItemSelect} />

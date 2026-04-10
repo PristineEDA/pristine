@@ -196,6 +196,74 @@ async function readTerminalThemeSnapshot(window: Awaited<ReturnType<typeof launc
   });
 }
 
+async function readMonacoAppearanceSnapshot(
+  window: Awaited<ReturnType<typeof launchApp>>['window'],
+  expectedColors?: { background?: string; lineNumber?: string },
+) {
+  return window.evaluate(({ background, lineNumber }) => {
+    type StyleLike = {
+      backgroundColor: string;
+      color: string;
+      fontFamily: string;
+      fontSize: string;
+    };
+
+    type ElementLike = {
+      querySelector: (selectors: string) => ElementLike | null;
+      remove: () => void;
+      style: Record<string, string>;
+    };
+
+    const browserGlobal = globalThis as typeof globalThis & {
+      document: {
+        body: { appendChild: (node: ElementLike) => void };
+        createElement: (tagName: string) => ElementLike;
+        querySelector: (selectors: string) => ElementLike | null;
+      };
+      getComputedStyle: (element: ElementLike) => StyleLike;
+    };
+
+    const editorRoot = browserGlobal.document.querySelector('.monaco-editor');
+
+    if (!editorRoot) {
+      return null;
+    }
+
+    const resolveCssColor = (property: 'backgroundColor' | 'color', value?: string) => {
+      if (!value) {
+        return null;
+      }
+
+      const probe = browserGlobal.document.createElement('div');
+      probe.style[property] = value;
+      browserGlobal.document.body.appendChild(probe);
+      const normalizedColor = browserGlobal.getComputedStyle(probe)[property];
+      probe.remove();
+
+      return normalizedColor;
+    };
+
+    const backgroundElement =
+      editorRoot.querySelector('.monaco-editor-background') ??
+      editorRoot.querySelector('.margin') ??
+      editorRoot;
+    const lineNumberElement = editorRoot.querySelector('.margin .line-numbers') ?? editorRoot.querySelector('.line-numbers');
+    const textLayer =
+      editorRoot.querySelector('.view-lines .view-line') ??
+      editorRoot.querySelector('.view-lines') ??
+      editorRoot;
+
+    return {
+      backgroundColor: browserGlobal.getComputedStyle(backgroundElement).backgroundColor,
+      expectedBackgroundColor: resolveCssColor('backgroundColor', background),
+      expectedLineNumberColor: resolveCssColor('color', lineNumber),
+      fontFamily: browserGlobal.getComputedStyle(textLayer).fontFamily,
+      fontSize: browserGlobal.getComputedStyle(textLayer).fontSize,
+      lineNumberColor: lineNumberElement ? browserGlobal.getComputedStyle(lineNumberElement).color : null,
+    };
+  }, expectedColors ?? {});
+}
+
 async function clearRememberedCloseBehavior(window: Awaited<ReturnType<typeof launchApp>>['window']) {
   await window.evaluate(async () => {
     const browserGlobal = globalThis as typeof globalThis & {
@@ -253,6 +321,26 @@ async function setSwitchChecked(locator: Locator, checked: boolean) {
     await locator.click();
     await expect(locator).toHaveAttribute('data-state', checked ? 'checked' : 'unchecked');
   }
+}
+
+async function selectComboboxOption(
+  window: Awaited<ReturnType<typeof launchApp>>['window'],
+  triggerTestId: string,
+  optionTestId: string,
+) {
+  await window.getByTestId(triggerTestId).click();
+  await expect(window.getByTestId(optionTestId)).toBeVisible();
+  await window.getByTestId(optionTestId).click();
+}
+
+async function setEditorFontSizePreset(
+  window: Awaited<ReturnType<typeof launchApp>>['window'],
+  preset: 'min' | 'max',
+) {
+  const sliderThumb = window.locator('[data-testid="settings-editor-font-size-slider"] [role="slider"]');
+  await expect(sliderThumb).toBeVisible();
+  await sliderThumb.focus();
+  await sliderThumb.press(preset === 'max' ? 'End' : 'Home');
 }
 
 async function requestWindowClose(window: Awaited<ReturnType<typeof launchApp>>['window']) {
@@ -1364,6 +1452,137 @@ test('settings theme switch persists across app relaunch', async () => {
 
   await secondWindow.getByTestId('settings-close-button').click();
   await expect(secondWindow.getByTestId('settings-dialog')).toHaveCount(0);
+
+  await secondApp.close();
+});
+
+test('code editor settings persist across app relaunch', async () => {
+  test.slow();
+
+  const firstLaunch = await launchApp();
+  const { app: firstApp, window: firstWindow } = firstLaunch;
+
+  await ensureExplorerVisible(firstWindow);
+  await openNestedWorkspaceFile(firstWindow, [
+    'file-tree-node-rtl',
+    'file-tree-node-rtl_core',
+    'file-tree-node-rtl_core_reg_file_v',
+  ]);
+  await expect(firstWindow.getByTestId('editor-tab-rtl/core/reg_file.v')).toBeVisible();
+  await expect(firstWindow.locator('.monaco-editor .view-lines')).toContainText('module reg_file');
+
+  await firstWindow.getByTestId('menu-settings-button').click();
+  await expect(firstWindow.getByTestId('settings-dialog')).toBeVisible();
+
+  await selectComboboxOption(
+    firstWindow,
+    'settings-editor-theme-combobox',
+    'settings-editor-theme-option-github-dark',
+  );
+  await setEditorFontSizePreset(firstWindow, 'max');
+
+  await expect.poll(async () => readConfigValue(firstWindow, 'editor.theme')).toBe('github-dark');
+  await expect.poll(async () => readConfigValue(firstWindow, 'editor.fontSize')).toBe(24);
+  await expect(firstWindow.getByTestId('settings-editor-font-size-value')).toHaveText('24px');
+  await expect(firstWindow.getByTestId('settings-editor-theme-combobox')).toContainText('GitHub Dark');
+
+  await firstWindow.getByTestId('settings-close-button').click();
+  await expect(firstWindow.getByTestId('settings-dialog')).toHaveCount(0);
+
+  await expect
+    .poll(async () => {
+      const snapshot = await readMonacoAppearanceSnapshot(firstWindow, {
+        background: '#0d1117',
+        lineNumber: '#8b949e',
+      });
+
+      return snapshot
+        ? {
+            fontFamilyHasMono: snapshot.fontFamily.includes('JetBrains Mono'),
+            fontSize: snapshot.fontSize,
+            matchesBackground: snapshot.backgroundColor === snapshot.expectedBackgroundColor,
+          }
+        : null;
+    })
+    .toEqual({
+      fontFamilyHasMono: true,
+      fontSize: '24px',
+      matchesBackground: true,
+    });
+
+  await firstApp.close();
+
+  const secondLaunch = await launchApp();
+  const { app: secondApp, window: secondWindow } = secondLaunch;
+
+  await ensureExplorerVisible(secondWindow);
+  await openNestedWorkspaceFile(secondWindow, [
+    'file-tree-node-rtl',
+    'file-tree-node-rtl_core',
+    'file-tree-node-rtl_core_reg_file_v',
+  ]);
+  await expect(secondWindow.getByTestId('editor-tab-rtl/core/reg_file.v')).toBeVisible();
+  await expect(secondWindow.locator('.monaco-editor .view-lines')).toContainText('module reg_file');
+
+  await expect
+    .poll(async () => {
+      const snapshot = await readMonacoAppearanceSnapshot(secondWindow, {
+        background: '#0d1117',
+        lineNumber: '#8b949e',
+      });
+
+      return snapshot
+        ? {
+            fontFamilyHasMono: snapshot.fontFamily.includes('JetBrains Mono'),
+            fontSize: snapshot.fontSize,
+            matchesBackground: snapshot.backgroundColor === snapshot.expectedBackgroundColor,
+          }
+        : null;
+    })
+    .toEqual({
+      fontFamilyHasMono: true,
+      fontSize: '24px',
+      matchesBackground: true,
+    });
+
+  await secondWindow.getByTestId('menu-settings-button').click();
+  await expect(secondWindow.getByTestId('settings-dialog')).toBeVisible();
+  await expect(secondWindow.getByTestId('settings-editor-font-size-value')).toHaveText('24px');
+  await expect(secondWindow.getByTestId('settings-editor-theme-combobox')).toContainText('GitHub Dark');
+
+  await setEditorFontSizePreset(secondWindow, 'min');
+  await selectComboboxOption(
+    secondWindow,
+    'settings-editor-theme-combobox',
+    'settings-editor-theme-option-github-light',
+  );
+
+  await expect.poll(async () => readConfigValue(secondWindow, 'editor.fontSize')).toBe(10);
+  await expect.poll(async () => readConfigValue(secondWindow, 'editor.theme')).toBe('github-light');
+
+  await secondWindow.getByTestId('settings-close-button').click();
+  await expect(secondWindow.getByTestId('settings-dialog')).toHaveCount(0);
+
+  await expect
+    .poll(async () => {
+      const snapshot = await readMonacoAppearanceSnapshot(secondWindow, {
+        background: '#ffffff',
+        lineNumber: '#6e7781',
+      });
+
+      return snapshot
+        ? {
+            fontFamilyHasMono: snapshot.fontFamily.includes('JetBrains Mono'),
+            fontSize: snapshot.fontSize,
+            matchesBackground: snapshot.backgroundColor === snapshot.expectedBackgroundColor,
+          }
+        : null;
+    })
+    .toEqual({
+      fontFamilyHasMono: true,
+      fontSize: '10px',
+      matchesBackground: true,
+    });
 
   await secondApp.close();
 });

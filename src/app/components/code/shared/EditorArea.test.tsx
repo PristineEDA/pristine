@@ -4,6 +4,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { EditorArea } from './EditorArea';
 import { draculaThemeDefinition } from '../../../editor/draculaTheme';
 
+vi.mock('../../../context/EditorSettingsContext', () => ({
+  useEditorSettings: () => ({
+    fontSize: 13,
+    setFontSize: vi.fn(),
+    setTheme: vi.fn(),
+    theme: 'dracula',
+    themes: [],
+  }),
+}));
+
 const { mockEditorInstance, mockModel, mockMonaco, mockEditorComponent } = vi.hoisted(() => {
   const editorInstance = {
     onDidChangeCursorPosition: vi.fn((callback: (event: { position: { lineNumber: number; column: number } }) => void) => {
@@ -67,6 +77,8 @@ describe('EditorArea', () => {
     const electronApi = window.electronAPI!;
 
     vi.clearAllMocks();
+    delete (mockMonaco as any).__pristineLanguagesRegistered;
+    delete (mockMonaco as any).__pristineThemesRegistered;
     mockMonaco.languages.getLanguages.mockReturnValue([]);
     mockMonaco.editor.getModels.mockReturnValue([mockModel]);
     vi.mocked(electronApi.fs.readFile).mockResolvedValue('// fixture content');
