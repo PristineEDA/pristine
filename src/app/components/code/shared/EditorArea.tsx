@@ -10,7 +10,11 @@ import type { SplitDirection } from '../../../editor/editorLayout';
 import { EmptyProject } from './EmptyProject';
 import { TooltipIconButton } from '../../ui/tooltip-icon-button';
 
-const MonacoEditorPane = lazy(() => import('./MonacoEditorPane').then((module) => ({ default: module.MonacoEditorPane })));
+function loadMonacoEditorPane() {
+  return import('./MonacoEditorPane');
+}
+
+const MonacoEditorPane = lazy(() => loadMonacoEditorPane().then((module) => ({ default: module.MonacoEditorPane })));
 
 interface Tab {
   id: string;
@@ -176,6 +180,30 @@ export function EditorArea({
     editorRef.current.setPosition({ lineNumber: jumpToLine, column: 1 });
     editorRef.current.focus();
   }, [jumpToLine, editorRef]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    if ('requestIdleCallback' in window) {
+      const idleCallbackId = window.requestIdleCallback(() => {
+        void loadMonacoEditorPane();
+      });
+
+      return () => {
+        window.cancelIdleCallback(idleCallbackId);
+      };
+    }
+
+    const timeoutId = globalThis.setTimeout(() => {
+      void loadMonacoEditorPane();
+    }, 150);
+
+    return () => {
+      globalThis.clearTimeout(timeoutId);
+    };
+  }, []);
 
   if (tabs.length === 0) {
     return (

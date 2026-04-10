@@ -2,9 +2,10 @@ import Editor, { useMonaco } from '@monaco-editor/react';
 import { useEffect } from 'react';
 import { useProblemsList } from '../../../../data/mockDataLoader';
 import { IDE_MONO_FONT_FAMILY } from '../../../editor/appearance';
-import { defineDraculaTheme } from '../../../editor/draculaTheme';
+import { registerEditorThemes } from '../../../editor/monacoThemes';
 import { useRegisterEditorLanguages } from '../../../editor/registerLanguages';
 import { getEditorLanguage } from '../../../workspace/workspaceFiles';
+import { useEditorSettings } from '../../../context/EditorSettingsContext';
 
 interface MonacoEditorPaneProps {
   activeTabId: string;
@@ -29,6 +30,7 @@ export function MonacoEditorPane({
 }: MonacoEditorPaneProps) {
   const monaco = useMonaco();
   const problemsList = useProblemsList();
+  const { fontSize, theme } = useEditorSettings();
 
   useRegisterEditorLanguages(monaco);
 
@@ -71,9 +73,9 @@ export function MonacoEditorPane({
         height="100%"
         language={getEditorLanguage(activeTabId)}
         value={code}
-        theme="dracula"
+        theme={theme}
         beforeMount={(nextMonaco) => {
-          defineDraculaTheme(nextMonaco);
+          registerEditorThemes(nextMonaco);
         }}
         onMount={(editor) => {
           editorRef.current = editor;
@@ -86,7 +88,7 @@ export function MonacoEditorPane({
           onContentChange?.(value ?? '');
         }}
         options={{
-          fontSize: 13,
+          fontSize,
           fontFamily: IDE_MONO_FONT_FAMILY,
           fontLigatures: true,
           lineNumbers: 'on',

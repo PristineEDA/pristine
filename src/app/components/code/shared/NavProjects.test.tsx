@@ -47,7 +47,13 @@ describe('NavProjects', () => {
     renderNavProjects();
 
     const moreButtons = screen.getAllByRole('button', { name: 'More' });
-    await user.click(moreButtons[0]);
+    const firstMoreButton = moreButtons[0];
+
+    if (!firstMoreButton) {
+      throw new Error('Expected at least one project action trigger');
+    }
+
+    await user.click(firstMoreButton);
 
     expect(await screen.findByRole('menuitem', { name: /view project/i })).toBeInTheDocument();
     expect(screen.getByRole('menuitem', { name: /share project/i })).toBeInTheDocument();

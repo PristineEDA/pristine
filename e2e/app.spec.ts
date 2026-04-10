@@ -255,6 +255,26 @@ async function setSwitchChecked(locator: Locator, checked: boolean) {
   }
 }
 
+async function selectComboboxOption(
+  window: Awaited<ReturnType<typeof launchApp>>['window'],
+  triggerTestId: string,
+  optionTestId: string,
+) {
+  await window.getByTestId(triggerTestId).click();
+  await expect(window.getByTestId(optionTestId)).toBeVisible();
+  await window.getByTestId(optionTestId).click();
+}
+
+async function setEditorFontSizePreset(
+  window: Awaited<ReturnType<typeof launchApp>>['window'],
+  preset: 'min' | 'max',
+) {
+  const sliderThumb = window.locator('[data-testid="settings-editor-font-size-slider"] [role="slider"]');
+  await expect(sliderThumb).toBeVisible();
+  await sliderThumb.focus();
+  await sliderThumb.press(preset === 'max' ? 'End' : 'Home');
+}
+
 async function requestWindowClose(window: Awaited<ReturnType<typeof launchApp>>['window']) {
   await window.getByTestId('window-control-close').click();
 }
@@ -1361,6 +1381,56 @@ test('settings theme switch persists across app relaunch', async () => {
     isDark: false,
     stored: 'light',
   });
+
+  await secondWindow.getByTestId('settings-close-button').click();
+  await expect(secondWindow.getByTestId('settings-dialog')).toHaveCount(0);
+
+  await secondApp.close();
+});
+
+test('code editor settings persist across app relaunch', async () => {
+  test.slow();
+
+  const firstLaunch = await launchApp();
+  const { app: firstApp, window: firstWindow } = firstLaunch;
+
+  await firstWindow.getByTestId('menu-settings-button').click();
+  await expect(firstWindow.getByTestId('settings-dialog')).toBeVisible();
+
+  await selectComboboxOption(
+    firstWindow,
+    'settings-editor-theme-combobox',
+    'settings-editor-theme-option-github-dark',
+  );
+  await setEditorFontSizePreset(firstWindow, 'max');
+
+  await expect.poll(async () => readConfigValue(firstWindow, 'editor.theme')).toBe('github-dark');
+  await expect.poll(async () => readConfigValue(firstWindow, 'editor.fontSize')).toBe(24);
+  await expect(firstWindow.getByTestId('settings-editor-font-size-value')).toHaveText('24px');
+  await expect(firstWindow.getByTestId('settings-editor-theme-combobox')).toContainText('GitHub Dark');
+
+  await firstWindow.getByTestId('settings-close-button').click();
+  await expect(firstWindow.getByTestId('settings-dialog')).toHaveCount(0);
+
+  await firstApp.close();
+
+  const secondLaunch = await launchApp();
+  const { app: secondApp, window: secondWindow } = secondLaunch;
+
+  await secondWindow.getByTestId('menu-settings-button').click();
+  await expect(secondWindow.getByTestId('settings-dialog')).toBeVisible();
+  await expect(secondWindow.getByTestId('settings-editor-font-size-value')).toHaveText('24px');
+  await expect(secondWindow.getByTestId('settings-editor-theme-combobox')).toContainText('GitHub Dark');
+
+  await setEditorFontSizePreset(secondWindow, 'min');
+  await selectComboboxOption(
+    secondWindow,
+    'settings-editor-theme-combobox',
+    'settings-editor-theme-option-dracula',
+  );
+
+  await expect.poll(async () => readConfigValue(secondWindow, 'editor.fontSize')).toBe(10);
+  await expect.poll(async () => readConfigValue(secondWindow, 'editor.theme')).toBe('dracula');
 
   await secondWindow.getByTestId('settings-close-button').click();
   await expect(secondWindow.getByTestId('settings-dialog')).toHaveCount(0);
