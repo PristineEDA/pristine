@@ -23,9 +23,12 @@ let isQuitting = false;
 
 function configureElectronStoragePaths(): void {
   const isDev = Boolean(process.env['VITE_DEV_SERVER_URL']);
-  const userDataPath = isDev
-    ? path.join(app.getPath('appData'), 'Pristine', 'dev-profile')
-    : path.join(app.getPath('appData'), app.getName());
+  const configuredUserDataPath = process.env['PRISTINE_USER_DATA_PATH'];
+  const userDataPath = configuredUserDataPath ?? (
+    isDev
+      ? path.join(app.getPath('appData'), 'Pristine', 'dev-profile')
+      : path.join(app.getPath('appData'), app.getName())
+  );
   const sessionDataPath = path.join(userDataPath, 'session-data');
 
   fs.mkdirSync(sessionDataPath, { recursive: true });

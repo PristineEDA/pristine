@@ -214,11 +214,13 @@ vi.mock('./ipc/config.js', () => ({
 const originalPlatform = process.platform;
 const originalDevServerUrl = process.env.VITE_DEV_SERVER_URL;
 const originalProjectRoot = process.env.PRISTINE_PROJECT_ROOT;
+const originalUserDataPath = process.env.PRISTINE_USER_DATA_PATH;
 
 async function importMain(options?: {
   platform?: NodeJS.Platform;
   devServerUrl?: string;
   projectRoot?: string;
+  userDataPath?: string;
   configValues?: Record<string, unknown>;
 }) {
   vi.resetModules();
@@ -259,6 +261,12 @@ async function importMain(options?: {
     delete process.env.PRISTINE_PROJECT_ROOT;
   }
 
+  if (options?.userDataPath) {
+    process.env.PRISTINE_USER_DATA_PATH = options.userDataPath;
+  } else {
+    delete process.env.PRISTINE_USER_DATA_PATH;
+  }
+
   Object.defineProperty(process, 'platform', {
     value: options?.platform ?? 'win32',
   });
@@ -295,7 +303,26 @@ describe('electron main entry', () => {
       delete process.env.PRISTINE_PROJECT_ROOT;
     }
 
+    if (originalUserDataPath) {
+      process.env.PRISTINE_USER_DATA_PATH = originalUserDataPath;
+    } else {
+      delete process.env.PRISTINE_USER_DATA_PATH;
+    }
+
     Object.defineProperty(process, 'platform', { value: originalPlatform });
+  });
+
+  it('uses the configured user data path override when provided', async () => {
+    const userDataPath = path.join(mocks.mockAppDataPath, 'Pristine', 'e2e-profile');
+
+    await importMain({ userDataPath });
+
+    expect(mocks.mockMkdirSync).toHaveBeenCalledWith(
+      path.join(userDataPath, 'session-data'),
+      { recursive: true },
+    );
+    expect(mocks.mockSetPath).toHaveBeenCalledWith('userData', userDataPath);
+    expect(mocks.mockSetPath).toHaveBeenCalledWith('sessionData', path.join(userDataPath, 'session-data'));
   });
 
   it('registers handlers, creates tray and startup windows, and loads the dev server when available', async () => {

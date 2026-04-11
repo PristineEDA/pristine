@@ -137,7 +137,10 @@ function EditorGroupLeaf({
   dragState: DragState | null;
 }) {
   const {
+    clearCursorRestoreRequest,
     editorGroups,
+    getCursorRestoreRequest,
+    getStoredCursorPosition,
     setActiveTabIdInGroup,
     pinTabInGroup,
     closeFileInGroup,
@@ -158,6 +161,8 @@ function EditorGroupLeaf({
   }
 
   const showFocusRing = focused && group.tabs.length > 0;
+  const activeCursorPosition = group.activeTabId ? getStoredCursorPosition(group.id, group.activeTabId) : undefined;
+  const cursorRestoreRequest = getCursorRestoreRequest(group.id);
 
   return (
     <div
@@ -197,10 +202,20 @@ function EditorGroupLeaf({
         onTabClose={(tabId) => closeFileInGroup(group.id, tabId)}
         onTabPin={(tabId) => pinTabInGroup(group.id, tabId)}
         editorRef={editorRef}
+        cursorPosition={activeCursorPosition}
+        cursorRestoreRequest={cursorRestoreRequest}
+        onCursorRestoreRequestConsumed={(token) => clearCursorRestoreRequest(group.id, token)}
         jumpToLine={focused ? jumpToLine : undefined}
-        onCursorChange={(line, col) => setCursorPos(line, col, group.id)}
+        onCursorChange={(line, col) => {
+          if (!group.activeTabId) {
+            return;
+          }
+
+          setCursorPos(line, col, group.id, group.activeTabId);
+        }}
         onSplitEditor={(direction) => splitGroup(group.id, direction)}
         onFocus={() => onFocus(group.id)}
+        focused={focused}
         onTabDragStart={onDragStart}
         onTabDragEnd={onDragEnd}
         contentCache={fileContents}

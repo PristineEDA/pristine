@@ -13,7 +13,11 @@ import {
   type MainContentView,
   type PanelVisibilityState,
 } from '../codeViewPanels';
-import { useWorkspaceEditorState } from './useWorkspaceEditorState';
+import {
+  useWorkspaceEditorState,
+  type CursorRestoreRequest,
+  type EditorSelectionSnapshot,
+} from './useWorkspaceEditorState';
 import { useWorkspaceFileStore } from './useWorkspaceFileStore';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -32,6 +36,7 @@ interface WorkspaceState {
   editorLayout: EditorLayoutNode | null;
   focusedGroupId: string | null;
   focusGroup: (groupId: string) => void;
+  focusActiveEditor: (groupId?: string) => void;
   splitGroup: (groupId: string, direction?: 'horizontal' | 'vertical') => void;
   moveTab: (sourceGroupId: string, tabId: string, targetGroupId: string, position: EditorDropPosition) => void;
 
@@ -53,7 +58,12 @@ interface WorkspaceState {
 
   cursorLine: number;
   cursorCol: number;
-  setCursorPos: (line: number, col: number, groupId?: string) => void;
+  setCursorPos: (line: number, col: number, groupId?: string, fileId?: string) => void;
+  getStoredCursorPosition: (groupId: string, fileId: string) => { line: number; col: number } | undefined;
+  getCursorRestoreRequest: (groupId: string) => CursorRestoreRequest | undefined;
+  clearCursorRestoreRequest: (groupId: string, token: number) => void;
+  captureEditorSelectionSnapshot: (groupId?: string, fileId?: string) => EditorSelectionSnapshot | null;
+  restoreEditorSelection: (snapshot: EditorSelectionSnapshot) => void;
 
   showLeftPanel: boolean;
   setShowLeftPanel: (show: boolean) => void;
@@ -122,6 +132,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       editorLayout: editorWorkspace.editorLayout,
       focusedGroupId: editorWorkspace.focusedGroupId,
       focusGroup: editorWorkspace.focusGroup,
+      focusActiveEditor: editorWorkspace.focusActiveEditor,
       splitGroup: editorWorkspace.splitGroup,
       moveTab: editorWorkspace.moveTab,
       tabs: editorWorkspace.tabs,
@@ -141,6 +152,11 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       cursorLine: editorWorkspace.cursorLine,
       cursorCol: editorWorkspace.cursorCol,
       setCursorPos: editorWorkspace.setCursorPos,
+      getStoredCursorPosition: editorWorkspace.getStoredCursorPosition,
+      getCursorRestoreRequest: editorWorkspace.getCursorRestoreRequest,
+      clearCursorRestoreRequest: editorWorkspace.clearCursorRestoreRequest,
+      captureEditorSelectionSnapshot: editorWorkspace.captureEditorSelectionSnapshot,
+      restoreEditorSelection: editorWorkspace.restoreEditorSelection,
       showLeftPanel: visiblePanelState.showLeftPanel,
       setShowLeftPanel: (show) => setPanelStateForActiveView({ showLeftPanel: show }),
       showBottomPanel: visiblePanelState.showBottomPanel,

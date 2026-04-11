@@ -7,6 +7,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const fixtureWorkspace = path.join(__dirname, '..', 'test', 'fixtures', 'workspace');
 const releaseRoot = path.join(__dirname, '..', 'release');
 
+function getE2EUserDataPath() {
+  return test.info().outputPath('electron-user-data');
+}
+
 async function resolveStartupWindows(app: Awaited<ReturnType<typeof electron.launch>>) {
   await expect.poll(() => app.windows().length, {
     timeout: 10000,
@@ -75,6 +79,7 @@ async function launchApp() {
       ...process.env,
       PRISTINE_E2E: '1',
       PRISTINE_PROJECT_ROOT: fixtureWorkspace,
+      PRISTINE_USER_DATA_PATH: getE2EUserDataPath(),
     },
   });
 
@@ -94,6 +99,7 @@ async function launchPackagedWindowsApp() {
       ...process.env,
       PRISTINE_E2E: '1',
       PRISTINE_PROJECT_ROOT: fixtureWorkspace,
+      PRISTINE_USER_DATA_PATH: getE2EUserDataPath(),
     },
   });
 
@@ -102,10 +108,23 @@ async function launchPackagedWindowsApp() {
   return { app, window, splashWindow };
 }
 
-async function openNestedWorkspaceFile(window: Awaited<ReturnType<typeof launchApp>>['window'], pathTestIds: string[]) {
-  for (const testId of pathTestIds) {
+async function openNestedWorkspaceFile(
+  window: Awaited<ReturnType<typeof launchApp>>['window'],
+  pathTestIds: string[],
+  options?: { finalAction?: 'click' | 'dblclick' },
+) {
+  const finalAction = options?.finalAction ?? 'click';
+
+  for (const [index, testId] of pathTestIds.entries()) {
     const node = window.getByTestId(testId);
     await expect(node).toBeVisible();
+    const isLastNode = index === pathTestIds.length - 1;
+
+    if (isLastNode && finalAction === 'dblclick') {
+      await node.dblclick();
+      continue;
+    }
+
     await node.click();
   }
 }
@@ -262,6 +281,33 @@ async function readMonacoAppearanceSnapshot(
       lineNumberColor: lineNumberElement ? browserGlobal.getComputedStyle(lineNumberElement).color : null,
     };
   }, expectedColors ?? {});
+}
+
+async function focusMonacoEditor(window: Awaited<ReturnType<typeof launchApp>>['window']) {
+  const editor = window.locator('.monaco-editor');
+  await expect(editor).toBeVisible();
+  await editor.click({ position: { x: 24, y: 12 } });
+}
+
+async function moveMonacoCursor(
+  window: Awaited<ReturnType<typeof launchApp>>['window'],
+  movement: { down?: number; right?: number },
+) {
+  await focusMonacoEditor(window);
+  await window.keyboard.press('Control+Home');
+  await window.keyboard.press('Home');
+
+  for (let index = 0; index < (movement.down ?? 0); index += 1) {
+    await window.keyboard.press('ArrowDown');
+  }
+
+  for (let index = 0; index < (movement.right ?? 0); index += 1) {
+    await window.keyboard.press('ArrowRight');
+  }
+}
+
+function getCursorStatus(window: Awaited<ReturnType<typeof launchApp>>['window']) {
+  return window.getByText(/^Ln \d+, Col \d+$/);
 }
 
 async function clearRememberedCloseBehavior(window: Awaited<ReturnType<typeof launchApp>>['window']) {
@@ -917,6 +963,70 @@ test('ctrl+p quick open escape closes the palette and reopening resets the query
   await expect(reopenedInput).toBeFocused();
   await expect(reopenedInput).toHaveValue('');
   await expect(window.getByTestId('quick-open-result-README_md')).toBeVisible();
+
+  await app.close();
+});
+
+test('monaco restores cursor position across file switches and tab reopen while new files start at line 1 column 1', async () => {
+  const { app, window } = await launchApp();
+
+  await ensureExplorerVisible(window);
+  await openNestedWorkspaceFile(window, [
+    'file-tree-node-rtl',
+    'file-tree-node-rtl_core',
+    'file-tree-node-rtl_core_reg_file_v',
+  ], { finalAction: 'dblclick' });
+
+  await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toBeVisible();
+  await expect(getCursorStatus(window)).toHaveText('Ln 1, Col 1');
+
+  await moveMonacoCursor(window, { down: 3, right: 4 });
+  await expect(getCursorStatus(window)).toHaveText('Ln 4, Col 5');
+
+  await window.getByTestId('file-tree-node-README_md').dblclick();
+  await expect(window.getByTestId('editor-tab-README.md')).toBeVisible();
+  await expect(getCursorStatus(window)).toHaveText('Ln 1, Col 1');
+
+  await window.getByTestId('editor-tab-rtl/core/reg_file.v').click();
+  await expect(getCursorStatus(window)).toHaveText('Ln 4, Col 5');
+
+  await window.getByTestId('editor-tab-close-rtl/core/reg_file.v').click();
+  await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toHaveCount(0);
+
+  await window.getByTestId('file-tree-node-rtl_core_reg_file_v').dblclick();
+  await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toBeVisible();
+  await expect(getCursorStatus(window)).toHaveText('Ln 4, Col 5');
+
+  await app.close();
+});
+
+test('ctrl+p quick open escape restores the previous editor cursor position and monaco focus', async () => {
+  const { app, window } = await launchApp();
+
+  await ensureExplorerVisible(window);
+  await openNestedWorkspaceFile(window, [
+    'file-tree-node-rtl',
+    'file-tree-node-rtl_core',
+    'file-tree-node-rtl_core_reg_file_v',
+  ]);
+
+  await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toBeVisible();
+  await moveMonacoCursor(window, { down: 2, right: 6 });
+  await expect(getCursorStatus(window)).toHaveText('Ln 3, Col 7');
+
+  await window.keyboard.press('Control+P');
+  const quickOpenInput = window.getByTestId('quick-open-input');
+  await expect(quickOpenInput).toBeFocused();
+
+  await quickOpenInput.fill('read');
+  await quickOpenInput.press('Escape');
+
+  await expect(window.getByTestId('quick-open-overlay')).toHaveCount(0);
+  await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toHaveClass(/bg-background/);
+  await expect(getCursorStatus(window)).toHaveText('Ln 3, Col 7');
+
+  await window.keyboard.press('ArrowDown');
+  await expect(getCursorStatus(window)).toHaveText('Ln 4, Col 7');
 
   await app.close();
 });

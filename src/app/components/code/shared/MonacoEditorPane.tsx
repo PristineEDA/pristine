@@ -1,5 +1,5 @@
 import Editor, { useMonaco } from '@monaco-editor/react';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useProblemsList } from '../../../../data/mockDataLoader';
 import { getEditorFontFamilyStack } from '../../../editor/editorSettings';
 import { registerEditorThemes } from '../../../editor/monacoThemes';
@@ -11,6 +11,7 @@ interface MonacoEditorPaneProps {
   activeTabId: string;
   code: string;
   editorRef: React.MutableRefObject<any>;
+  onActiveModelReady?: (fileId: string) => void;
   onCursorChange?: (line: number, col: number) => void;
   onContentChange?: (value: string) => void;
   onEditorMount?: (editor: any) => void;
@@ -22,6 +23,7 @@ export function MonacoEditorPane({
   activeTabId,
   code,
   editorRef,
+  onActiveModelReady,
   onCursorChange,
   onContentChange,
   onEditorMount,
@@ -32,6 +34,16 @@ export function MonacoEditorPane({
   const problemsList = useProblemsList();
   const { fontFamily, fontSize, theme } = useEditorSettings();
   const editorFontFamily = getEditorFontFamilyStack(fontFamily);
+  const onCursorChangeRef = useRef(onCursorChange);
+  const canPropagateCursorChangesRef = useRef(true);
+
+  useEffect(() => {
+    onCursorChangeRef.current = onCursorChange;
+  }, [onCursorChange]);
+
+  useEffect(() => {
+    canPropagateCursorChangesRef.current = false;
+  }, [activeTabId]);
 
   useRegisterEditorLanguages(monaco);
 
@@ -77,6 +89,14 @@ export function MonacoEditorPane({
     monaco?.editor.remeasureFonts?.();
   }, [editorFontFamily, editorRef, fontSize, monaco]);
 
+  useEffect(() => {
+    if (!activeTabId || !editorRef.current) {
+      return;
+    }
+
+    onActiveModelReady?.(activeTabId);
+  }, [activeTabId, editorRef, onActiveModelReady]);
+
   return (
     <div className="relative flex-1 overflow-hidden bg-background">
       {showDragInteractionShield && (
@@ -89,6 +109,8 @@ export function MonacoEditorPane({
       <Editor
         height="100%"
         language={getEditorLanguage(activeTabId)}
+        path={activeTabId}
+        saveViewState={false}
         value={code}
         theme={theme}
         beforeMount={(nextMonaco) => {
@@ -97,8 +119,26 @@ export function MonacoEditorPane({
         onMount={(editor) => {
           editorRef.current = editor;
           onEditorMount?.(editor);
+          editor.onDidFocusEditorText?.(() => {
+            canPropagateCursorChangesRef.current = true;
+          });
           editor.onDidChangeCursorPosition((event: any) => {
-            onCursorChange?.(event.position.lineNumber, event.position.column);
+            if (!canPropagateCursorChangesRef.current) {
+              return;
+            }
+
+            const editorDomNode = editor.getDomNode?.();
+            const activeElement = editorDomNode?.ownerDocument?.activeElement;
+
+            if (editorDomNode && activeElement && !editorDomNode.contains(activeElement)) {
+              return;
+            }
+
+            if (typeof editor.hasTextFocus === 'function' && !editor.hasTextFocus()) {
+              return;
+            }
+
+            onCursorChangeRef.current?.(event.position.lineNumber, event.position.column);
           });
         }}
         onChange={(value) => {
