@@ -1,10 +1,12 @@
-import { spawn } from 'node:child_process'
-import { createWriteStream } from 'node:fs'
+import { createReadStream, createWriteStream } from 'node:fs'
 import { access, copyFile, mkdir, mkdtemp, rm, stat } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { pipeline } from 'node:stream/promises'
+import { createGunzip } from 'node:zlib'
 import extractZip from 'extract-zip'
+import tarFs from 'tar-fs'
+import unbzip2Stream from 'unbzip2-stream'
 
 const workspaceRoot = process.cwd()
 const generatedDir = path.join(workspaceRoot, 'public', 'generated')
@@ -175,47 +177,25 @@ async function resolveFontAssetSourcePath(asset, tempRoot) {
   return archivePath
 }
 
-function startTarExtraction(args) {
-  return new Promise((resolve, reject) => {
-    const child = spawn('tar', args, { stdio: ['ignore', 'pipe', 'pipe'] })
-    let stderr = ''
-    const exitPromise = new Promise((resolveExit, rejectExit) => {
-      child.once('close', resolveExit)
-      child.once('error', (error) => {
-        const wrappedError = new Error(`Failed to launch tar: ${error instanceof Error ? error.message : String(error)}`)
-        rejectExit(wrappedError)
-        reject(wrappedError)
-      })
-    })
+function createTarDecompressor(archivePath) {
+  if (archivePath.endsWith('.tar.gz')) {
+    return createGunzip()
+  }
 
-    child.once('spawn', () => {
-      resolve({ child, exitPromise, getStderr: () => stderr })
-    })
+  if (archivePath.endsWith('.tar.bz2')) {
+    return unbzip2Stream()
+  }
 
-    child.stderr.on('data', (chunk) => {
-      stderr += String(chunk)
-    })
-  })
+  throw new Error(`Unsupported tar archive format: ${path.basename(archivePath)}`)
 }
 
-async function extractTarEntry(archivePath, entryPath, outputPath) {
-  await ensureDirectory(path.dirname(outputPath))
-  const { child, exitPromise, getStderr } = await startTarExtraction(['-xOf', archivePath, entryPath])
-
-  try {
-    await pipeline(child.stdout, createWriteStream(outputPath))
-  } catch (error) {
-    await rm(outputPath, { force: true })
-    throw error
-  }
-
-  const exitCode = await exitPromise
-
-  if (exitCode !== 0) {
-    await rm(outputPath, { force: true })
-    const stderr = getStderr().trim()
-    throw new Error(stderr ? `tar failed while extracting ${entryPath}: ${stderr}` : `tar failed while extracting ${entryPath}`)
-  }
+async function extractTarArchive(archivePath, extractDir) {
+  await ensureDirectory(extractDir)
+  await pipeline(
+    createReadStream(archivePath),
+    createTarDecompressor(archivePath),
+    tarFs.extract(extractDir),
+  )
 }
 
 async function copyExtractedFile(sourcePath, targetPath) {
@@ -253,10 +233,24 @@ async function prepareFontAsset(asset, tempRoot) {
   const archivePath = await resolveFontAssetSourcePath(asset, tempRoot)
 
   if (asset.kind === 'tar') {
-    for (const output of missingOutputs) {
-      await extractTarEntry(archivePath, output.entry, output.targetPath)
-      console.log(`Prepared font file: ${path.relative(workspaceRoot, output.targetPath)}`)
+    const extractDir = await mkdtemp(path.join(tempRoot, `${path.parse(asset.sourceFile).name}-`))
+
+    try {
+      await extractTarArchive(archivePath, extractDir)
+
+      for (const output of missingOutputs) {
+        const sourcePath = path.join(extractDir, ...output.entry.split('/'))
+        if (!(await exists(sourcePath))) {
+          throw new Error(`Missing extracted font entry: ${output.entry}`)
+        }
+
+        await copyExtractedFile(sourcePath, output.targetPath)
+        console.log(`Prepared font file: ${path.relative(workspaceRoot, output.targetPath)}`)
+      }
+    } finally {
+      await rm(extractDir, { recursive: true, force: true })
     }
+
     return
   }
 
