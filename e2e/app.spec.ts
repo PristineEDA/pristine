@@ -1194,13 +1194,32 @@ test('terminal uses the shared theme and mono font at runtime', async () => {
   const { app, window } = await launchApp();
 
   await openBottomTerminal(window);
+  await expect.poll(async () => readTerminalPid(window), {
+    timeout: 15000,
+  }).toBeGreaterThan(0);
 
-  const themeState = await readTerminalThemeSnapshot(window);
-  expect(themeState.terminalBackground).toBeTruthy();
-  expect(themeState.terminalFontFamilies.length).toBeGreaterThan(0);
-  expect(themeState.expectedBackground).toBeTruthy();
-  expect(themeState.terminalBackground).toBe(themeState.expectedBackground);
-  expect(themeState.terminalFontFamilies.some((value) => value.toLowerCase().includes('jetbrains mono'))).toBe(true);
+  await expect.poll(async () => {
+    const themeState = await readTerminalThemeSnapshot(window);
+
+    return {
+      hasBackground: Boolean(themeState.terminalBackground),
+      hasFontFamilies: themeState.terminalFontFamilies.length > 0,
+      hasExpectedBackground: Boolean(themeState.expectedBackground),
+      backgroundMatches: themeState.terminalBackground === themeState.expectedBackground,
+      usesJetBrainsMono: themeState.terminalFontFamilies.some((value) => value.toLowerCase().includes('jetbrains mono')),
+    };
+  }, {
+    timeout: 15000,
+  }).toEqual({
+    hasBackground: true,
+    hasFontFamilies: true,
+    hasExpectedBackground: true,
+    backgroundMatches: true,
+    usesJetBrainsMono: true,
+  });
+
+  await window.getByRole('button', { name: /close panel/i }).click();
+  await expect(window.getByTestId('terminal-host')).toHaveCount(0);
 
   await app.close();
 });

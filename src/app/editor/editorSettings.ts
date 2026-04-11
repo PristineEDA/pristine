@@ -106,6 +106,12 @@ export const editorFontFamilyOptions = [
     description: 'Legibility-first coding font with restrained ligatures.',
   },
   {
+    value: 'zxproto',
+    label: 'ZxProto',
+    fontFamily: '"ZxProto", monospace',
+    description: 'Companion 0xType monospace with a slightly sharper technical voice.',
+  },
+  {
     value: 'agave',
     label: 'Agave',
     fontFamily: 'Agave, monospace',
@@ -142,10 +148,40 @@ export const editorFontFamilyOptions = [
     description: 'Technical monospace with exceptional Unicode and math support.',
   },
   {
+    value: 'liberation-mono',
+    label: 'Liberation Mono',
+    fontFamily: '"Liberation Mono", monospace',
+    description: 'Widely deployed open-source monospace from the Liberation family.',
+  },
+  {
     value: 'm-plus-code-latin',
-    label: 'M PLUS Code Latin',
-    fontFamily: '"M PLUS Code Latin", monospace',
-    description: 'M+ project code-oriented Latin monospace variant.',
+    label: 'M PLUS Code Latin 60',
+    fontFamily: '"M PLUS Code Latin 60", monospace',
+    description: 'M+ project code-oriented Latin monospace in the 60 variant.',
+  },
+  {
+    value: 'm-plus-code-latin-50',
+    label: 'M PLUS Code Latin 50',
+    fontFamily: '"M PLUS Code Latin 50", monospace',
+    description: 'M+ project code-oriented Latin monospace in the 50 variant.',
+  },
+  {
+    value: 'meslo-lg-dz',
+    label: 'Meslo LG DZ',
+    fontFamily: '"Meslo LG DZ", monospace',
+    description: 'Terminal-friendly Meslo variant with crisp developer-focused forms.',
+  },
+  {
+    value: 'meslo-lg-mdz',
+    label: 'Meslo LG MDZ',
+    fontFamily: '"Meslo LG MDZ", monospace',
+    description: 'Meslo medium-width DZ variant tuned for terminal and code use.',
+  },
+  {
+    value: 'meslo-lg-sdz',
+    label: 'Meslo LG SDZ',
+    fontFamily: '"Meslo LG SDZ", monospace',
+    description: 'Meslo narrow DZ variant for denser code layouts.',
   },
   {
     value: 'monaspace-argon',

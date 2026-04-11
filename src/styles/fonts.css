@@ -13,6 +13,14 @@
 }
 
 @font-face {
+	font-family: 'ZxProto';
+	font-style: normal;
+	font-weight: 400;
+	font-display: swap;
+	src: url('/generated/fonts/ZxProto-Regular.ttf') format('truetype');
+}
+
+@font-face {
 	font-family: 'Agave';
 	font-style: normal;
 	font-weight: 400;
@@ -41,7 +49,7 @@
 	font-style: normal;
 	font-weight: 400;
 	font-display: swap;
-	src: url('/generated/fonts/Hack-Regular.ttf') format('truetype');
+	src: url('/generated/fonts/Hack-Regular.woff2') format('woff2');
 }
 
 @font-face {
@@ -61,11 +69,51 @@
 }
 
 @font-face {
-	font-family: 'M PLUS Code Latin';
+	font-family: 'Liberation Mono';
+	font-style: normal;
+	font-weight: 400;
+	font-display: swap;
+	src: url('/generated/fonts/LiberationMono-Regular.ttf') format('truetype');
+}
+
+@font-face {
+	font-family: 'M PLUS Code Latin 60';
 	font-style: normal;
 	font-weight: 400;
 	font-display: swap;
 	src: url('/generated/fonts/MPLUSCodeLatin-Regular.ttf') format('truetype');
+}
+
+@font-face {
+	font-family: 'M PLUS Code Latin 50';
+	font-style: normal;
+	font-weight: 400;
+	font-display: swap;
+	src: url('/generated/fonts/MPLUSCodeLatin50-Regular.ttf') format('truetype');
+}
+
+@font-face {
+	font-family: 'Meslo LG DZ';
+	font-style: normal;
+	font-weight: 400;
+	font-display: swap;
+	src: url('/generated/fonts/MesloLGLDZ-Regular.ttf') format('truetype');
+}
+
+@font-face {
+	font-family: 'Meslo LG MDZ';
+	font-style: normal;
+	font-weight: 400;
+	font-display: swap;
+	src: url('/generated/fonts/MesloLGMDZ-Regular.ttf') format('truetype');
+}
+
+@font-face {
+	font-family: 'Meslo LG SDZ';
+	font-style: normal;
+	font-weight: 400;
+	font-display: swap;
+	src: url('/generated/fonts/MesloLGSDZ-Regular.ttf') format('truetype');
 }
 
 @font-face {

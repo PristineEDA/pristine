@@ -223,6 +223,12 @@ describe('MenuBar', () => {
     await user.click(screen.getByTestId('menu-settings-button'));
     await user.click(screen.getByTestId('settings-editor-font-family-combobox'));
 
+    expect(await screen.findByTestId('settings-editor-font-family-option-liberation-mono')).toHaveTextContent('Liberation Mono');
+    expect(screen.getByTestId('settings-editor-font-family-option-zxproto')).toHaveTextContent('ZxProto');
+    expect(screen.getByTestId('settings-editor-font-family-option-m-plus-code-latin-50')).toHaveTextContent('M PLUS Code Latin 50');
+    expect(screen.getByTestId('settings-editor-font-family-option-meslo-lg-dz')).toHaveTextContent('Meslo LG DZ');
+    expect(screen.getByTestId('settings-editor-font-family-option-meslo-lg-mdz')).toHaveTextContent('Meslo LG MDZ');
+    expect(screen.getByTestId('settings-editor-font-family-option-meslo-lg-sdz')).toHaveTextContent('Meslo LG SDZ');
     expect(await screen.findByTestId('settings-editor-font-family-option-monaspace-neon')).toHaveTextContent('Monaspace Neon');
     expect(screen.getByTestId('settings-editor-font-family-option-0xproto')).toHaveTextContent('0xProto');
     expect(screen.getByTestId('settings-editor-font-family-option-julia-mono')).toHaveTextContent('JuliaMono');

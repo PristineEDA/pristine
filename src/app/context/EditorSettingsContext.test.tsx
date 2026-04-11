@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { EditorSettingsProvider, useEditorSettings } from './EditorSettingsContext'
 
-const ensureEditorFontFamilyLoadedMock = vi.fn(() => Promise.resolve())
+const ensureEditorFontFamilyLoadedMock = vi.fn<(fontFamily: string) => Promise<void>>(() => Promise.resolve())
 
 vi.mock('../editor/fontLoader', () => ({
   ensureEditorFontFamilyLoaded: (fontFamily: string) => ensureEditorFontFamilyLoadedMock(fontFamily),
@@ -16,7 +16,7 @@ function EditorSettingsProbe() {
       <span data-testid="editor-font-family">{fontFamily}</span>
       <span data-testid="editor-font-size">{fontSize}</span>
       <span data-testid="editor-theme">{theme}</span>
-      <button data-testid="set-font-family" onClick={() => setFontFamily('monaspace-neon')}>
+      <button data-testid="set-font-family" onClick={() => setFontFamily('meslo-lg-dz')}>
         Set font family
       </button>
       <button data-testid="set-font-size" onClick={() => setFontSize(18)}>
@@ -84,9 +84,9 @@ describe('EditorSettingsContext', () => {
     )
 
     fireEvent.click(screen.getByTestId('set-font-family'))
-    expect(screen.getByTestId('editor-font-family')).toHaveTextContent('monaspace-neon')
-    expect(window.electronAPI?.config.set).toHaveBeenCalledWith('editor.fontFamily', 'monaspace-neon')
-    expect(ensureEditorFontFamilyLoadedMock).toHaveBeenCalledWith('monaspace-neon')
+    expect(screen.getByTestId('editor-font-family')).toHaveTextContent('meslo-lg-dz')
+    expect(window.electronAPI?.config.set).toHaveBeenCalledWith('editor.fontFamily', 'meslo-lg-dz')
+    expect(ensureEditorFontFamilyLoadedMock).toHaveBeenCalledWith('meslo-lg-dz')
 
     fireEvent.click(screen.getByTestId('set-font-size'))
     expect(screen.getByTestId('editor-font-size')).toHaveTextContent('18')

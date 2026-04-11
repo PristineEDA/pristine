@@ -6,6 +6,7 @@ import { draculaThemeDefinition } from '../../../editor/draculaTheme';
 
 vi.mock('../../../context/EditorSettingsContext', () => ({
   useEditorSettings: () => ({
+    fontFamily: 'jetbrains-mono',
     fontSize: 13,
     setFontSize: vi.fn(),
     setTheme: vi.fn(),
@@ -22,6 +23,8 @@ const { mockEditorInstance, mockModel, mockMonaco, mockEditorComponent } = vi.ho
     revealLineInCenter: vi.fn(),
     setPosition: vi.fn(),
     focus: vi.fn(),
+    updateOptions: vi.fn(),
+    layout: vi.fn(),
   };
 
   const model = { id: 'mock-model' };
@@ -38,6 +41,7 @@ const { mockEditorInstance, mockModel, mockMonaco, mockEditorComponent } = vi.ho
       defineTheme: vi.fn(),
       getModels: vi.fn(() => [model]),
       setModelMarkers: vi.fn(),
+      remeasureFonts: vi.fn(),
     },
     MarkerSeverity: {
       Error: 8,

@@ -12,7 +12,7 @@ Build-time downloaded code editor fonts are sourced from their official GitHub r
 - JuliaMono from https://github.com/cormullion/juliamono
 - Liberation Mono from https://github.com/liberationfonts/liberation-fonts
 - M PLUS Code Latin from https://github.com/coz-m/mplus_fonts
-- Meslo LG S from https://github.com/andreberg/Meslo-Font
+- Meslo LG DZ from https://github.com/andreberg/Meslo-Font
 - Monaspace Argon, Krypton, Neon, Radon, and Xenon from https://github.com/githubnext/monaspace
 - Monoid from https://github.com/larsenwork/monoid
 - 0xProto from https://github.com/0xType/0xProto
