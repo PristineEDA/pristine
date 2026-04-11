@@ -35,6 +35,7 @@ import { Separator } from '../../ui/separator';
 import { Button } from '../../ui/button';
 import { Combobox } from '../../ui/combobox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../../ui/dialog';
+import { ScrollArea } from '../../ui/scroll-area';
 import { Slider } from '../../ui/slider';
 import { Switch } from '../../ui/switch';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../../ui/tooltip';
@@ -264,6 +265,10 @@ export function MenuBar({
     setSettingsEditorTheme(nextTheme);
     setEditorTheme(nextTheme);
   };
+
+  const settingsSectionClassName = 'rounded-md border border-border/85 bg-muted/55 px-3 py-2.5';
+  const settingsSectionTitleClassName = 'text-[13px] font-medium';
+  const settingsSectionDescriptionClassName = 'text-[12px] text-muted-foreground';
 
   return (
     <TooltipProvider delayDuration={0}>
@@ -521,19 +526,24 @@ export function MenuBar({
         </div>
 
         <Dialog open={settingsDialogOpen} onOpenChange={setSettingsDialogOpen}>
-          <DialogContent data-testid="settings-dialog" style={noDragInteractive as React.CSSProperties}>
+          <DialogContent
+            data-testid="settings-dialog"
+            className="max-h-[85vh] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden sm:max-w-xl"
+            style={noDragInteractive as React.CSSProperties}
+          >
             <DialogHeader>
               <DialogTitle>Settings</DialogTitle>
               <DialogDescription>
                 Manage appearance and window behavior preferences.
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-3">
-              <div className="rounded-md border border-border/70 bg-muted/30 px-3 py-3">
-                <div className="space-y-3">
+            <ScrollArea className="min-h-0">
+              <div className="space-y-2.5 pr-4">
+              <div className={settingsSectionClassName}>
+                <div className="space-y-2.5">
                   <div className="space-y-1">
-                    <p className="text-sm font-medium">Code editor font size</p>
-                    <p className="text-sm text-muted-foreground" data-testid="editor-font-size-description">
+                    <p className={settingsSectionTitleClassName}>Code editor font size</p>
+                    <p className={settingsSectionDescriptionClassName} data-testid="editor-font-size-description">
                       Adjust the Monaco editor font size used in code tabs.
                     </p>
                   </div>
@@ -549,7 +559,7 @@ export function MenuBar({
                       onValueCommit={handleEditorFontSizeCommit}
                     />
                     <span
-                      className="min-w-10 text-right text-sm font-medium text-foreground"
+                      className="min-w-10 text-right text-[13px] font-medium text-foreground"
                       data-testid="settings-editor-font-size-value"
                     >
                       {settingsEditorFontSize}px
@@ -557,11 +567,11 @@ export function MenuBar({
                   </div>
                 </div>
               </div>
-              <div className="rounded-md border border-border/70 bg-muted/30 px-3 py-3">
-                <div className="space-y-3">
+              <div className={settingsSectionClassName}>
+                <div className="space-y-2.5">
                   <div className="space-y-1">
-                    <p className="text-sm font-medium">Code editor font</p>
-                    <p className="text-sm text-muted-foreground" data-testid="editor-font-family-description">
+                    <p className={settingsSectionTitleClassName}>Code editor font</p>
+                    <p className={settingsSectionDescriptionClassName} data-testid="editor-font-family-description">
                       Choose the bundled monospace font used in Monaco editor tabs.
                     </p>
                   </div>
@@ -581,11 +591,11 @@ export function MenuBar({
                   />
                 </div>
               </div>
-              <div className="rounded-md border border-border/70 bg-muted/30 px-3 py-3">
-                <div className="space-y-3">
+              <div className={settingsSectionClassName}>
+                <div className="space-y-2.5">
                   <div className="space-y-1">
-                    <p className="text-sm font-medium">Code editor theme</p>
-                    <p className="text-sm text-muted-foreground" data-testid="editor-theme-description">
+                    <p className={settingsSectionTitleClassName}>Code editor theme</p>
+                    <p className={settingsSectionDescriptionClassName} data-testid="editor-theme-description">
                       Choose the Monaco color theme used for source files.
                     </p>
                   </div>
@@ -605,11 +615,11 @@ export function MenuBar({
                   />
                 </div>
               </div>
-              <div className="rounded-md border border-border/70 bg-muted/30 px-3 py-3">
+              <div className={settingsSectionClassName}>
                 <div className="flex items-center justify-between gap-4">
                   <div className="space-y-1">
-                    <p className="text-sm font-medium">Dark mode</p>
-                    <p className="text-sm text-muted-foreground" data-testid="theme-mode-description">
+                    <p className={settingsSectionTitleClassName}>Dark mode</p>
+                    <p className={settingsSectionDescriptionClassName} data-testid="theme-mode-description">
                       Switch between the default light theme and the dark theme.
                     </p>
                   </div>
@@ -620,11 +630,11 @@ export function MenuBar({
                   />
                 </div>
               </div>
-              <div className="rounded-md border border-border/70 bg-muted/30 px-3 py-3">
+              <div className={settingsSectionClassName}>
                 <div className="flex items-center justify-between gap-4">
                   <div className="space-y-1">
-                    <p className="text-sm font-medium">Close to tray</p>
-                    <p className="text-sm text-muted-foreground" data-testid="close-behavior-description">
+                    <p className={settingsSectionTitleClassName}>Close to tray</p>
+                    <p className={settingsSectionDescriptionClassName} data-testid="close-behavior-description">
                       Keep Pristine running in the tray when the window is closed.
                     </p>
                   </div>
@@ -635,11 +645,11 @@ export function MenuBar({
                   />
                 </div>
               </div>
-              <div className="rounded-md border border-border/70 bg-muted/30 px-3 py-3">
+              <div className={settingsSectionClassName}>
                 <div className="flex items-center justify-between gap-4">
                   <div className="space-y-1">
-                    <p className="text-sm font-medium">Show floating info window</p>
-                    <p className="text-sm text-muted-foreground" data-testid="floating-info-window-description">
+                    <p className={settingsSectionTitleClassName}>Show floating info window</p>
+                    <p className={settingsSectionDescriptionClassName} data-testid="floating-info-window-description">
                       Display a detached always-on-top info window even while Pristine is hidden to tray.
                     </p>
                   </div>
@@ -650,7 +660,8 @@ export function MenuBar({
                   />
                 </div>
               </div>
-            </div>
+              </div>
+            </ScrollArea>
             <DialogFooter>
               <Button
                 type="button"
