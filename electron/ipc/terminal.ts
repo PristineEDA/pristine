@@ -17,27 +17,64 @@ const sessions = new Map<string, pty.IPty>();
 let nextId = 1;
 let projectRoot: string | null = null;
 
+function hasMissingProcessError(error: unknown): boolean {
+  if (error && typeof error === 'object' && 'code' in error) {
+    return (error as NodeJS.ErrnoException).code === 'ESRCH';
+  }
+
+  return error instanceof Error && /not found|no such process|no running instance/i.test(error.message);
+}
+
+function isProcessRunning(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return !hasMissingProcessError(error);
+  }
+}
+
+function terminateWindowsProcessTree(pid: number): void {
+  if (!isProcessRunning(pid)) {
+    return;
+  }
+
+  try {
+    execFileSync('taskkill', ['/PID', String(pid), '/T', '/F'], {
+      stdio: 'ignore',
+      windowsHide: true,
+    });
+  } catch {
+    // Ignore best-effort Windows shutdown failures.
+  }
+}
+
 function terminateSession(session: pty.IPty): void {
+  const pid = session.pid;
+
+  if (process.platform === 'win32') {
+    if (!pid) {
+      try {
+        session.kill();
+      } catch {
+        // Ignore best-effort PTY shutdown failures.
+      }
+      return;
+    }
+
+    // node-pty.kill() shells out to taskkill on Windows and can emit a
+    // benign "The process <pid> not found" message if the shell already exited.
+    terminateWindowsProcessTree(pid);
+    return;
+  }
+
   try {
     session.kill();
   } catch {
     // Ignore best-effort PTY shutdown failures.
   }
 
-  const pid = session.pid;
   if (!pid) {
-    return;
-  }
-
-  if (process.platform === 'win32') {
-    try {
-      execFileSync('taskkill', ['/PID', String(pid), '/T', '/F'], {
-        stdio: 'ignore',
-        windowsHide: true,
-      });
-    } catch {
-      // Process may already be gone.
-    }
     return;
   }
 

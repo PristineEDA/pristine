@@ -389,6 +389,23 @@ async function requestWindowClose(window: Awaited<ReturnType<typeof launchApp>>[
   await window.getByTestId('window-control-close').click();
 }
 
+async function selectMenuBarItem(
+  window: Awaited<ReturnType<typeof launchApp>>['window'],
+  menuLabel: string,
+  itemLabel: string,
+) {
+  const menuTrigger = window.locator('[data-slot="menubar-trigger"]').filter({ hasText: menuLabel }).first();
+  await expect(menuTrigger).toBeVisible();
+  await menuTrigger.click();
+
+  const menuContent = window.locator('[data-slot="menubar-content"]').last();
+  await expect(menuContent).toBeVisible();
+
+  const menuItem = menuContent.locator('[data-slot="menubar-item"]').filter({ hasText: itemLabel }).first();
+  await expect(menuItem).toBeVisible();
+  await menuItem.click();
+}
+
 function isProcessRunning(pid: number) {
   if (!Number.isFinite(pid) || pid <= 0) {
     return false;
@@ -472,6 +489,75 @@ test('window controls toggle minimize and maximize state', async () => {
   await browserWindow.evaluate((win) => win.restore());
   await expect.poll(async () => browserWindow.evaluate((win) => win.isMinimized())).toBe(false);
 
+  await app.close();
+});
+
+test('File > Setting... opens the settings dialog and updates persisted options', async () => {
+  const { app, window } = await launchApp();
+
+  await clearRememberedCloseBehavior(window);
+  await selectMenuBarItem(window, 'File', 'Setting...');
+  await expect(window.getByTestId('settings-dialog')).toBeVisible();
+
+  await setSwitchChecked(window.getByTestId('settings-close-to-tray-switch'), true);
+  await expect.poll(async () => readConfigValue(window, 'window.closeActionPreference')).toBe('tray');
+
+  await window.getByTestId('settings-close-button').click();
+  await clearRememberedCloseBehavior(window);
+
+  await app.close();
+});
+
+test('File > Close hides the app to tray when close-to-tray is enabled', async () => {
+  const { app, window } = await launchApp();
+  const browserWindow = await app.browserWindow(window);
+
+  await clearRememberedCloseBehavior(window);
+  await selectMenuBarItem(window, 'File', 'Setting...');
+  await expect(window.getByTestId('settings-dialog')).toBeVisible();
+  await setSwitchChecked(window.getByTestId('settings-close-to-tray-switch'), true);
+  await expect.poll(async () => readConfigValue(window, 'window.closeActionPreference')).toBe('tray');
+  await window.getByTestId('settings-close-button').click();
+
+  await selectMenuBarItem(window, 'File', 'Close');
+  await expect.poll(async () => browserWindow.evaluate((win) => win.isVisible())).toBe(false);
+  await expect.poll(() => app.windows().length).toBe(1);
+
+  await browserWindow.evaluate((win) => {
+    win.show();
+    win.focus();
+  });
+  await expect.poll(async () => browserWindow.evaluate((win) => win.isVisible())).toBe(true);
+
+  await clearRememberedCloseBehavior(window);
+  await app.close();
+});
+
+test('Ctrl+Q or Cmd+Q hides the app to tray when close-to-tray is enabled', async () => {
+  const { app, window } = await launchApp();
+  const browserWindow = await app.browserWindow(window);
+  const closeShortcut = process.platform === 'darwin' ? 'Meta+Q' : 'Control+Q';
+
+  await clearRememberedCloseBehavior(window);
+  await selectMenuBarItem(window, 'File', 'Setting...');
+  await expect(window.getByTestId('settings-dialog')).toBeVisible();
+  await setSwitchChecked(window.getByTestId('settings-close-to-tray-switch'), true);
+  await expect.poll(async () => readConfigValue(window, 'window.closeActionPreference')).toBe('tray');
+  await window.getByTestId('settings-close-button').click();
+
+  await window.bringToFront();
+  await window.keyboard.press(closeShortcut);
+
+  await expect.poll(async () => browserWindow.evaluate((win) => win.isVisible())).toBe(false);
+  await expect.poll(() => app.windows().length).toBe(1);
+
+  await browserWindow.evaluate((win) => {
+    win.show();
+    win.focus();
+  });
+  await expect.poll(async () => browserWindow.evaluate((win) => win.isVisible())).toBe(true);
+
+  await clearRememberedCloseBehavior(window);
   await app.close();
 });
 

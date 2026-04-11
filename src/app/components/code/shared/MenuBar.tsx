@@ -63,9 +63,48 @@ const noDragInteractive = {
   pointerEvents: 'auto' as const,
 };
 const isMacOS = window.electronAPI?.platform === 'darwin';
+const closeShortcutLabel = isMacOS ? '⌘Q' : 'Ctrl+Q';
 const CLOSE_ACTION_CONFIG_KEY = 'window.closeActionPreference';
 const FLOATING_INFO_VISIBLE_CONFIG_KEY = 'ui.floatingInfoWindow.visible';
 const THEME_CONFIG_KEY = 'ui.theme';
+
+function getMenuItemAction(menuLabel: string, itemName: string): 'open-settings' | 'close-app' | null {
+  if (menuLabel !== 'File') {
+    return null;
+  }
+
+  if (itemName === 'Setting...') {
+    return 'open-settings';
+  }
+
+  if (itemName === 'Close') {
+    return 'close-app';
+  }
+
+  return null;
+}
+
+function getMenuItemShortcut(menuLabel: string, itemName: string, shortcutLabel: string): string {
+  if (menuLabel === 'File' && itemName === 'Close') {
+    return shortcutLabel;
+  }
+
+  const menu = menus.find((entry) => entry.label === menuLabel);
+  const item = menu?.items.find((entry) => entry.name === itemName);
+  return item?.kdb ?? '';
+}
+
+function isCloseShortcutPressed(event: KeyboardEvent): boolean {
+  if (event.key.toLowerCase() !== 'q' || event.altKey || event.shiftKey) {
+    return false;
+  }
+
+  if (isMacOS) {
+    return event.metaKey && !event.ctrlKey;
+  }
+
+  return event.ctrlKey && !event.metaKey;
+}
 
 function getConfiguredCloseAction(): 'quit' | 'tray' {
   const value = window.electronAPI?.config.get(CLOSE_ACTION_CONFIG_KEY);
@@ -266,9 +305,46 @@ export function MenuBar({
     setEditorTheme(nextTheme);
   };
 
+  const openSettingsDialog = () => {
+    syncPersistedSettingsState();
+    setSettingsDialogOpen(true);
+  };
+
+  const requestAppClose = () => {
+    void window.electronAPI?.close();
+  };
+
+  const handleMenuItemSelect = (action: 'open-settings' | 'close-app' | null) => {
+    if (action === 'open-settings') {
+      openSettingsDialog();
+      return;
+    }
+
+    if (action === 'close-app') {
+      requestAppClose();
+    }
+  };
+
   const settingsSectionClassName = 'rounded-md border border-border/85 bg-muted/55 px-3 py-2.5';
   const settingsSectionTitleClassName = 'text-[13px] font-medium';
   const settingsSectionDescriptionClassName = 'text-[12px] text-muted-foreground';
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!isCloseShortcutPressed(event)) {
+        return;
+      }
+
+      event.preventDefault();
+      requestAppClose();
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
 
   return (
     <TooltipProvider delayDuration={0}>
@@ -296,15 +372,24 @@ export function MenuBar({
                   {menu.label}
                 </MenubarTrigger>
                 <MenubarContent align="start" sideOffset={4} className="min-w-36 p-0.5">
-                  {menu.items.map((item, i) =>
-                    item.name === '---' ? (
-                      <MenubarSeparator key={i} className="my-0.5" />
-                    ) : (
-                      <MenubarItem key={i} className="px-2 py-1 text-[12px]">
-                        {item.name} <MenubarShortcut>{item.kdb}</MenubarShortcut>
+                  {menu.items.map((item, i) => {
+                    if (item.name === '---') {
+                      return <MenubarSeparator key={i} className="my-0.5" />;
+                    }
+
+                    const action = getMenuItemAction(menu.label, item.name);
+                    const shortcut = getMenuItemShortcut(menu.label, item.name, closeShortcutLabel);
+
+                    return (
+                      <MenubarItem
+                        key={i}
+                        className="px-2 py-1 text-[12px]"
+                        onSelect={() => handleMenuItemSelect(action)}
+                      >
+                        {item.name} <MenubarShortcut>{shortcut}</MenubarShortcut>
                       </MenubarItem>
-                    )
-                  )}
+                    );
+                  })}
                 </MenubarContent>
               </MenubarMenu>
             ))}
@@ -467,10 +552,7 @@ export function MenuBar({
               aria-label="Settings"
               data-testid="menu-settings-button"
               className="w-8 h-full rounded-none text-muted-foreground hover:cursor-pointer hover:text-foreground"
-              onClick={() => {
-                syncPersistedSettingsState();
-                setSettingsDialogOpen(true);
-              }}
+              onClick={openSettingsDialog}
             >
               <Settings size={15} />
             </Button>
@@ -515,7 +597,7 @@ export function MenuBar({
                 data-testid="window-control-close"
                 className="w-9 h-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-destructive/80 transition-colors"
                 style={noDragInteractive as React.CSSProperties}
-                onClick={() => void window.electronAPI?.close()}
+                onClick={requestAppClose}
               >
                 <X size={14} />
               </button>

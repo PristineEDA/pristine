@@ -43,6 +43,9 @@ beforeEach(() => {
   setEditorThemeMock.mockReset();
   setThemeMock.mockReset();
   toggleThemeMock.mockReset();
+  vi.mocked(window.electronAPI!.minimize).mockReset();
+  vi.mocked(window.electronAPI!.maximize).mockReset();
+  vi.mocked(window.electronAPI!.close).mockReset();
   vi.mocked(window.electronAPI!.config.get).mockReset();
   vi.mocked(window.electronAPI!.config.set).mockReset();
   vi.mocked(window.electronAPI!.setFloatingInfoWindowVisible).mockReset();
@@ -102,6 +105,63 @@ describe('MenuBar', () => {
 
     expect(window.electronAPI?.minimize).toHaveBeenCalledTimes(1);
     expect(window.electronAPI?.maximize).toHaveBeenCalledTimes(1);
+    expect(window.electronAPI?.close).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens settings from the File menu using the shared settings behavior', async () => {
+    const user = userEvent.setup();
+    const expectedCloseShortcut = window.electronAPI?.platform === 'darwin' ? '⌘Q' : 'Ctrl+Q';
+
+    vi.mocked(window.electronAPI!.config.get).mockImplementation((key: string) =>
+      key === 'ui.theme'
+        ? 'dark'
+        : key === 'editor.fontFamily'
+          ? 'fira-code'
+        : key === 'editor.fontSize'
+          ? 18
+          : key === 'editor.theme'
+            ? 'night-owl'
+            : key === 'window.closeActionPreference'
+              ? 'tray'
+              : key === 'ui.floatingInfoWindow.visible'
+                ? true
+                : null,
+    );
+
+    renderMenuBar();
+
+    await user.click(screen.getByText('File'));
+    expect(await screen.findByText(expectedCloseShortcut)).toBeInTheDocument();
+    await user.click(await screen.findByText('Setting...'));
+
+    expect(await screen.findByTestId('settings-dialog')).toBeVisible();
+    expect(screen.getByTestId('settings-editor-font-family-combobox')).toHaveTextContent(getEditorFontFamilyLabel('fira-code'));
+    expect(screen.getByTestId('settings-editor-font-size-value')).toHaveTextContent('18px');
+    expect(screen.getByTestId('settings-editor-theme-combobox')).toHaveTextContent('Night Owl');
+  });
+
+  it('closes the app from the File menu using the shared close behavior', async () => {
+    const user = userEvent.setup();
+
+    renderMenuBar();
+
+    await user.click(screen.getByText('File'));
+    await user.click(await screen.findByText('Close'));
+
+    expect(window.electronAPI?.close).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes the app with the platform close shortcut', () => {
+    const isMacOS = window.electronAPI?.platform === 'darwin';
+
+    renderMenuBar();
+
+    fireEvent.keyDown(window, {
+      key: 'q',
+      ctrlKey: !isMacOS,
+      metaKey: isMacOS,
+    });
+
     expect(window.electronAPI?.close).toHaveBeenCalledTimes(1);
   });
 
