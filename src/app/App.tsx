@@ -12,6 +12,7 @@ import { QuickOpenPalette } from './components/code/shared/QuickOpenPalette';
 import { createQuickOpenFileEntries, getRecentQuickOpenFiles, searchQuickOpenFiles, type QuickOpenFileEntry, type QuickOpenSearchResult } from './quickOpen/quickOpenSearch';
 import type { WorkspaceRevealRequest } from './workspace/useWorkspaceTree';
 import { WorkspaceProvider, useWorkspace } from './context/WorkspaceContext';
+import type { EditorSelectionSnapshot } from './context/useWorkspaceEditorState';
 import { getLeftPanelTargetSizePercent } from './layout/panelSizing';
 import { SidebarProvider } from './components/ui/sidebar';
 
@@ -59,7 +60,10 @@ function AppLayout() {
     showLeftPanel, setShowLeftPanel,
     showBottomPanel, setShowBottomPanel,
     showRightPanel, setShowRightPanel,
+    captureEditorSelectionSnapshot,
     cursorLine, cursorCol,
+    focusActiveEditor,
+    restoreEditorSelection,
   } = useWorkspace();
   const [isQuickOpenVisible, setIsQuickOpenVisible] = useState(false);
   const [quickOpenQuery, setQuickOpenQuery] = useState('');
@@ -72,6 +76,7 @@ function AppLayout() {
   const panelGroupContainerRef = useRef<HTMLDivElement | null>(null);
   const leftPanelRef = useRef<PanelImperativeHandle | null>(null);
   const revealTokenRef = useRef(0);
+  const quickOpenEditorSnapshotRef = useRef<EditorSelectionSnapshot | null>(null);
 
   const syncLeftPanelWidth = useCallback(() => {
     const panelGroupContainer = panelGroupContainerRef.current;
@@ -87,17 +92,35 @@ function AppLayout() {
     setActiveView(nextView as typeof activeView);
   };
 
-  const closeQuickOpen = useCallback(() => {
+  const closeQuickOpen = useCallback((options?: { restorePreviousEditor?: boolean }) => {
+    const shouldRestorePreviousEditor = options?.restorePreviousEditor ?? true;
+    const snapshot = quickOpenEditorSnapshotRef.current;
+
+    quickOpenEditorSnapshotRef.current = null;
     setIsQuickOpenVisible(false);
     setQuickOpenQuery('');
     setQuickOpenSelectedIndex(0);
-  }, []);
+    if (shouldRestorePreviousEditor && snapshot) {
+      restoreEditorSelection(snapshot);
+    }
+
+    if (typeof window !== 'undefined' && 'requestAnimationFrame' in window) {
+      window.requestAnimationFrame(() => {
+        focusActiveEditor();
+      });
+    } else {
+      globalThis.setTimeout(() => {
+        focusActiveEditor();
+      }, 0);
+    }
+  }, [focusActiveEditor, restoreEditorSelection]);
 
   const openQuickOpen = useCallback(() => {
+    quickOpenEditorSnapshotRef.current = captureEditorSelectionSnapshot();
     setIsQuickOpenVisible(true);
     setQuickOpenQuery('');
     setQuickOpenSelectedIndex(0);
-  }, []);
+  }, [captureEditorSelectionSnapshot]);
 
   const invalidateWorkspaceFiles = useCallback(() => {
     setWorkspaceFiles(null);
@@ -213,7 +236,7 @@ function AppLayout() {
     revealTokenRef.current += 1;
     setRevealRequest({ path: result.path, token: revealTokenRef.current });
     openWorkspaceFile(result.path, result.name);
-    closeQuickOpen();
+    closeQuickOpen({ restorePreviousEditor: false });
   }, [closeQuickOpen, openWorkspaceFile]);
 
   const renderPanelPlaceholder = (title: string, testId: string) => (

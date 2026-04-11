@@ -144,6 +144,7 @@ describe('WorkspaceContext', () => {
     );
 
     fireEvent.click(screen.getByText('set-view'));
+    fireEvent.click(screen.getByText('open-reg'));
     fireEvent.click(screen.getByText('cursor'));
     fireEvent.click(screen.getByText('hide-bottom'));
 

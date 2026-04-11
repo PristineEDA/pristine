@@ -113,12 +113,16 @@ vi.mock('./components/code/shared/EditorSplitLayout', async () => {
   return {
     EditorSplitLayout: ({ jumpToLine }: any) => {
       const workspace = actual.useWorkspace();
+      const restoreRequest = workspace.focusedGroupId ? workspace.getCursorRestoreRequest(workspace.focusedGroupId) : undefined;
 
       return (
         <div>
           <span data-testid="editor-active-tab">{workspace.activeTabId}</span>
           <span data-testid="editor-tab-count">{workspace.tabs.length}</span>
           <span data-testid="editor-jump-line">{jumpToLine ?? 'none'}</span>
+          <span data-testid="editor-restore-file">{restoreRequest?.fileId ?? ''}</span>
+          <span data-testid="editor-restore-line">{restoreRequest?.line ?? ''}</span>
+          <span data-testid="editor-restore-col">{restoreRequest?.col ?? ''}</span>
           <button onClick={() => workspace.setActiveTabId('rtl/core/alu.v')}>editor-activate-alu</button>
           <button onClick={() => workspace.closeFile('rtl/core/reg_file.v')}>editor-close-open</button>
           <button onClick={() => workspace.setCursorPos(9, 3)}>editor-cursor</button>
@@ -490,5 +494,34 @@ describe('App', () => {
     expect(screen.getByTestId('activity-view')).toHaveTextContent('explorer');
     expect(screen.getByTestId('editor-active-tab')).toHaveTextContent('rtl/core/alu.v');
     expect(screen.queryByTestId('left-panel')).not.toBeInTheDocument();
+  });
+
+  it('restores the previous editor file and cursor snapshot when quick open closes without a selection', async () => {
+    vi.mocked(window.electronAPI!.fs.listFiles).mockResolvedValue([
+      'README.md',
+      'rtl/core/alu.v',
+      'rtl/core/reg_file.v',
+    ]);
+
+    render(<App />);
+
+    fireEvent.click(screen.getByText('toggle-left-panel'));
+    fireEvent.click(screen.getByText('left-open'));
+    fireEvent.click(screen.getByText('editor-cursor'));
+
+    expect(screen.getByTestId('editor-active-tab')).toHaveTextContent('rtl/core/reg_file.v');
+    expect(screen.getByTestId('status-bar-cursor')).toHaveTextContent('9:3');
+
+    fireEvent.keyDown(document, { key: 'p', ctrlKey: true });
+    await screen.findByTestId('quick-open-overlay');
+
+    fireEvent.click(screen.getByText('quick-open-set-query'));
+    fireEvent.click(screen.getByText('quick-open-close'));
+
+    expect(screen.queryByTestId('quick-open-overlay')).not.toBeInTheDocument();
+    expect(screen.getByTestId('editor-active-tab')).toHaveTextContent('rtl/core/reg_file.v');
+    expect(screen.getByTestId('editor-restore-file')).toHaveTextContent('rtl/core/reg_file.v');
+    expect(screen.getByTestId('editor-restore-line')).toHaveTextContent('9');
+    expect(screen.getByTestId('editor-restore-col')).toHaveTextContent('3');
   });
 });

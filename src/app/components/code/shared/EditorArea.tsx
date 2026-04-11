@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect } from 'react';
+import { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import {
   X, ChevronRight, Split,
   MoreHorizontal, Circle,
@@ -7,8 +7,36 @@ import { getWorkspaceSegments } from '../../../workspace/workspaceFiles';
 import { FileTypeBadge } from './FileTypeBadge';
 import { useEditorDocumentState } from './useEditorDocumentState';
 import type { SplitDirection } from '../../../editor/editorLayout';
+import type { CursorRestoreRequest } from '../../../context/useWorkspaceEditorState';
 import { EmptyProject } from './EmptyProject';
 import { TooltipIconButton } from '../../ui/tooltip-icon-button';
+
+function clampEditorPosition(editor: any, line: number, col: number) {
+  const model = editor?.getModel?.();
+  if (!model) {
+    return {
+      lineNumber: Math.max(line, 1),
+      column: Math.max(col, 1),
+    };
+  }
+
+  const safeLine = Math.min(Math.max(line, 1), model.getLineCount?.() ?? Math.max(line, 1));
+  const safeColumn = Math.min(
+    Math.max(col, 1),
+    model.getLineMaxColumn?.(safeLine) ?? Math.max(col, 1),
+  );
+
+  return {
+    lineNumber: safeLine,
+    column: safeColumn,
+  };
+}
+
+function focusEditorInstance(editor: any) {
+  editor?.focus?.();
+  editor?.getDomNode?.()?.querySelector?.('.native-edit-context')?.focus?.();
+  editor?.getDomNode?.()?.focus?.();
+}
 
 function loadMonacoEditorPane() {
   return import('./MonacoEditorPane');
@@ -32,8 +60,12 @@ interface EditorAreaProps {
   editorRef: React.MutableRefObject<any>;
   jumpToLine?: number;
   onCursorChange?: (line: number, col: number) => void;
+  cursorPosition?: { line: number; col: number };
+  cursorRestoreRequest?: CursorRestoreRequest;
+  onCursorRestoreRequestConsumed?: (token: number) => void;
   onSplitEditor?: (direction: SplitDirection) => void;
   onFocus?: () => void;
+  focused?: boolean;
   onTabDragStart?: (tabId: string) => void;
   onTabDragEnd?: () => void;
   contentCache?: Record<string, string>;
@@ -150,8 +182,12 @@ export function EditorArea({
   editorRef,
   jumpToLine,
   onCursorChange,
+  cursorPosition,
+  cursorRestoreRequest,
+  onCursorRestoreRequestConsumed,
   onSplitEditor,
   onFocus,
+  focused = true,
   onTabDragStart,
   onTabDragEnd,
   contentCache,
@@ -163,7 +199,9 @@ export function EditorArea({
   showDragInteractionShield,
   dragInteractionShieldTestId,
 }: EditorAreaProps) {
-  const { activeTab, code, updateContent } = useEditorDocumentState({
+  const lastAppliedRestoreRef = useRef({ activeTabId: '', restoreToken: 0 });
+  const [activeModelReadyId, setActiveModelReadyId] = useState('');
+  const { activeTab, code, isActiveTabReady, updateContent } = useEditorDocumentState({
     tabs,
     activeTabId,
     contentCache,
@@ -176,10 +214,93 @@ export function EditorArea({
   // Jump to line
   useEffect(() => {
     if (!jumpToLine || !editorRef.current) return;
-    editorRef.current.revealLineInCenter(jumpToLine);
-    editorRef.current.setPosition({ lineNumber: jumpToLine, column: 1 });
-    editorRef.current.focus();
-  }, [jumpToLine, editorRef]);
+    const editor = editorRef.current;
+
+    if (typeof window !== 'undefined' && 'requestAnimationFrame' in window) {
+      const frameId = window.requestAnimationFrame(() => {
+        editor.revealLineInCenter(jumpToLine);
+        editor.setPosition({ lineNumber: jumpToLine, column: 1 });
+        focusEditorInstance(editor);
+        onCursorChange?.(jumpToLine, 1);
+        lastAppliedRestoreRef.current = { activeTabId, restoreToken: 0 };
+      });
+
+      return () => {
+        window.cancelAnimationFrame(frameId);
+      };
+    }
+
+    editor.revealLineInCenter(jumpToLine);
+    editor.setPosition({ lineNumber: jumpToLine, column: 1 });
+    focusEditorInstance(editor);
+    onCursorChange?.(jumpToLine, 1);
+    lastAppliedRestoreRef.current = { activeTabId, restoreToken: 0 };
+  }, [activeTabId, jumpToLine, editorRef, onCursorChange]);
+
+  useEffect(() => {
+    const editor = editorRef.current;
+    const activeRestoreRequest = cursorRestoreRequest?.fileId === activeTabId ? cursorRestoreRequest : undefined;
+    const restoreToken = activeRestoreRequest?.token ?? 0;
+
+    if (!focused || !activeTabId || !isActiveTabReady || activeModelReadyId !== activeTabId || !editor || jumpToLine) {
+      return;
+    }
+
+    const lastAppliedRestore = lastAppliedRestoreRef.current;
+    const needsRestore = lastAppliedRestore.activeTabId !== activeTabId || lastAppliedRestore.restoreToken !== restoreToken;
+    if (!needsRestore) {
+      return;
+    }
+
+    const applyRestore = () => {
+      const currentEditor = editorRef.current;
+      if (!currentEditor) {
+        return;
+      }
+
+      const targetPosition = activeRestoreRequest ?? cursorPosition ?? { line: 1, col: 1 };
+      const nextPosition = clampEditorPosition(currentEditor, targetPosition.line, targetPosition.col);
+
+      currentEditor.setPosition(nextPosition);
+      currentEditor.revealPositionInCenter?.(nextPosition);
+      if (!currentEditor.revealPositionInCenter) {
+        currentEditor.revealLineInCenter?.(nextPosition.lineNumber);
+      }
+      focusEditorInstance(currentEditor);
+      onCursorChange?.(nextPosition.lineNumber, nextPosition.column);
+
+      lastAppliedRestoreRef.current = {
+        activeTabId,
+        restoreToken: activeRestoreRequest ? 0 : restoreToken,
+      };
+
+      if (activeRestoreRequest) {
+        onCursorRestoreRequestConsumed?.(activeRestoreRequest.token);
+      }
+    };
+
+    if (typeof window !== 'undefined' && 'requestAnimationFrame' in window) {
+      const frameId = window.requestAnimationFrame(applyRestore);
+
+      return () => {
+        window.cancelAnimationFrame(frameId);
+      };
+    }
+
+    applyRestore();
+  }, [
+    activeTabId,
+    cursorPosition?.col,
+    cursorPosition?.line,
+    cursorRestoreRequest,
+    editorRef,
+    focused,
+    activeModelReadyId,
+    isActiveTabReady,
+    jumpToLine,
+    onCursorChange,
+    onCursorRestoreRequestConsumed,
+  ]);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -267,6 +388,7 @@ export function EditorArea({
           activeTabId={activeTabId}
           code={code}
           editorRef={editorRef}
+          onActiveModelReady={setActiveModelReadyId}
           onCursorChange={onCursorChange}
           onContentChange={updateContent}
           onEditorMount={onEditorMount}

@@ -20,6 +20,10 @@ const { mockEditorInstance, mockModel, mockMonaco, mockEditorComponent } = vi.ho
     onDidChangeCursorPosition: vi.fn((callback: (event: { position: { lineNumber: number; column: number } }) => void) => {
       callback({ position: { lineNumber: 12, column: 7 } });
     }),
+    getModel: vi.fn(() => ({
+      getLineCount: () => 200,
+      getLineMaxColumn: () => 120,
+    })),
     revealLineInCenter: vi.fn(),
     setPosition: vi.fn(),
     focus: vi.fn(),
@@ -440,9 +444,100 @@ describe('EditorArea', () => {
     );
     expect(onCursorChange).toHaveBeenCalledWith(12, 7);
     expect(editorRef.current).toBe(mockEditorInstance);
-    expect(mockEditorInstance.revealLineInCenter).toHaveBeenCalledWith(24);
-    expect(mockEditorInstance.setPosition).toHaveBeenCalledWith({ lineNumber: 24, column: 1 });
+    await waitFor(() => {
+      expect(mockEditorInstance.revealLineInCenter).toHaveBeenCalledWith(24);
+      expect(mockEditorInstance.setPosition).toHaveBeenCalledWith({ lineNumber: 24, column: 1 });
+      expect(mockEditorInstance.focus).toHaveBeenCalled();
+    });
+  });
+
+  it('places the cursor at line 1 column 1 when a file is opened without saved position', async () => {
+    render(
+      <EditorArea
+        tabs={[{ id: 'rtl/core/reg_file.v', name: 'reg_file.v', isPinned: true }]}
+        activeTabId="rtl/core/reg_file.v"
+        onTabChange={vi.fn()}
+        onTabClose={vi.fn()}
+        editorRef={createRef()}
+        contentCache={{ 'rtl/core/reg_file.v': 'module reg_file;\nendmodule\n' }}
+      />,
+    );
+
+    await screen.findByTestId('monaco-editor');
+
+    await waitFor(() => {
+      expect(mockEditorInstance.setPosition).toHaveBeenCalledWith({ lineNumber: 1, column: 1 });
+      expect(mockEditorInstance.focus).toHaveBeenCalled();
+    });
+  });
+
+  it('restores the saved cursor position after the active file content becomes ready', async () => {
+    const onLoadFile = vi.fn();
+
+    const { rerender } = render(
+      <EditorArea
+        tabs={[{ id: 'rtl/core/reg_file.v', name: 'reg_file.v', isPinned: true }]}
+        activeTabId="rtl/core/reg_file.v"
+        onTabChange={vi.fn()}
+        onTabClose={vi.fn()}
+        editorRef={createRef()}
+        cursorPosition={{ line: 18, col: 6 }}
+        loadingFiles={{ 'rtl/core/reg_file.v': true }}
+        onLoadFile={onLoadFile}
+      />,
+    );
+
+    await screen.findByTestId('monaco-editor');
+    expect(onLoadFile).toHaveBeenCalledWith('rtl/core/reg_file.v');
+    expect(mockEditorInstance.setPosition).not.toHaveBeenCalledWith({ lineNumber: 18, column: 6 });
+
+    rerender(
+      <EditorArea
+        tabs={[{ id: 'rtl/core/reg_file.v', name: 'reg_file.v', isPinned: true }]}
+        activeTabId="rtl/core/reg_file.v"
+        onTabChange={vi.fn()}
+        onTabClose={vi.fn()}
+        editorRef={createRef()}
+        cursorPosition={{ line: 18, col: 6 }}
+        contentCache={{ 'rtl/core/reg_file.v': 'line 1\nline 2\nline 3\n' }}
+        onLoadFile={onLoadFile}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(mockEditorInstance.setPosition).toHaveBeenCalledWith({ lineNumber: 18, column: 6 });
+    });
     expect(mockEditorInstance.focus).toHaveBeenCalled();
+  });
+
+  it('applies and consumes an explicit cursor restore request for the active file', async () => {
+    const onCursorRestoreRequestConsumed = vi.fn();
+
+    render(
+      <EditorArea
+        tabs={[{ id: 'rtl/core/reg_file.v', name: 'reg_file.v', isPinned: true }]}
+        activeTabId="rtl/core/reg_file.v"
+        onTabChange={vi.fn()}
+        onTabClose={vi.fn()}
+        editorRef={createRef()}
+        contentCache={{ 'rtl/core/reg_file.v': 'module reg_file;\nendmodule\n' }}
+        cursorRestoreRequest={{
+          groupId: 'group-1',
+          fileId: 'rtl/core/reg_file.v',
+          line: 33,
+          col: 4,
+          token: 7,
+        }}
+        onCursorRestoreRequestConsumed={onCursorRestoreRequestConsumed}
+      />,
+    );
+
+    await screen.findByTestId('monaco-editor');
+
+    await waitFor(() => {
+      expect(mockEditorInstance.setPosition).toHaveBeenCalledWith({ lineNumber: 33, column: 4 });
+      expect(onCursorRestoreRequestConsumed).toHaveBeenCalledWith(7);
+    });
   });
 
   it('keeps Dracula token styling for linker script and file list syntax categories', async () => {
