@@ -2,12 +2,13 @@ import { createRef } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Problem } from '../../../../data/mockData';
-import { IDE_MONO_FONT_FAMILY } from '../../../editor/appearance';
+import { getEditorFontFamilyStack } from '../../../editor/editorSettings';
 
 const mockedUseRegisterEditorLanguages = vi.fn();
 const mockedRegisterEditorThemes = vi.fn();
 const mockedGetEditorLanguage = vi.fn((filePath: string) => (filePath.endsWith('.sv') ? 'systemverilog' : 'verilog'));
 let mockedProblems: Problem[] = [];
+let mockedEditorFontFamily = 'jetbrains-mono';
 let mockedEditorFontSize = 13;
 let mockedEditorTheme = 'dracula';
 
@@ -16,12 +17,15 @@ const { mockEditorInstance, mockModels, mockMonaco, mockEditorComponent } = vi.h
     onDidChangeCursorPosition: vi.fn((callback: (event: { position: { lineNumber: number; column: number } }) => void) => {
       callback({ position: { lineNumber: 5, column: 10 } });
     }),
+    updateOptions: vi.fn(),
+    layout: vi.fn(),
   };
 
   const models = [{ id: 'model-a' }, { id: 'model-b' }];
   const monaco = {
     editor: {
       getModels: vi.fn(() => models),
+      remeasureFonts: vi.fn(),
       setModelMarkers: vi.fn(),
     },
     MarkerSeverity: {
@@ -73,7 +77,10 @@ vi.mock('../../../editor/registerLanguages', () => ({
 
 vi.mock('../../../context/EditorSettingsContext', () => ({
   useEditorSettings: () => ({
+    fontFamilies: [],
+    fontFamily: mockedEditorFontFamily,
     fontSize: mockedEditorFontSize,
+    setFontFamily: vi.fn(),
     setFontSize: vi.fn(),
     setTheme: vi.fn(),
     theme: mockedEditorTheme,
@@ -93,6 +100,7 @@ describe('MonacoEditorPane', () => {
     delete (mockMonaco as any).__pristineLanguagesRegistered;
     delete (mockMonaco as any).__pristineThemesRegistered;
     mockedProblems = [];
+    mockedEditorFontFamily = 'jetbrains-mono';
     mockedEditorFontSize = 13;
     mockedEditorTheme = 'dracula';
     mockMonaco.editor.getModels.mockReturnValue(mockModels);
@@ -124,12 +132,13 @@ describe('MonacoEditorPane', () => {
 
     const editorCalls = mockEditorComponent.mock.calls;
     const lastEditorProps = editorCalls[editorCalls.length - 1]?.[0];
-    expect(lastEditorProps.options.fontFamily).toBe(IDE_MONO_FONT_FAMILY);
+    expect(lastEditorProps.options.fontFamily).toBe(getEditorFontFamilyStack('jetbrains-mono'));
     expect(lastEditorProps.options.fontSize).toBe(13);
     expect(lastEditorProps.theme).toBe('dracula');
   });
 
-  it('applies persisted editor font size and theme settings to Monaco', () => {
+  it('applies persisted editor font family, font size and theme settings to Monaco', () => {
+    mockedEditorFontFamily = 'monaspace-neon';
     mockedEditorFontSize = 18;
     mockedEditorTheme = 'github-dark';
 
@@ -144,8 +153,15 @@ describe('MonacoEditorPane', () => {
     const editorCalls = mockEditorComponent.mock.calls;
     const lastEditorProps = editorCalls[editorCalls.length - 1]?.[0];
 
+    expect(lastEditorProps.options.fontFamily).toBe(getEditorFontFamilyStack('monaspace-neon'));
     expect(lastEditorProps.options.fontSize).toBe(18);
     expect(lastEditorProps.theme).toBe('github-dark');
+    expect(mockEditorInstance.updateOptions).toHaveBeenCalledWith({
+      fontFamily: getEditorFontFamilyStack('monaspace-neon'),
+      fontSize: 18,
+    });
+    expect(mockEditorInstance.layout).toHaveBeenCalled();
+    expect(mockMonaco.editor.remeasureFonts).toHaveBeenCalled();
   });
 
   it('maps matching problems to monaco markers for every model', () => {

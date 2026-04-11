@@ -11,6 +11,30 @@ let staticChecksCache: StaticCheckItem[] | null = null;
 let referencesCache: Reference[] | null = null;
 let outputLogCache: MockDataModule['outputLog'] | null = null;
 
+function scheduleIdleLoad(load: () => void): () => void {
+  if (typeof window === 'undefined') {
+    return () => {};
+  }
+
+  if ('requestIdleCallback' in window) {
+    const idleCallbackId = window.requestIdleCallback(() => {
+      load();
+    });
+
+    return () => {
+      window.cancelIdleCallback(idleCallbackId);
+    };
+  }
+
+  const timeoutId = globalThis.setTimeout(() => {
+    load();
+  }, 120);
+
+  return () => {
+    globalThis.clearTimeout(timeoutId);
+  };
+}
+
 function loadMockDataModule(): Promise<MockDataModule> {
   if (!mockDataPromise) {
     mockDataPromise = import('./mockData');
@@ -88,14 +112,17 @@ export function useProblemsList() {
     }
 
     let cancelled = false;
-    void loadProblemsList().then((nextProblems) => {
-      if (!cancelled) {
-        setProblems(nextProblems);
-      }
+    const cancelScheduledLoad = scheduleIdleLoad(() => {
+      void loadProblemsList().then((nextProblems) => {
+        if (!cancelled) {
+          setProblems(nextProblems);
+        }
+      });
     });
 
     return () => {
       cancelled = true;
+      cancelScheduledLoad();
     };
   }, []);
 
@@ -111,14 +138,17 @@ export function useFileOutlines() {
     }
 
     let cancelled = false;
-    void loadFileOutlines().then((nextOutlines) => {
-      if (!cancelled) {
-        setOutlines(nextOutlines);
-      }
+    const cancelScheduledLoad = scheduleIdleLoad(() => {
+      void loadFileOutlines().then((nextOutlines) => {
+        if (!cancelled) {
+          setOutlines(nextOutlines);
+        }
+      });
     });
 
     return () => {
       cancelled = true;
+      cancelScheduledLoad();
     };
   }, []);
 
@@ -134,14 +164,17 @@ export function useInitialAIMessages() {
     }
 
     let cancelled = false;
-    void loadInitialAIMessages().then((nextMessages) => {
-      if (!cancelled) {
-        setMessages(nextMessages);
-      }
+    const cancelScheduledLoad = scheduleIdleLoad(() => {
+      void loadInitialAIMessages().then((nextMessages) => {
+        if (!cancelled) {
+          setMessages(nextMessages);
+        }
+      });
     });
 
     return () => {
       cancelled = true;
+      cancelScheduledLoad();
     };
   }, []);
 
@@ -157,14 +190,17 @@ export function useStaticChecks() {
     }
 
     let cancelled = false;
-    void loadStaticChecks().then((nextChecks) => {
-      if (!cancelled) {
-        setStaticChecks(nextChecks);
-      }
+    const cancelScheduledLoad = scheduleIdleLoad(() => {
+      void loadStaticChecks().then((nextChecks) => {
+        if (!cancelled) {
+          setStaticChecks(nextChecks);
+        }
+      });
     });
 
     return () => {
       cancelled = true;
+      cancelScheduledLoad();
     };
   }, []);
 
@@ -180,14 +216,17 @@ export function useReferences() {
     }
 
     let cancelled = false;
-    void loadReferences().then((nextReferences) => {
-      if (!cancelled) {
-        setReferences(nextReferences);
-      }
+    const cancelScheduledLoad = scheduleIdleLoad(() => {
+      void loadReferences().then((nextReferences) => {
+        if (!cancelled) {
+          setReferences(nextReferences);
+        }
+      });
     });
 
     return () => {
       cancelled = true;
+      cancelScheduledLoad();
     };
   }, []);
 
@@ -203,14 +242,17 @@ export function useOutputLog() {
     }
 
     let cancelled = false;
-    void loadOutputLog().then((nextOutputLog) => {
-      if (!cancelled) {
-        setOutputLog(nextOutputLog);
-      }
+    const cancelScheduledLoad = scheduleIdleLoad(() => {
+      void loadOutputLog().then((nextOutputLog) => {
+        if (!cancelled) {
+          setOutputLog(nextOutputLog);
+        }
+      });
     });
 
     return () => {
       cancelled = true;
+      cancelScheduledLoad();
     };
   }, []);
 

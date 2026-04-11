@@ -5,6 +5,30 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const fixtureWorkspace = path.join(__dirname, '..', 'test', 'fixtures', 'workspace');
 
+async function resolveStartupWindows(app: Awaited<ReturnType<typeof electron.launch>>) {
+  await expect.poll(() => app.windows().length, {
+    timeout: 10000,
+  }).toBeGreaterThan(1);
+
+  const startupWindows = app.windows();
+  await Promise.all(startupWindows.map((page) => page.waitForLoadState('domcontentloaded')));
+
+  const titledWindows = await Promise.all(
+    startupWindows.map(async (page) => ({
+      page,
+      title: await page.title(),
+    })),
+  );
+
+  const window = titledWindows.find((entry) => entry.title === 'Pristine')?.page;
+
+  if (!window) {
+    throw new Error('Expected main Pristine window during startup');
+  }
+
+  return { window };
+}
+
 async function launchApp() {
   const app = await electron.launch({
     args: [path.join(__dirname, '..', 'dist-electron', 'main.js')],
@@ -15,8 +39,7 @@ async function launchApp() {
     },
   });
 
-  const window = await app.firstWindow();
-  await window.waitForLoadState('domcontentloaded');
+  const { window } = await resolveStartupWindows(app);
 
   return { app, window };
 }
@@ -28,7 +51,7 @@ test.describe('whiteboard performance smoke', () => {
     const { app, window } = await launchApp();
 
     const startTime = Date.now();
-    await window.getByTitle('Whiteboard').click();
+    await window.getByLabel('Whiteboard').click();
     await expect(window.getByTestId('whiteboard-view')).toBeVisible();
 
     const addNodeButton = window.getByTestId('whiteboard-add-node');
@@ -49,7 +72,7 @@ test.describe('whiteboard performance smoke', () => {
 
     const { app, window } = await launchApp();
 
-    await window.getByTitle('Whiteboard').click();
+    await window.getByLabel('Whiteboard').click();
     await expect(window.getByTestId('whiteboard-view')).toBeVisible();
 
     const addNodeButton = window.getByTestId('whiteboard-add-node');

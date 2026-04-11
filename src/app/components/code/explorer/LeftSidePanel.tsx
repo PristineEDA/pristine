@@ -92,21 +92,21 @@ export function LeftSidePanel({
       {/* Explorer */}
       {tab === 'explorer' && (
         <div className="flex flex-col flex-1 overflow-hidden">
-          <div className="flex items-center px-3 py-1.5 shrink-0">
+          <div className="flex items-center px-3 shrink-0">
             <span className="flex-1 text-muted-foreground uppercase text-[11px] font-bold tracking-wide">
               {DEFAULT_STARTUP_PROJECT_NAME}
             </span>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center">
               <TooltipIconButton content="New File">
-                <Button variant="ghost" size="icon" aria-label="New File" className="text-muted-foreground hover:text-foreground"><FilePlus size={14} /></Button>
+                <Button variant="ghost" size="icon-sm" aria-label="New File" className="text-muted-foreground hover:text-foreground"><FilePlus size={14} /></Button>
               </TooltipIconButton>
               <TooltipIconButton content="New Folder">
-                <Button variant="ghost" size="icon" aria-label="New Folder" className="text-muted-foreground hover:text-foreground"><FolderPlus size={14} /></Button>
+                <Button variant="ghost" size="icon-sm" aria-label="New Folder" className="text-muted-foreground hover:text-foreground"><FolderPlus size={14} /></Button>
               </TooltipIconButton>
               <TooltipIconButton content="Refresh">
                 <Button
                   variant="ghost"
-                  size="icon"
+                  size="icon-sm"
                   aria-label="Refresh"
                   className="text-muted-foreground hover:text-foreground"
                   onClick={() => {
@@ -116,7 +116,7 @@ export function LeftSidePanel({
                 ><RefreshCw size={13} /></Button>
               </TooltipIconButton>
               <TooltipIconButton content="Collapse All">
-                <Button variant="ghost" size="icon" aria-label="Collapse All" className="text-muted-foreground hover:text-foreground" onClick={collapseAll}><ChevronsUpDown size={13} /></Button>
+                <Button variant="ghost" size="icon-sm" aria-label="Collapse All" className="text-muted-foreground hover:text-foreground" onClick={collapseAll}><ChevronsUpDown size={13} /></Button>
               </TooltipIconButton>
             </div>
           </div>

@@ -1,7 +1,7 @@
 import Editor, { useMonaco } from '@monaco-editor/react';
 import { useEffect } from 'react';
 import { useProblemsList } from '../../../../data/mockDataLoader';
-import { IDE_MONO_FONT_FAMILY } from '../../../editor/appearance';
+import { getEditorFontFamilyStack } from '../../../editor/editorSettings';
 import { registerEditorThemes } from '../../../editor/monacoThemes';
 import { useRegisterEditorLanguages } from '../../../editor/registerLanguages';
 import { getEditorLanguage } from '../../../workspace/workspaceFiles';
@@ -30,7 +30,8 @@ export function MonacoEditorPane({
 }: MonacoEditorPaneProps) {
   const monaco = useMonaco();
   const problemsList = useProblemsList();
-  const { fontSize, theme } = useEditorSettings();
+  const { fontFamily, fontSize, theme } = useEditorSettings();
+  const editorFontFamily = getEditorFontFamilyStack(fontFamily);
 
   useRegisterEditorLanguages(monaco);
 
@@ -39,26 +40,42 @@ export function MonacoEditorPane({
       return;
     }
 
+    const issues = problemsList.filter((problem) => problem.fileId === activeTabId);
+    const markers = issues.map((problem) => ({
+      severity: problem.severity === 'error'
+        ? monaco.MarkerSeverity.Error
+        : problem.severity === 'warning'
+        ? monaco.MarkerSeverity.Warning
+        : monaco.MarkerSeverity.Info,
+      startLineNumber: problem.line,
+      startColumn: problem.column,
+      endLineNumber: problem.line,
+      endColumn: problem.column + 30,
+      message: problem.message,
+      code: problem.code,
+      source: problem.source,
+    }));
+
     const models = monaco.editor.getModels();
     models.forEach((model: any) => {
-      const issues = problemsList.filter((problem) => problem.fileId === activeTabId);
-      const markers = issues.map((problem) => ({
-        severity: problem.severity === 'error'
-          ? monaco.MarkerSeverity.Error
-          : problem.severity === 'warning'
-          ? monaco.MarkerSeverity.Warning
-          : monaco.MarkerSeverity.Info,
-        startLineNumber: problem.line,
-        startColumn: problem.column,
-        endLineNumber: problem.line,
-        endColumn: problem.column + 30,
-        message: problem.message,
-        code: problem.code,
-        source: problem.source,
-      }));
       monaco.editor.setModelMarkers(model, 'rtl-lint', markers);
     });
   }, [activeTabId, monaco, problemsList]);
+
+  useEffect(() => {
+    const editor = editorRef.current;
+
+    if (!editor) {
+      return;
+    }
+
+    editor.updateOptions({
+      fontFamily: editorFontFamily,
+      fontSize,
+    });
+    editor.layout();
+    monaco?.editor.remeasureFonts?.();
+  }, [editorFontFamily, editorRef, fontSize, monaco]);
 
   return (
     <div className="relative flex-1 overflow-hidden bg-background">
@@ -89,7 +106,7 @@ export function MonacoEditorPane({
         }}
         options={{
           fontSize,
-          fontFamily: IDE_MONO_FONT_FAMILY,
+          fontFamily: editorFontFamily,
           fontLigatures: true,
           lineNumbers: 'on',
           lineNumbersMinChars: 4,

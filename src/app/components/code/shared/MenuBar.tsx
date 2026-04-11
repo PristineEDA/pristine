@@ -9,9 +9,13 @@ import { useEditorSettings } from '../../../context/EditorSettingsContext';
 import { useWorkspace } from '../../../context/WorkspaceContext';
 import { useTheme, type Theme } from '../../../context/ThemeContext';
 import {
+  EDITOR_FONT_FAMILY_CONFIG_KEY,
   EDITOR_FONT_SIZE_CONFIG_KEY,
   EDITOR_THEME_CONFIG_KEY,
+  editorFontFamilyOptions,
+  getEditorFontFamilyLabel,
   editorThemeOptions,
+  parseEditorFontFamily,
   getEditorThemeLabel,
   parseEditorFontSize,
   parseEditorTheme,
@@ -23,6 +27,7 @@ import {
   MenubarContent,
   MenubarItem,
   MenubarSeparator,
+  MenubarShortcut,
 } from '../../ui/menubar';
 import { ToggleGroup, ToggleGroupItem } from '../../ui/toggle-group';
 import { Toggle } from '../../ui/toggle';
@@ -30,6 +35,7 @@ import { Separator } from '../../ui/separator';
 import { Button } from '../../ui/button';
 import { Combobox } from '../../ui/combobox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../../ui/dialog';
+import { ScrollArea } from '../../ui/scroll-area';
 import { Slider } from '../../ui/slider';
 import { Switch } from '../../ui/switch';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../../ui/tooltip';
@@ -39,31 +45,15 @@ import { centerViewSwitchItemClassName } from './viewSwitcherStyles';
 const menus = [
   {
     label: 'File',
-    items: ['New Project', 'Open Project...', '---', 'Save', 'Save As...', '---', 'Setting...', 'Close'],
+    items: [{ name: 'New Project', kdb: '⌘N'}, {name: 'Open Project...', kdb: '⌘O'}, {name: '---', kdb: ''}, {name: 'Save', kdb: '⌘S'}, {name: 'Save As...', kdb: '⇧⌘S'}, {name: '---', kdb: ''}, {name: 'Setting...', kdb: ''}, {name: 'Close', kdb: '⌘Q'}],
   },
   {
     label: 'Edit',
-    items: ['Undo', 'Redo', '---', 'Cut', 'Copy', 'Paste', '---', 'Find', 'Replace', '---', 'Format Document', 'Toggle Comment'],
-  },
-  {
-    label: 'Selection',
-    items: ['Select All', 'Expand Selection', '---', 'Select All Occurrences', 'Add Cursor to Line Ends'],
-  },
-  {
-    label: 'View',
-    items: ['Command Palette', '---', 'Explorer', 'AI Assistant', '---', 'Terminal', 'Output', 'Problems', '---', 'Split Editor'],
-  },
-  {
-    label: 'Run',
-    items: ['Start Simulation', 'Debug Simulation', '---', 'Static Check', 'Synthesis', 'Place & Route', '---', 'Stop'],
-  },
-  {
-    label: 'Terminal',
-    items: ['New Terminal', 'Split Terminal', '---', 'Run Task...'],
+    items: [{name: 'Undo', kdb: '⌘Z'}, {name: 'Redo', kdb: '⌘Y'}, {name: '---', kdb: ''}, {name: 'Cut', kdb: '⌘X'}, {name: 'Copy', kdb: '⌘C'}, {name: 'Paste', kdb: '⌘V'}, {name: '---', kdb: ''}, {name: 'Find', kdb: '⌘F'}, {name: 'Replace', kdb: '⌘H'}],
   },
   {
     label: 'Help',
-    items: ['Documentation', 'Check for Update...', '---', 'About'],
+    items: [{name: 'Documentation', kdb: ''}, {name: 'Check for Update...', kdb: ''}, {name: '---', kdb: ''}, {name: 'About', kdb: ''}],
   },
 ];
 
@@ -73,9 +63,48 @@ const noDragInteractive = {
   pointerEvents: 'auto' as const,
 };
 const isMacOS = window.electronAPI?.platform === 'darwin';
+const closeShortcutLabel = isMacOS ? '⌘Q' : 'Ctrl+Q';
 const CLOSE_ACTION_CONFIG_KEY = 'window.closeActionPreference';
 const FLOATING_INFO_VISIBLE_CONFIG_KEY = 'ui.floatingInfoWindow.visible';
 const THEME_CONFIG_KEY = 'ui.theme';
+
+function getMenuItemAction(menuLabel: string, itemName: string): 'open-settings' | 'close-app' | null {
+  if (menuLabel !== 'File') {
+    return null;
+  }
+
+  if (itemName === 'Setting...') {
+    return 'open-settings';
+  }
+
+  if (itemName === 'Close') {
+    return 'close-app';
+  }
+
+  return null;
+}
+
+function getMenuItemShortcut(menuLabel: string, itemName: string, shortcutLabel: string): string {
+  if (menuLabel === 'File' && itemName === 'Close') {
+    return shortcutLabel;
+  }
+
+  const menu = menus.find((entry) => entry.label === menuLabel);
+  const item = menu?.items.find((entry) => entry.name === itemName);
+  return item?.kdb ?? '';
+}
+
+function isCloseShortcutPressed(event: KeyboardEvent): boolean {
+  if (event.key.toLowerCase() !== 'q' || event.altKey || event.shiftKey) {
+    return false;
+  }
+
+  if (isMacOS) {
+    return event.metaKey && !event.ctrlKey;
+  }
+
+  return event.ctrlKey && !event.metaKey;
+}
 
 function getConfiguredCloseAction(): 'quit' | 'tray' {
   const value = window.electronAPI?.config.get(CLOSE_ACTION_CONFIG_KEY);
@@ -92,6 +121,10 @@ function getConfiguredTheme(): Theme {
 
 function getConfiguredEditorFontSize(): number {
   return parseEditorFontSize(window.electronAPI?.config.get(EDITOR_FONT_SIZE_CONFIG_KEY));
+}
+
+function getConfiguredEditorFontFamily() {
+  return parseEditorFontFamily(window.electronAPI?.config.get(EDITOR_FONT_FAMILY_CONFIG_KEY));
 }
 
 function getConfiguredEditorTheme() {
@@ -165,7 +198,9 @@ export function MenuBar({
 }: MenuBarProps) {
   const { activeView, mainContentView, setMainContentView } = useWorkspace();
   const {
+    fontFamily: editorFontFamily,
     fontSize: editorFontSize,
+    setFontFamily: setEditorFontFamily,
     setFontSize: setEditorFontSize,
     setTheme: setEditorTheme,
     theme: editorTheme,
@@ -177,6 +212,7 @@ export function MenuBar({
   const [closeToTrayEnabled, setCloseToTrayEnabled] = useState(() => getConfiguredCloseAction() === 'tray');
   const [floatingInfoWindowVisible, setFloatingInfoWindowVisible] = useState(() => getFloatingInfoWindowVisible());
   const [settingsTheme, setSettingsTheme] = useState<Theme>(() => getConfiguredTheme());
+  const [settingsEditorFontFamily, setSettingsEditorFontFamily] = useState(() => getConfiguredEditorFontFamily());
   const [settingsEditorFontSize, setSettingsEditorFontSize] = useState(() => getConfiguredEditorFontSize());
   const [settingsEditorTheme, setSettingsEditorTheme] = useState(() => getConfiguredEditorTheme());
   const layoutIconsEnabled = canUseLayoutPanels(mainContentView, activeView);
@@ -200,6 +236,7 @@ export function MenuBar({
     setCloseToTrayEnabled(getConfiguredCloseAction() === 'tray');
     setFloatingInfoWindowVisible(getFloatingInfoWindowVisible());
     setSettingsTheme(getConfiguredTheme());
+    setSettingsEditorFontFamily(getConfiguredEditorFontFamily());
     setSettingsEditorFontSize(getConfiguredEditorFontSize());
     setSettingsEditorTheme(getConfiguredEditorTheme());
   };
@@ -207,6 +244,10 @@ export function MenuBar({
   useEffect(() => {
     setSettingsTheme(theme);
   }, [theme]);
+
+  useEffect(() => {
+    setSettingsEditorFontFamily(editorFontFamily);
+  }, [editorFontFamily]);
 
   useEffect(() => {
     setSettingsEditorFontSize(editorFontSize);
@@ -252,11 +293,58 @@ export function MenuBar({
     setEditorFontSize(nextValue);
   };
 
+  const handleEditorFontFamilyChange = (value: string) => {
+    const nextFontFamily = parseEditorFontFamily(value);
+    setSettingsEditorFontFamily(nextFontFamily);
+    setEditorFontFamily(nextFontFamily);
+  };
+
   const handleEditorThemeChange = (value: string) => {
     const nextTheme = parseEditorTheme(value);
     setSettingsEditorTheme(nextTheme);
     setEditorTheme(nextTheme);
   };
+
+  const openSettingsDialog = () => {
+    syncPersistedSettingsState();
+    setSettingsDialogOpen(true);
+  };
+
+  const requestAppClose = () => {
+    void window.electronAPI?.close();
+  };
+
+  const handleMenuItemSelect = (action: 'open-settings' | 'close-app' | null) => {
+    if (action === 'open-settings') {
+      openSettingsDialog();
+      return;
+    }
+
+    if (action === 'close-app') {
+      requestAppClose();
+    }
+  };
+
+  const settingsSectionClassName = 'rounded-md border border-border/85 bg-muted/55 px-3 py-2.5';
+  const settingsSectionTitleClassName = 'text-[13px] font-medium';
+  const settingsSectionDescriptionClassName = 'text-[12px] text-muted-foreground';
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!isCloseShortcutPressed(event)) {
+        return;
+      }
+
+      event.preventDefault();
+      requestAppClose();
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
 
   return (
     <TooltipProvider delayDuration={0}>
@@ -280,19 +368,28 @@ export function MenuBar({
           <Menubar className="h-8 border-0 rounded-none bg-transparent p-0 shadow-none" style={noDrag as React.CSSProperties}>
             {menus.map((menu) => (
               <MenubarMenu key={menu.label}>
-                <MenubarTrigger className="px-2.5 h-7 text-[12px] font-normal rounded-sm">
+                <MenubarTrigger className="px-2.5 h-6 text-[12px] font-normal rounded-sm">
                   {menu.label}
                 </MenubarTrigger>
-                <MenubarContent align="start" sideOffset={4} className="min-w-48">
-                  {menu.items.map((item, i) =>
-                    item === '---' ? (
-                      <MenubarSeparator key={i} />
-                    ) : (
-                      <MenubarItem key={i} className="text-[12px]">
-                        {item}
+                <MenubarContent align="start" sideOffset={4} className="min-w-36 p-0.5">
+                  {menu.items.map((item, i) => {
+                    if (item.name === '---') {
+                      return <MenubarSeparator key={i} className="my-0.5" />;
+                    }
+
+                    const action = getMenuItemAction(menu.label, item.name);
+                    const shortcut = getMenuItemShortcut(menu.label, item.name, closeShortcutLabel);
+
+                    return (
+                      <MenubarItem
+                        key={i}
+                        className="px-2 py-1 text-[12px]"
+                        onSelect={() => handleMenuItemSelect(action)}
+                      >
+                        {item.name} <MenubarShortcut>{shortcut}</MenubarShortcut>
                       </MenubarItem>
-                    )
-                  )}
+                    );
+                  })}
                 </MenubarContent>
               </MenubarMenu>
             ))}
@@ -455,10 +552,7 @@ export function MenuBar({
               aria-label="Settings"
               data-testid="menu-settings-button"
               className="w-8 h-full rounded-none text-muted-foreground hover:cursor-pointer hover:text-foreground"
-              onClick={() => {
-                syncPersistedSettingsState();
-                setSettingsDialogOpen(true);
-              }}
+              onClick={openSettingsDialog}
             >
               <Settings size={15} />
             </Button>
@@ -503,7 +597,7 @@ export function MenuBar({
                 data-testid="window-control-close"
                 className="w-9 h-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-destructive/80 transition-colors"
                 style={noDragInteractive as React.CSSProperties}
-                onClick={() => void window.electronAPI?.close()}
+                onClick={requestAppClose}
               >
                 <X size={14} />
               </button>
@@ -514,19 +608,24 @@ export function MenuBar({
         </div>
 
         <Dialog open={settingsDialogOpen} onOpenChange={setSettingsDialogOpen}>
-          <DialogContent data-testid="settings-dialog" style={noDragInteractive as React.CSSProperties}>
+          <DialogContent
+            data-testid="settings-dialog"
+            className="max-h-[85vh] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden sm:max-w-xl"
+            style={noDragInteractive as React.CSSProperties}
+          >
             <DialogHeader>
               <DialogTitle>Settings</DialogTitle>
               <DialogDescription>
                 Manage appearance and window behavior preferences.
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-3">
-              <div className="rounded-md border border-border/70 bg-muted/30 px-3 py-3">
-                <div className="space-y-3">
+            <ScrollArea className="min-h-0">
+              <div className="space-y-2.5 pr-4">
+              <div className={settingsSectionClassName}>
+                <div className="space-y-2.5">
                   <div className="space-y-1">
-                    <p className="text-sm font-medium">Code editor font size</p>
-                    <p className="text-sm text-muted-foreground" data-testid="editor-font-size-description">
+                    <p className={settingsSectionTitleClassName}>Code editor font size</p>
+                    <p className={settingsSectionDescriptionClassName} data-testid="editor-font-size-description">
                       Adjust the Monaco editor font size used in code tabs.
                     </p>
                   </div>
@@ -542,7 +641,7 @@ export function MenuBar({
                       onValueCommit={handleEditorFontSizeCommit}
                     />
                     <span
-                      className="min-w-10 text-right text-sm font-medium text-foreground"
+                      className="min-w-10 text-right text-[13px] font-medium text-foreground"
                       data-testid="settings-editor-font-size-value"
                     >
                       {settingsEditorFontSize}px
@@ -550,11 +649,35 @@ export function MenuBar({
                   </div>
                 </div>
               </div>
-              <div className="rounded-md border border-border/70 bg-muted/30 px-3 py-3">
-                <div className="space-y-3">
+              <div className={settingsSectionClassName}>
+                <div className="space-y-2.5">
                   <div className="space-y-1">
-                    <p className="text-sm font-medium">Code editor theme</p>
-                    <p className="text-sm text-muted-foreground" data-testid="editor-theme-description">
+                    <p className={settingsSectionTitleClassName}>Code editor font</p>
+                    <p className={settingsSectionDescriptionClassName} data-testid="editor-font-family-description">
+                      Choose the bundled monospace font used in Monaco editor tabs.
+                    </p>
+                  </div>
+                  <Combobox
+                    value={settingsEditorFontFamily}
+                    onValueChange={handleEditorFontFamilyChange}
+                    options={editorFontFamilyOptions.map((option) => ({
+                      value: option.value,
+                      label: option.label,
+                      description: option.description,
+                    }))}
+                    placeholder={getEditorFontFamilyLabel(settingsEditorFontFamily)}
+                    searchPlaceholder="Search editor fonts..."
+                    emptyText="No editor font found."
+                    triggerTestId="settings-editor-font-family-combobox"
+                    getOptionTestId={(value) => `settings-editor-font-family-option-${value}`}
+                  />
+                </div>
+              </div>
+              <div className={settingsSectionClassName}>
+                <div className="space-y-2.5">
+                  <div className="space-y-1">
+                    <p className={settingsSectionTitleClassName}>Code editor theme</p>
+                    <p className={settingsSectionDescriptionClassName} data-testid="editor-theme-description">
                       Choose the Monaco color theme used for source files.
                     </p>
                   </div>
@@ -574,11 +697,11 @@ export function MenuBar({
                   />
                 </div>
               </div>
-              <div className="rounded-md border border-border/70 bg-muted/30 px-3 py-3">
+              <div className={settingsSectionClassName}>
                 <div className="flex items-center justify-between gap-4">
                   <div className="space-y-1">
-                    <p className="text-sm font-medium">Dark mode</p>
-                    <p className="text-sm text-muted-foreground" data-testid="theme-mode-description">
+                    <p className={settingsSectionTitleClassName}>Dark mode</p>
+                    <p className={settingsSectionDescriptionClassName} data-testid="theme-mode-description">
                       Switch between the default light theme and the dark theme.
                     </p>
                   </div>
@@ -589,11 +712,11 @@ export function MenuBar({
                   />
                 </div>
               </div>
-              <div className="rounded-md border border-border/70 bg-muted/30 px-3 py-3">
+              <div className={settingsSectionClassName}>
                 <div className="flex items-center justify-between gap-4">
                   <div className="space-y-1">
-                    <p className="text-sm font-medium">Close to tray</p>
-                    <p className="text-sm text-muted-foreground" data-testid="close-behavior-description">
+                    <p className={settingsSectionTitleClassName}>Close to tray</p>
+                    <p className={settingsSectionDescriptionClassName} data-testid="close-behavior-description">
                       Keep Pristine running in the tray when the window is closed.
                     </p>
                   </div>
@@ -604,11 +727,11 @@ export function MenuBar({
                   />
                 </div>
               </div>
-              <div className="rounded-md border border-border/70 bg-muted/30 px-3 py-3">
+              <div className={settingsSectionClassName}>
                 <div className="flex items-center justify-between gap-4">
                   <div className="space-y-1">
-                    <p className="text-sm font-medium">Show floating info window</p>
-                    <p className="text-sm text-muted-foreground" data-testid="floating-info-window-description">
+                    <p className={settingsSectionTitleClassName}>Show floating info window</p>
+                    <p className={settingsSectionDescriptionClassName} data-testid="floating-info-window-description">
                       Display a detached always-on-top info window even while Pristine is hidden to tray.
                     </p>
                   </div>
@@ -619,7 +742,8 @@ export function MenuBar({
                   />
                 </div>
               </div>
-            </div>
+              </div>
+            </ScrollArea>
             <DialogFooter>
               <Button
                 type="button"

@@ -1,12 +1,18 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
 import path from 'node:path';
 
 const mockHandle = vi.fn();
 const send = vi.fn();
+const mockExecFileSync = vi.fn();
+const originalPlatform = process.platform;
 
 vi.mock('electron', () => ({
   ipcMain: { handle: (...args: unknown[]) => mockHandle(...args) },
   BrowserWindow: class {},
+}));
+
+vi.mock('node:child_process', () => ({
+  execFileSync: (...args: unknown[]) => mockExecFileSync(...args),
 }));
 
 const mockSpawn = vi.fn();
@@ -20,6 +26,13 @@ import {
   registerTerminalHandlers,
   setTerminalProjectRoot,
 } from './terminal.js';
+
+function setProcessPlatform(platform: NodeJS.Platform): void {
+  Object.defineProperty(process, 'platform', {
+    value: platform,
+    configurable: true,
+  });
+}
 
 function getHandler(channel: string): (...args: unknown[]) => Promise<unknown> {
   const call = mockHandle.mock.calls.find((entry) => entry[0] === channel);
@@ -58,8 +71,10 @@ describe('terminal IPC handlers', () => {
   const getMainWindow = () => mainWindow;
 
   beforeEach(() => {
+    setProcessPlatform('linux');
     mockHandle.mockClear();
     mockSpawn.mockClear();
+    mockExecFileSync.mockClear();
     send.mockClear();
     disposeAllTerminalSessions();
     mainWindow = {
@@ -70,6 +85,10 @@ describe('terminal IPC handlers', () => {
       },
     };
     registerTerminalHandlers(getMainWindow);
+  });
+
+  afterAll(() => {
+    setProcessPlatform(originalPlatform);
   });
 
   it('selects PowerShell on Windows', () => {
@@ -147,6 +166,41 @@ describe('terminal IPC handlers', () => {
     expect(fakeTerminal.kill).toHaveBeenCalled();
   });
 
+  it('uses silent taskkill to terminate Windows terminal sessions', async () => {
+    setProcessPlatform('win32');
+    const processKillSpy = vi.spyOn(process, 'kill').mockImplementation(((_pid: number, signal?: NodeJS.Signals | number) => {
+      if (signal === 0) {
+        return true;
+      }
+
+      return true;
+    }) as typeof process.kill);
+
+    try {
+      const fakeTerminal = createFakeTerminal();
+      mockSpawn.mockReturnValue(fakeTerminal);
+      const createHandler = getHandler('async:terminal:create');
+      const killHandler = getHandler('async:terminal:kill');
+
+      const result = await createHandler({}, {});
+      const sessionId = (result as { id: string }).id;
+
+      await expect(killHandler({}, sessionId)).resolves.toBe(true);
+
+      expect(fakeTerminal.kill).not.toHaveBeenCalled();
+      expect(mockExecFileSync).toHaveBeenCalledWith(
+        'taskkill',
+        ['/PID', '2468', '/T', '/F'],
+        expect.objectContaining({
+          stdio: 'ignore',
+          windowsHide: true,
+        }),
+      );
+    } finally {
+      processKillSpy.mockRestore();
+    }
+  });
+
   it('returns false for write, resize, and kill when the session is missing', async () => {
     const writeHandler = getHandler('async:terminal:write');
     const resizeHandler = getHandler('async:terminal:resize');
@@ -212,6 +266,34 @@ describe('terminal IPC handlers', () => {
 
     expect(firstTerminal.kill).toHaveBeenCalledTimes(1);
     expect(secondTerminal.kill).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips Windows taskkill cleanup when the terminal process has already exited', async () => {
+    setProcessPlatform('win32');
+    const processKillSpy = vi.spyOn(process, 'kill').mockImplementation(((_pid: number, signal?: NodeJS.Signals | number) => {
+      if (signal === 0) {
+        const error = new Error('process missing') as NodeJS.ErrnoException;
+        error.code = 'ESRCH';
+        throw error;
+      }
+
+      return true;
+    }) as typeof process.kill);
+
+    try {
+      const fakeTerminal = createFakeTerminal();
+      mockSpawn.mockReturnValue(fakeTerminal);
+
+      const createHandler = getHandler('async:terminal:create');
+      await createHandler({}, {});
+
+      disposeAllTerminalSessions();
+
+      expect(fakeTerminal.kill).not.toHaveBeenCalled();
+      expect(mockExecFileSync).not.toHaveBeenCalled();
+    } finally {
+      processKillSpy.mockRestore();
+    }
   });
 
   it('ignores late terminal events after the window is destroyed', async () => {

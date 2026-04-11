@@ -54,14 +54,20 @@ describe('BottomPanel', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /^output$/i }));
 
+    expect(await screen.findByText(/RTL Analyzer v2\.4\.1 started/i)).toBeInTheDocument();
+
     const filterInput = await screen.findByPlaceholderText(/filter output/i);
     fireEvent.change(filterInput, { target: { value: 'cpu_top' } });
 
-    expect(screen.getByText(/cpu_top\.v \[L56\]: Unconnected port alu_src_b/i)).toBeInTheDocument();
-    expect(screen.queryByText(/RTL Analyzer v2\.4\.1 started/i)).not.toBeInTheDocument();
+    expect(await screen.findByText(/cpu_top\.v \[L56\]: Unconnected port alu_src_b/i)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByText(/RTL Analyzer v2\.4\.1 started/i)).not.toBeInTheDocument();
+    });
 
     fireEvent.click(screen.getByRole('button', { name: /^INFO$/i }));
 
-    expect(screen.queryByText(/cpu_top\.v \[L56\]: Unconnected port alu_src_b/i)).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByText(/cpu_top\.v \[L56\]: Unconnected port alu_src_b/i)).not.toBeInTheDocument();
+    });
   });
 });

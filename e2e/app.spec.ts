@@ -333,6 +333,48 @@ async function selectComboboxOption(
   await window.getByTestId(optionTestId).click();
 }
 
+async function readComboboxListSnapshot(
+  window: Awaited<ReturnType<typeof launchApp>>['window'],
+  listTestId: string,
+  selectedOptionTestId: string,
+) {
+  const list = window.locator(`[data-combobox-list="${listTestId}"]`)
+
+  return list.evaluate((listElement, selectedTestId) => {
+    type RectLike = {
+      top: number
+      bottom: number
+    }
+
+    type ElementLike = {
+      clientHeight: number
+      getBoundingClientRect: () => RectLike
+      querySelector: (selector: string) => ElementLike | null
+      scrollHeight: number
+      scrollTop: number
+    }
+
+    const listNode = listElement as unknown as ElementLike
+    const selectedNode = listNode.querySelector(`[data-testid="${selectedTestId}"]`)
+
+    if (!selectedNode) {
+      return null
+    }
+
+    const listRect = listNode.getBoundingClientRect()
+    const selectedRect = selectedNode.getBoundingClientRect()
+
+    return {
+      clientHeight: listNode.clientHeight,
+      scrollHeight: listNode.scrollHeight,
+      scrollTop: listNode.scrollTop,
+      selectedFullyVisible:
+        selectedRect.top >= listRect.top &&
+        selectedRect.bottom <= listRect.bottom,
+    }
+  }, selectedOptionTestId)
+}
+
 async function setEditorFontSizePreset(
   window: Awaited<ReturnType<typeof launchApp>>['window'],
   preset: 'min' | 'max',
@@ -345,6 +387,23 @@ async function setEditorFontSizePreset(
 
 async function requestWindowClose(window: Awaited<ReturnType<typeof launchApp>>['window']) {
   await window.getByTestId('window-control-close').click();
+}
+
+async function selectMenuBarItem(
+  window: Awaited<ReturnType<typeof launchApp>>['window'],
+  menuLabel: string,
+  itemLabel: string,
+) {
+  const menuTrigger = window.locator('[data-slot="menubar-trigger"]').filter({ hasText: menuLabel }).first();
+  await expect(menuTrigger).toBeVisible();
+  await menuTrigger.click();
+
+  const menuContent = window.locator('[data-slot="menubar-content"]').last();
+  await expect(menuContent).toBeVisible();
+
+  const menuItem = menuContent.locator('[data-slot="menubar-item"]').filter({ hasText: itemLabel }).first();
+  await expect(menuItem).toBeVisible();
+  await menuItem.click();
 }
 
 function isProcessRunning(pid: number) {
@@ -430,6 +489,75 @@ test('window controls toggle minimize and maximize state', async () => {
   await browserWindow.evaluate((win) => win.restore());
   await expect.poll(async () => browserWindow.evaluate((win) => win.isMinimized())).toBe(false);
 
+  await app.close();
+});
+
+test('File > Setting... opens the settings dialog and updates persisted options', async () => {
+  const { app, window } = await launchApp();
+
+  await clearRememberedCloseBehavior(window);
+  await selectMenuBarItem(window, 'File', 'Setting...');
+  await expect(window.getByTestId('settings-dialog')).toBeVisible();
+
+  await setSwitchChecked(window.getByTestId('settings-close-to-tray-switch'), true);
+  await expect.poll(async () => readConfigValue(window, 'window.closeActionPreference')).toBe('tray');
+
+  await window.getByTestId('settings-close-button').click();
+  await clearRememberedCloseBehavior(window);
+
+  await app.close();
+});
+
+test('File > Close hides the app to tray when close-to-tray is enabled', async () => {
+  const { app, window } = await launchApp();
+  const browserWindow = await app.browserWindow(window);
+
+  await clearRememberedCloseBehavior(window);
+  await selectMenuBarItem(window, 'File', 'Setting...');
+  await expect(window.getByTestId('settings-dialog')).toBeVisible();
+  await setSwitchChecked(window.getByTestId('settings-close-to-tray-switch'), true);
+  await expect.poll(async () => readConfigValue(window, 'window.closeActionPreference')).toBe('tray');
+  await window.getByTestId('settings-close-button').click();
+
+  await selectMenuBarItem(window, 'File', 'Close');
+  await expect.poll(async () => browserWindow.evaluate((win) => win.isVisible())).toBe(false);
+  await expect.poll(() => app.windows().length).toBe(1);
+
+  await browserWindow.evaluate((win) => {
+    win.show();
+    win.focus();
+  });
+  await expect.poll(async () => browserWindow.evaluate((win) => win.isVisible())).toBe(true);
+
+  await clearRememberedCloseBehavior(window);
+  await app.close();
+});
+
+test('Ctrl+Q or Cmd+Q hides the app to tray when close-to-tray is enabled', async () => {
+  const { app, window } = await launchApp();
+  const browserWindow = await app.browserWindow(window);
+  const closeShortcut = process.platform === 'darwin' ? 'Meta+Q' : 'Control+Q';
+
+  await clearRememberedCloseBehavior(window);
+  await selectMenuBarItem(window, 'File', 'Setting...');
+  await expect(window.getByTestId('settings-dialog')).toBeVisible();
+  await setSwitchChecked(window.getByTestId('settings-close-to-tray-switch'), true);
+  await expect.poll(async () => readConfigValue(window, 'window.closeActionPreference')).toBe('tray');
+  await window.getByTestId('settings-close-button').click();
+
+  await window.bringToFront();
+  await window.keyboard.press(closeShortcut);
+
+  await expect.poll(async () => browserWindow.evaluate((win) => win.isVisible())).toBe(false);
+  await expect.poll(() => app.windows().length).toBe(1);
+
+  await browserWindow.evaluate((win) => {
+    win.show();
+    win.focus();
+  });
+  await expect.poll(async () => browserWindow.evaluate((win) => win.isVisible())).toBe(true);
+
+  await clearRememberedCloseBehavior(window);
   await app.close();
 });
 
@@ -1152,13 +1280,32 @@ test('terminal uses the shared theme and mono font at runtime', async () => {
   const { app, window } = await launchApp();
 
   await openBottomTerminal(window);
+  await expect.poll(async () => readTerminalPid(window), {
+    timeout: 15000,
+  }).toBeGreaterThan(0);
 
-  const themeState = await readTerminalThemeSnapshot(window);
-  expect(themeState.terminalBackground).toBeTruthy();
-  expect(themeState.terminalFontFamilies.length).toBeGreaterThan(0);
-  expect(themeState.expectedBackground).toBeTruthy();
-  expect(themeState.terminalBackground).toBe(themeState.expectedBackground);
-  expect(themeState.terminalFontFamilies.some((value) => value.toLowerCase().includes('jetbrains mono'))).toBe(true);
+  await expect.poll(async () => {
+    const themeState = await readTerminalThemeSnapshot(window);
+
+    return {
+      hasBackground: Boolean(themeState.terminalBackground),
+      hasFontFamilies: themeState.terminalFontFamilies.length > 0,
+      hasExpectedBackground: Boolean(themeState.expectedBackground),
+      backgroundMatches: themeState.terminalBackground === themeState.expectedBackground,
+      usesJetBrainsMono: themeState.terminalFontFamilies.some((value) => value.toLowerCase().includes('jetbrains mono')),
+    };
+  }, {
+    timeout: 15000,
+  }).toEqual({
+    hasBackground: true,
+    hasFontFamilies: true,
+    hasExpectedBackground: true,
+    backgroundMatches: true,
+    usesJetBrainsMono: true,
+  });
+
+  await window.getByRole('button', { name: /close panel/i }).click();
+  await expect(window.getByTestId('terminal-host')).toHaveCount(0);
 
   await app.close();
 });
@@ -1476,13 +1623,20 @@ test('code editor settings persist across app relaunch', async () => {
 
   await selectComboboxOption(
     firstWindow,
+    'settings-editor-font-family-combobox',
+    'settings-editor-font-family-option-monaspace-neon',
+  );
+  await selectComboboxOption(
+    firstWindow,
     'settings-editor-theme-combobox',
     'settings-editor-theme-option-github-dark',
   );
   await setEditorFontSizePreset(firstWindow, 'max');
 
+  await expect.poll(async () => readConfigValue(firstWindow, 'editor.fontFamily')).toBe('monaspace-neon');
   await expect.poll(async () => readConfigValue(firstWindow, 'editor.theme')).toBe('github-dark');
   await expect.poll(async () => readConfigValue(firstWindow, 'editor.fontSize')).toBe(24);
+  await expect(firstWindow.getByTestId('settings-editor-font-family-combobox')).toContainText('Monaspace Neon');
   await expect(firstWindow.getByTestId('settings-editor-font-size-value')).toHaveText('24px');
   await expect(firstWindow.getByTestId('settings-editor-theme-combobox')).toContainText('GitHub Dark');
 
@@ -1498,14 +1652,14 @@ test('code editor settings persist across app relaunch', async () => {
 
       return snapshot
         ? {
-            fontFamilyHasMono: snapshot.fontFamily.includes('JetBrains Mono'),
+            fontFamilyIncludesSelection: snapshot.fontFamily.includes('Monaspace Neon'),
             fontSize: snapshot.fontSize,
             matchesBackground: snapshot.backgroundColor === snapshot.expectedBackgroundColor,
           }
         : null;
     })
     .toEqual({
-      fontFamilyHasMono: true,
+      fontFamilyIncludesSelection: true,
       fontSize: '24px',
       matchesBackground: true,
     });
@@ -1533,23 +1687,29 @@ test('code editor settings persist across app relaunch', async () => {
 
       return snapshot
         ? {
-            fontFamilyHasMono: snapshot.fontFamily.includes('JetBrains Mono'),
+            fontFamilyIncludesSelection: snapshot.fontFamily.includes('Monaspace Neon'),
             fontSize: snapshot.fontSize,
             matchesBackground: snapshot.backgroundColor === snapshot.expectedBackgroundColor,
           }
         : null;
     })
     .toEqual({
-      fontFamilyHasMono: true,
+      fontFamilyIncludesSelection: true,
       fontSize: '24px',
       matchesBackground: true,
     });
 
   await secondWindow.getByTestId('menu-settings-button').click();
   await expect(secondWindow.getByTestId('settings-dialog')).toBeVisible();
+  await expect(secondWindow.getByTestId('settings-editor-font-family-combobox')).toContainText('Monaspace Neon');
   await expect(secondWindow.getByTestId('settings-editor-font-size-value')).toHaveText('24px');
   await expect(secondWindow.getByTestId('settings-editor-theme-combobox')).toContainText('GitHub Dark');
 
+  await selectComboboxOption(
+    secondWindow,
+    'settings-editor-font-family-combobox',
+    'settings-editor-font-family-option-jetbrains-mono',
+  );
   await setEditorFontSizePreset(secondWindow, 'min');
   await selectComboboxOption(
     secondWindow,
@@ -1557,6 +1717,7 @@ test('code editor settings persist across app relaunch', async () => {
     'settings-editor-theme-option-github-light',
   );
 
+  await expect.poll(async () => readConfigValue(secondWindow, 'editor.fontFamily')).toBe('jetbrains-mono');
   await expect.poll(async () => readConfigValue(secondWindow, 'editor.fontSize')).toBe(10);
   await expect.poll(async () => readConfigValue(secondWindow, 'editor.theme')).toBe('github-light');
 
@@ -1572,20 +1733,108 @@ test('code editor settings persist across app relaunch', async () => {
 
       return snapshot
         ? {
-            fontFamilyHasMono: snapshot.fontFamily.includes('JetBrains Mono'),
+            fontFamilyIncludesSelection: snapshot.fontFamily.includes('JetBrains Mono'),
             fontSize: snapshot.fontSize,
             matchesBackground: snapshot.backgroundColor === snapshot.expectedBackgroundColor,
           }
         : null;
     })
     .toEqual({
-      fontFamilyHasMono: true,
+      fontFamilyIncludesSelection: true,
       fontSize: '10px',
       matchesBackground: true,
     });
 
   await secondApp.close();
 });
+
+test('editor font and theme comboboxes support wheel scrolling and reopen at the selected option', async () => {
+  const { app, window } = await launchApp()
+
+  await window.getByTestId('menu-settings-button').click()
+  await expect(window.getByTestId('settings-dialog')).toBeVisible()
+
+  await window.getByTestId('settings-editor-font-family-combobox').click()
+  const fontList = window.locator('[data-combobox-list="settings-editor-font-family-combobox-list"]')
+  await expect(fontList).toBeVisible()
+  await fontList.hover()
+  await window.mouse.wheel(0, 720)
+
+  await expect.poll(async () => {
+    const snapshot = await readComboboxListSnapshot(
+      window,
+      'settings-editor-font-family-combobox-list',
+      'settings-editor-font-family-option-jetbrains-mono',
+    )
+
+    return snapshot?.scrollTop ?? 0
+  }).toBeGreaterThan(0)
+
+  await window.getByTestId('settings-editor-font-family-option-victor-mono').click()
+  await expect(window.getByTestId('settings-editor-font-family-combobox')).toContainText('Victor Mono')
+
+  await window.getByTestId('settings-editor-font-family-combobox').click()
+  await expect.poll(async () => {
+    return readComboboxListSnapshot(
+      window,
+      'settings-editor-font-family-combobox-list',
+      'settings-editor-font-family-option-victor-mono',
+    )
+  }).toEqual(
+    expect.objectContaining({
+      selectedFullyVisible: true,
+    }),
+  )
+  await window.keyboard.press('Escape')
+
+  await selectComboboxOption(
+    window,
+    'settings-editor-theme-combobox',
+    'settings-editor-theme-option-solarized-dark',
+  )
+  await expect(window.getByTestId('settings-editor-theme-combobox')).toContainText('Solarized Dark')
+
+  await window.getByTestId('settings-editor-theme-combobox').click()
+  const themeList = window.locator('[data-combobox-list="settings-editor-theme-combobox-list"]')
+  await expect(themeList).toBeVisible()
+  await themeList.hover()
+  await window.mouse.wheel(0, 320)
+
+  await expect.poll(async () => {
+    return readComboboxListSnapshot(
+      window,
+      'settings-editor-theme-combobox-list',
+      'settings-editor-theme-option-solarized-dark',
+    )
+  }).toEqual(
+    expect.objectContaining({
+      scrollHeight: expect.any(Number),
+      clientHeight: expect.any(Number),
+      selectedFullyVisible: true,
+    }),
+  )
+
+  await window.keyboard.press('Escape')
+  await app.close()
+})
+
+test('newly downloaded Monaco font options can be selected and persist to config', async () => {
+  const { app, window } = await launchApp()
+
+  await window.getByTestId('menu-settings-button').click()
+  await expect(window.getByTestId('settings-dialog')).toBeVisible()
+
+  await selectComboboxOption(
+    window,
+    'settings-editor-font-family-combobox',
+    'settings-editor-font-family-option-0xproto',
+  )
+
+  await expect(window.getByTestId('settings-editor-font-family-combobox')).toContainText('0xProto')
+  await expect.poll(async () => readConfigValue(window, 'editor.fontFamily')).toBe('0xproto')
+
+  await app.close()
+})
 
 test('theme toggle persists across app relaunch', async () => {
   const firstLaunch = await launchApp();

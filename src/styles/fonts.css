@@ -1,5 +1,165 @@
-/* JetBrains Mono — bundled locally via @fontsource, no network dependency */
+/* Default editor font stays eager; additional @fontsource families load on demand. */
 @import '@fontsource/jetbrains-mono/400.css';
 @import '@fontsource/jetbrains-mono/400-italic.css';
 @import '@fontsource/jetbrains-mono/500.css';
 @import '@fontsource/jetbrains-mono/700.css';
+
+@font-face {
+	font-family: '0xProto';
+	font-style: normal;
+	font-weight: 400;
+	font-display: swap;
+	src: url('/generated/fonts/0xProto-Regular.ttf') format('truetype');
+}
+
+@font-face {
+	font-family: 'ZxProto';
+	font-style: normal;
+	font-weight: 400;
+	font-display: swap;
+	src: url('/generated/fonts/ZxProto-Regular.ttf') format('truetype');
+}
+
+@font-face {
+	font-family: 'Agave';
+	font-style: normal;
+	font-weight: 400;
+	font-display: swap;
+	src: url('/generated/fonts/Agave-Regular.ttf') format('truetype');
+}
+
+@font-face {
+	font-family: 'DejaVu Sans Mono';
+	font-style: normal;
+	font-weight: 400;
+	font-display: swap;
+	src: url('/generated/fonts/DejaVuSansMono.ttf') format('truetype');
+}
+
+@font-face {
+	font-family: 'Fantasque Sans Mono';
+	font-style: normal;
+	font-weight: 400;
+	font-display: swap;
+	src: url('/generated/fonts/FantasqueSansMono-Regular.ttf') format('truetype');
+}
+
+@font-face {
+	font-family: 'Hack';
+	font-style: normal;
+	font-weight: 400;
+	font-display: swap;
+	src: url('/generated/fonts/Hack-Regular.woff2') format('woff2');
+}
+
+@font-face {
+	font-family: 'Hasklig';
+	font-style: normal;
+	font-weight: 400;
+	font-display: swap;
+	src: url('/generated/fonts/Hasklig-Regular.ttf') format('truetype');
+}
+
+@font-face {
+	font-family: 'JuliaMono';
+	font-style: normal;
+	font-weight: 400;
+	font-display: swap;
+	src: url('/generated/fonts/JuliaMono-Regular.woff2') format('woff2');
+}
+
+@font-face {
+	font-family: 'Liberation Mono';
+	font-style: normal;
+	font-weight: 400;
+	font-display: swap;
+	src: url('/generated/fonts/LiberationMono-Regular.ttf') format('truetype');
+}
+
+@font-face {
+	font-family: 'M PLUS Code Latin 60';
+	font-style: normal;
+	font-weight: 400;
+	font-display: swap;
+	src: url('/generated/fonts/MPLUSCodeLatin-Regular.ttf') format('truetype');
+}
+
+@font-face {
+	font-family: 'M PLUS Code Latin 50';
+	font-style: normal;
+	font-weight: 400;
+	font-display: swap;
+	src: url('/generated/fonts/MPLUSCodeLatin50-Regular.ttf') format('truetype');
+}
+
+@font-face {
+	font-family: 'Meslo LG DZ';
+	font-style: normal;
+	font-weight: 400;
+	font-display: swap;
+	src: url('/generated/fonts/MesloLGLDZ-Regular.ttf') format('truetype');
+}
+
+@font-face {
+	font-family: 'Meslo LG MDZ';
+	font-style: normal;
+	font-weight: 400;
+	font-display: swap;
+	src: url('/generated/fonts/MesloLGMDZ-Regular.ttf') format('truetype');
+}
+
+@font-face {
+	font-family: 'Meslo LG SDZ';
+	font-style: normal;
+	font-weight: 400;
+	font-display: swap;
+	src: url('/generated/fonts/MesloLGSDZ-Regular.ttf') format('truetype');
+}
+
+@font-face {
+	font-family: 'Monaspace Argon';
+	font-style: normal;
+	font-weight: 400;
+	font-display: swap;
+	src: url('/generated/fonts/MonaspaceArgon-Regular.woff2') format('woff2');
+}
+
+@font-face {
+	font-family: 'Monaspace Krypton';
+	font-style: normal;
+	font-weight: 400;
+	font-display: swap;
+	src: url('/generated/fonts/MonaspaceKrypton-Regular.woff2') format('woff2');
+}
+
+@font-face {
+	font-family: 'Monaspace Neon';
+	font-style: normal;
+	font-weight: 400;
+	font-display: swap;
+	src: url('/generated/fonts/MonaspaceNeon-Regular.woff2') format('woff2');
+}
+
+@font-face {
+	font-family: 'Monaspace Radon';
+	font-style: normal;
+	font-weight: 400;
+	font-display: swap;
+	src: url('/generated/fonts/MonaspaceRadon-Regular.woff2') format('woff2');
+}
+
+@font-face {
+	font-family: 'Monaspace Xenon';
+	font-style: normal;
+	font-weight: 400;
+	font-display: swap;
+	src: url('/generated/fonts/MonaspaceXenon-Regular.woff2') format('woff2');
+}
+
+@font-face {
+	font-family: 'Monoid';
+	font-style: normal;
+	font-weight: 400;
+	font-display: swap;
+	src: url('/generated/fonts/Monoid-Regular.ttf') format('truetype');
+}

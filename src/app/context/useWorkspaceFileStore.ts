@@ -4,11 +4,12 @@ export function useWorkspaceFileStore() {
   const [fileContents, setFileContents] = useState<Record<string, string>>({});
   const [loadingFiles, setLoadingFiles] = useState<Record<string, boolean>>({});
   const [loadErrors, setLoadErrors] = useState<Record<string, string>>({});
+  const fileContentsRef = useRef<Record<string, string>>({});
   const inFlightLoadsRef = useRef<Set<string>>(new Set());
   const isMountedRef = useRef(true);
 
   const loadFileContent = useCallback((fileId: string) => {
-    if (!fileId || fileContents[fileId] !== undefined || inFlightLoadsRef.current.has(fileId)) {
+    if (!fileId || fileContentsRef.current[fileId] !== undefined || inFlightLoadsRef.current.has(fileId)) {
       return;
     }
 
@@ -27,7 +28,15 @@ export function useWorkspaceFileStore() {
           return;
         }
 
-        setFileContents((current) => ({ ...current, [fileId]: content }));
+        setFileContents((current) => {
+          if (current[fileId] === content) {
+            return current;
+          }
+
+          const next = { ...current, [fileId]: content };
+          fileContentsRef.current = next;
+          return next;
+        });
         setLoadErrors((current) => {
           if (!current[fileId]) {
             return current;
@@ -54,15 +63,27 @@ export function useWorkspaceFileStore() {
 
         setLoadingFiles((current) => ({ ...current, [fileId]: false }));
       });
-  }, [fileContents]);
+  }, []);
 
   const updateFileContent = useCallback((fileId: string, content: string) => {
-    setFileContents((current) => ({ ...current, [fileId]: content }));
+    setFileContents((current) => {
+      if (current[fileId] === content) {
+        return current;
+      }
+
+      const next = { ...current, [fileId]: content };
+      fileContentsRef.current = next;
+      return next;
+    });
   }, []);
 
   useEffect(() => () => {
     isMountedRef.current = false;
   }, []);
+
+  useEffect(() => {
+    fileContentsRef.current = fileContents;
+  }, [fileContents]);
 
   return {
     fileContents,
