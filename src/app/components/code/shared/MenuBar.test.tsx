@@ -93,6 +93,13 @@ function WorkspaceControls() {
   );
 }
 
+function hasNormalizedTextContent(expectedText: string) {
+  const normalizedExpectedText = expectedText.replace(/\s+/g, '');
+
+  return (_content: string, element?: Element | null) =>
+    element?.textContent?.replace(/\s+/g, '') === normalizedExpectedText;
+}
+
 describe('MenuBar', () => {
   it('calls electron window controls directly', async () => {
     const user = userEvent.setup();
@@ -106,6 +113,34 @@ describe('MenuBar', () => {
     expect(window.electronAPI?.minimize).toHaveBeenCalledTimes(1);
     expect(window.electronAPI?.maximize).toHaveBeenCalledTimes(1);
     expect(window.electronAPI?.close).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders Ctrl-based menu shortcuts on non-macOS platforms', async () => {
+    const user = userEvent.setup();
+
+    renderMenuBar();
+
+    await user.click(screen.getByText('File'));
+
+    expect(await screen.findByText(hasNormalizedTextContent('New ProjectCtrl+N'))).toBeInTheDocument();
+    expect(screen.getByText(hasNormalizedTextContent('SaveCtrl+S'))).toBeInTheDocument();
+    expect(screen.getByText(hasNormalizedTextContent('Save As...Ctrl+Shift+S'))).toBeInTheDocument();
+    expect(screen.getByText(hasNormalizedTextContent('CloseCtrl+Q'))).toBeInTheDocument();
+  });
+
+  it('renders command-based menu shortcuts on macOS', async () => {
+    const user = userEvent.setup();
+
+    window.electronAPI!.platform = 'darwin';
+
+    renderMenuBar();
+
+    await user.click(screen.getByText('File'));
+
+    expect(await screen.findByText(hasNormalizedTextContent('New Project⌘N'))).toBeInTheDocument();
+    expect(screen.getByText(hasNormalizedTextContent('Save⌘S'))).toBeInTheDocument();
+    expect(screen.getByText(hasNormalizedTextContent('Save As...⇧⌘S'))).toBeInTheDocument();
+    expect(screen.getByText(hasNormalizedTextContent('Close⌘Q'))).toBeInTheDocument();
   });
 
   it('opens settings from the File menu using the shared settings behavior', async () => {
@@ -160,6 +195,19 @@ describe('MenuBar', () => {
       key: 'q',
       ctrlKey: !isMacOS,
       metaKey: isMacOS,
+    });
+
+    expect(window.electronAPI?.close).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes the app with Command+Q on macOS', () => {
+    window.electronAPI!.platform = 'darwin';
+
+    renderMenuBar();
+
+    fireEvent.keyDown(window, {
+      key: 'q',
+      metaKey: true,
     });
 
     expect(window.electronAPI?.close).toHaveBeenCalledTimes(1);

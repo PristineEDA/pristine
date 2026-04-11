@@ -45,15 +45,39 @@ import { centerViewSwitchItemClassName } from './viewSwitcherStyles';
 const menus = [
   {
     label: 'File',
-    items: [{ name: 'New Project', kdb: '⌘N'}, {name: 'Open Project...', kdb: '⌘O'}, {name: '---', kdb: ''}, {name: 'Save', kdb: '⌘S'}, {name: 'Save As...', kdb: '⇧⌘S'}, {name: '---', kdb: ''}, {name: 'Setting...', kdb: ''}, {name: 'Close', kdb: '⌘Q'}],
+    items: [
+      { name: 'New Project', shortcut: 'Mod+N' },
+      { name: 'Open Project...', shortcut: 'Mod+O' },
+      { name: '---' },
+      { name: 'Save', shortcut: 'Mod+S' },
+      { name: 'Save As...', shortcut: 'Shift+Mod+S' },
+      { name: '---' },
+      { name: 'Setting...' },
+      { name: 'Close', shortcut: 'Mod+Q' },
+    ],
   },
   {
     label: 'Edit',
-    items: [{name: 'Undo', kdb: '⌘Z'}, {name: 'Redo', kdb: '⌘Y'}, {name: '---', kdb: ''}, {name: 'Cut', kdb: '⌘X'}, {name: 'Copy', kdb: '⌘C'}, {name: 'Paste', kdb: '⌘V'}, {name: '---', kdb: ''}, {name: 'Find', kdb: '⌘F'}, {name: 'Replace', kdb: '⌘H'}],
+    items: [
+      { name: 'Undo', shortcut: 'Mod+Z' },
+      { name: 'Redo', shortcut: 'Mod+Y' },
+      { name: '---' },
+      { name: 'Cut', shortcut: 'Mod+X' },
+      { name: 'Copy', shortcut: 'Mod+C' },
+      { name: 'Paste', shortcut: 'Mod+V' },
+      { name: '---' },
+      { name: 'Find', shortcut: 'Mod+F' },
+      { name: 'Replace', shortcut: 'Mod+H' },
+    ],
   },
   {
     label: 'Help',
-    items: [{name: 'Documentation', kdb: ''}, {name: 'Check for Update...', kdb: ''}, {name: '---', kdb: ''}, {name: 'About', kdb: ''}],
+    items: [
+      { name: 'Documentation' },
+      { name: 'Check for Update...' },
+      { name: '---' },
+      { name: 'About' },
+    ],
   },
 ];
 
@@ -62,11 +86,13 @@ const noDragInteractive = {
   WebkitAppRegion: 'no-drag' as const,
   pointerEvents: 'auto' as const,
 };
-const isMacOS = window.electronAPI?.platform === 'darwin';
-const closeShortcutLabel = isMacOS ? '⌘Q' : 'Ctrl+Q';
 const CLOSE_ACTION_CONFIG_KEY = 'window.closeActionPreference';
 const FLOATING_INFO_VISIBLE_CONFIG_KEY = 'ui.floatingInfoWindow.visible';
 const THEME_CONFIG_KEY = 'ui.theme';
+
+function isMacOSPlatform(): boolean {
+  return typeof window !== 'undefined' && window.electronAPI?.platform === 'darwin';
+}
 
 function getMenuItemAction(menuLabel: string, itemName: string): 'open-settings' | 'close-app' | null {
   if (menuLabel !== 'File') {
@@ -84,14 +110,54 @@ function getMenuItemAction(menuLabel: string, itemName: string): 'open-settings'
   return null;
 }
 
-function getMenuItemShortcut(menuLabel: string, itemName: string, shortcutLabel: string): string {
-  if (menuLabel === 'File' && itemName === 'Close') {
-    return shortcutLabel;
+function formatShortcutLabel(shortcut?: string): string {
+  if (!shortcut) {
+    return '';
   }
 
+  const isMacOS = isMacOSPlatform();
+  const tokens = shortcut.split('+');
+  const keyToken = tokens.at(-1)?.toUpperCase() ?? '';
+  const modifierTokens = tokens.slice(0, -1);
+
+  if (isMacOS) {
+    const macModifiers = modifierTokens.map((token) => {
+      if (token === 'Mod') {
+        return '⌘';
+      }
+
+      if (token === 'Shift') {
+        return '⇧';
+      }
+
+      return token.toUpperCase();
+    });
+
+    return [...macModifiers, keyToken].join('');
+  }
+
+  const nonMacModifierOrder = ['Mod', 'Shift'];
+  const nonMacModifiers = [...modifierTokens]
+    .sort((leftToken, rightToken) => nonMacModifierOrder.indexOf(leftToken) - nonMacModifierOrder.indexOf(rightToken))
+    .map((token) => {
+      if (token === 'Mod') {
+        return 'Ctrl';
+      }
+
+      if (token === 'Shift') {
+        return 'Shift';
+      }
+
+      return token.toUpperCase();
+    });
+
+  return [...nonMacModifiers, keyToken].join('+');
+}
+
+function getMenuItemShortcut(menuLabel: string, itemName: string): string {
   const menu = menus.find((entry) => entry.label === menuLabel);
   const item = menu?.items.find((entry) => entry.name === itemName);
-  return item?.kdb ?? '';
+  return formatShortcutLabel(item?.shortcut);
 }
 
 function isCloseShortcutPressed(event: KeyboardEvent): boolean {
@@ -99,7 +165,7 @@ function isCloseShortcutPressed(event: KeyboardEvent): boolean {
     return false;
   }
 
-  if (isMacOS) {
+  if (isMacOSPlatform()) {
     return event.metaKey && !event.ctrlKey;
   }
 
@@ -196,6 +262,7 @@ export function MenuBar({
   onToggleBottomPanel,
   onToggleRightPanel,
 }: MenuBarProps) {
+  const isMacOS = isMacOSPlatform();
   const { activeView, mainContentView, setMainContentView } = useWorkspace();
   const {
     fontFamily: editorFontFamily,
@@ -378,7 +445,7 @@ export function MenuBar({
                     }
 
                     const action = getMenuItemAction(menu.label, item.name);
-                    const shortcut = getMenuItemShortcut(menu.label, item.name, closeShortcutLabel);
+                    const shortcut = getMenuItemShortcut(menu.label, item.name);
 
                     return (
                       <MenubarItem
