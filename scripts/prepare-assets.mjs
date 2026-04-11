@@ -179,22 +179,28 @@ function startTarExtraction(args) {
   return new Promise((resolve, reject) => {
     const child = spawn('tar', args, { stdio: ['ignore', 'pipe', 'pipe'] })
     let stderr = ''
+    const exitPromise = new Promise((resolveExit, rejectExit) => {
+      child.once('close', resolveExit)
+      child.once('error', (error) => {
+        const wrappedError = new Error(`Failed to launch tar: ${error instanceof Error ? error.message : String(error)}`)
+        rejectExit(wrappedError)
+        reject(wrappedError)
+      })
+    })
 
-    child.on('error', (error) => {
-      reject(new Error(`Failed to launch tar: ${error instanceof Error ? error.message : String(error)}`))
+    child.once('spawn', () => {
+      resolve({ child, exitPromise, getStderr: () => stderr })
     })
 
     child.stderr.on('data', (chunk) => {
       stderr += String(chunk)
     })
-
-    resolve({ child, getStderr: () => stderr })
   })
 }
 
 async function extractTarEntry(archivePath, entryPath, outputPath) {
   await ensureDirectory(path.dirname(outputPath))
-  const { child, getStderr } = await startTarExtraction(['-xOf', archivePath, entryPath])
+  const { child, exitPromise, getStderr } = await startTarExtraction(['-xOf', archivePath, entryPath])
 
   try {
     await pipeline(child.stdout, createWriteStream(outputPath))
@@ -203,10 +209,7 @@ async function extractTarEntry(archivePath, entryPath, outputPath) {
     throw error
   }
 
-  const exitCode = await new Promise((resolve, reject) => {
-    child.on('close', resolve)
-    child.on('error', reject)
-  })
+  const exitCode = await exitPromise
 
   if (exitCode !== 0) {
     await rm(outputPath, { force: true })
