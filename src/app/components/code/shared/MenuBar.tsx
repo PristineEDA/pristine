@@ -27,6 +27,7 @@ import {
   MenubarContent,
   MenubarItem,
   MenubarSeparator,
+  MenubarShortcut,
 } from '../../ui/menubar';
 import { ToggleGroup, ToggleGroupItem } from '../../ui/toggle-group';
 import { Toggle } from '../../ui/toggle';
@@ -43,31 +44,15 @@ import { centerViewSwitchItemClassName } from './viewSwitcherStyles';
 const menus = [
   {
     label: 'File',
-    items: ['New Project', 'Open Project...', '---', 'Save', 'Save As...', '---', 'Setting...', 'Close'],
+    items: [{ name: 'New Project', kdb: '⌘N'}, {name: 'Open Project...', kdb: '⌘O'}, {name: '---', kdb: ''}, {name: 'Save', kdb: '⌘S'}, {name: 'Save As...', kdb: '⇧⌘S'}, {name: '---', kdb: ''}, {name: 'Setting...', kdb: ''}, {name: 'Close', kdb: '⌘Q'}],
   },
   {
     label: 'Edit',
-    items: ['Undo', 'Redo', '---', 'Cut', 'Copy', 'Paste', '---', 'Find', 'Replace', '---', 'Format Document', 'Toggle Comment'],
-  },
-  {
-    label: 'Selection',
-    items: ['Select All', 'Expand Selection', '---', 'Select All Occurrences', 'Add Cursor to Line Ends'],
-  },
-  {
-    label: 'View',
-    items: ['Command Palette', '---', 'Explorer', 'AI Assistant', '---', 'Terminal', 'Output', 'Problems', '---', 'Split Editor'],
-  },
-  {
-    label: 'Run',
-    items: ['Start Simulation', 'Debug Simulation', '---', 'Static Check', 'Synthesis', 'Place & Route', '---', 'Stop'],
-  },
-  {
-    label: 'Terminal',
-    items: ['New Terminal', 'Split Terminal', '---', 'Run Task...'],
+    items: [{name: 'Undo', kdb: '⌘Z'}, {name: 'Redo', kdb: '⌘Y'}, {name: '---', kdb: ''}, {name: 'Cut', kdb: '⌘X'}, {name: 'Copy', kdb: '⌘C'}, {name: 'Paste', kdb: '⌘V'}, {name: '---', kdb: ''}, {name: 'Find', kdb: '⌘F'}, {name: 'Replace', kdb: '⌘H'}],
   },
   {
     label: 'Help',
-    items: ['Documentation', 'Check for Update...', '---', 'About'],
+    items: [{name: 'Documentation', kdb: ''}, {name: 'Check for Update...', kdb: ''}, {name: '---', kdb: ''}, {name: 'About', kdb: ''}],
   },
 ];
 
@@ -302,16 +287,16 @@ export function MenuBar({
           <Menubar className="h-8 border-0 rounded-none bg-transparent p-0 shadow-none" style={noDrag as React.CSSProperties}>
             {menus.map((menu) => (
               <MenubarMenu key={menu.label}>
-                <MenubarTrigger className="px-2.5 h-7 text-[12px] font-normal rounded-sm">
+                <MenubarTrigger className="px-2.5 h-6 text-[12px] font-normal rounded-sm">
                   {menu.label}
                 </MenubarTrigger>
-                <MenubarContent align="start" sideOffset={4} className="min-w-48">
+                <MenubarContent align="start" sideOffset={4} className="min-w-36 p-0.5">
                   {menu.items.map((item, i) =>
-                    item === '---' ? (
-                      <MenubarSeparator key={i} />
+                    item.name === '---' ? (
+                      <MenubarSeparator key={i} className="my-0.5" />
                     ) : (
-                      <MenubarItem key={i} className="text-[12px]">
-                        {item}
+                      <MenubarItem key={i} className="px-2 py-1 text-[12px]">
+                        {item.name} <MenubarShortcut>{item.kdb}</MenubarShortcut>
                       </MenubarItem>
                     )
                   )}
