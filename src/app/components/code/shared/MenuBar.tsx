@@ -117,7 +117,7 @@ function formatShortcutLabel(shortcut?: string): string {
 
   const isMacOS = isMacOSPlatform();
   const tokens = shortcut.split('+');
-  const keyToken = tokens.at(-1)?.toUpperCase() ?? '';
+  const keyToken = tokens[tokens.length - 1]?.toUpperCase() ?? '';
   const modifierTokens = tokens.slice(0, -1);
 
   if (isMacOS) {
