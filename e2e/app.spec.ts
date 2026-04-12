@@ -1205,33 +1205,55 @@ test('status bar switches across primary and secondary navigation views', async 
   await app.close();
 });
 
-test('left sidebar width is resized to keep tab labels readable when the window size changes', async () => {
+test('left sidebar keeps a fixed pixel width across window changes and manual resize', async () => {
   const { app, window } = await launchApp();
   const browserWindow = await app.browserWindow(window);
   await ensureExplorerVisible(window);
   const leftPanel = window.getByTestId('panel-left-panel');
+  const leftHandle = window.getByTestId('panel-handle-left-panel');
   const readPanelWidth = async () => leftPanel.evaluate((element) => {
     const panelElement = element as { getBoundingClientRect?: () => { width: number } };
     return Math.round(panelElement.getBoundingClientRect?.().width ?? 0);
   });
 
   await expect(leftPanel).toBeVisible();
+  await expect(leftHandle).toBeVisible();
+
+  await expect.poll(readPanelWidth).toBeGreaterThanOrEqual(238);
+  await expect.poll(readPanelWidth).toBeLessThanOrEqual(242);
 
   await browserWindow.evaluate((win) => win.setSize(1600, 900));
 
-  await expect.poll(readPanelWidth).toBeGreaterThan(220);
-  await expect.poll(readPanelWidth).toBeLessThan(260);
+  await expect.poll(readPanelWidth).toBeGreaterThanOrEqual(238);
+  await expect.poll(readPanelWidth).toBeLessThanOrEqual(242);
 
-  const wideWidth = await readPanelWidth();
+  await leftHandle.evaluate((element) => {
+    const handle = element as HTMLElement;
+
+    handle.dispatchEvent(new PointerEvent('pointerdown', {
+      bubbles: true,
+      clientX: 240,
+      pointerId: 1,
+    }));
+    handle.dispatchEvent(new PointerEvent('pointermove', {
+      bubbles: true,
+      clientX: 320,
+      pointerId: 1,
+    }));
+    handle.dispatchEvent(new PointerEvent('pointerup', {
+      bubbles: true,
+      clientX: 320,
+      pointerId: 1,
+    }));
+  });
+
+  await expect.poll(readPanelWidth).toBeGreaterThanOrEqual(318);
+  await expect.poll(readPanelWidth).toBeLessThanOrEqual(322);
 
   await browserWindow.evaluate((win) => win.setSize(1100, 900));
 
-  await expect.poll(readPanelWidth).toBeGreaterThan(220);
-  await expect.poll(readPanelWidth).toBeLessThan(260);
-
-  const narrowWidth = await readPanelWidth();
-
-  expect(Math.abs(wideWidth - narrowWidth)).toBeLessThanOrEqual(16);
+  await expect.poll(readPanelWidth).toBeGreaterThanOrEqual(318);
+  await expect.poll(readPanelWidth).toBeLessThanOrEqual(322);
 
   await app.close();
 });

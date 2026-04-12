@@ -3,18 +3,13 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import App from './App';
 
-const panelResizeMock = vi.fn();
 let renderRealActivityBar = false;
 
 vi.mock('./components/ui/resizable', () => ({
   ResizablePanelGroup: ({ children }: { children: React.ReactNode }) => <div data-testid="panel-group">{children}</div>,
-  ResizablePanel: ({ children, id, minSize, defaultSize, panelRef, collapsed }: any) => {
+  ResizablePanel: ({ children, id, minSize, defaultSize, collapsed }: any) => {
     if (collapsed) {
       return null;
-    }
-
-    if (panelRef && typeof panelRef === 'object') {
-      panelRef.current = { resize: panelResizeMock };
     }
 
     return <div data-testid={`panel-${id}`} data-min-size={minSize} data-default-size={defaultSize}>{children}</div>;
@@ -176,40 +171,29 @@ vi.mock('./components/code/shared/QuickOpenPalette', () => ({
 }));
 
 describe('App', () => {
-  it('opens the left panel on demand and resizes it from the container width', async () => {
-    class ResizeObserverMock {
-      private readonly callback: ResizeObserverCallback;
-
-      constructor(callback: ResizeObserverCallback) {
-        this.callback = callback;
-      }
-
-      observe = (target: Element) => {
-        Object.defineProperty(target, 'clientWidth', {
-          configurable: true,
-          value: 1280,
-        });
-
-        this.callback([{ target, contentRect: { width: 1280 } as DOMRectReadOnly }] as ResizeObserverEntry[], this as unknown as ResizeObserver);
-      };
-
-      disconnect = vi.fn();
-      unobserve = vi.fn();
-    }
-
-    vi.stubGlobal('ResizeObserver', ResizeObserverMock);
-
+  it('opens the left panel at 240px and remembers dragged width across code view switches', async () => {
     render(<App />);
 
-  expect(screen.queryByTestId('panel-left-panel')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('panel-left-panel')).not.toBeInTheDocument();
 
-  fireEvent.click(screen.getByText('toggle-left-panel'));
+    fireEvent.click(screen.getByText('toggle-left-panel'));
 
-    expect(screen.getByTestId('panel-left-panel')).toHaveAttribute('data-min-size', '12');
-    expect(screen.getByTestId('panel-left-panel')).toHaveAttribute('data-default-size', '18');
+    expect(screen.getByTestId('panel-left-panel')).toHaveStyle({ width: '240px' });
+
+    const leftHandle = screen.getByTestId('panel-handle-left-panel');
+    fireEvent.pointerDown(leftHandle, { clientX: 240, pointerId: 1 });
+    fireEvent.pointerMove(leftHandle, { clientX: 300, pointerId: 1 });
+    fireEvent.pointerUp(leftHandle, { clientX: 300, pointerId: 1 });
+
+    expect(screen.getByTestId('panel-left-panel')).toHaveStyle({ width: '300px' });
+
+    fireEvent.click(screen.getByText('select-simulation'));
+    expect(await screen.findByTestId('code-view-simulation')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('select-explorer'));
 
     await waitFor(() => {
-      expect(panelResizeMock).toHaveBeenCalledWith('18.13%');
+      expect(screen.getByTestId('panel-left-panel')).toHaveStyle({ width: '300px' });
     });
   });
 
@@ -238,7 +222,7 @@ describe('App', () => {
 
     fireEvent.click(screen.getByText('toggle-left-panel'));
     expect(screen.getByTestId('menu-left-state')).toHaveTextContent('true');
-    expect(screen.getByTestId('panel-left-panel')).toHaveAttribute('data-default-size', '18');
+    expect(screen.getByTestId('panel-left-panel')).toHaveStyle({ width: '240px' });
     expect(screen.getByTestId('left-panel')).toBeInTheDocument();
     expect(screen.getByTestId('left-active-file')).toHaveTextContent('');
 

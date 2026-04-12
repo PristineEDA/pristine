@@ -1,19 +1,17 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { type PanelImperativeHandle } from './components/ui/resizable';
 import { MenuBar } from './components/code/shared/MenuBar';
 import { ActivityBar } from './components/code/shared/ActivityBar';
 import { LeftSidePanel } from './components/code/explorer/LeftSidePanel';
 import { EditorSplitLayout } from './components/code/shared/EditorSplitLayout';
 import { RightSidePanel } from './components/code/explorer/RightSidePanel';
 import { BottomPanel } from './components/code/explorer/BottomPanel';
-import { CodeWorkspaceShell } from './components/code/shared/CodeWorkspaceShell';
+import { CodeWorkspaceShell, EXPLORER_LEFT_PANEL_DEFAULT_WIDTH_PX } from './components/code/shared/CodeWorkspaceShell';
 import { AppStatusBar } from './components/code/shared/statusBars/AppStatusBar';
 import { QuickOpenPalette } from './components/code/shared/QuickOpenPalette';
 import { createQuickOpenFileEntries, getRecentQuickOpenFiles, searchQuickOpenFiles, type QuickOpenFileEntry, type QuickOpenSearchResult } from './quickOpen/quickOpenSearch';
 import type { WorkspaceRevealRequest } from './workspace/useWorkspaceTree';
 import { WorkspaceProvider, useWorkspace } from './context/WorkspaceContext';
 import type { EditorSelectionSnapshot } from './context/useWorkspaceEditorState';
-import { getLeftPanelTargetSizePercent } from './layout/panelSizing';
 import { SidebarProvider } from './components/ui/sidebar';
 
 const QUICK_OPEN_RECENT_LIMIT = 20;
@@ -73,20 +71,9 @@ function AppLayout() {
   const [quickOpenError, setQuickOpenError] = useState<string | null>(null);
   const [recentQuickOpenFiles, setRecentQuickOpenFiles] = useState<QuickOpenFileEntry[]>([]);
   const [revealRequest, setRevealRequest] = useState<WorkspaceRevealRequest | null>(null);
-  const panelGroupContainerRef = useRef<HTMLDivElement | null>(null);
-  const leftPanelRef = useRef<PanelImperativeHandle | null>(null);
+  const [explorerLeftPanelWidthPx, setExplorerLeftPanelWidthPx] = useState(EXPLORER_LEFT_PANEL_DEFAULT_WIDTH_PX);
   const revealTokenRef = useRef(0);
   const quickOpenEditorSnapshotRef = useRef<EditorSelectionSnapshot | null>(null);
-
-  const syncLeftPanelWidth = useCallback(() => {
-    const panelGroupContainer = panelGroupContainerRef.current;
-    if (!panelGroupContainer || !showLeftPanel) {
-      return;
-    }
-
-    const nextSize = getLeftPanelTargetSizePercent(panelGroupContainer.clientWidth);
-    leftPanelRef.current?.resize(`${nextSize}%`);
-  }, [showLeftPanel]);
 
   const handleActivityItemSelect = (nextView: string) => {
     setActiveView(nextView as typeof activeView);
@@ -143,33 +130,6 @@ function AppLayout() {
     recordRecentFile(filePath, fileName);
     openPreviewFile(filePath, fileName);
   }, [openPreviewFile, recordRecentFile]);
-
-  useEffect(() => {
-    const panelGroupContainer = panelGroupContainerRef.current;
-    if (!panelGroupContainer) {
-      return;
-    }
-
-    syncLeftPanelWidth();
-
-    const resizeObserver = typeof ResizeObserver !== 'undefined'
-      ? new ResizeObserver(syncLeftPanelWidth)
-      : null;
-
-    resizeObserver?.observe(panelGroupContainer);
-    window.addEventListener('resize', syncLeftPanelWidth);
-
-    return () => {
-      resizeObserver?.disconnect();
-      window.removeEventListener('resize', syncLeftPanelWidth);
-    };
-  }, [syncLeftPanelWidth]);
-
-  useEffect(() => {
-    if (showLeftPanel && canToggleLayoutPanels) {
-      syncLeftPanelWidth();
-    }
-  }, [canToggleLayoutPanels, showLeftPanel, syncLeftPanelWidth]);
 
   useEffect(() => {
     if (!isQuickOpenVisible || workspaceFiles !== null) {
@@ -262,6 +222,8 @@ function AppLayout() {
     bottomContent,
     rightContent,
     overlay,
+    leftFixedWidthPx,
+    onLeftFixedWidthChange,
   }: {
     shellTestId?: string;
     leftPanelId: string;
@@ -274,13 +236,13 @@ function AppLayout() {
     bottomContent: React.ReactNode;
     rightContent: React.ReactNode;
     overlay?: React.ReactNode;
+    leftFixedWidthPx?: number;
+    onLeftFixedWidthChange?: React.Dispatch<React.SetStateAction<number>>;
   }) => (
     <CodeWorkspaceShell
       shellTestId={shellTestId}
       activityBar={activityBar}
       overlay={overlay}
-      containerRef={panelGroupContainerRef}
-      leftPanelRef={leftPanelRef}
       showLeftPanel={showLeftPanel}
       showBottomPanel={showBottomPanel}
       showRightPanel={showRightPanel}
@@ -293,6 +255,8 @@ function AppLayout() {
       topContent={topContent}
       bottomContent={bottomContent}
       rightContent={rightContent}
+      leftFixedWidthPx={leftFixedWidthPx}
+      onLeftFixedWidthChange={onLeftFixedWidthChange}
     />
   );
 
@@ -303,6 +267,8 @@ function AppLayout() {
       topPanelId: 'editor-panel',
       bottomPanelId: 'bottom-panel',
       rightPanelId: 'right-panel',
+      leftFixedWidthPx: explorerLeftPanelWidthPx,
+      onLeftFixedWidthChange: setExplorerLeftPanelWidthPx,
       leftContent: (
         <LeftSidePanel
           activeFileId={activeTabId}

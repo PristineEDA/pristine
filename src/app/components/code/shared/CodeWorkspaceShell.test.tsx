@@ -1,5 +1,5 @@
-import { createRef } from 'react';
-import { render, screen } from '@testing-library/react';
+import { useState } from 'react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { CodeWorkspaceShell } from './CodeWorkspaceShell';
 
@@ -10,11 +10,8 @@ vi.mock('../../ui/resizable', () => ({
   ResizablePanelGroup: ({ children, orientation }: { children: React.ReactNode; orientation: string }) => (
     <div data-testid={`panel-group-${orientation}`}>{children}</div>
   ),
-  ResizablePanel: ({ children, id, collapsed, panelRef }: { children: React.ReactNode; id?: string; collapsed?: boolean; panelRef?: { current: { resize: (size: number | `${number}%`) => void } | null } }) => {
+  ResizablePanel: ({ children, id, collapsed }: { children: React.ReactNode; id?: string; collapsed?: boolean }) => {
     panelRecords.push({ id, collapsed });
-    if (panelRef) {
-      panelRef.current = collapsed ? null : { resize: vi.fn() };
-    }
 
     return (
       <div data-testid={`panel-${id ?? 'unknown'}`} data-collapsed={collapsed ? 'true' : 'false'}>
@@ -29,20 +26,15 @@ vi.mock('../../ui/resizable', () => ({
 }));
 
 describe('CodeWorkspaceShell', () => {
-  it('renders all visible regions and wires the container and left panel refs', () => {
+  it('renders all visible regions with the percentage layout by default', () => {
     panelRecords.length = 0;
     handleRecords.length = 0;
-
-    const containerRef = createRef<HTMLDivElement>();
-    const leftPanelRef = createRef<{ resize: (size: number | `${number}%`) => void } | null>();
 
     render(
       <CodeWorkspaceShell
         shellTestId="workspace-shell"
         activityBar={<div>Activity</div>}
         overlay={<div>Overlay</div>}
-        containerRef={containerRef}
-        leftPanelRef={leftPanelRef}
         showLeftPanel
         showBottomPanel
         showRightPanel
@@ -65,8 +57,6 @@ describe('CodeWorkspaceShell', () => {
     expect(screen.getByText('Editor')).toBeInTheDocument();
     expect(screen.getByText('Terminal')).toBeInTheDocument();
     expect(screen.getByText('Inspector')).toBeInTheDocument();
-    expect(containerRef.current).toBeInstanceOf(HTMLDivElement);
-    expect(leftPanelRef.current).not.toBeNull();
     expect(panelRecords).toEqual([
       { id: 'left', collapsed: false },
       { id: 'center', collapsed: undefined },
@@ -81,16 +71,84 @@ describe('CodeWorkspaceShell', () => {
     ]);
   });
 
+  it('renders a fixed-width left panel and clamps drag updates', () => {
+    panelRecords.length = 0;
+    handleRecords.length = 0;
+
+    function FixedWidthHarness() {
+      const [leftWidth, setLeftWidth] = useState(240);
+
+      return (
+        <>
+          <span data-testid="left-width-value">{leftWidth}</span>
+          <CodeWorkspaceShell
+            activityBar={<div>Activity</div>}
+            overlay={<div>Overlay</div>}
+            showLeftPanel
+            showBottomPanel
+            showRightPanel
+            leftPanelId="left"
+            centerPanelId="center"
+            topPanelId="top"
+            bottomPanelId="bottom"
+            rightPanelId="right"
+            leftFixedWidthPx={leftWidth}
+            onLeftFixedWidthChange={setLeftWidth}
+            leftContent={<div>Explorer</div>}
+            topContent={<div>Editor</div>}
+            bottomContent={<div>Terminal</div>}
+            rightContent={<div>Inspector</div>}
+          />
+        </>
+      );
+    }
+
+    render(<FixedWidthHarness />);
+
+    expect(screen.getByTestId('panel-left')).toHaveStyle({ width: '240px' });
+    expect(screen.getByTestId('panel-handle-left')).toBeInTheDocument();
+    expect(panelRecords).toEqual([
+      { id: 'center', collapsed: undefined },
+      { id: 'top', collapsed: undefined },
+      { id: 'bottom', collapsed: false },
+      { id: 'right', collapsed: false },
+    ]);
+    expect(handleRecords).toEqual([
+      { hidden: false },
+      { hidden: false },
+    ]);
+
+    const leftHandle = screen.getByTestId('panel-handle-left');
+
+    fireEvent.pointerDown(leftHandle, { clientX: 240, pointerId: 1 });
+    fireEvent.pointerMove(leftHandle, { clientX: 320, pointerId: 1 });
+    fireEvent.pointerUp(leftHandle, { clientX: 320, pointerId: 1 });
+
+    expect(screen.getByTestId('left-width-value')).toHaveTextContent('320');
+    expect(screen.getByTestId('panel-left')).toHaveStyle({ width: '320px' });
+
+    fireEvent.pointerDown(leftHandle, { clientX: 320, pointerId: 2 });
+    fireEvent.pointerMove(leftHandle, { clientX: -120, pointerId: 2 });
+    fireEvent.pointerUp(leftHandle, { clientX: -120, pointerId: 2 });
+
+    expect(screen.getByTestId('left-width-value')).toHaveTextContent('200');
+    expect(screen.getByTestId('panel-left')).toHaveStyle({ width: '200px' });
+
+    fireEvent.pointerDown(leftHandle, { clientX: 200, pointerId: 3 });
+    fireEvent.pointerMove(leftHandle, { clientX: 800, pointerId: 3 });
+    fireEvent.pointerUp(leftHandle, { clientX: 800, pointerId: 3 });
+
+    expect(screen.getByTestId('left-width-value')).toHaveTextContent('480');
+    expect(screen.getByTestId('panel-left')).toHaveStyle({ width: '480px' });
+  });
+
   it('keeps hidden panel content out of the layout and marks the matching handles as hidden', () => {
     panelRecords.length = 0;
     handleRecords.length = 0;
 
-    const leftPanelRef = createRef<{ resize: (size: number | `${number}%`) => void } | null>();
-
     render(
       <CodeWorkspaceShell
         activityBar={<div>Activity</div>}
-        leftPanelRef={leftPanelRef}
         showLeftPanel={false}
         showBottomPanel={false}
         showRightPanel={false}
@@ -110,7 +168,6 @@ describe('CodeWorkspaceShell', () => {
     expect(screen.queryByText('Terminal')).not.toBeInTheDocument();
     expect(screen.queryByText('Inspector')).not.toBeInTheDocument();
     expect(screen.getByText('Editor')).toBeInTheDocument();
-    expect(leftPanelRef.current).toBeNull();
     expect(handleRecords).toEqual([
       { hidden: true },
       { hidden: true },
