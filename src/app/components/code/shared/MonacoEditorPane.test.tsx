@@ -109,6 +109,7 @@ describe('MonacoEditorPane', () => {
   it('configures the editor and exposes mount callbacks', () => {
     const editorRef = createRef<any>();
     const onEditorMount = vi.fn();
+    const onActiveModelReady = vi.fn();
     const onCursorChange = vi.fn();
 
     render(
@@ -116,6 +117,7 @@ describe('MonacoEditorPane', () => {
         activeTabId="rtl/core/cpu_top.sv"
         code="module cpu_top; endmodule"
         editorRef={editorRef}
+        onActiveModelReady={onActiveModelReady}
         onEditorMount={onEditorMount}
         onCursorChange={onCursorChange}
       />,
@@ -127,6 +129,7 @@ describe('MonacoEditorPane', () => {
     expect(mockedUseRegisterEditorLanguages).toHaveBeenCalledWith(mockMonaco);
     expect(mockedRegisterEditorThemes).toHaveBeenCalledWith(mockMonaco);
     expect(editorRef.current).toBe(mockEditorInstance);
+    expect(onActiveModelReady).toHaveBeenCalledWith('rtl/core/cpu_top.sv');
     expect(onEditorMount).toHaveBeenCalledWith(mockEditorInstance);
     expect(onCursorChange).toHaveBeenCalledWith(5, 10);
 

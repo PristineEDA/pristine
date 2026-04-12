@@ -967,6 +967,47 @@ test('ctrl+p quick open escape closes the palette and reopening resets the query
   await app.close();
 });
 
+test('single-clicking the first explorer file places the monaco cursor at line 1 column 1', async () => {
+  const { app, window } = await launchApp();
+
+  await ensureExplorerVisible(window);
+  await openNestedWorkspaceFile(window, [
+    'file-tree-node-rtl',
+    'file-tree-node-rtl_core',
+    'file-tree-node-rtl_core_reg_file_v',
+  ]);
+
+  await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toBeVisible();
+  await expect(window.getByTestId('editor-tab-title-rtl/core/reg_file.v')).toHaveClass(/italic/);
+  await expect(getCursorStatus(window)).toHaveText('Ln 1, Col 1');
+
+  await window.keyboard.press('ArrowDown');
+  await expect(getCursorStatus(window)).toHaveText('Ln 2, Col 1');
+
+  await app.close();
+});
+
+test('quick open places the first opened file cursor at line 1 column 1', async () => {
+  const { app, window } = await launchApp();
+
+  await window.keyboard.press('Control+P');
+
+  const quickOpenInput = window.getByTestId('quick-open-input');
+  await expect(quickOpenInput).toBeFocused();
+  await quickOpenInput.fill('reg');
+  await expect(window.getByTestId('quick-open-result-rtl_core_reg_file_v')).toBeVisible();
+  await quickOpenInput.press('Enter');
+
+  await expect(window.getByTestId('quick-open-overlay')).toHaveCount(0);
+  await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toBeVisible();
+  await expect(getCursorStatus(window)).toHaveText('Ln 1, Col 1');
+
+  await window.keyboard.press('ArrowDown');
+  await expect(getCursorStatus(window)).toHaveText('Ln 2, Col 1');
+
+  await app.close();
+});
+
 test('monaco restores cursor position across file switches and tab reopen while new files start at line 1 column 1', async () => {
   const { app, window } = await launchApp();
 

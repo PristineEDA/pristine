@@ -118,6 +118,9 @@ export function MonacoEditorPane({
         }}
         onMount={(editor) => {
           editorRef.current = editor;
+          if (activeTabId) {
+            onActiveModelReady?.(activeTabId);
+          }
           onEditorMount?.(editor);
           editor.onDidFocusEditorText?.(() => {
             canPropagateCursorChangesRef.current = true;
