@@ -1228,19 +1228,31 @@ test('left sidebar keeps a fixed pixel width across window changes and manual re
   await expect.poll(readPanelWidth).toBeLessThanOrEqual(242);
 
   await leftHandle.evaluate((element) => {
-    const handle = element as HTMLElement;
+    const handle = element as {
+      dispatchEvent: (event: unknown) => void;
+      ownerDocument?: {
+        defaultView?: {
+          PointerEvent?: new (type: string, init?: Record<string, boolean | number>) => unknown;
+        };
+      };
+    };
+    const PointerEventCtor = handle.ownerDocument?.defaultView?.PointerEvent;
 
-    handle.dispatchEvent(new PointerEvent('pointerdown', {
+    if (!PointerEventCtor) {
+      return;
+    }
+
+    handle.dispatchEvent(new PointerEventCtor('pointerdown', {
       bubbles: true,
       clientX: 240,
       pointerId: 1,
     }));
-    handle.dispatchEvent(new PointerEvent('pointermove', {
+    handle.dispatchEvent(new PointerEventCtor('pointermove', {
       bubbles: true,
       clientX: 320,
       pointerId: 1,
     }));
-    handle.dispatchEvent(new PointerEvent('pointerup', {
+    handle.dispatchEvent(new PointerEventCtor('pointerup', {
       bubbles: true,
       clientX: 320,
       pointerId: 1,
@@ -1385,6 +1397,98 @@ test('closing the last tab removes an empty split group', async () => {
 
   await expect(window.getByTestId('editor-group-group-1')).toHaveCount(0);
   await expect(window.getByTestId('editor-group-group-2')).toBeVisible();
+
+  await app.close();
+});
+
+test('ctrl+w closes the active tab when monaco focus is inside the current editor group', async () => {
+  const { app, window } = await launchApp();
+
+  await ensureExplorerVisible(window);
+  await window.getByTestId('file-tree-node-README_md').dblclick();
+  await openNestedWorkspaceFile(window, [
+    'file-tree-node-rtl',
+    'file-tree-node-rtl_core',
+    'file-tree-node-rtl_core_reg_file_v',
+  ], { finalAction: 'dblclick' });
+
+  await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toHaveClass(/bg-background/);
+
+  await focusMonacoEditor(window);
+  await window.keyboard.press('Control+W');
+
+  await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toHaveCount(0);
+  await expect(window.getByTestId('editor-tab-README.md')).toHaveClass(/bg-background/);
+
+  await app.close();
+});
+
+test('ctrl+tab cycles tabs to the right within the focused editor group', async () => {
+  const { app, window } = await launchApp();
+
+  await ensureExplorerVisible(window);
+  await window.getByTestId('file-tree-node-README_md').dblclick();
+  await openNestedWorkspaceFile(window, [
+    'file-tree-node-rtl',
+    'file-tree-node-rtl_core',
+    'file-tree-node-rtl_core_reg_file_v',
+  ], { finalAction: 'dblclick' });
+
+  await window.keyboard.press('Control+P');
+  const quickOpenInput = window.getByTestId('quick-open-input');
+  await expect(quickOpenInput).toBeFocused();
+  await quickOpenInput.fill('giti');
+  await expect(window.getByTestId('quick-open-result-_gitignore')).toBeVisible();
+  await quickOpenInput.press('Enter');
+
+  await expect(window.getByTestId('editor-tab-.gitignore')).toBeVisible();
+  await window.getByTestId('editor-tab-rtl/core/reg_file.v').click();
+  await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toHaveClass(/bg-background/);
+
+  await focusMonacoEditor(window);
+  await window.keyboard.press('Control+Tab');
+  await expect(window.getByTestId('editor-tab-.gitignore')).toHaveClass(/bg-background/);
+  await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).not.toHaveClass(/bg-background/);
+
+  await window.keyboard.press('Control+Tab');
+  await expect(window.getByTestId('editor-tab-README.md')).toHaveClass(/bg-background/);
+  await expect(window.getByTestId('editor-tab-.gitignore')).not.toHaveClass(/bg-background/);
+
+  await app.close();
+});
+
+test('ctrl+shift+tab cycles tabs to the left within the focused editor group', async () => {
+  const { app, window } = await launchApp();
+
+  await ensureExplorerVisible(window);
+  await window.getByTestId('file-tree-node-README_md').dblclick();
+  await openNestedWorkspaceFile(window, [
+    'file-tree-node-rtl',
+    'file-tree-node-rtl_core',
+    'file-tree-node-rtl_core_reg_file_v',
+  ], { finalAction: 'dblclick' });
+
+  await window.keyboard.press('Control+P');
+  const quickOpenInput = window.getByTestId('quick-open-input');
+  await expect(quickOpenInput).toBeFocused();
+  await quickOpenInput.fill('giti');
+  await expect(window.getByTestId('quick-open-result-_gitignore')).toBeVisible();
+  await quickOpenInput.press('Enter');
+
+  await expect(window.getByTestId('editor-tab-.gitignore')).toHaveClass(/bg-background/);
+
+  await focusMonacoEditor(window);
+  await window.keyboard.press('Control+Shift+Tab');
+  await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toHaveClass(/bg-background/);
+  await expect(window.getByTestId('editor-tab-.gitignore')).not.toHaveClass(/bg-background/);
+
+  await window.getByTestId('editor-tab-README.md').click();
+  await expect(window.getByTestId('editor-tab-README.md')).toHaveClass(/bg-background/);
+
+  await focusMonacoEditor(window);
+  await window.keyboard.press('Control+Shift+Tab');
+  await expect(window.getByTestId('editor-tab-.gitignore')).toHaveClass(/bg-background/);
+  await expect(window.getByTestId('editor-tab-README.md')).not.toHaveClass(/bg-background/);
 
   await app.close();
 });

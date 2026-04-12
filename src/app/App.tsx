@@ -13,6 +13,7 @@ import type { WorkspaceRevealRequest } from './workspace/useWorkspaceTree';
 import { WorkspaceProvider, useWorkspace } from './context/WorkspaceContext';
 import type { EditorSelectionSnapshot } from './context/useWorkspaceEditorState';
 import { SidebarProvider } from './components/ui/sidebar';
+import { useGlobalAppShortcuts } from './useGlobalAppShortcuts';
 
 const QUICK_OPEN_RECENT_LIMIT = 20;
 const WhiteboardView = lazy(() => import('./components/whiteboard/WhiteboardView').then((module) => ({ default: module.WhiteboardView })));
@@ -344,51 +345,16 @@ function AppLayout() {
     );
   };
 
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (!(event.ctrlKey || event.metaKey) || event.shiftKey) {
-        return;
-      }
-
-      const key = event.key.toLowerCase();
-
-      if (key === 'p') {
-        event.preventDefault();
-
-        if (isQuickOpenVisible) {
-          closeQuickOpen();
-          return;
-        }
-
-        openQuickOpen();
-        return;
-      }
-
-      if (key === 'j') {
-        if (!canToggleLayoutPanels) {
-          return;
-        }
-
-        event.preventDefault();
-        setShowBottomPanel(!showBottomPanel);
-        return;
-      }
-
-      if (key === 'b') {
-        if (!canToggleLayoutPanels) {
-          return;
-        }
-
-        event.preventDefault();
-        setShowLeftPanel(!showLeftPanel);
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [canToggleLayoutPanels, closeQuickOpen, isQuickOpenVisible, openQuickOpen, setShowBottomPanel, setShowLeftPanel, showBottomPanel, showLeftPanel]);
+  useGlobalAppShortcuts({
+    canToggleLayoutPanels,
+    closeQuickOpen,
+    isQuickOpenVisible,
+    openQuickOpen,
+    setShowBottomPanel,
+    setShowLeftPanel,
+    showBottomPanel,
+    showLeftPanel,
+  });
 
   return (
     <SidebarProvider

@@ -2,12 +2,15 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   createInitialEditorWorkspace,
   focusEditorGroup,
+  getCycledTabIdInEditorGroup,
+  getNextActiveTabIdAfterClose,
   moveEditorTab,
   openFileInEditorGroup,
   pinTabInEditorGroup,
   setActiveTabInEditorGroup,
   closeFileInEditorGroup,
   splitEditorGroup,
+  type EditorTabCycleDirection,
   type EditorDropPosition,
   type EditorWorkspaceModel,
 } from '../editor/editorLayout';
@@ -86,22 +89,6 @@ function findTabGroupId(model: Pick<EditorWorkspaceModel, 'groups' | 'focusedGro
   }
 
   return Object.values(model.groups).find((group) => group.tabs.some((tab) => tab.id === tabId))?.id;
-}
-
-function getNextActiveTabIdAfterClose(group: EditorWorkspaceModel['groups'][string] | undefined, fileId: string): string {
-  if (!group) {
-    return '';
-  }
-
-  const closingIndex = group.tabs.findIndex((tab) => tab.id === fileId);
-  if (closingIndex === -1) {
-    return group.activeTabId;
-  }
-
-  const nextTabs = group.tabs.filter((tab) => tab.id !== fileId);
-  return group.activeTabId === fileId
-    ? nextTabs[Math.min(closingIndex, nextTabs.length - 1)]?.id ?? ''
-    : group.activeTabId;
 }
 
 export function useWorkspaceEditorState() {
@@ -297,6 +284,20 @@ export function useWorkspaceEditorState() {
     });
   }, []);
 
+  const closeActiveTabInFocusedGroup = useCallback(() => {
+    const groupId = editorState.focusedGroupId;
+    if (!groupId) {
+      return;
+    }
+
+    const activeFileId = editorState.groups[groupId]?.activeTabId;
+    if (!activeFileId) {
+      return;
+    }
+
+    closeFileInGroup(groupId, activeFileId);
+  }, [closeFileInGroup, editorState.focusedGroupId, editorState.groups]);
+
   const setActiveTabIdInGroup = useCallback((groupId: string, tabId: string) => {
     setEditorState((current) => setActiveTabInEditorGroup(current, groupId, tabId));
     syncEditorRefForGroup(groupId);
@@ -317,6 +318,28 @@ export function useWorkspaceEditorState() {
       queueStoredCursorRestore(targetGroupId, tabId);
     }
   }, [editorState, queueStoredCursorRestore, syncEditorRefForGroup]);
+
+  const cycleFocusedGroupTabs = useCallback((direction: EditorTabCycleDirection = 'forward') => {
+    const groupId = editorState.focusedGroupId;
+    if (!groupId) {
+      return;
+    }
+
+    const group = editorState.groups[groupId];
+    const nextTabId = getCycledTabIdInEditorGroup(group, direction);
+    if (!nextTabId || nextTabId === group?.activeTabId) {
+      return;
+    }
+
+    setEditorState((current) => {
+      const currentGroup = current.groups[groupId];
+      const resolvedNextTabId = getCycledTabIdInEditorGroup(currentGroup, direction);
+      return resolvedNextTabId ? setActiveTabInEditorGroup(current, groupId, resolvedNextTabId) : current;
+    });
+
+    syncEditorRefForGroup(groupId);
+    queueStoredCursorRestore(groupId, nextTabId);
+  }, [editorState.focusedGroupId, editorState.groups, queueStoredCursorRestore, syncEditorRefForGroup]);
 
   const pinTabInGroup = useCallback((groupId: string, tabId: string) => {
     setEditorState((current) => pinTabInEditorGroup(current, groupId, tabId));
@@ -447,9 +470,11 @@ export function useWorkspaceEditorState() {
     clearCursorRestoreRequest,
     cursorCol,
     cursorLine,
+    cycleFocusedGroupTabs,
     editorGroups,
     editorLayout: editorState.layout,
     editorRef,
+    closeActiveTabInFocusedGroup,
     focusGroup,
     focusActiveEditor,
     focusedGroupId: editorState.focusedGroupId,

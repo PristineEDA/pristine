@@ -1,5 +1,6 @@
 export type SplitDirection = 'horizontal' | 'vertical';
 export type EditorDropPosition = 'center' | 'left' | 'right' | 'top' | 'bottom';
+export type EditorTabCycleDirection = 'forward' | 'backward';
 
 export interface EditorTab {
   id: string;
@@ -58,6 +59,42 @@ export function createInitialEditorWorkspace(initialGroupId: string): EditorWork
     },
     focusedGroupId: initialGroupId,
   };
+}
+
+export function getNextActiveTabIdAfterClose(group: EditorGroup | undefined, fileId: string): string {
+  if (!group) {
+    return '';
+  }
+
+  const closingIndex = group.tabs.findIndex((tab) => tab.id === fileId);
+  if (closingIndex === -1) {
+    return group.activeTabId;
+  }
+
+  const nextTabs = group.tabs.filter((tab) => tab.id !== fileId);
+  return group.activeTabId === fileId
+    ? nextTabs[Math.min(closingIndex, nextTabs.length - 1)]?.id ?? ''
+    : group.activeTabId;
+}
+
+export function getCycledTabIdInEditorGroup(
+  group: EditorGroup | undefined,
+  direction: EditorTabCycleDirection = 'forward',
+): string {
+  if (!group || group.tabs.length === 0) {
+    return '';
+  }
+
+  const activeIndex = group.tabs.findIndex((tab) => tab.id === group.activeTabId);
+  if (activeIndex === -1) {
+    return direction === 'backward'
+      ? group.tabs[group.tabs.length - 1]?.id ?? ''
+      : group.tabs[0]?.id ?? '';
+  }
+
+  const offset = direction === 'backward' ? -1 : 1;
+  const nextIndex = (activeIndex + offset + group.tabs.length) % group.tabs.length;
+  return group.tabs[nextIndex]?.id ?? group.activeTabId;
 }
 
 export function getFirstGroupId(layout: EditorLayoutNode | null): string | null {
@@ -316,9 +353,7 @@ export function closeFileInEditorGroup(
   }
 
   const nextTabs = group.tabs.filter((tab) => tab.id !== fileId);
-  const nextActiveTabId = group.activeTabId === fileId
-    ? nextTabs[Math.min(closingIndex, nextTabs.length - 1)]?.id ?? ''
-    : group.activeTabId;
+  const nextActiveTabId = getNextActiveTabIdAfterClose(group, fileId);
 
   const nextModel: EditorWorkspaceModel = {
     ...model,
