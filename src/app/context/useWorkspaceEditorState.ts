@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   createInitialEditorWorkspace,
   focusEditorGroup,
@@ -14,6 +14,7 @@ import {
   type EditorDropPosition,
   type EditorWorkspaceModel,
 } from '../editor/editorLayout';
+import { focusEditorInstance } from '../editor/focusEditor';
 
 interface CursorPosition {
   line: number;
@@ -30,6 +31,26 @@ export interface CursorRestoreRequest extends EditorSelectionSnapshot {
 }
 
 type StoredCursorPositions = Record<string, Record<string, CursorPosition>>;
+
+interface EditorViewport {
+  width: number;
+  height: number;
+}
+
+function getEditorViewport(element: HTMLElement | null | undefined): EditorViewport | null {
+  if (!element) {
+    return null;
+  }
+
+  const width = element.clientWidth || element.parentElement?.clientWidth || 0;
+  const height = element.clientHeight || element.parentElement?.clientHeight || 0;
+
+  if (width <= 0 || height <= 0) {
+    return null;
+  }
+
+  return { width, height };
+}
 
 function getStoredCursorPosition(
   cursorPositions: StoredCursorPositions,
@@ -100,6 +121,7 @@ export function useWorkspaceEditorState() {
   const [cursorRestoreRequests, setCursorRestoreRequests] = useState<Record<string, CursorRestoreRequest | undefined>>({});
   const editorRef = useRef<any>(null);
   const editorRefsRef = useRef<Record<string, any>>({});
+  const relayoutFrameRef = useRef<number | null>(null);
 
   const nextGeneratedId = useCallback((prefix: string) => {
     const id = `${prefix}-${idCounterRef.current}`;
@@ -119,6 +141,49 @@ export function useWorkspaceEditorState() {
     if (editorRefsRef.current[groupId]) {
       editorRef.current = editorRefsRef.current[groupId];
     }
+  }, []);
+
+  const relayoutEditors = useCallback((groupIds?: string[]) => {
+    const applyRelayout = () => {
+      relayoutFrameRef.current = null;
+
+      const editors = (groupIds?.length
+        ? groupIds.map((groupId) => editorRefsRef.current[groupId])
+        : Object.values(editorRefsRef.current))
+        .filter(Boolean);
+
+      editors.forEach((editorInstance) => {
+        const domNode = editorInstance.getDomNode?.() as HTMLElement | null | undefined;
+        const viewport = getEditorViewport(domNode);
+
+        if (viewport) {
+          editorInstance.layout?.(viewport);
+          return;
+        }
+
+        editorInstance.layout?.();
+      });
+    };
+
+    if (typeof window === 'undefined' || !('requestAnimationFrame' in window)) {
+      applyRelayout();
+      return;
+    }
+
+    if (relayoutFrameRef.current !== null) {
+      window.cancelAnimationFrame(relayoutFrameRef.current);
+    }
+
+    relayoutFrameRef.current = window.requestAnimationFrame(applyRelayout);
+  }, []);
+
+  useEffect(() => () => {
+    if (typeof window === 'undefined' || relayoutFrameRef.current === null) {
+      return;
+    }
+
+    window.cancelAnimationFrame(relayoutFrameRef.current);
+    relayoutFrameRef.current = null;
   }, []);
 
   const getCursorPositionOrDefault = useCallback((groupId: string, fileId: string): CursorPosition => {
@@ -380,7 +445,9 @@ export function useWorkspaceEditorState() {
         getCursorPositionOrDefault(groupId, activeFileId),
       ));
     }
-  }, [editorState.groups, getCursorPositionOrDefault, nextGeneratedId]);
+
+    relayoutEditors();
+  }, [editorState.groups, getCursorPositionOrDefault, nextGeneratedId, relayoutEditors]);
 
   const moveTab = useCallback((sourceGroupId: string, tabId: string, targetGroupId: string, position: EditorDropPosition) => {
     const newGroupId = nextGeneratedId('group');
@@ -422,7 +489,9 @@ export function useWorkspaceEditorState() {
 
       return upsertStoredCursorPosition(basePositions, destinationGroupId, tabId, sourcePosition);
     });
-  }, [editorState.groups, getCursorPositionOrDefault, nextGeneratedId, syncEditorRefForGroup]);
+
+    relayoutEditors();
+  }, [editorState.groups, getCursorPositionOrDefault, nextGeneratedId, relayoutEditors, syncEditorRefForGroup]);
 
   const jumpTo = useCallback((line: number) => {
     setJumpToLine(line);
@@ -460,8 +529,7 @@ export function useWorkspaceEditorState() {
     }
 
     syncEditorRefForGroup(resolvedGroupId);
-    editorRefsRef.current[resolvedGroupId]?.focus?.();
-    editorRefsRef.current[resolvedGroupId]?.getDomNode?.()?.focus?.();
+    focusEditorInstance(editorRefsRef.current[resolvedGroupId]);
   }, [editorState.focusedGroupId, syncEditorRefForGroup]);
 
   return {

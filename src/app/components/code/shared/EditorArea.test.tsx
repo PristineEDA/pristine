@@ -1,4 +1,4 @@
-import { createRef } from 'react';
+import { createRef, useLayoutEffect } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { EditorArea } from './EditorArea';
@@ -15,11 +15,28 @@ vi.mock('../../../context/EditorSettingsContext', () => ({
   }),
 }));
 
-const { mockEditorInstance, mockModel, mockMonaco, mockEditorComponent } = vi.hoisted(() => {
+const { mockEditorComponent, mockEditorDomNode, mockEditorInstance, mockModel, mockMonaco } = vi.hoisted(() => {
+  const activeElement = {};
+  const inputElement = {
+    focus: vi.fn(),
+  };
+  const editorDomNode = {
+    contains: vi.fn((element: unknown) => element === activeElement),
+    focus: vi.fn(),
+    ownerDocument: {
+      activeElement,
+    },
+    querySelector: vi.fn(() => inputElement),
+  };
+
   const editorInstance = {
+    getDomNode: vi.fn(() => editorDomNode),
+    hasTextFocus: vi.fn(() => true),
     onDidChangeCursorPosition: vi.fn((callback: (event: { position: { lineNumber: number; column: number } }) => void) => {
       callback({ position: { lineNumber: 12, column: 7 } });
+      return { dispose: vi.fn() };
     }),
+    onDidFocusEditorText: vi.fn(() => ({ dispose: vi.fn() })),
     getModel: vi.fn(() => ({
       getLineCount: () => 200,
       getLineMaxColumn: () => 120,
@@ -55,6 +72,7 @@ const { mockEditorInstance, mockModel, mockMonaco, mockEditorComponent } = vi.ho
   };
 
   return {
+    mockEditorDomNode: editorDomNode,
     mockEditorInstance: editorInstance,
     mockModel: model,
     mockMonaco: monaco,
@@ -65,8 +83,11 @@ const { mockEditorInstance, mockModel, mockMonaco, mockEditorComponent } = vi.ho
 vi.mock('@monaco-editor/react', () => ({
   default: (props: any) => {
     mockEditorComponent(props);
-    props.beforeMount?.(mockMonaco);
-    props.onMount?.(mockEditorInstance);
+
+    useLayoutEffect(() => {
+      props.beforeMount?.(mockMonaco);
+      props.onMount?.(mockEditorInstance);
+    }, []);
 
     return (
       <div
@@ -89,6 +110,8 @@ describe('EditorArea', () => {
     delete (mockMonaco as any).__pristineThemesRegistered;
     mockMonaco.languages.getLanguages.mockReturnValue([]);
     mockMonaco.editor.getModels.mockReturnValue([mockModel]);
+    mockEditorDomNode.contains.mockReturnValue(true);
+    mockEditorInstance.hasTextFocus.mockReturnValue(true);
     vi.mocked(electronApi.fs.readFile).mockResolvedValue('// fixture content');
   });
 
@@ -473,6 +496,7 @@ describe('EditorArea', () => {
 
   it('restores the saved cursor position after the active file content becomes ready', async () => {
     const onLoadFile = vi.fn();
+    const editorRef = createRef<any>();
 
     const { rerender } = render(
       <EditorArea
@@ -480,7 +504,7 @@ describe('EditorArea', () => {
         activeTabId="rtl/core/reg_file.v"
         onTabChange={vi.fn()}
         onTabClose={vi.fn()}
-        editorRef={createRef()}
+        editorRef={editorRef}
         cursorPosition={{ line: 18, col: 6 }}
         loadingFiles={{ 'rtl/core/reg_file.v': true }}
         onLoadFile={onLoadFile}
@@ -497,7 +521,7 @@ describe('EditorArea', () => {
         activeTabId="rtl/core/reg_file.v"
         onTabChange={vi.fn()}
         onTabClose={vi.fn()}
-        editorRef={createRef()}
+        editorRef={editorRef}
         cursorPosition={{ line: 18, col: 6 }}
         contentCache={{ 'rtl/core/reg_file.v': 'line 1\nline 2\nline 3\n' }}
         onLoadFile={onLoadFile}

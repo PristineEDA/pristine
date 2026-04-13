@@ -7,6 +7,7 @@ import { getWorkspaceSegments } from '../../../workspace/workspaceFiles';
 import { FileTypeBadge } from './FileTypeBadge';
 import { useEditorDocumentState } from './useEditorDocumentState';
 import type { SplitDirection } from '../../../editor/editorLayout';
+import { focusEditorInstance } from '../../../editor/focusEditor';
 import type { CursorRestoreRequest } from '../../../context/useWorkspaceEditorState';
 import { EmptyProject } from './EmptyProject';
 import { TooltipIconButton } from '../../ui/tooltip-icon-button';
@@ -30,12 +31,6 @@ function clampEditorPosition(editor: any, line: number, col: number) {
     lineNumber: safeLine,
     column: safeColumn,
   };
-}
-
-function focusEditorInstance(editor: any) {
-  editor?.focus?.();
-  editor?.getDomNode?.()?.querySelector?.('.native-edit-context')?.focus?.();
-  editor?.getDomNode?.()?.focus?.();
 }
 
 function loadMonacoEditorPane() {

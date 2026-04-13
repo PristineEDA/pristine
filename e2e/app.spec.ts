@@ -1,4 +1,4 @@
-import { test, expect, _electron as electron, type Locator } from '@playwright/test';
+import { test, expect, _electron as electron, type Locator, type Page } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -11,21 +11,46 @@ function getE2EUserDataPath() {
   return test.info().outputPath('electron-user-data');
 }
 
+async function getPageTitleSafely(page: Page) {
+  if (page.isClosed()) {
+    return null;
+  }
+
+  try {
+    await page.waitForLoadState('domcontentloaded', { timeout: 1000 });
+    return await page.title();
+  } catch {
+    return null;
+  }
+}
+
+async function getTitledWindows(app: Awaited<ReturnType<typeof electron.launch>>) {
+  const titledWindows = await Promise.all(
+    app.windows().map(async (page) => ({
+      page,
+      title: await getPageTitleSafely(page),
+    })),
+  );
+
+  return titledWindows.filter((entry): entry is { page: typeof entry.page; title: string } => Boolean(entry.title));
+}
+
 async function resolveStartupWindows(app: Awaited<ReturnType<typeof electron.launch>>) {
   await expect.poll(() => app.windows().length, {
     timeout: 10000,
   }).toBeGreaterThan(1);
 
-  const startupWindows = app.windows();
-  await Promise.all(startupWindows.map((page) => page.waitForLoadState('domcontentloaded')));
+  await expect.poll(async () => {
+    const titledWindows = await getTitledWindows(app);
+    const splashWindow = titledWindows.find((entry) => entry.title === 'Pristine Loading')?.page;
+    const window = titledWindows.find((entry) => entry.title === 'Pristine')?.page;
 
-  const titledWindows = await Promise.all(
-    startupWindows.map(async (page) => ({
-      page,
-      title: await page.title(),
-    })),
-  );
+    return Boolean(splashWindow && window);
+  }, {
+    timeout: 10000,
+  }).toBe(true);
 
+  const titledWindows = await getTitledWindows(app);
   const splashWindow = titledWindows.find((entry) => entry.title === 'Pristine Loading')?.page;
   const window = titledWindows.find((entry) => entry.title === 'Pristine')?.page;
 
@@ -37,12 +62,7 @@ async function resolveStartupWindows(app: Awaited<ReturnType<typeof electron.lau
 }
 
 async function getWindowByTitle(app: Awaited<ReturnType<typeof electron.launch>>, title: string) {
-  const titledWindows = await Promise.all(
-    app.windows().map(async (page) => ({
-      page,
-      title: await page.title(),
-    })),
-  );
+  const titledWindows = await getTitledWindows(app);
 
   return titledWindows.find((entry) => entry.title === title)?.page ?? null;
 }
@@ -287,6 +307,42 @@ async function focusMonacoEditor(window: Awaited<ReturnType<typeof launchApp>>['
   const editor = window.locator('.monaco-editor');
   await expect(editor).toBeVisible();
   await editor.click({ position: { x: 24, y: 12 } });
+}
+
+async function waitForMonacoEditor(window: Awaited<ReturnType<typeof launchApp>>['window']) {
+  const editor = window.locator('.monaco-editor');
+  await expect(editor).toBeVisible();
+  return editor;
+}
+
+async function waitForMonacoEditorTextFocus(window: Awaited<ReturnType<typeof launchApp>>['window']) {
+  await expect.poll(() => window.evaluate(() => {
+    const browserGlobal = globalThis as typeof globalThis & {
+      document: {
+        activeElement: Element | null;
+        querySelector: (selectors: string) => Element | null;
+      };
+    };
+    const activeElement = browserGlobal.document.activeElement;
+    const textInput = browserGlobal.document.querySelector('.monaco-editor textarea.inputarea, .monaco-editor .inputarea, .monaco-editor .native-edit-context');
+    return activeElement === textInput;
+  }), {
+    timeout: 15000,
+  }).toBe(true);
+}
+
+async function expectVisibleEditorsToContainText(
+  window: Awaited<ReturnType<typeof launchApp>>['window'],
+  expectedCount: number,
+  text: string,
+) {
+  const textLayers = window.locator('.monaco-editor .view-lines');
+
+  await expect(textLayers).toHaveCount(expectedCount);
+
+  for (let index = 0; index < expectedCount; index += 1) {
+    await expect(textLayers.nth(index)).toContainText(text);
+  }
 }
 
 async function moveMonacoCursor(
@@ -979,6 +1035,7 @@ test('single-clicking the first explorer file places the monaco cursor at line 1
 
   await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toBeVisible();
   await expect(window.getByTestId('editor-tab-title-rtl/core/reg_file.v')).toHaveClass(/italic/);
+  await waitForMonacoEditor(window);
   await expect(getCursorStatus(window)).toHaveText('Ln 1, Col 1');
 
   await window.keyboard.press('ArrowDown');
@@ -1000,6 +1057,8 @@ test('quick open places the first opened file cursor at line 1 column 1', async 
 
   await expect(window.getByTestId('quick-open-overlay')).toHaveCount(0);
   await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toBeVisible();
+  await waitForMonacoEditor(window);
+  await waitForMonacoEditorTextFocus(window);
   await expect(getCursorStatus(window)).toHaveText('Ln 1, Col 1');
 
   await window.keyboard.press('ArrowDown');
@@ -1392,6 +1451,39 @@ test('editor split actions create additional groups and support vertical splitti
   await app.close();
 });
 
+test('dragging one visible copy of the same file into a new split keeps the other rendered', async () => {
+  const { app, window } = await launchApp();
+  const editorGroups = window.locator('[data-testid^="editor-group-group-"]');
+
+  await ensureExplorerVisible(window);
+  await window.getByTestId('file-tree-node-README_md').click();
+
+  const firstGroup = window.getByTestId('editor-group-group-1');
+  await firstGroup.getByTestId('editor-split-right').click();
+
+  const secondGroup = window.getByTestId('editor-group-group-2');
+  await expect(secondGroup).toBeVisible();
+
+  await expectVisibleEditorsToContainText(window, 2, 'Fixture Workspace');
+
+  const secondGroupBounds = await secondGroup.boundingBox();
+  if (!secondGroupBounds) {
+    throw new Error('Expected second editor group bounds');
+  }
+
+  await secondGroup.getByTestId('editor-tab-README.md').dragTo(secondGroup, {
+    targetPosition: {
+      x: Math.max(Math.floor(secondGroupBounds.width / 2), 24),
+      y: Math.max(Math.floor(secondGroupBounds.height - 18), 24),
+    },
+  });
+
+  await expect(editorGroups).toHaveCount(3);
+  await expectVisibleEditorsToContainText(window, 3, 'Fixture Workspace');
+
+  await app.close();
+});
+
 test('focused split receives file tree opens and tabs can be dragged into another split', async () => {
   const { app, window } = await launchApp();
 
@@ -1685,6 +1777,13 @@ test('terminal bottom panel close button terminates the shell and reopening crea
   const reopenedPid = await readTerminalPid(window);
   expect(reopenedPid).not.toBe(originalPid);
   expect(isProcessRunning(reopenedPid)).toBe(true);
+
+  await window.getByRole('button', { name: 'Close Panel' }).click();
+  await expect(window.getByTestId('terminal-host')).toHaveCount(0);
+
+  await expect.poll(() => isProcessRunning(reopenedPid), {
+    timeout: 15000,
+  }).toBe(false);
 
   await app.close();
 });

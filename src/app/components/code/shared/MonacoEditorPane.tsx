@@ -7,6 +7,37 @@ import { useRegisterEditorLanguages } from '../../../editor/registerLanguages';
 import { getEditorLanguage } from '../../../workspace/workspaceFiles';
 import { useEditorSettings } from '../../../context/EditorSettingsContext';
 
+interface EditorViewport {
+  width: number;
+  height: number;
+}
+
+function hasFocusedEditorText(editor: any) {
+  const editorDomNode = editor?.getDomNode?.();
+  const activeElement = editorDomNode?.ownerDocument?.activeElement;
+  const hasDomFocus = Boolean(editorDomNode && activeElement && editorDomNode.contains(activeElement));
+  const hasTextFocus = typeof editor?.hasTextFocus === 'function'
+    ? editor.hasTextFocus()
+    : hasDomFocus;
+
+  return hasTextFocus || hasDomFocus;
+}
+
+function getRenderableEditorViewport(element: HTMLDivElement | null): EditorViewport | null {
+  if (!element) {
+    return null;
+  }
+
+  const width = element.clientWidth;
+  const height = element.clientHeight;
+
+  if (width <= 0 || height <= 0) {
+    return null;
+  }
+
+  return { width, height };
+}
+
 interface MonacoEditorPaneProps {
   activeTabId: string;
   code: string;
@@ -36,6 +67,35 @@ export function MonacoEditorPane({
   const editorFontFamily = getEditorFontFamilyStack(fontFamily);
   const onCursorChangeRef = useRef(onCursorChange);
   const canPropagateCursorChangesRef = useRef(true);
+  const hostRef = useRef<HTMLDivElement | null>(null);
+  const layoutFrameRef = useRef<number | null>(null);
+  const queueEditorLayoutRef = useRef<() => void>(() => undefined);
+
+  queueEditorLayoutRef.current = () => {
+    const applyLayout = () => {
+      layoutFrameRef.current = null;
+
+      const editor = editorRef.current;
+      const viewport = getRenderableEditorViewport(hostRef.current);
+
+      if (!editor || !viewport) {
+        return;
+      }
+
+      editor.layout(viewport);
+    };
+
+    if (typeof window === 'undefined' || !('requestAnimationFrame' in window)) {
+      applyLayout();
+      return;
+    }
+
+    if (layoutFrameRef.current !== null) {
+      window.cancelAnimationFrame(layoutFrameRef.current);
+    }
+
+    layoutFrameRef.current = window.requestAnimationFrame(applyLayout);
+  };
 
   useEffect(() => {
     onCursorChangeRef.current = onCursorChange;
@@ -46,6 +106,40 @@ export function MonacoEditorPane({
   }, [activeTabId]);
 
   useRegisterEditorLanguages(monaco);
+
+  useEffect(() => {
+    queueEditorLayoutRef.current();
+
+    const host = hostRef.current;
+    if (!host || typeof ResizeObserver === 'undefined') {
+      return;
+    }
+
+    const resizeObserver = new ResizeObserver(() => {
+      queueEditorLayoutRef.current();
+    });
+
+    resizeObserver.observe(host);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (typeof window === 'undefined' || layoutFrameRef.current === null) {
+        return;
+      }
+
+      window.cancelAnimationFrame(layoutFrameRef.current);
+      layoutFrameRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    queueEditorLayoutRef.current();
+  }, [showDragInteractionShield]);
 
   useEffect(() => {
     if (!monaco) {
@@ -85,7 +179,7 @@ export function MonacoEditorPane({
       fontFamily: editorFontFamily,
       fontSize,
     });
-    editor.layout();
+    queueEditorLayoutRef.current();
     monaco?.editor.remeasureFonts?.();
   }, [editorFontFamily, editorRef, fontSize, monaco]);
 
@@ -95,10 +189,11 @@ export function MonacoEditorPane({
     }
 
     onActiveModelReady?.(activeTabId);
+    queueEditorLayoutRef.current();
   }, [activeTabId, editorRef, onActiveModelReady]);
 
   return (
-    <div className="relative flex-1 overflow-hidden bg-background">
+    <div ref={hostRef} className="relative flex-1 overflow-hidden bg-background">
       {showDragInteractionShield && (
         <div
           data-testid={dragInteractionShieldTestId}
@@ -110,6 +205,7 @@ export function MonacoEditorPane({
         height="100%"
         language={getEditorLanguage(activeTabId)}
         path={activeTabId}
+        keepCurrentModel
         saveViewState={false}
         value={code}
         theme={theme}
@@ -121,24 +217,20 @@ export function MonacoEditorPane({
           if (activeTabId) {
             onActiveModelReady?.(activeTabId);
           }
+          queueEditorLayoutRef.current();
           onEditorMount?.(editor);
           editor.onDidFocusEditorText?.(() => {
             canPropagateCursorChangesRef.current = true;
           });
           editor.onDidChangeCursorPosition((event: any) => {
+            const focusedEditorText = hasFocusedEditorText(editor);
+
+            if (!focusedEditorText) {
+              return;
+            }
+
             if (!canPropagateCursorChangesRef.current) {
-              return;
-            }
-
-            const editorDomNode = editor.getDomNode?.();
-            const activeElement = editorDomNode?.ownerDocument?.activeElement;
-
-            if (editorDomNode && activeElement && !editorDomNode.contains(activeElement)) {
-              return;
-            }
-
-            if (typeof editor.hasTextFocus === 'function' && !editor.hasTextFocus()) {
-              return;
+              canPropagateCursorChangesRef.current = true;
             }
 
             onCursorChangeRef.current?.(event.position.lineNumber, event.position.column);

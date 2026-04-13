@@ -10,6 +10,7 @@ import { AppStatusBar } from './components/code/shared/statusBars/AppStatusBar';
 import { QuickOpenPalette } from './components/code/shared/QuickOpenPalette';
 import { createQuickOpenFileEntries, getRecentQuickOpenFiles, searchQuickOpenFiles, type QuickOpenFileEntry, type QuickOpenSearchResult } from './quickOpen/quickOpenSearch';
 import type { WorkspaceRevealRequest } from './workspace/useWorkspaceTree';
+import { isMonacoTextInputFocused } from './editor/focusEditor';
 import { WorkspaceProvider, useWorkspace } from './context/WorkspaceContext';
 import type { EditorSelectionSnapshot } from './context/useWorkspaceEditorState';
 import { SidebarProvider } from './components/ui/sidebar';
@@ -80,6 +81,29 @@ function AppLayout() {
     setActiveView(nextView as typeof activeView);
   };
 
+  const restoreActiveEditorFocus = useCallback(() => {
+    if (typeof window === 'undefined') {
+      globalThis.setTimeout(() => {
+        focusActiveEditor();
+      }, 0);
+      return;
+    }
+
+    const focusDeadline = window.performance.now() + 5000;
+
+    const tryFocus = () => {
+      focusActiveEditor();
+
+      if (isMonacoTextInputFocused() || window.performance.now() >= focusDeadline) {
+        return;
+      }
+
+      window.requestAnimationFrame(tryFocus);
+    };
+
+    window.requestAnimationFrame(tryFocus);
+  }, [focusActiveEditor]);
+
   const closeQuickOpen = useCallback((options?: { restorePreviousEditor?: boolean }) => {
     const shouldRestorePreviousEditor = options?.restorePreviousEditor ?? true;
     const snapshot = quickOpenEditorSnapshotRef.current;
@@ -92,16 +116,8 @@ function AppLayout() {
       restoreEditorSelection(snapshot);
     }
 
-    if (typeof window !== 'undefined' && 'requestAnimationFrame' in window) {
-      window.requestAnimationFrame(() => {
-        focusActiveEditor();
-      });
-    } else {
-      globalThis.setTimeout(() => {
-        focusActiveEditor();
-      }, 0);
-    }
-  }, [focusActiveEditor, restoreEditorSelection]);
+    restoreActiveEditorFocus();
+  }, [restoreActiveEditorFocus, restoreEditorSelection]);
 
   const openQuickOpen = useCallback(() => {
     quickOpenEditorSnapshotRef.current = captureEditorSelectionSnapshot();

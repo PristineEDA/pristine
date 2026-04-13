@@ -1,5 +1,5 @@
 import { createRef } from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Problem } from '../../../../data/mockData';
 import { getEditorFontFamilyStack } from '../../../editor/editorSettings';
@@ -12,10 +12,26 @@ let mockedEditorFontFamily = 'jetbrains-mono';
 let mockedEditorFontSize = 13;
 let mockedEditorTheme = 'dracula';
 
-const { mockEditorInstance, mockModels, mockMonaco, mockEditorComponent } = vi.hoisted(() => {
+const { mockCursorPositionListeners, mockEditorComponent, mockEditorDomNode, mockEditorInstance, mockFocusEditorTextListeners, mockModels, mockMonaco } = vi.hoisted(() => {
+  const activeElement = {};
+  const cursorPositionListeners: Array<(event: { position: { lineNumber: number; column: number } }) => void> = [];
+  const focusEditorTextListeners: Array<() => void> = [];
+  const editorDomNode = {
+    contains: vi.fn((element: unknown) => element === activeElement),
+    ownerDocument: {
+      activeElement,
+    },
+  };
   const editorInstance = {
+    getDomNode: vi.fn(() => editorDomNode),
+    hasTextFocus: vi.fn(() => true),
     onDidChangeCursorPosition: vi.fn((callback: (event: { position: { lineNumber: number; column: number } }) => void) => {
-      callback({ position: { lineNumber: 5, column: 10 } });
+      cursorPositionListeners.push(callback);
+      return { dispose: vi.fn() };
+    }),
+    onDidFocusEditorText: vi.fn((callback: () => void) => {
+      focusEditorTextListeners.push(callback);
+      return { dispose: vi.fn() };
     }),
     updateOptions: vi.fn(),
     layout: vi.fn(),
@@ -36,7 +52,10 @@ const { mockEditorInstance, mockModels, mockMonaco, mockEditorComponent } = vi.h
   };
 
   return {
+    mockCursorPositionListeners: cursorPositionListeners,
     mockEditorInstance: editorInstance,
+    mockEditorDomNode: editorDomNode,
+    mockFocusEditorTextListeners: focusEditorTextListeners,
     mockModels: models,
     mockMonaco: monaco,
     mockEditorComponent: vi.fn(),
@@ -103,7 +122,11 @@ describe('MonacoEditorPane', () => {
     mockedEditorFontFamily = 'jetbrains-mono';
     mockedEditorFontSize = 13;
     mockedEditorTheme = 'dracula';
+    mockCursorPositionListeners.length = 0;
+    mockFocusEditorTextListeners.length = 0;
+    mockEditorDomNode.contains.mockReturnValue(true);
     mockMonaco.editor.getModels.mockReturnValue(mockModels);
+    mockEditorInstance.hasTextFocus.mockReturnValue(true);
   });
 
   it('configures the editor and exposes mount callbacks', () => {
@@ -131,19 +154,45 @@ describe('MonacoEditorPane', () => {
     expect(editorRef.current).toBe(mockEditorInstance);
     expect(onActiveModelReady).toHaveBeenCalledWith('rtl/core/cpu_top.sv');
     expect(onEditorMount).toHaveBeenCalledWith(mockEditorInstance);
+
+    const cursorPositionListener = mockCursorPositionListeners[mockCursorPositionListeners.length - 1];
+    cursorPositionListener?.({ position: { lineNumber: 5, column: 10 } });
     expect(onCursorChange).toHaveBeenCalledWith(5, 10);
 
     const editorCalls = mockEditorComponent.mock.calls;
     const lastEditorProps = editorCalls[editorCalls.length - 1]?.[0];
     expect(lastEditorProps.options.fontFamily).toBe(getEditorFontFamilyStack('jetbrains-mono'));
     expect(lastEditorProps.options.fontSize).toBe(13);
+    expect(lastEditorProps.keepCurrentModel).toBe(true);
     expect(lastEditorProps.theme).toBe('dracula');
   });
 
-  it('applies persisted editor font family, font size and theme settings to Monaco', () => {
+  it('propagates cursor changes when the editor already has text focus after opening a file', () => {
+    const onCursorChange = vi.fn();
+
+    render(
+      <MonacoEditorPane
+        activeTabId="rtl/core/reg_file.v"
+        code="module reg_file; endmodule"
+        editorRef={createRef<any>()}
+        onCursorChange={onCursorChange}
+      />,
+    );
+
+    const cursorPositionListener = mockCursorPositionListeners[mockCursorPositionListeners.length - 1];
+    cursorPositionListener?.({ position: { lineNumber: 2, column: 1 } });
+
+    expect(mockFocusEditorTextListeners).toHaveLength(1);
+    expect(onCursorChange).toHaveBeenCalledWith(2, 1);
+  });
+
+  it('applies persisted editor font family, font size and theme settings to Monaco', async () => {
     mockedEditorFontFamily = 'monaspace-neon';
     mockedEditorFontSize = 18;
     mockedEditorTheme = 'github-dark';
+
+    const clientWidthSpy = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(960);
+    const clientHeightSpy = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(540);
 
     render(
       <MonacoEditorPane
@@ -163,8 +212,13 @@ describe('MonacoEditorPane', () => {
       fontFamily: getEditorFontFamilyStack('monaspace-neon'),
       fontSize: 18,
     });
-    expect(mockEditorInstance.layout).toHaveBeenCalled();
+    await waitFor(() => {
+      expect(mockEditorInstance.layout).toHaveBeenCalled();
+    });
     expect(mockMonaco.editor.remeasureFonts).toHaveBeenCalled();
+
+    clientWidthSpy.mockRestore();
+    clientHeightSpy.mockRestore();
   });
 
   it('maps matching problems to monaco markers for every model', () => {
