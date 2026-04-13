@@ -19,6 +19,25 @@ async function assertFileExists(filePath) {
   if (!fileStats.isFile()) {
     throw new Error(`Slang server binary path is not a file: ${filePath}`)
   }
+
+  return fileStats
+}
+
+async function readFileStatsIfExists(filePath) {
+  try {
+    return await stat(filePath)
+  } catch {
+    return null
+  }
+}
+
+function isTargetUpToDate(sourceStats, targetStats) {
+  return Boolean(
+    targetStats &&
+    targetStats.isFile() &&
+    targetStats.size === sourceStats.size &&
+    targetStats.mtimeMs >= sourceStats.mtimeMs,
+  )
 }
 
 async function main() {
@@ -27,9 +46,29 @@ async function main() {
     return
   }
 
-  await assertFileExists(sourcePath)
+  const sourceStats = await assertFileExists(sourcePath)
+  const existingTargetStats = await readFileStatsIfExists(targetPath)
+
+  if (isTargetUpToDate(sourceStats, existingTargetStats)) {
+    console.log(`Using existing slang-server binary: ${path.relative(workspaceRoot, targetPath)}`)
+    return
+  }
+
   await mkdir(binariesDir, { recursive: true })
-  await copyFile(sourcePath, targetPath)
+
+  try {
+    await copyFile(sourcePath, targetPath)
+  } catch (error) {
+    if (error?.code === 'EBUSY') {
+      const lockedTargetStats = await readFileStatsIfExists(targetPath)
+      if (isTargetUpToDate(sourceStats, lockedTargetStats)) {
+        console.log(`Keeping in-use slang-server binary: ${path.relative(workspaceRoot, targetPath)}`)
+        return
+      }
+    }
+
+    throw error
+  }
 
   console.log(`Prepared slang-server binary: ${path.relative(workspaceRoot, targetPath)}`)
 }
