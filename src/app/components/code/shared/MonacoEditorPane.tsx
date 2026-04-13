@@ -1,9 +1,10 @@
 import Editor, { useMonaco } from '@monaco-editor/react';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useProblemsList } from '../../../../data/mockDataLoader';
 import { getEditorFontFamilyStack } from '../../../editor/editorSettings';
 import { registerEditorThemes } from '../../../editor/monacoThemes';
 import { useRegisterEditorLanguages } from '../../../editor/registerLanguages';
+import { systemVerilogLspBridge } from '../../../lsp/systemVerilogLspBridge';
 import { getEditorLanguage } from '../../../workspace/workspaceFiles';
 import { useEditorSettings } from '../../../context/EditorSettingsContext';
 
@@ -46,6 +47,9 @@ interface MonacoEditorPaneProps {
   onCursorChange?: (line: number, col: number) => void;
   onContentChange?: (value: string) => void;
   onEditorMount?: (editor: any) => void;
+  onNavigateToLocation?: (fileId: string, line: number, col: number) => void;
+  isDocumentReady?: boolean;
+  hasLoadError?: boolean;
   showDragInteractionShield?: boolean;
   dragInteractionShieldTestId?: string;
 }
@@ -58,6 +62,9 @@ export function MonacoEditorPane({
   onCursorChange,
   onContentChange,
   onEditorMount,
+  onNavigateToLocation,
+  isDocumentReady = true,
+  hasLoadError = false,
   showDragInteractionShield,
   dragInteractionShieldTestId,
 }: MonacoEditorPaneProps) {
@@ -65,10 +72,12 @@ export function MonacoEditorPane({
   const problemsList = useProblemsList();
   const { fontFamily, fontSize, theme } = useEditorSettings();
   const editorFontFamily = getEditorFontFamilyStack(fontFamily);
+  const editorLanguage = getEditorLanguage(activeTabId);
   const onCursorChangeRef = useRef(onCursorChange);
   const canPropagateCursorChangesRef = useRef(true);
   const hostRef = useRef<HTMLDivElement | null>(null);
   const layoutFrameRef = useRef<number | null>(null);
+  const [mountedEditor, setMountedEditor] = useState<any>(null);
   const queueEditorLayoutRef = useRef<() => void>(() => undefined);
 
   queueEditorLayoutRef.current = () => {
@@ -163,10 +172,67 @@ export function MonacoEditorPane({
     }));
 
     const models = monaco.editor.getModels();
+    const normalizedActiveTabId = activeTabId.replace(/\\/g, '/').replace(/^\.\//, '').replace(/^\//, '');
+    const hasModelPaths = models.some((model: any) => typeof model?.uri?.path === 'string' || typeof model?.uri?.fsPath === 'string');
+
     models.forEach((model: any) => {
-      monaco.editor.setModelMarkers(model, 'rtl-lint', markers);
+      if (!hasModelPaths) {
+        monaco.editor.setModelMarkers(model, 'rtl-lint', markers);
+        return;
+      }
+
+      const modelPath = typeof model?.uri?.path === 'string'
+        ? model.uri.path
+        : typeof model?.uri?.fsPath === 'string'
+        ? model.uri.fsPath
+        : '';
+      const normalizedModelPath = modelPath.replace(/\\/g, '/').replace(/^\.\//, '').replace(/^\//, '');
+
+      monaco.editor.setModelMarkers(
+        model,
+        'rtl-lint',
+        normalizedModelPath === normalizedActiveTabId ? markers : [],
+      );
     });
   }, [activeTabId, monaco, problemsList]);
+
+  useEffect(() => {
+    if (!monaco) {
+      return;
+    }
+
+    systemVerilogLspBridge.ensureRegistered(monaco);
+  }, [monaco]);
+
+  useEffect(() => {
+    if (!mountedEditor || editorLanguage !== 'systemverilog') {
+      return;
+    }
+
+    systemVerilogLspBridge.setNavigateHandler(mountedEditor, onNavigateToLocation);
+  }, [editorLanguage, mountedEditor, onNavigateToLocation]);
+
+  useEffect(() => {
+    if (!monaco || !mountedEditor || !activeTabId || editorLanguage !== 'systemverilog' || !isDocumentReady || hasLoadError) {
+      return;
+    }
+
+    return systemVerilogLspBridge.attachDocument({
+      monaco,
+      editor: mountedEditor,
+      filePath: activeTabId,
+      text: code,
+      onNavigateToLocation,
+    });
+  }, [activeTabId, editorLanguage, hasLoadError, isDocumentReady, monaco, mountedEditor]);
+
+  useEffect(() => {
+    if (!activeTabId || editorLanguage !== 'systemverilog' || !isDocumentReady || hasLoadError) {
+      return;
+    }
+
+    systemVerilogLspBridge.updateDocument(activeTabId, code);
+  }, [activeTabId, code, editorLanguage, hasLoadError, isDocumentReady]);
 
   useEffect(() => {
     const editor = editorRef.current;
@@ -203,7 +269,7 @@ export function MonacoEditorPane({
       )}
       <Editor
         height="100%"
-        language={getEditorLanguage(activeTabId)}
+        language={editorLanguage}
         path={activeTabId}
         keepCurrentModel
         saveViewState={false}
@@ -214,6 +280,7 @@ export function MonacoEditorPane({
         }}
         onMount={(editor) => {
           editorRef.current = editor;
+          setMountedEditor(editor);
           if (activeTabId) {
             onActiveModelReady?.(activeTabId);
           }

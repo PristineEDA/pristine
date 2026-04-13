@@ -34,6 +34,7 @@ export function useEditorDocumentState({
   const resolvedLoadingFiles = loadingFiles ?? localLoadingFiles;
   const resolvedLoadErrors = loadErrors ?? localLoadErrors;
   const activeTabContent = activeTabId ? resolvedContentCache[activeTabId] : undefined;
+  const activeLoadError = activeTabId ? resolvedLoadErrors[activeTabId] : undefined;
   const activeTab = tabs.find((tab) => tab.id === activeTabId);
   const isActiveTabReady = Boolean(activeTabId) && (activeTabContent !== undefined || Boolean(resolvedLoadErrors[activeTabId]));
   const code = activeTabId
@@ -117,6 +118,7 @@ export function useEditorDocumentState({
 
   return {
     activeTab,
+    activeLoadError,
     code,
     isActiveTabReady,
     updateContent,

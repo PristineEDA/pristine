@@ -152,6 +152,7 @@ const mocks = vi.hoisted(() => {
     mockQuit: vi.fn(),
     mockBuildFromTemplate: vi.fn((template: unknown[]) => ({ template })),
     mockCreateFromDataURL: vi.fn(() => ({ kind: 'native-image' })),
+    mockDisposeLspSession: vi.fn(),
     mockDisposeAllTerminalSessions: vi.fn(),
     mockFlushPendingConfigSave: vi.fn(),
     mockGetConfigValue: vi.fn<(key: string) => unknown>(() => null),
@@ -206,6 +207,10 @@ vi.mock('./ipc/terminal.js', () => ({
   disposeAllTerminalSessions: (...args: unknown[]) => mocks.mockDisposeAllTerminalSessions(...args),
 }));
 
+vi.mock('./ipc/lsp.js', () => ({
+  disposeLspSession: (...args: unknown[]) => mocks.mockDisposeLspSession(...args),
+}));
+
 vi.mock('./ipc/config.js', () => ({
   flushPendingConfigSave: (...args: unknown[]) => mocks.mockFlushPendingConfigSave(...args),
   getConfigValue: (key: string) => mocks.mockGetConfigValue(key),
@@ -240,6 +245,7 @@ async function importMain(options?: {
   mocks.mockQuit.mockClear();
   mocks.mockBuildFromTemplate.mockClear();
   mocks.mockCreateFromDataURL.mockClear();
+  mocks.mockDisposeLspSession.mockClear();
   mocks.mockDisposeAllTerminalSessions.mockClear();
   mocks.mockFlushPendingConfigSave.mockClear();
   mocks.mockGetConfigValue.mockReset();
@@ -553,6 +559,7 @@ describe('electron main entry', () => {
     appHandlers.get('before-quit')?.();
 
     expect(mocks.mockFlushPendingConfigSave).toHaveBeenCalledTimes(1);
+    expect(mocks.mockDisposeLspSession).toHaveBeenCalledTimes(1);
     expect(mocks.mockDisposeAllTerminalSessions).toHaveBeenCalledTimes(1);
     expect(trayInstances[0].destroy).toHaveBeenCalledTimes(1);
   });

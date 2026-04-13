@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { registerAllHandlers, setProjectRoot, setupWindowStreams } from './ipc/register.js';
 import { flushPendingConfigSave, getConfigValue } from './ipc/config.js';
+import { disposeLspSession } from './ipc/lsp.js';
 import { disposeAllTerminalSessions } from './ipc/terminal.js';
 import { DEFAULT_STARTUP_PROJECT_ROOT } from '../src/app/workspace/workspaceFiles.js';
 
@@ -370,6 +371,7 @@ app.whenReady().then(() => {
 app.on('before-quit', () => {
   isQuitting = true;
   flushPendingConfigSave();
+  disposeLspSession();
   disposeAllTerminalSessions();
   tray?.destroy();
   tray = null;

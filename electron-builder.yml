@@ -6,6 +6,11 @@ directories:
 files:
   - dist/**/*
   - dist-electron/**/*
+extraResources:
+  - from: binaries
+    to: binaries
+    filter:
+      - '**/*'
 asar: true
 asarUnpack:
   - node_modules/node-pty/**

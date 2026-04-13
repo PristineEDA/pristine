@@ -766,6 +766,90 @@ test('explorer opens a file into a new editor tab', async () => {
   await app.close();
 });
 
+test('systemverilog lsp smoke resolves a cross-file definition and symbol references', async () => {
+  const { app, window } = await launchApp();
+  const aluInstantiationLine = '  alu u_alu ();';
+  const dataReadyDeclarationLine = '  logic data_ready;';
+  const aluSource = [
+    'module alu;',
+    'endmodule',
+  ].join('\n');
+  const cpuTopSource = [
+    'module cpu_top;',
+    '  logic data_ready;',
+    '',
+    '  alu u_alu ();',
+    '',
+    "  assign data_ready = 1'b1;",
+    'endmodule',
+  ].join('\n');
+
+  await ensureExplorerVisible(window);
+  await openNestedWorkspaceFile(window, [
+    'file-tree-node-rtl',
+    'file-tree-node-rtl_core',
+    'file-tree-node-rtl_core_cpu_top_sv',
+  ]);
+
+  await expect(window.getByTestId('editor-tab-rtl/core/cpu_top.sv')).toBeVisible();
+  await expect(window.locator('.monaco-editor .view-lines')).toContainText('alu u_alu');
+
+  await window.evaluate(async ({ nextAluSource, nextCpuTopSource }) => {
+    const browserGlobal = globalThis as typeof globalThis & {
+      electronAPI?: {
+        lsp: {
+          openDocument: (filePath: string, languageId: string, text: string) => Promise<void>;
+        };
+      };
+    };
+
+    await browserGlobal.electronAPI?.lsp.openDocument('rtl/core/alu.sv', 'systemverilog', nextAluSource);
+    await browserGlobal.electronAPI?.lsp.openDocument('rtl/core/cpu_top.sv', 'systemverilog', nextCpuTopSource);
+  }, {
+    nextAluSource: aluSource,
+    nextCpuTopSource: cpuTopSource,
+  });
+
+  await expect.poll(async () => window.evaluate(async ({ definitionCharacter, referencesCharacter }) => {
+    const browserGlobal = globalThis as typeof globalThis & {
+      electronAPI?: {
+        lsp: {
+          definition: (filePath: string, line: number, character: number) => Promise<Array<{ filePath: string }>>;
+          references: (filePath: string, line: number, character: number, includeDeclaration?: boolean) => Promise<Array<{ filePath: string }>>;
+        };
+      };
+    };
+
+    try {
+      const definition = await browserGlobal.electronAPI?.lsp.definition('rtl/core/cpu_top.sv', 3, definitionCharacter);
+      const references = await browserGlobal.electronAPI?.lsp.references('rtl/core/cpu_top.sv', 1, referencesCharacter, true);
+
+      return {
+        definitionFilePath: definition?.[0]?.filePath ?? null,
+        hasAtLeastTwoReferences: (references?.length ?? 0) >= 2,
+        allReferencePathsLocal: (references?.every((entry) => entry.filePath === 'rtl/core/cpu_top.sv') ?? false),
+      };
+    } catch {
+      return {
+        definitionFilePath: null,
+        hasAtLeastTwoReferences: false,
+        allReferencePathsLocal: false,
+      };
+    }
+  }, {
+    definitionCharacter: aluInstantiationLine.indexOf('alu'),
+    referencesCharacter: dataReadyDeclarationLine.indexOf('data_ready'),
+  }), {
+    timeout: 15000,
+  }).toMatchObject({
+    definitionFilePath: 'rtl/core/alu.sv',
+    hasAtLeastTwoReferences: true,
+    allReferencePathsLocal: true,
+  });
+
+  await app.close();
+});
+
 test('single-clicked explorer files stay in preview style until double-clicked to pin', async () => {
   const { app, window } = await launchApp();
 

@@ -56,7 +56,14 @@ const { mockEditorComponent, mockEditorDomNode, mockEditorInstance, mockModel, m
       register: vi.fn(),
       setMonarchTokensProvider: vi.fn(),
       registerCompletionItemProvider: vi.fn(),
+      registerHoverProvider: vi.fn(),
+      registerDefinitionProvider: vi.fn(),
+      registerReferenceProvider: vi.fn(),
       CompletionItemKind: { Keyword: 'keyword', Variable: 'variable' },
+      CompletionItemInsertTextRule: { InsertAsSnippet: 4 },
+    },
+    Uri: {
+      parse: vi.fn((value: string) => ({ path: value })),
     },
     editor: {
       defineTheme: vi.fn(),

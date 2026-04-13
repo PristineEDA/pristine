@@ -166,6 +166,8 @@ function EditorGroupLeaf({
     editorGroups,
     getCursorRestoreRequest,
     getStoredCursorPosition,
+    openFileInGroup,
+    restoreEditorSelection,
     setActiveTabIdInGroup,
     pinTabInGroup,
     closeFileInGroup,
@@ -282,6 +284,16 @@ function EditorGroupLeaf({
         onLoadFile={loadFileContent}
         onContentChange={updateFileContent}
         onEditorMount={(editor) => registerEditorRef(group.id, editor)}
+        onNavigateToLocation={(fileId, line, col) => {
+          const fileName = fileId.split('/').pop() ?? fileId;
+          openFileInGroup(fileId, fileName, group.id);
+          restoreEditorSelection({
+            groupId: group.id,
+            fileId,
+            line,
+            col,
+          });
+        }}
         showDragInteractionShield={Boolean(dragState)}
         dragInteractionShieldTestId={`editor-drag-shield-${group.id}`}
       />

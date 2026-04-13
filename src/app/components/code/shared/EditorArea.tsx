@@ -69,6 +69,7 @@ interface EditorAreaProps {
   onLoadFile?: (fileId: string) => void;
   onContentChange?: (fileId: string, content: string) => void;
   onEditorMount?: (editor: any) => void;
+  onNavigateToLocation?: (fileId: string, line: number, col: number) => void;
   showDragInteractionShield?: boolean;
   dragInteractionShieldTestId?: string;
 }
@@ -191,12 +192,13 @@ export function EditorArea({
   onLoadFile,
   onContentChange,
   onEditorMount,
+  onNavigateToLocation,
   showDragInteractionShield,
   dragInteractionShieldTestId,
 }: EditorAreaProps) {
   const lastAppliedRestoreRef = useRef({ activeTabId: '', restoreToken: 0 });
   const [activeModelReadyId, setActiveModelReadyId] = useState('');
-  const { activeTab, code, isActiveTabReady, updateContent } = useEditorDocumentState({
+  const { activeLoadError, activeTab, code, isActiveTabReady, updateContent } = useEditorDocumentState({
     tabs,
     activeTabId,
     contentCache,
@@ -387,6 +389,9 @@ export function EditorArea({
           onCursorChange={onCursorChange}
           onContentChange={updateContent}
           onEditorMount={onEditorMount}
+          onNavigateToLocation={onNavigateToLocation}
+          isDocumentReady={isActiveTabReady}
+          hasLoadError={Boolean(activeLoadError)}
           showDragInteractionShield={showDragInteractionShield}
           dragInteractionShieldTestId={dragInteractionShieldTestId}
         />

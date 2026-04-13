@@ -1,4 +1,4 @@
-import { createRef } from 'react';
+import { createRef, useLayoutEffect } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Problem } from '../../../../data/mockData';
@@ -7,6 +7,10 @@ import { getEditorFontFamilyStack } from '../../../editor/editorSettings';
 const mockedUseRegisterEditorLanguages = vi.fn();
 const mockedRegisterEditorThemes = vi.fn();
 const mockedGetEditorLanguage = vi.fn((filePath: string) => (filePath.endsWith('.sv') ? 'systemverilog' : 'verilog'));
+const mockedEnsureLspRegistered = vi.fn();
+const mockedAttachLspDocument = vi.fn((_args?: unknown) => vi.fn());
+const mockedUpdateLspDocument = vi.fn();
+const mockedSetNavigateHandler = vi.fn();
 let mockedProblems: Problem[] = [];
 let mockedEditorFontFamily = 'jetbrains-mono';
 let mockedEditorFontSize = 13;
@@ -65,8 +69,11 @@ const { mockCursorPositionListeners, mockEditorComponent, mockEditorDomNode, moc
 vi.mock('@monaco-editor/react', () => ({
   default: (props: any) => {
     mockEditorComponent(props);
-    props.beforeMount?.(mockMonaco);
-    props.onMount?.(mockEditorInstance);
+
+    useLayoutEffect(() => {
+      props.beforeMount?.(mockMonaco);
+      props.onMount?.(mockEditorInstance);
+    }, []);
 
     return (
       <button
@@ -111,6 +118,15 @@ vi.mock('../../../workspace/workspaceFiles', () => ({
   getEditorLanguage: (filePath: string) => mockedGetEditorLanguage(filePath),
 }));
 
+vi.mock('../../../lsp/systemVerilogLspBridge', () => ({
+  systemVerilogLspBridge: {
+    ensureRegistered: (monaco: unknown) => mockedEnsureLspRegistered(monaco),
+    attachDocument: (args: unknown) => mockedAttachLspDocument(args),
+    updateDocument: (filePath: string, text: string) => mockedUpdateLspDocument(filePath, text),
+    setNavigateHandler: (editor: unknown, handler: unknown) => mockedSetNavigateHandler(editor, handler),
+  },
+}));
+
 import { MonacoEditorPane } from './MonacoEditorPane';
 
 describe('MonacoEditorPane', () => {
@@ -122,6 +138,11 @@ describe('MonacoEditorPane', () => {
     mockedEditorFontFamily = 'jetbrains-mono';
     mockedEditorFontSize = 13;
     mockedEditorTheme = 'dracula';
+    mockedEnsureLspRegistered.mockReset();
+    mockedAttachLspDocument.mockReset();
+    mockedAttachLspDocument.mockImplementation(() => vi.fn());
+    mockedUpdateLspDocument.mockReset();
+    mockedSetNavigateHandler.mockReset();
     mockCursorPositionListeners.length = 0;
     mockFocusEditorTextListeners.length = 0;
     mockEditorDomNode.contains.mockReturnValue(true);
@@ -151,6 +172,15 @@ describe('MonacoEditorPane', () => {
     expect(mockedGetEditorLanguage).toHaveBeenCalledWith('rtl/core/cpu_top.sv');
     expect(mockedUseRegisterEditorLanguages).toHaveBeenCalledWith(mockMonaco);
     expect(mockedRegisterEditorThemes).toHaveBeenCalledWith(mockMonaco);
+    expect(mockedEnsureLspRegistered).toHaveBeenCalledWith(mockMonaco);
+    expect(mockedAttachLspDocument).toHaveBeenCalledWith(expect.objectContaining({
+      monaco: mockMonaco,
+      editor: mockEditorInstance,
+      filePath: 'rtl/core/cpu_top.sv',
+      text: 'module cpu_top; endmodule',
+    }));
+    expect(mockedSetNavigateHandler).toHaveBeenCalledWith(mockEditorInstance, undefined);
+    expect(mockedUpdateLspDocument).toHaveBeenCalledWith('rtl/core/cpu_top.sv', 'module cpu_top; endmodule');
     expect(editorRef.current).toBe(mockEditorInstance);
     expect(onActiveModelReady).toHaveBeenCalledWith('rtl/core/cpu_top.sv');
     expect(onEditorMount).toHaveBeenCalledWith(mockEditorInstance);
@@ -184,6 +214,7 @@ describe('MonacoEditorPane', () => {
 
     expect(mockFocusEditorTextListeners).toHaveLength(1);
     expect(onCursorChange).toHaveBeenCalledWith(2, 1);
+    expect(mockedAttachLspDocument).not.toHaveBeenCalled();
   });
 
   it('applies persisted editor font family, font size and theme settings to Monaco', async () => {

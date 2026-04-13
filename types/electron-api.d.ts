@@ -1,3 +1,11 @@
+import type {
+  LspCompletionResponse,
+  LspDiagnosticsEvent,
+  LspHover,
+  LspStateEvent,
+  WorkspaceLocation,
+} from './systemverilog-lsp';
+
 export interface ElectronAPI {
   platform: string;
   arch: string;
@@ -61,6 +69,29 @@ export interface ElectronAPI {
     kill: (id: string) => Promise<boolean>;
     onData: (callback: (data: { id: string; data: string }) => void) => () => void;
     onExit: (callback: (data: { id: string; exitCode: number; signal: number }) => void) => () => void;
+  };
+
+  lsp: {
+    openDocument: (filePath: string, languageId: string, text: string) => Promise<void>;
+    changeDocument: (filePath: string, text: string) => Promise<void>;
+    closeDocument: (filePath: string) => Promise<void>;
+    completion: (
+      filePath: string,
+      line: number,
+      character: number,
+      triggerCharacter?: string,
+      triggerKind?: number,
+    ) => Promise<LspCompletionResponse | null>;
+    hover: (filePath: string, line: number, character: number) => Promise<LspHover | null>;
+    definition: (filePath: string, line: number, character: number) => Promise<WorkspaceLocation[]>;
+    references: (
+      filePath: string,
+      line: number,
+      character: number,
+      includeDeclaration?: boolean,
+    ) => Promise<WorkspaceLocation[]>;
+    onDiagnostics: (callback: (payload: LspDiagnosticsEvent) => void) => () => void;
+    onState: (callback: (payload: LspStateEvent) => void) => () => void;
   };
 
   // Config

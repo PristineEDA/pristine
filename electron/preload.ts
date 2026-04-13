@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { SyncChannels, AsyncChannels, StreamChannels } from './ipc/channels.js';
+import type { LspCompletionResponse, LspDiagnosticsEvent, LspHover, LspStateEvent, WorkspaceLocation } from '../types/systemverilog-lsp.js';
 
 // ─── Sync Helpers ─────────────────────────────────────────────────────────────
 
@@ -124,6 +125,51 @@ const electronAPI = {
       ) => callback(payload);
       ipcRenderer.on(StreamChannels.TERMINAL_EXIT, handler);
       return () => { ipcRenderer.removeListener(StreamChannels.TERMINAL_EXIT, handler); };
+    },
+  },
+
+  lsp: {
+    openDocument: (filePath: string, languageId: string, text: string) =>
+      ipcRenderer.invoke(AsyncChannels.LSP_OPEN_DOCUMENT, filePath, languageId, text) as Promise<void>,
+    changeDocument: (filePath: string, text: string) =>
+      ipcRenderer.invoke(AsyncChannels.LSP_CHANGE_DOCUMENT, filePath, text) as Promise<void>,
+    closeDocument: (filePath: string) =>
+      ipcRenderer.invoke(AsyncChannels.LSP_CLOSE_DOCUMENT, filePath) as Promise<void>,
+    completion: (
+      filePath: string,
+      line: number,
+      character: number,
+      triggerCharacter?: string,
+      triggerKind?: number,
+    ) => ipcRenderer.invoke(
+      AsyncChannels.LSP_COMPLETION,
+      filePath,
+      line,
+      character,
+      triggerCharacter,
+      triggerKind,
+    ) as Promise<LspCompletionResponse | null>,
+    hover: (filePath: string, line: number, character: number) =>
+      ipcRenderer.invoke(AsyncChannels.LSP_HOVER, filePath, line, character) as Promise<LspHover | null>,
+    definition: (filePath: string, line: number, character: number) =>
+      ipcRenderer.invoke(AsyncChannels.LSP_DEFINITION, filePath, line, character) as Promise<WorkspaceLocation[]>,
+    references: (filePath: string, line: number, character: number, includeDeclaration = true) =>
+      ipcRenderer.invoke(
+        AsyncChannels.LSP_REFERENCES,
+        filePath,
+        line,
+        character,
+        includeDeclaration,
+      ) as Promise<WorkspaceLocation[]>,
+    onDiagnostics: (callback: (payload: LspDiagnosticsEvent) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, payload: LspDiagnosticsEvent) => callback(payload);
+      ipcRenderer.on(StreamChannels.LSP_DIAGNOSTICS, handler);
+      return () => { ipcRenderer.removeListener(StreamChannels.LSP_DIAGNOSTICS, handler); };
+    },
+    onState: (callback: (payload: LspStateEvent) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, payload: LspStateEvent) => callback(payload);
+      ipcRenderer.on(StreamChannels.LSP_STATE, handler);
+      return () => { ipcRenderer.removeListener(StreamChannels.LSP_STATE, handler); };
     },
   },
 

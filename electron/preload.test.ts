@@ -63,6 +63,8 @@ describe('preload bridge', () => {
     const onShellExit = vi.fn();
     const onTerminalData = vi.fn();
     const onTerminalExit = vi.fn();
+    const onLspDiagnostics = vi.fn();
+    const onLspState = vi.fn();
 
     api.minimize();
     api.maximize();
@@ -82,6 +84,13 @@ describe('preload bridge', () => {
     api.terminal.write('terminal-1', 'help');
     api.terminal.resize('terminal-1', 160, 50);
     api.terminal.kill('terminal-1');
+    api.lsp.openDocument('rtl/core/cpu_top.sv', 'systemverilog', 'module cpu_top; endmodule');
+    api.lsp.changeDocument('rtl/core/cpu_top.sv', 'module cpu_top; logic a; endmodule');
+    api.lsp.closeDocument('rtl/core/cpu_top.sv');
+    api.lsp.completion('rtl/core/cpu_top.sv', 4, 6, '.', 2);
+    api.lsp.hover('rtl/core/cpu_top.sv', 4, 6);
+    api.lsp.definition('rtl/core/cpu_top.sv', 4, 6);
+    api.lsp.references('rtl/core/cpu_top.sv', 4, 6, false);
     api.config.set('theme', 'dracula');
 
     const dispose = api.onMaximizedChange(onMaximizedChange);
@@ -90,6 +99,8 @@ describe('preload bridge', () => {
     const disposeShellExit = api.shell.onExit(onShellExit);
     const disposeTerminalData = api.terminal.onData(onTerminalData);
     const disposeTerminalExit = api.terminal.onExit(onTerminalExit);
+    const disposeLspDiagnostics = api.lsp.onDiagnostics(onLspDiagnostics);
+    const disposeLspState = api.lsp.onState(onLspState);
 
     expect(mockInvoke).toHaveBeenCalledWith('async:window:minimize');
     expect(mockInvoke).toHaveBeenCalledWith('async:window:maximize');
@@ -109,6 +120,13 @@ describe('preload bridge', () => {
     expect(mockInvoke).toHaveBeenCalledWith('async:terminal:write', 'terminal-1', 'help');
     expect(mockInvoke).toHaveBeenCalledWith('async:terminal:resize', 'terminal-1', 160, 50);
     expect(mockInvoke).toHaveBeenCalledWith('async:terminal:kill', 'terminal-1');
+    expect(mockInvoke).toHaveBeenCalledWith('async:lsp:open-document', 'rtl/core/cpu_top.sv', 'systemverilog', 'module cpu_top; endmodule');
+    expect(mockInvoke).toHaveBeenCalledWith('async:lsp:change-document', 'rtl/core/cpu_top.sv', 'module cpu_top; logic a; endmodule');
+    expect(mockInvoke).toHaveBeenCalledWith('async:lsp:close-document', 'rtl/core/cpu_top.sv');
+    expect(mockInvoke).toHaveBeenCalledWith('async:lsp:completion', 'rtl/core/cpu_top.sv', 4, 6, '.', 2);
+    expect(mockInvoke).toHaveBeenCalledWith('async:lsp:hover', 'rtl/core/cpu_top.sv', 4, 6);
+    expect(mockInvoke).toHaveBeenCalledWith('async:lsp:definition', 'rtl/core/cpu_top.sv', 4, 6);
+    expect(mockInvoke).toHaveBeenCalledWith('async:lsp:references', 'rtl/core/cpu_top.sv', 4, 6, false);
     expect(mockInvoke).toHaveBeenCalledWith('async:config:set', 'theme', 'dracula');
     expect(mockOn).toHaveBeenCalledWith('stream:window:maximized-change', expect.any(Function));
     expect(mockOn).toHaveBeenCalledWith('stream:shell:stdout', expect.any(Function));
@@ -116,6 +134,8 @@ describe('preload bridge', () => {
     expect(mockOn).toHaveBeenCalledWith('stream:shell:exit', expect.any(Function));
     expect(mockOn).toHaveBeenCalledWith('stream:terminal:data', expect.any(Function));
     expect(mockOn).toHaveBeenCalledWith('stream:terminal:exit', expect.any(Function));
+    expect(mockOn).toHaveBeenCalledWith('stream:lsp:diagnostics', expect.any(Function));
+    expect(mockOn).toHaveBeenCalledWith('stream:lsp:state', expect.any(Function));
 
     const handler = mockOn.mock.calls.find((call) => call[0] === 'stream:window:maximized-change')?.[1];
     handler({}, true);
@@ -141,17 +161,29 @@ describe('preload bridge', () => {
     terminalExitHandler({}, { id: 'terminal-1', exitCode: 0, signal: 15 });
     expect(onTerminalExit).toHaveBeenCalledWith({ id: 'terminal-1', exitCode: 0, signal: 15 });
 
+    const diagnosticsHandler = mockOn.mock.calls.find((call) => call[0] === 'stream:lsp:diagnostics')?.[1];
+    diagnosticsHandler({}, { filePath: 'rtl/core/cpu_top.sv', diagnostics: [] });
+    expect(onLspDiagnostics).toHaveBeenCalledWith({ filePath: 'rtl/core/cpu_top.sv', diagnostics: [] });
+
+    const lspStateHandler = mockOn.mock.calls.find((call) => call[0] === 'stream:lsp:state')?.[1];
+    lspStateHandler({}, { status: 'ready' });
+    expect(onLspState).toHaveBeenCalledWith({ status: 'ready' });
+
     dispose();
     disposeStdout();
     disposeStderr();
     disposeShellExit();
     disposeTerminalData();
     disposeTerminalExit();
+    disposeLspDiagnostics();
+    disposeLspState();
     expect(mockRemoveListener).toHaveBeenCalledWith('stream:window:maximized-change', handler);
     expect(mockRemoveListener).toHaveBeenCalledWith('stream:shell:stdout', stdoutHandler);
     expect(mockRemoveListener).toHaveBeenCalledWith('stream:shell:stderr', stderrHandler);
     expect(mockRemoveListener).toHaveBeenCalledWith('stream:shell:exit', shellExitHandler);
     expect(mockRemoveListener).toHaveBeenCalledWith('stream:terminal:data', terminalDataHandler);
     expect(mockRemoveListener).toHaveBeenCalledWith('stream:terminal:exit', terminalExitHandler);
+    expect(mockRemoveListener).toHaveBeenCalledWith('stream:lsp:diagnostics', diagnosticsHandler);
+    expect(mockRemoveListener).toHaveBeenCalledWith('stream:lsp:state', lspStateHandler);
   });
 });

@@ -213,7 +213,7 @@ export default defineConfig(() => ({
                   }
                 },
               },
-              external: ['node-pty'],
+                  external: ['node-pty', 'vscode-jsonrpc', 'vscode-jsonrpc/node', 'vscode-jsonrpc/node.js'],
             },
           },
         },

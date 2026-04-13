@@ -6,8 +6,9 @@
   "main": "dist-electron/main.js",
   "scripts": {
     "prepare:assets": "node scripts/prepare-assets.mjs",
-    "build:app": "pnpm run prepare:assets && vite build",
-    "predev": "pnpm run prepare:assets",
+    "prepare:slang-server": "node scripts/prepare-slang-server.mjs",
+    "build:app": "pnpm run prepare:assets && pnpm run prepare:slang-server && vite build",
+    "predev": "pnpm run prepare:assets && pnpm run prepare:slang-server",
     "dev": "vite",
     "dev:web": "vite --config vite.config.web.ts",
     "build": "pnpm run build:app",
@@ -20,7 +21,7 @@
     "test": "vitest",
     "test:unit": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "test:e2e": "playwright test",
+    "test:e2e": "playwright test --max-failures=1",
     "test:whiteboard:perf": "playwright test --config playwright.perf.config.ts e2e/whiteboard.perf.spec.ts",
     "package:linux:x64": "pnpm run build:app && electron-builder --linux AppImage deb --x64 --config electron-builder.yml",
     "package:win:x64": "pnpm run build:app && electron-builder --win nsis portable --x64 --config electron-builder.yml",
@@ -41,7 +42,8 @@
     "radix-ui": "^1.4.3",
     "react": "19.2.4",
     "react-dom": "19.2.4",
-    "tailwind-merge": "^3.5.0"
+    "tailwind-merge": "^3.5.0",
+    "vscode-jsonrpc": "^8.2.1"
   },
   "devDependencies": {
     "@fontsource/anonymous-pro": "^5.2.8",
