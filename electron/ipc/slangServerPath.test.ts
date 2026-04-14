@@ -35,7 +35,7 @@ describe('slang server path helpers', () => {
     { platform: 'win32', binaryName: 'slang-server.exe' },
     { platform: 'linux', binaryName: 'slang-server' },
     { platform: 'darwin', binaryName: 'slang-server' },
-  ])('resolves the development binary relative to the repository root on $platform', ({ platform, binaryName }) => {
+  ] as const)('resolves the development binary relative to the repository root on $platform', ({ platform, binaryName }) => {
     const binaryPattern = new RegExp(`Pristine[\\\\/]binaries[\\\\/]${binaryName.replace('.', '\\.')}$`);
 
     expect(getSlangServerBinaryName(platform)).toBe(binaryName);

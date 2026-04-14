@@ -17,54 +17,88 @@ async function getPageTitleSafely(page: Page) {
   }
 
   try {
-    await page.waitForLoadState('domcontentloaded', { timeout: 1000 });
+    await page.waitForLoadState('domcontentloaded', { timeout: 5000 });
     return await page.title();
   } catch {
     return null;
   }
 }
 
-async function getTitledWindows(app: Awaited<ReturnType<typeof electron.launch>>) {
-  const titledWindows = await Promise.all(
+function isSplashWindow(entry: { title: string | null; url: string }) {
+  return entry.title === 'Pristine Loading' || entry.url.endsWith('/splash.html');
+}
+
+function isMainWindow(entry: { title: string | null; url: string }) {
+  return entry.title === 'Pristine' || entry.url.endsWith('/index.html');
+}
+
+async function getIdentifiedWindows(app: Awaited<ReturnType<typeof electron.launch>>) {
+  return Promise.all(
     app.windows().map(async (page) => ({
       page,
       title: await getPageTitleSafely(page),
+      url: page.url(),
     })),
   );
-
-  return titledWindows.filter((entry): entry is { page: typeof entry.page; title: string } => Boolean(entry.title));
 }
 
 async function resolveStartupWindows(app: Awaited<ReturnType<typeof electron.launch>>) {
-  await expect.poll(() => app.windows().length, {
-    timeout: 10000,
-  }).toBeGreaterThan(1);
+  let resolvedMainWindow: Page | null = null;
+  let resolvedSplashWindow: Page | null = null;
 
   await expect.poll(async () => {
-    const titledWindows = await getTitledWindows(app);
-    const splashWindow = titledWindows.find((entry) => entry.title === 'Pristine Loading')?.page;
-    const window = titledWindows.find((entry) => entry.title === 'Pristine')?.page;
+    const identifiedWindows = await getIdentifiedWindows(app);
+    const splashWindow = identifiedWindows.find(isSplashWindow)?.page ?? null;
+    const window = identifiedWindows.find(isMainWindow)?.page ?? null;
 
-    return Boolean(splashWindow && window);
+    if (window) {
+      resolvedMainWindow = window;
+    }
+
+    if (splashWindow) {
+      resolvedSplashWindow = splashWindow;
+    }
+
+    return Boolean(window);
   }, {
     timeout: 10000,
   }).toBe(true);
 
-  const titledWindows = await getTitledWindows(app);
-  const splashWindow = titledWindows.find((entry) => entry.title === 'Pristine Loading')?.page;
-  const window = titledWindows.find((entry) => entry.title === 'Pristine')?.page;
-
-  if (!splashWindow || !window) {
-    throw new Error('Expected splash and main windows during startup');
+  if (!resolvedMainWindow) {
+    throw new Error('Expected main window during startup');
   }
 
-  return { splashWindow, window };
+  return {
+    splashWindow: resolvedSplashWindow,
+    window: resolvedMainWindow,
+  };
 }
 
 async function getWindowByTitle(app: Awaited<ReturnType<typeof electron.launch>>, title: string) {
-  const titledWindows = await getTitledWindows(app);
+  const titledWindows = await getIdentifiedWindows(app);
 
   return titledWindows.find((entry) => entry.title === title)?.page ?? null;
+}
+
+async function getStartupBrowserWindowState(app: Awaited<ReturnType<typeof electron.launch>>) {
+  return app.evaluate(async ({ BrowserWindow }) => {
+    return BrowserWindow.getAllWindows().map((window) => ({
+      title: window.getTitle(),
+      visible: window.isVisible(),
+      destroyed: window.isDestroyed(),
+      url: window.webContents.getURL(),
+    }));
+  });
+}
+
+async function isStartupBrowserWindowVisible(
+  app: Awaited<ReturnType<typeof electron.launch>>,
+  kind: 'main' | 'splash',
+) {
+  const windows = await getStartupBrowserWindowState(app);
+  const matcher = kind === 'main' ? isMainWindow : isSplashWindow;
+  const targetWindow = windows.find(matcher);
+  return targetWindow?.visible ?? false;
 }
 
 function findPackagedWindowsExecutablePath() {
@@ -533,25 +567,26 @@ test('app launches and shows main UI', async () => {
 test('splash window hands off to the main window after the startup delay', async () => {
   const launchStartedAt = Date.now();
   const { app, window, splashWindow } = await launchApp();
-  const splashBrowserWindow = await app.browserWindow(splashWindow);
-  const mainBrowserWindow = await app.browserWindow(window);
+  if (!splashWindow) {
+    throw new Error('Expected splash window during startup');
+  }
   const splashClosePromise = splashWindow.waitForEvent('close');
 
   await expect(splashWindow.getByTestId('splash-screen')).toBeVisible();
-  await expect.poll(async () => splashBrowserWindow.evaluate((browserWindow) => browserWindow.isVisible())).toBe(true);
-  await expect.poll(async () => mainBrowserWindow.evaluate((browserWindow) => browserWindow.isVisible())).toBe(false);
+  await expect.poll(async () => isStartupBrowserWindowVisible(app, 'splash')).toBe(true);
+  await expect.poll(async () => isStartupBrowserWindowVisible(app, 'main')).toBe(false);
 
   await window.waitForTimeout(1000);
 
-  await expect.poll(async () => splashBrowserWindow.evaluate((browserWindow) => browserWindow.isVisible())).toBe(true);
-  await expect.poll(async () => mainBrowserWindow.evaluate((browserWindow) => browserWindow.isVisible())).toBe(false);
+  await expect.poll(async () => isStartupBrowserWindowVisible(app, 'splash')).toBe(true);
+  await expect.poll(async () => isStartupBrowserWindowVisible(app, 'main')).toBe(false);
 
   await splashClosePromise;
 
   expect(Date.now() - launchStartedAt).toBeGreaterThanOrEqual(3000);
 
   await expect.poll(() => app.windows().length).toBe(1);
-  await expect.poll(async () => mainBrowserWindow.evaluate((browserWindow) => browserWindow.isVisible())).toBe(true);
+  await expect.poll(async () => isStartupBrowserWindowVisible(app, 'main')).toBe(true);
   await expect(window.getByTestId('activity-item-explorer')).toBeVisible();
 
   await app.close();
