@@ -121,6 +121,9 @@ function createFakeConnection(): FakeConnection {
 }
 
 describe('LSP IPC handlers', () => {
+  const expectedBinaryPattern = process.platform === 'win32'
+    ? /binaries[\\/]slang-server\.exe$/
+    : /binaries[\\/]slang-server$/;
   const send = vi.fn();
   const getMainWindow = () => ({ webContents: { send } } as any);
   let fakeProcess: FakeProcess;
@@ -154,7 +157,7 @@ describe('LSP IPC handlers', () => {
 
     expect(mockSpawn).toHaveBeenCalledTimes(1);
     expect(mockSpawn).toHaveBeenCalledWith(
-      expect.stringMatching(/binaries[\\/]slang-server\.exe$/),
+      expect.stringMatching(expectedBinaryPattern),
       [],
       expect.objectContaining({
         cwd: expect.stringContaining('Pristine'),
