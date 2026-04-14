@@ -43,20 +43,25 @@ async function getIdentifiedWindows(app: Awaited<ReturnType<typeof electron.laun
 }
 
 async function resolveStartupWindows(app: Awaited<ReturnType<typeof electron.launch>>) {
-  let resolvedMainWindow: Page | null = null;
-  let resolvedSplashWindow: Page | null = null;
+  const resolvedStartupWindows: {
+    splashWindow: Page | null;
+    window: Page | null;
+  } = {
+    splashWindow: null,
+    window: null,
+  };
 
   await expect.poll(async () => {
     const identifiedWindows = await getIdentifiedWindows(app);
     const splashWindow = identifiedWindows.find(isSplashWindow)?.page ?? null;
     const window = identifiedWindows.find(isMainWindow)?.page ?? null;
 
-    if (window) {
-      resolvedMainWindow = window;
+    if (splashWindow && !resolvedStartupWindows.splashWindow) {
+      resolvedStartupWindows.splashWindow = splashWindow;
     }
 
-    if (splashWindow) {
-      resolvedSplashWindow = splashWindow;
+    if (window) {
+      resolvedStartupWindows.window = window;
     }
 
     return Boolean(window);
@@ -64,13 +69,15 @@ async function resolveStartupWindows(app: Awaited<ReturnType<typeof electron.lau
     timeout: 10000,
   }).toBe(true);
 
-  if (!resolvedMainWindow) {
+  const window = resolvedStartupWindows.window;
+
+  if (!window) {
     throw new Error('Expected main window during startup');
   }
 
   return {
-    splashWindow: resolvedSplashWindow,
-    window: resolvedMainWindow,
+    splashWindow: resolvedStartupWindows.splashWindow,
+    window,
   };
 }
 
