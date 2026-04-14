@@ -55,6 +55,7 @@ function LayoutHarness() {
     <div>
       <button onClick={() => openFile('rtl/core/reg_file.v', 'reg_file.v')}>open-reg</button>
       <button onClick={() => openFile('rtl/core/alu.v', 'alu.v')}>open-alu</button>
+      <button onClick={() => openFile('.gitignore', '.gitignore')}>open-gitignore</button>
       <button onClick={() => openPreviewFile('rtl/core/reg_file.v', 'reg_file.v')}>preview-reg</button>
       <EditorSplitLayout />
     </div>
@@ -220,6 +221,50 @@ describe('EditorSplitLayout', () => {
 
     expect(within(sourceGroup).getByTestId('mock-tabs')).toHaveTextContent('rtl/core/alu.v');
     expect(within(targetGroup).getByTestId('mock-tabs')).toHaveTextContent('rtl/core/alu.v,rtl/core/reg_file.v');
+  });
+
+  it('cycles the focused group tabs to the right and reverses with Ctrl/Cmd+Shift+Tab', () => {
+    render(
+      <WorkspaceProvider>
+        <LayoutHarness />
+      </WorkspaceProvider>,
+    );
+
+    fireEvent.click(screen.getByText('open-reg'));
+    fireEvent.click(screen.getByText('open-alu'));
+    fireEvent.click(screen.getByText('open-gitignore'));
+
+    const group = screen.getByTestId('editor-group-group-1');
+    fireEvent.mouseDown(group);
+    fireEvent.click(within(group).getByTestId('mock-tab-rtl/core/alu.v'));
+
+    fireEvent.keyDown(group, { key: 'Tab', ctrlKey: true });
+    expect(within(group).getByTestId('mock-active-tab')).toHaveTextContent('.gitignore');
+
+    fireEvent.keyDown(group, { key: 'Tab', metaKey: true, shiftKey: true });
+    expect(within(group).getByTestId('mock-active-tab')).toHaveTextContent('rtl/core/alu.v');
+  });
+
+  it('closes only the focused group active tab with Ctrl+W', () => {
+    render(
+      <WorkspaceProvider>
+        <LayoutHarness />
+      </WorkspaceProvider>,
+    );
+
+    fireEvent.click(screen.getByText('open-reg'));
+    fireEvent.click(within(screen.getByTestId('editor-group-group-1')).getByText('split-editor'));
+    fireEvent.click(screen.getByText('open-alu'));
+
+    const firstGroup = screen.getByTestId('editor-group-group-1');
+    const secondGroup = screen.getByTestId('editor-group-group-2');
+    fireEvent.mouseDown(secondGroup);
+
+    fireEvent.keyDown(secondGroup, { key: 'w', ctrlKey: true });
+
+    expect(within(firstGroup).getByTestId('mock-tabs')).toHaveTextContent('rtl/core/reg_file.v');
+    expect(within(secondGroup).getByTestId('mock-tabs')).toHaveTextContent('rtl/core/reg_file.v');
+    expect(within(secondGroup).getByTestId('mock-active-tab')).toHaveTextContent('rtl/core/reg_file.v');
   });
 
   it('renders half-pane edge hot zones with animated neutral styling', () => {

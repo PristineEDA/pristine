@@ -136,6 +136,17 @@ function createElectronApiMock() {
       onData: vi.fn(() => vi.fn()),
       onExit: vi.fn(() => vi.fn()),
     },
+    lsp: {
+      openDocument: vi.fn().mockResolvedValue(undefined),
+      changeDocument: vi.fn().mockResolvedValue(undefined),
+      closeDocument: vi.fn().mockResolvedValue(undefined),
+      completion: vi.fn().mockResolvedValue(null),
+      hover: vi.fn().mockResolvedValue(null),
+      definition: vi.fn().mockResolvedValue([]),
+      references: vi.fn().mockResolvedValue([]),
+      onDiagnostics: vi.fn(() => vi.fn()),
+      onState: vi.fn(() => vi.fn()),
+    },
     config: {
       get: vi.fn(),
       set: vi.fn(),

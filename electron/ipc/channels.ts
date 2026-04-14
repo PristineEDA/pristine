@@ -29,6 +29,13 @@ export const AsyncChannels = {
   TERMINAL_WRITE: 'async:terminal:write',
   TERMINAL_RESIZE: 'async:terminal:resize',
   TERMINAL_KILL: 'async:terminal:kill',
+  LSP_OPEN_DOCUMENT: 'async:lsp:open-document',
+  LSP_CHANGE_DOCUMENT: 'async:lsp:change-document',
+  LSP_CLOSE_DOCUMENT: 'async:lsp:close-document',
+  LSP_COMPLETION: 'async:lsp:completion',
+  LSP_HOVER: 'async:lsp:hover',
+  LSP_DEFINITION: 'async:lsp:definition',
+  LSP_REFERENCES: 'async:lsp:references',
   CONFIG_SET: 'async:config:set',
 } as const;
 
@@ -38,5 +45,7 @@ export const StreamChannels = {
   SHELL_EXIT: 'stream:shell:exit',
   TERMINAL_DATA: 'stream:terminal:data',
   TERMINAL_EXIT: 'stream:terminal:exit',
+  LSP_DIAGNOSTICS: 'stream:lsp:diagnostics',
+  LSP_STATE: 'stream:lsp:state',
   WINDOW_MAXIMIZED_CHANGE: 'stream:window:maximized-change',
 } as const;

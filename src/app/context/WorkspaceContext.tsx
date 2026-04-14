@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import {
+  type EditorTabCycleDirection,
   type EditorDropPosition,
   type EditorGroup,
   type EditorLayoutNode,
@@ -39,6 +40,8 @@ interface WorkspaceState {
   focusActiveEditor: (groupId?: string) => void;
   splitGroup: (groupId: string, direction?: 'horizontal' | 'vertical') => void;
   moveTab: (sourceGroupId: string, tabId: string, targetGroupId: string, position: EditorDropPosition) => void;
+  cycleFocusedGroupTabs: (direction?: EditorTabCycleDirection) => void;
+  closeActiveTabInFocusedGroup: () => void;
 
   tabs: Tab[];
   activeTabId: string;
@@ -135,6 +138,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       focusActiveEditor: editorWorkspace.focusActiveEditor,
       splitGroup: editorWorkspace.splitGroup,
       moveTab: editorWorkspace.moveTab,
+      cycleFocusedGroupTabs: editorWorkspace.cycleFocusedGroupTabs,
+      closeActiveTabInFocusedGroup: editorWorkspace.closeActiveTabInFocusedGroup,
       tabs: editorWorkspace.tabs,
       activeTabId: editorWorkspace.activeTabId,
       openFile: editorWorkspace.openFile,

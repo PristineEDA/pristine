@@ -3,6 +3,8 @@ import {
   closeFileInEditorGroup,
   createEditorGroup,
   createInitialEditorWorkspace,
+  getCycledTabIdInEditorGroup,
+  getNextActiveTabIdAfterClose,
   moveEditorTab,
   openFileInEditorGroup,
   pinTabInEditorGroup,
@@ -107,6 +109,38 @@ describe('editorLayout', () => {
 
     expect(state.groups['group-1']?.previewTabId).toBeNull();
     expect(state.groups['group-2']?.tabs.find((tab) => tab.id === 'rtl/core/alu.v')?.isPinned).toBe(true);
+  });
+
+  it('cycles tabs to the right by default and supports reverse cycling to the left', () => {
+    const group = createEditorGroup(
+      'group-1',
+      [
+        { id: 'README.md', name: 'README.md', isPinned: true },
+        { id: 'rtl/core/reg_file.v', name: 'reg_file.v', isPinned: true },
+        { id: '.gitignore', name: '.gitignore', isPinned: true },
+      ],
+      'rtl/core/reg_file.v',
+    );
+
+    expect(getCycledTabIdInEditorGroup(group)).toBe('.gitignore');
+    expect(getCycledTabIdInEditorGroup({ ...group, activeTabId: '.gitignore' })).toBe('README.md');
+    expect(getCycledTabIdInEditorGroup(group, 'backward')).toBe('README.md');
+    expect(getCycledTabIdInEditorGroup({ ...group, activeTabId: 'README.md' }, 'backward')).toBe('.gitignore');
+  });
+
+  it('selects the nearest surviving neighbor when closing the active tab', () => {
+    const group = createEditorGroup(
+      'group-1',
+      [
+        { id: 'README.md', name: 'README.md', isPinned: true },
+        { id: 'rtl/core/reg_file.v', name: 'reg_file.v', isPinned: true },
+        { id: '.gitignore', name: '.gitignore', isPinned: true },
+      ],
+      'rtl/core/reg_file.v',
+    );
+
+    expect(getNextActiveTabIdAfterClose(group, 'rtl/core/reg_file.v')).toBe('.gitignore');
+    expect(getNextActiveTabIdAfterClose({ ...group, activeTabId: '.gitignore' }, '.gitignore')).toBe('rtl/core/reg_file.v');
   });
 
   it('removes an empty group after its last tab closes', () => {

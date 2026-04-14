@@ -156,6 +156,100 @@ describe('useWorkspaceEditorState', () => {
     );
   });
 
+  it('cycles focused-group tabs to the right by default and supports reverse cycling', () => {
+    const { result } = renderHook(() => useWorkspaceEditorState());
+
+    act(() => {
+      result.current.openFile('README.md', 'README.md');
+    });
+
+    act(() => {
+      result.current.setCursorPos(4, 2);
+    });
+
+    act(() => {
+      result.current.openFile('rtl/core/reg_file.v', 'reg_file.v');
+    });
+
+    act(() => {
+      result.current.setCursorPos(9, 6);
+    });
+
+    act(() => {
+      result.current.openFile('.gitignore', '.gitignore');
+    });
+
+    act(() => {
+      result.current.setCursorPos(12, 7);
+    });
+
+    act(() => {
+      result.current.cycleFocusedGroupTabs();
+    });
+
+    expect(result.current.activeTabId).toBe('README.md');
+    expect(result.current.getCursorRestoreRequest('group-1')).toEqual(
+      expect.objectContaining({
+        groupId: 'group-1',
+        fileId: 'README.md',
+        line: 4,
+        col: 2,
+        token: expect.any(Number),
+      }),
+    );
+
+    act(() => {
+      result.current.cycleFocusedGroupTabs('backward');
+    });
+
+    expect(result.current.activeTabId).toBe('.gitignore');
+    expect(result.current.getCursorRestoreRequest('group-1')).toEqual(
+      expect.objectContaining({
+        groupId: 'group-1',
+        fileId: '.gitignore',
+        line: 12,
+        col: 7,
+        token: expect.any(Number),
+      }),
+    );
+  });
+
+  it('closes the active tab in the focused group and restores the next tab cursor snapshot', () => {
+    const { result } = renderHook(() => useWorkspaceEditorState());
+
+    act(() => {
+      result.current.openFile('README.md', 'README.md');
+    });
+
+    act(() => {
+      result.current.setCursorPos(7, 4);
+    });
+
+    act(() => {
+      result.current.openFile('rtl/core/reg_file.v', 'reg_file.v');
+    });
+
+    act(() => {
+      result.current.setCursorPos(15, 3);
+    });
+
+    act(() => {
+      result.current.closeActiveTabInFocusedGroup();
+    });
+
+    expect(result.current.activeTabId).toBe('README.md');
+    expect(result.current.tabs.map((tab) => tab.id)).toEqual(['README.md']);
+    expect(result.current.getCursorRestoreRequest('group-1')).toEqual(
+      expect.objectContaining({
+        groupId: 'group-1',
+        fileId: 'README.md',
+        line: 7,
+        col: 4,
+        token: expect.any(Number),
+      }),
+    );
+  });
+
   it('focuses the registered editor for the active group', () => {
     const { result } = renderHook(() => useWorkspaceEditorState());
     const focus = vi.fn();

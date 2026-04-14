@@ -1,4 +1,4 @@
-import { test, expect, _electron as electron, type Locator } from '@playwright/test';
+import { test, expect, _electron as electron, type Locator, type Page } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -11,40 +11,101 @@ function getE2EUserDataPath() {
   return test.info().outputPath('electron-user-data');
 }
 
-async function resolveStartupWindows(app: Awaited<ReturnType<typeof electron.launch>>) {
-  await expect.poll(() => app.windows().length, {
-    timeout: 10000,
-  }).toBeGreaterThan(1);
-
-  const startupWindows = app.windows();
-  await Promise.all(startupWindows.map((page) => page.waitForLoadState('domcontentloaded')));
-
-  const titledWindows = await Promise.all(
-    startupWindows.map(async (page) => ({
-      page,
-      title: await page.title(),
-    })),
-  );
-
-  const splashWindow = titledWindows.find((entry) => entry.title === 'Pristine Loading')?.page;
-  const window = titledWindows.find((entry) => entry.title === 'Pristine')?.page;
-
-  if (!splashWindow || !window) {
-    throw new Error('Expected splash and main windows during startup');
+async function getPageTitleSafely(page: Page) {
+  if (page.isClosed()) {
+    return null;
   }
 
-  return { splashWindow, window };
+  try {
+    await page.waitForLoadState('domcontentloaded', { timeout: 5000 });
+    return await page.title();
+  } catch {
+    return null;
+  }
+}
+
+function isSplashWindow(entry: { title: string | null; url: string }) {
+  return entry.title === 'Pristine Loading' || entry.url.endsWith('/splash.html');
+}
+
+function isMainWindow(entry: { title: string | null; url: string }) {
+  return entry.title === 'Pristine' || entry.url.endsWith('/index.html');
+}
+
+async function getIdentifiedWindows(app: Awaited<ReturnType<typeof electron.launch>>) {
+  return Promise.all(
+    app.windows().map(async (page) => ({
+      page,
+      title: await getPageTitleSafely(page),
+      url: page.url(),
+    })),
+  );
+}
+
+async function resolveStartupWindows(app: Awaited<ReturnType<typeof electron.launch>>) {
+  const resolvedStartupWindows: {
+    splashWindow: Page | null;
+    window: Page | null;
+  } = {
+    splashWindow: null,
+    window: null,
+  };
+
+  await expect.poll(async () => {
+    const identifiedWindows = await getIdentifiedWindows(app);
+    const splashWindow = identifiedWindows.find(isSplashWindow)?.page ?? null;
+    const window = identifiedWindows.find(isMainWindow)?.page ?? null;
+
+    if (splashWindow && !resolvedStartupWindows.splashWindow) {
+      resolvedStartupWindows.splashWindow = splashWindow;
+    }
+
+    if (window) {
+      resolvedStartupWindows.window = window;
+    }
+
+    return Boolean(window);
+  }, {
+    timeout: 10000,
+  }).toBe(true);
+
+  const window = resolvedStartupWindows.window;
+
+  if (!window) {
+    throw new Error('Expected main window during startup');
+  }
+
+  return {
+    splashWindow: resolvedStartupWindows.splashWindow,
+    window,
+  };
 }
 
 async function getWindowByTitle(app: Awaited<ReturnType<typeof electron.launch>>, title: string) {
-  const titledWindows = await Promise.all(
-    app.windows().map(async (page) => ({
-      page,
-      title: await page.title(),
-    })),
-  );
+  const titledWindows = await getIdentifiedWindows(app);
 
   return titledWindows.find((entry) => entry.title === title)?.page ?? null;
+}
+
+async function getStartupBrowserWindowState(app: Awaited<ReturnType<typeof electron.launch>>) {
+  return app.evaluate(async ({ BrowserWindow }) => {
+    return BrowserWindow.getAllWindows().map((window) => ({
+      title: window.getTitle(),
+      visible: window.isVisible(),
+      destroyed: window.isDestroyed(),
+      url: window.webContents.getURL(),
+    }));
+  });
+}
+
+async function isStartupBrowserWindowVisible(
+  app: Awaited<ReturnType<typeof electron.launch>>,
+  kind: 'main' | 'splash',
+) {
+  const windows = await getStartupBrowserWindowState(app);
+  const matcher = kind === 'main' ? isMainWindow : isSplashWindow;
+  const targetWindow = windows.find(matcher);
+  return targetWindow?.visible ?? false;
 }
 
 function findPackagedWindowsExecutablePath() {
@@ -289,6 +350,42 @@ async function focusMonacoEditor(window: Awaited<ReturnType<typeof launchApp>>['
   await editor.click({ position: { x: 24, y: 12 } });
 }
 
+async function waitForMonacoEditor(window: Awaited<ReturnType<typeof launchApp>>['window']) {
+  const editor = window.locator('.monaco-editor');
+  await expect(editor).toBeVisible();
+  return editor;
+}
+
+async function waitForMonacoEditorTextFocus(window: Awaited<ReturnType<typeof launchApp>>['window']) {
+  await expect.poll(() => window.evaluate(() => {
+    const browserGlobal = globalThis as typeof globalThis & {
+      document: {
+        activeElement: Element | null;
+        querySelector: (selectors: string) => Element | null;
+      };
+    };
+    const activeElement = browserGlobal.document.activeElement;
+    const textInput = browserGlobal.document.querySelector('.monaco-editor textarea.inputarea, .monaco-editor .inputarea, .monaco-editor .native-edit-context');
+    return activeElement === textInput;
+  }), {
+    timeout: 15000,
+  }).toBe(true);
+}
+
+async function expectVisibleEditorsToContainText(
+  window: Awaited<ReturnType<typeof launchApp>>['window'],
+  expectedCount: number,
+  text: string,
+) {
+  const textLayers = window.locator('.monaco-editor .view-lines');
+
+  await expect(textLayers).toHaveCount(expectedCount);
+
+  for (let index = 0; index < expectedCount; index += 1) {
+    await expect(textLayers.nth(index)).toContainText(text);
+  }
+}
+
 async function moveMonacoCursor(
   window: Awaited<ReturnType<typeof launchApp>>['window'],
   movement: { down?: number; right?: number },
@@ -477,25 +574,26 @@ test('app launches and shows main UI', async () => {
 test('splash window hands off to the main window after the startup delay', async () => {
   const launchStartedAt = Date.now();
   const { app, window, splashWindow } = await launchApp();
-  const splashBrowserWindow = await app.browserWindow(splashWindow);
-  const mainBrowserWindow = await app.browserWindow(window);
+  if (!splashWindow) {
+    throw new Error('Expected splash window during startup');
+  }
   const splashClosePromise = splashWindow.waitForEvent('close');
 
   await expect(splashWindow.getByTestId('splash-screen')).toBeVisible();
-  await expect.poll(async () => splashBrowserWindow.evaluate((browserWindow) => browserWindow.isVisible())).toBe(true);
-  await expect.poll(async () => mainBrowserWindow.evaluate((browserWindow) => browserWindow.isVisible())).toBe(false);
+  await expect.poll(async () => isStartupBrowserWindowVisible(app, 'splash')).toBe(true);
+  await expect.poll(async () => isStartupBrowserWindowVisible(app, 'main')).toBe(false);
 
   await window.waitForTimeout(1000);
 
-  await expect.poll(async () => splashBrowserWindow.evaluate((browserWindow) => browserWindow.isVisible())).toBe(true);
-  await expect.poll(async () => mainBrowserWindow.evaluate((browserWindow) => browserWindow.isVisible())).toBe(false);
+  await expect.poll(async () => isStartupBrowserWindowVisible(app, 'splash')).toBe(true);
+  await expect.poll(async () => isStartupBrowserWindowVisible(app, 'main')).toBe(false);
 
   await splashClosePromise;
 
   expect(Date.now() - launchStartedAt).toBeGreaterThanOrEqual(3000);
 
   await expect.poll(() => app.windows().length).toBe(1);
-  await expect.poll(async () => mainBrowserWindow.evaluate((browserWindow) => browserWindow.isVisible())).toBe(true);
+  await expect.poll(async () => isStartupBrowserWindowVisible(app, 'main')).toBe(true);
   await expect(window.getByTestId('activity-item-explorer')).toBeVisible();
 
   await app.close();
@@ -706,6 +804,90 @@ test('explorer opens a file into a new editor tab', async () => {
 
   await expect(window.getByTestId('editor-tab-README.md')).toBeVisible();
   await expect(window.locator('.monaco-editor .view-lines')).toContainText('Fixture Workspace');
+
+  await app.close();
+});
+
+test('systemverilog lsp smoke resolves a cross-file definition and symbol references', async () => {
+  const { app, window } = await launchApp();
+  const aluInstantiationLine = '  alu u_alu ();';
+  const dataReadyDeclarationLine = '  logic data_ready;';
+  const aluSource = [
+    'module alu;',
+    'endmodule',
+  ].join('\n');
+  const cpuTopSource = [
+    'module cpu_top;',
+    '  logic data_ready;',
+    '',
+    '  alu u_alu ();',
+    '',
+    "  assign data_ready = 1'b1;",
+    'endmodule',
+  ].join('\n');
+
+  await ensureExplorerVisible(window);
+  await openNestedWorkspaceFile(window, [
+    'file-tree-node-rtl',
+    'file-tree-node-rtl_core',
+    'file-tree-node-rtl_core_cpu_top_sv',
+  ]);
+
+  await expect(window.getByTestId('editor-tab-rtl/core/cpu_top.sv')).toBeVisible();
+  await expect(window.locator('.monaco-editor .view-lines')).toContainText('alu u_alu');
+
+  await window.evaluate(async ({ nextAluSource, nextCpuTopSource }) => {
+    const browserGlobal = globalThis as typeof globalThis & {
+      electronAPI?: {
+        lsp: {
+          openDocument: (filePath: string, languageId: string, text: string) => Promise<void>;
+        };
+      };
+    };
+
+    await browserGlobal.electronAPI?.lsp.openDocument('rtl/core/alu.sv', 'systemverilog', nextAluSource);
+    await browserGlobal.electronAPI?.lsp.openDocument('rtl/core/cpu_top.sv', 'systemverilog', nextCpuTopSource);
+  }, {
+    nextAluSource: aluSource,
+    nextCpuTopSource: cpuTopSource,
+  });
+
+  await expect.poll(async () => window.evaluate(async ({ definitionCharacter, referencesCharacter }) => {
+    const browserGlobal = globalThis as typeof globalThis & {
+      electronAPI?: {
+        lsp: {
+          definition: (filePath: string, line: number, character: number) => Promise<Array<{ filePath: string }>>;
+          references: (filePath: string, line: number, character: number, includeDeclaration?: boolean) => Promise<Array<{ filePath: string }>>;
+        };
+      };
+    };
+
+    try {
+      const definition = await browserGlobal.electronAPI?.lsp.definition('rtl/core/cpu_top.sv', 3, definitionCharacter);
+      const references = await browserGlobal.electronAPI?.lsp.references('rtl/core/cpu_top.sv', 1, referencesCharacter, true);
+
+      return {
+        definitionFilePath: definition?.[0]?.filePath ?? null,
+        hasAtLeastTwoReferences: (references?.length ?? 0) >= 2,
+        allReferencePathsLocal: (references?.every((entry) => entry.filePath === 'rtl/core/cpu_top.sv') ?? false),
+      };
+    } catch {
+      return {
+        definitionFilePath: null,
+        hasAtLeastTwoReferences: false,
+        allReferencePathsLocal: false,
+      };
+    }
+  }, {
+    definitionCharacter: aluInstantiationLine.indexOf('alu'),
+    referencesCharacter: dataReadyDeclarationLine.indexOf('data_ready'),
+  }), {
+    timeout: 15000,
+  }).toMatchObject({
+    definitionFilePath: 'rtl/core/alu.sv',
+    hasAtLeastTwoReferences: true,
+    allReferencePathsLocal: true,
+  });
 
   await app.close();
 });
@@ -967,6 +1149,50 @@ test('ctrl+p quick open escape closes the palette and reopening resets the query
   await app.close();
 });
 
+test('single-clicking the first explorer file places the monaco cursor at line 1 column 1', async () => {
+  const { app, window } = await launchApp();
+
+  await ensureExplorerVisible(window);
+  await openNestedWorkspaceFile(window, [
+    'file-tree-node-rtl',
+    'file-tree-node-rtl_core',
+    'file-tree-node-rtl_core_reg_file_v',
+  ]);
+
+  await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toBeVisible();
+  await expect(window.getByTestId('editor-tab-title-rtl/core/reg_file.v')).toHaveClass(/italic/);
+  await waitForMonacoEditor(window);
+  await expect(getCursorStatus(window)).toHaveText('Ln 1, Col 1');
+
+  await window.keyboard.press('ArrowDown');
+  await expect(getCursorStatus(window)).toHaveText('Ln 2, Col 1');
+
+  await app.close();
+});
+
+test('quick open places the first opened file cursor at line 1 column 1', async () => {
+  const { app, window } = await launchApp();
+
+  await window.keyboard.press('Control+P');
+
+  const quickOpenInput = window.getByTestId('quick-open-input');
+  await expect(quickOpenInput).toBeFocused();
+  await quickOpenInput.fill('reg');
+  await expect(window.getByTestId('quick-open-result-rtl_core_reg_file_v')).toBeVisible();
+  await quickOpenInput.press('Enter');
+
+  await expect(window.getByTestId('quick-open-overlay')).toHaveCount(0);
+  await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toBeVisible();
+  await waitForMonacoEditor(window);
+  await waitForMonacoEditorTextFocus(window);
+  await expect(getCursorStatus(window)).toHaveText('Ln 1, Col 1');
+
+  await window.keyboard.press('ArrowDown');
+  await expect(getCursorStatus(window)).toHaveText('Ln 2, Col 1');
+
+  await app.close();
+});
+
 test('monaco restores cursor position across file switches and tab reopen while new files start at line 1 column 1', async () => {
   const { app, window } = await launchApp();
 
@@ -1205,33 +1431,67 @@ test('status bar switches across primary and secondary navigation views', async 
   await app.close();
 });
 
-test('left sidebar width is resized to keep tab labels readable when the window size changes', async () => {
+test('left sidebar keeps a fixed pixel width across window changes and manual resize', async () => {
   const { app, window } = await launchApp();
   const browserWindow = await app.browserWindow(window);
   await ensureExplorerVisible(window);
   const leftPanel = window.getByTestId('panel-left-panel');
+  const leftHandle = window.getByTestId('panel-handle-left-panel');
   const readPanelWidth = async () => leftPanel.evaluate((element) => {
     const panelElement = element as { getBoundingClientRect?: () => { width: number } };
     return Math.round(panelElement.getBoundingClientRect?.().width ?? 0);
   });
 
   await expect(leftPanel).toBeVisible();
+  await expect(leftHandle).toBeVisible();
+
+  await expect.poll(readPanelWidth).toBeGreaterThanOrEqual(238);
+  await expect.poll(readPanelWidth).toBeLessThanOrEqual(242);
 
   await browserWindow.evaluate((win) => win.setSize(1600, 900));
 
-  await expect.poll(readPanelWidth).toBeGreaterThan(220);
-  await expect.poll(readPanelWidth).toBeLessThan(260);
+  await expect.poll(readPanelWidth).toBeGreaterThanOrEqual(238);
+  await expect.poll(readPanelWidth).toBeLessThanOrEqual(242);
 
-  const wideWidth = await readPanelWidth();
+  await leftHandle.evaluate((element) => {
+    const handle = element as {
+      dispatchEvent: (event: unknown) => void;
+      ownerDocument?: {
+        defaultView?: {
+          PointerEvent?: new (type: string, init?: Record<string, boolean | number>) => unknown;
+        };
+      };
+    };
+    const PointerEventCtor = handle.ownerDocument?.defaultView?.PointerEvent;
+
+    if (!PointerEventCtor) {
+      return;
+    }
+
+    handle.dispatchEvent(new PointerEventCtor('pointerdown', {
+      bubbles: true,
+      clientX: 240,
+      pointerId: 1,
+    }));
+    handle.dispatchEvent(new PointerEventCtor('pointermove', {
+      bubbles: true,
+      clientX: 320,
+      pointerId: 1,
+    }));
+    handle.dispatchEvent(new PointerEventCtor('pointerup', {
+      bubbles: true,
+      clientX: 320,
+      pointerId: 1,
+    }));
+  });
+
+  await expect.poll(readPanelWidth).toBeGreaterThanOrEqual(318);
+  await expect.poll(readPanelWidth).toBeLessThanOrEqual(322);
 
   await browserWindow.evaluate((win) => win.setSize(1100, 900));
 
-  await expect.poll(readPanelWidth).toBeGreaterThan(220);
-  await expect.poll(readPanelWidth).toBeLessThan(260);
-
-  const narrowWidth = await readPanelWidth();
-
-  expect(Math.abs(wideWidth - narrowWidth)).toBeLessThanOrEqual(16);
+  await expect.poll(readPanelWidth).toBeGreaterThanOrEqual(318);
+  await expect.poll(readPanelWidth).toBeLessThanOrEqual(322);
 
   await app.close();
 });
@@ -1317,6 +1577,39 @@ test('editor split actions create additional groups and support vertical splitti
   await app.close();
 });
 
+test('dragging one visible copy of the same file into a new split keeps the other rendered', async () => {
+  const { app, window } = await launchApp();
+  const editorGroups = window.locator('[data-testid^="editor-group-group-"]');
+
+  await ensureExplorerVisible(window);
+  await window.getByTestId('file-tree-node-README_md').click();
+
+  const firstGroup = window.getByTestId('editor-group-group-1');
+  await firstGroup.getByTestId('editor-split-right').click();
+
+  const secondGroup = window.getByTestId('editor-group-group-2');
+  await expect(secondGroup).toBeVisible();
+
+  await expectVisibleEditorsToContainText(window, 2, 'Fixture Workspace');
+
+  const secondGroupBounds = await secondGroup.boundingBox();
+  if (!secondGroupBounds) {
+    throw new Error('Expected second editor group bounds');
+  }
+
+  await secondGroup.getByTestId('editor-tab-README.md').dragTo(secondGroup, {
+    targetPosition: {
+      x: Math.max(Math.floor(secondGroupBounds.width / 2), 24),
+      y: Math.max(Math.floor(secondGroupBounds.height - 18), 24),
+    },
+  });
+
+  await expect(editorGroups).toHaveCount(3);
+  await expectVisibleEditorsToContainText(window, 3, 'Fixture Workspace');
+
+  await app.close();
+});
+
 test('focused split receives file tree opens and tabs can be dragged into another split', async () => {
   const { app, window } = await launchApp();
 
@@ -1363,6 +1656,98 @@ test('closing the last tab removes an empty split group', async () => {
 
   await expect(window.getByTestId('editor-group-group-1')).toHaveCount(0);
   await expect(window.getByTestId('editor-group-group-2')).toBeVisible();
+
+  await app.close();
+});
+
+test('ctrl+w closes the active tab when monaco focus is inside the current editor group', async () => {
+  const { app, window } = await launchApp();
+
+  await ensureExplorerVisible(window);
+  await window.getByTestId('file-tree-node-README_md').dblclick();
+  await openNestedWorkspaceFile(window, [
+    'file-tree-node-rtl',
+    'file-tree-node-rtl_core',
+    'file-tree-node-rtl_core_reg_file_v',
+  ], { finalAction: 'dblclick' });
+
+  await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toHaveClass(/bg-background/);
+
+  await focusMonacoEditor(window);
+  await window.keyboard.press('Control+W');
+
+  await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toHaveCount(0);
+  await expect(window.getByTestId('editor-tab-README.md')).toHaveClass(/bg-background/);
+
+  await app.close();
+});
+
+test('ctrl+tab cycles tabs to the right within the focused editor group', async () => {
+  const { app, window } = await launchApp();
+
+  await ensureExplorerVisible(window);
+  await window.getByTestId('file-tree-node-README_md').dblclick();
+  await openNestedWorkspaceFile(window, [
+    'file-tree-node-rtl',
+    'file-tree-node-rtl_core',
+    'file-tree-node-rtl_core_reg_file_v',
+  ], { finalAction: 'dblclick' });
+
+  await window.keyboard.press('Control+P');
+  const quickOpenInput = window.getByTestId('quick-open-input');
+  await expect(quickOpenInput).toBeFocused();
+  await quickOpenInput.fill('giti');
+  await expect(window.getByTestId('quick-open-result-_gitignore')).toBeVisible();
+  await quickOpenInput.press('Enter');
+
+  await expect(window.getByTestId('editor-tab-.gitignore')).toBeVisible();
+  await window.getByTestId('editor-tab-rtl/core/reg_file.v').click();
+  await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toHaveClass(/bg-background/);
+
+  await focusMonacoEditor(window);
+  await window.keyboard.press('Control+Tab');
+  await expect(window.getByTestId('editor-tab-.gitignore')).toHaveClass(/bg-background/);
+  await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).not.toHaveClass(/bg-background/);
+
+  await window.keyboard.press('Control+Tab');
+  await expect(window.getByTestId('editor-tab-README.md')).toHaveClass(/bg-background/);
+  await expect(window.getByTestId('editor-tab-.gitignore')).not.toHaveClass(/bg-background/);
+
+  await app.close();
+});
+
+test('ctrl+shift+tab cycles tabs to the left within the focused editor group', async () => {
+  const { app, window } = await launchApp();
+
+  await ensureExplorerVisible(window);
+  await window.getByTestId('file-tree-node-README_md').dblclick();
+  await openNestedWorkspaceFile(window, [
+    'file-tree-node-rtl',
+    'file-tree-node-rtl_core',
+    'file-tree-node-rtl_core_reg_file_v',
+  ], { finalAction: 'dblclick' });
+
+  await window.keyboard.press('Control+P');
+  const quickOpenInput = window.getByTestId('quick-open-input');
+  await expect(quickOpenInput).toBeFocused();
+  await quickOpenInput.fill('giti');
+  await expect(window.getByTestId('quick-open-result-_gitignore')).toBeVisible();
+  await quickOpenInput.press('Enter');
+
+  await expect(window.getByTestId('editor-tab-.gitignore')).toHaveClass(/bg-background/);
+
+  await focusMonacoEditor(window);
+  await window.keyboard.press('Control+Shift+Tab');
+  await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toHaveClass(/bg-background/);
+  await expect(window.getByTestId('editor-tab-.gitignore')).not.toHaveClass(/bg-background/);
+
+  await window.getByTestId('editor-tab-README.md').click();
+  await expect(window.getByTestId('editor-tab-README.md')).toHaveClass(/bg-background/);
+
+  await focusMonacoEditor(window);
+  await window.keyboard.press('Control+Shift+Tab');
+  await expect(window.getByTestId('editor-tab-.gitignore')).toHaveClass(/bg-background/);
+  await expect(window.getByTestId('editor-tab-README.md')).not.toHaveClass(/bg-background/);
 
   await app.close();
 });
@@ -1518,6 +1903,13 @@ test('terminal bottom panel close button terminates the shell and reopening crea
   const reopenedPid = await readTerminalPid(window);
   expect(reopenedPid).not.toBe(originalPid);
   expect(isProcessRunning(reopenedPid)).toBe(true);
+
+  await window.getByRole('button', { name: 'Close Panel' }).click();
+  await expect(window.getByTestId('terminal-host')).toHaveCount(0);
+
+  await expect.poll(() => isProcessRunning(reopenedPid), {
+    timeout: 15000,
+  }).toBe(false);
 
   await app.close();
 });

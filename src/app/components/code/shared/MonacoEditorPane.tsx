@@ -1,11 +1,43 @@
 import Editor, { useMonaco } from '@monaco-editor/react';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useProblemsList } from '../../../../data/mockDataLoader';
 import { getEditorFontFamilyStack } from '../../../editor/editorSettings';
 import { registerEditorThemes } from '../../../editor/monacoThemes';
 import { useRegisterEditorLanguages } from '../../../editor/registerLanguages';
+import { systemVerilogLspBridge } from '../../../lsp/systemVerilogLspBridge';
 import { getEditorLanguage } from '../../../workspace/workspaceFiles';
 import { useEditorSettings } from '../../../context/EditorSettingsContext';
+
+interface EditorViewport {
+  width: number;
+  height: number;
+}
+
+function hasFocusedEditorText(editor: any) {
+  const editorDomNode = editor?.getDomNode?.();
+  const activeElement = editorDomNode?.ownerDocument?.activeElement;
+  const hasDomFocus = Boolean(editorDomNode && activeElement && editorDomNode.contains(activeElement));
+  const hasTextFocus = typeof editor?.hasTextFocus === 'function'
+    ? editor.hasTextFocus()
+    : hasDomFocus;
+
+  return hasTextFocus || hasDomFocus;
+}
+
+function getRenderableEditorViewport(element: HTMLDivElement | null): EditorViewport | null {
+  if (!element) {
+    return null;
+  }
+
+  const width = element.clientWidth;
+  const height = element.clientHeight;
+
+  if (width <= 0 || height <= 0) {
+    return null;
+  }
+
+  return { width, height };
+}
 
 interface MonacoEditorPaneProps {
   activeTabId: string;
@@ -15,6 +47,9 @@ interface MonacoEditorPaneProps {
   onCursorChange?: (line: number, col: number) => void;
   onContentChange?: (value: string) => void;
   onEditorMount?: (editor: any) => void;
+  onNavigateToLocation?: (fileId: string, line: number, col: number) => void;
+  isDocumentReady?: boolean;
+  hasLoadError?: boolean;
   showDragInteractionShield?: boolean;
   dragInteractionShieldTestId?: string;
 }
@@ -27,6 +62,9 @@ export function MonacoEditorPane({
   onCursorChange,
   onContentChange,
   onEditorMount,
+  onNavigateToLocation,
+  isDocumentReady = true,
+  hasLoadError = false,
   showDragInteractionShield,
   dragInteractionShieldTestId,
 }: MonacoEditorPaneProps) {
@@ -34,8 +72,39 @@ export function MonacoEditorPane({
   const problemsList = useProblemsList();
   const { fontFamily, fontSize, theme } = useEditorSettings();
   const editorFontFamily = getEditorFontFamilyStack(fontFamily);
+  const editorLanguage = getEditorLanguage(activeTabId);
   const onCursorChangeRef = useRef(onCursorChange);
   const canPropagateCursorChangesRef = useRef(true);
+  const hostRef = useRef<HTMLDivElement | null>(null);
+  const layoutFrameRef = useRef<number | null>(null);
+  const [mountedEditor, setMountedEditor] = useState<any>(null);
+  const queueEditorLayoutRef = useRef<() => void>(() => undefined);
+
+  queueEditorLayoutRef.current = () => {
+    const applyLayout = () => {
+      layoutFrameRef.current = null;
+
+      const editor = editorRef.current;
+      const viewport = getRenderableEditorViewport(hostRef.current);
+
+      if (!editor || !viewport) {
+        return;
+      }
+
+      editor.layout(viewport);
+    };
+
+    if (typeof window === 'undefined' || !('requestAnimationFrame' in window)) {
+      applyLayout();
+      return;
+    }
+
+    if (layoutFrameRef.current !== null) {
+      window.cancelAnimationFrame(layoutFrameRef.current);
+    }
+
+    layoutFrameRef.current = window.requestAnimationFrame(applyLayout);
+  };
 
   useEffect(() => {
     onCursorChangeRef.current = onCursorChange;
@@ -46,6 +115,40 @@ export function MonacoEditorPane({
   }, [activeTabId]);
 
   useRegisterEditorLanguages(monaco);
+
+  useEffect(() => {
+    queueEditorLayoutRef.current();
+
+    const host = hostRef.current;
+    if (!host || typeof ResizeObserver === 'undefined') {
+      return;
+    }
+
+    const resizeObserver = new ResizeObserver(() => {
+      queueEditorLayoutRef.current();
+    });
+
+    resizeObserver.observe(host);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (typeof window === 'undefined' || layoutFrameRef.current === null) {
+        return;
+      }
+
+      window.cancelAnimationFrame(layoutFrameRef.current);
+      layoutFrameRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    queueEditorLayoutRef.current();
+  }, [showDragInteractionShield]);
 
   useEffect(() => {
     if (!monaco) {
@@ -69,10 +172,67 @@ export function MonacoEditorPane({
     }));
 
     const models = monaco.editor.getModels();
+    const normalizedActiveTabId = activeTabId.replace(/\\/g, '/').replace(/^\.\//, '').replace(/^\//, '');
+    const hasModelPaths = models.some((model: any) => typeof model?.uri?.path === 'string' || typeof model?.uri?.fsPath === 'string');
+
     models.forEach((model: any) => {
-      monaco.editor.setModelMarkers(model, 'rtl-lint', markers);
+      if (!hasModelPaths) {
+        monaco.editor.setModelMarkers(model, 'rtl-lint', markers);
+        return;
+      }
+
+      const modelPath = typeof model?.uri?.path === 'string'
+        ? model.uri.path
+        : typeof model?.uri?.fsPath === 'string'
+        ? model.uri.fsPath
+        : '';
+      const normalizedModelPath = modelPath.replace(/\\/g, '/').replace(/^\.\//, '').replace(/^\//, '');
+
+      monaco.editor.setModelMarkers(
+        model,
+        'rtl-lint',
+        normalizedModelPath === normalizedActiveTabId ? markers : [],
+      );
     });
   }, [activeTabId, monaco, problemsList]);
+
+  useEffect(() => {
+    if (!monaco) {
+      return;
+    }
+
+    systemVerilogLspBridge.ensureRegistered(monaco);
+  }, [monaco]);
+
+  useEffect(() => {
+    if (!mountedEditor || editorLanguage !== 'systemverilog') {
+      return;
+    }
+
+    systemVerilogLspBridge.setNavigateHandler(mountedEditor, onNavigateToLocation);
+  }, [editorLanguage, mountedEditor, onNavigateToLocation]);
+
+  useEffect(() => {
+    if (!monaco || !mountedEditor || !activeTabId || editorLanguage !== 'systemverilog' || !isDocumentReady || hasLoadError) {
+      return;
+    }
+
+    return systemVerilogLspBridge.attachDocument({
+      monaco,
+      editor: mountedEditor,
+      filePath: activeTabId,
+      text: code,
+      onNavigateToLocation,
+    });
+  }, [activeTabId, editorLanguage, hasLoadError, isDocumentReady, monaco, mountedEditor]);
+
+  useEffect(() => {
+    if (!activeTabId || editorLanguage !== 'systemverilog' || !isDocumentReady || hasLoadError) {
+      return;
+    }
+
+    systemVerilogLspBridge.updateDocument(activeTabId, code);
+  }, [activeTabId, code, editorLanguage, hasLoadError, isDocumentReady]);
 
   useEffect(() => {
     const editor = editorRef.current;
@@ -85,7 +245,7 @@ export function MonacoEditorPane({
       fontFamily: editorFontFamily,
       fontSize,
     });
-    editor.layout();
+    queueEditorLayoutRef.current();
     monaco?.editor.remeasureFonts?.();
   }, [editorFontFamily, editorRef, fontSize, monaco]);
 
@@ -95,10 +255,11 @@ export function MonacoEditorPane({
     }
 
     onActiveModelReady?.(activeTabId);
+    queueEditorLayoutRef.current();
   }, [activeTabId, editorRef, onActiveModelReady]);
 
   return (
-    <div className="relative flex-1 overflow-hidden bg-background">
+    <div ref={hostRef} className="relative flex-1 overflow-hidden bg-background">
       {showDragInteractionShield && (
         <div
           data-testid={dragInteractionShieldTestId}
@@ -108,8 +269,9 @@ export function MonacoEditorPane({
       )}
       <Editor
         height="100%"
-        language={getEditorLanguage(activeTabId)}
+        language={editorLanguage}
         path={activeTabId}
+        keepCurrentModel
         saveViewState={false}
         value={code}
         theme={theme}
@@ -118,24 +280,24 @@ export function MonacoEditorPane({
         }}
         onMount={(editor) => {
           editorRef.current = editor;
+          setMountedEditor(editor);
+          if (activeTabId) {
+            onActiveModelReady?.(activeTabId);
+          }
+          queueEditorLayoutRef.current();
           onEditorMount?.(editor);
           editor.onDidFocusEditorText?.(() => {
             canPropagateCursorChangesRef.current = true;
           });
           editor.onDidChangeCursorPosition((event: any) => {
+            const focusedEditorText = hasFocusedEditorText(editor);
+
+            if (!focusedEditorText) {
+              return;
+            }
+
             if (!canPropagateCursorChangesRef.current) {
-              return;
-            }
-
-            const editorDomNode = editor.getDomNode?.();
-            const activeElement = editorDomNode?.ownerDocument?.activeElement;
-
-            if (editorDomNode && activeElement && !editorDomNode.contains(activeElement)) {
-              return;
-            }
-
-            if (typeof editor.hasTextFocus === 'function' && !editor.hasTextFocus()) {
-              return;
+              canPropagateCursorChangesRef.current = true;
             }
 
             onCursorChangeRef.current?.(event.position.lineNumber, event.position.column);

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '../../ui/resizable';
 import { EditorArea } from './EditorArea';
 import { useWorkspace } from '../../../context/WorkspaceContext';
@@ -37,6 +37,29 @@ const DROP_PREVIEW_CLASS_NAMES: Record<EditorDropPosition, string> = {
   top: 'left-3 right-3 top-1/2 h-px -translate-y-1/2 bg-muted-foreground/75',
   bottom: 'left-3 right-3 bottom-1/2 h-px translate-y-1/2 bg-muted-foreground/75',
 };
+
+const FOCUSABLE_TARGET_SELECTOR = [
+  'button',
+  'a[href]',
+  'input',
+  'select',
+  'textarea',
+  '[role="button"]',
+  '[tabindex]:not([tabindex="-1"])',
+  '[contenteditable="true"]',
+].join(',');
+
+function shouldFocusEditorGroupRoot(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return true;
+  }
+
+  if (target.closest('.monaco-editor')) {
+    return false;
+  }
+
+  return target.closest(FOCUSABLE_TARGET_SELECTOR) === null;
+}
 
 function ResizeHandle({ direction }: { direction: SplitDirection }) {
   return (
@@ -137,10 +160,14 @@ function EditorGroupLeaf({
   dragState: DragState | null;
 }) {
   const {
+    closeActiveTabInFocusedGroup,
+    cycleFocusedGroupTabs,
     clearCursorRestoreRequest,
     editorGroups,
     getCursorRestoreRequest,
     getStoredCursorPosition,
+    openFileInGroup,
+    restoreEditorSelection,
     setActiveTabIdInGroup,
     pinTabInGroup,
     closeFileInGroup,
@@ -164,12 +191,45 @@ function EditorGroupLeaf({
   const activeCursorPosition = group.activeTabId ? getStoredCursorPosition(group.id, group.activeTabId) : undefined;
   const cursorRestoreRequest = getCursorRestoreRequest(group.id);
 
+  const handleGroupMouseDown = (event: ReactMouseEvent<HTMLDivElement>) => {
+    onFocus(group.id);
+
+    if (shouldFocusEditorGroupRoot(event.target)) {
+      event.currentTarget.focus();
+    }
+  };
+
+  const handleGroupKeyDownCapture = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (!focused || !(event.ctrlKey || event.metaKey) || event.altKey) {
+      return;
+    }
+
+    const key = event.key.toLowerCase();
+
+    if (key === 'w' && !event.shiftKey) {
+      event.preventDefault();
+      event.stopPropagation();
+      closeActiveTabInFocusedGroup();
+      return;
+    }
+
+    if (key === 'tab') {
+      event.preventDefault();
+      event.stopPropagation();
+      cycleFocusedGroupTabs(event.shiftKey ? 'backward' : 'forward');
+    }
+  };
+
   return (
     <div
       data-testid={`editor-group-${group.id}`}
+      data-editor-group-root="true"
       data-focused={focused ? 'true' : 'false'}
+      tabIndex={-1}
       className={`relative h-full min-w-0 ${showFocusRing ? 'ring-1 ring-inset ring-primary/50' : ''} ${dropPosition ? 'ring-1 ring-inset ring-border/80' : ''}`}
-      onMouseDown={() => onFocus(group.id)}
+      onFocusCapture={() => onFocus(group.id)}
+      onKeyDownCapture={handleGroupKeyDownCapture}
+      onMouseDown={handleGroupMouseDown}
       onDragOver={(event) => {
         if (!dragState) {
           return;
@@ -224,6 +284,16 @@ function EditorGroupLeaf({
         onLoadFile={loadFileContent}
         onContentChange={updateFileContent}
         onEditorMount={(editor) => registerEditorRef(group.id, editor)}
+        onNavigateToLocation={(fileId, line, col) => {
+          const fileName = fileId.split('/').pop() ?? fileId;
+          openFileInGroup(fileId, fileName, group.id);
+          restoreEditorSelection({
+            groupId: group.id,
+            fileId,
+            line,
+            col,
+          });
+        }}
         showDragInteractionShield={Boolean(dragState)}
         dragInteractionShieldTestId={`editor-drag-shield-${group.id}`}
       />

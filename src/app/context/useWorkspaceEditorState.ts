@@ -1,16 +1,20 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   createInitialEditorWorkspace,
   focusEditorGroup,
+  getCycledTabIdInEditorGroup,
+  getNextActiveTabIdAfterClose,
   moveEditorTab,
   openFileInEditorGroup,
   pinTabInEditorGroup,
   setActiveTabInEditorGroup,
   closeFileInEditorGroup,
   splitEditorGroup,
+  type EditorTabCycleDirection,
   type EditorDropPosition,
   type EditorWorkspaceModel,
 } from '../editor/editorLayout';
+import { focusEditorInstance } from '../editor/focusEditor';
 
 interface CursorPosition {
   line: number;
@@ -27,6 +31,26 @@ export interface CursorRestoreRequest extends EditorSelectionSnapshot {
 }
 
 type StoredCursorPositions = Record<string, Record<string, CursorPosition>>;
+
+interface EditorViewport {
+  width: number;
+  height: number;
+}
+
+function getEditorViewport(element: HTMLElement | null | undefined): EditorViewport | null {
+  if (!element) {
+    return null;
+  }
+
+  const width = element.clientWidth || element.parentElement?.clientWidth || 0;
+  const height = element.clientHeight || element.parentElement?.clientHeight || 0;
+
+  if (width <= 0 || height <= 0) {
+    return null;
+  }
+
+  return { width, height };
+}
 
 function getStoredCursorPosition(
   cursorPositions: StoredCursorPositions,
@@ -88,22 +112,6 @@ function findTabGroupId(model: Pick<EditorWorkspaceModel, 'groups' | 'focusedGro
   return Object.values(model.groups).find((group) => group.tabs.some((tab) => tab.id === tabId))?.id;
 }
 
-function getNextActiveTabIdAfterClose(group: EditorWorkspaceModel['groups'][string] | undefined, fileId: string): string {
-  if (!group) {
-    return '';
-  }
-
-  const closingIndex = group.tabs.findIndex((tab) => tab.id === fileId);
-  if (closingIndex === -1) {
-    return group.activeTabId;
-  }
-
-  const nextTabs = group.tabs.filter((tab) => tab.id !== fileId);
-  return group.activeTabId === fileId
-    ? nextTabs[Math.min(closingIndex, nextTabs.length - 1)]?.id ?? ''
-    : group.activeTabId;
-}
-
 export function useWorkspaceEditorState() {
   const idCounterRef = useRef(2);
   const cursorRestoreTokenRef = useRef(1);
@@ -113,6 +121,7 @@ export function useWorkspaceEditorState() {
   const [cursorRestoreRequests, setCursorRestoreRequests] = useState<Record<string, CursorRestoreRequest | undefined>>({});
   const editorRef = useRef<any>(null);
   const editorRefsRef = useRef<Record<string, any>>({});
+  const relayoutFrameRef = useRef<number | null>(null);
 
   const nextGeneratedId = useCallback((prefix: string) => {
     const id = `${prefix}-${idCounterRef.current}`;
@@ -132,6 +141,49 @@ export function useWorkspaceEditorState() {
     if (editorRefsRef.current[groupId]) {
       editorRef.current = editorRefsRef.current[groupId];
     }
+  }, []);
+
+  const relayoutEditors = useCallback((groupIds?: string[]) => {
+    const applyRelayout = () => {
+      relayoutFrameRef.current = null;
+
+      const editors = (groupIds?.length
+        ? groupIds.map((groupId) => editorRefsRef.current[groupId])
+        : Object.values(editorRefsRef.current))
+        .filter(Boolean);
+
+      editors.forEach((editorInstance) => {
+        const domNode = editorInstance.getDomNode?.() as HTMLElement | null | undefined;
+        const viewport = getEditorViewport(domNode);
+
+        if (viewport) {
+          editorInstance.layout?.(viewport);
+          return;
+        }
+
+        editorInstance.layout?.();
+      });
+    };
+
+    if (typeof window === 'undefined' || !('requestAnimationFrame' in window)) {
+      applyRelayout();
+      return;
+    }
+
+    if (relayoutFrameRef.current !== null) {
+      window.cancelAnimationFrame(relayoutFrameRef.current);
+    }
+
+    relayoutFrameRef.current = window.requestAnimationFrame(applyRelayout);
+  }, []);
+
+  useEffect(() => () => {
+    if (typeof window === 'undefined' || relayoutFrameRef.current === null) {
+      return;
+    }
+
+    window.cancelAnimationFrame(relayoutFrameRef.current);
+    relayoutFrameRef.current = null;
   }, []);
 
   const getCursorPositionOrDefault = useCallback((groupId: string, fileId: string): CursorPosition => {
@@ -297,6 +349,20 @@ export function useWorkspaceEditorState() {
     });
   }, []);
 
+  const closeActiveTabInFocusedGroup = useCallback(() => {
+    const groupId = editorState.focusedGroupId;
+    if (!groupId) {
+      return;
+    }
+
+    const activeFileId = editorState.groups[groupId]?.activeTabId;
+    if (!activeFileId) {
+      return;
+    }
+
+    closeFileInGroup(groupId, activeFileId);
+  }, [closeFileInGroup, editorState.focusedGroupId, editorState.groups]);
+
   const setActiveTabIdInGroup = useCallback((groupId: string, tabId: string) => {
     setEditorState((current) => setActiveTabInEditorGroup(current, groupId, tabId));
     syncEditorRefForGroup(groupId);
@@ -317,6 +383,28 @@ export function useWorkspaceEditorState() {
       queueStoredCursorRestore(targetGroupId, tabId);
     }
   }, [editorState, queueStoredCursorRestore, syncEditorRefForGroup]);
+
+  const cycleFocusedGroupTabs = useCallback((direction: EditorTabCycleDirection = 'forward') => {
+    const groupId = editorState.focusedGroupId;
+    if (!groupId) {
+      return;
+    }
+
+    const group = editorState.groups[groupId];
+    const nextTabId = getCycledTabIdInEditorGroup(group, direction);
+    if (!nextTabId || nextTabId === group?.activeTabId) {
+      return;
+    }
+
+    setEditorState((current) => {
+      const currentGroup = current.groups[groupId];
+      const resolvedNextTabId = getCycledTabIdInEditorGroup(currentGroup, direction);
+      return resolvedNextTabId ? setActiveTabInEditorGroup(current, groupId, resolvedNextTabId) : current;
+    });
+
+    syncEditorRefForGroup(groupId);
+    queueStoredCursorRestore(groupId, nextTabId);
+  }, [editorState.focusedGroupId, editorState.groups, queueStoredCursorRestore, syncEditorRefForGroup]);
 
   const pinTabInGroup = useCallback((groupId: string, tabId: string) => {
     setEditorState((current) => pinTabInEditorGroup(current, groupId, tabId));
@@ -357,7 +445,9 @@ export function useWorkspaceEditorState() {
         getCursorPositionOrDefault(groupId, activeFileId),
       ));
     }
-  }, [editorState.groups, getCursorPositionOrDefault, nextGeneratedId]);
+
+    relayoutEditors();
+  }, [editorState.groups, getCursorPositionOrDefault, nextGeneratedId, relayoutEditors]);
 
   const moveTab = useCallback((sourceGroupId: string, tabId: string, targetGroupId: string, position: EditorDropPosition) => {
     const newGroupId = nextGeneratedId('group');
@@ -399,7 +489,9 @@ export function useWorkspaceEditorState() {
 
       return upsertStoredCursorPosition(basePositions, destinationGroupId, tabId, sourcePosition);
     });
-  }, [editorState.groups, getCursorPositionOrDefault, nextGeneratedId, syncEditorRefForGroup]);
+
+    relayoutEditors();
+  }, [editorState.groups, getCursorPositionOrDefault, nextGeneratedId, relayoutEditors, syncEditorRefForGroup]);
 
   const jumpTo = useCallback((line: number) => {
     setJumpToLine(line);
@@ -437,8 +529,7 @@ export function useWorkspaceEditorState() {
     }
 
     syncEditorRefForGroup(resolvedGroupId);
-    editorRefsRef.current[resolvedGroupId]?.focus?.();
-    editorRefsRef.current[resolvedGroupId]?.getDomNode?.()?.focus?.();
+    focusEditorInstance(editorRefsRef.current[resolvedGroupId]);
   }, [editorState.focusedGroupId, syncEditorRefForGroup]);
 
   return {
@@ -447,9 +538,11 @@ export function useWorkspaceEditorState() {
     clearCursorRestoreRequest,
     cursorCol,
     cursorLine,
+    cycleFocusedGroupTabs,
     editorGroups,
     editorLayout: editorState.layout,
     editorRef,
+    closeActiveTabInFocusedGroup,
     focusGroup,
     focusActiveEditor,
     focusedGroupId: editorState.focusedGroupId,
