@@ -1,8 +1,16 @@
-import { app, BrowserWindow, Menu, Tray, nativeImage, screen } from 'electron';
+import { app, BrowserWindow, Menu, Tray, nativeImage, screen, type MenuItemConstructorOptions } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  applicationMenus,
+  isAppMenuItem,
+  toElectronAccelerator,
+  type AppMenuAction,
+  type MenuCommandEvent,
+} from '../src/app/menu/applicationMenu.js';
 import { registerAllHandlers, setProjectRoot, setupWindowStreams } from './ipc/register.js';
+import { StreamChannels } from './ipc/channels.js';
 import { flushPendingConfigSave, getConfigValue } from './ipc/config.js';
 import { disposeLspSession } from './ipc/lsp.js';
 import { disposeAllTerminalSessions } from './ipc/terminal.js';
@@ -39,6 +47,15 @@ function configureElectronStoragePaths(): void {
 
 function getMainWindow(): BrowserWindow | null {
   return mainWindow;
+}
+
+function sendMenuCommandToMainWindow(payload: MenuCommandEvent): void {
+  const window = getMainWindow();
+  if (!window || window.isDestroyed() || window.webContents.isDestroyed()) {
+    return;
+  }
+
+  window.webContents.send(StreamChannels.MENU_COMMAND, payload);
 }
 
 function getPreloadPath(): string {
@@ -86,6 +103,72 @@ function showMainWindow(): void {
 
   mainWindow.show();
   mainWindow.focus();
+}
+
+function openSettingsFromApplicationMenu(): void {
+  const existingWindow = mainWindow;
+
+  showMainWindow();
+
+  const window = mainWindow;
+  if (!window || window.isDestroyed()) {
+    return;
+  }
+
+  if (existingWindow && existingWindow === window) {
+    sendMenuCommandToMainWindow({ action: 'open-settings' });
+    return;
+  }
+
+  window.once('ready-to-show', () => {
+    if (mainWindow === window) {
+      sendMenuCommandToMainWindow({ action: 'open-settings' });
+    }
+  });
+}
+
+function handleApplicationMenuAction(action: AppMenuAction): void {
+  if (action === 'open-settings') {
+    openSettingsFromApplicationMenu();
+    return;
+  }
+
+  if (action === 'close-app') {
+    mainWindow?.close();
+  }
+}
+
+function createMacOSApplicationMenu(): Menu {
+  const template: MenuItemConstructorOptions[] = applicationMenus.map((menu) => ({
+    label: menu.label,
+    submenu: menu.items.map((item) => {
+      if (!isAppMenuItem(item)) {
+        return { type: 'separator' };
+      }
+
+      const action = item.action;
+
+      return {
+        label: item.name,
+        accelerator: toElectronAccelerator(item.shortcut),
+        click: action === undefined
+          ? undefined
+          : () => {
+            handleApplicationMenuAction(action);
+          },
+      } satisfies MenuItemConstructorOptions;
+    }),
+  }));
+
+  return Menu.buildFromTemplate(template);
+}
+
+function installApplicationMenu(): void {
+  if (process.platform !== 'darwin') {
+    return;
+  }
+
+  Menu.setApplicationMenu(createMacOSApplicationMenu());
 }
 
 function hideMainWindowToTray(): void {
@@ -349,6 +432,7 @@ configureElectronStoragePaths();
 registerAllHandlers(getMainWindow, setFloatingInfoWindowVisible);
 
 app.whenReady().then(() => {
+  installApplicationMenu();
   createTray();
   createStartupWindows();
 

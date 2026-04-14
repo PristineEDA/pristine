@@ -5,6 +5,7 @@ import type {
   LspStateEvent,
   WorkspaceLocation,
 } from './systemverilog-lsp';
+import type { MenuCommandEvent } from '../src/app/menu/applicationMenu';
 
 export interface ElectronAPI {
   platform: string;
@@ -92,6 +93,10 @@ export interface ElectronAPI {
     ) => Promise<WorkspaceLocation[]>;
     onDiagnostics: (callback: (payload: LspDiagnosticsEvent) => void) => () => void;
     onState: (callback: (payload: LspStateEvent) => void) => () => void;
+  };
+
+  menu: {
+    onCommand: (callback: (payload: MenuCommandEvent) => void) => () => void;
   };
 
   // Config

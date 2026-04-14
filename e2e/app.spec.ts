@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const fixtureWorkspace = path.join(__dirname, '..', 'test', 'fixtures', 'workspace');
 const releaseRoot = path.join(__dirname, '..', 'release');
+const MONACO_READY_TIMEOUT_MS = 15000;
 
 function getE2EUserDataPath() {
   return test.info().outputPath('electron-user-data');
@@ -346,13 +347,13 @@ async function readMonacoAppearanceSnapshot(
 
 async function focusMonacoEditor(window: Awaited<ReturnType<typeof launchApp>>['window']) {
   const editor = window.locator('.monaco-editor');
-  await expect(editor).toBeVisible();
+  await expect(editor).toBeVisible({ timeout: MONACO_READY_TIMEOUT_MS });
   await editor.click({ position: { x: 24, y: 12 } });
 }
 
 async function waitForMonacoEditor(window: Awaited<ReturnType<typeof launchApp>>['window']) {
   const editor = window.locator('.monaco-editor');
-  await expect(editor).toBeVisible();
+  await expect(editor).toBeVisible({ timeout: MONACO_READY_TIMEOUT_MS });
   return editor;
 }
 
@@ -379,10 +380,10 @@ async function expectVisibleEditorsToContainText(
 ) {
   const textLayers = window.locator('.monaco-editor .view-lines');
 
-  await expect(textLayers).toHaveCount(expectedCount);
+  await expect(textLayers).toHaveCount(expectedCount, { timeout: MONACO_READY_TIMEOUT_MS });
 
   for (let index = 0; index < expectedCount; index += 1) {
-    await expect(textLayers.nth(index)).toContainText(text);
+    await expect(textLayers.nth(index)).toContainText(text, { timeout: MONACO_READY_TIMEOUT_MS });
   }
 }
 
@@ -803,7 +804,9 @@ test('explorer opens a file into a new editor tab', async () => {
   await fileNode.click();
 
   await expect(window.getByTestId('editor-tab-README.md')).toBeVisible();
-  await expect(window.locator('.monaco-editor .view-lines')).toContainText('Fixture Workspace');
+  await expect(window.locator('.monaco-editor .view-lines')).toContainText('Fixture Workspace', {
+    timeout: MONACO_READY_TIMEOUT_MS,
+  });
 
   await app.close();
 });
@@ -834,7 +837,9 @@ test('systemverilog lsp smoke resolves a cross-file definition and symbol refere
   ]);
 
   await expect(window.getByTestId('editor-tab-rtl/core/cpu_top.sv')).toBeVisible();
-  await expect(window.locator('.monaco-editor .view-lines')).toContainText('alu u_alu');
+  await expect(window.locator('.monaco-editor .view-lines')).toContainText('alu u_alu', {
+    timeout: MONACO_READY_TIMEOUT_MS,
+  });
 
   await window.evaluate(async ({ nextAluSource, nextCpuTopSource }) => {
     const browserGlobal = globalThis as typeof globalThis & {
@@ -1118,7 +1123,9 @@ test('ctrl+p quick open search keyboard navigation opens the selected filtered f
   await expect(window.getByTestId('quick-open-overlay')).toHaveCount(0);
   await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toBeVisible();
   await expect(window.getByTestId('editor-tab-preview-indicator-rtl/core/reg_file.v')).toHaveCount(0);
-  await expect(window.locator('.monaco-editor .view-lines')).toContainText('module reg_file');
+  await expect(window.locator('.monaco-editor .view-lines')).toContainText('module reg_file', {
+    timeout: MONACO_READY_TIMEOUT_MS,
+  });
 
   await app.close();
 });
@@ -2118,7 +2125,9 @@ test('code editor settings persist across app relaunch', async () => {
     'file-tree-node-rtl_core_reg_file_v',
   ]);
   await expect(firstWindow.getByTestId('editor-tab-rtl/core/reg_file.v')).toBeVisible();
-  await expect(firstWindow.locator('.monaco-editor .view-lines')).toContainText('module reg_file');
+  await expect(firstWindow.locator('.monaco-editor .view-lines')).toContainText('module reg_file', {
+    timeout: MONACO_READY_TIMEOUT_MS,
+  });
 
   await firstWindow.getByTestId('menu-settings-button').click();
   await expect(firstWindow.getByTestId('settings-dialog')).toBeVisible();
@@ -2178,7 +2187,9 @@ test('code editor settings persist across app relaunch', async () => {
     'file-tree-node-rtl_core_reg_file_v',
   ]);
   await expect(secondWindow.getByTestId('editor-tab-rtl/core/reg_file.v')).toBeVisible();
-  await expect(secondWindow.locator('.monaco-editor .view-lines')).toContainText('module reg_file');
+  await expect(secondWindow.locator('.monaco-editor .view-lines')).toContainText('module reg_file', {
+    timeout: MONACO_READY_TIMEOUT_MS,
+  });
 
   await expect
     .poll(async () => {

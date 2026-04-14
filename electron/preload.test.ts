@@ -65,6 +65,7 @@ describe('preload bridge', () => {
     const onTerminalExit = vi.fn();
     const onLspDiagnostics = vi.fn();
     const onLspState = vi.fn();
+    const onMenuCommand = vi.fn();
 
     api.minimize();
     api.maximize();
@@ -101,6 +102,7 @@ describe('preload bridge', () => {
     const disposeTerminalExit = api.terminal.onExit(onTerminalExit);
     const disposeLspDiagnostics = api.lsp.onDiagnostics(onLspDiagnostics);
     const disposeLspState = api.lsp.onState(onLspState);
+    const disposeMenuCommand = api.menu.onCommand(onMenuCommand);
 
     expect(mockInvoke).toHaveBeenCalledWith('async:window:minimize');
     expect(mockInvoke).toHaveBeenCalledWith('async:window:maximize');
@@ -136,6 +138,7 @@ describe('preload bridge', () => {
     expect(mockOn).toHaveBeenCalledWith('stream:terminal:exit', expect.any(Function));
     expect(mockOn).toHaveBeenCalledWith('stream:lsp:diagnostics', expect.any(Function));
     expect(mockOn).toHaveBeenCalledWith('stream:lsp:state', expect.any(Function));
+    expect(mockOn).toHaveBeenCalledWith('stream:menu:command', expect.any(Function));
 
     const handler = mockOn.mock.calls.find((call) => call[0] === 'stream:window:maximized-change')?.[1];
     handler({}, true);
@@ -169,6 +172,10 @@ describe('preload bridge', () => {
     lspStateHandler({}, { status: 'ready' });
     expect(onLspState).toHaveBeenCalledWith({ status: 'ready' });
 
+    const menuCommandHandler = mockOn.mock.calls.find((call) => call[0] === 'stream:menu:command')?.[1];
+    menuCommandHandler({}, { action: 'open-settings' });
+    expect(onMenuCommand).toHaveBeenCalledWith({ action: 'open-settings' });
+
     dispose();
     disposeStdout();
     disposeStderr();
@@ -177,6 +184,7 @@ describe('preload bridge', () => {
     disposeTerminalExit();
     disposeLspDiagnostics();
     disposeLspState();
+    disposeMenuCommand();
     expect(mockRemoveListener).toHaveBeenCalledWith('stream:window:maximized-change', handler);
     expect(mockRemoveListener).toHaveBeenCalledWith('stream:shell:stdout', stdoutHandler);
     expect(mockRemoveListener).toHaveBeenCalledWith('stream:shell:stderr', stderrHandler);
@@ -185,5 +193,6 @@ describe('preload bridge', () => {
     expect(mockRemoveListener).toHaveBeenCalledWith('stream:terminal:exit', terminalExitHandler);
     expect(mockRemoveListener).toHaveBeenCalledWith('stream:lsp:diagnostics', diagnosticsHandler);
     expect(mockRemoveListener).toHaveBeenCalledWith('stream:lsp:state', lspStateHandler);
+    expect(mockRemoveListener).toHaveBeenCalledWith('stream:menu:command', menuCommandHandler);
   });
 });

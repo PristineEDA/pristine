@@ -1,9 +1,15 @@
-import { useRef, useState } from 'react';
-import { useEffect } from 'react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import {
   Settings, CircleUser, Minus, Square, X, Code2, Presentation, Workflow,
   Sun, Moon,
 } from 'lucide-react';
+import {
+  applicationMenus,
+  getApplicationMenuItemAction,
+  getApplicationMenuItemShortcut,
+  isAppMenuItem,
+  type MenuCommandEvent,
+} from '../../../menu/applicationMenu';
 import { canToggleLayoutPanels as canUseLayoutPanels } from '../../../codeViewPanels';
 import { useEditorSettings } from '../../../context/EditorSettingsContext';
 import { useWorkspace } from '../../../context/WorkspaceContext';
@@ -42,45 +48,6 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../../
 import { useSidebar } from '../../ui/sidebar';
 import { centerViewSwitchItemClassName } from './viewSwitcherStyles';
 
-const menus = [
-  {
-    label: 'File',
-    items: [
-      { name: 'New Project', shortcut: 'Mod+N' },
-      { name: 'Open Project...', shortcut: 'Mod+O' },
-      { name: '---' },
-      { name: 'Save', shortcut: 'Mod+S' },
-      { name: 'Save As...', shortcut: 'Shift+Mod+S' },
-      { name: '---' },
-      { name: 'Setting...' },
-      { name: 'Close', shortcut: 'Mod+Q' },
-    ],
-  },
-  {
-    label: 'Edit',
-    items: [
-      { name: 'Undo', shortcut: 'Mod+Z' },
-      { name: 'Redo', shortcut: 'Mod+Y' },
-      { name: '---' },
-      { name: 'Cut', shortcut: 'Mod+X' },
-      { name: 'Copy', shortcut: 'Mod+C' },
-      { name: 'Paste', shortcut: 'Mod+V' },
-      { name: '---' },
-      { name: 'Find', shortcut: 'Mod+F' },
-      { name: 'Replace', shortcut: 'Mod+H' },
-    ],
-  },
-  {
-    label: 'Help',
-    items: [
-      { name: 'Documentation' },
-      { name: 'Check for Update...' },
-      { name: '---' },
-      { name: 'About' },
-    ],
-  },
-];
-
 const noDrag = { WebkitAppRegion: 'no-drag' as const };
 const noDragInteractive = {
   WebkitAppRegion: 'no-drag' as const,
@@ -92,22 +59,6 @@ const THEME_CONFIG_KEY = 'ui.theme';
 
 function isMacOSPlatform(): boolean {
   return typeof window !== 'undefined' && window.electronAPI?.platform === 'darwin';
-}
-
-function getMenuItemAction(menuLabel: string, itemName: string): 'open-settings' | 'close-app' | null {
-  if (menuLabel !== 'File') {
-    return null;
-  }
-
-  if (itemName === 'Setting...') {
-    return 'open-settings';
-  }
-
-  if (itemName === 'Close') {
-    return 'close-app';
-  }
-
-  return null;
 }
 
 function formatShortcutLabel(shortcut?: string): string {
@@ -155,9 +106,7 @@ function formatShortcutLabel(shortcut?: string): string {
 }
 
 function getMenuItemShortcut(menuLabel: string, itemName: string): string {
-  const menu = menus.find((entry) => entry.label === menuLabel);
-  const item = menu?.items.find((entry) => entry.name === itemName);
-  return formatShortcutLabel(item?.shortcut);
+  return formatShortcutLabel(getApplicationMenuItemShortcut(menuLabel, itemName));
 }
 
 function isCloseShortcutPressed(event: KeyboardEvent): boolean {
@@ -263,6 +212,7 @@ export function MenuBar({
   onToggleRightPanel,
 }: MenuBarProps) {
   const isMacOS = isMacOSPlatform();
+  const showWindowMenu = !isMacOS;
   const { activeView, mainContentView, setMainContentView } = useWorkspace();
   const {
     fontFamily: editorFontFamily,
@@ -381,7 +331,7 @@ export function MenuBar({
     void window.electronAPI?.close();
   };
 
-  const handleMenuItemSelect = (action: 'open-settings' | 'close-app' | null) => {
+  const handleMenuItemSelect = (action: ReturnType<typeof getApplicationMenuItemAction>) => {
     if (action === 'open-settings') {
       openSettingsDialog();
       return;
@@ -392,9 +342,25 @@ export function MenuBar({
     }
   };
 
+  const handleNativeMenuCommand = useEffectEvent((payload: MenuCommandEvent) => {
+    if (payload.action === 'open-settings') {
+      openSettingsDialog();
+    }
+  });
+
   const settingsSectionClassName = 'rounded-md border border-border/85 bg-muted/55 px-3 py-2.5';
   const settingsSectionTitleClassName = 'text-[13px] font-medium';
   const settingsSectionDescriptionClassName = 'text-[12px] text-muted-foreground';
+
+  useEffect(() => {
+    const dispose = window.electronAPI?.menu.onCommand((payload) => {
+      handleNativeMenuCommand(payload);
+    });
+
+    return () => {
+      dispose?.();
+    };
+  }, []);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -425,42 +391,46 @@ export function MenuBar({
           {isMacOS && <div className="w-20 shrink-0" />}
 
           {/* App icon / title */}
-          <div className="flex items-center gap-1.5 px-3 pr-2" style={noDrag as React.CSSProperties}>
-            <div className="w-4 h-4 rounded-sm bg-primary flex items-center justify-center">
-              <span className="text-primary-foreground text-[9px] font-bold">P</span>
+          {showWindowMenu && (
+            <div className="flex items-center gap-1.5 px-3 pr-2" data-testid="menu-app-icon" style={noDrag as React.CSSProperties}>
+              <div className="w-4 h-4 rounded-sm bg-primary flex items-center justify-center">
+                <span className="text-primary-foreground text-[9px] font-bold">P</span>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Menu items — shadcn Menubar */}
-          <Menubar className="h-8 border-0 rounded-none bg-transparent p-0 shadow-none" style={noDrag as React.CSSProperties}>
-            {menus.map((menu) => (
-              <MenubarMenu key={menu.label}>
-                <MenubarTrigger className="px-2.5 h-6 text-[12px] font-normal rounded-sm">
-                  {menu.label}
-                </MenubarTrigger>
-                <MenubarContent align="start" sideOffset={4} className="min-w-36 p-0.5">
-                  {menu.items.map((item, i) => {
-                    if (item.name === '---') {
-                      return <MenubarSeparator key={i} className="my-0.5" />;
-                    }
+          {showWindowMenu && (
+            <Menubar className="h-8 border-0 rounded-none bg-transparent p-0 shadow-none" data-testid="menu-menubar" style={noDrag as React.CSSProperties}>
+              {applicationMenus.map((menu) => (
+                <MenubarMenu key={menu.label}>
+                  <MenubarTrigger className="px-2.5 h-6 text-[12px] font-normal rounded-sm">
+                    {menu.label}
+                  </MenubarTrigger>
+                  <MenubarContent align="start" sideOffset={4} className="min-w-36 p-0.5">
+                    {menu.items.map((item, index) => {
+                      if (!isAppMenuItem(item)) {
+                        return <MenubarSeparator key={`${menu.label}-separator-${index}`} className="my-0.5" />;
+                      }
 
-                    const action = getMenuItemAction(menu.label, item.name);
-                    const shortcut = getMenuItemShortcut(menu.label, item.name);
+                      const action = getApplicationMenuItemAction(menu.label, item.name);
+                      const shortcut = getMenuItemShortcut(menu.label, item.name);
 
-                    return (
-                      <MenubarItem
-                        key={i}
-                        className="px-2 py-1 text-[12px]"
-                        onSelect={() => handleMenuItemSelect(action)}
-                      >
-                        {item.name} <MenubarShortcut>{shortcut}</MenubarShortcut>
-                      </MenubarItem>
-                    );
-                  })}
-                </MenubarContent>
-              </MenubarMenu>
-            ))}
-          </Menubar>
+                      return (
+                        <MenubarItem
+                          key={`${menu.label}-${item.name}`}
+                          className="px-2 py-1 text-[12px]"
+                          onSelect={() => handleMenuItemSelect(action)}
+                        >
+                          {item.name} <MenubarShortcut>{shortcut}</MenubarShortcut>
+                        </MenubarItem>
+                      );
+                    })}
+                  </MenubarContent>
+                </MenubarMenu>
+              ))}
+            </Menubar>
+          )}
 
 
           <TooltipIconButton content="Toggle activity bar" wrapTrigger={false}>
@@ -639,7 +609,7 @@ export function MenuBar({
             </Button>
           </TooltipIconButton>
 
-          <Separator orientation="vertical" className="h-4 mx-1" />
+          {showWindowMenu && <Separator data-testid="menu-avatar-separator" orientation="vertical" className="h-4 mx-1" />}
 
           {/* Window controls (hidden on macOS — native traffic lights used instead) */}
           {!isMacOS && (

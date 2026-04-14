@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { SyncChannels, AsyncChannels, StreamChannels } from './ipc/channels.js';
 import type { LspCompletionResponse, LspDiagnosticsEvent, LspHover, LspStateEvent, WorkspaceLocation } from '../types/systemverilog-lsp.js';
+import type { MenuCommandEvent } from '../src/app/menu/applicationMenu.js';
 
 // ─── Sync Helpers ─────────────────────────────────────────────────────────────
 
@@ -170,6 +171,14 @@ const electronAPI = {
       const handler = (_event: Electron.IpcRendererEvent, payload: LspStateEvent) => callback(payload);
       ipcRenderer.on(StreamChannels.LSP_STATE, handler);
       return () => { ipcRenderer.removeListener(StreamChannels.LSP_STATE, handler); };
+    },
+  },
+
+  menu: {
+    onCommand: (callback: (payload: MenuCommandEvent) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, payload: MenuCommandEvent) => callback(payload);
+      ipcRenderer.on(StreamChannels.MENU_COMMAND, handler);
+      return () => { ipcRenderer.removeListener(StreamChannels.MENU_COMMAND, handler); };
     },
   },
 

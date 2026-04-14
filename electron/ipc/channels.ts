@@ -47,5 +47,6 @@ export const StreamChannels = {
   TERMINAL_EXIT: 'stream:terminal:exit',
   LSP_DIAGNOSTICS: 'stream:lsp:diagnostics',
   LSP_STATE: 'stream:lsp:state',
+  MENU_COMMAND: 'stream:menu:command',
   WINDOW_MAXIMIZED_CHANGE: 'stream:window:maximized-change',
 } as const;

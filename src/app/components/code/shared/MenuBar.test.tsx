@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MenuBar } from './MenuBar';
@@ -49,6 +49,7 @@ beforeEach(() => {
   vi.mocked(window.electronAPI!.config.get).mockReset();
   vi.mocked(window.electronAPI!.config.set).mockReset();
   vi.mocked(window.electronAPI!.setFloatingInfoWindowVisible).mockReset();
+  vi.mocked(window.electronAPI!.menu.onCommand).mockReset();
 });
 
 function renderMenuBar(props: React.ComponentProps<typeof MenuBar> = {}) {
@@ -128,19 +129,49 @@ describe('MenuBar', () => {
     expect(screen.getByText(hasNormalizedTextContent('CloseCtrl+Q'))).toBeInTheDocument();
   });
 
-  it('renders command-based menu shortcuts on macOS', async () => {
-    const user = userEvent.setup();
-
+  it('hides the window-local app icon, menu items, and trailing avatar separator on macOS', () => {
     window.electronAPI!.platform = 'darwin';
 
     renderMenuBar();
 
-    await user.click(screen.getByText('File'));
+    expect(screen.queryByTestId('menu-app-icon')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('menu-menubar')).not.toBeInTheDocument();
+    expect(screen.queryByText('File')).not.toBeInTheDocument();
+    expect(screen.queryByText('Edit')).not.toBeInTheDocument();
+    expect(screen.queryByText('Help')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('menu-avatar-separator')).not.toBeInTheDocument();
+    expect(screen.getByTestId('toggle-theme')).toBeInTheDocument();
+    expect(screen.getByTestId('menu-settings-button')).toBeInTheDocument();
+    expect(screen.getByTestId('user-avatar-button')).toBeInTheDocument();
+  });
 
-    expect(await screen.findByText(hasNormalizedTextContent('New Project⌘N'))).toBeInTheDocument();
-    expect(screen.getByText(hasNormalizedTextContent('Save⌘S'))).toBeInTheDocument();
-    expect(screen.getByText(hasNormalizedTextContent('Save As...⇧⌘S'))).toBeInTheDocument();
-    expect(screen.getByText(hasNormalizedTextContent('Close⌘Q'))).toBeInTheDocument();
+  it('opens settings from native menu commands on macOS', async () => {
+    window.electronAPI!.platform = 'darwin';
+    vi.mocked(window.electronAPI!.config.get).mockImplementation((key: string) =>
+      key === 'ui.theme'
+        ? 'dark'
+        : key === 'editor.fontFamily'
+          ? 'fira-code'
+        : key === 'editor.fontSize'
+          ? 18
+        : key === 'editor.theme'
+          ? 'night-owl'
+        : key === 'window.closeActionPreference'
+          ? 'tray'
+        : key === 'ui.floatingInfoWindow.visible'
+          ? true
+          : null,
+    );
+
+    renderMenuBar();
+
+    const menuCommandHandler = vi.mocked(window.electronAPI!.menu.onCommand).mock.calls[0]?.[0];
+    await act(async () => {
+      menuCommandHandler?.({ action: 'open-settings' });
+    });
+
+    expect(await screen.findByTestId('settings-dialog')).toBeVisible();
+    expect(screen.getByTestId('settings-editor-font-family-combobox')).toHaveTextContent(getEditorFontFamilyLabel('fira-code'));
   });
 
   it('opens settings from the File menu using the shared settings behavior', async () => {

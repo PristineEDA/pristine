@@ -151,6 +151,7 @@ const mocks = vi.hoisted(() => {
     mockGetName: vi.fn(() => 'Pristine'),
     mockQuit: vi.fn(),
     mockBuildFromTemplate: vi.fn((template: unknown[]) => ({ template })),
+    mockSetApplicationMenu: vi.fn(),
     mockCreateFromDataURL: vi.fn(() => ({ kind: 'native-image' })),
     mockDisposeLspSession: vi.fn(),
     mockDisposeAllTerminalSessions: vi.fn(),
@@ -180,6 +181,7 @@ vi.mock('electron', () => ({
   BrowserWindow: mocks.BrowserWindowMock,
   Menu: {
     buildFromTemplate: mocks.mockBuildFromTemplate,
+    setApplicationMenu: mocks.mockSetApplicationMenu,
   },
   Tray: mocks.TrayMock,
   nativeImage: {
@@ -244,6 +246,7 @@ async function importMain(options?: {
   mocks.mockSetPath.mockClear();
   mocks.mockQuit.mockClear();
   mocks.mockBuildFromTemplate.mockClear();
+  mocks.mockSetApplicationMenu.mockClear();
   mocks.mockCreateFromDataURL.mockClear();
   mocks.mockDisposeLspSession.mockClear();
   mocks.mockDisposeAllTerminalSessions.mockClear();
@@ -416,6 +419,9 @@ describe('electron main entry', () => {
 
     const splashWindow = browserWindowInstances[0];
     const mainWindow = browserWindowInstances[1];
+    const applicationMenu = mocks.mockSetApplicationMenu.mock.calls[0]?.[0] as {
+      template: Array<{ label?: string }>;
+    };
 
     expect(mainWindow.options).toMatchObject({
       frame: true,
@@ -423,9 +429,31 @@ describe('electron main entry', () => {
       titleBarStyle: 'hiddenInset',
       trafficLightPosition: { x: 12, y: 10 },
     });
+    expect(mocks.mockSetApplicationMenu).toHaveBeenCalledTimes(1);
+    expect(applicationMenu.template.map((item) => item.label)).toEqual(['File', 'Edit', 'Help']);
     expect(mainWindow.loadFile).toHaveBeenCalledWith(expect.stringMatching(/dist[\\/]index\.html$/));
     expect(mainWindow.loadURL).not.toHaveBeenCalled();
     expect(splashWindow.loadFile).toHaveBeenCalledWith(expect.stringMatching(/dist[\\/]splash\.html$/));
+  });
+
+  it('routes the macOS Settings menu item back into the renderer settings dialog flow', async () => {
+    const { browserWindowInstances } = await importMain({ platform: 'darwin' });
+
+    const mainWindow = browserWindowInstances[1];
+    const applicationMenu = mocks.mockSetApplicationMenu.mock.calls[0]?.[0] as {
+      template: Array<{
+        label?: string;
+        submenu?: Array<{ label?: string; click?: () => void }>;
+      }>;
+    };
+    const fileMenu = applicationMenu.template.find((item) => item.label === 'File');
+    const settingsItem = fileMenu?.submenu?.find((item) => item.label === 'Setting...');
+
+    settingsItem?.click?.();
+
+    expect(mainWindow.show).toHaveBeenCalledTimes(1);
+    expect(mainWindow.focus).toHaveBeenCalledTimes(1);
+    expect(mainWindow.webContents.send).toHaveBeenCalledWith('stream:menu:command', { action: 'open-settings' });
   });
 
   it('creates the detached floating info window when enabled in config', async () => {

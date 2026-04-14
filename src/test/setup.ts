@@ -147,6 +147,9 @@ function createElectronApiMock() {
       onDiagnostics: vi.fn(() => vi.fn()),
       onState: vi.fn(() => vi.fn()),
     },
+    menu: {
+      onCommand: vi.fn(() => vi.fn()),
+    },
     config: {
       get: vi.fn(),
       set: vi.fn(),
