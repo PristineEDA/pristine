@@ -49,6 +49,8 @@ const CLIENT_VERSION = '0.0.1';
 let projectRoot: string | null = null;
 let activeSessionPromise: Promise<LspSession> | null = null;
 let activeSession: LspSession | null = null;
+const WINDOWS_ABSOLUTE_PATH_PATTERN = /^[A-Za-z]:[\\/]/;
+const WINDOWS_FILE_URI_PATH_PATTERN = /^\/[A-Za-z]:\//;
 
 function getProjectRoot(): string {
   if (!projectRoot) {
@@ -62,22 +64,84 @@ function normalizeWorkspaceFilePath(filePath: string): string {
   return filePath.replace(/\\/g, '/').replace(/^\.\//, '').replace(/^\//, '');
 }
 
-function getDocumentUri(filePath: string): string {
-  const absolutePath = validatePathWithinRoot(getProjectRoot(), filePath);
-  return pathToFileURL(absolutePath).toString();
+function isWindowsAbsolutePath(filePath: string): boolean {
+  return WINDOWS_ABSOLUTE_PATH_PATTERN.test(filePath);
 }
 
-function getRelativeWorkspaceFilePath(uri: string): string | null {
-  let absolutePath: string;
+function resolveProjectRootPath(root: string): string {
+  return isWindowsAbsolutePath(root)
+    ? path.win32.normalize(root)
+    : path.resolve(root);
+}
+
+function resolveWorkspaceFilePath(filePath: string): string {
+  const root = getProjectRoot();
+
+  if (!isWindowsAbsolutePath(root)) {
+    return validatePathWithinRoot(root, filePath);
+  }
+
+  const resolvedPath = path.win32.isAbsolute(filePath)
+    ? path.win32.normalize(filePath)
+    : path.win32.resolve(root, filePath);
+  const relativePath = path.win32.relative(root, resolvedPath);
+
+  if (relativePath.startsWith('..') || path.win32.isAbsolute(relativePath)) {
+    throw new Error(`Path traversal denied: ${filePath}`);
+  }
+
+  return resolvedPath;
+}
+
+function absolutePathToFileUri(absolutePath: string): string {
+  if (!isWindowsAbsolutePath(absolutePath)) {
+    return pathToFileURL(absolutePath).toString();
+  }
+
+  const url = new URL('file:///');
+  url.pathname = `/${path.win32.normalize(absolutePath).replace(/\\/g, '/')}`;
+  return url.toString();
+}
+
+function fileUriToAbsolutePath(uri: string): string | null {
+  let parsedUri: URL;
 
   try {
-    absolutePath = fileURLToPath(uri);
+    parsedUri = new URL(uri);
   } catch {
     return null;
   }
 
-  const relativePath = path.relative(getProjectRoot(), absolutePath);
-  if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+  if (parsedUri.protocol !== 'file:') {
+    return null;
+  }
+
+  const decodedPathname = decodeURIComponent(parsedUri.pathname);
+  if (WINDOWS_FILE_URI_PATH_PATTERN.test(decodedPathname)) {
+    return path.win32.normalize(decodedPathname.slice(1));
+  }
+
+  try {
+    return fileURLToPath(parsedUri);
+  } catch {
+    return null;
+  }
+}
+
+function getDocumentUri(filePath: string): string {
+  return absolutePathToFileUri(resolveWorkspaceFilePath(filePath));
+}
+
+function getRelativeWorkspaceFilePath(uri: string): string | null {
+  const absolutePath = fileUriToAbsolutePath(uri);
+  if (!absolutePath) {
+    return null;
+  }
+
+  const root = getProjectRoot();
+  const pathModule = isWindowsAbsolutePath(root) ? path.win32 : path;
+  const relativePath = pathModule.relative(root, absolutePath);
+  if (relativePath.startsWith('..') || pathModule.isAbsolute(relativePath)) {
     return null;
   }
 
@@ -281,7 +345,7 @@ function normalizeWorkspaceLocations(value: unknown): WorkspaceLocation[] {
 
 function createInitializeParams() {
   const root = getProjectRoot();
-  const rootUri = pathToFileURL(root).toString();
+  const rootUri = absolutePathToFileUri(root);
 
   return {
     processId: process.pid,
@@ -468,7 +532,7 @@ function updateDocumentText(session: LspSession, filePath: string, text: string)
 }
 
 export function setLspProjectRoot(root: string): void {
-  projectRoot = path.resolve(root);
+  projectRoot = resolveProjectRootPath(root);
 }
 
 export function disposeLspSession(): void {
