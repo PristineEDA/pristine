@@ -177,7 +177,7 @@ function EditorGroupLeaf({
     loadingFiles,
     loadErrors,
     loadFileContent,
-    updateFileContent,
+    updateFileContentInGroup,
     registerEditorRef,
   } = useWorkspace();
   const group = editorGroups.find((currentGroup) => currentGroup.id === groupId);
@@ -282,7 +282,9 @@ function EditorGroupLeaf({
         loadingFiles={loadingFiles}
         loadErrors={loadErrors}
         onLoadFile={loadFileContent}
-        onContentChange={updateFileContent}
+        onContentChange={(fileId, content) => {
+          updateFileContentInGroup(group.id, fileId, content);
+        }}
         onEditorMount={(editor) => registerEditorRef(group.id, editor)}
         onNavigateToLocation={(fileId, line, col) => {
           const fileName = fileId.split('/').pop() ?? fileId;

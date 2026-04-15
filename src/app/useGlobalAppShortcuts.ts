@@ -5,6 +5,7 @@ interface UseGlobalAppShortcutsOptions {
   closeQuickOpen: () => void;
   isQuickOpenVisible: boolean;
   openQuickOpen: () => void;
+  saveActiveFile: () => Promise<boolean>;
   setShowBottomPanel: (show: boolean) => void;
   setShowLeftPanel: (show: boolean) => void;
   showBottomPanel: boolean;
@@ -20,6 +21,7 @@ export function useGlobalAppShortcuts({
   closeQuickOpen,
   isQuickOpenVisible,
   openQuickOpen,
+  saveActiveFile,
   setShowBottomPanel,
   setShowLeftPanel,
   showBottomPanel,
@@ -42,6 +44,12 @@ export function useGlobalAppShortcuts({
         }
 
         openQuickOpen();
+        return;
+      }
+
+      if (key === 's') {
+        event.preventDefault();
+        void saveActiveFile();
         return;
       }
 
@@ -74,6 +82,7 @@ export function useGlobalAppShortcuts({
     closeQuickOpen,
     isQuickOpenVisible,
     openQuickOpen,
+    saveActiveFile,
     setShowBottomPanel,
     setShowLeftPanel,
     showBottomPanel,

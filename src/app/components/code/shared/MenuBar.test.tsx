@@ -11,6 +11,8 @@ const setEditorFontFamilyMock = vi.fn();
 const setEditorThemeMock = vi.fn();
 const setThemeMock = vi.fn();
 const toggleThemeMock = vi.fn();
+const undoActionRun = vi.fn(() => Promise.resolve());
+const redoActionRun = vi.fn(() => Promise.resolve());
 let mockedEditorFontFamily = 'jetbrains-mono';
 let mockedEditorFontSize = 13;
 let mockedEditorTheme = 'dracula';
@@ -43,6 +45,8 @@ beforeEach(() => {
   setEditorThemeMock.mockReset();
   setThemeMock.mockReset();
   toggleThemeMock.mockReset();
+  undoActionRun.mockClear();
+  redoActionRun.mockClear();
   vi.mocked(window.electronAPI!.minimize).mockReset();
   vi.mocked(window.electronAPI!.maximize).mockReset();
   vi.mocked(window.electronAPI!.close).mockReset();
@@ -90,7 +94,13 @@ function SidebarStateProbe() {
 }
 
 function WorkspaceControls() {
-  const { setActiveView, setMainContentView } = useWorkspace();
+  const {
+    openFile,
+    registerEditorRef,
+    setActiveView,
+    setMainContentView,
+    updateFileContentInGroup,
+  } = useWorkspace();
 
   return (
     <div>
@@ -98,6 +108,11 @@ function WorkspaceControls() {
       <button onClick={() => setActiveView('synthesis')}>set-synthesis</button>
       <button onClick={() => setMainContentView('whiteboard')}>set-whiteboard</button>
       <button onClick={() => setMainContentView('code')}>set-code</button>
+      <button onClick={() => openFile('rtl/core/reg_file.v', 'reg_file.v')}>open-reg</button>
+      <button onClick={() => updateFileContentInGroup('group-1', 'rtl/core/reg_file.v', 'module reg_file; logic dirty; endmodule')}>edit-reg</button>
+      <button onClick={() => registerEditorRef('group-1', {
+        getAction: (actionId: string) => ({ run: actionId === 'undo' ? undoActionRun : redoActionRun }),
+      })}>register-editor</button>
     </div>
   );
 }
@@ -218,6 +233,47 @@ describe('MenuBar', () => {
 
     expect(await screen.findByTestId('settings-dialog')).toBeVisible();
     expect(screen.getByTestId('settings-editor-font-family-combobox')).toHaveTextContent(getEditorFontFamilyLabel('fira-code'));
+  });
+
+  it('routes save, undo, and redo through the shared workspace commands', async () => {
+    const user = userEvent.setup();
+
+    renderMenuBarWithControls();
+
+    fireEvent.click(screen.getByText('open-reg'));
+    fireEvent.click(screen.getByText('edit-reg'));
+    fireEvent.click(screen.getByText('register-editor'));
+
+    await user.click(screen.getByText('File'));
+    await user.click(await screen.findByText('Save'));
+    await user.click(screen.getByText('Edit'));
+    await user.click(await screen.findByText('Undo'));
+    await user.click(screen.getByText('Edit'));
+    await user.click(await screen.findByText('Redo'));
+
+    expect(window.electronAPI?.fs.writeFile).toHaveBeenCalledWith('rtl/core/reg_file.v', 'module reg_file; logic dirty; endmodule');
+    expect(undoActionRun).toHaveBeenCalledTimes(1);
+    expect(redoActionRun).toHaveBeenCalledTimes(1);
+  });
+
+  it('routes native macOS save and undo commands through the same workspace actions', async () => {
+    window.electronAPI!.platform = 'darwin';
+
+    renderMenuBarWithControls();
+
+    fireEvent.click(screen.getByText('open-reg'));
+    fireEvent.click(screen.getByText('edit-reg'));
+    fireEvent.click(screen.getByText('register-editor'));
+
+    const menuCommandHandler = vi.mocked(window.electronAPI!.menu.onCommand).mock.calls[0]?.[0];
+
+    await act(async () => {
+      menuCommandHandler?.({ action: 'save-file' });
+      menuCommandHandler?.({ action: 'undo-editor' });
+    });
+
+    expect(window.electronAPI?.fs.writeFile).toHaveBeenCalledWith('rtl/core/reg_file.v', 'module reg_file; logic dirty; endmodule');
+    expect(undoActionRun).toHaveBeenCalledTimes(1);
   });
 
   it('opens settings from the File menu using the shared settings behavior', async () => {

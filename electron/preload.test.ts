@@ -63,6 +63,7 @@ describe('preload bridge', () => {
     const [, api] = mockExposeInMainWorld.mock.calls[0];
     const onMaximizedChange = vi.fn();
     const onFullScreenChange = vi.fn();
+    const onCloseRequested = vi.fn();
     const onStdout = vi.fn();
     const onStderr = vi.fn();
     const onShellExit = vi.fn();
@@ -77,6 +78,7 @@ describe('preload bridge', () => {
     api.show();
     api.hide();
     api.close();
+    api.resolveCloseRequest(3, 'proceed');
     api.setFloatingInfoWindowVisible(true);
     api.fs.readFile('src/main.v', 'utf-8');
     api.fs.listFiles('rtl');
@@ -100,7 +102,8 @@ describe('preload bridge', () => {
     api.config.set('theme', 'dracula');
 
     const dispose = api.onMaximizedChange(onMaximizedChange);
-  const disposeFullScreen = api.onFullScreenChange(onFullScreenChange);
+    const disposeFullScreen = api.onFullScreenChange(onFullScreenChange);
+    const disposeCloseRequest = api.onCloseRequested(onCloseRequested);
     const disposeStdout = api.shell.onStdout(onStdout);
     const disposeStderr = api.shell.onStderr(onStderr);
     const disposeShellExit = api.shell.onExit(onShellExit);
@@ -115,6 +118,7 @@ describe('preload bridge', () => {
     expect(mockInvoke).toHaveBeenCalledWith('async:window:show');
     expect(mockInvoke).toHaveBeenCalledWith('async:window:hide');
     expect(mockInvoke).toHaveBeenCalledWith('async:window:close');
+    expect(mockInvoke).toHaveBeenCalledWith('async:window:resolve-close-request', 3, 'proceed');
     expect(mockInvoke).toHaveBeenCalledWith('async:window:set-floating-info-visibility', true);
     expect(mockInvoke).toHaveBeenCalledWith('async:fs:read-file', 'src/main.v', 'utf-8');
     expect(mockInvoke).toHaveBeenCalledWith('async:fs:list-files', 'rtl');
@@ -138,6 +142,7 @@ describe('preload bridge', () => {
     expect(mockInvoke).toHaveBeenCalledWith('async:config:set', 'theme', 'dracula');
     expect(mockOn).toHaveBeenCalledWith('stream:window:maximized-change', expect.any(Function));
     expect(mockOn).toHaveBeenCalledWith('stream:window:full-screen-change', expect.any(Function));
+    expect(mockOn).toHaveBeenCalledWith('stream:window:close-request', expect.any(Function));
     expect(mockOn).toHaveBeenCalledWith('stream:shell:stdout', expect.any(Function));
     expect(mockOn).toHaveBeenCalledWith('stream:shell:stderr', expect.any(Function));
     expect(mockOn).toHaveBeenCalledWith('stream:shell:exit', expect.any(Function));
@@ -154,6 +159,10 @@ describe('preload bridge', () => {
     const fullScreenHandler = mockOn.mock.calls.find((call) => call[0] === 'stream:window:full-screen-change')?.[1];
     fullScreenHandler({}, true);
     expect(onFullScreenChange).toHaveBeenCalledWith(true);
+
+    const closeRequestHandler = mockOn.mock.calls.find((call) => call[0] === 'stream:window:close-request')?.[1];
+    closeRequestHandler({}, { requestId: 8, action: 'tray' });
+    expect(onCloseRequested).toHaveBeenCalledWith({ requestId: 8, action: 'tray' });
 
     const stdoutHandler = mockOn.mock.calls.find((call) => call[0] === 'stream:shell:stdout')?.[1];
     stdoutHandler({}, { id: 'shell-1', data: 'ok' });
@@ -189,6 +198,7 @@ describe('preload bridge', () => {
 
     dispose();
     disposeFullScreen();
+    disposeCloseRequest();
     disposeStdout();
     disposeStderr();
     disposeShellExit();
@@ -199,6 +209,7 @@ describe('preload bridge', () => {
     disposeMenuCommand();
     expect(mockRemoveListener).toHaveBeenCalledWith('stream:window:maximized-change', handler);
     expect(mockRemoveListener).toHaveBeenCalledWith('stream:window:full-screen-change', fullScreenHandler);
+    expect(mockRemoveListener).toHaveBeenCalledWith('stream:window:close-request', closeRequestHandler);
     expect(mockRemoveListener).toHaveBeenCalledWith('stream:shell:stdout', stdoutHandler);
     expect(mockRemoveListener).toHaveBeenCalledWith('stream:shell:stderr', stderrHandler);
     expect(mockRemoveListener).toHaveBeenCalledWith('stream:shell:exit', shellExitHandler);

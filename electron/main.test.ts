@@ -291,6 +291,7 @@ async function importMain(options?: {
     browserWindowInstances: mocks.browserWindowInstances,
     trayInstances: mocks.trayInstances,
     getMainWindow: mocks.mockRegisterAllHandlers.mock.calls[0]?.[0] as (() => BrowserWindowInstance | null) | undefined,
+    resolveCloseRequest: mocks.mockRegisterAllHandlers.mock.calls[0]?.[2] as ((requestId: number, decision: 'proceed' | 'cancel') => boolean) | undefined,
   };
 }
 
@@ -462,8 +463,8 @@ describe('electron main entry', () => {
     ]);
   });
 
-  it('quits the app from the dedicated macOS Pristine menu item', async () => {
-    await importMain({ platform: 'darwin' });
+  it('routes the dedicated macOS Pristine quit item through the close-request handshake', async () => {
+    const { browserWindowInstances, resolveCloseRequest } = await importMain({ platform: 'darwin' });
 
     const applicationMenu = mocks.mockSetApplicationMenu.mock.calls[0]?.[0] as {
       template: Array<{
@@ -473,10 +474,33 @@ describe('electron main entry', () => {
     };
     const appMenu = applicationMenu.template[0];
     const quitItem = appMenu.submenu?.find((item) => item.label === 'Quit Pristine');
+    const mainWindow = browserWindowInstances[1];
 
     quitItem?.click?.();
 
+    expect(mainWindow.webContents.send).toHaveBeenCalledWith('stream:window:close-request', { requestId: 1, action: 'quit' });
+    resolveCloseRequest?.(1, 'proceed');
     expect(mocks.mockQuit).toHaveBeenCalledTimes(1);
+  });
+
+  it('routes macOS Save and Undo menu items back into the renderer command flow', async () => {
+    const { browserWindowInstances } = await importMain({ platform: 'darwin' });
+
+    const mainWindow = browserWindowInstances[1];
+    const applicationMenu = mocks.mockSetApplicationMenu.mock.calls[0]?.[0] as {
+      template: Array<{
+        label?: string;
+        submenu?: Array<{ label?: string; click?: () => void }>;
+      }>;
+    };
+    const fileMenu = applicationMenu.template.find((item) => item.label === 'File');
+    const editMenu = applicationMenu.template.find((item) => item.label === 'Edit');
+
+    fileMenu?.submenu?.find((item) => item.label === 'Save')?.click?.();
+    editMenu?.submenu?.find((item) => item.label === 'Undo')?.click?.();
+
+    expect(mainWindow.webContents.send).toHaveBeenNthCalledWith(1, 'stream:menu:command', { action: 'save-file' });
+    expect(mainWindow.webContents.send).toHaveBeenNthCalledWith(2, 'stream:menu:command', { action: 'undo-editor' });
   });
 
   it('routes the macOS Settings menu item back into the renderer settings dialog flow', async () => {
@@ -548,8 +572,8 @@ describe('electron main entry', () => {
     expect(mainWindow.focus).toHaveBeenCalledTimes(1);
   });
 
-  it('opens the tray menu on click and tray actions can show or quit the app', async () => {
-    const { browserWindowInstances, trayInstances } = await importMain({ platform: 'win32' });
+  it('opens the tray menu on click and tray actions can show or request quit through close confirmation', async () => {
+    const { browserWindowInstances, trayInstances, resolveCloseRequest } = await importMain({ platform: 'win32' });
 
     const tray = trayInstances[0];
     const mainWindow = browserWindowInstances[1];
@@ -569,21 +593,27 @@ describe('electron main entry', () => {
     expect(mainWindow.focus).toHaveBeenCalledTimes(1);
 
     quitItem?.click?.();
+    expect(mainWindow.webContents.send).toHaveBeenCalledWith('stream:window:close-request', { requestId: 1, action: 'quit' });
+    resolveCloseRequest?.(1, 'proceed');
     expect(mocks.mockQuit).toHaveBeenCalledTimes(1);
   });
 
-  it('quits on native close when close-to-tray is not enabled', async () => {
-    const { browserWindowInstances } = await importMain({ platform: 'win32' });
+  it('requests renderer confirmation before quitting on native close when close-to-tray is not enabled', async () => {
+    const { browserWindowInstances, resolveCloseRequest } = await importMain({ platform: 'win32' });
 
     const mainWindow = browserWindowInstances[1];
     mainWindow.close();
 
+    expect(mainWindow.webContents.send).toHaveBeenCalledWith('stream:window:close-request', { requestId: 1, action: 'quit' });
     expect(mainWindow.hide).not.toHaveBeenCalled();
+    expect(mocks.mockQuit).not.toHaveBeenCalled();
+
+    resolveCloseRequest?.(1, 'proceed');
     expect(mocks.mockQuit).toHaveBeenCalledTimes(1);
   });
 
-  it('hides to tray on native close when the configured choice is tray', async () => {
-    const { browserWindowInstances } = await importMain({
+  it('requests renderer confirmation before hiding to tray on native close when the configured choice is tray', async () => {
+    const { browserWindowInstances, resolveCloseRequest } = await importMain({
       platform: 'win32',
       configValues: {
         'window.closeActionPreference': 'tray',
@@ -593,12 +623,15 @@ describe('electron main entry', () => {
     const mainWindow = browserWindowInstances[1];
     mainWindow.close();
 
+    expect(mainWindow.webContents.send).toHaveBeenCalledWith('stream:window:close-request', { requestId: 1, action: 'tray' });
+    expect(mainWindow.hide).not.toHaveBeenCalled();
+    resolveCloseRequest?.(1, 'proceed');
     expect(mainWindow.hide).toHaveBeenCalledTimes(1);
     expect(mocks.mockQuit).not.toHaveBeenCalled();
   });
 
-  it('quits on native close when the configured choice is quit', async () => {
-    const { browserWindowInstances } = await importMain({
+  it('does not quit when the renderer cancels a pending native close request', async () => {
+    const { browserWindowInstances, resolveCloseRequest } = await importMain({
       platform: 'win32',
       configValues: {
         'window.closeActionPreference': 'quit',
@@ -606,8 +639,10 @@ describe('electron main entry', () => {
     });
 
     browserWindowInstances[1].close();
+    resolveCloseRequest?.(1, 'cancel');
 
-    expect(mocks.mockQuit).toHaveBeenCalledTimes(1);
+    expect(mocks.mockQuit).not.toHaveBeenCalled();
+    expect(browserWindowInstances[1].hide).not.toHaveBeenCalled();
   });
 
   it('quits the app when all windows are closed on non-macOS platforms', async () => {

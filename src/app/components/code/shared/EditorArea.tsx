@@ -88,6 +88,9 @@ function EditorTab({
 }) {
   const isPreview = tab.isPinned === false;
   const tooltipText = isPreview ? `${tab.id} (Preview tab)` : tab.id;
+  const trailingControlClassName = isPreview && !tab.modified
+    ? 'opacity-50 hover:opacity-100'
+    : 'opacity-0 group-hover:opacity-100';
 
   return (
     <div
@@ -127,7 +130,22 @@ function EditorTab({
       >
         {tab.name}
       </span>
-      {tab.modified && <Circle size={7} className="fill-foreground text-foreground shrink-0" />}
+      {tab.modified && (
+        <div className="relative flex h-3 w-3 shrink-0 items-center justify-center">
+          <Circle
+            size={7}
+            data-testid={`editor-tab-dirty-indicator-${tab.id}`}
+            className="fill-foreground text-foreground shrink-0 transition-opacity group-hover:opacity-0"
+          />
+          <button
+            data-testid={`editor-tab-close-${tab.id}`}
+            className="absolute inset-0 flex items-center justify-center rounded opacity-0 transition-opacity group-hover:opacity-100 hover:bg-border"
+            onClick={(e) => { e.stopPropagation(); onClose(); }}
+          >
+            <X size={12} />
+          </button>
+        </div>
+      )}
       {!tab.modified && isPreview && (
         <span
           data-testid={`editor-tab-preview-indicator-${tab.id}`}
@@ -135,13 +153,15 @@ function EditorTab({
           title="Preview tab"
         />
       )}
-      <button
-        data-testid={`editor-tab-close-${tab.id}`}
-        className={`shrink-0 p-0.5 rounded hover:bg-border transition-opacity ${isPreview ? 'opacity-50 hover:opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
-        onClick={(e) => { e.stopPropagation(); onClose(); }}
-      >
-        <X size={12} />
-      </button>
+      {!tab.modified && (
+        <button
+          data-testid={`editor-tab-close-${tab.id}`}
+          className={`shrink-0 p-0.5 rounded hover:bg-border transition-opacity ${trailingControlClassName}`}
+          onClick={(e) => { e.stopPropagation(); onClose(); }}
+        >
+          <X size={12} />
+        </button>
+      )}
     </div>
   );
 }

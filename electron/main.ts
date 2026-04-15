@@ -16,6 +16,7 @@ import { flushPendingConfigSave, getConfigValue } from './ipc/config.js';
 import { disposeLspSession } from './ipc/lsp.js';
 import { disposeAllTerminalSessions } from './ipc/terminal.js';
 import { DEFAULT_STARTUP_PROJECT_ROOT } from '../src/app/workspace/workspaceFiles.js';
+import type { WindowCloseDecision, WindowCloseRequest } from '../src/app/window/windowClose.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MINIMUM_SPLASH_DURATION_MS = 3000;
@@ -30,6 +31,8 @@ let splashWindow: BrowserWindow | null = null;
 let floatingInfoWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let isQuitting = false;
+let nextWindowCloseRequestId = 1;
+let pendingWindowCloseRequest: WindowCloseRequest | null = null;
 
 app.setName(APP_DISPLAY_NAME);
 
@@ -59,6 +62,15 @@ function sendMenuCommandToMainWindow(payload: MenuCommandEvent): void {
   }
 
   window.webContents.send(StreamChannels.MENU_COMMAND, payload);
+}
+
+function sendWindowCloseRequestToMainWindow(payload: WindowCloseRequest): void {
+  const window = getMainWindow();
+  if (!window || window.isDestroyed() || window.webContents.isDestroyed()) {
+    return;
+  }
+
+  window.webContents.send(StreamChannels.WINDOW_CLOSE_REQUEST, payload);
 }
 
 function getPreloadPath(): string {
@@ -136,9 +148,23 @@ function handleApplicationMenuAction(action: AppMenuAction): void {
     return;
   }
 
+  if (action === 'save-file' || action === 'undo-editor' || action === 'redo-editor') {
+    sendMenuCommandToMainWindow({ action });
+    return;
+  }
+
   if (action === 'close-app') {
     mainWindow?.close();
   }
+}
+
+function requestApplicationQuit(): void {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    requestRendererWindowClose('quit');
+    return;
+  }
+
+  app.quit();
 }
 
 function createMacOSApplicationMenu(): Menu {
@@ -168,7 +194,7 @@ function createMacOSApplicationMenu(): Menu {
           label: `Quit ${APP_DISPLAY_NAME}`,
           accelerator: 'Command+Q',
           click: () => {
-            app.quit();
+            requestApplicationQuit();
           },
         },
       ],
@@ -299,6 +325,8 @@ function getConfiguredCloseAction(): 'quit' | 'tray' {
 }
 
 function executeCloseAction(action: 'quit' | 'tray'): void {
+  pendingWindowCloseRequest = null;
+
   if (action === 'tray') {
     hideMainWindowToTray();
     return;
@@ -320,10 +348,40 @@ function createTrayMenu(): Menu {
     {
       label: 'Quit Pristine',
       click: () => {
-        app.quit();
+        requestApplicationQuit();
       },
     },
   ]);
+}
+
+function requestRendererWindowClose(action: 'quit' | 'tray'): void {
+  if (pendingWindowCloseRequest) {
+    return;
+  }
+
+  const request: WindowCloseRequest = {
+    requestId: nextWindowCloseRequestId++,
+    action,
+  };
+
+  pendingWindowCloseRequest = request;
+  sendWindowCloseRequestToMainWindow(request);
+}
+
+function resolveWindowCloseRequest(requestId: number, decision: WindowCloseDecision): boolean {
+  if (!pendingWindowCloseRequest || pendingWindowCloseRequest.requestId !== requestId) {
+    return false;
+  }
+
+  const { action } = pendingWindowCloseRequest;
+  pendingWindowCloseRequest = null;
+
+  if (decision === 'cancel') {
+    return true;
+  }
+
+  executeCloseAction(action);
+  return true;
 }
 
 function createTray(): Tray {
@@ -415,12 +473,13 @@ function createMainWindow(): BrowserWindow {
     }
 
     event.preventDefault();
-    executeCloseAction(getConfiguredCloseAction());
+    requestRendererWindowClose(getConfiguredCloseAction());
   });
 
   window.on('closed', () => {
     if (mainWindow === window) {
       mainWindow = null;
+      pendingWindowCloseRequest = null;
     }
   });
 
@@ -464,7 +523,7 @@ setProjectRoot(process.env['PRISTINE_PROJECT_ROOT'] ?? DEFAULT_STARTUP_PROJECT_R
 configureElectronStoragePaths();
 
 // Register all IPC handlers before window creation
-registerAllHandlers(getMainWindow, setFloatingInfoWindowVisible);
+registerAllHandlers(getMainWindow, setFloatingInfoWindowVisible, resolveWindowCloseRequest);
 
 app.whenReady().then(() => {
   installApplicationMenu();

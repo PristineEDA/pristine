@@ -160,13 +160,13 @@ const packagedWindowsExecutablePath = findPackagedWindowsExecutablePath();
 
 test.skip(process.platform === 'darwin', 'Custom window controls are hidden on macOS');
 
-async function launchApp() {
+async function launchApp(options?: { projectRoot?: string }) {
   const app = await electron.launch({
     args: [path.join(__dirname, '..', 'dist-electron', 'main.js')],
     env: {
       ...process.env,
       PRISTINE_E2E: '1',
-      PRISTINE_PROJECT_ROOT: fixtureWorkspace,
+      PRISTINE_PROJECT_ROOT: options?.projectRoot ?? fixtureWorkspace,
       PRISTINE_USER_DATA_PATH: getE2EUserDataPath(),
     },
   });
@@ -174,6 +174,11 @@ async function launchApp() {
   const { splashWindow, window } = await resolveStartupWindows(app);
 
   return { app, window, splashWindow };
+}
+
+function createWorkspaceCopy(targetPath: string) {
+  fs.rmSync(targetPath, { recursive: true, force: true });
+  fs.cpSync(fixtureWorkspace, targetPath, { recursive: true });
 }
 
 async function launchAppForSplashHandoff() {
@@ -980,6 +985,75 @@ test('single-clicked explorer files stay in preview style until double-clicked t
   await expect(window.getByTestId('editor-tab-README.md')).toBeVisible();
 
   await app.close();
+});
+
+test('editing a preview tab pins it so the next preview open does not replace it', async () => {
+  const { app, window } = await launchApp();
+
+  await ensureExplorerVisible(window);
+  await openNestedWorkspaceFile(window, [
+    'file-tree-node-rtl',
+    'file-tree-node-rtl_core',
+    'file-tree-node-rtl_core_reg_file_v',
+  ]);
+
+  await expect(window.getByTestId('editor-tab-title-rtl/core/reg_file.v')).toHaveClass(/italic/);
+  await expect(window.getByTestId('editor-tab-preview-indicator-rtl/core/reg_file.v')).toBeVisible();
+
+  await waitForMonacoEditor(window);
+  await focusMonacoEditor(window);
+  await waitForMonacoEditorTextFocus(window);
+  await window.keyboard.press('End');
+  await window.keyboard.type(' // preview pinned by edit');
+
+  await expect(window.getByTestId('editor-tab-title-rtl/core/reg_file.v')).not.toHaveClass(/italic/);
+  await expect(window.getByTestId('editor-tab-preview-indicator-rtl/core/reg_file.v')).toHaveCount(0);
+  await expect(window.getByTestId('editor-tab-dirty-indicator-rtl/core/reg_file.v')).toBeVisible();
+
+  await window.getByTestId('file-tree-node-README_md').click();
+
+  await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toBeVisible();
+  await expect(window.getByTestId('editor-tab-README.md')).toBeVisible();
+  await expect(window.getByTestId('editor-tab-preview-indicator-README.md')).toBeVisible();
+
+  await app.evaluate(({ app: electronApp }) => {
+    electronApp.quit();
+  });
+});
+
+test('ctrl+s saves an edited explorer file and clears the dirty indicator', async () => {
+  const workspaceCopy = test.info().outputPath('save-workspace');
+  createWorkspaceCopy(workspaceCopy);
+
+  const filePath = path.join(workspaceCopy, 'rtl', 'core', 'reg_file.v');
+  const marker = `// e2e save marker ${Date.now()}`;
+  const { app, window } = await launchApp({ projectRoot: workspaceCopy });
+
+  try {
+    await ensureExplorerVisible(window);
+    await openNestedWorkspaceFile(window, [
+      'file-tree-node-rtl',
+      'file-tree-node-rtl_core',
+      'file-tree-node-rtl_core_reg_file_v',
+    ], { finalAction: 'dblclick' });
+
+    await waitForMonacoEditor(window);
+    await focusMonacoEditor(window);
+    await waitForMonacoEditorTextFocus(window);
+    await window.keyboard.press('Control+End');
+    await window.keyboard.type(`\n${marker}`);
+
+    await expect(window.getByTestId('editor-tab-dirty-indicator-rtl/core/reg_file.v')).toBeVisible();
+
+    await window.keyboard.press('Control+S');
+
+    await expect(window.getByTestId('editor-tab-dirty-indicator-rtl/core/reg_file.v')).toHaveCount(0);
+    await expect.poll(() => fs.readFileSync(filePath, 'utf-8'), {
+      timeout: 15000,
+    }).toContain(marker);
+  } finally {
+    await app.close();
+  }
 });
 
 test('menu bar switches to the whiteboard view and renders the React Flow UI chrome', async () => {

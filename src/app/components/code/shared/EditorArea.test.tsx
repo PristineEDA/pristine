@@ -199,6 +199,24 @@ describe('EditorArea', () => {
     expect(screen.queryByTestId('editor-tab-preview-indicator-rtl/core/alu.v')).not.toBeInTheDocument();
   });
 
+  it('renders a VS Code-style dirty indicator and hides the preview marker for modified tabs', () => {
+    render(
+      <EditorArea
+        tabs={[
+          { id: 'rtl/core/reg_file.v', name: 'reg_file.v', modified: true, isPinned: false },
+        ]}
+        activeTabId="rtl/core/reg_file.v"
+        onTabChange={vi.fn()}
+        onTabClose={vi.fn()}
+        editorRef={createRef()}
+      />,
+    );
+
+    expect(screen.getByTestId('editor-tab-dirty-indicator-rtl/core/reg_file.v')).toBeInTheDocument();
+    expect(screen.queryByTestId('editor-tab-preview-indicator-rtl/core/reg_file.v')).not.toBeInTheDocument();
+    expect(screen.getByTestId('editor-tab-close-rtl/core/reg_file.v')).toBeInTheDocument();
+  });
+
   it('pins a preview tab on double-click and before dragging begins', () => {
     const onTabChange = vi.fn();
     const onTabPin = vi.fn();

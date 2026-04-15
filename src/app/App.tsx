@@ -1,5 +1,6 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { MenuBar } from './components/code/shared/MenuBar';
+import { UnsavedChangesDialog } from './components/code/shared/UnsavedChangesDialog';
 import { ActivityBar } from './components/code/shared/ActivityBar';
 import { LeftSidePanel } from './components/code/explorer/LeftSidePanel';
 import { EditorSplitLayout } from './components/code/shared/EditorSplitLayout';
@@ -64,6 +65,7 @@ function AppLayout() {
     cursorLine, cursorCol,
     focusActiveEditor,
     restoreEditorSelection,
+    saveActiveFile,
   } = useWorkspace();
   const [isQuickOpenVisible, setIsQuickOpenVisible] = useState(false);
   const [quickOpenQuery, setQuickOpenQuery] = useState('');
@@ -366,6 +368,7 @@ function AppLayout() {
     closeQuickOpen,
     isQuickOpenVisible,
     openQuickOpen,
+    saveActiveFile,
     setShowBottomPanel,
     setShowLeftPanel,
     showBottomPanel,
@@ -387,6 +390,7 @@ function AppLayout() {
         onToggleBottomPanel={() => setShowBottomPanel(!showBottomPanel)}
         onToggleRightPanel={() => setShowRightPanel(!showRightPanel)}
       />
+      <UnsavedChangesDialog />
 
       {mainContentView === 'code'
         ? (activeView === 'explorer'

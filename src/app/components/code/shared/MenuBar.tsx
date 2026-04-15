@@ -215,7 +215,14 @@ export function MenuBar({
   const [windowFullScreen, setWindowFullScreen] = useState(() => window.electronAPI?.isFullScreen() === true);
   const showWindowMenu = !isMacOS;
   const showMacOSLeadingSpace = isMacOS && !windowFullScreen;
-  const { activeView, mainContentView, setMainContentView } = useWorkspace();
+  const {
+    activeView,
+    mainContentView,
+    redoActiveEditor,
+    saveActiveFile,
+    setMainContentView,
+    undoActiveEditor,
+  } = useWorkspace();
   const {
     fontFamily: editorFontFamily,
     fontSize: editorFontSize,
@@ -339,6 +346,21 @@ export function MenuBar({
       return;
     }
 
+    if (action === 'save-file') {
+      void saveActiveFile();
+      return;
+    }
+
+    if (action === 'undo-editor') {
+      void undoActiveEditor();
+      return;
+    }
+
+    if (action === 'redo-editor') {
+      void redoActiveEditor();
+      return;
+    }
+
     if (action === 'close-app') {
       requestAppClose();
     }
@@ -347,6 +369,21 @@ export function MenuBar({
   const handleNativeMenuCommand = useEffectEvent((payload: MenuCommandEvent) => {
     if (payload.action === 'open-settings') {
       openSettingsDialog();
+      return;
+    }
+
+    if (payload.action === 'save-file') {
+      void saveActiveFile();
+      return;
+    }
+
+    if (payload.action === 'undo-editor') {
+      void undoActiveEditor();
+      return;
+    }
+
+    if (payload.action === 'redo-editor') {
+      void redoActiveEditor();
     }
   });
 

@@ -17,6 +17,7 @@ export const AsyncChannels = {
   WINDOW_SHOW: 'async:window:show',
   WINDOW_HIDE: 'async:window:hide',
   WINDOW_CLOSE: 'async:window:close',
+  WINDOW_RESOLVE_CLOSE_REQUEST: 'async:window:resolve-close-request',
   WINDOW_SET_FLOATING_INFO_VISIBILITY: 'async:window:set-floating-info-visibility',
   FS_READ_FILE: 'async:fs:read-file',
   FS_LIST_FILES: 'async:fs:list-files',
@@ -49,6 +50,7 @@ export const StreamChannels = {
   LSP_DIAGNOSTICS: 'stream:lsp:diagnostics',
   LSP_STATE: 'stream:lsp:state',
   MENU_COMMAND: 'stream:menu:command',
+  WINDOW_CLOSE_REQUEST: 'stream:window:close-request',
   WINDOW_MAXIMIZED_CHANGE: 'stream:window:maximized-change',
   WINDOW_FULLSCREEN_CHANGE: 'stream:window:full-screen-change',
 } as const;

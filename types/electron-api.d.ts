@@ -6,6 +6,7 @@ import type {
   WorkspaceLocation,
 } from './systemverilog-lsp';
 import type { MenuCommandEvent } from '../src/app/menu/applicationMenu';
+import type { WindowCloseDecision, WindowCloseRequest } from '../src/app/window/windowClose';
 
 export interface ElectronAPI {
   platform: string;
@@ -23,11 +24,13 @@ export interface ElectronAPI {
   show: () => Promise<void>;
   hide: () => Promise<void>;
   close: () => Promise<void>;
+  resolveCloseRequest: (requestId: number, decision: WindowCloseDecision) => Promise<boolean>;
   setFloatingInfoWindowVisible: (visible: boolean) => Promise<boolean>;
   isMaximized: () => boolean;
   isFullScreen: () => boolean;
   onMaximizedChange: (callback: (maximized: boolean) => void) => () => void;
   onFullScreenChange: (callback: (fullScreen: boolean) => void) => () => void;
+  onCloseRequested: (callback: (request: WindowCloseRequest) => void) => () => void;
 
   // File system (project-dir scoped)
   fs: {

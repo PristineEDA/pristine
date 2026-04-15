@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 import { SyncChannels, AsyncChannels, StreamChannels } from './ipc/channels.js';
 import type { LspCompletionResponse, LspDiagnosticsEvent, LspHover, LspStateEvent, WorkspaceLocation } from '../types/systemverilog-lsp.js';
 import type { MenuCommandEvent } from '../src/app/menu/applicationMenu.js';
+import type { WindowCloseDecision, WindowCloseRequest } from '../src/app/window/windowClose.js';
 
 // ─── Sync Helpers ─────────────────────────────────────────────────────────────
 
@@ -36,6 +37,8 @@ const electronAPI = {
   show: () => ipcRenderer.invoke(AsyncChannels.WINDOW_SHOW),
   hide: () => ipcRenderer.invoke(AsyncChannels.WINDOW_HIDE),
   close: () => ipcRenderer.invoke(AsyncChannels.WINDOW_CLOSE),
+  resolveCloseRequest: (requestId: number, decision: WindowCloseDecision) =>
+    ipcRenderer.invoke(AsyncChannels.WINDOW_RESOLVE_CLOSE_REQUEST, requestId, decision) as Promise<boolean>,
   setFloatingInfoWindowVisible: (visible: boolean) =>
     ipcRenderer.invoke(AsyncChannels.WINDOW_SET_FLOATING_INFO_VISIBILITY, visible),
   isMaximized: (): boolean => syncSend(SyncChannels.WINDOW_IS_MAXIMIZED),
@@ -49,6 +52,11 @@ const electronAPI = {
     const handler = (_event: Electron.IpcRendererEvent, fullScreen: boolean) => callback(fullScreen);
     ipcRenderer.on(StreamChannels.WINDOW_FULLSCREEN_CHANGE, handler);
     return () => { ipcRenderer.removeListener(StreamChannels.WINDOW_FULLSCREEN_CHANGE, handler); };
+  },
+  onCloseRequested: (callback: (request: WindowCloseRequest) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, request: WindowCloseRequest) => callback(request);
+    ipcRenderer.on(StreamChannels.WINDOW_CLOSE_REQUEST, handler);
+    return () => { ipcRenderer.removeListener(StreamChannels.WINDOW_CLOSE_REQUEST, handler); };
   },
 
   // ── File System (async, project-dir scoped) ──
