@@ -1,10 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 const mockHandle = vi.fn();
 const send = vi.fn();
 const mockExecFileSync = vi.fn();
 const originalPlatform = process.platform;
+const originalPwd = process.env.PWD;
 
 vi.mock('electron', () => ({
   ipcMain: { handle: (...args: unknown[]) => mockHandle(...args) },
@@ -89,6 +92,12 @@ describe('terminal IPC handlers', () => {
 
   afterAll(() => {
     setProcessPlatform(originalPlatform);
+    if (originalPwd === undefined) {
+      delete process.env.PWD;
+      return;
+    }
+
+    process.env.PWD = originalPwd;
   });
 
   it('selects PowerShell on Windows', () => {
@@ -117,33 +126,104 @@ describe('terminal IPC handlers', () => {
   it('creates a terminal session and forwards data/exit streams', async () => {
     const fakeTerminal = createFakeTerminal();
     mockSpawn.mockReturnValue(fakeTerminal);
-    const root = path.resolve('sandbox-root');
-    setTerminalProjectRoot(root);
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pristine-terminal-root-'));
+    const sourceDir = path.join(root, 'src');
+    fs.mkdirSync(sourceDir, { recursive: true });
+    const expectedCwd = fs.realpathSync(sourceDir);
+
+    try {
+      setTerminalProjectRoot(root);
+
+      const createHandler = getHandler('async:terminal:create');
+      const result = await createHandler({}, { cwd: 'src', cols: 100, rows: 40 });
+
+      expect(result).toEqual({
+        id: expect.any(String),
+        pid: 2468,
+        shell: expect.any(String),
+      });
+      expect(mockSpawn).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(Array),
+        expect.objectContaining({
+          cols: 100,
+          rows: 40,
+          cwd: expectedCwd,
+          env: expect.objectContaining({
+            PWD: expectedCwd,
+            SHELL: expect.any(String),
+            TERM: 'xterm-256color',
+          }),
+        }),
+      );
+
+      const sessionId = (result as { id: string }).id;
+      fakeTerminal.handlers.data?.('PS> ');
+      fakeTerminal.handlers.exit?.({ exitCode: 0, signal: 0 });
+
+      expect(send).toHaveBeenNthCalledWith(1, 'stream:terminal:data', { id: sessionId, data: 'PS> ' });
+      expect(send).toHaveBeenNthCalledWith(2, 'stream:terminal:exit', { id: sessionId, exitCode: 0, signal: 0 });
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('falls back to a valid local cwd when the configured project root does not exist', async () => {
+    const fakeTerminal = createFakeTerminal();
+    const fallbackCwd = fs.realpathSync(os.homedir());
+    const missingProjectRoot = path.join(fallbackCwd, '__missing_pristine_project_root__');
+
+    mockSpawn.mockReturnValue(fakeTerminal);
+    process.env.PWD = path.join(fallbackCwd, '__missing_pristine_pwd__');
+    setTerminalProjectRoot(missingProjectRoot);
 
     const createHandler = getHandler('async:terminal:create');
-    const result = await createHandler({}, { cwd: 'src', cols: 100, rows: 40 });
+    await createHandler({}, {});
 
-    expect(result).toEqual({
-      id: expect.any(String),
-      pid: 2468,
-      shell: expect.any(String),
-    });
     expect(mockSpawn).toHaveBeenCalledWith(
       expect.any(String),
       expect.any(Array),
       expect.objectContaining({
-        cols: 100,
-        rows: 40,
-        cwd: path.resolve(root, 'src'),
+        cwd: fallbackCwd,
+        env: expect.objectContaining({ PWD: fallbackCwd }),
       }),
     );
+  });
 
-    const sessionId = (result as { id: string }).id;
-    fakeTerminal.handlers.data?.('PS> ');
-    fakeTerminal.handlers.exit?.({ exitCode: 0, signal: 0 });
+  it('repairs the macOS node-pty spawn-helper execute bit before spawning', async () => {
+    setProcessPlatform('darwin');
 
-    expect(send).toHaveBeenNthCalledWith(1, 'stream:terminal:data', { id: sessionId, data: 'PS> ' });
-    expect(send).toHaveBeenNthCalledWith(2, 'stream:terminal:exit', { id: sessionId, exitCode: 0, signal: 0 });
+    const fakeTerminal = createFakeTerminal();
+    const originalStatSync = fs.statSync;
+    const chmodSyncSpy = vi.spyOn(fs, 'chmodSync').mockImplementation(() => undefined);
+    const statSyncSpy = vi.spyOn(fs, 'statSync').mockImplementation(((targetPath: fs.PathLike) => {
+      const normalizedPath = String(targetPath).replace(/\\/g, '/');
+
+      if (normalizedPath.includes('/node-pty/prebuilds/darwin-') && normalizedPath.endsWith('/spawn-helper')) {
+        return {
+          mode: 0o644,
+          isDirectory: () => false,
+        } as fs.Stats;
+      }
+
+      return originalStatSync(targetPath);
+    }) as typeof fs.statSync);
+
+    try {
+      mockSpawn.mockReturnValue(fakeTerminal);
+
+      const createHandler = getHandler('async:terminal:create');
+      await createHandler({}, {});
+
+      expect(chmodSyncSpy).toHaveBeenCalledWith(
+        expect.stringMatching(/node-pty[\\/]prebuilds[\\/]darwin-(arm64|x64)[\\/]spawn-helper$/),
+        0o755,
+      );
+      expect(mockSpawn).toHaveBeenCalledTimes(1);
+    } finally {
+      chmodSyncSpy.mockRestore();
+      statSyncSpy.mockRestore();
+    }
   });
 
   it('routes write, resize, and kill to the matching session', async () => {

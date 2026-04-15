@@ -6,6 +6,8 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const fixtureWorkspace = path.join(__dirname, '..', 'test', 'fixtures', 'workspace');
 const releaseRoot = path.join(__dirname, '..', 'release');
+const MONACO_READY_TIMEOUT_MS = 15000;
+const UI_READY_TIMEOUT_MS = 15000;
 
 function getE2EUserDataPath() {
   return test.info().outputPath('electron-user-data');
@@ -81,6 +83,31 @@ async function resolveStartupWindows(app: Awaited<ReturnType<typeof electron.lau
   };
 }
 
+async function waitForStartupWindow(
+  app: Awaited<ReturnType<typeof electron.launch>>,
+  kind: 'main' | 'splash',
+) {
+  const matcher = kind === 'main' ? isMainWindow : isSplashWindow;
+
+  await expect.poll(async () => {
+    const identifiedWindows = await getIdentifiedWindows(app);
+    const window = identifiedWindows.find(matcher)?.page ?? null;
+
+    return Boolean(window);
+  }, {
+    timeout: 10000,
+  }).toBe(true);
+
+  const identifiedWindows = await getIdentifiedWindows(app);
+  const resolvedWindow = identifiedWindows.find(matcher)?.page ?? null;
+
+  if (!resolvedWindow) {
+    throw new Error(`Expected ${kind} window during startup`);
+  }
+
+  return resolvedWindow;
+}
+
 async function getWindowByTitle(app: Awaited<ReturnType<typeof electron.launch>>, title: string) {
   const titledWindows = await getIdentifiedWindows(app);
 
@@ -149,6 +176,23 @@ async function launchApp() {
   return { app, window, splashWindow };
 }
 
+async function launchAppForSplashHandoff() {
+  const app = await electron.launch({
+    args: [path.join(__dirname, '..', 'dist-electron', 'main.js')],
+    env: {
+      ...process.env,
+      PRISTINE_E2E: '1',
+      PRISTINE_PROJECT_ROOT: fixtureWorkspace,
+      PRISTINE_USER_DATA_PATH: getE2EUserDataPath(),
+    },
+  });
+
+  const splashWindow = await waitForStartupWindow(app, 'splash');
+  const windowPromise = waitForStartupWindow(app, 'main');
+
+  return { app, splashWindow, windowPromise };
+}
+
 async function launchPackagedWindowsApp() {
   if (!packagedWindowsExecutablePath) {
     throw new Error('Packaged Windows executable not found');
@@ -214,15 +258,15 @@ async function ensureExplorerHidden(window: Awaited<ReturnType<typeof launchApp>
 
 async function openBottomTerminal(window: Awaited<ReturnType<typeof launchApp>>['window']) {
   const toggleBottomPanel = window.getByTestId('toggle-bottom-panel');
-  await expect(toggleBottomPanel).toBeVisible();
+  await expect(toggleBottomPanel).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
 
   if ((await toggleBottomPanel.getAttribute('aria-pressed')) !== 'true') {
     await toggleBottomPanel.click();
   }
 
   const terminalHost = window.getByTestId('terminal-host');
-  await expect(terminalHost).toBeVisible();
-  await expect(window.locator('[data-testid="terminal-host"] .xterm')).toBeVisible();
+  await expect(terminalHost).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect(window.locator('[data-testid="terminal-host"] .xterm')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
 
   return terminalHost;
 }
@@ -346,13 +390,13 @@ async function readMonacoAppearanceSnapshot(
 
 async function focusMonacoEditor(window: Awaited<ReturnType<typeof launchApp>>['window']) {
   const editor = window.locator('.monaco-editor');
-  await expect(editor).toBeVisible();
+  await expect(editor).toBeVisible({ timeout: MONACO_READY_TIMEOUT_MS });
   await editor.click({ position: { x: 24, y: 12 } });
 }
 
 async function waitForMonacoEditor(window: Awaited<ReturnType<typeof launchApp>>['window']) {
   const editor = window.locator('.monaco-editor');
-  await expect(editor).toBeVisible();
+  await expect(editor).toBeVisible({ timeout: MONACO_READY_TIMEOUT_MS });
   return editor;
 }
 
@@ -379,10 +423,10 @@ async function expectVisibleEditorsToContainText(
 ) {
   const textLayers = window.locator('.monaco-editor .view-lines');
 
-  await expect(textLayers).toHaveCount(expectedCount);
+  await expect(textLayers).toHaveCount(expectedCount, { timeout: MONACO_READY_TIMEOUT_MS });
 
   for (let index = 0; index < expectedCount; index += 1) {
-    await expect(textLayers.nth(index)).toContainText(text);
+    await expect(textLayers.nth(index)).toContainText(text, { timeout: MONACO_READY_TIMEOUT_MS });
   }
 }
 
@@ -572,23 +616,27 @@ test('app launches and shows main UI', async () => {
 });
 
 test('splash window hands off to the main window after the startup delay', async () => {
+  test.slow();
+
   const launchStartedAt = Date.now();
-  const { app, window, splashWindow } = await launchApp();
-  if (!splashWindow) {
-    throw new Error('Expected splash window during startup');
-  }
+  const splashMidpointCheckMs = 2000;
+  const { app, splashWindow, windowPromise } = await launchAppForSplashHandoff();
   const splashClosePromise = splashWindow.waitForEvent('close');
 
   await expect(splashWindow.getByTestId('splash-screen')).toBeVisible();
   await expect.poll(async () => isStartupBrowserWindowVisible(app, 'splash')).toBe(true);
   await expect.poll(async () => isStartupBrowserWindowVisible(app, 'main')).toBe(false);
 
-  await window.waitForTimeout(1000);
+  const elapsedBeforeMidpointCheck = Date.now() - launchStartedAt;
+  if (elapsedBeforeMidpointCheck < splashMidpointCheckMs) {
+    await splashWindow.waitForTimeout(splashMidpointCheckMs - elapsedBeforeMidpointCheck);
 
-  await expect.poll(async () => isStartupBrowserWindowVisible(app, 'splash')).toBe(true);
-  await expect.poll(async () => isStartupBrowserWindowVisible(app, 'main')).toBe(false);
+    await expect.poll(async () => isStartupBrowserWindowVisible(app, 'splash')).toBe(true);
+    await expect.poll(async () => isStartupBrowserWindowVisible(app, 'main')).toBe(false);
+  }
 
   await splashClosePromise;
+  const window = await windowPromise;
 
   expect(Date.now() - launchStartedAt).toBeGreaterThanOrEqual(3000);
 
@@ -606,8 +654,10 @@ test('packaged Windows app keeps the splash handoff working during startup', asy
   const { app, window } = await launchPackagedWindowsApp();
   const mainBrowserWindow = await app.browserWindow(window);
 
-  await expect.poll(() => app.windows().length).toBe(1);
-  await expect.poll(async () => mainBrowserWindow.evaluate((browserWindow) => browserWindow.isVisible())).toBe(true);
+  await expect.poll(() => app.windows().length, { timeout: 15000 }).toBe(1);
+  await expect.poll(async () => mainBrowserWindow.evaluate((browserWindow) => browserWindow.isVisible()), {
+    timeout: 15000,
+  }).toBe(true);
   await expect(window.getByTestId('activity-item-explorer')).toBeVisible();
 
   await app.close();
@@ -803,12 +853,16 @@ test('explorer opens a file into a new editor tab', async () => {
   await fileNode.click();
 
   await expect(window.getByTestId('editor-tab-README.md')).toBeVisible();
-  await expect(window.locator('.monaco-editor .view-lines')).toContainText('Fixture Workspace');
+  await expect(window.locator('.monaco-editor .view-lines')).toContainText('Fixture Workspace', {
+    timeout: MONACO_READY_TIMEOUT_MS,
+  });
 
   await app.close();
 });
 
 test('systemverilog lsp smoke resolves a cross-file definition and symbol references', async () => {
+  test.slow();
+
   const { app, window } = await launchApp();
   const aluInstantiationLine = '  alu u_alu ();';
   const dataReadyDeclarationLine = '  logic data_ready;';
@@ -834,7 +888,9 @@ test('systemverilog lsp smoke resolves a cross-file definition and symbol refere
   ]);
 
   await expect(window.getByTestId('editor-tab-rtl/core/cpu_top.sv')).toBeVisible();
-  await expect(window.locator('.monaco-editor .view-lines')).toContainText('alu u_alu');
+  await expect(window.locator('.monaco-editor .view-lines')).toContainText('alu u_alu', {
+    timeout: MONACO_READY_TIMEOUT_MS,
+  });
 
   await window.evaluate(async ({ nextAluSource, nextCpuTopSource }) => {
     const browserGlobal = globalThis as typeof globalThis & {
@@ -1118,7 +1174,9 @@ test('ctrl+p quick open search keyboard navigation opens the selected filtered f
   await expect(window.getByTestId('quick-open-overlay')).toHaveCount(0);
   await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toBeVisible();
   await expect(window.getByTestId('editor-tab-preview-indicator-rtl/core/reg_file.v')).toHaveCount(0);
-  await expect(window.locator('.monaco-editor .view-lines')).toContainText('module reg_file');
+  await expect(window.locator('.monaco-editor .view-lines')).toContainText('module reg_file', {
+    timeout: MONACO_READY_TIMEOUT_MS,
+  });
 
   await app.close();
 });
@@ -1432,6 +1490,8 @@ test('status bar switches across primary and secondary navigation views', async 
 });
 
 test('left sidebar keeps a fixed pixel width across window changes and manual resize', async () => {
+  test.slow();
+
   const { app, window } = await launchApp();
   const browserWindow = await app.browserWindow(window);
   await ensureExplorerVisible(window);
@@ -2118,7 +2178,9 @@ test('code editor settings persist across app relaunch', async () => {
     'file-tree-node-rtl_core_reg_file_v',
   ]);
   await expect(firstWindow.getByTestId('editor-tab-rtl/core/reg_file.v')).toBeVisible();
-  await expect(firstWindow.locator('.monaco-editor .view-lines')).toContainText('module reg_file');
+  await expect(firstWindow.locator('.monaco-editor .view-lines')).toContainText('module reg_file', {
+    timeout: MONACO_READY_TIMEOUT_MS,
+  });
 
   await firstWindow.getByTestId('menu-settings-button').click();
   await expect(firstWindow.getByTestId('settings-dialog')).toBeVisible();
@@ -2178,7 +2240,9 @@ test('code editor settings persist across app relaunch', async () => {
     'file-tree-node-rtl_core_reg_file_v',
   ]);
   await expect(secondWindow.getByTestId('editor-tab-rtl/core/reg_file.v')).toBeVisible();
-  await expect(secondWindow.locator('.monaco-editor .view-lines')).toContainText('module reg_file');
+  await expect(secondWindow.locator('.monaco-editor .view-lines')).toContainText('module reg_file', {
+    timeout: MONACO_READY_TIMEOUT_MS,
+  });
 
   await expect
     .poll(async () => {

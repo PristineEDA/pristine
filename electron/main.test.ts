@@ -148,9 +148,11 @@ const mocks = vi.hoisted(() => {
     mockSetPath: vi.fn((name: string, value: string) => {
       appPaths.set(name, value);
     }),
+    mockSetName: vi.fn(),
     mockGetName: vi.fn(() => 'Pristine'),
     mockQuit: vi.fn(),
     mockBuildFromTemplate: vi.fn((template: unknown[]) => ({ template })),
+    mockSetApplicationMenu: vi.fn(),
     mockCreateFromDataURL: vi.fn(() => ({ kind: 'native-image' })),
     mockDisposeLspSession: vi.fn(),
     mockDisposeAllTerminalSessions: vi.fn(),
@@ -173,6 +175,7 @@ vi.mock('electron', () => ({
     getName: mocks.mockGetName,
     getPath: mocks.mockGetPath,
     setPath: mocks.mockSetPath,
+    setName: mocks.mockSetName,
     whenReady: mocks.mockWhenReady,
     on: mocks.mockAppOn,
     quit: mocks.mockQuit,
@@ -180,6 +183,7 @@ vi.mock('electron', () => ({
   BrowserWindow: mocks.BrowserWindowMock,
   Menu: {
     buildFromTemplate: mocks.mockBuildFromTemplate,
+    setApplicationMenu: mocks.mockSetApplicationMenu,
   },
   Tray: mocks.TrayMock,
   nativeImage: {
@@ -242,8 +246,10 @@ async function importMain(options?: {
   mocks.mockGetName.mockClear();
   mocks.mockGetPath.mockClear();
   mocks.mockSetPath.mockClear();
+  mocks.mockSetName.mockClear();
   mocks.mockQuit.mockClear();
   mocks.mockBuildFromTemplate.mockClear();
+  mocks.mockSetApplicationMenu.mockClear();
   mocks.mockCreateFromDataURL.mockClear();
   mocks.mockDisposeLspSession.mockClear();
   mocks.mockDisposeAllTerminalSessions.mockClear();
@@ -323,6 +329,7 @@ describe('electron main entry', () => {
 
     await importMain({ userDataPath });
 
+    expect(mocks.mockSetName).toHaveBeenCalledWith('Pristine');
     expect(mocks.mockMkdirSync).toHaveBeenCalledWith(
       path.join(userDataPath, 'session-data'),
       { recursive: true },
@@ -398,6 +405,7 @@ describe('electron main entry', () => {
     await Promise.resolve();
     expect(mainWindow.show).toHaveBeenCalledTimes(1);
     expect(splashWindow.close).toHaveBeenCalledTimes(1);
+    expect(mocks.mockSetApplicationMenu).not.toHaveBeenCalled();
 
     mainWindow.emit('closed');
     expect(getMainWindow?.()).toBeNull();
@@ -416,6 +424,9 @@ describe('electron main entry', () => {
 
     const splashWindow = browserWindowInstances[0];
     const mainWindow = browserWindowInstances[1];
+    const applicationMenu = mocks.mockSetApplicationMenu.mock.calls[0]?.[0] as {
+      template: Array<{ label?: string }>;
+    };
 
     expect(mainWindow.options).toMatchObject({
       frame: true,
@@ -423,9 +434,69 @@ describe('electron main entry', () => {
       titleBarStyle: 'hiddenInset',
       trafficLightPosition: { x: 12, y: 10 },
     });
+    expect(mocks.mockSetApplicationMenu).toHaveBeenCalledTimes(1);
+    expect(applicationMenu.template.map((item) => item.label)).toEqual(['Pristine', 'File', 'Edit', 'Help']);
     expect(mainWindow.loadFile).toHaveBeenCalledWith(expect.stringMatching(/dist[\\/]index\.html$/));
     expect(mainWindow.loadURL).not.toHaveBeenCalled();
     expect(splashWindow.loadFile).toHaveBeenCalledWith(expect.stringMatching(/dist[\\/]splash\.html$/));
+  });
+
+  it('installs a dedicated macOS application menu labeled Pristine with app commands', async () => {
+    await importMain({ platform: 'darwin' });
+
+    const applicationMenu = mocks.mockSetApplicationMenu.mock.calls[0]?.[0] as {
+      template: Array<{
+        label?: string;
+        submenu?: Array<{ label?: string; click?: () => void }>;
+      }>;
+    };
+    const appMenu = applicationMenu.template[0];
+
+    expect(appMenu.label).toBe('Pristine');
+    expect(appMenu.submenu?.map((item) => item.label).filter(Boolean)).toEqual([
+      'About Pristine',
+      'Hide Pristine',
+      'Hide Others',
+      'Show All',
+      'Quit Pristine',
+    ]);
+  });
+
+  it('quits the app from the dedicated macOS Pristine menu item', async () => {
+    await importMain({ platform: 'darwin' });
+
+    const applicationMenu = mocks.mockSetApplicationMenu.mock.calls[0]?.[0] as {
+      template: Array<{
+        label?: string;
+        submenu?: Array<{ label?: string; click?: () => void }>;
+      }>;
+    };
+    const appMenu = applicationMenu.template[0];
+    const quitItem = appMenu.submenu?.find((item) => item.label === 'Quit Pristine');
+
+    quitItem?.click?.();
+
+    expect(mocks.mockQuit).toHaveBeenCalledTimes(1);
+  });
+
+  it('routes the macOS Settings menu item back into the renderer settings dialog flow', async () => {
+    const { browserWindowInstances } = await importMain({ platform: 'darwin' });
+
+    const mainWindow = browserWindowInstances[1];
+    const applicationMenu = mocks.mockSetApplicationMenu.mock.calls[0]?.[0] as {
+      template: Array<{
+        label?: string;
+        submenu?: Array<{ label?: string; click?: () => void }>;
+      }>;
+    };
+    const fileMenu = applicationMenu.template.find((item) => item.label === 'File');
+    const settingsItem = fileMenu?.submenu?.find((item) => item.label === 'Setting...');
+
+    settingsItem?.click?.();
+
+    expect(mainWindow.show).toHaveBeenCalledTimes(1);
+    expect(mainWindow.focus).toHaveBeenCalledTimes(1);
+    expect(mainWindow.webContents.send).toHaveBeenCalledWith('stream:menu:command', { action: 'open-settings' });
   });
 
   it('creates the detached floating info window when enabled in config', async () => {

@@ -5,6 +5,7 @@ import type {
   LspStateEvent,
   WorkspaceLocation,
 } from './systemverilog-lsp';
+import type { MenuCommandEvent } from '../src/app/menu/applicationMenu';
 
 export interface ElectronAPI {
   platform: string;
@@ -24,7 +25,9 @@ export interface ElectronAPI {
   close: () => Promise<void>;
   setFloatingInfoWindowVisible: (visible: boolean) => Promise<boolean>;
   isMaximized: () => boolean;
+  isFullScreen: () => boolean;
   onMaximizedChange: (callback: (maximized: boolean) => void) => () => void;
+  onFullScreenChange: (callback: (fullScreen: boolean) => void) => () => void;
 
   // File system (project-dir scoped)
   fs: {
@@ -92,6 +95,10 @@ export interface ElectronAPI {
     ) => Promise<WorkspaceLocation[]>;
     onDiagnostics: (callback: (payload: LspDiagnosticsEvent) => void) => () => void;
     onState: (callback: (payload: LspStateEvent) => void) => () => void;
+  };
+
+  menu: {
+    onCommand: (callback: (payload: MenuCommandEvent) => void) => () => void;
   };
 
   // Config

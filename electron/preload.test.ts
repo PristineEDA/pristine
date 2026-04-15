@@ -6,6 +6,9 @@ const { mockExposeInMainWorld, mockSendSync, mockInvoke, mockOn, mockRemoveListe
     if (channel === 'sync:window:is-maximized') {
       return true;
     }
+    if (channel === 'sync:window:is-full-screen') {
+      return false;
+    }
     if (channel === 'sync:config:get') {
       return args[0] === 'theme' ? 'dracula' : null;
     }
@@ -50,6 +53,7 @@ describe('preload bridge', () => {
     expect(api.arch).toBe(process.arch);
     expect(api.versions.electron).toBe(process.versions.electron);
     expect(api.isMaximized()).toBe(true);
+    expect(api.isFullScreen()).toBe(false);
     expect(api.config.get('theme')).toBe('dracula');
   });
 
@@ -58,6 +62,7 @@ describe('preload bridge', () => {
 
     const [, api] = mockExposeInMainWorld.mock.calls[0];
     const onMaximizedChange = vi.fn();
+    const onFullScreenChange = vi.fn();
     const onStdout = vi.fn();
     const onStderr = vi.fn();
     const onShellExit = vi.fn();
@@ -65,6 +70,7 @@ describe('preload bridge', () => {
     const onTerminalExit = vi.fn();
     const onLspDiagnostics = vi.fn();
     const onLspState = vi.fn();
+    const onMenuCommand = vi.fn();
 
     api.minimize();
     api.maximize();
@@ -94,6 +100,7 @@ describe('preload bridge', () => {
     api.config.set('theme', 'dracula');
 
     const dispose = api.onMaximizedChange(onMaximizedChange);
+  const disposeFullScreen = api.onFullScreenChange(onFullScreenChange);
     const disposeStdout = api.shell.onStdout(onStdout);
     const disposeStderr = api.shell.onStderr(onStderr);
     const disposeShellExit = api.shell.onExit(onShellExit);
@@ -101,6 +108,7 @@ describe('preload bridge', () => {
     const disposeTerminalExit = api.terminal.onExit(onTerminalExit);
     const disposeLspDiagnostics = api.lsp.onDiagnostics(onLspDiagnostics);
     const disposeLspState = api.lsp.onState(onLspState);
+    const disposeMenuCommand = api.menu.onCommand(onMenuCommand);
 
     expect(mockInvoke).toHaveBeenCalledWith('async:window:minimize');
     expect(mockInvoke).toHaveBeenCalledWith('async:window:maximize');
@@ -129,6 +137,7 @@ describe('preload bridge', () => {
     expect(mockInvoke).toHaveBeenCalledWith('async:lsp:references', 'rtl/core/cpu_top.sv', 4, 6, false);
     expect(mockInvoke).toHaveBeenCalledWith('async:config:set', 'theme', 'dracula');
     expect(mockOn).toHaveBeenCalledWith('stream:window:maximized-change', expect.any(Function));
+    expect(mockOn).toHaveBeenCalledWith('stream:window:full-screen-change', expect.any(Function));
     expect(mockOn).toHaveBeenCalledWith('stream:shell:stdout', expect.any(Function));
     expect(mockOn).toHaveBeenCalledWith('stream:shell:stderr', expect.any(Function));
     expect(mockOn).toHaveBeenCalledWith('stream:shell:exit', expect.any(Function));
@@ -136,10 +145,15 @@ describe('preload bridge', () => {
     expect(mockOn).toHaveBeenCalledWith('stream:terminal:exit', expect.any(Function));
     expect(mockOn).toHaveBeenCalledWith('stream:lsp:diagnostics', expect.any(Function));
     expect(mockOn).toHaveBeenCalledWith('stream:lsp:state', expect.any(Function));
+    expect(mockOn).toHaveBeenCalledWith('stream:menu:command', expect.any(Function));
 
     const handler = mockOn.mock.calls.find((call) => call[0] === 'stream:window:maximized-change')?.[1];
     handler({}, true);
     expect(onMaximizedChange).toHaveBeenCalledWith(true);
+
+    const fullScreenHandler = mockOn.mock.calls.find((call) => call[0] === 'stream:window:full-screen-change')?.[1];
+    fullScreenHandler({}, true);
+    expect(onFullScreenChange).toHaveBeenCalledWith(true);
 
     const stdoutHandler = mockOn.mock.calls.find((call) => call[0] === 'stream:shell:stdout')?.[1];
     stdoutHandler({}, { id: 'shell-1', data: 'ok' });
@@ -169,7 +183,12 @@ describe('preload bridge', () => {
     lspStateHandler({}, { status: 'ready' });
     expect(onLspState).toHaveBeenCalledWith({ status: 'ready' });
 
+    const menuCommandHandler = mockOn.mock.calls.find((call) => call[0] === 'stream:menu:command')?.[1];
+    menuCommandHandler({}, { action: 'open-settings' });
+    expect(onMenuCommand).toHaveBeenCalledWith({ action: 'open-settings' });
+
     dispose();
+    disposeFullScreen();
     disposeStdout();
     disposeStderr();
     disposeShellExit();
@@ -177,7 +196,9 @@ describe('preload bridge', () => {
     disposeTerminalExit();
     disposeLspDiagnostics();
     disposeLspState();
+    disposeMenuCommand();
     expect(mockRemoveListener).toHaveBeenCalledWith('stream:window:maximized-change', handler);
+    expect(mockRemoveListener).toHaveBeenCalledWith('stream:window:full-screen-change', fullScreenHandler);
     expect(mockRemoveListener).toHaveBeenCalledWith('stream:shell:stdout', stdoutHandler);
     expect(mockRemoveListener).toHaveBeenCalledWith('stream:shell:stderr', stderrHandler);
     expect(mockRemoveListener).toHaveBeenCalledWith('stream:shell:exit', shellExitHandler);
@@ -185,5 +206,6 @@ describe('preload bridge', () => {
     expect(mockRemoveListener).toHaveBeenCalledWith('stream:terminal:exit', terminalExitHandler);
     expect(mockRemoveListener).toHaveBeenCalledWith('stream:lsp:diagnostics', diagnosticsHandler);
     expect(mockRemoveListener).toHaveBeenCalledWith('stream:lsp:state', lspStateHandler);
+    expect(mockRemoveListener).toHaveBeenCalledWith('stream:menu:command', menuCommandHandler);
   });
 });

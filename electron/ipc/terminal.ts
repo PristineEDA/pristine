@@ -1,5 +1,8 @@
 import { ipcMain, BrowserWindow } from 'electron';
 import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
+import { createRequire } from 'node:module';
+import os from 'node:os';
 import * as path from 'node:path';
 import * as pty from 'node-pty';
 import { AsyncChannels, StreamChannels } from './channels.js';
@@ -12,10 +15,16 @@ import {
 
 const DEFAULT_COLS = 120;
 const DEFAULT_ROWS = 32;
+const EXECUTABLE_PERMISSION_BITS = 0o111;
+const FILE_PERMISSION_BITS_MASK = 0o777;
+const DIRECTORY_ACCESS_MODE = fs.constants.R_OK | fs.constants.X_OK;
 
 const sessions = new Map<string, pty.IPty>();
 let nextId = 1;
 let projectRoot: string | null = null;
+let macOSSpawnHelperPermissionsEnsured = false;
+
+const require = createRequire(import.meta.url);
 
 function hasMissingProcessError(error: unknown): boolean {
   if (error && typeof error === 'object' && 'code' in error) {
@@ -109,20 +118,137 @@ export function getTerminalLaunchConfig(
   return { file: shellPath, args: ['-l'] };
 }
 
+function getNodePtyPackageDirectory(): string | null {
+  try {
+    return path.dirname(require.resolve('node-pty/package.json'));
+  } catch {
+    return null;
+  }
+}
+
+function toUnpackedAsarPath(filePath: string): string {
+  return filePath.replace(`${path.sep}app.asar${path.sep}`, `${path.sep}app.asar.unpacked${path.sep}`);
+}
+
+function getMacOSSpawnHelperPathCandidates(
+  platform: NodeJS.Platform = process.platform,
+  arch: string = process.arch,
+): string[] {
+  if (platform !== 'darwin') {
+    return [];
+  }
+
+  const packageDirectory = getNodePtyPackageDirectory();
+  if (!packageDirectory) {
+    return [];
+  }
+
+  return [...new Set([
+    packageDirectory,
+    toUnpackedAsarPath(packageDirectory),
+  ].map((directory) => path.join(directory, 'prebuilds', `darwin-${arch}`, 'spawn-helper')))];
+}
+
+function ensureMacOSSpawnHelperExecutable(platform: NodeJS.Platform = process.platform): void {
+  if (platform !== 'darwin' || macOSSpawnHelperPermissionsEnsured) {
+    return;
+  }
+
+  for (const helperPath of getMacOSSpawnHelperPathCandidates(platform)) {
+    try {
+      const stats = fs.statSync(helperPath);
+      const permissions = stats.mode & FILE_PERMISSION_BITS_MASK;
+
+      if ((permissions & EXECUTABLE_PERMISSION_BITS) !== EXECUTABLE_PERMISSION_BITS) {
+        fs.chmodSync(helperPath, permissions | EXECUTABLE_PERMISSION_BITS);
+      }
+
+      macOSSpawnHelperPermissionsEnsured = true;
+      return;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        continue;
+      }
+
+      throw error;
+    }
+  }
+
+  macOSSpawnHelperPermissionsEnsured = true;
+}
+
+function getAccessibleDirectory(dirPath: string | null | undefined): string | null {
+  if (!dirPath) {
+    return null;
+  }
+
+  try {
+    const resolvedPath = fs.realpathSync(dirPath);
+    const stats = fs.statSync(resolvedPath);
+
+    if (!stats.isDirectory()) {
+      return null;
+    }
+
+    fs.accessSync(resolvedPath, DIRECTORY_ACCESS_MODE);
+    return resolvedPath;
+  } catch {
+    return null;
+  }
+}
+
+function getProcessCwdSafe(): string | null {
+  try {
+    return process.cwd();
+  } catch {
+    return null;
+  }
+}
+
+function getFallbackSessionCwd(): string {
+  const envPwd = process.env['PWD']?.trim();
+  const envHome = process.env['HOME']?.trim();
+  const homeDirectory = os.homedir();
+  const currentWorkingDirectory = getProcessCwdSafe();
+
+  return [homeDirectory, envHome, envPwd, currentWorkingDirectory]
+    .map((candidate) => getAccessibleDirectory(candidate))
+    .find((candidate): candidate is string => candidate !== null)
+    ?? homeDirectory;
+}
+
 function resolveSessionCwd(cwd?: string): string {
+  const candidates: string[] = [];
+
   if (cwd && projectRoot) {
-    return validatePathWithinRoot(projectRoot, cwd);
+    candidates.push(validatePathWithinRoot(projectRoot, cwd), projectRoot);
+  } else if (cwd) {
+    candidates.push(path.resolve(cwd));
+  } else if (projectRoot) {
+    candidates.push(projectRoot);
   }
 
-  if (cwd) {
-    return path.resolve(cwd);
+  return candidates
+    .map((candidate) => getAccessibleDirectory(candidate))
+    .find((candidate): candidate is string => candidate !== null)
+    ?? getFallbackSessionCwd();
+}
+
+function createTerminalEnvironment(resolvedCwd: string, shellPath: string): NodeJS.ProcessEnv {
+  const environment: NodeJS.ProcessEnv = {
+    ...process.env,
+    TERM: 'xterm-256color',
+    PWD: resolvedCwd,
+    SHELL: shellPath,
+  };
+
+  const homeDirectory = getAccessibleDirectory(os.homedir());
+  if (homeDirectory) {
+    environment['HOME'] = homeDirectory;
   }
 
-  if (projectRoot) {
-    return projectRoot;
-  }
-
-  return process.cwd();
+  delete environment['OLDPWD'];
+  return environment;
 }
 
 function normalizeSize(value: number | undefined, fallback: number): number {
@@ -176,16 +302,23 @@ export function registerTerminalHandlers(getMainWindow: () => BrowserWindow | nu
 
     const launch = getTerminalLaunchConfig();
     const id = String(nextId++);
-    const session = pty.spawn(launch.file, launch.args, {
-      name: 'xterm-256color',
-      cols: normalizeSize(cols as number | undefined, DEFAULT_COLS),
-      rows: normalizeSize(rows as number | undefined, DEFAULT_ROWS),
-      cwd: resolveSessionCwd(cwd),
-      env: {
-        ...process.env,
-        TERM: 'xterm-256color',
-      },
-    });
+    const resolvedCwd = resolveSessionCwd(cwd);
+    let session: pty.IPty;
+
+    try {
+      ensureMacOSSpawnHelperExecutable();
+
+      session = pty.spawn(launch.file, launch.args, {
+        name: 'xterm-256color',
+        cols: normalizeSize(cols as number | undefined, DEFAULT_COLS),
+        rows: normalizeSize(rows as number | undefined, DEFAULT_ROWS),
+        cwd: resolvedCwd,
+        env: createTerminalEnvironment(resolvedCwd, launch.file),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to start terminal shell "${launch.file}" in "${resolvedCwd}": ${message}`);
+    }
 
     sessions.set(id, session);
 

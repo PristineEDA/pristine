@@ -10,6 +10,11 @@ export function registerWindowHandlers(
     event.returnValue = win ? win.isMaximized() : false;
   });
 
+  ipcMain.on(SyncChannels.WINDOW_IS_FULLSCREEN, (event) => {
+    const win = getMainWindow();
+    event.returnValue = win ? win.isFullScreen() : false;
+  });
+
   ipcMain.handle(AsyncChannels.WINDOW_MINIMIZE, () => {
     const win = getMainWindow();
     if (!win) return false;
@@ -68,5 +73,11 @@ export function setupWindowStreams(win: BrowserWindow): void {
   });
   win.on('unmaximize', () => {
     win.webContents.send(StreamChannels.WINDOW_MAXIMIZED_CHANGE, false);
+  });
+  win.on('enter-full-screen', () => {
+    win.webContents.send(StreamChannels.WINDOW_FULLSCREEN_CHANGE, true);
+  });
+  win.on('leave-full-screen', () => {
+    win.webContents.send(StreamChannels.WINDOW_FULLSCREEN_CHANGE, false);
   });
 }

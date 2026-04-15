@@ -112,7 +112,9 @@ function createElectronApiMock() {
     close: vi.fn(),
     setFloatingInfoWindowVisible: vi.fn(),
     isMaximized: vi.fn(() => false),
+    isFullScreen: vi.fn(() => false),
     onMaximizedChange: vi.fn(() => vi.fn()),
+    onFullScreenChange: vi.fn(() => vi.fn()),
     fs: {
       readFile: vi.fn().mockResolvedValue(''),
       listFiles: vi.fn().mockResolvedValue([]),
@@ -146,6 +148,9 @@ function createElectronApiMock() {
       references: vi.fn().mockResolvedValue([]),
       onDiagnostics: vi.fn(() => vi.fn()),
       onState: vi.fn(() => vi.fn()),
+    },
+    menu: {
+      onCommand: vi.fn(() => vi.fn()),
     },
     config: {
       get: vi.fn(),

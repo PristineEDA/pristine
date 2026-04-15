@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { SyncChannels, AsyncChannels, StreamChannels } from './ipc/channels.js';
 import type { LspCompletionResponse, LspDiagnosticsEvent, LspHover, LspStateEvent, WorkspaceLocation } from '../types/systemverilog-lsp.js';
+import type { MenuCommandEvent } from '../src/app/menu/applicationMenu.js';
 
 // ─── Sync Helpers ─────────────────────────────────────────────────────────────
 
@@ -38,10 +39,16 @@ const electronAPI = {
   setFloatingInfoWindowVisible: (visible: boolean) =>
     ipcRenderer.invoke(AsyncChannels.WINDOW_SET_FLOATING_INFO_VISIBILITY, visible),
   isMaximized: (): boolean => syncSend(SyncChannels.WINDOW_IS_MAXIMIZED),
+  isFullScreen: (): boolean => syncSend(SyncChannels.WINDOW_IS_FULLSCREEN),
   onMaximizedChange: (callback: (maximized: boolean) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, maximized: boolean) => callback(maximized);
     ipcRenderer.on(StreamChannels.WINDOW_MAXIMIZED_CHANGE, handler);
     return () => { ipcRenderer.removeListener(StreamChannels.WINDOW_MAXIMIZED_CHANGE, handler); };
+  },
+  onFullScreenChange: (callback: (fullScreen: boolean) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, fullScreen: boolean) => callback(fullScreen);
+    ipcRenderer.on(StreamChannels.WINDOW_FULLSCREEN_CHANGE, handler);
+    return () => { ipcRenderer.removeListener(StreamChannels.WINDOW_FULLSCREEN_CHANGE, handler); };
   },
 
   // ── File System (async, project-dir scoped) ──
@@ -170,6 +177,14 @@ const electronAPI = {
       const handler = (_event: Electron.IpcRendererEvent, payload: LspStateEvent) => callback(payload);
       ipcRenderer.on(StreamChannels.LSP_STATE, handler);
       return () => { ipcRenderer.removeListener(StreamChannels.LSP_STATE, handler); };
+    },
+  },
+
+  menu: {
+    onCommand: (callback: (payload: MenuCommandEvent) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, payload: MenuCommandEvent) => callback(payload);
+      ipcRenderer.on(StreamChannels.MENU_COMMAND, handler);
+      return () => { ipcRenderer.removeListener(StreamChannels.MENU_COMMAND, handler); };
     },
   },
 

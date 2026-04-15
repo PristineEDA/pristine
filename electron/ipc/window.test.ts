@@ -38,10 +38,21 @@ describe('window IPC handlers', () => {
 
   it('returns maximized state via sync channel', () => {
     const event = { returnValue: undefined as boolean | undefined };
-    const getMainWindow = () => ({ isMaximized: () => true }) as any;
+    const getMainWindow = () => ({ isMaximized: () => true, isFullScreen: () => false }) as any;
 
     registerWindowHandlers(getMainWindow);
     const listener = getOnListener(SyncChannels.WINDOW_IS_MAXIMIZED);
+    listener(event);
+
+    expect(event.returnValue).toBe(true);
+  });
+
+  it('returns full-screen state via sync channel', () => {
+    const event = { returnValue: undefined as boolean | undefined };
+    const getMainWindow = () => ({ isFullScreen: () => true }) as any;
+
+    registerWindowHandlers(getMainWindow);
+    const listener = getOnListener(SyncChannels.WINDOW_IS_FULLSCREEN);
     listener(event);
 
     expect(event.returnValue).toBe(true);
@@ -62,6 +73,7 @@ describe('window IPC handlers', () => {
       maximize: vi.fn(() => { maximized = true; }),
       unmaximize: vi.fn(() => { maximized = false; }),
       isMaximized: vi.fn(() => maximized),
+      isFullScreen: vi.fn(() => false),
       isMinimized: vi.fn(() => minimized),
       restore: vi.fn(() => { minimized = false; }),
       show: vi.fn(),
@@ -102,7 +114,7 @@ describe('window IPC handlers', () => {
     expect(mockSetFloatingInfoWindowVisible).toHaveBeenCalledWith(true);
   });
 
-  it('emits maximize and unmaximize stream events', () => {
+  it('emits maximize and full-screen stream events separately', () => {
     const events: Record<string, () => void> = {};
     const send = vi.fn();
     const win = {
@@ -115,8 +127,12 @@ describe('window IPC handlers', () => {
     setupWindowStreams(win as any);
     events['maximize']();
     events['unmaximize']();
+    events['enter-full-screen']();
+    events['leave-full-screen']();
 
     expect(send).toHaveBeenNthCalledWith(1, StreamChannels.WINDOW_MAXIMIZED_CHANGE, true);
     expect(send).toHaveBeenNthCalledWith(2, StreamChannels.WINDOW_MAXIMIZED_CHANGE, false);
+    expect(send).toHaveBeenNthCalledWith(3, StreamChannels.WINDOW_FULLSCREEN_CHANGE, true);
+    expect(send).toHaveBeenNthCalledWith(4, StreamChannels.WINDOW_FULLSCREEN_CHANGE, false);
   });
 });
