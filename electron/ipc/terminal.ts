@@ -17,6 +17,7 @@ const DEFAULT_COLS = 120;
 const DEFAULT_ROWS = 32;
 const EXECUTABLE_PERMISSION_BITS = 0o111;
 const FILE_PERMISSION_BITS_MASK = 0o777;
+const DIRECTORY_ACCESS_MODE = fs.constants.R_OK | fs.constants.X_OK;
 
 const sessions = new Map<string, pty.IPty>();
 let nextId = 1;
@@ -176,23 +177,44 @@ function ensureMacOSSpawnHelperExecutable(platform: NodeJS.Platform = process.pl
   macOSSpawnHelperPermissionsEnsured = true;
 }
 
-function isExistingDirectory(dirPath: string | null | undefined): dirPath is string {
+function getAccessibleDirectory(dirPath: string | null | undefined): string | null {
   if (!dirPath) {
-    return false;
+    return null;
   }
 
   try {
-    return fs.statSync(dirPath).isDirectory();
+    const resolvedPath = fs.realpathSync(dirPath);
+    const stats = fs.statSync(resolvedPath);
+
+    if (!stats.isDirectory()) {
+      return null;
+    }
+
+    fs.accessSync(resolvedPath, DIRECTORY_ACCESS_MODE);
+    return resolvedPath;
   } catch {
-    return false;
+    return null;
+  }
+}
+
+function getProcessCwdSafe(): string | null {
+  try {
+    return process.cwd();
+  } catch {
+    return null;
   }
 }
 
 function getFallbackSessionCwd(): string {
   const envPwd = process.env['PWD']?.trim();
+  const envHome = process.env['HOME']?.trim();
   const homeDirectory = os.homedir();
+  const currentWorkingDirectory = getProcessCwdSafe();
 
-  return [envPwd, homeDirectory, process.cwd()].find(isExistingDirectory) ?? process.cwd();
+  return [homeDirectory, envHome, envPwd, currentWorkingDirectory]
+    .map((candidate) => getAccessibleDirectory(candidate))
+    .find((candidate): candidate is string => candidate !== null)
+    ?? homeDirectory;
 }
 
 function resolveSessionCwd(cwd?: string): string {
@@ -206,7 +228,27 @@ function resolveSessionCwd(cwd?: string): string {
     candidates.push(projectRoot);
   }
 
-  return candidates.find(isExistingDirectory) ?? getFallbackSessionCwd();
+  return candidates
+    .map((candidate) => getAccessibleDirectory(candidate))
+    .find((candidate): candidate is string => candidate !== null)
+    ?? getFallbackSessionCwd();
+}
+
+function createTerminalEnvironment(resolvedCwd: string, shellPath: string): NodeJS.ProcessEnv {
+  const environment: NodeJS.ProcessEnv = {
+    ...process.env,
+    TERM: 'xterm-256color',
+    PWD: resolvedCwd,
+    SHELL: shellPath,
+  };
+
+  const homeDirectory = getAccessibleDirectory(os.homedir());
+  if (homeDirectory) {
+    environment['HOME'] = homeDirectory;
+  }
+
+  delete environment['OLDPWD'];
+  return environment;
 }
 
 function normalizeSize(value: number | undefined, fallback: number): number {
@@ -271,10 +313,7 @@ export function registerTerminalHandlers(getMainWindow: () => BrowserWindow | nu
         cols: normalizeSize(cols as number | undefined, DEFAULT_COLS),
         rows: normalizeSize(rows as number | undefined, DEFAULT_ROWS),
         cwd: resolvedCwd,
-        env: {
-          ...process.env,
-          TERM: 'xterm-256color',
-        },
+        env: createTerminalEnvironment(resolvedCwd, launch.file),
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

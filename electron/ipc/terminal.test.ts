@@ -148,6 +148,11 @@ describe('terminal IPC handlers', () => {
           cols: 100,
           rows: 40,
           cwd: sourceDir,
+          env: expect.objectContaining({
+            PWD: sourceDir,
+            SHELL: expect.any(String),
+            TERM: 'xterm-256color',
+          }),
         }),
       );
 
@@ -164,11 +169,11 @@ describe('terminal IPC handlers', () => {
 
   it('falls back to a valid local cwd when the configured project root does not exist', async () => {
     const fakeTerminal = createFakeTerminal();
-    const fallbackCwd = process.cwd();
+    const fallbackCwd = os.homedir();
     const missingProjectRoot = path.join(fallbackCwd, '__missing_pristine_project_root__');
 
     mockSpawn.mockReturnValue(fakeTerminal);
-    process.env.PWD = fallbackCwd;
+    process.env.PWD = path.join(fallbackCwd, '__missing_pristine_pwd__');
     setTerminalProjectRoot(missingProjectRoot);
 
     const createHandler = getHandler('async:terminal:create');
@@ -177,7 +182,10 @@ describe('terminal IPC handlers', () => {
     expect(mockSpawn).toHaveBeenCalledWith(
       expect.any(String),
       expect.any(Array),
-      expect.objectContaining({ cwd: fallbackCwd }),
+      expect.objectContaining({
+        cwd: fallbackCwd,
+        env: expect.objectContaining({ PWD: fallbackCwd }),
+      }),
     );
   });
 
