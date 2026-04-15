@@ -46,6 +46,10 @@ beforeEach(() => {
   vi.mocked(window.electronAPI!.minimize).mockReset();
   vi.mocked(window.electronAPI!.maximize).mockReset();
   vi.mocked(window.electronAPI!.close).mockReset();
+  vi.mocked(window.electronAPI!.isMaximized).mockReset();
+  vi.mocked(window.electronAPI!.isMaximized).mockReturnValue(false);
+  vi.mocked(window.electronAPI!.onMaximizedChange).mockReset();
+  vi.mocked(window.electronAPI!.onMaximizedChange).mockImplementation(() => vi.fn());
   vi.mocked(window.electronAPI!.config.get).mockReset();
   vi.mocked(window.electronAPI!.config.set).mockReset();
   vi.mocked(window.electronAPI!.setFloatingInfoWindowVisible).mockReset();
@@ -134,6 +138,7 @@ describe('MenuBar', () => {
 
     renderMenuBar();
 
+    expect(screen.getByTestId('macos-traffic-light-clearance')).toBeInTheDocument();
     expect(screen.queryByTestId('menu-app-icon')).not.toBeInTheDocument();
     expect(screen.queryByTestId('menu-menubar')).not.toBeInTheDocument();
     expect(screen.queryByText('File')).not.toBeInTheDocument();
@@ -143,6 +148,40 @@ describe('MenuBar', () => {
     expect(screen.getByTestId('toggle-theme')).toBeInTheDocument();
     expect(screen.getByTestId('menu-settings-button')).toBeInTheDocument();
     expect(screen.getByTestId('user-avatar-button')).toBeInTheDocument();
+  });
+
+  it('moves the activity bar trigger to the far left when the macOS window is maximized', () => {
+    let maximizeListener: ((maximized: boolean) => void) | undefined;
+    const dispose = vi.fn();
+
+    window.electronAPI!.platform = 'darwin';
+    vi.mocked(window.electronAPI!.onMaximizedChange).mockImplementation((callback: (maximized: boolean) => void) => {
+      maximizeListener = callback;
+      return dispose;
+    });
+
+    const { unmount } = renderMenuBar();
+    const trigger = screen.getByTestId('toggle-activity-bar');
+
+    expect(screen.getByTestId('macos-traffic-light-clearance')).toBeInTheDocument();
+    expect(trigger).toHaveClass('ml-1');
+
+    act(() => {
+      maximizeListener?.(true);
+    });
+
+    expect(screen.queryByTestId('macos-traffic-light-clearance')).not.toBeInTheDocument();
+    expect(trigger).not.toHaveClass('ml-1');
+
+    act(() => {
+      maximizeListener?.(false);
+    });
+
+    expect(screen.getByTestId('macos-traffic-light-clearance')).toBeInTheDocument();
+    expect(trigger).toHaveClass('ml-1');
+
+    unmount();
+    expect(dispose).toHaveBeenCalledTimes(1);
   });
 
   it('opens settings from native menu commands on macOS', async () => {

@@ -401,6 +401,7 @@ describe('electron main entry', () => {
     await Promise.resolve();
     expect(mainWindow.show).toHaveBeenCalledTimes(1);
     expect(splashWindow.close).toHaveBeenCalledTimes(1);
+    expect(mocks.mockSetApplicationMenu).not.toHaveBeenCalled();
 
     mainWindow.emit('closed');
     expect(getMainWindow?.()).toBeNull();
@@ -430,10 +431,48 @@ describe('electron main entry', () => {
       trafficLightPosition: { x: 12, y: 10 },
     });
     expect(mocks.mockSetApplicationMenu).toHaveBeenCalledTimes(1);
-    expect(applicationMenu.template.map((item) => item.label)).toEqual(['File', 'Edit', 'Help']);
+    expect(applicationMenu.template.map((item) => item.label)).toEqual(['Pristine', 'File', 'Edit', 'Help']);
     expect(mainWindow.loadFile).toHaveBeenCalledWith(expect.stringMatching(/dist[\\/]index\.html$/));
     expect(mainWindow.loadURL).not.toHaveBeenCalled();
     expect(splashWindow.loadFile).toHaveBeenCalledWith(expect.stringMatching(/dist[\\/]splash\.html$/));
+  });
+
+  it('installs a dedicated macOS application menu labeled Pristine with app commands', async () => {
+    await importMain({ platform: 'darwin' });
+
+    const applicationMenu = mocks.mockSetApplicationMenu.mock.calls[0]?.[0] as {
+      template: Array<{
+        label?: string;
+        submenu?: Array<{ label?: string; click?: () => void }>;
+      }>;
+    };
+    const appMenu = applicationMenu.template[0];
+
+    expect(appMenu.label).toBe('Pristine');
+    expect(appMenu.submenu?.map((item) => item.label).filter(Boolean)).toEqual([
+      'About Pristine',
+      'Hide Pristine',
+      'Hide Others',
+      'Show All',
+      'Quit Pristine',
+    ]);
+  });
+
+  it('quits the app from the dedicated macOS Pristine menu item', async () => {
+    await importMain({ platform: 'darwin' });
+
+    const applicationMenu = mocks.mockSetApplicationMenu.mock.calls[0]?.[0] as {
+      template: Array<{
+        label?: string;
+        submenu?: Array<{ label?: string; click?: () => void }>;
+      }>;
+    };
+    const appMenu = applicationMenu.template[0];
+    const quitItem = appMenu.submenu?.find((item) => item.label === 'Quit Pristine');
+
+    quitItem?.click?.();
+
+    expect(mocks.mockQuit).toHaveBeenCalledTimes(1);
   });
 
   it('routes the macOS Settings menu item back into the renderer settings dialog flow', async () => {

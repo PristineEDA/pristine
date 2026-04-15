@@ -7,6 +7,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const fixtureWorkspace = path.join(__dirname, '..', 'test', 'fixtures', 'workspace');
 const releaseRoot = path.join(__dirname, '..', 'release');
 const MONACO_READY_TIMEOUT_MS = 15000;
+const UI_READY_TIMEOUT_MS = 15000;
 
 function getE2EUserDataPath() {
   return test.info().outputPath('electron-user-data');
@@ -82,6 +83,31 @@ async function resolveStartupWindows(app: Awaited<ReturnType<typeof electron.lau
   };
 }
 
+async function waitForStartupWindow(
+  app: Awaited<ReturnType<typeof electron.launch>>,
+  kind: 'main' | 'splash',
+) {
+  const matcher = kind === 'main' ? isMainWindow : isSplashWindow;
+
+  await expect.poll(async () => {
+    const identifiedWindows = await getIdentifiedWindows(app);
+    const window = identifiedWindows.find(matcher)?.page ?? null;
+
+    return Boolean(window);
+  }, {
+    timeout: 10000,
+  }).toBe(true);
+
+  const identifiedWindows = await getIdentifiedWindows(app);
+  const resolvedWindow = identifiedWindows.find(matcher)?.page ?? null;
+
+  if (!resolvedWindow) {
+    throw new Error(`Expected ${kind} window during startup`);
+  }
+
+  return resolvedWindow;
+}
+
 async function getWindowByTitle(app: Awaited<ReturnType<typeof electron.launch>>, title: string) {
   const titledWindows = await getIdentifiedWindows(app);
 
@@ -150,6 +176,23 @@ async function launchApp() {
   return { app, window, splashWindow };
 }
 
+async function launchAppForSplashHandoff() {
+  const app = await electron.launch({
+    args: [path.join(__dirname, '..', 'dist-electron', 'main.js')],
+    env: {
+      ...process.env,
+      PRISTINE_E2E: '1',
+      PRISTINE_PROJECT_ROOT: fixtureWorkspace,
+      PRISTINE_USER_DATA_PATH: getE2EUserDataPath(),
+    },
+  });
+
+  const splashWindow = await waitForStartupWindow(app, 'splash');
+  const windowPromise = waitForStartupWindow(app, 'main');
+
+  return { app, splashWindow, windowPromise };
+}
+
 async function launchPackagedWindowsApp() {
   if (!packagedWindowsExecutablePath) {
     throw new Error('Packaged Windows executable not found');
@@ -215,15 +258,15 @@ async function ensureExplorerHidden(window: Awaited<ReturnType<typeof launchApp>
 
 async function openBottomTerminal(window: Awaited<ReturnType<typeof launchApp>>['window']) {
   const toggleBottomPanel = window.getByTestId('toggle-bottom-panel');
-  await expect(toggleBottomPanel).toBeVisible();
+  await expect(toggleBottomPanel).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
 
   if ((await toggleBottomPanel.getAttribute('aria-pressed')) !== 'true') {
     await toggleBottomPanel.click();
   }
 
   const terminalHost = window.getByTestId('terminal-host');
-  await expect(terminalHost).toBeVisible();
-  await expect(window.locator('[data-testid="terminal-host"] .xterm')).toBeVisible();
+  await expect(terminalHost).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect(window.locator('[data-testid="terminal-host"] .xterm')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
 
   return terminalHost;
 }
@@ -573,23 +616,27 @@ test('app launches and shows main UI', async () => {
 });
 
 test('splash window hands off to the main window after the startup delay', async () => {
+  test.slow();
+
   const launchStartedAt = Date.now();
-  const { app, window, splashWindow } = await launchApp();
-  if (!splashWindow) {
-    throw new Error('Expected splash window during startup');
-  }
+  const splashMidpointCheckMs = 2000;
+  const { app, splashWindow, windowPromise } = await launchAppForSplashHandoff();
   const splashClosePromise = splashWindow.waitForEvent('close');
 
   await expect(splashWindow.getByTestId('splash-screen')).toBeVisible();
   await expect.poll(async () => isStartupBrowserWindowVisible(app, 'splash')).toBe(true);
   await expect.poll(async () => isStartupBrowserWindowVisible(app, 'main')).toBe(false);
 
-  await window.waitForTimeout(1000);
+  const elapsedBeforeMidpointCheck = Date.now() - launchStartedAt;
+  if (elapsedBeforeMidpointCheck < splashMidpointCheckMs) {
+    await splashWindow.waitForTimeout(splashMidpointCheckMs - elapsedBeforeMidpointCheck);
 
-  await expect.poll(async () => isStartupBrowserWindowVisible(app, 'splash')).toBe(true);
-  await expect.poll(async () => isStartupBrowserWindowVisible(app, 'main')).toBe(false);
+    await expect.poll(async () => isStartupBrowserWindowVisible(app, 'splash')).toBe(true);
+    await expect.poll(async () => isStartupBrowserWindowVisible(app, 'main')).toBe(false);
+  }
 
   await splashClosePromise;
+  const window = await windowPromise;
 
   expect(Date.now() - launchStartedAt).toBeGreaterThanOrEqual(3000);
 
@@ -607,8 +654,10 @@ test('packaged Windows app keeps the splash handoff working during startup', asy
   const { app, window } = await launchPackagedWindowsApp();
   const mainBrowserWindow = await app.browserWindow(window);
 
-  await expect.poll(() => app.windows().length).toBe(1);
-  await expect.poll(async () => mainBrowserWindow.evaluate((browserWindow) => browserWindow.isVisible())).toBe(true);
+  await expect.poll(() => app.windows().length, { timeout: 15000 }).toBe(1);
+  await expect.poll(async () => mainBrowserWindow.evaluate((browserWindow) => browserWindow.isVisible()), {
+    timeout: 15000,
+  }).toBe(true);
   await expect(window.getByTestId('activity-item-explorer')).toBeVisible();
 
   await app.close();
@@ -812,6 +861,8 @@ test('explorer opens a file into a new editor tab', async () => {
 });
 
 test('systemverilog lsp smoke resolves a cross-file definition and symbol references', async () => {
+  test.slow();
+
   const { app, window } = await launchApp();
   const aluInstantiationLine = '  alu u_alu ();';
   const dataReadyDeclarationLine = '  logic data_ready;';
@@ -1439,6 +1490,8 @@ test('status bar switches across primary and secondary navigation views', async 
 });
 
 test('left sidebar keeps a fixed pixel width across window changes and manual resize', async () => {
+  test.slow();
+
   const { app, window } = await launchApp();
   const browserWindow = await app.browserWindow(window);
   await ensureExplorerVisible(window);

@@ -1,3 +1,5 @@
+export const APP_DISPLAY_NAME = 'Pristine';
+
 export type AppMenuAction = 'open-settings' | 'close-app';
 
 export type AppMenuItem = {

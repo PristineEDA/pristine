@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  APP_DISPLAY_NAME,
   applicationMenus,
   isAppMenuItem,
   toElectronAccelerator,
@@ -139,26 +140,58 @@ function handleApplicationMenuAction(action: AppMenuAction): void {
 }
 
 function createMacOSApplicationMenu(): Menu {
-  const template: MenuItemConstructorOptions[] = applicationMenus.map((menu) => ({
-    label: menu.label,
-    submenu: menu.items.map((item) => {
-      if (!isAppMenuItem(item)) {
-        return { type: 'separator' };
-      }
-
-      const action = item.action;
-
-      return {
-        label: item.name,
-        accelerator: toElectronAccelerator(item.shortcut),
-        click: action === undefined
-          ? undefined
-          : () => {
-            handleApplicationMenuAction(action);
+  const template: MenuItemConstructorOptions[] = [
+    {
+      label: APP_DISPLAY_NAME,
+      submenu: [
+        {
+          label: `About ${APP_DISPLAY_NAME}`,
+          role: 'about',
+        },
+        { type: 'separator' },
+        {
+          label: `Hide ${APP_DISPLAY_NAME}`,
+          role: 'hide',
+        },
+        {
+          label: 'Hide Others',
+          role: 'hideOthers',
+        },
+        {
+          label: 'Show All',
+          role: 'unhide',
+        },
+        { type: 'separator' },
+        {
+          label: `Quit ${APP_DISPLAY_NAME}`,
+          accelerator: 'Command+Q',
+          click: () => {
+            app.quit();
           },
-      } satisfies MenuItemConstructorOptions;
-    }),
-  }));
+        },
+      ],
+    },
+    ...applicationMenus.map<MenuItemConstructorOptions>((menu) => ({
+      label: menu.label,
+      submenu: menu.items.map<MenuItemConstructorOptions>((item) => {
+        if (!isAppMenuItem(item)) {
+          return { type: 'separator' };
+        }
+
+        const action = item.action;
+
+        return {
+          label: item.name,
+          accelerator: toElectronAccelerator(item.shortcut),
+          click: action === undefined
+            ? undefined
+            : () => {
+              handleApplicationMenuAction(action);
+            },
+        } satisfies MenuItemConstructorOptions;
+      }),
+    })),
+  ];
 
   return Menu.buildFromTemplate(template);
 }

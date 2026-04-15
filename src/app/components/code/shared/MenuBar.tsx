@@ -212,7 +212,9 @@ export function MenuBar({
   onToggleRightPanel,
 }: MenuBarProps) {
   const isMacOS = isMacOSPlatform();
+  const [windowMaximized, setWindowMaximized] = useState(() => window.electronAPI?.isMaximized() === true);
   const showWindowMenu = !isMacOS;
+  const showMacOSLeadingSpace = isMacOS && !windowMaximized;
   const { activeView, mainContentView, setMainContentView } = useWorkspace();
   const {
     fontFamily: editorFontFamily,
@@ -242,7 +244,7 @@ export function MenuBar({
       : 'cursor-not-allowed opacity-40',
   ].join(' ');
   const activityBarTriggerClassName = [
-    'ml-1 w-8 h-full rounded-none border-0 text-muted-foreground',
+    `${showMacOSLeadingSpace || !isMacOS ? 'ml-1 ' : ''}w-8 h-full rounded-none border-0 text-muted-foreground`,
     'data-[state=on]:text-foreground',
     activityBarToggleEnabled
       ? 'hover:cursor-pointer hover:text-foreground hover:bg-accent'
@@ -353,6 +355,22 @@ export function MenuBar({
   const settingsSectionDescriptionClassName = 'text-[12px] text-muted-foreground';
 
   useEffect(() => {
+    if (!isMacOS) {
+      return;
+    }
+
+    setWindowMaximized(window.electronAPI?.isMaximized() === true);
+
+    const dispose = window.electronAPI?.onMaximizedChange((maximized) => {
+      setWindowMaximized(maximized);
+    });
+
+    return () => {
+      dispose?.();
+    };
+  }, [isMacOS]);
+
+  useEffect(() => {
     const dispose = window.electronAPI?.menu.onCommand((payload) => {
       handleNativeMenuCommand(payload);
     });
@@ -388,7 +406,7 @@ export function MenuBar({
           style={{ userSelect: 'none', WebkitAppRegion: 'drag' } as React.CSSProperties}
         >
           {/* macOS traffic light clearance */}
-          {isMacOS && <div className="w-20 shrink-0" />}
+          {showMacOSLeadingSpace && <div data-testid="macos-traffic-light-clearance" className="w-20 shrink-0" />}
 
           {/* App icon / title */}
           {showWindowMenu && (
