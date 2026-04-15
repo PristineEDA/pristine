@@ -177,6 +177,7 @@ function EditorGroupLeaf({
     loadingFiles,
     loadErrors,
     loadFileContent,
+    saveActiveFile,
     updateFileContentInGroup,
     registerEditorRef,
   } = useWorkspace();
@@ -282,6 +283,9 @@ function EditorGroupLeaf({
         loadingFiles={loadingFiles}
         loadErrors={loadErrors}
         onLoadFile={loadFileContent}
+        onSaveShortcut={() => {
+          void saveActiveFile();
+        }}
         onContentChange={(fileId, content) => {
           updateFileContentInGroup(group.id, fileId, content);
         }}

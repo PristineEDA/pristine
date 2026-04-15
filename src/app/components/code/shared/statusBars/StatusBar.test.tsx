@@ -1,5 +1,5 @@
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 import { StatusBar } from './StatusBar';
 
 describe('StatusBar', () => {
@@ -36,5 +36,56 @@ describe('StatusBar', () => {
 
     rerender(<StatusBar activeFileId="build/Makefile" cursorLine={1} cursorCol={1} />);
     expect(screen.getByText('Makefile')).toBeInTheDocument();
+  });
+
+  it('shows unsaved summaries and exposes Save All and review actions', () => {
+    const onOpenUnsavedFiles = vi.fn();
+    const onSaveAll = vi.fn();
+
+    render(
+      <StatusBar
+        activeFileId="rtl/core/alu.v"
+        cursorLine={9}
+        cursorCol={3}
+        dirtyFileCount={2}
+        failedSaveFileCount={1}
+        savingFileCount={0}
+        onOpenUnsavedFiles={onOpenUnsavedFiles}
+        onSaveAll={onSaveAll}
+      />,
+    );
+
+    expect(screen.getByTestId('status-bar-unsaved-summary')).toHaveTextContent('2 Unsaved');
+    expect(screen.getByTestId('status-bar-save-error-summary')).toHaveTextContent('1 Save Failed');
+
+    fireEvent.click(screen.getByTestId('status-bar-unsaved-summary'));
+    fireEvent.click(screen.getByTestId('status-bar-save-error-summary'));
+    fireEvent.click(screen.getByTestId('status-bar-save-all'));
+
+    expect(onOpenUnsavedFiles).toHaveBeenCalledTimes(2);
+    expect(onSaveAll).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows saving progress and disables Save All while files are being saved', () => {
+    const onSaveAll = vi.fn();
+
+    render(
+      <StatusBar
+        activeFileId="rtl/core/alu.v"
+        cursorLine={9}
+        cursorCol={3}
+        dirtyFileCount={2}
+        savingFileCount={1}
+        onSaveAll={onSaveAll}
+      />,
+    );
+
+    expect(screen.getByTestId('status-bar-unsaved-summary')).toHaveTextContent('2 Unsaved');
+    expect(screen.getByTestId('status-bar-saving-summary')).toHaveTextContent('Saving 1');
+    expect(screen.getByTestId('status-bar-save-all')).toBeDisabled();
+
+    fireEvent.click(screen.getByTestId('status-bar-save-all'));
+
+    expect(onSaveAll).not.toHaveBeenCalled();
   });
 });

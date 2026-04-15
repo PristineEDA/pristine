@@ -24,11 +24,11 @@ function WorkspaceHarness() {
 
       <button onClick={() => workspace.setActiveView('simulation')}>set-view</button>
       <button onClick={() => workspace.openFile('rtl/core/reg_file.v', 'reg_file.v')}>open-reg</button>
+      <button onClick={() => workspace.openFile('rtl/core/alu.v', 'alu.v')}>open-alu</button>
       <button onClick={() => workspace.openPreviewFile('rtl/core/reg_file.v', 'reg_file.v')}>preview-reg</button>
       <button onClick={() => workspace.openPreviewFile('rtl/core/alu.v', 'alu.v')}>preview-alu</button>
       <button onClick={() => workspace.pinTab('rtl/core/alu.v')}>pin-alu</button>
       <button onClick={() => workspace.openFile('rtl/core/reg_file.v', 'reg_file.v')}>open-existing</button>
-      <button onClick={() => workspace.openFile('rtl/core/alu.v', 'alu.v')}>open-alu</button>
       <button onClick={() => workspace.splitGroup('group-1')}>split-group-1</button>
       <button onClick={() => workspace.focusGroup('group-1')}>focus-group-1</button>
       <button onClick={() => workspace.focusGroup('group-2')}>focus-group-2</button>
@@ -38,7 +38,10 @@ function WorkspaceHarness() {
       <button onClick={() => workspace.setCursorPos(8, 16)}>cursor</button>
       <button onClick={() => workspace.setShowBottomPanel(false)}>hide-bottom</button>
       <button onClick={() => workspace.updateFileContentInGroup('group-1', 'rtl/core/reg_file.v', 'module reg_file; logic dirty; endmodule')}>edit-reg</button>
+      <button onClick={() => workspace.updateFileContentInGroup('group-1', 'rtl/core/alu.v', 'module alu; logic dirty; endmodule')}>edit-alu</button>
       <button onClick={() => { void workspace.saveActiveFile(); }}>save-active</button>
+      <button onClick={() => { void workspace.saveAllFiles(); }}>save-all</button>
+      <button onClick={() => workspace.openUnsavedChangesDialog()}>open-unsaved-dialog</button>
       <button onClick={() => { void workspace.confirmUnsavedChangesSave(); }}>confirm-save</button>
       <button onClick={() => workspace.discardUnsavedChanges()}>discard-unsaved</button>
       <button onClick={() => workspace.cancelUnsavedChanges()}>cancel-unsaved</button>
@@ -95,6 +98,46 @@ describe('WorkspaceContext', () => {
 
     expect(undoActionRun).toHaveBeenCalledTimes(1);
     expect(redoActionRun).toHaveBeenCalledTimes(1);
+  });
+
+  it('saves all dirty files through the shared workspace command', async () => {
+    render(
+      <WorkspaceProvider>
+        <WorkspaceHarness />
+      </WorkspaceProvider>,
+    );
+
+    fireEvent.click(screen.getByText('open-reg'));
+    fireEvent.click(screen.getByText('edit-reg'));
+    fireEvent.click(screen.getByText('open-alu'));
+    fireEvent.click(screen.getByText('edit-alu'));
+
+    expect(screen.getByTestId('dirty-files')).toHaveTextContent('rtl/core/reg_file.v,rtl/core/alu.v');
+
+    fireEvent.click(screen.getByText('save-all'));
+
+    await waitFor(() => {
+      expect(window.electronAPI?.fs.writeFile).toHaveBeenCalledWith('rtl/core/reg_file.v', 'module reg_file; logic dirty; endmodule');
+      expect(window.electronAPI?.fs.writeFile).toHaveBeenCalledWith('rtl/core/alu.v', 'module alu; logic dirty; endmodule');
+    });
+
+    expect(screen.getByTestId('dirty-files')).toHaveTextContent('');
+  });
+
+  it('opens the unsaved files manager for the current dirty files', async () => {
+    render(
+      <WorkspaceProvider>
+        <WorkspaceHarness />
+      </WorkspaceProvider>,
+    );
+
+    fireEvent.click(screen.getByText('open-reg'));
+    fireEvent.click(screen.getByText('edit-reg'));
+    fireEvent.click(screen.getByText('open-unsaved-dialog'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('unsaved-dialog-files')).toHaveTextContent('rtl/core/reg_file.v');
+    });
   });
 
   it('prompts before closing a dirty file and can discard the changes', async () => {

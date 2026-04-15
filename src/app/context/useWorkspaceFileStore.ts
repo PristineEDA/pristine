@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+export interface SaveFilesResult {
+  savedFileIds: string[];
+  failedFileIds: string[];
+}
+
 export function useWorkspaceFileStore() {
   const [fileContents, setFileContents] = useState<Record<string, string>>({});
   const [savedFileContents, setSavedFileContents] = useState<Record<string, string>>({});
@@ -232,14 +237,24 @@ export function useWorkspaceFileStore() {
     }
   }, []);
 
-  const saveFiles = useCallback(async (fileIds: string[]) => {
+  const saveFiles = useCallback(async (fileIds: string[]): Promise<SaveFilesResult> => {
     const uniqueFileIds = Array.from(new Set(fileIds.filter(Boolean)));
     if (uniqueFileIds.length === 0) {
-      return true;
+      return {
+        savedFileIds: [],
+        failedFileIds: [],
+      };
     }
 
-    const results = await Promise.all(uniqueFileIds.map((fileId) => saveFileContent(fileId)));
-    return results.every(Boolean);
+    const results = await Promise.all(uniqueFileIds.map(async (fileId) => ({
+      fileId,
+      saved: await saveFileContent(fileId),
+    })));
+
+    return {
+      savedFileIds: results.filter((result) => result.saved).map((result) => result.fileId),
+      failedFileIds: results.filter((result) => !result.saved).map((result) => result.fileId),
+    };
   }, [saveFileContent]);
 
   const dirtyFiles = useMemo(() => {

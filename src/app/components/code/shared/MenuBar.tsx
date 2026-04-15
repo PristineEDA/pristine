@@ -220,6 +220,7 @@ export function MenuBar({
     mainContentView,
     redoActiveEditor,
     saveActiveFile,
+    saveAllFiles,
     setMainContentView,
     undoActiveEditor,
   } = useWorkspace();
@@ -351,6 +352,11 @@ export function MenuBar({
       return;
     }
 
+    if (action === 'save-all-files') {
+      void saveAllFiles();
+      return;
+    }
+
     if (action === 'undo-editor') {
       void undoActiveEditor();
       return;
@@ -374,6 +380,11 @@ export function MenuBar({
 
     if (payload.action === 'save-file') {
       void saveActiveFile();
+      return;
+    }
+
+    if (payload.action === 'save-all-files') {
+      void saveAllFiles();
       return;
     }
 

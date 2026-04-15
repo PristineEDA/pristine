@@ -45,6 +45,7 @@ interface MonacoEditorPaneProps {
   editorRef: React.MutableRefObject<any>;
   onActiveModelReady?: (fileId: string) => void;
   onCursorChange?: (line: number, col: number) => void;
+  onSaveShortcut?: () => void;
   onContentChange?: (value: string) => void;
   onEditorMount?: (editor: any) => void;
   onNavigateToLocation?: (fileId: string, line: number, col: number) => void;
@@ -60,6 +61,7 @@ export function MonacoEditorPane({
   editorRef,
   onActiveModelReady,
   onCursorChange,
+  onSaveShortcut,
   onContentChange,
   onEditorMount,
   onNavigateToLocation,
@@ -74,6 +76,7 @@ export function MonacoEditorPane({
   const editorFontFamily = getEditorFontFamilyStack(fontFamily);
   const editorLanguage = getEditorLanguage(activeTabId);
   const onCursorChangeRef = useRef(onCursorChange);
+  const monacoInstanceRef = useRef(monaco);
   const canPropagateCursorChangesRef = useRef(true);
   const hostRef = useRef<HTMLDivElement | null>(null);
   const layoutFrameRef = useRef<number | null>(null);
@@ -109,6 +112,10 @@ export function MonacoEditorPane({
   useEffect(() => {
     onCursorChangeRef.current = onCursorChange;
   }, [onCursorChange]);
+
+  useEffect(() => {
+    monacoInstanceRef.current = monaco;
+  }, [monaco]);
 
   useEffect(() => {
     canPropagateCursorChangesRef.current = false;
@@ -276,9 +283,12 @@ export function MonacoEditorPane({
         value={code}
         theme={theme}
         beforeMount={(nextMonaco) => {
+          monacoInstanceRef.current = nextMonaco;
           registerEditorThemes(nextMonaco);
         }}
         onMount={(editor) => {
+          const activeMonaco = monacoInstanceRef.current;
+
           editorRef.current = editor;
           setMountedEditor(editor);
           if (activeTabId) {
@@ -286,6 +296,16 @@ export function MonacoEditorPane({
           }
           queueEditorLayoutRef.current();
           onEditorMount?.(editor);
+          if (
+            onSaveShortcut
+            && typeof editor.addCommand === 'function'
+            && typeof activeMonaco?.KeyMod?.CtrlCmd === 'number'
+            && typeof activeMonaco?.KeyCode?.KeyS === 'number'
+          ) {
+            editor.addCommand(activeMonaco.KeyMod.CtrlCmd | activeMonaco.KeyCode.KeyS, () => {
+              onSaveShortcut();
+            });
+          }
           editor.onDidFocusEditorText?.(() => {
             canPropagateCursorChangesRef.current = true;
           });

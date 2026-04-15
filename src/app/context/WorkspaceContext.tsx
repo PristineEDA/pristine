@@ -28,15 +28,18 @@ import {
   type CursorRestoreRequest,
   type EditorSelectionSnapshot,
 } from './useWorkspaceEditorState';
-import { useWorkspaceFileStore } from './useWorkspaceFileStore';
+import { useWorkspaceFileStore, type SaveFilesResult } from './useWorkspaceFileStore';
 import type { WindowCloseRequest } from '../window/windowClose';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 export type Tab = EditorTab;
 
+type UnsavedChangesDialogKind = 'close-app' | 'close-file' | 'review';
+
 export interface UnsavedChangesDialogState {
   fileIds: string[];
+  kind: UnsavedChangesDialogKind;
   title: string;
   description: string;
 }
@@ -102,13 +105,15 @@ interface WorkspaceState {
   savingFiles: Record<string, boolean>;
   saveErrors: Record<string, string>;
   saveActiveFile: () => Promise<boolean>;
-  saveFiles: (fileIds: string[]) => Promise<boolean>;
+  saveAllFiles: () => Promise<boolean>;
+  saveFiles: (fileIds: string[]) => Promise<SaveFilesResult>;
   undoActiveEditor: () => Promise<boolean>;
   redoActiveEditor: () => Promise<boolean>;
 
   unsavedChangesDialog: UnsavedChangesDialogState | null;
-  confirmUnsavedChangesSave: () => Promise<void>;
-  discardUnsavedChanges: () => void;
+  openUnsavedChangesDialog: (fileIds?: string[]) => void;
+  confirmUnsavedChangesSave: (fileIds?: string[]) => Promise<void>;
+  discardUnsavedChanges: (fileIds?: string[]) => void;
   cancelUnsavedChanges: () => void;
 
   editorRef: React.MutableRefObject<any>;
@@ -119,6 +124,41 @@ function getFileBaseName(fileId: string): string {
   const normalized = fileId.replace(/\\/g, '/');
   const segments = normalized.split('/');
   return segments[segments.length - 1] ?? fileId;
+}
+
+function createUnsavedChangesDialogState(
+  kind: UnsavedChangesDialogKind,
+  fileIds: string[],
+  getTabName: (fileId: string) => string,
+): UnsavedChangesDialogState {
+  if (kind === 'close-app') {
+    return {
+      fileIds,
+      kind,
+      title: 'Save changes before closing Pristine?',
+      description: `You have ${fileIds.length} file${fileIds.length === 1 ? '' : 's'} with unsaved changes.`,
+    };
+  }
+
+  if (kind === 'review') {
+    return {
+      fileIds,
+      kind,
+      title: 'Unsaved Files',
+      description: fileIds.length === 1
+        ? `The file ${getTabName(fileIds[0] ?? '')} has unsaved changes.`
+        : `${fileIds.length} files have unsaved changes. Choose which files to save now.`,
+    };
+  }
+
+  return {
+    fileIds,
+    kind,
+    title: 'Save changes before closing?',
+    description: fileIds.length === 1
+      ? `The file ${getTabName(fileIds[0] ?? '')} has unsaved changes.`
+      : `${fileIds.length} files have unsaved changes.`,
+  };
 }
 
 // ─── Context ────────────────────────────────────────────────────────────────
@@ -170,35 +210,36 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     [editorWorkspace.editorGroups, fileStore.dirtyFiles],
   );
 
-  const requestUnsavedChangesConfirmation = useCallback((fileIds: string[], options?: {
-    title?: string;
-    description?: string;
-  }) => {
-    const uniqueFileIds = Array.from(new Set(fileIds.filter((fileId) => fileStore.dirtyFiles[fileId])));
+  const getDirtyRequestedFileIds = useCallback((fileIds: string[]) => Array.from(
+    new Set(fileIds.filter((fileId) => fileStore.dirtyFiles[fileId])),
+  ), [fileStore.dirtyFiles]);
+
+  const showUnsavedChangesDialog = useCallback((fileIds: string[], kind: UnsavedChangesDialogKind) => {
+    const uniqueFileIds = getDirtyRequestedFileIds(fileIds);
     if (uniqueFileIds.length === 0) {
-      return Promise.resolve<'save' | 'discard' | 'cancel'>('save');
+      setUnsavedChangesDialog(null);
+      return null;
     }
 
+    const nextState = createUnsavedChangesDialogState(kind, uniqueFileIds, findTabName);
+    setUnsavedChangesDialog(nextState);
+    return nextState;
+  }, [findTabName, getDirtyRequestedFileIds]);
+
+  const requestUnsavedChangesConfirmation = useCallback((fileIds: string[], kind: UnsavedChangesDialogKind) => {
     if (unsavedChangesResolverRef.current) {
       unsavedChangesResolverRef.current('cancel');
     }
 
-    const title = options?.title ?? (uniqueFileIds.length === 1 ? 'Save changes before closing?' : 'Save changes before continuing?');
-    const description = options?.description
-      ?? (uniqueFileIds.length === 1
-        ? `The file ${findTabName(uniqueFileIds[0] ?? '')} has unsaved changes.`
-        : `${uniqueFileIds.length} files have unsaved changes.`);
-
-    setUnsavedChangesDialog({
-      fileIds: uniqueFileIds,
-      title,
-      description,
-    });
+    const dialogState = showUnsavedChangesDialog(fileIds, kind);
+    if (!dialogState) {
+      return Promise.resolve<'save' | 'discard' | 'cancel'>('save');
+    }
 
     return new Promise<'save' | 'discard' | 'cancel'>((resolve) => {
       unsavedChangesResolverRef.current = resolve;
     });
-  }, [fileStore.dirtyFiles, findTabName]);
+  }, [showUnsavedChangesDialog]);
 
   const resolveUnsavedChangesDialog = useCallback((result: 'save' | 'discard' | 'cancel') => {
     const resolver = unsavedChangesResolverRef.current;
@@ -209,6 +250,11 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   const saveFiles = useCallback((fileIds: string[]) => {
     return fileStore.saveFiles(fileIds);
+  }, [fileStore]);
+
+  const saveAllFiles = useCallback(async () => {
+    const result = await fileStore.saveFiles(fileStore.dirtyFileIds);
+    return result.failedFileIds.length === 0;
   }, [fileStore]);
 
   const saveActiveFile = useCallback(async () => {
@@ -251,49 +297,43 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   const maybeProceedWithUnsavedChanges = useCallback(async (
     fileIds: string[],
-    options: { title?: string; description?: string },
+    kind: UnsavedChangesDialogKind,
     onProceed: () => void | Promise<void>,
   ) => {
-    const dirtyFileIds = Array.from(new Set(fileIds.filter((fileId) => fileStore.dirtyFiles[fileId])));
+    const dirtyFileIds = getDirtyRequestedFileIds(fileIds);
     if (dirtyFileIds.length === 0) {
       await onProceed();
       return true;
     }
 
-    const decision = await requestUnsavedChangesConfirmation(dirtyFileIds, options);
+    const decision = await requestUnsavedChangesConfirmation(dirtyFileIds, kind);
     if (decision === 'cancel') {
       return false;
     }
 
     await onProceed();
     return true;
-  }, [fileStore, requestUnsavedChangesConfirmation]);
+  }, [getDirtyRequestedFileIds, requestUnsavedChangesConfirmation]);
 
   const closeFileInGroup = useCallback((groupId: string, fileId: string) => {
     void maybeProceedWithUnsavedChanges(
       [fileId],
-      {
-        title: 'Save changes before closing?',
-        description: `The file ${findTabName(fileId)} has unsaved changes.`,
-      },
+      'close-file',
       () => {
         editorWorkspace.closeFileInGroup(groupId, fileId);
       },
     );
-  }, [editorWorkspace, findTabName, maybeProceedWithUnsavedChanges]);
+  }, [editorWorkspace, maybeProceedWithUnsavedChanges]);
 
   const closeFile = useCallback((fileId: string) => {
     void maybeProceedWithUnsavedChanges(
       [fileId],
-      {
-        title: 'Save changes before closing?',
-        description: `The file ${findTabName(fileId)} has unsaved changes.`,
-      },
+      'close-file',
       () => {
         editorWorkspace.closeFile(fileId);
       },
     );
-  }, [editorWorkspace, findTabName, maybeProceedWithUnsavedChanges]);
+  }, [editorWorkspace, maybeProceedWithUnsavedChanges]);
 
   const closeActiveTabInFocusedGroup = useCallback(() => {
     const groupId = editorWorkspace.focusedGroupId;
@@ -309,29 +349,61 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     closeFileInGroup(groupId, activeFileId);
   }, [closeFileInGroup, editorWorkspace.editorGroups, editorWorkspace.focusedGroupId]);
 
-  const confirmUnsavedChangesSave = useCallback(async () => {
-    const fileIds = unsavedChangesDialog?.fileIds ?? [];
-    if (fileIds.length === 0) {
+  const openUnsavedChangesDialog = useCallback((fileIds?: string[]) => {
+    showUnsavedChangesDialog(fileIds ?? fileStore.dirtyFileIds, 'review');
+  }, [fileStore.dirtyFileIds, showUnsavedChangesDialog]);
+
+  const confirmUnsavedChangesSave = useCallback(async (selectedFileIds?: string[]) => {
+    const dialogState = unsavedChangesDialog;
+    const fileIds = dialogState?.fileIds ?? [];
+    if (fileIds.length === 0 || !dialogState) {
       resolveUnsavedChangesDialog('cancel');
       return;
     }
 
-    const saveSucceeded = await fileStore.saveFiles(fileIds);
-    if (!saveSucceeded) {
+    const targetFileIds = Array.from(new Set((selectedFileIds ?? fileIds).filter((fileId) => fileIds.includes(fileId))));
+    if (targetFileIds.length === 0) {
+      return;
+    }
+
+    const saveResult = await fileStore.saveFiles(targetFileIds);
+    const remainingFileIds = getDirtyRequestedFileIds(
+      fileIds.filter((fileId) => !saveResult.savedFileIds.includes(fileId)),
+    );
+    if (remainingFileIds.length > 0) {
+      setUnsavedChangesDialog(createUnsavedChangesDialogState(dialogState.kind, remainingFileIds, findTabName));
       return;
     }
 
     resolveUnsavedChangesDialog('save');
-  }, [fileStore, resolveUnsavedChangesDialog, unsavedChangesDialog?.fileIds]);
+  }, [fileStore, findTabName, getDirtyRequestedFileIds, resolveUnsavedChangesDialog, unsavedChangesDialog]);
 
-  const discardUnsavedChanges = useCallback(() => {
-    const fileIds = unsavedChangesDialog?.fileIds ?? [];
-    if (fileIds.length > 0) {
-      fileStore.discardFiles(fileIds);
+  const discardUnsavedChanges = useCallback((selectedFileIds?: string[]) => {
+    const dialogState = unsavedChangesDialog;
+    const fileIds = dialogState?.fileIds ?? [];
+    if (fileIds.length === 0 || !dialogState) {
+      resolveUnsavedChangesDialog('discard');
+      return;
+    }
+
+    const targetFileIds = Array.from(new Set((selectedFileIds ?? fileIds).filter((fileId) => fileIds.includes(fileId))));
+    if (targetFileIds.length === 0) {
+      return;
+    }
+
+    fileStore.discardFiles(targetFileIds);
+
+    const discardedFileIdSet = new Set(targetFileIds);
+    const remainingFileIds = getDirtyRequestedFileIds(
+      fileIds.filter((fileId) => !discardedFileIdSet.has(fileId)),
+    );
+    if (remainingFileIds.length > 0) {
+      setUnsavedChangesDialog(createUnsavedChangesDialogState(dialogState.kind, remainingFileIds, findTabName));
+      return;
     }
 
     resolveUnsavedChangesDialog('discard');
-  }, [fileStore, resolveUnsavedChangesDialog, unsavedChangesDialog?.fileIds]);
+  }, [fileStore, findTabName, getDirtyRequestedFileIds, resolveUnsavedChangesDialog, unsavedChangesDialog]);
 
   const cancelUnsavedChanges = useCallback(() => {
     resolveUnsavedChangesDialog('cancel');
@@ -351,10 +423,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           return;
         }
 
-        const decision = await requestUnsavedChangesConfirmation(dirtyFileIds, {
-          title: 'Save changes before closing Pristine?',
-          description: `You have ${dirtyFileIds.length} file${dirtyFileIds.length === 1 ? '' : 's'} with unsaved changes.`,
-        });
+        const decision = await requestUnsavedChangesConfirmation(dirtyFileIds, 'close-app');
 
         if (decision === 'cancel') {
           await electronApi.resolveCloseRequest(request.requestId, 'cancel');
@@ -441,10 +510,12 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       savingFiles: fileStore.savingFiles,
       saveErrors: fileStore.saveErrors,
       saveActiveFile,
+      saveAllFiles,
       saveFiles,
       undoActiveEditor: () => runActiveEditorAction('undo'),
       redoActiveEditor: () => runActiveEditorAction('redo'),
       unsavedChangesDialog,
+      openUnsavedChangesDialog,
       confirmUnsavedChangesSave,
       discardUnsavedChanges,
       cancelUnsavedChanges,

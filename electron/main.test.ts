@@ -483,7 +483,7 @@ describe('electron main entry', () => {
     expect(mocks.mockQuit).toHaveBeenCalledTimes(1);
   });
 
-  it('routes macOS Save and Undo menu items back into the renderer command flow', async () => {
+  it('routes macOS Save, Save All, and Undo menu items back into the renderer command flow', async () => {
     const { browserWindowInstances } = await importMain({ platform: 'darwin' });
 
     const mainWindow = browserWindowInstances[1];
@@ -497,10 +497,12 @@ describe('electron main entry', () => {
     const editMenu = applicationMenu.template.find((item) => item.label === 'Edit');
 
     fileMenu?.submenu?.find((item) => item.label === 'Save')?.click?.();
+    fileMenu?.submenu?.find((item) => item.label === 'Save All')?.click?.();
     editMenu?.submenu?.find((item) => item.label === 'Undo')?.click?.();
 
     expect(mainWindow.webContents.send).toHaveBeenNthCalledWith(1, 'stream:menu:command', { action: 'save-file' });
-    expect(mainWindow.webContents.send).toHaveBeenNthCalledWith(2, 'stream:menu:command', { action: 'undo-editor' });
+    expect(mainWindow.webContents.send).toHaveBeenNthCalledWith(2, 'stream:menu:command', { action: 'save-all-files' });
+    expect(mainWindow.webContents.send).toHaveBeenNthCalledWith(3, 'stream:menu:command', { action: 'undo-editor' });
   });
 
   it('routes the macOS Settings menu item back into the renderer settings dialog flow', async () => {

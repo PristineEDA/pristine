@@ -1,6 +1,6 @@
 export const APP_DISPLAY_NAME = 'Pristine';
 
-export type AppMenuAction = 'open-settings' | 'save-file' | 'undo-editor' | 'redo-editor' | 'close-app';
+export type AppMenuAction = 'open-settings' | 'save-file' | 'save-all-files' | 'undo-editor' | 'redo-editor' | 'close-app';
 
 export type AppMenuItem = {
   kind: 'item';
@@ -32,6 +32,7 @@ export const applicationMenus: AppMenuSection[] = [
       { kind: 'item', name: 'Open Project...', shortcut: 'Mod+O' },
       { kind: 'separator' },
       { kind: 'item', name: 'Save', shortcut: 'Mod+S', action: 'save-file' },
+      { kind: 'item', name: 'Save All', action: 'save-all-files' },
       { kind: 'item', name: 'Save As...', shortcut: 'Shift+Mod+S' },
       { kind: 'separator' },
       { kind: 'item', name: 'Setting...', action: 'open-settings' },

@@ -16,9 +16,19 @@ let mockedEditorFontFamily = 'jetbrains-mono';
 let mockedEditorFontSize = 13;
 let mockedEditorTheme = 'dracula';
 
-const { mockCursorPositionListeners, mockEditorComponent, mockEditorDomNode, mockEditorInstance, mockFocusEditorTextListeners, mockModels, mockMonaco } = vi.hoisted(() => {
+const {
+  mockCursorPositionListeners,
+  mockEditorCommands,
+  mockEditorComponent,
+  mockEditorDomNode,
+  mockEditorInstance,
+  mockFocusEditorTextListeners,
+  mockModels,
+  mockMonaco,
+} = vi.hoisted(() => {
   const activeElement = {};
   const cursorPositionListeners: Array<(event: { position: { lineNumber: number; column: number } }) => void> = [];
+  const editorCommands: Array<{ keybinding: number; handler: () => void }> = [];
   const focusEditorTextListeners: Array<() => void> = [];
   const editorDomNode = {
     contains: vi.fn((element: unknown) => element === activeElement),
@@ -37,6 +47,10 @@ const { mockCursorPositionListeners, mockEditorComponent, mockEditorDomNode, moc
       focusEditorTextListeners.push(callback);
       return { dispose: vi.fn() };
     }),
+    addCommand: vi.fn((keybinding: number, handler: () => void) => {
+      editorCommands.push({ keybinding, handler });
+      return editorCommands.length;
+    }),
     updateOptions: vi.fn(),
     layout: vi.fn(),
   };
@@ -53,10 +67,17 @@ const { mockCursorPositionListeners, mockEditorComponent, mockEditorDomNode, moc
       Warning: 4,
       Info: 2,
     },
+    KeyCode: {
+      KeyS: 49,
+    },
+    KeyMod: {
+      CtrlCmd: 2048,
+    },
   };
 
   return {
     mockCursorPositionListeners: cursorPositionListeners,
+    mockEditorCommands: editorCommands,
     mockEditorInstance: editorInstance,
     mockEditorDomNode: editorDomNode,
     mockFocusEditorTextListeners: focusEditorTextListeners,
@@ -144,6 +165,7 @@ describe('MonacoEditorPane', () => {
     mockedUpdateLspDocument.mockReset();
     mockedSetNavigateHandler.mockReset();
     mockCursorPositionListeners.length = 0;
+    mockEditorCommands.length = 0;
     mockFocusEditorTextListeners.length = 0;
     mockEditorDomNode.contains.mockReturnValue(true);
     mockMonaco.editor.getModels.mockReturnValue(mockModels);
@@ -364,5 +386,28 @@ describe('MonacoEditorPane', () => {
 
     fireEvent.click(screen.getByTestId('monaco-editor'));
     expect(onContentChange).toHaveBeenCalledWith('updated code');
+  });
+
+  it('registers a Monaco save command so Ctrl/Cmd+S works while the editor is focused', () => {
+    const onSaveShortcut = vi.fn();
+
+    render(
+      <MonacoEditorPane
+        activeTabId="rtl/core/reg_file.v"
+        code="module reg_file; endmodule"
+        editorRef={createRef<any>()}
+        onSaveShortcut={onSaveShortcut}
+      />,
+    );
+
+    expect(mockEditorInstance.addCommand).toHaveBeenCalledWith(
+      mockMonaco.KeyMod.CtrlCmd | mockMonaco.KeyCode.KeyS,
+      expect.any(Function),
+    );
+
+    const saveCommand = mockEditorCommands[mockEditorCommands.length - 1];
+    saveCommand?.handler();
+
+    expect(onSaveShortcut).toHaveBeenCalledTimes(1);
   });
 });

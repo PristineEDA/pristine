@@ -109,7 +109,9 @@ function WorkspaceControls() {
       <button onClick={() => setMainContentView('whiteboard')}>set-whiteboard</button>
       <button onClick={() => setMainContentView('code')}>set-code</button>
       <button onClick={() => openFile('rtl/core/reg_file.v', 'reg_file.v')}>open-reg</button>
+      <button onClick={() => openFile('rtl/core/alu.v', 'alu.v')}>open-alu</button>
       <button onClick={() => updateFileContentInGroup('group-1', 'rtl/core/reg_file.v', 'module reg_file; logic dirty; endmodule')}>edit-reg</button>
+      <button onClick={() => updateFileContentInGroup('group-1', 'rtl/core/alu.v', 'module alu; logic dirty; endmodule')}>edit-alu</button>
       <button onClick={() => registerEditorRef('group-1', {
         getAction: (actionId: string) => ({ run: actionId === 'undo' ? undoActionRun : redoActionRun }),
       })}>register-editor</button>
@@ -256,22 +258,43 @@ describe('MenuBar', () => {
     expect(redoActionRun).toHaveBeenCalledTimes(1);
   });
 
-  it('routes native macOS save and undo commands through the same workspace actions', async () => {
+  it('routes Save All through the shared workspace command', async () => {
+    const user = userEvent.setup();
+
+    renderMenuBarWithControls();
+
+    fireEvent.click(screen.getByText('open-reg'));
+    fireEvent.click(screen.getByText('edit-reg'));
+    fireEvent.click(screen.getByText('open-alu'));
+    fireEvent.click(screen.getByText('edit-alu'));
+
+    await user.click(screen.getByText('File'));
+    await user.click(await screen.findByText('Save All'));
+
+    expect(window.electronAPI?.fs.writeFile).toHaveBeenCalledWith('rtl/core/reg_file.v', 'module reg_file; logic dirty; endmodule');
+    expect(window.electronAPI?.fs.writeFile).toHaveBeenCalledWith('rtl/core/alu.v', 'module alu; logic dirty; endmodule');
+  });
+
+  it('routes native macOS save, Save All, and undo commands through the same workspace actions', async () => {
     window.electronAPI!.platform = 'darwin';
 
     renderMenuBarWithControls();
 
     fireEvent.click(screen.getByText('open-reg'));
     fireEvent.click(screen.getByText('edit-reg'));
+    fireEvent.click(screen.getByText('open-alu'));
+    fireEvent.click(screen.getByText('edit-alu'));
     fireEvent.click(screen.getByText('register-editor'));
 
     const menuCommandHandler = vi.mocked(window.electronAPI!.menu.onCommand).mock.calls[0]?.[0];
 
     await act(async () => {
       menuCommandHandler?.({ action: 'save-file' });
+      menuCommandHandler?.({ action: 'save-all-files' });
       menuCommandHandler?.({ action: 'undo-editor' });
     });
 
+    expect(window.electronAPI?.fs.writeFile).toHaveBeenCalledWith('rtl/core/alu.v', 'module alu; logic dirty; endmodule');
     expect(window.electronAPI?.fs.writeFile).toHaveBeenCalledWith('rtl/core/reg_file.v', 'module reg_file; logic dirty; endmodule');
     expect(undoActionRun).toHaveBeenCalledTimes(1);
   });

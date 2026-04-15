@@ -67,6 +67,7 @@ interface EditorAreaProps {
   loadingFiles?: Record<string, boolean>;
   loadErrors?: Record<string, string>;
   onLoadFile?: (fileId: string) => void;
+  onSaveShortcut?: () => void;
   onContentChange?: (fileId: string, content: string) => void;
   onEditorMount?: (editor: any) => void;
   onNavigateToLocation?: (fileId: string, line: number, col: number) => void;
@@ -210,6 +211,7 @@ export function EditorArea({
   loadingFiles,
   loadErrors,
   onLoadFile,
+  onSaveShortcut,
   onContentChange,
   onEditorMount,
   onNavigateToLocation,
@@ -407,6 +409,7 @@ export function EditorArea({
           editorRef={editorRef}
           onActiveModelReady={setActiveModelReadyId}
           onCursorChange={onCursorChange}
+          onSaveShortcut={onSaveShortcut}
           onContentChange={updateContent}
           onEditorMount={onEditorMount}
           onNavigateToLocation={onNavigateToLocation}

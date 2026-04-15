@@ -139,6 +139,32 @@ describe('useWorkspaceFileStore', () => {
     expect(result.current.dirtyFiles['rtl/edit.v']).toBe(false);
   });
 
+  it('returns per-file results when saving multiple files together', async () => {
+    vi.mocked(window.electronAPI!.fs.writeFile)
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('Disk full'));
+
+    const { result } = renderHook(() => useWorkspaceFileStore());
+
+    act(() => {
+      result.current.updateFileContent('rtl/pass.v', 'module pass; endmodule');
+      result.current.updateFileContent('rtl/fail.v', 'module fail; endmodule');
+    });
+
+    let saveResult: Awaited<ReturnType<typeof result.current.saveFiles>> | undefined;
+
+    await act(async () => {
+      saveResult = await result.current.saveFiles(['rtl/pass.v', 'rtl/fail.v']);
+    });
+
+    expect(saveResult).toEqual({
+      savedFileIds: ['rtl/pass.v'],
+      failedFileIds: ['rtl/fail.v'],
+    });
+    expect(result.current.dirtyFiles['rtl/pass.v']).toBe(false);
+    expect(result.current.dirtyFiles['rtl/fail.v']).toBe(true);
+  });
+
   it('retains dirty state and exposes save errors when a save fails', async () => {
     vi.mocked(window.electronAPI!.fs.readFile).mockResolvedValueOnce('module fail; endmodule');
     vi.mocked(window.electronAPI!.fs.writeFile).mockRejectedValueOnce(new Error('Disk full'));

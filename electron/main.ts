@@ -148,7 +148,7 @@ function handleApplicationMenuAction(action: AppMenuAction): void {
     return;
   }
 
-  if (action === 'save-file' || action === 'undo-editor' || action === 'redo-editor') {
+  if (action === 'save-file' || action === 'save-all-files' || action === 'undo-editor' || action === 'redo-editor') {
     sendMenuCommandToMainWindow({ action });
     return;
   }
