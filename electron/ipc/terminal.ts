@@ -1,6 +1,7 @@
 import { ipcMain, BrowserWindow } from 'electron';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import os from 'node:os';
 import * as path from 'node:path';
 import * as pty from 'node-pty';
@@ -14,10 +15,15 @@ import {
 
 const DEFAULT_COLS = 120;
 const DEFAULT_ROWS = 32;
+const EXECUTABLE_PERMISSION_BITS = 0o111;
+const FILE_PERMISSION_BITS_MASK = 0o777;
 
 const sessions = new Map<string, pty.IPty>();
 let nextId = 1;
 let projectRoot: string | null = null;
+let macOSSpawnHelperPermissionsEnsured = false;
+
+const require = createRequire(import.meta.url);
 
 function hasMissingProcessError(error: unknown): boolean {
   if (error && typeof error === 'object' && 'code' in error) {
@@ -111,6 +117,65 @@ export function getTerminalLaunchConfig(
   return { file: shellPath, args: ['-l'] };
 }
 
+function getNodePtyPackageDirectory(): string | null {
+  try {
+    return path.dirname(require.resolve('node-pty/package.json'));
+  } catch {
+    return null;
+  }
+}
+
+function toUnpackedAsarPath(filePath: string): string {
+  return filePath.replace(`${path.sep}app.asar${path.sep}`, `${path.sep}app.asar.unpacked${path.sep}`);
+}
+
+function getMacOSSpawnHelperPathCandidates(
+  platform: NodeJS.Platform = process.platform,
+  arch: string = process.arch,
+): string[] {
+  if (platform !== 'darwin') {
+    return [];
+  }
+
+  const packageDirectory = getNodePtyPackageDirectory();
+  if (!packageDirectory) {
+    return [];
+  }
+
+  return [...new Set([
+    packageDirectory,
+    toUnpackedAsarPath(packageDirectory),
+  ].map((directory) => path.join(directory, 'prebuilds', `darwin-${arch}`, 'spawn-helper')))];
+}
+
+function ensureMacOSSpawnHelperExecutable(platform: NodeJS.Platform = process.platform): void {
+  if (platform !== 'darwin' || macOSSpawnHelperPermissionsEnsured) {
+    return;
+  }
+
+  for (const helperPath of getMacOSSpawnHelperPathCandidates(platform)) {
+    try {
+      const stats = fs.statSync(helperPath);
+      const permissions = stats.mode & FILE_PERMISSION_BITS_MASK;
+
+      if ((permissions & EXECUTABLE_PERMISSION_BITS) !== EXECUTABLE_PERMISSION_BITS) {
+        fs.chmodSync(helperPath, permissions | EXECUTABLE_PERMISSION_BITS);
+      }
+
+      macOSSpawnHelperPermissionsEnsured = true;
+      return;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        continue;
+      }
+
+      throw error;
+    }
+  }
+
+  macOSSpawnHelperPermissionsEnsured = true;
+}
+
 function isExistingDirectory(dirPath: string | null | undefined): dirPath is string {
   if (!dirPath) {
     return false;
@@ -199,6 +264,8 @@ export function registerTerminalHandlers(getMainWindow: () => BrowserWindow | nu
     let session: pty.IPty;
 
     try {
+      ensureMacOSSpawnHelperExecutable();
+
       session = pty.spawn(launch.file, launch.args, {
         name: 'xterm-256color',
         cols: normalizeSize(cols as number | undefined, DEFAULT_COLS),

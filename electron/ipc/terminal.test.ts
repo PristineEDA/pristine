@@ -181,6 +181,42 @@ describe('terminal IPC handlers', () => {
     );
   });
 
+  it('repairs the macOS node-pty spawn-helper execute bit before spawning', async () => {
+    setProcessPlatform('darwin');
+
+    const fakeTerminal = createFakeTerminal();
+    const originalStatSync = fs.statSync;
+    const chmodSyncSpy = vi.spyOn(fs, 'chmodSync').mockImplementation(() => undefined);
+    const statSyncSpy = vi.spyOn(fs, 'statSync').mockImplementation(((targetPath: fs.PathLike) => {
+      const normalizedPath = String(targetPath).replace(/\\/g, '/');
+
+      if (normalizedPath.includes('/node-pty/prebuilds/darwin-') && normalizedPath.endsWith('/spawn-helper')) {
+        return {
+          mode: 0o644,
+          isDirectory: () => false,
+        } as fs.Stats;
+      }
+
+      return originalStatSync(targetPath);
+    }) as typeof fs.statSync);
+
+    try {
+      mockSpawn.mockReturnValue(fakeTerminal);
+
+      const createHandler = getHandler('async:terminal:create');
+      await createHandler({}, {});
+
+      expect(chmodSyncSpy).toHaveBeenCalledWith(
+        expect.stringMatching(/node-pty[\\/]prebuilds[\\/]darwin-(arm64|x64)[\\/]spawn-helper$/),
+        0o755,
+      );
+      expect(mockSpawn).toHaveBeenCalledTimes(1);
+    } finally {
+      chmodSyncSpy.mockRestore();
+      statSyncSpy.mockRestore();
+    }
+  });
+
   it('routes write, resize, and kill to the matching session', async () => {
     const fakeTerminal = createFakeTerminal();
     mockSpawn.mockReturnValue(fakeTerminal);
