@@ -48,8 +48,12 @@ beforeEach(() => {
   vi.mocked(window.electronAPI!.close).mockReset();
   vi.mocked(window.electronAPI!.isMaximized).mockReset();
   vi.mocked(window.electronAPI!.isMaximized).mockReturnValue(false);
+  vi.mocked(window.electronAPI!.isFullScreen).mockReset();
+  vi.mocked(window.electronAPI!.isFullScreen).mockReturnValue(false);
   vi.mocked(window.electronAPI!.onMaximizedChange).mockReset();
   vi.mocked(window.electronAPI!.onMaximizedChange).mockImplementation(() => vi.fn());
+  vi.mocked(window.electronAPI!.onFullScreenChange).mockReset();
+  vi.mocked(window.electronAPI!.onFullScreenChange).mockImplementation(() => vi.fn());
   vi.mocked(window.electronAPI!.config.get).mockReset();
   vi.mocked(window.electronAPI!.config.set).mockReset();
   vi.mocked(window.electronAPI!.setFloatingInfoWindowVisible).mockReset();
@@ -150,13 +154,14 @@ describe('MenuBar', () => {
     expect(screen.getByTestId('user-avatar-button')).toBeInTheDocument();
   });
 
-  it('moves the activity bar trigger to the far left when the macOS window is maximized', () => {
-    let maximizeListener: ((maximized: boolean) => void) | undefined;
+  it('keeps the activity bar trigger position on macOS maximize and only left-aligns it in full-screen', () => {
+    let fullScreenListener: ((fullScreen: boolean) => void) | undefined;
     const dispose = vi.fn();
 
     window.electronAPI!.platform = 'darwin';
-    vi.mocked(window.electronAPI!.onMaximizedChange).mockImplementation((callback: (maximized: boolean) => void) => {
-      maximizeListener = callback;
+    vi.mocked(window.electronAPI!.isMaximized).mockReturnValue(true);
+    vi.mocked(window.electronAPI!.onFullScreenChange).mockImplementation((callback: (fullScreen: boolean) => void) => {
+      fullScreenListener = callback;
       return dispose;
     });
 
@@ -165,16 +170,18 @@ describe('MenuBar', () => {
 
     expect(screen.getByTestId('macos-traffic-light-clearance')).toBeInTheDocument();
     expect(trigger).toHaveClass('ml-1');
+    expect(window.electronAPI!.onMaximizedChange).not.toHaveBeenCalled();
 
     act(() => {
-      maximizeListener?.(true);
+      fullScreenListener?.(true);
     });
 
     expect(screen.queryByTestId('macos-traffic-light-clearance')).not.toBeInTheDocument();
+    expect(trigger).toHaveClass('ml-2');
     expect(trigger).not.toHaveClass('ml-1');
 
     act(() => {
-      maximizeListener?.(false);
+      fullScreenListener?.(false);
     });
 
     expect(screen.getByTestId('macos-traffic-light-clearance')).toBeInTheDocument();

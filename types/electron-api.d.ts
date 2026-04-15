@@ -25,7 +25,9 @@ export interface ElectronAPI {
   close: () => Promise<void>;
   setFloatingInfoWindowVisible: (visible: boolean) => Promise<boolean>;
   isMaximized: () => boolean;
+  isFullScreen: () => boolean;
   onMaximizedChange: (callback: (maximized: boolean) => void) => () => void;
+  onFullScreenChange: (callback: (fullScreen: boolean) => void) => () => void;
 
   // File system (project-dir scoped)
   fs: {

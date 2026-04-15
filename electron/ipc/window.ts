@@ -7,7 +7,12 @@ export function registerWindowHandlers(
 ): void {
   ipcMain.on(SyncChannels.WINDOW_IS_MAXIMIZED, (event) => {
     const win = getMainWindow();
-    event.returnValue = win ? win.isMaximized() || win.isFullScreen() : false;
+    event.returnValue = win ? win.isMaximized() : false;
+  });
+
+  ipcMain.on(SyncChannels.WINDOW_IS_FULLSCREEN, (event) => {
+    const win = getMainWindow();
+    event.returnValue = win ? win.isFullScreen() : false;
   });
 
   ipcMain.handle(AsyncChannels.WINDOW_MINIMIZE, () => {
@@ -63,20 +68,16 @@ export function registerWindowHandlers(
 }
 
 export function setupWindowStreams(win: BrowserWindow): void {
-  const emitWindowLayoutState = () => {
-    win.webContents.send(StreamChannels.WINDOW_MAXIMIZED_CHANGE, win.isMaximized() || win.isFullScreen());
-  };
-
   win.on('maximize', () => {
-    emitWindowLayoutState();
+    win.webContents.send(StreamChannels.WINDOW_MAXIMIZED_CHANGE, true);
   });
   win.on('unmaximize', () => {
-    emitWindowLayoutState();
+    win.webContents.send(StreamChannels.WINDOW_MAXIMIZED_CHANGE, false);
   });
   win.on('enter-full-screen', () => {
-    emitWindowLayoutState();
+    win.webContents.send(StreamChannels.WINDOW_FULLSCREEN_CHANGE, true);
   });
   win.on('leave-full-screen', () => {
-    emitWindowLayoutState();
+    win.webContents.send(StreamChannels.WINDOW_FULLSCREEN_CHANGE, false);
   });
 }

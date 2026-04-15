@@ -38,10 +38,21 @@ describe('window IPC handlers', () => {
 
   it('returns maximized state via sync channel', () => {
     const event = { returnValue: undefined as boolean | undefined };
-    const getMainWindow = () => ({ isMaximized: () => false, isFullScreen: () => true }) as any;
+    const getMainWindow = () => ({ isMaximized: () => true, isFullScreen: () => false }) as any;
 
     registerWindowHandlers(getMainWindow);
     const listener = getOnListener(SyncChannels.WINDOW_IS_MAXIMIZED);
+    listener(event);
+
+    expect(event.returnValue).toBe(true);
+  });
+
+  it('returns full-screen state via sync channel', () => {
+    const event = { returnValue: undefined as boolean | undefined };
+    const getMainWindow = () => ({ isFullScreen: () => true }) as any;
+
+    registerWindowHandlers(getMainWindow);
+    const listener = getOnListener(SyncChannels.WINDOW_IS_FULLSCREEN);
     listener(event);
 
     expect(event.returnValue).toBe(true);
@@ -56,14 +67,13 @@ describe('window IPC handlers', () => {
 
   it('toggles maximize state, changes visibility, and requests window close', async () => {
     let maximized = false;
-    let fullScreen = false;
     let minimized = false;
     const win = {
       minimize: vi.fn(),
       maximize: vi.fn(() => { maximized = true; }),
       unmaximize: vi.fn(() => { maximized = false; }),
       isMaximized: vi.fn(() => maximized),
-      isFullScreen: vi.fn(() => fullScreen),
+      isFullScreen: vi.fn(() => false),
       isMinimized: vi.fn(() => minimized),
       restore: vi.fn(() => { minimized = false; }),
       show: vi.fn(),
@@ -102,41 +112,27 @@ describe('window IPC handlers', () => {
     expect(win.hide).toHaveBeenCalledTimes(1);
     expect(win.close).toHaveBeenCalledTimes(1);
     expect(mockSetFloatingInfoWindowVisible).toHaveBeenCalledWith(true);
-
-    fullScreen = true;
-    const syncListener = getOnListener(SyncChannels.WINDOW_IS_MAXIMIZED);
-    const syncEvent = { returnValue: undefined as boolean | undefined };
-    syncListener(syncEvent);
-    expect(syncEvent.returnValue).toBe(true);
   });
 
-  it('emits window layout stream events for maximize and fullscreen transitions', () => {
+  it('emits maximize and full-screen stream events separately', () => {
     const events: Record<string, () => void> = {};
     const send = vi.fn();
-    let maximized = false;
-    let fullScreen = false;
     const win = {
       on: vi.fn((event: string, callback: () => void) => {
         events[event] = callback;
       }),
-      isMaximized: vi.fn(() => maximized),
-      isFullScreen: vi.fn(() => fullScreen),
       webContents: { send },
     };
 
     setupWindowStreams(win as any);
-    maximized = true;
     events['maximize']();
-    maximized = false;
     events['unmaximize']();
-    fullScreen = true;
     events['enter-full-screen']();
-    fullScreen = false;
     events['leave-full-screen']();
 
     expect(send).toHaveBeenNthCalledWith(1, StreamChannels.WINDOW_MAXIMIZED_CHANGE, true);
     expect(send).toHaveBeenNthCalledWith(2, StreamChannels.WINDOW_MAXIMIZED_CHANGE, false);
-    expect(send).toHaveBeenNthCalledWith(3, StreamChannels.WINDOW_MAXIMIZED_CHANGE, true);
-    expect(send).toHaveBeenNthCalledWith(4, StreamChannels.WINDOW_MAXIMIZED_CHANGE, false);
+    expect(send).toHaveBeenNthCalledWith(3, StreamChannels.WINDOW_FULLSCREEN_CHANGE, true);
+    expect(send).toHaveBeenNthCalledWith(4, StreamChannels.WINDOW_FULLSCREEN_CHANGE, false);
   });
 });

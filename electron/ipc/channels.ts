@@ -8,6 +8,7 @@ export const SyncChannels = {
   PLATFORM: 'sync:platform',
   CONFIG_GET: 'sync:config:get',
   WINDOW_IS_MAXIMIZED: 'sync:window:is-maximized',
+  WINDOW_IS_FULLSCREEN: 'sync:window:is-full-screen',
 } as const;
 
 export const AsyncChannels = {
@@ -49,4 +50,5 @@ export const StreamChannels = {
   LSP_STATE: 'stream:lsp:state',
   MENU_COMMAND: 'stream:menu:command',
   WINDOW_MAXIMIZED_CHANGE: 'stream:window:maximized-change',
+  WINDOW_FULLSCREEN_CHANGE: 'stream:window:full-screen-change',
 } as const;

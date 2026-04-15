@@ -212,9 +212,9 @@ export function MenuBar({
   onToggleRightPanel,
 }: MenuBarProps) {
   const isMacOS = isMacOSPlatform();
-  const [windowMaximized, setWindowMaximized] = useState(() => window.electronAPI?.isMaximized() === true);
+  const [windowFullScreen, setWindowFullScreen] = useState(() => window.electronAPI?.isFullScreen() === true);
   const showWindowMenu = !isMacOS;
-  const showMacOSLeadingSpace = isMacOS && !windowMaximized;
+  const showMacOSLeadingSpace = isMacOS && !windowFullScreen;
   const { activeView, mainContentView, setMainContentView } = useWorkspace();
   const {
     fontFamily: editorFontFamily,
@@ -244,7 +244,7 @@ export function MenuBar({
       : 'cursor-not-allowed opacity-40',
   ].join(' ');
   const activityBarTriggerClassName = [
-    `${showMacOSLeadingSpace || !isMacOS ? 'ml-1 ' : ''}w-8 h-full rounded-none border-0 text-muted-foreground`,
+    `${isMacOS ? (windowFullScreen ? 'ml-2 ' : 'ml-1 ') : 'ml-1 '}w-8 h-full rounded-none border-0 text-muted-foreground`,
     'data-[state=on]:text-foreground',
     activityBarToggleEnabled
       ? 'hover:cursor-pointer hover:text-foreground hover:bg-accent'
@@ -359,10 +359,10 @@ export function MenuBar({
       return;
     }
 
-    setWindowMaximized(window.electronAPI?.isMaximized() === true);
+    setWindowFullScreen(window.electronAPI?.isFullScreen() === true);
 
-    const dispose = window.electronAPI?.onMaximizedChange((maximized) => {
-      setWindowMaximized(maximized);
+    const dispose = window.electronAPI?.onFullScreenChange((fullScreen) => {
+      setWindowFullScreen(fullScreen);
     });
 
     return () => {

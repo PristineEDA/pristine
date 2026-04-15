@@ -39,10 +39,16 @@ const electronAPI = {
   setFloatingInfoWindowVisible: (visible: boolean) =>
     ipcRenderer.invoke(AsyncChannels.WINDOW_SET_FLOATING_INFO_VISIBILITY, visible),
   isMaximized: (): boolean => syncSend(SyncChannels.WINDOW_IS_MAXIMIZED),
+  isFullScreen: (): boolean => syncSend(SyncChannels.WINDOW_IS_FULLSCREEN),
   onMaximizedChange: (callback: (maximized: boolean) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, maximized: boolean) => callback(maximized);
     ipcRenderer.on(StreamChannels.WINDOW_MAXIMIZED_CHANGE, handler);
     return () => { ipcRenderer.removeListener(StreamChannels.WINDOW_MAXIMIZED_CHANGE, handler); };
+  },
+  onFullScreenChange: (callback: (fullScreen: boolean) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, fullScreen: boolean) => callback(fullScreen);
+    ipcRenderer.on(StreamChannels.WINDOW_FULLSCREEN_CHANGE, handler);
+    return () => { ipcRenderer.removeListener(StreamChannels.WINDOW_FULLSCREEN_CHANGE, handler); };
   },
 
   // ── File System (async, project-dir scoped) ──
