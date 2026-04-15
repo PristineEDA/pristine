@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MenuBar } from './MenuBar';
+import { formatAttributionLine, openSourceAttributionSections } from '../../../about/attributions';
 import { WorkspaceProvider, useWorkspace } from '../../../context/WorkspaceContext';
 import { SidebarProvider, useSidebar } from '../../ui/sidebar';
 import { getEditorFontFamilyLabel } from '../../../editor/editorSettings';
@@ -40,6 +41,7 @@ beforeEach(() => {
   mockedEditorFontSize = 13;
   mockedEditorTheme = 'dracula';
   mockedTheme = 'light';
+  window.electronAPI!.platform = 'win32';
   setEditorFontFamilyMock.mockReset();
   setEditorFontSizeMock.mockReset();
   setEditorThemeMock.mockReset();
@@ -235,6 +237,42 @@ describe('MenuBar', () => {
 
     expect(await screen.findByTestId('settings-dialog')).toBeVisible();
     expect(screen.getByTestId('settings-editor-font-family-combobox')).toHaveTextContent(getEditorFontFamilyLabel('fira-code'));
+  });
+
+  it('opens About from the Help menu using the shared attribution data', async () => {
+    const user = userEvent.setup();
+    const firstAttributionItem = openSourceAttributionSections[0]?.items[0];
+
+    if (!firstAttributionItem) {
+      throw new Error('Expected at least one attribution item');
+    }
+
+    renderMenuBar();
+
+    await user.click(screen.getByText('Help'));
+    await user.click(await screen.findByText('About'));
+
+    expect(await screen.findByTestId('about-dialog')).toBeVisible();
+
+    for (const section of openSourceAttributionSections) {
+      expect(screen.getByText(section.title)).toBeInTheDocument();
+    }
+
+    expect(screen.getByText(hasNormalizedTextContent(formatAttributionLine(firstAttributionItem)))).toBeInTheDocument();
+  });
+
+  it('opens About from native menu commands on macOS', async () => {
+    window.electronAPI!.platform = 'darwin';
+
+    renderMenuBar();
+
+    const menuCommandHandler = vi.mocked(window.electronAPI!.menu.onCommand).mock.calls[0]?.[0];
+    await act(async () => {
+      menuCommandHandler?.({ action: 'open-about' });
+    });
+
+    expect(await screen.findByTestId('about-dialog')).toBeVisible();
+    expect(screen.getByText('Bundled Binaries & Extra Resources')).toBeInTheDocument();
   });
 
   it('routes save, undo, and redo through the shared workspace commands', async () => {

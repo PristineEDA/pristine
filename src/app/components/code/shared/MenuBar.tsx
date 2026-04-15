@@ -46,6 +46,7 @@ import { Slider } from '../../ui/slider';
 import { Switch } from '../../ui/switch';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../../ui/tooltip';
 import { useSidebar } from '../../ui/sidebar';
+import { AboutDialog } from './AboutDialog';
 import { centerViewSwitchItemClassName } from './viewSwitcherStyles';
 
 const noDrag = { WebkitAppRegion: 'no-drag' as const };
@@ -235,6 +236,7 @@ export function MenuBar({
   const { theme, setTheme, toggleTheme } = useTheme();
   const { state: activityBarState, toggleSidebar } = useSidebar();
   const ref = useRef<HTMLDivElement>(null);
+  const [aboutDialogOpen, setAboutDialogOpen] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [closeToTrayEnabled, setCloseToTrayEnabled] = useState(() => getConfiguredCloseAction() === 'tray');
   const [floatingInfoWindowVisible, setFloatingInfoWindowVisible] = useState(() => getFloatingInfoWindowVisible());
@@ -337,6 +339,10 @@ export function MenuBar({
     setSettingsDialogOpen(true);
   };
 
+  const openAboutDialog = () => {
+    setAboutDialogOpen(true);
+  };
+
   const requestAppClose = () => {
     void window.electronAPI?.close();
   };
@@ -344,6 +350,11 @@ export function MenuBar({
   const handleMenuItemSelect = (action: ReturnType<typeof getApplicationMenuItemAction>) => {
     if (action === 'open-settings') {
       openSettingsDialog();
+      return;
+    }
+
+    if (action === 'open-about') {
+      openAboutDialog();
       return;
     }
 
@@ -375,6 +386,11 @@ export function MenuBar({
   const handleNativeMenuCommand = useEffectEvent((payload: MenuCommandEvent) => {
     if (payload.action === 'open-settings') {
       openSettingsDialog();
+      return;
+    }
+
+    if (payload.action === 'open-about') {
+      openAboutDialog();
       return;
     }
 
@@ -709,6 +725,12 @@ export function MenuBar({
 
           </div>
         </div>
+
+        <AboutDialog
+          open={aboutDialogOpen}
+          onOpenChange={setAboutDialogOpen}
+          dialogStyle={noDragInteractive as React.CSSProperties}
+        />
 
         <Dialog open={settingsDialogOpen} onOpenChange={setSettingsDialogOpen}>
           <DialogContent

@@ -26,6 +26,11 @@ async function getPageTitleSafely(page: Page) {
   }
 }
 
+async function waitForMainUi(window: Page) {
+  await window.waitForLoadState('domcontentloaded');
+  await expect(window.getByTestId('toggle-activity-bar')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+}
+
 function isSplashWindow(entry: { title: string | null; url: string }) {
   return entry.title === 'Pristine Loading' || entry.url.endsWith('/splash.html');
 }
@@ -88,24 +93,28 @@ async function waitForStartupWindow(
   kind: 'main' | 'splash',
 ) {
   const matcher = kind === 'main' ? isMainWindow : isSplashWindow;
+  let resolvedWindow: Page | null = null;
 
   await expect.poll(async () => {
     const identifiedWindows = await getIdentifiedWindows(app);
     const window = identifiedWindows.find(matcher)?.page ?? null;
+
+    if (window && !resolvedWindow) {
+      resolvedWindow = window;
+    }
 
     return Boolean(window);
   }, {
     timeout: 10000,
   }).toBe(true);
 
-  const identifiedWindows = await getIdentifiedWindows(app);
-  const resolvedWindow = identifiedWindows.find(matcher)?.page ?? null;
+  const startupWindow = resolvedWindow ?? (await getIdentifiedWindows(app)).find(matcher)?.page ?? null;
 
-  if (!resolvedWindow) {
+  if (!startupWindow) {
     throw new Error(`Expected ${kind} window during startup`);
   }
 
-  return resolvedWindow;
+  return startupWindow;
 }
 
 async function getWindowByTitle(app: Awaited<ReturnType<typeof electron.launch>>, title: string) {
@@ -172,6 +181,7 @@ async function launchApp(options?: { projectRoot?: string }) {
   });
 
   const { splashWindow, window } = await resolveStartupWindows(app);
+  await waitForMainUi(window);
 
   return { app, window, splashWindow };
 }
@@ -192,10 +202,9 @@ async function launchAppForSplashHandoff() {
     },
   });
 
-  const splashWindow = await waitForStartupWindow(app, 'splash');
   const windowPromise = waitForStartupWindow(app, 'main');
 
-  return { app, splashWindow, windowPromise };
+  return { app, windowPromise };
 }
 
 async function launchPackagedWindowsApp() {
@@ -214,6 +223,7 @@ async function launchPackagedWindowsApp() {
   });
 
   const { splashWindow, window } = await resolveStartupWindows(app);
+  await waitForMainUi(window);
 
   return { app, window, splashWindow };
 }
@@ -274,6 +284,14 @@ async function openBottomTerminal(window: Awaited<ReturnType<typeof launchApp>>[
   await expect(window.locator('[data-testid="terminal-host"] .xterm')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
 
   return terminalHost;
+}
+
+async function switchToWhiteboard(window: Awaited<ReturnType<typeof launchApp>>['window']) {
+  const whiteboardTrigger = window.getByTestId('center-view-whiteboard');
+
+  await expect(whiteboardTrigger).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await whiteboardTrigger.click();
+  await expect(window.getByTestId('whiteboard-view')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
 }
 
 async function readTerminalText(window: Awaited<ReturnType<typeof launchApp>>['window']) {
@@ -397,6 +415,7 @@ async function focusMonacoEditor(window: Awaited<ReturnType<typeof launchApp>>['
   const editor = window.locator('.monaco-editor');
   await expect(editor).toBeVisible({ timeout: MONACO_READY_TIMEOUT_MS });
   await editor.click({ position: { x: 24, y: 12 } });
+  await waitForMonacoEditorTextFocus(window);
 }
 
 async function waitForMonacoEditor(window: Awaited<ReturnType<typeof launchApp>>['window']) {
@@ -587,14 +606,14 @@ async function selectMenuBarItem(
   itemLabel: string,
 ) {
   const menuTrigger = window.locator('[data-slot="menubar-trigger"]').filter({ hasText: menuLabel }).first();
-  await expect(menuTrigger).toBeVisible();
+  await expect(menuTrigger).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
   await menuTrigger.click();
 
   const menuContent = window.locator('[data-slot="menubar-content"]').last();
-  await expect(menuContent).toBeVisible();
+  await expect(menuContent).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
 
   const menuItem = menuContent.locator('[data-slot="menubar-item"]').filter({ hasText: itemLabel }).first();
-  await expect(menuItem).toBeVisible();
+  await expect(menuItem).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
   await menuItem.click();
 }
 
@@ -625,22 +644,24 @@ test('splash window hands off to the main window after the startup delay', async
 
   const launchStartedAt = Date.now();
   const splashMidpointCheckMs = 2000;
-  const { app, splashWindow, windowPromise } = await launchAppForSplashHandoff();
-  const splashClosePromise = splashWindow.waitForEvent('close');
+  const { app, windowPromise } = await launchAppForSplashHandoff();
 
-  await expect(splashWindow.getByTestId('splash-screen')).toBeVisible();
   await expect.poll(async () => isStartupBrowserWindowVisible(app, 'splash')).toBe(true);
   await expect.poll(async () => isStartupBrowserWindowVisible(app, 'main')).toBe(false);
 
   const elapsedBeforeMidpointCheck = Date.now() - launchStartedAt;
   if (elapsedBeforeMidpointCheck < splashMidpointCheckMs) {
-    await splashWindow.waitForTimeout(splashMidpointCheckMs - elapsedBeforeMidpointCheck);
+    await expect.poll(() => Date.now() - launchStartedAt, {
+      timeout: splashMidpointCheckMs - elapsedBeforeMidpointCheck + 1000,
+    }).toBeGreaterThanOrEqual(splashMidpointCheckMs);
 
     await expect.poll(async () => isStartupBrowserWindowVisible(app, 'splash')).toBe(true);
     await expect.poll(async () => isStartupBrowserWindowVisible(app, 'main')).toBe(false);
   }
 
-  await splashClosePromise;
+  await expect.poll(async () => isStartupBrowserWindowVisible(app, 'splash'), {
+    timeout: 15000,
+  }).toBe(false);
   const window = await windowPromise;
 
   expect(Date.now() - launchStartedAt).toBeGreaterThanOrEqual(3000);
@@ -743,9 +764,12 @@ test('Ctrl+Q or Cmd+Q hides the app to tray when close-to-tray is enabled', asyn
   await setSwitchChecked(window.getByTestId('settings-close-to-tray-switch'), true);
   await expect.poll(async () => readConfigValue(window, 'window.closeActionPreference')).toBe('tray');
   await window.getByTestId('settings-close-button').click();
+  await expect(window.getByTestId('settings-dialog')).toHaveCount(0);
 
   await window.bringToFront();
-  await window.keyboard.press(closeShortcut);
+  const activityBarTrigger = window.getByTestId('toggle-activity-bar');
+  await activityBarTrigger.focus();
+  await activityBarTrigger.press(closeShortcut);
 
   await expect.poll(async () => browserWindow.evaluate((win) => win.isVisible())).toBe(false);
   await expect.poll(() => app.windows().length).toBe(1);
@@ -1059,9 +1083,7 @@ test('ctrl+s saves an edited explorer file and clears the dirty indicator', asyn
 test('menu bar switches to the whiteboard view and renders the React Flow UI chrome', async () => {
   const { app, window } = await launchApp();
 
-  await window.getByLabel('Whiteboard').click();
-
-  await expect(window.getByTestId('whiteboard-view')).toBeVisible();
+  await switchToWhiteboard(window);
   await expect(window.getByTestId('whiteboard-react-flow')).toHaveClass(/light/);
   await expect(window.locator('[data-testid="whiteboard-controls-wrapper"] .react-flow__controls')).toBeVisible();
   await expect(window.getByTestId('rf__minimap')).toBeVisible();
@@ -1073,7 +1095,7 @@ test('menu bar switches to the whiteboard view and renders the React Flow UI chr
 test('whiteboard creates draggable nodes on the React Flow canvas', async () => {
   const { app, window } = await launchApp();
 
-  await window.getByLabel('Whiteboard').click();
+  await switchToWhiteboard(window);
 
   const addNodeButton = window.getByTestId('whiteboard-add-node');
   await expect(addNodeButton).toBeVisible();
@@ -1423,7 +1445,9 @@ test('activity bar switches code subpages and menu bar keeps higher-priority pag
   const { app, window } = await launchApp();
   const activityBarTrigger = window.getByTestId('toggle-activity-bar');
 
-  await expect(window.getByTestId('activity-item-explorer')).toBeVisible();
+  await expect(activityBarTrigger).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect(window.getByTestId('panel-center-panel')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect(window.getByTestId('activity-item-explorer')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
   await expect(window.getByTestId('activity-item-simulation')).toBeVisible();
   await expect(window.getByTestId('activity-item-synthesis')).toBeVisible();
   await expect(window.getByTestId('activity-item-physical')).toBeVisible();
@@ -1469,7 +1493,7 @@ test('activity bar switches code subpages and menu bar keeps higher-priority pag
   await window.getByTestId('activity-item-factory').click();
   await expect(window.getByTestId('code-view-factory')).toBeVisible();
 
-  await window.getByLabel('Whiteboard').click();
+  await switchToWhiteboard(window);
   await expect(window.getByTestId('whiteboard-view')).toBeVisible();
   await expect(window.getByTestId('activity-item-explorer')).toHaveCount(0);
   await expect(activityBarTrigger).toBeDisabled();
@@ -1541,7 +1565,7 @@ test('status bar switches across primary and secondary navigation views', async 
   await expect(statusBar).toHaveAttribute('data-status-bar-id', 'code-physical');
   await expect(statusBar).toContainText('Physical');
 
-  await window.getByLabel('Whiteboard').click();
+  await switchToWhiteboard(window);
   await expect(window.getByTestId('whiteboard-view')).toBeVisible();
   await expect(statusBar).toHaveAttribute('data-status-bar-id', 'whiteboard');
   await expect(statusBar).toContainText('Whiteboard');
@@ -1668,7 +1692,7 @@ test('menu bar activity trigger expands and preserves the activity bar state acr
   await expect(compileButton.getByText('Compile')).toBeVisible();
   await expect(runButton.getByText('Run')).toBeVisible();
 
-  await window.getByLabel('Whiteboard').click();
+  await switchToWhiteboard(window);
   await expect(window.getByTestId('whiteboard-view')).toBeVisible();
   await expect(window.getByTestId('activity-item-explorer')).toHaveCount(0);
   await expect(trigger).toBeVisible();

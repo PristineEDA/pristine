@@ -120,7 +120,7 @@ function showMainWindow(): void {
   mainWindow.focus();
 }
 
-function openSettingsFromApplicationMenu(): void {
+function openRendererDialogFromApplicationMenu(action: Extract<AppMenuAction, 'open-settings' | 'open-about'>): void {
   const existingWindow = mainWindow;
 
   showMainWindow();
@@ -131,20 +131,20 @@ function openSettingsFromApplicationMenu(): void {
   }
 
   if (existingWindow && existingWindow === window) {
-    sendMenuCommandToMainWindow({ action: 'open-settings' });
+    sendMenuCommandToMainWindow({ action });
     return;
   }
 
   window.once('ready-to-show', () => {
     if (mainWindow === window) {
-      sendMenuCommandToMainWindow({ action: 'open-settings' });
+      sendMenuCommandToMainWindow({ action });
     }
   });
 }
 
 function handleApplicationMenuAction(action: AppMenuAction): void {
-  if (action === 'open-settings') {
-    openSettingsFromApplicationMenu();
+  if (action === 'open-settings' || action === 'open-about') {
+    openRendererDialogFromApplicationMenu(action);
     return;
   }
 
@@ -174,7 +174,9 @@ function createMacOSApplicationMenu(): Menu {
       submenu: [
         {
           label: `About ${APP_DISPLAY_NAME}`,
-          role: 'about',
+          click: () => {
+            openRendererDialogFromApplicationMenu('open-about');
+          },
         },
         { type: 'separator' },
         {

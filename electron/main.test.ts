@@ -525,6 +525,28 @@ describe('electron main entry', () => {
     expect(mainWindow.webContents.send).toHaveBeenCalledWith('stream:menu:command', { action: 'open-settings' });
   });
 
+  it('routes macOS About menu items back into the renderer about dialog flow', async () => {
+    const { browserWindowInstances } = await importMain({ platform: 'darwin' });
+
+    const mainWindow = browserWindowInstances[1];
+    const applicationMenu = mocks.mockSetApplicationMenu.mock.calls[0]?.[0] as {
+      template: Array<{
+        label?: string;
+        submenu?: Array<{ label?: string; click?: () => void }>;
+      }>;
+    };
+    const appMenu = applicationMenu.template[0];
+    const helpMenu = applicationMenu.template.find((item) => item.label === 'Help');
+
+    appMenu.submenu?.find((item) => item.label === 'About Pristine')?.click?.();
+    helpMenu?.submenu?.find((item) => item.label === 'About')?.click?.();
+
+    expect(mainWindow.show).toHaveBeenCalledTimes(2);
+    expect(mainWindow.focus).toHaveBeenCalledTimes(2);
+    expect(mainWindow.webContents.send).toHaveBeenNthCalledWith(1, 'stream:menu:command', { action: 'open-about' });
+    expect(mainWindow.webContents.send).toHaveBeenNthCalledWith(2, 'stream:menu:command', { action: 'open-about' });
+  });
+
   it('creates the detached floating info window when enabled in config', async () => {
     const { browserWindowInstances } = await importMain({
       platform: 'win32',
