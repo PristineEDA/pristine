@@ -129,6 +129,7 @@ describe('terminal IPC handlers', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pristine-terminal-root-'));
     const sourceDir = path.join(root, 'src');
     fs.mkdirSync(sourceDir, { recursive: true });
+    const expectedCwd = fs.realpathSync(sourceDir);
 
     try {
       setTerminalProjectRoot(root);
@@ -147,9 +148,9 @@ describe('terminal IPC handlers', () => {
         expect.objectContaining({
           cols: 100,
           rows: 40,
-          cwd: sourceDir,
+          cwd: expectedCwd,
           env: expect.objectContaining({
-            PWD: sourceDir,
+            PWD: expectedCwd,
             SHELL: expect.any(String),
             TERM: 'xterm-256color',
           }),
@@ -169,7 +170,7 @@ describe('terminal IPC handlers', () => {
 
   it('falls back to a valid local cwd when the configured project root does not exist', async () => {
     const fakeTerminal = createFakeTerminal();
-    const fallbackCwd = os.homedir();
+    const fallbackCwd = fs.realpathSync(os.homedir());
     const missingProjectRoot = path.join(fallbackCwd, '__missing_pristine_project_root__');
 
     mockSpawn.mockReturnValue(fakeTerminal);
