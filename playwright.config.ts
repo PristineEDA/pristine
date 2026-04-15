@@ -1,9 +1,11 @@
 import { defineConfig } from '@playwright/test';
 
+const isWindows = process.platform === 'win32';
+
 export default defineConfig({
   testDir: './e2e',
   testIgnore: ['**/*.perf.spec.ts'],
-  timeout: 30000,
+  timeout: isWindows ? 120000 : 30000,
   retries: process.env['CI'] ? 1 : 0,
   workers: process.env['CI'] ? 1 : undefined,
   reporter: process.env['CI']

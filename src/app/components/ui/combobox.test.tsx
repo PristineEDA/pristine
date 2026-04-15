@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -47,7 +47,9 @@ describe('Combobox', () => {
     await user.click(screen.getByTestId('font-combobox'))
 
     expect(await screen.findByTestId('font-option-font-15')).toBeVisible()
-    expect(scrollIntoViewMock).toHaveBeenCalledWith({ block: 'nearest' })
+    await waitFor(() => {
+      expect(scrollIntoViewMock).toHaveBeenLastCalledWith({ block: 'center' })
+    })
   })
 
   it('supports mouse wheel scrolling inside the menu list', async () => {

@@ -121,7 +121,9 @@ describe('WorkspaceContext', () => {
       expect(window.electronAPI?.fs.writeFile).toHaveBeenCalledWith('rtl/core/alu.v', 'module alu; logic dirty; endmodule');
     });
 
-    expect(screen.getByTestId('dirty-files')).toHaveTextContent('');
+    await waitFor(() => {
+      expect(screen.getByTestId('dirty-files')).toBeEmptyDOMElement();
+    });
   });
 
   it('opens the unsaved files manager for the current dirty files', async () => {

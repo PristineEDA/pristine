@@ -72,7 +72,19 @@ export function MonacoEditorPane({
 }: MonacoEditorPaneProps) {
   const monaco = useMonaco();
   const problemsList = useProblemsList();
-  const { fontFamily, fontSize, theme } = useEditorSettings();
+  const {
+    bracketPairGuides,
+    fontFamily,
+    fontSize,
+    glyphMargin,
+    indentGuides,
+    lineNumbers,
+    minimapEnabled,
+    renderControlCharacters,
+    renderWhitespace,
+    theme,
+    wordWrap,
+  } = useEditorSettings();
   const editorFontFamily = getEditorFontFamilyStack(fontFamily);
   const editorLanguage = getEditorLanguage(activeTabId);
   const onCursorChangeRef = useRef(onCursorChange);
@@ -249,12 +261,35 @@ export function MonacoEditorPane({
     }
 
     editor.updateOptions({
+      glyphMargin,
       fontFamily: editorFontFamily,
       fontSize,
+      guides: {
+        bracketPairs: bracketPairGuides,
+        indentation: indentGuides,
+      },
+      lineNumbers,
+      minimap: { enabled: minimapEnabled, scale: 1, showSlider: 'mouseover' },
+      renderControlCharacters,
+      renderWhitespace,
+      wordWrap,
     });
     queueEditorLayoutRef.current();
     monaco?.editor.remeasureFonts?.();
-  }, [editorFontFamily, editorRef, fontSize, monaco]);
+  }, [
+    bracketPairGuides,
+    editorFontFamily,
+    editorRef,
+    fontSize,
+    glyphMargin,
+    indentGuides,
+    lineNumbers,
+    minimapEnabled,
+    monaco,
+    renderControlCharacters,
+    renderWhitespace,
+    wordWrap,
+  ]);
 
   useEffect(() => {
     if (!activeTabId || !editorRef.current) {
@@ -330,21 +365,22 @@ export function MonacoEditorPane({
           fontSize,
           fontFamily: editorFontFamily,
           fontLigatures: true,
-          lineNumbers: 'on',
+          lineNumbers,
           lineNumbersMinChars: 4,
-          glyphMargin: true,
+          glyphMargin,
           folding: true,
           foldingStrategy: 'indentation',
-          minimap: { enabled: true, scale: 1, showSlider: 'mouseover' },
+          minimap: { enabled: minimapEnabled, scale: 1, showSlider: 'mouseover' },
           scrollBeyondLastLine: false,
           automaticLayout: true,
           tabSize: 4,
           insertSpaces: true,
-          wordWrap: 'off',
+          wordWrap,
           rulers: [80, 120],
-          renderWhitespace: 'selection',
+          renderWhitespace,
+          renderControlCharacters,
           bracketPairColorization: { enabled: true },
-          guides: { bracketPairs: true, indentation: true },
+          guides: { bracketPairs: bracketPairGuides, indentation: indentGuides },
           suggest: { showKeywords: true, showSnippets: true },
           quickSuggestions: { other: true, comments: false, strings: false },
           parameterHints: { enabled: true },

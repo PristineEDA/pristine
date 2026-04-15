@@ -2,33 +2,65 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MenuBar } from './MenuBar';
-import { formatAttributionLine, openSourceAttributionSections } from '../../../about/attributions';
+import { openSourceAttributionSections } from '../../../about/attributions';
 import { WorkspaceProvider, useWorkspace } from '../../../context/WorkspaceContext';
 import { SidebarProvider, useSidebar } from '../../ui/sidebar';
 import { getEditorFontFamilyLabel } from '../../../editor/editorSettings';
 
 const setEditorFontSizeMock = vi.fn();
 const setEditorFontFamilyMock = vi.fn();
+const setEditorWordWrapMock = vi.fn();
+const setEditorRenderWhitespaceMock = vi.fn();
+const setEditorRenderControlCharactersMock = vi.fn();
+const setEditorLineNumbersMock = vi.fn();
+const setEditorMinimapEnabledMock = vi.fn();
+const setEditorGlyphMarginMock = vi.fn();
+const setEditorBracketPairGuidesMock = vi.fn();
+const setEditorIndentGuidesMock = vi.fn();
 const setEditorThemeMock = vi.fn();
 const setThemeMock = vi.fn();
 const toggleThemeMock = vi.fn();
 const undoActionRun = vi.fn(() => Promise.resolve());
 const redoActionRun = vi.fn(() => Promise.resolve());
+let mockedEditorBracketPairGuides = true;
 let mockedEditorFontFamily = 'jetbrains-mono';
 let mockedEditorFontSize = 13;
+let mockedEditorGlyphMargin = true;
+let mockedEditorIndentGuides = true;
+let mockedEditorLineNumbers = 'on';
+let mockedEditorMinimapEnabled = true;
+let mockedEditorRenderControlCharacters = false;
+let mockedEditorRenderWhitespace = 'selection';
 let mockedEditorTheme = 'dracula';
+let mockedEditorWordWrap = 'off';
 let mockedTheme: 'light' | 'dark' = 'light';
 
 vi.mock('../../../context/EditorSettingsContext', () => ({
   useEditorSettings: () => ({
+    bracketPairGuides: mockedEditorBracketPairGuides,
     fontFamilies: [],
     fontFamily: mockedEditorFontFamily,
     fontSize: mockedEditorFontSize,
+    glyphMargin: mockedEditorGlyphMargin,
+    indentGuides: mockedEditorIndentGuides,
+    lineNumbers: mockedEditorLineNumbers,
+    minimapEnabled: mockedEditorMinimapEnabled,
+    renderControlCharacters: mockedEditorRenderControlCharacters,
+    renderWhitespace: mockedEditorRenderWhitespace,
+    setBracketPairGuides: setEditorBracketPairGuidesMock,
     setFontFamily: setEditorFontFamilyMock,
     setFontSize: setEditorFontSizeMock,
+    setGlyphMargin: setEditorGlyphMarginMock,
+    setIndentGuides: setEditorIndentGuidesMock,
+    setLineNumbers: setEditorLineNumbersMock,
+    setMinimapEnabled: setEditorMinimapEnabledMock,
+    setRenderControlCharacters: setEditorRenderControlCharactersMock,
+    setRenderWhitespace: setEditorRenderWhitespaceMock,
     setTheme: setEditorThemeMock,
+    setWordWrap: setEditorWordWrapMock,
     theme: mockedEditorTheme,
     themes: [],
+    wordWrap: mockedEditorWordWrap,
   }),
 }));
 
@@ -37,14 +69,30 @@ vi.mock('../../../context/ThemeContext', () => ({
 }));
 
 beforeEach(() => {
+  mockedEditorBracketPairGuides = true;
   mockedEditorFontFamily = 'jetbrains-mono';
   mockedEditorFontSize = 13;
+  mockedEditorGlyphMargin = true;
+  mockedEditorIndentGuides = true;
+  mockedEditorLineNumbers = 'on';
+  mockedEditorMinimapEnabled = true;
+  mockedEditorRenderControlCharacters = false;
+  mockedEditorRenderWhitespace = 'selection';
   mockedEditorTheme = 'dracula';
+  mockedEditorWordWrap = 'off';
   mockedTheme = 'light';
   window.electronAPI!.platform = 'win32';
+  setEditorBracketPairGuidesMock.mockReset();
   setEditorFontFamilyMock.mockReset();
   setEditorFontSizeMock.mockReset();
+  setEditorGlyphMarginMock.mockReset();
+  setEditorIndentGuidesMock.mockReset();
+  setEditorLineNumbersMock.mockReset();
+  setEditorMinimapEnabledMock.mockReset();
+  setEditorRenderControlCharactersMock.mockReset();
+  setEditorRenderWhitespaceMock.mockReset();
   setEditorThemeMock.mockReset();
+  setEditorWordWrapMock.mockReset();
   setThemeMock.mockReset();
   toggleThemeMock.mockReset();
   undoActionRun.mockClear();
@@ -65,6 +113,80 @@ beforeEach(() => {
   vi.mocked(window.electronAPI!.setFloatingInfoWindowVisible).mockReset();
   vi.mocked(window.electronAPI!.menu.onCommand).mockReset();
 });
+
+type PersistedSettingsOptions = {
+  appTheme?: 'light' | 'dark';
+  bracketPairGuides?: boolean;
+  closeAction?: 'quit' | 'tray';
+  floatingInfoWindowVisible?: boolean;
+  fontFamily?: string;
+  fontSize?: number;
+  glyphMargin?: boolean;
+  indentGuides?: boolean;
+  lineNumbers?: string;
+  minimapEnabled?: boolean;
+  renderControlCharacters?: boolean;
+  renderWhitespace?: string;
+  editorTheme?: string;
+  wordWrap?: string;
+};
+
+function mockPersistedSettingsConfig(options: PersistedSettingsOptions = {}) {
+  const persisted = {
+    appTheme: 'light' as const,
+    bracketPairGuides: true,
+    closeAction: 'quit' as const,
+    floatingInfoWindowVisible: false,
+    fontFamily: 'jetbrains-mono',
+    fontSize: 13,
+    glyphMargin: true,
+    indentGuides: true,
+    lineNumbers: 'on',
+    minimapEnabled: true,
+    renderControlCharacters: false,
+    renderWhitespace: 'selection',
+    editorTheme: 'dracula',
+    wordWrap: 'off',
+    ...options,
+  };
+
+  vi.mocked(window.electronAPI!.config.get).mockImplementation((key: string) => {
+    switch (key) {
+      case 'ui.theme':
+        return persisted.appTheme;
+      case 'editor.guides.bracketPairs':
+        return persisted.bracketPairGuides;
+      case 'window.closeActionPreference':
+        return persisted.closeAction;
+      case 'ui.floatingInfoWindow.visible':
+        return persisted.floatingInfoWindowVisible;
+      case 'editor.fontFamily':
+        return persisted.fontFamily;
+      case 'editor.fontSize':
+        return persisted.fontSize;
+      case 'editor.glyphMargin':
+        return persisted.glyphMargin;
+      case 'editor.guides.indentation':
+        return persisted.indentGuides;
+      case 'editor.lineNumbers':
+        return persisted.lineNumbers;
+      case 'editor.minimap.enabled':
+        return persisted.minimapEnabled;
+      case 'editor.renderControlCharacters':
+        return persisted.renderControlCharacters;
+      case 'editor.renderWhitespace':
+        return persisted.renderWhitespace;
+      case 'editor.theme':
+        return persisted.editorTheme;
+      case 'editor.wordWrap':
+        return persisted.wordWrap;
+      default:
+        return null;
+    }
+  });
+
+  return persisted;
+}
 
 function renderMenuBar(props: React.ComponentProps<typeof MenuBar> = {}) {
   return render(
@@ -212,21 +334,14 @@ describe('MenuBar', () => {
 
   it('opens settings from native menu commands on macOS', async () => {
     window.electronAPI!.platform = 'darwin';
-    vi.mocked(window.electronAPI!.config.get).mockImplementation((key: string) =>
-      key === 'ui.theme'
-        ? 'dark'
-        : key === 'editor.fontFamily'
-          ? 'fira-code'
-        : key === 'editor.fontSize'
-          ? 18
-        : key === 'editor.theme'
-          ? 'night-owl'
-        : key === 'window.closeActionPreference'
-          ? 'tray'
-        : key === 'ui.floatingInfoWindow.visible'
-          ? true
-          : null,
-    );
+    mockPersistedSettingsConfig({
+      appTheme: 'dark',
+      closeAction: 'tray',
+      floatingInfoWindowVisible: true,
+      fontFamily: 'fira-code',
+      fontSize: 18,
+      editorTheme: 'night-owl',
+    });
 
     renderMenuBar();
 
@@ -258,7 +373,9 @@ describe('MenuBar', () => {
       expect(screen.getByText(section.title)).toBeInTheDocument();
     }
 
-    expect(screen.getByText(hasNormalizedTextContent(formatAttributionLine(firstAttributionItem)))).toBeInTheDocument();
+    expect(screen.getByText(firstAttributionItem.name)).toBeInTheDocument();
+    expect(screen.getByText(firstAttributionItem.url)).toBeInTheDocument();
+    expect(screen.getByText(firstAttributionItem.author)).toBeInTheDocument();
   });
 
   it('opens About from native menu commands on macOS', async () => {
@@ -341,21 +458,14 @@ describe('MenuBar', () => {
     const user = userEvent.setup();
     const expectedCloseShortcut = window.electronAPI?.platform === 'darwin' ? '⌘Q' : 'Ctrl+Q';
 
-    vi.mocked(window.electronAPI!.config.get).mockImplementation((key: string) =>
-      key === 'ui.theme'
-        ? 'dark'
-        : key === 'editor.fontFamily'
-          ? 'fira-code'
-        : key === 'editor.fontSize'
-          ? 18
-          : key === 'editor.theme'
-            ? 'night-owl'
-            : key === 'window.closeActionPreference'
-              ? 'tray'
-              : key === 'ui.floatingInfoWindow.visible'
-                ? true
-                : null,
-    );
+    mockPersistedSettingsConfig({
+      appTheme: 'dark',
+      closeAction: 'tray',
+      floatingInfoWindowVisible: true,
+      fontFamily: 'fira-code',
+      fontSize: 18,
+      editorTheme: 'night-owl',
+    });
 
     renderMenuBar();
 
@@ -409,22 +519,22 @@ describe('MenuBar', () => {
 
   it('shows editor settings plus theme, close-to-tray and floating info window visibility', async () => {
     const user = userEvent.setup();
-    vi.mocked(window.electronAPI!.config.get).mockImplementation((key: string) =>
-      key === 'ui.theme'
-        ? 'dark'
-        : key === 'editor.fontFamily'
-          ? 'fira-code'
-        : key === 'editor.fontSize'
-          ? 18
-          : key === 'editor.theme'
-            ? 'night-owl'
-            :
-      key === 'window.closeActionPreference'
-        ? 'tray'
-        : key === 'ui.floatingInfoWindow.visible'
-          ? true
-          : null,
-    );
+    mockPersistedSettingsConfig({
+      appTheme: 'dark',
+      bracketPairGuides: false,
+      closeAction: 'tray',
+      floatingInfoWindowVisible: true,
+      fontFamily: 'fira-code',
+      fontSize: 18,
+      glyphMargin: false,
+      indentGuides: false,
+      lineNumbers: 'relative',
+      minimapEnabled: false,
+      renderControlCharacters: true,
+      renderWhitespace: 'all',
+      editorTheme: 'night-owl',
+      wordWrap: 'bounded',
+    });
 
     renderMenuBar();
 
@@ -434,46 +544,71 @@ describe('MenuBar', () => {
     expect(screen.getByTestId('settings-editor-font-family-combobox')).toHaveTextContent(getEditorFontFamilyLabel('fira-code'));
     expect(screen.getByTestId('settings-editor-font-size-value')).toHaveTextContent('18px');
     expect(screen.getByTestId('settings-editor-theme-combobox')).toHaveTextContent('Night Owl');
+    expect(screen.getByTestId('settings-editor-word-wrap-combobox')).toHaveTextContent('Bounded');
+    expect(screen.getByTestId('settings-editor-render-whitespace-combobox')).toHaveTextContent('All');
+    expect(screen.getByTestId('settings-editor-line-numbers-combobox')).toHaveTextContent('Relative');
+    expect(screen.getByTestId('settings-editor-render-control-characters-switch')).toHaveAttribute('data-state', 'checked');
+    expect(screen.getByTestId('settings-editor-minimap-switch')).toHaveAttribute('data-state', 'unchecked');
+    expect(screen.getByTestId('settings-editor-glyph-margin-switch')).toHaveAttribute('data-state', 'unchecked');
+    expect(screen.getByTestId('settings-editor-bracket-pair-guides-switch')).toHaveAttribute('data-state', 'unchecked');
+    expect(screen.getByTestId('settings-editor-indent-guides-switch')).toHaveAttribute('data-state', 'unchecked');
     expect(screen.getByTestId('settings-theme-switch')).toHaveAttribute('data-state', 'checked');
     expect(screen.getByTestId('settings-close-to-tray-switch')).toHaveAttribute('data-state', 'checked');
     expect(screen.getByTestId('settings-floating-info-window-switch')).toHaveAttribute('data-state', 'checked');
 
     await user.click(screen.getByTestId('settings-editor-font-family-combobox'));
     await user.click(await screen.findByTestId('settings-editor-font-family-option-victor-mono'));
+    await user.click(screen.getByTestId('settings-editor-word-wrap-combobox'));
+    await user.click(await screen.findByTestId('settings-editor-word-wrap-option-on'));
+    await user.click(screen.getByTestId('settings-editor-render-whitespace-combobox'));
+    await user.click(await screen.findByTestId('settings-editor-render-whitespace-option-boundary'));
+    await user.click(screen.getByTestId('settings-editor-line-numbers-combobox'));
+    await user.click(await screen.findByTestId('settings-editor-line-numbers-option-interval'));
     await user.click(screen.getByTestId('settings-editor-theme-combobox'));
     await user.click(await screen.findByTestId('settings-editor-theme-option-github-dark'));
+    await user.click(screen.getByTestId('settings-editor-render-control-characters-switch'));
+    await user.click(screen.getByTestId('settings-editor-minimap-switch'));
+    await user.click(screen.getByTestId('settings-editor-glyph-margin-switch'));
+    await user.click(screen.getByTestId('settings-editor-bracket-pair-guides-switch'));
+    await user.click(screen.getByTestId('settings-editor-indent-guides-switch'));
     await user.click(screen.getByTestId('settings-theme-switch'));
     await user.click(screen.getByTestId('settings-close-to-tray-switch'));
     await user.click(screen.getByTestId('settings-floating-info-window-switch'));
 
     expect(setEditorFontFamilyMock).toHaveBeenCalledWith('victor-mono');
+    expect(setEditorWordWrapMock).toHaveBeenCalledWith('on');
+    expect(setEditorRenderWhitespaceMock).toHaveBeenCalledWith('boundary');
+    expect(setEditorLineNumbersMock).toHaveBeenCalledWith('interval');
+    expect(setEditorRenderControlCharactersMock).toHaveBeenCalledWith(false);
+    expect(setEditorMinimapEnabledMock).toHaveBeenCalledWith(true);
+    expect(setEditorGlyphMarginMock).toHaveBeenCalledWith(true);
+    expect(setEditorBracketPairGuidesMock).toHaveBeenCalledWith(true);
+    expect(setEditorIndentGuidesMock).toHaveBeenCalledWith(true);
     expect(setEditorThemeMock).toHaveBeenCalledWith('github-dark');
     expect(setThemeMock).toHaveBeenCalledWith('light');
     expect(window.electronAPI?.config.set).toHaveBeenCalledWith('window.closeActionPreference', 'quit');
     expect(window.electronAPI?.config.set).toHaveBeenCalledWith('ui.floatingInfoWindow.visible', false);
     expect(window.electronAPI?.setFloatingInfoWindowVisible).toHaveBeenCalledWith(false);
-  });
+  }, 15000);
 
   it('re-reads persisted settings each time the dialog opens', async () => {
     const user = userEvent.setup();
-    const configGetMock = vi.mocked(window.electronAPI!.config.get);
-
-    configGetMock.mockImplementation((key: string) =>
-      key === 'ui.theme'
-        ? 'dark'
-        : key === 'editor.fontFamily'
-          ? 'fira-code'
-        : key === 'editor.fontSize'
-          ? 18
-          : key === 'editor.theme'
-            ? 'night-owl'
-            :
-      key === 'window.closeActionPreference'
-        ? 'tray'
-        : key === 'ui.floatingInfoWindow.visible'
-          ? true
-          : null,
-    );
+    mockPersistedSettingsConfig({
+      appTheme: 'dark',
+      bracketPairGuides: false,
+      closeAction: 'tray',
+      floatingInfoWindowVisible: true,
+      fontFamily: 'fira-code',
+      fontSize: 18,
+      glyphMargin: false,
+      indentGuides: false,
+      lineNumbers: 'relative',
+      minimapEnabled: false,
+      renderControlCharacters: true,
+      renderWhitespace: 'all',
+      editorTheme: 'night-owl',
+      wordWrap: 'bounded',
+    });
 
     renderMenuBar();
 
@@ -483,28 +618,33 @@ describe('MenuBar', () => {
     expect(screen.getByTestId('settings-editor-font-family-combobox')).toHaveTextContent(getEditorFontFamilyLabel('fira-code'));
     expect(screen.getByTestId('settings-editor-font-size-value')).toHaveTextContent('18px');
     expect(screen.getByTestId('settings-editor-theme-combobox')).toHaveTextContent('Night Owl');
+    expect(screen.getByTestId('settings-editor-word-wrap-combobox')).toHaveTextContent('Bounded');
+    expect(screen.getByTestId('settings-editor-render-whitespace-combobox')).toHaveTextContent('All');
+    expect(screen.getByTestId('settings-editor-line-numbers-combobox')).toHaveTextContent('Relative');
+    expect(screen.getByTestId('settings-editor-render-control-characters-switch')).toHaveAttribute('data-state', 'checked');
+    expect(screen.getByTestId('settings-editor-minimap-switch')).toHaveAttribute('data-state', 'unchecked');
     expect(screen.getByTestId('settings-theme-switch')).toHaveAttribute('data-state', 'checked');
     expect(screen.getByTestId('settings-close-to-tray-switch')).toHaveAttribute('data-state', 'checked');
     expect(screen.getByTestId('settings-floating-info-window-switch')).toHaveAttribute('data-state', 'checked');
 
     await user.click(screen.getByTestId('settings-close-button'));
 
-    configGetMock.mockImplementation((key: string) =>
-      key === 'ui.theme'
-        ? 'light'
-        : key === 'editor.fontFamily'
-          ? 'jetbrains-mono'
-        : key === 'editor.fontSize'
-          ? 12
-          : key === 'editor.theme'
-            ? 'github-light'
-            :
-      key === 'window.closeActionPreference'
-        ? 'quit'
-        : key === 'ui.floatingInfoWindow.visible'
-          ? false
-          : null,
-    );
+    mockPersistedSettingsConfig({
+      appTheme: 'light',
+      bracketPairGuides: true,
+      closeAction: 'quit',
+      floatingInfoWindowVisible: false,
+      fontFamily: 'jetbrains-mono',
+      fontSize: 12,
+      glyphMargin: true,
+      indentGuides: true,
+      lineNumbers: 'on',
+      minimapEnabled: true,
+      renderControlCharacters: false,
+      renderWhitespace: 'selection',
+      editorTheme: 'github-light',
+      wordWrap: 'off',
+    });
 
     await user.click(screen.getByTestId('menu-settings-button'));
 
@@ -512,6 +652,11 @@ describe('MenuBar', () => {
     expect(screen.getByTestId('settings-editor-font-family-combobox')).toHaveTextContent('JetBrains Mono');
     expect(screen.getByTestId('settings-editor-font-size-value')).toHaveTextContent('12px');
     expect(screen.getByTestId('settings-editor-theme-combobox')).toHaveTextContent('GitHub Light');
+    expect(screen.getByTestId('settings-editor-word-wrap-combobox')).toHaveTextContent('Off');
+    expect(screen.getByTestId('settings-editor-render-whitespace-combobox')).toHaveTextContent('Selection');
+    expect(screen.getByTestId('settings-editor-line-numbers-combobox')).toHaveTextContent('On');
+    expect(screen.getByTestId('settings-editor-render-control-characters-switch')).toHaveAttribute('data-state', 'unchecked');
+    expect(screen.getByTestId('settings-editor-minimap-switch')).toHaveAttribute('data-state', 'checked');
     expect(screen.getByTestId('settings-theme-switch')).toHaveAttribute('data-state', 'unchecked');
     expect(screen.getByTestId('settings-close-to-tray-switch')).toHaveAttribute('data-state', 'unchecked');
     expect(screen.getByTestId('settings-floating-info-window-switch')).toHaveAttribute('data-state', 'unchecked');

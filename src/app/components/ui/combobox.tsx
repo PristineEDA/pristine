@@ -62,16 +62,34 @@ function Combobox({
       return
     }
 
+    let nestedAnimationFrameId = 0
     const animationFrameId = window.requestAnimationFrame(() => {
-      const selectedElement = document.querySelector<HTMLElement>(
-        `[data-combobox-list="${listTestId}"] [data-selected-option="true"]`,
-      )
+      nestedAnimationFrameId = window.requestAnimationFrame(() => {
+        const listElement = document.querySelector<HTMLElement>(`[data-combobox-list="${listTestId}"]`)
+        const selectedElement = document.querySelector<HTMLElement>(
+          `[data-combobox-list="${listTestId}"] [data-selected-option="true"]`,
+        )
 
-      selectedElement?.scrollIntoView({ block: "nearest" })
+        if (listElement && selectedElement) {
+          const targetScrollTop = Math.max(
+            selectedElement.offsetTop - listElement.clientHeight / 2 + selectedElement.offsetHeight / 2,
+            0,
+          )
+
+          if (typeof listElement.scrollTo === "function") {
+            listElement.scrollTo({ top: targetScrollTop })
+          } else {
+            listElement.scrollTop = targetScrollTop
+          }
+        }
+
+        selectedElement?.scrollIntoView({ block: "center" })
+      })
     })
 
     return () => {
       window.cancelAnimationFrame(animationFrameId)
+      window.cancelAnimationFrame(nestedAnimationFrameId)
     }
   }, [listTestId, open, value])
 
