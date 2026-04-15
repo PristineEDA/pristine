@@ -1,10 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 const mockHandle = vi.fn();
 const send = vi.fn();
 const mockExecFileSync = vi.fn();
 const originalPlatform = process.platform;
+const originalPwd = process.env.PWD;
 
 vi.mock('electron', () => ({
   ipcMain: { handle: (...args: unknown[]) => mockHandle(...args) },
@@ -89,6 +92,12 @@ describe('terminal IPC handlers', () => {
 
   afterAll(() => {
     setProcessPlatform(originalPlatform);
+    if (originalPwd === undefined) {
+      delete process.env.PWD;
+      return;
+    }
+
+    process.env.PWD = originalPwd;
   });
 
   it('selects PowerShell on Windows', () => {
@@ -117,33 +126,59 @@ describe('terminal IPC handlers', () => {
   it('creates a terminal session and forwards data/exit streams', async () => {
     const fakeTerminal = createFakeTerminal();
     mockSpawn.mockReturnValue(fakeTerminal);
-    const root = path.resolve('sandbox-root');
-    setTerminalProjectRoot(root);
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pristine-terminal-root-'));
+    const sourceDir = path.join(root, 'src');
+    fs.mkdirSync(sourceDir, { recursive: true });
+
+    try {
+      setTerminalProjectRoot(root);
+
+      const createHandler = getHandler('async:terminal:create');
+      const result = await createHandler({}, { cwd: 'src', cols: 100, rows: 40 });
+
+      expect(result).toEqual({
+        id: expect.any(String),
+        pid: 2468,
+        shell: expect.any(String),
+      });
+      expect(mockSpawn).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(Array),
+        expect.objectContaining({
+          cols: 100,
+          rows: 40,
+          cwd: sourceDir,
+        }),
+      );
+
+      const sessionId = (result as { id: string }).id;
+      fakeTerminal.handlers.data?.('PS> ');
+      fakeTerminal.handlers.exit?.({ exitCode: 0, signal: 0 });
+
+      expect(send).toHaveBeenNthCalledWith(1, 'stream:terminal:data', { id: sessionId, data: 'PS> ' });
+      expect(send).toHaveBeenNthCalledWith(2, 'stream:terminal:exit', { id: sessionId, exitCode: 0, signal: 0 });
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('falls back to a valid local cwd when the configured project root does not exist', async () => {
+    const fakeTerminal = createFakeTerminal();
+    const fallbackCwd = process.cwd();
+    const missingProjectRoot = path.join(fallbackCwd, '__missing_pristine_project_root__');
+
+    mockSpawn.mockReturnValue(fakeTerminal);
+    process.env.PWD = fallbackCwd;
+    setTerminalProjectRoot(missingProjectRoot);
 
     const createHandler = getHandler('async:terminal:create');
-    const result = await createHandler({}, { cwd: 'src', cols: 100, rows: 40 });
+    await createHandler({}, {});
 
-    expect(result).toEqual({
-      id: expect.any(String),
-      pid: 2468,
-      shell: expect.any(String),
-    });
     expect(mockSpawn).toHaveBeenCalledWith(
       expect.any(String),
       expect.any(Array),
-      expect.objectContaining({
-        cols: 100,
-        rows: 40,
-        cwd: path.resolve(root, 'src'),
-      }),
+      expect.objectContaining({ cwd: fallbackCwd }),
     );
-
-    const sessionId = (result as { id: string }).id;
-    fakeTerminal.handlers.data?.('PS> ');
-    fakeTerminal.handlers.exit?.({ exitCode: 0, signal: 0 });
-
-    expect(send).toHaveBeenNthCalledWith(1, 'stream:terminal:data', { id: sessionId, data: 'PS> ' });
-    expect(send).toHaveBeenNthCalledWith(2, 'stream:terminal:exit', { id: sessionId, exitCode: 0, signal: 0 });
   });
 
   it('routes write, resize, and kill to the matching session', async () => {

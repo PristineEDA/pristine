@@ -1,5 +1,7 @@
 import { ipcMain, BrowserWindow } from 'electron';
 import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
 import * as path from 'node:path';
 import * as pty from 'node-pty';
 import { AsyncChannels, StreamChannels } from './channels.js';
@@ -109,20 +111,37 @@ export function getTerminalLaunchConfig(
   return { file: shellPath, args: ['-l'] };
 }
 
+function isExistingDirectory(dirPath: string | null | undefined): dirPath is string {
+  if (!dirPath) {
+    return false;
+  }
+
+  try {
+    return fs.statSync(dirPath).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+function getFallbackSessionCwd(): string {
+  const envPwd = process.env['PWD']?.trim();
+  const homeDirectory = os.homedir();
+
+  return [envPwd, homeDirectory, process.cwd()].find(isExistingDirectory) ?? process.cwd();
+}
+
 function resolveSessionCwd(cwd?: string): string {
+  const candidates: string[] = [];
+
   if (cwd && projectRoot) {
-    return validatePathWithinRoot(projectRoot, cwd);
+    candidates.push(validatePathWithinRoot(projectRoot, cwd), projectRoot);
+  } else if (cwd) {
+    candidates.push(path.resolve(cwd));
+  } else if (projectRoot) {
+    candidates.push(projectRoot);
   }
 
-  if (cwd) {
-    return path.resolve(cwd);
-  }
-
-  if (projectRoot) {
-    return projectRoot;
-  }
-
-  return process.cwd();
+  return candidates.find(isExistingDirectory) ?? getFallbackSessionCwd();
 }
 
 function normalizeSize(value: number | undefined, fallback: number): number {
@@ -176,16 +195,24 @@ export function registerTerminalHandlers(getMainWindow: () => BrowserWindow | nu
 
     const launch = getTerminalLaunchConfig();
     const id = String(nextId++);
-    const session = pty.spawn(launch.file, launch.args, {
-      name: 'xterm-256color',
-      cols: normalizeSize(cols as number | undefined, DEFAULT_COLS),
-      rows: normalizeSize(rows as number | undefined, DEFAULT_ROWS),
-      cwd: resolveSessionCwd(cwd),
-      env: {
-        ...process.env,
-        TERM: 'xterm-256color',
-      },
-    });
+    const resolvedCwd = resolveSessionCwd(cwd);
+    let session: pty.IPty;
+
+    try {
+      session = pty.spawn(launch.file, launch.args, {
+        name: 'xterm-256color',
+        cols: normalizeSize(cols as number | undefined, DEFAULT_COLS),
+        rows: normalizeSize(rows as number | undefined, DEFAULT_ROWS),
+        cwd: resolvedCwd,
+        env: {
+          ...process.env,
+          TERM: 'xterm-256color',
+        },
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to start terminal shell "${launch.file}" in "${resolvedCwd}": ${message}`);
+    }
 
     sessions.set(id, session);
 
