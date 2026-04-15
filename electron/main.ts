@@ -31,6 +31,8 @@ let floatingInfoWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let isQuitting = false;
 
+app.setName(APP_DISPLAY_NAME);
+
 function configureElectronStoragePaths(): void {
   const isDev = Boolean(process.env['VITE_DEV_SERVER_URL']);
   const configuredUserDataPath = process.env['PRISTINE_USER_DATA_PATH'];

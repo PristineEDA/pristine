@@ -148,6 +148,7 @@ const mocks = vi.hoisted(() => {
     mockSetPath: vi.fn((name: string, value: string) => {
       appPaths.set(name, value);
     }),
+    mockSetName: vi.fn(),
     mockGetName: vi.fn(() => 'Pristine'),
     mockQuit: vi.fn(),
     mockBuildFromTemplate: vi.fn((template: unknown[]) => ({ template })),
@@ -174,6 +175,7 @@ vi.mock('electron', () => ({
     getName: mocks.mockGetName,
     getPath: mocks.mockGetPath,
     setPath: mocks.mockSetPath,
+    setName: mocks.mockSetName,
     whenReady: mocks.mockWhenReady,
     on: mocks.mockAppOn,
     quit: mocks.mockQuit,
@@ -244,6 +246,7 @@ async function importMain(options?: {
   mocks.mockGetName.mockClear();
   mocks.mockGetPath.mockClear();
   mocks.mockSetPath.mockClear();
+  mocks.mockSetName.mockClear();
   mocks.mockQuit.mockClear();
   mocks.mockBuildFromTemplate.mockClear();
   mocks.mockSetApplicationMenu.mockClear();
@@ -326,6 +329,7 @@ describe('electron main entry', () => {
 
     await importMain({ userDataPath });
 
+    expect(mocks.mockSetName).toHaveBeenCalledWith('Pristine');
     expect(mocks.mockMkdirSync).toHaveBeenCalledWith(
       path.join(userDataPath, 'session-data'),
       { recursive: true },
