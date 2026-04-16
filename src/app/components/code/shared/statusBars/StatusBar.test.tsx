@@ -120,7 +120,7 @@ describe('StatusBar', () => {
   });
 
   it('falls back to the generic git label when no project files are open or the workspace is not a git repo', () => {
-    mockedGitStatus.branchName = null;
+    mockedGitStatus.branchName = '';
     mockedGitStatus.hasProjectFiles = false;
     mockedGitStatus.isGitRepo = false;
 

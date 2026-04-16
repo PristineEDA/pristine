@@ -10,15 +10,21 @@ const mockedEnsureLspRegistered = vi.fn();
 const mockedAttachLspDocument = vi.fn((_args?: unknown) => vi.fn());
 const mockedUpdateLspDocument = vi.fn();
 const mockedSetNavigateHandler = vi.fn();
+let mockedEditorCursorBlinking = 'smooth';
 let mockedEditorBracketPairGuides = true;
 let mockedEditorFontFamily = 'jetbrains-mono';
+let mockedEditorFontLigatures = true;
 let mockedEditorFontSize = 13;
+let mockedEditorFoldingStrategy = 'indentation';
 let mockedEditorGlyphMargin = true;
 let mockedEditorIndentGuides = true;
 let mockedEditorLineNumbers = 'on';
 let mockedEditorMinimapEnabled = true;
 let mockedEditorRenderControlCharacters = false;
 let mockedEditorRenderWhitespace = 'selection';
+let mockedEditorScrollBeyondLastLine = false;
+let mockedEditorSmoothScrolling = true;
+let mockedEditorTabSize = 4;
 let mockedEditorTheme = 'dracula';
 let mockedEditorWordWrap = 'off';
 
@@ -128,25 +134,37 @@ vi.mock('../../../editor/registerLanguages', () => ({
 
 vi.mock('../../../context/EditorSettingsContext', () => ({
   useEditorSettings: () => ({
+    cursorBlinking: mockedEditorCursorBlinking,
     bracketPairGuides: mockedEditorBracketPairGuides,
     fontFamilies: [],
     fontFamily: mockedEditorFontFamily,
+    fontLigatures: mockedEditorFontLigatures,
     fontSize: mockedEditorFontSize,
+    foldingStrategy: mockedEditorFoldingStrategy,
     glyphMargin: mockedEditorGlyphMargin,
     indentGuides: mockedEditorIndentGuides,
     lineNumbers: mockedEditorLineNumbers,
     minimapEnabled: mockedEditorMinimapEnabled,
     renderControlCharacters: mockedEditorRenderControlCharacters,
     renderWhitespace: mockedEditorRenderWhitespace,
+    scrollBeyondLastLine: mockedEditorScrollBeyondLastLine,
+    smoothScrolling: mockedEditorSmoothScrolling,
+    tabSize: mockedEditorTabSize,
+    setCursorBlinking: vi.fn(),
     setBracketPairGuides: vi.fn(),
     setFontFamily: vi.fn(),
+    setFontLigatures: vi.fn(),
     setFontSize: vi.fn(),
+    setFoldingStrategy: vi.fn(),
     setGlyphMargin: vi.fn(),
     setIndentGuides: vi.fn(),
     setLineNumbers: vi.fn(),
     setMinimapEnabled: vi.fn(),
     setRenderControlCharacters: vi.fn(),
     setRenderWhitespace: vi.fn(),
+    setScrollBeyondLastLine: vi.fn(),
+    setSmoothScrolling: vi.fn(),
+    setTabSize: vi.fn(),
     setTheme: vi.fn(),
     setWordWrap: vi.fn(),
     theme: mockedEditorTheme,
@@ -173,15 +191,21 @@ import { MonacoEditorPane } from './MonacoEditorPane';
 describe('MonacoEditorPane', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockedEditorCursorBlinking = 'smooth';
     mockedEditorBracketPairGuides = true;
     mockedEditorFontFamily = 'jetbrains-mono';
+    mockedEditorFontLigatures = true;
     mockedEditorFontSize = 13;
+    mockedEditorFoldingStrategy = 'indentation';
     mockedEditorGlyphMargin = true;
     mockedEditorIndentGuides = true;
     mockedEditorLineNumbers = 'on';
     mockedEditorMinimapEnabled = true;
     mockedEditorRenderControlCharacters = false;
     mockedEditorRenderWhitespace = 'selection';
+    mockedEditorScrollBeyondLastLine = false;
+    mockedEditorSmoothScrolling = true;
+    mockedEditorTabSize = 4;
     mockedEditorTheme = 'dracula';
     mockedEditorWordWrap = 'off';
     mockedEnsureLspRegistered.mockReset();
@@ -239,13 +263,18 @@ describe('MonacoEditorPane', () => {
     const editorCalls = mockEditorComponent.mock.calls;
     const lastEditorProps = editorCalls[editorCalls.length - 1]?.[0];
     expect(lastEditorProps.options.fontFamily).toBe(getEditorFontFamilyStack('jetbrains-mono'));
+    expect(lastEditorProps.options.fontLigatures).toBe(true);
     expect(lastEditorProps.options.fontSize).toBe(13);
+    expect(lastEditorProps.options.foldingStrategy).toBe('indentation');
     expect(lastEditorProps.options.glyphMargin).toBe(true);
     expect(lastEditorProps.options.guides).toEqual({ bracketPairs: true, indentation: true });
     expect(lastEditorProps.options.lineNumbers).toBe('on');
     expect(lastEditorProps.options.minimap).toEqual({ enabled: true, scale: 1, showSlider: 'mouseover' });
     expect(lastEditorProps.options.renderControlCharacters).toBe(false);
     expect(lastEditorProps.options.renderWhitespace).toBe('selection');
+    expect(lastEditorProps.options.scrollBeyondLastLine).toBe(false);
+    expect(lastEditorProps.options.smoothScrolling).toBe(true);
+    expect(lastEditorProps.options.tabSize).toBe(4);
     expect(lastEditorProps.keepCurrentModel).toBe(true);
     expect(lastEditorProps.theme).toBe('dracula');
     expect(lastEditorProps.options.wordWrap).toBe('off');
@@ -272,15 +301,21 @@ describe('MonacoEditorPane', () => {
   });
 
   it('applies persisted editor display, font size and theme settings to Monaco', async () => {
+    mockedEditorCursorBlinking = 'solid';
     mockedEditorBracketPairGuides = false;
     mockedEditorFontFamily = 'monaspace-neon';
+    mockedEditorFontLigatures = false;
     mockedEditorFontSize = 18;
+    mockedEditorFoldingStrategy = 'auto';
     mockedEditorGlyphMargin = false;
     mockedEditorIndentGuides = false;
     mockedEditorLineNumbers = 'relative';
     mockedEditorMinimapEnabled = false;
     mockedEditorRenderControlCharacters = true;
     mockedEditorRenderWhitespace = 'all';
+    mockedEditorScrollBeyondLastLine = true;
+    mockedEditorSmoothScrolling = false;
+    mockedEditorTabSize = 2;
     mockedEditorTheme = 'github-dark';
     mockedEditorWordWrap = 'on';
 
@@ -299,18 +334,26 @@ describe('MonacoEditorPane', () => {
     const lastEditorProps = editorCalls[editorCalls.length - 1]?.[0];
 
     expect(lastEditorProps.options.fontFamily).toBe(getEditorFontFamilyStack('monaspace-neon'));
+    expect(lastEditorProps.options.fontLigatures).toBe(false);
     expect(lastEditorProps.options.fontSize).toBe(18);
+    expect(lastEditorProps.options.foldingStrategy).toBe('auto');
     expect(lastEditorProps.options.glyphMargin).toBe(false);
     expect(lastEditorProps.options.guides).toEqual({ bracketPairs: false, indentation: false });
     expect(lastEditorProps.options.lineNumbers).toBe('relative');
     expect(lastEditorProps.options.minimap).toEqual({ enabled: false, scale: 1, showSlider: 'mouseover' });
     expect(lastEditorProps.options.renderControlCharacters).toBe(true);
     expect(lastEditorProps.options.renderWhitespace).toBe('all');
+    expect(lastEditorProps.options.scrollBeyondLastLine).toBe(true);
+    expect(lastEditorProps.options.smoothScrolling).toBe(false);
+    expect(lastEditorProps.options.tabSize).toBe(2);
     expect(lastEditorProps.theme).toBe('github-dark');
     expect(lastEditorProps.options.wordWrap).toBe('on');
     expect(mockEditorInstance.updateOptions).toHaveBeenCalledWith({
+      cursorBlinking: 'solid',
       fontFamily: getEditorFontFamilyStack('monaspace-neon'),
+      fontLigatures: false,
       fontSize: 18,
+      foldingStrategy: 'auto',
       glyphMargin: false,
       guides: {
         bracketPairs: false,
@@ -320,6 +363,9 @@ describe('MonacoEditorPane', () => {
       minimap: { enabled: false, scale: 1, showSlider: 'mouseover' },
       renderControlCharacters: true,
       renderWhitespace: 'all',
+      scrollBeyondLastLine: true,
+      smoothScrolling: false,
+      tabSize: 2,
       wordWrap: 'on',
     });
     await waitFor(() => {

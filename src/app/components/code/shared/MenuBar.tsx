@@ -16,12 +16,18 @@ import { useWorkspace } from '../../../context/WorkspaceContext';
 import { useTheme, type Theme } from '../../../context/ThemeContext';
 import {
   DEFAULT_EDITOR_BRACKET_PAIR_GUIDES,
+  DEFAULT_EDITOR_FONT_LIGATURES,
   EDITOR_FONT_FAMILY_CONFIG_KEY,
   EDITOR_FONT_SIZE_CONFIG_KEY,
+  DEFAULT_EDITOR_SCROLL_BEYOND_LAST_LINE,
+  DEFAULT_EDITOR_SMOOTH_SCROLLING,
   DEFAULT_EDITOR_GLYPH_MARGIN,
   DEFAULT_EDITOR_INDENT_GUIDES,
   DEFAULT_EDITOR_MINIMAP_ENABLED,
   EDITOR_BRACKET_PAIR_GUIDES_CONFIG_KEY,
+  EDITOR_CURSOR_BLINKING_CONFIG_KEY,
+  EDITOR_FONT_LIGATURES_CONFIG_KEY,
+  EDITOR_FOLDING_STRATEGY_CONFIG_KEY,
   EDITOR_THEME_CONFIG_KEY,
   EDITOR_GLYPH_MARGIN_CONFIG_KEY,
   EDITOR_INDENT_GUIDES_CONFIG_KEY,
@@ -29,22 +35,26 @@ import {
   EDITOR_MINIMAP_ENABLED_CONFIG_KEY,
   EDITOR_RENDER_CONTROL_CHARACTERS_CONFIG_KEY,
   EDITOR_RENDER_WHITESPACE_CONFIG_KEY,
+  EDITOR_SCROLL_BEYOND_LAST_LINE_CONFIG_KEY,
+  EDITOR_SMOOTH_SCROLLING_CONFIG_KEY,
+  EDITOR_TAB_SIZE_CONFIG_KEY,
   EDITOR_WORD_WRAP_CONFIG_KEY,
+  editorCursorBlinkingOptions,
   editorFontFamilyOptions,
+  editorFoldingStrategyOptions,
   editorLineNumbersOptions,
   editorRenderWhitespaceOptions,
-  getEditorFontFamilyLabel,
-  getEditorLineNumbersLabel,
-  getEditorRenderWhitespaceLabel,
-  getEditorWordWrapLabel,
+  editorTabSizeOptions,
   editorThemeOptions,
   editorWordWrapOptions,
+  parseEditorCursorBlinking,
   parseEditorFontFamily,
+  parseEditorFoldingStrategy,
   parseEditorLineNumbers,
   parseEditorRenderControlCharacters,
   parseEditorRenderWhitespace,
+  parseEditorTabSize,
   parseEditorWordWrap,
-  getEditorThemeLabel,
   parseEditorFontSize,
   parseEditorTheme,
 } from '../../../editor/editorSettings';
@@ -61,7 +71,7 @@ import { ToggleGroup, ToggleGroupItem } from '../../ui/toggle-group';
 import { Toggle } from '../../ui/toggle';
 import { Separator } from '../../ui/separator';
 import { Button } from '../../ui/button';
-import { Combobox } from '../../ui/combobox';
+import { Combobox, type ComboboxOption } from '../../ui/combobox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../../ui/dialog';
 import { ScrollArea } from '../../ui/scroll-area';
 import { Slider } from '../../ui/slider';
@@ -180,12 +190,39 @@ function getConfiguredEditorRenderWhitespace() {
   return parseEditorRenderWhitespace(window.electronAPI?.config.get(EDITOR_RENDER_WHITESPACE_CONFIG_KEY));
 }
 
+function getConfiguredEditorFontLigatures() {
+  return getConfiguredEditorBooleanSetting(EDITOR_FONT_LIGATURES_CONFIG_KEY, DEFAULT_EDITOR_FONT_LIGATURES);
+}
+
+function getConfiguredEditorTabSize() {
+  return parseEditorTabSize(window.electronAPI?.config.get(EDITOR_TAB_SIZE_CONFIG_KEY));
+}
+
+function getConfiguredEditorCursorBlinking() {
+  return parseEditorCursorBlinking(window.electronAPI?.config.get(EDITOR_CURSOR_BLINKING_CONFIG_KEY));
+}
+
 function getConfiguredEditorRenderControlCharacters() {
   return parseEditorRenderControlCharacters(window.electronAPI?.config.get(EDITOR_RENDER_CONTROL_CHARACTERS_CONFIG_KEY));
 }
 
 function getConfiguredEditorLineNumbers() {
   return parseEditorLineNumbers(window.electronAPI?.config.get(EDITOR_LINE_NUMBERS_CONFIG_KEY));
+}
+
+function getConfiguredEditorSmoothScrolling() {
+  return getConfiguredEditorBooleanSetting(EDITOR_SMOOTH_SCROLLING_CONFIG_KEY, DEFAULT_EDITOR_SMOOTH_SCROLLING);
+}
+
+function getConfiguredEditorScrollBeyondLastLine() {
+  return getConfiguredEditorBooleanSetting(
+    EDITOR_SCROLL_BEYOND_LAST_LINE_CONFIG_KEY,
+    DEFAULT_EDITOR_SCROLL_BEYOND_LAST_LINE,
+  );
+}
+
+function getConfiguredEditorFoldingStrategy() {
+  return parseEditorFoldingStrategy(window.electronAPI?.config.get(EDITOR_FOLDING_STRATEGY_CONFIG_KEY));
 }
 
 function getConfiguredEditorBooleanSetting(configKey: string, defaultValue: boolean) {
@@ -231,6 +268,49 @@ function SettingsSwitchRow({
         </p>
       </div>
       <Switch checked={checked} data-testid={testId} onCheckedChange={onCheckedChange} />
+    </div>
+  );
+}
+
+function SettingsComboboxSection({
+  description,
+  emptyText,
+  onValueChange,
+  options,
+  searchPlaceholder,
+  testId,
+  title,
+  value,
+}: {
+  description: string;
+  emptyText: string;
+  onValueChange: (value: string) => void;
+  options: ComboboxOption[];
+  searchPlaceholder: string;
+  testId: string;
+  title: string;
+  value: string;
+}) {
+  return (
+    <div className={settingsSectionClassName}>
+      <div className="space-y-2.5">
+        <div className="space-y-1">
+          <p className={settingsSectionTitleClassName}>{title}</p>
+          <p className={settingsSectionDescriptionClassName} data-testid={`${testId}-description`}>
+            {description}
+          </p>
+        </div>
+        <Combobox
+          value={value}
+          onValueChange={onValueChange}
+          options={options}
+          placeholder={options.find((option) => option.value === value)?.label ?? options[0]?.label ?? ''}
+          searchPlaceholder={searchPlaceholder}
+          emptyText={emptyText}
+          triggerTestId={testId}
+          getOptionTestId={(optionValue) => `${testId.replace('-combobox', '-option')}-${optionValue}`}
+        />
+      </div>
     </div>
   );
 }
@@ -314,24 +394,36 @@ export function MenuBar({
     undoActiveEditor,
   } = useWorkspace();
   const {
+    cursorBlinking: editorCursorBlinking,
     bracketPairGuides: editorBracketPairGuides,
     fontFamily: editorFontFamily,
+    fontLigatures: editorFontLigatures,
     fontSize: editorFontSize,
+    foldingStrategy: editorFoldingStrategy,
     glyphMargin: editorGlyphMargin,
     indentGuides: editorIndentGuides,
     lineNumbers: editorLineNumbers,
     minimapEnabled: editorMinimapEnabled,
     renderControlCharacters: editorRenderControlCharacters,
     renderWhitespace: editorRenderWhitespace,
+    scrollBeyondLastLine: editorScrollBeyondLastLine,
+    smoothScrolling: editorSmoothScrolling,
+    tabSize: editorTabSize,
+    setCursorBlinking: setEditorCursorBlinking,
     setBracketPairGuides: setEditorBracketPairGuides,
     setFontFamily: setEditorFontFamily,
+    setFontLigatures: setEditorFontLigatures,
     setFontSize: setEditorFontSize,
+    setFoldingStrategy: setEditorFoldingStrategy,
     setGlyphMargin: setEditorGlyphMargin,
     setIndentGuides: setEditorIndentGuides,
     setLineNumbers: setEditorLineNumbers,
     setMinimapEnabled: setEditorMinimapEnabled,
     setRenderControlCharacters: setEditorRenderControlCharacters,
     setRenderWhitespace: setEditorRenderWhitespace,
+    setScrollBeyondLastLine: setEditorScrollBeyondLastLine,
+    setSmoothScrolling: setEditorSmoothScrolling,
+    setTabSize: setEditorTabSize,
     setTheme: setEditorTheme,
     setWordWrap: setEditorWordWrap,
     theme: editorTheme,
@@ -345,9 +437,12 @@ export function MenuBar({
   const [closeToTrayEnabled, setCloseToTrayEnabled] = useState(() => getConfiguredCloseAction() === 'tray');
   const [floatingInfoWindowVisible, setFloatingInfoWindowVisible] = useState(() => getFloatingInfoWindowVisible());
   const [settingsTheme, setSettingsTheme] = useState<Theme>(() => getConfiguredTheme());
+  const [settingsEditorCursorBlinking, setSettingsEditorCursorBlinking] = useState(() => getConfiguredEditorCursorBlinking());
   const [settingsEditorBracketPairGuides, setSettingsEditorBracketPairGuides] = useState(() => getConfiguredEditorBracketPairGuides());
   const [settingsEditorFontFamily, setSettingsEditorFontFamily] = useState(() => getConfiguredEditorFontFamily());
+  const [settingsEditorFontLigatures, setSettingsEditorFontLigatures] = useState(() => getConfiguredEditorFontLigatures());
   const [settingsEditorFontSize, setSettingsEditorFontSize] = useState(() => getConfiguredEditorFontSize());
+  const [settingsEditorFoldingStrategy, setSettingsEditorFoldingStrategy] = useState(() => getConfiguredEditorFoldingStrategy());
   const [settingsEditorGlyphMargin, setSettingsEditorGlyphMargin] = useState(() => getConfiguredEditorGlyphMargin());
   const [settingsEditorIndentGuides, setSettingsEditorIndentGuides] = useState(() => getConfiguredEditorIndentGuides());
   const [settingsEditorLineNumbers, setSettingsEditorLineNumbers] = useState(() => getConfiguredEditorLineNumbers());
@@ -356,6 +451,11 @@ export function MenuBar({
     () => getConfiguredEditorRenderControlCharacters(),
   );
   const [settingsEditorRenderWhitespace, setSettingsEditorRenderWhitespace] = useState(() => getConfiguredEditorRenderWhitespace());
+  const [settingsEditorScrollBeyondLastLine, setSettingsEditorScrollBeyondLastLine] = useState(
+    () => getConfiguredEditorScrollBeyondLastLine(),
+  );
+  const [settingsEditorSmoothScrolling, setSettingsEditorSmoothScrolling] = useState(() => getConfiguredEditorSmoothScrolling());
+  const [settingsEditorTabSize, setSettingsEditorTabSize] = useState(() => getConfiguredEditorTabSize());
   const [settingsEditorTheme, setSettingsEditorTheme] = useState(() => getConfiguredEditorTheme());
   const [settingsEditorWordWrap, setSettingsEditorWordWrap] = useState(() => getConfiguredEditorWordWrap());
   const layoutIconsEnabled = canUseLayoutPanels(mainContentView, activeView);
@@ -379,15 +479,21 @@ export function MenuBar({
     setCloseToTrayEnabled(getConfiguredCloseAction() === 'tray');
     setFloatingInfoWindowVisible(getFloatingInfoWindowVisible());
     setSettingsTheme(getConfiguredTheme());
+    setSettingsEditorCursorBlinking(getConfiguredEditorCursorBlinking());
     setSettingsEditorBracketPairGuides(getConfiguredEditorBracketPairGuides());
     setSettingsEditorFontFamily(getConfiguredEditorFontFamily());
+    setSettingsEditorFontLigatures(getConfiguredEditorFontLigatures());
     setSettingsEditorFontSize(getConfiguredEditorFontSize());
+    setSettingsEditorFoldingStrategy(getConfiguredEditorFoldingStrategy());
     setSettingsEditorGlyphMargin(getConfiguredEditorGlyphMargin());
     setSettingsEditorIndentGuides(getConfiguredEditorIndentGuides());
     setSettingsEditorLineNumbers(getConfiguredEditorLineNumbers());
     setSettingsEditorMinimapEnabled(getConfiguredEditorMinimapEnabled());
     setSettingsEditorRenderControlCharacters(getConfiguredEditorRenderControlCharacters());
     setSettingsEditorRenderWhitespace(getConfiguredEditorRenderWhitespace());
+    setSettingsEditorScrollBeyondLastLine(getConfiguredEditorScrollBeyondLastLine());
+    setSettingsEditorSmoothScrolling(getConfiguredEditorSmoothScrolling());
+    setSettingsEditorTabSize(getConfiguredEditorTabSize());
     setSettingsEditorTheme(getConfiguredEditorTheme());
     setSettingsEditorWordWrap(getConfiguredEditorWordWrap());
   };
@@ -395,6 +501,10 @@ export function MenuBar({
   useEffect(() => {
     setSettingsTheme(theme);
   }, [theme]);
+
+  useEffect(() => {
+    setSettingsEditorCursorBlinking(editorCursorBlinking);
+  }, [editorCursorBlinking]);
 
   useEffect(() => {
     setSettingsEditorBracketPairGuides(editorBracketPairGuides);
@@ -405,8 +515,16 @@ export function MenuBar({
   }, [editorFontFamily]);
 
   useEffect(() => {
+    setSettingsEditorFontLigatures(editorFontLigatures);
+  }, [editorFontLigatures]);
+
+  useEffect(() => {
     setSettingsEditorFontSize(editorFontSize);
   }, [editorFontSize]);
+
+  useEffect(() => {
+    setSettingsEditorFoldingStrategy(editorFoldingStrategy);
+  }, [editorFoldingStrategy]);
 
   useEffect(() => {
     setSettingsEditorGlyphMargin(editorGlyphMargin);
@@ -431,6 +549,18 @@ export function MenuBar({
   useEffect(() => {
     setSettingsEditorRenderWhitespace(editorRenderWhitespace);
   }, [editorRenderWhitespace]);
+
+  useEffect(() => {
+    setSettingsEditorScrollBeyondLastLine(editorScrollBeyondLastLine);
+  }, [editorScrollBeyondLastLine]);
+
+  useEffect(() => {
+    setSettingsEditorSmoothScrolling(editorSmoothScrolling);
+  }, [editorSmoothScrolling]);
+
+  useEffect(() => {
+    setSettingsEditorTabSize(editorTabSize);
+  }, [editorTabSize]);
 
   useEffect(() => {
     setSettingsEditorTheme(editorTheme);
@@ -482,6 +612,23 @@ export function MenuBar({
     setEditorFontFamily(nextFontFamily);
   };
 
+  const handleEditorFontLigaturesChange = (checked: boolean) => {
+    setSettingsEditorFontLigatures(checked);
+    setEditorFontLigatures(checked);
+  };
+
+  const handleEditorTabSizeChange = (value: string) => {
+    const nextTabSize = parseEditorTabSize(value);
+    setSettingsEditorTabSize(nextTabSize);
+    setEditorTabSize(nextTabSize);
+  };
+
+  const handleEditorCursorBlinkingChange = (value: string) => {
+    const nextCursorBlinking = parseEditorCursorBlinking(value);
+    setSettingsEditorCursorBlinking(nextCursorBlinking);
+    setEditorCursorBlinking(nextCursorBlinking);
+  };
+
   const handleEditorThemeChange = (value: string) => {
     const nextTheme = parseEditorTheme(value);
     setSettingsEditorTheme(nextTheme);
@@ -504,6 +651,22 @@ export function MenuBar({
     const nextLineNumbers = parseEditorLineNumbers(value);
     setSettingsEditorLineNumbers(nextLineNumbers);
     setEditorLineNumbers(nextLineNumbers);
+  };
+
+  const handleEditorSmoothScrollingChange = (checked: boolean) => {
+    setSettingsEditorSmoothScrolling(checked);
+    setEditorSmoothScrolling(checked);
+  };
+
+  const handleEditorScrollBeyondLastLineChange = (checked: boolean) => {
+    setSettingsEditorScrollBeyondLastLine(checked);
+    setEditorScrollBeyondLastLine(checked);
+  };
+
+  const handleEditorFoldingStrategyChange = (value: string) => {
+    const nextFoldingStrategy = parseEditorFoldingStrategy(value);
+    setSettingsEditorFoldingStrategy(nextFoldingStrategy);
+    setEditorFoldingStrategy(nextFoldingStrategy);
   };
 
   const handleEditorRenderControlCharactersChange = (checked: boolean) => {
@@ -967,136 +1130,152 @@ export function MenuBar({
                   </div>
                 </div>
               </div>
-              <div className={settingsSectionClassName}>
-                <div className="space-y-2.5">
-                  <div className="space-y-1">
-                    <p className={settingsSectionTitleClassName}>Code editor font</p>
-                    <p className={settingsSectionDescriptionClassName} data-testid="editor-font-family-description">
-                      Choose the bundled monospace font used in Monaco editor tabs.
-                    </p>
-                  </div>
-                  <Combobox
-                    value={settingsEditorFontFamily}
-                    onValueChange={handleEditorFontFamilyChange}
-                    options={editorFontFamilyOptions.map((option) => ({
-                      value: option.value,
-                      label: option.label,
-                      description: option.description,
-                    }))}
-                    placeholder={getEditorFontFamilyLabel(settingsEditorFontFamily)}
-                    searchPlaceholder="Search editor fonts..."
-                    emptyText="No editor font found."
-                    triggerTestId="settings-editor-font-family-combobox"
-                    getOptionTestId={(value) => `settings-editor-font-family-option-${value}`}
-                  />
-                </div>
-              </div>
-              <div className={settingsSectionClassName}>
-                <div className="space-y-2.5">
-                  <div className="space-y-1">
-                    <p className={settingsSectionTitleClassName}>Code editor theme</p>
-                    <p className={settingsSectionDescriptionClassName} data-testid="editor-theme-description">
-                      Choose the Monaco color theme used for source files.
-                    </p>
-                  </div>
-                  <Combobox
-                    value={settingsEditorTheme}
-                    onValueChange={handleEditorThemeChange}
-                    options={editorThemeOptions.map((option) => ({
-                      value: option.value,
-                      label: option.label,
-                      description: option.description,
-                    }))}
-                    placeholder={getEditorThemeLabel(settingsEditorTheme)}
-                    searchPlaceholder="Search editor themes..."
-                    emptyText="No editor theme found."
-                    triggerTestId="settings-editor-theme-combobox"
-                    getOptionTestId={(value) => `settings-editor-theme-option-${value}`}
-                  />
-                </div>
-              </div>
+              <SettingsComboboxSection
+                value={settingsEditorFontFamily}
+                onValueChange={handleEditorFontFamilyChange}
+                options={editorFontFamilyOptions.map((option) => ({
+                  value: option.value,
+                  label: option.label,
+                  description: option.description,
+                }))}
+                title="Code editor font"
+                description="Choose the bundled monospace font used in Monaco editor tabs."
+                searchPlaceholder="Search editor fonts..."
+                emptyText="No editor font found."
+                testId="settings-editor-font-family-combobox"
+              />
+              <SettingsComboboxSection
+                value={settingsEditorTheme}
+                onValueChange={handleEditorThemeChange}
+                options={editorThemeOptions.map((option) => ({
+                  value: option.value,
+                  label: option.label,
+                  description: option.description,
+                }))}
+                title="Code editor theme"
+                description="Choose the Monaco color theme used for source files."
+                searchPlaceholder="Search editor themes..."
+                emptyText="No editor theme found."
+                testId="settings-editor-theme-combobox"
+              />
               <div className={settingsSectionClassName}>
                 <div className="space-y-1">
-                  <p className={settingsSectionTitleClassName}>Editor display</p>
+                  <p className={settingsSectionTitleClassName}>Editor behavior &amp; display</p>
                   <p className={settingsSectionDescriptionClassName} data-testid="editor-display-description">
-                    Configure Monaco display aids such as wrapping, whitespace, gutters, and guides.
+                    Configure Monaco behavior and display aids such as indentation, caret motion, wrapping, gutters, and guides.
                   </p>
                 </div>
               </div>
-              <div className={settingsSectionClassName}>
-                <div className="space-y-2.5">
-                  <div className="space-y-1">
-                    <p className={settingsSectionTitleClassName}>Word wrap</p>
-                    <p className={settingsSectionDescriptionClassName} data-testid="editor-word-wrap-description">
-                      Control how Monaco wraps long lines inside the current editor viewport.
-                    </p>
-                  </div>
-                  <Combobox
-                    value={settingsEditorWordWrap}
-                    onValueChange={handleEditorWordWrapChange}
-                    options={editorWordWrapOptions.map((option) => ({
-                      value: option.value,
-                      label: option.label,
-                      description: option.description,
-                    }))}
-                    placeholder={getEditorWordWrapLabel(settingsEditorWordWrap)}
-                    searchPlaceholder="Search word wrap modes..."
-                    emptyText="No word wrap mode found."
-                    triggerTestId="settings-editor-word-wrap-combobox"
-                    getOptionTestId={(value) => `settings-editor-word-wrap-option-${value}`}
-                  />
-                </div>
-              </div>
-              <div className={settingsSectionClassName}>
-                <div className="space-y-2.5">
-                  <div className="space-y-1">
-                    <p className={settingsSectionTitleClassName}>Whitespace rendering</p>
-                    <p className={settingsSectionDescriptionClassName} data-testid="editor-render-whitespace-description">
-                      Choose when visible whitespace markers should appear in the editor.
-                    </p>
-                  </div>
-                  <Combobox
-                    value={settingsEditorRenderWhitespace}
-                    onValueChange={handleEditorRenderWhitespaceChange}
-                    options={editorRenderWhitespaceOptions.map((option) => ({
-                      value: option.value,
-                      label: option.label,
-                      description: option.description,
-                    }))}
-                    placeholder={getEditorRenderWhitespaceLabel(settingsEditorRenderWhitespace)}
-                    searchPlaceholder="Search whitespace modes..."
-                    emptyText="No whitespace mode found."
-                    triggerTestId="settings-editor-render-whitespace-combobox"
-                    getOptionTestId={(value) => `settings-editor-render-whitespace-option-${value}`}
-                  />
-                </div>
-              </div>
-              <div className={settingsSectionClassName}>
-                <div className="space-y-2.5">
-                  <div className="space-y-1">
-                    <p className={settingsSectionTitleClassName}>Line numbers</p>
-                    <p className={settingsSectionDescriptionClassName} data-testid="editor-line-numbers-description">
-                      Choose whether the editor gutter shows absolute, relative, or interval line numbers.
-                    </p>
-                  </div>
-                  <Combobox
-                    value={settingsEditorLineNumbers}
-                    onValueChange={handleEditorLineNumbersChange}
-                    options={editorLineNumbersOptions.map((option) => ({
-                      value: option.value,
-                      label: option.label,
-                      description: option.description,
-                    }))}
-                    placeholder={getEditorLineNumbersLabel(settingsEditorLineNumbers)}
-                    searchPlaceholder="Search line number modes..."
-                    emptyText="No line number mode found."
-                    triggerTestId="settings-editor-line-numbers-combobox"
-                    getOptionTestId={(value) => `settings-editor-line-numbers-option-${value}`}
-                  />
-                </div>
-              </div>
+              <SettingsComboboxSection
+                value={settingsEditorWordWrap}
+                onValueChange={handleEditorWordWrapChange}
+                options={editorWordWrapOptions.map((option) => ({
+                  value: option.value,
+                  label: option.label,
+                  description: option.description,
+                }))}
+                title="Word wrap"
+                description="Control how Monaco wraps long lines inside the current editor viewport."
+                searchPlaceholder="Search word wrap modes..."
+                emptyText="No word wrap mode found."
+                testId="settings-editor-word-wrap-combobox"
+              />
+              <SettingsComboboxSection
+                value={String(settingsEditorTabSize)}
+                onValueChange={handleEditorTabSizeChange}
+                options={editorTabSizeOptions.map((option) => ({
+                  value: String(option.value),
+                  label: option.label,
+                  description: option.description,
+                }))}
+                title="Tab size"
+                description="Choose how many spaces Monaco inserts and aligns when indentation uses tabs as spaces."
+                searchPlaceholder="Search tab sizes..."
+                emptyText="No tab size found."
+                testId="settings-editor-tab-size-combobox"
+              />
+              <SettingsComboboxSection
+                value={settingsEditorCursorBlinking}
+                onValueChange={handleEditorCursorBlinkingChange}
+                options={editorCursorBlinkingOptions.map((option) => ({
+                  value: option.value,
+                  label: option.label,
+                  description: option.description,
+                }))}
+                title="Cursor blinking"
+                description="Control the caret animation Monaco uses while the editor has focus."
+                searchPlaceholder="Search cursor blinking modes..."
+                emptyText="No cursor blinking mode found."
+                testId="settings-editor-cursor-blinking-combobox"
+              />
+              <SettingsComboboxSection
+                value={settingsEditorRenderWhitespace}
+                onValueChange={handleEditorRenderWhitespaceChange}
+                options={editorRenderWhitespaceOptions.map((option) => ({
+                  value: option.value,
+                  label: option.label,
+                  description: option.description,
+                }))}
+                title="Whitespace rendering"
+                description="Choose when visible whitespace markers should appear in the editor."
+                searchPlaceholder="Search whitespace modes..."
+                emptyText="No whitespace mode found."
+                testId="settings-editor-render-whitespace-combobox"
+              />
+              <SettingsComboboxSection
+                value={settingsEditorLineNumbers}
+                onValueChange={handleEditorLineNumbersChange}
+                options={editorLineNumbersOptions.map((option) => ({
+                  value: option.value,
+                  label: option.label,
+                  description: option.description,
+                }))}
+                title="Line numbers"
+                description="Choose whether the editor gutter shows absolute, relative, or interval line numbers."
+                searchPlaceholder="Search line number modes..."
+                emptyText="No line number mode found."
+                testId="settings-editor-line-numbers-combobox"
+              />
+              <SettingsComboboxSection
+                value={settingsEditorFoldingStrategy}
+                onValueChange={handleEditorFoldingStrategyChange}
+                options={editorFoldingStrategyOptions.map((option) => ({
+                  value: option.value,
+                  label: option.label,
+                  description: option.description,
+                }))}
+                title="Folding strategy"
+                description="Choose whether Monaco folds from indentation only or uses language-aware providers when possible."
+                searchPlaceholder="Search folding strategies..."
+                emptyText="No folding strategy found."
+                testId="settings-editor-folding-strategy-combobox"
+              />
               <div className={settingsSectionClassName}>
                 <div className="space-y-3">
+                  <SettingsSwitchRow
+                    checked={settingsEditorFontLigatures}
+                    description="Enable Monaco font ligatures when the selected code font supports them."
+                    onCheckedChange={handleEditorFontLigaturesChange}
+                    testId="settings-editor-font-ligatures-switch"
+                    title="Font ligatures"
+                  />
+                  <Separator />
+                  <SettingsSwitchRow
+                    checked={settingsEditorSmoothScrolling}
+                    description="Animate editor scrolling with Monaco's smooth scrolling behavior."
+                    onCheckedChange={handleEditorSmoothScrollingChange}
+                    testId="settings-editor-smooth-scrolling-switch"
+                    title="Smooth scrolling"
+                  />
+                  <Separator />
+                  <SettingsSwitchRow
+                    checked={settingsEditorScrollBeyondLastLine}
+                    description="Keep extra blank space after the final line so the cursor can scroll below the file end."
+                    onCheckedChange={handleEditorScrollBeyondLastLineChange}
+                    testId="settings-editor-scroll-beyond-last-line-switch"
+                    title="Scroll beyond last line"
+                  />
+                  <Separator />
                   <SettingsSwitchRow
                     checked={settingsEditorRenderControlCharacters}
                     description="Render control characters such as tabs and other non-printable glyphs using Monaco's built-in markers."

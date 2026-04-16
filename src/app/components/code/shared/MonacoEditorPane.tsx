@@ -72,15 +72,21 @@ export function MonacoEditorPane({
 }: MonacoEditorPaneProps) {
   const monaco = useMonaco();
   const {
+    cursorBlinking,
     bracketPairGuides,
     fontFamily,
+    fontLigatures,
     fontSize,
+    foldingStrategy,
     glyphMargin,
     indentGuides,
     lineNumbers,
     minimapEnabled,
     renderControlCharacters,
     renderWhitespace,
+    scrollBeyondLastLine,
+    smoothScrolling,
+    tabSize,
     theme,
     wordWrap,
   } = useEditorSettings();
@@ -93,6 +99,26 @@ export function MonacoEditorPane({
   const layoutFrameRef = useRef<number | null>(null);
   const [mountedEditor, setMountedEditor] = useState<any>(null);
   const queueEditorLayoutRef = useRef<() => void>(() => undefined);
+  const editorBehaviorOptions = {
+    cursorBlinking,
+    fontFamily: editorFontFamily,
+    fontLigatures,
+    fontSize,
+    foldingStrategy,
+    glyphMargin,
+    guides: {
+      bracketPairs: bracketPairGuides,
+      indentation: indentGuides,
+    },
+    lineNumbers,
+    minimap: { enabled: minimapEnabled, scale: 1, showSlider: 'mouseover' as const },
+    renderControlCharacters,
+    renderWhitespace,
+    scrollBeyondLastLine,
+    smoothScrolling,
+    tabSize,
+    wordWrap,
+  };
 
   queueEditorLayoutRef.current = () => {
     const applyLayout = () => {
@@ -213,27 +239,17 @@ export function MonacoEditorPane({
       return;
     }
 
-    editor.updateOptions({
-      glyphMargin,
-      fontFamily: editorFontFamily,
-      fontSize,
-      guides: {
-        bracketPairs: bracketPairGuides,
-        indentation: indentGuides,
-      },
-      lineNumbers,
-      minimap: { enabled: minimapEnabled, scale: 1, showSlider: 'mouseover' },
-      renderControlCharacters,
-      renderWhitespace,
-      wordWrap,
-    });
+    editor.updateOptions(editorBehaviorOptions);
     queueEditorLayoutRef.current();
     monaco?.editor.remeasureFonts?.();
   }, [
+    cursorBlinking,
     bracketPairGuides,
     editorFontFamily,
     editorRef,
+    fontLigatures,
     fontSize,
+    foldingStrategy,
     glyphMargin,
     indentGuides,
     lineNumbers,
@@ -241,6 +257,9 @@ export function MonacoEditorPane({
     monaco,
     renderControlCharacters,
     renderWhitespace,
+    scrollBeyondLastLine,
+    smoothScrolling,
+    tabSize,
     wordWrap,
   ]);
 
@@ -315,30 +334,16 @@ export function MonacoEditorPane({
           onContentChange?.(value ?? '');
         }}
         options={{
-          fontSize,
-          fontFamily: editorFontFamily,
-          fontLigatures: true,
-          lineNumbers,
+          ...editorBehaviorOptions,
           lineNumbersMinChars: 4,
-          glyphMargin,
           folding: true,
-          foldingStrategy: 'indentation',
-          minimap: { enabled: minimapEnabled, scale: 1, showSlider: 'mouseover' },
-          scrollBeyondLastLine: false,
           automaticLayout: true,
-          tabSize: 4,
           insertSpaces: true,
-          wordWrap,
           rulers: [80, 120],
-          renderWhitespace,
-          renderControlCharacters,
           bracketPairColorization: { enabled: true },
-          guides: { bracketPairs: bracketPairGuides, indentation: indentGuides },
           suggest: { showKeywords: true, showSnippets: true },
           quickSuggestions: { other: true, comments: false, strings: false },
           parameterHints: { enabled: true },
-          cursorBlinking: 'smooth',
-          smoothScrolling: true,
           scrollbar: {
             verticalScrollbarSize: 8,
             horizontalScrollbarSize: 8,

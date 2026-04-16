@@ -9,9 +9,15 @@ import { getEditorFontFamilyLabel } from '../../../editor/editorSettings';
 
 const setEditorFontSizeMock = vi.fn();
 const setEditorFontFamilyMock = vi.fn();
+const setEditorFontLigaturesMock = vi.fn();
+const setEditorTabSizeMock = vi.fn();
+const setEditorCursorBlinkingMock = vi.fn();
 const setEditorWordWrapMock = vi.fn();
 const setEditorRenderWhitespaceMock = vi.fn();
 const setEditorRenderControlCharactersMock = vi.fn();
+const setEditorSmoothScrollingMock = vi.fn();
+const setEditorScrollBeyondLastLineMock = vi.fn();
+const setEditorFoldingStrategyMock = vi.fn();
 const setEditorLineNumbersMock = vi.fn();
 const setEditorMinimapEnabledMock = vi.fn();
 const setEditorGlyphMarginMock = vi.fn();
@@ -23,14 +29,20 @@ const toggleThemeMock = vi.fn();
 const undoActionRun = vi.fn(() => Promise.resolve());
 const redoActionRun = vi.fn(() => Promise.resolve());
 let mockedEditorBracketPairGuides = true;
+let mockedEditorCursorBlinking = 'smooth';
 let mockedEditorFontFamily = 'jetbrains-mono';
+let mockedEditorFontLigatures = true;
 let mockedEditorFontSize = 13;
+let mockedEditorFoldingStrategy = 'indentation';
 let mockedEditorGlyphMargin = true;
 let mockedEditorIndentGuides = true;
 let mockedEditorLineNumbers = 'on';
 let mockedEditorMinimapEnabled = true;
 let mockedEditorRenderControlCharacters = false;
 let mockedEditorRenderWhitespace = 'selection';
+let mockedEditorScrollBeyondLastLine = false;
+let mockedEditorSmoothScrolling = true;
+let mockedEditorTabSize = 4;
 let mockedEditorTheme = 'dracula';
 let mockedEditorWordWrap = 'off';
 let mockedTheme: 'light' | 'dark' = 'light';
@@ -38,24 +50,36 @@ let mockedTheme: 'light' | 'dark' = 'light';
 vi.mock('../../../context/EditorSettingsContext', () => ({
   useEditorSettings: () => ({
     bracketPairGuides: mockedEditorBracketPairGuides,
+    cursorBlinking: mockedEditorCursorBlinking,
     fontFamilies: [],
     fontFamily: mockedEditorFontFamily,
+    fontLigatures: mockedEditorFontLigatures,
     fontSize: mockedEditorFontSize,
+    foldingStrategy: mockedEditorFoldingStrategy,
     glyphMargin: mockedEditorGlyphMargin,
     indentGuides: mockedEditorIndentGuides,
     lineNumbers: mockedEditorLineNumbers,
     minimapEnabled: mockedEditorMinimapEnabled,
     renderControlCharacters: mockedEditorRenderControlCharacters,
     renderWhitespace: mockedEditorRenderWhitespace,
+    scrollBeyondLastLine: mockedEditorScrollBeyondLastLine,
+    smoothScrolling: mockedEditorSmoothScrolling,
+    tabSize: mockedEditorTabSize,
     setBracketPairGuides: setEditorBracketPairGuidesMock,
+    setCursorBlinking: setEditorCursorBlinkingMock,
     setFontFamily: setEditorFontFamilyMock,
+    setFontLigatures: setEditorFontLigaturesMock,
     setFontSize: setEditorFontSizeMock,
+    setFoldingStrategy: setEditorFoldingStrategyMock,
     setGlyphMargin: setEditorGlyphMarginMock,
     setIndentGuides: setEditorIndentGuidesMock,
     setLineNumbers: setEditorLineNumbersMock,
     setMinimapEnabled: setEditorMinimapEnabledMock,
     setRenderControlCharacters: setEditorRenderControlCharactersMock,
     setRenderWhitespace: setEditorRenderWhitespaceMock,
+    setScrollBeyondLastLine: setEditorScrollBeyondLastLineMock,
+    setSmoothScrolling: setEditorSmoothScrollingMock,
+    setTabSize: setEditorTabSizeMock,
     setTheme: setEditorThemeMock,
     setWordWrap: setEditorWordWrapMock,
     theme: mockedEditorTheme,
@@ -70,27 +94,39 @@ vi.mock('../../../context/ThemeContext', () => ({
 
 beforeEach(() => {
   mockedEditorBracketPairGuides = true;
+  mockedEditorCursorBlinking = 'smooth';
   mockedEditorFontFamily = 'jetbrains-mono';
+  mockedEditorFontLigatures = true;
   mockedEditorFontSize = 13;
+  mockedEditorFoldingStrategy = 'indentation';
   mockedEditorGlyphMargin = true;
   mockedEditorIndentGuides = true;
   mockedEditorLineNumbers = 'on';
   mockedEditorMinimapEnabled = true;
   mockedEditorRenderControlCharacters = false;
   mockedEditorRenderWhitespace = 'selection';
+  mockedEditorScrollBeyondLastLine = false;
+  mockedEditorSmoothScrolling = true;
+  mockedEditorTabSize = 4;
   mockedEditorTheme = 'dracula';
   mockedEditorWordWrap = 'off';
   mockedTheme = 'light';
   window.electronAPI!.platform = 'win32';
   setEditorBracketPairGuidesMock.mockReset();
+  setEditorCursorBlinkingMock.mockReset();
   setEditorFontFamilyMock.mockReset();
+  setEditorFontLigaturesMock.mockReset();
   setEditorFontSizeMock.mockReset();
+  setEditorFoldingStrategyMock.mockReset();
   setEditorGlyphMarginMock.mockReset();
   setEditorIndentGuidesMock.mockReset();
   setEditorLineNumbersMock.mockReset();
   setEditorMinimapEnabledMock.mockReset();
   setEditorRenderControlCharactersMock.mockReset();
   setEditorRenderWhitespaceMock.mockReset();
+  setEditorScrollBeyondLastLineMock.mockReset();
+  setEditorSmoothScrollingMock.mockReset();
+  setEditorTabSizeMock.mockReset();
   setEditorThemeMock.mockReset();
   setEditorWordWrapMock.mockReset();
   setThemeMock.mockReset();
@@ -118,15 +154,21 @@ type PersistedSettingsOptions = {
   appTheme?: 'light' | 'dark';
   bracketPairGuides?: boolean;
   closeAction?: 'quit' | 'tray';
+  cursorBlinking?: string;
   floatingInfoWindowVisible?: boolean;
   fontFamily?: string;
+  fontLigatures?: boolean;
   fontSize?: number;
+  foldingStrategy?: string;
   glyphMargin?: boolean;
   indentGuides?: boolean;
   lineNumbers?: string;
   minimapEnabled?: boolean;
   renderControlCharacters?: boolean;
   renderWhitespace?: string;
+  scrollBeyondLastLine?: boolean;
+  smoothScrolling?: boolean;
+  tabSize?: number;
   editorTheme?: string;
   wordWrap?: string;
 };
@@ -136,15 +178,21 @@ function mockPersistedSettingsConfig(options: PersistedSettingsOptions = {}) {
     appTheme: 'light' as const,
     bracketPairGuides: true,
     closeAction: 'quit' as const,
+    cursorBlinking: 'smooth',
     floatingInfoWindowVisible: false,
     fontFamily: 'jetbrains-mono',
+    fontLigatures: true,
     fontSize: 13,
+    foldingStrategy: 'indentation',
     glyphMargin: true,
     indentGuides: true,
     lineNumbers: 'on',
     minimapEnabled: true,
     renderControlCharacters: false,
     renderWhitespace: 'selection',
+    scrollBeyondLastLine: false,
+    smoothScrolling: true,
+    tabSize: 4,
     editorTheme: 'dracula',
     wordWrap: 'off',
     ...options,
@@ -158,12 +206,18 @@ function mockPersistedSettingsConfig(options: PersistedSettingsOptions = {}) {
         return persisted.bracketPairGuides;
       case 'window.closeActionPreference':
         return persisted.closeAction;
+      case 'editor.cursorBlinking':
+        return persisted.cursorBlinking;
       case 'ui.floatingInfoWindow.visible':
         return persisted.floatingInfoWindowVisible;
       case 'editor.fontFamily':
         return persisted.fontFamily;
+      case 'editor.fontLigatures':
+        return persisted.fontLigatures;
       case 'editor.fontSize':
         return persisted.fontSize;
+      case 'editor.foldingStrategy':
+        return persisted.foldingStrategy;
       case 'editor.glyphMargin':
         return persisted.glyphMargin;
       case 'editor.guides.indentation':
@@ -176,6 +230,12 @@ function mockPersistedSettingsConfig(options: PersistedSettingsOptions = {}) {
         return persisted.renderControlCharacters;
       case 'editor.renderWhitespace':
         return persisted.renderWhitespace;
+      case 'editor.scrollBeyondLastLine':
+        return persisted.scrollBeyondLastLine;
+      case 'editor.smoothScrolling':
+        return persisted.smoothScrolling;
+      case 'editor.tabSize':
+        return persisted.tabSize;
       case 'editor.theme':
         return persisted.editorTheme;
       case 'editor.wordWrap':
@@ -523,15 +583,21 @@ describe('MenuBar', () => {
       appTheme: 'dark',
       bracketPairGuides: false,
       closeAction: 'tray',
+      cursorBlinking: 'solid',
       floatingInfoWindowVisible: true,
       fontFamily: 'fira-code',
+      fontLigatures: false,
       fontSize: 18,
+      foldingStrategy: 'auto',
       glyphMargin: false,
       indentGuides: false,
       lineNumbers: 'relative',
       minimapEnabled: false,
       renderControlCharacters: true,
       renderWhitespace: 'all',
+      scrollBeyondLastLine: true,
+      smoothScrolling: false,
+      tabSize: 8,
       editorTheme: 'night-owl',
       wordWrap: 'bounded',
     });
@@ -545,9 +611,15 @@ describe('MenuBar', () => {
     expect(screen.getByTestId('settings-editor-font-size-value')).toHaveTextContent('18px');
     expect(screen.getByTestId('settings-editor-theme-combobox')).toHaveTextContent('Night Owl');
     expect(screen.getByTestId('settings-editor-word-wrap-combobox')).toHaveTextContent('Bounded');
+    expect(screen.getByTestId('settings-editor-tab-size-combobox')).toHaveTextContent('8 spaces');
+    expect(screen.getByTestId('settings-editor-cursor-blinking-combobox')).toHaveTextContent('Solid');
     expect(screen.getByTestId('settings-editor-render-whitespace-combobox')).toHaveTextContent('All');
     expect(screen.getByTestId('settings-editor-line-numbers-combobox')).toHaveTextContent('Relative');
+    expect(screen.getByTestId('settings-editor-folding-strategy-combobox')).toHaveTextContent('Auto');
+    expect(screen.getByTestId('settings-editor-font-ligatures-switch')).toHaveAttribute('data-state', 'unchecked');
     expect(screen.getByTestId('settings-editor-render-control-characters-switch')).toHaveAttribute('data-state', 'checked');
+    expect(screen.getByTestId('settings-editor-smooth-scrolling-switch')).toHaveAttribute('data-state', 'unchecked');
+    expect(screen.getByTestId('settings-editor-scroll-beyond-last-line-switch')).toHaveAttribute('data-state', 'checked');
     expect(screen.getByTestId('settings-editor-minimap-switch')).toHaveAttribute('data-state', 'unchecked');
     expect(screen.getByTestId('settings-editor-glyph-margin-switch')).toHaveAttribute('data-state', 'unchecked');
     expect(screen.getByTestId('settings-editor-bracket-pair-guides-switch')).toHaveAttribute('data-state', 'unchecked');
@@ -560,13 +632,22 @@ describe('MenuBar', () => {
     await user.click(await screen.findByTestId('settings-editor-font-family-option-victor-mono'));
     await user.click(screen.getByTestId('settings-editor-word-wrap-combobox'));
     await user.click(await screen.findByTestId('settings-editor-word-wrap-option-on'));
+    await user.click(screen.getByTestId('settings-editor-tab-size-combobox'));
+    await user.click(await screen.findByTestId('settings-editor-tab-size-option-2'));
+    await user.click(screen.getByTestId('settings-editor-cursor-blinking-combobox'));
+    await user.click(await screen.findByTestId('settings-editor-cursor-blinking-option-phase'));
     await user.click(screen.getByTestId('settings-editor-render-whitespace-combobox'));
     await user.click(await screen.findByTestId('settings-editor-render-whitespace-option-boundary'));
     await user.click(screen.getByTestId('settings-editor-line-numbers-combobox'));
     await user.click(await screen.findByTestId('settings-editor-line-numbers-option-interval'));
+    await user.click(screen.getByTestId('settings-editor-folding-strategy-combobox'));
+    await user.click(await screen.findByTestId('settings-editor-folding-strategy-option-indentation'));
     await user.click(screen.getByTestId('settings-editor-theme-combobox'));
     await user.click(await screen.findByTestId('settings-editor-theme-option-github-dark'));
+    await user.click(screen.getByTestId('settings-editor-font-ligatures-switch'));
     await user.click(screen.getByTestId('settings-editor-render-control-characters-switch'));
+    await user.click(screen.getByTestId('settings-editor-smooth-scrolling-switch'));
+    await user.click(screen.getByTestId('settings-editor-scroll-beyond-last-line-switch'));
     await user.click(screen.getByTestId('settings-editor-minimap-switch'));
     await user.click(screen.getByTestId('settings-editor-glyph-margin-switch'));
     await user.click(screen.getByTestId('settings-editor-bracket-pair-guides-switch'));
@@ -577,9 +658,15 @@ describe('MenuBar', () => {
 
     expect(setEditorFontFamilyMock).toHaveBeenCalledWith('victor-mono');
     expect(setEditorWordWrapMock).toHaveBeenCalledWith('on');
+    expect(setEditorTabSizeMock).toHaveBeenCalledWith(2);
+    expect(setEditorCursorBlinkingMock).toHaveBeenCalledWith('phase');
     expect(setEditorRenderWhitespaceMock).toHaveBeenCalledWith('boundary');
     expect(setEditorLineNumbersMock).toHaveBeenCalledWith('interval');
+    expect(setEditorFoldingStrategyMock).toHaveBeenCalledWith('indentation');
+    expect(setEditorFontLigaturesMock).toHaveBeenCalledWith(true);
     expect(setEditorRenderControlCharactersMock).toHaveBeenCalledWith(false);
+    expect(setEditorSmoothScrollingMock).toHaveBeenCalledWith(true);
+    expect(setEditorScrollBeyondLastLineMock).toHaveBeenCalledWith(false);
     expect(setEditorMinimapEnabledMock).toHaveBeenCalledWith(true);
     expect(setEditorGlyphMarginMock).toHaveBeenCalledWith(true);
     expect(setEditorBracketPairGuidesMock).toHaveBeenCalledWith(true);
@@ -597,15 +684,21 @@ describe('MenuBar', () => {
       appTheme: 'dark',
       bracketPairGuides: false,
       closeAction: 'tray',
+      cursorBlinking: 'solid',
       floatingInfoWindowVisible: true,
       fontFamily: 'fira-code',
+      fontLigatures: false,
       fontSize: 18,
+      foldingStrategy: 'auto',
       glyphMargin: false,
       indentGuides: false,
       lineNumbers: 'relative',
       minimapEnabled: false,
       renderControlCharacters: true,
       renderWhitespace: 'all',
+      scrollBeyondLastLine: true,
+      smoothScrolling: false,
+      tabSize: 8,
       editorTheme: 'night-owl',
       wordWrap: 'bounded',
     });
@@ -619,9 +712,15 @@ describe('MenuBar', () => {
     expect(screen.getByTestId('settings-editor-font-size-value')).toHaveTextContent('18px');
     expect(screen.getByTestId('settings-editor-theme-combobox')).toHaveTextContent('Night Owl');
     expect(screen.getByTestId('settings-editor-word-wrap-combobox')).toHaveTextContent('Bounded');
+    expect(screen.getByTestId('settings-editor-tab-size-combobox')).toHaveTextContent('8 spaces');
+    expect(screen.getByTestId('settings-editor-cursor-blinking-combobox')).toHaveTextContent('Solid');
     expect(screen.getByTestId('settings-editor-render-whitespace-combobox')).toHaveTextContent('All');
     expect(screen.getByTestId('settings-editor-line-numbers-combobox')).toHaveTextContent('Relative');
+    expect(screen.getByTestId('settings-editor-folding-strategy-combobox')).toHaveTextContent('Auto');
+    expect(screen.getByTestId('settings-editor-font-ligatures-switch')).toHaveAttribute('data-state', 'unchecked');
     expect(screen.getByTestId('settings-editor-render-control-characters-switch')).toHaveAttribute('data-state', 'checked');
+    expect(screen.getByTestId('settings-editor-smooth-scrolling-switch')).toHaveAttribute('data-state', 'unchecked');
+    expect(screen.getByTestId('settings-editor-scroll-beyond-last-line-switch')).toHaveAttribute('data-state', 'checked');
     expect(screen.getByTestId('settings-editor-minimap-switch')).toHaveAttribute('data-state', 'unchecked');
     expect(screen.getByTestId('settings-theme-switch')).toHaveAttribute('data-state', 'checked');
     expect(screen.getByTestId('settings-close-to-tray-switch')).toHaveAttribute('data-state', 'checked');
@@ -633,15 +732,21 @@ describe('MenuBar', () => {
       appTheme: 'light',
       bracketPairGuides: true,
       closeAction: 'quit',
+      cursorBlinking: 'smooth',
       floatingInfoWindowVisible: false,
       fontFamily: 'jetbrains-mono',
+      fontLigatures: true,
       fontSize: 12,
+      foldingStrategy: 'indentation',
       glyphMargin: true,
       indentGuides: true,
       lineNumbers: 'on',
       minimapEnabled: true,
       renderControlCharacters: false,
       renderWhitespace: 'selection',
+      scrollBeyondLastLine: false,
+      smoothScrolling: true,
+      tabSize: 4,
       editorTheme: 'github-light',
       wordWrap: 'off',
     });
@@ -653,9 +758,15 @@ describe('MenuBar', () => {
     expect(screen.getByTestId('settings-editor-font-size-value')).toHaveTextContent('12px');
     expect(screen.getByTestId('settings-editor-theme-combobox')).toHaveTextContent('GitHub Light');
     expect(screen.getByTestId('settings-editor-word-wrap-combobox')).toHaveTextContent('Off');
+    expect(screen.getByTestId('settings-editor-tab-size-combobox')).toHaveTextContent('4 spaces');
+    expect(screen.getByTestId('settings-editor-cursor-blinking-combobox')).toHaveTextContent('Smooth');
     expect(screen.getByTestId('settings-editor-render-whitespace-combobox')).toHaveTextContent('Selection');
     expect(screen.getByTestId('settings-editor-line-numbers-combobox')).toHaveTextContent('On');
+    expect(screen.getByTestId('settings-editor-folding-strategy-combobox')).toHaveTextContent('Indentation');
+    expect(screen.getByTestId('settings-editor-font-ligatures-switch')).toHaveAttribute('data-state', 'checked');
     expect(screen.getByTestId('settings-editor-render-control-characters-switch')).toHaveAttribute('data-state', 'unchecked');
+    expect(screen.getByTestId('settings-editor-smooth-scrolling-switch')).toHaveAttribute('data-state', 'checked');
+    expect(screen.getByTestId('settings-editor-scroll-beyond-last-line-switch')).toHaveAttribute('data-state', 'unchecked');
     expect(screen.getByTestId('settings-editor-minimap-switch')).toHaveAttribute('data-state', 'checked');
     expect(screen.getByTestId('settings-theme-switch')).toHaveAttribute('data-state', 'unchecked');
     expect(screen.getByTestId('settings-close-to-tray-switch')).toHaveAttribute('data-state', 'unchecked');
