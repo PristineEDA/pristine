@@ -24,26 +24,21 @@ describe('LeftSidePanel', () => {
     });
   });
 
-  it('opens a file and jumps to the selected problem line', async () => {
-    const onFileOpen = vi.fn();
-    const onFilePreview = vi.fn();
-    const onLineJump = vi.fn();
-
+  it('renders only explorer and outline tabs', async () => {
     render(
       <LeftSidePanel
         activeFileId="cpu_top"
-        onFileOpen={onFileOpen}
-        onFilePreview={onFilePreview}
-        onLineJump={onLineJump}
+        onFileOpen={vi.fn()}
+        onFilePreview={vi.fn()}
+        onLineJump={vi.fn()}
         currentOutlineId="cpu_top"
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /problems/i }));
-  fireEvent.click(await screen.findByText(/Port 'alu_src_b' of module 'ctrl_unit' not connected/i));
-
-    expect(onFileOpen).toHaveBeenCalledWith('cpu_top', 'cpu_top.v');
-    expect(onLineJump).toHaveBeenCalledWith(56);
+    expect(screen.getByRole('button', { name: 'Explorer' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Outline' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /problems/i })).not.toBeInTheDocument();
+    expect(await screen.findByTestId('file-tree-node-rtl')).toBeInTheDocument();
   });
 
   it('expands explorer items and opens a clicked file', async () => {

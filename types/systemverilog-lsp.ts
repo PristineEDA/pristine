@@ -21,6 +21,31 @@ export interface LspDiagnosticsEvent {
   diagnostics: LspDiagnostic[];
 }
 
+export type LspDebugValue =
+  | string
+  | number
+  | boolean
+  | null
+  | LspDebugValue[]
+  | { [key: string]: LspDebugValue };
+
+export type LspDebugDirection = 'client->server' | 'server->client' | 'session';
+
+export type LspDebugKind = 'request' | 'response' | 'notification' | 'lifecycle' | 'stderr';
+
+export interface LspDebugEvent {
+  sequence: number;
+  timestamp: string;
+  direction: LspDebugDirection;
+  kind: LspDebugKind;
+  requestId?: number;
+  method?: string;
+  status?: LspStateEvent['status'];
+  filePath?: string;
+  payload?: LspDebugValue;
+  text?: string;
+}
+
 export interface LspMarkedString {
   language: string;
   value: string;

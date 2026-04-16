@@ -1,6 +1,6 @@
 export const APP_DISPLAY_NAME = 'Pristine';
 
-export type AppMenuAction = 'open-settings' | 'close-app';
+export type AppMenuAction = 'open-settings' | 'open-about' | 'save-file' | 'save-all-files' | 'undo-editor' | 'redo-editor' | 'close-app';
 
 export type AppMenuItem = {
   kind: 'item';
@@ -21,7 +21,7 @@ export type AppMenuSection = {
 };
 
 export type MenuCommandEvent = {
-  action: 'open-settings';
+  action: Exclude<AppMenuAction, 'close-app'>;
 };
 
 export const applicationMenus: AppMenuSection[] = [
@@ -31,7 +31,8 @@ export const applicationMenus: AppMenuSection[] = [
       { kind: 'item', name: 'New Project', shortcut: 'Mod+N' },
       { kind: 'item', name: 'Open Project...', shortcut: 'Mod+O' },
       { kind: 'separator' },
-      { kind: 'item', name: 'Save', shortcut: 'Mod+S' },
+      { kind: 'item', name: 'Save', shortcut: 'Mod+S', action: 'save-file' },
+      { kind: 'item', name: 'Save All', action: 'save-all-files' },
       { kind: 'item', name: 'Save As...', shortcut: 'Shift+Mod+S' },
       { kind: 'separator' },
       { kind: 'item', name: 'Setting...', action: 'open-settings' },
@@ -41,8 +42,8 @@ export const applicationMenus: AppMenuSection[] = [
   {
     label: 'Edit',
     items: [
-      { kind: 'item', name: 'Undo', shortcut: 'Mod+Z' },
-      { kind: 'item', name: 'Redo', shortcut: 'Mod+Y' },
+      { kind: 'item', name: 'Undo', shortcut: 'Mod+Z', action: 'undo-editor' },
+      { kind: 'item', name: 'Redo', shortcut: 'Mod+Y', action: 'redo-editor' },
       { kind: 'separator' },
       { kind: 'item', name: 'Cut', shortcut: 'Mod+X' },
       { kind: 'item', name: 'Copy', shortcut: 'Mod+C' },
@@ -58,7 +59,7 @@ export const applicationMenus: AppMenuSection[] = [
       { kind: 'item', name: 'Documentation' },
       { kind: 'item', name: 'Check for Update...' },
       { kind: 'separator' },
-      { kind: 'item', name: 'About' },
+      { kind: 'item', name: 'About', action: 'open-about' },
     ],
   },
 ];

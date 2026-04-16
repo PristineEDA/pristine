@@ -9,9 +9,25 @@ interface AppStatusBarProps {
   activeFileId: string;
   cursorLine: number;
   cursorCol: number;
+  dirtyFileCount?: number;
+  failedSaveFileCount?: number;
+  savingFileCount?: number;
+  onOpenUnsavedFiles?: () => void;
+  onSaveAll?: () => void;
 }
 
-export function AppStatusBar({ mainContentView, activeView, activeFileId, cursorLine, cursorCol }: AppStatusBarProps) {
+export function AppStatusBar({
+  mainContentView,
+  activeView,
+  activeFileId,
+  cursorLine,
+  cursorCol,
+  dirtyFileCount,
+  failedSaveFileCount,
+  savingFileCount,
+  onOpenUnsavedFiles,
+  onSaveAll,
+}: AppStatusBarProps) {
   if (mainContentView === 'code') {
     return (
       <CodeStatusBar
@@ -19,6 +35,11 @@ export function AppStatusBar({ mainContentView, activeView, activeFileId, cursor
         activeFileId={activeFileId}
         cursorLine={cursorLine}
         cursorCol={cursorCol}
+        dirtyFileCount={dirtyFileCount}
+        failedSaveFileCount={failedSaveFileCount}
+        savingFileCount={savingFileCount}
+        onOpenUnsavedFiles={onOpenUnsavedFiles}
+        onSaveAll={onSaveAll}
       />
     );
   }

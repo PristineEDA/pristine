@@ -3,6 +3,9 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { EditorArea } from './EditorArea';
 import { draculaThemeDefinition } from '../../../editor/draculaTheme';
+import { resetEditorLanguageRegistrationForTests } from '../../../editor/registerLanguages';
+import { resetEditorThemeRegistrationForTests } from '../../../editor/monacoThemes';
+import { resetSystemVerilogLspProviderRegistrationForTests } from '../../../lsp/systemVerilogLspBridge';
 
 vi.mock('../../../context/EditorSettingsContext', () => ({
   useEditorSettings: () => ({
@@ -108,13 +111,16 @@ vi.mock('@monaco-editor/react', () => ({
   useMonaco: () => mockMonaco,
 }));
 
+vi.mock('../../../editor/configureMonacoLoader', () => ({}));
+
 describe('EditorArea', () => {
   beforeEach(() => {
     const electronApi = window.electronAPI!;
 
     vi.clearAllMocks();
-    delete (mockMonaco as any).__pristineLanguagesRegistered;
-    delete (mockMonaco as any).__pristineThemesRegistered;
+    resetEditorLanguageRegistrationForTests();
+    resetEditorThemeRegistrationForTests();
+    resetSystemVerilogLspProviderRegistrationForTests();
     mockMonaco.languages.getLanguages.mockReturnValue([]);
     mockMonaco.editor.getModels.mockReturnValue([mockModel]);
     mockEditorDomNode.contains.mockReturnValue(true);
@@ -197,6 +203,24 @@ describe('EditorArea', () => {
     expect(screen.getByTestId('editor-tab-close-rtl/core/reg_file.v')).toHaveClass('opacity-50');
     expect(screen.getByTestId('editor-tab-rtl/core/alu.v')).toHaveAttribute('title', 'rtl/core/alu.v');
     expect(screen.queryByTestId('editor-tab-preview-indicator-rtl/core/alu.v')).not.toBeInTheDocument();
+  });
+
+  it('renders a VS Code-style dirty indicator and hides the preview marker for modified tabs', () => {
+    render(
+      <EditorArea
+        tabs={[
+          { id: 'rtl/core/reg_file.v', name: 'reg_file.v', modified: true, isPinned: false },
+        ]}
+        activeTabId="rtl/core/reg_file.v"
+        onTabChange={vi.fn()}
+        onTabClose={vi.fn()}
+        editorRef={createRef()}
+      />,
+    );
+
+    expect(screen.getByTestId('editor-tab-dirty-indicator-rtl/core/reg_file.v')).toBeInTheDocument();
+    expect(screen.queryByTestId('editor-tab-preview-indicator-rtl/core/reg_file.v')).not.toBeInTheDocument();
+    expect(screen.getByTestId('editor-tab-close-rtl/core/reg_file.v')).toBeInTheDocument();
   });
 
   it('pins a preview tab on double-click and before dragging begins', () => {
@@ -461,16 +485,19 @@ describe('EditorArea', () => {
       expect(window.electronAPI!.fs.readFile).toHaveBeenCalledWith('rtl/tb/tb_cpu_top.sv', 'utf-8');
     });
 
-    expect(screen.getByTestId('monaco-editor')).toHaveAttribute('data-language', 'systemverilog');
+    expect(await screen.findByTestId('monaco-editor')).toHaveAttribute('data-language', 'systemverilog');
     expect(screen.getByText('retroSoC')).toBeInTheDocument();
     expect(screen.getAllByText('tb_cpu_top.sv')).toHaveLength(2);
     expect(mockMonaco.languages.register).toHaveBeenCalled();
     expect(mockMonaco.languages.setMonarchTokensProvider).toHaveBeenCalledTimes(9);
     expect(mockMonaco.editor.defineTheme).toHaveBeenCalled();
     expect(mockMonaco.editor.setModelMarkers).toHaveBeenCalledWith(
-      mockModel,
-      'rtl-lint',
-      expect.any(Array),
+      expect.objectContaining({
+        getLineCount: expect.any(Function),
+        getLineMaxColumn: expect.any(Function),
+      }),
+      'slang-lsp',
+      [],
     );
     expect(onCursorChange).toHaveBeenCalledWith(12, 7);
     expect(editorRef.current).toBe(mockEditorInstance);

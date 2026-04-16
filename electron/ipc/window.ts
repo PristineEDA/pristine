@@ -1,9 +1,11 @@
 import { BrowserWindow, ipcMain } from 'electron';
 import { SyncChannels, AsyncChannels, StreamChannels } from './channels.js';
+import type { WindowCloseDecision } from '../../src/app/window/windowClose.js';
 
 export function registerWindowHandlers(
   getMainWindow: () => BrowserWindow | null,
   setFloatingInfoWindowVisible: (visible: boolean) => boolean = () => false,
+  resolveCloseRequest: (requestId: number, decision: WindowCloseDecision) => boolean = () => false,
 ): void {
   ipcMain.on(SyncChannels.WINDOW_IS_MAXIMIZED, (event) => {
     const win = getMainWindow();
@@ -56,6 +58,18 @@ export function registerWindowHandlers(
     if (!win) return false;
     win.close();
     return true;
+  });
+
+  ipcMain.handle(AsyncChannels.WINDOW_RESOLVE_CLOSE_REQUEST, (_event, requestId: unknown, decision: unknown) => {
+    if (typeof requestId !== 'number' || !Number.isInteger(requestId) || requestId < 1) {
+      throw new Error('Expected close request id to be a positive integer');
+    }
+
+    if (decision !== 'proceed' && decision !== 'cancel') {
+      throw new Error('Expected close request decision to be "proceed" or "cancel"');
+    }
+
+    return resolveCloseRequest(requestId, decision);
   });
 
   ipcMain.handle(AsyncChannels.WINDOW_SET_FLOATING_INFO_VISIBILITY, async (_event, visible: unknown) => {

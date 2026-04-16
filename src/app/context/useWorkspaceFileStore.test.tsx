@@ -40,6 +40,7 @@ describe('useWorkspaceFileStore', () => {
     });
 
     expect(result.current.loadingFiles['rtl/main.v']).toBe(false);
+    expect(result.current.dirtyFiles['rtl/main.v']).toBe(false);
 
     act(() => {
       result.current.loadFileContent('rtl/main.v');
@@ -98,5 +99,96 @@ describe('useWorkspaceFileStore', () => {
     });
 
     expect(result.current.fileContents['rtl/edit.v']).toBe('updated');
+    expect(result.current.dirtyFiles['rtl/edit.v']).toBe(true);
+  });
+
+  it('tracks dirty state across edit, save, and discard operations', async () => {
+    vi.mocked(window.electronAPI!.fs.readFile).mockResolvedValueOnce('module edit; endmodule');
+    vi.mocked(window.electronAPI!.fs.writeFile).mockResolvedValueOnce(undefined);
+
+    const { result } = renderHook(() => useWorkspaceFileStore());
+
+    act(() => {
+      result.current.loadFileContent('rtl/edit.v');
+    });
+
+    await waitFor(() => {
+      expect(result.current.fileContents['rtl/edit.v']).toBe('module edit; endmodule');
+    });
+
+    act(() => {
+      result.current.updateFileContent('rtl/edit.v', 'module edit; logic dirty; endmodule');
+    });
+
+    expect(result.current.dirtyFiles['rtl/edit.v']).toBe(true);
+    expect(result.current.dirtyFileIds).toContain('rtl/edit.v');
+
+    await act(async () => {
+      await result.current.saveFileContent('rtl/edit.v');
+    });
+
+    expect(window.electronAPI?.fs.writeFile).toHaveBeenCalledWith('rtl/edit.v', 'module edit; logic dirty; endmodule');
+    expect(result.current.dirtyFiles['rtl/edit.v']).toBe(false);
+
+    act(() => {
+      result.current.updateFileContent('rtl/edit.v', 'module edit; logic changed_again; endmodule');
+      result.current.discardFiles(['rtl/edit.v']);
+    });
+
+    expect(result.current.fileContents['rtl/edit.v']).toBe('module edit; logic dirty; endmodule');
+    expect(result.current.dirtyFiles['rtl/edit.v']).toBe(false);
+  });
+
+  it('returns per-file results when saving multiple files together', async () => {
+    vi.mocked(window.electronAPI!.fs.writeFile)
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('Disk full'));
+
+    const { result } = renderHook(() => useWorkspaceFileStore());
+
+    act(() => {
+      result.current.updateFileContent('rtl/pass.v', 'module pass; endmodule');
+      result.current.updateFileContent('rtl/fail.v', 'module fail; endmodule');
+    });
+
+    let saveResult: Awaited<ReturnType<typeof result.current.saveFiles>> | undefined;
+
+    await act(async () => {
+      saveResult = await result.current.saveFiles(['rtl/pass.v', 'rtl/fail.v']);
+    });
+
+    expect(saveResult).toEqual({
+      savedFileIds: ['rtl/pass.v'],
+      failedFileIds: ['rtl/fail.v'],
+    });
+    expect(result.current.dirtyFiles['rtl/pass.v']).toBe(false);
+    expect(result.current.dirtyFiles['rtl/fail.v']).toBe(true);
+  });
+
+  it('retains dirty state and exposes save errors when a save fails', async () => {
+    vi.mocked(window.electronAPI!.fs.readFile).mockResolvedValueOnce('module fail; endmodule');
+    vi.mocked(window.electronAPI!.fs.writeFile).mockRejectedValueOnce(new Error('Disk full'));
+
+    const { result } = renderHook(() => useWorkspaceFileStore());
+
+    act(() => {
+      result.current.loadFileContent('rtl/fail.v');
+    });
+
+    await waitFor(() => {
+      expect(result.current.fileContents['rtl/fail.v']).toBe('module fail; endmodule');
+    });
+
+    act(() => {
+      result.current.updateFileContent('rtl/fail.v', 'module fail; logic unsaved; endmodule');
+    });
+
+    await act(async () => {
+      await result.current.saveFileContent('rtl/fail.v');
+    });
+
+    expect(result.current.dirtyFiles['rtl/fail.v']).toBe(true);
+    expect(result.current.saveErrors['rtl/fail.v']).toBe('Disk full');
+    expect(result.current.savingFiles['rtl/fail.v']).toBe(false);
   });
 });

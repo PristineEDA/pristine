@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
+import { claimMonacoRegistration, resetMonacoRegistrationForTests } from './monacoRegistrationTracker';
 
-const LANGUAGE_REGISTRATION_MARKER = '__pristineLanguagesRegistered';
+const LANGUAGE_REGISTRATION_KEY = 'editor-languages';
 
 const verilogKeywords = [
   'module', 'endmodule', 'input', 'output', 'inout', 'wire', 'reg', 'logic',
@@ -105,15 +106,9 @@ function createKeywordSuggestions(monaco: any, keywords: string[], model: any, p
 }
 
 export function registerEditorLanguages(monaco: any): void {
-  if (!monaco) {
+  if (!claimMonacoRegistration(LANGUAGE_REGISTRATION_KEY, monaco)) {
     return;
   }
-
-  if (monaco[LANGUAGE_REGISTRATION_MARKER] === true) {
-    return;
-  }
-
-  monaco[LANGUAGE_REGISTRATION_MARKER] = true;
 
   const languages = monaco.languages.getLanguages();
   if (!languages.find((language: any) => language.id === 'verilog')) {
@@ -490,4 +485,8 @@ export function useRegisterEditorLanguages(monaco: any): void {
   useEffect(() => {
     registerEditorLanguages(monaco);
   }, [monaco]);
+}
+
+export function resetEditorLanguageRegistrationForTests(): void {
+  resetMonacoRegistrationForTests(LANGUAGE_REGISTRATION_KEY);
 }

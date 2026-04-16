@@ -7,6 +7,7 @@ import { registerShellHandlers, setShellProjectRoot } from './shell.js';
 import { registerTerminalHandlers, setTerminalProjectRoot } from './terminal.js';
 import { registerConfigHandlers } from './config.js';
 import { registerPlatformHandler } from './platform.js';
+import type { WindowCloseDecision } from '../../src/app/window/windowClose.js';
 
 export function setProjectRoot(root: string): void {
   const resolved = path.resolve(root);
@@ -19,9 +20,10 @@ export function setProjectRoot(root: string): void {
 export function registerAllHandlers(
   getMainWindow: () => BrowserWindow | null,
   setFloatingInfoWindowVisible: (visible: boolean) => boolean = () => false,
+  resolveCloseRequest: (requestId: number, decision: WindowCloseDecision) => boolean = () => false,
 ): void {
   registerPlatformHandler();
-  registerWindowHandlers(getMainWindow, setFloatingInfoWindowVisible);
+  registerWindowHandlers(getMainWindow, setFloatingInfoWindowVisible, resolveCloseRequest);
   registerFilesystemHandlers();
   registerLspHandlers(getMainWindow);
   registerShellHandlers(getMainWindow);

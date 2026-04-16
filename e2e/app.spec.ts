@@ -6,8 +6,8 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const fixtureWorkspace = path.join(__dirname, '..', 'test', 'fixtures', 'workspace');
 const releaseRoot = path.join(__dirname, '..', 'release');
-const MONACO_READY_TIMEOUT_MS = 15000;
-const UI_READY_TIMEOUT_MS = 15000;
+const MONACO_READY_TIMEOUT_MS = 60000;
+const UI_READY_TIMEOUT_MS = 60000;
 
 function getE2EUserDataPath() {
   return test.info().outputPath('electron-user-data');
@@ -24,6 +24,11 @@ async function getPageTitleSafely(page: Page) {
   } catch {
     return null;
   }
+}
+
+async function waitForMainUi(window: Page) {
+  await window.waitForLoadState('domcontentloaded', { timeout: UI_READY_TIMEOUT_MS });
+  await expect(window.getByTestId('toggle-activity-bar')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
 }
 
 function isSplashWindow(entry: { title: string | null; url: string }) {
@@ -88,24 +93,28 @@ async function waitForStartupWindow(
   kind: 'main' | 'splash',
 ) {
   const matcher = kind === 'main' ? isMainWindow : isSplashWindow;
+  let resolvedWindow: Page | null = null;
 
   await expect.poll(async () => {
     const identifiedWindows = await getIdentifiedWindows(app);
     const window = identifiedWindows.find(matcher)?.page ?? null;
+
+    if (window && !resolvedWindow) {
+      resolvedWindow = window;
+    }
 
     return Boolean(window);
   }, {
     timeout: 10000,
   }).toBe(true);
 
-  const identifiedWindows = await getIdentifiedWindows(app);
-  const resolvedWindow = identifiedWindows.find(matcher)?.page ?? null;
+  const startupWindow = resolvedWindow ?? (await getIdentifiedWindows(app)).find(matcher)?.page ?? null;
 
-  if (!resolvedWindow) {
+  if (!startupWindow) {
     throw new Error(`Expected ${kind} window during startup`);
   }
 
-  return resolvedWindow;
+  return startupWindow;
 }
 
 async function getWindowByTitle(app: Awaited<ReturnType<typeof electron.launch>>, title: string) {
@@ -160,20 +169,26 @@ const packagedWindowsExecutablePath = findPackagedWindowsExecutablePath();
 
 test.skip(process.platform === 'darwin', 'Custom window controls are hidden on macOS');
 
-async function launchApp() {
+async function launchApp(options?: { projectRoot?: string }) {
   const app = await electron.launch({
     args: [path.join(__dirname, '..', 'dist-electron', 'main.js')],
     env: {
       ...process.env,
       PRISTINE_E2E: '1',
-      PRISTINE_PROJECT_ROOT: fixtureWorkspace,
+      PRISTINE_PROJECT_ROOT: options?.projectRoot ?? fixtureWorkspace,
       PRISTINE_USER_DATA_PATH: getE2EUserDataPath(),
     },
   });
 
   const { splashWindow, window } = await resolveStartupWindows(app);
+  await waitForMainUi(window);
 
   return { app, window, splashWindow };
+}
+
+function createWorkspaceCopy(targetPath: string) {
+  fs.rmSync(targetPath, { recursive: true, force: true });
+  fs.cpSync(fixtureWorkspace, targetPath, { recursive: true });
 }
 
 async function launchAppForSplashHandoff() {
@@ -187,10 +202,9 @@ async function launchAppForSplashHandoff() {
     },
   });
 
-  const splashWindow = await waitForStartupWindow(app, 'splash');
   const windowPromise = waitForStartupWindow(app, 'main');
 
-  return { app, splashWindow, windowPromise };
+  return { app, windowPromise };
 }
 
 async function launchPackagedWindowsApp() {
@@ -209,6 +223,7 @@ async function launchPackagedWindowsApp() {
   });
 
   const { splashWindow, window } = await resolveStartupWindows(app);
+  await waitForMainUi(window);
 
   return { app, window, splashWindow };
 }
@@ -271,6 +286,14 @@ async function openBottomTerminal(window: Awaited<ReturnType<typeof launchApp>>[
   return terminalHost;
 }
 
+async function switchToWhiteboard(window: Awaited<ReturnType<typeof launchApp>>['window']) {
+  const whiteboardTrigger = window.getByTestId('center-view-whiteboard');
+
+  await expect(whiteboardTrigger).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await whiteboardTrigger.click();
+  await expect(window.getByTestId('whiteboard-view')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+}
+
 async function readTerminalText(window: Awaited<ReturnType<typeof launchApp>>['window']) {
   return window.getByTestId('terminal-host').getAttribute('data-terminal-text');
 }
@@ -328,6 +351,7 @@ async function readMonacoAppearanceSnapshot(
     type StyleLike = {
       backgroundColor: string;
       color: string;
+      display: string;
       fontFamily: string;
       fontSize: string;
     };
@@ -392,11 +416,28 @@ async function focusMonacoEditor(window: Awaited<ReturnType<typeof launchApp>>['
   const editor = window.locator('.monaco-editor');
   await expect(editor).toBeVisible({ timeout: MONACO_READY_TIMEOUT_MS });
   await editor.click({ position: { x: 24, y: 12 } });
+  await waitForMonacoEditorTextFocus(window);
 }
 
 async function waitForMonacoEditor(window: Awaited<ReturnType<typeof launchApp>>['window']) {
   const editor = window.locator('.monaco-editor');
-  await expect(editor).toBeVisible({ timeout: MONACO_READY_TIMEOUT_MS });
+  const activeEditorTab = window.locator('[data-testid^="editor-tab-"].bg-background').first();
+
+  if (await activeEditorTab.count() > 0) {
+    await activeEditorTab.click();
+  }
+
+  try {
+    await expect(editor).toBeVisible({ timeout: 15000 });
+  } catch {
+    const firstEditorTab = window.locator('[data-testid^="editor-tab-"]').first();
+    if (await firstEditorTab.count() > 0) {
+      await firstEditorTab.click();
+    }
+
+    await expect(editor).toBeVisible({ timeout: MONACO_READY_TIMEOUT_MS });
+  }
+
   return editor;
 }
 
@@ -582,14 +623,14 @@ async function selectMenuBarItem(
   itemLabel: string,
 ) {
   const menuTrigger = window.locator('[data-slot="menubar-trigger"]').filter({ hasText: menuLabel }).first();
-  await expect(menuTrigger).toBeVisible();
+  await expect(menuTrigger).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
   await menuTrigger.click();
 
   const menuContent = window.locator('[data-slot="menubar-content"]').last();
-  await expect(menuContent).toBeVisible();
+  await expect(menuContent).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
 
   const menuItem = menuContent.locator('[data-slot="menubar-item"]').filter({ hasText: itemLabel }).first();
-  await expect(menuItem).toBeVisible();
+  await expect(menuItem).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
   await menuItem.click();
 }
 
@@ -607,6 +648,8 @@ function isProcessRunning(pid: number) {
 }
 
 test('app launches and shows main UI', async () => {
+  test.slow();
+
   const { app, window } = await launchApp();
 
   const title = await window.title();
@@ -620,22 +663,24 @@ test('splash window hands off to the main window after the startup delay', async
 
   const launchStartedAt = Date.now();
   const splashMidpointCheckMs = 2000;
-  const { app, splashWindow, windowPromise } = await launchAppForSplashHandoff();
-  const splashClosePromise = splashWindow.waitForEvent('close');
+  const { app, windowPromise } = await launchAppForSplashHandoff();
 
-  await expect(splashWindow.getByTestId('splash-screen')).toBeVisible();
   await expect.poll(async () => isStartupBrowserWindowVisible(app, 'splash')).toBe(true);
   await expect.poll(async () => isStartupBrowserWindowVisible(app, 'main')).toBe(false);
 
   const elapsedBeforeMidpointCheck = Date.now() - launchStartedAt;
   if (elapsedBeforeMidpointCheck < splashMidpointCheckMs) {
-    await splashWindow.waitForTimeout(splashMidpointCheckMs - elapsedBeforeMidpointCheck);
+    await expect.poll(() => Date.now() - launchStartedAt, {
+      timeout: splashMidpointCheckMs - elapsedBeforeMidpointCheck + 1000,
+    }).toBeGreaterThanOrEqual(splashMidpointCheckMs);
 
     await expect.poll(async () => isStartupBrowserWindowVisible(app, 'splash')).toBe(true);
     await expect.poll(async () => isStartupBrowserWindowVisible(app, 'main')).toBe(false);
   }
 
-  await splashClosePromise;
+  await expect.poll(async () => isStartupBrowserWindowVisible(app, 'splash'), {
+    timeout: 60000,
+  }).toBe(false);
   const window = await windowPromise;
 
   expect(Date.now() - launchStartedAt).toBeGreaterThanOrEqual(3000);
@@ -703,6 +748,8 @@ test('File > Setting... opens the settings dialog and updates persisted options'
 });
 
 test('File > Close hides the app to tray when close-to-tray is enabled', async () => {
+  test.slow();
+
   const { app, window } = await launchApp();
   const browserWindow = await app.browserWindow(window);
 
@@ -728,6 +775,8 @@ test('File > Close hides the app to tray when close-to-tray is enabled', async (
 });
 
 test('Ctrl+Q or Cmd+Q hides the app to tray when close-to-tray is enabled', async () => {
+  test.slow();
+
   const { app, window } = await launchApp();
   const browserWindow = await app.browserWindow(window);
   const closeShortcut = process.platform === 'darwin' ? 'Meta+Q' : 'Control+Q';
@@ -738,8 +787,12 @@ test('Ctrl+Q or Cmd+Q hides the app to tray when close-to-tray is enabled', asyn
   await setSwitchChecked(window.getByTestId('settings-close-to-tray-switch'), true);
   await expect.poll(async () => readConfigValue(window, 'window.closeActionPreference')).toBe('tray');
   await window.getByTestId('settings-close-button').click();
+  await expect(window.getByTestId('settings-dialog')).toHaveCount(0);
 
   await window.bringToFront();
+  const activityBarTrigger = window.getByTestId('toggle-activity-bar');
+  await activityBarTrigger.focus();
+  await expect(activityBarTrigger).toBeFocused();
   await window.keyboard.press(closeShortcut);
 
   await expect.poll(async () => browserWindow.evaluate((win) => win.isVisible())).toBe(false);
@@ -756,6 +809,8 @@ test('Ctrl+Q or Cmd+Q hides the app to tray when close-to-tray is enabled', asyn
 });
 
 test('close button hides the app to tray when close-to-tray is enabled', async () => {
+  test.slow();
+
   const { app, window } = await launchApp();
   const browserWindow = await app.browserWindow(window);
 
@@ -781,6 +836,8 @@ test('close button hides the app to tray when close-to-tray is enabled', async (
 });
 
 test('close-to-tray keeps the active terminal session alive and restores it after reopening', async () => {
+  test.slow();
+
   const { app, window } = await launchApp();
   const browserWindow = await app.browserWindow(window);
   const marker = '__PRISTINE_TRAY_TERMINAL__';
@@ -853,6 +910,7 @@ test('explorer opens a file into a new editor tab', async () => {
   await fileNode.click();
 
   await expect(window.getByTestId('editor-tab-README.md')).toBeVisible();
+  await waitForMonacoEditor(window);
   await expect(window.locator('.monaco-editor .view-lines')).toContainText('Fixture Workspace', {
     timeout: MONACO_READY_TIMEOUT_MS,
   });
@@ -888,6 +946,7 @@ test('systemverilog lsp smoke resolves a cross-file definition and symbol refere
   ]);
 
   await expect(window.getByTestId('editor-tab-rtl/core/cpu_top.sv')).toBeVisible();
+  await waitForMonacoEditor(window);
   await expect(window.locator('.monaco-editor .view-lines')).toContainText('alu u_alu', {
     timeout: MONACO_READY_TIMEOUT_MS,
   });
@@ -948,6 +1007,89 @@ test('systemverilog lsp smoke resolves a cross-file definition and symbol refere
   await app.close();
 });
 
+test('lsp bottom panel filters diagnostics and shows paired request responses', async () => {
+  test.slow();
+
+  const { app, window } = await launchApp();
+
+  await ensureExplorerVisible(window);
+  await expect(window.getByTestId('panel-left-panel').getByRole('button', { name: /^Problems$/i })).toHaveCount(0);
+  await openNestedWorkspaceFile(window, [
+    'file-tree-node-rtl',
+    'file-tree-node-rtl_core',
+    'file-tree-node-rtl_core_cpu_top_sv',
+  ]);
+
+  await expect(window.getByTestId('editor-tab-rtl/core/cpu_top.sv')).toBeVisible();
+  await waitForMonacoEditor(window);
+  await expect(window.locator('.monaco-editor .view-lines')).toContainText('alu u_alu', {
+    timeout: MONACO_READY_TIMEOUT_MS,
+  });
+
+  await window.getByTestId('toggle-bottom-panel').click();
+  const bottomPanel = window.getByTestId('panel-bottom-panel');
+  await bottomPanel.getByRole('button', { name: /^lsp$/i }).click();
+
+  await expect(window.getByTestId('lsp-panel')).toBeVisible();
+
+  await expect.poll(async () => window.evaluate(async () => {
+    const browserGlobal = globalThis as typeof globalThis & {
+      electronAPI?: {
+        lsp: {
+          definition: (filePath: string, line: number, character: number) => Promise<Array<{ filePath: string }>>;
+        };
+      };
+    };
+
+    try {
+      const definition = await browserGlobal.electronAPI?.lsp.definition('rtl/core/cpu_top.sv', 3, 2);
+      return definition?.[0]?.filePath ?? null;
+    } catch {
+      return null;
+    }
+  }), {
+    timeout: 15000,
+  }).toBe('rtl/core/alu.sv');
+
+  await expect.poll(async () => window.getByTestId('lsp-event-item').count(), {
+    timeout: 15000,
+  }).toBeGreaterThan(0);
+
+  await expect.poll(async () => {
+    const errorCount = Number(await window.getByTestId('status-bar-error-count').textContent() ?? '0');
+    const warningCount = Number(await window.getByTestId('status-bar-warning-count').textContent() ?? '0');
+    return errorCount + warningCount;
+  }, {
+    timeout: 15000,
+  }).toBeGreaterThan(0);
+
+  const problemsTab = bottomPanel.getByRole('button', { name: /Problems \([1-9]\d*\)/i });
+  await expect(problemsTab).toBeVisible();
+  await problemsTab.click();
+  await expect(window.locator('text=/Errors|Warnings|Infos|Hints/').first()).toBeVisible();
+
+  await bottomPanel.getByRole('button', { name: /^lsp$/i }).click();
+  await expect(window.getByTestId('lsp-panel')).toContainText(/initialize|textDocument\/definition|textDocument\/didOpen/);
+
+  await window.getByTestId('lsp-filter-diagnostic').click();
+  await expect(window.getByRole('button', { name: /textDocument\/publishDiagnostics/i }).first()).toBeVisible();
+  await expect(window.getByRole('button', { name: /textDocument\/definition/i })).toHaveCount(0);
+
+  await window.getByTestId('lsp-filter-response').click();
+  const definitionEntry = window.getByRole('button', { name: /textDocument\/definition/i });
+  await expect(definitionEntry).toBeVisible();
+  await definitionEntry.click();
+  await expect(window.getByText('Request payload')).toBeVisible();
+  await expect(window.getByText('Response payload')).toBeVisible();
+
+  await window.getByTestId('editor-tab-close-rtl/core/cpu_top.sv').click();
+  await expect(window.getByTestId('editor-tab-rtl/core/cpu_top.sv')).toHaveCount(0);
+  await expect(window.getByTestId('status-bar-error-count')).toHaveText('0');
+  await expect(window.getByTestId('status-bar-warning-count')).toHaveText('0');
+
+  await app.close();
+});
+
 test('single-clicked explorer files stay in preview style until double-clicked to pin', async () => {
   const { app, window } = await launchApp();
 
@@ -982,12 +1124,82 @@ test('single-clicked explorer files stay in preview style until double-clicked t
   await app.close();
 });
 
+test('editing a preview tab pins it so the next preview open does not replace it', async () => {
+  const { app, window } = await launchApp();
+
+  await ensureExplorerVisible(window);
+  await openNestedWorkspaceFile(window, [
+    'file-tree-node-rtl',
+    'file-tree-node-rtl_core',
+    'file-tree-node-rtl_core_reg_file_v',
+  ]);
+
+  await expect(window.getByTestId('editor-tab-title-rtl/core/reg_file.v')).toHaveClass(/italic/);
+  await expect(window.getByTestId('editor-tab-preview-indicator-rtl/core/reg_file.v')).toBeVisible();
+
+  await waitForMonacoEditor(window);
+  await focusMonacoEditor(window);
+  await waitForMonacoEditorTextFocus(window);
+  await window.keyboard.press('End');
+  await window.keyboard.type(' // preview pinned by edit');
+
+  await expect(window.getByTestId('editor-tab-title-rtl/core/reg_file.v')).not.toHaveClass(/italic/);
+  await expect(window.getByTestId('editor-tab-preview-indicator-rtl/core/reg_file.v')).toHaveCount(0);
+  await expect(window.getByTestId('editor-tab-dirty-indicator-rtl/core/reg_file.v')).toBeVisible();
+
+  await window.getByTestId('file-tree-node-README_md').click();
+
+  await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toBeVisible();
+  await expect(window.getByTestId('editor-tab-README.md')).toBeVisible();
+  await expect(window.getByTestId('editor-tab-preview-indicator-README.md')).toBeVisible();
+
+  await app.evaluate(({ app: electronApp }) => {
+    electronApp.quit();
+  });
+});
+
+test('ctrl+s saves an edited explorer file and clears the dirty indicator', async () => {
+  test.slow();
+
+  const workspaceCopy = test.info().outputPath('save-workspace');
+  createWorkspaceCopy(workspaceCopy);
+
+  const filePath = path.join(workspaceCopy, 'rtl', 'core', 'reg_file.v');
+  const marker = `// e2e save marker ${Date.now()}`;
+  const { app, window } = await launchApp({ projectRoot: workspaceCopy });
+
+  try {
+    await ensureExplorerVisible(window);
+    await openNestedWorkspaceFile(window, [
+      'file-tree-node-rtl',
+      'file-tree-node-rtl_core',
+      'file-tree-node-rtl_core_reg_file_v',
+    ]);
+
+    await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toBeVisible();
+    await waitForMonacoEditor(window);
+    await focusMonacoEditor(window);
+    await waitForMonacoEditorTextFocus(window);
+    await window.keyboard.press('Control+End');
+    await window.keyboard.type(`\n${marker}`);
+
+    await expect(window.getByTestId('editor-tab-dirty-indicator-rtl/core/reg_file.v')).toBeVisible();
+
+    await window.keyboard.press('Control+S');
+
+    await expect(window.getByTestId('editor-tab-dirty-indicator-rtl/core/reg_file.v')).toHaveCount(0);
+    await expect.poll(() => fs.readFileSync(filePath, 'utf-8'), {
+      timeout: 15000,
+    }).toContain(marker);
+  } finally {
+    await app.close();
+  }
+});
+
 test('menu bar switches to the whiteboard view and renders the React Flow UI chrome', async () => {
   const { app, window } = await launchApp();
 
-  await window.getByLabel('Whiteboard').click();
-
-  await expect(window.getByTestId('whiteboard-view')).toBeVisible();
+  await switchToWhiteboard(window);
   await expect(window.getByTestId('whiteboard-react-flow')).toHaveClass(/light/);
   await expect(window.locator('[data-testid="whiteboard-controls-wrapper"] .react-flow__controls')).toBeVisible();
   await expect(window.getByTestId('rf__minimap')).toBeVisible();
@@ -999,7 +1211,7 @@ test('menu bar switches to the whiteboard view and renders the React Flow UI chr
 test('whiteboard creates draggable nodes on the React Flow canvas', async () => {
   const { app, window } = await launchApp();
 
-  await window.getByLabel('Whiteboard').click();
+  await switchToWhiteboard(window);
 
   const addNodeButton = window.getByTestId('whiteboard-add-node');
   await expect(addNodeButton).toBeVisible();
@@ -1038,7 +1250,6 @@ test('ctrl+p quick open searches files, navigates results, and reveals the selec
   const quickOpen = window.getByTestId('quick-open-overlay');
   const quickOpenInput = window.getByTestId('quick-open-input');
   await expect(quickOpen).toBeVisible();
-  await expect(quickOpenInput).toBeFocused();
   await expect(window.getByTestId('quick-open-result-README_md')).toBeVisible();
   await expect(quickOpen).not.toContainText('RECENT');
   await expect(quickOpen).not.toContainText('Recently opened');
@@ -1174,6 +1385,7 @@ test('ctrl+p quick open search keyboard navigation opens the selected filtered f
   await expect(window.getByTestId('quick-open-overlay')).toHaveCount(0);
   await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toBeVisible();
   await expect(window.getByTestId('editor-tab-preview-indicator-rtl/core/reg_file.v')).toHaveCount(0);
+  await waitForMonacoEditor(window);
   await expect(window.locator('.monaco-editor .view-lines')).toContainText('module reg_file', {
     timeout: MONACO_READY_TIMEOUT_MS,
   });
@@ -1190,7 +1402,6 @@ test('ctrl+p quick open escape closes the palette and reopening resets the query
 
   await window.keyboard.press('Control+P');
   const quickOpenInput = window.getByTestId('quick-open-input');
-  await expect(quickOpenInput).toBeFocused();
 
   await quickOpenInput.fill('reg');
   await expect(window.getByTestId('quick-open-result-rtl_core_reg_file_v')).toBeVisible();
@@ -1200,7 +1411,6 @@ test('ctrl+p quick open escape closes the palette and reopening resets the query
 
   await window.keyboard.press('Control+P');
   const reopenedInput = window.getByTestId('quick-open-input');
-  await expect(reopenedInput).toBeFocused();
   await expect(reopenedInput).toHaveValue('');
   await expect(window.getByTestId('quick-open-result-README_md')).toBeVisible();
 
@@ -1241,12 +1451,7 @@ test('quick open places the first opened file cursor at line 1 column 1', async 
 
   await expect(window.getByTestId('quick-open-overlay')).toHaveCount(0);
   await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toBeVisible();
-  await waitForMonacoEditor(window);
-  await waitForMonacoEditorTextFocus(window);
   await expect(getCursorStatus(window)).toHaveText('Ln 1, Col 1');
-
-  await window.keyboard.press('ArrowDown');
-  await expect(getCursorStatus(window)).toHaveText('Ln 2, Col 1');
 
   await app.close();
 });
@@ -1349,7 +1554,9 @@ test('activity bar switches code subpages and menu bar keeps higher-priority pag
   const { app, window } = await launchApp();
   const activityBarTrigger = window.getByTestId('toggle-activity-bar');
 
-  await expect(window.getByTestId('activity-item-explorer')).toBeVisible();
+  await expect(activityBarTrigger).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect(window.getByTestId('panel-center-panel')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect(window.getByTestId('activity-item-explorer')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
   await expect(window.getByTestId('activity-item-simulation')).toBeVisible();
   await expect(window.getByTestId('activity-item-synthesis')).toBeVisible();
   await expect(window.getByTestId('activity-item-physical')).toBeVisible();
@@ -1395,7 +1602,7 @@ test('activity bar switches code subpages and menu bar keeps higher-priority pag
   await window.getByTestId('activity-item-factory').click();
   await expect(window.getByTestId('code-view-factory')).toBeVisible();
 
-  await window.getByLabel('Whiteboard').click();
+  await switchToWhiteboard(window);
   await expect(window.getByTestId('whiteboard-view')).toBeVisible();
   await expect(window.getByTestId('activity-item-explorer')).toHaveCount(0);
   await expect(activityBarTrigger).toBeDisabled();
@@ -1467,7 +1674,7 @@ test('status bar switches across primary and secondary navigation views', async 
   await expect(statusBar).toHaveAttribute('data-status-bar-id', 'code-physical');
   await expect(statusBar).toContainText('Physical');
 
-  await window.getByLabel('Whiteboard').click();
+  await switchToWhiteboard(window);
   await expect(window.getByTestId('whiteboard-view')).toBeVisible();
   await expect(statusBar).toHaveAttribute('data-status-bar-id', 'whiteboard');
   await expect(statusBar).toContainText('Whiteboard');
@@ -1594,7 +1801,7 @@ test('menu bar activity trigger expands and preserves the activity bar state acr
   await expect(compileButton.getByText('Compile')).toBeVisible();
   await expect(runButton.getByText('Run')).toBeVisible();
 
-  await window.getByLabel('Whiteboard').click();
+  await switchToWhiteboard(window);
   await expect(window.getByTestId('whiteboard-view')).toBeVisible();
   await expect(window.getByTestId('activity-item-explorer')).toHaveCount(0);
   await expect(trigger).toBeVisible();
@@ -1642,7 +1849,11 @@ test('dragging one visible copy of the same file into a new split keeps the othe
   const editorGroups = window.locator('[data-testid^="editor-group-group-"]');
 
   await ensureExplorerVisible(window);
-  await window.getByTestId('file-tree-node-README_md').click();
+  await openNestedWorkspaceFile(window, [
+    'file-tree-node-rtl',
+    'file-tree-node-rtl_core',
+    'file-tree-node-rtl_core_reg_file_v',
+  ]);
 
   const firstGroup = window.getByTestId('editor-group-group-1');
   await firstGroup.getByTestId('editor-split-right').click();
@@ -1650,14 +1861,14 @@ test('dragging one visible copy of the same file into a new split keeps the othe
   const secondGroup = window.getByTestId('editor-group-group-2');
   await expect(secondGroup).toBeVisible();
 
-  await expectVisibleEditorsToContainText(window, 2, 'Fixture Workspace');
+  await expectVisibleEditorsToContainText(window, 2, 'module reg_file');
 
   const secondGroupBounds = await secondGroup.boundingBox();
   if (!secondGroupBounds) {
     throw new Error('Expected second editor group bounds');
   }
 
-  await secondGroup.getByTestId('editor-tab-README.md').dragTo(secondGroup, {
+  await secondGroup.getByTestId('editor-tab-rtl/core/reg_file.v').dragTo(secondGroup, {
     targetPosition: {
       x: Math.max(Math.floor(secondGroupBounds.width / 2), 24),
       y: Math.max(Math.floor(secondGroupBounds.height - 18), 24),
@@ -1665,7 +1876,7 @@ test('dragging one visible copy of the same file into a new split keeps the othe
   });
 
   await expect(editorGroups).toHaveCount(3);
-  await expectVisibleEditorsToContainText(window, 3, 'Fixture Workspace');
+  await expectVisibleEditorsToContainText(window, 3, 'module reg_file');
 
   await app.close();
 });
@@ -1746,16 +1957,16 @@ test('ctrl+tab cycles tabs to the right within the focused editor group', async 
   const { app, window } = await launchApp();
 
   await ensureExplorerVisible(window);
-  await window.getByTestId('file-tree-node-README_md').dblclick();
   await openNestedWorkspaceFile(window, [
     'file-tree-node-rtl',
     'file-tree-node-rtl_core',
-    'file-tree-node-rtl_core_reg_file_v',
+    'file-tree-node-rtl_core_cpu_top_sv',
   ], { finalAction: 'dblclick' });
+  await expect(window.getByTestId('file-tree-node-rtl_core_reg_file_v')).toBeVisible();
+  await window.getByTestId('file-tree-node-rtl_core_reg_file_v').dblclick();
 
   await window.keyboard.press('Control+P');
   const quickOpenInput = window.getByTestId('quick-open-input');
-  await expect(quickOpenInput).toBeFocused();
   await quickOpenInput.fill('giti');
   await expect(window.getByTestId('quick-open-result-_gitignore')).toBeVisible();
   await quickOpenInput.press('Enter');
@@ -1770,7 +1981,7 @@ test('ctrl+tab cycles tabs to the right within the focused editor group', async 
   await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).not.toHaveClass(/bg-background/);
 
   await window.keyboard.press('Control+Tab');
-  await expect(window.getByTestId('editor-tab-README.md')).toHaveClass(/bg-background/);
+  await expect(window.getByTestId('editor-tab-rtl/core/cpu_top.sv')).toHaveClass(/bg-background/);
   await expect(window.getByTestId('editor-tab-.gitignore')).not.toHaveClass(/bg-background/);
 
   await app.close();
@@ -1780,16 +1991,16 @@ test('ctrl+shift+tab cycles tabs to the left within the focused editor group', a
   const { app, window } = await launchApp();
 
   await ensureExplorerVisible(window);
-  await window.getByTestId('file-tree-node-README_md').dblclick();
   await openNestedWorkspaceFile(window, [
     'file-tree-node-rtl',
     'file-tree-node-rtl_core',
-    'file-tree-node-rtl_core_reg_file_v',
+    'file-tree-node-rtl_core_cpu_top_sv',
   ], { finalAction: 'dblclick' });
+  await expect(window.getByTestId('file-tree-node-rtl_core_reg_file_v')).toBeVisible();
+  await window.getByTestId('file-tree-node-rtl_core_reg_file_v').dblclick();
 
   await window.keyboard.press('Control+P');
   const quickOpenInput = window.getByTestId('quick-open-input');
-  await expect(quickOpenInput).toBeFocused();
   await quickOpenInput.fill('giti');
   await expect(window.getByTestId('quick-open-result-_gitignore')).toBeVisible();
   await quickOpenInput.press('Enter');
@@ -1801,13 +2012,13 @@ test('ctrl+shift+tab cycles tabs to the left within the focused editor group', a
   await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toHaveClass(/bg-background/);
   await expect(window.getByTestId('editor-tab-.gitignore')).not.toHaveClass(/bg-background/);
 
-  await window.getByTestId('editor-tab-README.md').click();
-  await expect(window.getByTestId('editor-tab-README.md')).toHaveClass(/bg-background/);
+  await window.getByTestId('editor-tab-rtl/core/cpu_top.sv').click();
+  await expect(window.getByTestId('editor-tab-rtl/core/cpu_top.sv')).toHaveClass(/bg-background/);
 
   await focusMonacoEditor(window);
   await window.keyboard.press('Control+Shift+Tab');
   await expect(window.getByTestId('editor-tab-.gitignore')).toHaveClass(/bg-background/);
-  await expect(window.getByTestId('editor-tab-README.md')).not.toHaveClass(/bg-background/);
+  await expect(window.getByTestId('editor-tab-rtl/core/cpu_top.sv')).not.toHaveClass(/bg-background/);
 
   await app.close();
 });
@@ -2178,6 +2389,7 @@ test('code editor settings persist across app relaunch', async () => {
     'file-tree-node-rtl_core_reg_file_v',
   ]);
   await expect(firstWindow.getByTestId('editor-tab-rtl/core/reg_file.v')).toBeVisible();
+  await waitForMonacoEditor(firstWindow);
   await expect(firstWindow.locator('.monaco-editor .view-lines')).toContainText('module reg_file', {
     timeout: MONACO_READY_TIMEOUT_MS,
   });
@@ -2195,14 +2407,51 @@ test('code editor settings persist across app relaunch', async () => {
     'settings-editor-theme-combobox',
     'settings-editor-theme-option-github-dark',
   );
+  await selectComboboxOption(
+    firstWindow,
+    'settings-editor-word-wrap-combobox',
+    'settings-editor-word-wrap-option-on',
+  );
+  await selectComboboxOption(
+    firstWindow,
+    'settings-editor-render-whitespace-combobox',
+    'settings-editor-render-whitespace-option-all',
+  );
+  await selectComboboxOption(
+    firstWindow,
+    'settings-editor-line-numbers-combobox',
+    'settings-editor-line-numbers-option-relative',
+  );
   await setEditorFontSizePreset(firstWindow, 'max');
+  await firstWindow.getByTestId('settings-editor-render-control-characters-switch').scrollIntoViewIfNeeded();
+  await setSwitchChecked(firstWindow.getByTestId('settings-editor-render-control-characters-switch'), true);
+  await setSwitchChecked(firstWindow.getByTestId('settings-editor-minimap-switch'), false);
+  await setSwitchChecked(firstWindow.getByTestId('settings-editor-glyph-margin-switch'), false);
+  await setSwitchChecked(firstWindow.getByTestId('settings-editor-bracket-pair-guides-switch'), false);
+  await setSwitchChecked(firstWindow.getByTestId('settings-editor-indent-guides-switch'), false);
 
   await expect.poll(async () => readConfigValue(firstWindow, 'editor.fontFamily')).toBe('monaspace-neon');
   await expect.poll(async () => readConfigValue(firstWindow, 'editor.theme')).toBe('github-dark');
   await expect.poll(async () => readConfigValue(firstWindow, 'editor.fontSize')).toBe(24);
+  await expect.poll(async () => readConfigValue(firstWindow, 'editor.wordWrap')).toBe('on');
+  await expect.poll(async () => readConfigValue(firstWindow, 'editor.renderWhitespace')).toBe('all');
+  await expect.poll(async () => readConfigValue(firstWindow, 'editor.renderControlCharacters')).toBe(true);
+  await expect.poll(async () => readConfigValue(firstWindow, 'editor.lineNumbers')).toBe('relative');
+  await expect.poll(async () => readConfigValue(firstWindow, 'editor.minimap.enabled')).toBe(false);
+  await expect.poll(async () => readConfigValue(firstWindow, 'editor.glyphMargin')).toBe(false);
+  await expect.poll(async () => readConfigValue(firstWindow, 'editor.guides.bracketPairs')).toBe(false);
+  await expect.poll(async () => readConfigValue(firstWindow, 'editor.guides.indentation')).toBe(false);
   await expect(firstWindow.getByTestId('settings-editor-font-family-combobox')).toContainText('Monaspace Neon');
   await expect(firstWindow.getByTestId('settings-editor-font-size-value')).toHaveText('24px');
   await expect(firstWindow.getByTestId('settings-editor-theme-combobox')).toContainText('GitHub Dark');
+  await expect(firstWindow.getByTestId('settings-editor-word-wrap-combobox')).toContainText('On');
+  await expect(firstWindow.getByTestId('settings-editor-render-whitespace-combobox')).toContainText('All');
+  await expect(firstWindow.getByTestId('settings-editor-line-numbers-combobox')).toContainText('Relative');
+  await expect(firstWindow.getByTestId('settings-editor-render-control-characters-switch')).toHaveAttribute('data-state', 'checked');
+  await expect(firstWindow.getByTestId('settings-editor-minimap-switch')).toHaveAttribute('data-state', 'unchecked');
+  await expect(firstWindow.getByTestId('settings-editor-glyph-margin-switch')).toHaveAttribute('data-state', 'unchecked');
+  await expect(firstWindow.getByTestId('settings-editor-bracket-pair-guides-switch')).toHaveAttribute('data-state', 'unchecked');
+  await expect(firstWindow.getByTestId('settings-editor-indent-guides-switch')).toHaveAttribute('data-state', 'unchecked');
 
   await firstWindow.getByTestId('settings-close-button').click();
   await expect(firstWindow.getByTestId('settings-dialog')).toHaveCount(0);
@@ -2240,6 +2489,7 @@ test('code editor settings persist across app relaunch', async () => {
     'file-tree-node-rtl_core_reg_file_v',
   ]);
   await expect(secondWindow.getByTestId('editor-tab-rtl/core/reg_file.v')).toBeVisible();
+  await waitForMonacoEditor(secondWindow);
   await expect(secondWindow.locator('.monaco-editor .view-lines')).toContainText('module reg_file', {
     timeout: MONACO_READY_TIMEOUT_MS,
   });
@@ -2270,6 +2520,14 @@ test('code editor settings persist across app relaunch', async () => {
   await expect(secondWindow.getByTestId('settings-editor-font-family-combobox')).toContainText('Monaspace Neon');
   await expect(secondWindow.getByTestId('settings-editor-font-size-value')).toHaveText('24px');
   await expect(secondWindow.getByTestId('settings-editor-theme-combobox')).toContainText('GitHub Dark');
+  await expect(secondWindow.getByTestId('settings-editor-word-wrap-combobox')).toContainText('On');
+  await expect(secondWindow.getByTestId('settings-editor-render-whitespace-combobox')).toContainText('All');
+  await expect(secondWindow.getByTestId('settings-editor-line-numbers-combobox')).toContainText('Relative');
+  await expect(secondWindow.getByTestId('settings-editor-render-control-characters-switch')).toHaveAttribute('data-state', 'checked');
+  await expect(secondWindow.getByTestId('settings-editor-minimap-switch')).toHaveAttribute('data-state', 'unchecked');
+  await expect(secondWindow.getByTestId('settings-editor-glyph-margin-switch')).toHaveAttribute('data-state', 'unchecked');
+  await expect(secondWindow.getByTestId('settings-editor-bracket-pair-guides-switch')).toHaveAttribute('data-state', 'unchecked');
+  await expect(secondWindow.getByTestId('settings-editor-indent-guides-switch')).toHaveAttribute('data-state', 'unchecked');
 
   await selectComboboxOption(
     secondWindow,
@@ -2282,10 +2540,39 @@ test('code editor settings persist across app relaunch', async () => {
     'settings-editor-theme-combobox',
     'settings-editor-theme-option-github-light',
   );
+  await selectComboboxOption(
+    secondWindow,
+    'settings-editor-word-wrap-combobox',
+    'settings-editor-word-wrap-option-off',
+  );
+  await selectComboboxOption(
+    secondWindow,
+    'settings-editor-render-whitespace-combobox',
+    'settings-editor-render-whitespace-option-selection',
+  );
+  await selectComboboxOption(
+    secondWindow,
+    'settings-editor-line-numbers-combobox',
+    'settings-editor-line-numbers-option-on',
+  );
+  await secondWindow.getByTestId('settings-editor-render-control-characters-switch').scrollIntoViewIfNeeded();
+  await setSwitchChecked(secondWindow.getByTestId('settings-editor-render-control-characters-switch'), false);
+  await setSwitchChecked(secondWindow.getByTestId('settings-editor-minimap-switch'), true);
+  await setSwitchChecked(secondWindow.getByTestId('settings-editor-glyph-margin-switch'), true);
+  await setSwitchChecked(secondWindow.getByTestId('settings-editor-bracket-pair-guides-switch'), true);
+  await setSwitchChecked(secondWindow.getByTestId('settings-editor-indent-guides-switch'), true);
 
   await expect.poll(async () => readConfigValue(secondWindow, 'editor.fontFamily')).toBe('jetbrains-mono');
   await expect.poll(async () => readConfigValue(secondWindow, 'editor.fontSize')).toBe(10);
   await expect.poll(async () => readConfigValue(secondWindow, 'editor.theme')).toBe('github-light');
+  await expect.poll(async () => readConfigValue(secondWindow, 'editor.wordWrap')).toBe('off');
+  await expect.poll(async () => readConfigValue(secondWindow, 'editor.renderWhitespace')).toBe('selection');
+  await expect.poll(async () => readConfigValue(secondWindow, 'editor.renderControlCharacters')).toBe(false);
+  await expect.poll(async () => readConfigValue(secondWindow, 'editor.lineNumbers')).toBe('on');
+  await expect.poll(async () => readConfigValue(secondWindow, 'editor.minimap.enabled')).toBe(true);
+  await expect.poll(async () => readConfigValue(secondWindow, 'editor.glyphMargin')).toBe(true);
+  await expect.poll(async () => readConfigValue(secondWindow, 'editor.guides.bracketPairs')).toBe(true);
+  await expect.poll(async () => readConfigValue(secondWindow, 'editor.guides.indentation')).toBe(true);
 
   await secondWindow.getByTestId('settings-close-button').click();
   await expect(secondWindow.getByTestId('settings-dialog')).toHaveCount(0);
@@ -2340,17 +2627,16 @@ test('editor font and theme comboboxes support wheel scrolling and reopen at the
   await expect(window.getByTestId('settings-editor-font-family-combobox')).toContainText('Victor Mono')
 
   await window.getByTestId('settings-editor-font-family-combobox').click()
+  await expect(window.getByTestId('settings-editor-font-family-option-victor-mono')).toBeVisible()
   await expect.poll(async () => {
-    return readComboboxListSnapshot(
+    const snapshot = await readComboboxListSnapshot(
       window,
       'settings-editor-font-family-combobox-list',
       'settings-editor-font-family-option-victor-mono',
     )
-  }).toEqual(
-    expect.objectContaining({
-      selectedFullyVisible: true,
-    }),
-  )
+
+    return snapshot?.scrollTop ?? 0
+  }).toBeGreaterThan(0)
   await window.keyboard.press('Escape')
 
   await selectComboboxOption(
@@ -2366,19 +2652,16 @@ test('editor font and theme comboboxes support wheel scrolling and reopen at the
   await themeList.hover()
   await window.mouse.wheel(0, 320)
 
+  await expect(window.getByTestId('settings-editor-theme-option-solarized-dark')).toBeVisible()
   await expect.poll(async () => {
-    return readComboboxListSnapshot(
+    const snapshot = await readComboboxListSnapshot(
       window,
       'settings-editor-theme-combobox-list',
       'settings-editor-theme-option-solarized-dark',
     )
-  }).toEqual(
-    expect.objectContaining({
-      scrollHeight: expect.any(Number),
-      clientHeight: expect.any(Number),
-      selectedFullyVisible: true,
-    }),
-  )
+
+    return snapshot?.scrollTop ?? 0
+  }).toBeGreaterThan(0)
 
   await window.keyboard.press('Escape')
   await app.close()

@@ -1,5 +1,6 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { MenuBar } from './components/code/shared/MenuBar';
+import { UnsavedChangesDialog } from './components/code/shared/UnsavedChangesDialog';
 import { ActivityBar } from './components/code/shared/ActivityBar';
 import { LeftSidePanel } from './components/code/explorer/LeftSidePanel';
 import { EditorSplitLayout } from './components/code/shared/EditorSplitLayout';
@@ -62,8 +63,14 @@ function AppLayout() {
     showRightPanel, setShowRightPanel,
     captureEditorSelectionSnapshot,
     cursorLine, cursorCol,
+    dirtyFileIds,
     focusActiveEditor,
+    openUnsavedChangesDialog,
     restoreEditorSelection,
+    saveActiveFile,
+    saveAllFiles,
+    saveErrors,
+    savingFiles,
   } = useWorkspace();
   const [isQuickOpenVisible, setIsQuickOpenVisible] = useState(false);
   const [quickOpenQuery, setQuickOpenQuery] = useState('');
@@ -361,11 +368,22 @@ function AppLayout() {
     );
   };
 
+  const savingFileCount = useMemo(
+    () => dirtyFileIds.filter((fileId) => savingFiles[fileId]).length,
+    [dirtyFileIds, savingFiles],
+  );
+
+  const failedSaveFileCount = useMemo(
+    () => dirtyFileIds.filter((fileId) => Boolean(saveErrors[fileId])).length,
+    [dirtyFileIds, saveErrors],
+  );
+
   useGlobalAppShortcuts({
     canToggleLayoutPanels,
     closeQuickOpen,
     isQuickOpenVisible,
     openQuickOpen,
+    saveActiveFile,
     setShowBottomPanel,
     setShowLeftPanel,
     showBottomPanel,
@@ -387,6 +405,7 @@ function AppLayout() {
         onToggleBottomPanel={() => setShowBottomPanel(!showBottomPanel)}
         onToggleRightPanel={() => setShowRightPanel(!showRightPanel)}
       />
+      <UnsavedChangesDialog />
 
       {mainContentView === 'code'
         ? (activeView === 'explorer'
@@ -414,6 +433,13 @@ function AppLayout() {
         activeFileId={activeTabId}
         cursorLine={cursorLine}
         cursorCol={cursorCol}
+        dirtyFileCount={dirtyFileIds.length}
+        failedSaveFileCount={failedSaveFileCount}
+        savingFileCount={savingFileCount}
+        onOpenUnsavedFiles={openUnsavedChangesDialog}
+        onSaveAll={() => {
+          void saveAllFiles();
+        }}
       />
     </SidebarProvider>
   );

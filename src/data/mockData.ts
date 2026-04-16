@@ -1,15 +1,3 @@
-export interface Problem {
-  id: string;
-  file: string;
-  fileId: string;
-  line: number;
-  column: number;
-  severity: 'error' | 'warning' | 'info' | 'hint';
-  message: string;
-  code?: string;
-  source?: string;
-}
-
 export interface OutlineItem {
   id: string;
   name: string;
@@ -119,45 +107,6 @@ export const fileOutlines: Record<string, OutlineItem[]> = {
     },
   ],
 };
-
-export const problemsList: Problem[] = [
-  {
-    id: 'p1', file: 'cpu_top.v', fileId: 'cpu_top', line: 56, column: 5,
-    severity: 'error',
-    message: "Port 'alu_src_b' of module 'ctrl_unit' not connected",
-    code: 'V001', source: 'rtl-lint',
-  },
-  {
-    id: 'p2', file: 'cpu_top.v', fileId: 'cpu_top', line: 100, column: 12,
-    severity: 'error',
-    message: "Module 'imm_gen' not found in project — missing source file",
-    code: 'V002', source: 'rtl-lint',
-  },
-  {
-    id: 'p3', file: 'alu.v', fileId: 'alu', line: 51, column: 27,
-    severity: 'warning',
-    message: "Default branch result '32\\'hDEAD_BEEF' may propagate X-state in simulation",
-    code: 'W003', source: 'rtl-lint',
-  },
-  {
-    id: 'p4', file: 'alu.v', fileId: 'alu', line: 14, column: 4,
-    severity: 'warning',
-    message: "Output 'overflow' is never read by instantiating module",
-    code: 'W007', source: 'rtl-lint',
-  },
-  {
-    id: 'p5', file: 'spi_master.v', fileId: 'spi_master', line: 38, column: 1,
-    severity: 'warning',
-    message: 'Potential clock domain crossing: signal crosses from clk to spi_clk without synchronizer',
-    code: 'W014', source: 'cdc-check',
-  },
-  {
-    id: 'p6', file: 'uart_tx.v', fileId: 'uart_tx', line: 17, column: 15,
-    severity: 'info',
-    message: "'ready' can be simplified to a registered signal to improve timing",
-    code: 'I021', source: 'timing-advisor',
-  },
-];
 
 export const staticChecks: StaticCheckItem[] = [
   {

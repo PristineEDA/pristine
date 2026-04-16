@@ -1,6 +1,6 @@
 import Editor, { useMonaco } from '@monaco-editor/react';
 import { useEffect, useRef, useState } from 'react';
-import { useProblemsList } from '../../../../data/mockDataLoader';
+import '../../../editor/configureMonacoLoader';
 import { getEditorFontFamilyStack } from '../../../editor/editorSettings';
 import { registerEditorThemes } from '../../../editor/monacoThemes';
 import { useRegisterEditorLanguages } from '../../../editor/registerLanguages';
@@ -45,6 +45,7 @@ interface MonacoEditorPaneProps {
   editorRef: React.MutableRefObject<any>;
   onActiveModelReady?: (fileId: string) => void;
   onCursorChange?: (line: number, col: number) => void;
+  onSaveShortcut?: () => void;
   onContentChange?: (value: string) => void;
   onEditorMount?: (editor: any) => void;
   onNavigateToLocation?: (fileId: string, line: number, col: number) => void;
@@ -60,6 +61,7 @@ export function MonacoEditorPane({
   editorRef,
   onActiveModelReady,
   onCursorChange,
+  onSaveShortcut,
   onContentChange,
   onEditorMount,
   onNavigateToLocation,
@@ -69,11 +71,23 @@ export function MonacoEditorPane({
   dragInteractionShieldTestId,
 }: MonacoEditorPaneProps) {
   const monaco = useMonaco();
-  const problemsList = useProblemsList();
-  const { fontFamily, fontSize, theme } = useEditorSettings();
+  const {
+    bracketPairGuides,
+    fontFamily,
+    fontSize,
+    glyphMargin,
+    indentGuides,
+    lineNumbers,
+    minimapEnabled,
+    renderControlCharacters,
+    renderWhitespace,
+    theme,
+    wordWrap,
+  } = useEditorSettings();
   const editorFontFamily = getEditorFontFamilyStack(fontFamily);
   const editorLanguage = getEditorLanguage(activeTabId);
   const onCursorChangeRef = useRef(onCursorChange);
+  const monacoInstanceRef = useRef(monaco);
   const canPropagateCursorChangesRef = useRef(true);
   const hostRef = useRef<HTMLDivElement | null>(null);
   const layoutFrameRef = useRef<number | null>(null);
@@ -109,6 +123,10 @@ export function MonacoEditorPane({
   useEffect(() => {
     onCursorChangeRef.current = onCursorChange;
   }, [onCursorChange]);
+
+  useEffect(() => {
+    monacoInstanceRef.current = monaco;
+  }, [monaco]);
 
   useEffect(() => {
     canPropagateCursorChangesRef.current = false;
@@ -149,52 +167,6 @@ export function MonacoEditorPane({
   useEffect(() => {
     queueEditorLayoutRef.current();
   }, [showDragInteractionShield]);
-
-  useEffect(() => {
-    if (!monaco) {
-      return;
-    }
-
-    const issues = problemsList.filter((problem) => problem.fileId === activeTabId);
-    const markers = issues.map((problem) => ({
-      severity: problem.severity === 'error'
-        ? monaco.MarkerSeverity.Error
-        : problem.severity === 'warning'
-        ? monaco.MarkerSeverity.Warning
-        : monaco.MarkerSeverity.Info,
-      startLineNumber: problem.line,
-      startColumn: problem.column,
-      endLineNumber: problem.line,
-      endColumn: problem.column + 30,
-      message: problem.message,
-      code: problem.code,
-      source: problem.source,
-    }));
-
-    const models = monaco.editor.getModels();
-    const normalizedActiveTabId = activeTabId.replace(/\\/g, '/').replace(/^\.\//, '').replace(/^\//, '');
-    const hasModelPaths = models.some((model: any) => typeof model?.uri?.path === 'string' || typeof model?.uri?.fsPath === 'string');
-
-    models.forEach((model: any) => {
-      if (!hasModelPaths) {
-        monaco.editor.setModelMarkers(model, 'rtl-lint', markers);
-        return;
-      }
-
-      const modelPath = typeof model?.uri?.path === 'string'
-        ? model.uri.path
-        : typeof model?.uri?.fsPath === 'string'
-        ? model.uri.fsPath
-        : '';
-      const normalizedModelPath = modelPath.replace(/\\/g, '/').replace(/^\.\//, '').replace(/^\//, '');
-
-      monaco.editor.setModelMarkers(
-        model,
-        'rtl-lint',
-        normalizedModelPath === normalizedActiveTabId ? markers : [],
-      );
-    });
-  }, [activeTabId, monaco, problemsList]);
 
   useEffect(() => {
     if (!monaco) {
@@ -242,12 +214,35 @@ export function MonacoEditorPane({
     }
 
     editor.updateOptions({
+      glyphMargin,
       fontFamily: editorFontFamily,
       fontSize,
+      guides: {
+        bracketPairs: bracketPairGuides,
+        indentation: indentGuides,
+      },
+      lineNumbers,
+      minimap: { enabled: minimapEnabled, scale: 1, showSlider: 'mouseover' },
+      renderControlCharacters,
+      renderWhitespace,
+      wordWrap,
     });
     queueEditorLayoutRef.current();
     monaco?.editor.remeasureFonts?.();
-  }, [editorFontFamily, editorRef, fontSize, monaco]);
+  }, [
+    bracketPairGuides,
+    editorFontFamily,
+    editorRef,
+    fontSize,
+    glyphMargin,
+    indentGuides,
+    lineNumbers,
+    minimapEnabled,
+    monaco,
+    renderControlCharacters,
+    renderWhitespace,
+    wordWrap,
+  ]);
 
   useEffect(() => {
     if (!activeTabId || !editorRef.current) {
@@ -276,9 +271,12 @@ export function MonacoEditorPane({
         value={code}
         theme={theme}
         beforeMount={(nextMonaco) => {
+          monacoInstanceRef.current = nextMonaco;
           registerEditorThemes(nextMonaco);
         }}
         onMount={(editor) => {
+          const activeMonaco = monacoInstanceRef.current;
+
           editorRef.current = editor;
           setMountedEditor(editor);
           if (activeTabId) {
@@ -286,6 +284,16 @@ export function MonacoEditorPane({
           }
           queueEditorLayoutRef.current();
           onEditorMount?.(editor);
+          if (
+            onSaveShortcut
+            && typeof editor.addCommand === 'function'
+            && typeof activeMonaco?.KeyMod?.CtrlCmd === 'number'
+            && typeof activeMonaco?.KeyCode?.KeyS === 'number'
+          ) {
+            editor.addCommand(activeMonaco.KeyMod.CtrlCmd | activeMonaco.KeyCode.KeyS, () => {
+              onSaveShortcut();
+            });
+          }
           editor.onDidFocusEditorText?.(() => {
             canPropagateCursorChangesRef.current = true;
           });
@@ -310,21 +318,22 @@ export function MonacoEditorPane({
           fontSize,
           fontFamily: editorFontFamily,
           fontLigatures: true,
-          lineNumbers: 'on',
+          lineNumbers,
           lineNumbersMinChars: 4,
-          glyphMargin: true,
+          glyphMargin,
           folding: true,
           foldingStrategy: 'indentation',
-          minimap: { enabled: true, scale: 1, showSlider: 'mouseover' },
+          minimap: { enabled: minimapEnabled, scale: 1, showSlider: 'mouseover' },
           scrollBeyondLastLine: false,
           automaticLayout: true,
           tabSize: 4,
           insertSpaces: true,
-          wordWrap: 'off',
+          wordWrap,
           rulers: [80, 120],
-          renderWhitespace: 'selection',
+          renderWhitespace,
+          renderControlCharacters,
           bracketPairColorization: { enabled: true },
-          guides: { bracketPairs: true, indentation: true },
+          guides: { bracketPairs: bracketPairGuides, indentation: indentGuides },
           suggest: { showKeywords: true, showSnippets: true },
           quickSuggestions: { other: true, comments: false, strings: false },
           parameterHints: { enabled: true },

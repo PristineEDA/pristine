@@ -7,6 +7,14 @@ export const MAX_EDITOR_FONT_SIZE = 24
 export const EDITOR_FONT_SIZE_CONFIG_KEY = 'editor.fontSize'
 export const EDITOR_FONT_FAMILY_CONFIG_KEY = 'editor.fontFamily'
 export const EDITOR_THEME_CONFIG_KEY = 'editor.theme'
+export const EDITOR_WORD_WRAP_CONFIG_KEY = 'editor.wordWrap'
+export const EDITOR_RENDER_WHITESPACE_CONFIG_KEY = 'editor.renderWhitespace'
+export const EDITOR_RENDER_CONTROL_CHARACTERS_CONFIG_KEY = 'editor.renderControlCharacters'
+export const EDITOR_LINE_NUMBERS_CONFIG_KEY = 'editor.lineNumbers'
+export const EDITOR_MINIMAP_ENABLED_CONFIG_KEY = 'editor.minimap.enabled'
+export const EDITOR_GLYPH_MARGIN_CONFIG_KEY = 'editor.glyphMargin'
+export const EDITOR_BRACKET_PAIR_GUIDES_CONFIG_KEY = 'editor.guides.bracketPairs'
+export const EDITOR_INDENT_GUIDES_CONFIG_KEY = 'editor.guides.indentation'
 
 export const editorFontFamilyOptions = [
   {
@@ -232,10 +240,43 @@ export const editorThemeOptions = [
   { value: 'solarized-dark', label: 'Solarized Dark', description: 'Muted dark theme based on Solarized.' },
 ] as const
 
+export const editorWordWrapOptions = [
+  { value: 'off', label: 'Off', description: 'Disable soft wrapping for long lines.' },
+  { value: 'on', label: 'On', description: 'Wrap long lines at the current viewport width.' },
+  { value: 'bounded', label: 'Bounded', description: 'Wrap at the viewport width or Monaco wrap column, whichever is smaller.' },
+  { value: 'wordWrapColumn', label: 'Wrap Column', description: 'Wrap long lines at Monaco\'s configured word wrap column.' },
+] as const
+
+export const editorRenderWhitespaceOptions = [
+  { value: 'none', label: 'Hidden', description: 'Do not render whitespace markers.' },
+  { value: 'boundary', label: 'Boundary', description: 'Render whitespace around word boundaries.' },
+  { value: 'selection', label: 'Selection', description: 'Render whitespace only for the active selection.' },
+  { value: 'trailing', label: 'Trailing', description: 'Render trailing whitespace markers.' },
+  { value: 'all', label: 'All', description: 'Render whitespace markers everywhere.' },
+] as const
+
+export const editorLineNumbersOptions = [
+  { value: 'on', label: 'On', description: 'Always show absolute line numbers.' },
+  { value: 'off', label: 'Off', description: 'Hide the line number gutter.' },
+  { value: 'relative', label: 'Relative', description: 'Show the current line and relative offsets around it.' },
+  { value: 'interval', label: 'Interval', description: 'Render line numbers at regular intervals.' },
+] as const
+
 export type EditorFontFamilyId = (typeof editorFontFamilyOptions)[number]['value']
 export type EditorThemeId = (typeof editorThemeOptions)[number]['value']
+export type EditorWordWrapMode = (typeof editorWordWrapOptions)[number]['value']
+export type EditorRenderWhitespaceMode = (typeof editorRenderWhitespaceOptions)[number]['value']
+export type EditorLineNumbersMode = (typeof editorLineNumbersOptions)[number]['value']
 export const DEFAULT_EDITOR_FONT_FAMILY = 'jetbrains-mono' as const satisfies EditorFontFamilyId
 export const DEFAULT_EDITOR_THEME = 'dracula' as const satisfies EditorThemeId
+export const DEFAULT_EDITOR_WORD_WRAP = 'off' as const satisfies EditorWordWrapMode
+export const DEFAULT_EDITOR_RENDER_WHITESPACE = 'selection' as const satisfies EditorRenderWhitespaceMode
+export const DEFAULT_EDITOR_LINE_NUMBERS = 'on' as const satisfies EditorLineNumbersMode
+export const DEFAULT_EDITOR_RENDER_CONTROL_CHARACTERS = false
+export const DEFAULT_EDITOR_MINIMAP_ENABLED = true
+export const DEFAULT_EDITOR_GLYPH_MARGIN = true
+export const DEFAULT_EDITOR_BRACKET_PAIR_GUIDES = true
+export const DEFAULT_EDITOR_INDENT_GUIDES = true
 
 const editorFontFamilyValues = new Set<EditorFontFamilyId>(editorFontFamilyOptions.map((option) => option.value))
 const editorFontFamilyOptionsById = new Map<EditorFontFamilyId, (typeof editorFontFamilyOptions)[number]>(
@@ -244,6 +285,18 @@ const editorFontFamilyOptionsById = new Map<EditorFontFamilyId, (typeof editorFo
 const editorThemeValues = new Set<EditorThemeId>(editorThemeOptions.map((option) => option.value))
 const editorThemeOptionsById = new Map<EditorThemeId, (typeof editorThemeOptions)[number]>(
   editorThemeOptions.map((option) => [option.value, option]),
+)
+const editorWordWrapValues = new Set<EditorWordWrapMode>(editorWordWrapOptions.map((option) => option.value))
+const editorWordWrapOptionsById = new Map<EditorWordWrapMode, (typeof editorWordWrapOptions)[number]>(
+  editorWordWrapOptions.map((option) => [option.value, option]),
+)
+const editorRenderWhitespaceValues = new Set<EditorRenderWhitespaceMode>(editorRenderWhitespaceOptions.map((option) => option.value))
+const editorRenderWhitespaceOptionsById = new Map<EditorRenderWhitespaceMode, (typeof editorRenderWhitespaceOptions)[number]>(
+  editorRenderWhitespaceOptions.map((option) => [option.value, option]),
+)
+const editorLineNumbersValues = new Set<EditorLineNumbersMode>(editorLineNumbersOptions.map((option) => option.value))
+const editorLineNumbersOptionsById = new Map<EditorLineNumbersMode, (typeof editorLineNumbersOptions)[number]>(
+  editorLineNumbersOptions.map((option) => [option.value, option]),
 )
 
 export function isEditorFontFamilyId(value: unknown): value is EditorFontFamilyId {
@@ -284,4 +337,64 @@ export function parseEditorFontSize(value: unknown): number {
   }
 
   return clampEditorFontSize(value)
+}
+
+function parseEditorBooleanSetting(value: unknown, defaultValue: boolean): boolean {
+  return typeof value === 'boolean' ? value : defaultValue
+}
+
+export function isEditorWordWrapMode(value: unknown): value is EditorWordWrapMode {
+  return typeof value === 'string' && editorWordWrapValues.has(value as EditorWordWrapMode)
+}
+
+export function getEditorWordWrapLabel(wordWrap: EditorWordWrapMode): string {
+  return editorWordWrapOptionsById.get(wordWrap)?.label ?? 'Off'
+}
+
+export function parseEditorWordWrap(value: unknown): EditorWordWrapMode {
+  return isEditorWordWrapMode(value) ? value : DEFAULT_EDITOR_WORD_WRAP
+}
+
+export function isEditorRenderWhitespaceMode(value: unknown): value is EditorRenderWhitespaceMode {
+  return typeof value === 'string' && editorRenderWhitespaceValues.has(value as EditorRenderWhitespaceMode)
+}
+
+export function getEditorRenderWhitespaceLabel(renderWhitespace: EditorRenderWhitespaceMode): string {
+  return editorRenderWhitespaceOptionsById.get(renderWhitespace)?.label ?? 'Selection'
+}
+
+export function parseEditorRenderWhitespace(value: unknown): EditorRenderWhitespaceMode {
+  return isEditorRenderWhitespaceMode(value) ? value : DEFAULT_EDITOR_RENDER_WHITESPACE
+}
+
+export function isEditorLineNumbersMode(value: unknown): value is EditorLineNumbersMode {
+  return typeof value === 'string' && editorLineNumbersValues.has(value as EditorLineNumbersMode)
+}
+
+export function getEditorLineNumbersLabel(lineNumbers: EditorLineNumbersMode): string {
+  return editorLineNumbersOptionsById.get(lineNumbers)?.label ?? 'On'
+}
+
+export function parseEditorLineNumbers(value: unknown): EditorLineNumbersMode {
+  return isEditorLineNumbersMode(value) ? value : DEFAULT_EDITOR_LINE_NUMBERS
+}
+
+export function parseEditorRenderControlCharacters(value: unknown): boolean {
+  return parseEditorBooleanSetting(value, DEFAULT_EDITOR_RENDER_CONTROL_CHARACTERS)
+}
+
+export function parseEditorMinimapEnabled(value: unknown): boolean {
+  return parseEditorBooleanSetting(value, DEFAULT_EDITOR_MINIMAP_ENABLED)
+}
+
+export function parseEditorGlyphMargin(value: unknown): boolean {
+  return parseEditorBooleanSetting(value, DEFAULT_EDITOR_GLYPH_MARGIN)
+}
+
+export function parseEditorBracketPairGuides(value: unknown): boolean {
+  return parseEditorBooleanSetting(value, DEFAULT_EDITOR_BRACKET_PAIR_GUIDES)
+}
+
+export function parseEditorIndentGuides(value: unknown): boolean {
+  return parseEditorBooleanSetting(value, DEFAULT_EDITOR_INDENT_GUIDES)
 }

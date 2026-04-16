@@ -13,6 +13,8 @@ import type {
   LspCompletionItem,
   LspCompletionList,
   LspCompletionResponse,
+  LspDebugEvent,
+  LspDebugValue,
   LspDiagnostic,
   LspDiagnosticsEvent,
   LspHover,
@@ -40,6 +42,7 @@ interface LspSession {
   initialized: Promise<void>;
   documents: Map<string, TrackedDocument>;
   disposed: boolean;
+  nextDebugRequestId: number;
 }
 
 const SYSTEMVERILOG_LANGUAGE_ID = 'systemverilog';
@@ -49,6 +52,7 @@ const CLIENT_VERSION = '0.0.1';
 let projectRoot: string | null = null;
 let activeSessionPromise: Promise<LspSession> | null = null;
 let activeSession: LspSession | null = null;
+let nextDebugEventSequence = 1;
 const WINDOWS_ABSOLUTE_PATH_PATTERN = /^[A-Za-z]:[\\/]/;
 const WINDOWS_FILE_URI_PATH_PATTERN = /^\/[A-Za-z]:\//;
 
@@ -152,8 +156,169 @@ function sendLspState(getMainWindow: () => BrowserWindow | null, payload: LspSta
   getMainWindow()?.webContents.send(StreamChannels.LSP_STATE, payload);
 }
 
+function sendLspDebug(getMainWindow: () => BrowserWindow | null, payload: Omit<LspDebugEvent, 'sequence' | 'timestamp'>): void {
+  getMainWindow()?.webContents.send(StreamChannels.LSP_DEBUG, {
+    sequence: nextDebugEventSequence++,
+    timestamp: new Date().toISOString(),
+    ...payload,
+  } satisfies LspDebugEvent);
+}
+
+function emitLspLifecycle(getMainWindow: () => BrowserWindow | null, payload: LspStateEvent): void {
+  sendLspState(getMainWindow, payload);
+  sendLspDebug(getMainWindow, {
+    direction: 'session',
+    kind: 'lifecycle',
+    status: payload.status,
+    text: payload.message,
+    payload: payload.message ? { message: payload.message } : undefined,
+  });
+}
+
 function sendLspDiagnostics(getMainWindow: () => BrowserWindow | null, payload: LspDiagnosticsEvent): void {
   getMainWindow()?.webContents.send(StreamChannels.LSP_DIAGNOSTICS, payload);
+}
+
+function toDebugValue(value: unknown, depth = 0): LspDebugValue {
+  if (value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return value;
+  }
+
+  if (depth >= 6) {
+    return '[Max depth reached]';
+  }
+
+  if (value instanceof Error) {
+    return {
+      name: value.name,
+      message: value.message,
+      stack: value.stack ?? null,
+    };
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((entry) => toDebugValue(entry, depth + 1));
+  }
+
+  if (value && typeof value === 'object') {
+    const normalizedEntries = Object.entries(value).flatMap(([key, entry]) => {
+      if (entry === undefined) {
+        return [];
+      }
+
+      return [[key, toDebugValue(entry, depth + 1)] as const];
+    });
+
+    return Object.fromEntries(normalizedEntries);
+  }
+
+  return String(value);
+}
+
+function getDebugFilePath(value: unknown): string | undefined {
+  if (!value || typeof value !== 'object') {
+    return undefined;
+  }
+
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const nestedPath = getDebugFilePath(entry);
+      if (nestedPath) {
+        return nestedPath;
+      }
+    }
+
+    return undefined;
+  }
+
+  const candidate = value as {
+    filePath?: unknown;
+    uri?: unknown;
+    textDocument?: { filePath?: unknown; uri?: unknown };
+    targetUri?: unknown;
+  };
+  if (typeof candidate.filePath === 'string') {
+    return normalizeWorkspaceFilePath(candidate.filePath);
+  }
+
+  if (typeof candidate.textDocument?.filePath === 'string') {
+    return normalizeWorkspaceFilePath(candidate.textDocument.filePath);
+  }
+
+  const uri = typeof candidate.textDocument?.uri === 'string'
+    ? candidate.textDocument.uri
+    : typeof candidate.targetUri === 'string'
+    ? candidate.targetUri
+    : typeof candidate.uri === 'string'
+    ? candidate.uri
+    : null;
+  if (!uri) {
+    return undefined;
+  }
+
+  return getRelativeWorkspaceFilePath(uri) ?? undefined;
+}
+
+async function sendDebugNotification(
+  session: LspSession,
+  getMainWindow: () => BrowserWindow | null,
+  method: string,
+  params: unknown,
+): Promise<void> {
+  sendLspDebug(getMainWindow, {
+    direction: 'client->server',
+    kind: 'notification',
+    method,
+    filePath: getDebugFilePath(params),
+    payload: toDebugValue(params),
+  });
+
+  await session.connection.sendNotification(method, params);
+}
+
+async function sendDebugRequest<T>(
+  session: LspSession,
+  getMainWindow: () => BrowserWindow | null,
+  method: string,
+  params: unknown,
+): Promise<T> {
+  const requestId = session.nextDebugRequestId++;
+  const filePath = getDebugFilePath(params);
+
+  sendLspDebug(getMainWindow, {
+    direction: 'client->server',
+    kind: 'request',
+    requestId,
+    method,
+    filePath,
+    payload: toDebugValue(params),
+  });
+
+  try {
+    const result = await session.connection.sendRequest(method, params);
+    sendLspDebug(getMainWindow, {
+      direction: 'server->client',
+      kind: 'response',
+      requestId,
+      method,
+      filePath: getDebugFilePath(result) ?? filePath,
+      payload: toDebugValue(result),
+    });
+    return result as T;
+  } catch (error) {
+    sendLspDebug(getMainWindow, {
+      direction: 'server->client',
+      kind: 'response',
+      requestId,
+      method,
+      filePath,
+      payload: {
+        error: toDebugValue(error),
+      },
+      text: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
 }
 
 function normalizeTextEdit(value: unknown): LspTextEdit | undefined {
@@ -434,13 +599,28 @@ async function createSession(getMainWindow: () => BrowserWindow | null): Promise
     initialized: Promise.resolve(),
     documents: new Map<string, TrackedDocument>(),
     disposed: false,
+    nextDebugRequestId: 1,
   };
 
   activeSession = session;
-  sendLspState(getMainWindow, { status: 'starting' });
+  emitLspLifecycle(getMainWindow, { status: 'starting' });
+
+  serverProcess.stderr.on('data', (chunk: Buffer | string) => {
+    const text = chunk.toString().trim();
+    if (!text) {
+      return;
+    }
+
+    sendLspDebug(getMainWindow, {
+      direction: 'server->client',
+      kind: 'stderr',
+      text,
+      payload: { text },
+    });
+  });
 
   serverProcess.on('error', (error) => {
-    sendLspState(getMainWindow, { status: 'error', message: error.message });
+    emitLspLifecycle(getMainWindow, { status: 'error', message: error.message });
     cleanupSession(session);
   });
 
@@ -450,7 +630,7 @@ async function createSession(getMainWindow: () => BrowserWindow | null): Promise
     }
 
     const message = code === null ? 'Language server exited unexpectedly' : `Language server exited with code ${code}`;
-    sendLspState(getMainWindow, { status: 'stopped', message });
+    emitLspLifecycle(getMainWindow, { status: 'stopped', message });
     cleanupSession(session);
   });
 
@@ -460,6 +640,14 @@ async function createSession(getMainWindow: () => BrowserWindow | null): Promise
       return;
     }
 
+    sendLspDebug(getMainWindow, {
+      direction: 'server->client',
+      kind: 'notification',
+      method: 'textDocument/publishDiagnostics',
+      filePath,
+      payload: toDebugValue(params),
+    });
+
     sendLspDiagnostics(getMainWindow, {
       filePath,
       diagnostics: params.diagnostics,
@@ -468,19 +656,21 @@ async function createSession(getMainWindow: () => BrowserWindow | null): Promise
 
   connection.onClose(() => {
     if (!session.disposed) {
-      sendLspState(getMainWindow, { status: 'stopped' });
+      emitLspLifecycle(getMainWindow, { status: 'stopped' });
     }
   });
 
   connection.listen();
-  session.initialized = connection.sendRequest('initialize', createInitializeParams())
+  session.initialized = sendDebugRequest(session, getMainWindow, 'initialize', createInitializeParams())
     .then(() => {
-      connection.sendNotification('initialized', {});
-      sendLspState(getMainWindow, { status: 'ready' });
+      return sendDebugNotification(session, getMainWindow, 'initialized', {});
+    })
+    .then(() => {
+      emitLspLifecycle(getMainWindow, { status: 'ready' });
     })
     .catch((error: unknown) => {
       const message = error instanceof Error ? error.message : 'Failed to initialize SystemVerilog LSP server';
-      sendLspState(getMainWindow, { status: 'error', message });
+      emitLspLifecycle(getMainWindow, { status: 'error', message });
       cleanupSession(session);
       throw error;
     });
@@ -552,7 +742,7 @@ export function registerLspHandlers(getMainWindow: () => BrowserWindow | null): 
       document.refCount += 1;
 
       if (document.refCount === 1) {
-        await session.connection.sendNotification('textDocument/didOpen', {
+        await sendDebugNotification(session, getMainWindow, 'textDocument/didOpen', {
           textDocument: {
             uri: document.uri,
             languageId: document.languageId,
@@ -566,7 +756,7 @@ export function registerLspHandlers(getMainWindow: () => BrowserWindow | null): 
       if (document.text !== text) {
         document.text = text;
         document.version += 1;
-        await session.connection.sendNotification('textDocument/didChange', {
+        await sendDebugNotification(session, getMainWindow, 'textDocument/didChange', {
           textDocument: {
             uri: document.uri,
             version: document.version,
@@ -585,7 +775,7 @@ export function registerLspHandlers(getMainWindow: () => BrowserWindow | null): 
       const document = updateDocumentText(session, filePath, text);
       if (document.refCount === 0) {
         document.refCount = 1;
-        await session.connection.sendNotification('textDocument/didOpen', {
+        await sendDebugNotification(session, getMainWindow, 'textDocument/didOpen', {
           textDocument: {
             uri: document.uri,
             languageId: document.languageId,
@@ -596,7 +786,7 @@ export function registerLspHandlers(getMainWindow: () => BrowserWindow | null): 
         return;
       }
 
-      await session.connection.sendNotification('textDocument/didChange', {
+      await sendDebugNotification(session, getMainWindow, 'textDocument/didChange', {
         textDocument: {
           uri: document.uri,
           version: document.version,
@@ -622,7 +812,7 @@ export function registerLspHandlers(getMainWindow: () => BrowserWindow | null): 
       }
 
       session.documents.delete(normalizedFilePath);
-      await session.connection.sendNotification('textDocument/didClose', {
+      await sendDebugNotification(session, getMainWindow, 'textDocument/didClose', {
         textDocument: {
           uri: document.uri,
         },
@@ -649,7 +839,7 @@ export function registerLspHandlers(getMainWindow: () => BrowserWindow | null): 
       }
 
       return withInitializedSession(getMainWindow, async (session) => {
-        const result = await session.connection.sendRequest('textDocument/completion', {
+        const result = await sendDebugRequest(session, getMainWindow, 'textDocument/completion', {
           textDocument: { uri: getDocumentUri(filePath) },
           position: { line, character },
           context: triggerKind === undefined
@@ -671,7 +861,7 @@ export function registerLspHandlers(getMainWindow: () => BrowserWindow | null): 
     assertNumber(character, 'character');
 
     return withInitializedSession(getMainWindow, async (session) => {
-      const result = await session.connection.sendRequest('textDocument/hover', {
+      const result = await sendDebugRequest(session, getMainWindow, 'textDocument/hover', {
         textDocument: { uri: getDocumentUri(filePath) },
         position: { line, character },
       });
@@ -686,7 +876,7 @@ export function registerLspHandlers(getMainWindow: () => BrowserWindow | null): 
     assertNumber(character, 'character');
 
     return withInitializedSession(getMainWindow, async (session) => {
-      const result = await session.connection.sendRequest('textDocument/definition', {
+      const result = await sendDebugRequest(session, getMainWindow, 'textDocument/definition', {
         textDocument: { uri: getDocumentUri(filePath) },
         position: { line, character },
       });
@@ -706,7 +896,7 @@ export function registerLspHandlers(getMainWindow: () => BrowserWindow | null): 
       }
 
       return withInitializedSession(getMainWindow, async (session) => {
-        const result = await session.connection.sendRequest('textDocument/references', {
+        const result = await sendDebugRequest(session, getMainWindow, 'textDocument/references', {
           textDocument: { uri: getDocumentUri(filePath) },
           position: { line, character },
           context: { includeDeclaration: includeDeclaration !== false },

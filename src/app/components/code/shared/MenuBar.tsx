@@ -15,13 +15,35 @@ import { useEditorSettings } from '../../../context/EditorSettingsContext';
 import { useWorkspace } from '../../../context/WorkspaceContext';
 import { useTheme, type Theme } from '../../../context/ThemeContext';
 import {
+  DEFAULT_EDITOR_BRACKET_PAIR_GUIDES,
   EDITOR_FONT_FAMILY_CONFIG_KEY,
   EDITOR_FONT_SIZE_CONFIG_KEY,
+  DEFAULT_EDITOR_GLYPH_MARGIN,
+  DEFAULT_EDITOR_INDENT_GUIDES,
+  DEFAULT_EDITOR_MINIMAP_ENABLED,
+  EDITOR_BRACKET_PAIR_GUIDES_CONFIG_KEY,
   EDITOR_THEME_CONFIG_KEY,
+  EDITOR_GLYPH_MARGIN_CONFIG_KEY,
+  EDITOR_INDENT_GUIDES_CONFIG_KEY,
+  EDITOR_LINE_NUMBERS_CONFIG_KEY,
+  EDITOR_MINIMAP_ENABLED_CONFIG_KEY,
+  EDITOR_RENDER_CONTROL_CHARACTERS_CONFIG_KEY,
+  EDITOR_RENDER_WHITESPACE_CONFIG_KEY,
+  EDITOR_WORD_WRAP_CONFIG_KEY,
   editorFontFamilyOptions,
+  editorLineNumbersOptions,
+  editorRenderWhitespaceOptions,
   getEditorFontFamilyLabel,
+  getEditorLineNumbersLabel,
+  getEditorRenderWhitespaceLabel,
+  getEditorWordWrapLabel,
   editorThemeOptions,
+  editorWordWrapOptions,
   parseEditorFontFamily,
+  parseEditorLineNumbers,
+  parseEditorRenderControlCharacters,
+  parseEditorRenderWhitespace,
+  parseEditorWordWrap,
   getEditorThemeLabel,
   parseEditorFontSize,
   parseEditorTheme,
@@ -46,6 +68,7 @@ import { Slider } from '../../ui/slider';
 import { Switch } from '../../ui/switch';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../../ui/tooltip';
 import { useSidebar } from '../../ui/sidebar';
+import { AboutDialog } from './AboutDialog';
 import { centerViewSwitchItemClassName } from './viewSwitcherStyles';
 
 const noDrag = { WebkitAppRegion: 'no-drag' as const };
@@ -56,6 +79,9 @@ const noDragInteractive = {
 const CLOSE_ACTION_CONFIG_KEY = 'window.closeActionPreference';
 const FLOATING_INFO_VISIBLE_CONFIG_KEY = 'ui.floatingInfoWindow.visible';
 const THEME_CONFIG_KEY = 'ui.theme';
+const settingsSectionClassName = 'rounded-md border border-border/85 bg-muted/55 px-3 py-2.5';
+const settingsSectionTitleClassName = 'text-[13px] font-medium';
+const settingsSectionDescriptionClassName = 'text-[12px] text-muted-foreground';
 
 function isMacOSPlatform(): boolean {
   return typeof window !== 'undefined' && window.electronAPI?.platform === 'darwin';
@@ -146,6 +172,69 @@ function getConfiguredEditorTheme() {
   return parseEditorTheme(window.electronAPI?.config.get(EDITOR_THEME_CONFIG_KEY));
 }
 
+function getConfiguredEditorWordWrap() {
+  return parseEditorWordWrap(window.electronAPI?.config.get(EDITOR_WORD_WRAP_CONFIG_KEY));
+}
+
+function getConfiguredEditorRenderWhitespace() {
+  return parseEditorRenderWhitespace(window.electronAPI?.config.get(EDITOR_RENDER_WHITESPACE_CONFIG_KEY));
+}
+
+function getConfiguredEditorRenderControlCharacters() {
+  return parseEditorRenderControlCharacters(window.electronAPI?.config.get(EDITOR_RENDER_CONTROL_CHARACTERS_CONFIG_KEY));
+}
+
+function getConfiguredEditorLineNumbers() {
+  return parseEditorLineNumbers(window.electronAPI?.config.get(EDITOR_LINE_NUMBERS_CONFIG_KEY));
+}
+
+function getConfiguredEditorBooleanSetting(configKey: string, defaultValue: boolean) {
+  const value = window.electronAPI?.config.get(configKey);
+  return typeof value === 'boolean' ? value : defaultValue;
+}
+
+function getConfiguredEditorMinimapEnabled() {
+  return getConfiguredEditorBooleanSetting(EDITOR_MINIMAP_ENABLED_CONFIG_KEY, DEFAULT_EDITOR_MINIMAP_ENABLED);
+}
+
+function getConfiguredEditorGlyphMargin() {
+  return getConfiguredEditorBooleanSetting(EDITOR_GLYPH_MARGIN_CONFIG_KEY, DEFAULT_EDITOR_GLYPH_MARGIN);
+}
+
+function getConfiguredEditorBracketPairGuides() {
+  return getConfiguredEditorBooleanSetting(EDITOR_BRACKET_PAIR_GUIDES_CONFIG_KEY, DEFAULT_EDITOR_BRACKET_PAIR_GUIDES);
+}
+
+function getConfiguredEditorIndentGuides() {
+  return getConfiguredEditorBooleanSetting(EDITOR_INDENT_GUIDES_CONFIG_KEY, DEFAULT_EDITOR_INDENT_GUIDES);
+}
+
+function SettingsSwitchRow({
+  checked,
+  description,
+  onCheckedChange,
+  testId,
+  title,
+}: {
+  checked: boolean;
+  description: string;
+  onCheckedChange: (checked: boolean) => void;
+  testId: string;
+  title: string;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <div className="space-y-1">
+        <p className={settingsSectionTitleClassName}>{title}</p>
+        <p className={settingsSectionDescriptionClassName} data-testid={`${testId}-description`}>
+          {description}
+        </p>
+      </div>
+      <Switch checked={checked} data-testid={testId} onCheckedChange={onCheckedChange} />
+    </div>
+  );
+}
+
 function TooltipIconButton({
   content,
   children,
@@ -215,25 +304,60 @@ export function MenuBar({
   const [windowFullScreen, setWindowFullScreen] = useState(() => window.electronAPI?.isFullScreen() === true);
   const showWindowMenu = !isMacOS;
   const showMacOSLeadingSpace = isMacOS && !windowFullScreen;
-  const { activeView, mainContentView, setMainContentView } = useWorkspace();
   const {
+    activeView,
+    mainContentView,
+    redoActiveEditor,
+    saveActiveFile,
+    saveAllFiles,
+    setMainContentView,
+    undoActiveEditor,
+  } = useWorkspace();
+  const {
+    bracketPairGuides: editorBracketPairGuides,
     fontFamily: editorFontFamily,
     fontSize: editorFontSize,
+    glyphMargin: editorGlyphMargin,
+    indentGuides: editorIndentGuides,
+    lineNumbers: editorLineNumbers,
+    minimapEnabled: editorMinimapEnabled,
+    renderControlCharacters: editorRenderControlCharacters,
+    renderWhitespace: editorRenderWhitespace,
+    setBracketPairGuides: setEditorBracketPairGuides,
     setFontFamily: setEditorFontFamily,
     setFontSize: setEditorFontSize,
+    setGlyphMargin: setEditorGlyphMargin,
+    setIndentGuides: setEditorIndentGuides,
+    setLineNumbers: setEditorLineNumbers,
+    setMinimapEnabled: setEditorMinimapEnabled,
+    setRenderControlCharacters: setEditorRenderControlCharacters,
+    setRenderWhitespace: setEditorRenderWhitespace,
     setTheme: setEditorTheme,
+    setWordWrap: setEditorWordWrap,
     theme: editorTheme,
+    wordWrap: editorWordWrap,
   } = useEditorSettings();
   const { theme, setTheme, toggleTheme } = useTheme();
   const { state: activityBarState, toggleSidebar } = useSidebar();
   const ref = useRef<HTMLDivElement>(null);
+  const [aboutDialogOpen, setAboutDialogOpen] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [closeToTrayEnabled, setCloseToTrayEnabled] = useState(() => getConfiguredCloseAction() === 'tray');
   const [floatingInfoWindowVisible, setFloatingInfoWindowVisible] = useState(() => getFloatingInfoWindowVisible());
   const [settingsTheme, setSettingsTheme] = useState<Theme>(() => getConfiguredTheme());
+  const [settingsEditorBracketPairGuides, setSettingsEditorBracketPairGuides] = useState(() => getConfiguredEditorBracketPairGuides());
   const [settingsEditorFontFamily, setSettingsEditorFontFamily] = useState(() => getConfiguredEditorFontFamily());
   const [settingsEditorFontSize, setSettingsEditorFontSize] = useState(() => getConfiguredEditorFontSize());
+  const [settingsEditorGlyphMargin, setSettingsEditorGlyphMargin] = useState(() => getConfiguredEditorGlyphMargin());
+  const [settingsEditorIndentGuides, setSettingsEditorIndentGuides] = useState(() => getConfiguredEditorIndentGuides());
+  const [settingsEditorLineNumbers, setSettingsEditorLineNumbers] = useState(() => getConfiguredEditorLineNumbers());
+  const [settingsEditorMinimapEnabled, setSettingsEditorMinimapEnabled] = useState(() => getConfiguredEditorMinimapEnabled());
+  const [settingsEditorRenderControlCharacters, setSettingsEditorRenderControlCharacters] = useState(
+    () => getConfiguredEditorRenderControlCharacters(),
+  );
+  const [settingsEditorRenderWhitespace, setSettingsEditorRenderWhitespace] = useState(() => getConfiguredEditorRenderWhitespace());
   const [settingsEditorTheme, setSettingsEditorTheme] = useState(() => getConfiguredEditorTheme());
+  const [settingsEditorWordWrap, setSettingsEditorWordWrap] = useState(() => getConfiguredEditorWordWrap());
   const layoutIconsEnabled = canUseLayoutPanels(mainContentView, activeView);
   const activityBarToggleEnabled = mainContentView === 'code';
   const layoutIconClassName = [
@@ -255,14 +379,26 @@ export function MenuBar({
     setCloseToTrayEnabled(getConfiguredCloseAction() === 'tray');
     setFloatingInfoWindowVisible(getFloatingInfoWindowVisible());
     setSettingsTheme(getConfiguredTheme());
+    setSettingsEditorBracketPairGuides(getConfiguredEditorBracketPairGuides());
     setSettingsEditorFontFamily(getConfiguredEditorFontFamily());
     setSettingsEditorFontSize(getConfiguredEditorFontSize());
+    setSettingsEditorGlyphMargin(getConfiguredEditorGlyphMargin());
+    setSettingsEditorIndentGuides(getConfiguredEditorIndentGuides());
+    setSettingsEditorLineNumbers(getConfiguredEditorLineNumbers());
+    setSettingsEditorMinimapEnabled(getConfiguredEditorMinimapEnabled());
+    setSettingsEditorRenderControlCharacters(getConfiguredEditorRenderControlCharacters());
+    setSettingsEditorRenderWhitespace(getConfiguredEditorRenderWhitespace());
     setSettingsEditorTheme(getConfiguredEditorTheme());
+    setSettingsEditorWordWrap(getConfiguredEditorWordWrap());
   };
 
   useEffect(() => {
     setSettingsTheme(theme);
   }, [theme]);
+
+  useEffect(() => {
+    setSettingsEditorBracketPairGuides(editorBracketPairGuides);
+  }, [editorBracketPairGuides]);
 
   useEffect(() => {
     setSettingsEditorFontFamily(editorFontFamily);
@@ -273,8 +409,36 @@ export function MenuBar({
   }, [editorFontSize]);
 
   useEffect(() => {
+    setSettingsEditorGlyphMargin(editorGlyphMargin);
+  }, [editorGlyphMargin]);
+
+  useEffect(() => {
+    setSettingsEditorIndentGuides(editorIndentGuides);
+  }, [editorIndentGuides]);
+
+  useEffect(() => {
+    setSettingsEditorLineNumbers(editorLineNumbers);
+  }, [editorLineNumbers]);
+
+  useEffect(() => {
+    setSettingsEditorMinimapEnabled(editorMinimapEnabled);
+  }, [editorMinimapEnabled]);
+
+  useEffect(() => {
+    setSettingsEditorRenderControlCharacters(editorRenderControlCharacters);
+  }, [editorRenderControlCharacters]);
+
+  useEffect(() => {
+    setSettingsEditorRenderWhitespace(editorRenderWhitespace);
+  }, [editorRenderWhitespace]);
+
+  useEffect(() => {
     setSettingsEditorTheme(editorTheme);
   }, [editorTheme]);
+
+  useEffect(() => {
+    setSettingsEditorWordWrap(editorWordWrap);
+  }, [editorWordWrap]);
 
   useEffect(() => {
     if (!settingsDialogOpen) {
@@ -324,9 +488,56 @@ export function MenuBar({
     setEditorTheme(nextTheme);
   };
 
+  const handleEditorWordWrapChange = (value: string) => {
+    const nextWordWrap = parseEditorWordWrap(value);
+    setSettingsEditorWordWrap(nextWordWrap);
+    setEditorWordWrap(nextWordWrap);
+  };
+
+  const handleEditorRenderWhitespaceChange = (value: string) => {
+    const nextRenderWhitespace = parseEditorRenderWhitespace(value);
+    setSettingsEditorRenderWhitespace(nextRenderWhitespace);
+    setEditorRenderWhitespace(nextRenderWhitespace);
+  };
+
+  const handleEditorLineNumbersChange = (value: string) => {
+    const nextLineNumbers = parseEditorLineNumbers(value);
+    setSettingsEditorLineNumbers(nextLineNumbers);
+    setEditorLineNumbers(nextLineNumbers);
+  };
+
+  const handleEditorRenderControlCharactersChange = (checked: boolean) => {
+    setSettingsEditorRenderControlCharacters(checked);
+    setEditorRenderControlCharacters(checked);
+  };
+
+  const handleEditorMinimapEnabledChange = (checked: boolean) => {
+    setSettingsEditorMinimapEnabled(checked);
+    setEditorMinimapEnabled(checked);
+  };
+
+  const handleEditorGlyphMarginChange = (checked: boolean) => {
+    setSettingsEditorGlyphMargin(checked);
+    setEditorGlyphMargin(checked);
+  };
+
+  const handleEditorBracketPairGuidesChange = (checked: boolean) => {
+    setSettingsEditorBracketPairGuides(checked);
+    setEditorBracketPairGuides(checked);
+  };
+
+  const handleEditorIndentGuidesChange = (checked: boolean) => {
+    setSettingsEditorIndentGuides(checked);
+    setEditorIndentGuides(checked);
+  };
+
   const openSettingsDialog = () => {
     syncPersistedSettingsState();
     setSettingsDialogOpen(true);
+  };
+
+  const openAboutDialog = () => {
+    setAboutDialogOpen(true);
   };
 
   const requestAppClose = () => {
@@ -339,6 +550,31 @@ export function MenuBar({
       return;
     }
 
+    if (action === 'open-about') {
+      openAboutDialog();
+      return;
+    }
+
+    if (action === 'save-file') {
+      void saveActiveFile();
+      return;
+    }
+
+    if (action === 'save-all-files') {
+      void saveAllFiles();
+      return;
+    }
+
+    if (action === 'undo-editor') {
+      void undoActiveEditor();
+      return;
+    }
+
+    if (action === 'redo-editor') {
+      void redoActiveEditor();
+      return;
+    }
+
     if (action === 'close-app') {
       requestAppClose();
     }
@@ -347,12 +583,33 @@ export function MenuBar({
   const handleNativeMenuCommand = useEffectEvent((payload: MenuCommandEvent) => {
     if (payload.action === 'open-settings') {
       openSettingsDialog();
+      return;
+    }
+
+    if (payload.action === 'open-about') {
+      openAboutDialog();
+      return;
+    }
+
+    if (payload.action === 'save-file') {
+      void saveActiveFile();
+      return;
+    }
+
+    if (payload.action === 'save-all-files') {
+      void saveAllFiles();
+      return;
+    }
+
+    if (payload.action === 'undo-editor') {
+      void undoActiveEditor();
+      return;
+    }
+
+    if (payload.action === 'redo-editor') {
+      void redoActiveEditor();
     }
   });
-
-  const settingsSectionClassName = 'rounded-md border border-border/85 bg-muted/55 px-3 py-2.5';
-  const settingsSectionTitleClassName = 'text-[13px] font-medium';
-  const settingsSectionDescriptionClassName = 'text-[12px] text-muted-foreground';
 
   useEffect(() => {
     if (!isMacOS) {
@@ -662,6 +919,12 @@ export function MenuBar({
           </div>
         </div>
 
+        <AboutDialog
+          open={aboutDialogOpen}
+          onOpenChange={setAboutDialogOpen}
+          dialogStyle={noDragInteractive as React.CSSProperties}
+        />
+
         <Dialog open={settingsDialogOpen} onOpenChange={setSettingsDialogOpen}>
           <DialogContent
             data-testid="settings-dialog"
@@ -749,6 +1012,129 @@ export function MenuBar({
                     emptyText="No editor theme found."
                     triggerTestId="settings-editor-theme-combobox"
                     getOptionTestId={(value) => `settings-editor-theme-option-${value}`}
+                  />
+                </div>
+              </div>
+              <div className={settingsSectionClassName}>
+                <div className="space-y-1">
+                  <p className={settingsSectionTitleClassName}>Editor display</p>
+                  <p className={settingsSectionDescriptionClassName} data-testid="editor-display-description">
+                    Configure Monaco display aids such as wrapping, whitespace, gutters, and guides.
+                  </p>
+                </div>
+              </div>
+              <div className={settingsSectionClassName}>
+                <div className="space-y-2.5">
+                  <div className="space-y-1">
+                    <p className={settingsSectionTitleClassName}>Word wrap</p>
+                    <p className={settingsSectionDescriptionClassName} data-testid="editor-word-wrap-description">
+                      Control how Monaco wraps long lines inside the current editor viewport.
+                    </p>
+                  </div>
+                  <Combobox
+                    value={settingsEditorWordWrap}
+                    onValueChange={handleEditorWordWrapChange}
+                    options={editorWordWrapOptions.map((option) => ({
+                      value: option.value,
+                      label: option.label,
+                      description: option.description,
+                    }))}
+                    placeholder={getEditorWordWrapLabel(settingsEditorWordWrap)}
+                    searchPlaceholder="Search word wrap modes..."
+                    emptyText="No word wrap mode found."
+                    triggerTestId="settings-editor-word-wrap-combobox"
+                    getOptionTestId={(value) => `settings-editor-word-wrap-option-${value}`}
+                  />
+                </div>
+              </div>
+              <div className={settingsSectionClassName}>
+                <div className="space-y-2.5">
+                  <div className="space-y-1">
+                    <p className={settingsSectionTitleClassName}>Whitespace rendering</p>
+                    <p className={settingsSectionDescriptionClassName} data-testid="editor-render-whitespace-description">
+                      Choose when visible whitespace markers should appear in the editor.
+                    </p>
+                  </div>
+                  <Combobox
+                    value={settingsEditorRenderWhitespace}
+                    onValueChange={handleEditorRenderWhitespaceChange}
+                    options={editorRenderWhitespaceOptions.map((option) => ({
+                      value: option.value,
+                      label: option.label,
+                      description: option.description,
+                    }))}
+                    placeholder={getEditorRenderWhitespaceLabel(settingsEditorRenderWhitespace)}
+                    searchPlaceholder="Search whitespace modes..."
+                    emptyText="No whitespace mode found."
+                    triggerTestId="settings-editor-render-whitespace-combobox"
+                    getOptionTestId={(value) => `settings-editor-render-whitespace-option-${value}`}
+                  />
+                </div>
+              </div>
+              <div className={settingsSectionClassName}>
+                <div className="space-y-2.5">
+                  <div className="space-y-1">
+                    <p className={settingsSectionTitleClassName}>Line numbers</p>
+                    <p className={settingsSectionDescriptionClassName} data-testid="editor-line-numbers-description">
+                      Choose whether the editor gutter shows absolute, relative, or interval line numbers.
+                    </p>
+                  </div>
+                  <Combobox
+                    value={settingsEditorLineNumbers}
+                    onValueChange={handleEditorLineNumbersChange}
+                    options={editorLineNumbersOptions.map((option) => ({
+                      value: option.value,
+                      label: option.label,
+                      description: option.description,
+                    }))}
+                    placeholder={getEditorLineNumbersLabel(settingsEditorLineNumbers)}
+                    searchPlaceholder="Search line number modes..."
+                    emptyText="No line number mode found."
+                    triggerTestId="settings-editor-line-numbers-combobox"
+                    getOptionTestId={(value) => `settings-editor-line-numbers-option-${value}`}
+                  />
+                </div>
+              </div>
+              <div className={settingsSectionClassName}>
+                <div className="space-y-3">
+                  <SettingsSwitchRow
+                    checked={settingsEditorRenderControlCharacters}
+                    description="Render control characters such as tabs and other non-printable glyphs using Monaco's built-in markers."
+                    onCheckedChange={handleEditorRenderControlCharactersChange}
+                    testId="settings-editor-render-control-characters-switch"
+                    title="Render control characters"
+                  />
+                  <Separator />
+                  <SettingsSwitchRow
+                    checked={settingsEditorMinimapEnabled}
+                    description="Show Monaco's minimap overview on the right side of the editor."
+                    onCheckedChange={handleEditorMinimapEnabledChange}
+                    testId="settings-editor-minimap-switch"
+                    title="Show minimap"
+                  />
+                  <Separator />
+                  <SettingsSwitchRow
+                    checked={settingsEditorGlyphMargin}
+                    description="Keep the glyph margin visible for breakpoints, decorations, and code markers."
+                    onCheckedChange={handleEditorGlyphMarginChange}
+                    testId="settings-editor-glyph-margin-switch"
+                    title="Show glyph margin"
+                  />
+                  <Separator />
+                  <SettingsSwitchRow
+                    checked={settingsEditorBracketPairGuides}
+                    description="Render Monaco's bracket pair guide lines to make nested scopes easier to scan."
+                    onCheckedChange={handleEditorBracketPairGuidesChange}
+                    testId="settings-editor-bracket-pair-guides-switch"
+                    title="Bracket pair guides"
+                  />
+                  <Separator />
+                  <SettingsSwitchRow
+                    checked={settingsEditorIndentGuides}
+                    description="Render indentation guide lines that follow the current block structure."
+                    onCheckedChange={handleEditorIndentGuidesChange}
+                    testId="settings-editor-indent-guides-switch"
+                    title="Indent guides"
                   />
                 </div>
               </div>

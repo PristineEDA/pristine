@@ -1,7 +1,6 @@
 import { createRef, useLayoutEffect } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Problem } from '../../../../data/mockData';
 import { getEditorFontFamilyStack } from '../../../editor/editorSettings';
 
 const mockedUseRegisterEditorLanguages = vi.fn();
@@ -11,14 +10,31 @@ const mockedEnsureLspRegistered = vi.fn();
 const mockedAttachLspDocument = vi.fn((_args?: unknown) => vi.fn());
 const mockedUpdateLspDocument = vi.fn();
 const mockedSetNavigateHandler = vi.fn();
-let mockedProblems: Problem[] = [];
+let mockedEditorBracketPairGuides = true;
 let mockedEditorFontFamily = 'jetbrains-mono';
 let mockedEditorFontSize = 13;
+let mockedEditorGlyphMargin = true;
+let mockedEditorIndentGuides = true;
+let mockedEditorLineNumbers = 'on';
+let mockedEditorMinimapEnabled = true;
+let mockedEditorRenderControlCharacters = false;
+let mockedEditorRenderWhitespace = 'selection';
 let mockedEditorTheme = 'dracula';
+let mockedEditorWordWrap = 'off';
 
-const { mockCursorPositionListeners, mockEditorComponent, mockEditorDomNode, mockEditorInstance, mockFocusEditorTextListeners, mockModels, mockMonaco } = vi.hoisted(() => {
+const {
+  mockCursorPositionListeners,
+  mockEditorCommands,
+  mockEditorComponent,
+  mockEditorDomNode,
+  mockEditorInstance,
+  mockFocusEditorTextListeners,
+  mockModels,
+  mockMonaco,
+} = vi.hoisted(() => {
   const activeElement = {};
   const cursorPositionListeners: Array<(event: { position: { lineNumber: number; column: number } }) => void> = [];
+  const editorCommands: Array<{ keybinding: number; handler: () => void }> = [];
   const focusEditorTextListeners: Array<() => void> = [];
   const editorDomNode = {
     contains: vi.fn((element: unknown) => element === activeElement),
@@ -37,6 +53,10 @@ const { mockCursorPositionListeners, mockEditorComponent, mockEditorDomNode, moc
       focusEditorTextListeners.push(callback);
       return { dispose: vi.fn() };
     }),
+    addCommand: vi.fn((keybinding: number, handler: () => void) => {
+      editorCommands.push({ keybinding, handler });
+      return editorCommands.length;
+    }),
     updateOptions: vi.fn(),
     layout: vi.fn(),
   };
@@ -53,10 +73,17 @@ const { mockCursorPositionListeners, mockEditorComponent, mockEditorDomNode, moc
       Warning: 4,
       Info: 2,
     },
+    KeyCode: {
+      KeyS: 49,
+    },
+    KeyMod: {
+      CtrlCmd: 2048,
+    },
   };
 
   return {
     mockCursorPositionListeners: cursorPositionListeners,
+    mockEditorCommands: editorCommands,
     mockEditorInstance: editorInstance,
     mockEditorDomNode: editorDomNode,
     mockFocusEditorTextListeners: focusEditorTextListeners,
@@ -89,9 +116,7 @@ vi.mock('@monaco-editor/react', () => ({
   useMonaco: () => mockMonaco,
 }));
 
-vi.mock('../../../../data/mockDataLoader', () => ({
-  useProblemsList: () => mockedProblems,
-}));
+vi.mock('../../../editor/configureMonacoLoader', () => ({}));
 
 vi.mock('../../../editor/monacoThemes', () => ({
   registerEditorThemes: (monaco: unknown) => mockedRegisterEditorThemes(monaco),
@@ -103,14 +128,30 @@ vi.mock('../../../editor/registerLanguages', () => ({
 
 vi.mock('../../../context/EditorSettingsContext', () => ({
   useEditorSettings: () => ({
+    bracketPairGuides: mockedEditorBracketPairGuides,
     fontFamilies: [],
     fontFamily: mockedEditorFontFamily,
     fontSize: mockedEditorFontSize,
+    glyphMargin: mockedEditorGlyphMargin,
+    indentGuides: mockedEditorIndentGuides,
+    lineNumbers: mockedEditorLineNumbers,
+    minimapEnabled: mockedEditorMinimapEnabled,
+    renderControlCharacters: mockedEditorRenderControlCharacters,
+    renderWhitespace: mockedEditorRenderWhitespace,
+    setBracketPairGuides: vi.fn(),
     setFontFamily: vi.fn(),
     setFontSize: vi.fn(),
+    setGlyphMargin: vi.fn(),
+    setIndentGuides: vi.fn(),
+    setLineNumbers: vi.fn(),
+    setMinimapEnabled: vi.fn(),
+    setRenderControlCharacters: vi.fn(),
+    setRenderWhitespace: vi.fn(),
     setTheme: vi.fn(),
+    setWordWrap: vi.fn(),
     theme: mockedEditorTheme,
     themes: [],
+    wordWrap: mockedEditorWordWrap,
   }),
 }));
 
@@ -132,18 +173,24 @@ import { MonacoEditorPane } from './MonacoEditorPane';
 describe('MonacoEditorPane', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    delete (mockMonaco as any).__pristineLanguagesRegistered;
-    delete (mockMonaco as any).__pristineThemesRegistered;
-    mockedProblems = [];
+    mockedEditorBracketPairGuides = true;
     mockedEditorFontFamily = 'jetbrains-mono';
     mockedEditorFontSize = 13;
+    mockedEditorGlyphMargin = true;
+    mockedEditorIndentGuides = true;
+    mockedEditorLineNumbers = 'on';
+    mockedEditorMinimapEnabled = true;
+    mockedEditorRenderControlCharacters = false;
+    mockedEditorRenderWhitespace = 'selection';
     mockedEditorTheme = 'dracula';
+    mockedEditorWordWrap = 'off';
     mockedEnsureLspRegistered.mockReset();
     mockedAttachLspDocument.mockReset();
     mockedAttachLspDocument.mockImplementation(() => vi.fn());
     mockedUpdateLspDocument.mockReset();
     mockedSetNavigateHandler.mockReset();
     mockCursorPositionListeners.length = 0;
+    mockEditorCommands.length = 0;
     mockFocusEditorTextListeners.length = 0;
     mockEditorDomNode.contains.mockReturnValue(true);
     mockMonaco.editor.getModels.mockReturnValue(mockModels);
@@ -193,8 +240,15 @@ describe('MonacoEditorPane', () => {
     const lastEditorProps = editorCalls[editorCalls.length - 1]?.[0];
     expect(lastEditorProps.options.fontFamily).toBe(getEditorFontFamilyStack('jetbrains-mono'));
     expect(lastEditorProps.options.fontSize).toBe(13);
+    expect(lastEditorProps.options.glyphMargin).toBe(true);
+    expect(lastEditorProps.options.guides).toEqual({ bracketPairs: true, indentation: true });
+    expect(lastEditorProps.options.lineNumbers).toBe('on');
+    expect(lastEditorProps.options.minimap).toEqual({ enabled: true, scale: 1, showSlider: 'mouseover' });
+    expect(lastEditorProps.options.renderControlCharacters).toBe(false);
+    expect(lastEditorProps.options.renderWhitespace).toBe('selection');
     expect(lastEditorProps.keepCurrentModel).toBe(true);
     expect(lastEditorProps.theme).toBe('dracula');
+    expect(lastEditorProps.options.wordWrap).toBe('off');
   });
 
   it('propagates cursor changes when the editor already has text focus after opening a file', () => {
@@ -217,10 +271,18 @@ describe('MonacoEditorPane', () => {
     expect(mockedAttachLspDocument).not.toHaveBeenCalled();
   });
 
-  it('applies persisted editor font family, font size and theme settings to Monaco', async () => {
+  it('applies persisted editor display, font size and theme settings to Monaco', async () => {
+    mockedEditorBracketPairGuides = false;
     mockedEditorFontFamily = 'monaspace-neon';
     mockedEditorFontSize = 18;
+    mockedEditorGlyphMargin = false;
+    mockedEditorIndentGuides = false;
+    mockedEditorLineNumbers = 'relative';
+    mockedEditorMinimapEnabled = false;
+    mockedEditorRenderControlCharacters = true;
+    mockedEditorRenderWhitespace = 'all';
     mockedEditorTheme = 'github-dark';
+    mockedEditorWordWrap = 'on';
 
     const clientWidthSpy = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(960);
     const clientHeightSpy = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(540);
@@ -238,10 +300,27 @@ describe('MonacoEditorPane', () => {
 
     expect(lastEditorProps.options.fontFamily).toBe(getEditorFontFamilyStack('monaspace-neon'));
     expect(lastEditorProps.options.fontSize).toBe(18);
+    expect(lastEditorProps.options.glyphMargin).toBe(false);
+    expect(lastEditorProps.options.guides).toEqual({ bracketPairs: false, indentation: false });
+    expect(lastEditorProps.options.lineNumbers).toBe('relative');
+    expect(lastEditorProps.options.minimap).toEqual({ enabled: false, scale: 1, showSlider: 'mouseover' });
+    expect(lastEditorProps.options.renderControlCharacters).toBe(true);
+    expect(lastEditorProps.options.renderWhitespace).toBe('all');
     expect(lastEditorProps.theme).toBe('github-dark');
+    expect(lastEditorProps.options.wordWrap).toBe('on');
     expect(mockEditorInstance.updateOptions).toHaveBeenCalledWith({
       fontFamily: getEditorFontFamilyStack('monaspace-neon'),
       fontSize: 18,
+      glyphMargin: false,
+      guides: {
+        bracketPairs: false,
+        indentation: false,
+      },
+      lineNumbers: 'relative',
+      minimap: { enabled: false, scale: 1, showSlider: 'mouseover' },
+      renderControlCharacters: true,
+      renderWhitespace: 'all',
+      wordWrap: 'on',
     });
     await waitFor(() => {
       expect(mockEditorInstance.layout).toHaveBeenCalled();
@@ -250,99 +329,6 @@ describe('MonacoEditorPane', () => {
 
     clientWidthSpy.mockRestore();
     clientHeightSpy.mockRestore();
-  });
-
-  it('maps matching problems to monaco markers for every model', () => {
-    mockedProblems = [
-      {
-        id: 'error-1',
-        file: 'cpu_top.sv',
-        fileId: 'rtl/core/cpu_top.sv',
-        line: 11,
-        column: 3,
-        severity: 'error',
-        message: 'Undriven net detected',
-        code: 'E001',
-        source: 'rtl-lint',
-      },
-      {
-        id: 'warning-1',
-        file: 'cpu_top.sv',
-        fileId: 'rtl/core/cpu_top.sv',
-        line: 24,
-        column: 7,
-        severity: 'warning',
-        message: 'Potential latch inferred',
-        code: 'W002',
-        source: 'rtl-lint',
-      },
-      {
-        id: 'info-1',
-        file: 'cpu_top.sv',
-        fileId: 'rtl/core/cpu_top.sv',
-        line: 30,
-        column: 1,
-        severity: 'info',
-        message: 'Consider registering this output',
-        code: 'I003',
-        source: 'timing-advisor',
-      },
-      {
-        id: 'other-file',
-        file: 'alu.v',
-        fileId: 'rtl/core/alu.v',
-        line: 8,
-        column: 1,
-        severity: 'error',
-        message: 'Should be filtered out',
-      },
-    ];
-
-    render(
-      <MonacoEditorPane
-        activeTabId="rtl/core/cpu_top.sv"
-        code="module cpu_top; endmodule"
-        editorRef={createRef<any>()}
-      />,
-    );
-
-    expect(mockMonaco.editor.setModelMarkers).toHaveBeenCalledTimes(2);
-
-    const firstCall = mockMonaco.editor.setModelMarkers.mock.calls[0];
-    expect(firstCall?.[0]).toBe(mockModels[0]);
-    expect(firstCall?.[1]).toBe('rtl-lint');
-    expect(firstCall?.[2]).toEqual([
-      {
-        severity: 8,
-        startLineNumber: 11,
-        startColumn: 3,
-        endLineNumber: 11,
-        endColumn: 33,
-        message: 'Undriven net detected',
-        code: 'E001',
-        source: 'rtl-lint',
-      },
-      {
-        severity: 4,
-        startLineNumber: 24,
-        startColumn: 7,
-        endLineNumber: 24,
-        endColumn: 37,
-        message: 'Potential latch inferred',
-        code: 'W002',
-        source: 'rtl-lint',
-      },
-      {
-        severity: 2,
-        startLineNumber: 30,
-        startColumn: 1,
-        endLineNumber: 30,
-        endColumn: 31,
-        message: 'Consider registering this output',
-        code: 'I003',
-        source: 'timing-advisor',
-      },
-    ]);
   });
 
   it('updates content and renders the drag interaction shield when requested', () => {
@@ -364,5 +350,28 @@ describe('MonacoEditorPane', () => {
 
     fireEvent.click(screen.getByTestId('monaco-editor'));
     expect(onContentChange).toHaveBeenCalledWith('updated code');
+  });
+
+  it('registers a Monaco save command so Ctrl/Cmd+S works while the editor is focused', () => {
+    const onSaveShortcut = vi.fn();
+
+    render(
+      <MonacoEditorPane
+        activeTabId="rtl/core/reg_file.v"
+        code="module reg_file; endmodule"
+        editorRef={createRef<any>()}
+        onSaveShortcut={onSaveShortcut}
+      />,
+    );
+
+    expect(mockEditorInstance.addCommand).toHaveBeenCalledWith(
+      mockMonaco.KeyMod.CtrlCmd | mockMonaco.KeyCode.KeyS,
+      expect.any(Function),
+    );
+
+    const saveCommand = mockEditorCommands[mockEditorCommands.length - 1];
+    saveCommand?.handler();
+
+    expect(onSaveShortcut).toHaveBeenCalledTimes(1);
   });
 });

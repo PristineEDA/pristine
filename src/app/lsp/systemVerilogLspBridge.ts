@@ -1,6 +1,7 @@
 import type {
   LspCompletionItem,
   LspCompletionResponse,
+  LspDebugEvent,
   LspDiagnostic,
   LspHover,
   LspMarkedString,
@@ -8,11 +9,13 @@ import type {
   LspTextEdit,
   WorkspaceLocation,
 } from '../../../types/systemverilog-lsp';
+import { claimMonacoRegistration, resetMonacoRegistrationForTests } from '../editor/monacoRegistrationTracker';
 import { normalizeWorkspacePath } from '../workspace/workspaceFiles';
 
 const CHANGE_DEBOUNCE_MS = 120;
+const DEBUG_EVENT_LIMIT = 200;
 const LSP_MARKER_OWNER = 'slang-lsp';
-const LSP_PROVIDER_REGISTRATION_MARKER = '__pristineSystemVerilogLspProvidersRegistered';
+const LSP_PROVIDER_REGISTRATION_KEY = 'systemverilog-lsp-providers';
 
 type NavigateToLocation = (filePath: string, line: number, col: number) => void;
 
@@ -165,8 +168,22 @@ function getCompletionItems(response: LspCompletionResponse | null): LspCompleti
   return Array.isArray(response) ? response : response.items;
 }
 
+function cloneDiagnostic(diagnostic: LspDiagnostic): LspDiagnostic {
+  return {
+    ...diagnostic,
+    range: {
+      start: { ...diagnostic.range.start },
+      end: { ...diagnostic.range.end },
+    },
+  };
+}
+
 class SystemVerilogLspBridge {
   private diagnosticsByFile = new Map<string, LspDiagnostic[]>();
+
+  private diagnosticsSnapshot: ReadonlyMap<string, readonly LspDiagnostic[]> = new Map();
+
+  private debugEvents: LspDebugEvent[] = [];
 
   private trackedDocuments = new Map<string, TrackedDocument>();
 
@@ -176,9 +193,65 @@ class SystemVerilogLspBridge {
 
   private diagnosticsSubscriptionInstalled = false;
 
+  private debugSubscriptionInstalled = false;
+
   private stateSubscriptionInstalled = false;
 
+  private diagnosticsListeners = new Set<() => void>();
+
+  private debugListeners = new Set<() => void>();
+
   private loggedErrorMessage: string | null = null;
+
+  private notifyDebugListeners() {
+    this.debugListeners.forEach((listener) => {
+      listener();
+    });
+  }
+
+  private appendDebugEvent(event: LspDebugEvent) {
+    this.debugEvents = [...this.debugEvents, event].slice(-DEBUG_EVENT_LIMIT);
+    this.notifyDebugListeners();
+  }
+
+  private notifyDiagnosticsListeners() {
+    this.diagnosticsListeners.forEach((listener) => {
+      listener();
+    });
+  }
+
+  private updateDiagnostics(filePath: string, diagnostics: LspDiagnostic[]) {
+    if (diagnostics.length === 0) {
+      this.diagnosticsByFile.delete(filePath);
+    } else {
+      this.diagnosticsByFile.set(filePath, diagnostics.map((diagnostic) => cloneDiagnostic(diagnostic)));
+    }
+
+    this.diagnosticsSnapshot = new Map(this.diagnosticsByFile);
+    this.notifyDiagnosticsListeners();
+  }
+
+  getDiagnosticsSnapshot(): ReadonlyMap<string, readonly LspDiagnostic[]> {
+    return this.diagnosticsSnapshot;
+  }
+
+  subscribeToDiagnosticsChanges(listener: () => void) {
+    this.diagnosticsListeners.add(listener);
+    return () => {
+      this.diagnosticsListeners.delete(listener);
+    };
+  }
+
+  getDebugEvents() {
+    return this.debugEvents;
+  }
+
+  subscribeToDebugEvents(listener: () => void) {
+    this.debugListeners.add(listener);
+    return () => {
+      this.debugListeners.delete(listener);
+    };
+  }
 
   private handleError(error: unknown) {
     const message = error instanceof Error
@@ -203,10 +276,17 @@ class SystemVerilogLspBridge {
     if (!this.diagnosticsSubscriptionInstalled) {
       api.onDiagnostics((payload) => {
         const filePath = normalizeWorkspacePath(payload.filePath);
-        this.diagnosticsByFile.set(filePath, payload.diagnostics);
+        this.updateDiagnostics(filePath, payload.diagnostics);
         this.applyDiagnostics(monaco, filePath);
       });
       this.diagnosticsSubscriptionInstalled = true;
+    }
+
+    if (!this.debugSubscriptionInstalled && typeof api.onDebug === 'function') {
+      api.onDebug((payload) => {
+        this.appendDebugEvent(payload);
+      });
+      this.debugSubscriptionInstalled = true;
     }
 
     if (!this.stateSubscriptionInstalled) {
@@ -398,11 +478,9 @@ class SystemVerilogLspBridge {
     }
 
     this.ensureStreamSubscriptions(monaco);
-    if (monaco[LSP_PROVIDER_REGISTRATION_MARKER] === true) {
+    if (!claimMonacoRegistration(LSP_PROVIDER_REGISTRATION_KEY, monaco)) {
       return;
     }
-
-    monaco[LSP_PROVIDER_REGISTRATION_MARKER] = true;
 
     monaco.languages.registerCompletionItemProvider('systemverilog', {
       triggerCharacters: ['.', ':', '`', '$'],
@@ -580,6 +658,10 @@ class SystemVerilogLspBridge {
     trackedDocument.pendingText = text;
     this.scheduleChange(normalizeWorkspacePath(filePath));
   }
+}
+
+export function resetSystemVerilogLspProviderRegistrationForTests(): void {
+  resetMonacoRegistrationForTests(LSP_PROVIDER_REGISTRATION_KEY);
 }
 
 export const systemVerilogLspBridge = new SystemVerilogLspBridge();
