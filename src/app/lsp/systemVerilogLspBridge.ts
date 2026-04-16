@@ -1,6 +1,7 @@
 import type {
   LspCompletionItem,
   LspCompletionResponse,
+  LspDebugEvent,
   LspDiagnostic,
   LspHover,
   LspMarkedString,
@@ -11,6 +12,7 @@ import type {
 import { normalizeWorkspacePath } from '../workspace/workspaceFiles';
 
 const CHANGE_DEBOUNCE_MS = 120;
+const DEBUG_EVENT_LIMIT = 200;
 const LSP_MARKER_OWNER = 'slang-lsp';
 const LSP_PROVIDER_REGISTRATION_MARKER = '__pristineSystemVerilogLspProvidersRegistered';
 
@@ -168,6 +170,8 @@ function getCompletionItems(response: LspCompletionResponse | null): LspCompleti
 class SystemVerilogLspBridge {
   private diagnosticsByFile = new Map<string, LspDiagnostic[]>();
 
+  private debugEvents: LspDebugEvent[] = [];
+
   private trackedDocuments = new Map<string, TrackedDocument>();
 
   private modelFilePaths = new WeakMap<any, string>();
@@ -176,9 +180,35 @@ class SystemVerilogLspBridge {
 
   private diagnosticsSubscriptionInstalled = false;
 
+  private debugSubscriptionInstalled = false;
+
   private stateSubscriptionInstalled = false;
 
+  private debugListeners = new Set<() => void>();
+
   private loggedErrorMessage: string | null = null;
+
+  private notifyDebugListeners() {
+    this.debugListeners.forEach((listener) => {
+      listener();
+    });
+  }
+
+  private appendDebugEvent(event: LspDebugEvent) {
+    this.debugEvents = [...this.debugEvents, event].slice(-DEBUG_EVENT_LIMIT);
+    this.notifyDebugListeners();
+  }
+
+  getDebugEvents() {
+    return this.debugEvents;
+  }
+
+  subscribeToDebugEvents(listener: () => void) {
+    this.debugListeners.add(listener);
+    return () => {
+      this.debugListeners.delete(listener);
+    };
+  }
 
   private handleError(error: unknown) {
     const message = error instanceof Error
@@ -207,6 +237,13 @@ class SystemVerilogLspBridge {
         this.applyDiagnostics(monaco, filePath);
       });
       this.diagnosticsSubscriptionInstalled = true;
+    }
+
+    if (!this.debugSubscriptionInstalled && typeof api.onDebug === 'function') {
+      api.onDebug((payload) => {
+        this.appendDebugEvent(payload);
+      });
+      this.debugSubscriptionInstalled = true;
     }
 
     if (!this.stateSubscriptionInstalled) {

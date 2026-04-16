@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 type DiagnosticsHandler = (payload: { filePath: string; diagnostics: Array<Record<string, unknown>> }) => void;
+type DebugHandler = (payload: { sequence: number; timestamp: string; kind: string; direction: string; method?: string }) => void;
 type StateHandler = (payload: { status: string; message?: string }) => void;
 
 function createMonacoMock() {
@@ -114,11 +115,13 @@ async function loadBridgeModule() {
 }
 
 describe('systemVerilogLspBridge', () => {
+  let debugHandler: DebugHandler | undefined;
   let diagnosticsHandler: DiagnosticsHandler | undefined;
   let stateHandler: StateHandler | undefined;
   let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
+    debugHandler = undefined;
     diagnosticsHandler = undefined;
     stateHandler = undefined;
     consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
@@ -131,6 +134,10 @@ describe('systemVerilogLspBridge', () => {
     electronApi.lsp.hover.mockResolvedValue(null);
     electronApi.lsp.definition.mockResolvedValue([]);
     electronApi.lsp.references.mockResolvedValue([]);
+    electronApi.lsp.onDebug = vi.fn((callback: DebugHandler) => {
+      debugHandler = callback;
+      return vi.fn();
+    });
     electronApi.lsp.onDiagnostics = vi.fn((callback: DiagnosticsHandler) => {
       diagnosticsHandler = callback;
       return vi.fn();
@@ -200,6 +207,7 @@ describe('systemVerilogLspBridge', () => {
     });
 
     expect(electronApi.lsp.onDiagnostics).toHaveBeenCalledTimes(1);
+    expect(electronApi.lsp.onDebug).toHaveBeenCalledTimes(1);
     expect(electronApi.lsp.onState).toHaveBeenCalledTimes(1);
     expect(monaco.languages.registerCompletionItemProvider).toHaveBeenCalledTimes(1);
     expect(monaco.languages.registerHoverProvider).toHaveBeenCalledTimes(1);
@@ -383,5 +391,34 @@ describe('systemVerilogLspBridge', () => {
     stateHandler?.({ status: 'error', message: 'language server failed' });
     expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
     expect(consoleErrorSpy).toHaveBeenCalledWith('language server failed');
+  });
+
+  it('buffers debug events and notifies listeners with the latest bounded snapshot', async () => {
+    const { systemVerilogLspBridge } = await loadBridgeModule();
+    const monaco = createMonacoMock();
+
+    systemVerilogLspBridge.ensureRegistered(monaco);
+
+    const listener = vi.fn();
+    const unsubscribe = systemVerilogLspBridge.subscribeToDebugEvents(listener);
+
+    for (let index = 1; index <= 205; index += 1) {
+      debugHandler?.({
+        sequence: index,
+        timestamp: `2026-01-01T00:00:${String(index).padStart(2, '0')}.000Z`,
+        direction: 'client->server',
+        kind: 'request',
+        method: `method-${index}`,
+      });
+    }
+
+    expect(listener).toHaveBeenCalledTimes(205);
+
+    const snapshot = systemVerilogLspBridge.getDebugEvents();
+    expect(snapshot).toHaveLength(200);
+    expect(snapshot[0]).toEqual(expect.objectContaining({ sequence: 6, method: 'method-6' }));
+    expect(snapshot[snapshot.length - 1]).toEqual(expect.objectContaining({ sequence: 205, method: 'method-205' }));
+
+    unsubscribe();
   });
 });

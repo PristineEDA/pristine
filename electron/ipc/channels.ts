@@ -47,6 +47,7 @@ export const StreamChannels = {
   SHELL_EXIT: 'stream:shell:exit',
   TERMINAL_DATA: 'stream:terminal:data',
   TERMINAL_EXIT: 'stream:terminal:exit',
+  LSP_DEBUG: 'stream:lsp:debug',
   LSP_DIAGNOSTICS: 'stream:lsp:diagnostics',
   LSP_STATE: 'stream:lsp:state',
   MENU_COMMAND: 'stream:menu:command',

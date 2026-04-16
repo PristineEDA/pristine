@@ -69,6 +69,7 @@ describe('preload bridge', () => {
     const onShellExit = vi.fn();
     const onTerminalData = vi.fn();
     const onTerminalExit = vi.fn();
+    const onLspDebug = vi.fn();
     const onLspDiagnostics = vi.fn();
     const onLspState = vi.fn();
     const onMenuCommand = vi.fn();
@@ -109,6 +110,7 @@ describe('preload bridge', () => {
     const disposeShellExit = api.shell.onExit(onShellExit);
     const disposeTerminalData = api.terminal.onData(onTerminalData);
     const disposeTerminalExit = api.terminal.onExit(onTerminalExit);
+    const disposeLspDebug = api.lsp.onDebug(onLspDebug);
     const disposeLspDiagnostics = api.lsp.onDiagnostics(onLspDiagnostics);
     const disposeLspState = api.lsp.onState(onLspState);
     const disposeMenuCommand = api.menu.onCommand(onMenuCommand);
@@ -148,6 +150,7 @@ describe('preload bridge', () => {
     expect(mockOn).toHaveBeenCalledWith('stream:shell:exit', expect.any(Function));
     expect(mockOn).toHaveBeenCalledWith('stream:terminal:data', expect.any(Function));
     expect(mockOn).toHaveBeenCalledWith('stream:terminal:exit', expect.any(Function));
+    expect(mockOn).toHaveBeenCalledWith('stream:lsp:debug', expect.any(Function));
     expect(mockOn).toHaveBeenCalledWith('stream:lsp:diagnostics', expect.any(Function));
     expect(mockOn).toHaveBeenCalledWith('stream:lsp:state', expect.any(Function));
     expect(mockOn).toHaveBeenCalledWith('stream:menu:command', expect.any(Function));
@@ -184,6 +187,10 @@ describe('preload bridge', () => {
     terminalExitHandler({}, { id: 'terminal-1', exitCode: 0, signal: 15 });
     expect(onTerminalExit).toHaveBeenCalledWith({ id: 'terminal-1', exitCode: 0, signal: 15 });
 
+    const debugHandler = mockOn.mock.calls.find((call) => call[0] === 'stream:lsp:debug')?.[1];
+    debugHandler({}, { sequence: 1, timestamp: '2026-01-01T00:00:00.000Z', direction: 'session', kind: 'lifecycle', status: 'ready' });
+    expect(onLspDebug).toHaveBeenCalledWith({ sequence: 1, timestamp: '2026-01-01T00:00:00.000Z', direction: 'session', kind: 'lifecycle', status: 'ready' });
+
     const diagnosticsHandler = mockOn.mock.calls.find((call) => call[0] === 'stream:lsp:diagnostics')?.[1];
     diagnosticsHandler({}, { filePath: 'rtl/core/cpu_top.sv', diagnostics: [] });
     expect(onLspDiagnostics).toHaveBeenCalledWith({ filePath: 'rtl/core/cpu_top.sv', diagnostics: [] });
@@ -204,6 +211,7 @@ describe('preload bridge', () => {
     disposeShellExit();
     disposeTerminalData();
     disposeTerminalExit();
+    disposeLspDebug();
     disposeLspDiagnostics();
     disposeLspState();
     disposeMenuCommand();
@@ -215,6 +223,7 @@ describe('preload bridge', () => {
     expect(mockRemoveListener).toHaveBeenCalledWith('stream:shell:exit', shellExitHandler);
     expect(mockRemoveListener).toHaveBeenCalledWith('stream:terminal:data', terminalDataHandler);
     expect(mockRemoveListener).toHaveBeenCalledWith('stream:terminal:exit', terminalExitHandler);
+    expect(mockRemoveListener).toHaveBeenCalledWith('stream:lsp:debug', debugHandler);
     expect(mockRemoveListener).toHaveBeenCalledWith('stream:lsp:diagnostics', diagnosticsHandler);
     expect(mockRemoveListener).toHaveBeenCalledWith('stream:lsp:state', lspStateHandler);
     expect(mockRemoveListener).toHaveBeenCalledWith('stream:menu:command', menuCommandHandler);

@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { SyncChannels, AsyncChannels, StreamChannels } from './ipc/channels.js';
-import type { LspCompletionResponse, LspDiagnosticsEvent, LspHover, LspStateEvent, WorkspaceLocation } from '../types/systemverilog-lsp.js';
+import type { LspCompletionResponse, LspDebugEvent, LspDiagnosticsEvent, LspHover, LspStateEvent, WorkspaceLocation } from '../types/systemverilog-lsp.js';
 import type { MenuCommandEvent } from '../src/app/menu/applicationMenu.js';
 import type { WindowCloseDecision, WindowCloseRequest } from '../src/app/window/windowClose.js';
 
@@ -180,6 +180,11 @@ const electronAPI = {
       const handler = (_event: Electron.IpcRendererEvent, payload: LspDiagnosticsEvent) => callback(payload);
       ipcRenderer.on(StreamChannels.LSP_DIAGNOSTICS, handler);
       return () => { ipcRenderer.removeListener(StreamChannels.LSP_DIAGNOSTICS, handler); };
+    },
+    onDebug: (callback: (payload: LspDebugEvent) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, payload: LspDebugEvent) => callback(payload);
+      ipcRenderer.on(StreamChannels.LSP_DEBUG, handler);
+      return () => { ipcRenderer.removeListener(StreamChannels.LSP_DEBUG, handler); };
     },
     onState: (callback: (payload: LspStateEvent) => void) => {
       const handler = (_event: Electron.IpcRendererEvent, payload: LspStateEvent) => callback(payload);

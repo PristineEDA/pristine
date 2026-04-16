@@ -1,5 +1,6 @@
 import type {
   LspCompletionResponse,
+  LspDebugEvent,
   LspDiagnosticsEvent,
   LspHover,
   LspStateEvent,
@@ -96,6 +97,7 @@ export interface ElectronAPI {
       character: number,
       includeDeclaration?: boolean,
     ) => Promise<WorkspaceLocation[]>;
+    onDebug: (callback: (payload: LspDebugEvent) => void) => () => void;
     onDiagnostics: (callback: (payload: LspDiagnosticsEvent) => void) => () => void;
     onState: (callback: (payload: LspStateEvent) => void) => () => void;
   };

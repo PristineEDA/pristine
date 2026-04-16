@@ -187,6 +187,29 @@ describe('LSP IPC handlers', () => {
         uri: 'file:///C:/workspace/Pristine/rtl/core/cpu_top.sv',
       },
     });
+
+    expect(send).toHaveBeenCalledWith('stream:lsp:debug', expect.objectContaining({
+      direction: 'session',
+      kind: 'lifecycle',
+      status: 'starting',
+    }));
+    expect(send).toHaveBeenCalledWith('stream:lsp:debug', expect.objectContaining({
+      direction: 'client->server',
+      kind: 'request',
+      method: 'initialize',
+    }));
+    expect(send).toHaveBeenCalledWith('stream:lsp:debug', expect.objectContaining({
+      direction: 'client->server',
+      kind: 'notification',
+      method: 'textDocument/didOpen',
+      filePath: 'rtl/core/cpu_top.sv',
+    }));
+    expect(send).toHaveBeenCalledWith('stream:lsp:debug', expect.objectContaining({
+      direction: 'client->server',
+      kind: 'notification',
+      method: 'textDocument/didChange',
+      filePath: 'rtl/core/cpu_top.sv',
+    }));
   });
 
   it('forwards diagnostics and normalizes definition results to workspace-relative paths', async () => {
@@ -227,5 +250,39 @@ describe('LSP IPC handlers', () => {
         end: { line: 8, character: 12 },
       },
     }]);
+
+    expect(send).toHaveBeenCalledWith('stream:lsp:debug', expect.objectContaining({
+      direction: 'server->client',
+      kind: 'notification',
+      method: 'textDocument/publishDiagnostics',
+      filePath: 'rtl/core/cpu_top.sv',
+    }));
+    expect(send).toHaveBeenCalledWith('stream:lsp:debug', expect.objectContaining({
+      direction: 'client->server',
+      kind: 'request',
+      method: 'textDocument/definition',
+      filePath: 'rtl/core/cpu_top.sv',
+    }));
+    expect(send).toHaveBeenCalledWith('stream:lsp:debug', expect.objectContaining({
+      direction: 'server->client',
+      kind: 'response',
+      method: 'textDocument/definition',
+      filePath: 'rtl/core/alu.sv',
+    }));
+  });
+
+  it('emits stderr output as debug events', async () => {
+    const openHandler = getHandler('async:lsp:open-document');
+
+    await openHandler({}, 'rtl/core/cpu_top.sv', 'systemverilog', 'module cpu_top; endmodule');
+
+    const stderrHandler = fakeProcess.stderr.on.mock.calls[0]?.[1];
+    stderrHandler?.(Buffer.from('server warning\n'));
+
+    expect(send).toHaveBeenCalledWith('stream:lsp:debug', expect.objectContaining({
+      direction: 'server->client',
+      kind: 'stderr',
+      text: 'server warning',
+    }));
   });
 });

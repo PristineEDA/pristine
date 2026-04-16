@@ -421,7 +421,23 @@ async function focusMonacoEditor(window: Awaited<ReturnType<typeof launchApp>>['
 
 async function waitForMonacoEditor(window: Awaited<ReturnType<typeof launchApp>>['window']) {
   const editor = window.locator('.monaco-editor');
-  await expect(editor).toBeVisible({ timeout: MONACO_READY_TIMEOUT_MS });
+  const activeEditorTab = window.locator('[data-testid^="editor-tab-"].bg-background').first();
+
+  if (await activeEditorTab.count() > 0) {
+    await activeEditorTab.click();
+  }
+
+  try {
+    await expect(editor).toBeVisible({ timeout: 15000 });
+  } catch {
+    const firstEditorTab = window.locator('[data-testid^="editor-tab-"]').first();
+    if (await firstEditorTab.count() > 0) {
+      await firstEditorTab.click();
+    }
+
+    await expect(editor).toBeVisible({ timeout: MONACO_READY_TIMEOUT_MS });
+  }
+
   return editor;
 }
 
@@ -991,6 +1007,58 @@ test('systemverilog lsp smoke resolves a cross-file definition and symbol refere
   await app.close();
 });
 
+test('lsp bottom panel shows raw debug events for systemverilog requests', async () => {
+  test.slow();
+
+  const { app, window } = await launchApp();
+
+  await ensureExplorerVisible(window);
+  await openNestedWorkspaceFile(window, [
+    'file-tree-node-rtl',
+    'file-tree-node-rtl_core',
+    'file-tree-node-rtl_core_cpu_top_sv',
+  ]);
+
+  await expect(window.getByTestId('editor-tab-rtl/core/cpu_top.sv')).toBeVisible();
+  await waitForMonacoEditor(window);
+  await expect(window.locator('.monaco-editor .view-lines')).toContainText('alu u_alu', {
+    timeout: MONACO_READY_TIMEOUT_MS,
+  });
+
+  await window.getByTestId('toggle-bottom-panel').click();
+  const bottomPanel = window.getByTestId('panel-bottom-panel');
+  await bottomPanel.getByRole('button', { name: /^lsp$/i }).click();
+
+  await expect(window.getByTestId('lsp-panel')).toBeVisible();
+
+  await expect.poll(async () => window.evaluate(async () => {
+    const browserGlobal = globalThis as typeof globalThis & {
+      electronAPI?: {
+        lsp: {
+          definition: (filePath: string, line: number, character: number) => Promise<Array<{ filePath: string }>>;
+        };
+      };
+    };
+
+    try {
+      const definition = await browserGlobal.electronAPI?.lsp.definition('rtl/core/cpu_top.sv', 3, 2);
+      return definition?.[0]?.filePath ?? null;
+    } catch {
+      return null;
+    }
+  }), {
+    timeout: 15000,
+  }).toBe('rtl/core/alu.sv');
+
+  await expect.poll(async () => window.getByTestId('lsp-event-item').count(), {
+    timeout: 15000,
+  }).toBeGreaterThan(0);
+
+  await expect(window.getByTestId('lsp-panel')).toContainText(/initialize|textDocument\/definition|textDocument\/didOpen/);
+
+  await app.close();
+});
+
 test('single-clicked explorer files stay in preview style until double-clicked to pin', async () => {
   const { app, window } = await launchApp();
 
@@ -1075,8 +1143,9 @@ test('ctrl+s saves an edited explorer file and clears the dirty indicator', asyn
       'file-tree-node-rtl',
       'file-tree-node-rtl_core',
       'file-tree-node-rtl_core_reg_file_v',
-    ], { finalAction: 'dblclick' });
+    ]);
 
+    await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toBeVisible();
     await waitForMonacoEditor(window);
     await focusMonacoEditor(window);
     await waitForMonacoEditorTextFocus(window);

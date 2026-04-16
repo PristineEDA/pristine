@@ -45,6 +45,10 @@ describe('BottomPanel', () => {
     expect(screen.getByRole('button', { name: /start debugging/i })).toBeInTheDocument();
     expect(screen.getByText(/Debug session not started/i)).toBeInTheDocument();
 
+    fireEvent.click(screen.getByRole('button', { name: /^lsp$/i }));
+    expect(await screen.findByTestId('lsp-panel')).toBeInTheDocument();
+    expect(screen.getByText(/No LSP debug events yet\./i)).toBeInTheDocument();
+
     fireEvent.click(screen.getByRole('button', { name: /close panel/i }));
     expect(terminateTerminalSessionMock).toHaveBeenCalled();
   });
