@@ -3,6 +3,7 @@ import {
   FilePlus, FolderPlus, RefreshCw, ChevronsUpDown,
 } from 'lucide-react';
 import { useFileOutlines } from '../../../../data/mockDataLoader';
+import { refreshWorkspaceGitStatus, useWorkspaceGitStatus } from '../../../git/workspaceGitStatus';
 import { FileTreeNode } from './FileTreeNode';
 import { OutlineNode } from './OutlineNode';
 import { DEFAULT_STARTUP_PROJECT_NAME } from '../../../workspace/workspaceFiles';
@@ -32,6 +33,7 @@ export function LeftSidePanel({
 }: LeftSidePanelProps) {
   const [tab, setTab] = useState<'explorer' | 'outline'>('explorer');
   const fileOutlines = useFileOutlines();
+  const gitStatus = useWorkspaceGitStatus();
   const {
     treeNodes,
     workspaceAvailable,
@@ -85,6 +87,7 @@ export function LeftSidePanel({
                   onClick={() => {
                     onWorkspaceRefresh?.();
                     refreshTree();
+                    refreshWorkspaceGitStatus();
                   }}
                 ><RefreshCw size={13} /></Button>
               </TooltipIconButton>
@@ -110,6 +113,7 @@ export function LeftSidePanel({
                 onFilePreview={onFilePreview}
                 expandedFolders={expandedFolders}
                 onToggleFolder={toggleFolder}
+                gitPathStates={gitStatus.pathStates}
                 revealRequest={revealRequest}
               />
             ))}

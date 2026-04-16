@@ -122,7 +122,7 @@ describe('window IPC handlers', () => {
     expect(mockSetFloatingInfoWindowVisible).toHaveBeenCalledWith(true);
   });
 
-  it('emits maximize and full-screen stream events separately', () => {
+  it('emits focus, maximize, and full-screen stream events separately', () => {
     const events: Record<string, () => void> = {};
     const send = vi.fn();
     const win = {
@@ -133,14 +133,16 @@ describe('window IPC handlers', () => {
     };
 
     setupWindowStreams(win as any);
+    events['focus']();
     events['maximize']();
     events['unmaximize']();
     events['enter-full-screen']();
     events['leave-full-screen']();
 
-    expect(send).toHaveBeenNthCalledWith(1, StreamChannels.WINDOW_MAXIMIZED_CHANGE, true);
-    expect(send).toHaveBeenNthCalledWith(2, StreamChannels.WINDOW_MAXIMIZED_CHANGE, false);
-    expect(send).toHaveBeenNthCalledWith(3, StreamChannels.WINDOW_FULLSCREEN_CHANGE, true);
-    expect(send).toHaveBeenNthCalledWith(4, StreamChannels.WINDOW_FULLSCREEN_CHANGE, false);
+    expect(send).toHaveBeenNthCalledWith(1, StreamChannels.WINDOW_FOCUS);
+    expect(send).toHaveBeenNthCalledWith(2, StreamChannels.WINDOW_MAXIMIZED_CHANGE, true);
+    expect(send).toHaveBeenNthCalledWith(3, StreamChannels.WINDOW_MAXIMIZED_CHANGE, false);
+    expect(send).toHaveBeenNthCalledWith(4, StreamChannels.WINDOW_FULLSCREEN_CHANGE, true);
+    expect(send).toHaveBeenNthCalledWith(5, StreamChannels.WINDOW_FULLSCREEN_CHANGE, false);
   });
 });

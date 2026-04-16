@@ -5,6 +5,8 @@ const {
   mockSetupWindowStreams,
   mockRegisterFilesystemHandlers,
   mockSetFsRoot,
+  mockRegisterGitHandlers,
+  mockSetGitProjectRoot,
   mockRegisterLspHandlers,
   mockSetLspProjectRoot,
   mockRegisterShellHandlers,
@@ -18,6 +20,8 @@ const {
   mockSetupWindowStreams: vi.fn(),
   mockRegisterFilesystemHandlers: vi.fn(),
   mockSetFsRoot: vi.fn(),
+  mockRegisterGitHandlers: vi.fn(),
+  mockSetGitProjectRoot: vi.fn(),
   mockRegisterLspHandlers: vi.fn(),
   mockSetLspProjectRoot: vi.fn(),
   mockRegisterShellHandlers: vi.fn(),
@@ -36,6 +40,11 @@ vi.mock('./window.js', () => ({
 vi.mock('./filesystem.js', () => ({
   registerFilesystemHandlers: () => mockRegisterFilesystemHandlers(),
   setProjectRoot: (root: string) => mockSetFsRoot(root),
+}));
+
+vi.mock('./git.js', () => ({
+  registerGitHandlers: () => mockRegisterGitHandlers(),
+  setGitProjectRoot: (root: string) => mockSetGitProjectRoot(root),
 }));
 
 vi.mock('./lsp.js', () => ({
@@ -72,6 +81,7 @@ describe('register helpers', () => {
     setProjectRoot('./workspace/../project-root');
 
     expect(mockSetFsRoot).toHaveBeenCalledWith(expect.stringContaining('project-root'));
+    expect(mockSetGitProjectRoot).toHaveBeenCalledWith(expect.stringContaining('project-root'));
     expect(mockSetLspProjectRoot).toHaveBeenCalledWith(expect.stringContaining('project-root'));
     expect(mockSetShellProjectRoot).toHaveBeenCalledWith(expect.stringContaining('project-root'));
     expect(mockSetTerminalProjectRoot).toHaveBeenCalledWith(expect.stringContaining('project-root'));
@@ -87,6 +97,7 @@ describe('register helpers', () => {
     expect(mockRegisterPlatformHandler).toHaveBeenCalledTimes(1);
     expect(mockRegisterWindowHandlers).toHaveBeenCalledWith(getMainWindow, setFloatingInfoWindowVisible, resolveCloseRequest);
     expect(mockRegisterFilesystemHandlers).toHaveBeenCalledTimes(1);
+    expect(mockRegisterGitHandlers).toHaveBeenCalledTimes(1);
     expect(mockRegisterLspHandlers).toHaveBeenCalledWith(getMainWindow);
     expect(mockRegisterShellHandlers).toHaveBeenCalledWith(getMainWindow);
     expect(mockRegisterTerminalHandlers).toHaveBeenCalledWith(getMainWindow);

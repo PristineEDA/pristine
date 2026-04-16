@@ -64,6 +64,7 @@ describe('preload bridge', () => {
     const onMaximizedChange = vi.fn();
     const onFullScreenChange = vi.fn();
     const onCloseRequested = vi.fn();
+    const onWindowFocus = vi.fn();
     const onStdout = vi.fn();
     const onStderr = vi.fn();
     const onShellExit = vi.fn();
@@ -87,6 +88,7 @@ describe('preload bridge', () => {
     api.fs.readDir('rtl');
     api.fs.stat('rtl/main.v');
     api.fs.exists('rtl/main.v');
+    api.git.getStatus();
     api.shell.exec('make', ['lint'], { cwd: 'rtl' });
     api.shell.kill('shell-1');
     api.terminal.create({ cwd: 'rtl', cols: 120, rows: 40 });
@@ -105,6 +107,7 @@ describe('preload bridge', () => {
     const dispose = api.onMaximizedChange(onMaximizedChange);
     const disposeFullScreen = api.onFullScreenChange(onFullScreenChange);
     const disposeCloseRequest = api.onCloseRequested(onCloseRequested);
+    const disposeWindowFocus = api.onWindowFocus(onWindowFocus);
     const disposeStdout = api.shell.onStdout(onStdout);
     const disposeStderr = api.shell.onStderr(onStderr);
     const disposeShellExit = api.shell.onExit(onShellExit);
@@ -128,6 +131,7 @@ describe('preload bridge', () => {
     expect(mockInvoke).toHaveBeenCalledWith('async:fs:read-dir', 'rtl');
     expect(mockInvoke).toHaveBeenCalledWith('async:fs:stat', 'rtl/main.v');
     expect(mockInvoke).toHaveBeenCalledWith('async:fs:exists', 'rtl/main.v');
+    expect(mockInvoke).toHaveBeenCalledWith('async:git:get-status');
     expect(mockInvoke).toHaveBeenCalledWith('async:shell:exec', 'make', ['lint'], { cwd: 'rtl' });
     expect(mockInvoke).toHaveBeenCalledWith('async:shell:kill', 'shell-1');
     expect(mockInvoke).toHaveBeenCalledWith('async:terminal:create', { cwd: 'rtl', cols: 120, rows: 40 });
@@ -145,6 +149,7 @@ describe('preload bridge', () => {
     expect(mockOn).toHaveBeenCalledWith('stream:window:maximized-change', expect.any(Function));
     expect(mockOn).toHaveBeenCalledWith('stream:window:full-screen-change', expect.any(Function));
     expect(mockOn).toHaveBeenCalledWith('stream:window:close-request', expect.any(Function));
+    expect(mockOn).toHaveBeenCalledWith('stream:window:focus', expect.any(Function));
     expect(mockOn).toHaveBeenCalledWith('stream:shell:stdout', expect.any(Function));
     expect(mockOn).toHaveBeenCalledWith('stream:shell:stderr', expect.any(Function));
     expect(mockOn).toHaveBeenCalledWith('stream:shell:exit', expect.any(Function));
@@ -166,6 +171,10 @@ describe('preload bridge', () => {
     const closeRequestHandler = mockOn.mock.calls.find((call) => call[0] === 'stream:window:close-request')?.[1];
     closeRequestHandler({}, { requestId: 8, action: 'tray' });
     expect(onCloseRequested).toHaveBeenCalledWith({ requestId: 8, action: 'tray' });
+
+    const focusHandler = mockOn.mock.calls.find((call) => call[0] === 'stream:window:focus')?.[1];
+    focusHandler({});
+    expect(onWindowFocus).toHaveBeenCalledTimes(1);
 
     const stdoutHandler = mockOn.mock.calls.find((call) => call[0] === 'stream:shell:stdout')?.[1];
     stdoutHandler({}, { id: 'shell-1', data: 'ok' });
@@ -206,6 +215,7 @@ describe('preload bridge', () => {
     dispose();
     disposeFullScreen();
     disposeCloseRequest();
+    disposeWindowFocus();
     disposeStdout();
     disposeStderr();
     disposeShellExit();
@@ -218,6 +228,7 @@ describe('preload bridge', () => {
     expect(mockRemoveListener).toHaveBeenCalledWith('stream:window:maximized-change', handler);
     expect(mockRemoveListener).toHaveBeenCalledWith('stream:window:full-screen-change', fullScreenHandler);
     expect(mockRemoveListener).toHaveBeenCalledWith('stream:window:close-request', closeRequestHandler);
+    expect(mockRemoveListener).toHaveBeenCalledWith('stream:window:focus', focusHandler);
     expect(mockRemoveListener).toHaveBeenCalledWith('stream:shell:stdout', stdoutHandler);
     expect(mockRemoveListener).toHaveBeenCalledWith('stream:shell:stderr', stderrHandler);
     expect(mockRemoveListener).toHaveBeenCalledWith('stream:shell:exit', shellExitHandler);

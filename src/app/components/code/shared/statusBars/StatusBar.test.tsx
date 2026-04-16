@@ -1,7 +1,15 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LspProblem } from '../../../../lsp/lspProblems';
 import { StatusBar } from './StatusBar';
+
+const mockedGitStatus = {
+  branchName: 'feature/git-ui',
+  hasProjectFiles: true,
+  isGitRepo: true,
+  isLoading: false,
+  pathStates: {},
+};
 
 const mockedProblemsByFile: Record<string, LspProblem[]> = {
   'rtl/tb/tb_cpu_top.sv': [
@@ -60,13 +68,26 @@ vi.mock('../../../../lsp/lspProblems', async (importOriginal) => {
   };
 });
 
+vi.mock('../../../../git/workspaceGitStatus', () => ({
+  useWorkspaceGitStatus: () => mockedGitStatus,
+  getWorkspaceGitBranchLabel: (snapshot: typeof mockedGitStatus) => (
+    snapshot.hasProjectFiles && snapshot.isGitRepo && snapshot.branchName ? snapshot.branchName : 'git'
+  ),
+}));
+
 describe('StatusBar', () => {
+  beforeEach(() => {
+    mockedGitStatus.branchName = 'feature/git-ui';
+    mockedGitStatus.hasProjectFiles = true;
+    mockedGitStatus.isGitRepo = true;
+  });
+
   it('shows branch, diagnostics, cursor state, and inferred language from file paths', () => {
     render(
       <StatusBar activeFileId="rtl/tb/tb_cpu_top.sv" cursorLine={18} cursorCol={4} />,
     );
 
-    expect(screen.getByText('main')).toBeInTheDocument();
+    expect(screen.getByTestId('status-bar-branch-label')).toHaveTextContent('feature/git-ui');
     expect(screen.getByText('Sync')).toBeInTheDocument();
     expect(screen.getByText('Ln 18, Col 4')).toBeInTheDocument();
     expect(screen.getByText('SystemVerilog')).toBeInTheDocument();
@@ -96,6 +117,26 @@ describe('StatusBar', () => {
 
     rerender(<StatusBar activeFileId="build/Makefile" cursorLine={1} cursorCol={1} />);
     expect(screen.getByText('Makefile')).toBeInTheDocument();
+  });
+
+  it('falls back to the generic git label when no project files are open or the workspace is not a git repo', () => {
+    mockedGitStatus.branchName = '';
+    mockedGitStatus.hasProjectFiles = false;
+    mockedGitStatus.isGitRepo = false;
+
+    const { rerender } = render(
+      <StatusBar activeFileId="rtl/core/alu.v" cursorLine={9} cursorCol={3} />,
+    );
+
+    expect(screen.getByTestId('status-bar-branch-label')).toHaveTextContent('git');
+
+    mockedGitStatus.branchName = 'feature/git-ui';
+    mockedGitStatus.hasProjectFiles = true;
+    mockedGitStatus.isGitRepo = true;
+
+    rerender(<StatusBar activeFileId="rtl/core/alu.v" cursorLine={9} cursorCol={3} />);
+
+    expect(screen.getByTestId('status-bar-branch-label')).toHaveTextContent('feature/git-ui');
   });
 
   it('shows 0 error and warning counts when no file is open', () => {

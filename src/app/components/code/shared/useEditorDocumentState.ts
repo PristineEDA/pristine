@@ -36,13 +36,14 @@ export function useEditorDocumentState({
   const activeTabContent = activeTabId ? resolvedContentCache[activeTabId] : undefined;
   const activeLoadError = activeTabId ? resolvedLoadErrors[activeTabId] : undefined;
   const activeTab = tabs.find((tab) => tab.id === activeTabId);
-  const isActiveTabReady = Boolean(activeTabId) && (activeTabContent !== undefined || Boolean(resolvedLoadErrors[activeTabId]));
-  const code = activeTabId
-    ? resolvedLoadErrors[activeTabId]
-      ? `// Failed to load ${activeTab?.name ?? activeTabId}\n// ${resolvedLoadErrors[activeTabId]}\n`
-      : resolvedLoadingFiles[activeTabId]
+  const isActiveTabReady = Boolean(activeTabId) && activeTabContent !== undefined;
+  const code = activeTabContent ?? '';
+  const placeholderText = activeTabId
+    ? activeLoadError
+      ? `// Failed to load ${activeTab?.name ?? activeTabId}\n// ${activeLoadError}\n`
+      : resolvedLoadingFiles[activeTabId] || activeTabContent === undefined
       ? `// ${activeTab?.name ?? activeTabId}\n// Loading file contents...\n`
-      : resolvedContentCache[activeTabId] ?? `// ${activeTab?.name ?? activeTabId}\n// Loading file contents...\n`
+      : ''
     : '';
 
   useEffect(() => () => {
@@ -121,6 +122,7 @@ export function useEditorDocumentState({
     activeLoadError,
     code,
     isActiveTabReady,
+    placeholderText,
     updateContent,
   };
 }

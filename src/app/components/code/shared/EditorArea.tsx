@@ -3,6 +3,8 @@ import {
   X, ChevronRight, Split,
   MoreHorizontal, Circle,
 } from 'lucide-react';
+import type { WorkspaceGitPathState } from '../../../../../types/workspace-git';
+import { getWorkspaceGitPathState, useWorkspaceGitStatus } from '../../../git/workspaceGitStatus';
 import { getWorkspaceSegments } from '../../../workspace/workspaceFiles';
 import { FileTypeBadge } from './FileTypeBadge';
 import { useEditorDocumentState } from './useEditorDocumentState';
@@ -75,12 +77,24 @@ interface EditorAreaProps {
   dragInteractionShieldTestId?: string;
 }
 
+function EditorDocumentPlaceholder({ text }: { text: string }) {
+  return (
+    <div
+      data-testid="editor-document-placeholder"
+      className="flex-1 overflow-auto bg-background px-4 py-3 font-mono text-[12px] text-muted-foreground whitespace-pre"
+    >
+      {text}
+    </div>
+  );
+}
+
 // ─── Tab Component ─────────────────────────────────────────────────────────────
 function EditorTab({
-  tab, isActive, onActivate, onClose, onPin, onDragStart, onDragEnd,
+  tab, isActive, gitState, onActivate, onClose, onPin, onDragStart, onDragEnd,
 }: {
   tab: Tab;
   isActive: boolean;
+  gitState?: WorkspaceGitPathState;
   onActivate: () => void;
   onClose: () => void;
   onPin?: () => void;
@@ -92,6 +106,13 @@ function EditorTab({
   const trailingControlClassName = isPreview && !tab.modified
     ? 'opacity-50 hover:opacity-100'
     : 'opacity-0 group-hover:opacity-100';
+  const tabTitleToneClassName = gitState === 'modified'
+    ? 'text-ide-warning'
+    : gitState === 'ignored'
+    ? 'text-ide-text-muted'
+    : isPreview
+    ? 'text-foreground'
+    : '';
 
   return (
     <div
@@ -127,7 +148,7 @@ function EditorTab({
       />
       <span
         data-testid={`editor-tab-title-${tab.id}`}
-        className={`flex-1 truncate text-[12px] ${isPreview ? 'italic text-foreground' : ''}`}
+        className={`flex-1 truncate text-[12px] ${isPreview ? 'italic' : ''} ${tabTitleToneClassName}`}
       >
         {tab.name}
       </span>
@@ -220,7 +241,15 @@ export function EditorArea({
 }: EditorAreaProps) {
   const lastAppliedRestoreRef = useRef({ activeTabId: '', restoreToken: 0 });
   const [activeModelReadyId, setActiveModelReadyId] = useState('');
-  const { activeLoadError, activeTab, code, isActiveTabReady, updateContent } = useEditorDocumentState({
+  const gitStatus = useWorkspaceGitStatus();
+  const {
+    activeLoadError,
+    activeTab,
+    code,
+    isActiveTabReady,
+    placeholderText,
+    updateContent,
+  } = useEditorDocumentState({
     tabs,
     activeTabId,
     contentCache,
@@ -363,6 +392,7 @@ export function EditorArea({
             key={tab.id}
             tab={tab}
             isActive={tab.id === activeTabId}
+            gitState={getWorkspaceGitPathState(gitStatus, tab.id)}
             onActivate={() => onTabChange(tab.id)}
             onClose={() => onTabClose(tab.id)}
             onPin={onTabPin ? () => onTabPin(tab.id) : undefined}
@@ -399,29 +429,33 @@ export function EditorArea({
       {/* Breadcrumb */}
       {activeTab && <Breadcrumb filePath={activeTabId} />}
 
-      <Suspense
-        fallback={(
-          <div className="flex flex-1 items-center justify-center bg-background text-muted-foreground text-[12px]">
-            Loading editor...
-          </div>
-        )}
-      >
-        <MonacoEditorPane
-          activeTabId={activeTabId}
-          code={code}
-          editorRef={editorRef}
-          onActiveModelReady={setActiveModelReadyId}
-          onCursorChange={onCursorChange}
-          onSaveShortcut={onSaveShortcut}
-          onContentChange={updateContent}
-          onEditorMount={onEditorMount}
-          onNavigateToLocation={onNavigateToLocation}
-          isDocumentReady={isActiveTabReady}
-          hasLoadError={Boolean(activeLoadError)}
-          showDragInteractionShield={showDragInteractionShield}
-          dragInteractionShieldTestId={dragInteractionShieldTestId}
-        />
-      </Suspense>
+      {!isActiveTabReady ? (
+        <EditorDocumentPlaceholder text={placeholderText} />
+      ) : (
+        <Suspense
+          fallback={(
+            <div className="flex flex-1 items-center justify-center bg-background text-muted-foreground text-[12px]">
+              Loading editor...
+            </div>
+          )}
+        >
+          <MonacoEditorPane
+            activeTabId={activeTabId}
+            code={code}
+            editorRef={editorRef}
+            onActiveModelReady={setActiveModelReadyId}
+            onCursorChange={onCursorChange}
+            onSaveShortcut={onSaveShortcut}
+            onContentChange={updateContent}
+            onEditorMount={onEditorMount}
+            onNavigateToLocation={onNavigateToLocation}
+            isDocumentReady={isActiveTabReady}
+            hasLoadError={Boolean(activeLoadError)}
+            showDragInteractionShield={showDragInteractionShield}
+            dragInteractionShieldTestId={dragInteractionShieldTestId}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

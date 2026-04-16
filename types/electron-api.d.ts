@@ -6,6 +6,7 @@ import type {
   LspStateEvent,
   WorkspaceLocation,
 } from './systemverilog-lsp';
+import type { WorkspaceGitStatusPayload } from './workspace-git';
 import type { MenuCommandEvent } from '../src/app/menu/applicationMenu';
 import type { WindowCloseDecision, WindowCloseRequest } from '../src/app/window/windowClose';
 
@@ -32,6 +33,7 @@ export interface ElectronAPI {
   onMaximizedChange: (callback: (maximized: boolean) => void) => () => void;
   onFullScreenChange: (callback: (fullScreen: boolean) => void) => () => void;
   onCloseRequested: (callback: (request: WindowCloseRequest) => void) => () => void;
+  onWindowFocus: (callback: () => void) => () => void;
 
   // File system (project-dir scoped)
   fs: {
@@ -51,6 +53,10 @@ export interface ElectronAPI {
       ctime: string;
     }>;
     exists: (filePath: string) => Promise<boolean>;
+  };
+
+  git: {
+    getStatus: () => Promise<WorkspaceGitStatusPayload>;
   };
 
   // Shell (isolated subprocess)

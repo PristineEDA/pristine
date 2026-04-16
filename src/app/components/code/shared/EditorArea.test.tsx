@@ -18,7 +18,14 @@ vi.mock('../../../context/EditorSettingsContext', () => ({
   }),
 }));
 
-const { mockEditorComponent, mockEditorDomNode, mockEditorInstance, mockModel, mockMonaco } = vi.hoisted(() => {
+const {
+  mockEditorComponent,
+  mockEditorDomNode,
+  mockEditorInstance,
+  mockModel,
+  mockMonaco,
+  mockWorkspaceGitStatus,
+} = vi.hoisted(() => {
   const activeElement = {};
   const inputElement = {
     focus: vi.fn(),
@@ -87,6 +94,13 @@ const { mockEditorComponent, mockEditorDomNode, mockEditorInstance, mockModel, m
     mockModel: model,
     mockMonaco: monaco,
     mockEditorComponent: vi.fn(),
+    mockWorkspaceGitStatus: {
+      branchName: 'feature/git-ui',
+      hasProjectFiles: true,
+      isGitRepo: true,
+      isLoading: false,
+      pathStates: {} as Record<string, 'modified' | 'ignored'>,
+    },
   };
 });
 
@@ -111,6 +125,14 @@ vi.mock('@monaco-editor/react', () => ({
   useMonaco: () => mockMonaco,
 }));
 
+vi.mock('../../../git/workspaceGitStatus', () => ({
+  useWorkspaceGitStatus: () => mockWorkspaceGitStatus,
+  getWorkspaceGitPathState: (
+    snapshot: typeof mockWorkspaceGitStatus,
+    path: string,
+  ) => snapshot.pathStates[path],
+}));
+
 vi.mock('../../../editor/configureMonacoLoader', () => ({}));
 
 describe('EditorArea', () => {
@@ -125,6 +147,10 @@ describe('EditorArea', () => {
     mockMonaco.editor.getModels.mockReturnValue([mockModel]);
     mockEditorDomNode.contains.mockReturnValue(true);
     mockEditorInstance.hasTextFocus.mockReturnValue(true);
+    mockWorkspaceGitStatus.branchName = 'feature/git-ui';
+    mockWorkspaceGitStatus.hasProjectFiles = true;
+    mockWorkspaceGitStatus.isGitRepo = true;
+    mockWorkspaceGitStatus.pathStates = {};
     vi.mocked(electronApi.fs.readFile).mockResolvedValue('// fixture content');
   });
 
@@ -221,6 +247,27 @@ describe('EditorArea', () => {
     expect(screen.getByTestId('editor-tab-dirty-indicator-rtl/core/reg_file.v')).toBeInTheDocument();
     expect(screen.queryByTestId('editor-tab-preview-indicator-rtl/core/reg_file.v')).not.toBeInTheDocument();
     expect(screen.getByTestId('editor-tab-close-rtl/core/reg_file.v')).toBeInTheDocument();
+  });
+
+  it('highlights git-modified tabs in yellow while keeping the unsaved dirty indicator visible', () => {
+    mockWorkspaceGitStatus.pathStates = {
+      'rtl/core/reg_file.v': 'modified',
+    };
+
+    render(
+      <EditorArea
+        tabs={[
+          { id: 'rtl/core/reg_file.v', name: 'reg_file.v', modified: true, isPinned: true },
+        ]}
+        activeTabId="rtl/core/reg_file.v"
+        onTabChange={vi.fn()}
+        onTabClose={vi.fn()}
+        editorRef={createRef()}
+      />,
+    );
+
+    expect(screen.getByTestId('editor-tab-title-rtl/core/reg_file.v')).toHaveClass('text-ide-warning');
+    expect(screen.getByTestId('editor-tab-dirty-indicator-rtl/core/reg_file.v')).toBeInTheDocument();
   });
 
   it('pins a preview tab on double-click and before dragging begins', () => {
@@ -545,7 +592,8 @@ describe('EditorArea', () => {
       />,
     );
 
-    await screen.findByTestId('monaco-editor');
+    expect(screen.getByTestId('editor-document-placeholder')).toHaveTextContent('Loading file contents...');
+    expect(screen.queryByTestId('monaco-editor')).not.toBeInTheDocument();
     expect(onLoadFile).toHaveBeenCalledWith('rtl/core/reg_file.v');
     expect(mockEditorInstance.setPosition).not.toHaveBeenCalledWith({ lineNumber: 18, column: 6 });
 
@@ -563,6 +611,7 @@ describe('EditorArea', () => {
     );
 
     await waitFor(() => {
+      expect(screen.queryByTestId('editor-document-placeholder')).not.toBeInTheDocument();
       expect(mockEditorInstance.setPosition).toHaveBeenCalledWith({ lineNumber: 18, column: 6 });
     });
     expect(mockEditorInstance.focus).toHaveBeenCalled();
@@ -695,12 +744,45 @@ describe('EditorArea', () => {
       />,
     );
 
-    expect(screen.getByTestId('monaco-editor')).toHaveTextContent('Loading file contents...');
+    expect(screen.getByTestId('editor-document-placeholder')).toHaveTextContent('Loading file contents...');
+    expect(screen.queryByTestId('monaco-editor')).not.toBeInTheDocument();
 
     resolveFirstRead?.('// cpu_top content');
 
     await waitFor(() => {
       expect(screen.getByTestId('monaco-editor')).toHaveTextContent('// cpu_top content');
+    });
+  });
+
+  it('keeps loading placeholders out of the Monaco document until file content is ready', async () => {
+    const { rerender } = render(
+      <EditorArea
+        tabs={[{ id: 'rtl/core/reg_file.v', name: 'reg_file.v', isPinned: true }]}
+        activeTabId="rtl/core/reg_file.v"
+        onTabChange={vi.fn()}
+        onTabClose={vi.fn()}
+        editorRef={createRef()}
+        onLoadFile={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId('editor-document-placeholder')).toHaveTextContent('Loading file contents...');
+    expect(screen.queryByTestId('monaco-editor')).not.toBeInTheDocument();
+
+    rerender(
+      <EditorArea
+        tabs={[{ id: 'rtl/core/reg_file.v', name: 'reg_file.v', isPinned: true }]}
+        activeTabId="rtl/core/reg_file.v"
+        onTabChange={vi.fn()}
+        onTabClose={vi.fn()}
+        editorRef={createRef()}
+        contentCache={{ 'rtl/core/reg_file.v': 'module reg_file; endmodule' }}
+        onLoadFile={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('monaco-editor')).toHaveTextContent('module reg_file; endmodule');
     });
   });
 });

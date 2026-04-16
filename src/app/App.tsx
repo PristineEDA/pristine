@@ -15,6 +15,7 @@ import { isMonacoTextInputFocused } from './editor/focusEditor';
 import { WorkspaceProvider, useWorkspace } from './context/WorkspaceContext';
 import type { EditorSelectionSnapshot } from './context/useWorkspaceEditorState';
 import { SidebarProvider } from './components/ui/sidebar';
+import { refreshWorkspaceGitStatus } from './git/workspaceGitStatus';
 import { useGlobalAppShortcuts } from './useGlobalAppShortcuts';
 
 const QUICK_OPEN_RECENT_LIMIT = 20;
@@ -156,6 +157,38 @@ function AppLayout() {
   }, [openPreviewFile, recordRecentFile]);
 
   useEffect(() => {
+    const electronApi = typeof window === 'undefined' ? undefined : window.electronAPI;
+
+    if (!electronApi?.onWindowFocus) {
+      if (typeof window === 'undefined') {
+        return undefined;
+      }
+
+      const handleWindowFocus = () => {
+        refreshWorkspaceGitStatus();
+      };
+
+      window.addEventListener('focus', handleWindowFocus);
+
+      return () => {
+        window.removeEventListener('focus', handleWindowFocus);
+      };
+    }
+
+    const disposeWindowFocus = electronApi.onWindowFocus(() => {
+      refreshWorkspaceGitStatus();
+    });
+
+    return () => {
+      disposeWindowFocus();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return undefined;
+    }
+
     if (!isQuickOpenVisible || workspaceFiles !== null) {
       return;
     }

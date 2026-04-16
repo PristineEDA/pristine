@@ -1,10 +1,13 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { resetWorkspaceGitStatusStoreForTests } from '../../../git/workspaceGitStatus';
 import { LeftSidePanel } from './LeftSidePanel';
 
 describe('LeftSidePanel', () => {
   beforeEach(() => {
     const electronApi = window.electronAPI!;
+
+    resetWorkspaceGitStatusStoreForTests();
 
     vi.mocked(electronApi.fs.exists).mockResolvedValue(true);
     vi.mocked(electronApi.fs.readDir).mockImplementation(async (dirPath: string) => {

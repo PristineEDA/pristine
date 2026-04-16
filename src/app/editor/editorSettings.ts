@@ -10,6 +10,12 @@ export const EDITOR_THEME_CONFIG_KEY = 'editor.theme'
 export const EDITOR_WORD_WRAP_CONFIG_KEY = 'editor.wordWrap'
 export const EDITOR_RENDER_WHITESPACE_CONFIG_KEY = 'editor.renderWhitespace'
 export const EDITOR_RENDER_CONTROL_CHARACTERS_CONFIG_KEY = 'editor.renderControlCharacters'
+export const EDITOR_FONT_LIGATURES_CONFIG_KEY = 'editor.fontLigatures'
+export const EDITOR_TAB_SIZE_CONFIG_KEY = 'editor.tabSize'
+export const EDITOR_CURSOR_BLINKING_CONFIG_KEY = 'editor.cursorBlinking'
+export const EDITOR_SMOOTH_SCROLLING_CONFIG_KEY = 'editor.smoothScrolling'
+export const EDITOR_SCROLL_BEYOND_LAST_LINE_CONFIG_KEY = 'editor.scrollBeyondLastLine'
+export const EDITOR_FOLDING_STRATEGY_CONFIG_KEY = 'editor.foldingStrategy'
 export const EDITOR_LINE_NUMBERS_CONFIG_KEY = 'editor.lineNumbers'
 export const EDITOR_MINIMAP_ENABLED_CONFIG_KEY = 'editor.minimap.enabled'
 export const EDITOR_GLYPH_MARGIN_CONFIG_KEY = 'editor.glyphMargin'
@@ -255,6 +261,20 @@ export const editorRenderWhitespaceOptions = [
   { value: 'all', label: 'All', description: 'Render whitespace markers everywhere.' },
 ] as const
 
+export const editorTabSizeOptions = [
+  { value: 2, label: '2 spaces', description: 'Compact indentation for dense code layouts.' },
+  { value: 4, label: '4 spaces', description: 'Balanced default for most source files.' },
+  { value: 8, label: '8 spaces', description: 'Wide indentation for traditional hardware codebases.' },
+] as const
+
+export const editorCursorBlinkingOptions = [
+  { value: 'blink', label: 'Blink', description: 'Use Monaco\'s classic blinking caret animation.' },
+  { value: 'smooth', label: 'Smooth', description: 'Use a softer eased blinking animation.' },
+  { value: 'phase', label: 'Phase', description: 'Fade the caret in and out using phase timing.' },
+  { value: 'expand', label: 'Expand', description: 'Animate the caret with a subtle expansion effect.' },
+  { value: 'solid', label: 'Solid', description: 'Keep the caret constantly visible without blinking.' },
+] as const
+
 export const editorLineNumbersOptions = [
   { value: 'on', label: 'On', description: 'Always show absolute line numbers.' },
   { value: 'off', label: 'Off', description: 'Hide the line number gutter.' },
@@ -262,16 +282,38 @@ export const editorLineNumbersOptions = [
   { value: 'interval', label: 'Interval', description: 'Render line numbers at regular intervals.' },
 ] as const
 
+export const editorFoldingStrategyOptions = [
+  {
+    value: 'indentation',
+    label: 'Indentation',
+    description: 'Infer folding ranges from indentation and structural markers in the file.',
+  },
+  {
+    value: 'auto',
+    label: 'Auto',
+    description: 'Prefer Monaco language-aware folding providers when they are available.',
+  },
+] as const
+
 export type EditorFontFamilyId = (typeof editorFontFamilyOptions)[number]['value']
 export type EditorThemeId = (typeof editorThemeOptions)[number]['value']
 export type EditorWordWrapMode = (typeof editorWordWrapOptions)[number]['value']
 export type EditorRenderWhitespaceMode = (typeof editorRenderWhitespaceOptions)[number]['value']
+export type EditorTabSize = (typeof editorTabSizeOptions)[number]['value']
+export type EditorCursorBlinkingMode = (typeof editorCursorBlinkingOptions)[number]['value']
 export type EditorLineNumbersMode = (typeof editorLineNumbersOptions)[number]['value']
+export type EditorFoldingStrategy = (typeof editorFoldingStrategyOptions)[number]['value']
 export const DEFAULT_EDITOR_FONT_FAMILY = 'jetbrains-mono' as const satisfies EditorFontFamilyId
 export const DEFAULT_EDITOR_THEME = 'dracula' as const satisfies EditorThemeId
 export const DEFAULT_EDITOR_WORD_WRAP = 'off' as const satisfies EditorWordWrapMode
 export const DEFAULT_EDITOR_RENDER_WHITESPACE = 'selection' as const satisfies EditorRenderWhitespaceMode
+export const DEFAULT_EDITOR_FONT_LIGATURES = true
+export const DEFAULT_EDITOR_TAB_SIZE = 4 as const satisfies EditorTabSize
+export const DEFAULT_EDITOR_CURSOR_BLINKING = 'smooth' as const satisfies EditorCursorBlinkingMode
 export const DEFAULT_EDITOR_LINE_NUMBERS = 'on' as const satisfies EditorLineNumbersMode
+export const DEFAULT_EDITOR_SMOOTH_SCROLLING = true
+export const DEFAULT_EDITOR_SCROLL_BEYOND_LAST_LINE = false
+export const DEFAULT_EDITOR_FOLDING_STRATEGY = 'indentation' as const satisfies EditorFoldingStrategy
 export const DEFAULT_EDITOR_RENDER_CONTROL_CHARACTERS = false
 export const DEFAULT_EDITOR_MINIMAP_ENABLED = true
 export const DEFAULT_EDITOR_GLYPH_MARGIN = true
@@ -294,9 +336,21 @@ const editorRenderWhitespaceValues = new Set<EditorRenderWhitespaceMode>(editorR
 const editorRenderWhitespaceOptionsById = new Map<EditorRenderWhitespaceMode, (typeof editorRenderWhitespaceOptions)[number]>(
   editorRenderWhitespaceOptions.map((option) => [option.value, option]),
 )
+const editorTabSizeValues = new Set<EditorTabSize>(editorTabSizeOptions.map((option) => option.value))
+const editorTabSizeOptionsById = new Map<EditorTabSize, (typeof editorTabSizeOptions)[number]>(
+  editorTabSizeOptions.map((option) => [option.value, option]),
+)
+const editorCursorBlinkingValues = new Set<EditorCursorBlinkingMode>(editorCursorBlinkingOptions.map((option) => option.value))
+const editorCursorBlinkingOptionsById = new Map<EditorCursorBlinkingMode, (typeof editorCursorBlinkingOptions)[number]>(
+  editorCursorBlinkingOptions.map((option) => [option.value, option]),
+)
 const editorLineNumbersValues = new Set<EditorLineNumbersMode>(editorLineNumbersOptions.map((option) => option.value))
 const editorLineNumbersOptionsById = new Map<EditorLineNumbersMode, (typeof editorLineNumbersOptions)[number]>(
   editorLineNumbersOptions.map((option) => [option.value, option]),
+)
+const editorFoldingStrategyValues = new Set<EditorFoldingStrategy>(editorFoldingStrategyOptions.map((option) => option.value))
+const editorFoldingStrategyOptionsById = new Map<EditorFoldingStrategy, (typeof editorFoldingStrategyOptions)[number]>(
+  editorFoldingStrategyOptions.map((option) => [option.value, option]),
 )
 
 export function isEditorFontFamilyId(value: unknown): value is EditorFontFamilyId {
@@ -343,6 +397,22 @@ function parseEditorBooleanSetting(value: unknown, defaultValue: boolean): boole
   return typeof value === 'boolean' ? value : defaultValue
 }
 
+function parseEditorNumericChoice<T extends number>(
+  value: unknown,
+  validValues: Set<T>,
+  defaultValue: T,
+): T {
+  const numericValue = typeof value === 'number'
+    ? value
+    : typeof value === 'string' && /^\d+$/.test(value.trim())
+      ? Number.parseInt(value, 10)
+      : null
+
+  return typeof numericValue === 'number' && validValues.has(numericValue as T)
+    ? numericValue as T
+    : defaultValue
+}
+
 export function isEditorWordWrapMode(value: unknown): value is EditorWordWrapMode {
   return typeof value === 'string' && editorWordWrapValues.has(value as EditorWordWrapMode)
 }
@@ -367,6 +437,26 @@ export function parseEditorRenderWhitespace(value: unknown): EditorRenderWhitesp
   return isEditorRenderWhitespaceMode(value) ? value : DEFAULT_EDITOR_RENDER_WHITESPACE
 }
 
+export function getEditorTabSizeLabel(tabSize: EditorTabSize): string {
+  return editorTabSizeOptionsById.get(tabSize)?.label ?? '4 spaces'
+}
+
+export function parseEditorTabSize(value: unknown): EditorTabSize {
+  return parseEditorNumericChoice(value, editorTabSizeValues, DEFAULT_EDITOR_TAB_SIZE)
+}
+
+export function isEditorCursorBlinkingMode(value: unknown): value is EditorCursorBlinkingMode {
+  return typeof value === 'string' && editorCursorBlinkingValues.has(value as EditorCursorBlinkingMode)
+}
+
+export function getEditorCursorBlinkingLabel(cursorBlinking: EditorCursorBlinkingMode): string {
+  return editorCursorBlinkingOptionsById.get(cursorBlinking)?.label ?? 'Smooth'
+}
+
+export function parseEditorCursorBlinking(value: unknown): EditorCursorBlinkingMode {
+  return isEditorCursorBlinkingMode(value) ? value : DEFAULT_EDITOR_CURSOR_BLINKING
+}
+
 export function isEditorLineNumbersMode(value: unknown): value is EditorLineNumbersMode {
   return typeof value === 'string' && editorLineNumbersValues.has(value as EditorLineNumbersMode)
 }
@@ -377,6 +467,30 @@ export function getEditorLineNumbersLabel(lineNumbers: EditorLineNumbersMode): s
 
 export function parseEditorLineNumbers(value: unknown): EditorLineNumbersMode {
   return isEditorLineNumbersMode(value) ? value : DEFAULT_EDITOR_LINE_NUMBERS
+}
+
+export function isEditorFoldingStrategy(value: unknown): value is EditorFoldingStrategy {
+  return typeof value === 'string' && editorFoldingStrategyValues.has(value as EditorFoldingStrategy)
+}
+
+export function getEditorFoldingStrategyLabel(foldingStrategy: EditorFoldingStrategy): string {
+  return editorFoldingStrategyOptionsById.get(foldingStrategy)?.label ?? 'Indentation'
+}
+
+export function parseEditorFoldingStrategy(value: unknown): EditorFoldingStrategy {
+  return isEditorFoldingStrategy(value) ? value : DEFAULT_EDITOR_FOLDING_STRATEGY
+}
+
+export function parseEditorFontLigatures(value: unknown): boolean {
+  return parseEditorBooleanSetting(value, DEFAULT_EDITOR_FONT_LIGATURES)
+}
+
+export function parseEditorSmoothScrolling(value: unknown): boolean {
+  return parseEditorBooleanSetting(value, DEFAULT_EDITOR_SMOOTH_SCROLLING)
+}
+
+export function parseEditorScrollBeyondLastLine(value: unknown): boolean {
+  return parseEditorBooleanSetting(value, DEFAULT_EDITOR_SCROLL_BEYOND_LAST_LINE)
 }
 
 export function parseEditorRenderControlCharacters(value: unknown): boolean {

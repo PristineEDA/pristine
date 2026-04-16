@@ -1,5 +1,17 @@
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+vi.mock('../../../../git/workspaceGitStatus', () => ({
+  useWorkspaceGitStatus: () => ({
+    branchName: 'feature/git-ui',
+    hasProjectFiles: true,
+    isGitRepo: true,
+    isLoading: false,
+    pathStates: {},
+  }),
+  getWorkspaceGitBranchLabel: () => 'feature/git-ui',
+}));
+
 import { AppStatusBar } from './AppStatusBar';
 
 describe('AppStatusBar', () => {
@@ -15,7 +27,7 @@ describe('AppStatusBar', () => {
     );
 
     expect(screen.getByTestId('status-bar')).toHaveAttribute('data-status-bar-id', 'code-explorer');
-    expect(screen.getByText('main')).toBeInTheDocument();
+    expect(screen.getByText('feature/git-ui')).toBeInTheDocument();
     expect(screen.getByText('Ln 18, Col 4')).toBeInTheDocument();
     expect(screen.getByText('SystemVerilog')).toBeInTheDocument();
   });

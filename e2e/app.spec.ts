@@ -1,4 +1,5 @@
 import { test, expect, _electron as electron, type Locator, type Page } from '@playwright/test';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -189,6 +190,44 @@ async function launchApp(options?: { projectRoot?: string }) {
 function createWorkspaceCopy(targetPath: string) {
   fs.rmSync(targetPath, { recursive: true, force: true });
   fs.cpSync(fixtureWorkspace, targetPath, { recursive: true });
+}
+
+function initializeGitWorkspaceCopy(targetPath: string, branchName: string) {
+  const gitIgnorePath = path.join(targetPath, '.gitignore');
+  const existingGitIgnore = fs.existsSync(gitIgnorePath)
+    ? fs.readFileSync(gitIgnorePath, 'utf-8').trimEnd()
+    : '';
+  const nextGitIgnore = [existingGitIgnore, 'ignored-dir/', 'ignored.log']
+    .filter(Boolean)
+    .join('\n');
+
+  fs.writeFileSync(gitIgnorePath, `${nextGitIgnore}\n`, 'utf-8');
+
+  execFileSync('git', ['init'], { cwd: targetPath, stdio: 'pipe', windowsHide: true });
+  execFileSync('git', ['config', 'user.name', 'Pristine E2E'], { cwd: targetPath, stdio: 'pipe', windowsHide: true });
+  execFileSync('git', ['config', 'user.email', 'pristine-e2e@example.com'], { cwd: targetPath, stdio: 'pipe', windowsHide: true });
+  execFileSync('git', ['add', '.'], { cwd: targetPath, stdio: 'pipe', windowsHide: true });
+  execFileSync('git', ['commit', '-m', 'Initial fixture'], { cwd: targetPath, stdio: 'pipe', windowsHide: true });
+  execFileSync('git', ['branch', '-M', branchName], { cwd: targetPath, stdio: 'pipe', windowsHide: true });
+
+  fs.appendFileSync(path.join(targetPath, 'rtl', 'core', 'reg_file.v'), '\n// git modified fixture\n', 'utf-8');
+  fs.mkdirSync(path.join(targetPath, 'ignored-dir'), { recursive: true });
+  fs.writeFileSync(path.join(targetPath, 'ignored-dir', 'cache.txt'), 'ignored cache\n', 'utf-8');
+  fs.writeFileSync(path.join(targetPath, 'ignored.log'), 'ignored log\n', 'utf-8');
+}
+
+function notifyAppWindowFocused(
+  app: Awaited<ReturnType<typeof electron.launch>>,
+) {
+  return app.evaluate(async ({ BrowserWindow }) => {
+    const mainWindow = BrowserWindow.getAllWindows().find((window) => window.getTitle() === 'Pristine');
+
+    if (!mainWindow) {
+      throw new Error('Expected Pristine main window');
+    }
+
+    mainWindow.webContents.send('stream:window:focus');
+  });
 }
 
 async function launchAppForSplashHandoff() {
@@ -1191,6 +1230,110 @@ test('ctrl+s saves an edited explorer file and clears the dirty indicator', asyn
     await expect.poll(() => fs.readFileSync(filePath, 'utf-8'), {
       timeout: 15000,
     }).toContain(marker);
+  } finally {
+    await app.close();
+  }
+});
+
+test('explorer shows the real git branch and git file decorations for tracked and ignored paths', async () => {
+  test.slow();
+
+  const workspaceCopy = test.info().outputPath('git-status-workspace');
+  createWorkspaceCopy(workspaceCopy);
+  initializeGitWorkspaceCopy(workspaceCopy, 'e2e-git-ui');
+
+  const { app, window } = await launchApp({ projectRoot: workspaceCopy });
+
+  try {
+    await ensureExplorerVisible(window);
+
+    await expect(window.getByTestId('status-bar-branch-label')).toHaveText('e2e-git-ui');
+    await expect(window.getByTestId('file-tree-label-ignored-dir')).toHaveClass(/text-ide-text-muted/);
+    await expect(window.getByTestId('file-tree-label-ignored_log')).toHaveClass(/text-ide-text-muted/);
+
+    await window.getByTestId('file-tree-node-rtl').click();
+    await window.getByTestId('file-tree-node-rtl_core').click();
+
+    await expect(window.getByTestId('file-tree-label-rtl_core_reg_file_v')).toHaveClass(/text-ide-warning/);
+
+    await window.getByTestId('file-tree-node-rtl_core_reg_file_v').dblclick();
+
+    await expect(window.getByTestId('editor-tab-title-rtl/core/reg_file.v')).toHaveClass(/text-ide-warning/);
+  } finally {
+    await app.close();
+  }
+});
+
+test('explorer status bar updates the git branch label after refocusing the app window', async () => {
+  test.slow();
+
+  const workspaceCopy = test.info().outputPath('git-branch-refresh-workspace');
+  createWorkspaceCopy(workspaceCopy);
+  initializeGitWorkspaceCopy(workspaceCopy, 'e2e-git-ui');
+  execFileSync('git', ['branch', 'e2e-git-ui-next'], { cwd: workspaceCopy, stdio: 'pipe', windowsHide: true });
+
+  const { app, window } = await launchApp({ projectRoot: workspaceCopy });
+
+  try {
+    await ensureExplorerVisible(window);
+    await expect(window.getByTestId('status-bar-branch-label')).toHaveText('e2e-git-ui');
+
+    execFileSync('git', ['switch', 'e2e-git-ui-next'], { cwd: workspaceCopy, stdio: 'pipe', windowsHide: true });
+    await notifyAppWindowFocused(app);
+
+    await expect(window.getByTestId('status-bar-branch-label')).toHaveText('e2e-git-ui-next');
+  } finally {
+    await app.close();
+  }
+});
+
+test('ctrl+z does not restore the loading placeholder after undo returns a file to its initial state', async () => {
+  test.slow();
+
+  const workspaceCopy = test.info().outputPath('undo-workspace');
+  createWorkspaceCopy(workspaceCopy);
+
+  const marker = `// e2e undo marker ${Date.now()}`;
+  const { app, window } = await launchApp({ projectRoot: workspaceCopy });
+
+  try {
+    await ensureExplorerVisible(window);
+    await openNestedWorkspaceFile(window, [
+      'file-tree-node-rtl',
+      'file-tree-node-rtl_core',
+      'file-tree-node-rtl_core_reg_file_v',
+    ]);
+
+    const dirtyIndicator = window.getByTestId('editor-tab-dirty-indicator-rtl/core/reg_file.v');
+    const editorLines = window.locator('.monaco-editor .view-lines').first();
+
+    await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toBeVisible();
+    await waitForMonacoEditor(window);
+    await focusMonacoEditor(window);
+    await waitForMonacoEditorTextFocus(window);
+    await window.keyboard.press('Control+End');
+    await window.keyboard.type(` ${marker}`);
+
+    await expect(dirtyIndicator).toBeVisible();
+    await expect(editorLines).toContainText(marker, { timeout: MONACO_READY_TIMEOUT_MS });
+
+    for (let index = 0; index < 10; index += 1) {
+      await window.keyboard.press('Control+Z');
+
+      if (await dirtyIndicator.count() === 0) {
+        break;
+      }
+    }
+
+    await expect(dirtyIndicator).toHaveCount(0);
+    await expect(editorLines).not.toContainText(marker, { timeout: MONACO_READY_TIMEOUT_MS });
+
+    await window.keyboard.press('Control+Z');
+
+    await expect(dirtyIndicator).toHaveCount(0);
+    await expect(editorLines).not.toContainText(marker);
+    await expect(editorLines).not.toContainText('Loading file contents...');
+    await expect(editorLines).toContainText('module reg_file', { timeout: MONACO_READY_TIMEOUT_MS });
   } finally {
     await app.close();
   }
@@ -2414,6 +2557,16 @@ test('code editor settings persist across app relaunch', async () => {
   );
   await selectComboboxOption(
     firstWindow,
+    'settings-editor-tab-size-combobox',
+    'settings-editor-tab-size-option-2',
+  );
+  await selectComboboxOption(
+    firstWindow,
+    'settings-editor-cursor-blinking-combobox',
+    'settings-editor-cursor-blinking-option-solid',
+  );
+  await selectComboboxOption(
+    firstWindow,
     'settings-editor-render-whitespace-combobox',
     'settings-editor-render-whitespace-option-all',
   );
@@ -2422,9 +2575,17 @@ test('code editor settings persist across app relaunch', async () => {
     'settings-editor-line-numbers-combobox',
     'settings-editor-line-numbers-option-relative',
   );
+  await selectComboboxOption(
+    firstWindow,
+    'settings-editor-folding-strategy-combobox',
+    'settings-editor-folding-strategy-option-auto',
+  );
   await setEditorFontSizePreset(firstWindow, 'max');
-  await firstWindow.getByTestId('settings-editor-render-control-characters-switch').scrollIntoViewIfNeeded();
+  await firstWindow.getByTestId('settings-editor-font-ligatures-switch').scrollIntoViewIfNeeded();
+  await setSwitchChecked(firstWindow.getByTestId('settings-editor-font-ligatures-switch'), false);
   await setSwitchChecked(firstWindow.getByTestId('settings-editor-render-control-characters-switch'), true);
+  await setSwitchChecked(firstWindow.getByTestId('settings-editor-smooth-scrolling-switch'), false);
+  await setSwitchChecked(firstWindow.getByTestId('settings-editor-scroll-beyond-last-line-switch'), true);
   await setSwitchChecked(firstWindow.getByTestId('settings-editor-minimap-switch'), false);
   await setSwitchChecked(firstWindow.getByTestId('settings-editor-glyph-margin-switch'), false);
   await setSwitchChecked(firstWindow.getByTestId('settings-editor-bracket-pair-guides-switch'), false);
@@ -2433,10 +2594,16 @@ test('code editor settings persist across app relaunch', async () => {
   await expect.poll(async () => readConfigValue(firstWindow, 'editor.fontFamily')).toBe('monaspace-neon');
   await expect.poll(async () => readConfigValue(firstWindow, 'editor.theme')).toBe('github-dark');
   await expect.poll(async () => readConfigValue(firstWindow, 'editor.fontSize')).toBe(24);
+  await expect.poll(async () => readConfigValue(firstWindow, 'editor.fontLigatures')).toBe(false);
   await expect.poll(async () => readConfigValue(firstWindow, 'editor.wordWrap')).toBe('on');
+  await expect.poll(async () => readConfigValue(firstWindow, 'editor.tabSize')).toBe(2);
   await expect.poll(async () => readConfigValue(firstWindow, 'editor.renderWhitespace')).toBe('all');
   await expect.poll(async () => readConfigValue(firstWindow, 'editor.renderControlCharacters')).toBe(true);
+  await expect.poll(async () => readConfigValue(firstWindow, 'editor.cursorBlinking')).toBe('solid');
   await expect.poll(async () => readConfigValue(firstWindow, 'editor.lineNumbers')).toBe('relative');
+  await expect.poll(async () => readConfigValue(firstWindow, 'editor.smoothScrolling')).toBe(false);
+  await expect.poll(async () => readConfigValue(firstWindow, 'editor.scrollBeyondLastLine')).toBe(true);
+  await expect.poll(async () => readConfigValue(firstWindow, 'editor.foldingStrategy')).toBe('auto');
   await expect.poll(async () => readConfigValue(firstWindow, 'editor.minimap.enabled')).toBe(false);
   await expect.poll(async () => readConfigValue(firstWindow, 'editor.glyphMargin')).toBe(false);
   await expect.poll(async () => readConfigValue(firstWindow, 'editor.guides.bracketPairs')).toBe(false);
@@ -2445,9 +2612,15 @@ test('code editor settings persist across app relaunch', async () => {
   await expect(firstWindow.getByTestId('settings-editor-font-size-value')).toHaveText('24px');
   await expect(firstWindow.getByTestId('settings-editor-theme-combobox')).toContainText('GitHub Dark');
   await expect(firstWindow.getByTestId('settings-editor-word-wrap-combobox')).toContainText('On');
+  await expect(firstWindow.getByTestId('settings-editor-tab-size-combobox')).toContainText('2 spaces');
+  await expect(firstWindow.getByTestId('settings-editor-cursor-blinking-combobox')).toContainText('Solid');
   await expect(firstWindow.getByTestId('settings-editor-render-whitespace-combobox')).toContainText('All');
   await expect(firstWindow.getByTestId('settings-editor-line-numbers-combobox')).toContainText('Relative');
+  await expect(firstWindow.getByTestId('settings-editor-folding-strategy-combobox')).toContainText('Auto');
+  await expect(firstWindow.getByTestId('settings-editor-font-ligatures-switch')).toHaveAttribute('data-state', 'unchecked');
   await expect(firstWindow.getByTestId('settings-editor-render-control-characters-switch')).toHaveAttribute('data-state', 'checked');
+  await expect(firstWindow.getByTestId('settings-editor-smooth-scrolling-switch')).toHaveAttribute('data-state', 'unchecked');
+  await expect(firstWindow.getByTestId('settings-editor-scroll-beyond-last-line-switch')).toHaveAttribute('data-state', 'checked');
   await expect(firstWindow.getByTestId('settings-editor-minimap-switch')).toHaveAttribute('data-state', 'unchecked');
   await expect(firstWindow.getByTestId('settings-editor-glyph-margin-switch')).toHaveAttribute('data-state', 'unchecked');
   await expect(firstWindow.getByTestId('settings-editor-bracket-pair-guides-switch')).toHaveAttribute('data-state', 'unchecked');
@@ -2521,9 +2694,15 @@ test('code editor settings persist across app relaunch', async () => {
   await expect(secondWindow.getByTestId('settings-editor-font-size-value')).toHaveText('24px');
   await expect(secondWindow.getByTestId('settings-editor-theme-combobox')).toContainText('GitHub Dark');
   await expect(secondWindow.getByTestId('settings-editor-word-wrap-combobox')).toContainText('On');
+  await expect(secondWindow.getByTestId('settings-editor-tab-size-combobox')).toContainText('2 spaces');
+  await expect(secondWindow.getByTestId('settings-editor-cursor-blinking-combobox')).toContainText('Solid');
   await expect(secondWindow.getByTestId('settings-editor-render-whitespace-combobox')).toContainText('All');
   await expect(secondWindow.getByTestId('settings-editor-line-numbers-combobox')).toContainText('Relative');
+  await expect(secondWindow.getByTestId('settings-editor-folding-strategy-combobox')).toContainText('Auto');
+  await expect(secondWindow.getByTestId('settings-editor-font-ligatures-switch')).toHaveAttribute('data-state', 'unchecked');
   await expect(secondWindow.getByTestId('settings-editor-render-control-characters-switch')).toHaveAttribute('data-state', 'checked');
+  await expect(secondWindow.getByTestId('settings-editor-smooth-scrolling-switch')).toHaveAttribute('data-state', 'unchecked');
+  await expect(secondWindow.getByTestId('settings-editor-scroll-beyond-last-line-switch')).toHaveAttribute('data-state', 'checked');
   await expect(secondWindow.getByTestId('settings-editor-minimap-switch')).toHaveAttribute('data-state', 'unchecked');
   await expect(secondWindow.getByTestId('settings-editor-glyph-margin-switch')).toHaveAttribute('data-state', 'unchecked');
   await expect(secondWindow.getByTestId('settings-editor-bracket-pair-guides-switch')).toHaveAttribute('data-state', 'unchecked');
@@ -2547,6 +2726,16 @@ test('code editor settings persist across app relaunch', async () => {
   );
   await selectComboboxOption(
     secondWindow,
+    'settings-editor-tab-size-combobox',
+    'settings-editor-tab-size-option-4',
+  );
+  await selectComboboxOption(
+    secondWindow,
+    'settings-editor-cursor-blinking-combobox',
+    'settings-editor-cursor-blinking-option-smooth',
+  );
+  await selectComboboxOption(
+    secondWindow,
     'settings-editor-render-whitespace-combobox',
     'settings-editor-render-whitespace-option-selection',
   );
@@ -2555,8 +2744,16 @@ test('code editor settings persist across app relaunch', async () => {
     'settings-editor-line-numbers-combobox',
     'settings-editor-line-numbers-option-on',
   );
-  await secondWindow.getByTestId('settings-editor-render-control-characters-switch').scrollIntoViewIfNeeded();
+  await selectComboboxOption(
+    secondWindow,
+    'settings-editor-folding-strategy-combobox',
+    'settings-editor-folding-strategy-option-indentation',
+  );
+  await secondWindow.getByTestId('settings-editor-font-ligatures-switch').scrollIntoViewIfNeeded();
+  await setSwitchChecked(secondWindow.getByTestId('settings-editor-font-ligatures-switch'), true);
   await setSwitchChecked(secondWindow.getByTestId('settings-editor-render-control-characters-switch'), false);
+  await setSwitchChecked(secondWindow.getByTestId('settings-editor-smooth-scrolling-switch'), true);
+  await setSwitchChecked(secondWindow.getByTestId('settings-editor-scroll-beyond-last-line-switch'), false);
   await setSwitchChecked(secondWindow.getByTestId('settings-editor-minimap-switch'), true);
   await setSwitchChecked(secondWindow.getByTestId('settings-editor-glyph-margin-switch'), true);
   await setSwitchChecked(secondWindow.getByTestId('settings-editor-bracket-pair-guides-switch'), true);
@@ -2565,10 +2762,16 @@ test('code editor settings persist across app relaunch', async () => {
   await expect.poll(async () => readConfigValue(secondWindow, 'editor.fontFamily')).toBe('jetbrains-mono');
   await expect.poll(async () => readConfigValue(secondWindow, 'editor.fontSize')).toBe(10);
   await expect.poll(async () => readConfigValue(secondWindow, 'editor.theme')).toBe('github-light');
+  await expect.poll(async () => readConfigValue(secondWindow, 'editor.fontLigatures')).toBe(true);
   await expect.poll(async () => readConfigValue(secondWindow, 'editor.wordWrap')).toBe('off');
+  await expect.poll(async () => readConfigValue(secondWindow, 'editor.tabSize')).toBe(4);
   await expect.poll(async () => readConfigValue(secondWindow, 'editor.renderWhitespace')).toBe('selection');
   await expect.poll(async () => readConfigValue(secondWindow, 'editor.renderControlCharacters')).toBe(false);
+  await expect.poll(async () => readConfigValue(secondWindow, 'editor.cursorBlinking')).toBe('smooth');
   await expect.poll(async () => readConfigValue(secondWindow, 'editor.lineNumbers')).toBe('on');
+  await expect.poll(async () => readConfigValue(secondWindow, 'editor.smoothScrolling')).toBe(true);
+  await expect.poll(async () => readConfigValue(secondWindow, 'editor.scrollBeyondLastLine')).toBe(false);
+  await expect.poll(async () => readConfigValue(secondWindow, 'editor.foldingStrategy')).toBe('indentation');
   await expect.poll(async () => readConfigValue(secondWindow, 'editor.minimap.enabled')).toBe(true);
   await expect.poll(async () => readConfigValue(secondWindow, 'editor.glyphMargin')).toBe(true);
   await expect.poll(async () => readConfigValue(secondWindow, 'editor.guides.bracketPairs')).toBe(true);

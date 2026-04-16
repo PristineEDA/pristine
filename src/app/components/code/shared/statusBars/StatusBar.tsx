@@ -4,6 +4,7 @@ import {
   Save,
   LoaderCircle,
 } from 'lucide-react';
+import { getWorkspaceGitBranchLabel, useWorkspaceGitStatus } from '../../../../git/workspaceGitStatus';
 import { summarizeLspProblems, useLspProblems } from '../../../../lsp/lspProblems';
 import { getEditorLanguageLabel } from '../../../../workspace/workspaceFiles';
 import { StatusBarFrame } from './StatusBarFrame';
@@ -29,8 +30,10 @@ export function StatusBar({
   onOpenUnsavedFiles,
   onSaveAll,
 }: StatusBarProps) {
+  const gitStatus = useWorkspaceGitStatus();
   const problemsList = useLspProblems(activeFileId);
   const { errorCount, warningCount } = summarizeLspProblems(problemsList);
+  const branchLabel = getWorkspaceGitBranchLabel(gitStatus);
   const lang = activeFileId ? getEditorLanguageLabel(activeFileId) : 'Plain Text';
   const interactiveItemClassName = 'flex items-center gap-1 px-2 h-full transition-colors';
   const interactiveButtonClassName = `${interactiveItemClassName} hover:bg-primary-foreground/10 disabled:cursor-default disabled:opacity-60`;
@@ -42,7 +45,7 @@ export function StatusBar({
         <>
           <div className="flex items-center gap-1 px-2.5 h-full hover:bg-primary-foreground/10 cursor-pointer transition-colors">
             <GitBranch size={12} />
-            <span className="text-[11px]">main</span>
+            <span data-testid="status-bar-branch-label" className="text-[11px]">{branchLabel}</span>
           </div>
           <div className="flex items-center gap-1 px-2 h-full hover:bg-primary-foreground/10 cursor-pointer transition-colors">
             <CheckCircle2 size={11} />
