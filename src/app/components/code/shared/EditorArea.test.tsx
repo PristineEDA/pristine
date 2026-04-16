@@ -3,6 +3,9 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { EditorArea } from './EditorArea';
 import { draculaThemeDefinition } from '../../../editor/draculaTheme';
+import { resetEditorLanguageRegistrationForTests } from '../../../editor/registerLanguages';
+import { resetEditorThemeRegistrationForTests } from '../../../editor/monacoThemes';
+import { resetSystemVerilogLspProviderRegistrationForTests } from '../../../lsp/systemVerilogLspBridge';
 
 vi.mock('../../../context/EditorSettingsContext', () => ({
   useEditorSettings: () => ({
@@ -108,13 +111,16 @@ vi.mock('@monaco-editor/react', () => ({
   useMonaco: () => mockMonaco,
 }));
 
+vi.mock('../../../editor/configureMonacoLoader', () => ({}));
+
 describe('EditorArea', () => {
   beforeEach(() => {
     const electronApi = window.electronAPI!;
 
     vi.clearAllMocks();
-    delete (mockMonaco as any).__pristineLanguagesRegistered;
-    delete (mockMonaco as any).__pristineThemesRegistered;
+    resetEditorLanguageRegistrationForTests();
+    resetEditorThemeRegistrationForTests();
+    resetSystemVerilogLspProviderRegistrationForTests();
     mockMonaco.languages.getLanguages.mockReturnValue([]);
     mockMonaco.editor.getModels.mockReturnValue([mockModel]);
     mockEditorDomNode.contains.mockReturnValue(true);

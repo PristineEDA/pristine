@@ -1,6 +1,7 @@
 import Editor, { useMonaco } from '@monaco-editor/react';
 import { useEffect, useRef, useState } from 'react';
 import { useProblemsList } from '../../../../data/mockDataLoader';
+import '../../../editor/configureMonacoLoader';
 import { getEditorFontFamilyStack } from '../../../editor/editorSettings';
 import { registerEditorThemes } from '../../../editor/monacoThemes';
 import { useRegisterEditorLanguages } from '../../../editor/registerLanguages';

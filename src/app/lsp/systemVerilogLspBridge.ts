@@ -9,12 +9,13 @@ import type {
   LspTextEdit,
   WorkspaceLocation,
 } from '../../../types/systemverilog-lsp';
+import { claimMonacoRegistration, resetMonacoRegistrationForTests } from '../editor/monacoRegistrationTracker';
 import { normalizeWorkspacePath } from '../workspace/workspaceFiles';
 
 const CHANGE_DEBOUNCE_MS = 120;
 const DEBUG_EVENT_LIMIT = 200;
 const LSP_MARKER_OWNER = 'slang-lsp';
-const LSP_PROVIDER_REGISTRATION_MARKER = '__pristineSystemVerilogLspProvidersRegistered';
+const LSP_PROVIDER_REGISTRATION_KEY = 'systemverilog-lsp-providers';
 
 type NavigateToLocation = (filePath: string, line: number, col: number) => void;
 
@@ -435,11 +436,9 @@ class SystemVerilogLspBridge {
     }
 
     this.ensureStreamSubscriptions(monaco);
-    if (monaco[LSP_PROVIDER_REGISTRATION_MARKER] === true) {
+    if (!claimMonacoRegistration(LSP_PROVIDER_REGISTRATION_KEY, monaco)) {
       return;
     }
-
-    monaco[LSP_PROVIDER_REGISTRATION_MARKER] = true;
 
     monaco.languages.registerCompletionItemProvider('systemverilog', {
       triggerCharacters: ['.', ':', '`', '$'],
@@ -617,6 +616,10 @@ class SystemVerilogLspBridge {
     trackedDocument.pendingText = text;
     this.scheduleChange(normalizeWorkspacePath(filePath));
   }
+}
+
+export function resetSystemVerilogLspProviderRegistrationForTests(): void {
+  resetMonacoRegistrationForTests(LSP_PROVIDER_REGISTRATION_KEY);
 }
 
 export const systemVerilogLspBridge = new SystemVerilogLspBridge();

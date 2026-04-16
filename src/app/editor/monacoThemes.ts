@@ -1,5 +1,6 @@
 import { createDraculaThemeDefinition } from './draculaTheme'
 import { DEFAULT_EDITOR_THEME, type EditorThemeId, editorThemeOptions } from './editorSettings'
+import { claimMonacoRegistration, resetMonacoRegistrationForTests } from './monacoRegistrationTracker'
 import {
   type DraculaPalette,
   getRootThemeStyles,
@@ -8,7 +9,7 @@ import {
 
 type MonacoBaseTheme = 'vs' | 'vs-dark'
 
-const THEME_REGISTRATION_MARKER = '__pristineThemesRegistered'
+const THEME_REGISTRATION_KEY = 'editor-themes'
 
 interface StaticThemeDefinition {
   base: MonacoBaseTheme
@@ -233,17 +234,15 @@ export function getEditorThemeDefinition(
 }
 
 export function registerEditorThemes(monaco: any): void {
-  if (!monaco) {
+  if (!claimMonacoRegistration(THEME_REGISTRATION_KEY, monaco)) {
     return
   }
-
-  if (monaco[THEME_REGISTRATION_MARKER] === true) {
-    return
-  }
-
-  monaco[THEME_REGISTRATION_MARKER] = true
 
   for (const option of editorThemeOptions) {
     monaco.editor.defineTheme(option.value, getEditorThemeDefinition(option.value) as any)
   }
+}
+
+export function resetEditorThemeRegistrationForTests(): void {
+  resetMonacoRegistrationForTests(THEME_REGISTRATION_KEY)
 }

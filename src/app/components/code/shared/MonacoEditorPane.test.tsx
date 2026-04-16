@@ -118,6 +118,8 @@ vi.mock('@monaco-editor/react', () => ({
   useMonaco: () => mockMonaco,
 }));
 
+vi.mock('../../../editor/configureMonacoLoader', () => ({}));
+
 vi.mock('../../../../data/mockDataLoader', () => ({
   useProblemsList: () => mockedProblems,
 }));
@@ -177,8 +179,6 @@ import { MonacoEditorPane } from './MonacoEditorPane';
 describe('MonacoEditorPane', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    delete (mockMonaco as any).__pristineLanguagesRegistered;
-    delete (mockMonaco as any).__pristineThemesRegistered;
     mockedProblems = [];
     mockedEditorBracketPairGuides = true;
     mockedEditorFontFamily = 'jetbrains-mono';
