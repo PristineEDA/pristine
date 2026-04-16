@@ -1,7 +1,6 @@
 import { createRef, useLayoutEffect } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Problem } from '../../../../data/mockData';
 import { getEditorFontFamilyStack } from '../../../editor/editorSettings';
 
 const mockedUseRegisterEditorLanguages = vi.fn();
@@ -11,7 +10,6 @@ const mockedEnsureLspRegistered = vi.fn();
 const mockedAttachLspDocument = vi.fn((_args?: unknown) => vi.fn());
 const mockedUpdateLspDocument = vi.fn();
 const mockedSetNavigateHandler = vi.fn();
-let mockedProblems: Problem[] = [];
 let mockedEditorBracketPairGuides = true;
 let mockedEditorFontFamily = 'jetbrains-mono';
 let mockedEditorFontSize = 13;
@@ -120,10 +118,6 @@ vi.mock('@monaco-editor/react', () => ({
 
 vi.mock('../../../editor/configureMonacoLoader', () => ({}));
 
-vi.mock('../../../../data/mockDataLoader', () => ({
-  useProblemsList: () => mockedProblems,
-}));
-
 vi.mock('../../../editor/monacoThemes', () => ({
   registerEditorThemes: (monaco: unknown) => mockedRegisterEditorThemes(monaco),
 }));
@@ -179,7 +173,6 @@ import { MonacoEditorPane } from './MonacoEditorPane';
 describe('MonacoEditorPane', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockedProblems = [];
     mockedEditorBracketPairGuides = true;
     mockedEditorFontFamily = 'jetbrains-mono';
     mockedEditorFontSize = 13;
@@ -336,99 +329,6 @@ describe('MonacoEditorPane', () => {
 
     clientWidthSpy.mockRestore();
     clientHeightSpy.mockRestore();
-  });
-
-  it('maps matching problems to monaco markers for every model', () => {
-    mockedProblems = [
-      {
-        id: 'error-1',
-        file: 'cpu_top.sv',
-        fileId: 'rtl/core/cpu_top.sv',
-        line: 11,
-        column: 3,
-        severity: 'error',
-        message: 'Undriven net detected',
-        code: 'E001',
-        source: 'rtl-lint',
-      },
-      {
-        id: 'warning-1',
-        file: 'cpu_top.sv',
-        fileId: 'rtl/core/cpu_top.sv',
-        line: 24,
-        column: 7,
-        severity: 'warning',
-        message: 'Potential latch inferred',
-        code: 'W002',
-        source: 'rtl-lint',
-      },
-      {
-        id: 'info-1',
-        file: 'cpu_top.sv',
-        fileId: 'rtl/core/cpu_top.sv',
-        line: 30,
-        column: 1,
-        severity: 'info',
-        message: 'Consider registering this output',
-        code: 'I003',
-        source: 'timing-advisor',
-      },
-      {
-        id: 'other-file',
-        file: 'alu.v',
-        fileId: 'rtl/core/alu.v',
-        line: 8,
-        column: 1,
-        severity: 'error',
-        message: 'Should be filtered out',
-      },
-    ];
-
-    render(
-      <MonacoEditorPane
-        activeTabId="rtl/core/cpu_top.sv"
-        code="module cpu_top; endmodule"
-        editorRef={createRef<any>()}
-      />,
-    );
-
-    expect(mockMonaco.editor.setModelMarkers).toHaveBeenCalledTimes(2);
-
-    const firstCall = mockMonaco.editor.setModelMarkers.mock.calls[0];
-    expect(firstCall?.[0]).toBe(mockModels[0]);
-    expect(firstCall?.[1]).toBe('rtl-lint');
-    expect(firstCall?.[2]).toEqual([
-      {
-        severity: 8,
-        startLineNumber: 11,
-        startColumn: 3,
-        endLineNumber: 11,
-        endColumn: 33,
-        message: 'Undriven net detected',
-        code: 'E001',
-        source: 'rtl-lint',
-      },
-      {
-        severity: 4,
-        startLineNumber: 24,
-        startColumn: 7,
-        endLineNumber: 24,
-        endColumn: 37,
-        message: 'Potential latch inferred',
-        code: 'W002',
-        source: 'rtl-lint',
-      },
-      {
-        severity: 2,
-        startLineNumber: 30,
-        startColumn: 1,
-        endLineNumber: 30,
-        endColumn: 31,
-        message: 'Consider registering this output',
-        code: 'I003',
-        source: 'timing-advisor',
-      },
-    ]);
   });
 
   it('updates content and renders the drag interaction shield when requested', () => {

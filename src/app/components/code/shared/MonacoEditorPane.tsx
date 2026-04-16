@@ -1,6 +1,5 @@
 import Editor, { useMonaco } from '@monaco-editor/react';
 import { useEffect, useRef, useState } from 'react';
-import { useProblemsList } from '../../../../data/mockDataLoader';
 import '../../../editor/configureMonacoLoader';
 import { getEditorFontFamilyStack } from '../../../editor/editorSettings';
 import { registerEditorThemes } from '../../../editor/monacoThemes';
@@ -72,7 +71,6 @@ export function MonacoEditorPane({
   dragInteractionShieldTestId,
 }: MonacoEditorPaneProps) {
   const monaco = useMonaco();
-  const problemsList = useProblemsList();
   const {
     bracketPairGuides,
     fontFamily,
@@ -169,52 +167,6 @@ export function MonacoEditorPane({
   useEffect(() => {
     queueEditorLayoutRef.current();
   }, [showDragInteractionShield]);
-
-  useEffect(() => {
-    if (!monaco) {
-      return;
-    }
-
-    const issues = problemsList.filter((problem) => problem.fileId === activeTabId);
-    const markers = issues.map((problem) => ({
-      severity: problem.severity === 'error'
-        ? monaco.MarkerSeverity.Error
-        : problem.severity === 'warning'
-        ? monaco.MarkerSeverity.Warning
-        : monaco.MarkerSeverity.Info,
-      startLineNumber: problem.line,
-      startColumn: problem.column,
-      endLineNumber: problem.line,
-      endColumn: problem.column + 30,
-      message: problem.message,
-      code: problem.code,
-      source: problem.source,
-    }));
-
-    const models = monaco.editor.getModels();
-    const normalizedActiveTabId = activeTabId.replace(/\\/g, '/').replace(/^\.\//, '').replace(/^\//, '');
-    const hasModelPaths = models.some((model: any) => typeof model?.uri?.path === 'string' || typeof model?.uri?.fsPath === 'string');
-
-    models.forEach((model: any) => {
-      if (!hasModelPaths) {
-        monaco.editor.setModelMarkers(model, 'rtl-lint', markers);
-        return;
-      }
-
-      const modelPath = typeof model?.uri?.path === 'string'
-        ? model.uri.path
-        : typeof model?.uri?.fsPath === 'string'
-        ? model.uri.fsPath
-        : '';
-      const normalizedModelPath = modelPath.replace(/\\/g, '/').replace(/^\.\//, '').replace(/^\//, '');
-
-      monaco.editor.setModelMarkers(
-        model,
-        'rtl-lint',
-        normalizedModelPath === normalizedActiveTabId ? markers : [],
-      );
-    });
-  }, [activeTabId, monaco, problemsList]);
 
   useEffect(() => {
     if (!monaco) {

@@ -4,7 +4,7 @@ import {
   Save,
   LoaderCircle,
 } from 'lucide-react';
-import { useProblemsList } from '../../../../../data/mockDataLoader';
+import { summarizeLspProblems, useLspProblems } from '../../../../lsp/lspProblems';
 import { getEditorLanguageLabel } from '../../../../workspace/workspaceFiles';
 import { StatusBarFrame } from './StatusBarFrame';
 
@@ -29,9 +29,8 @@ export function StatusBar({
   onOpenUnsavedFiles,
   onSaveAll,
 }: StatusBarProps) {
-  const problemsList = useProblemsList();
-  const errorCount = problemsList.filter((p) => p.severity === 'error').length;
-  const warnCount = problemsList.filter((p) => p.severity === 'warning').length;
+  const problemsList = useLspProblems(activeFileId);
+  const { errorCount, warningCount } = summarizeLspProblems(problemsList);
   const lang = activeFileId ? getEditorLanguageLabel(activeFileId) : 'Plain Text';
   const interactiveItemClassName = 'flex items-center gap-1 px-2 h-full transition-colors';
   const interactiveButtonClassName = `${interactiveItemClassName} hover:bg-primary-foreground/10 disabled:cursor-default disabled:opacity-60`;
@@ -96,11 +95,11 @@ export function StatusBar({
           <div className="flex items-center gap-2.5 px-2 h-full hover:bg-primary-foreground/10 cursor-pointer transition-colors">
             <div className="flex items-center gap-1">
               <AlertCircle size={11} />
-              <span className="text-[11px]">{errorCount}</span>
+              <span data-testid="status-bar-error-count" className="text-[11px]">{errorCount}</span>
             </div>
             <div className="flex items-center gap-1">
               <AlertTriangle size={11} />
-              <span className="text-[11px]">{warnCount}</span>
+              <span data-testid="status-bar-warning-count" className="text-[11px]">{warningCount}</span>
             </div>
           </div>
           <div className="flex items-center gap-1 px-2 h-full hover:bg-primary-foreground/10 cursor-pointer transition-colors">

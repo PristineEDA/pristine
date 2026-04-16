@@ -232,7 +232,10 @@ export function EditorArea({
 
   // Jump to line
   useEffect(() => {
-    if (!jumpToLine || !editorRef.current) return;
+    if (!jumpToLine || !editorRef.current || !isActiveTabReady || activeModelReadyId !== activeTabId) {
+      return;
+    }
+
     const editor = editorRef.current;
 
     if (typeof window !== 'undefined' && 'requestAnimationFrame' in window) {
@@ -254,7 +257,7 @@ export function EditorArea({
     focusEditorInstance(editor);
     onCursorChange?.(jumpToLine, 1);
     lastAppliedRestoreRef.current = { activeTabId, restoreToken: 0 };
-  }, [activeTabId, jumpToLine, editorRef, onCursorChange]);
+  }, [activeModelReadyId, activeTabId, isActiveTabReady, jumpToLine, editorRef, onCursorChange]);
 
   useEffect(() => {
     const editor = editorRef.current;

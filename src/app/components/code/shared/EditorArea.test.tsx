@@ -485,16 +485,19 @@ describe('EditorArea', () => {
       expect(window.electronAPI!.fs.readFile).toHaveBeenCalledWith('rtl/tb/tb_cpu_top.sv', 'utf-8');
     });
 
-    expect(screen.getByTestId('monaco-editor')).toHaveAttribute('data-language', 'systemverilog');
+    expect(await screen.findByTestId('monaco-editor')).toHaveAttribute('data-language', 'systemverilog');
     expect(screen.getByText('retroSoC')).toBeInTheDocument();
     expect(screen.getAllByText('tb_cpu_top.sv')).toHaveLength(2);
     expect(mockMonaco.languages.register).toHaveBeenCalled();
     expect(mockMonaco.languages.setMonarchTokensProvider).toHaveBeenCalledTimes(9);
     expect(mockMonaco.editor.defineTheme).toHaveBeenCalled();
     expect(mockMonaco.editor.setModelMarkers).toHaveBeenCalledWith(
-      mockModel,
-      'rtl-lint',
-      expect.any(Array),
+      expect.objectContaining({
+        getLineCount: expect.any(Function),
+        getLineMaxColumn: expect.any(Function),
+      }),
+      'slang-lsp',
+      [],
     );
     expect(onCursorChange).toHaveBeenCalledWith(12, 7);
     expect(editorRef.current).toBe(mockEditorInstance);

@@ -1,6 +1,64 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import type { LspProblem } from '../../../../lsp/lspProblems';
 import { StatusBar } from './StatusBar';
+
+const mockedProblemsByFile: Record<string, LspProblem[]> = {
+  'rtl/tb/tb_cpu_top.sv': [
+    {
+      id: 'tb-error',
+      severity: 'error',
+      message: 'Top-level reset is undriven',
+      file: 'tb_cpu_top.sv',
+      fileId: 'rtl/tb/tb_cpu_top.sv',
+      line: 12,
+      column: 3,
+    },
+    {
+      id: 'tb-warning',
+      severity: 'warning',
+      message: 'Potential latch inferred',
+      file: 'tb_cpu_top.sv',
+      fileId: 'rtl/tb/tb_cpu_top.sv',
+      line: 18,
+      column: 5,
+    },
+    {
+      id: 'tb-info',
+      severity: 'info',
+      message: 'This info should not affect the status bar counts',
+      file: 'tb_cpu_top.sv',
+      fileId: 'rtl/tb/tb_cpu_top.sv',
+      line: 22,
+      column: 1,
+    },
+  ],
+  'rtl/core/alu.v': [
+    {
+      id: 'alu-warning',
+      severity: 'warning',
+      message: 'Unused output',
+      file: 'alu.v',
+      fileId: 'rtl/core/alu.v',
+      line: 9,
+      column: 4,
+    },
+  ],
+};
+
+vi.mock('../../../../lsp/lspProblems', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../../lsp/lspProblems')>();
+  return {
+    ...actual,
+    useLspProblems: (fileId?: string | null) => {
+      if (!fileId) {
+        return [];
+      }
+
+      return mockedProblemsByFile[fileId] ?? [];
+    },
+  };
+});
 
 describe('StatusBar', () => {
   it('shows branch, diagnostics, cursor state, and inferred language from file paths', () => {
@@ -13,6 +71,8 @@ describe('StatusBar', () => {
     expect(screen.getByText('Ln 18, Col 4')).toBeInTheDocument();
     expect(screen.getByText('SystemVerilog')).toBeInTheDocument();
     expect(screen.getByText('Verilator 5.024')).toBeInTheDocument();
+    expect(screen.getByTestId('status-bar-error-count')).toHaveTextContent('1');
+    expect(screen.getByTestId('status-bar-warning-count')).toHaveTextContent('1');
   });
 
   it('shows specialized labels for config and script files used in the editor area', () => {
@@ -36,6 +96,16 @@ describe('StatusBar', () => {
 
     rerender(<StatusBar activeFileId="build/Makefile" cursorLine={1} cursorCol={1} />);
     expect(screen.getByText('Makefile')).toBeInTheDocument();
+  });
+
+  it('shows 0 error and warning counts when no file is open', () => {
+    render(
+      <StatusBar activeFileId="" cursorLine={1} cursorCol={1} />,
+    );
+
+    expect(screen.getByText('Plain Text')).toBeInTheDocument();
+    expect(screen.getByTestId('status-bar-error-count')).toHaveTextContent('0');
+    expect(screen.getByTestId('status-bar-warning-count')).toHaveTextContent('0');
   });
 
   it('shows unsaved summaries and exposes Save All and review actions', () => {

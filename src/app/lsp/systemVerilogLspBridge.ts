@@ -168,8 +168,20 @@ function getCompletionItems(response: LspCompletionResponse | null): LspCompleti
   return Array.isArray(response) ? response : response.items;
 }
 
+function cloneDiagnostic(diagnostic: LspDiagnostic): LspDiagnostic {
+  return {
+    ...diagnostic,
+    range: {
+      start: { ...diagnostic.range.start },
+      end: { ...diagnostic.range.end },
+    },
+  };
+}
+
 class SystemVerilogLspBridge {
   private diagnosticsByFile = new Map<string, LspDiagnostic[]>();
+
+  private diagnosticsSnapshot: ReadonlyMap<string, readonly LspDiagnostic[]> = new Map();
 
   private debugEvents: LspDebugEvent[] = [];
 
@@ -185,6 +197,8 @@ class SystemVerilogLspBridge {
 
   private stateSubscriptionInstalled = false;
 
+  private diagnosticsListeners = new Set<() => void>();
+
   private debugListeners = new Set<() => void>();
 
   private loggedErrorMessage: string | null = null;
@@ -198,6 +212,34 @@ class SystemVerilogLspBridge {
   private appendDebugEvent(event: LspDebugEvent) {
     this.debugEvents = [...this.debugEvents, event].slice(-DEBUG_EVENT_LIMIT);
     this.notifyDebugListeners();
+  }
+
+  private notifyDiagnosticsListeners() {
+    this.diagnosticsListeners.forEach((listener) => {
+      listener();
+    });
+  }
+
+  private updateDiagnostics(filePath: string, diagnostics: LspDiagnostic[]) {
+    if (diagnostics.length === 0) {
+      this.diagnosticsByFile.delete(filePath);
+    } else {
+      this.diagnosticsByFile.set(filePath, diagnostics.map((diagnostic) => cloneDiagnostic(diagnostic)));
+    }
+
+    this.diagnosticsSnapshot = new Map(this.diagnosticsByFile);
+    this.notifyDiagnosticsListeners();
+  }
+
+  getDiagnosticsSnapshot(): ReadonlyMap<string, readonly LspDiagnostic[]> {
+    return this.diagnosticsSnapshot;
+  }
+
+  subscribeToDiagnosticsChanges(listener: () => void) {
+    this.diagnosticsListeners.add(listener);
+    return () => {
+      this.diagnosticsListeners.delete(listener);
+    };
   }
 
   getDebugEvents() {
@@ -234,7 +276,7 @@ class SystemVerilogLspBridge {
     if (!this.diagnosticsSubscriptionInstalled) {
       api.onDiagnostics((payload) => {
         const filePath = normalizeWorkspacePath(payload.filePath);
-        this.diagnosticsByFile.set(filePath, payload.diagnostics);
+        this.updateDiagnostics(filePath, payload.diagnostics);
         this.applyDiagnostics(monaco, filePath);
       });
       this.diagnosticsSubscriptionInstalled = true;

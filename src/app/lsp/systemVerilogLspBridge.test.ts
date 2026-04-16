@@ -338,6 +338,9 @@ describe('systemVerilogLspBridge', () => {
     const firstEditor = createEditorMock(firstModel);
     const secondEditor = createEditorMock(secondModel);
     const navigateToLocation = vi.fn();
+    const diagnosticsListener = vi.fn();
+
+    const unsubscribeDiagnostics = systemVerilogLspBridge.subscribeToDiagnosticsChanges(diagnosticsListener);
 
     systemVerilogLspBridge.attachDocument({
       monaco,
@@ -381,6 +384,26 @@ describe('systemVerilogLspBridge', () => {
       endLineNumber: 4,
       endColumn: 15,
     }));
+    expect(diagnosticsListener).toHaveBeenCalledTimes(1);
+    expect(Array.from(systemVerilogLspBridge.getDiagnosticsSnapshot().entries())).toEqual([
+      [
+        'rtl/core/cpu_top.sv',
+        [
+          expect.objectContaining({
+            message: 'Undriven signal',
+            severity: 1,
+          }),
+        ],
+      ],
+    ]);
+
+    diagnosticsHandler?.({
+      filePath: 'rtl/core/cpu_top.sv',
+      diagnostics: [],
+    });
+
+    expect(diagnosticsListener).toHaveBeenCalledTimes(2);
+    expect(Array.from(systemVerilogLspBridge.getDiagnosticsSnapshot().entries())).toEqual([]);
 
     await firstEditor.__actions[0].run(firstEditor);
     expect(electronApi.lsp.definition).toHaveBeenCalledWith('rtl/core/cpu_top.sv', 3, 5);
@@ -391,6 +414,8 @@ describe('systemVerilogLspBridge', () => {
     stateHandler?.({ status: 'error', message: 'language server failed' });
     expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
     expect(consoleErrorSpy).toHaveBeenCalledWith('language server failed');
+
+    unsubscribeDiagnostics();
   });
 
   it('buffers debug events and notifies listeners with the latest bounded snapshot', async () => {

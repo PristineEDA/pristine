@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react';
-import type { AIMessage, OutlineItem, Problem, Reference, StaticCheckItem } from './mockData';
+import type { AIMessage, OutlineItem, Reference, StaticCheckItem } from './mockData';
 
 type MockDataModule = typeof import('./mockData');
 
 let mockDataPromise: Promise<MockDataModule> | null = null;
-let problemsCache: Problem[] | null = null;
 let outlinesCache: Record<string, OutlineItem[]> | null = null;
 let aiMessagesCache: AIMessage[] | null = null;
 let staticChecksCache: StaticCheckItem[] | null = null;
@@ -41,16 +40,6 @@ function loadMockDataModule(): Promise<MockDataModule> {
   }
 
   return mockDataPromise;
-}
-
-export async function loadProblemsList(): Promise<Problem[]> {
-  if (problemsCache) {
-    return problemsCache;
-  }
-
-  const module = await loadMockDataModule();
-  problemsCache = module.problemsList;
-  return problemsCache;
 }
 
 export async function loadFileOutlines(): Promise<Record<string, OutlineItem[]>> {
@@ -101,32 +90,6 @@ export async function loadOutputLog(): Promise<MockDataModule['outputLog']> {
   const module = await loadMockDataModule();
   outputLogCache = module.outputLog;
   return outputLogCache;
-}
-
-export function useProblemsList() {
-  const [problems, setProblems] = useState<Problem[]>(() => problemsCache ?? []);
-
-  useEffect(() => {
-    if (problemsCache) {
-      return;
-    }
-
-    let cancelled = false;
-    const cancelScheduledLoad = scheduleIdleLoad(() => {
-      void loadProblemsList().then((nextProblems) => {
-        if (!cancelled) {
-          setProblems(nextProblems);
-        }
-      });
-    });
-
-    return () => {
-      cancelled = true;
-      cancelScheduledLoad();
-    };
-  }, []);
-
-  return problems;
 }
 
 export function useFileOutlines() {

@@ -1,10 +1,10 @@
 import { Suspense, lazy, useMemo, useState, type ReactNode } from 'react';
 import {
   Terminal, X, Plus,
-  AlertCircle, AlertTriangle,
+  AlertCircle, AlertTriangle, Info, Lightbulb,
   Bug, Square,
 } from 'lucide-react';
-import { useProblemsList } from '../../../../data/mockDataLoader';
+import { summarizeLspProblems, useLspProblems } from '../../../lsp/lspProblems';
 import { TerminalPanel } from './TerminalPanel';
 import { DebugConsole } from './DebugConsole';
 import { terminateTerminalSession } from './terminalSessionStore';
@@ -23,7 +23,8 @@ interface BottomPanelProps {
 
 export function BottomPanel({ onClose }: BottomPanelProps) {
   const [tab, setTab] = useState<BottomPanelTabId>('terminal');
-  const problemsList = useProblemsList();
+  const problemsList = useLspProblems();
+  const problemCounts = useMemo(() => summarizeLspProblems(problemsList), [problemsList]);
 
   const handleClose = () => {
     void terminateTerminalSession().finally(() => {
@@ -34,13 +35,11 @@ export function BottomPanel({ onClose }: BottomPanelProps) {
   const tabs = [
     { id: 'terminal', label: 'Terminal', icon: Terminal },
     { id: 'output', label: 'Output', icon: null },
-    { id: 'problems', label: `Problems (${problemsList.length})`, icon: null },
+    { id: 'problems', label: `Problems (${problemCounts.totalCount})`, icon: null },
     { id: 'debug', label: 'Debug Console', icon: Bug },
     { id: 'lsp', label: 'LSP', icon: null },
   ] as const;
 
-  const errCount = useMemo(() => problemsList.filter((p) => p.severity === 'error').length, [problemsList]);
-  const warnCount = useMemo(() => problemsList.filter((p) => p.severity === 'warning').length, [problemsList]);
   const panelContent = useMemo<Record<BottomPanelTabId, ReactNode>>(() => ({
     terminal: <TerminalPanel />,
     output: (
@@ -50,14 +49,18 @@ export function BottomPanel({ onClose }: BottomPanelProps) {
     ),
     problems: (
       <div className="flex flex-col h-full">
-        <div className="flex items-center gap-2 px-3 py-1 border-b border-border shrink-0">
+        <div className="flex flex-wrap items-center gap-2 px-3 py-1 border-b border-border shrink-0">
           <AlertCircle size={11} className="text-destructive" />
-          <span className="text-destructive text-[11px]">{errCount} errors</span>
+          <span className="text-destructive text-[11px]">{problemCounts.errorCount} errors</span>
           <AlertTriangle size={11} className="text-amber-500" />
-          <span className="text-amber-500 text-[11px]">{warnCount} warnings</span>
+          <span className="text-amber-500 text-[11px]">{problemCounts.warningCount} warnings</span>
+          <Info size={11} className="text-sky-500" />
+          <span className="text-sky-500 text-[11px]">{problemCounts.infoCount} infos</span>
+          <Lightbulb size={11} className="text-emerald-500" />
+          <span className="text-emerald-500 text-[11px]">{problemCounts.hintCount} hints</span>
         </div>
         <Suspense fallback={<div className="flex h-full items-center justify-center text-muted-foreground text-[12px]">Loading problems...</div>}>
-          <ProblemsTabPanel />
+          <ProblemsTabPanel problems={problemsList} />
         </Suspense>
       </div>
     ),
@@ -81,7 +84,7 @@ export function BottomPanel({ onClose }: BottomPanelProps) {
         <LspPanel />
       </Suspense>
     ),
-  }), [errCount, warnCount]);
+  }), [problemCounts.errorCount, problemCounts.hintCount, problemCounts.infoCount, problemCounts.warningCount, problemsList]);
 
   return (
     <div className="flex flex-col h-full bg-background border-t border-border overflow-hidden">
@@ -97,7 +100,7 @@ export function BottomPanel({ onClose }: BottomPanelProps) {
                 : 'text-[12px] text-muted-foreground border-transparent hover:text-foreground'
             }`}
           >
-            {t.id === 'problems' && errCount > 0 && (
+            {t.id === 'problems' && problemCounts.errorCount > 0 && (
               <AlertCircle size={11} className="text-destructive" />
             )}
             {t.label}
