@@ -1007,7 +1007,7 @@ test('systemverilog lsp smoke resolves a cross-file definition and symbol refere
   await app.close();
 });
 
-test('lsp bottom panel shows raw debug events for systemverilog requests', async () => {
+test('lsp bottom panel filters diagnostics and shows paired request responses', async () => {
   test.slow();
 
   const { app, window } = await launchApp();
@@ -1055,6 +1055,17 @@ test('lsp bottom panel shows raw debug events for systemverilog requests', async
   }).toBeGreaterThan(0);
 
   await expect(window.getByTestId('lsp-panel')).toContainText(/initialize|textDocument\/definition|textDocument\/didOpen/);
+
+  await window.getByTestId('lsp-filter-diagnostic').click();
+  await expect(window.getByRole('button', { name: /textDocument\/publishDiagnostics/i }).first()).toBeVisible();
+  await expect(window.getByRole('button', { name: /textDocument\/definition/i })).toHaveCount(0);
+
+  await window.getByTestId('lsp-filter-response').click();
+  const definitionEntry = window.getByRole('button', { name: /textDocument\/definition/i });
+  await expect(definitionEntry).toBeVisible();
+  await definitionEntry.click();
+  await expect(window.getByText('Request payload')).toBeVisible();
+  await expect(window.getByText('Response payload')).toBeVisible();
 
   await app.close();
 });
