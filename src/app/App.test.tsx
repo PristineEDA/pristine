@@ -1,7 +1,8 @@
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
+import { resetWorkspaceGitStatusStoreForTests } from './git/workspaceGitStatus';
 
 let renderRealActivityBar = false;
 
@@ -171,6 +172,12 @@ vi.mock('./components/code/shared/QuickOpenPalette', () => ({
 }));
 
 describe('App', () => {
+  beforeEach(() => {
+    renderRealActivityBar = false;
+    resetWorkspaceGitStatusStoreForTests();
+    vi.clearAllMocks();
+  });
+
   it('opens the left panel at 240px and remembers dragged width across code view switches', async () => {
     render(<App />);
 
@@ -507,5 +514,29 @@ describe('App', () => {
     expect(screen.getByTestId('editor-restore-file')).toHaveTextContent('rtl/core/reg_file.v');
     expect(screen.getByTestId('editor-restore-line')).toHaveTextContent('9');
     expect(screen.getByTestId('editor-restore-col')).toHaveTextContent('3');
+  });
+
+  it('refreshes workspace git status when the window regains focus', async () => {
+    render(<App />);
+
+    expect(window.electronAPI?.onWindowFocus).toHaveBeenCalledTimes(1);
+    expect(window.electronAPI?.git.getStatus).not.toHaveBeenCalled();
+
+    const focusHandler = vi.mocked(window.electronAPI!.onWindowFocus).mock.calls[0]?.[0];
+    if (!focusHandler) {
+      throw new Error('Expected App to subscribe to the Electron window focus stream');
+    }
+
+    focusHandler();
+
+    await waitFor(() => {
+      expect(window.electronAPI?.git.getStatus).toHaveBeenCalledTimes(1);
+    });
+
+    focusHandler();
+
+    await waitFor(() => {
+      expect(window.electronAPI?.git.getStatus).toHaveBeenCalledTimes(2);
+    });
   });
 });

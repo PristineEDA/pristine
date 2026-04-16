@@ -216,6 +216,20 @@ function initializeGitWorkspaceCopy(targetPath: string, branchName: string) {
   fs.writeFileSync(path.join(targetPath, 'ignored.log'), 'ignored log\n', 'utf-8');
 }
 
+function notifyAppWindowFocused(
+  app: Awaited<ReturnType<typeof electron.launch>>,
+) {
+  return app.evaluate(async ({ BrowserWindow }) => {
+    const mainWindow = BrowserWindow.getAllWindows().find((window) => window.getTitle() === 'Pristine');
+
+    if (!mainWindow) {
+      throw new Error('Expected Pristine main window');
+    }
+
+    mainWindow.webContents.send('stream:window:focus');
+  });
+}
+
 async function launchAppForSplashHandoff() {
   const app = await electron.launch({
     args: [path.join(__dirname, '..', 'dist-electron', 'main.js')],
@@ -1245,6 +1259,29 @@ test('explorer shows the real git branch and git file decorations for tracked an
     await window.getByTestId('file-tree-node-rtl_core_reg_file_v').dblclick();
 
     await expect(window.getByTestId('editor-tab-title-rtl/core/reg_file.v')).toHaveClass(/text-ide-warning/);
+  } finally {
+    await app.close();
+  }
+});
+
+test('explorer status bar updates the git branch label after refocusing the app window', async () => {
+  test.slow();
+
+  const workspaceCopy = test.info().outputPath('git-branch-refresh-workspace');
+  createWorkspaceCopy(workspaceCopy);
+  initializeGitWorkspaceCopy(workspaceCopy, 'e2e-git-ui');
+  execFileSync('git', ['branch', 'e2e-git-ui-next'], { cwd: workspaceCopy, stdio: 'pipe', windowsHide: true });
+
+  const { app, window } = await launchApp({ projectRoot: workspaceCopy });
+
+  try {
+    await ensureExplorerVisible(window);
+    await expect(window.getByTestId('status-bar-branch-label')).toHaveText('e2e-git-ui');
+
+    execFileSync('git', ['switch', 'e2e-git-ui-next'], { cwd: workspaceCopy, stdio: 'pipe', windowsHide: true });
+    await notifyAppWindowFocused(app);
+
+    await expect(window.getByTestId('status-bar-branch-label')).toHaveText('e2e-git-ui-next');
   } finally {
     await app.close();
   }

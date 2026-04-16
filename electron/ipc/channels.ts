@@ -53,6 +53,7 @@ export const StreamChannels = {
   LSP_STATE: 'stream:lsp:state',
   MENU_COMMAND: 'stream:menu:command',
   WINDOW_CLOSE_REQUEST: 'stream:window:close-request',
+  WINDOW_FOCUS: 'stream:window:focus',
   WINDOW_MAXIMIZED_CHANGE: 'stream:window:maximized-change',
   WINDOW_FULLSCREEN_CHANGE: 'stream:window:full-screen-change',
 } as const;

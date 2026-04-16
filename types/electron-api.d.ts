@@ -33,6 +33,7 @@ export interface ElectronAPI {
   onMaximizedChange: (callback: (maximized: boolean) => void) => () => void;
   onFullScreenChange: (callback: (fullScreen: boolean) => void) => () => void;
   onCloseRequested: (callback: (request: WindowCloseRequest) => void) => () => void;
+  onWindowFocus: (callback: () => void) => () => void;
 
   // File system (project-dir scoped)
   fs: {

@@ -59,6 +59,11 @@ const electronAPI = {
     ipcRenderer.on(StreamChannels.WINDOW_CLOSE_REQUEST, handler);
     return () => { ipcRenderer.removeListener(StreamChannels.WINDOW_CLOSE_REQUEST, handler); };
   },
+  onWindowFocus: (callback: () => void) => {
+    const handler = () => callback();
+    ipcRenderer.on(StreamChannels.WINDOW_FOCUS, handler);
+    return () => { ipcRenderer.removeListener(StreamChannels.WINDOW_FOCUS, handler); };
+  },
 
   // ── File System (async, project-dir scoped) ──
   fs: {

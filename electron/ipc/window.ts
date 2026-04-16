@@ -82,6 +82,9 @@ export function registerWindowHandlers(
 }
 
 export function setupWindowStreams(win: BrowserWindow): void {
+  win.on('focus', () => {
+    win.webContents.send(StreamChannels.WINDOW_FOCUS);
+  });
   win.on('maximize', () => {
     win.webContents.send(StreamChannels.WINDOW_MAXIMIZED_CHANGE, true);
   });
