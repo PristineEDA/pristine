@@ -1196,6 +1196,58 @@ test('ctrl+s saves an edited explorer file and clears the dirty indicator', asyn
   }
 });
 
+test('ctrl+z does not restore the loading placeholder after undo returns a file to its initial state', async () => {
+  test.slow();
+
+  const workspaceCopy = test.info().outputPath('undo-workspace');
+  createWorkspaceCopy(workspaceCopy);
+
+  const marker = `// e2e undo marker ${Date.now()}`;
+  const { app, window } = await launchApp({ projectRoot: workspaceCopy });
+
+  try {
+    await ensureExplorerVisible(window);
+    await openNestedWorkspaceFile(window, [
+      'file-tree-node-rtl',
+      'file-tree-node-rtl_core',
+      'file-tree-node-rtl_core_reg_file_v',
+    ]);
+
+    const dirtyIndicator = window.getByTestId('editor-tab-dirty-indicator-rtl/core/reg_file.v');
+    const editorLines = window.locator('.monaco-editor .view-lines').first();
+
+    await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toBeVisible();
+    await waitForMonacoEditor(window);
+    await focusMonacoEditor(window);
+    await waitForMonacoEditorTextFocus(window);
+    await window.keyboard.press('Control+End');
+    await window.keyboard.type(` ${marker}`);
+
+    await expect(dirtyIndicator).toBeVisible();
+    await expect(editorLines).toContainText(marker, { timeout: MONACO_READY_TIMEOUT_MS });
+
+    for (let index = 0; index < 10; index += 1) {
+      await window.keyboard.press('Control+Z');
+
+      if (await dirtyIndicator.count() === 0) {
+        break;
+      }
+    }
+
+    await expect(dirtyIndicator).toHaveCount(0);
+    await expect(editorLines).not.toContainText(marker, { timeout: MONACO_READY_TIMEOUT_MS });
+
+    await window.keyboard.press('Control+Z');
+
+    await expect(dirtyIndicator).toHaveCount(0);
+    await expect(editorLines).not.toContainText(marker);
+    await expect(editorLines).not.toContainText('Loading file contents...');
+    await expect(editorLines).toContainText('module reg_file', { timeout: MONACO_READY_TIMEOUT_MS });
+  } finally {
+    await app.close();
+  }
+});
+
 test('menu bar switches to the whiteboard view and renders the React Flow UI chrome', async () => {
   const { app, window } = await launchApp();
 

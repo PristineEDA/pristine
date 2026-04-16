@@ -30,7 +30,9 @@ describe('useEditorDocumentState', () => {
     }));
 
     expect(onLoadFile).toHaveBeenCalledWith('rtl/core/reg_file.v');
-    expect(result.current.code).toContain('Loading file contents');
+    expect(result.current.code).toBe('');
+    expect(result.current.placeholderText).toContain('Loading file contents');
+    expect(result.current.isActiveTabReady).toBe(false);
   });
 
   it('uses provided content cache without triggering a load', () => {
@@ -45,6 +47,7 @@ describe('useEditorDocumentState', () => {
 
     expect(onLoadFile).not.toHaveBeenCalled();
     expect(result.current.code).toBe('module reg_file; endmodule');
+    expect(result.current.placeholderText).toBe('');
     expect(result.current.activeTab?.name).toBe('reg_file.v');
   });
 
@@ -58,7 +61,8 @@ describe('useEditorDocumentState', () => {
     }));
 
     expect(window.electronAPI?.fs.readFile).toHaveBeenCalledWith('rtl/core/reg_file.v', 'utf-8');
-    expect(result.current.code).toContain('Loading file contents');
+  expect(result.current.code).toBe('');
+  expect(result.current.placeholderText).toContain('Loading file contents');
 
     deferred.resolve('always_ff @(posedge clk) q <= d;');
 
@@ -79,7 +83,7 @@ describe('useEditorDocumentState', () => {
     }));
 
     await waitFor(() => {
-      expect(unavailable.result.current.code).toContain('Filesystem API unavailable');
+      expect(unavailable.result.current.placeholderText).toContain('Filesystem API unavailable');
     });
 
     unavailable.unmount();
@@ -96,9 +100,9 @@ describe('useEditorDocumentState', () => {
     }));
 
     await waitFor(() => {
-      expect(failed.result.current.code).toContain('Failed to load reg_file.v');
+      expect(failed.result.current.placeholderText).toContain('Failed to load reg_file.v');
     });
-    expect(failed.result.current.code).toContain('Permission denied');
+    expect(failed.result.current.placeholderText).toContain('Permission denied');
   });
 
   it('updates content through the external callback or local cache', async () => {

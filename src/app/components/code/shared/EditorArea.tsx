@@ -75,6 +75,17 @@ interface EditorAreaProps {
   dragInteractionShieldTestId?: string;
 }
 
+function EditorDocumentPlaceholder({ text }: { text: string }) {
+  return (
+    <div
+      data-testid="editor-document-placeholder"
+      className="flex-1 overflow-auto bg-background px-4 py-3 font-mono text-[12px] text-muted-foreground whitespace-pre"
+    >
+      {text}
+    </div>
+  );
+}
+
 // ─── Tab Component ─────────────────────────────────────────────────────────────
 function EditorTab({
   tab, isActive, onActivate, onClose, onPin, onDragStart, onDragEnd,
@@ -220,7 +231,14 @@ export function EditorArea({
 }: EditorAreaProps) {
   const lastAppliedRestoreRef = useRef({ activeTabId: '', restoreToken: 0 });
   const [activeModelReadyId, setActiveModelReadyId] = useState('');
-  const { activeLoadError, activeTab, code, isActiveTabReady, updateContent } = useEditorDocumentState({
+  const {
+    activeLoadError,
+    activeTab,
+    code,
+    isActiveTabReady,
+    placeholderText,
+    updateContent,
+  } = useEditorDocumentState({
     tabs,
     activeTabId,
     contentCache,
@@ -399,29 +417,33 @@ export function EditorArea({
       {/* Breadcrumb */}
       {activeTab && <Breadcrumb filePath={activeTabId} />}
 
-      <Suspense
-        fallback={(
-          <div className="flex flex-1 items-center justify-center bg-background text-muted-foreground text-[12px]">
-            Loading editor...
-          </div>
-        )}
-      >
-        <MonacoEditorPane
-          activeTabId={activeTabId}
-          code={code}
-          editorRef={editorRef}
-          onActiveModelReady={setActiveModelReadyId}
-          onCursorChange={onCursorChange}
-          onSaveShortcut={onSaveShortcut}
-          onContentChange={updateContent}
-          onEditorMount={onEditorMount}
-          onNavigateToLocation={onNavigateToLocation}
-          isDocumentReady={isActiveTabReady}
-          hasLoadError={Boolean(activeLoadError)}
-          showDragInteractionShield={showDragInteractionShield}
-          dragInteractionShieldTestId={dragInteractionShieldTestId}
-        />
-      </Suspense>
+      {!isActiveTabReady ? (
+        <EditorDocumentPlaceholder text={placeholderText} />
+      ) : (
+        <Suspense
+          fallback={(
+            <div className="flex flex-1 items-center justify-center bg-background text-muted-foreground text-[12px]">
+              Loading editor...
+            </div>
+          )}
+        >
+          <MonacoEditorPane
+            activeTabId={activeTabId}
+            code={code}
+            editorRef={editorRef}
+            onActiveModelReady={setActiveModelReadyId}
+            onCursorChange={onCursorChange}
+            onSaveShortcut={onSaveShortcut}
+            onContentChange={updateContent}
+            onEditorMount={onEditorMount}
+            onNavigateToLocation={onNavigateToLocation}
+            isDocumentReady={isActiveTabReady}
+            hasLoadError={Boolean(activeLoadError)}
+            showDragInteractionShield={showDragInteractionShield}
+            dragInteractionShieldTestId={dragInteractionShieldTestId}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

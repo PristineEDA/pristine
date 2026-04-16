@@ -545,7 +545,8 @@ describe('EditorArea', () => {
       />,
     );
 
-    await screen.findByTestId('monaco-editor');
+    expect(screen.getByTestId('editor-document-placeholder')).toHaveTextContent('Loading file contents...');
+    expect(screen.queryByTestId('monaco-editor')).not.toBeInTheDocument();
     expect(onLoadFile).toHaveBeenCalledWith('rtl/core/reg_file.v');
     expect(mockEditorInstance.setPosition).not.toHaveBeenCalledWith({ lineNumber: 18, column: 6 });
 
@@ -563,6 +564,7 @@ describe('EditorArea', () => {
     );
 
     await waitFor(() => {
+      expect(screen.queryByTestId('editor-document-placeholder')).not.toBeInTheDocument();
       expect(mockEditorInstance.setPosition).toHaveBeenCalledWith({ lineNumber: 18, column: 6 });
     });
     expect(mockEditorInstance.focus).toHaveBeenCalled();
@@ -695,12 +697,45 @@ describe('EditorArea', () => {
       />,
     );
 
-    expect(screen.getByTestId('monaco-editor')).toHaveTextContent('Loading file contents...');
+    expect(screen.getByTestId('editor-document-placeholder')).toHaveTextContent('Loading file contents...');
+    expect(screen.queryByTestId('monaco-editor')).not.toBeInTheDocument();
 
     resolveFirstRead?.('// cpu_top content');
 
     await waitFor(() => {
       expect(screen.getByTestId('monaco-editor')).toHaveTextContent('// cpu_top content');
+    });
+  });
+
+  it('keeps loading placeholders out of the Monaco document until file content is ready', async () => {
+    const { rerender } = render(
+      <EditorArea
+        tabs={[{ id: 'rtl/core/reg_file.v', name: 'reg_file.v', isPinned: true }]}
+        activeTabId="rtl/core/reg_file.v"
+        onTabChange={vi.fn()}
+        onTabClose={vi.fn()}
+        editorRef={createRef()}
+        onLoadFile={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId('editor-document-placeholder')).toHaveTextContent('Loading file contents...');
+    expect(screen.queryByTestId('monaco-editor')).not.toBeInTheDocument();
+
+    rerender(
+      <EditorArea
+        tabs={[{ id: 'rtl/core/reg_file.v', name: 'reg_file.v', isPinned: true }]}
+        activeTabId="rtl/core/reg_file.v"
+        onTabChange={vi.fn()}
+        onTabClose={vi.fn()}
+        editorRef={createRef()}
+        contentCache={{ 'rtl/core/reg_file.v': 'module reg_file; endmodule' }}
+        onLoadFile={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('monaco-editor')).toHaveTextContent('module reg_file; endmodule');
     });
   });
 });
