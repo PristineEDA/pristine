@@ -123,6 +123,7 @@ describe('FileTreeNode', () => {
         onFilePreview={onFilePreview}
         expandedFolders={new Set()}
         onToggleFolder={onToggleFolder}
+        gitPathStates={{}}
       />,
     );
 
@@ -148,6 +149,7 @@ describe('FileTreeNode', () => {
         onFilePreview={onFilePreview}
         expandedFolders={new Set(['rtl'])}
         onToggleFolder={onToggleFolder}
+        gitPathStates={{}}
       />,
     );
 
@@ -175,6 +177,7 @@ describe('FileTreeNode', () => {
         onFilePreview={onFilePreview}
         expandedFolders={new Set()}
         onToggleFolder={onToggleFolder}
+        gitPathStates={{}}
       />,
     );
 
@@ -217,10 +220,60 @@ describe('FileTreeNode', () => {
         onFilePreview={onFilePreview}
         expandedFolders={new Set()}
         onToggleFolder={onToggleFolder}
+        gitPathStates={{}}
         revealRequest={{ path: 'rtl/core/reg_file.v', token: 1 }}
       />,
     );
 
     expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' });
+  });
+
+  it('colors git-modified files yellow and ignored folders gray', () => {
+    const onToggleFolder = vi.fn();
+
+    const { rerender } = render(
+      <FileTreeNode
+        node={{
+          id: 'rtl/core/cpu_top.v',
+          path: 'rtl/core/cpu_top.v',
+          name: 'cpu_top.v',
+          type: 'file',
+          hasLoadedChildren: true,
+          isLoading: false,
+        }}
+        depth={1}
+        activeFileId=""
+        onFileOpen={vi.fn()}
+        onFilePreview={vi.fn()}
+        expandedFolders={new Set()}
+        onToggleFolder={onToggleFolder}
+        gitPathStates={{ 'rtl/core/cpu_top.v': 'modified' }}
+      />,
+    );
+
+    expect(screen.getByTestId('file-tree-label-rtl_core_cpu_top_v')).toHaveClass('text-ide-warning');
+
+    rerender(
+      <FileTreeNode
+        node={{
+          id: 'build',
+          path: 'build',
+          name: 'build',
+          type: 'folder',
+          children: [],
+          hasLoadedChildren: true,
+          isLoading: false,
+        }}
+        depth={0}
+        activeFileId=""
+        onFileOpen={vi.fn()}
+        onFilePreview={vi.fn()}
+        expandedFolders={new Set()}
+        onToggleFolder={onToggleFolder}
+        gitPathStates={{ build: 'ignored' }}
+      />,
+    );
+
+    expect(screen.getByTestId('file-tree-label-build')).toHaveClass('text-ide-text-muted');
   });
 });

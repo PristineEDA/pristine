@@ -87,6 +87,7 @@ describe('preload bridge', () => {
     api.fs.readDir('rtl');
     api.fs.stat('rtl/main.v');
     api.fs.exists('rtl/main.v');
+    api.git.getStatus();
     api.shell.exec('make', ['lint'], { cwd: 'rtl' });
     api.shell.kill('shell-1');
     api.terminal.create({ cwd: 'rtl', cols: 120, rows: 40 });
@@ -128,6 +129,7 @@ describe('preload bridge', () => {
     expect(mockInvoke).toHaveBeenCalledWith('async:fs:read-dir', 'rtl');
     expect(mockInvoke).toHaveBeenCalledWith('async:fs:stat', 'rtl/main.v');
     expect(mockInvoke).toHaveBeenCalledWith('async:fs:exists', 'rtl/main.v');
+    expect(mockInvoke).toHaveBeenCalledWith('async:git:get-status');
     expect(mockInvoke).toHaveBeenCalledWith('async:shell:exec', 'make', ['lint'], { cwd: 'rtl' });
     expect(mockInvoke).toHaveBeenCalledWith('async:shell:kill', 'shell-1');
     expect(mockInvoke).toHaveBeenCalledWith('async:terminal:create', { cwd: 'rtl', cols: 120, rows: 40 });

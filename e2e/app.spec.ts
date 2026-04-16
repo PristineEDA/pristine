@@ -1,4 +1,5 @@
 import { test, expect, _electron as electron, type Locator, type Page } from '@playwright/test';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -189,6 +190,30 @@ async function launchApp(options?: { projectRoot?: string }) {
 function createWorkspaceCopy(targetPath: string) {
   fs.rmSync(targetPath, { recursive: true, force: true });
   fs.cpSync(fixtureWorkspace, targetPath, { recursive: true });
+}
+
+function initializeGitWorkspaceCopy(targetPath: string, branchName: string) {
+  const gitIgnorePath = path.join(targetPath, '.gitignore');
+  const existingGitIgnore = fs.existsSync(gitIgnorePath)
+    ? fs.readFileSync(gitIgnorePath, 'utf-8').trimEnd()
+    : '';
+  const nextGitIgnore = [existingGitIgnore, 'ignored-dir/', 'ignored.log']
+    .filter(Boolean)
+    .join('\n');
+
+  fs.writeFileSync(gitIgnorePath, `${nextGitIgnore}\n`, 'utf-8');
+
+  execFileSync('git', ['init'], { cwd: targetPath, stdio: 'pipe', windowsHide: true });
+  execFileSync('git', ['config', 'user.name', 'Pristine E2E'], { cwd: targetPath, stdio: 'pipe', windowsHide: true });
+  execFileSync('git', ['config', 'user.email', 'pristine-e2e@example.com'], { cwd: targetPath, stdio: 'pipe', windowsHide: true });
+  execFileSync('git', ['add', '.'], { cwd: targetPath, stdio: 'pipe', windowsHide: true });
+  execFileSync('git', ['commit', '-m', 'Initial fixture'], { cwd: targetPath, stdio: 'pipe', windowsHide: true });
+  execFileSync('git', ['branch', '-M', branchName], { cwd: targetPath, stdio: 'pipe', windowsHide: true });
+
+  fs.appendFileSync(path.join(targetPath, 'rtl', 'core', 'reg_file.v'), '\n// git modified fixture\n', 'utf-8');
+  fs.mkdirSync(path.join(targetPath, 'ignored-dir'), { recursive: true });
+  fs.writeFileSync(path.join(targetPath, 'ignored-dir', 'cache.txt'), 'ignored cache\n', 'utf-8');
+  fs.writeFileSync(path.join(targetPath, 'ignored.log'), 'ignored log\n', 'utf-8');
 }
 
 async function launchAppForSplashHandoff() {
@@ -1191,6 +1216,35 @@ test('ctrl+s saves an edited explorer file and clears the dirty indicator', asyn
     await expect.poll(() => fs.readFileSync(filePath, 'utf-8'), {
       timeout: 15000,
     }).toContain(marker);
+  } finally {
+    await app.close();
+  }
+});
+
+test('explorer shows the real git branch and git file decorations for tracked and ignored paths', async () => {
+  test.slow();
+
+  const workspaceCopy = test.info().outputPath('git-status-workspace');
+  createWorkspaceCopy(workspaceCopy);
+  initializeGitWorkspaceCopy(workspaceCopy, 'e2e-git-ui');
+
+  const { app, window } = await launchApp({ projectRoot: workspaceCopy });
+
+  try {
+    await ensureExplorerVisible(window);
+
+    await expect(window.getByTestId('status-bar-branch-label')).toHaveText('e2e-git-ui');
+    await expect(window.getByTestId('file-tree-label-ignored-dir')).toHaveClass(/text-ide-text-muted/);
+    await expect(window.getByTestId('file-tree-label-ignored_log')).toHaveClass(/text-ide-text-muted/);
+
+    await window.getByTestId('file-tree-node-rtl').click();
+    await window.getByTestId('file-tree-node-rtl_core').click();
+
+    await expect(window.getByTestId('file-tree-label-rtl_core_reg_file_v')).toHaveClass(/text-ide-warning/);
+
+    await window.getByTestId('file-tree-node-rtl_core_reg_file_v').dblclick();
+
+    await expect(window.getByTestId('editor-tab-title-rtl/core/reg_file.v')).toHaveClass(/text-ide-warning/);
   } finally {
     await app.close();
   }

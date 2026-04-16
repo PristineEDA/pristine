@@ -4,6 +4,7 @@ import {
 } from 'lucide-react';
 import { WorkspaceTreeNode, toTreeTestId } from '../../../workspace/workspaceFiles';
 import type { WorkspaceRevealRequest } from '../../../workspace/useWorkspaceTree';
+import type { WorkspaceGitPathState } from '../../../../../types/workspace-git';
 import { FileTypeBadge } from '../shared/FileTypeBadge';
 
 // ─── File Icon ────────────────────────────────────────────────────────────────
@@ -49,6 +50,7 @@ export const FileTreeNode = memo(function FileTreeNode({
   onFilePreview,
   expandedFolders,
   onToggleFolder,
+  gitPathStates,
   revealRequest,
 }: {
   node: WorkspaceTreeNode;
@@ -58,12 +60,19 @@ export const FileTreeNode = memo(function FileTreeNode({
   onFilePreview: (id: string, name: string) => void;
   expandedFolders: Set<string>;
   onToggleFolder: (id: string) => void;
+  gitPathStates: Record<string, WorkspaceGitPathState>;
   revealRequest?: WorkspaceRevealRequest | null;
 }) {
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
   const rowRef = useRef<HTMLDivElement | null>(null);
   const isExpanded = expandedFolders.has(node.id);
   const isActive = node.id === activeFileId;
+  const gitPathState = gitPathStates[node.path];
+  const labelColorClassName = gitPathState === 'modified'
+    ? 'text-ide-warning'
+    : gitPathState === 'ignored'
+    ? 'text-ide-text-muted'
+    : 'text-foreground';
 
   useEffect(() => {
     if (revealRequest?.path !== node.path) {
@@ -126,7 +135,12 @@ export const FileTreeNode = memo(function FileTreeNode({
             {isExpanded
               ? <FolderOpen size={14} className="text-ide-syntax-folder shrink-0" />
               : <Folder size={14} className="text-ide-syntax-folder shrink-0" />}
-            <span className="text-[13px] flex-1 truncate ml-1">{node.name}</span>
+            <span
+              data-testid={`file-tree-label-${toTreeTestId(node.path)}`}
+              className={`text-[13px] flex-1 truncate ml-1 ${labelColorClassName}`}
+            >
+              {node.name}
+            </span>
           </>
         ) : (
           <>
@@ -134,7 +148,12 @@ export const FileTreeNode = memo(function FileTreeNode({
             <span className="w-4 h-4 flex items-center justify-center shrink-0">
               <FileIcon name={node.name} />
             </span>
-            <span className="text-[13px] flex-1 truncate ml-1">{node.name}</span>
+            <span
+              data-testid={`file-tree-label-${toTreeTestId(node.path)}`}
+              className={`text-[13px] flex-1 truncate ml-1 ${labelColorClassName}`}
+            >
+              {node.name}
+            </span>
           </>
         )}
       </div>
@@ -163,6 +182,7 @@ export const FileTreeNode = memo(function FileTreeNode({
           onFilePreview={onFilePreview}
           expandedFolders={expandedFolders}
           onToggleFolder={onToggleFolder}
+          gitPathStates={gitPathStates}
           revealRequest={revealRequest}
         />
       ))}

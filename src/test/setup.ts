@@ -125,6 +125,14 @@ function createElectronApiMock() {
       stat: vi.fn(),
       exists: vi.fn().mockResolvedValue(false),
     },
+    git: {
+      getStatus: vi.fn().mockResolvedValue({
+        branchName: null,
+        hasProjectFiles: false,
+        isGitRepo: false,
+        pathStates: {},
+      }),
+    },
     shell: {
       exec: vi.fn(),
       kill: vi.fn(),
@@ -148,6 +156,7 @@ function createElectronApiMock() {
       hover: vi.fn().mockResolvedValue(null),
       definition: vi.fn().mockResolvedValue([]),
       references: vi.fn().mockResolvedValue([]),
+      onDebug: vi.fn(() => vi.fn()),
       onDiagnostics: vi.fn(() => vi.fn()),
       onState: vi.fn(() => vi.fn()),
     },

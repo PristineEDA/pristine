@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { SyncChannels, AsyncChannels, StreamChannels } from './ipc/channels.js';
 import type { LspCompletionResponse, LspDebugEvent, LspDiagnosticsEvent, LspHover, LspStateEvent, WorkspaceLocation } from '../types/systemverilog-lsp.js';
+import type { WorkspaceGitStatusPayload } from '../types/workspace-git.js';
 import type { MenuCommandEvent } from '../src/app/menu/applicationMenu.js';
 import type { WindowCloseDecision, WindowCloseRequest } from '../src/app/window/windowClose.js';
 
@@ -81,6 +82,11 @@ const electronAPI = {
       }>,
     exists: (filePath: string) =>
       ipcRenderer.invoke(AsyncChannels.FS_EXISTS, filePath) as Promise<boolean>,
+  },
+
+  git: {
+    getStatus: () =>
+      ipcRenderer.invoke(AsyncChannels.GIT_GET_STATUS) as Promise<WorkspaceGitStatusPayload>,
   },
 
   // ── Shell (async + stream) ──

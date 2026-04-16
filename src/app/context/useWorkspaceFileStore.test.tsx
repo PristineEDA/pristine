@@ -128,6 +128,7 @@ describe('useWorkspaceFileStore', () => {
     });
 
     expect(window.electronAPI?.fs.writeFile).toHaveBeenCalledWith('rtl/edit.v', 'module edit; logic dirty; endmodule');
+    expect(window.electronAPI?.git.getStatus).toHaveBeenCalledTimes(1);
     expect(result.current.dirtyFiles['rtl/edit.v']).toBe(false);
 
     act(() => {
@@ -161,6 +162,7 @@ describe('useWorkspaceFileStore', () => {
       savedFileIds: ['rtl/pass.v'],
       failedFileIds: ['rtl/fail.v'],
     });
+    expect(window.electronAPI?.git.getStatus).toHaveBeenCalledTimes(1);
     expect(result.current.dirtyFiles['rtl/pass.v']).toBe(false);
     expect(result.current.dirtyFiles['rtl/fail.v']).toBe(true);
   });

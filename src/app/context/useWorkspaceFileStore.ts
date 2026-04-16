@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { refreshWorkspaceGitStatus } from '../git/workspaceGitStatus';
 
 export interface SaveFilesResult {
   savedFileIds: string[];
@@ -163,7 +164,7 @@ export function useWorkspaceFileStore() {
     });
   }, []);
 
-  const saveFileContent = useCallback(async (fileId: string) => {
+  const saveFileContentInternal = useCallback(async (fileId: string, refreshGitStatusAfterSuccess: boolean) => {
     if (!fileId) {
       return false;
     }
@@ -220,6 +221,11 @@ export function useWorkspaceFileStore() {
         savedFileContentsRef.current = next;
         return next;
       });
+
+      if (refreshGitStatusAfterSuccess) {
+        refreshWorkspaceGitStatus();
+      }
+
       return true;
     } catch (error: unknown) {
       if (isMountedRef.current) {
@@ -237,6 +243,10 @@ export function useWorkspaceFileStore() {
     }
   }, []);
 
+  const saveFileContent = useCallback(async (fileId: string) => {
+    return saveFileContentInternal(fileId, true);
+  }, [saveFileContentInternal]);
+
   const saveFiles = useCallback(async (fileIds: string[]): Promise<SaveFilesResult> => {
     const uniqueFileIds = Array.from(new Set(fileIds.filter(Boolean)));
     if (uniqueFileIds.length === 0) {
@@ -248,14 +258,18 @@ export function useWorkspaceFileStore() {
 
     const results = await Promise.all(uniqueFileIds.map(async (fileId) => ({
       fileId,
-      saved: await saveFileContent(fileId),
+      saved: await saveFileContentInternal(fileId, false),
     })));
+
+    if (results.some((result) => result.saved)) {
+      refreshWorkspaceGitStatus();
+    }
 
     return {
       savedFileIds: results.filter((result) => result.saved).map((result) => result.fileId),
       failedFileIds: results.filter((result) => !result.saved).map((result) => result.fileId),
     };
-  }, [saveFileContent]);
+  }, [saveFileContentInternal]);
 
   const dirtyFiles = useMemo(() => {
     const dirtyEntries = new Set([
