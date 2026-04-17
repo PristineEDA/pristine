@@ -13,7 +13,7 @@ on:
       - published
 
 env:
-  PRISTINE_EMPTY_WALLPAPER_URL: https://raw.githubusercontent.com/PristineEDA/Pristine-res/main/images/empty-wallpaper.png
+  PRISTINE_EMPTY_WALLPAPER_URL: https://raw.githubusercontent.com/PristineEDA/pristine-res/main/images/empty-wallpaper.png
 
 jobs:
   package-gate:

@@ -1,27 +1,47 @@
-import { AlertCircle, AlertTriangle, Info, Lightbulb } from 'lucide-react';
+import { useMemo } from 'react';
+import { AlertCircle, AlertTriangle, Info, Lightbulb, type LucideIcon } from 'lucide-react';
 import type { LspProblem } from '../../../lsp/lspProblems';
 
 interface ProblemsTabPanelProps {
   problems: LspProblem[];
 }
 
-export function ProblemsTabPanel({ problems }: ProblemsTabPanelProps) {
-  const problemsList = problems;
-  const errors = problemsList.filter((p) => p.severity === 'error');
-  const warnings = problemsList.filter((p) => p.severity === 'warning');
-  const infos = problemsList.filter((p) => p.severity === 'info');
-  const hints = problemsList.filter((p) => p.severity === 'hint');
+interface ProblemSectionDefinition {
+  label: string;
+  severity: LspProblem['severity'];
+  icon: LucideIcon;
+  color: string;
+}
 
-  const sections = [
-    { label: 'Errors', items: errors, icon: AlertCircle, color: '#f48771' },
-    { label: 'Warnings', items: warnings, icon: AlertTriangle, color: '#cca700' },
-    { label: 'Infos', items: infos, icon: Info, color: '#75beff' },
-    { label: 'Hints', items: hints, icon: Lightbulb, color: '#2fbf71' },
-  ];
+const PROBLEM_SECTION_DEFINITIONS: ProblemSectionDefinition[] = [
+  { label: 'Errors', severity: 'error', icon: AlertCircle, color: '#f48771' },
+  { label: 'Warnings', severity: 'warning', icon: AlertTriangle, color: '#cca700' },
+  { label: 'Infos', severity: 'info', icon: Info, color: '#75beff' },
+  { label: 'Hints', severity: 'hint', icon: Lightbulb, color: '#2fbf71' },
+];
+
+export function ProblemsTabPanel({ problems }: ProblemsTabPanelProps) {
+  const sections = useMemo(() => {
+    const groupedProblems: Record<LspProblem['severity'], LspProblem[]> = {
+      error: [],
+      warning: [],
+      info: [],
+      hint: [],
+    };
+
+    for (const problem of problems) {
+      groupedProblems[problem.severity].push(problem);
+    }
+
+    return PROBLEM_SECTION_DEFINITIONS.map((section) => ({
+      ...section,
+      items: groupedProblems[section.severity],
+    }));
+  }, [problems]);
 
   return (
     <div className="flex-1 overflow-y-auto py-1">
-      {problemsList.length === 0 && (
+      {problems.length === 0 && (
         <div className="px-4 py-3 text-[12px] text-muted-foreground" data-testid="problems-tab-empty-state">
           No LSP diagnostics yet.
         </div>

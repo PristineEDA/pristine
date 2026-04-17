@@ -13,11 +13,11 @@ const generatedDir = path.join(workspaceRoot, 'public', 'generated')
 const wallpaperTargetPath = path.join(generatedDir, 'empty-wallpaper.png')
 const generatedFontsDir = path.join(generatedDir, 'fonts')
 
-const defaultAssetUrl = 'https://raw.githubusercontent.com/PristineEDA/Pristine-res/main/images/empty-wallpaper.png'
+const defaultAssetUrl = 'https://raw.githubusercontent.com/PristineEDA/pristine-res/main/images/empty-wallpaper.png'
 const assetUrl = process.env.PRISTINE_EMPTY_WALLPAPER_URL ?? defaultAssetUrl
-const defaultFontAssetBaseUrl = 'https://raw.githubusercontent.com/PristineEDA/Pristine-res/main/fonts'
+const defaultFontAssetBaseUrl = 'https://raw.githubusercontent.com/PristineEDA/pristine-res/main/fonts'
 const fontAssetBaseUrl = process.env.PRISTINE_FONT_ASSET_BASE_URL ?? defaultFontAssetBaseUrl
-const defaultLocalResourceRoot = path.resolve(workspaceRoot, '..', 'Pristine-res')
+const defaultLocalResourceRoot = path.resolve(workspaceRoot, '..', 'pristine-res')
 const localResourceRoot = process.env.PRISTINE_RES_LOCAL_DIR ?? defaultLocalResourceRoot
 const localWallpaperSourcePath = path.join(localResourceRoot, 'images', 'empty-wallpaper.png')
 const localFontSourceDir = path.join(localResourceRoot, 'fonts')
