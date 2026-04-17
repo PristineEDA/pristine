@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useRef, useState } from 'react';
+import { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react';
 import {
   Settings, CircleUser, Minus, Square, X, Code2, Presentation, Workflow,
   Sun, Moon,
@@ -363,6 +363,54 @@ const PanelRightIcon = ({ size = 15, filled = false }: { size?: number; filled?:
   </svg>
 );
 
+interface MenuBarSettingsState {
+  closeToTrayEnabled: boolean;
+  floatingInfoWindowVisible: boolean;
+  theme: Theme;
+  editorCursorBlinking: ReturnType<typeof getConfiguredEditorCursorBlinking>;
+  editorBracketPairGuides: ReturnType<typeof getConfiguredEditorBracketPairGuides>;
+  editorFontFamily: ReturnType<typeof getConfiguredEditorFontFamily>;
+  editorFontLigatures: ReturnType<typeof getConfiguredEditorFontLigatures>;
+  editorFontSize: ReturnType<typeof getConfiguredEditorFontSize>;
+  editorFoldingStrategy: ReturnType<typeof getConfiguredEditorFoldingStrategy>;
+  editorGlyphMargin: ReturnType<typeof getConfiguredEditorGlyphMargin>;
+  editorIndentGuides: ReturnType<typeof getConfiguredEditorIndentGuides>;
+  editorLineNumbers: ReturnType<typeof getConfiguredEditorLineNumbers>;
+  editorMinimapEnabled: ReturnType<typeof getConfiguredEditorMinimapEnabled>;
+  editorRenderControlCharacters: ReturnType<typeof getConfiguredEditorRenderControlCharacters>;
+  editorRenderWhitespace: ReturnType<typeof getConfiguredEditorRenderWhitespace>;
+  editorScrollBeyondLastLine: ReturnType<typeof getConfiguredEditorScrollBeyondLastLine>;
+  editorSmoothScrolling: ReturnType<typeof getConfiguredEditorSmoothScrolling>;
+  editorTabSize: ReturnType<typeof getConfiguredEditorTabSize>;
+  editorTheme: ReturnType<typeof getConfiguredEditorTheme>;
+  editorWordWrap: ReturnType<typeof getConfiguredEditorWordWrap>;
+}
+
+function getPersistedSettingsState(): MenuBarSettingsState {
+  return {
+    closeToTrayEnabled: getConfiguredCloseAction() === 'tray',
+    floatingInfoWindowVisible: getFloatingInfoWindowVisible(),
+    theme: getConfiguredTheme(),
+    editorCursorBlinking: getConfiguredEditorCursorBlinking(),
+    editorBracketPairGuides: getConfiguredEditorBracketPairGuides(),
+    editorFontFamily: getConfiguredEditorFontFamily(),
+    editorFontLigatures: getConfiguredEditorFontLigatures(),
+    editorFontSize: getConfiguredEditorFontSize(),
+    editorFoldingStrategy: getConfiguredEditorFoldingStrategy(),
+    editorGlyphMargin: getConfiguredEditorGlyphMargin(),
+    editorIndentGuides: getConfiguredEditorIndentGuides(),
+    editorLineNumbers: getConfiguredEditorLineNumbers(),
+    editorMinimapEnabled: getConfiguredEditorMinimapEnabled(),
+    editorRenderControlCharacters: getConfiguredEditorRenderControlCharacters(),
+    editorRenderWhitespace: getConfiguredEditorRenderWhitespace(),
+    editorScrollBeyondLastLine: getConfiguredEditorScrollBeyondLastLine(),
+    editorSmoothScrolling: getConfiguredEditorSmoothScrolling(),
+    editorTabSize: getConfiguredEditorTabSize(),
+    editorTheme: getConfiguredEditorTheme(),
+    editorWordWrap: getConfiguredEditorWordWrap(),
+  };
+}
+
 interface MenuBarProps {
   showLeftPanel?: boolean;
   showBottomPanel?: boolean;
@@ -394,21 +442,6 @@ export function MenuBar({
     undoActiveEditor,
   } = useWorkspace();
   const {
-    cursorBlinking: editorCursorBlinking,
-    bracketPairGuides: editorBracketPairGuides,
-    fontFamily: editorFontFamily,
-    fontLigatures: editorFontLigatures,
-    fontSize: editorFontSize,
-    foldingStrategy: editorFoldingStrategy,
-    glyphMargin: editorGlyphMargin,
-    indentGuides: editorIndentGuides,
-    lineNumbers: editorLineNumbers,
-    minimapEnabled: editorMinimapEnabled,
-    renderControlCharacters: editorRenderControlCharacters,
-    renderWhitespace: editorRenderWhitespace,
-    scrollBeyondLastLine: editorScrollBeyondLastLine,
-    smoothScrolling: editorSmoothScrolling,
-    tabSize: editorTabSize,
     setCursorBlinking: setEditorCursorBlinking,
     setBracketPairGuides: setEditorBracketPairGuides,
     setFontFamily: setEditorFontFamily,
@@ -426,38 +459,13 @@ export function MenuBar({
     setTabSize: setEditorTabSize,
     setTheme: setEditorTheme,
     setWordWrap: setEditorWordWrap,
-    theme: editorTheme,
-    wordWrap: editorWordWrap,
   } = useEditorSettings();
   const { theme, setTheme, toggleTheme } = useTheme();
   const { state: activityBarState, toggleSidebar } = useSidebar();
   const ref = useRef<HTMLDivElement>(null);
   const [aboutDialogOpen, setAboutDialogOpen] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
-  const [closeToTrayEnabled, setCloseToTrayEnabled] = useState(() => getConfiguredCloseAction() === 'tray');
-  const [floatingInfoWindowVisible, setFloatingInfoWindowVisible] = useState(() => getFloatingInfoWindowVisible());
-  const [settingsTheme, setSettingsTheme] = useState<Theme>(() => getConfiguredTheme());
-  const [settingsEditorCursorBlinking, setSettingsEditorCursorBlinking] = useState(() => getConfiguredEditorCursorBlinking());
-  const [settingsEditorBracketPairGuides, setSettingsEditorBracketPairGuides] = useState(() => getConfiguredEditorBracketPairGuides());
-  const [settingsEditorFontFamily, setSettingsEditorFontFamily] = useState(() => getConfiguredEditorFontFamily());
-  const [settingsEditorFontLigatures, setSettingsEditorFontLigatures] = useState(() => getConfiguredEditorFontLigatures());
-  const [settingsEditorFontSize, setSettingsEditorFontSize] = useState(() => getConfiguredEditorFontSize());
-  const [settingsEditorFoldingStrategy, setSettingsEditorFoldingStrategy] = useState(() => getConfiguredEditorFoldingStrategy());
-  const [settingsEditorGlyphMargin, setSettingsEditorGlyphMargin] = useState(() => getConfiguredEditorGlyphMargin());
-  const [settingsEditorIndentGuides, setSettingsEditorIndentGuides] = useState(() => getConfiguredEditorIndentGuides());
-  const [settingsEditorLineNumbers, setSettingsEditorLineNumbers] = useState(() => getConfiguredEditorLineNumbers());
-  const [settingsEditorMinimapEnabled, setSettingsEditorMinimapEnabled] = useState(() => getConfiguredEditorMinimapEnabled());
-  const [settingsEditorRenderControlCharacters, setSettingsEditorRenderControlCharacters] = useState(
-    () => getConfiguredEditorRenderControlCharacters(),
-  );
-  const [settingsEditorRenderWhitespace, setSettingsEditorRenderWhitespace] = useState(() => getConfiguredEditorRenderWhitespace());
-  const [settingsEditorScrollBeyondLastLine, setSettingsEditorScrollBeyondLastLine] = useState(
-    () => getConfiguredEditorScrollBeyondLastLine(),
-  );
-  const [settingsEditorSmoothScrolling, setSettingsEditorSmoothScrolling] = useState(() => getConfiguredEditorSmoothScrolling());
-  const [settingsEditorTabSize, setSettingsEditorTabSize] = useState(() => getConfiguredEditorTabSize());
-  const [settingsEditorTheme, setSettingsEditorTheme] = useState(() => getConfiguredEditorTheme());
-  const [settingsEditorWordWrap, setSettingsEditorWordWrap] = useState(() => getConfiguredEditorWordWrap());
+  const [settingsState, setSettingsState] = useState<MenuBarSettingsState>(getPersistedSettingsState);
   const layoutIconsEnabled = canUseLayoutPanels(mainContentView, activeView);
   const activityBarToggleEnabled = mainContentView === 'code';
   const layoutIconClassName = [
@@ -475,229 +483,137 @@ export function MenuBar({
       : 'opacity-40',
   ].join(' ');
 
-  const syncPersistedSettingsState = () => {
-    setCloseToTrayEnabled(getConfiguredCloseAction() === 'tray');
-    setFloatingInfoWindowVisible(getFloatingInfoWindowVisible());
-    setSettingsTheme(getConfiguredTheme());
-    setSettingsEditorCursorBlinking(getConfiguredEditorCursorBlinking());
-    setSettingsEditorBracketPairGuides(getConfiguredEditorBracketPairGuides());
-    setSettingsEditorFontFamily(getConfiguredEditorFontFamily());
-    setSettingsEditorFontLigatures(getConfiguredEditorFontLigatures());
-    setSettingsEditorFontSize(getConfiguredEditorFontSize());
-    setSettingsEditorFoldingStrategy(getConfiguredEditorFoldingStrategy());
-    setSettingsEditorGlyphMargin(getConfiguredEditorGlyphMargin());
-    setSettingsEditorIndentGuides(getConfiguredEditorIndentGuides());
-    setSettingsEditorLineNumbers(getConfiguredEditorLineNumbers());
-    setSettingsEditorMinimapEnabled(getConfiguredEditorMinimapEnabled());
-    setSettingsEditorRenderControlCharacters(getConfiguredEditorRenderControlCharacters());
-    setSettingsEditorRenderWhitespace(getConfiguredEditorRenderWhitespace());
-    setSettingsEditorScrollBeyondLastLine(getConfiguredEditorScrollBeyondLastLine());
-    setSettingsEditorSmoothScrolling(getConfiguredEditorSmoothScrolling());
-    setSettingsEditorTabSize(getConfiguredEditorTabSize());
-    setSettingsEditorTheme(getConfiguredEditorTheme());
-    setSettingsEditorWordWrap(getConfiguredEditorWordWrap());
-  };
+  const patchSettingsState = useCallback((partialState: Partial<MenuBarSettingsState>) => {
+    setSettingsState((current) => ({ ...current, ...partialState }));
+  }, []);
 
-  useEffect(() => {
-    setSettingsTheme(theme);
-  }, [theme]);
-
-  useEffect(() => {
-    setSettingsEditorCursorBlinking(editorCursorBlinking);
-  }, [editorCursorBlinking]);
-
-  useEffect(() => {
-    setSettingsEditorBracketPairGuides(editorBracketPairGuides);
-  }, [editorBracketPairGuides]);
-
-  useEffect(() => {
-    setSettingsEditorFontFamily(editorFontFamily);
-  }, [editorFontFamily]);
-
-  useEffect(() => {
-    setSettingsEditorFontLigatures(editorFontLigatures);
-  }, [editorFontLigatures]);
-
-  useEffect(() => {
-    setSettingsEditorFontSize(editorFontSize);
-  }, [editorFontSize]);
-
-  useEffect(() => {
-    setSettingsEditorFoldingStrategy(editorFoldingStrategy);
-  }, [editorFoldingStrategy]);
-
-  useEffect(() => {
-    setSettingsEditorGlyphMargin(editorGlyphMargin);
-  }, [editorGlyphMargin]);
-
-  useEffect(() => {
-    setSettingsEditorIndentGuides(editorIndentGuides);
-  }, [editorIndentGuides]);
-
-  useEffect(() => {
-    setSettingsEditorLineNumbers(editorLineNumbers);
-  }, [editorLineNumbers]);
-
-  useEffect(() => {
-    setSettingsEditorMinimapEnabled(editorMinimapEnabled);
-  }, [editorMinimapEnabled]);
-
-  useEffect(() => {
-    setSettingsEditorRenderControlCharacters(editorRenderControlCharacters);
-  }, [editorRenderControlCharacters]);
-
-  useEffect(() => {
-    setSettingsEditorRenderWhitespace(editorRenderWhitespace);
-  }, [editorRenderWhitespace]);
-
-  useEffect(() => {
-    setSettingsEditorScrollBeyondLastLine(editorScrollBeyondLastLine);
-  }, [editorScrollBeyondLastLine]);
-
-  useEffect(() => {
-    setSettingsEditorSmoothScrolling(editorSmoothScrolling);
-  }, [editorSmoothScrolling]);
-
-  useEffect(() => {
-    setSettingsEditorTabSize(editorTabSize);
-  }, [editorTabSize]);
-
-  useEffect(() => {
-    setSettingsEditorTheme(editorTheme);
-  }, [editorTheme]);
-
-  useEffect(() => {
-    setSettingsEditorWordWrap(editorWordWrap);
-  }, [editorWordWrap]);
-
-  useEffect(() => {
-    if (!settingsDialogOpen) {
-      return;
+  const handleSettingsDialogOpenChange = useCallback((nextOpen: boolean) => {
+    if (nextOpen) {
+      setSettingsState(getPersistedSettingsState());
     }
 
-    syncPersistedSettingsState();
-  }, [settingsDialogOpen]);
+    setSettingsDialogOpen(nextOpen);
+  }, []);
 
   const handleCloseToTrayChange = (checked: boolean) => {
-    setCloseToTrayEnabled(checked);
+    patchSettingsState({ closeToTrayEnabled: checked });
     void window.electronAPI?.config.set(CLOSE_ACTION_CONFIG_KEY, checked ? 'tray' : 'quit');
   };
 
   const handleFloatingInfoWindowVisibleChange = (checked: boolean) => {
-    setFloatingInfoWindowVisible(checked);
+    patchSettingsState({ floatingInfoWindowVisible: checked });
     void window.electronAPI?.config.set(FLOATING_INFO_VISIBLE_CONFIG_KEY, checked);
     void window.electronAPI?.setFloatingInfoWindowVisible(checked);
   };
 
   const handleThemeModeChange = (checked: boolean) => {
     const nextTheme = checked ? 'dark' : 'light';
-    setSettingsTheme(nextTheme);
+    patchSettingsState({ theme: nextTheme });
     setTheme(nextTheme);
   };
 
   const handleEditorFontSizeChange = (value: number[]) => {
-    const nextValue = value[0] ?? settingsEditorFontSize;
-    setSettingsEditorFontSize(nextValue);
+    const nextValue = value[0] ?? settingsState.editorFontSize;
+    patchSettingsState({ editorFontSize: nextValue });
   };
 
   const handleEditorFontSizeCommit = (value: number[]) => {
-    const nextValue = value[0] ?? settingsEditorFontSize;
-    setSettingsEditorFontSize(nextValue);
+    const nextValue = value[0] ?? settingsState.editorFontSize;
+    patchSettingsState({ editorFontSize: nextValue });
     setEditorFontSize(nextValue);
   };
 
   const handleEditorFontFamilyChange = (value: string) => {
     const nextFontFamily = parseEditorFontFamily(value);
-    setSettingsEditorFontFamily(nextFontFamily);
+    patchSettingsState({ editorFontFamily: nextFontFamily });
     setEditorFontFamily(nextFontFamily);
   };
 
   const handleEditorFontLigaturesChange = (checked: boolean) => {
-    setSettingsEditorFontLigatures(checked);
+    patchSettingsState({ editorFontLigatures: checked });
     setEditorFontLigatures(checked);
   };
 
   const handleEditorTabSizeChange = (value: string) => {
     const nextTabSize = parseEditorTabSize(value);
-    setSettingsEditorTabSize(nextTabSize);
+    patchSettingsState({ editorTabSize: nextTabSize });
     setEditorTabSize(nextTabSize);
   };
 
   const handleEditorCursorBlinkingChange = (value: string) => {
     const nextCursorBlinking = parseEditorCursorBlinking(value);
-    setSettingsEditorCursorBlinking(nextCursorBlinking);
+    patchSettingsState({ editorCursorBlinking: nextCursorBlinking });
     setEditorCursorBlinking(nextCursorBlinking);
   };
 
   const handleEditorThemeChange = (value: string) => {
     const nextTheme = parseEditorTheme(value);
-    setSettingsEditorTheme(nextTheme);
+    patchSettingsState({ editorTheme: nextTheme });
     setEditorTheme(nextTheme);
   };
 
   const handleEditorWordWrapChange = (value: string) => {
     const nextWordWrap = parseEditorWordWrap(value);
-    setSettingsEditorWordWrap(nextWordWrap);
+    patchSettingsState({ editorWordWrap: nextWordWrap });
     setEditorWordWrap(nextWordWrap);
   };
 
   const handleEditorRenderWhitespaceChange = (value: string) => {
     const nextRenderWhitespace = parseEditorRenderWhitespace(value);
-    setSettingsEditorRenderWhitespace(nextRenderWhitespace);
+    patchSettingsState({ editorRenderWhitespace: nextRenderWhitespace });
     setEditorRenderWhitespace(nextRenderWhitespace);
   };
 
   const handleEditorLineNumbersChange = (value: string) => {
     const nextLineNumbers = parseEditorLineNumbers(value);
-    setSettingsEditorLineNumbers(nextLineNumbers);
+    patchSettingsState({ editorLineNumbers: nextLineNumbers });
     setEditorLineNumbers(nextLineNumbers);
   };
 
   const handleEditorSmoothScrollingChange = (checked: boolean) => {
-    setSettingsEditorSmoothScrolling(checked);
+    patchSettingsState({ editorSmoothScrolling: checked });
     setEditorSmoothScrolling(checked);
   };
 
   const handleEditorScrollBeyondLastLineChange = (checked: boolean) => {
-    setSettingsEditorScrollBeyondLastLine(checked);
+    patchSettingsState({ editorScrollBeyondLastLine: checked });
     setEditorScrollBeyondLastLine(checked);
   };
 
   const handleEditorFoldingStrategyChange = (value: string) => {
     const nextFoldingStrategy = parseEditorFoldingStrategy(value);
-    setSettingsEditorFoldingStrategy(nextFoldingStrategy);
+    patchSettingsState({ editorFoldingStrategy: nextFoldingStrategy });
     setEditorFoldingStrategy(nextFoldingStrategy);
   };
 
   const handleEditorRenderControlCharactersChange = (checked: boolean) => {
-    setSettingsEditorRenderControlCharacters(checked);
+    patchSettingsState({ editorRenderControlCharacters: checked });
     setEditorRenderControlCharacters(checked);
   };
 
   const handleEditorMinimapEnabledChange = (checked: boolean) => {
-    setSettingsEditorMinimapEnabled(checked);
+    patchSettingsState({ editorMinimapEnabled: checked });
     setEditorMinimapEnabled(checked);
   };
 
   const handleEditorGlyphMarginChange = (checked: boolean) => {
-    setSettingsEditorGlyphMargin(checked);
+    patchSettingsState({ editorGlyphMargin: checked });
     setEditorGlyphMargin(checked);
   };
 
   const handleEditorBracketPairGuidesChange = (checked: boolean) => {
-    setSettingsEditorBracketPairGuides(checked);
+    patchSettingsState({ editorBracketPairGuides: checked });
     setEditorBracketPairGuides(checked);
   };
 
   const handleEditorIndentGuidesChange = (checked: boolean) => {
-    setSettingsEditorIndentGuides(checked);
+    patchSettingsState({ editorIndentGuides: checked });
     setEditorIndentGuides(checked);
   };
 
-  const openSettingsDialog = () => {
-    syncPersistedSettingsState();
-    setSettingsDialogOpen(true);
-  };
+  const openSettingsDialog = useCallback(() => {
+    handleSettingsDialogOpenChange(true);
+  }, [handleSettingsDialogOpenChange]);
 
   const openAboutDialog = () => {
     setAboutDialogOpen(true);
@@ -1088,7 +1004,7 @@ export function MenuBar({
           dialogStyle={noDragInteractive as React.CSSProperties}
         />
 
-        <Dialog open={settingsDialogOpen} onOpenChange={setSettingsDialogOpen}>
+        <Dialog open={settingsDialogOpen} onOpenChange={handleSettingsDialogOpenChange}>
           <DialogContent
             data-testid="settings-dialog"
             className="max-h-[85vh] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden sm:max-w-xl"
@@ -1117,7 +1033,7 @@ export function MenuBar({
                       min={10}
                       max={24}
                       step={1}
-                      value={[settingsEditorFontSize]}
+                      value={[settingsState.editorFontSize]}
                       onValueChange={handleEditorFontSizeChange}
                       onValueCommit={handleEditorFontSizeCommit}
                     />
@@ -1125,13 +1041,13 @@ export function MenuBar({
                       className="min-w-10 text-right text-[13px] font-medium text-foreground"
                       data-testid="settings-editor-font-size-value"
                     >
-                      {settingsEditorFontSize}px
+                      {settingsState.editorFontSize}px
                     </span>
                   </div>
                 </div>
               </div>
               <SettingsComboboxSection
-                value={settingsEditorFontFamily}
+                value={settingsState.editorFontFamily}
                 onValueChange={handleEditorFontFamilyChange}
                 options={editorFontFamilyOptions.map((option) => ({
                   value: option.value,
@@ -1145,7 +1061,7 @@ export function MenuBar({
                 testId="settings-editor-font-family-combobox"
               />
               <SettingsComboboxSection
-                value={settingsEditorTheme}
+                value={settingsState.editorTheme}
                 onValueChange={handleEditorThemeChange}
                 options={editorThemeOptions.map((option) => ({
                   value: option.value,
@@ -1167,7 +1083,7 @@ export function MenuBar({
                 </div>
               </div>
               <SettingsComboboxSection
-                value={settingsEditorWordWrap}
+                value={settingsState.editorWordWrap}
                 onValueChange={handleEditorWordWrapChange}
                 options={editorWordWrapOptions.map((option) => ({
                   value: option.value,
@@ -1181,7 +1097,7 @@ export function MenuBar({
                 testId="settings-editor-word-wrap-combobox"
               />
               <SettingsComboboxSection
-                value={String(settingsEditorTabSize)}
+                value={String(settingsState.editorTabSize)}
                 onValueChange={handleEditorTabSizeChange}
                 options={editorTabSizeOptions.map((option) => ({
                   value: String(option.value),
@@ -1195,7 +1111,7 @@ export function MenuBar({
                 testId="settings-editor-tab-size-combobox"
               />
               <SettingsComboboxSection
-                value={settingsEditorCursorBlinking}
+                value={settingsState.editorCursorBlinking}
                 onValueChange={handleEditorCursorBlinkingChange}
                 options={editorCursorBlinkingOptions.map((option) => ({
                   value: option.value,
@@ -1209,7 +1125,7 @@ export function MenuBar({
                 testId="settings-editor-cursor-blinking-combobox"
               />
               <SettingsComboboxSection
-                value={settingsEditorRenderWhitespace}
+                value={settingsState.editorRenderWhitespace}
                 onValueChange={handleEditorRenderWhitespaceChange}
                 options={editorRenderWhitespaceOptions.map((option) => ({
                   value: option.value,
@@ -1223,7 +1139,7 @@ export function MenuBar({
                 testId="settings-editor-render-whitespace-combobox"
               />
               <SettingsComboboxSection
-                value={settingsEditorLineNumbers}
+                value={settingsState.editorLineNumbers}
                 onValueChange={handleEditorLineNumbersChange}
                 options={editorLineNumbersOptions.map((option) => ({
                   value: option.value,
@@ -1237,7 +1153,7 @@ export function MenuBar({
                 testId="settings-editor-line-numbers-combobox"
               />
               <SettingsComboboxSection
-                value={settingsEditorFoldingStrategy}
+                value={settingsState.editorFoldingStrategy}
                 onValueChange={handleEditorFoldingStrategyChange}
                 options={editorFoldingStrategyOptions.map((option) => ({
                   value: option.value,
@@ -1253,7 +1169,7 @@ export function MenuBar({
               <div className={settingsSectionClassName}>
                 <div className="space-y-3">
                   <SettingsSwitchRow
-                    checked={settingsEditorFontLigatures}
+                    checked={settingsState.editorFontLigatures}
                     description="Enable Monaco font ligatures when the selected code font supports them."
                     onCheckedChange={handleEditorFontLigaturesChange}
                     testId="settings-editor-font-ligatures-switch"
@@ -1261,7 +1177,7 @@ export function MenuBar({
                   />
                   <Separator />
                   <SettingsSwitchRow
-                    checked={settingsEditorSmoothScrolling}
+                    checked={settingsState.editorSmoothScrolling}
                     description="Animate editor scrolling with Monaco's smooth scrolling behavior."
                     onCheckedChange={handleEditorSmoothScrollingChange}
                     testId="settings-editor-smooth-scrolling-switch"
@@ -1269,7 +1185,7 @@ export function MenuBar({
                   />
                   <Separator />
                   <SettingsSwitchRow
-                    checked={settingsEditorScrollBeyondLastLine}
+                    checked={settingsState.editorScrollBeyondLastLine}
                     description="Keep extra blank space after the final line so the cursor can scroll below the file end."
                     onCheckedChange={handleEditorScrollBeyondLastLineChange}
                     testId="settings-editor-scroll-beyond-last-line-switch"
@@ -1277,7 +1193,7 @@ export function MenuBar({
                   />
                   <Separator />
                   <SettingsSwitchRow
-                    checked={settingsEditorRenderControlCharacters}
+                    checked={settingsState.editorRenderControlCharacters}
                     description="Render control characters such as tabs and other non-printable glyphs using Monaco's built-in markers."
                     onCheckedChange={handleEditorRenderControlCharactersChange}
                     testId="settings-editor-render-control-characters-switch"
@@ -1285,7 +1201,7 @@ export function MenuBar({
                   />
                   <Separator />
                   <SettingsSwitchRow
-                    checked={settingsEditorMinimapEnabled}
+                    checked={settingsState.editorMinimapEnabled}
                     description="Show Monaco's minimap overview on the right side of the editor."
                     onCheckedChange={handleEditorMinimapEnabledChange}
                     testId="settings-editor-minimap-switch"
@@ -1293,7 +1209,7 @@ export function MenuBar({
                   />
                   <Separator />
                   <SettingsSwitchRow
-                    checked={settingsEditorGlyphMargin}
+                    checked={settingsState.editorGlyphMargin}
                     description="Keep the glyph margin visible for breakpoints, decorations, and code markers."
                     onCheckedChange={handleEditorGlyphMarginChange}
                     testId="settings-editor-glyph-margin-switch"
@@ -1301,7 +1217,7 @@ export function MenuBar({
                   />
                   <Separator />
                   <SettingsSwitchRow
-                    checked={settingsEditorBracketPairGuides}
+                    checked={settingsState.editorBracketPairGuides}
                     description="Render Monaco's bracket pair guide lines to make nested scopes easier to scan."
                     onCheckedChange={handleEditorBracketPairGuidesChange}
                     testId="settings-editor-bracket-pair-guides-switch"
@@ -1309,7 +1225,7 @@ export function MenuBar({
                   />
                   <Separator />
                   <SettingsSwitchRow
-                    checked={settingsEditorIndentGuides}
+                    checked={settingsState.editorIndentGuides}
                     description="Render indentation guide lines that follow the current block structure."
                     onCheckedChange={handleEditorIndentGuidesChange}
                     testId="settings-editor-indent-guides-switch"
@@ -1326,7 +1242,7 @@ export function MenuBar({
                     </p>
                   </div>
                   <Switch
-                    checked={settingsTheme === 'dark'}
+                    checked={settingsState.theme === 'dark'}
                     data-testid="settings-theme-switch"
                     onCheckedChange={handleThemeModeChange}
                   />
@@ -1341,7 +1257,7 @@ export function MenuBar({
                     </p>
                   </div>
                   <Switch
-                    checked={closeToTrayEnabled}
+                    checked={settingsState.closeToTrayEnabled}
                     data-testid="settings-close-to-tray-switch"
                     onCheckedChange={handleCloseToTrayChange}
                   />
@@ -1356,7 +1272,7 @@ export function MenuBar({
                     </p>
                   </div>
                   <Switch
-                    checked={floatingInfoWindowVisible}
+                    checked={settingsState.floatingInfoWindowVisible}
                     data-testid="settings-floating-info-window-switch"
                     onCheckedChange={handleFloatingInfoWindowVisibleChange}
                   />
@@ -1369,7 +1285,7 @@ export function MenuBar({
                 type="button"
                 variant="outline"
                 data-testid="settings-close-button"
-                onClick={() => setSettingsDialogOpen(false)}
+                onClick={() => handleSettingsDialogOpenChange(false)}
               >
                 Close
               </Button>
