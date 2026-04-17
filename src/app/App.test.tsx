@@ -27,9 +27,9 @@ vi.mock('./components/code/shared/MenuBar', async () => {
     showLeftPanel,
     showBottomPanel,
     showRightPanel,
-    onToggleLeftPanel,
-    onToggleBottomPanel,
-    onToggleRightPanel,
+    onShowLeftPanelChange,
+    onShowBottomPanelChange,
+    onShowRightPanelChange,
   }: any) => {
     const workspace = actual.useWorkspace();
     const activityBar = sidebar.useSidebar();
@@ -42,9 +42,9 @@ vi.mock('./components/code/shared/MenuBar', async () => {
         <span data-testid="main-content-view">{workspace.mainContentView}</span>
         <span data-testid="menu-layout-enabled">{String(workspace.canToggleLayoutPanels)}</span>
         <span data-testid="menu-activity-bar-state">{activityBar.state}</span>
-        <button disabled={!workspace.canToggleLayoutPanels} onClick={onToggleLeftPanel}>toggle-left-panel</button>
-        <button disabled={!workspace.canToggleLayoutPanels} onClick={onToggleBottomPanel}>toggle-bottom-panel</button>
-        <button disabled={!workspace.canToggleLayoutPanels} onClick={onToggleRightPanel}>toggle-right-panel</button>
+        <button disabled={!workspace.canToggleLayoutPanels} onClick={() => onShowLeftPanelChange?.(!showLeftPanel)}>toggle-left-panel</button>
+        <button disabled={!workspace.canToggleLayoutPanels} onClick={() => onShowBottomPanelChange?.(!showBottomPanel)}>toggle-bottom-panel</button>
+        <button disabled={!workspace.canToggleLayoutPanels} onClick={() => onShowRightPanelChange?.(!showRightPanel)}>toggle-right-panel</button>
         <button onClick={activityBar.toggleSidebar}>toggle-activity-bar</button>
         <button onClick={() => workspace.setMainContentView('code')}>switch-code</button>
         <button onClick={() => workspace.setMainContentView('whiteboard')}>switch-whiteboard</button>

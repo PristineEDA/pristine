@@ -557,9 +557,9 @@ function AppLayout() {
         showLeftPanel={showLeftPanel}
         showBottomPanel={showBottomPanel}
         showRightPanel={showRightPanel}
-        onToggleLeftPanel={() => setShowLeftPanel(!showLeftPanel)}
-        onToggleBottomPanel={() => setShowBottomPanel(!showBottomPanel)}
-        onToggleRightPanel={() => setShowRightPanel(!showRightPanel)}
+        onShowLeftPanelChange={setShowLeftPanel}
+        onShowBottomPanelChange={setShowBottomPanel}
+        onShowRightPanelChange={setShowRightPanel}
       />
       <UnsavedChangesDialog />
 

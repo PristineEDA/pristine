@@ -415,18 +415,18 @@ interface MenuBarProps {
   showLeftPanel?: boolean;
   showBottomPanel?: boolean;
   showRightPanel?: boolean;
-  onToggleLeftPanel?: () => void;
-  onToggleBottomPanel?: () => void;
-  onToggleRightPanel?: () => void;
+  onShowLeftPanelChange?: (show: boolean) => void;
+  onShowBottomPanelChange?: (show: boolean) => void;
+  onShowRightPanelChange?: (show: boolean) => void;
 }
 
 export function MenuBar({
   showLeftPanel = false,
   showBottomPanel = false,
   showRightPanel = false,
-  onToggleLeftPanel,
-  onToggleBottomPanel,
-  onToggleRightPanel,
+  onShowLeftPanelChange,
+  onShowBottomPanelChange,
+  onShowRightPanelChange,
 }: MenuBarProps) {
   const isMacOS = isMacOSPlatform();
   const [windowFullScreen, setWindowFullScreen] = useState(() => window.electronAPI?.isFullScreen() === true);
@@ -869,12 +869,12 @@ export function MenuBar({
               data-testid="toggle-left-panel"
               disabled={!layoutIconsEnabled}
               className={layoutIconClassName}
-              onPressedChange={() => {
+              onPressedChange={(nextPressed) => {
                 if (!layoutIconsEnabled) {
                   return;
                 }
 
-                onToggleLeftPanel?.();
+                onShowLeftPanelChange?.(nextPressed);
               }}
             >
               <PanelLeftIcon size={15} filled={showLeftPanel} />
@@ -888,12 +888,12 @@ export function MenuBar({
               data-testid="toggle-bottom-panel"
               disabled={!layoutIconsEnabled}
               className={layoutIconClassName}
-              onPressedChange={() => {
+              onPressedChange={(nextPressed) => {
                 if (!layoutIconsEnabled) {
                   return;
                 }
 
-                onToggleBottomPanel?.();
+                onShowBottomPanelChange?.(nextPressed);
               }}
             >
               <PanelBottomIcon size={15} filled={showBottomPanel} />
@@ -907,12 +907,12 @@ export function MenuBar({
               data-testid="toggle-right-panel"
               disabled={!layoutIconsEnabled}
               className={layoutIconClassName}
-              onPressedChange={() => {
+              onPressedChange={(nextPressed) => {
                 if (!layoutIconsEnabled) {
                   return;
                 }
 
-                onToggleRightPanel?.();
+                onShowRightPanelChange?.(nextPressed);
               }}
             >
               <PanelRightIcon size={15} filled={showRightPanel} />

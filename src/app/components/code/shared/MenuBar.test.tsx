@@ -819,34 +819,37 @@ describe('MenuBar', () => {
   });
 
   it('calls the panel toggle callbacks from the layout icons', () => {
-    const onToggleLeftPanel = vi.fn();
-    const onToggleBottomPanel = vi.fn();
-    const onToggleRightPanel = vi.fn();
+    const onShowLeftPanelChange = vi.fn();
+    const onShowBottomPanelChange = vi.fn();
+    const onShowRightPanelChange = vi.fn();
 
     renderMenuBar({
-      onToggleLeftPanel,
-      onToggleBottomPanel,
-      onToggleRightPanel,
+      onShowLeftPanelChange,
+      onShowBottomPanelChange,
+      onShowRightPanelChange,
     });
 
     fireEvent.click(screen.getByTestId('toggle-left-panel'));
     fireEvent.click(screen.getByTestId('toggle-bottom-panel'));
     fireEvent.click(screen.getByTestId('toggle-right-panel'));
 
-    expect(onToggleLeftPanel).toHaveBeenCalledTimes(1);
-    expect(onToggleBottomPanel).toHaveBeenCalledTimes(1);
-    expect(onToggleRightPanel).toHaveBeenCalledTimes(1);
+    expect(onShowLeftPanelChange).toHaveBeenCalledTimes(1);
+    expect(onShowLeftPanelChange).toHaveBeenCalledWith(true);
+    expect(onShowBottomPanelChange).toHaveBeenCalledTimes(1);
+    expect(onShowBottomPanelChange).toHaveBeenCalledWith(true);
+    expect(onShowRightPanelChange).toHaveBeenCalledTimes(1);
+    expect(onShowRightPanelChange).toHaveBeenCalledWith(true);
   });
 
   it('disables layout icons on unsupported pages and only disables the activity bar toggle outside code', () => {
-    const onToggleLeftPanel = vi.fn();
-    const onToggleBottomPanel = vi.fn();
-    const onToggleRightPanel = vi.fn();
+    const onShowLeftPanelChange = vi.fn();
+    const onShowBottomPanelChange = vi.fn();
+    const onShowRightPanelChange = vi.fn();
 
     renderMenuBarWithControls({
-      onToggleLeftPanel,
-      onToggleBottomPanel,
-      onToggleRightPanel,
+      onShowLeftPanelChange,
+      onShowBottomPanelChange,
+      onShowRightPanelChange,
     });
 
     fireEvent.click(screen.getByText('set-synthesis'));
@@ -866,9 +869,9 @@ describe('MenuBar', () => {
     fireEvent.click(screen.getByTestId('toggle-right-panel'));
     fireEvent.click(screen.getByTestId('toggle-activity-bar'));
 
-    expect(onToggleLeftPanel).not.toHaveBeenCalled();
-    expect(onToggleBottomPanel).not.toHaveBeenCalled();
-    expect(onToggleRightPanel).not.toHaveBeenCalled();
+    expect(onShowLeftPanelChange).not.toHaveBeenCalled();
+    expect(onShowBottomPanelChange).not.toHaveBeenCalled();
+    expect(onShowRightPanelChange).not.toHaveBeenCalled();
     expect(screen.getByTestId('sidebar-state')).toHaveTextContent('expanded');
 
     fireEvent.click(screen.getByText('set-simulation'));
