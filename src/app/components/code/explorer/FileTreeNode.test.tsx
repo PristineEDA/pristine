@@ -185,10 +185,10 @@ describe('FileTreeNode', () => {
     expect(node.className).toContain('bg-primary/20');
 
     fireEvent.click(node);
-  expect(onFilePreview).toHaveBeenCalledWith('rtl/core/cpu_top.v', 'cpu_top.v');
+    expect(onFilePreview).toHaveBeenCalledWith('rtl/core/cpu_top.v', 'cpu_top.v');
 
-  fireEvent.doubleClick(node);
-  expect(onFileOpen).toHaveBeenCalledWith('rtl/core/cpu_top.v', 'cpu_top.v');
+    fireEvent.doubleClick(node);
+    expect(onFileOpen).toHaveBeenCalledWith('rtl/core/cpu_top.v', 'cpu_top.v');
 
     fireEvent.contextMenu(node, { clientX: 100, clientY: 120 });
     fireEvent.click(screen.getByRole('button', { name: /Open in Editor/i }));
@@ -196,6 +196,34 @@ describe('FileTreeNode', () => {
     expect(onFileOpen).toHaveBeenCalledTimes(2);
     expect(screen.queryByRole('button', { name: /Open in Editor/i })).not.toBeInTheDocument();
     expect(screen.getByText('cpu_top.v')).toBeInTheDocument();
+  });
+
+  it('shows the static folder context menu entries when right-clicking a folder', () => {
+    render(
+      <FileTreeNode
+        node={{
+          id: 'rtl',
+          path: 'rtl',
+          name: 'rtl',
+          type: 'folder',
+          children: [],
+          hasLoadedChildren: true,
+          isLoading: false,
+        }}
+        depth={0}
+        activeFileId=""
+        onFileOpen={vi.fn()}
+        onFilePreview={vi.fn()}
+        expandedFolders={new Set()}
+        onToggleFolder={vi.fn()}
+        gitPathStates={{}}
+      />,
+    );
+
+    fireEvent.contextMenu(screen.getByTestId('file-tree-node-rtl'), { clientX: 40, clientY: 60 });
+
+    expect(screen.getByRole('button', { name: /New File/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Copy Path/i })).toBeInTheDocument();
   });
 
   it('scrolls a revealed file node into view when requested', () => {

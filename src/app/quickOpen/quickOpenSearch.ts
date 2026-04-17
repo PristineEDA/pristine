@@ -92,28 +92,39 @@ export function searchQuickOpenFiles(
 ): QuickOpenSearchResult[] {
   const normalizedQuery = query.trim().toLowerCase();
 
-  if (normalizedQuery.length === 0) {
+  if (normalizedQuery.length === 0 || limit <= 0 || files.length === 0) {
     return [];
   }
 
-  return files
-    .map((file) => {
-      const score = getMatchScore(file, normalizedQuery);
-      return score === null ? null : { ...file, score };
-    })
-    .filter((file): file is QuickOpenSearchResult => file !== null)
-    .sort((left, right) => {
-      if (left.score !== right.score) {
-        return right.score - left.score;
-      }
+  const matches: QuickOpenSearchResult[] = [];
 
-      if (left.name !== right.name) {
-        return left.name.localeCompare(right.name, undefined, { numeric: true, sensitivity: 'base' });
-      }
+  for (const file of files) {
+    const score = getMatchScore(file, normalizedQuery);
 
-      return left.path.localeCompare(right.path, undefined, { numeric: true, sensitivity: 'base' });
-    })
-    .slice(0, limit);
+    if (score === null) {
+      continue;
+    }
+
+    matches.push({ ...file, score });
+  }
+
+  matches.sort((left, right) => {
+    if (left.score !== right.score) {
+      return right.score - left.score;
+    }
+
+    if (left.name !== right.name) {
+      return left.name.localeCompare(right.name, undefined, { numeric: true, sensitivity: 'base' });
+    }
+
+    return left.path.localeCompare(right.path, undefined, { numeric: true, sensitivity: 'base' });
+  });
+
+  if (matches.length > limit) {
+    matches.length = limit;
+  }
+
+  return matches;
 }
 
 export function getRecentQuickOpenFiles(
@@ -121,15 +132,36 @@ export function getRecentQuickOpenFiles(
   availableFiles?: QuickOpenFileEntry[] | null,
   limit = 20,
 ): QuickOpenSearchResult[] {
-  const availablePaths = availableFiles
-    ? new Set(availableFiles.map((file) => file.path))
-    : null;
+  if (limit <= 0 || recentFiles.length === 0) {
+    return [];
+  }
 
-  return recentFiles
-    .filter((file) => availablePaths === null || availablePaths.has(file.path))
-    .slice(0, limit)
-    .map((file, index) => ({
+  let availablePaths: Set<string> | null = null;
+
+  if (availableFiles) {
+    availablePaths = new Set<string>();
+
+    for (const file of availableFiles) {
+      availablePaths.add(file.path);
+    }
+  }
+
+  const recentResults: QuickOpenSearchResult[] = [];
+
+  for (const file of recentFiles) {
+    if (availablePaths !== null && !availablePaths.has(file.path)) {
+      continue;
+    }
+
+    recentResults.push({
       ...file,
-      score: limit - index,
-    }));
+      score: limit - recentResults.length,
+    });
+
+    if (recentResults.length === limit) {
+      break;
+    }
+  }
+
+  return recentResults;
 }

@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef } from 'react';
+import { Fragment, memo, useEffect, useMemo, useRef } from 'react';
 import { CornerDownLeft, Search } from 'lucide-react';
 import { toTreeTestId } from '../../../workspace/workspaceFiles';
 import { FileTypeBadge } from './FileTypeBadge';
@@ -21,6 +21,24 @@ interface QuickOpenPaletteProps {
   onSelectResult: (result: QuickOpenSearchResult) => void;
 }
 
+interface HighlightedTextProps {
+  text: string;
+  query: string;
+  testIdPrefix?: string;
+}
+
+interface QuickOpenResultRowProps {
+  result: QuickOpenSearchResult;
+  query: string;
+  index: number;
+  isSelected: boolean;
+  onSelectedIndexChange: (index: number) => void;
+  onSelectResult: (result: QuickOpenSearchResult) => void;
+  selectedRowRef: React.RefObject<HTMLButtonElement | null>;
+}
+
+const EMPTY_MATCHED_CHARACTER_INDEXES = new Set<number>();
+
 function getDirectoryPath(filePath: string): string {
   const segments = filePath.split('/');
   if (segments.length <= 1) {
@@ -35,7 +53,7 @@ function getMatchedCharacterIndexes(text: string, query: string): Set<number> {
   const normalizedText = text.toLowerCase();
 
   if (normalizedQuery.length === 0 || normalizedText.length === 0) {
-    return new Set<number>();
+    return EMPTY_MATCHED_CHARACTER_INDEXES;
   }
 
   const contiguousMatchIndex = normalizedText.indexOf(normalizedQuery);
@@ -61,28 +79,90 @@ function getMatchedCharacterIndexes(text: string, query: string): Set<number> {
     }
   }
 
-  return new Set<number>();
+  return EMPTY_MATCHED_CHARACTER_INDEXES;
 }
 
-function renderHighlightedText(text: string, query: string, testIdPrefix?: string) {
-  const matchedIndexes = getMatchedCharacterIndexes(text, query);
+const HighlightedText = memo(function HighlightedText({ text, query, testIdPrefix }: HighlightedTextProps) {
+  const highlightedCharacters = useMemo(() => {
+    const matchedIndexes = getMatchedCharacterIndexes(text, query);
 
-  return Array.from(text).map((character, index) => {
-    if (!matchedIndexes.has(index)) {
-      return <Fragment key={`${text}-${index}`}>{character}</Fragment>;
-    }
+    return Array.from(text).map((character, index) => {
+      if (!matchedIndexes.has(index)) {
+        return <Fragment key={`${text}-${index}`}>{character}</Fragment>;
+      }
 
-    return (
-      <mark
-        key={`${text}-${index}`}
-        data-testid={testIdPrefix ? `${testIdPrefix}-${index}` : undefined}
-        className="bg-transparent font-semibold text-ide-chat-text-bright"
-      >
-        {character}
-      </mark>
-    );
-  });
-}
+      return (
+        <mark
+          key={`${text}-${index}`}
+          data-testid={testIdPrefix ? `${testIdPrefix}-${index}` : undefined}
+          className="bg-transparent font-semibold text-ide-chat-text-bright"
+        >
+          {character}
+        </mark>
+      );
+    });
+  }, [query, testIdPrefix, text]);
+
+  return highlightedCharacters;
+});
+
+const QuickOpenResultRow = memo(function QuickOpenResultRow({
+  result,
+  query,
+  index,
+  isSelected,
+  onSelectedIndexChange,
+  onSelectResult,
+  selectedRowRef,
+}: QuickOpenResultRowProps) {
+  const directoryPath = getDirectoryPath(result.path);
+  const treeTestId = toTreeTestId(result.path);
+
+  return (
+    <button
+      ref={isSelected ? selectedRowRef : null}
+      type="button"
+      data-testid={`quick-open-result-${treeTestId}`}
+      className={`flex w-full cursor-pointer items-center gap-3 px-3 py-1.5 text-left transition-colors ${
+        isSelected
+          ? 'bg-primary/20 text-foreground'
+          : 'text-foreground hover:bg-accent'
+      }`}
+      onMouseEnter={() => onSelectedIndexChange(index)}
+      onClick={() => onSelectResult(result)}
+    >
+      <div className="flex w-6 shrink-0 justify-end">
+        <FileTypeBadge
+          name={result.name}
+          className="text-[10px] leading-none"
+          fallbackClassName="text-muted-foreground"
+          testId={`quick-open-icon-${treeTestId}`}
+        />
+      </div>
+      <div className="flex min-w-0 flex-1 items-center gap-3 overflow-hidden whitespace-nowrap">
+        <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-foreground">
+          <HighlightedText
+            text={result.name}
+            query={query}
+            testIdPrefix={`quick-open-match-name-${treeTestId}`}
+          />
+        </span>
+        {directoryPath.length > 0 && (
+          <span
+            data-testid={`quick-open-path-${treeTestId}`}
+            className="max-w-[45%] shrink-0 truncate text-right text-[11px] text-muted-foreground"
+          >
+            <HighlightedText
+              text={directoryPath}
+              query={query}
+              testIdPrefix={`quick-open-match-path-${treeTestId}`}
+            />
+          </span>
+        )}
+      </div>
+    </button>
+  );
+});
 
 export function QuickOpenPalette({
   isOpen,
@@ -196,45 +276,17 @@ export function QuickOpenPalette({
           )}
 
           {!isLoading && !errorMessage && results.map((result, index) => {
-            const isSelected = index === selectedIndex;
-            const directoryPath = getDirectoryPath(result.path);
-
             return (
-              <button
+              <QuickOpenResultRow
                 key={result.path}
-                ref={isSelected ? selectedRowRef : null}
-                type="button"
-                data-testid={`quick-open-result-${toTreeTestId(result.path)}`}
-                className={`flex w-full cursor-pointer items-center gap-3 px-3 py-1.5 text-left transition-colors ${
-                  isSelected
-                    ? 'bg-primary/20 text-foreground'
-                    : 'text-foreground hover:bg-accent'
-                }`}
-                onMouseEnter={() => onSelectedIndexChange(index)}
-                onClick={() => onSelectResult(result)}
-              >
-                <div className="flex w-6 shrink-0 justify-end">
-                  <FileTypeBadge
-                    name={result.name}
-                    className="text-[10px] leading-none"
-                    fallbackClassName="text-muted-foreground"
-                    testId={`quick-open-icon-${toTreeTestId(result.path)}`}
-                  />
-                </div>
-                <div className="flex min-w-0 flex-1 items-center gap-3 overflow-hidden whitespace-nowrap">
-                  <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-foreground">
-                    {renderHighlightedText(result.name, query, `quick-open-match-name-${toTreeTestId(result.path)}`)}
-                  </span>
-                  {directoryPath.length > 0 && (
-                    <span
-                      data-testid={`quick-open-path-${toTreeTestId(result.path)}`}
-                      className="max-w-[45%] shrink-0 truncate text-right text-[11px] text-muted-foreground"
-                    >
-                      {renderHighlightedText(directoryPath, query, `quick-open-match-path-${toTreeTestId(result.path)}`)}
-                    </span>
-                  )}
-                </div>
-              </button>
+                result={result}
+                query={query}
+                index={index}
+                isSelected={index === selectedIndex}
+                onSelectedIndexChange={onSelectedIndexChange}
+                onSelectResult={onSelectResult}
+                selectedRowRef={selectedRowRef}
+              />
             );
           })}
         </div>

@@ -147,6 +147,32 @@ describe('QuickOpenPalette', () => {
     expect(screen.getByTestId('quick-open-match-name-rtl_core_reg_file_v-2')).toHaveTextContent('g');
   });
 
+  it('highlights matched characters in the directory path', () => {
+    const aluResult = results[0]!;
+
+    render(
+      <QuickOpenPalette
+        isOpen
+        mode="search"
+        query="core"
+        results={[aluResult]}
+        selectedIndex={0}
+        isLoading={false}
+        errorMessage={null}
+        emptyMessage="No matching files"
+        onClose={vi.fn()}
+        onQueryChange={vi.fn()}
+        onSelectedIndexChange={vi.fn()}
+        onSelectResult={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId('quick-open-match-path-rtl_core_alu_v-4')).toHaveTextContent('c');
+    expect(screen.getByTestId('quick-open-match-path-rtl_core_alu_v-5')).toHaveTextContent('o');
+    expect(screen.getByTestId('quick-open-match-path-rtl_core_alu_v-6')).toHaveTextContent('r');
+    expect(screen.getByTestId('quick-open-match-path-rtl_core_alu_v-7')).toHaveTextContent('e');
+  });
+
   it('renders a recent empty state message when no recent files are available', () => {
     render(
       <QuickOpenPalette
