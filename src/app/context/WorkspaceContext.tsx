@@ -161,6 +161,84 @@ function createUnsavedChangesDialogState(
   };
 }
 
+const EMPTY_TABS: Tab[] = [];
+const EMPTY_EDITOR_GROUPS: EditorGroup[] = [];
+
+function withModifiedTabState(tab: EditorTab, dirtyFiles: Record<string, boolean>, previousTab?: EditorTab): EditorTab {
+  const modified = Boolean(dirtyFiles[tab.id]);
+
+  if (
+    previousTab
+    && previousTab.id === tab.id
+    && previousTab.name === tab.name
+    && previousTab.isPinned === tab.isPinned
+    && previousTab.modified === modified
+  ) {
+    return previousTab;
+  }
+
+  return {
+    ...tab,
+    modified,
+  };
+}
+
+function withModifiedTabsState(
+  tabs: EditorTab[],
+  dirtyFiles: Record<string, boolean>,
+  previousTabs: EditorTab[] = EMPTY_TABS,
+): EditorTab[] {
+  const previousTabsById = new Map(previousTabs.map((tab) => [tab.id, tab]));
+  let changed = tabs.length !== previousTabs.length;
+
+  const nextTabs = tabs.map((tab, index) => {
+    const nextTab = withModifiedTabState(tab, dirtyFiles, previousTabsById.get(tab.id));
+
+    if (!changed && nextTab !== previousTabs[index]) {
+      changed = true;
+    }
+
+    return nextTab;
+  });
+
+  return changed ? nextTabs : previousTabs;
+}
+
+function withModifiedEditorGroupsState(
+  groups: EditorGroup[],
+  dirtyFiles: Record<string, boolean>,
+  previousGroups: EditorGroup[],
+): EditorGroup[] {
+  const previousGroupsById = new Map(previousGroups.map((group) => [group.id, group]));
+  let changed = groups.length !== previousGroups.length;
+
+  const nextGroups = groups.map((group, index) => {
+    const previousGroup = previousGroupsById.get(group.id);
+    const nextTabs = withModifiedTabsState(group.tabs, dirtyFiles, previousGroup?.tabs);
+
+    if (
+      previousGroup
+      && previousGroup.activeTabId === group.activeTabId
+      && previousGroup.previewTabId === group.previewTabId
+      && nextTabs === previousGroup.tabs
+    ) {
+      if (!changed && previousGroup !== previousGroups[index]) {
+        changed = true;
+      }
+
+      return previousGroup;
+    }
+
+    changed = true;
+    return {
+      ...group,
+      tabs: nextTabs,
+    };
+  });
+
+  return changed ? nextGroups : previousGroups;
+}
+
 // ─── Context ────────────────────────────────────────────────────────────────
 
 const WorkspaceContext = createContext<WorkspaceState | null>(null);
@@ -183,6 +261,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const fileStore = useWorkspaceFileStore();
   const [unsavedChangesDialog, setUnsavedChangesDialog] = useState<UnsavedChangesDialogState | null>(null);
   const unsavedChangesResolverRef = useRef<((result: 'save' | 'discard' | 'cancel') => void) | null>(null);
+  const previousEditorGroupsRef = useRef<EditorGroup[]>(EMPTY_EDITOR_GROUPS);
   const layoutPanelsEnabled = canToggleLayoutPanels(mainContentView, activeView);
   const visiblePanelState = layoutPanelsEnabled ? panelStateByView[activeView] : EMPTY_PANEL_STATE;
 
@@ -197,17 +276,20 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     return getFileBaseName(fileId);
   }, [editorWorkspace.editorGroups]);
 
-  const tabs = useMemo(
-    () => editorWorkspace.tabs.map((tab) => ({ ...tab, modified: fileStore.dirtyFiles[tab.id] })),
-    [editorWorkspace.tabs, fileStore.dirtyFiles],
-  );
+  const editorGroups = useMemo(() => {
+    const nextGroups = withModifiedEditorGroupsState(
+      editorWorkspace.editorGroups,
+      fileStore.dirtyFiles,
+      previousEditorGroupsRef.current,
+    );
 
-  const editorGroups = useMemo(
-    () => editorWorkspace.editorGroups.map((group) => ({
-      ...group,
-      tabs: group.tabs.map((tab) => ({ ...tab, modified: fileStore.dirtyFiles[tab.id] })),
-    })),
-    [editorWorkspace.editorGroups, fileStore.dirtyFiles],
+    previousEditorGroupsRef.current = nextGroups;
+    return nextGroups;
+  }, [editorWorkspace.editorGroups, fileStore.dirtyFiles]);
+
+  const tabs = useMemo(
+    () => editorGroups.find((group) => group.id === editorWorkspace.focusedGroupId)?.tabs ?? EMPTY_TABS,
+    [editorGroups, editorWorkspace.focusedGroupId],
   );
 
   const getDirtyRequestedFileIds = useCallback((fileIds: string[]) => Array.from(

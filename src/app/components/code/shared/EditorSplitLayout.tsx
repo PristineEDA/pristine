@@ -1,8 +1,17 @@
-import { useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
+import {
+  memo,
+  useCallback,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
+} from 'react';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '../../ui/resizable';
 import { EditorArea } from './EditorArea';
 import { useWorkspace } from '../../../context/WorkspaceContext';
-import type { EditorDropPosition, EditorLayoutNode, SplitDirection } from '../../../editor/editorLayout';
+import type { EditorDropPosition, EditorGroup, EditorLayoutNode, SplitDirection } from '../../../editor/editorLayout';
+import type { CursorRestoreRequest } from '../../../context/useWorkspaceEditorState';
 
 interface DragState {
   sourceGroupId: string;
@@ -12,6 +21,29 @@ interface DragState {
 interface DropTargetState {
   groupId: string;
   position: EditorDropPosition;
+}
+
+interface CursorPosition {
+  line: number;
+  col: number;
+}
+
+interface EditorGroupWorkspaceActions {
+  clearCursorRestoreRequest: (groupId: string, token: number) => void;
+  closeActiveTabInFocusedGroup: () => void;
+  closeFileInGroup: (groupId: string, fileId: string) => void;
+  cycleFocusedGroupTabs: (direction?: 'forward' | 'backward') => void;
+  focusGroup: (groupId: string) => void;
+  loadFileContent: (fileId: string) => void;
+  openFileInGroup: (fileId: string, fileName: string, groupId: string) => void;
+  pinTabInGroup: (groupId: string, tabId: string) => void;
+  registerEditorRef: (groupId: string, editorInstance: any) => void;
+  restoreEditorSelection: (snapshot: { groupId: string; fileId: string; line: number; col: number }) => void;
+  saveActiveFile: () => Promise<boolean>;
+  setActiveTabIdInGroup: (groupId: string, tabId: string) => void;
+  setCursorPos: (line: number, col: number, groupId?: string, fileId?: string) => void;
+  splitGroup: (groupId: string, direction?: SplitDirection) => void;
+  updateFileContentInGroup: (groupId: string, fileId: string, content: string) => void;
 }
 
 const DROP_POSITION_LABELS: Record<EditorDropPosition, string> = {
@@ -134,11 +166,16 @@ function DropIndicator({ position }: { position: EditorDropPosition }) {
   );
 }
 
-function EditorGroupLeaf({
-  groupId,
+const EditorGroupLeaf = memo(function EditorGroupLeaf({
+  group,
   focused,
   jumpToLine,
   dropPosition,
+  activeCursorPosition,
+  cursorRestoreRequest,
+  contentCache,
+  loadingFiles,
+  loadErrors,
   onDropPosition,
   onClearDrop,
   onFocus,
@@ -146,51 +183,29 @@ function EditorGroupLeaf({
   onDragStart,
   onDragEnd,
   dragState,
+  workspaceActionsRef,
 }: {
-  groupId: string;
+  group: EditorGroup;
   focused: boolean;
   jumpToLine?: number;
   dropPosition: EditorDropPosition | null;
+  activeCursorPosition?: CursorPosition;
+  cursorRestoreRequest?: CursorRestoreRequest;
+  contentCache: Record<string, string>;
+  loadingFiles: Record<string, boolean>;
+  loadErrors: Record<string, string>;
   onDropPosition: (groupId: string, position: EditorDropPosition) => void;
   onClearDrop: (groupId: string) => void;
   onFocus: (groupId: string) => void;
   onMoveTab: (targetGroupId: string, position: EditorDropPosition) => void;
-  onDragStart: (tabId: string) => void;
+  onDragStart: (groupId: string, tabId: string) => void;
   onDragEnd: () => void;
   dragState: DragState | null;
+  workspaceActionsRef: React.MutableRefObject<EditorGroupWorkspaceActions>;
 }) {
-  const {
-    closeActiveTabInFocusedGroup,
-    cycleFocusedGroupTabs,
-    clearCursorRestoreRequest,
-    editorGroups,
-    getCursorRestoreRequest,
-    getStoredCursorPosition,
-    openFileInGroup,
-    restoreEditorSelection,
-    setActiveTabIdInGroup,
-    pinTabInGroup,
-    closeFileInGroup,
-    splitGroup,
-    setCursorPos,
-    fileContents,
-    loadingFiles,
-    loadErrors,
-    loadFileContent,
-    saveActiveFile,
-    updateFileContentInGroup,
-    registerEditorRef,
-  } = useWorkspace();
-  const group = editorGroups.find((currentGroup) => currentGroup.id === groupId);
   const editorRef = useRef<any>(null);
 
-  if (!group) {
-    return null;
-  }
-
   const showFocusRing = focused && group.tabs.length > 0;
-  const activeCursorPosition = group.activeTabId ? getStoredCursorPosition(group.id, group.activeTabId) : undefined;
-  const cursorRestoreRequest = getCursorRestoreRequest(group.id);
 
   const handleGroupMouseDown = (event: ReactMouseEvent<HTMLDivElement>) => {
     onFocus(group.id);
@@ -210,14 +225,14 @@ function EditorGroupLeaf({
     if (key === 'w' && !event.shiftKey) {
       event.preventDefault();
       event.stopPropagation();
-      closeActiveTabInFocusedGroup();
+      workspaceActionsRef.current.closeActiveTabInFocusedGroup();
       return;
     }
 
     if (key === 'tab') {
       event.preventDefault();
       event.stopPropagation();
-      cycleFocusedGroupTabs(event.shiftKey ? 'backward' : 'forward');
+      workspaceActionsRef.current.cycleFocusedGroupTabs(event.shiftKey ? 'backward' : 'forward');
     }
   };
 
@@ -259,41 +274,41 @@ function EditorGroupLeaf({
       <EditorArea
         tabs={group.tabs}
         activeTabId={group.activeTabId}
-        onTabChange={(tabId) => setActiveTabIdInGroup(group.id, tabId)}
-        onTabClose={(tabId) => closeFileInGroup(group.id, tabId)}
-        onTabPin={(tabId) => pinTabInGroup(group.id, tabId)}
+        onTabChange={(tabId) => workspaceActionsRef.current.setActiveTabIdInGroup(group.id, tabId)}
+        onTabClose={(tabId) => workspaceActionsRef.current.closeFileInGroup(group.id, tabId)}
+        onTabPin={(tabId) => workspaceActionsRef.current.pinTabInGroup(group.id, tabId)}
         editorRef={editorRef}
         cursorPosition={activeCursorPosition}
         cursorRestoreRequest={cursorRestoreRequest}
-        onCursorRestoreRequestConsumed={(token) => clearCursorRestoreRequest(group.id, token)}
-        jumpToLine={focused ? jumpToLine : undefined}
+        onCursorRestoreRequestConsumed={(token) => workspaceActionsRef.current.clearCursorRestoreRequest(group.id, token)}
+        jumpToLine={jumpToLine}
         onCursorChange={(line, col) => {
           if (!group.activeTabId) {
             return;
           }
 
-          setCursorPos(line, col, group.id, group.activeTabId);
+          workspaceActionsRef.current.setCursorPos(line, col, group.id, group.activeTabId);
         }}
-        onSplitEditor={(direction) => splitGroup(group.id, direction)}
+        onSplitEditor={(direction) => workspaceActionsRef.current.splitGroup(group.id, direction)}
         onFocus={() => onFocus(group.id)}
         focused={focused}
-        onTabDragStart={onDragStart}
+        onTabDragStart={(tabId) => onDragStart(group.id, tabId)}
         onTabDragEnd={onDragEnd}
-        contentCache={fileContents}
+        contentCache={contentCache}
         loadingFiles={loadingFiles}
         loadErrors={loadErrors}
-        onLoadFile={loadFileContent}
+        onLoadFile={workspaceActionsRef.current.loadFileContent}
         onSaveShortcut={() => {
-          void saveActiveFile();
+          void workspaceActionsRef.current.saveActiveFile();
         }}
         onContentChange={(fileId, content) => {
-          updateFileContentInGroup(group.id, fileId, content);
+          workspaceActionsRef.current.updateFileContentInGroup(group.id, fileId, content);
         }}
-        onEditorMount={(editor) => registerEditorRef(group.id, editor)}
+        onEditorMount={(editor) => workspaceActionsRef.current.registerEditorRef(group.id, editor)}
         onNavigateToLocation={(fileId, line, col) => {
           const fileName = fileId.split('/').pop() ?? fileId;
-          openFileInGroup(fileId, fileName, group.id);
-          restoreEditorSelection({
+          workspaceActionsRef.current.openFileInGroup(fileId, fileName, group.id);
+          workspaceActionsRef.current.restoreEditorSelection({
             groupId: group.id,
             fileId,
             line,
@@ -305,28 +320,116 @@ function EditorGroupLeaf({
       />
     </div>
   );
-}
+});
 
 export function EditorSplitLayout({ jumpToLine }: { jumpToLine?: number }) {
   const {
+    clearCursorRestoreRequest,
+    closeActiveTabInFocusedGroup,
+    closeFileInGroup,
+    cycleFocusedGroupTabs,
     editorLayout,
-    focusedGroupId,
+    fileContents,
     focusGroup,
-    moveTab,
+    focusedGroupId,
+    getCursorRestoreRequest,
+    getStoredCursorPosition,
+    loadErrors,
+    loadFileContent,
+    loadingFiles,
     editorGroups,
+    moveTab,
+    openFileInGroup,
+    pinTabInGroup,
+    registerEditorRef,
+    restoreEditorSelection,
+    saveActiveFile,
+    setActiveTabIdInGroup,
+    setCursorPos,
+    splitGroup,
+    updateFileContentInGroup,
   } = useWorkspace();
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [dropTarget, setDropTarget] = useState<DropTargetState | null>(null);
+  const moveTabRef = useRef(moveTab);
+  const workspaceActionsRef = useRef<EditorGroupWorkspaceActions>({
+    clearCursorRestoreRequest,
+    closeActiveTabInFocusedGroup,
+    closeFileInGroup,
+    cycleFocusedGroupTabs,
+    focusGroup,
+    loadFileContent,
+    openFileInGroup,
+    pinTabInGroup,
+    registerEditorRef,
+    restoreEditorSelection,
+    saveActiveFile,
+    setActiveTabIdInGroup,
+    setCursorPos,
+    splitGroup,
+    updateFileContentInGroup,
+  });
+
+  workspaceActionsRef.current = {
+    clearCursorRestoreRequest,
+    closeActiveTabInFocusedGroup,
+    closeFileInGroup,
+    cycleFocusedGroupTabs,
+    focusGroup,
+    loadFileContent,
+    openFileInGroup,
+    pinTabInGroup,
+    registerEditorRef,
+    restoreEditorSelection,
+    saveActiveFile,
+    setActiveTabIdInGroup,
+    setCursorPos,
+    splitGroup,
+    updateFileContentInGroup,
+  };
+  moveTabRef.current = moveTab;
 
   const groupsById = useMemo(
     () => Object.fromEntries(editorGroups.map((group) => [group.id, group])),
     [editorGroups],
   );
 
-  const clearDragState = () => {
+  const clearDragState = useCallback(() => {
     setDragState(null);
     setDropTarget(null);
-  };
+  }, []);
+
+  const handleDropPosition = useCallback((groupId: string, position: EditorDropPosition) => {
+    setDropTarget((current) => {
+      if (current?.groupId === groupId && current.position === position) {
+        return current;
+      }
+
+      return { groupId, position };
+    });
+  }, []);
+
+  const handleClearDrop = useCallback((groupId: string) => {
+    setDropTarget((current) => (current?.groupId === groupId ? null : current));
+  }, []);
+
+  const handleFocusGroup = useCallback((groupId: string) => {
+    workspaceActionsRef.current.focusGroup(groupId);
+  }, []);
+
+  const handleMoveTab = useCallback((targetGroupId: string, position: EditorDropPosition) => {
+    if (!dragState) {
+      return;
+    }
+
+    moveTabRef.current(dragState.sourceGroupId, dragState.tabId, targetGroupId, position);
+    clearDragState();
+  }, [clearDragState, dragState]);
+
+  const handleDragStart = useCallback((sourceGroupId: string, tabId: string) => {
+    setDragState({ sourceGroupId, tabId });
+    setDropTarget(null);
+  }, []);
 
   const renderNode = (node: EditorLayoutNode | null): React.ReactNode => {
     if (!node) {
@@ -350,24 +453,23 @@ export function EditorSplitLayout({ jumpToLine }: { jumpToLine?: number }) {
       return (
         <EditorGroupLeaf
           key={group.id}
-          groupId={group.id}
+          group={group}
           focused={focusedGroupId === group.id}
-          jumpToLine={jumpToLine}
+          jumpToLine={focusedGroupId === group.id ? jumpToLine : undefined}
           dropPosition={dropTarget?.groupId === group.id ? dropTarget.position : null}
-          onDropPosition={(groupId, position) => setDropTarget({ groupId, position })}
-          onClearDrop={(groupId) => setDropTarget((current) => (current?.groupId === groupId ? null : current))}
-          onFocus={focusGroup}
-          onMoveTab={(targetGroupId, position) => {
-            if (!dragState) {
-              return;
-            }
-
-            moveTab(dragState.sourceGroupId, dragState.tabId, targetGroupId, position);
-            clearDragState();
-          }}
-          onDragStart={(tabId) => setDragState({ sourceGroupId: group.id, tabId })}
+          activeCursorPosition={group.activeTabId ? getStoredCursorPosition(group.id, group.activeTabId) : undefined}
+          cursorRestoreRequest={getCursorRestoreRequest(group.id)}
+          contentCache={fileContents}
+          loadingFiles={loadingFiles}
+          loadErrors={loadErrors}
+          onDropPosition={handleDropPosition}
+          onClearDrop={handleClearDrop}
+          onFocus={handleFocusGroup}
+          onMoveTab={handleMoveTab}
+          onDragStart={handleDragStart}
           onDragEnd={clearDragState}
           dragState={dragState}
+          workspaceActionsRef={workspaceActionsRef}
         />
       );
     }

@@ -1,7 +1,17 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { WorkspaceProvider, useWorkspace } from '../../../context/WorkspaceContext';
 import { EditorSplitLayout } from './EditorSplitLayout';
+
+const editorAreaRenderCounts = new Map<string, number>();
+
+function clearEditorAreaRenderCounts() {
+  editorAreaRenderCounts.clear();
+}
+
+function getEditorAreaRenderCount(groupId: string) {
+  return editorAreaRenderCounts.get(groupId) ?? 0;
+}
 
 vi.mock('./EditorArea', () => ({
   EditorArea: ({
@@ -16,36 +26,41 @@ vi.mock('./EditorArea', () => ({
     onFocus,
     showDragInteractionShield,
     dragInteractionShieldTestId,
-  }: any) => (
-    <div data-testid="mock-editor-area" onMouseDown={onFocus}>
-      <div data-testid="mock-active-tab">{activeTabId}</div>
-      <div data-testid="mock-tabs">{tabs.map((tab: { id: string }) => tab.id).join(',')}</div>
-      <div data-testid="mock-preview-tabs">{tabs.filter((tab: { isPinned?: boolean }) => tab.isPinned === false).map((tab: { id: string }) => tab.id).join(',')}</div>
-      {showDragInteractionShield ? <div data-testid={dragInteractionShieldTestId} /> : null}
-      {onSplitEditor ? <button onClick={() => onSplitEditor('horizontal')}>split-editor</button> : null}
-      {onSplitEditor ? <button onClick={() => onSplitEditor('vertical')}>split-editor-down</button> : null}
-      {tabs.map((tab: { id: string; name: string }) => (
-        <div key={tab.id}>
-          <button
-            data-testid={`mock-tab-${tab.id}`}
-            draggable
-            onClick={() => onTabChange(tab.id)}
-            onDoubleClick={() => onTabPin?.(tab.id)}
-            onDragStart={() => {
-              onTabPin?.(tab.id);
-              onTabDragStart?.(tab.id);
-            }}
-            onDragEnd={() => onTabDragEnd?.()}
-          >
-            {tab.name}
-          </button>
-          <button data-testid={`mock-close-${tab.id}`} onClick={() => onTabClose(tab.id)}>
-            close
-          </button>
-        </div>
-      ))}
-    </div>
-  ),
+  }: any) => {
+    const groupId = dragInteractionShieldTestId?.replace('editor-drag-shield-', '') ?? 'empty';
+    editorAreaRenderCounts.set(groupId, (editorAreaRenderCounts.get(groupId) ?? 0) + 1);
+
+    return (
+      <div data-testid="mock-editor-area" onMouseDown={onFocus}>
+        <div data-testid="mock-active-tab">{activeTabId}</div>
+        <div data-testid="mock-tabs">{tabs.map((tab: { id: string }) => tab.id).join(',')}</div>
+        <div data-testid="mock-preview-tabs">{tabs.filter((tab: { isPinned?: boolean }) => tab.isPinned === false).map((tab: { id: string }) => tab.id).join(',')}</div>
+        {showDragInteractionShield ? <div data-testid={dragInteractionShieldTestId} /> : null}
+        {onSplitEditor ? <button onClick={() => onSplitEditor('horizontal')}>split-editor</button> : null}
+        {onSplitEditor ? <button onClick={() => onSplitEditor('vertical')}>split-editor-down</button> : null}
+        {tabs.map((tab: { id: string; name: string }) => (
+          <div key={tab.id}>
+            <button
+              data-testid={`mock-tab-${tab.id}`}
+              draggable
+              onClick={() => onTabChange(tab.id)}
+              onDoubleClick={() => onTabPin?.(tab.id)}
+              onDragStart={() => {
+                onTabPin?.(tab.id);
+                onTabDragStart?.(tab.id);
+              }}
+              onDragEnd={() => onTabDragEnd?.()}
+            >
+              {tab.name}
+            </button>
+            <button data-testid={`mock-close-${tab.id}`} onClick={() => onTabClose(tab.id)}>
+              close
+            </button>
+          </div>
+        ))}
+      </div>
+    );
+  },
 }));
 
 function LayoutHarness() {
@@ -89,6 +104,10 @@ function fireDragEvent(element: HTMLElement, type: 'dragover' | 'drop', clientX:
 }
 
 describe('EditorSplitLayout', () => {
+  beforeEach(() => {
+    clearEditorAreaRenderCounts();
+  });
+
   it('does not show the focused editor ring when the initial group is empty', () => {
     render(
       <WorkspaceProvider>
@@ -221,6 +240,25 @@ describe('EditorSplitLayout', () => {
 
     expect(within(sourceGroup).getByTestId('mock-tabs')).toHaveTextContent('rtl/core/alu.v');
     expect(within(targetGroup).getByTestId('mock-tabs')).toHaveTextContent('rtl/core/alu.v,rtl/core/reg_file.v');
+  });
+
+  it('keeps an unchanged split group from rerendering when another group opens a file', () => {
+    render(
+      <WorkspaceProvider>
+        <LayoutHarness />
+      </WorkspaceProvider>,
+    );
+
+    fireEvent.click(screen.getByText('open-reg'));
+    fireEvent.click(within(screen.getByTestId('editor-group-group-1')).getByText('split-editor'));
+
+    clearEditorAreaRenderCounts();
+    fireEvent.click(screen.getByText('open-alu'));
+
+    expect(within(screen.getByTestId('editor-group-group-1')).getByTestId('mock-tabs')).toHaveTextContent('rtl/core/reg_file.v');
+    expect(within(screen.getByTestId('editor-group-group-2')).getByTestId('mock-tabs')).toHaveTextContent('rtl/core/reg_file.v,rtl/core/alu.v');
+    expect(getEditorAreaRenderCount('group-1')).toBe(0);
+    expect(getEditorAreaRenderCount('group-2')).toBeGreaterThan(0);
   });
 
   it('cycles the focused group tabs to the right and reverses with Ctrl/Cmd+Shift+Tab', () => {
