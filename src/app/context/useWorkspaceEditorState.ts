@@ -120,8 +120,15 @@ export function useWorkspaceEditorState() {
   const [cursorPositions, setCursorPositions] = useState<StoredCursorPositions>({});
   const [cursorRestoreRequests, setCursorRestoreRequests] = useState<Record<string, CursorRestoreRequest | undefined>>({});
   const editorRef = useRef<any>(null);
+  const editorStateRef = useRef(editorState);
+  const cursorPositionsRef = useRef(cursorPositions);
+  const cursorRestoreRequestsRef = useRef(cursorRestoreRequests);
   const editorRefsRef = useRef<Record<string, any>>({});
   const relayoutFrameRef = useRef<number | null>(null);
+
+  editorStateRef.current = editorState;
+  cursorPositionsRef.current = cursorPositions;
+  cursorRestoreRequestsRef.current = cursorRestoreRequests;
 
   const nextGeneratedId = useCallback((prefix: string) => {
     const id = `${prefix}-${idCounterRef.current}`;
@@ -187,13 +194,13 @@ export function useWorkspaceEditorState() {
   }, []);
 
   const getCursorPositionOrDefault = useCallback((groupId: string, fileId: string): CursorPosition => {
-    return getStoredCursorPosition(cursorPositions, groupId, fileId) ?? { line: 1, col: 1 };
-  }, [cursorPositions]);
+    return getStoredCursorPosition(cursorPositionsRef.current, groupId, fileId) ?? { line: 1, col: 1 };
+  }, []);
 
   const getPreferredEmptyWorkspaceGroupId = useCallback((fileId: string) => {
-    const storedGroupId = Object.keys(cursorPositions).find((groupId) => Boolean(cursorPositions[groupId]?.[fileId]));
+    const storedGroupId = Object.keys(cursorPositionsRef.current).find((groupId) => Boolean(cursorPositionsRef.current[groupId]?.[fileId]));
     return storedGroupId ?? 'group-1';
-  }, [cursorPositions]);
+  }, []);
 
   const queueCursorRestore = useCallback((groupId: string, fileId: string, position: CursorPosition) => {
     setCursorPositions((current) => upsertStoredCursorPosition(current, groupId, fileId, position));
@@ -227,17 +234,18 @@ export function useWorkspaceEditorState() {
   }, []);
 
   const captureEditorSelectionSnapshot = useCallback((groupId?: string, fileId?: string): EditorSelectionSnapshot | null => {
-    const resolvedGroupId = groupId ?? editorState.focusedGroupId;
+    const currentState = editorStateRef.current;
+    const resolvedGroupId = groupId ?? currentState.focusedGroupId;
     if (!resolvedGroupId) {
       return null;
     }
 
-    const resolvedFileId = fileId ?? editorState.groups[resolvedGroupId]?.activeTabId;
+    const resolvedFileId = fileId ?? currentState.groups[resolvedGroupId]?.activeTabId;
     if (!resolvedFileId) {
       return null;
     }
 
-    const position = getStoredCursorPosition(cursorPositions, resolvedGroupId, resolvedFileId) ?? { line: 1, col: 1 };
+    const position = getStoredCursorPosition(cursorPositionsRef.current, resolvedGroupId, resolvedFileId) ?? { line: 1, col: 1 };
 
     return {
       groupId: resolvedGroupId,
@@ -245,7 +253,7 @@ export function useWorkspaceEditorState() {
       line: position.line,
       col: position.col,
     };
-  }, [cursorPositions, editorState.focusedGroupId, editorState.groups]);
+  }, []);
 
   const restoreEditorSelection = useCallback((snapshot: EditorSelectionSnapshot) => {
     setEditorState((current) => {
@@ -270,12 +278,14 @@ export function useWorkspaceEditorState() {
   }, [queueCursorRestore, syncEditorRefForGroup]);
 
   const focusGroup = useCallback((groupId: string) => {
-    if (editorState.focusedGroupId === groupId) {
+    const currentState = editorStateRef.current;
+
+    if (currentState.focusedGroupId === groupId) {
       syncEditorRefForGroup(groupId);
       return;
     }
 
-    const activeFileId = editorState.groups[groupId]?.activeTabId;
+    const activeFileId = currentState.groups[groupId]?.activeTabId;
 
     setEditorState((current) => focusEditorGroup(current, groupId));
     syncEditorRefForGroup(groupId);
@@ -283,7 +293,7 @@ export function useWorkspaceEditorState() {
     if (activeFileId) {
       queueStoredCursorRestore(groupId, activeFileId);
     }
-  }, [editorState.focusedGroupId, editorState.groups, queueStoredCursorRestore, syncEditorRefForGroup]);
+  }, [queueStoredCursorRestore, syncEditorRefForGroup]);
 
   const openFileInGroup = useCallback((fileId: string, fileName: string, groupId: string) => {
     setEditorState((current) => openFileInEditorGroup(current, groupId, fileId, fileName));
@@ -300,7 +310,7 @@ export function useWorkspaceEditorState() {
   }, [queueStoredCursorRestore, syncEditorRefForGroup]);
 
   const openFile = useCallback((fileId: string, fileName: string) => {
-    const targetGroupId = editorState.focusedGroupId ?? getPreferredEmptyWorkspaceGroupId(fileId);
+    const targetGroupId = editorStateRef.current.focusedGroupId ?? getPreferredEmptyWorkspaceGroupId(fileId);
 
     setEditorState((current) => {
       const baseState = current.groups[targetGroupId]
@@ -313,10 +323,10 @@ export function useWorkspaceEditorState() {
     syncEditorRefForGroup(targetGroupId);
 
     queueStoredCursorRestore(targetGroupId, fileId);
-  }, [editorState.focusedGroupId, getPreferredEmptyWorkspaceGroupId, queueStoredCursorRestore, syncEditorRefForGroup]);
+  }, [getPreferredEmptyWorkspaceGroupId, queueStoredCursorRestore, syncEditorRefForGroup]);
 
   const openPreviewFile = useCallback((fileId: string, fileName: string) => {
-    const targetGroupId = editorState.focusedGroupId ?? getPreferredEmptyWorkspaceGroupId(fileId);
+    const targetGroupId = editorStateRef.current.focusedGroupId ?? getPreferredEmptyWorkspaceGroupId(fileId);
 
     setEditorState((current) => {
       const baseState = current.groups[targetGroupId]
@@ -329,10 +339,10 @@ export function useWorkspaceEditorState() {
     syncEditorRefForGroup(targetGroupId);
 
     queueStoredCursorRestore(targetGroupId, fileId);
-  }, [editorState.focusedGroupId, getPreferredEmptyWorkspaceGroupId, queueStoredCursorRestore, syncEditorRefForGroup]);
+  }, [getPreferredEmptyWorkspaceGroupId, queueStoredCursorRestore, syncEditorRefForGroup]);
 
   const closeFileInGroup = useCallback((groupId: string, fileId: string) => {
-    const nextActiveTabId = getNextActiveTabIdAfterClose(editorState.groups[groupId], fileId);
+    const nextActiveTabId = getNextActiveTabIdAfterClose(editorStateRef.current.groups[groupId], fileId);
 
     setEditorState((current) => closeFileInEditorGroup(current, groupId, fileId));
 
@@ -340,7 +350,7 @@ export function useWorkspaceEditorState() {
       syncEditorRefForGroup(groupId);
       queueStoredCursorRestore(groupId, nextActiveTabId);
     }
-  }, [editorState.groups, queueStoredCursorRestore, syncEditorRefForGroup]);
+  }, [queueStoredCursorRestore, syncEditorRefForGroup]);
 
   const closeFile = useCallback((fileId: string) => {
     setEditorState((current) => {
@@ -350,18 +360,19 @@ export function useWorkspaceEditorState() {
   }, []);
 
   const closeActiveTabInFocusedGroup = useCallback(() => {
-    const groupId = editorState.focusedGroupId;
+    const currentState = editorStateRef.current;
+    const groupId = currentState.focusedGroupId;
     if (!groupId) {
       return;
     }
 
-    const activeFileId = editorState.groups[groupId]?.activeTabId;
+    const activeFileId = currentState.groups[groupId]?.activeTabId;
     if (!activeFileId) {
       return;
     }
 
     closeFileInGroup(groupId, activeFileId);
-  }, [closeFileInGroup, editorState.focusedGroupId, editorState.groups]);
+  }, [closeFileInGroup]);
 
   const setActiveTabIdInGroup = useCallback((groupId: string, tabId: string) => {
     setEditorState((current) => setActiveTabInEditorGroup(current, groupId, tabId));
@@ -371,7 +382,7 @@ export function useWorkspaceEditorState() {
   }, [queueStoredCursorRestore, syncEditorRefForGroup]);
 
   const setActiveTabId = useCallback((tabId: string) => {
-    const targetGroupId = findTabGroupId(editorState, tabId);
+    const targetGroupId = findTabGroupId(editorStateRef.current, tabId);
 
     setEditorState((current) => {
       const resolvedTargetGroupId = findTabGroupId(current, tabId);
@@ -382,15 +393,16 @@ export function useWorkspaceEditorState() {
       syncEditorRefForGroup(targetGroupId);
       queueStoredCursorRestore(targetGroupId, tabId);
     }
-  }, [editorState, queueStoredCursorRestore, syncEditorRefForGroup]);
+  }, [queueStoredCursorRestore, syncEditorRefForGroup]);
 
   const cycleFocusedGroupTabs = useCallback((direction: EditorTabCycleDirection = 'forward') => {
-    const groupId = editorState.focusedGroupId;
+    const currentState = editorStateRef.current;
+    const groupId = currentState.focusedGroupId;
     if (!groupId) {
       return;
     }
 
-    const group = editorState.groups[groupId];
+    const group = currentState.groups[groupId];
     const nextTabId = getCycledTabIdInEditorGroup(group, direction);
     if (!nextTabId || nextTabId === group?.activeTabId) {
       return;
@@ -404,7 +416,7 @@ export function useWorkspaceEditorState() {
 
     syncEditorRefForGroup(groupId);
     queueStoredCursorRestore(groupId, nextTabId);
-  }, [editorState.focusedGroupId, editorState.groups, queueStoredCursorRestore, syncEditorRefForGroup]);
+  }, [queueStoredCursorRestore, syncEditorRefForGroup]);
 
   const pinTabInGroup = useCallback((groupId: string, tabId: string) => {
     setEditorState((current) => pinTabInEditorGroup(current, groupId, tabId));
@@ -412,7 +424,7 @@ export function useWorkspaceEditorState() {
   }, [syncEditorRefForGroup]);
 
   const pinTab = useCallback((tabId: string) => {
-    const targetGroupId = findTabGroupId(editorState, tabId);
+    const targetGroupId = findTabGroupId(editorStateRef.current, tabId);
 
     setEditorState((current) => {
       const resolvedTargetGroupId = findTabGroupId(current, tabId);
@@ -422,12 +434,12 @@ export function useWorkspaceEditorState() {
     if (targetGroupId) {
       syncEditorRefForGroup(targetGroupId);
     }
-  }, [editorState, syncEditorRefForGroup]);
+  }, [syncEditorRefForGroup]);
 
   const splitGroup = useCallback((groupId: string, direction: 'horizontal' | 'vertical' = 'horizontal') => {
     const newGroupId = nextGeneratedId('group');
     const splitId = nextGeneratedId('split');
-    const activeFileId = editorState.groups[groupId]?.activeTabId;
+    const activeFileId = editorStateRef.current.groups[groupId]?.activeTabId;
 
     setEditorState((current) => splitEditorGroup(
       current,
@@ -447,7 +459,7 @@ export function useWorkspaceEditorState() {
     }
 
     relayoutEditors();
-  }, [editorState.groups, getCursorPositionOrDefault, nextGeneratedId, relayoutEditors]);
+  }, [getCursorPositionOrDefault, nextGeneratedId, relayoutEditors]);
 
   const moveTab = useCallback((sourceGroupId: string, tabId: string, targetGroupId: string, position: EditorDropPosition) => {
     const newGroupId = nextGeneratedId('group');
@@ -468,7 +480,7 @@ export function useWorkspaceEditorState() {
     }
 
     const sourcePosition = getCursorPositionOrDefault(sourceGroupId, tabId);
-    const sourceTabCount = editorState.groups[sourceGroupId]?.tabs.length ?? 0;
+    const sourceTabCount = editorStateRef.current.groups[sourceGroupId]?.tabs.length ?? 0;
     const shouldDuplicate = position !== 'center' && sourceGroupId === targetGroupId && sourceTabCount === 1;
     const destinationGroupId = position === 'center' ? targetGroupId : newGroupId;
 
@@ -491,7 +503,7 @@ export function useWorkspaceEditorState() {
     });
 
     relayoutEditors();
-  }, [editorState.groups, getCursorPositionOrDefault, nextGeneratedId, relayoutEditors, syncEditorRefForGroup]);
+  }, [getCursorPositionOrDefault, nextGeneratedId, relayoutEditors, syncEditorRefForGroup]);
 
   const jumpTo = useCallback((line: number) => {
     setJumpToLine(line);
@@ -499,38 +511,48 @@ export function useWorkspaceEditorState() {
   }, []);
 
   const setCursorPos = useCallback((line: number, col: number, groupId?: string, fileId?: string) => {
-    const resolvedGroupId = groupId ?? editorState.focusedGroupId ?? 'group-1';
-    const resolvedFileId = fileId ?? editorState.groups[resolvedGroupId]?.activeTabId;
+    const currentState = editorStateRef.current;
+    const resolvedGroupId = groupId ?? currentState.focusedGroupId ?? 'group-1';
+    const resolvedFileId = fileId ?? currentState.groups[resolvedGroupId]?.activeTabId;
 
     if (!resolvedFileId) {
       return;
     }
 
     setCursorPositions((current) => upsertStoredCursorPosition(current, resolvedGroupId, resolvedFileId, { line, col }));
-  }, [editorState.focusedGroupId, editorState.groups]);
+  }, []);
 
   const registerEditorRef = useCallback((groupId: string, editorInstance: any) => {
     editorRefsRef.current[groupId] = editorInstance;
-    if (editorState.focusedGroupId === groupId) {
+    if (editorStateRef.current.focusedGroupId === groupId) {
       editorRef.current = editorInstance;
     }
-  }, [editorState.focusedGroupId]);
+  }, []);
 
   const syncFocusedEditorRef = useCallback(() => {
-    if (editorState.focusedGroupId) {
-      syncEditorRefForGroup(editorState.focusedGroupId);
+    const focusedGroupId = editorStateRef.current.focusedGroupId;
+
+    if (focusedGroupId) {
+      syncEditorRefForGroup(focusedGroupId);
     }
-  }, [editorState.focusedGroupId, syncEditorRefForGroup]);
+  }, [syncEditorRefForGroup]);
 
   const focusActiveEditor = useCallback((groupId?: string) => {
-    const resolvedGroupId = groupId ?? editorState.focusedGroupId;
+    const resolvedGroupId = groupId ?? editorStateRef.current.focusedGroupId;
     if (!resolvedGroupId) {
       return;
     }
 
     syncEditorRefForGroup(resolvedGroupId);
     focusEditorInstance(editorRefsRef.current[resolvedGroupId]);
-  }, [editorState.focusedGroupId, syncEditorRefForGroup]);
+  }, [syncEditorRefForGroup]);
+
+  const getCursorRestoreRequest = useCallback((groupId: string) => cursorRestoreRequestsRef.current[groupId], []);
+
+  const getStoredCursorPositionForGroup = useCallback(
+    (groupId: string, fileId: string) => getStoredCursorPosition(cursorPositionsRef.current, groupId, fileId),
+    [],
+  );
 
   return {
     activeTabId,
@@ -546,8 +568,8 @@ export function useWorkspaceEditorState() {
     focusGroup,
     focusActiveEditor,
     focusedGroupId: editorState.focusedGroupId,
-    getCursorRestoreRequest: (groupId: string) => cursorRestoreRequests[groupId],
-    getStoredCursorPosition: (groupId: string, fileId: string) => getStoredCursorPosition(cursorPositions, groupId, fileId),
+    getCursorRestoreRequest,
+    getStoredCursorPosition: getStoredCursorPositionForGroup,
     jumpTo,
     jumpToLine,
     moveTab,

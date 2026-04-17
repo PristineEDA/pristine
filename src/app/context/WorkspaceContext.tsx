@@ -537,7 +537,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     editorWorkspace.syncFocusedEditorRef();
-  }, [editorWorkspace]);
+  }, [editorWorkspace.syncFocusedEditorRef]);
 
   return (
     <WorkspaceContext.Provider value={{

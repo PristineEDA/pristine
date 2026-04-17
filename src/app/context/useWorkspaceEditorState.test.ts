@@ -265,4 +265,49 @@ describe('useWorkspaceEditorState', () => {
 
     expect(focus).toHaveBeenCalledTimes(1);
   });
+
+  it('keeps core editor actions stable across workspace state updates', () => {
+    const { result } = renderHook(() => useWorkspaceEditorState());
+
+    const initialActions = {
+      openFile: result.current.openFile,
+      openPreviewFile: result.current.openPreviewFile,
+      focusGroup: result.current.focusGroup,
+      closeActiveTabInFocusedGroup: result.current.closeActiveTabInFocusedGroup,
+      setActiveTabId: result.current.setActiveTabId,
+      cycleFocusedGroupTabs: result.current.cycleFocusedGroupTabs,
+      splitGroup: result.current.splitGroup,
+      moveTab: result.current.moveTab,
+      setCursorPos: result.current.setCursorPos,
+      getStoredCursorPosition: result.current.getStoredCursorPosition,
+      getCursorRestoreRequest: result.current.getCursorRestoreRequest,
+      syncFocusedEditorRef: result.current.syncFocusedEditorRef,
+      focusActiveEditor: result.current.focusActiveEditor,
+      registerEditorRef: result.current.registerEditorRef,
+    };
+
+    act(() => {
+      result.current.openFile('README.md', 'README.md');
+      result.current.setCursorPos(4, 2);
+      result.current.splitGroup('group-1', 'horizontal');
+      result.current.focusGroup('group-1');
+      result.current.openPreviewFile('rtl/core/reg_file.v', 'reg_file.v');
+      result.current.cycleFocusedGroupTabs('forward');
+    });
+
+    expect(result.current.openFile).toBe(initialActions.openFile);
+    expect(result.current.openPreviewFile).toBe(initialActions.openPreviewFile);
+    expect(result.current.focusGroup).toBe(initialActions.focusGroup);
+    expect(result.current.closeActiveTabInFocusedGroup).toBe(initialActions.closeActiveTabInFocusedGroup);
+    expect(result.current.setActiveTabId).toBe(initialActions.setActiveTabId);
+    expect(result.current.cycleFocusedGroupTabs).toBe(initialActions.cycleFocusedGroupTabs);
+    expect(result.current.splitGroup).toBe(initialActions.splitGroup);
+    expect(result.current.moveTab).toBe(initialActions.moveTab);
+    expect(result.current.setCursorPos).toBe(initialActions.setCursorPos);
+    expect(result.current.getStoredCursorPosition).toBe(initialActions.getStoredCursorPosition);
+    expect(result.current.getCursorRestoreRequest).toBe(initialActions.getCursorRestoreRequest);
+    expect(result.current.syncFocusedEditorRef).toBe(initialActions.syncFocusedEditorRef);
+    expect(result.current.focusActiveEditor).toBe(initialActions.focusActiveEditor);
+    expect(result.current.registerEditorRef).toBe(initialActions.registerEditorRef);
+  });
 });
