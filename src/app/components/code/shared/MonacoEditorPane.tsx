@@ -1,5 +1,5 @@
 import Editor, { useMonaco } from '@monaco-editor/react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 import '../../../editor/configureMonacoLoader';
 import { getEditorFontFamilyStack } from '../../../editor/editorSettings';
 import { registerEditorThemes } from '../../../editor/monacoThemes';
@@ -92,14 +92,32 @@ export function MonacoEditorPane({
   } = useEditorSettings();
   const editorFontFamily = getEditorFontFamilyStack(fontFamily);
   const editorLanguage = getEditorLanguage(activeTabId);
-  const onCursorChangeRef = useRef(onCursorChange);
   const monacoInstanceRef = useRef(monaco);
   const canPropagateCursorChangesRef = useRef(true);
   const hostRef = useRef<HTMLDivElement | null>(null);
   const layoutFrameRef = useRef<number | null>(null);
   const [mountedEditor, setMountedEditor] = useState<any>(null);
   const queueEditorLayoutRef = useRef<() => void>(() => undefined);
-  const editorBehaviorOptions = {
+  const isSystemVerilogDocumentReady = Boolean(activeTabId) && editorLanguage === 'systemverilog' && isDocumentReady && !hasLoadError;
+  const handleActiveModelReady = useEffectEvent((fileId: string) => {
+    onActiveModelReady?.(fileId);
+  });
+  const handleContentChange = useEffectEvent((value: string) => {
+    onContentChange?.(value);
+  });
+  const handleCursorChange = useEffectEvent((line: number, col: number) => {
+    onCursorChange?.(line, col);
+  });
+  const handleEditorMount = useEffectEvent((editor: any) => {
+    onEditorMount?.(editor);
+  });
+  const handleNavigateToLocation = useEffectEvent((fileId: string, line: number, col: number) => {
+    onNavigateToLocation?.(fileId, line, col);
+  });
+  const handleSaveShortcut = useEffectEvent(() => {
+    onSaveShortcut?.();
+  });
+  const editorBehaviorOptions = useMemo(() => ({
     cursorBlinking,
     fontFamily: editorFontFamily,
     fontLigatures,
@@ -118,7 +136,41 @@ export function MonacoEditorPane({
     smoothScrolling,
     tabSize,
     wordWrap,
-  };
+  }), [
+    bracketPairGuides,
+    cursorBlinking,
+    editorFontFamily,
+    foldingStrategy,
+    fontLigatures,
+    fontSize,
+    glyphMargin,
+    indentGuides,
+    lineNumbers,
+    minimapEnabled,
+    renderControlCharacters,
+    renderWhitespace,
+    scrollBeyondLastLine,
+    smoothScrolling,
+    tabSize,
+    wordWrap,
+  ]);
+  const editorOptions = useMemo(() => ({
+    ...editorBehaviorOptions,
+    lineNumbersMinChars: 4,
+    folding: true,
+    automaticLayout: true,
+    insertSpaces: true,
+    rulers: [80, 120],
+    bracketPairColorization: { enabled: true },
+    suggest: { showKeywords: true, showSnippets: true },
+    quickSuggestions: { other: true, comments: false, strings: false },
+    parameterHints: { enabled: true },
+    scrollbar: {
+      verticalScrollbarSize: 8,
+      horizontalScrollbarSize: 8,
+    },
+    padding: { top: 8 },
+  }), [editorBehaviorOptions]);
 
   queueEditorLayoutRef.current = () => {
     const applyLayout = () => {
@@ -145,10 +197,6 @@ export function MonacoEditorPane({
 
     layoutFrameRef.current = window.requestAnimationFrame(applyLayout);
   };
-
-  useEffect(() => {
-    onCursorChangeRef.current = onCursorChange;
-  }, [onCursorChange]);
 
   useEffect(() => {
     monacoInstanceRef.current = monaco;
@@ -203,15 +251,18 @@ export function MonacoEditorPane({
   }, [monaco]);
 
   useEffect(() => {
-    if (!mountedEditor || editorLanguage !== 'systemverilog') {
+    if (!mountedEditor) {
       return;
     }
 
-    systemVerilogLspBridge.setNavigateHandler(mountedEditor, onNavigateToLocation);
-  }, [editorLanguage, mountedEditor, onNavigateToLocation]);
+    systemVerilogLspBridge.setNavigateHandler(
+      mountedEditor,
+      isSystemVerilogDocumentReady ? handleNavigateToLocation : undefined,
+    );
+  }, [isSystemVerilogDocumentReady, mountedEditor]);
 
   useEffect(() => {
-    if (!monaco || !mountedEditor || !activeTabId || editorLanguage !== 'systemverilog' || !isDocumentReady || hasLoadError) {
+    if (!monaco || !mountedEditor || !isSystemVerilogDocumentReady) {
       return;
     }
 
@@ -220,17 +271,17 @@ export function MonacoEditorPane({
       editor: mountedEditor,
       filePath: activeTabId,
       text: code,
-      onNavigateToLocation,
+      onNavigateToLocation: handleNavigateToLocation,
     });
-  }, [activeTabId, editorLanguage, hasLoadError, isDocumentReady, monaco, mountedEditor]);
+  }, [activeTabId, isSystemVerilogDocumentReady, monaco, mountedEditor]);
 
   useEffect(() => {
-    if (!activeTabId || editorLanguage !== 'systemverilog' || !isDocumentReady || hasLoadError) {
+    if (!isSystemVerilogDocumentReady) {
       return;
     }
 
     systemVerilogLspBridge.updateDocument(activeTabId, code);
-  }, [activeTabId, code, editorLanguage, hasLoadError, isDocumentReady]);
+  }, [activeTabId, code, isSystemVerilogDocumentReady]);
 
   useEffect(() => {
     const editor = editorRef.current;
@@ -241,36 +292,20 @@ export function MonacoEditorPane({
 
     editor.updateOptions(editorBehaviorOptions);
     queueEditorLayoutRef.current();
-    monaco?.editor.remeasureFonts?.();
-  }, [
-    cursorBlinking,
-    bracketPairGuides,
-    editorFontFamily,
-    editorRef,
-    fontLigatures,
-    fontSize,
-    foldingStrategy,
-    glyphMargin,
-    indentGuides,
-    lineNumbers,
-    minimapEnabled,
-    monaco,
-    renderControlCharacters,
-    renderWhitespace,
-    scrollBeyondLastLine,
-    smoothScrolling,
-    tabSize,
-    wordWrap,
-  ]);
+  }, [editorBehaviorOptions, editorRef]);
 
   useEffect(() => {
-    if (!activeTabId || !editorRef.current) {
+    monaco?.editor.remeasureFonts?.();
+  }, [editorFontFamily, fontLigatures, fontSize, monaco]);
+
+  useEffect(() => {
+    if (!activeTabId || !mountedEditor) {
       return;
     }
 
-    onActiveModelReady?.(activeTabId);
+    handleActiveModelReady(activeTabId);
     queueEditorLayoutRef.current();
-  }, [activeTabId, editorRef, onActiveModelReady]);
+  }, [activeTabId, mountedEditor]);
 
   return (
     <div ref={hostRef} className="relative flex-1 overflow-hidden bg-background">
@@ -299,10 +334,10 @@ export function MonacoEditorPane({
           editorRef.current = editor;
           setMountedEditor(editor);
           if (activeTabId) {
-            onActiveModelReady?.(activeTabId);
+            handleActiveModelReady(activeTabId);
           }
           queueEditorLayoutRef.current();
-          onEditorMount?.(editor);
+          handleEditorMount(editor);
           if (
             onSaveShortcut
             && typeof editor.addCommand === 'function'
@@ -310,7 +345,7 @@ export function MonacoEditorPane({
             && typeof activeMonaco?.KeyCode?.KeyS === 'number'
           ) {
             editor.addCommand(activeMonaco.KeyMod.CtrlCmd | activeMonaco.KeyCode.KeyS, () => {
-              onSaveShortcut();
+              handleSaveShortcut();
             });
           }
           editor.onDidFocusEditorText?.(() => {
@@ -327,29 +362,13 @@ export function MonacoEditorPane({
               canPropagateCursorChangesRef.current = true;
             }
 
-            onCursorChangeRef.current?.(event.position.lineNumber, event.position.column);
+            handleCursorChange(event.position.lineNumber, event.position.column);
           });
         }}
         onChange={(value) => {
-          onContentChange?.(value ?? '');
+          handleContentChange(value ?? '');
         }}
-        options={{
-          ...editorBehaviorOptions,
-          lineNumbersMinChars: 4,
-          folding: true,
-          automaticLayout: true,
-          insertSpaces: true,
-          rulers: [80, 120],
-          bracketPairColorization: { enabled: true },
-          suggest: { showKeywords: true, showSnippets: true },
-          quickSuggestions: { other: true, comments: false, strings: false },
-          parameterHints: { enabled: true },
-          scrollbar: {
-            verticalScrollbarSize: 8,
-            horizontalScrollbarSize: 8,
-          },
-          padding: { top: 8 },
-        }}
+        options={editorOptions}
       />
     </div>
   );

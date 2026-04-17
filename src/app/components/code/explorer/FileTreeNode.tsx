@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, memo } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ChevronRight, ChevronDown, Folder, FolderOpen,
 } from 'lucide-react';
@@ -6,6 +6,36 @@ import { WorkspaceTreeNode, toTreeTestId } from '../../../workspace/workspaceFil
 import type { WorkspaceRevealRequest } from '../../../workspace/useWorkspaceTree';
 import type { WorkspaceGitPathState } from '../../../../../types/workspace-git';
 import { FileTypeBadge } from '../shared/FileTypeBadge';
+
+interface ContextMenuItem {
+  label: string;
+  action: () => void;
+}
+
+const noop = () => {};
+const FOLDER_CONTEXT_MENU_ITEMS: ContextMenuItem[] = [
+  { label: 'New File', action: noop },
+  { label: 'New Folder', action: noop },
+  { label: '---', action: noop },
+  { label: 'Rename', action: noop },
+  { label: 'Delete', action: noop },
+  { label: '---', action: noop },
+  { label: 'Set as Simulation Top', action: noop },
+  { label: 'Copy Path', action: noop },
+];
+const treeRowIndentStyleCache = new Map<number, React.CSSProperties>();
+
+function getTreeRowIndentStyle(depth: number): React.CSSProperties {
+  const cachedStyle = treeRowIndentStyleCache.get(depth);
+
+  if (cachedStyle) {
+    return cachedStyle;
+  }
+
+  const nextStyle = { paddingLeft: depth * 12 + 4 };
+  treeRowIndentStyleCache.set(depth, nextStyle);
+  return nextStyle;
+}
 
 // ─── File Icon ────────────────────────────────────────────────────────────────
 export function FileIcon({ name }: { name: string; language?: string }) {
@@ -15,7 +45,7 @@ export function FileIcon({ name }: { name: string; language?: string }) {
 // ─── Context Menu ─────────────────────────────────────────────────────────────
 export function ContextMenu({
   x, y, onClose, items,
-}: { x: number; y: number; onClose: () => void; items: { label: string; action: () => void }[] }) {
+}: { x: number; y: number; onClose: () => void; items: ContextMenuItem[] }) {
   return (
     <>
       <div className="fixed inset-0 z-40" onClick={onClose} />
@@ -68,11 +98,17 @@ export const FileTreeNode = memo(function FileTreeNode({
   const isExpanded = expandedFolders.has(node.id);
   const isActive = node.id === activeFileId;
   const gitPathState = gitPathStates[node.path];
+  const treeTestId = toTreeTestId(node.path);
   const labelColorClassName = gitPathState === 'modified'
     ? 'text-ide-warning'
     : gitPathState === 'ignored'
     ? 'text-ide-text-muted'
     : 'text-foreground';
+  const rowIndentStyle = getTreeRowIndentStyle(depth);
+
+  const openFileFromContextMenu = useCallback(() => {
+    onFileOpen(node.path, node.name);
+  }, [node.name, node.path, onFileOpen]);
 
   useEffect(() => {
     if (revealRequest?.path !== node.path) {
@@ -82,37 +118,32 @@ export const FileTreeNode = memo(function FileTreeNode({
     rowRef.current?.scrollIntoView({ block: 'nearest' });
   }, [node.path, revealRequest]);
 
-  const contextItems = node.type === 'folder'
-    ? [
-        { label: 'New File', action: () => {} },
-        { label: 'New Folder', action: () => {} },
-        { label: '---', action: () => {} },
-        { label: 'Rename', action: () => {} },
-        { label: 'Delete', action: () => {} },
-        { label: '---', action: () => {} },
-        { label: 'Set as Simulation Top', action: () => {} },
-        { label: 'Copy Path', action: () => {} },
-      ]
-    : [
-      { label: 'Open in Editor', action: () => onFileOpen(node.path, node.name) },
-        { label: '---', action: () => {} },
-        { label: 'Rename', action: () => {} },
-        { label: 'Delete', action: () => {} },
-        { label: '---', action: () => {} },
-        { label: 'Set as Simulation Top', action: () => {} },
-        { label: 'Copy Path', action: () => {} },
-        { label: 'Copy Relative Path', action: () => {} },
-      ];
+  const contextItems = useMemo<ContextMenuItem[]>(() => {
+    if (node.type === 'folder') {
+      return FOLDER_CONTEXT_MENU_ITEMS;
+    }
+
+    return [
+      { label: 'Open in Editor', action: openFileFromContextMenu },
+      { label: '---', action: noop },
+      { label: 'Rename', action: noop },
+      { label: 'Delete', action: noop },
+      { label: '---', action: noop },
+      { label: 'Set as Simulation Top', action: noop },
+      { label: 'Copy Path', action: noop },
+      { label: 'Copy Relative Path', action: noop },
+    ];
+  }, [node.type, openFileFromContextMenu]);
 
   return (
     <div>
       <div
         ref={rowRef}
-        data-testid={`file-tree-node-${toTreeTestId(node.path)}`}
+        data-testid={`file-tree-node-${treeTestId}`}
         className={`flex items-center gap-1 h-6 cursor-pointer group hover:bg-accent transition-colors ${
           isActive ? 'bg-primary/20 text-foreground' : 'text-foreground'
         }`}
-        style={{ paddingLeft: depth * 12 + 4 }}
+        style={rowIndentStyle}
         onClick={() => {
           if (node.type === 'folder') onToggleFolder(node.id);
           else onFilePreview(node.path, node.name);
@@ -136,7 +167,7 @@ export const FileTreeNode = memo(function FileTreeNode({
               ? <FolderOpen size={14} className="text-ide-syntax-folder shrink-0" />
               : <Folder size={14} className="text-ide-syntax-folder shrink-0" />}
             <span
-              data-testid={`file-tree-label-${toTreeTestId(node.path)}`}
+              data-testid={`file-tree-label-${treeTestId}`}
               className={`text-[13px] flex-1 truncate ml-1 ${labelColorClassName}`}
             >
               {node.name}
@@ -149,7 +180,7 @@ export const FileTreeNode = memo(function FileTreeNode({
               <FileIcon name={node.name} />
             </span>
             <span
-              data-testid={`file-tree-label-${toTreeTestId(node.path)}`}
+              data-testid={`file-tree-label-${treeTestId}`}
               className={`text-[13px] flex-1 truncate ml-1 ${labelColorClassName}`}
             >
               {node.name}

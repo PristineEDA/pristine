@@ -46,4 +46,33 @@ describe('quickOpenSearch', () => {
       'rtl/core/alu.v',
     ]);
   });
+
+  it('keeps tied search results ordered by path when name and score match', () => {
+    const files = createQuickOpenFileEntries([
+      'bbb/alu.v',
+      'aaa/alu.v',
+    ]);
+
+    expect(searchQuickOpenFiles(files, 'alu.v').map((result) => result.path)).toEqual([
+      'aaa/alu.v',
+      'bbb/alu.v',
+    ]);
+  });
+
+  it('caps recent results at the provided limit and preserves recency scores', () => {
+    const indexedFiles = createQuickOpenFileEntries([
+      'rtl/core/alu.v',
+      'rtl/core/reg_file.v',
+      'rtl/core/cpu_top.v',
+    ]);
+
+    expect(getRecentQuickOpenFiles([
+      { path: 'rtl/core/cpu_top.v', name: 'cpu_top.v' },
+      { path: 'rtl/core/reg_file.v', name: 'reg_file.v' },
+      { path: 'rtl/core/alu.v', name: 'alu.v' },
+    ], indexedFiles, 2)).toEqual([
+      { path: 'rtl/core/cpu_top.v', name: 'cpu_top.v', score: 2 },
+      { path: 'rtl/core/reg_file.v', name: 'reg_file.v', score: 1 },
+    ]);
+  });
 });

@@ -250,7 +250,7 @@ describe('MonacoEditorPane', () => {
       filePath: 'rtl/core/cpu_top.sv',
       text: 'module cpu_top; endmodule',
     }));
-    expect(mockedSetNavigateHandler).toHaveBeenCalledWith(mockEditorInstance, undefined);
+    expect(mockedSetNavigateHandler).toHaveBeenCalledWith(mockEditorInstance, expect.any(Function));
     expect(mockedUpdateLspDocument).toHaveBeenCalledWith('rtl/core/cpu_top.sv', 'module cpu_top; endmodule');
     expect(editorRef.current).toBe(mockEditorInstance);
     expect(onActiveModelReady).toHaveBeenCalledWith('rtl/core/cpu_top.sv');
@@ -396,6 +396,45 @@ describe('MonacoEditorPane', () => {
 
     fireEvent.click(screen.getByTestId('monaco-editor'));
     expect(onContentChange).toHaveBeenCalledWith('updated code');
+  });
+
+  it('keeps the LSP document attached while the navigate callback updates', () => {
+    const editorRef = createRef<any>();
+    const initialNavigate = vi.fn();
+    const nextNavigate = vi.fn();
+
+    const { rerender } = render(
+      <MonacoEditorPane
+        activeTabId="rtl/core/cpu_top.sv"
+        code="module cpu_top; endmodule"
+        editorRef={editorRef}
+        onNavigateToLocation={initialNavigate}
+      />,
+    );
+
+    expect(mockedAttachLspDocument).toHaveBeenCalledTimes(1);
+    expect(mockedSetNavigateHandler).toHaveBeenCalledTimes(1);
+
+    const firstAttachArgs = mockedAttachLspDocument.mock.calls[0]?.[0] as {
+      onNavigateToLocation?: (fileId: string, line: number, col: number) => void;
+    };
+
+    rerender(
+      <MonacoEditorPane
+        activeTabId="rtl/core/cpu_top.sv"
+        code="module cpu_top; endmodule"
+        editorRef={editorRef}
+        onNavigateToLocation={nextNavigate}
+      />,
+    );
+
+    expect(mockedAttachLspDocument).toHaveBeenCalledTimes(1);
+    expect(mockedSetNavigateHandler).toHaveBeenCalledTimes(1);
+
+    firstAttachArgs.onNavigateToLocation?.('rtl/core/alu.sv', 12, 7);
+
+    expect(initialNavigate).not.toHaveBeenCalled();
+    expect(nextNavigate).toHaveBeenCalledWith('rtl/core/alu.sv', 12, 7);
   });
 
   it('registers a Monaco save command so Ctrl/Cmd+S works while the editor is focused', () => {

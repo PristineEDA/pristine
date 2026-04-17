@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   DEFAULT_EDITOR_CURSOR_BLINKING,
   DEFAULT_EDITOR_BRACKET_PAIR_GUIDES,
@@ -62,7 +62,7 @@ import {
 } from '../editor/editorSettings'
 import { ensureEditorFontFamilyLoaded } from '../editor/fontLoader'
 
-interface EditorSettingsContextValue {
+interface EditorSettingsState {
   cursorBlinking: EditorCursorBlinkingMode
   bracketPairGuides: boolean
   fontFamily: EditorFontFamilyId
@@ -78,6 +78,11 @@ interface EditorSettingsContextValue {
   scrollBeyondLastLine: boolean
   smoothScrolling: boolean
   tabSize: EditorTabSize
+  theme: EditorThemeId
+  wordWrap: EditorWordWrapMode
+}
+
+interface EditorSettingsContextValue extends EditorSettingsState {
   setCursorBlinking: (cursorBlinking: EditorCursorBlinkingMode) => void
   setBracketPairGuides: (enabled: boolean) => void
   setFontFamily: (fontFamily: EditorFontFamilyId) => void
@@ -95,399 +100,198 @@ interface EditorSettingsContextValue {
   setTabSize: (tabSize: EditorTabSize) => void
   setTheme: (theme: EditorThemeId) => void
   setWordWrap: (wordWrap: EditorWordWrapMode) => void
-  theme: EditorThemeId
-  wordWrap: EditorWordWrapMode
+}
+
+type EditorSettingDefinition<T> = {
+  configKey: string
+  fallback: T
+  parseValue: (value: unknown) => T
+}
+
+type EditorSettingDefinitions = {
+  [K in keyof EditorSettingsState]: EditorSettingDefinition<EditorSettingsState[K]>
 }
 
 const EditorSettingsContext = createContext<EditorSettingsContextValue | null>(null)
 
-function readConfiguredEditorSetting<T>(configKey: string, parseValue: (value: unknown) => T, fallback: T): T {
+const EDITOR_SETTING_DEFINITIONS: EditorSettingDefinitions = {
+  cursorBlinking: {
+    configKey: EDITOR_CURSOR_BLINKING_CONFIG_KEY,
+    fallback: DEFAULT_EDITOR_CURSOR_BLINKING,
+    parseValue: parseEditorCursorBlinking,
+  },
+  bracketPairGuides: {
+    configKey: EDITOR_BRACKET_PAIR_GUIDES_CONFIG_KEY,
+    fallback: DEFAULT_EDITOR_BRACKET_PAIR_GUIDES,
+    parseValue: parseEditorBracketPairGuides,
+  },
+  fontFamily: {
+    configKey: EDITOR_FONT_FAMILY_CONFIG_KEY,
+    fallback: DEFAULT_EDITOR_FONT_FAMILY,
+    parseValue: parseEditorFontFamily,
+  },
+  fontLigatures: {
+    configKey: EDITOR_FONT_LIGATURES_CONFIG_KEY,
+    fallback: DEFAULT_EDITOR_FONT_LIGATURES,
+    parseValue: parseEditorFontLigatures,
+  },
+  fontSize: {
+    configKey: EDITOR_FONT_SIZE_CONFIG_KEY,
+    fallback: DEFAULT_EDITOR_FONT_SIZE,
+    parseValue: parseEditorFontSize,
+  },
+  foldingStrategy: {
+    configKey: EDITOR_FOLDING_STRATEGY_CONFIG_KEY,
+    fallback: DEFAULT_EDITOR_FOLDING_STRATEGY,
+    parseValue: parseEditorFoldingStrategy,
+  },
+  glyphMargin: {
+    configKey: EDITOR_GLYPH_MARGIN_CONFIG_KEY,
+    fallback: DEFAULT_EDITOR_GLYPH_MARGIN,
+    parseValue: parseEditorGlyphMargin,
+  },
+  indentGuides: {
+    configKey: EDITOR_INDENT_GUIDES_CONFIG_KEY,
+    fallback: DEFAULT_EDITOR_INDENT_GUIDES,
+    parseValue: parseEditorIndentGuides,
+  },
+  lineNumbers: {
+    configKey: EDITOR_LINE_NUMBERS_CONFIG_KEY,
+    fallback: DEFAULT_EDITOR_LINE_NUMBERS,
+    parseValue: parseEditorLineNumbers,
+  },
+  minimapEnabled: {
+    configKey: EDITOR_MINIMAP_ENABLED_CONFIG_KEY,
+    fallback: DEFAULT_EDITOR_MINIMAP_ENABLED,
+    parseValue: parseEditorMinimapEnabled,
+  },
+  renderControlCharacters: {
+    configKey: EDITOR_RENDER_CONTROL_CHARACTERS_CONFIG_KEY,
+    fallback: DEFAULT_EDITOR_RENDER_CONTROL_CHARACTERS,
+    parseValue: parseEditorRenderControlCharacters,
+  },
+  renderWhitespace: {
+    configKey: EDITOR_RENDER_WHITESPACE_CONFIG_KEY,
+    fallback: DEFAULT_EDITOR_RENDER_WHITESPACE,
+    parseValue: parseEditorRenderWhitespace,
+  },
+  scrollBeyondLastLine: {
+    configKey: EDITOR_SCROLL_BEYOND_LAST_LINE_CONFIG_KEY,
+    fallback: DEFAULT_EDITOR_SCROLL_BEYOND_LAST_LINE,
+    parseValue: parseEditorScrollBeyondLastLine,
+  },
+  smoothScrolling: {
+    configKey: EDITOR_SMOOTH_SCROLLING_CONFIG_KEY,
+    fallback: DEFAULT_EDITOR_SMOOTH_SCROLLING,
+    parseValue: parseEditorSmoothScrolling,
+  },
+  tabSize: {
+    configKey: EDITOR_TAB_SIZE_CONFIG_KEY,
+    fallback: DEFAULT_EDITOR_TAB_SIZE,
+    parseValue: parseEditorTabSize,
+  },
+  theme: {
+    configKey: EDITOR_THEME_CONFIG_KEY,
+    fallback: DEFAULT_EDITOR_THEME,
+    parseValue: parseEditorTheme,
+  },
+  wordWrap: {
+    configKey: EDITOR_WORD_WRAP_CONFIG_KEY,
+    fallback: DEFAULT_EDITOR_WORD_WRAP,
+    parseValue: parseEditorWordWrap,
+  },
+}
+
+function readConfiguredEditorSetting<T>(definition: EditorSettingDefinition<T>): T {
   try {
-    return parseValue(window.electronAPI?.config.get(configKey))
+    return definition.parseValue(window.electronAPI?.config.get(definition.configKey))
   } catch {
-    return fallback
+    return definition.fallback
   }
 }
 
-function persistConfiguredEditorSetting<T>(configKey: string, parseValue: (value: unknown) => T, value: T) {
+function persistConfiguredEditorSetting<T>(definition: EditorSettingDefinition<T>, value: T) {
   try {
-    void window.electronAPI?.config.set(configKey, parseValue(value))
+    void window.electronAPI?.config.set(definition.configKey, definition.parseValue(value))
   } catch {
     /* ignore */
   }
 }
 
-function getConfiguredEditorFontSize(): number {
-  return readConfiguredEditorSetting(EDITOR_FONT_SIZE_CONFIG_KEY, parseEditorFontSize, DEFAULT_EDITOR_FONT_SIZE)
-}
-
-function getConfiguredEditorFontFamily(): EditorFontFamilyId {
-  return readConfiguredEditorSetting(EDITOR_FONT_FAMILY_CONFIG_KEY, parseEditorFontFamily, DEFAULT_EDITOR_FONT_FAMILY)
-}
-
-function getConfiguredEditorTheme(): EditorThemeId {
-  return readConfiguredEditorSetting(EDITOR_THEME_CONFIG_KEY, parseEditorTheme, DEFAULT_EDITOR_THEME)
-}
-
-function getConfiguredEditorWordWrap(): EditorWordWrapMode {
-  return readConfiguredEditorSetting(EDITOR_WORD_WRAP_CONFIG_KEY, parseEditorWordWrap, DEFAULT_EDITOR_WORD_WRAP)
-}
-
-function getConfiguredEditorRenderWhitespace(): EditorRenderWhitespaceMode {
-  return readConfiguredEditorSetting(
-    EDITOR_RENDER_WHITESPACE_CONFIG_KEY,
-    parseEditorRenderWhitespace,
-    DEFAULT_EDITOR_RENDER_WHITESPACE,
-  )
-}
-
-function getConfiguredEditorFontLigatures(): boolean {
-  return readConfiguredEditorSetting(
-    EDITOR_FONT_LIGATURES_CONFIG_KEY,
-    parseEditorFontLigatures,
-    DEFAULT_EDITOR_FONT_LIGATURES,
-  )
-}
-
-function getConfiguredEditorTabSize(): EditorTabSize {
-  return readConfiguredEditorSetting(EDITOR_TAB_SIZE_CONFIG_KEY, parseEditorTabSize, DEFAULT_EDITOR_TAB_SIZE)
-}
-
-function getConfiguredEditorCursorBlinking(): EditorCursorBlinkingMode {
-  return readConfiguredEditorSetting(
-    EDITOR_CURSOR_BLINKING_CONFIG_KEY,
-    parseEditorCursorBlinking,
-    DEFAULT_EDITOR_CURSOR_BLINKING,
-  )
-}
-
-function getConfiguredEditorRenderControlCharacters(): boolean {
-  return readConfiguredEditorSetting(
-    EDITOR_RENDER_CONTROL_CHARACTERS_CONFIG_KEY,
-    parseEditorRenderControlCharacters,
-    DEFAULT_EDITOR_RENDER_CONTROL_CHARACTERS,
-  )
-}
-
-function getConfiguredEditorLineNumbers(): EditorLineNumbersMode {
-  return readConfiguredEditorSetting(EDITOR_LINE_NUMBERS_CONFIG_KEY, parseEditorLineNumbers, DEFAULT_EDITOR_LINE_NUMBERS)
-}
-
-function getConfiguredEditorSmoothScrolling(): boolean {
-  return readConfiguredEditorSetting(
-    EDITOR_SMOOTH_SCROLLING_CONFIG_KEY,
-    parseEditorSmoothScrolling,
-    DEFAULT_EDITOR_SMOOTH_SCROLLING,
-  )
-}
-
-function getConfiguredEditorScrollBeyondLastLine(): boolean {
-  return readConfiguredEditorSetting(
-    EDITOR_SCROLL_BEYOND_LAST_LINE_CONFIG_KEY,
-    parseEditorScrollBeyondLastLine,
-    DEFAULT_EDITOR_SCROLL_BEYOND_LAST_LINE,
-  )
-}
-
-function getConfiguredEditorFoldingStrategy(): EditorFoldingStrategy {
-  return readConfiguredEditorSetting(
-    EDITOR_FOLDING_STRATEGY_CONFIG_KEY,
-    parseEditorFoldingStrategy,
-    DEFAULT_EDITOR_FOLDING_STRATEGY,
-  )
-}
-
-function getConfiguredEditorMinimapEnabled(): boolean {
-  return readConfiguredEditorSetting(EDITOR_MINIMAP_ENABLED_CONFIG_KEY, parseEditorMinimapEnabled, DEFAULT_EDITOR_MINIMAP_ENABLED)
-}
-
-function getConfiguredEditorGlyphMargin(): boolean {
-  return readConfiguredEditorSetting(EDITOR_GLYPH_MARGIN_CONFIG_KEY, parseEditorGlyphMargin, DEFAULT_EDITOR_GLYPH_MARGIN)
-}
-
-function getConfiguredEditorBracketPairGuides(): boolean {
-  return readConfiguredEditorSetting(
-    EDITOR_BRACKET_PAIR_GUIDES_CONFIG_KEY,
-    parseEditorBracketPairGuides,
-    DEFAULT_EDITOR_BRACKET_PAIR_GUIDES,
-  )
-}
-
-function getConfiguredEditorIndentGuides(): boolean {
-  return readConfiguredEditorSetting(EDITOR_INDENT_GUIDES_CONFIG_KEY, parseEditorIndentGuides, DEFAULT_EDITOR_INDENT_GUIDES)
+function getInitialEditorSettingsState(): EditorSettingsState {
+  return {
+    cursorBlinking: readConfiguredEditorSetting(EDITOR_SETTING_DEFINITIONS.cursorBlinking),
+    bracketPairGuides: readConfiguredEditorSetting(EDITOR_SETTING_DEFINITIONS.bracketPairGuides),
+    fontFamily: readConfiguredEditorSetting(EDITOR_SETTING_DEFINITIONS.fontFamily),
+    fontLigatures: readConfiguredEditorSetting(EDITOR_SETTING_DEFINITIONS.fontLigatures),
+    fontSize: readConfiguredEditorSetting(EDITOR_SETTING_DEFINITIONS.fontSize),
+    foldingStrategy: readConfiguredEditorSetting(EDITOR_SETTING_DEFINITIONS.foldingStrategy),
+    glyphMargin: readConfiguredEditorSetting(EDITOR_SETTING_DEFINITIONS.glyphMargin),
+    indentGuides: readConfiguredEditorSetting(EDITOR_SETTING_DEFINITIONS.indentGuides),
+    lineNumbers: readConfiguredEditorSetting(EDITOR_SETTING_DEFINITIONS.lineNumbers),
+    minimapEnabled: readConfiguredEditorSetting(EDITOR_SETTING_DEFINITIONS.minimapEnabled),
+    renderControlCharacters: readConfiguredEditorSetting(EDITOR_SETTING_DEFINITIONS.renderControlCharacters),
+    renderWhitespace: readConfiguredEditorSetting(EDITOR_SETTING_DEFINITIONS.renderWhitespace),
+    scrollBeyondLastLine: readConfiguredEditorSetting(EDITOR_SETTING_DEFINITIONS.scrollBeyondLastLine),
+    smoothScrolling: readConfiguredEditorSetting(EDITOR_SETTING_DEFINITIONS.smoothScrolling),
+    tabSize: readConfiguredEditorSetting(EDITOR_SETTING_DEFINITIONS.tabSize),
+    theme: readConfiguredEditorSetting(EDITOR_SETTING_DEFINITIONS.theme),
+    wordWrap: readConfiguredEditorSetting(EDITOR_SETTING_DEFINITIONS.wordWrap),
+  }
 }
 
 export function EditorSettingsProvider({ children }: { children: ReactNode }) {
-  const [cursorBlinking, setCursorBlinkingState] = useState<EditorCursorBlinkingMode>(getConfiguredEditorCursorBlinking)
-  const [bracketPairGuides, setBracketPairGuidesState] = useState<boolean>(getConfiguredEditorBracketPairGuides)
-  const [fontFamily, setFontFamilyState] = useState<EditorFontFamilyId>(getConfiguredEditorFontFamily)
-  const [fontLigatures, setFontLigaturesState] = useState<boolean>(getConfiguredEditorFontLigatures)
-  const [fontSize, setFontSizeState] = useState<number>(getConfiguredEditorFontSize)
-  const [foldingStrategy, setFoldingStrategyState] = useState<EditorFoldingStrategy>(getConfiguredEditorFoldingStrategy)
-  const [glyphMargin, setGlyphMarginState] = useState<boolean>(getConfiguredEditorGlyphMargin)
-  const [indentGuides, setIndentGuidesState] = useState<boolean>(getConfiguredEditorIndentGuides)
-  const [lineNumbers, setLineNumbersState] = useState<EditorLineNumbersMode>(getConfiguredEditorLineNumbers)
-  const [minimapEnabled, setMinimapEnabledState] = useState<boolean>(getConfiguredEditorMinimapEnabled)
-  const [renderControlCharacters, setRenderControlCharactersState] = useState<boolean>(getConfiguredEditorRenderControlCharacters)
-  const [renderWhitespace, setRenderWhitespaceState] = useState<EditorRenderWhitespaceMode>(getConfiguredEditorRenderWhitespace)
-  const [scrollBeyondLastLine, setScrollBeyondLastLineState] = useState<boolean>(getConfiguredEditorScrollBeyondLastLine)
-  const [smoothScrolling, setSmoothScrollingState] = useState<boolean>(getConfiguredEditorSmoothScrolling)
-  const [tabSize, setTabSizeState] = useState<EditorTabSize>(getConfiguredEditorTabSize)
-  const [theme, setThemeState] = useState<EditorThemeId>(getConfiguredEditorTheme)
-  const [wordWrap, setWordWrapState] = useState<EditorWordWrapMode>(getConfiguredEditorWordWrap)
+  const [settings, setSettings] = useState<EditorSettingsState>(getInitialEditorSettingsState)
 
-  const setFontSize = useCallback((value: number) => {
-    const nextValue = parseEditorFontSize(value)
-    setFontSizeState(nextValue)
-    persistConfiguredEditorSetting(EDITOR_FONT_SIZE_CONFIG_KEY, parseEditorFontSize, nextValue)
+  const updateSetting = useCallback(function updateSetting<K extends keyof EditorSettingsState>(
+    key: K,
+    value: EditorSettingsState[K],
+  ) {
+    const definition = EDITOR_SETTING_DEFINITIONS[key]
+    const nextValue = definition.parseValue(value)
+
+    setSettings((currentSettings) => {
+      if (Object.is(currentSettings[key], nextValue)) {
+        return currentSettings
+      }
+
+      return {
+        ...currentSettings,
+        [key]: nextValue,
+      } as EditorSettingsState
+    })
+
+    persistConfiguredEditorSetting(definition, nextValue)
   }, [])
 
-  const setFontFamily = useCallback((value: EditorFontFamilyId) => {
-    const nextValue = parseEditorFontFamily(value)
-    setFontFamilyState(nextValue)
-    persistConfiguredEditorSetting(EDITOR_FONT_FAMILY_CONFIG_KEY, parseEditorFontFamily, nextValue)
-  }, [])
-
-  const setFontLigatures = useCallback((value: boolean) => {
-    const nextValue = parseEditorFontLigatures(value)
-    setFontLigaturesState(nextValue)
-    persistConfiguredEditorSetting(EDITOR_FONT_LIGATURES_CONFIG_KEY, parseEditorFontLigatures, nextValue)
-  }, [])
-
-  const setTabSize = useCallback((value: EditorTabSize) => {
-    const nextValue = parseEditorTabSize(value)
-    setTabSizeState(nextValue)
-    persistConfiguredEditorSetting(EDITOR_TAB_SIZE_CONFIG_KEY, parseEditorTabSize, nextValue)
-  }, [])
-
-  const setCursorBlinking = useCallback((value: EditorCursorBlinkingMode) => {
-    const nextValue = parseEditorCursorBlinking(value)
-    setCursorBlinkingState(nextValue)
-    persistConfiguredEditorSetting(EDITOR_CURSOR_BLINKING_CONFIG_KEY, parseEditorCursorBlinking, nextValue)
-  }, [])
-
-  const setTheme = useCallback((value: EditorThemeId) => {
-    const nextValue = parseEditorTheme(value)
-    setThemeState(nextValue)
-    persistConfiguredEditorSetting(EDITOR_THEME_CONFIG_KEY, parseEditorTheme, nextValue)
-  }, [])
-
-  const setWordWrap = useCallback((value: EditorWordWrapMode) => {
-    const nextValue = parseEditorWordWrap(value)
-    setWordWrapState(nextValue)
-    persistConfiguredEditorSetting(EDITOR_WORD_WRAP_CONFIG_KEY, parseEditorWordWrap, nextValue)
-  }, [])
-
-  const setRenderWhitespace = useCallback((value: EditorRenderWhitespaceMode) => {
-    const nextValue = parseEditorRenderWhitespace(value)
-    setRenderWhitespaceState(nextValue)
-    persistConfiguredEditorSetting(EDITOR_RENDER_WHITESPACE_CONFIG_KEY, parseEditorRenderWhitespace, nextValue)
-  }, [])
-
-  const setRenderControlCharacters = useCallback((value: boolean) => {
-    const nextValue = parseEditorRenderControlCharacters(value)
-    setRenderControlCharactersState(nextValue)
-    persistConfiguredEditorSetting(
-      EDITOR_RENDER_CONTROL_CHARACTERS_CONFIG_KEY,
-      parseEditorRenderControlCharacters,
-      nextValue,
-    )
-  }, [])
-
-  const setLineNumbers = useCallback((value: EditorLineNumbersMode) => {
-    const nextValue = parseEditorLineNumbers(value)
-    setLineNumbersState(nextValue)
-    persistConfiguredEditorSetting(EDITOR_LINE_NUMBERS_CONFIG_KEY, parseEditorLineNumbers, nextValue)
-  }, [])
-
-  const setSmoothScrolling = useCallback((value: boolean) => {
-    const nextValue = parseEditorSmoothScrolling(value)
-    setSmoothScrollingState(nextValue)
-    persistConfiguredEditorSetting(EDITOR_SMOOTH_SCROLLING_CONFIG_KEY, parseEditorSmoothScrolling, nextValue)
-  }, [])
-
-  const setScrollBeyondLastLine = useCallback((value: boolean) => {
-    const nextValue = parseEditorScrollBeyondLastLine(value)
-    setScrollBeyondLastLineState(nextValue)
-    persistConfiguredEditorSetting(
-      EDITOR_SCROLL_BEYOND_LAST_LINE_CONFIG_KEY,
-      parseEditorScrollBeyondLastLine,
-      nextValue,
-    )
-  }, [])
-
-  const setFoldingStrategy = useCallback((value: EditorFoldingStrategy) => {
-    const nextValue = parseEditorFoldingStrategy(value)
-    setFoldingStrategyState(nextValue)
-    persistConfiguredEditorSetting(EDITOR_FOLDING_STRATEGY_CONFIG_KEY, parseEditorFoldingStrategy, nextValue)
-  }, [])
-
-  const setMinimapEnabled = useCallback((value: boolean) => {
-    const nextValue = parseEditorMinimapEnabled(value)
-    setMinimapEnabledState(nextValue)
-    persistConfiguredEditorSetting(EDITOR_MINIMAP_ENABLED_CONFIG_KEY, parseEditorMinimapEnabled, nextValue)
-  }, [])
-
-  const setGlyphMargin = useCallback((value: boolean) => {
-    const nextValue = parseEditorGlyphMargin(value)
-    setGlyphMarginState(nextValue)
-    persistConfiguredEditorSetting(EDITOR_GLYPH_MARGIN_CONFIG_KEY, parseEditorGlyphMargin, nextValue)
-  }, [])
-
-  const setBracketPairGuides = useCallback((value: boolean) => {
-    const nextValue = parseEditorBracketPairGuides(value)
-    setBracketPairGuidesState(nextValue)
-    persistConfiguredEditorSetting(EDITOR_BRACKET_PAIR_GUIDES_CONFIG_KEY, parseEditorBracketPairGuides, nextValue)
-  }, [])
-
-  const setIndentGuides = useCallback((value: boolean) => {
-    const nextValue = parseEditorIndentGuides(value)
-    setIndentGuidesState(nextValue)
-    persistConfiguredEditorSetting(EDITOR_INDENT_GUIDES_CONFIG_KEY, parseEditorIndentGuides, nextValue)
-  }, [])
+  const settingActions = useMemo(() => ({
+    setCursorBlinking: (value: EditorCursorBlinkingMode) => updateSetting('cursorBlinking', value),
+    setBracketPairGuides: (value: boolean) => updateSetting('bracketPairGuides', value),
+    setFontFamily: (value: EditorFontFamilyId) => updateSetting('fontFamily', value),
+    setFontLigatures: (value: boolean) => updateSetting('fontLigatures', value),
+    setFontSize: (value: number) => updateSetting('fontSize', value),
+    setFoldingStrategy: (value: EditorFoldingStrategy) => updateSetting('foldingStrategy', value),
+    setGlyphMargin: (value: boolean) => updateSetting('glyphMargin', value),
+    setIndentGuides: (value: boolean) => updateSetting('indentGuides', value),
+    setLineNumbers: (value: EditorLineNumbersMode) => updateSetting('lineNumbers', value),
+    setMinimapEnabled: (value: boolean) => updateSetting('minimapEnabled', value),
+    setRenderControlCharacters: (value: boolean) => updateSetting('renderControlCharacters', value),
+    setRenderWhitespace: (value: EditorRenderWhitespaceMode) => updateSetting('renderWhitespace', value),
+    setScrollBeyondLastLine: (value: boolean) => updateSetting('scrollBeyondLastLine', value),
+    setSmoothScrolling: (value: boolean) => updateSetting('smoothScrolling', value),
+    setTabSize: (value: EditorTabSize) => updateSetting('tabSize', value),
+    setTheme: (value: EditorThemeId) => updateSetting('theme', value),
+    setWordWrap: (value: EditorWordWrapMode) => updateSetting('wordWrap', value),
+  }), [updateSetting])
 
   useEffect(() => {
-    if (parseEditorCursorBlinking(window.electronAPI?.config.get(EDITOR_CURSOR_BLINKING_CONFIG_KEY)) !== cursorBlinking) {
-      persistConfiguredEditorSetting(EDITOR_CURSOR_BLINKING_CONFIG_KEY, parseEditorCursorBlinking, cursorBlinking)
-    }
+    void ensureEditorFontFamilyLoaded(settings.fontFamily)
+  }, [settings.fontFamily])
 
-    if (parseEditorBracketPairGuides(window.electronAPI?.config.get(EDITOR_BRACKET_PAIR_GUIDES_CONFIG_KEY)) !== bracketPairGuides) {
-      persistConfiguredEditorSetting(EDITOR_BRACKET_PAIR_GUIDES_CONFIG_KEY, parseEditorBracketPairGuides, bracketPairGuides)
-    }
-
-    if (parseEditorFontFamily(window.electronAPI?.config.get(EDITOR_FONT_FAMILY_CONFIG_KEY)) !== fontFamily) {
-      persistConfiguredEditorSetting(EDITOR_FONT_FAMILY_CONFIG_KEY, parseEditorFontFamily, fontFamily)
-    }
-
-    if (parseEditorFontLigatures(window.electronAPI?.config.get(EDITOR_FONT_LIGATURES_CONFIG_KEY)) !== fontLigatures) {
-      persistConfiguredEditorSetting(EDITOR_FONT_LIGATURES_CONFIG_KEY, parseEditorFontLigatures, fontLigatures)
-    }
-
-    if (parseEditorFontSize(window.electronAPI?.config.get(EDITOR_FONT_SIZE_CONFIG_KEY)) !== fontSize) {
-      persistConfiguredEditorSetting(EDITOR_FONT_SIZE_CONFIG_KEY, parseEditorFontSize, fontSize)
-    }
-
-    if (parseEditorFoldingStrategy(window.electronAPI?.config.get(EDITOR_FOLDING_STRATEGY_CONFIG_KEY)) !== foldingStrategy) {
-      persistConfiguredEditorSetting(EDITOR_FOLDING_STRATEGY_CONFIG_KEY, parseEditorFoldingStrategy, foldingStrategy)
-    }
-
-    if (parseEditorGlyphMargin(window.electronAPI?.config.get(EDITOR_GLYPH_MARGIN_CONFIG_KEY)) !== glyphMargin) {
-      persistConfiguredEditorSetting(EDITOR_GLYPH_MARGIN_CONFIG_KEY, parseEditorGlyphMargin, glyphMargin)
-    }
-
-    if (parseEditorIndentGuides(window.electronAPI?.config.get(EDITOR_INDENT_GUIDES_CONFIG_KEY)) !== indentGuides) {
-      persistConfiguredEditorSetting(EDITOR_INDENT_GUIDES_CONFIG_KEY, parseEditorIndentGuides, indentGuides)
-    }
-
-    if (parseEditorLineNumbers(window.electronAPI?.config.get(EDITOR_LINE_NUMBERS_CONFIG_KEY)) !== lineNumbers) {
-      persistConfiguredEditorSetting(EDITOR_LINE_NUMBERS_CONFIG_KEY, parseEditorLineNumbers, lineNumbers)
-    }
-
-    if (parseEditorMinimapEnabled(window.electronAPI?.config.get(EDITOR_MINIMAP_ENABLED_CONFIG_KEY)) !== minimapEnabled) {
-      persistConfiguredEditorSetting(EDITOR_MINIMAP_ENABLED_CONFIG_KEY, parseEditorMinimapEnabled, minimapEnabled)
-    }
-
-    if (
-      parseEditorRenderControlCharacters(window.electronAPI?.config.get(EDITOR_RENDER_CONTROL_CHARACTERS_CONFIG_KEY))
-      !== renderControlCharacters
-    ) {
-      persistConfiguredEditorSetting(
-        EDITOR_RENDER_CONTROL_CHARACTERS_CONFIG_KEY,
-        parseEditorRenderControlCharacters,
-        renderControlCharacters,
-      )
-    }
-
-    if (parseEditorRenderWhitespace(window.electronAPI?.config.get(EDITOR_RENDER_WHITESPACE_CONFIG_KEY)) !== renderWhitespace) {
-      persistConfiguredEditorSetting(EDITOR_RENDER_WHITESPACE_CONFIG_KEY, parseEditorRenderWhitespace, renderWhitespace)
-    }
-
-    if (
-      parseEditorScrollBeyondLastLine(window.electronAPI?.config.get(EDITOR_SCROLL_BEYOND_LAST_LINE_CONFIG_KEY))
-      !== scrollBeyondLastLine
-    ) {
-      persistConfiguredEditorSetting(
-        EDITOR_SCROLL_BEYOND_LAST_LINE_CONFIG_KEY,
-        parseEditorScrollBeyondLastLine,
-        scrollBeyondLastLine,
-      )
-    }
-
-    if (parseEditorSmoothScrolling(window.electronAPI?.config.get(EDITOR_SMOOTH_SCROLLING_CONFIG_KEY)) !== smoothScrolling) {
-      persistConfiguredEditorSetting(EDITOR_SMOOTH_SCROLLING_CONFIG_KEY, parseEditorSmoothScrolling, smoothScrolling)
-    }
-
-    if (parseEditorTabSize(window.electronAPI?.config.get(EDITOR_TAB_SIZE_CONFIG_KEY)) !== tabSize) {
-      persistConfiguredEditorSetting(EDITOR_TAB_SIZE_CONFIG_KEY, parseEditorTabSize, tabSize)
-    }
-
-    if (parseEditorTheme(window.electronAPI?.config.get(EDITOR_THEME_CONFIG_KEY)) !== theme) {
-      persistConfiguredEditorSetting(EDITOR_THEME_CONFIG_KEY, parseEditorTheme, theme)
-    }
-
-    if (parseEditorWordWrap(window.electronAPI?.config.get(EDITOR_WORD_WRAP_CONFIG_KEY)) !== wordWrap) {
-      persistConfiguredEditorSetting(EDITOR_WORD_WRAP_CONFIG_KEY, parseEditorWordWrap, wordWrap)
-    }
-  }, [
-    cursorBlinking,
-    bracketPairGuides,
-    fontFamily,
-    fontLigatures,
-    fontSize,
-    foldingStrategy,
-    glyphMargin,
-    indentGuides,
-    lineNumbers,
-    minimapEnabled,
-    renderControlCharacters,
-    renderWhitespace,
-    scrollBeyondLastLine,
-    smoothScrolling,
-    tabSize,
-    theme,
-    wordWrap,
-  ])
-
-  useEffect(() => {
-    void ensureEditorFontFamilyLoaded(fontFamily)
-  }, [fontFamily])
-
-  const value: EditorSettingsContextValue = {
-    cursorBlinking,
-    bracketPairGuides,
-    fontFamily,
-    fontLigatures,
-    fontSize,
-    foldingStrategy,
-    glyphMargin,
-    indentGuides,
-    lineNumbers,
-    minimapEnabled,
-    renderControlCharacters,
-    renderWhitespace,
-    scrollBeyondLastLine,
-    smoothScrolling,
-    tabSize,
-    setCursorBlinking,
-    setBracketPairGuides,
-    setFontFamily,
-    setFontLigatures,
-    setFontSize,
-    setFoldingStrategy,
-    setGlyphMargin,
-    setIndentGuides,
-    setLineNumbers,
-    setMinimapEnabled,
-    setRenderControlCharacters,
-    setRenderWhitespace,
-    setScrollBeyondLastLine,
-    setSmoothScrolling,
-    setTabSize,
-    setTheme,
-    setWordWrap,
-    theme,
-    wordWrap,
-  }
+  const value = useMemo<EditorSettingsContextValue>(() => ({
+    ...settings,
+    ...settingActions,
+  }), [settingActions, settings])
 
   return (
     <EditorSettingsContext.Provider value={value}>

@@ -656,6 +656,15 @@ describe('MenuBar', () => {
     await user.click(screen.getByTestId('settings-close-to-tray-switch'));
     await user.click(screen.getByTestId('settings-floating-info-window-switch'));
 
+    expect(screen.getByTestId('settings-editor-font-family-combobox')).toHaveTextContent('Victor Mono');
+    expect(screen.getByTestId('settings-editor-word-wrap-combobox')).toHaveTextContent('On');
+    expect(screen.getByTestId('settings-editor-tab-size-combobox')).toHaveTextContent('2 spaces');
+    expect(screen.getByTestId('settings-editor-theme-combobox')).toHaveTextContent('GitHub Dark');
+    expect(screen.getByTestId('settings-editor-font-ligatures-switch')).toHaveAttribute('data-state', 'checked');
+    expect(screen.getByTestId('settings-theme-switch')).toHaveAttribute('data-state', 'unchecked');
+    expect(screen.getByTestId('settings-close-to-tray-switch')).toHaveAttribute('data-state', 'unchecked');
+    expect(screen.getByTestId('settings-floating-info-window-switch')).toHaveAttribute('data-state', 'unchecked');
+
     expect(setEditorFontFamilyMock).toHaveBeenCalledWith('victor-mono');
     expect(setEditorWordWrapMock).toHaveBeenCalledWith('on');
     expect(setEditorTabSizeMock).toHaveBeenCalledWith(2);
