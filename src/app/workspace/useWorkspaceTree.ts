@@ -175,9 +175,21 @@ export function useWorkspaceTree(revealRequest?: WorkspaceRevealRequest | null) 
     const ancestorPaths = getWorkspaceAncestorPaths(revealRequest.path);
 
     setExpandedFolders((current) => {
-      const next = new Set(current);
-      ancestorPaths.forEach((ancestorPath) => next.add(ancestorPath));
-      return next;
+      let next: Set<string> | null = null;
+
+      for (const ancestorPath of ancestorPaths) {
+        if (current.has(ancestorPath)) {
+          continue;
+        }
+
+        if (next === null) {
+          next = new Set(current);
+        }
+
+        next.add(ancestorPath);
+      }
+
+      return next ?? current;
     });
 
     const nextAncestorToLoad = ancestorPaths.find((ancestorPath) => {
