@@ -223,6 +223,26 @@ describe('EditorSettingsContext', () => {
     expect(ensureEditorFontFamilyLoadedMock).toHaveBeenCalledWith('fira-code')
   })
 
+  it('persists each editor setting interaction once', () => {
+    render(
+      <EditorSettingsProvider>
+        <EditorSettingsProbe />
+      </EditorSettingsProvider>,
+    )
+
+    fireEvent.click(screen.getByTestId('set-theme'))
+    expect(window.electronAPI?.config.set).toHaveBeenCalledTimes(1)
+    expect(window.electronAPI?.config.set).toHaveBeenLastCalledWith('editor.theme', 'github-dark')
+
+    fireEvent.click(screen.getByTestId('set-word-wrap'))
+    expect(window.electronAPI?.config.set).toHaveBeenCalledTimes(2)
+    expect(window.electronAPI?.config.set).toHaveBeenLastCalledWith('editor.wordWrap', 'bounded')
+
+    fireEvent.click(screen.getByTestId('set-font-size'))
+    expect(window.electronAPI?.config.set).toHaveBeenCalledTimes(3)
+    expect(window.electronAPI?.config.set).toHaveBeenLastCalledWith('editor.fontSize', 18)
+  })
+
   it('persists display settings, font settings and theme updates and clamps invalid values', () => {
     render(
       <EditorSettingsProvider>
