@@ -98,6 +98,7 @@ vi.mock('./components/code/explorer/LeftSidePanel', () => ({
       <span data-testid="left-active-file">{activeFileId}</span>
       <span data-testid="left-outline-file">{currentOutlineId}</span>
       <span data-testid="left-reveal-path">{revealRequest?.path ?? ''}</span>
+      <span data-testid="left-reveal-token">{revealRequest?.token ?? ''}</span>
       <button onClick={() => { onFileOpen('rtl/core/reg_file.v', 'reg_file.v'); onLineJump(77); }}>left-open</button>
     </div>
   ),
@@ -107,7 +108,7 @@ vi.mock('./components/code/shared/EditorSplitLayout', async () => {
   const actual = await vi.importActual<typeof import('./context/WorkspaceContext')>('./context/WorkspaceContext');
 
   return {
-    EditorSplitLayout: ({ jumpToLine }: any) => {
+    EditorSplitLayout: ({ jumpToLine, onActiveFileReveal }: any) => {
       const workspace = actual.useWorkspace();
       const restoreRequest = workspace.focusedGroupId ? workspace.getCursorRestoreRequest(workspace.focusedGroupId) : undefined;
 
@@ -119,7 +120,8 @@ vi.mock('./components/code/shared/EditorSplitLayout', async () => {
           <span data-testid="editor-restore-file">{restoreRequest?.fileId ?? ''}</span>
           <span data-testid="editor-restore-line">{restoreRequest?.line ?? ''}</span>
           <span data-testid="editor-restore-col">{restoreRequest?.col ?? ''}</span>
-          <button onClick={() => workspace.setActiveTabId('rtl/core/alu.v')}>editor-activate-alu</button>
+          <button onClick={() => { onActiveFileReveal?.('rtl/core/reg_file.v'); workspace.setActiveTabId('rtl/core/reg_file.v'); }}>editor-activate-reg</button>
+          <button onClick={() => { onActiveFileReveal?.('rtl/core/alu.v'); workspace.setActiveTabId('rtl/core/alu.v'); }}>editor-activate-alu</button>
           <button onClick={() => workspace.closeFile('rtl/core/reg_file.v')}>editor-close-open</button>
           <button onClick={() => workspace.setCursorPos(9, 3)}>editor-cursor</button>
         </div>
@@ -463,6 +465,26 @@ describe('App', () => {
 
     fireEvent.keyDown(document, { key: 'p', ctrlKey: true });
     expect(screen.queryByTestId('quick-open-overlay')).not.toBeInTheDocument();
+  });
+
+  it('reveals the active file in explorer when editor tab activation changes or repeats', () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByText('toggle-left-panel'));
+    fireEvent.click(screen.getByText('left-open'));
+    fireEvent.click(screen.getByText('toggle-right-panel'));
+    fireEvent.click(screen.getByText('right-open'));
+    fireEvent.click(screen.getByText('editor-activate-reg'));
+
+    expect(screen.getByTestId('editor-active-tab')).toHaveTextContent('rtl/core/reg_file.v');
+    expect(screen.getByTestId('left-reveal-path')).toHaveTextContent('rtl/core/reg_file.v');
+
+    const firstRevealToken = Number(screen.getByTestId('left-reveal-token').textContent);
+
+    fireEvent.click(screen.getByText('editor-activate-reg'));
+
+    expect(screen.getByTestId('left-reveal-path')).toHaveTextContent('rtl/core/reg_file.v');
+    expect(Number(screen.getByTestId('left-reveal-token').textContent)).toBeGreaterThan(firstRevealToken);
   });
 
   it('keeps the left sidebar hidden when quick open selects a file', async () => {

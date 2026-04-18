@@ -63,7 +63,7 @@ vi.mock('./EditorArea', () => ({
   },
 }));
 
-function LayoutHarness() {
+function LayoutHarness({ onActiveFileReveal }: { onActiveFileReveal?: (fileId: string) => void } = {}) {
   const { openFile, openPreviewFile } = useWorkspace();
 
   return (
@@ -72,7 +72,7 @@ function LayoutHarness() {
       <button onClick={() => openFile('rtl/core/alu.v', 'alu.v')}>open-alu</button>
       <button onClick={() => openFile('.gitignore', '.gitignore')}>open-gitignore</button>
       <button onClick={() => openPreviewFile('rtl/core/reg_file.v', 'reg_file.v')}>preview-reg</button>
-      <EditorSplitLayout />
+      <EditorSplitLayout onActiveFileReveal={onActiveFileReveal} />
     </div>
   );
 }
@@ -211,6 +211,28 @@ describe('EditorSplitLayout', () => {
 
     expect(within(group).getByTestId('mock-preview-tabs')).toHaveTextContent('');
     expect(screen.getByTestId('editor-drag-shield-group-1')).toBeInTheDocument();
+  });
+
+  it('requests explorer reveal whenever a tab is activated, including repeated clicks on the active tab', () => {
+    const onActiveFileReveal = vi.fn();
+
+    render(
+      <WorkspaceProvider>
+        <LayoutHarness onActiveFileReveal={onActiveFileReveal} />
+      </WorkspaceProvider>,
+    );
+
+    fireEvent.click(screen.getByText('open-reg'));
+    fireEvent.click(screen.getByText('open-alu'));
+
+    const group = screen.getByTestId('editor-group-group-1');
+    const aluTab = within(group).getByTestId('mock-tab-rtl/core/alu.v');
+
+    fireEvent.click(aluTab);
+    fireEvent.click(aluTab);
+
+    expect(onActiveFileReveal).toHaveBeenNthCalledWith(1, 'rtl/core/alu.v');
+    expect(onActiveFileReveal).toHaveBeenNthCalledWith(2, 'rtl/core/alu.v');
   });
 
   it('moves a tab into an existing group when dropped in the center', () => {

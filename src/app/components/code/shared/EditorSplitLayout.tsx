@@ -183,6 +183,7 @@ const EditorGroupLeaf = memo(function EditorGroupLeaf({
   onDragStart,
   onDragEnd,
   dragState,
+  onActiveFileReveal,
   workspaceActionsRef,
 }: {
   group: EditorGroup;
@@ -201,6 +202,7 @@ const EditorGroupLeaf = memo(function EditorGroupLeaf({
   onDragStart: (groupId: string, tabId: string) => void;
   onDragEnd: () => void;
   dragState: DragState | null;
+  onActiveFileReveal?: (fileId: string) => void;
   workspaceActionsRef: React.MutableRefObject<EditorGroupWorkspaceActions>;
 }) {
   const editorRef = useRef<any>(null);
@@ -274,7 +276,10 @@ const EditorGroupLeaf = memo(function EditorGroupLeaf({
       <EditorArea
         tabs={group.tabs}
         activeTabId={group.activeTabId}
-        onTabChange={(tabId) => workspaceActionsRef.current.setActiveTabIdInGroup(group.id, tabId)}
+        onTabChange={(tabId) => {
+          onActiveFileReveal?.(tabId);
+          workspaceActionsRef.current.setActiveTabIdInGroup(group.id, tabId);
+        }}
         onTabClose={(tabId) => workspaceActionsRef.current.closeFileInGroup(group.id, tabId)}
         onTabPin={(tabId) => workspaceActionsRef.current.pinTabInGroup(group.id, tabId)}
         editorRef={editorRef}
@@ -322,7 +327,13 @@ const EditorGroupLeaf = memo(function EditorGroupLeaf({
   );
 });
 
-export function EditorSplitLayout({ jumpToLine }: { jumpToLine?: number }) {
+export function EditorSplitLayout({
+  jumpToLine,
+  onActiveFileReveal,
+}: {
+  jumpToLine?: number;
+  onActiveFileReveal?: (fileId: string) => void;
+}) {
   const {
     clearCursorRestoreRequest,
     closeActiveTabInFocusedGroup,
@@ -469,6 +480,7 @@ export function EditorSplitLayout({ jumpToLine }: { jumpToLine?: number }) {
           onDragStart={handleDragStart}
           onDragEnd={clearDragState}
           dragState={dragState}
+          onActiveFileReveal={onActiveFileReveal}
           workspaceActionsRef={workspaceActionsRef}
         />
       );
