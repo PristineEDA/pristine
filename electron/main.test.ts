@@ -151,6 +151,8 @@ const mocks = vi.hoisted(() => {
     mockSetName: vi.fn(),
     mockGetName: vi.fn(() => 'Pristine'),
     mockQuit: vi.fn(),
+    mockSetAsDefaultProtocolClient: vi.fn(),
+    mockRequestSingleInstanceLock: vi.fn(() => true),
     mockBuildFromTemplate: vi.fn((template: unknown[]) => ({ template })),
     mockSetApplicationMenu: vi.fn(),
     mockCreateFromDataURL: vi.fn(() => ({ kind: 'native-image' })),
@@ -161,6 +163,8 @@ const mocks = vi.hoisted(() => {
     mockRegisterAllHandlers: vi.fn(),
     mockSetProjectRoot: vi.fn(),
     mockSetupWindowStreams: vi.fn(),
+    mockHandleAuthCallbackUrl: vi.fn<(url: string) => Promise<void>>(() => Promise.resolve()),
+    mockIsAuthProtocolUrl: vi.fn<(value: string) => boolean>((value: string) => value.startsWith('pristine://')),
   };
 });
 
@@ -176,6 +180,8 @@ vi.mock('electron', () => ({
     getPath: mocks.mockGetPath,
     setPath: mocks.mockSetPath,
     setName: mocks.mockSetName,
+     setAsDefaultProtocolClient: mocks.mockSetAsDefaultProtocolClient,
+     requestSingleInstanceLock: mocks.mockRequestSingleInstanceLock,
     whenReady: mocks.mockWhenReady,
     on: mocks.mockAppOn,
     quit: mocks.mockQuit,
@@ -220,6 +226,11 @@ vi.mock('./ipc/config.js', () => ({
   getConfigValue: (key: string) => mocks.mockGetConfigValue(key),
 }));
 
+vi.mock('./ipc/auth.js', () => ({
+  handleAuthCallbackUrl: (url: string) => mocks.mockHandleAuthCallbackUrl(url),
+  isAuthProtocolUrl: (value: string) => mocks.mockIsAuthProtocolUrl(value),
+}));
+
 const originalPlatform = process.platform;
 const originalDevServerUrl = process.env.VITE_DEV_SERVER_URL;
 const originalProjectRoot = process.env.PRISTINE_PROJECT_ROOT;
@@ -247,6 +258,8 @@ async function importMain(options?: {
   mocks.mockGetPath.mockClear();
   mocks.mockSetPath.mockClear();
   mocks.mockSetName.mockClear();
+    mocks.mockSetAsDefaultProtocolClient.mockClear();
+    mocks.mockRequestSingleInstanceLock.mockClear();
   mocks.mockQuit.mockClear();
   mocks.mockBuildFromTemplate.mockClear();
   mocks.mockSetApplicationMenu.mockClear();
@@ -259,6 +272,9 @@ async function importMain(options?: {
   mocks.mockRegisterAllHandlers.mockClear();
   mocks.mockSetProjectRoot.mockClear();
   mocks.mockSetupWindowStreams.mockClear();
+    mocks.mockHandleAuthCallbackUrl.mockClear();
+    mocks.mockIsAuthProtocolUrl.mockClear();
+    mocks.mockIsAuthProtocolUrl.mockImplementation((value: string) => value.startsWith('pristine://'));
   mocks.BrowserWindowMock.getAllWindows.mockClear();
 
   if (options?.devServerUrl) {
@@ -346,6 +362,8 @@ describe('electron main entry', () => {
     });
 
     expect(mocks.mockRegisterAllHandlers).toHaveBeenCalledTimes(1);
+    expect(mocks.mockRequestSingleInstanceLock).toHaveBeenCalledTimes(1);
+    expect(mocks.mockSetAsDefaultProtocolClient).toHaveBeenCalledWith('pristine');
     expect(mocks.mockSetProjectRoot).toHaveBeenCalledWith('C:\\Users\\maksy\\Desktop\\fpga\\retroSoC');
     expect(mocks.mockMkdirSync).toHaveBeenCalledWith(
       path.join(mocks.mockAppDataPath, 'Pristine', 'dev-profile', 'session-data'),
@@ -570,6 +588,21 @@ describe('electron main entry', () => {
     expect(floatingInfoWindow.setAlwaysOnTop).toHaveBeenCalledWith(true, 'screen-saver');
     expect(floatingInfoWindow.loadFile).toHaveBeenCalledWith(expect.stringMatching(/dist[\\/]floating-info\.html$/));
   });
+
+    it('routes auth callback deep links from a second instance back through the main process auth bridge', async () => {
+      const { appHandlers, browserWindowInstances } = await importMain({ platform: 'win32' });
+
+      const mainWindow = browserWindowInstances[1];
+      mainWindow.show.mockClear();
+      mainWindow.focus.mockClear();
+
+      appHandlers.get('second-instance')?.({}, ['pristine://auth/callback?code=exchange-code']);
+      await Promise.resolve();
+
+      expect(mocks.mockHandleAuthCallbackUrl).toHaveBeenCalledWith('pristine://auth/callback?code=exchange-code');
+      expect(mainWindow.show).toHaveBeenCalledTimes(1);
+      expect(mainWindow.focus).toHaveBeenCalledTimes(1);
+    });
 
   it('recreates splash and main windows on activate when all windows are closed', async () => {
     const { appHandlers, browserWindowInstances } = await importMain({ platform: 'darwin' });

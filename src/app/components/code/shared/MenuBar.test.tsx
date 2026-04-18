@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MenuBar } from './MenuBar';
 import { openSourceAttributionSections } from '../../../about/attributions';
+import type { DesktopAuthSession } from '../../../auth/types';
 import { WorkspaceProvider, useWorkspace } from '../../../context/WorkspaceContext';
 import { SidebarProvider, useSidebar } from '../../ui/sidebar';
 import { getEditorFontFamilyLabel } from '../../../editor/editorSettings';
@@ -26,6 +27,10 @@ const setEditorIndentGuidesMock = vi.fn();
 const setEditorThemeMock = vi.fn();
 const setThemeMock = vi.fn();
 const toggleThemeMock = vi.fn();
+const clearUserErrorMock = vi.fn();
+const openAccountPageMock = vi.fn(() => Promise.resolve(true));
+const signOutMock = vi.fn(() => Promise.resolve(true));
+const syncCloudConfigMock = vi.fn(() => Promise.resolve(true));
 const undoActionRun = vi.fn(() => Promise.resolve());
 const redoActionRun = vi.fn(() => Promise.resolve());
 let mockedEditorBracketPairGuides = true;
@@ -46,6 +51,10 @@ let mockedEditorTabSize = 4;
 let mockedEditorTheme = 'dracula';
 let mockedEditorWordWrap = 'off';
 let mockedTheme: 'light' | 'dark' = 'light';
+let mockedUserErrorMessage: string | null = null;
+let mockedUserIsSyncing = false;
+let mockedUserSession: DesktopAuthSession | null = null;
+let mockedUserStatus: 'loading' | 'signed-in' | 'signed-out' = 'signed-out';
 
 vi.mock('../../../context/EditorSettingsContext', () => ({
   useEditorSettings: () => ({
@@ -92,6 +101,19 @@ vi.mock('../../../context/ThemeContext', () => ({
   useTheme: () => ({ theme: mockedTheme, setTheme: setThemeMock, toggleTheme: toggleThemeMock }),
 }));
 
+vi.mock('../../../context/UserContext', () => ({
+  useUser: () => ({
+    clearError: clearUserErrorMock,
+    errorMessage: mockedUserErrorMessage,
+    isSyncing: mockedUserIsSyncing,
+    openAccountPage: openAccountPageMock,
+    session: mockedUserSession,
+    signOut: signOutMock,
+    status: mockedUserStatus,
+    syncCloudConfig: syncCloudConfigMock,
+  }),
+}));
+
 beforeEach(() => {
   mockedEditorBracketPairGuides = true;
   mockedEditorCursorBlinking = 'smooth';
@@ -111,6 +133,10 @@ beforeEach(() => {
   mockedEditorTheme = 'dracula';
   mockedEditorWordWrap = 'off';
   mockedTheme = 'light';
+  mockedUserErrorMessage = null;
+  mockedUserIsSyncing = false;
+  mockedUserSession = null;
+  mockedUserStatus = 'signed-out';
   window.electronAPI!.platform = 'win32';
   setEditorBracketPairGuidesMock.mockReset();
   setEditorCursorBlinkingMock.mockReset();
@@ -131,6 +157,13 @@ beforeEach(() => {
   setEditorWordWrapMock.mockReset();
   setThemeMock.mockReset();
   toggleThemeMock.mockReset();
+  clearUserErrorMock.mockReset();
+  openAccountPageMock.mockReset();
+  openAccountPageMock.mockResolvedValue(true);
+  signOutMock.mockReset();
+  signOutMock.mockResolvedValue(true);
+  syncCloudConfigMock.mockReset();
+  syncCloudConfigMock.mockResolvedValue(true);
   undoActionRun.mockClear();
   redoActionRun.mockClear();
   vi.mocked(window.electronAPI!.minimize).mockReset();
@@ -353,6 +386,49 @@ describe('MenuBar', () => {
     expect(screen.getByTestId('toggle-theme')).toBeInTheDocument();
     expect(screen.getByTestId('menu-settings-button')).toBeInTheDocument();
     expect(screen.getByTestId('user-avatar-button')).toBeInTheDocument();
+  });
+
+  it('opens sign-in and sign-up actions from the user account popover when signed out', async () => {
+    const user = userEvent.setup();
+
+    renderMenuBar();
+
+    await user.click(screen.getByTestId('user-avatar-button'));
+    expect(await screen.findByTestId('user-account-popover')).toBeInTheDocument();
+
+    await user.click(screen.getByTestId('user-sign-in-button'));
+    await user.click(screen.getByTestId('user-sign-up-button'));
+
+    expect(openAccountPageMock).toHaveBeenNthCalledWith(1, 'login');
+    expect(openAccountPageMock).toHaveBeenNthCalledWith(2, 'signup');
+  });
+
+  it('shows the signed-in account summary and sync actions in the user account popover', async () => {
+    const user = userEvent.setup();
+
+    mockedUserStatus = 'signed-in';
+    mockedUserSession = {
+      avatarUrl: 'https://example.com/avatar.png',
+      email: 'alice@example.com',
+      sessionExpiresAt: 1_900_000_000,
+      syncedAt: '2026-04-18T12:00:00.000Z',
+      userId: 'user-1',
+      username: 'Alice Chen',
+    };
+
+    renderMenuBar();
+
+    await user.click(screen.getByTestId('user-avatar-button'));
+
+    expect(await screen.findByTestId('user-account-name')).toHaveTextContent('Alice Chen');
+    expect(screen.getByTestId('user-account-email')).toHaveTextContent('alice@example.com');
+    expect(screen.getByTestId('user-account-sync-status')).toHaveTextContent('Synced');
+
+    await user.click(screen.getByTestId('user-sync-config-button'));
+    await user.click(screen.getByTestId('user-sign-out-button'));
+
+    expect(syncCloudConfigMock).toHaveBeenCalledTimes(1);
+    expect(signOutMock).toHaveBeenCalledTimes(1);
   });
 
   it('keeps the activity bar trigger position on macOS maximize and only left-aligns it in full-screen', () => {

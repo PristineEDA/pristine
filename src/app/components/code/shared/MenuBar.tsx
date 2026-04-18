@@ -2,6 +2,7 @@ import { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react'
 import {
   Settings, CircleUser, Minus, Square, X, Code2, Presentation, Workflow,
   Sun, Moon,
+  LogIn, LogOut, RefreshCw, UserPlus,
 } from 'lucide-react';
 import {
   applicationMenus,
@@ -14,6 +15,7 @@ import { canToggleLayoutPanels as canUseLayoutPanels } from '../../../codeViewPa
 import { useEditorSettings } from '../../../context/EditorSettingsContext';
 import { useWorkspace } from '../../../context/WorkspaceContext';
 import { useTheme, type Theme } from '../../../context/ThemeContext';
+import { useUser } from '../../../context/UserContext';
 import {
   DEFAULT_EDITOR_BRACKET_PAIR_GUIDES,
   DEFAULT_EDITOR_FONT_LIGATURES,
@@ -71,8 +73,10 @@ import { ToggleGroup, ToggleGroupItem } from '../../ui/toggle-group';
 import { Toggle } from '../../ui/toggle';
 import { Separator } from '../../ui/separator';
 import { Button } from '../../ui/button';
+import { Avatar, AvatarFallback, AvatarImage } from '../../ui/avatar';
 import { Combobox, type ComboboxOption } from '../../ui/combobox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../../ui/dialog';
+import { Popover, PopoverContent, PopoverTrigger } from '../../ui/popover';
 import { ScrollArea } from '../../ui/scroll-area';
 import { Slider } from '../../ui/slider';
 import { Switch } from '../../ui/switch';
@@ -244,6 +248,31 @@ function getConfiguredEditorBracketPairGuides() {
 
 function getConfiguredEditorIndentGuides() {
   return getConfiguredEditorBooleanSetting(EDITOR_INDENT_GUIDES_CONFIG_KEY, DEFAULT_EDITOR_INDENT_GUIDES);
+}
+
+function getUserInitials(username: string): string {
+  const initials = username
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((segment) => segment[0]?.toUpperCase() ?? '')
+    .join('');
+
+  return initials || 'PR';
+}
+
+function formatSyncTimestamp(value: string | null): string {
+  if (!value) {
+    return 'Not synced yet';
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return 'Not synced yet';
+  }
+
+  return `Synced ${date.toLocaleString()}`;
 }
 
 function SettingsSwitchRow({
@@ -461,6 +490,16 @@ export function MenuBar({
     setWordWrap: setEditorWordWrap,
   } = useEditorSettings();
   const { theme, setTheme, toggleTheme } = useTheme();
+  const {
+    clearError,
+    errorMessage,
+    isSyncing,
+    openAccountPage,
+    session,
+    signOut,
+    status,
+    syncCloudConfig,
+  } = useUser();
   const { state: activityBarState, toggleSidebar } = useSidebar();
   const ref = useRef<HTMLDivElement>(null);
   const [aboutDialogOpen, setAboutDialogOpen] = useState(false);
@@ -482,6 +521,10 @@ export function MenuBar({
       ? 'hover:cursor-pointer hover:text-foreground hover:bg-accent'
       : 'opacity-40',
   ].join(' ');
+  const userAvatarFallback = getUserInitials(session?.username ?? 'Pristine User');
+  const userSyncLabel = formatSyncTimestamp(session?.syncedAt ?? null);
+  const isSignedIn = status === 'signed-in' && session !== null;
+  const isUserActionsDisabled = status === 'loading';
 
   const patchSettingsState = useCallback((partialState: Partial<MenuBarSettingsState>) => {
     setSettingsState((current) => ({ ...current, ...partialState }));
@@ -950,18 +993,149 @@ export function MenuBar({
           </TooltipIconButton>
 
           {/* User avatar */}
-          <TooltipIconButton content="User profile" wrapTrigger={false}>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="User profile"
-              data-testid="user-avatar-button"
-              className="relative h-full w-8 rounded-none hover:cursor-pointer"
+          <Popover onOpenChange={(open) => {
+            if (open) {
+              clearError();
+            }
+          }}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="inline-flex h-full" style={noDragInteractive as React.CSSProperties}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label="User profile"
+                      data-testid="user-avatar-button"
+                      className="relative h-full w-8 rounded-none px-0 hover:cursor-pointer"
+                    >
+                      <Avatar className="size-6 border border-border/70 bg-muted/70">
+                        {isSignedIn && session?.avatarUrl ? <AvatarImage alt={session.username} src={session.avatarUrl} /> : null}
+                        <AvatarFallback className="bg-transparent text-[10px] font-semibold text-foreground">
+                          {isSignedIn ? userAvatarFallback : <CircleUser size={14} className="text-muted-foreground" />}
+                        </AvatarFallback>
+                      </Avatar>
+                      <span
+                        className={[
+                          'absolute bottom-1.5 right-1 rounded-full border border-background',
+                          status === 'loading' ? 'h-1.5 w-1.5 bg-muted-foreground/80' : '',
+                          isSignedIn ? 'h-2 w-2 bg-emerald-500' : '',
+                          status === 'signed-out' ? 'h-2 w-2 bg-amber-400' : '',
+                        ].join(' ')}
+                      />
+                    </Button>
+                  </PopoverTrigger>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" sideOffset={6}>
+                User profile
+              </TooltipContent>
+            </Tooltip>
+            <PopoverContent
+              align="end"
+              className="w-72 p-0"
+              data-testid="user-account-popover"
+              style={noDragInteractive as React.CSSProperties}
             >
-              <CircleUser size={16} className="text-muted-foreground" />
-              <span className="absolute bottom-1.5 right-1.5 w-2 h-2 rounded-full bg-green-500 border border-background" />
-            </Button>
-          </TooltipIconButton>
+              <div className="border-b border-border/80 px-4 py-3">
+                <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-muted-foreground">
+                  Pristine Account
+                </p>
+                <p className="mt-1 text-sm text-foreground">
+                  {isSignedIn ? 'Cloud sync and account management for this desktop session.' : 'Sign in with the system browser to sync your desktop settings.'}
+                </p>
+              </div>
+
+              <div className="space-y-3 px-4 py-3">
+                {isSignedIn && session ? (
+                  <>
+                    <div className="flex items-center gap-3">
+                      <Avatar className="size-11 border border-border/80 bg-muted/70">
+                        {session.avatarUrl ? <AvatarImage alt={session.username} src={session.avatarUrl} /> : null}
+                        <AvatarFallback className="text-sm font-semibold">{userAvatarFallback}</AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0 space-y-1">
+                        <p className="truncate text-sm font-semibold text-foreground" data-testid="user-account-name">
+                          {session.username}
+                        </p>
+                        <p className="truncate text-xs text-muted-foreground" data-testid="user-account-email">
+                          {session.email}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground" data-testid="user-account-sync-status">
+                          {userSyncLabel}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="grid gap-2">
+                      <Button
+                        variant="outline"
+                        className="w-full justify-start"
+                        data-testid="user-sync-config-button"
+                        disabled={isSyncing}
+                        onClick={() => {
+                          void syncCloudConfig();
+                        }}
+                      >
+                        <RefreshCw className={isSyncing ? 'animate-spin' : ''} />
+                        {isSyncing ? 'Syncing settings...' : 'Sync desktop settings'}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        className="w-full justify-start"
+                        data-testid="user-sign-out-button"
+                        onClick={() => {
+                          void signOut();
+                        }}
+                      >
+                        <LogOut />
+                        Sign out
+                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  <div className="grid gap-2">
+                    <div className="rounded-md border border-dashed border-border/80 bg-muted/40 px-3 py-3 text-xs text-muted-foreground">
+                      {status === 'loading'
+                        ? 'Checking the local desktop session...'
+                        : 'No account is linked to this desktop session yet.'}
+                    </div>
+                    <Button
+                      className="w-full justify-start"
+                      data-testid="user-sign-in-button"
+                      disabled={isUserActionsDisabled}
+                      onClick={() => {
+                        void openAccountPage('login');
+                      }}
+                    >
+                      <LogIn />
+                      Sign in
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start"
+                      data-testid="user-sign-up-button"
+                      disabled={isUserActionsDisabled}
+                      onClick={() => {
+                        void openAccountPage('signup');
+                      }}
+                    >
+                      <UserPlus />
+                      Create account
+                    </Button>
+                  </div>
+                )}
+
+                {errorMessage ? (
+                  <div
+                    className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive"
+                    data-testid="user-account-error"
+                  >
+                    {errorMessage}
+                  </div>
+                ) : null}
+              </div>
+            </PopoverContent>
+          </Popover>
 
           {showWindowMenu && <Separator data-testid="menu-avatar-separator" orientation="vertical" className="h-4 mx-1" />}
 

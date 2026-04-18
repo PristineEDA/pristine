@@ -164,9 +164,18 @@ function createElectronApiMock() {
     menu: {
       onCommand: vi.fn(() => vi.fn()),
     },
+    auth: {
+      openAccountPage: vi.fn().mockResolvedValue(true),
+      getSession: vi.fn().mockResolvedValue(null),
+      signOut: vi.fn().mockResolvedValue(true),
+      syncCloudConfig: vi.fn().mockResolvedValue(true),
+      onStateChanged: vi.fn(() => vi.fn()),
+      onError: vi.fn(() => vi.fn()),
+    },
     config: {
       get: vi.fn(),
       set: vi.fn(),
+      onDidChange: vi.fn(() => vi.fn()),
     },
   };
 }

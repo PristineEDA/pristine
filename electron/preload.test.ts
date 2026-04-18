@@ -102,6 +102,10 @@ describe('preload bridge', () => {
     api.lsp.hover('rtl/core/cpu_top.sv', 4, 6);
     api.lsp.definition('rtl/core/cpu_top.sv', 4, 6);
     api.lsp.references('rtl/core/cpu_top.sv', 4, 6, false);
+    api.auth.openAccountPage('login');
+    api.auth.getSession();
+    api.auth.signOut();
+    api.auth.syncCloudConfig();
     api.config.set('theme', 'dracula');
 
     const dispose = api.onMaximizedChange(onMaximizedChange);
@@ -117,6 +121,12 @@ describe('preload bridge', () => {
     const disposeLspDiagnostics = api.lsp.onDiagnostics(onLspDiagnostics);
     const disposeLspState = api.lsp.onState(onLspState);
     const disposeMenuCommand = api.menu.onCommand(onMenuCommand);
+    const onAuthStateChanged = vi.fn();
+    const onAuthError = vi.fn();
+    const onConfigChange = vi.fn();
+    const disposeAuthState = api.auth.onStateChanged(onAuthStateChanged);
+    const disposeAuthError = api.auth.onError(onAuthError);
+    const disposeConfigChange = api.config.onDidChange(onConfigChange);
 
     expect(mockInvoke).toHaveBeenCalledWith('async:window:minimize');
     expect(mockInvoke).toHaveBeenCalledWith('async:window:maximize');
@@ -145,6 +155,10 @@ describe('preload bridge', () => {
     expect(mockInvoke).toHaveBeenCalledWith('async:lsp:hover', 'rtl/core/cpu_top.sv', 4, 6);
     expect(mockInvoke).toHaveBeenCalledWith('async:lsp:definition', 'rtl/core/cpu_top.sv', 4, 6);
     expect(mockInvoke).toHaveBeenCalledWith('async:lsp:references', 'rtl/core/cpu_top.sv', 4, 6, false);
+    expect(mockInvoke).toHaveBeenCalledWith('async:auth:open-account-page', 'login');
+    expect(mockInvoke).toHaveBeenCalledWith('async:auth:get-session');
+    expect(mockInvoke).toHaveBeenCalledWith('async:auth:sign-out');
+    expect(mockInvoke).toHaveBeenCalledWith('async:auth:sync-config');
     expect(mockInvoke).toHaveBeenCalledWith('async:config:set', 'theme', 'dracula');
     expect(mockOn).toHaveBeenCalledWith('stream:window:maximized-change', expect.any(Function));
     expect(mockOn).toHaveBeenCalledWith('stream:window:full-screen-change', expect.any(Function));
@@ -159,6 +173,9 @@ describe('preload bridge', () => {
     expect(mockOn).toHaveBeenCalledWith('stream:lsp:diagnostics', expect.any(Function));
     expect(mockOn).toHaveBeenCalledWith('stream:lsp:state', expect.any(Function));
     expect(mockOn).toHaveBeenCalledWith('stream:menu:command', expect.any(Function));
+    expect(mockOn).toHaveBeenCalledWith('stream:auth:state-changed', expect.any(Function));
+    expect(mockOn).toHaveBeenCalledWith('stream:auth:error', expect.any(Function));
+    expect(mockOn).toHaveBeenCalledWith('stream:config:changed', expect.any(Function));
 
     const handler = mockOn.mock.calls.find((call) => call[0] === 'stream:window:maximized-change')?.[1];
     handler({}, true);
@@ -212,6 +229,18 @@ describe('preload bridge', () => {
     menuCommandHandler({}, { action: 'open-settings' });
     expect(onMenuCommand).toHaveBeenCalledWith({ action: 'open-settings' });
 
+    const authStateHandler = mockOn.mock.calls.find((call) => call[0] === 'stream:auth:state-changed')?.[1];
+    authStateHandler({}, { userId: 'user-1', username: 'Alice', email: 'alice@example.com', avatarUrl: null, syncedAt: null, sessionExpiresAt: null });
+    expect(onAuthStateChanged).toHaveBeenCalledWith({ userId: 'user-1', username: 'Alice', email: 'alice@example.com', avatarUrl: null, syncedAt: null, sessionExpiresAt: null });
+
+    const authErrorHandler = mockOn.mock.calls.find((call) => call[0] === 'stream:auth:error')?.[1];
+    authErrorHandler({}, 'Unable to sign in');
+    expect(onAuthError).toHaveBeenCalledWith('Unable to sign in');
+
+    const configChangedHandler = mockOn.mock.calls.find((call) => call[0] === 'stream:config:changed')?.[1];
+    configChangedHandler({}, { key: 'ui.theme', value: 'dark' });
+    expect(onConfigChange).toHaveBeenCalledWith('ui.theme', 'dark');
+
     dispose();
     disposeFullScreen();
     disposeCloseRequest();
@@ -225,6 +254,9 @@ describe('preload bridge', () => {
     disposeLspDiagnostics();
     disposeLspState();
     disposeMenuCommand();
+    disposeAuthState();
+    disposeAuthError();
+    disposeConfigChange();
     expect(mockRemoveListener).toHaveBeenCalledWith('stream:window:maximized-change', handler);
     expect(mockRemoveListener).toHaveBeenCalledWith('stream:window:full-screen-change', fullScreenHandler);
     expect(mockRemoveListener).toHaveBeenCalledWith('stream:window:close-request', closeRequestHandler);
@@ -238,5 +270,8 @@ describe('preload bridge', () => {
     expect(mockRemoveListener).toHaveBeenCalledWith('stream:lsp:diagnostics', diagnosticsHandler);
     expect(mockRemoveListener).toHaveBeenCalledWith('stream:lsp:state', lspStateHandler);
     expect(mockRemoveListener).toHaveBeenCalledWith('stream:menu:command', menuCommandHandler);
+    expect(mockRemoveListener).toHaveBeenCalledWith('stream:auth:state-changed', authStateHandler);
+    expect(mockRemoveListener).toHaveBeenCalledWith('stream:auth:error', authErrorHandler);
+    expect(mockRemoveListener).toHaveBeenCalledWith('stream:config:changed', configChangedHandler);
   });
 });

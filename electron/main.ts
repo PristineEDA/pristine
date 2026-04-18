@@ -17,11 +17,13 @@ import { disposeLspSession } from './ipc/lsp.js';
 import { disposeAllTerminalSessions } from './ipc/terminal.js';
 import { DEFAULT_STARTUP_PROJECT_ROOT } from '../src/app/workspace/workspaceFiles.js';
 import type { WindowCloseDecision, WindowCloseRequest } from '../src/app/window/windowClose.js';
+import { handleAuthCallbackUrl, isAuthProtocolUrl } from './ipc/auth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MINIMUM_SPLASH_DURATION_MS = 3000;
 const CLOSE_ACTION_CONFIG_KEY = 'window.closeActionPreference';
 const FLOATING_INFO_VISIBLE_CONFIG_KEY = 'ui.floatingInfoWindow.visible';
+const AUTH_CALLBACK_PROTOCOL = 'pristine';
 const FLOATING_INFO_WINDOW_TITLE = 'Pristine Floating Info';
 const FLOATING_INFO_WINDOW_WIDTH = 60;
 const FLOATING_INFO_WINDOW_HEIGHT = 24;
@@ -33,6 +35,7 @@ let tray: Tray | null = null;
 let isQuitting = false;
 let nextWindowCloseRequestId = 1;
 let pendingWindowCloseRequest: WindowCloseRequest | null = null;
+let pendingAuthCallbackUrl: string | null = null;
 
 app.setName(APP_DISPLAY_NAME);
 
@@ -53,6 +56,28 @@ function configureElectronStoragePaths(): void {
 
 function getMainWindow(): BrowserWindow | null {
   return mainWindow;
+}
+
+function findAuthCallbackUrl(args: readonly string[]): string | null {
+  return args.find((value) => isAuthProtocolUrl(value)) ?? null;
+}
+
+function registerDeepLinkProtocol(): void {
+  if (process.defaultApp && process.argv[1]) {
+    app.setAsDefaultProtocolClient(AUTH_CALLBACK_PROTOCOL, process.execPath, [path.resolve(process.argv[1])]);
+    return;
+  }
+
+  app.setAsDefaultProtocolClient(AUTH_CALLBACK_PROTOCOL);
+}
+
+function processAuthCallbackUrl(url: string): void {
+  pendingAuthCallbackUrl = url;
+  void handleAuthCallbackUrl(url).then(() => {
+    if (pendingAuthCallbackUrl === url) {
+      pendingAuthCallbackUrl = null;
+    }
+  });
 }
 
 function sendMenuCommandToMainWindow(payload: MenuCommandEvent): void {
@@ -523,6 +548,25 @@ function createStartupWindows(): void {
 
 setProjectRoot(process.env['PRISTINE_PROJECT_ROOT'] ?? DEFAULT_STARTUP_PROJECT_ROOT);
 configureElectronStoragePaths();
+registerDeepLinkProtocol();
+
+const singleInstanceLock = app.requestSingleInstanceLock();
+
+if (!singleInstanceLock) {
+  app.quit();
+}
+
+pendingAuthCallbackUrl = findAuthCallbackUrl(process.argv);
+
+app.on('second-instance', (_event, argv) => {
+  const nextAuthCallbackUrl = findAuthCallbackUrl(argv);
+
+  if (nextAuthCallbackUrl) {
+    processAuthCallbackUrl(nextAuthCallbackUrl);
+  }
+
+  showMainWindow();
+});
 
 // Register all IPC handlers before window creation
 registerAllHandlers(getMainWindow, setFloatingInfoWindowVisible, resolveWindowCloseRequest);
@@ -535,6 +579,16 @@ app.whenReady().then(() => {
    if (shouldShowFloatingInfoWindow()) {
     setFloatingInfoWindowVisible(true);
   }
+
+  if (pendingAuthCallbackUrl) {
+    processAuthCallbackUrl(pendingAuthCallbackUrl);
+  }
+
+  app.on('open-url', (event, url) => {
+    event.preventDefault();
+    processAuthCallbackUrl(url);
+    showMainWindow();
+  });
 
   app.on('activate', () => {
     if (mainWindow) {

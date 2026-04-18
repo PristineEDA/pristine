@@ -12,6 +12,10 @@ export const SyncChannels = {
 } as const;
 
 export const AsyncChannels = {
+  AUTH_OPEN_ACCOUNT_PAGE: 'async:auth:open-account-page',
+  AUTH_GET_SESSION: 'async:auth:get-session',
+  AUTH_SIGN_OUT: 'async:auth:sign-out',
+  AUTH_SYNC_CONFIG: 'async:auth:sync-config',
   WINDOW_MINIMIZE: 'async:window:minimize',
   WINDOW_MAXIMIZE: 'async:window:maximize',
   WINDOW_SHOW: 'async:window:show',
@@ -43,6 +47,9 @@ export const AsyncChannels = {
 } as const;
 
 export const StreamChannels = {
+  AUTH_STATE_CHANGED: 'stream:auth:state-changed',
+  AUTH_ERROR: 'stream:auth:error',
+  CONFIG_CHANGED: 'stream:config:changed',
   SHELL_STDOUT: 'stream:shell:stdout',
   SHELL_STDERR: 'stream:shell:stderr',
   SHELL_EXIT: 'stream:shell:exit',

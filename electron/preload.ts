@@ -4,6 +4,7 @@ import type { LspCompletionResponse, LspDebugEvent, LspDiagnosticsEvent, LspHove
 import type { WorkspaceGitStatusPayload } from '../types/workspace-git.js';
 import type { MenuCommandEvent } from '../src/app/menu/applicationMenu.js';
 import type { WindowCloseDecision, WindowCloseRequest } from '../src/app/window/windowClose.js';
+import type { AuthView, DesktopAuthSession } from '../src/app/auth/types.js';
 
 // ─── Sync Helpers ─────────────────────────────────────────────────────────────
 
@@ -212,11 +213,38 @@ const electronAPI = {
     },
   },
 
+  auth: {
+    openAccountPage: (view: AuthView) =>
+      ipcRenderer.invoke(AsyncChannels.AUTH_OPEN_ACCOUNT_PAGE, view) as Promise<boolean>,
+    getSession: () =>
+      ipcRenderer.invoke(AsyncChannels.AUTH_GET_SESSION) as Promise<DesktopAuthSession | null>,
+    signOut: () =>
+      ipcRenderer.invoke(AsyncChannels.AUTH_SIGN_OUT) as Promise<boolean>,
+    syncCloudConfig: () =>
+      ipcRenderer.invoke(AsyncChannels.AUTH_SYNC_CONFIG) as Promise<boolean>,
+    onStateChanged: (callback: (session: DesktopAuthSession | null) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, session: DesktopAuthSession | null) => callback(session);
+      ipcRenderer.on(StreamChannels.AUTH_STATE_CHANGED, handler);
+      return () => { ipcRenderer.removeListener(StreamChannels.AUTH_STATE_CHANGED, handler); };
+    },
+    onError: (callback: (message: string) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, message: string) => callback(message);
+      ipcRenderer.on(StreamChannels.AUTH_ERROR, handler);
+      return () => { ipcRenderer.removeListener(StreamChannels.AUTH_ERROR, handler); };
+    },
+  },
+
   // ── Config (sync get, async set) ──
   config: {
     get: (key: string): unknown => syncSend(SyncChannels.CONFIG_GET, key),
     set: (key: string, value: unknown) =>
       ipcRenderer.invoke(AsyncChannels.CONFIG_SET, key, value) as Promise<void>,
+    onDidChange: (callback: (key: string, value: unknown) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, payload: { key: string; value: unknown }) =>
+        callback(payload.key, payload.value);
+      ipcRenderer.on(StreamChannels.CONFIG_CHANGED, handler);
+      return () => { ipcRenderer.removeListener(StreamChannels.CONFIG_CHANGED, handler); };
+    },
   },
 };
 

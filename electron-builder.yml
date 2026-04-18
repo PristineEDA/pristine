@@ -6,6 +6,10 @@ directories:
 files:
   - dist/**/*
   - dist-electron/**/*
+protocols:
+  - name: Pristine Auth Callback
+    schemes:
+      - pristine
 extraResources:
   - from: binaries
     to: binaries

@@ -2328,14 +2328,16 @@ test('terminal bottom panel close button terminates the shell and reopening crea
   await app.close();
 });
 
-test('menu bar right-side controls render shadcn tooltip content at runtime', async () => {
+test('menu bar avatar opens the account popover with desktop auth actions', async () => {
   const { app, window } = await launchApp();
 
   const userAvatarButton = window.getByTestId('user-avatar-button');
   await expect(userAvatarButton).toBeVisible();
 
-  await userAvatarButton.hover();
-  await expect(window.getByRole('tooltip', { name: 'User profile' })).toBeVisible();
+  await userAvatarButton.click();
+  await expect(window.getByTestId('user-account-popover')).toBeVisible();
+  await expect(window.getByTestId('user-sign-in-button')).toBeVisible();
+  await expect(window.getByTestId('user-sign-up-button')).toBeVisible();
 
   await app.close();
 });
