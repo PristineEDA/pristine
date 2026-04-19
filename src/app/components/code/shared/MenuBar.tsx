@@ -12,6 +12,8 @@ import {
   type MenuCommandEvent,
 } from '../../../menu/applicationMenu';
 import { canToggleLayoutPanels as canUseLayoutPanels } from '../../../codeViewPanels';
+import { getDesktopAvatarCandidates } from '../../../auth/avatar';
+import type { DesktopAuthSession } from '../../../auth/types';
 import { useEditorSettings } from '../../../context/EditorSettingsContext';
 import { useWorkspace } from '../../../context/WorkspaceContext';
 import { useTheme, type Theme } from '../../../context/ThemeContext';
@@ -276,6 +278,46 @@ function formatSyncTimestamp(value: string | null): string {
   }
 
   return `Synced ${date.toLocaleString()}`;
+}
+
+function SessionAvatarImage({
+  alt,
+  session,
+}: {
+  alt: string;
+  session: DesktopAuthSession | null;
+}) {
+  const [candidateIndex, setCandidateIndex] = useState(0);
+  const candidateUrls = getDesktopAvatarCandidates(
+    session,
+    import.meta.env.VITE_PRISTINE_SUPABASE_URL,
+  );
+  const currentCandidateUrl = candidateUrls[candidateIndex] ?? null;
+
+  useEffect(() => {
+    setCandidateIndex(0);
+  }, [session?.avatarUrl, session?.userId]);
+
+  if (!currentCandidateUrl) {
+    return null;
+  }
+
+  return (
+    <AvatarImage
+      key={currentCandidateUrl}
+      alt={alt}
+      src={currentCandidateUrl}
+      onLoadingStatusChange={(status) => {
+        if (status !== 'error') {
+          return;
+        }
+
+        setCandidateIndex((currentIndex) => (
+          currentIndex + 1 < candidateUrls.length ? currentIndex + 1 : currentIndex
+        ));
+      }}
+    />
+  );
 }
 
 function SettingsSwitchRow({
@@ -1032,7 +1074,7 @@ export function MenuBar({
                       className="relative h-full w-8 rounded-none px-0 hover:cursor-pointer"
                     >
                       <Avatar className="size-6 border border-border/70 bg-muted/70">
-                        {isSignedIn && session?.avatarUrl ? <AvatarImage alt={session.username} src={session.avatarUrl} /> : null}
+                        {isSignedIn ? <SessionAvatarImage alt={session.username} session={session} /> : null}
                         <AvatarFallback className="bg-transparent text-[10px] font-semibold text-foreground">
                           {isSignedIn ? userAvatarFallback : <CircleUser size={14} className="text-muted-foreground" />}
                         </AvatarFallback>
@@ -1064,7 +1106,7 @@ export function MenuBar({
                   <>
                     <div className="flex items-center gap-3">
                       <Avatar className="size-11 border border-border/80 bg-muted/70">
-                        {session.avatarUrl ? <AvatarImage alt={session.username} src={session.avatarUrl} /> : null}
+                        <SessionAvatarImage alt={session.username} session={session} />
                         <AvatarFallback className="text-sm font-semibold">{userAvatarFallback}</AvatarFallback>
                       </Avatar>
                       <div className="min-w-0 space-y-1">
