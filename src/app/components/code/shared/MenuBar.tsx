@@ -83,6 +83,7 @@ import { Switch } from '../../ui/switch';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../../ui/tooltip';
 import { useSidebar } from '../../ui/sidebar';
 import { AboutDialog } from './AboutDialog';
+import { EditorFontAdvancedDialog } from './EditorFontAdvancedDialog';
 import { centerViewSwitchItemClassName } from './viewSwitcherStyles';
 
 const noDrag = { WebkitAppRegion: 'no-drag' as const };
@@ -304,6 +305,7 @@ function SettingsSwitchRow({
 }
 
 function SettingsComboboxSection({
+  action,
   description,
   emptyText,
   onValueChange,
@@ -313,6 +315,7 @@ function SettingsComboboxSection({
   title,
   value,
 }: {
+  action?: React.ReactNode;
   description: string;
   emptyText: string;
   onValueChange: (value: string) => void;
@@ -331,16 +334,21 @@ function SettingsComboboxSection({
             {description}
           </p>
         </div>
-        <Combobox
-          value={value}
-          onValueChange={onValueChange}
-          options={options}
-          placeholder={options.find((option) => option.value === value)?.label ?? options[0]?.label ?? ''}
-          searchPlaceholder={searchPlaceholder}
-          emptyText={emptyText}
-          triggerTestId={testId}
-          getOptionTestId={(optionValue) => `${testId.replace('-combobox', '-option')}-${optionValue}`}
-        />
+        <div className={action ? 'flex items-center gap-2' : undefined}>
+          <div className={action ? 'min-w-0 flex-1' : undefined}>
+            <Combobox
+              value={value}
+              onValueChange={onValueChange}
+              options={options}
+              placeholder={options.find((option) => option.value === value)?.label ?? options[0]?.label ?? ''}
+              searchPlaceholder={searchPlaceholder}
+              emptyText={emptyText}
+              triggerTestId={testId}
+              getOptionTestId={(optionValue) => `${testId.replace('-combobox', '-option')}-${optionValue}`}
+            />
+          </div>
+          {action}
+        </div>
       </div>
     </div>
   );
@@ -505,6 +513,7 @@ export function MenuBar({
   const { state: activityBarState, toggleSidebar } = useSidebar();
   const ref = useRef<HTMLDivElement>(null);
   const [aboutDialogOpen, setAboutDialogOpen] = useState(false);
+  const [editorFontAdvancedDialogOpen, setEditorFontAdvancedDialogOpen] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [settingsState, setSettingsState] = useState<MenuBarSettingsState>(getPersistedSettingsState);
   const layoutIconsEnabled = canUseLayoutPanels(mainContentView, activeView);
@@ -535,9 +544,15 @@ export function MenuBar({
   const handleSettingsDialogOpenChange = useCallback((nextOpen: boolean) => {
     if (nextOpen) {
       setSettingsState(getPersistedSettingsState());
+    } else {
+      setEditorFontAdvancedDialogOpen(false);
     }
 
     setSettingsDialogOpen(nextOpen);
+  }, []);
+
+  const handleEditorFontAdvancedDialogOpenChange = useCallback((nextOpen: boolean) => {
+    setEditorFontAdvancedDialogOpen(nextOpen);
   }, []);
 
   const handleCloseToTrayChange = (checked: boolean) => {
@@ -573,6 +588,11 @@ export function MenuBar({
     patchSettingsState({ editorFontFamily: nextFontFamily });
     setEditorFontFamily(nextFontFamily);
   };
+
+  const handleEditorFontAdvancedSelect = useCallback((value: string) => {
+    handleEditorFontFamilyChange(value);
+    setEditorFontAdvancedDialogOpen(false);
+  }, [handleEditorFontFamilyChange]);
 
   const handleEditorFontLigaturesChange = (checked: boolean) => {
     patchSettingsState({ editorFontLigatures: checked });
@@ -1228,6 +1248,18 @@ export function MenuBar({
                 searchPlaceholder="Search editor fonts..."
                 emptyText="No editor font found."
                 testId="settings-editor-font-family-combobox"
+                action={(
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    data-testid="settings-editor-font-family-advanced-button"
+                    className="shrink-0 hover:cursor-pointer"
+                    onClick={() => setEditorFontAdvancedDialogOpen(true)}
+                  >
+                    Advanced
+                  </Button>
+                )}
               />
               <SettingsComboboxSection
                 value={settingsState.editorTheme}
@@ -1461,6 +1493,14 @@ export function MenuBar({
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        <EditorFontAdvancedDialog
+          open={editorFontAdvancedDialogOpen}
+          onOpenChange={handleEditorFontAdvancedDialogOpenChange}
+          onSelectFontFamily={handleEditorFontAdvancedSelect}
+          selectedFontFamily={settingsState.editorFontFamily}
+          dialogStyle={noDragInteractive as React.CSSProperties}
+        />
       </>
     </TooltipProvider>
   );

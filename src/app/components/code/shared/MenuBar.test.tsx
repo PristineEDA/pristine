@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MenuBar } from './MenuBar';
@@ -8,6 +8,7 @@ import { WorkspaceProvider, useWorkspace } from '../../../context/WorkspaceConte
 import { SidebarProvider, useSidebar } from '../../ui/sidebar';
 import { getEditorFontFamilyLabel } from '../../../editor/editorSettings';
 
+const ensureEditorFontFamilyLoadedMock = vi.fn<(fontFamily: string) => Promise<void>>(() => Promise.resolve());
 const setEditorFontSizeMock = vi.fn();
 const setEditorFontFamilyMock = vi.fn();
 const setEditorFontLigaturesMock = vi.fn();
@@ -114,6 +115,10 @@ vi.mock('../../../context/UserContext', () => ({
   }),
 }));
 
+vi.mock('../../../editor/fontLoader', () => ({
+  ensureEditorFontFamilyLoaded: (fontFamily: string) => ensureEditorFontFamilyLoadedMock(fontFamily),
+}));
+
 beforeEach(() => {
   mockedEditorBracketPairGuides = true;
   mockedEditorCursorBlinking = 'smooth';
@@ -138,6 +143,8 @@ beforeEach(() => {
   mockedUserSession = null;
   mockedUserStatus = 'signed-out';
   window.electronAPI!.platform = 'win32';
+  ensureEditorFontFamilyLoadedMock.mockReset();
+  ensureEditorFontFamilyLoadedMock.mockResolvedValue(undefined);
   setEditorBracketPairGuidesMock.mockReset();
   setEditorCursorBlinkingMock.mockReset();
   setEditorFontFamilyMock.mockReset();
@@ -611,6 +618,7 @@ describe('MenuBar', () => {
 
     expect(await screen.findByTestId('settings-dialog')).toBeVisible();
     expect(screen.getByTestId('settings-editor-font-family-combobox')).toHaveTextContent(getEditorFontFamilyLabel('fira-code'));
+    expect(screen.getByTestId('settings-editor-font-family-advanced-button')).toBeVisible();
     expect(screen.getByTestId('settings-editor-font-size-value')).toHaveTextContent('18px');
     expect(screen.getByTestId('settings-editor-theme-combobox')).toHaveTextContent('Night Owl');
   });
@@ -762,6 +770,37 @@ describe('MenuBar', () => {
     expect(window.electronAPI?.config.set).toHaveBeenCalledWith('ui.floatingInfoWindow.visible', false);
     expect(window.electronAPI?.setFloatingInfoWindowVisible).toHaveBeenCalledWith(false);
   }, 15000);
+
+  it('opens the advanced editor font picker and applies the selected preview card', async () => {
+    const user = userEvent.setup();
+
+    mockPersistedSettingsConfig({
+      fontFamily: 'fira-code',
+    });
+
+    renderMenuBar();
+
+    await user.click(screen.getByTestId('menu-settings-button'));
+    expect(await screen.findByTestId('settings-dialog')).toBeVisible();
+
+    await user.click(screen.getByTestId('settings-editor-font-family-advanced-button'));
+
+    expect(await screen.findByTestId('settings-editor-font-family-advanced-dialog')).toBeVisible();
+    expect(screen.getByTestId('settings-editor-font-family-advanced-grid')).toBeVisible();
+    expect(screen.getByTestId('settings-editor-font-family-preview-card-fira-code')).toHaveAttribute('data-state', 'selected');
+    expect(screen.getByTestId('settings-editor-font-family-preview-letters-victor-mono')).toHaveTextContent('AaBbCcDdEe');
+    expect(screen.getByTestId('settings-editor-font-family-preview-digits-victor-mono')).toHaveTextContent('0123456789');
+    expect(ensureEditorFontFamilyLoadedMock).toHaveBeenCalledWith('victor-mono');
+
+    await user.click(screen.getByTestId('settings-editor-font-family-preview-card-victor-mono'));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('settings-editor-font-family-advanced-dialog')).not.toBeInTheDocument();
+    });
+
+    expect(screen.getByTestId('settings-editor-font-family-combobox')).toHaveTextContent('Victor Mono');
+    expect(setEditorFontFamilyMock).toHaveBeenCalledWith('victor-mono');
+  });
 
   it('re-reads persisted settings each time the dialog opens', async () => {
     const user = userEvent.setup();

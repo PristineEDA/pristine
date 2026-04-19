@@ -2872,6 +2872,28 @@ test('editor font and theme comboboxes support wheel scrolling and reopen at the
   await app.close()
 })
 
+test('advanced editor font picker closes after selecting a preview card and syncs the font setting', async () => {
+  const { app, window } = await launchApp()
+
+  await window.getByTestId('menu-settings-button').click()
+  await expect(window.getByTestId('settings-dialog')).toBeVisible()
+
+  const advancedDialog = window.locator('[data-testid="settings-editor-font-family-advanced-dialog"]')
+  await window.getByTestId('settings-editor-font-family-advanced-button').click()
+  await expect(advancedDialog).toBeVisible()
+
+  await expect(window.getByTestId('settings-editor-font-family-preview-letters-victor-mono')).toContainText('AaBbCcDdEe')
+  await expect(window.getByTestId('settings-editor-font-family-preview-digits-victor-mono')).toContainText('0123456789')
+
+  await window.getByTestId('settings-editor-font-family-preview-card-victor-mono').click()
+
+  await expect(advancedDialog).toHaveCount(0)
+  await expect(window.getByTestId('settings-editor-font-family-combobox')).toContainText('Victor Mono')
+  await expect.poll(async () => readConfigValue(window, 'editor.fontFamily')).toBe('victor-mono')
+
+  await app.close()
+})
+
 test('newly downloaded Monaco font options can be selected and persist to config', async () => {
   const { app, window } = await launchApp()
 
