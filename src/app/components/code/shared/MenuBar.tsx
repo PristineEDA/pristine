@@ -1141,10 +1141,10 @@ export function MenuBar({
                         }}
                       >
                         <RefreshCw className={isSyncing ? 'animate-spin' : ''} />
-                        {isSyncing ? 'Syncing settings...' : 'Sync desktop settings'}
+                        {isSyncing ? 'Syncing settings...' : 'Sync settings'}
                       </Button>
                       <Button
-                        variant="ghost"
+                        variant="outline"
                         className={userPopoverActionButtonClassName}
                         data-testid="user-sign-out-button"
                         onClick={() => {
