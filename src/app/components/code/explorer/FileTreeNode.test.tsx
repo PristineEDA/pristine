@@ -183,6 +183,7 @@ describe('FileTreeNode', () => {
 
     const node = screen.getByTestId('file-tree-node-rtl_core_cpu_top_v');
     expect(node.className).toContain('bg-primary/20');
+    expect(node.className).toContain('hover:bg-primary/20');
 
     fireEvent.click(node);
     expect(onFilePreview).toHaveBeenCalledWith('rtl/core/cpu_top.v', 'cpu_top.v');
@@ -196,6 +197,33 @@ describe('FileTreeNode', () => {
     expect(onFileOpen).toHaveBeenCalledTimes(2);
     expect(screen.queryByRole('button', { name: /Open in Editor/i })).not.toBeInTheDocument();
     expect(screen.getByText('cpu_top.v')).toBeInTheDocument();
+  });
+
+  it('does not keep a file highlighted while another folder is selected', () => {
+    render(
+      <FileTreeNode
+        node={{
+          id: 'rtl/core/cpu_top.v',
+          path: 'rtl/core/cpu_top.v',
+          name: 'cpu_top.v',
+          type: 'file',
+          hasLoadedChildren: true,
+          isLoading: false,
+        }}
+        depth={1}
+        activeFileId="rtl/core/cpu_top.v"
+        onFileOpen={vi.fn()}
+        onFilePreview={vi.fn()}
+        expandedFolders={new Set()}
+        onToggleFolder={vi.fn()}
+        selectedFolderId="rtl"
+        gitPathStates={{}}
+      />,
+    );
+
+    const node = screen.getByTestId('file-tree-node-rtl_core_cpu_top_v');
+    expect(node.className).toContain('hover:bg-accent');
+    expect(node.className).not.toContain('hover:bg-primary/20');
   });
 
   it('shows the static folder context menu entries when right-clicking a folder', () => {
@@ -224,6 +252,58 @@ describe('FileTreeNode', () => {
 
     expect(screen.getByRole('button', { name: /New File/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Copy Path/i })).toBeInTheDocument();
+  });
+
+  it('keeps a clicked folder highlighted when the selected folder id matches', () => {
+    const onFolderSelect = vi.fn();
+    const onToggleFolder = vi.fn();
+    const folderNode = {
+      id: 'rtl',
+      path: 'rtl',
+      name: 'rtl',
+      type: 'folder' as const,
+      children: [],
+      hasLoadedChildren: true,
+      isLoading: false,
+    };
+
+    const { rerender } = render(
+      <FileTreeNode
+        node={folderNode}
+        depth={0}
+        activeFileId=""
+        onFileOpen={vi.fn()}
+        onFilePreview={vi.fn()}
+        expandedFolders={new Set()}
+        onToggleFolder={onToggleFolder}
+        onFolderSelect={onFolderSelect}
+        selectedFolderId={null}
+        gitPathStates={{}}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('file-tree-node-rtl'));
+
+    expect(onFolderSelect).toHaveBeenCalledWith('rtl');
+    expect(onToggleFolder).toHaveBeenCalledWith('rtl');
+
+    rerender(
+      <FileTreeNode
+        node={folderNode}
+        depth={0}
+        activeFileId=""
+        onFileOpen={vi.fn()}
+        onFilePreview={vi.fn()}
+        expandedFolders={new Set()}
+        onToggleFolder={onToggleFolder}
+        onFolderSelect={onFolderSelect}
+        selectedFolderId="rtl"
+        gitPathStates={{}}
+      />,
+    );
+
+    expect(screen.getByTestId('file-tree-node-rtl').className).toContain('bg-primary/20');
+    expect(screen.getByTestId('file-tree-node-rtl').className).toContain('hover:bg-primary/20');
   });
 
   it('scrolls a revealed file node into view when requested', () => {

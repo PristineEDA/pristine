@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   FilePlus, FolderPlus, RefreshCw, ChevronsUpDown,
 } from 'lucide-react';
@@ -31,6 +31,7 @@ export function LeftSidePanel({
   revealRequest,
   onWorkspaceRefresh,
 }: LeftSidePanelProps) {
+  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [tab, setTab] = useState<'explorer' | 'outline'>('explorer');
   const fileOutlines = useFileOutlines();
   const gitStatus = useWorkspaceGitStatus();
@@ -44,6 +45,23 @@ export function LeftSidePanel({
   } = useWorkspaceTree(revealRequest);
 
   const outline = fileOutlines[currentOutlineId] || [];
+
+  useEffect(() => {
+    if (!activeFileId) {
+      return;
+    }
+
+    setSelectedFolderId(null);
+  }, [activeFileId]);
+
+  const handleFilePreview = useCallback((fileId: string, fileName: string) => {
+    setSelectedFolderId(null);
+    onFilePreview(fileId, fileName);
+  }, [onFilePreview]);
+  const handleFileOpen = useCallback((fileId: string, fileName: string) => {
+    setSelectedFolderId(null);
+    onFileOpen(fileId, fileName);
+  }, [onFileOpen]);
 
   return (
     <div className="flex flex-col h-full bg-muted/40 overflow-hidden">
@@ -109,10 +127,12 @@ export function LeftSidePanel({
                 node={node}
                 depth={0}
                 activeFileId={activeFileId}
-                onFileOpen={onFileOpen}
-                onFilePreview={onFilePreview}
+                onFileOpen={handleFileOpen}
+                onFilePreview={handleFilePreview}
                 expandedFolders={expandedFolders}
                 onToggleFolder={toggleFolder}
+                onFolderSelect={setSelectedFolderId}
+                selectedFolderId={selectedFolderId}
                 gitPathStates={gitStatus.pathStates}
                 revealRequest={revealRequest}
               />

@@ -80,6 +80,8 @@ export const FileTreeNode = memo(function FileTreeNode({
   onFilePreview,
   expandedFolders,
   onToggleFolder,
+  onFolderSelect,
+  selectedFolderId,
   gitPathStates,
   revealRequest,
 }: {
@@ -90,6 +92,8 @@ export const FileTreeNode = memo(function FileTreeNode({
   onFilePreview: (id: string, name: string) => void;
   expandedFolders: Set<string>;
   onToggleFolder: (id: string) => void;
+  onFolderSelect?: (id: string) => void;
+  selectedFolderId?: string | null;
   gitPathStates: Record<string, WorkspaceGitPathState>;
   revealRequest?: WorkspaceRevealRequest | null;
 }) {
@@ -97,6 +101,9 @@ export const FileTreeNode = memo(function FileTreeNode({
   const rowRef = useRef<HTMLDivElement | null>(null);
   const isExpanded = expandedFolders.has(node.id);
   const isActive = node.id === activeFileId;
+  const isFolderSelected = node.type === 'folder' && node.id === selectedFolderId;
+  const isActiveFileHighlighted = !selectedFolderId && isActive;
+  const isPersistentlyHighlighted = isFolderSelected || isActiveFileHighlighted;
   const gitPathState = gitPathStates[node.path];
   const treeTestId = toTreeTestId(node.path);
   const labelColorClassName = gitPathState === 'modified'
@@ -140,13 +147,20 @@ export const FileTreeNode = memo(function FileTreeNode({
       <div
         ref={rowRef}
         data-testid={`file-tree-node-${treeTestId}`}
-        className={`flex items-center gap-1 h-6 cursor-pointer group hover:bg-accent transition-colors ${
-          isActive ? 'bg-primary/20 text-foreground' : 'text-foreground'
+        className={`flex items-center gap-1 h-6 cursor-pointer group transition-colors ${
+          isPersistentlyHighlighted
+            ? 'bg-primary/20 text-foreground hover:bg-primary/20'
+            : 'text-foreground hover:bg-accent'
         }`}
         style={rowIndentStyle}
         onClick={() => {
-          if (node.type === 'folder') onToggleFolder(node.id);
-          else onFilePreview(node.path, node.name);
+          if (node.type === 'folder') {
+            onFolderSelect?.(node.id);
+            onToggleFolder(node.id);
+            return;
+          }
+
+          onFilePreview(node.path, node.name);
         }}
         onDoubleClick={() => {
           if (node.type === 'file') {
@@ -213,6 +227,8 @@ export const FileTreeNode = memo(function FileTreeNode({
           onFilePreview={onFilePreview}
           expandedFolders={expandedFolders}
           onToggleFolder={onToggleFolder}
+          onFolderSelect={onFolderSelect}
+          selectedFolderId={selectedFolderId}
           gitPathStates={gitPathStates}
           revealRequest={revealRequest}
         />

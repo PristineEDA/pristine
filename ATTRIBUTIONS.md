@@ -66,4 +66,4 @@ Monoid（https://github.com/larsenwork/monoid）Andreas Larsen MIT / OFL-1.1
 ## Bundled Binaries & Extra Resources
 
 slang-server（https://github.com/hudson-trading/slang-server）Hudson Trading MIT
-Pristine-res（https://github.com/PristineEDA/Pristine-res）PristineEDA Apache-2.0
+pristine-res（https://github.com/PristineEDA/pristine-res）PristineEDA Apache-2.0

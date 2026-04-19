@@ -9,6 +9,7 @@ import type {
 import type { WorkspaceGitStatusPayload } from './workspace-git';
 import type { MenuCommandEvent } from '../src/app/menu/applicationMenu';
 import type { WindowCloseDecision, WindowCloseRequest } from '../src/app/window/windowClose';
+import type { AuthView, DesktopAuthSession } from '../src/app/auth/types';
 
 export interface ElectronAPI {
   platform: string;
@@ -112,10 +113,20 @@ export interface ElectronAPI {
     onCommand: (callback: (payload: MenuCommandEvent) => void) => () => void;
   };
 
+  auth: {
+    openAccountPage: (view: AuthView) => Promise<boolean>;
+    getSession: () => Promise<DesktopAuthSession | null>;
+    signOut: () => Promise<boolean>;
+    syncCloudConfig: () => Promise<boolean>;
+    onStateChanged: (callback: (session: DesktopAuthSession | null) => void) => () => void;
+    onError: (callback: (message: string) => void) => () => void;
+  };
+
   // Config
   config: {
     get: (key: string) => unknown;
     set: (key: string, value: unknown) => Promise<void>;
+    onDidChange: (callback: (key: string, value: unknown) => void) => () => void;
   };
 }
 

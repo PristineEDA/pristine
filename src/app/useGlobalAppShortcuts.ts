@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useEffectEvent } from 'react';
 
 interface UseGlobalAppShortcutsOptions {
   canToggleLayoutPanels: boolean;
@@ -27,65 +27,59 @@ export function useGlobalAppShortcuts({
   showBottomPanel,
   showLeftPanel,
 }: UseGlobalAppShortcutsOptions) {
+  const handleKeyDown = useEffectEvent((event: KeyboardEvent) => {
+    if (!isPrimaryModifierShortcut(event)) {
+      return;
+    }
+
+    const key = event.key.toLowerCase();
+
+    if (key === 'p') {
+      event.preventDefault();
+
+      if (isQuickOpenVisible) {
+        closeQuickOpen();
+        return;
+      }
+
+      openQuickOpen();
+      return;
+    }
+
+    if (key === 's') {
+      event.preventDefault();
+      void saveActiveFile();
+      return;
+    }
+
+    if (key === 'j') {
+      if (!canToggleLayoutPanels) {
+        return;
+      }
+
+      event.preventDefault();
+      setShowBottomPanel(!showBottomPanel);
+      return;
+    }
+
+    if (key === 'b') {
+      if (!canToggleLayoutPanels) {
+        return;
+      }
+
+      event.preventDefault();
+      setShowLeftPanel(!showLeftPanel);
+    }
+  });
+
   useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (!isPrimaryModifierShortcut(event)) {
-        return;
-      }
-
-      const key = event.key.toLowerCase();
-
-      if (key === 'p') {
-        event.preventDefault();
-
-        if (isQuickOpenVisible) {
-          closeQuickOpen();
-          return;
-        }
-
-        openQuickOpen();
-        return;
-      }
-
-      if (key === 's') {
-        event.preventDefault();
-        void saveActiveFile();
-        return;
-      }
-
-      if (key === 'j') {
-        if (!canToggleLayoutPanels) {
-          return;
-        }
-
-        event.preventDefault();
-        setShowBottomPanel(!showBottomPanel);
-        return;
-      }
-
-      if (key === 'b') {
-        if (!canToggleLayoutPanels) {
-          return;
-        }
-
-        event.preventDefault();
-        setShowLeftPanel(!showLeftPanel);
-      }
+    const listener = (event: KeyboardEvent) => {
+      handleKeyDown(event);
     };
 
-    document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('keydown', listener);
     return () => {
-      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('keydown', listener);
     };
-  }, [
-    canToggleLayoutPanels,
-    closeQuickOpen,
-    isQuickOpenVisible,
-    openQuickOpen,
-    saveActiveFile,
-    setShowBottomPanel,
-    setShowLeftPanel,
-    showBottomPanel,
-    showLeftPanel,
-  ]);
+  }, []);
 }

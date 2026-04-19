@@ -1,0 +1,88 @@
+import { useState } from 'react';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { useGlobalAppShortcuts } from './useGlobalAppShortcuts';
+
+function ShortcutHarness({
+  canToggleLayoutPanels = true,
+  isQuickOpenVisible = false,
+}: {
+  canToggleLayoutPanels?: boolean;
+  isQuickOpenVisible?: boolean;
+}) {
+  const [showBottomPanel, setShowBottomPanel] = useState(false);
+  const [showLeftPanel, setShowLeftPanel] = useState(false);
+
+  useGlobalAppShortcuts({
+    canToggleLayoutPanels,
+    closeQuickOpen: vi.fn(),
+    isQuickOpenVisible,
+    openQuickOpen: vi.fn(),
+    saveActiveFile: vi.fn(async () => true),
+    setShowBottomPanel,
+    setShowLeftPanel,
+    showBottomPanel,
+    showLeftPanel,
+  });
+
+  return (
+    <div>
+      <span data-testid="left-panel-state">{String(showLeftPanel)}</span>
+      <span data-testid="bottom-panel-state">{String(showBottomPanel)}</span>
+    </div>
+  );
+}
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+describe('useGlobalAppShortcuts', () => {
+  it('keeps the document keydown listener registered once across state changes', () => {
+    const addEventListenerSpy = vi.spyOn(document, 'addEventListener');
+    const removeEventListenerSpy = vi.spyOn(document, 'removeEventListener');
+
+    const { rerender, unmount } = render(<ShortcutHarness />);
+
+    const getDocumentKeydownRegistrations = () => addEventListenerSpy.mock.calls.filter(
+      ([eventName]) => eventName === 'keydown',
+    );
+
+    const getDocumentKeydownRemovals = () => removeEventListenerSpy.mock.calls.filter(
+      ([eventName]) => eventName === 'keydown',
+    );
+
+    expect(getDocumentKeydownRegistrations()).toHaveLength(1);
+    expect(getDocumentKeydownRegistrations()[0]).toEqual(['keydown', expect.any(Function)]);
+
+    rerender(<ShortcutHarness isQuickOpenVisible />);
+    rerender(<ShortcutHarness canToggleLayoutPanels={false} isQuickOpenVisible />);
+
+    expect(getDocumentKeydownRegistrations()).toHaveLength(1);
+    expect(getDocumentKeydownRemovals()).toHaveLength(0);
+
+    unmount();
+
+    expect(getDocumentKeydownRemovals()).toHaveLength(1);
+    expect(getDocumentKeydownRemovals()[0]).toEqual(['keydown', expect.any(Function)]);
+  });
+
+  it('uses the latest panel visibility when Ctrl+B and Ctrl+J toggle panels', () => {
+    render(<ShortcutHarness />);
+
+    expect(screen.getByTestId('left-panel-state')).toHaveTextContent('false');
+    expect(screen.getByTestId('bottom-panel-state')).toHaveTextContent('false');
+
+    fireEvent.keyDown(document, { key: 'b', ctrlKey: true });
+    fireEvent.keyDown(document, { key: 'j', ctrlKey: true });
+
+    expect(screen.getByTestId('left-panel-state')).toHaveTextContent('true');
+    expect(screen.getByTestId('bottom-panel-state')).toHaveTextContent('true');
+
+    fireEvent.keyDown(document, { key: 'b', ctrlKey: true });
+    fireEvent.keyDown(document, { key: 'j', ctrlKey: true });
+
+    expect(screen.getByTestId('left-panel-state')).toHaveTextContent('false');
+    expect(screen.getByTestId('bottom-panel-state')).toHaveTextContent('false');
+  });
+});

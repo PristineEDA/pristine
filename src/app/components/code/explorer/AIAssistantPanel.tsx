@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useEffectEvent } from "react";
 import {
   Sparkles,
   Bot,
@@ -35,22 +35,33 @@ export function AIAssistantPanel() {
   const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const hasOpenDropdown = agentOpen || modelOpen || attachOpen;
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping]);
 
-  // Close dropdowns when clicking outside
+  const handleOutsideDropdownMouseDown = useEffectEvent(() => {
+    setAgentOpen(false);
+    setModelOpen(false);
+    setAttachOpen(false);
+  });
+
+  // Close dropdowns when clicking outside while a menu is open
   useEffect(() => {
+    if (!hasOpenDropdown) {
+      return;
+    }
+
     const handler = () => {
-      setAgentOpen(false);
-      setModelOpen(false);
-      setAttachOpen(false);
+      handleOutsideDropdownMouseDown();
     };
+
     document.addEventListener("mousedown", handler);
-    return () =>
+    return () => {
       document.removeEventListener("mousedown", handler);
-  }, []);
+    };
+  }, [hasOpenDropdown]);
 
   const autoResizeTextarea = () => {
     const el = textareaRef.current;

@@ -2,7 +2,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AsyncChannels, SyncChannels } from './channels.js';
 
-const { mockOn, mockHandle, mockFs, mockGetPath } = vi.hoisted(() => ({
+const { mockOn, mockHandle, mockFs, mockGetPath, mockGetAllWindows } = vi.hoisted(() => ({
   mockOn: vi.fn(),
   mockHandle: vi.fn(),
   mockFs: {
@@ -11,9 +11,19 @@ const { mockOn, mockHandle, mockFs, mockGetPath } = vi.hoisted(() => ({
     writeFileSync: vi.fn(),
   },
   mockGetPath: vi.fn((_name: string) => '/tmp/pristine-user-data'),
+  mockGetAllWindows: vi.fn<() => Array<{
+    isDestroyed: () => boolean;
+    webContents: {
+      isDestroyed: () => boolean;
+      send: (...args: unknown[]) => void;
+    };
+  }>>(() => []),
 }));
 
 vi.mock('electron', () => ({
+  BrowserWindow: {
+    getAllWindows: () => mockGetAllWindows(),
+  },
   ipcMain: {
     on: (...args: unknown[]) => mockOn(...args),
     handle: (...args: unknown[]) => mockHandle(...args),
@@ -50,6 +60,8 @@ describe('config IPC handlers', () => {
     mockOn.mockClear();
     mockHandle.mockClear();
     mockGetPath.mockReturnValue('/tmp/pristine-user-data');
+    mockGetAllWindows.mockReset();
+    mockGetAllWindows.mockReturnValue([]);
     mockFs.readFileSync.mockReset();
     mockFs.mkdirSync.mockReset();
     mockFs.writeFileSync.mockReset();
@@ -165,5 +177,33 @@ describe('config IPC handlers', () => {
 
     const handler = getAsyncHandler(AsyncChannels.CONFIG_SET);
     await expect(handler({}, 42, 'dracula')).rejects.toThrow('Expected string');
+  });
+
+  it('notifies in-process listeners and renderer windows when config values change', async () => {
+    mockFs.readFileSync.mockImplementation(() => {
+      throw new Error('ENOENT');
+    });
+
+    const send = vi.fn();
+    mockGetAllWindows.mockReturnValue([
+      {
+        isDestroyed: () => false,
+        webContents: {
+          isDestroyed: () => false,
+          send,
+        },
+      },
+    ]);
+
+    const { onConfigValueChanged, setConfigValue } = await importModule();
+    const listener = vi.fn();
+    const dispose = onConfigValueChanged(listener);
+
+    setConfigValue('ui.theme', 'dark');
+
+    expect(listener).toHaveBeenCalledWith('ui.theme', 'dark');
+    expect(send).toHaveBeenCalledWith('stream:config:changed', { key: 'ui.theme', value: 'dark' });
+
+    dispose();
   });
 });

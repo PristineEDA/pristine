@@ -1,12 +1,14 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MenuBar } from './MenuBar';
 import { openSourceAttributionSections } from '../../../about/attributions';
+import type { DesktopAuthSession } from '../../../auth/types';
 import { WorkspaceProvider, useWorkspace } from '../../../context/WorkspaceContext';
 import { SidebarProvider, useSidebar } from '../../ui/sidebar';
 import { getEditorFontFamilyLabel } from '../../../editor/editorSettings';
 
+const ensureEditorFontFamilyLoadedMock = vi.fn<(fontFamily: string) => Promise<void>>(() => Promise.resolve());
 const setEditorFontSizeMock = vi.fn();
 const setEditorFontFamilyMock = vi.fn();
 const setEditorFontLigaturesMock = vi.fn();
@@ -26,6 +28,10 @@ const setEditorIndentGuidesMock = vi.fn();
 const setEditorThemeMock = vi.fn();
 const setThemeMock = vi.fn();
 const toggleThemeMock = vi.fn();
+const clearUserErrorMock = vi.fn();
+const openAccountPageMock = vi.fn(() => Promise.resolve(true));
+const signOutMock = vi.fn(() => Promise.resolve(true));
+const syncCloudConfigMock = vi.fn(() => Promise.resolve(true));
 const undoActionRun = vi.fn(() => Promise.resolve());
 const redoActionRun = vi.fn(() => Promise.resolve());
 let mockedEditorBracketPairGuides = true;
@@ -46,6 +52,10 @@ let mockedEditorTabSize = 4;
 let mockedEditorTheme = 'dracula';
 let mockedEditorWordWrap = 'off';
 let mockedTheme: 'light' | 'dark' = 'light';
+let mockedUserErrorMessage: string | null = null;
+let mockedUserIsSyncing = false;
+let mockedUserSession: DesktopAuthSession | null = null;
+let mockedUserStatus: 'loading' | 'signed-in' | 'signed-out' = 'signed-out';
 
 vi.mock('../../../context/EditorSettingsContext', () => ({
   useEditorSettings: () => ({
@@ -92,6 +102,23 @@ vi.mock('../../../context/ThemeContext', () => ({
   useTheme: () => ({ theme: mockedTheme, setTheme: setThemeMock, toggleTheme: toggleThemeMock }),
 }));
 
+vi.mock('../../../context/UserContext', () => ({
+  useUser: () => ({
+    clearError: clearUserErrorMock,
+    errorMessage: mockedUserErrorMessage,
+    isSyncing: mockedUserIsSyncing,
+    openAccountPage: openAccountPageMock,
+    session: mockedUserSession,
+    signOut: signOutMock,
+    status: mockedUserStatus,
+    syncCloudConfig: syncCloudConfigMock,
+  }),
+}));
+
+vi.mock('../../../editor/fontLoader', () => ({
+  ensureEditorFontFamilyLoaded: (fontFamily: string) => ensureEditorFontFamilyLoadedMock(fontFamily),
+}));
+
 beforeEach(() => {
   mockedEditorBracketPairGuides = true;
   mockedEditorCursorBlinking = 'smooth';
@@ -111,7 +138,13 @@ beforeEach(() => {
   mockedEditorTheme = 'dracula';
   mockedEditorWordWrap = 'off';
   mockedTheme = 'light';
+  mockedUserErrorMessage = null;
+  mockedUserIsSyncing = false;
+  mockedUserSession = null;
+  mockedUserStatus = 'signed-out';
   window.electronAPI!.platform = 'win32';
+  ensureEditorFontFamilyLoadedMock.mockReset();
+  ensureEditorFontFamilyLoadedMock.mockResolvedValue(undefined);
   setEditorBracketPairGuidesMock.mockReset();
   setEditorCursorBlinkingMock.mockReset();
   setEditorFontFamilyMock.mockReset();
@@ -131,6 +164,13 @@ beforeEach(() => {
   setEditorWordWrapMock.mockReset();
   setThemeMock.mockReset();
   toggleThemeMock.mockReset();
+  clearUserErrorMock.mockReset();
+  openAccountPageMock.mockReset();
+  openAccountPageMock.mockResolvedValue(true);
+  signOutMock.mockReset();
+  signOutMock.mockResolvedValue(true);
+  syncCloudConfigMock.mockReset();
+  syncCloudConfigMock.mockResolvedValue(true);
   undoActionRun.mockClear();
   redoActionRun.mockClear();
   vi.mocked(window.electronAPI!.minimize).mockReset();
@@ -355,6 +395,78 @@ describe('MenuBar', () => {
     expect(screen.getByTestId('user-avatar-button')).toBeInTheDocument();
   });
 
+  it('opens sign-in and sign-up actions from the user account popover when signed out', async () => {
+    const user = userEvent.setup();
+
+    renderMenuBar();
+
+    await user.click(screen.getByTestId('user-avatar-button'));
+    expect(await screen.findByTestId('user-account-popover')).toBeInTheDocument();
+
+    await user.click(screen.getByTestId('user-sign-in-button'));
+    await user.click(screen.getByTestId('user-sign-up-button'));
+
+    expect(openAccountPageMock).toHaveBeenNthCalledWith(1, 'login');
+    expect(openAccountPageMock).toHaveBeenNthCalledWith(2, 'signup');
+  });
+
+  it('shows the signed-in account summary and sync actions in the user account popover', async () => {
+    const user = userEvent.setup();
+
+    mockedUserStatus = 'signed-in';
+    mockedUserSession = {
+      avatarUrl: 'https://example.com/avatar.png',
+      email: 'alice@example.com',
+      sessionExpiresAt: 1_900_000_000,
+      syncedAt: '2026-04-18T12:00:00.000Z',
+      userId: 'user-1',
+      username: 'Alice Chen',
+    };
+
+    renderMenuBar();
+
+    await user.click(screen.getByTestId('user-avatar-button'));
+
+    expect(await screen.findByTestId('user-account-name')).toHaveTextContent('Alice Chen');
+    expect(screen.getByTestId('user-account-email')).toHaveTextContent('alice@example.com');
+    expect(screen.getByTestId('user-account-sync-status')).toHaveTextContent('Synced');
+
+    await user.click(screen.getByTestId('user-sync-config-button'));
+    await user.click(screen.getByTestId('user-sign-out-button'));
+
+    expect(syncCloudConfigMock).toHaveBeenCalledTimes(1);
+    expect(signOutMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('restores the signed-out placeholder avatar after signing out from a signed-in session', () => {
+    mockedUserStatus = 'signed-in';
+    mockedUserSession = {
+      avatarUrl: 'https://example.com/avatar.png',
+      email: 'alice@example.com',
+      sessionExpiresAt: 1_900_000_000,
+      syncedAt: '2026-04-18T12:00:00.000Z',
+      userId: 'user-1',
+      username: 'Alice Chen',
+    };
+
+    const view = renderMenuBar();
+
+    expect(screen.getByTestId('user-avatar-button').querySelector('svg')).toBeNull();
+
+    mockedUserStatus = 'signed-out';
+    mockedUserSession = null;
+    view.rerender(
+      <SidebarProvider defaultOpen={false} keyboardShortcut={false}>
+        <WorkspaceProvider>
+          <SidebarStateProbe />
+          <MenuBar />
+        </WorkspaceProvider>
+      </SidebarProvider>,
+    );
+
+    expect(screen.getByTestId('user-avatar-button').querySelector('svg')).toBeInTheDocument();
+  });
+
   it('keeps the activity bar trigger position on macOS maximize and only left-aligns it in full-screen', () => {
     let fullScreenListener: ((fullScreen: boolean) => void) | undefined;
     const dispose = vi.fn();
@@ -535,6 +647,7 @@ describe('MenuBar', () => {
 
     expect(await screen.findByTestId('settings-dialog')).toBeVisible();
     expect(screen.getByTestId('settings-editor-font-family-combobox')).toHaveTextContent(getEditorFontFamilyLabel('fira-code'));
+    expect(screen.getByTestId('settings-editor-font-family-advanced-button')).toBeVisible();
     expect(screen.getByTestId('settings-editor-font-size-value')).toHaveTextContent('18px');
     expect(screen.getByTestId('settings-editor-theme-combobox')).toHaveTextContent('Night Owl');
   });
@@ -687,6 +800,37 @@ describe('MenuBar', () => {
     expect(window.electronAPI?.setFloatingInfoWindowVisible).toHaveBeenCalledWith(false);
   }, 15000);
 
+  it('opens the advanced editor font picker and applies the selected preview card', async () => {
+    const user = userEvent.setup();
+
+    mockPersistedSettingsConfig({
+      fontFamily: 'fira-code',
+    });
+
+    renderMenuBar();
+
+    await user.click(screen.getByTestId('menu-settings-button'));
+    expect(await screen.findByTestId('settings-dialog')).toBeVisible();
+
+    await user.click(screen.getByTestId('settings-editor-font-family-advanced-button'));
+
+    expect(await screen.findByTestId('settings-editor-font-family-advanced-dialog')).toBeVisible();
+    expect(screen.getByTestId('settings-editor-font-family-advanced-grid')).toBeVisible();
+    expect(screen.getByTestId('settings-editor-font-family-preview-card-fira-code')).toHaveAttribute('data-state', 'selected');
+    expect(screen.getByTestId('settings-editor-font-family-preview-letters-victor-mono')).toHaveTextContent('AaBbCcDdEe');
+    expect(screen.getByTestId('settings-editor-font-family-preview-digits-victor-mono')).toHaveTextContent('0123456789');
+    expect(ensureEditorFontFamilyLoadedMock).toHaveBeenCalledWith('victor-mono');
+
+    await user.click(screen.getByTestId('settings-editor-font-family-preview-card-victor-mono'));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('settings-editor-font-family-advanced-dialog')).not.toBeInTheDocument();
+    });
+
+    expect(screen.getByTestId('settings-editor-font-family-combobox')).toHaveTextContent('Victor Mono');
+    expect(setEditorFontFamilyMock).toHaveBeenCalledWith('victor-mono');
+  });
+
   it('re-reads persisted settings each time the dialog opens', async () => {
     const user = userEvent.setup();
     mockPersistedSettingsConfig({
@@ -819,34 +963,37 @@ describe('MenuBar', () => {
   });
 
   it('calls the panel toggle callbacks from the layout icons', () => {
-    const onToggleLeftPanel = vi.fn();
-    const onToggleBottomPanel = vi.fn();
-    const onToggleRightPanel = vi.fn();
+    const onShowLeftPanelChange = vi.fn();
+    const onShowBottomPanelChange = vi.fn();
+    const onShowRightPanelChange = vi.fn();
 
     renderMenuBar({
-      onToggleLeftPanel,
-      onToggleBottomPanel,
-      onToggleRightPanel,
+      onShowLeftPanelChange,
+      onShowBottomPanelChange,
+      onShowRightPanelChange,
     });
 
     fireEvent.click(screen.getByTestId('toggle-left-panel'));
     fireEvent.click(screen.getByTestId('toggle-bottom-panel'));
     fireEvent.click(screen.getByTestId('toggle-right-panel'));
 
-    expect(onToggleLeftPanel).toHaveBeenCalledTimes(1);
-    expect(onToggleBottomPanel).toHaveBeenCalledTimes(1);
-    expect(onToggleRightPanel).toHaveBeenCalledTimes(1);
+    expect(onShowLeftPanelChange).toHaveBeenCalledTimes(1);
+    expect(onShowLeftPanelChange).toHaveBeenCalledWith(true);
+    expect(onShowBottomPanelChange).toHaveBeenCalledTimes(1);
+    expect(onShowBottomPanelChange).toHaveBeenCalledWith(true);
+    expect(onShowRightPanelChange).toHaveBeenCalledTimes(1);
+    expect(onShowRightPanelChange).toHaveBeenCalledWith(true);
   });
 
   it('disables layout icons on unsupported pages and only disables the activity bar toggle outside code', () => {
-    const onToggleLeftPanel = vi.fn();
-    const onToggleBottomPanel = vi.fn();
-    const onToggleRightPanel = vi.fn();
+    const onShowLeftPanelChange = vi.fn();
+    const onShowBottomPanelChange = vi.fn();
+    const onShowRightPanelChange = vi.fn();
 
     renderMenuBarWithControls({
-      onToggleLeftPanel,
-      onToggleBottomPanel,
-      onToggleRightPanel,
+      onShowLeftPanelChange,
+      onShowBottomPanelChange,
+      onShowRightPanelChange,
     });
 
     fireEvent.click(screen.getByText('set-synthesis'));
@@ -866,9 +1013,9 @@ describe('MenuBar', () => {
     fireEvent.click(screen.getByTestId('toggle-right-panel'));
     fireEvent.click(screen.getByTestId('toggle-activity-bar'));
 
-    expect(onToggleLeftPanel).not.toHaveBeenCalled();
-    expect(onToggleBottomPanel).not.toHaveBeenCalled();
-    expect(onToggleRightPanel).not.toHaveBeenCalled();
+    expect(onShowLeftPanelChange).not.toHaveBeenCalled();
+    expect(onShowBottomPanelChange).not.toHaveBeenCalled();
+    expect(onShowRightPanelChange).not.toHaveBeenCalled();
     expect(screen.getByTestId('sidebar-state')).toHaveTextContent('expanded');
 
     fireEvent.click(screen.getByText('set-simulation'));

@@ -9,6 +9,7 @@ describe('AIAssistantPanel', () => {
 
   afterEach(() => {
     vi.runOnlyPendingTimers();
+    vi.restoreAllMocks();
     vi.useRealTimers();
   });
 
@@ -51,5 +52,34 @@ describe('AIAssistantPanel', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Add Image/i }));
     expect(screen.queryByRole('button', { name: /Add Image/i })).not.toBeInTheDocument();
+  });
+
+  it('registers the document mousedown listener only while a dropdown is open', () => {
+    const addEventListenerSpy = vi.spyOn(document, 'addEventListener');
+    const removeEventListenerSpy = vi.spyOn(document, 'removeEventListener');
+
+    const getDocumentMouseDownRegistrations = () => addEventListenerSpy.mock.calls.filter(
+      ([eventName]) => eventName === 'mousedown',
+    );
+
+    const getDocumentMouseDownRemovals = () => removeEventListenerSpy.mock.calls.filter(
+      ([eventName]) => eventName === 'mousedown',
+    );
+
+    render(<AIAssistantPanel />);
+
+    expect(getDocumentMouseDownRegistrations()).toHaveLength(0);
+
+    fireEvent.click(screen.getByRole('button', { name: /Add attachment/i }));
+
+    expect(screen.getByRole('button', { name: /Add Image/i })).toBeInTheDocument();
+    expect(getDocumentMouseDownRegistrations()).toHaveLength(1);
+    expect(getDocumentMouseDownRemovals()).toHaveLength(0);
+
+    fireEvent.mouseDown(document.body);
+
+    expect(screen.queryByRole('button', { name: /Add Image/i })).not.toBeInTheDocument();
+    expect(getDocumentMouseDownRegistrations()).toHaveLength(1);
+    expect(getDocumentMouseDownRemovals()).toHaveLength(1);
   });
 });

@@ -202,6 +202,7 @@ function AppLayout() {
   const [quickOpenState, dispatchQuickOpen] = useReducer(quickOpenReducer, QUICK_OPEN_INITIAL_STATE);
   const [explorerLeftPanelWidthPx, setExplorerLeftPanelWidthPx] = useState(EXPLORER_LEFT_PANEL_DEFAULT_WIDTH_PX);
   const revealTokenRef = useRef(0);
+  const lastHandledActiveFileRevealRef = useRef('');
   const quickOpenEditorSnapshotRef = useRef<EditorSelectionSnapshot | null>(null);
 
   const handleActivityItemSelect = (nextView: string) => {
@@ -257,6 +258,22 @@ function AppLayout() {
     dispatchQuickOpen({ type: 'recordRecentFile', filePath, fileName });
   }, []);
 
+  const queueRevealRequest = useCallback((filePath: string, options?: { markActiveFileHandled?: boolean }) => {
+    if (!filePath) {
+      return;
+    }
+
+    if (options?.markActiveFileHandled) {
+      lastHandledActiveFileRevealRef.current = filePath;
+    }
+
+    revealTokenRef.current += 1;
+    dispatchQuickOpen({
+      type: 'setRevealRequest',
+      revealRequest: { path: filePath, token: revealTokenRef.current },
+    });
+  }, []);
+
   const handleQuickOpenQueryChange = useCallback((query: string) => {
     dispatchQuickOpen({ type: 'setQuery', query });
   }, []);
@@ -266,14 +283,29 @@ function AppLayout() {
   }, []);
 
   const openWorkspaceFile = useCallback((filePath: string, fileName: string) => {
+    queueRevealRequest(filePath, { markActiveFileHandled: true });
     recordRecentFile(filePath, fileName);
     openFile(filePath, fileName);
-  }, [openFile, recordRecentFile]);
+  }, [openFile, queueRevealRequest, recordRecentFile]);
 
   const openWorkspacePreviewFile = useCallback((filePath: string, fileName: string) => {
+    queueRevealRequest(filePath, { markActiveFileHandled: true });
     recordRecentFile(filePath, fileName);
     openPreviewFile(filePath, fileName);
-  }, [openPreviewFile, recordRecentFile]);
+  }, [openPreviewFile, queueRevealRequest, recordRecentFile]);
+
+  const handleEditorActiveFileReveal = useCallback((filePath: string) => {
+    queueRevealRequest(filePath, { markActiveFileHandled: true });
+  }, [queueRevealRequest]);
+
+  useEffect(() => {
+    if (!activeTabId || activeTabId === lastHandledActiveFileRevealRef.current) {
+      return;
+    }
+
+    lastHandledActiveFileRevealRef.current = activeTabId;
+    queueRevealRequest(activeTabId);
+  }, [activeTabId, queueRevealRequest]);
 
   useEffect(() => {
     const electronApi = typeof window === 'undefined' ? undefined : window.electronAPI;
@@ -360,11 +392,6 @@ function AppLayout() {
   }, [quickOpenResults.length]);
 
   const handleQuickOpenSelect = useCallback((result: QuickOpenSearchResult) => {
-    revealTokenRef.current += 1;
-    dispatchQuickOpen({
-      type: 'setRevealRequest',
-      revealRequest: { path: result.path, token: revealTokenRef.current },
-    });
     openWorkspaceFile(result.path, result.name);
     closeQuickOpen({ restorePreviousEditor: false });
   }, [closeQuickOpen, openWorkspaceFile]);
@@ -450,7 +477,7 @@ function AppLayout() {
           onWorkspaceRefresh={invalidateWorkspaceFiles}
         />
       ),
-      topContent: <EditorSplitLayout jumpToLine={jumpToLine} />,
+      topContent: <EditorSplitLayout jumpToLine={jumpToLine} onActiveFileReveal={handleEditorActiveFileReveal} />,
       bottomContent: <BottomPanel onClose={() => setShowBottomPanel(false)} />,
       rightContent: (
         <RightSidePanel
@@ -557,9 +584,9 @@ function AppLayout() {
         showLeftPanel={showLeftPanel}
         showBottomPanel={showBottomPanel}
         showRightPanel={showRightPanel}
-        onToggleLeftPanel={() => setShowLeftPanel(!showLeftPanel)}
-        onToggleBottomPanel={() => setShowBottomPanel(!showBottomPanel)}
-        onToggleRightPanel={() => setShowRightPanel(!showRightPanel)}
+        onShowLeftPanelChange={setShowLeftPanel}
+        onShowBottomPanelChange={setShowBottomPanel}
+        onShowRightPanelChange={setShowRightPanel}
       />
       <UnsavedChangesDialog />
 

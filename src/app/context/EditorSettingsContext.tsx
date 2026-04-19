@@ -202,6 +202,11 @@ const EDITOR_SETTING_DEFINITIONS: EditorSettingDefinitions = {
   },
 }
 
+const EDITOR_SETTING_KEYS_BY_CONFIG_KEY = new Map(
+  (Object.entries(EDITOR_SETTING_DEFINITIONS) as Array<[keyof EditorSettingsState, EditorSettingDefinition<unknown>]>)
+    .map(([key, definition]) => [definition.configKey, key]),
+)
+
 function readConfiguredEditorSetting<T>(definition: EditorSettingDefinition<T>): T {
   try {
     return definition.parseValue(window.electronAPI?.config.get(definition.configKey))
@@ -287,6 +292,34 @@ export function EditorSettingsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     void ensureEditorFontFamilyLoaded(settings.fontFamily)
   }, [settings.fontFamily])
+
+  useEffect(() => {
+    const dispose = window.electronAPI?.config.onDidChange?.((configKey, value) => {
+      const settingKey = EDITOR_SETTING_KEYS_BY_CONFIG_KEY.get(configKey)
+
+      if (!settingKey) {
+        return
+      }
+
+      const definition = EDITOR_SETTING_DEFINITIONS[settingKey]
+      const nextValue = definition.parseValue(value) as EditorSettingsState[typeof settingKey]
+
+      setSettings((currentSettings) => {
+        if (Object.is(currentSettings[settingKey], nextValue)) {
+          return currentSettings
+        }
+
+        return {
+          ...currentSettings,
+          [settingKey]: nextValue,
+        } as EditorSettingsState
+      })
+    })
+
+    return () => {
+      dispose?.()
+    }
+  }, [])
 
   const value = useMemo<EditorSettingsContextValue>(() => ({
     ...settings,

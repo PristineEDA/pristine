@@ -161,6 +161,84 @@ function createUnsavedChangesDialogState(
   };
 }
 
+const EMPTY_TABS: Tab[] = [];
+const EMPTY_EDITOR_GROUPS: EditorGroup[] = [];
+
+function withModifiedTabState(tab: EditorTab, dirtyFiles: Record<string, boolean>, previousTab?: EditorTab): EditorTab {
+  const modified = Boolean(dirtyFiles[tab.id]);
+
+  if (
+    previousTab
+    && previousTab.id === tab.id
+    && previousTab.name === tab.name
+    && previousTab.isPinned === tab.isPinned
+    && previousTab.modified === modified
+  ) {
+    return previousTab;
+  }
+
+  return {
+    ...tab,
+    modified,
+  };
+}
+
+function withModifiedTabsState(
+  tabs: EditorTab[],
+  dirtyFiles: Record<string, boolean>,
+  previousTabs: EditorTab[] = EMPTY_TABS,
+): EditorTab[] {
+  const previousTabsById = new Map(previousTabs.map((tab) => [tab.id, tab]));
+  let changed = tabs.length !== previousTabs.length;
+
+  const nextTabs = tabs.map((tab, index) => {
+    const nextTab = withModifiedTabState(tab, dirtyFiles, previousTabsById.get(tab.id));
+
+    if (!changed && nextTab !== previousTabs[index]) {
+      changed = true;
+    }
+
+    return nextTab;
+  });
+
+  return changed ? nextTabs : previousTabs;
+}
+
+function withModifiedEditorGroupsState(
+  groups: EditorGroup[],
+  dirtyFiles: Record<string, boolean>,
+  previousGroups: EditorGroup[],
+): EditorGroup[] {
+  const previousGroupsById = new Map(previousGroups.map((group) => [group.id, group]));
+  let changed = groups.length !== previousGroups.length;
+
+  const nextGroups = groups.map((group, index) => {
+    const previousGroup = previousGroupsById.get(group.id);
+    const nextTabs = withModifiedTabsState(group.tabs, dirtyFiles, previousGroup?.tabs);
+
+    if (
+      previousGroup
+      && previousGroup.activeTabId === group.activeTabId
+      && previousGroup.previewTabId === group.previewTabId
+      && nextTabs === previousGroup.tabs
+    ) {
+      if (!changed && previousGroup !== previousGroups[index]) {
+        changed = true;
+      }
+
+      return previousGroup;
+    }
+
+    changed = true;
+    return {
+      ...group,
+      tabs: nextTabs,
+    };
+  });
+
+  return changed ? nextGroups : previousGroups;
+}
+
 // ─── Context ────────────────────────────────────────────────────────────────
 
 const WorkspaceContext = createContext<WorkspaceState | null>(null);
@@ -183,11 +261,23 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const fileStore = useWorkspaceFileStore();
   const [unsavedChangesDialog, setUnsavedChangesDialog] = useState<UnsavedChangesDialogState | null>(null);
   const unsavedChangesResolverRef = useRef<((result: 'save' | 'discard' | 'cancel') => void) | null>(null);
+  const previousEditorGroupsRef = useRef<EditorGroup[]>(EMPTY_EDITOR_GROUPS);
   const layoutPanelsEnabled = canToggleLayoutPanels(mainContentView, activeView);
   const visiblePanelState = layoutPanelsEnabled ? panelStateByView[activeView] : EMPTY_PANEL_STATE;
+  const editorWorkspaceRef = useRef(editorWorkspace);
+  const fileStoreRef = useRef(fileStore);
+  const activeViewRef = useRef(activeView);
+  const layoutPanelsEnabledRef = useRef(layoutPanelsEnabled);
+  const unsavedChangesDialogRef = useRef(unsavedChangesDialog);
+
+  editorWorkspaceRef.current = editorWorkspace;
+  fileStoreRef.current = fileStore;
+  activeViewRef.current = activeView;
+  layoutPanelsEnabledRef.current = layoutPanelsEnabled;
+  unsavedChangesDialogRef.current = unsavedChangesDialog;
 
   const findTabName = useCallback((fileId: string) => {
-    for (const group of editorWorkspace.editorGroups) {
+    for (const group of editorWorkspaceRef.current.editorGroups) {
       const tab = group.tabs.find((currentTab) => currentTab.id === fileId);
       if (tab) {
         return tab.name;
@@ -195,24 +285,27 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     }
 
     return getFileBaseName(fileId);
-  }, [editorWorkspace.editorGroups]);
+  }, []);
+
+  const editorGroups = useMemo(() => {
+    const nextGroups = withModifiedEditorGroupsState(
+      editorWorkspace.editorGroups,
+      fileStore.dirtyFiles,
+      previousEditorGroupsRef.current,
+    );
+
+    previousEditorGroupsRef.current = nextGroups;
+    return nextGroups;
+  }, [editorWorkspace.editorGroups, fileStore.dirtyFiles]);
 
   const tabs = useMemo(
-    () => editorWorkspace.tabs.map((tab) => ({ ...tab, modified: fileStore.dirtyFiles[tab.id] })),
-    [editorWorkspace.tabs, fileStore.dirtyFiles],
-  );
-
-  const editorGroups = useMemo(
-    () => editorWorkspace.editorGroups.map((group) => ({
-      ...group,
-      tabs: group.tabs.map((tab) => ({ ...tab, modified: fileStore.dirtyFiles[tab.id] })),
-    })),
-    [editorWorkspace.editorGroups, fileStore.dirtyFiles],
+    () => editorGroups.find((group) => group.id === editorWorkspace.focusedGroupId)?.tabs ?? EMPTY_TABS,
+    [editorGroups, editorWorkspace.focusedGroupId],
   );
 
   const getDirtyRequestedFileIds = useCallback((fileIds: string[]) => Array.from(
-    new Set(fileIds.filter((fileId) => fileStore.dirtyFiles[fileId])),
-  ), [fileStore.dirtyFiles]);
+    new Set(fileIds.filter((fileId) => fileStoreRef.current.dirtyFiles[fileId])),
+  ), []);
 
   const showUnsavedChangesDialog = useCallback((fileIds: string[], kind: UnsavedChangesDialogKind) => {
     const uniqueFileIds = getDirtyRequestedFileIds(fileIds);
@@ -249,25 +342,28 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const saveFiles = useCallback((fileIds: string[]) => {
-    return fileStore.saveFiles(fileIds);
-  }, [fileStore]);
+    return fileStoreRef.current.saveFiles(fileIds);
+  }, []);
 
   const saveAllFiles = useCallback(async () => {
-    const result = await fileStore.saveFiles(fileStore.dirtyFileIds);
+    const { dirtyFileIds, saveFiles: saveWorkspaceFiles } = fileStoreRef.current;
+    const result = await saveWorkspaceFiles(dirtyFileIds);
     return result.failedFileIds.length === 0;
-  }, [fileStore]);
+  }, []);
 
   const saveActiveFile = useCallback(async () => {
-    const activeFileId = editorWorkspace.activeTabId;
-    if (!activeFileId || fileStore.loadingFiles[activeFileId] || fileStore.loadErrors[activeFileId]) {
+    const { activeTabId } = editorWorkspaceRef.current;
+    const { loadingFiles, loadErrors, saveFileContent } = fileStoreRef.current;
+
+    if (!activeTabId || loadingFiles[activeTabId] || loadErrors[activeTabId]) {
       return false;
     }
 
-    return (await fileStore.saveFileContent(activeFileId)) === true;
-  }, [editorWorkspace.activeTabId, fileStore]);
+    return (await saveFileContent(activeTabId)) === true;
+  }, []);
 
   const runActiveEditorAction = useCallback(async (actionId: 'undo' | 'redo') => {
-    const editor = editorWorkspace.editorRef.current;
+    const editor = editorWorkspaceRef.current.editorRef.current;
     if (!editor) {
       return false;
     }
@@ -284,16 +380,16 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     }
 
     return false;
-  }, [editorWorkspace.editorRef]);
+  }, []);
 
   const updateFileContentInGroup = useCallback((groupId: string, fileId: string, content: string) => {
-    const group = editorWorkspace.editorGroups.find((currentGroup) => currentGroup.id === groupId);
+    const group = editorWorkspaceRef.current.editorGroups.find((currentGroup) => currentGroup.id === groupId);
     if (group?.previewTabId === fileId) {
-      editorWorkspace.pinTabInGroup(groupId, fileId);
+      editorWorkspaceRef.current.pinTabInGroup(groupId, fileId);
     }
 
-    fileStore.updateFileContent(fileId, content);
-  }, [editorWorkspace, fileStore]);
+    fileStoreRef.current.updateFileContent(fileId, content);
+  }, []);
 
   const maybeProceedWithUnsavedChanges = useCallback(async (
     fileIds: string[],
@@ -320,41 +416,42 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       [fileId],
       'close-file',
       () => {
-        editorWorkspace.closeFileInGroup(groupId, fileId);
+        editorWorkspaceRef.current.closeFileInGroup(groupId, fileId);
       },
     );
-  }, [editorWorkspace, maybeProceedWithUnsavedChanges]);
+  }, [maybeProceedWithUnsavedChanges]);
 
   const closeFile = useCallback((fileId: string) => {
     void maybeProceedWithUnsavedChanges(
       [fileId],
       'close-file',
       () => {
-        editorWorkspace.closeFile(fileId);
+        editorWorkspaceRef.current.closeFile(fileId);
       },
     );
-  }, [editorWorkspace, maybeProceedWithUnsavedChanges]);
+  }, [maybeProceedWithUnsavedChanges]);
 
   const closeActiveTabInFocusedGroup = useCallback(() => {
-    const groupId = editorWorkspace.focusedGroupId;
+    const { editorGroups, focusedGroupId } = editorWorkspaceRef.current;
+    const groupId = focusedGroupId;
     if (!groupId) {
       return;
     }
 
-    const activeFileId = editorWorkspace.editorGroups.find((group) => group.id === groupId)?.activeTabId;
+    const activeFileId = editorGroups.find((group) => group.id === groupId)?.activeTabId;
     if (!activeFileId) {
       return;
     }
 
     closeFileInGroup(groupId, activeFileId);
-  }, [closeFileInGroup, editorWorkspace.editorGroups, editorWorkspace.focusedGroupId]);
+  }, [closeFileInGroup]);
 
   const openUnsavedChangesDialog = useCallback((fileIds?: string[]) => {
-    showUnsavedChangesDialog(fileIds ?? fileStore.dirtyFileIds, 'review');
-  }, [fileStore.dirtyFileIds, showUnsavedChangesDialog]);
+    showUnsavedChangesDialog(fileIds ?? fileStoreRef.current.dirtyFileIds, 'review');
+  }, [showUnsavedChangesDialog]);
 
   const confirmUnsavedChangesSave = useCallback(async (selectedFileIds?: string[]) => {
-    const dialogState = unsavedChangesDialog;
+    const dialogState = unsavedChangesDialogRef.current;
     const fileIds = dialogState?.fileIds ?? [];
     if (fileIds.length === 0 || !dialogState) {
       resolveUnsavedChangesDialog('cancel');
@@ -366,7 +463,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const saveResult = await fileStore.saveFiles(targetFileIds);
+    const saveResult = await fileStoreRef.current.saveFiles(targetFileIds);
     const remainingFileIds = getDirtyRequestedFileIds(
       fileIds.filter((fileId) => !saveResult.savedFileIds.includes(fileId)),
     );
@@ -376,10 +473,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     }
 
     resolveUnsavedChangesDialog('save');
-  }, [fileStore, findTabName, getDirtyRequestedFileIds, resolveUnsavedChangesDialog, unsavedChangesDialog]);
+  }, [findTabName, getDirtyRequestedFileIds, resolveUnsavedChangesDialog]);
 
   const discardUnsavedChanges = useCallback((selectedFileIds?: string[]) => {
-    const dialogState = unsavedChangesDialog;
+    const dialogState = unsavedChangesDialogRef.current;
     const fileIds = dialogState?.fileIds ?? [];
     if (fileIds.length === 0 || !dialogState) {
       resolveUnsavedChangesDialog('discard');
@@ -391,7 +488,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    fileStore.discardFiles(targetFileIds);
+    fileStoreRef.current.discardFiles(targetFileIds);
 
     const discardedFileIdSet = new Set(targetFileIds);
     const remainingFileIds = getDirtyRequestedFileIds(
@@ -403,7 +500,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     }
 
     resolveUnsavedChangesDialog('discard');
-  }, [fileStore, findTabName, getDirtyRequestedFileIds, resolveUnsavedChangesDialog, unsavedChangesDialog]);
+  }, [findTabName, getDirtyRequestedFileIds, resolveUnsavedChangesDialog]);
 
   const cancelUnsavedChanges = useCallback(() => {
     resolveUnsavedChangesDialog('cancel');
@@ -417,7 +514,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
     const dispose = electronApi.onCloseRequested((request: WindowCloseRequest) => {
       void (async () => {
-        const dirtyFileIds = fileStore.dirtyFileIds;
+        const dirtyFileIds = fileStoreRef.current.dirtyFileIds;
         if (dirtyFileIds.length === 0) {
           await electronApi.resolveCloseRequest(request.requestId, 'proceed');
           return;
@@ -437,25 +534,55 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     return () => {
       dispose?.();
     };
-  }, [fileStore, requestUnsavedChangesConfirmation]);
+  }, [requestUnsavedChangesConfirmation]);
 
-  const setPanelStateForActiveView = (nextState: Partial<PanelVisibilityState>) => {
-    if (!layoutPanelsEnabled) {
+  const setPanelStateForActiveView = useCallback((nextState: Partial<PanelVisibilityState>) => {
+    if (!layoutPanelsEnabledRef.current) {
       return;
     }
 
-    setPanelStateByView((currentState) => ({
-      ...currentState,
-      [activeView]: {
-        ...currentState[activeView],
+    setPanelStateByView((currentState) => {
+      const view = activeViewRef.current;
+      const currentPanelState = currentState[view];
+      const nextPanelState = {
+        ...currentPanelState,
         ...nextState,
-      },
-    }));
-  };
+      };
+
+      if (
+        currentPanelState.showLeftPanel === nextPanelState.showLeftPanel
+        && currentPanelState.showBottomPanel === nextPanelState.showBottomPanel
+        && currentPanelState.showRightPanel === nextPanelState.showRightPanel
+      ) {
+        return currentState;
+      }
+
+      return {
+        ...currentState,
+        [view]: nextPanelState,
+      };
+    });
+  }, []);
+
+  const setShowLeftPanel = useCallback((show: boolean) => {
+    setPanelStateForActiveView({ showLeftPanel: show });
+  }, [setPanelStateForActiveView]);
+
+  const setShowBottomPanel = useCallback((show: boolean) => {
+    setPanelStateForActiveView({ showBottomPanel: show });
+  }, [setPanelStateForActiveView]);
+
+  const setShowRightPanel = useCallback((show: boolean) => {
+    setPanelStateForActiveView({ showRightPanel: show });
+  }, [setPanelStateForActiveView]);
+
+  const undoActiveEditor = useCallback(() => runActiveEditorAction('undo'), [runActiveEditorAction]);
+
+  const redoActiveEditor = useCallback(() => runActiveEditorAction('redo'), [runActiveEditorAction]);
 
   useEffect(() => {
     editorWorkspace.syncFocusedEditorRef();
-  }, [editorWorkspace]);
+  }, [editorWorkspace.syncFocusedEditorRef]);
 
   return (
     <WorkspaceContext.Provider value={{
@@ -494,11 +621,11 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       captureEditorSelectionSnapshot: editorWorkspace.captureEditorSelectionSnapshot,
       restoreEditorSelection: editorWorkspace.restoreEditorSelection,
       showLeftPanel: visiblePanelState.showLeftPanel,
-      setShowLeftPanel: (show) => setPanelStateForActiveView({ showLeftPanel: show }),
+      setShowLeftPanel,
       showBottomPanel: visiblePanelState.showBottomPanel,
-      setShowBottomPanel: (show) => setPanelStateForActiveView({ showBottomPanel: show }),
+      setShowBottomPanel,
       showRightPanel: visiblePanelState.showRightPanel,
-      setShowRightPanel: (show) => setPanelStateForActiveView({ showRightPanel: show }),
+      setShowRightPanel,
       dirtyFiles: fileStore.dirtyFiles,
       dirtyFileIds: fileStore.dirtyFileIds,
       fileContents: fileStore.fileContents,
@@ -512,8 +639,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       saveActiveFile,
       saveAllFiles,
       saveFiles,
-      undoActiveEditor: () => runActiveEditorAction('undo'),
-      redoActiveEditor: () => runActiveEditorAction('redo'),
+      undoActiveEditor,
+      redoActiveEditor,
       unsavedChangesDialog,
       openUnsavedChangesDialog,
       confirmUnsavedChangesSave,

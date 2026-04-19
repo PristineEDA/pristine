@@ -87,6 +87,26 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     }
   }, [persistTheme, theme]);
 
+  useEffect(() => {
+    const dispose = window.electronAPI?.config.onDidChange?.((key, value) => {
+      if (key !== THEME_CONFIG_KEY || !isTheme(value)) {
+        return;
+      }
+
+      setThemeState(value);
+
+      try {
+        localStorage.setItem(STORAGE_KEY, value);
+      } catch {
+        /* ignore */
+      }
+    });
+
+    return () => {
+      dispose?.();
+    };
+  }, []);
+
   return (
     <ThemeContext.Provider value={{ theme, setTheme, toggleTheme }}>
       {children}

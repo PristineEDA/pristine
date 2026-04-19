@@ -17,6 +17,7 @@ type BrowserWindowInstance = {
   setAlwaysOnTop: Mock<(flag: boolean, level?: string) => void>;
   restore: Mock<() => void>;
   isMinimized: Mock<() => boolean>;
+  isVisible: Mock<() => boolean>;
   isDestroyed: Mock<() => boolean>;
   close: Mock<() => void>;
   emit: (event: string, ...args: unknown[]) => void;
@@ -52,18 +53,27 @@ const mocks = vi.hoisted(() => {
       send: vi.fn(),
       isDestroyed: vi.fn(() => false),
     };
-    show = vi.fn();
-    hide = vi.fn();
+    private visible: boolean;
+    show = vi.fn(() => {
+      this.visible = true;
+    });
+    hide = vi.fn(() => {
+      this.visible = false;
+    });
     focus = vi.fn();
     setAlwaysOnTop = vi.fn();
-    restore = vi.fn();
+    restore = vi.fn(() => {
+      this.visible = true;
+    });
     isMinimized = vi.fn(() => false);
+    isVisible = vi.fn(() => this.visible);
     isDestroyed = vi.fn(() => false);
     private handlers = new Map<string, (...args: unknown[]) => void>();
     private onceHandlers = new Map<string, (...args: unknown[]) => void>();
 
     constructor(options: Record<string, unknown>) {
       this.options = options;
+      this.visible = options.show === true;
       browserWindowInstances.push(this as unknown as BrowserWindowInstance);
     }
 
@@ -151,6 +161,8 @@ const mocks = vi.hoisted(() => {
     mockSetName: vi.fn(),
     mockGetName: vi.fn(() => 'Pristine'),
     mockQuit: vi.fn(),
+    mockSetAsDefaultProtocolClient: vi.fn(),
+    mockRequestSingleInstanceLock: vi.fn(() => true),
     mockBuildFromTemplate: vi.fn((template: unknown[]) => ({ template })),
     mockSetApplicationMenu: vi.fn(),
     mockCreateFromDataURL: vi.fn(() => ({ kind: 'native-image' })),
@@ -161,6 +173,8 @@ const mocks = vi.hoisted(() => {
     mockRegisterAllHandlers: vi.fn(),
     mockSetProjectRoot: vi.fn(),
     mockSetupWindowStreams: vi.fn(),
+    mockHandleAuthCallbackUrl: vi.fn<(url: string) => Promise<void>>(() => Promise.resolve()),
+    mockIsAuthProtocolUrl: vi.fn<(value: string) => boolean>((value: string) => value.startsWith('pristine://')),
   };
 });
 
@@ -176,6 +190,8 @@ vi.mock('electron', () => ({
     getPath: mocks.mockGetPath,
     setPath: mocks.mockSetPath,
     setName: mocks.mockSetName,
+     setAsDefaultProtocolClient: mocks.mockSetAsDefaultProtocolClient,
+     requestSingleInstanceLock: mocks.mockRequestSingleInstanceLock,
     whenReady: mocks.mockWhenReady,
     on: mocks.mockAppOn,
     quit: mocks.mockQuit,
@@ -220,6 +236,11 @@ vi.mock('./ipc/config.js', () => ({
   getConfigValue: (key: string) => mocks.mockGetConfigValue(key),
 }));
 
+vi.mock('./ipc/auth.js', () => ({
+  handleAuthCallbackUrl: (url: string) => mocks.mockHandleAuthCallbackUrl(url),
+  isAuthProtocolUrl: (value: string) => mocks.mockIsAuthProtocolUrl(value),
+}));
+
 const originalPlatform = process.platform;
 const originalDevServerUrl = process.env.VITE_DEV_SERVER_URL;
 const originalProjectRoot = process.env.PRISTINE_PROJECT_ROOT;
@@ -231,6 +252,7 @@ async function importMain(options?: {
   projectRoot?: string;
   userDataPath?: string;
   configValues?: Record<string, unknown>;
+  singleInstanceLock?: boolean;
 }) {
   vi.resetModules();
   mocks.appHandlers.clear();
@@ -247,6 +269,9 @@ async function importMain(options?: {
   mocks.mockGetPath.mockClear();
   mocks.mockSetPath.mockClear();
   mocks.mockSetName.mockClear();
+    mocks.mockSetAsDefaultProtocolClient.mockClear();
+    mocks.mockRequestSingleInstanceLock.mockReset();
+    mocks.mockRequestSingleInstanceLock.mockImplementation(() => options?.singleInstanceLock ?? true);
   mocks.mockQuit.mockClear();
   mocks.mockBuildFromTemplate.mockClear();
   mocks.mockSetApplicationMenu.mockClear();
@@ -259,6 +284,9 @@ async function importMain(options?: {
   mocks.mockRegisterAllHandlers.mockClear();
   mocks.mockSetProjectRoot.mockClear();
   mocks.mockSetupWindowStreams.mockClear();
+    mocks.mockHandleAuthCallbackUrl.mockClear();
+    mocks.mockIsAuthProtocolUrl.mockClear();
+    mocks.mockIsAuthProtocolUrl.mockImplementation((value: string) => value.startsWith('pristine://'));
   mocks.BrowserWindowMock.getAllWindows.mockClear();
 
   if (options?.devServerUrl) {
@@ -339,6 +367,21 @@ describe('electron main entry', () => {
     expect(mocks.mockSetPath).toHaveBeenCalledWith('sessionData', path.join(userDataPath, 'session-data'));
   });
 
+  it('quits immediately without creating windows when a protocol-launched second instance fails to acquire the single-instance lock', async () => {
+    const { appHandlers, browserWindowInstances, trayInstances } = await importMain({
+      platform: 'win32',
+      singleInstanceLock: false,
+    });
+
+    expect(mocks.mockQuit).toHaveBeenCalledTimes(1);
+    expect(mocks.mockRegisterAllHandlers).not.toHaveBeenCalled();
+    expect(browserWindowInstances).toHaveLength(0);
+    expect(trayInstances).toHaveLength(0);
+    expect(appHandlers.has('second-instance')).toBe(false);
+    expect(appHandlers.has('activate')).toBe(false);
+    expect(appHandlers.has('before-quit')).toBe(false);
+  });
+
   it('registers handlers, creates tray and startup windows, and loads the dev server when available', async () => {
     const { browserWindowInstances, trayInstances, getMainWindow } = await importMain({
       platform: 'win32',
@@ -346,6 +389,8 @@ describe('electron main entry', () => {
     });
 
     expect(mocks.mockRegisterAllHandlers).toHaveBeenCalledTimes(1);
+    expect(mocks.mockRequestSingleInstanceLock).toHaveBeenCalledTimes(1);
+    expect(mocks.mockSetAsDefaultProtocolClient).toHaveBeenCalledWith('pristine');
     expect(mocks.mockSetProjectRoot).toHaveBeenCalledWith('C:\\Users\\maksy\\Desktop\\fpga\\retroSoC');
     expect(mocks.mockMkdirSync).toHaveBeenCalledWith(
       path.join(mocks.mockAppDataPath, 'Pristine', 'dev-profile', 'session-data'),
@@ -541,7 +586,7 @@ describe('electron main entry', () => {
     appMenu.submenu?.find((item) => item.label === 'About Pristine')?.click?.();
     helpMenu?.submenu?.find((item) => item.label === 'About')?.click?.();
 
-    expect(mainWindow.show).toHaveBeenCalledTimes(2);
+    expect(mainWindow.show).toHaveBeenCalledTimes(1);
     expect(mainWindow.focus).toHaveBeenCalledTimes(2);
     expect(mainWindow.webContents.send).toHaveBeenNthCalledWith(1, 'stream:menu:command', { action: 'open-about' });
     expect(mainWindow.webContents.send).toHaveBeenNthCalledWith(2, 'stream:menu:command', { action: 'open-about' });
@@ -569,6 +614,38 @@ describe('electron main entry', () => {
     expect(floatingInfoWindow.show).toHaveBeenCalledTimes(1);
     expect(floatingInfoWindow.setAlwaysOnTop).toHaveBeenCalledWith(true, 'screen-saver');
     expect(floatingInfoWindow.loadFile).toHaveBeenCalledWith(expect.stringMatching(/dist[\\/]floating-info\.html$/));
+  });
+
+  it('focuses the existing visible main window for auth callback deep links without replaying the show animation', async () => {
+    const { appHandlers, browserWindowInstances } = await importMain({ platform: 'win32' });
+
+    const mainWindow = browserWindowInstances[1];
+    mainWindow.isVisible.mockReturnValue(true);
+    mainWindow.show.mockClear();
+    mainWindow.focus.mockClear();
+
+    appHandlers.get('second-instance')?.({}, ['pristine://auth/callback?code=exchange-code']);
+    await Promise.resolve();
+
+    expect(mocks.mockHandleAuthCallbackUrl).toHaveBeenCalledWith('pristine://auth/callback?code=exchange-code');
+    expect(mainWindow.show).not.toHaveBeenCalled();
+    expect(mainWindow.focus).toHaveBeenCalledTimes(1);
+  });
+
+  it('reveals the main window for auth callback deep links when it is currently hidden', async () => {
+    const { appHandlers, browserWindowInstances } = await importMain({ platform: 'win32' });
+
+    const mainWindow = browserWindowInstances[1];
+    mainWindow.isVisible.mockReturnValue(false);
+    mainWindow.show.mockClear();
+    mainWindow.focus.mockClear();
+
+    appHandlers.get('second-instance')?.({}, ['pristine://auth/callback?code=exchange-code']);
+    await Promise.resolve();
+
+    expect(mocks.mockHandleAuthCallbackUrl).toHaveBeenCalledWith('pristine://auth/callback?code=exchange-code');
+    expect(mainWindow.show).toHaveBeenCalledTimes(1);
+    expect(mainWindow.focus).toHaveBeenCalledTimes(1);
   });
 
   it('recreates splash and main windows on activate when all windows are closed', async () => {

@@ -88,6 +88,86 @@ describe('LeftSidePanel', () => {
     expect(container.querySelector('.explorer-tree-scrollbar')).not.toBeNull();
   });
 
+  it('keeps a clicked explorer folder highlighted after the pointer leaves the tree', async () => {
+    render(
+      <LeftSidePanel
+        activeFileId="rtl/peripherals/uart_rx.v"
+        onFileOpen={vi.fn()}
+        onFilePreview={vi.fn()}
+        onLineJump={vi.fn()}
+        currentOutlineId="cpu_top"
+      />,
+    );
+
+    const folderNode = await screen.findByTestId('file-tree-node-rtl');
+
+    fireEvent.click(folderNode);
+
+    expect(screen.getByTestId('file-tree-node-rtl').className).toContain('bg-primary/20');
+    expect(screen.getByTestId('file-tree-node-rtl').className).toContain('hover:bg-primary/20');
+
+    fireEvent.mouseLeave(screen.getByTestId('file-tree-node-rtl'));
+
+    expect(screen.getByTestId('file-tree-node-rtl').className).toContain('bg-primary/20');
+  });
+
+  it('moves the persistent highlight from folders to files so only one explorer row stays highlighted', async () => {
+    render(
+      <LeftSidePanel
+        activeFileId="rtl/peripherals/uart_rx.v"
+        onFileOpen={vi.fn()}
+        onFilePreview={vi.fn()}
+        onLineJump={vi.fn()}
+        currentOutlineId="uart_rx"
+      />,
+    );
+
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl'));
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals'));
+
+    const folderNode = screen.getByTestId('file-tree-node-rtl_peripherals');
+    const fileNode = await screen.findByTestId('file-tree-node-rtl_peripherals_uart_rx_v');
+
+    expect(folderNode.className).toContain('bg-primary/20');
+    expect(fileNode.className).not.toContain('hover:bg-primary/20');
+
+    fireEvent.click(fileNode);
+
+    expect(screen.getByTestId('file-tree-node-rtl_peripherals').className).not.toContain('hover:bg-primary/20');
+    expect(screen.getByTestId('file-tree-node-rtl_peripherals_uart_rx_v').className).toContain('bg-primary/20');
+    expect(screen.getByTestId('file-tree-node-rtl_peripherals_uart_rx_v').className).toContain('hover:bg-primary/20');
+  });
+
+  it('clears the selected folder highlight when another entry activates a file', async () => {
+    const { rerender } = render(
+      <LeftSidePanel
+        activeFileId="rtl/peripherals/uart_rx.v"
+        onFileOpen={vi.fn()}
+        onFilePreview={vi.fn()}
+        onLineJump={vi.fn()}
+        currentOutlineId="uart_rx"
+      />,
+    );
+
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl'));
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals'));
+
+    expect(screen.getByTestId('file-tree-node-rtl_peripherals').className).toContain('bg-primary/20');
+    expect((await screen.findByTestId('file-tree-node-rtl_peripherals_uart_rx_v')).className).not.toContain('hover:bg-primary/20');
+
+    rerender(
+      <LeftSidePanel
+        activeFileId="rtl/core/cpu_top.v"
+        onFileOpen={vi.fn()}
+        onFilePreview={vi.fn()}
+        onLineJump={vi.fn()}
+        currentOutlineId="cpu_top"
+      />,
+    );
+
+    expect(screen.getByTestId('file-tree-node-rtl_peripherals').className).not.toContain('hover:bg-primary/20');
+  });
+
   it('allows the workspace root row to collapse and expand', async () => {
     render(
       <LeftSidePanel

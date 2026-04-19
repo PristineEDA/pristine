@@ -381,8 +381,8 @@ export const openSourceAttributionSections: AttributionSection[] = [
       },
       {
         id: 'pristine-res',
-        name: 'Pristine-res',
-        url: 'https://github.com/PristineEDA/Pristine-res',
+        name: 'pristine-res',
+        url: 'https://github.com/PristineEDA/pristine-res',
         author: 'PristineEDA',
         license: 'Apache-2.0',
       },

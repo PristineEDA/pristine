@@ -1,9 +1,18 @@
+import { useEffect } from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { WorkspaceProvider, useWorkspace } from './WorkspaceContext';
 
 const undoActionRun = vi.fn(() => Promise.resolve());
 const redoActionRun = vi.fn(() => Promise.resolve());
+
+type WorkspaceActionSnapshot = Pick<ReturnType<typeof useWorkspace>,
+  'closeFile'
+  | 'openUnsavedChangesDialog'
+  | 'saveActiveFile'
+  | 'saveAllFiles'
+  | 'setShowBottomPanel'
+>;
 
 function WorkspaceHarness() {
   const workspace = useWorkspace();
@@ -53,6 +62,29 @@ function WorkspaceHarness() {
       <button onClick={() => { void workspace.redoActiveEditor(); }}>redo-editor</button>
     </div>
   );
+}
+
+function StableActionHarness({ onSnapshot }: { onSnapshot: (snapshot: WorkspaceActionSnapshot) => void }) {
+  const workspace = useWorkspace();
+
+  useEffect(() => {
+    onSnapshot({
+      closeFile: workspace.closeFile,
+      openUnsavedChangesDialog: workspace.openUnsavedChangesDialog,
+      saveActiveFile: workspace.saveActiveFile,
+      saveAllFiles: workspace.saveAllFiles,
+      setShowBottomPanel: workspace.setShowBottomPanel,
+    });
+  }, [
+    onSnapshot,
+    workspace.closeFile,
+    workspace.openUnsavedChangesDialog,
+    workspace.saveActiveFile,
+    workspace.saveAllFiles,
+    workspace.setShowBottomPanel,
+  ]);
+
+  return <WorkspaceHarness />;
 }
 
 describe('WorkspaceContext', () => {
@@ -199,6 +231,53 @@ describe('WorkspaceContext', () => {
 
     expect(window.electronAPI?.fs.writeFile).toHaveBeenCalledWith('rtl/core/reg_file.v', 'module reg_file; logic dirty; endmodule');
     expect(window.electronAPI?.resolveCloseRequest).toHaveBeenCalledWith(7, 'proceed');
+  });
+
+  it('keeps the window-close listener registered once across workspace file updates', async () => {
+    vi.mocked(window.electronAPI!.onCloseRequested).mockClear();
+
+    render(
+      <WorkspaceProvider>
+        <WorkspaceHarness />
+      </WorkspaceProvider>,
+    );
+
+    expect(window.electronAPI?.onCloseRequested).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByText('open-reg'));
+    fireEvent.click(screen.getByText('edit-reg'));
+    fireEvent.click(screen.getByText('open-alu'));
+    fireEvent.click(screen.getByText('edit-alu'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('dirty-files')).toHaveTextContent('rtl/core/reg_file.v,rtl/core/alu.v');
+    });
+
+    expect(window.electronAPI?.onCloseRequested).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps workspace action references stable across unrelated workspace updates', async () => {
+    const snapshots: WorkspaceActionSnapshot[] = [];
+
+    render(
+      <WorkspaceProvider>
+        <StableActionHarness onSnapshot={(snapshot) => { snapshots.push(snapshot); }} />
+      </WorkspaceProvider>,
+    );
+
+    await waitFor(() => {
+      expect(snapshots.length).toBeGreaterThan(0);
+    });
+
+    fireEvent.click(screen.getByText('open-reg'));
+    fireEvent.click(screen.getByText('edit-reg'));
+    fireEvent.click(screen.getByText('set-view'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('active-view')).toHaveTextContent('simulation');
+      expect(screen.getByTestId('dirty-files')).toHaveTextContent('rtl/core/reg_file.v');
+      expect(snapshots).toHaveLength(1);
+    });
   });
 
   it('opens a new file and activates it', () => {

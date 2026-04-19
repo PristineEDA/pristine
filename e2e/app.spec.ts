@@ -1,6 +1,8 @@
 import { test, expect, _electron as electron, type Locator, type Page } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -12,6 +14,55 @@ const UI_READY_TIMEOUT_MS = 60000;
 
 function getE2EUserDataPath() {
   return test.info().outputPath('electron-user-data');
+}
+
+interface E2EStoredAuthSession {
+  accessToken: string;
+  profile: {
+    avatarUrl: string | null;
+    email: string;
+    sessionExpiresAt: number | null;
+    syncedAt: string | null;
+    userId: string;
+    username: string;
+  };
+  refreshToken: string;
+}
+
+function createE2EStoredAuthSession(overrides: Partial<E2EStoredAuthSession> = {}): E2EStoredAuthSession {
+  const baseSession: E2EStoredAuthSession = {
+    accessToken: 'e2e-access-token',
+    profile: {
+      avatarUrl: null,
+      email: 'alice@example.com',
+      sessionExpiresAt: 1_600_000_000,
+      syncedAt: null,
+      userId: 'user-1',
+      username: 'Alice',
+    },
+    refreshToken: 'e2e-refresh-token',
+  };
+
+  return {
+    ...baseSession,
+    ...overrides,
+    profile: {
+      ...baseSession.profile,
+      ...overrides.profile,
+    },
+  };
+}
+
+function writeE2EAuthSession(session: E2EStoredAuthSession) {
+  const userDataPath = getE2EUserDataPath();
+  const authSessionPath = path.join(userDataPath, 'auth-session.json');
+  const envelope = {
+    encrypted: false,
+    payload: Buffer.from(JSON.stringify(session), 'utf-8').toString('base64'),
+  };
+
+  fs.mkdirSync(userDataPath, { recursive: true });
+  fs.writeFileSync(authSessionPath, JSON.stringify(envelope, null, 2), 'utf-8');
 }
 
 async function getPageTitleSafely(page: Page) {
@@ -170,11 +221,12 @@ const packagedWindowsExecutablePath = findPackagedWindowsExecutablePath();
 
 test.skip(process.platform === 'darwin', 'Custom window controls are hidden on macOS');
 
-async function launchApp(options?: { projectRoot?: string }) {
+async function launchApp(options?: { env?: Record<string, string | undefined>; projectRoot?: string }) {
   const app = await electron.launch({
     args: [path.join(__dirname, '..', 'dist-electron', 'main.js')],
     env: {
       ...process.env,
+      ...options?.env,
       PRISTINE_E2E: '1',
       PRISTINE_PROJECT_ROOT: options?.projectRoot ?? fixtureWorkspace,
       PRISTINE_USER_DATA_PATH: getE2EUserDataPath(),
@@ -2328,16 +2380,106 @@ test('terminal bottom panel close button terminates the shell and reopening crea
   await app.close();
 });
 
-test('menu bar right-side controls render shadcn tooltip content at runtime', async () => {
+test('menu bar avatar opens the account popover with desktop auth actions', async () => {
   const { app, window } = await launchApp();
 
   const userAvatarButton = window.getByTestId('user-avatar-button');
   await expect(userAvatarButton).toBeVisible();
 
-  await userAvatarButton.hover();
-  await expect(window.getByRole('tooltip', { name: 'User profile' })).toBeVisible();
+  await userAvatarButton.click();
+  await expect(window.getByTestId('user-account-popover')).toBeVisible();
+  await expect(window.getByTestId('user-sign-in-button')).toBeVisible();
+  await expect(window.getByTestId('user-sign-up-button')).toBeVisible();
 
   await app.close();
+});
+
+test('desktop auth session persists across app relaunch', async () => {
+  const refreshRequests: string[] = [];
+  const refreshServer = createServer((request, response) => {
+    if (request.method === 'POST' && request.url?.startsWith('/auth/v1/token?grant_type=refresh_token')) {
+      refreshRequests.push(request.url);
+      response.writeHead(200, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify({
+        access_token: `refreshed-access-token-${refreshRequests.length}`,
+        expires_at: 2_000_000_000 + refreshRequests.length,
+        refresh_token: `refreshed-refresh-token-${refreshRequests.length}`,
+      }));
+      return;
+    }
+
+    response.writeHead(404, { 'Content-Type': 'application/json' });
+    response.end(JSON.stringify({ message: 'Not found' }));
+  });
+
+  await new Promise<void>((resolve) => {
+    refreshServer.listen(0, '127.0.0.1', () => resolve());
+  });
+
+  const { port } = refreshServer.address() as AddressInfo;
+  const supabaseUrl = `http://127.0.0.1:${port}`;
+
+  const readDesktopSession = async (window: Page) => {
+    return window.evaluate(async () => {
+      const browserGlobal = globalThis as typeof globalThis & {
+        electronAPI?: {
+          auth: {
+            getSession: () => Promise<{
+              email: string;
+              userId: string;
+              username: string;
+            } | null>;
+          };
+        };
+      };
+
+      return browserGlobal.electronAPI?.auth.getSession() ?? null;
+    });
+  };
+
+  const assertSignedInPopover = async (window: Page) => {
+    await expect.poll(async () => {
+      return (await readDesktopSession(window))?.username ?? null;
+    }).toBe('Alice');
+
+    await window.getByTestId('user-avatar-button').click();
+    await expect(window.getByTestId('user-account-popover')).toBeVisible();
+    await expect(window.getByTestId('user-account-name')).toHaveText('Alice');
+    await expect(window.getByTestId('user-sign-out-button')).toBeVisible();
+    await expect(window.getByTestId('user-sign-in-button')).toHaveCount(0);
+  };
+
+  writeE2EAuthSession(createE2EStoredAuthSession());
+
+  try {
+    const firstLaunch = await launchApp({
+      env: {
+        PRISTINE_SUPABASE_URL: supabaseUrl,
+      },
+    });
+    const { app: firstApp, window: firstWindow } = firstLaunch;
+
+    await assertSignedInPopover(firstWindow);
+    await expect.poll(() => refreshRequests.length).toBeGreaterThan(0);
+
+    await firstApp.close();
+
+    const secondLaunch = await launchApp({
+      env: {
+        PRISTINE_SUPABASE_URL: supabaseUrl,
+      },
+    });
+    const { app: secondApp, window: secondWindow } = secondLaunch;
+
+    await assertSignedInPopover(secondWindow);
+    await expect.poll(() => refreshRequests.length).toBeGreaterThan(1);
+
+    await secondApp.close();
+  } finally {
+    await new Promise<void>((resolve) => {
+      refreshServer.close(() => resolve());
+    });
+  }
 });
 
 test('floating info window stays visible after hiding the main window to tray', async () => {
@@ -2867,6 +3009,28 @@ test('editor font and theme comboboxes support wheel scrolling and reopen at the
   }).toBeGreaterThan(0)
 
   await window.keyboard.press('Escape')
+  await app.close()
+})
+
+test('advanced editor font picker closes after selecting a preview card and syncs the font setting', async () => {
+  const { app, window } = await launchApp()
+
+  await window.getByTestId('menu-settings-button').click()
+  await expect(window.getByTestId('settings-dialog')).toBeVisible()
+
+  const advancedDialog = window.locator('[data-testid="settings-editor-font-family-advanced-dialog"]')
+  await window.getByTestId('settings-editor-font-family-advanced-button').click()
+  await expect(advancedDialog).toBeVisible()
+
+  await expect(window.getByTestId('settings-editor-font-family-preview-letters-victor-mono')).toContainText('AaBbCcDdEe')
+  await expect(window.getByTestId('settings-editor-font-family-preview-digits-victor-mono')).toContainText('0123456789')
+
+  await window.getByTestId('settings-editor-font-family-preview-card-victor-mono').click()
+
+  await expect(advancedDialog).toHaveCount(0)
+  await expect(window.getByTestId('settings-editor-font-family-combobox')).toContainText('Victor Mono')
+  await expect.poll(async () => readConfigValue(window, 'editor.fontFamily')).toBe('victor-mono')
+
   await app.close()
 })
 

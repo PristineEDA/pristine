@@ -2,6 +2,7 @@ import { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react'
 import {
   Settings, CircleUser, Minus, Square, X, Code2, Presentation, Workflow,
   Sun, Moon,
+  LogIn, LogOut, RefreshCw, UserPlus,
 } from 'lucide-react';
 import {
   applicationMenus,
@@ -11,9 +12,12 @@ import {
   type MenuCommandEvent,
 } from '../../../menu/applicationMenu';
 import { canToggleLayoutPanels as canUseLayoutPanels } from '../../../codeViewPanels';
+import { getDesktopAvatarCandidates } from '../../../auth/avatar';
+import type { DesktopAuthSession } from '../../../auth/types';
 import { useEditorSettings } from '../../../context/EditorSettingsContext';
 import { useWorkspace } from '../../../context/WorkspaceContext';
 import { useTheme, type Theme } from '../../../context/ThemeContext';
+import { useUser } from '../../../context/UserContext';
 import {
   DEFAULT_EDITOR_BRACKET_PAIR_GUIDES,
   DEFAULT_EDITOR_FONT_LIGATURES,
@@ -71,14 +75,17 @@ import { ToggleGroup, ToggleGroupItem } from '../../ui/toggle-group';
 import { Toggle } from '../../ui/toggle';
 import { Separator } from '../../ui/separator';
 import { Button } from '../../ui/button';
+import { Avatar, AvatarFallback, AvatarImage } from '../../ui/avatar';
 import { Combobox, type ComboboxOption } from '../../ui/combobox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../../ui/dialog';
+import { Popover, PopoverContent, PopoverTrigger } from '../../ui/popover';
 import { ScrollArea } from '../../ui/scroll-area';
 import { Slider } from '../../ui/slider';
 import { Switch } from '../../ui/switch';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../../ui/tooltip';
 import { useSidebar } from '../../ui/sidebar';
 import { AboutDialog } from './AboutDialog';
+import { EditorFontAdvancedDialog } from './EditorFontAdvancedDialog';
 import { centerViewSwitchItemClassName } from './viewSwitcherStyles';
 
 const noDrag = { WebkitAppRegion: 'no-drag' as const };
@@ -92,6 +99,8 @@ const THEME_CONFIG_KEY = 'ui.theme';
 const settingsSectionClassName = 'rounded-md border border-border/85 bg-muted/55 px-3 py-2.5';
 const settingsSectionTitleClassName = 'text-[13px] font-medium';
 const settingsSectionDescriptionClassName = 'text-[12px] text-muted-foreground';
+const userPopoverActionsClassName = 'grid grid-cols-2 gap-1.5';
+const userPopoverActionButtonClassName = 'h-8 w-full justify-center gap-1 whitespace-nowrap px-2.5 text-[11px] hover:cursor-pointer [&_svg]:size-3.5 disabled:cursor-not-allowed';
 
 function isMacOSPlatform(): boolean {
   return typeof window !== 'undefined' && window.electronAPI?.platform === 'darwin';
@@ -246,6 +255,79 @@ function getConfiguredEditorIndentGuides() {
   return getConfiguredEditorBooleanSetting(EDITOR_INDENT_GUIDES_CONFIG_KEY, DEFAULT_EDITOR_INDENT_GUIDES);
 }
 
+function getUserInitials(username: string): string {
+  const initials = username
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((segment) => segment[0]?.toUpperCase() ?? '')
+    .join('');
+
+  return initials || 'PR';
+}
+
+function formatSyncTimestamp(value: string | null): string {
+  if (!value) {
+    return 'Not synced yet';
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return 'Not synced yet';
+  }
+
+  return `Synced ${date.toLocaleString()}`;
+}
+
+function SessionAvatarImage({
+  alt,
+  session,
+}: {
+  alt: string;
+  session: DesktopAuthSession | null;
+}) {
+  const [candidateIndex, setCandidateIndex] = useState(0);
+  const candidateUrls = getDesktopAvatarCandidates(
+    session,
+    import.meta.env.VITE_PRISTINE_SUPABASE_URL,
+  );
+  const currentCandidateUrl = candidateUrls[candidateIndex] ?? null;
+
+  useEffect(() => {
+    setCandidateIndex(0);
+  }, [session?.avatarUrl, session?.userId]);
+
+  if (!currentCandidateUrl) {
+    return null;
+  }
+
+  return (
+    <AvatarImage
+      key={currentCandidateUrl}
+      alt={alt}
+      src={currentCandidateUrl}
+      onLoadingStatusChange={(status) => {
+        if (status !== 'error') {
+          return;
+        }
+
+        setCandidateIndex((currentIndex) => (
+          currentIndex + 1 < candidateUrls.length ? currentIndex + 1 : currentIndex
+        ));
+      }}
+    />
+  );
+}
+
+function getAvatarStateKey(session: DesktopAuthSession | null): string {
+  if (!session) {
+    return 'signed-out';
+  }
+
+  return `${session.userId}:${session.avatarUrl ?? 'fallback'}`;
+}
+
 function SettingsSwitchRow({
   checked,
   description,
@@ -273,6 +355,7 @@ function SettingsSwitchRow({
 }
 
 function SettingsComboboxSection({
+  action,
   description,
   emptyText,
   onValueChange,
@@ -282,6 +365,7 @@ function SettingsComboboxSection({
   title,
   value,
 }: {
+  action?: React.ReactNode;
   description: string;
   emptyText: string;
   onValueChange: (value: string) => void;
@@ -300,16 +384,21 @@ function SettingsComboboxSection({
             {description}
           </p>
         </div>
-        <Combobox
-          value={value}
-          onValueChange={onValueChange}
-          options={options}
-          placeholder={options.find((option) => option.value === value)?.label ?? options[0]?.label ?? ''}
-          searchPlaceholder={searchPlaceholder}
-          emptyText={emptyText}
-          triggerTestId={testId}
-          getOptionTestId={(optionValue) => `${testId.replace('-combobox', '-option')}-${optionValue}`}
-        />
+        <div className={action ? 'flex items-center gap-2' : undefined}>
+          <div className={action ? 'min-w-0 flex-1' : undefined}>
+            <Combobox
+              value={value}
+              onValueChange={onValueChange}
+              options={options}
+              placeholder={options.find((option) => option.value === value)?.label ?? options[0]?.label ?? ''}
+              searchPlaceholder={searchPlaceholder}
+              emptyText={emptyText}
+              triggerTestId={testId}
+              getOptionTestId={(optionValue) => `${testId.replace('-combobox', '-option')}-${optionValue}`}
+            />
+          </div>
+          {action}
+        </div>
       </div>
     </div>
   );
@@ -415,18 +504,18 @@ interface MenuBarProps {
   showLeftPanel?: boolean;
   showBottomPanel?: boolean;
   showRightPanel?: boolean;
-  onToggleLeftPanel?: () => void;
-  onToggleBottomPanel?: () => void;
-  onToggleRightPanel?: () => void;
+  onShowLeftPanelChange?: (show: boolean) => void;
+  onShowBottomPanelChange?: (show: boolean) => void;
+  onShowRightPanelChange?: (show: boolean) => void;
 }
 
 export function MenuBar({
   showLeftPanel = false,
   showBottomPanel = false,
   showRightPanel = false,
-  onToggleLeftPanel,
-  onToggleBottomPanel,
-  onToggleRightPanel,
+  onShowLeftPanelChange,
+  onShowBottomPanelChange,
+  onShowRightPanelChange,
 }: MenuBarProps) {
   const isMacOS = isMacOSPlatform();
   const [windowFullScreen, setWindowFullScreen] = useState(() => window.electronAPI?.isFullScreen() === true);
@@ -461,9 +550,20 @@ export function MenuBar({
     setWordWrap: setEditorWordWrap,
   } = useEditorSettings();
   const { theme, setTheme, toggleTheme } = useTheme();
+  const {
+    clearError,
+    errorMessage,
+    isSyncing,
+    openAccountPage,
+    session,
+    signOut,
+    status,
+    syncCloudConfig,
+  } = useUser();
   const { state: activityBarState, toggleSidebar } = useSidebar();
   const ref = useRef<HTMLDivElement>(null);
   const [aboutDialogOpen, setAboutDialogOpen] = useState(false);
+  const [editorFontAdvancedDialogOpen, setEditorFontAdvancedDialogOpen] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [settingsState, setSettingsState] = useState<MenuBarSettingsState>(getPersistedSettingsState);
   const layoutIconsEnabled = canUseLayoutPanels(mainContentView, activeView);
@@ -482,6 +582,11 @@ export function MenuBar({
       ? 'hover:cursor-pointer hover:text-foreground hover:bg-accent'
       : 'opacity-40',
   ].join(' ');
+  const userAvatarFallback = getUserInitials(session?.username ?? 'Pristine User');
+  const userAvatarStateKey = getAvatarStateKey(session);
+  const userSyncLabel = formatSyncTimestamp(session?.syncedAt ?? null);
+  const isSignedIn = status === 'signed-in' && session !== null;
+  const isUserActionsDisabled = status === 'loading';
 
   const patchSettingsState = useCallback((partialState: Partial<MenuBarSettingsState>) => {
     setSettingsState((current) => ({ ...current, ...partialState }));
@@ -490,9 +595,15 @@ export function MenuBar({
   const handleSettingsDialogOpenChange = useCallback((nextOpen: boolean) => {
     if (nextOpen) {
       setSettingsState(getPersistedSettingsState());
+    } else {
+      setEditorFontAdvancedDialogOpen(false);
     }
 
     setSettingsDialogOpen(nextOpen);
+  }, []);
+
+  const handleEditorFontAdvancedDialogOpenChange = useCallback((nextOpen: boolean) => {
+    setEditorFontAdvancedDialogOpen(nextOpen);
   }, []);
 
   const handleCloseToTrayChange = (checked: boolean) => {
@@ -528,6 +639,11 @@ export function MenuBar({
     patchSettingsState({ editorFontFamily: nextFontFamily });
     setEditorFontFamily(nextFontFamily);
   };
+
+  const handleEditorFontAdvancedSelect = useCallback((value: string) => {
+    handleEditorFontFamilyChange(value);
+    setEditorFontAdvancedDialogOpen(false);
+  }, [handleEditorFontFamilyChange]);
 
   const handleEditorFontLigaturesChange = (checked: boolean) => {
     patchSettingsState({ editorFontLigatures: checked });
@@ -869,12 +985,12 @@ export function MenuBar({
               data-testid="toggle-left-panel"
               disabled={!layoutIconsEnabled}
               className={layoutIconClassName}
-              onPressedChange={() => {
+              onPressedChange={(nextPressed) => {
                 if (!layoutIconsEnabled) {
                   return;
                 }
 
-                onToggleLeftPanel?.();
+                onShowLeftPanelChange?.(nextPressed);
               }}
             >
               <PanelLeftIcon size={15} filled={showLeftPanel} />
@@ -888,12 +1004,12 @@ export function MenuBar({
               data-testid="toggle-bottom-panel"
               disabled={!layoutIconsEnabled}
               className={layoutIconClassName}
-              onPressedChange={() => {
+              onPressedChange={(nextPressed) => {
                 if (!layoutIconsEnabled) {
                   return;
                 }
 
-                onToggleBottomPanel?.();
+                onShowBottomPanelChange?.(nextPressed);
               }}
             >
               <PanelBottomIcon size={15} filled={showBottomPanel} />
@@ -907,12 +1023,12 @@ export function MenuBar({
               data-testid="toggle-right-panel"
               disabled={!layoutIconsEnabled}
               className={layoutIconClassName}
-              onPressedChange={() => {
+              onPressedChange={(nextPressed) => {
                 if (!layoutIconsEnabled) {
                   return;
                 }
 
-                onToggleRightPanel?.();
+                onShowRightPanelChange?.(nextPressed);
               }}
             >
               <PanelRightIcon size={15} filled={showRightPanel} />
@@ -950,18 +1066,142 @@ export function MenuBar({
           </TooltipIconButton>
 
           {/* User avatar */}
-          <TooltipIconButton content="User profile" wrapTrigger={false}>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="User profile"
-              data-testid="user-avatar-button"
-              className="relative h-full w-8 rounded-none hover:cursor-pointer"
+          <Popover onOpenChange={(open) => {
+            if (open) {
+              clearError();
+            }
+          }}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="inline-flex h-full" style={noDragInteractive as React.CSSProperties}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label="User profile"
+                      data-testid="user-avatar-button"
+                      className="relative h-full w-8 rounded-none px-0 hover:cursor-pointer"
+                    >
+                      <Avatar key={userAvatarStateKey} className="size-6 border border-border/70 bg-muted/70">
+                        {isSignedIn ? <SessionAvatarImage alt={session.username} session={session} /> : null}
+                        <AvatarFallback className="bg-transparent text-[10px] font-semibold text-foreground">
+                          {isSignedIn ? userAvatarFallback : <CircleUser size={14} className="text-muted-foreground" />}
+                        </AvatarFallback>
+                      </Avatar>
+                      <span
+                        className={[
+                          'absolute bottom-1.5 right-1 rounded-full border border-background',
+                          status === 'loading' ? 'h-1.5 w-1.5 bg-muted-foreground/80' : '',
+                          isSignedIn ? 'h-2 w-2 bg-emerald-500' : '',
+                          status === 'signed-out' ? 'h-2 w-2 bg-amber-400' : '',
+                        ].join(' ')}
+                      />
+                    </Button>
+                  </PopoverTrigger>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" sideOffset={6}>
+                User profile
+              </TooltipContent>
+            </Tooltip>
+            <PopoverContent
+              align="end"
+              className="w-72 p-0"
+              data-testid="user-account-popover"
+              style={noDragInteractive as React.CSSProperties}
             >
-              <CircleUser size={16} className="text-muted-foreground" />
-              <span className="absolute bottom-1.5 right-1.5 w-2 h-2 rounded-full bg-green-500 border border-background" />
-            </Button>
-          </TooltipIconButton>
+              <div className="space-y-3 px-4 py-3">
+                {isSignedIn && session ? (
+                  <>
+                    <div className="flex items-center gap-3">
+                      <Avatar key={userAvatarStateKey} className="size-11 border border-border/80 bg-muted/70">
+                        <SessionAvatarImage alt={session.username} session={session} />
+                        <AvatarFallback className="text-sm font-semibold">{userAvatarFallback}</AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0 space-y-1">
+                        <p className="truncate text-sm font-semibold text-foreground" data-testid="user-account-name">
+                          {session.username}
+                        </p>
+                        <p className="truncate text-xs text-muted-foreground" data-testid="user-account-email">
+                          {session.email}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground" data-testid="user-account-sync-status">
+                          {userSyncLabel}
+                        </p>
+                      </div>
+                    </div>
+                    <div className={userPopoverActionsClassName}>
+                      <Button
+                        variant="outline"
+                        className={userPopoverActionButtonClassName}
+                        data-testid="user-sync-config-button"
+                        disabled={isSyncing}
+                        onClick={() => {
+                          void syncCloudConfig();
+                        }}
+                      >
+                        <RefreshCw className={isSyncing ? 'animate-spin' : ''} />
+                        {isSyncing ? 'Syncing settings...' : 'Sync settings'}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className={userPopoverActionButtonClassName}
+                        data-testid="user-sign-out-button"
+                        onClick={() => {
+                          void signOut();
+                        }}
+                      >
+                        <LogOut />
+                        Sign out
+                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  <div className="grid gap-2">
+                    <div className="rounded-md border border-dashed border-border/80 bg-muted/40 px-3 py-3 text-xs text-muted-foreground">
+                      {status === 'loading'
+                        ? 'Checking the local desktop session...'
+                        : 'No account is linked to this desktop session yet.'}
+                    </div>
+                    <div className={userPopoverActionsClassName}>
+                      <Button
+                        className={userPopoverActionButtonClassName}
+                        data-testid="user-sign-in-button"
+                        disabled={isUserActionsDisabled}
+                        onClick={() => {
+                          void openAccountPage('login');
+                        }}
+                      >
+                        <LogIn />
+                        Sign in
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className={userPopoverActionButtonClassName}
+                        data-testid="user-sign-up-button"
+                        disabled={isUserActionsDisabled}
+                        onClick={() => {
+                          void openAccountPage('signup');
+                        }}
+                      >
+                        <UserPlus />
+                        Create account
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {errorMessage ? (
+                  <div
+                    className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive"
+                    data-testid="user-account-error"
+                  >
+                    {errorMessage}
+                  </div>
+                ) : null}
+              </div>
+            </PopoverContent>
+          </Popover>
 
           {showWindowMenu && <Separator data-testid="menu-avatar-separator" orientation="vertical" className="h-4 mx-1" />}
 
@@ -1059,6 +1299,18 @@ export function MenuBar({
                 searchPlaceholder="Search editor fonts..."
                 emptyText="No editor font found."
                 testId="settings-editor-font-family-combobox"
+                action={(
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    data-testid="settings-editor-font-family-advanced-button"
+                    className="shrink-0 hover:cursor-pointer"
+                    onClick={() => setEditorFontAdvancedDialogOpen(true)}
+                  >
+                    Advanced
+                  </Button>
+                )}
               />
               <SettingsComboboxSection
                 value={settingsState.editorTheme}
@@ -1292,6 +1544,14 @@ export function MenuBar({
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        <EditorFontAdvancedDialog
+          open={editorFontAdvancedDialogOpen}
+          onOpenChange={handleEditorFontAdvancedDialogOpenChange}
+          onSelectFontFamily={handleEditorFontAdvancedSelect}
+          selectedFontFamily={settingsState.editorFontFamily}
+          dialogStyle={noDragInteractive as React.CSSProperties}
+        />
       </>
     </TooltipProvider>
   );
