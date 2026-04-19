@@ -96,6 +96,8 @@ const THEME_CONFIG_KEY = 'ui.theme';
 const settingsSectionClassName = 'rounded-md border border-border/85 bg-muted/55 px-3 py-2.5';
 const settingsSectionTitleClassName = 'text-[13px] font-medium';
 const settingsSectionDescriptionClassName = 'text-[12px] text-muted-foreground';
+const userPopoverActionsClassName = 'grid grid-cols-2 gap-1.5';
+const userPopoverActionButtonClassName = 'h-8 w-full justify-center gap-1 whitespace-nowrap px-2.5 text-[11px] hover:cursor-pointer [&_svg]:size-3.5 disabled:cursor-not-allowed';
 
 function isMacOSPlatform(): boolean {
   return typeof window !== 'undefined' && window.electronAPI?.platform === 'darwin';
@@ -1037,15 +1039,6 @@ export function MenuBar({
               data-testid="user-account-popover"
               style={noDragInteractive as React.CSSProperties}
             >
-              <div className="border-b border-border/80 px-4 py-3">
-                <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-muted-foreground">
-                  Pristine Account
-                </p>
-                <p className="mt-1 text-sm text-foreground">
-                  {isSignedIn ? 'Cloud sync and account management for this desktop session.' : 'Sign in with the system browser to sync your desktop settings.'}
-                </p>
-              </div>
-
               <div className="space-y-3 px-4 py-3">
                 {isSignedIn && session ? (
                   <>
@@ -1066,10 +1059,10 @@ export function MenuBar({
                         </p>
                       </div>
                     </div>
-                    <div className="grid gap-2">
+                    <div className={userPopoverActionsClassName}>
                       <Button
                         variant="outline"
-                        className="w-full justify-start"
+                        className={userPopoverActionButtonClassName}
                         data-testid="user-sync-config-button"
                         disabled={isSyncing}
                         onClick={() => {
@@ -1081,7 +1074,7 @@ export function MenuBar({
                       </Button>
                       <Button
                         variant="ghost"
-                        className="w-full justify-start"
+                        className={userPopoverActionButtonClassName}
                         data-testid="user-sign-out-button"
                         onClick={() => {
                           void signOut();
@@ -1099,29 +1092,31 @@ export function MenuBar({
                         ? 'Checking the local desktop session...'
                         : 'No account is linked to this desktop session yet.'}
                     </div>
-                    <Button
-                      className="w-full justify-start"
-                      data-testid="user-sign-in-button"
-                      disabled={isUserActionsDisabled}
-                      onClick={() => {
-                        void openAccountPage('login');
-                      }}
-                    >
-                      <LogIn />
-                      Sign in
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className="w-full justify-start"
-                      data-testid="user-sign-up-button"
-                      disabled={isUserActionsDisabled}
-                      onClick={() => {
-                        void openAccountPage('signup');
-                      }}
-                    >
-                      <UserPlus />
-                      Create account
-                    </Button>
+                    <div className={userPopoverActionsClassName}>
+                      <Button
+                        className={userPopoverActionButtonClassName}
+                        data-testid="user-sign-in-button"
+                        disabled={isUserActionsDisabled}
+                        onClick={() => {
+                          void openAccountPage('login');
+                        }}
+                      >
+                        <LogIn />
+                        Sign in
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className={userPopoverActionButtonClassName}
+                        data-testid="user-sign-up-button"
+                        disabled={isUserActionsDisabled}
+                        onClick={() => {
+                          void openAccountPage('signup');
+                        }}
+                      >
+                        <UserPlus />
+                        Create account
+                      </Button>
+                    </div>
                   </div>
                 )}
 
