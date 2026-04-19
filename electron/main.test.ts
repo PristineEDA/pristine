@@ -17,6 +17,7 @@ type BrowserWindowInstance = {
   setAlwaysOnTop: Mock<(flag: boolean, level?: string) => void>;
   restore: Mock<() => void>;
   isMinimized: Mock<() => boolean>;
+  isVisible: Mock<() => boolean>;
   isDestroyed: Mock<() => boolean>;
   close: Mock<() => void>;
   emit: (event: string, ...args: unknown[]) => void;
@@ -52,18 +53,27 @@ const mocks = vi.hoisted(() => {
       send: vi.fn(),
       isDestroyed: vi.fn(() => false),
     };
-    show = vi.fn();
-    hide = vi.fn();
+    private visible: boolean;
+    show = vi.fn(() => {
+      this.visible = true;
+    });
+    hide = vi.fn(() => {
+      this.visible = false;
+    });
     focus = vi.fn();
     setAlwaysOnTop = vi.fn();
-    restore = vi.fn();
+    restore = vi.fn(() => {
+      this.visible = true;
+    });
     isMinimized = vi.fn(() => false);
+    isVisible = vi.fn(() => this.visible);
     isDestroyed = vi.fn(() => false);
     private handlers = new Map<string, (...args: unknown[]) => void>();
     private onceHandlers = new Map<string, (...args: unknown[]) => void>();
 
     constructor(options: Record<string, unknown>) {
       this.options = options;
+      this.visible = options.show === true;
       browserWindowInstances.push(this as unknown as BrowserWindowInstance);
     }
 
@@ -242,6 +252,7 @@ async function importMain(options?: {
   projectRoot?: string;
   userDataPath?: string;
   configValues?: Record<string, unknown>;
+  singleInstanceLock?: boolean;
 }) {
   vi.resetModules();
   mocks.appHandlers.clear();
@@ -259,7 +270,8 @@ async function importMain(options?: {
   mocks.mockSetPath.mockClear();
   mocks.mockSetName.mockClear();
     mocks.mockSetAsDefaultProtocolClient.mockClear();
-    mocks.mockRequestSingleInstanceLock.mockClear();
+    mocks.mockRequestSingleInstanceLock.mockReset();
+    mocks.mockRequestSingleInstanceLock.mockImplementation(() => options?.singleInstanceLock ?? true);
   mocks.mockQuit.mockClear();
   mocks.mockBuildFromTemplate.mockClear();
   mocks.mockSetApplicationMenu.mockClear();
@@ -353,6 +365,21 @@ describe('electron main entry', () => {
     );
     expect(mocks.mockSetPath).toHaveBeenCalledWith('userData', userDataPath);
     expect(mocks.mockSetPath).toHaveBeenCalledWith('sessionData', path.join(userDataPath, 'session-data'));
+  });
+
+  it('quits immediately without creating windows when a protocol-launched second instance fails to acquire the single-instance lock', async () => {
+    const { appHandlers, browserWindowInstances, trayInstances } = await importMain({
+      platform: 'win32',
+      singleInstanceLock: false,
+    });
+
+    expect(mocks.mockQuit).toHaveBeenCalledTimes(1);
+    expect(mocks.mockRegisterAllHandlers).not.toHaveBeenCalled();
+    expect(browserWindowInstances).toHaveLength(0);
+    expect(trayInstances).toHaveLength(0);
+    expect(appHandlers.has('second-instance')).toBe(false);
+    expect(appHandlers.has('activate')).toBe(false);
+    expect(appHandlers.has('before-quit')).toBe(false);
   });
 
   it('registers handlers, creates tray and startup windows, and loads the dev server when available', async () => {
@@ -559,7 +586,7 @@ describe('electron main entry', () => {
     appMenu.submenu?.find((item) => item.label === 'About Pristine')?.click?.();
     helpMenu?.submenu?.find((item) => item.label === 'About')?.click?.();
 
-    expect(mainWindow.show).toHaveBeenCalledTimes(2);
+    expect(mainWindow.show).toHaveBeenCalledTimes(1);
     expect(mainWindow.focus).toHaveBeenCalledTimes(2);
     expect(mainWindow.webContents.send).toHaveBeenNthCalledWith(1, 'stream:menu:command', { action: 'open-about' });
     expect(mainWindow.webContents.send).toHaveBeenNthCalledWith(2, 'stream:menu:command', { action: 'open-about' });
@@ -589,20 +616,37 @@ describe('electron main entry', () => {
     expect(floatingInfoWindow.loadFile).toHaveBeenCalledWith(expect.stringMatching(/dist[\\/]floating-info\.html$/));
   });
 
-    it('routes auth callback deep links from a second instance back through the main process auth bridge', async () => {
-      const { appHandlers, browserWindowInstances } = await importMain({ platform: 'win32' });
+  it('focuses the existing visible main window for auth callback deep links without replaying the show animation', async () => {
+    const { appHandlers, browserWindowInstances } = await importMain({ platform: 'win32' });
 
-      const mainWindow = browserWindowInstances[1];
-      mainWindow.show.mockClear();
-      mainWindow.focus.mockClear();
+    const mainWindow = browserWindowInstances[1];
+    mainWindow.isVisible.mockReturnValue(true);
+    mainWindow.show.mockClear();
+    mainWindow.focus.mockClear();
 
-      appHandlers.get('second-instance')?.({}, ['pristine://auth/callback?code=exchange-code']);
-      await Promise.resolve();
+    appHandlers.get('second-instance')?.({}, ['pristine://auth/callback?code=exchange-code']);
+    await Promise.resolve();
 
-      expect(mocks.mockHandleAuthCallbackUrl).toHaveBeenCalledWith('pristine://auth/callback?code=exchange-code');
-      expect(mainWindow.show).toHaveBeenCalledTimes(1);
-      expect(mainWindow.focus).toHaveBeenCalledTimes(1);
-    });
+    expect(mocks.mockHandleAuthCallbackUrl).toHaveBeenCalledWith('pristine://auth/callback?code=exchange-code');
+    expect(mainWindow.show).not.toHaveBeenCalled();
+    expect(mainWindow.focus).toHaveBeenCalledTimes(1);
+  });
+
+  it('reveals the main window for auth callback deep links when it is currently hidden', async () => {
+    const { appHandlers, browserWindowInstances } = await importMain({ platform: 'win32' });
+
+    const mainWindow = browserWindowInstances[1];
+    mainWindow.isVisible.mockReturnValue(false);
+    mainWindow.show.mockClear();
+    mainWindow.focus.mockClear();
+
+    appHandlers.get('second-instance')?.({}, ['pristine://auth/callback?code=exchange-code']);
+    await Promise.resolve();
+
+    expect(mocks.mockHandleAuthCallbackUrl).toHaveBeenCalledWith('pristine://auth/callback?code=exchange-code');
+    expect(mainWindow.show).toHaveBeenCalledTimes(1);
+    expect(mainWindow.focus).toHaveBeenCalledTimes(1);
+  });
 
   it('recreates splash and main windows on activate when all windows are closed', async () => {
     const { appHandlers, browserWindowInstances } = await importMain({ platform: 'darwin' });

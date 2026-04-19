@@ -141,7 +141,10 @@ function showMainWindow(): void {
     mainWindow.restore();
   }
 
-  mainWindow.show();
+  if (!mainWindow.isVisible()) {
+    mainWindow.show();
+  }
+
   mainWindow.focus();
 }
 
@@ -554,65 +557,65 @@ const singleInstanceLock = app.requestSingleInstanceLock();
 
 if (!singleInstanceLock) {
   app.quit();
-}
+} else {
+  pendingAuthCallbackUrl = findAuthCallbackUrl(process.argv);
 
-pendingAuthCallbackUrl = findAuthCallbackUrl(process.argv);
+  app.on('second-instance', (_event, argv) => {
+    const nextAuthCallbackUrl = findAuthCallbackUrl(argv);
 
-app.on('second-instance', (_event, argv) => {
-  const nextAuthCallbackUrl = findAuthCallbackUrl(argv);
+    if (nextAuthCallbackUrl) {
+      processAuthCallbackUrl(nextAuthCallbackUrl);
+    }
 
-  if (nextAuthCallbackUrl) {
-    processAuthCallbackUrl(nextAuthCallbackUrl);
-  }
-
-  showMainWindow();
-});
-
-// Register all IPC handlers before window creation
-registerAllHandlers(getMainWindow, setFloatingInfoWindowVisible, resolveWindowCloseRequest);
-
-app.whenReady().then(() => {
-  installApplicationMenu();
-  createTray();
-  createStartupWindows();
-
-   if (shouldShowFloatingInfoWindow()) {
-    setFloatingInfoWindowVisible(true);
-  }
-
-  if (pendingAuthCallbackUrl) {
-    processAuthCallbackUrl(pendingAuthCallbackUrl);
-  }
-
-  app.on('open-url', (event, url) => {
-    event.preventDefault();
-    processAuthCallbackUrl(url);
     showMainWindow();
   });
 
-  app.on('activate', () => {
-    if (mainWindow) {
-      showMainWindow();
-      return;
+  // Register all IPC handlers before window creation
+  registerAllHandlers(getMainWindow, setFloatingInfoWindowVisible, resolveWindowCloseRequest);
+
+  app.whenReady().then(() => {
+    installApplicationMenu();
+    createTray();
+    createStartupWindows();
+
+    if (shouldShowFloatingInfoWindow()) {
+      setFloatingInfoWindowVisible(true);
     }
 
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createStartupWindows();
+    if (pendingAuthCallbackUrl) {
+      processAuthCallbackUrl(pendingAuthCallbackUrl);
+    }
+
+    app.on('open-url', (event, url) => {
+      event.preventDefault();
+      processAuthCallbackUrl(url);
+      showMainWindow();
+    });
+
+    app.on('activate', () => {
+      if (mainWindow) {
+        showMainWindow();
+        return;
+      }
+
+      if (BrowserWindow.getAllWindows().length === 0) {
+        createStartupWindows();
+      }
+    });
+  });
+
+  app.on('before-quit', () => {
+    isQuitting = true;
+    flushPendingConfigSave();
+    disposeLspSession();
+    disposeAllTerminalSessions();
+    tray?.destroy();
+    tray = null;
+  });
+
+  app.on('window-all-closed', () => {
+    if (process.platform !== 'darwin') {
+      app.quit();
     }
   });
-});
-
-app.on('before-quit', () => {
-  isQuitting = true;
-  flushPendingConfigSave();
-  disposeLspSession();
-  disposeAllTerminalSessions();
-  tray?.destroy();
-  tray = null;
-});
-
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit();
-  }
-});
+}
