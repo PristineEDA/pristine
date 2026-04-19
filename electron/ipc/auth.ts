@@ -19,6 +19,8 @@ const DEFAULT_SUPABASE_URL = 'https://fsuyziugqxslwkaxcakv.supabase.co';
 const DEFAULT_SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_i5J8TuBBSJYZwep4Blkk1w_VryyHYPc';
 const CONFIG_SYNC_DEBOUNCE_MS = 1200;
 const ACCESS_TOKEN_REFRESH_BUFFER_MS = 60_000;
+const AUTH_SESSION_VALIDATION_INTERVAL_MS = 15 * 60_000;
+const AUTH_SESSION_TRANSIENT_RETRY_DELAYS_MS = [30_000, 60_000, 5 * 60_000] as const;
 const CONFIG_SYNC_KEYS = [
   'ui.theme',
   'window.closeActionPreference',
@@ -81,10 +83,25 @@ interface SupabaseRefreshResponse {
   refresh_token: string;
 }
 
+class HttpResponseError extends Error {
+  readonly body: Record<string, unknown>;
+  readonly status: number;
+
+  constructor(message: string, status: number, body: Record<string, unknown>) {
+    super(message);
+    this.name = 'HttpResponseError';
+    this.status = status;
+    this.body = body;
+  }
+}
+
 // ─── State ───────────────────────────────────────────────────────────────────
 
 let authSession: StoredAuthSession | null = null;
 let authSessionLoaded = false;
+let authSessionValidationInFlight: Promise<StoredAuthSession | null> | null = null;
+let authSessionValidationTimer: ReturnType<typeof setTimeout> | null = null;
+let authSessionTransientFailureCount = 0;
 let configSyncTimer: ReturnType<typeof setTimeout> | null = null;
 let configSyncListenerInstalled = false;
 let isApplyingCloudSnapshot = false;
@@ -158,7 +175,7 @@ function loadStoredSession(): StoredAuthSession | null {
 }
 
 function ensureAuthSessionLoaded(): void {
-  if (authSessionLoaded) {
+  if (authSessionLoaded || !app.isReady()) {
     return;
   }
 
@@ -173,6 +190,9 @@ function persistAuthSession(nextSession: StoredAuthSession | null): void {
   const sessionPath = getAuthSessionPath();
 
   if (!nextSession) {
+    clearAuthSessionValidationTimer();
+    authSessionTransientFailureCount = 0;
+
     try {
       fs.unlinkSync(sessionPath);
     } catch {
@@ -187,6 +207,79 @@ function persistAuthSession(nextSession: StoredAuthSession | null): void {
     JSON.stringify(serializeSessionEnvelope(nextSession), null, 2),
     'utf-8',
   );
+}
+
+function clearAuthSessionValidationTimer(): void {
+  if (!authSessionValidationTimer) {
+    return;
+  }
+
+  clearTimeout(authSessionValidationTimer);
+  authSessionValidationTimer = null;
+}
+
+function getSessionIdentity(session: StoredAuthSession | null): string | null {
+  if (!session) {
+    return null;
+  }
+
+  return `${session.profile.userId}:${session.refreshToken}`;
+}
+
+function isAccessTokenFresh(
+  session: StoredAuthSession | null,
+  bufferMs: number = ACCESS_TOKEN_REFRESH_BUFFER_MS,
+): boolean {
+  if (!session) {
+    return false;
+  }
+
+  const expiresAt = session.profile.sessionExpiresAt;
+
+  if (!expiresAt) {
+    return true;
+  }
+
+  return expiresAt * 1000 - Date.now() > bufferMs;
+}
+
+function getNextValidationDelayMs(session: StoredAuthSession): number {
+  const expiresAt = session.profile.sessionExpiresAt;
+
+  if (!expiresAt) {
+    return AUTH_SESSION_VALIDATION_INTERVAL_MS;
+  }
+
+  const refreshDeadlineMs = expiresAt * 1000 - Date.now() - ACCESS_TOKEN_REFRESH_BUFFER_MS;
+
+  return Math.max(0, Math.min(AUTH_SESSION_VALIDATION_INTERVAL_MS, refreshDeadlineMs));
+}
+
+function getTransientRetryDelayMs(): number {
+  const retryIndex = Math.min(
+    Math.max(authSessionTransientFailureCount - 1, 0),
+    AUTH_SESSION_TRANSIENT_RETRY_DELAYS_MS.length - 1,
+  );
+
+  return AUTH_SESSION_TRANSIENT_RETRY_DELAYS_MS[retryIndex] ?? AUTH_SESSION_VALIDATION_INTERVAL_MS;
+}
+
+function scheduleAuthSessionValidation(delayMs: number): void {
+  if (!authSession) {
+    clearAuthSessionValidationTimer();
+    return;
+  }
+
+  clearAuthSessionValidationTimer();
+  authSessionValidationTimer = setTimeout(() => {
+    authSessionValidationTimer = null;
+    void validateAuthSession(true);
+  }, delayMs);
+}
+
+function scheduleNextAuthSessionValidation(session: StoredAuthSession): void {
+  authSessionTransientFailureCount = 0;
+  scheduleAuthSessionValidation(getNextValidationDelayMs(session));
 }
 
 // ─── Broadcasts ──────────────────────────────────────────────────────────────
@@ -222,82 +315,146 @@ function emitAuthError(message: string): void {
 
 async function readJsonResponse<T>(response: Response, fallbackMessage: string): Promise<T> {
   const bodyText = await response.text();
-  const parsedBody = bodyText ? JSON.parse(bodyText) as Record<string, unknown> : {};
+  let parsedBody: Record<string, unknown> = {};
+
+  if (bodyText) {
+    try {
+      parsedBody = JSON.parse(bodyText) as Record<string, unknown>;
+    } catch {
+      parsedBody = {};
+    }
+  }
 
   if (!response.ok) {
     const message = typeof parsedBody['message'] === 'string'
       ? parsedBody['message']
-      : fallbackMessage;
-    throw new Error(message);
+      : typeof parsedBody['error_description'] === 'string'
+        ? parsedBody['error_description']
+        : typeof parsedBody['error'] === 'string'
+          ? parsedBody['error']
+          : fallbackMessage;
+    throw new HttpResponseError(message, response.status, parsedBody);
   }
 
   return parsedBody as T;
 }
 
-async function fetchAuthService(input: string, init?: RequestInit): Promise<Response> {
+async function fetchWithElectronNet(input: string, init?: RequestInit): Promise<Response> {
   return net.fetch(input, init);
 }
 
-async function refreshAuthSessionIfNeeded(): Promise<StoredAuthSession | null> {
+function isTerminalRefreshFailure(error: unknown): boolean {
+  return error instanceof HttpResponseError
+    && (error.status === 400 || error.status === 401);
+}
+
+async function validateAuthSession(forceRefresh: boolean): Promise<StoredAuthSession | null> {
   ensureAuthSessionLoaded();
 
   if (!authSession) {
     return null;
   }
 
-  const expiresAt = authSession.profile.sessionExpiresAt;
-  if (expiresAt && expiresAt * 1000 - Date.now() > ACCESS_TOKEN_REFRESH_BUFFER_MS) {
+  if (!forceRefresh && isAccessTokenFresh(authSession)) {
     return authSession;
   }
 
-  try {
-    const response = await fetch(
-      `${getSupabaseUrl()}/auth/v1/token?grant_type=refresh_token`,
-      {
-        method: 'POST',
-        headers: {
-          apikey: getSupabasePublishableKey(),
-          'Content-Type': 'application/json',
+  if (authSessionValidationInFlight) {
+    return authSessionValidationInFlight;
+  }
+
+  const sessionAtValidationStart = authSession;
+  const sessionIdentity = getSessionIdentity(sessionAtValidationStart);
+
+  authSessionValidationInFlight = (async () => {
+    try {
+      const response = await fetchWithElectronNet(
+        `${getSupabaseUrl()}/auth/v1/token?grant_type=refresh_token`,
+        {
+          method: 'POST',
+          headers: {
+            apikey: getSupabasePublishableKey(),
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            refresh_token: sessionAtValidationStart.refreshToken,
+          }),
         },
-        body: JSON.stringify({
-          refresh_token: authSession.refreshToken,
-        }),
-      },
-    );
-    const refreshedSession = await readJsonResponse<SupabaseRefreshResponse>(
-      response,
-      'The desktop session expired. Sign in again.',
-    );
+      );
+      const refreshedSession = await readJsonResponse<SupabaseRefreshResponse>(
+        response,
+        'The desktop session expired. Sign in again.',
+      );
 
-    const nextSession: StoredAuthSession = {
-      accessToken: refreshedSession.access_token,
-      profile: {
-        ...authSession.profile,
-        sessionExpiresAt: refreshedSession.expires_at ?? null,
-      },
-      refreshToken: refreshedSession.refresh_token,
-    };
+      if (getSessionIdentity(authSession) !== sessionIdentity) {
+        return authSession;
+      }
 
-    persistAuthSession(nextSession);
-    emitAuthStateChanged();
-    return nextSession;
-  } catch (error) {
-    persistAuthSession(null);
-    emitAuthStateChanged();
-    emitAuthError(error instanceof Error ? error.message : 'The desktop session expired. Sign in again.');
+      const nextSession: StoredAuthSession = {
+        accessToken: refreshedSession.access_token,
+        profile: {
+          ...sessionAtValidationStart.profile,
+          sessionExpiresAt: refreshedSession.expires_at ?? null,
+        },
+        refreshToken: refreshedSession.refresh_token,
+      };
+
+      persistAuthSession(nextSession);
+      emitAuthStateChanged();
+      scheduleNextAuthSessionValidation(nextSession);
+      return nextSession;
+    } catch (error) {
+      if (getSessionIdentity(authSession) !== sessionIdentity) {
+        return authSession;
+      }
+
+      if (isTerminalRefreshFailure(error)) {
+        persistAuthSession(null);
+        emitAuthStateChanged();
+        emitAuthError(error instanceof Error ? error.message : 'The desktop session expired. Sign in again.');
+        return null;
+      }
+
+      authSessionTransientFailureCount += 1;
+      scheduleAuthSessionValidation(getTransientRetryDelayMs());
+      return authSession;
+    } finally {
+      authSessionValidationInFlight = null;
+    }
+  })();
+
+  return authSessionValidationInFlight;
+}
+
+async function ensureAuthorizedSession(): Promise<StoredAuthSession | null> {
+  ensureAuthSessionLoaded();
+
+  if (!authSession) {
     return null;
   }
+
+  if (isAccessTokenFresh(authSession)) {
+    return authSession;
+  }
+
+  const validatedSession = await validateAuthSession(true);
+
+  if (!isAccessTokenFresh(validatedSession)) {
+    return null;
+  }
+
+  return validatedSession;
 }
 
 async function bestEffortRemoteSignOut(): Promise<void> {
-  const session = await refreshAuthSessionIfNeeded();
+  const session = await ensureAuthorizedSession();
 
   if (!session) {
     return;
   }
 
   try {
-    await fetch(`${getSupabaseUrl()}/auth/v1/logout`, {
+    await fetchWithElectronNet(`${getSupabaseUrl()}/auth/v1/logout`, {
       method: 'POST',
       headers: {
         apikey: getSupabasePublishableKey(),
@@ -312,13 +469,13 @@ async function bestEffortRemoteSignOut(): Promise<void> {
 // ─── Config Sync ─────────────────────────────────────────────────────────────
 
 async function pushLocalConfigToCloud(): Promise<AuthServiceConfigResponse | null> {
-  const session = await refreshAuthSessionIfNeeded();
+  const session = await ensureAuthorizedSession();
 
   if (!session) {
     return null;
   }
 
-  const response = await fetchAuthService(`${getAuthServiceUrl()}/api/desktop/config`, {
+  const response = await fetchWithElectronNet(`${getAuthServiceUrl()}/api/desktop/config`, {
     method: 'PUT',
     headers: {
       Authorization: `Bearer ${session.accessToken}`,
@@ -345,13 +502,13 @@ async function pushLocalConfigToCloud(): Promise<AuthServiceConfigResponse | nul
 }
 
 async function pullCloudConfigFromCloud(): Promise<AuthServiceConfigResponse | null> {
-  const session = await refreshAuthSessionIfNeeded();
+  const session = await ensureAuthorizedSession();
 
   if (!session) {
     return null;
   }
 
-  const response = await fetchAuthService(`${getAuthServiceUrl()}/api/desktop/config`, {
+  const response = await fetchWithElectronNet(`${getAuthServiceUrl()}/api/desktop/config`, {
     method: 'GET',
     headers: {
       Authorization: `Bearer ${session.accessToken}`,
@@ -483,7 +640,7 @@ export async function handleAuthCallbackUrl(url: string): Promise<boolean> {
   }
 
   try {
-    const response = await fetchAuthService(`${getAuthServiceUrl()}/api/desktop/exchange`, {
+    const response = await fetchWithElectronNet(`${getAuthServiceUrl()}/api/desktop/exchange`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -510,6 +667,10 @@ export async function handleAuthCallbackUrl(url: string): Promise<boolean> {
       refreshToken: exchangedSession.refreshToken,
     });
     emitAuthStateChanged();
+
+    if (authSession) {
+      scheduleNextAuthSessionValidation(authSession);
+    }
 
     const remoteSettings = exchangedSession.configSnapshot?.settings ?? {};
     if (Object.keys(remoteSettings).length > 0) {
@@ -543,7 +704,6 @@ export function isAuthProtocolUrl(url: string): boolean {
 // ─── IPC Registration ────────────────────────────────────────────────────────
 
 export function registerAuthHandlers(): void {
-  ensureAuthSessionLoaded();
   installConfigSyncListener();
 
   ipcMain.handle(AsyncChannels.AUTH_OPEN_ACCOUNT_PAGE, async (_event, view: unknown) => {
@@ -555,8 +715,13 @@ export function registerAuthHandlers(): void {
   });
 
   ipcMain.handle(AsyncChannels.AUTH_GET_SESSION, async () => {
-    const session = await refreshAuthSessionIfNeeded();
-    return getPublicSession(session);
+    ensureAuthSessionLoaded();
+
+    if (authSession) {
+      scheduleAuthSessionValidation(0);
+    }
+
+    return getPublicSession(authSession);
   });
 
   ipcMain.handle(AsyncChannels.AUTH_SIGN_OUT, async () => {
