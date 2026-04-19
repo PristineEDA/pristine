@@ -438,6 +438,35 @@ describe('MenuBar', () => {
     expect(signOutMock).toHaveBeenCalledTimes(1);
   });
 
+  it('restores the signed-out placeholder avatar after signing out from a signed-in session', () => {
+    mockedUserStatus = 'signed-in';
+    mockedUserSession = {
+      avatarUrl: 'https://example.com/avatar.png',
+      email: 'alice@example.com',
+      sessionExpiresAt: 1_900_000_000,
+      syncedAt: '2026-04-18T12:00:00.000Z',
+      userId: 'user-1',
+      username: 'Alice Chen',
+    };
+
+    const view = renderMenuBar();
+
+    expect(screen.getByTestId('user-avatar-button').querySelector('svg')).toBeNull();
+
+    mockedUserStatus = 'signed-out';
+    mockedUserSession = null;
+    view.rerender(
+      <SidebarProvider defaultOpen={false} keyboardShortcut={false}>
+        <WorkspaceProvider>
+          <SidebarStateProbe />
+          <MenuBar />
+        </WorkspaceProvider>
+      </SidebarProvider>,
+    );
+
+    expect(screen.getByTestId('user-avatar-button').querySelector('svg')).toBeInTheDocument();
+  });
+
   it('keeps the activity bar trigger position on macOS maximize and only left-aligns it in full-screen', () => {
     let fullScreenListener: ((fullScreen: boolean) => void) | undefined;
     const dispose = vi.fn();

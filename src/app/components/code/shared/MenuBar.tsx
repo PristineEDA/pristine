@@ -320,6 +320,14 @@ function SessionAvatarImage({
   );
 }
 
+function getAvatarStateKey(session: DesktopAuthSession | null): string {
+  if (!session) {
+    return 'signed-out';
+  }
+
+  return `${session.userId}:${session.avatarUrl ?? 'fallback'}`;
+}
+
 function SettingsSwitchRow({
   checked,
   description,
@@ -575,6 +583,7 @@ export function MenuBar({
       : 'opacity-40',
   ].join(' ');
   const userAvatarFallback = getUserInitials(session?.username ?? 'Pristine User');
+  const userAvatarStateKey = getAvatarStateKey(session);
   const userSyncLabel = formatSyncTimestamp(session?.syncedAt ?? null);
   const isSignedIn = status === 'signed-in' && session !== null;
   const isUserActionsDisabled = status === 'loading';
@@ -1073,7 +1082,7 @@ export function MenuBar({
                       data-testid="user-avatar-button"
                       className="relative h-full w-8 rounded-none px-0 hover:cursor-pointer"
                     >
-                      <Avatar className="size-6 border border-border/70 bg-muted/70">
+                      <Avatar key={userAvatarStateKey} className="size-6 border border-border/70 bg-muted/70">
                         {isSignedIn ? <SessionAvatarImage alt={session.username} session={session} /> : null}
                         <AvatarFallback className="bg-transparent text-[10px] font-semibold text-foreground">
                           {isSignedIn ? userAvatarFallback : <CircleUser size={14} className="text-muted-foreground" />}
@@ -1105,7 +1114,7 @@ export function MenuBar({
                 {isSignedIn && session ? (
                   <>
                     <div className="flex items-center gap-3">
-                      <Avatar className="size-11 border border-border/80 bg-muted/70">
+                      <Avatar key={userAvatarStateKey} className="size-11 border border-border/80 bg-muted/70">
                         <SessionAvatarImage alt={session.username} session={session} />
                         <AvatarFallback className="text-sm font-semibold">{userAvatarFallback}</AvatarFallback>
                       </Avatar>
