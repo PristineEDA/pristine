@@ -413,7 +413,7 @@ describe('LeftSidePanel', () => {
 
     fireEvent.click(await screen.findByTestId('file-tree-node-rtl'));
     fireEvent.contextMenu(await screen.findByTestId('file-tree-node-rtl_peripherals'), { clientX: 50, clientY: 60 });
-    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete' }));
 
     await waitFor(() => {
       expect(onDeleteWorkspaceEntry).toHaveBeenCalledWith('rtl/peripherals', 'folder');

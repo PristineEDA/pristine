@@ -15,16 +15,137 @@ import {
 } from '../../../workspace/workspaceFiles';
 import type { WorkspaceRevealRequest } from '../../../workspace/useWorkspaceTree';
 import type { WorkspaceGitPathState } from '../../../../../types/workspace-git';
+import { formatShortcutLabel } from '../../../menu/shortcutLabels';
 import { FileTypeBadge } from '../shared/FileTypeBadge';
 
 interface ContextMenuItem {
+  kind: 'item';
   label: string;
   action: () => void;
   disabled?: boolean;
+  shortcut?: string;
+  variant?: 'default' | 'destructive';
 }
 
-const noop = () => {};
+interface ContextMenuSeparatorItem {
+  kind: 'separator';
+  key: string;
+}
+
+type ExplorerContextMenuEntry = ContextMenuItem | ContextMenuSeparatorItem;
+
+function ExplorerContextMenu({
+  items,
+  onClose,
+  x,
+  y,
+}: {
+  items: ExplorerContextMenuEntry[];
+  onClose: () => void;
+  x: number;
+  y: number;
+}) {
+  return (
+    <>
+      <div className="fixed inset-0 z-40" data-testid="explorer-context-menu-backdrop" onClick={onClose} />
+      <div
+        role="menu"
+        data-testid="explorer-context-menu"
+        data-slot="context-menu-content"
+        className="fixed z-50 min-w-36 overflow-hidden rounded-md border bg-popover p-0.5 text-popover-foreground shadow-md"
+        style={{ left: x, top: y }}
+      >
+        {items.map((item) =>
+          item.kind === 'separator' ? (
+            <div
+              key={item.key}
+              role="separator"
+              data-slot="context-menu-separator"
+              className="-mx-1 my-0.5 h-px bg-border"
+            />
+          ) : (
+            <div
+              key={item.label}
+              role="menuitem"
+              tabIndex={-1}
+              data-testid={toExplorerContextMenuItemTestId(item.label)}
+              data-slot="context-menu-item"
+              data-variant={item.variant ?? 'default'}
+              data-disabled={item.disabled ? '' : undefined}
+              aria-disabled={item.disabled ? 'true' : undefined}
+              className={`relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1 text-[12px] outline-hidden select-none ${
+                item.disabled
+                  ? 'pointer-events-none opacity-50'
+                  : 'text-foreground hover:bg-accent hover:text-accent-foreground'
+              } ${item.variant === 'destructive' ? 'text-destructive hover:bg-destructive/10 hover:text-destructive' : ''}`}
+              onClick={() => {
+                if (item.disabled) {
+                  return;
+                }
+
+                item.action();
+                onClose();
+              }}
+            >
+              {item.label}
+              {item.shortcut ? (
+                <span
+                  aria-hidden="true"
+                  data-slot="context-menu-shortcut"
+                  className="ml-auto text-xs tracking-widest text-muted-foreground"
+                >
+                  {formatShortcutLabel(item.shortcut)}
+                </span>
+              ) : null}
+            </div>
+          )
+        )}
+      </div>
+    </>
+  );
+}
+
 const treeRowIndentStyleCache = new Map<number, React.CSSProperties>();
+
+function createContextMenuSeparator(key: string): ContextMenuSeparatorItem {
+  return {
+    kind: 'separator',
+    key,
+  };
+}
+
+function createContextMenuItem({
+  action,
+  disabled,
+  label,
+  shortcut,
+  variant,
+}: {
+  action: () => void;
+  disabled?: boolean;
+  label: string;
+  shortcut?: string;
+  variant?: 'default' | 'destructive';
+}): ContextMenuItem {
+  return {
+    kind: 'item',
+    label,
+    action,
+    disabled,
+    shortcut,
+    variant,
+  };
+}
+
+function toExplorerContextMenuItemTestId(label: string): string {
+  const normalizedLabel = label
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+  return `explorer-context-menu-item-${normalizedLabel}`;
+}
 
 function getTreeRowIndentStyle(depth: number): React.CSSProperties {
   const cachedStyle = treeRowIndentStyleCache.get(depth);
@@ -41,47 +162,6 @@ function getTreeRowIndentStyle(depth: number): React.CSSProperties {
 // ─── File Icon ────────────────────────────────────────────────────────────────
 export function FileIcon({ name }: { name: string; language?: string }) {
   return <FileTypeBadge name={name} className="text-[10px] font-bold font-mono" />;
-}
-
-// ─── Context Menu ─────────────────────────────────────────────────────────────
-export function ContextMenu({
-  x, y, onClose, items,
-}: { x: number; y: number; onClose: () => void; items: ContextMenuItem[] }) {
-  return (
-    <>
-      <div className="fixed inset-0 z-40" onClick={onClose} />
-      <div
-        className="fixed bg-popover border border-border shadow-2xl z-50 py-1 min-w-44"
-        style={{ left: x, top: y }}
-      >
-        {items.map((item, i) =>
-          item.label === '---' ? (
-            <div key={i} className="h-px bg-border my-1" />
-          ) : (
-            <button
-              key={i}
-              disabled={item.disabled}
-              className={`w-full text-left px-3 py-1 transition-colors text-[12px] ${
-                item.disabled
-                  ? 'text-muted-foreground/60 cursor-default'
-                  : 'text-foreground hover:bg-primary hover:text-primary-foreground'
-              }`}
-              onClick={() => {
-                if (item.disabled) {
-                  return;
-                }
-
-                item.action();
-                onClose();
-              }}
-            >
-              {item.label}
-            </button>
-          )
-        )}
-      </div>
-    </>
-  );
 }
 
 function TreeEditInputRow({
@@ -293,57 +373,92 @@ export const FileTreeNode = memo(function FileTreeNode({
     rowRef.current?.scrollIntoView({ block: 'nearest' });
   }, [node.path, revealRequest]);
 
-  const contextItems = useMemo<ContextMenuItem[]>(() => {
+  const contextItems = useMemo<ExplorerContextMenuEntry[]>(() => {
     const pasteTargetType = node.path === WORKSPACE_ROOT_PATH ? 'root' : node.type;
-    const pasteItem: ContextMenuItem = {
+    const pasteItem = createContextMenuItem({
       label: 'Paste',
       action: () => onStartPaste?.(node.path, pasteTargetType),
       disabled: !workspaceClipboard,
-    };
+      shortcut: 'Mod+V',
+    });
 
     if (node.type === 'folder') {
-      const items = [
-        {
+      const items: ExplorerContextMenuEntry[] = [
+        createContextMenuItem({
           label: 'New File',
           action: () => onStartCreateFile?.('file', node.path),
-        },
-        {
+        }),
+        createContextMenuItem({
           label: 'New Folder',
           action: () => onStartCreateFolder?.('folder', node.path),
-        },
-        { label: '---', action: noop },
-        { label: 'Copy', action: () => onStartCopy?.(node.path, 'folder') },
-        { label: 'Cut', action: () => onStartCut?.(node.path, 'folder') },
+        }),
+        createContextMenuSeparator('create-separator'),
+        createContextMenuItem({
+          label: 'Copy',
+          action: () => onStartCopy?.(node.path, 'folder'),
+          shortcut: 'Mod+C',
+        }),
+        createContextMenuItem({
+          label: 'Cut',
+          action: () => onStartCut?.(node.path, 'folder'),
+          shortcut: 'Mod+X',
+        }),
         pasteItem,
-        { label: '---', action: noop },
+        createContextMenuSeparator('clipboard-separator'),
       ];
 
       if (node.path !== WORKSPACE_ROOT_PATH) {
-        items.push({ label: 'Rename', action: () => onStartRename?.(node.path, 'folder') });
-        items.push({ label: 'Delete', action: () => onStartDelete?.(node.path, 'folder') });
-        items.push({ label: '---', action: noop });
+        items.push(createContextMenuItem({
+          label: 'Rename',
+          action: () => onStartRename?.(node.path, 'folder'),
+          shortcut: 'F2',
+        }));
+        items.push(createContextMenuItem({
+          label: 'Delete',
+          action: () => onStartDelete?.(node.path, 'folder'),
+          shortcut: 'Delete',
+          variant: 'destructive',
+        }));
+        items.push(createContextMenuSeparator('manage-separator'));
       }
 
       return [
         ...items,
-        { label: 'Set as Simulation Top', action: noop },
-        { label: 'Copy Path', action: noop },
+        createContextMenuItem({ label: 'Set as Simulation Top', action: () => {} }),
+        createContextMenuItem({ label: 'Copy Path', action: () => {} }),
       ];
     }
 
     return [
-      { label: 'Open in Editor', action: openFileFromContextMenu },
-      { label: '---', action: noop },
-      { label: 'Copy', action: () => onStartCopy?.(node.path, 'file') },
-      { label: 'Cut', action: () => onStartCut?.(node.path, 'file') },
+      createContextMenuItem({ label: 'Open in Editor', action: openFileFromContextMenu }),
+      createContextMenuSeparator('open-separator'),
+      createContextMenuItem({
+        label: 'Copy',
+        action: () => onStartCopy?.(node.path, 'file'),
+        shortcut: 'Mod+C',
+      }),
+      createContextMenuItem({
+        label: 'Cut',
+        action: () => onStartCut?.(node.path, 'file'),
+        shortcut: 'Mod+X',
+      }),
       pasteItem,
-      { label: '---', action: noop },
-      { label: 'Rename', action: () => onStartRename?.(node.path, 'file') },
-      { label: 'Delete', action: () => onStartDelete?.(node.path, 'file') },
-      { label: '---', action: noop },
-      { label: 'Set as Simulation Top', action: noop },
-      { label: 'Copy Path', action: noop },
-      { label: 'Copy Relative Path', action: noop },
+      createContextMenuSeparator('clipboard-separator'),
+      createContextMenuItem({
+        label: 'Rename',
+        action: () => onStartRename?.(node.path, 'file'),
+        shortcut: 'F2',
+      }),
+      createContextMenuItem({
+        label: 'Delete',
+        action: () => onStartDelete?.(node.path, 'file'),
+        shortcut: 'Delete',
+        variant: 'destructive',
+      }),
+      createContextMenuSeparator('manage-separator'),
+      createContextMenuItem({ label: 'Set as Simulation Top', action: () => {} }),
+      createContextMenuItem({ label: 'Copy Path', action: () => {} }),
+      createContextMenuItem({ label: 'Copy Relative Path', action: () => {} }),
     ];
   }, [
     node.path,
@@ -460,10 +575,10 @@ export const FileTreeNode = memo(function FileTreeNode({
             onFileOpen(node.path, node.name);
           }
         }}
-        onContextMenu={(e) => {
-          e.preventDefault();
+        onContextMenu={(event) => {
+          event.preventDefault();
           selectCurrentNode();
-          setCtxMenu({ x: e.clientX, y: e.clientY });
+          setCtxMenu({ x: event.clientX, y: event.clientY });
         }}
       >
         {node.type === 'folder' ? (
@@ -498,10 +613,11 @@ export const FileTreeNode = memo(function FileTreeNode({
       </div>
 
       {ctxMenu && (
-        <ContextMenu
-          x={ctxMenu.x} y={ctxMenu.y}
-          onClose={() => setCtxMenu(null)}
+        <ExplorerContextMenu
           items={contextItems}
+          onClose={() => setCtxMenu(null)}
+          x={ctxMenu.x}
+          y={ctxMenu.y}
         />
       )}
 

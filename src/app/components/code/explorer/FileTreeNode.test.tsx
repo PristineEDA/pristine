@@ -1,6 +1,20 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { ContextMenu, FileIcon, FileTreeNode } from './FileTreeNode';
+import { FileIcon, FileTreeNode } from './FileTreeNode';
+
+function getContextMenuItem(label: string): HTMLElement {
+  return screen.getByRole('menuitem', { name: label });
+}
+
+function getContextMenuShortcut(label: string): HTMLElement {
+  const shortcut = getContextMenuItem(label).querySelector('[data-slot="context-menu-shortcut"]');
+
+  if (!(shortcut instanceof HTMLElement)) {
+    throw new Error(`Context menu shortcut not found for label: ${label}`);
+  }
+
+  return shortcut;
+}
 
 describe('FileIcon', () => {
   it('renders extension-specific glyphs for supported workspace file types and falls back to the generic file icon', () => {
@@ -75,28 +89,6 @@ describe('FileIcon', () => {
 
     rerender(<FileIcon name="unknown.txt" />);
     expect(container.querySelector('svg')).toBeInTheDocument();
-  });
-});
-
-describe('ContextMenu', () => {
-  it('runs menu actions and closes when selecting an item or backdrop', () => {
-    const onClose = vi.fn();
-    const action = vi.fn();
-    const { container } = render(
-      <ContextMenu
-        x={20}
-        y={30}
-        onClose={onClose}
-        items={[{ label: 'Open in Editor', action }, { label: '---', action: vi.fn() }]}
-      />,
-    );
-
-    fireEvent.click(screen.getByRole('button', { name: /Open in Editor/i }));
-    expect(action).toHaveBeenCalledTimes(1);
-    expect(onClose).toHaveBeenCalledTimes(1);
-
-    fireEvent.click(container.querySelector('.fixed.inset-0.z-40') as HTMLElement);
-    expect(onClose).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -198,24 +190,24 @@ describe('FileTreeNode', () => {
     expect(onFileOpen).toHaveBeenCalledWith('rtl/core/cpu_top.v', 'cpu_top.v');
 
     fireEvent.contextMenu(node, { clientX: 100, clientY: 120 });
-    fireEvent.click(screen.getByRole('button', { name: /Open in Editor/i }));
+    fireEvent.click(getContextMenuItem('Open in Editor'));
 
     expect(onFileOpen).toHaveBeenCalledTimes(2);
-    expect(screen.queryByRole('button', { name: /Open in Editor/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Open in Editor' })).not.toBeInTheDocument();
     expect(screen.getByText('cpu_top.v')).toBeInTheDocument();
 
     fireEvent.contextMenu(node, { clientX: 100, clientY: 120 });
-    fireEvent.click(screen.getByRole('button', { name: 'Copy' }));
+    fireEvent.click(getContextMenuItem('Copy'));
 
     expect(onStartCopy).toHaveBeenCalledWith('rtl/core/cpu_top.v', 'file');
 
     fireEvent.contextMenu(node, { clientX: 100, clientY: 120 });
-    fireEvent.click(screen.getByRole('button', { name: 'Cut' }));
+    fireEvent.click(getContextMenuItem('Cut'));
 
     expect(onStartCut).toHaveBeenCalledWith('rtl/core/cpu_top.v', 'file');
 
     fireEvent.contextMenu(node, { clientX: 100, clientY: 120 });
-    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    fireEvent.click(getContextMenuItem('Delete'));
 
     expect(onStartDelete).toHaveBeenCalledWith('rtl/core/cpu_top.v', 'file');
   });
@@ -279,16 +271,56 @@ describe('FileTreeNode', () => {
 
     fireEvent.contextMenu(screen.getByTestId('file-tree-node-rtl'), { clientX: 40, clientY: 60 });
 
-    expect(screen.getByRole('button', { name: /New File/i })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Copy' })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Cut' })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Paste' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: /Copy Path/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument();
+    expect(screen.getByRole('menu')).toHaveAttribute('data-slot', 'context-menu-content');
+    expect(getContextMenuItem('New File')).toBeInTheDocument();
+    expect(getContextMenuItem('Copy')).toBeInTheDocument();
+    expect(getContextMenuItem('Cut')).toBeInTheDocument();
+    expect(getContextMenuItem('Paste')).toHaveAttribute('data-disabled');
+    expect(getContextMenuShortcut('Copy')).toHaveTextContent('Ctrl+C');
+    expect(getContextMenuShortcut('Cut')).toHaveTextContent('Ctrl+X');
+    expect(getContextMenuShortcut('Paste')).toHaveTextContent('Ctrl+V');
+    expect(getContextMenuShortcut('Rename')).toHaveTextContent('F2');
+    expect(getContextMenuShortcut('Delete')).toHaveTextContent('Delete');
+    expect(getContextMenuItem('Copy Path')).toBeInTheDocument();
+    expect(getContextMenuItem('Delete')).toHaveAttribute('data-variant', 'destructive');
+    expect(document.querySelectorAll('[data-slot="context-menu-separator"]')).toHaveLength(3);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    fireEvent.click(getContextMenuItem('Delete'));
 
     expect(onStartDelete).toHaveBeenCalledWith('rtl', 'folder');
+  });
+
+  it('formats explorer context menu shortcuts with macOS symbols', () => {
+    window.electronAPI!.platform = 'darwin';
+
+    render(
+      <FileTreeNode
+        node={{
+          id: 'rtl',
+          path: 'rtl',
+          name: 'rtl',
+          type: 'folder',
+          children: [],
+          hasLoadedChildren: true,
+          isLoading: false,
+        }}
+        depth={0}
+        activeFileId=""
+        onFileOpen={vi.fn()}
+        onFilePreview={vi.fn()}
+        expandedFolders={new Set()}
+        onToggleFolder={vi.fn()}
+        gitPathStates={{}}
+      />,
+    );
+
+    fireEvent.contextMenu(screen.getByTestId('file-tree-node-rtl'), { clientX: 40, clientY: 60 });
+
+    expect(getContextMenuShortcut('Copy')).toHaveTextContent('⌘C');
+    expect(getContextMenuShortcut('Cut')).toHaveTextContent('⌘X');
+    expect(getContextMenuShortcut('Paste')).toHaveTextContent('⌘V');
+    expect(getContextMenuShortcut('Rename')).toHaveTextContent('F2');
+    expect(getContextMenuShortcut('Delete')).toHaveTextContent('Delete');
   });
 
   it('omits the delete action for the workspace root context menu', () => {
@@ -316,8 +348,9 @@ describe('FileTreeNode', () => {
 
     fireEvent.contextMenu(screen.getByTestId('file-tree-node-root'), { clientX: 40, clientY: 60 });
 
-    expect(screen.getByRole('button', { name: 'Paste' })).toBeDisabled();
-    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
+    expect(getContextMenuItem('Paste')).toHaveAttribute('data-disabled');
+    expect(screen.queryByRole('menuitem', { name: 'Delete' })).not.toBeInTheDocument();
+    expect(document.querySelectorAll('[data-slot="context-menu-separator"]')).toHaveLength(2);
   });
 
   it('dims the cut source row and enables paste when clipboard data is available', () => {
@@ -350,7 +383,7 @@ describe('FileTreeNode', () => {
     expect(node.className).toContain('opacity-50');
 
     fireEvent.contextMenu(node, { clientX: 100, clientY: 120 });
-    expect(screen.getByRole('button', { name: 'Paste' })).toBeEnabled();
+    expect(getContextMenuItem('Paste')).not.toHaveAttribute('data-disabled');
   });
 
   it('keeps a clicked folder highlighted when the selected folder id matches', () => {

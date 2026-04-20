@@ -1430,6 +1430,7 @@ test('Explorer Rename cascades open child tabs when renaming a folder', async ()
   const renamedRegFilePath = `${renamedFolderRelativePath}/reg_file.v`;
   const renamedAluFilePath = `${renamedFolderRelativePath}/alu.sv`;
   const { app, window } = await launchApp({ projectRoot: workspaceCopy });
+  const explorerTree = window.locator('.explorer-tree-scrollbar');
 
   try {
     await ensureExplorerVisible(window);
@@ -1441,8 +1442,9 @@ test('Explorer Rename cascades open child tabs when renaming a folder', async ()
     await window.getByTestId('file-tree-node-rtl_core_alu_sv').dblclick();
 
     const coreFolderNode = window.getByTestId('file-tree-node-rtl_core');
-    await coreFolderNode.click({ button: 'right' });
-    await window.getByRole('button', { name: 'Rename' }).click();
+    await coreFolderNode.click();
+    await explorerTree.focus();
+    await explorerTree.press('F2');
 
     const renameInput = window.getByTestId('file-tree-input-rtl_core');
     await expect(renameInput).toBeVisible();
@@ -1527,6 +1529,7 @@ test('Explorer Delete shows unsaved changes first, then confirmation, before rec
   const deletedRegRelativePath = 'rtl/core/reg_file.v';
   const deletedAluRelativePath = 'rtl/core/alu.sv';
   const { app, window } = await launchApp({ projectRoot: workspaceCopy });
+  const explorerTree = window.locator('.explorer-tree-scrollbar');
 
   try {
     await ensureExplorerVisible(window);
@@ -1543,8 +1546,9 @@ test('Explorer Delete shows unsaved changes first, then confirmation, before rec
     await window.getByTestId('file-tree-node-rtl_core_alu_sv').dblclick();
 
     const coreFolderNode = window.getByTestId(toWorkspaceTreeTestId(deletedFolderRelativePath));
-    await coreFolderNode.click({ button: 'right' });
-    await window.getByRole('button', { name: 'Delete' }).click();
+    await coreFolderNode.click();
+    await explorerTree.focus();
+    await explorerTree.press('Delete');
 
     await expect(window.getByTestId('unsaved-changes-dialog')).toBeVisible();
     await expect(window.getByTestId('unsaved-changes-dialog')).toContainText('reg_file.v');
@@ -1573,23 +1577,24 @@ test('Explorer Copy creates a -copy file and keeps it after relaunch', async () 
 
   const workspaceCopy = test.info().outputPath('explorer-copy-file-workspace');
   createWorkspaceCopy(workspaceCopy);
+  const primaryModifier = process.platform === 'darwin' ? 'Meta' : 'Control';
 
   const copiedRelativePath = 'rtl/core/reg_file-copy.v';
   const copiedAbsolutePath = path.join(workspaceCopy, 'rtl', 'core', 'reg_file-copy.v');
   const copiedTreeTestId = toWorkspaceTreeTestId(copiedRelativePath);
   const sourceTreeTestId = toWorkspaceTreeTestId('rtl/core/reg_file.v');
   const { app, window } = await launchApp({ projectRoot: workspaceCopy });
+  const explorerTree = window.locator('.explorer-tree-scrollbar');
 
   try {
     await ensureExplorerVisible(window);
     await window.getByTestId('file-tree-node-rtl').click();
     await window.getByTestId('file-tree-node-rtl_core').click();
 
-    await window.getByTestId(sourceTreeTestId).click({ button: 'right' });
-    await window.getByRole('button', { name: 'Copy', exact: true }).click();
-
-    await window.getByTestId('file-tree-node-rtl_core').click({ button: 'right' });
-    await window.getByRole('button', { name: 'Paste', exact: true }).click();
+    await window.getByTestId(sourceTreeTestId).click();
+    await explorerTree.focus();
+    await explorerTree.press(`${primaryModifier}+C`);
+    await explorerTree.press(`${primaryModifier}+V`);
 
     await expect.poll(() => fs.existsSync(copiedAbsolutePath), {
       timeout: 15000,
@@ -1651,8 +1656,9 @@ test('Explorer Cut dims the source, Escape cancels it, and pasting to the worksp
     await explorerTree.press(`${primaryModifier}+X`);
     await expect(sourceFileNode).toHaveClass(/opacity-50/);
 
-    await window.getByTestId('file-tree-node-root').click({ button: 'right' });
-  await window.getByRole('button', { name: 'Paste', exact: true }).click();
+    await window.getByTestId('file-tree-node-README_md').click();
+    await explorerTree.focus();
+    await explorerTree.press(`${primaryModifier}+V`);
 
     await expect.poll(() => fs.existsSync(movedAbsolutePath), {
       timeout: 15000,
