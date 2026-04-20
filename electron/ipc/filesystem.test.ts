@@ -87,6 +87,13 @@ describe('filesystem IPC handlers', () => {
       const handler = getHandler('async:fs:read-file');
       await expect(handler({}, '../../etc/passwd')).rejects.toThrow('Path traversal denied');
     });
+
+    it('reads an absolute file path through the dedicated absolute channel', async () => {
+      mockFs.readFile.mockResolvedValue('absolute-content');
+      const handler = getHandler('async:fs:read-file-absolute');
+
+      await expect(handler({}, '/safe/external/main.v', 'utf-8')).resolves.toBe('absolute-content');
+    });
   });
 
   describe('FS_WRITE_FILE', () => {
@@ -98,6 +105,13 @@ describe('filesystem IPC handlers', () => {
     it('rejects non-string content', async () => {
       const handler = getHandler('async:fs:write-file');
       await expect(handler({}, 'file.v', 42)).rejects.toThrow('Expected string');
+    });
+
+    it('writes an absolute file path through the dedicated absolute channel', async () => {
+      const handler = getHandler('async:fs:write-file-absolute');
+
+      await expect(handler({}, '/safe/external/out.v', 'module out; endmodule')).resolves.toBeUndefined();
+      expect(mockFs.writeFile).toHaveBeenCalledWith(expect.any(String), 'module out; endmodule', 'utf-8');
     });
   });
 

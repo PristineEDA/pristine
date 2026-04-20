@@ -30,10 +30,12 @@ function WorkspaceHarness() {
       <div data-testid="bottom-panel">{workspace.showBottomPanel ? 'open' : 'closed'}</div>
       <div data-testid="dirty-files">{workspace.dirtyFileIds.join(',')}</div>
       <div data-testid="unsaved-dialog-files">{workspace.unsavedChangesDialog?.fileIds.join(',') ?? ''}</div>
+      <div data-testid="workspace-tree-refresh-token">{workspace.workspaceTreeRefreshToken}</div>
 
       <button onClick={() => workspace.setActiveView('simulation')}>set-view</button>
       <button onClick={() => workspace.openFile('rtl/core/reg_file.v', 'reg_file.v')}>open-reg</button>
       <button onClick={() => workspace.openFile('rtl/core/alu.v', 'alu.v')}>open-alu</button>
+      <button onClick={() => workspace.openUntitledFile()}>open-untitled</button>
       <button onClick={() => workspace.openPreviewFile('rtl/core/reg_file.v', 'reg_file.v')}>preview-reg</button>
       <button onClick={() => workspace.openPreviewFile('rtl/core/alu.v', 'alu.v')}>preview-alu</button>
       <button onClick={() => workspace.pinTab('rtl/core/alu.v')}>pin-alu</button>
@@ -48,6 +50,8 @@ function WorkspaceHarness() {
       <button onClick={() => workspace.setShowBottomPanel(false)}>hide-bottom</button>
       <button onClick={() => workspace.updateFileContentInGroup('group-1', 'rtl/core/reg_file.v', 'module reg_file; logic dirty; endmodule')}>edit-reg</button>
       <button onClick={() => workspace.updateFileContentInGroup('group-1', 'rtl/core/alu.v', 'module alu; logic dirty; endmodule')}>edit-alu</button>
+      <button onClick={() => workspace.updateFileContent(workspace.activeTabId, 'module untitled; endmodule')}>edit-active</button>
+      <button onClick={() => workspace.updateFileContent(workspace.activeTabId, '')}>clear-active</button>
       <button onClick={() => { void workspace.saveActiveFile(); }}>save-active</button>
       <button onClick={() => { void workspace.saveAllFiles(); }}>save-all</button>
       <button onClick={() => workspace.openUnsavedChangesDialog()}>open-unsaved-dialog</button>
@@ -55,6 +59,7 @@ function WorkspaceHarness() {
       <button onClick={() => workspace.discardUnsavedChanges()}>discard-unsaved</button>
       <button onClick={() => workspace.cancelUnsavedChanges()}>cancel-unsaved</button>
       <button onClick={() => workspace.closeFile('rtl/core/reg_file.v')}>close-reg</button>
+      <button onClick={() => workspace.closeActiveTabInFocusedGroup()}>close-active</button>
       <button onClick={() => workspace.registerEditorRef('group-1', {
         getAction: (actionId: string) => ({ run: actionId === 'undo' ? undoActionRun : redoActionRun }),
       })}>register-editor</button>
@@ -108,6 +113,72 @@ describe('WorkspaceContext', () => {
 
     expect(window.electronAPI?.fs.writeFile).toHaveBeenCalledWith('rtl/core/reg_file.v', 'module reg_file; logic dirty; endmodule');
     expect(screen.getByTestId('dirty-files')).toHaveTextContent('');
+  });
+
+  it('creates untitled files, marks them dirty when edited, and clears dirty state when reverted', async () => {
+    render(
+      <WorkspaceProvider>
+        <WorkspaceHarness />
+      </WorkspaceProvider>,
+    );
+
+    fireEvent.click(screen.getByText('open-untitled'));
+
+    expect(screen.getByTestId('tabs')).toHaveTextContent('untitled-1');
+    expect(screen.getByTestId('active-tab')).toHaveTextContent('untitled-1');
+    expect(screen.getByTestId('dirty-files')).toHaveTextContent('');
+
+    fireEvent.click(screen.getByText('edit-active'));
+    expect(screen.getByTestId('dirty-files')).toHaveTextContent('untitled-1');
+
+    fireEvent.click(screen.getByText('clear-active'));
+    expect(screen.getByTestId('dirty-files')).toHaveTextContent('');
+  });
+
+  it('saves untitled files through the native save dialog flow and refreshes the workspace tree when saved in-workspace', async () => {
+    vi.mocked(window.electronAPI!.dialog.showSaveDialog).mockResolvedValueOnce({
+      canceled: false,
+      filePath: 'C:/workspace/rtl/generated/new_file.sv',
+      workspaceRelativePath: 'rtl/generated/new_file.sv',
+    });
+
+    render(
+      <WorkspaceProvider>
+        <WorkspaceHarness />
+      </WorkspaceProvider>,
+    );
+
+    fireEvent.click(screen.getByText('open-untitled'));
+    fireEvent.click(screen.getByText('edit-active'));
+    fireEvent.click(screen.getByText('save-active'));
+
+    await waitFor(() => {
+      expect(window.electronAPI?.dialog.showSaveDialog).toHaveBeenCalledWith('untitled-1');
+      expect(window.electronAPI?.fs.writeFile).toHaveBeenCalledWith('rtl/generated/new_file.sv', 'module untitled; endmodule');
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('active-tab')).toHaveTextContent('rtl/generated/new_file.sv');
+      expect(screen.getByTestId('tabs')).toHaveTextContent('rtl/generated/new_file.sv');
+      expect(screen.getByTestId('dirty-files')).toHaveTextContent('');
+      expect(screen.getByTestId('workspace-tree-refresh-token')).toHaveTextContent('1');
+    });
+  });
+
+  it('closes a clean untitled tab immediately without opening the unsaved dialog', async () => {
+    render(
+      <WorkspaceProvider>
+        <WorkspaceHarness />
+      </WorkspaceProvider>,
+    );
+
+    fireEvent.click(screen.getByText('open-untitled'));
+    fireEvent.click(screen.getByText('close-active'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('tabs')).not.toHaveTextContent('untitled-1');
+      expect(screen.getByTestId('unsaved-dialog-files')).toHaveTextContent('');
+    });
   });
 
   it('routes undo and redo through the active editor instance', async () => {
@@ -195,6 +266,29 @@ describe('WorkspaceContext', () => {
       expect(screen.getByTestId('unsaved-dialog-files')).toHaveTextContent('');
     });
     expect(screen.getByTestId('tabs')).not.toHaveTextContent('rtl/core/reg_file.v');
+  });
+
+  it('prompts before closing a dirty untitled file and can discard it', async () => {
+    render(
+      <WorkspaceProvider>
+        <WorkspaceHarness />
+      </WorkspaceProvider>,
+    );
+
+    fireEvent.click(screen.getByText('open-untitled'));
+    fireEvent.click(screen.getByText('edit-active'));
+    fireEvent.click(screen.getByText('close-active'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('unsaved-dialog-files')).toHaveTextContent('untitled-1');
+    });
+
+    fireEvent.click(screen.getByText('discard-unsaved'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('tabs')).not.toHaveTextContent('untitled-1');
+      expect(screen.getByTestId('unsaved-dialog-files')).toHaveTextContent('');
+    });
   });
 
   it('prompts for unsaved changes when the main process requests a window close and resolves the request on save', async () => {

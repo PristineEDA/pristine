@@ -30,6 +30,7 @@ import {
 } from './useWorkspaceEditorState';
 import { useWorkspaceFileStore, type SaveFilesResult } from './useWorkspaceFileStore';
 import type { WindowCloseRequest } from '../window/windowClose';
+import { getPathBaseName } from '../workspace/workspaceFiles';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -65,7 +66,9 @@ interface WorkspaceState {
   tabs: Tab[];
   activeTabId: string;
   openFile: (fileId: string, fileName: string) => void;
+  resolveFileId: (fileId: string) => string;
   openFileInGroup: (fileId: string, fileName: string, groupId: string) => void;
+  openUntitledFile: (groupId?: string) => string;
   openPreviewFile: (fileId: string, fileName: string) => void;
   openPreviewFileInGroup: (fileId: string, fileName: string, groupId: string) => void;
   pinTab: (tabId: string) => void;
@@ -93,6 +96,7 @@ interface WorkspaceState {
   setShowBottomPanel: (show: boolean) => void;
   showRightPanel: boolean;
   setShowRightPanel: (show: boolean) => void;
+  workspaceTreeRefreshToken: number;
 
   fileContents: Record<string, string>;
   loadingFiles: Record<string, boolean>;
@@ -118,12 +122,6 @@ interface WorkspaceState {
 
   editorRef: React.MutableRefObject<any>;
   registerEditorRef: (groupId: string, editorInstance: any) => void;
-}
-
-function getFileBaseName(fileId: string): string {
-  const normalized = fileId.replace(/\\/g, '/');
-  const segments = normalized.split('/');
-  return segments[segments.length - 1] ?? fileId;
 }
 
 function createUnsavedChangesDialogState(
@@ -260,6 +258,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const editorWorkspace = useWorkspaceEditorState();
   const fileStore = useWorkspaceFileStore();
   const [unsavedChangesDialog, setUnsavedChangesDialog] = useState<UnsavedChangesDialogState | null>(null);
+  const [untitledFiles, setUntitledFiles] = useState<Record<string, string>>({});
+  const [workspaceTreeRefreshToken, setWorkspaceTreeRefreshToken] = useState(0);
   const unsavedChangesResolverRef = useRef<((result: 'save' | 'discard' | 'cancel') => void) | null>(null);
   const previousEditorGroupsRef = useRef<EditorGroup[]>(EMPTY_EDITOR_GROUPS);
   const layoutPanelsEnabled = canToggleLayoutPanels(mainContentView, activeView);
@@ -269,12 +269,48 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const activeViewRef = useRef(activeView);
   const layoutPanelsEnabledRef = useRef(layoutPanelsEnabled);
   const unsavedChangesDialogRef = useRef(unsavedChangesDialog);
+  const untitledFilesRef = useRef(untitledFiles);
+  const fileIdRedirectsRef = useRef<Record<string, string>>({});
 
   editorWorkspaceRef.current = editorWorkspace;
   fileStoreRef.current = fileStore;
   activeViewRef.current = activeView;
   layoutPanelsEnabledRef.current = layoutPanelsEnabled;
   unsavedChangesDialogRef.current = unsavedChangesDialog;
+  untitledFilesRef.current = untitledFiles;
+
+  const resolveCurrentFileId = useCallback((fileId: string) => {
+    let currentFileId = fileId;
+    const visited = new Set<string>();
+
+    while (fileIdRedirectsRef.current[currentFileId] && !visited.has(currentFileId)) {
+      visited.add(currentFileId);
+      currentFileId = fileIdRedirectsRef.current[currentFileId] ?? currentFileId;
+    }
+
+    return currentFileId;
+  }, []);
+
+  const clearTrackedFileId = useCallback((fileId: string) => {
+    const resolvedFileId = resolveCurrentFileId(fileId);
+
+    setUntitledFiles((current) => {
+      if (!current[fileId] && !current[resolvedFileId]) {
+        return current;
+      }
+
+      const next = { ...current };
+      delete next[fileId];
+      delete next[resolvedFileId];
+      return next;
+    });
+
+    delete fileIdRedirectsRef.current[fileId];
+  }, [resolveCurrentFileId]);
+
+  const bumpWorkspaceTreeRefreshToken = useCallback(() => {
+    setWorkspaceTreeRefreshToken((current) => current + 1);
+  }, []);
 
   const findTabName = useCallback((fileId: string) => {
     for (const group of editorWorkspaceRef.current.editorGroups) {
@@ -284,7 +320,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    return getFileBaseName(fileId);
+    return untitledFilesRef.current[fileId] ?? getPathBaseName(fileId);
   }, []);
 
   const editorGroups = useMemo(() => {
@@ -342,25 +378,100 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const saveFiles = useCallback((fileIds: string[]) => {
-    return fileStoreRef.current.saveFiles(fileIds);
-  }, []);
+    const uniqueFileIds = Array.from(new Set(fileIds.filter(Boolean)));
+
+    return (async (): Promise<SaveFilesResult> => {
+      const savedFileIds: string[] = [];
+      const failedFileIds: string[] = [];
+
+      for (const fileId of uniqueFileIds) {
+        const resolvedFileId = resolveCurrentFileId(fileId);
+
+        if (!resolvedFileId) {
+          failedFileIds.push(fileId);
+          continue;
+        }
+
+        if (!untitledFilesRef.current[resolvedFileId]) {
+          const saved = await fileStoreRef.current.saveFileContent(resolvedFileId);
+          if (saved) {
+            savedFileIds.push(fileId);
+          } else {
+            failedFileIds.push(fileId);
+          }
+          continue;
+        }
+
+        const dialogResult = await window.electronAPI?.dialog?.showSaveDialog(
+          untitledFilesRef.current[resolvedFileId] ?? resolvedFileId,
+        );
+
+        if (!dialogResult || dialogResult.canceled || !dialogResult.filePath) {
+          failedFileIds.push(fileId);
+          continue;
+        }
+
+        const targetFileId = dialogResult.workspaceRelativePath ?? dialogResult.filePath;
+        const currentContent = fileStoreRef.current.fileContents[resolvedFileId] ?? '';
+        const saved = await fileStoreRef.current.saveFileContent(resolvedFileId, {
+          absolute: dialogResult.workspaceRelativePath === null,
+          targetPath: dialogResult.workspaceRelativePath ?? dialogResult.filePath,
+        });
+
+        if (!saved) {
+          failedFileIds.push(fileId);
+          continue;
+        }
+
+        fileStoreRef.current.adoptFileState(resolvedFileId, targetFileId, {
+          content: currentContent,
+          removeSource: true,
+          savedContent: currentContent,
+        });
+        editorWorkspaceRef.current.renameFileId(resolvedFileId, targetFileId, getPathBaseName(targetFileId));
+        fileIdRedirectsRef.current[fileId] = targetFileId;
+        fileIdRedirectsRef.current[resolvedFileId] = targetFileId;
+        setUntitledFiles((current) => {
+          if (!current[resolvedFileId]) {
+            return current;
+          }
+
+          const next = { ...current };
+          delete next[resolvedFileId];
+          return next;
+        });
+
+        if (dialogResult.workspaceRelativePath) {
+          bumpWorkspaceTreeRefreshToken();
+        }
+
+        savedFileIds.push(fileId);
+      }
+
+      return {
+        savedFileIds,
+        failedFileIds,
+      };
+    })();
+  }, [bumpWorkspaceTreeRefreshToken, resolveCurrentFileId]);
 
   const saveAllFiles = useCallback(async () => {
-    const { dirtyFileIds, saveFiles: saveWorkspaceFiles } = fileStoreRef.current;
-    const result = await saveWorkspaceFiles(dirtyFileIds);
+    const { dirtyFileIds } = fileStoreRef.current;
+    const result = await saveFiles(dirtyFileIds);
     return result.failedFileIds.length === 0;
-  }, []);
+  }, [saveFiles]);
 
   const saveActiveFile = useCallback(async () => {
     const { activeTabId } = editorWorkspaceRef.current;
-    const { loadingFiles, loadErrors, saveFileContent } = fileStoreRef.current;
+    const resolvedFileId = resolveCurrentFileId(activeTabId);
+    const { loadingFiles, loadErrors } = fileStoreRef.current;
 
-    if (!activeTabId || loadingFiles[activeTabId] || loadErrors[activeTabId]) {
+    if (!resolvedFileId || loadingFiles[resolvedFileId] || loadErrors[resolvedFileId]) {
       return false;
     }
 
-    return (await saveFileContent(activeTabId)) === true;
-  }, []);
+    return (await saveFiles([resolvedFileId])).failedFileIds.length === 0;
+  }, [resolveCurrentFileId, saveFiles]);
 
   const runActiveEditorAction = useCallback(async (actionId: 'undo' | 'redo') => {
     const editor = editorWorkspaceRef.current.editorRef.current;
@@ -383,12 +494,36 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const updateFileContentInGroup = useCallback((groupId: string, fileId: string, content: string) => {
+    const resolvedFileId = resolveCurrentFileId(fileId);
     const group = editorWorkspaceRef.current.editorGroups.find((currentGroup) => currentGroup.id === groupId);
-    if (group?.previewTabId === fileId) {
-      editorWorkspaceRef.current.pinTabInGroup(groupId, fileId);
+    if (group?.previewTabId && resolveCurrentFileId(group.previewTabId) === resolvedFileId) {
+      editorWorkspaceRef.current.pinTabInGroup(groupId, group.previewTabId);
     }
 
-    fileStoreRef.current.updateFileContent(fileId, content);
+    fileStoreRef.current.updateFileContent(resolvedFileId, content);
+  }, [resolveCurrentFileId]);
+
+  const loadFileContent = useCallback((fileId: string) => {
+    const resolvedFileId = resolveCurrentFileId(fileId);
+
+    if (untitledFilesRef.current[resolvedFileId]) {
+      if (fileStoreRef.current.fileContents[resolvedFileId] === undefined) {
+        fileStoreRef.current.initializeFile(resolvedFileId, '');
+      }
+      return;
+    }
+
+    fileStoreRef.current.loadFileContent(resolvedFileId);
+  }, [resolveCurrentFileId]);
+
+  const openUntitledFile = useCallback((groupId?: string) => {
+    const untitledId = editorWorkspaceRef.current.openUntitledFile(groupId);
+    fileStoreRef.current.initializeFile(untitledId, '');
+    setUntitledFiles((current) => ({
+      ...current,
+      [untitledId]: untitledId,
+    }));
+    return untitledId;
   }, []);
 
   const maybeProceedWithUnsavedChanges = useCallback(async (
@@ -412,24 +547,30 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }, [getDirtyRequestedFileIds, requestUnsavedChangesConfirmation]);
 
   const closeFileInGroup = useCallback((groupId: string, fileId: string) => {
+    const resolvedFileId = resolveCurrentFileId(fileId);
+
     void maybeProceedWithUnsavedChanges(
-      [fileId],
+      [resolvedFileId],
       'close-file',
       () => {
-        editorWorkspaceRef.current.closeFileInGroup(groupId, fileId);
+        editorWorkspaceRef.current.closeFileInGroup(groupId, resolveCurrentFileId(fileId));
+        clearTrackedFileId(fileId);
       },
     );
-  }, [maybeProceedWithUnsavedChanges]);
+  }, [clearTrackedFileId, maybeProceedWithUnsavedChanges, resolveCurrentFileId]);
 
   const closeFile = useCallback((fileId: string) => {
+    const resolvedFileId = resolveCurrentFileId(fileId);
+
     void maybeProceedWithUnsavedChanges(
-      [fileId],
+      [resolvedFileId],
       'close-file',
       () => {
-        editorWorkspaceRef.current.closeFile(fileId);
+        editorWorkspaceRef.current.closeFile(resolveCurrentFileId(fileId));
+        clearTrackedFileId(fileId);
       },
     );
-  }, [maybeProceedWithUnsavedChanges]);
+  }, [clearTrackedFileId, maybeProceedWithUnsavedChanges, resolveCurrentFileId]);
 
   const closeActiveTabInFocusedGroup = useCallback(() => {
     const { editorGroups, focusedGroupId } = editorWorkspaceRef.current;
@@ -463,7 +604,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const saveResult = await fileStoreRef.current.saveFiles(targetFileIds);
+    const saveResult = await saveFiles(targetFileIds);
     const remainingFileIds = getDirtyRequestedFileIds(
       fileIds.filter((fileId) => !saveResult.savedFileIds.includes(fileId)),
     );
@@ -473,7 +614,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     }
 
     resolveUnsavedChangesDialog('save');
-  }, [findTabName, getDirtyRequestedFileIds, resolveUnsavedChangesDialog]);
+  }, [findTabName, getDirtyRequestedFileIds, resolveUnsavedChangesDialog, saveFiles]);
 
   const discardUnsavedChanges = useCallback((selectedFileIds?: string[]) => {
     const dialogState = unsavedChangesDialogRef.current;
@@ -599,9 +740,11 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       cycleFocusedGroupTabs: editorWorkspace.cycleFocusedGroupTabs,
       closeActiveTabInFocusedGroup,
       tabs,
-      activeTabId: editorWorkspace.activeTabId,
+      activeTabId: resolveCurrentFileId(editorWorkspace.activeTabId),
       openFile: editorWorkspace.openFile,
+      resolveFileId: resolveCurrentFileId,
       openFileInGroup: editorWorkspace.openFileInGroup,
+      openUntitledFile,
       openPreviewFile: editorWorkspace.openPreviewFile,
       openPreviewFileInGroup: editorWorkspace.openPreviewFileInGroup,
       pinTab: editorWorkspace.pinTab,
@@ -626,12 +769,13 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       setShowBottomPanel,
       showRightPanel: visiblePanelState.showRightPanel,
       setShowRightPanel,
+      workspaceTreeRefreshToken,
       dirtyFiles: fileStore.dirtyFiles,
       dirtyFileIds: fileStore.dirtyFileIds,
       fileContents: fileStore.fileContents,
       loadingFiles: fileStore.loadingFiles,
       loadErrors: fileStore.loadErrors,
-      loadFileContent: fileStore.loadFileContent,
+      loadFileContent,
       updateFileContent: fileStore.updateFileContent,
       updateFileContentInGroup,
       savingFiles: fileStore.savingFiles,

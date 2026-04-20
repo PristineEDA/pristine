@@ -42,6 +42,7 @@ function getRenderableEditorViewport(element: HTMLDivElement | null): EditorView
 interface MonacoEditorPaneProps {
   activeTabId: string;
   code: string;
+  onCloseShortcut?: () => void;
   editorRef: React.MutableRefObject<any>;
   onActiveModelReady?: (fileId: string) => void;
   onCursorChange?: (line: number, col: number) => void;
@@ -49,6 +50,7 @@ interface MonacoEditorPaneProps {
   onContentChange?: (value: string) => void;
   onEditorMount?: (editor: any) => void;
   onNavigateToLocation?: (fileId: string, line: number, col: number) => void;
+  onNewShortcut?: () => void;
   isDocumentReady?: boolean;
   hasLoadError?: boolean;
   showDragInteractionShield?: boolean;
@@ -58,6 +60,7 @@ interface MonacoEditorPaneProps {
 export function MonacoEditorPane({
   activeTabId,
   code,
+  onCloseShortcut,
   editorRef,
   onActiveModelReady,
   onCursorChange,
@@ -65,6 +68,7 @@ export function MonacoEditorPane({
   onContentChange,
   onEditorMount,
   onNavigateToLocation,
+  onNewShortcut,
   isDocumentReady = true,
   hasLoadError = false,
   showDragInteractionShield,
@@ -116,6 +120,12 @@ export function MonacoEditorPane({
   });
   const handleSaveShortcut = useEffectEvent(() => {
     onSaveShortcut?.();
+  });
+  const handleNewShortcut = useEffectEvent(() => {
+    onNewShortcut?.();
+  });
+  const handleCloseShortcut = useEffectEvent(() => {
+    onCloseShortcut?.();
   });
   const editorBehaviorOptions = useMemo(() => ({
     cursorBlinking,
@@ -346,6 +356,26 @@ export function MonacoEditorPane({
           ) {
             editor.addCommand(activeMonaco.KeyMod.CtrlCmd | activeMonaco.KeyCode.KeyS, () => {
               handleSaveShortcut();
+            });
+          }
+          if (
+            onNewShortcut
+            && typeof editor.addCommand === 'function'
+            && typeof activeMonaco?.KeyMod?.CtrlCmd === 'number'
+            && typeof activeMonaco?.KeyCode?.KeyN === 'number'
+          ) {
+            editor.addCommand(activeMonaco.KeyMod.CtrlCmd | activeMonaco.KeyCode.KeyN, () => {
+              handleNewShortcut();
+            });
+          }
+          if (
+            onCloseShortcut
+            && typeof editor.addCommand === 'function'
+            && typeof activeMonaco?.KeyMod?.CtrlCmd === 'number'
+            && typeof activeMonaco?.KeyCode?.KeyW === 'number'
+          ) {
+            editor.addCommand(activeMonaco.KeyMod.CtrlCmd | activeMonaco.KeyCode.KeyW, () => {
+              handleCloseShortcut();
             });
           }
           editor.onDidFocusEditorText?.(() => {

@@ -1,9 +1,31 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { refreshWorkspaceGitStatus } from '../git/workspaceGitStatus';
+import { isAbsoluteFilePath } from '../workspace/workspaceFiles';
 
 export interface SaveFilesResult {
   savedFileIds: string[];
   failedFileIds: string[];
+}
+
+interface SaveFileContentOptions {
+  absolute?: boolean;
+  targetPath?: string;
+}
+
+interface AdoptFileStateOptions {
+  content?: string;
+  removeSource?: boolean;
+  savedContent?: string;
+}
+
+function removeKey<T>(record: Record<string, T>, key: string): Record<string, T> {
+  if (!(key in record)) {
+    return record;
+  }
+
+  const nextRecord = { ...record };
+  delete nextRecord[key];
+  return nextRecord;
 }
 
 export function useWorkspaceFileStore() {
@@ -29,10 +51,16 @@ export function useWorkspaceFileStore() {
       return;
     }
 
+    const readFile = isAbsoluteFilePath(fileId) ? fsApi.readFileAbsolute : fsApi.readFile;
+    if (!readFile) {
+      setLoadErrors((current) => ({ ...current, [fileId]: 'Filesystem API unavailable' }));
+      return;
+    }
+
     inFlightLoadsRef.current.add(fileId);
     setLoadingFiles((current) => ({ ...current, [fileId]: true }));
 
-    void fsApi.readFile(fileId, 'utf-8')
+    void readFile(fileId, 'utf-8')
       .then((content) => {
         if (!isMountedRef.current) {
           return;
@@ -91,6 +119,150 @@ export function useWorkspaceFileStore() {
 
         setLoadingFiles((current) => ({ ...current, [fileId]: false }));
       });
+  }, []);
+
+  const initializeFile = useCallback((fileId: string, content: string, savedContent = content) => {
+    if (!fileId) {
+      return;
+    }
+
+    setFileContents((current) => {
+      if (current[fileId] === content) {
+        return current;
+      }
+
+      const next = { ...current, [fileId]: content };
+      fileContentsRef.current = next;
+      return next;
+    });
+
+    setSavedFileContents((current) => {
+      if (current[fileId] === savedContent) {
+        return current;
+      }
+
+      const next = { ...current, [fileId]: savedContent };
+      savedFileContentsRef.current = next;
+      return next;
+    });
+
+    setLoadErrors((current) => removeKey(current, fileId));
+    setSaveErrors((current) => removeKey(current, fileId));
+    setLoadingFiles((current) => {
+      if (current[fileId] !== false) {
+        return { ...current, [fileId]: false };
+      }
+
+      return current;
+    });
+    setSavingFiles((current) => {
+      if (current[fileId] !== false) {
+        return { ...current, [fileId]: false };
+      }
+
+      return current;
+    });
+  }, []);
+
+  const adoptFileState = useCallback((currentFileId: string, nextFileId: string, options?: AdoptFileStateOptions) => {
+    if (!currentFileId || !nextFileId) {
+      return;
+    }
+
+    const nextContent = options?.content ?? fileContentsRef.current[currentFileId] ?? '';
+    const nextSavedContent = options?.savedContent ?? savedFileContentsRef.current[currentFileId] ?? nextContent;
+    const removeSource = options?.removeSource ?? false;
+
+    setFileContents((current) => {
+      const next = {
+        ...current,
+        [nextFileId]: nextContent,
+      };
+
+      if (removeSource && currentFileId !== nextFileId) {
+        delete next[currentFileId];
+      }
+
+      fileContentsRef.current = next;
+      return next;
+    });
+
+    setSavedFileContents((current) => {
+      const next = {
+        ...current,
+        [nextFileId]: nextSavedContent,
+      };
+
+      if (removeSource && currentFileId !== nextFileId) {
+        delete next[currentFileId];
+      }
+
+      savedFileContentsRef.current = next;
+      return next;
+    });
+
+    setLoadErrors((current) => {
+      const next = removeSource && currentFileId !== nextFileId
+        ? removeKey(current, currentFileId)
+        : { ...current };
+      delete next[nextFileId];
+      return next;
+    });
+
+    setSaveErrors((current) => {
+      const next = removeSource && currentFileId !== nextFileId
+        ? removeKey(current, currentFileId)
+        : { ...current };
+      delete next[nextFileId];
+      return next;
+    });
+
+    setLoadingFiles((current) => {
+      const next = { ...current, [nextFileId]: false };
+      if (removeSource && currentFileId !== nextFileId) {
+        delete next[currentFileId];
+      }
+      return next;
+    });
+
+    setSavingFiles((current) => {
+      const next = { ...current, [nextFileId]: false };
+      if (removeSource && currentFileId !== nextFileId) {
+        delete next[currentFileId];
+      }
+      return next;
+    });
+  }, []);
+
+  const removeFile = useCallback((fileId: string) => {
+    if (!fileId) {
+      return;
+    }
+
+    setFileContents((current) => {
+      const next = removeKey(current, fileId);
+      if (next === current) {
+        return current;
+      }
+
+      fileContentsRef.current = next;
+      return next;
+    });
+
+    setSavedFileContents((current) => {
+      const next = removeKey(current, fileId);
+      if (next === current) {
+        return current;
+      }
+
+      savedFileContentsRef.current = next;
+      return next;
+    });
+
+    setLoadErrors((current) => removeKey(current, fileId));
+    setSaveErrors((current) => removeKey(current, fileId));
+    setLoadingFiles((current) => removeKey(current, fileId));
+    setSavingFiles((current) => removeKey(current, fileId));
   }, []);
 
   const updateFileContent = useCallback((fileId: string, content: string) => {
@@ -164,18 +336,23 @@ export function useWorkspaceFileStore() {
     });
   }, []);
 
-  const saveFileContentInternal = useCallback(async (fileId: string, refreshGitStatusAfterSuccess: boolean) => {
+  const saveFileContentInternal = useCallback(async (
+    fileId: string,
+    refreshGitStatusAfterSuccess: boolean,
+    options?: SaveFileContentOptions,
+  ) => {
     if (!fileId) {
       return false;
     }
 
+    const targetPath = options?.targetPath ?? fileId;
     const currentContent = fileContentsRef.current[fileId];
     const savedContent = savedFileContentsRef.current[fileId];
     if (currentContent === undefined) {
       return false;
     }
 
-    if (currentContent === savedContent) {
+    if (targetPath === fileId && currentContent === savedContent) {
       setSaveErrors((current) => {
         if (!current[fileId]) {
           return current;
@@ -194,6 +371,13 @@ export function useWorkspaceFileStore() {
       return false;
     }
 
+    const shouldWriteAbsolutePath = options?.absolute ?? isAbsoluteFilePath(targetPath);
+    const writeFile = shouldWriteAbsolutePath ? fsApi.writeFileAbsolute : fsApi.writeFile;
+    if (!writeFile) {
+      setSaveErrors((current) => ({ ...current, [fileId]: 'Filesystem API unavailable' }));
+      return false;
+    }
+
     setSavingFiles((current) => ({ ...current, [fileId]: true }));
     setSaveErrors((current) => {
       if (!current[fileId]) {
@@ -206,21 +390,23 @@ export function useWorkspaceFileStore() {
     });
 
     try {
-      await fsApi.writeFile(fileId, currentContent);
+      await writeFile(targetPath, currentContent);
 
       if (!isMountedRef.current) {
         return true;
       }
 
-      setSavedFileContents((current) => {
-        if (current[fileId] === currentContent) {
-          return current;
-        }
+      if (targetPath === fileId) {
+        setSavedFileContents((current) => {
+          if (current[fileId] === currentContent) {
+            return current;
+          }
 
-        const next = { ...current, [fileId]: currentContent };
-        savedFileContentsRef.current = next;
-        return next;
-      });
+          const next = { ...current, [fileId]: currentContent };
+          savedFileContentsRef.current = next;
+          return next;
+        });
+      }
 
       if (refreshGitStatusAfterSuccess) {
         refreshWorkspaceGitStatus();
@@ -243,8 +429,8 @@ export function useWorkspaceFileStore() {
     }
   }, []);
 
-  const saveFileContent = useCallback(async (fileId: string) => {
-    return saveFileContentInternal(fileId, true);
+  const saveFileContent = useCallback(async (fileId: string, options?: SaveFileContentOptions) => {
+    return saveFileContentInternal(fileId, true, options);
   }, [saveFileContentInternal]);
 
   const saveFiles = useCallback(async (fileIds: string[]): Promise<SaveFilesResult> => {
@@ -301,13 +487,16 @@ export function useWorkspaceFileStore() {
   }, [savedFileContents]);
 
   return {
+    adoptFileState,
     dirtyFileIds,
     dirtyFiles,
     discardFiles,
     fileContents,
+    initializeFile,
     loadErrors,
     loadFileContent,
     loadingFiles,
+    removeFile,
     saveErrors,
     saveFileContent,
     saveFiles,

@@ -7,6 +7,7 @@ import type {
   WorkspaceLocation,
 } from './systemverilog-lsp';
 import type { WorkspaceGitStatusPayload } from './workspace-git';
+import type { SaveDialogResult } from '../electron/ipc/dialog';
 import type { MenuCommandEvent } from '../src/app/menu/applicationMenu';
 import type { WindowCloseDecision, WindowCloseRequest } from '../src/app/window/windowClose';
 import type { AuthView, DesktopAuthSession } from '../src/app/auth/types';
@@ -39,8 +40,10 @@ export interface ElectronAPI {
   // File system (project-dir scoped)
   fs: {
     readFile: (filePath: string, encoding?: string) => Promise<string>;
+    readFileAbsolute: (filePath: string, encoding?: string) => Promise<string>;
     listFiles: (dirPath?: string) => Promise<string[]>;
     writeFile: (filePath: string, content: string) => Promise<void>;
+    writeFileAbsolute: (filePath: string, content: string) => Promise<void>;
     readDir: (dirPath: string) => Promise<Array<{
       name: string;
       isDirectory: boolean;
@@ -54,6 +57,10 @@ export interface ElectronAPI {
       ctime: string;
     }>;
     exists: (filePath: string) => Promise<boolean>;
+  };
+
+  dialog: {
+    showSaveDialog: (defaultPath?: string) => Promise<SaveDialogResult>;
   };
 
   git: {

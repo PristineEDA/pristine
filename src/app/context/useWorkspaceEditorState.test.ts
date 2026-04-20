@@ -3,6 +3,43 @@ import { describe, expect, it, vi } from 'vitest';
 import { useWorkspaceEditorState } from './useWorkspaceEditorState';
 
 describe('useWorkspaceEditorState', () => {
+  it('creates untitled files in the focused editor group with sequential names and initial cursor restore', () => {
+    const { result } = renderHook(() => useWorkspaceEditorState());
+
+    let firstUntitledId = '';
+    let secondUntitledId = '';
+
+    act(() => {
+      firstUntitledId = result.current.openUntitledFile();
+    });
+
+    expect(firstUntitledId).toBe('untitled-1');
+    expect(result.current.activeTabId).toBe('untitled-1');
+    expect(result.current.tabs.map((tab) => tab.id)).toEqual(['untitled-1']);
+    expect(result.current.getCursorRestoreRequest('group-1')).toEqual(
+      expect.objectContaining({
+        fileId: 'untitled-1',
+        groupId: 'group-1',
+        line: 1,
+        col: 1,
+      }),
+    );
+
+    act(() => {
+      result.current.openFile('rtl/core/reg_file.v', 'reg_file.v');
+      result.current.splitGroup('group-1', 'horizontal');
+    });
+
+    act(() => {
+      secondUntitledId = result.current.openUntitledFile();
+    });
+
+    expect(secondUntitledId).toBe('untitled-2');
+    expect(result.current.focusedGroupId).toBe('group-2');
+    expect(result.current.activeTabId).toBe('untitled-2');
+    expect(result.current.editorGroups.find((group) => group.id === 'group-2')?.tabs.map((tab) => tab.id)).toContain('untitled-2');
+  });
+
   it('tracks cursor positions separately for the same file in different editor groups', () => {
     const { result } = renderHook(() => useWorkspaceEditorState());
 

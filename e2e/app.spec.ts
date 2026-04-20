@@ -239,6 +239,16 @@ async function launchApp(options?: { env?: Record<string, string | undefined>; p
   return { app, window, splashWindow };
 }
 
+async function setNextSaveDialogPath(
+  app: Awaited<ReturnType<typeof electron.launch>>,
+  filePath: string,
+) {
+  await app.evaluate(({ app: electronApp }, nextFilePath) => {
+    void electronApp;
+    process.env['PRISTINE_E2E_SAVE_DIALOG_PATH'] = nextFilePath;
+  }, filePath);
+}
+
 function createWorkspaceCopy(targetPath: string) {
   fs.rmSync(targetPath, { recursive: true, force: true });
   fs.cpSync(fixtureWorkspace, targetPath, { recursive: true });
@@ -1282,6 +1292,116 @@ test('ctrl+s saves an edited explorer file and clears the dirty indicator', asyn
     await expect.poll(() => fs.readFileSync(filePath, 'utf-8'), {
       timeout: 15000,
     }).toContain(marker);
+  } finally {
+    await app.close();
+  }
+});
+
+test('Ctrl+N creates an untitled file, Ctrl+S saves it, and explorer refreshes to show the saved file', async () => {
+  test.slow();
+
+  const workspaceCopy = test.info().outputPath('untitled-save-workspace');
+  createWorkspaceCopy(workspaceCopy);
+
+  const savedFileName = `untitled_e2e_${Date.now()}.sv`;
+  const savedRelativePath = `rtl/core/${savedFileName}`;
+  const savedAbsolutePath = path.join(workspaceCopy, 'rtl', 'core', savedFileName);
+  const savedTreeTestId = `file-tree-node-${savedRelativePath.replace(/[/.]/g, '_').replace(/[^A-Za-z0-9_-]/g, '-')}`;
+  const primaryModifier = process.platform === 'darwin' ? 'Meta' : 'Control';
+  const marker = 'module untitled_e2e; endmodule';
+  const { app, window } = await launchApp({ projectRoot: workspaceCopy });
+
+  try {
+    await ensureExplorerVisible(window);
+    await window.getByTestId('file-tree-node-README_md').click();
+    await waitForMonacoEditor(window);
+    await focusMonacoEditor(window);
+    await waitForMonacoEditorTextFocus(window);
+
+    await window.keyboard.press(`${primaryModifier}+N`);
+
+    await expect(window.getByTestId('editor-tab-untitled-1')).toBeVisible();
+    await expect(window.getByTestId('editor-tab-untitled-1')).toHaveClass(/bg-background/);
+
+    await window.keyboard.type(marker);
+    await expect(window.getByTestId('editor-tab-dirty-indicator-untitled-1')).toBeVisible();
+
+    await setNextSaveDialogPath(app, savedAbsolutePath);
+    await window.keyboard.press(`${primaryModifier}+S`);
+
+    await expect(window.getByTestId(`editor-tab-${savedRelativePath}`)).toBeVisible();
+    await expect(window.getByTestId(`editor-tab-${savedRelativePath}`)).toHaveClass(/bg-background/);
+    await expect(window.getByTestId(`editor-tab-dirty-indicator-${savedRelativePath}`)).toHaveCount(0);
+    await expect(window.getByTestId('editor-breadcrumb')).toContainText('retroSoC');
+    await expect(window.getByTestId('editor-breadcrumb')).toContainText('rtl');
+    await expect(window.getByTestId('editor-breadcrumb')).toContainText('core');
+    await expect(window.getByTestId('editor-breadcrumb')).toContainText(savedFileName);
+    await expect(window.getByTestId(savedTreeTestId)).toBeVisible();
+    await expect.poll(() => fs.readFileSync(savedAbsolutePath, 'utf-8')).toContain(marker);
+
+    await app.close();
+
+    const relaunched = await launchApp({ projectRoot: workspaceCopy });
+
+    try {
+      await ensureExplorerVisible(relaunched.window);
+      await relaunched.window.getByTestId('file-tree-node-rtl').click();
+      await relaunched.window.getByTestId('file-tree-node-rtl_core').click();
+      await relaunched.window.getByTestId(savedTreeTestId).click();
+
+      await waitForMonacoEditor(relaunched.window);
+      await expect(relaunched.window.getByTestId('editor-document-placeholder')).toHaveCount(0);
+      await expect(relaunched.window.locator('.monaco-editor .view-lines')).toContainText(marker);
+
+      await relaunched.window.getByTestId(savedTreeTestId).dblclick();
+      await expect(relaunched.window.getByTestId(`editor-tab-${savedRelativePath}`)).toBeVisible();
+      await expect(relaunched.window.getByTestId('editor-document-placeholder')).toHaveCount(0);
+      await expect(relaunched.window.locator('.monaco-editor .view-lines')).toContainText(marker);
+    } finally {
+      await relaunched.app.close();
+    }
+  } finally {
+    await app.close().catch(() => undefined);
+  }
+});
+
+test('Ctrl+W prompts for dirty untitled files and supports Cancel and Don\'t save', async () => {
+  test.slow();
+
+  const workspaceCopy = test.info().outputPath('untitled-close-workspace');
+  createWorkspaceCopy(workspaceCopy);
+
+  const primaryModifier = process.platform === 'darwin' ? 'Meta' : 'Control';
+  const { app, window } = await launchApp({ projectRoot: workspaceCopy });
+
+  try {
+    await ensureExplorerVisible(window);
+    await window.getByTestId('file-tree-node-README_md').click();
+    await waitForMonacoEditor(window);
+    await focusMonacoEditor(window);
+    await waitForMonacoEditorTextFocus(window);
+
+    await window.keyboard.press(`${primaryModifier}+N`);
+    await expect(window.getByTestId('editor-tab-untitled-1')).toBeVisible();
+
+    await window.keyboard.type('module close_me; endmodule');
+    await expect(window.getByTestId('editor-tab-dirty-indicator-untitled-1')).toBeVisible();
+
+    await window.keyboard.press(`${primaryModifier}+W`);
+
+    await expect(window.getByTestId('unsaved-changes-dialog')).toBeVisible();
+    await expect(window.getByTestId('unsaved-changes-single-file')).toContainText('untitled-1');
+
+    await window.getByTestId('unsaved-changes-cancel').click();
+    await expect(window.getByTestId('unsaved-changes-dialog')).toHaveCount(0);
+    await expect(window.getByTestId('editor-tab-untitled-1')).toBeVisible();
+
+    await window.keyboard.press(`${primaryModifier}+W`);
+    await expect(window.getByTestId('unsaved-changes-dialog')).toBeVisible();
+    await window.getByTestId('unsaved-changes-discard').click();
+
+    await expect(window.getByTestId('editor-tab-untitled-1')).toHaveCount(0);
+    await expect(window.getByTestId('unsaved-changes-dialog')).toHaveCount(0);
   } finally {
     await app.close();
   }

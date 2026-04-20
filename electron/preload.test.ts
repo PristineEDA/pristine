@@ -82,9 +82,12 @@ describe('preload bridge', () => {
     api.close();
     api.resolveCloseRequest(3, 'proceed');
     api.setFloatingInfoWindowVisible(true);
+    api.dialog.showSaveDialog('untitled-1');
     api.fs.readFile('src/main.v', 'utf-8');
+    api.fs.readFileAbsolute('C:/external/main.v', 'utf-8');
     api.fs.listFiles('rtl');
     api.fs.writeFile('rtl/main.v', 'module main; endmodule');
+    api.fs.writeFileAbsolute('C:/external/main.v', 'module external; endmodule');
     api.fs.readDir('rtl');
     api.fs.stat('rtl/main.v');
     api.fs.exists('rtl/main.v');
@@ -135,9 +138,12 @@ describe('preload bridge', () => {
     expect(mockInvoke).toHaveBeenCalledWith('async:window:close');
     expect(mockInvoke).toHaveBeenCalledWith('async:window:resolve-close-request', 3, 'proceed');
     expect(mockInvoke).toHaveBeenCalledWith('async:window:set-floating-info-visibility', true);
+    expect(mockInvoke).toHaveBeenCalledWith('async:dialog:show-save', 'untitled-1');
     expect(mockInvoke).toHaveBeenCalledWith('async:fs:read-file', 'src/main.v', 'utf-8');
+    expect(mockInvoke).toHaveBeenCalledWith('async:fs:read-file-absolute', 'C:/external/main.v', 'utf-8');
     expect(mockInvoke).toHaveBeenCalledWith('async:fs:list-files', 'rtl');
     expect(mockInvoke).toHaveBeenCalledWith('async:fs:write-file', 'rtl/main.v', 'module main; endmodule');
+    expect(mockInvoke).toHaveBeenCalledWith('async:fs:write-file-absolute', 'C:/external/main.v', 'module external; endmodule');
     expect(mockInvoke).toHaveBeenCalledWith('async:fs:read-dir', 'rtl');
     expect(mockInvoke).toHaveBeenCalledWith('async:fs:stat', 'rtl/main.v');
     expect(mockInvoke).toHaveBeenCalledWith('async:fs:exists', 'rtl/main.v');

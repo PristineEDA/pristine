@@ -14,20 +14,24 @@ import { TooltipIconButton } from '../../ui/tooltip-icon-button';
 
 interface LeftSidePanelProps {
   activeFileId: string;
+  onCreateFile?: () => void;
   onFileOpen: (fileId: string, fileName: string) => void;
   onFilePreview: (fileId: string, fileName: string) => void;
   onLineJump: (line: number) => void;
   currentOutlineId: string;
+  refreshToken?: number;
   revealRequest?: WorkspaceRevealRequest | null;
   onWorkspaceRefresh?: () => void;
 }
 
 export function LeftSidePanel({
   activeFileId,
+  onCreateFile,
   onFileOpen,
   onFilePreview,
   onLineJump,
   currentOutlineId,
+  refreshToken = 0,
   revealRequest,
   onWorkspaceRefresh,
 }: LeftSidePanelProps) {
@@ -42,7 +46,7 @@ export function LeftSidePanel({
     toggleFolder,
     refreshTree,
     collapseAll,
-  } = useWorkspaceTree(revealRequest);
+  } = useWorkspaceTree(revealRequest, refreshToken);
 
   const outline = fileOutlines[currentOutlineId] || [];
 
@@ -91,7 +95,13 @@ export function LeftSidePanel({
             </span>
             <div className="flex items-center">
               <TooltipIconButton content="New File">
-                <Button variant="ghost" size="icon-sm" aria-label="New File" className="text-muted-foreground hover:text-foreground"><FilePlus size={14} /></Button>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="New File"
+                  className="text-muted-foreground hover:text-foreground"
+                  onClick={onCreateFile}
+                ><FilePlus size={14} /></Button>
               </TooltipIconButton>
               <TooltipIconButton content="New Folder">
                 <Button variant="ghost" size="icon-sm" aria-label="New Folder" className="text-muted-foreground hover:text-foreground"><FolderPlus size={14} /></Button>

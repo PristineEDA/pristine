@@ -17,6 +17,7 @@ import type { EditorSelectionSnapshot } from './context/useWorkspaceEditorState'
 import { SidebarProvider } from './components/ui/sidebar';
 import { refreshWorkspaceGitStatus } from './git/workspaceGitStatus';
 import { useGlobalAppShortcuts } from './useGlobalAppShortcuts';
+import { isWorkspaceRelativeFilePath } from './workspace/workspaceFiles';
 
 const QUICK_OPEN_RECENT_LIMIT = 20;
 const EMPTY_QUICK_OPEN_FILES: QuickOpenFileEntry[] = [];
@@ -180,8 +181,10 @@ function AppLayout() {
   const {
     activeView, setActiveView,
     canToggleLayoutPanels,
+    closeActiveTabInFocusedGroup,
     mainContentView,
     activeTabId,
+    openUntitledFile,
     openFile,
     openPreviewFile,
     jumpToLine, jumpTo,
@@ -198,6 +201,7 @@ function AppLayout() {
     saveAllFiles,
     saveErrors,
     savingFiles,
+    workspaceTreeRefreshToken,
   } = useWorkspace();
   const [quickOpenState, dispatchQuickOpen] = useReducer(quickOpenReducer, QUICK_OPEN_INITIAL_STATE);
   const [explorerLeftPanelWidthPx, setExplorerLeftPanelWidthPx] = useState(EXPLORER_LEFT_PANEL_DEFAULT_WIDTH_PX);
@@ -259,7 +263,7 @@ function AppLayout() {
   }, []);
 
   const queueRevealRequest = useCallback((filePath: string, options?: { markActiveFileHandled?: boolean }) => {
-    if (!filePath) {
+    if (!filePath || !isWorkspaceRelativeFilePath(filePath)) {
       return;
     }
 
@@ -281,6 +285,11 @@ function AppLayout() {
   const handleQuickOpenSelectedIndexChange = useCallback((index: number) => {
     dispatchQuickOpen({ type: 'setSelectedIndex', index });
   }, []);
+
+  const handleCreateUntitledFile = useCallback(() => {
+    openUntitledFile();
+    restoreActiveEditorFocus();
+  }, [openUntitledFile, restoreActiveEditorFocus]);
 
   const openWorkspaceFile = useCallback((filePath: string, fileName: string) => {
     queueRevealRequest(filePath, { markActiveFileHandled: true });
@@ -304,8 +313,18 @@ function AppLayout() {
     }
 
     lastHandledActiveFileRevealRef.current = activeTabId;
-    queueRevealRequest(activeTabId);
+    if (isWorkspaceRelativeFilePath(activeTabId)) {
+      queueRevealRequest(activeTabId);
+    }
   }, [activeTabId, queueRevealRequest]);
+
+  useEffect(() => {
+    if (workspaceTreeRefreshToken === 0) {
+      return;
+    }
+
+    invalidateWorkspaceFiles();
+  }, [invalidateWorkspaceFiles, workspaceTreeRefreshToken]);
 
   useEffect(() => {
     const electronApi = typeof window === 'undefined' ? undefined : window.electronAPI;
@@ -469,10 +488,12 @@ function AppLayout() {
       leftContent: (
         <LeftSidePanel
           activeFileId={activeTabId}
+          onCreateFile={handleCreateUntitledFile}
           onFileOpen={openWorkspaceFile}
           onFilePreview={openWorkspacePreviewFile}
           onLineJump={jumpTo}
           currentOutlineId={activeTabId}
+          refreshToken={workspaceTreeRefreshToken}
           revealRequest={quickOpenState.revealRequest}
           onWorkspaceRefresh={invalidateWorkspaceFiles}
         />
@@ -563,8 +584,10 @@ function AppLayout() {
 
   useGlobalAppShortcuts({
     canToggleLayoutPanels,
+    closeActiveTabInFocusedGroup,
     closeQuickOpen,
     isQuickOpenVisible: quickOpenState.isVisible,
+    openUntitledFile: handleCreateUntitledFile,
     openQuickOpen,
     saveActiveFile,
     setShowBottomPanel,

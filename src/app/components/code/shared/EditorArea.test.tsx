@@ -785,4 +785,27 @@ describe('EditorArea', () => {
       expect(screen.getByTestId('monaco-editor')).toHaveTextContent('module reg_file; endmodule');
     });
   });
+
+  it('renders breadcrumb and document content from the resolved saved path after an untitled tab is renamed', async () => {
+    render(
+      <EditorArea
+        tabs={[{ id: 'untitled-1', name: 'generated.sv', isPinned: true }]}
+        activeTabId="untitled-1"
+        documentTabId="rtl/core/generated.sv"
+        onTabChange={vi.fn()}
+        onTabClose={vi.fn()}
+        editorRef={createRef()}
+        contentCache={{ 'rtl/core/generated.sv': 'module generated; endmodule' }}
+      />,
+    );
+
+    expect(screen.getByTestId('editor-breadcrumb')).toHaveTextContent('retroSoC');
+    expect(screen.getByTestId('editor-breadcrumb')).toHaveTextContent('rtl');
+    expect(screen.getByTestId('editor-breadcrumb')).toHaveTextContent('core');
+    expect(screen.getByTestId('editor-breadcrumb')).toHaveTextContent('generated.sv');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('monaco-editor')).toHaveTextContent('module generated; endmodule');
+    });
+  });
 });

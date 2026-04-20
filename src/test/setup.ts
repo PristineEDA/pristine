@@ -120,11 +120,20 @@ function createElectronApiMock() {
     onWindowFocus: vi.fn(() => vi.fn()),
     fs: {
       readFile: vi.fn().mockResolvedValue(''),
+      readFileAbsolute: vi.fn().mockResolvedValue(''),
       listFiles: vi.fn().mockResolvedValue([]),
       writeFile: vi.fn(),
+      writeFileAbsolute: vi.fn(),
       readDir: vi.fn().mockResolvedValue([]),
       stat: vi.fn(),
       exists: vi.fn().mockResolvedValue(false),
+    },
+    dialog: {
+      showSaveDialog: vi.fn().mockResolvedValue({
+        canceled: true,
+        filePath: null,
+        workspaceRelativePath: null,
+      }),
     },
     git: {
       getStatus: vi.fn().mockResolvedValue({

@@ -3,7 +3,12 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import ignore from 'ignore';
 import { AsyncChannels } from './channels.js';
-import { validatePathWithinRoot, assertString, assertValidEncoding } from './validators.js';
+import {
+  validateAbsolutePath,
+  validatePathWithinRoot,
+  assertString,
+  assertValidEncoding,
+} from './validators.js';
 
 let projectRoot: string | null = null;
 
@@ -104,6 +109,14 @@ export function registerFilesystemHandlers(): void {
     return fs.readFile(resolved, { encoding: enc });
   });
 
+  ipcMain.handle(AsyncChannels.FS_READ_FILE_ABSOLUTE, async (_event, filePath: unknown, encoding?: unknown) => {
+    assertString(filePath, 'filePath');
+    assertValidEncoding(encoding, 'encoding');
+    const resolved = validateAbsolutePath(filePath);
+    const enc = (encoding as BufferEncoding) ?? 'utf-8';
+    return fs.readFile(resolved, { encoding: enc });
+  });
+
   ipcMain.handle(AsyncChannels.FS_LIST_FILES, async (_event, dirPath: unknown = '.') => {
     assertString(dirPath, 'dirPath');
     const files = await listFilesRecursive(dirPath);
@@ -114,6 +127,14 @@ export function registerFilesystemHandlers(): void {
     assertString(filePath, 'filePath');
     assertString(content, 'content');
     const resolved = validatePathWithinRoot(getRoot(), filePath);
+    await fs.mkdir(path.dirname(resolved), { recursive: true });
+    await fs.writeFile(resolved, content, 'utf-8');
+  });
+
+  ipcMain.handle(AsyncChannels.FS_WRITE_FILE_ABSOLUTE, async (_event, filePath: unknown, content: unknown) => {
+    assertString(filePath, 'filePath');
+    assertString(content, 'content');
+    const resolved = validateAbsolutePath(filePath);
     await fs.mkdir(path.dirname(resolved), { recursive: true });
     await fs.writeFile(resolved, content, 'utf-8');
   });
