@@ -89,6 +89,8 @@ describe('preload bridge', () => {
     api.fs.writeFile('rtl/main.v', 'module main; endmodule');
     api.fs.writeFileAbsolute('C:/external/main.v', 'module external; endmodule');
     api.fs.createDirectory('rtl/generated');
+    api.fs.deleteFile('rtl/main.v');
+    api.fs.deleteDirectory('rtl/generated');
     api.fs.rename('rtl/core/old.v', 'rtl/core/new.v');
     api.fs.readDir('rtl');
     api.fs.stat('rtl/main.v');
@@ -147,6 +149,8 @@ describe('preload bridge', () => {
     expect(mockInvoke).toHaveBeenCalledWith('async:fs:write-file', 'rtl/main.v', 'module main; endmodule');
     expect(mockInvoke).toHaveBeenCalledWith('async:fs:write-file-absolute', 'C:/external/main.v', 'module external; endmodule');
     expect(mockInvoke).toHaveBeenCalledWith('async:fs:create-directory', 'rtl/generated');
+    expect(mockInvoke).toHaveBeenCalledWith('async:fs:delete-file', 'rtl/main.v');
+    expect(mockInvoke).toHaveBeenCalledWith('async:fs:delete-directory', 'rtl/generated');
     expect(mockInvoke).toHaveBeenCalledWith('async:fs:rename', 'rtl/core/old.v', 'rtl/core/new.v');
     expect(mockInvoke).toHaveBeenCalledWith('async:fs:read-dir', 'rtl');
     expect(mockInvoke).toHaveBeenCalledWith('async:fs:stat', 'rtl/main.v');

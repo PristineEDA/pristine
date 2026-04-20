@@ -42,13 +42,27 @@ import {
 
 export type Tab = EditorTab;
 
-type UnsavedChangesDialogKind = 'close-app' | 'close-file' | 'review';
+type UnsavedChangesDialogKind = 'close-app' | 'close-file' | 'review' | 'delete-entry';
 
 export interface UnsavedChangesDialogState {
   fileIds: string[];
   kind: UnsavedChangesDialogKind;
   title: string;
   description: string;
+}
+
+export interface DeleteConfirmationDialogState {
+  targetPath: string;
+  entryType: 'file' | 'folder';
+  title: string;
+  description: string;
+  isSubmitting: boolean;
+  errorMessage: string | null;
+}
+
+interface WorkspaceFileDeleteTarget {
+  fileId: string;
+  groupId: string;
 }
 
 interface WorkspaceState {
@@ -79,6 +93,7 @@ interface WorkspaceState {
   openPreviewFileInGroup: (fileId: string, fileName: string, groupId: string) => void;
   createWorkspaceFile: (targetPath: string) => Promise<void>;
   createWorkspaceFolder: (targetPath: string) => Promise<void>;
+  deleteWorkspaceEntry: (targetPath: string, entryType: 'file' | 'folder') => Promise<boolean>;
   renameWorkspaceEntry: (currentPath: string, nextPath: string, entryType: 'file' | 'folder') => Promise<void>;
   pinTab: (tabId: string) => void;
   pinTabInGroup: (groupId: string, tabId: string) => void;
@@ -129,6 +144,10 @@ interface WorkspaceState {
   discardUnsavedChanges: (fileIds?: string[]) => void;
   cancelUnsavedChanges: () => void;
 
+  deleteConfirmationDialog: DeleteConfirmationDialogState | null;
+  confirmDeleteConfirmation: () => Promise<void>;
+  cancelDeleteConfirmation: () => void;
+
   editorRef: React.MutableRefObject<any>;
   registerEditorRef: (groupId: string, editorInstance: any) => void;
 }
@@ -158,6 +177,17 @@ function createUnsavedChangesDialogState(
     };
   }
 
+  if (kind === 'delete-entry') {
+    return {
+      fileIds,
+      kind,
+      title: 'Save changes before deleting?',
+      description: fileIds.length === 1
+        ? `The file ${getTabName(fileIds[0] ?? '')} has unsaved changes.`
+        : `${fileIds.length} files have unsaved changes and are affected by this delete.`,
+    };
+  }
+
   return {
     fileIds,
     kind,
@@ -166,6 +196,48 @@ function createUnsavedChangesDialogState(
       ? `The file ${getTabName(fileIds[0] ?? '')} has unsaved changes.`
       : `${fileIds.length} files have unsaved changes.`,
   };
+}
+
+function createDeleteConfirmationDialogState(
+  targetPath: string,
+  entryType: 'file' | 'folder',
+): DeleteConfirmationDialogState {
+  const entryLabel = entryType === 'folder' ? 'folder' : 'file';
+  const description = entryType === 'folder'
+    ? 'This will permanently delete this folder and all of its contents.'
+    : 'This will permanently delete this file.';
+
+  return {
+    targetPath,
+    entryType,
+    title: `Delete ${entryLabel}?`,
+    description,
+    isSubmitting: false,
+    errorMessage: null,
+  };
+}
+
+function isWorkspaceDeleteTargetMatch(
+  fileId: string,
+  targetPath: string,
+  entryType: 'file' | 'folder',
+) {
+  return entryType === 'folder'
+    ? isWithinWorkspacePath(fileId, targetPath)
+    : fileId === targetPath;
+}
+
+function collectWorkspaceFileDeleteTargets(
+  editorGroups: EditorGroup[],
+  targetPath: string,
+  entryType: 'file' | 'folder',
+): WorkspaceFileDeleteTarget[] {
+  return editorGroups.flatMap((group) => group.tabs
+    .filter((tab) => isWorkspaceRelativeFilePath(tab.id) && isWorkspaceDeleteTargetMatch(tab.id, targetPath, entryType))
+    .map((tab) => ({
+      fileId: tab.id,
+      groupId: group.id,
+    })));
 }
 
 const EMPTY_TABS: Tab[] = [];
@@ -267,9 +339,12 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const editorWorkspace = useWorkspaceEditorState();
   const fileStore = useWorkspaceFileStore();
   const [unsavedChangesDialog, setUnsavedChangesDialog] = useState<UnsavedChangesDialogState | null>(null);
+  const [deleteConfirmationDialog, setDeleteConfirmationDialog] = useState<DeleteConfirmationDialogState | null>(null);
   const [untitledFiles, setUntitledFiles] = useState<Record<string, string>>({});
   const [workspaceTreeRefreshToken, setWorkspaceTreeRefreshToken] = useState(0);
   const unsavedChangesResolverRef = useRef<((result: 'save' | 'discard' | 'cancel') => void) | null>(null);
+  const deleteConfirmationResolverRef = useRef<((result: boolean) => void) | null>(null);
+  const deleteConfirmationActionRef = useRef<(() => Promise<void>) | null>(null);
   const previousEditorGroupsRef = useRef<EditorGroup[]>(EMPTY_EDITOR_GROUPS);
   const layoutPanelsEnabled = canToggleLayoutPanels(mainContentView, activeView);
   const visiblePanelState = layoutPanelsEnabled ? panelStateByView[activeView] : EMPTY_PANEL_STATE;
@@ -278,6 +353,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const activeViewRef = useRef(activeView);
   const layoutPanelsEnabledRef = useRef(layoutPanelsEnabled);
   const unsavedChangesDialogRef = useRef(unsavedChangesDialog);
+  const deleteConfirmationDialogRef = useRef(deleteConfirmationDialog);
   const untitledFilesRef = useRef(untitledFiles);
   const fileIdRedirectsRef = useRef<Record<string, string>>({});
 
@@ -286,6 +362,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   activeViewRef.current = activeView;
   layoutPanelsEnabledRef.current = layoutPanelsEnabled;
   unsavedChangesDialogRef.current = unsavedChangesDialog;
+  deleteConfirmationDialogRef.current = deleteConfirmationDialog;
   untitledFilesRef.current = untitledFiles;
 
   const resolveCurrentFileId = useCallback((fileId: string) => {
@@ -338,6 +415,23 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     fileIdRedirectsRef.current = nextRedirects;
   }, []);
 
+  const removeRedirectedFileIds = useCallback((targetPath: string, entryType: 'file' | 'folder') => {
+    const nextRedirects: Record<string, string> = {};
+
+    Object.entries(fileIdRedirectsRef.current).forEach(([key, value]) => {
+      const shouldDeleteKey = isWorkspaceRelativeFilePath(key) && isWorkspaceDeleteTargetMatch(key, targetPath, entryType);
+      const shouldDeleteValue = isWorkspaceRelativeFilePath(value) && isWorkspaceDeleteTargetMatch(value, targetPath, entryType);
+
+      if (shouldDeleteKey || shouldDeleteValue) {
+        return;
+      }
+
+      nextRedirects[key] = value;
+    });
+
+    fileIdRedirectsRef.current = nextRedirects;
+  }, []);
+
   const findTabName = useCallback((fileId: string) => {
     for (const group of editorWorkspaceRef.current.editorGroups) {
       const tab = group.tabs.find((currentTab) => currentTab.id === fileId);
@@ -368,6 +462,13 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const getDirtyRequestedFileIds = useCallback((fileIds: string[]) => Array.from(
     new Set(fileIds.filter((fileId) => fileStoreRef.current.dirtyFiles[fileId])),
   ), []);
+
+  const closeWorkspaceDeleteTargets = useCallback((targets: WorkspaceFileDeleteTarget[]) => {
+    targets.forEach(({ groupId, fileId }) => {
+      editorWorkspaceRef.current.closeFileInGroup(groupId, fileId);
+      clearTrackedFileId(fileId);
+    });
+  }, [clearTrackedFileId]);
 
   const showUnsavedChangesDialog = useCallback((fileIds: string[], kind: UnsavedChangesDialogKind) => {
     const uniqueFileIds = getDirtyRequestedFileIds(fileIds);
@@ -402,6 +503,63 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     setUnsavedChangesDialog(null);
     resolver?.(result);
   }, []);
+
+  const requestDeleteConfirmation = useCallback((
+    targetPath: string,
+    entryType: 'file' | 'folder',
+    onConfirm: () => Promise<void>,
+  ) => {
+    deleteConfirmationResolverRef.current?.(false);
+    deleteConfirmationActionRef.current = onConfirm;
+    setDeleteConfirmationDialog(createDeleteConfirmationDialogState(targetPath, entryType));
+
+    return new Promise<boolean>((resolve) => {
+      deleteConfirmationResolverRef.current = resolve;
+    });
+  }, []);
+
+  const resolveDeleteConfirmation = useCallback((result: boolean) => {
+    const resolver = deleteConfirmationResolverRef.current;
+    deleteConfirmationResolverRef.current = null;
+    deleteConfirmationActionRef.current = null;
+    setDeleteConfirmationDialog(null);
+    resolver?.(result);
+  }, []);
+
+  const confirmDeleteConfirmation = useCallback(async () => {
+    const pendingAction = deleteConfirmationActionRef.current;
+    const currentDialog = deleteConfirmationDialogRef.current;
+
+    if (!pendingAction || !currentDialog || currentDialog.isSubmitting) {
+      return;
+    }
+
+    setDeleteConfirmationDialog((current) => (current ? {
+      ...current,
+      isSubmitting: true,
+      errorMessage: null,
+    } : current));
+
+    try {
+      await pendingAction();
+      resolveDeleteConfirmation(true);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unable to delete the selected entry.';
+      setDeleteConfirmationDialog((current) => (current ? {
+        ...current,
+        isSubmitting: false,
+        errorMessage: message,
+      } : current));
+    }
+  }, [resolveDeleteConfirmation]);
+
+  const cancelDeleteConfirmation = useCallback(() => {
+    if (deleteConfirmationDialogRef.current?.isSubmitting) {
+      return;
+    }
+
+    resolveDeleteConfirmation(false);
+  }, [resolveDeleteConfirmation]);
 
   const saveFiles = useCallback((fileIds: string[]) => {
     const uniqueFileIds = Array.from(new Set(fileIds.filter(Boolean)));
@@ -646,6 +804,69 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     return true;
   }, [getDirtyRequestedFileIds, requestUnsavedChangesConfirmation]);
 
+  const deleteWorkspaceEntry = useCallback(async (
+    targetPath: string,
+    entryType: 'file' | 'folder',
+  ) => {
+    if (!targetPath || targetPath === '.') {
+      return false;
+    }
+
+    const fsApi = window.electronAPI?.fs;
+    if (!fsApi?.exists || !fsApi.deleteFile || !fsApi.deleteDirectory) {
+      throw new Error('Filesystem API unavailable');
+    }
+
+    if (!(await fsApi.exists(targetPath))) {
+      throw new Error('The selected entry no longer exists.');
+    }
+
+    const dirtyFileIds = fileStoreRef.current.dirtyFileIds.filter((fileId) => (
+      isWorkspaceRelativeFilePath(fileId) && isWorkspaceDeleteTargetMatch(fileId, targetPath, entryType)
+    ));
+    const openTargets = collectWorkspaceFileDeleteTargets(
+      editorWorkspaceRef.current.editorGroups,
+      targetPath,
+      entryType,
+    );
+
+    let deleted = false;
+
+    const proceeded = await maybeProceedWithUnsavedChanges(
+      dirtyFileIds,
+      'delete-entry',
+      async () => {
+        deleted = await requestDeleteConfirmation(targetPath, entryType, async () => {
+          if (entryType === 'folder') {
+            await fsApi.deleteDirectory(targetPath);
+          } else {
+            await fsApi.deleteFile(targetPath);
+          }
+
+          closeWorkspaceDeleteTargets(openTargets);
+
+          if (entryType === 'folder') {
+            fileStoreRef.current.removeWorkspacePaths(targetPath);
+          } else {
+            fileStoreRef.current.removeFile(targetPath);
+          }
+
+          removeRedirectedFileIds(targetPath, entryType);
+          bumpWorkspaceTreeRefreshToken();
+          refreshWorkspaceGitStatus();
+        });
+      },
+    );
+
+    return proceeded && deleted;
+  }, [
+    bumpWorkspaceTreeRefreshToken,
+    closeWorkspaceDeleteTargets,
+    maybeProceedWithUnsavedChanges,
+    removeRedirectedFileIds,
+    requestDeleteConfirmation,
+  ]);
+
   const closeFileInGroup = useCallback((groupId: string, fileId: string) => {
     const resolvedFileId = resolveCurrentFileId(fileId);
 
@@ -849,6 +1070,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       openPreviewFileInGroup: editorWorkspace.openPreviewFileInGroup,
       createWorkspaceFile,
       createWorkspaceFolder,
+      deleteWorkspaceEntry,
       renameWorkspaceEntry,
       pinTab: editorWorkspace.pinTab,
       pinTabInGroup: editorWorkspace.pinTabInGroup,
@@ -893,6 +1115,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       confirmUnsavedChangesSave,
       discardUnsavedChanges,
       cancelUnsavedChanges,
+      deleteConfirmationDialog,
+      confirmDeleteConfirmation,
+      cancelDeleteConfirmation,
       editorRef: editorWorkspace.editorRef,
       registerEditorRef: editorWorkspace.registerEditorRef,
     }}>

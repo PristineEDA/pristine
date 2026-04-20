@@ -1463,6 +1463,111 @@ test('Explorer Rename cascades open child tabs when renaming a folder', async ()
   }
 });
 
+test('Explorer Delete removes a selected workspace file with the Delete key and keeps it deleted after relaunch', async () => {
+  test.slow();
+
+  const workspaceCopy = test.info().outputPath('explorer-delete-file-workspace');
+  createWorkspaceCopy(workspaceCopy);
+
+  const deletedRelativePath = 'rtl/core/reg_file.v';
+  const deletedAbsolutePath = path.join(workspaceCopy, 'rtl', 'core', 'reg_file.v');
+  const deletedTreeTestId = toWorkspaceTreeTestId(deletedRelativePath);
+  const { app, window } = await launchApp({ projectRoot: workspaceCopy });
+
+  try {
+    await ensureExplorerVisible(window);
+    await openNestedWorkspaceFile(window, [
+      'file-tree-node-rtl',
+      'file-tree-node-rtl_core',
+      'file-tree-node-rtl_core_reg_file_v',
+    ], { finalAction: 'dblclick' });
+
+    const fileNode = window.getByTestId(deletedTreeTestId);
+    const explorerTree = window.locator('.explorer-tree-scrollbar');
+    await fileNode.click();
+    await explorerTree.focus();
+    await explorerTree.press('Delete');
+
+    await expect(window.getByTestId('delete-confirmation-dialog')).toBeVisible();
+    await expect(window.getByTestId('delete-confirmation-target')).toContainText('reg_file.v');
+    await window.getByTestId('delete-confirmation-confirm').click();
+
+    await expect(window.getByTestId('delete-confirmation-dialog')).toHaveCount(0);
+    await expect(window.getByTestId(`editor-tab-${deletedRelativePath}`)).toHaveCount(0);
+    await expect.poll(() => fs.existsSync(deletedAbsolutePath), {
+      timeout: 15000,
+    }).toBe(false);
+    await expect(window.getByTestId(deletedTreeTestId)).toHaveCount(0);
+
+    await app.close();
+
+    const relaunched = await launchApp({ projectRoot: workspaceCopy });
+
+    try {
+      await ensureExplorerVisible(relaunched.window);
+      await relaunched.window.getByTestId('file-tree-node-rtl').click();
+      await relaunched.window.getByTestId('file-tree-node-rtl_core').click();
+      await expect(relaunched.window.getByTestId(deletedTreeTestId)).toHaveCount(0);
+    } finally {
+      await relaunched.app.close();
+    }
+  } finally {
+    await app.close().catch(() => undefined);
+  }
+});
+
+test('Explorer Delete shows unsaved changes first, then confirmation, before recursively deleting a folder', async () => {
+  test.slow();
+
+  const workspaceCopy = test.info().outputPath('explorer-delete-folder-workspace');
+  createWorkspaceCopy(workspaceCopy);
+
+  const deletedFolderRelativePath = 'rtl/core';
+  const deletedFolderAbsolutePath = path.join(workspaceCopy, 'rtl', 'core');
+  const deletedRegRelativePath = 'rtl/core/reg_file.v';
+  const deletedAluRelativePath = 'rtl/core/alu.sv';
+  const { app, window } = await launchApp({ projectRoot: workspaceCopy });
+
+  try {
+    await ensureExplorerVisible(window);
+    await openNestedWorkspaceFile(window, [
+      'file-tree-node-rtl',
+      'file-tree-node-rtl_core',
+      'file-tree-node-rtl_core_reg_file_v',
+    ], { finalAction: 'dblclick' });
+    await waitForMonacoEditor(window);
+    await focusMonacoEditor(window);
+    await window.keyboard.type('\n// delete me');
+    await expect(window.getByTestId(`editor-tab-dirty-indicator-${deletedRegRelativePath}`)).toBeVisible();
+
+    await window.getByTestId('file-tree-node-rtl_core_alu_sv').dblclick();
+
+    const coreFolderNode = window.getByTestId(toWorkspaceTreeTestId(deletedFolderRelativePath));
+    await coreFolderNode.click({ button: 'right' });
+    await window.getByRole('button', { name: 'Delete' }).click();
+
+    await expect(window.getByTestId('unsaved-changes-dialog')).toBeVisible();
+    await expect(window.getByTestId('unsaved-changes-dialog')).toContainText('reg_file.v');
+    await expect(window.getByTestId('delete-confirmation-dialog')).toHaveCount(0);
+
+    await window.getByTestId('unsaved-changes-discard').click();
+
+    await expect(window.getByTestId('delete-confirmation-dialog')).toBeVisible();
+    await expect(window.getByTestId('delete-confirmation-target')).toContainText('core');
+    await window.getByTestId('delete-confirmation-confirm').click();
+
+    await expect(window.getByTestId('delete-confirmation-dialog')).toHaveCount(0);
+    await expect(window.getByTestId(`editor-tab-${deletedRegRelativePath}`)).toHaveCount(0);
+    await expect(window.getByTestId(`editor-tab-${deletedAluRelativePath}`)).toHaveCount(0);
+    await expect.poll(() => fs.existsSync(deletedFolderAbsolutePath), {
+      timeout: 15000,
+    }).toBe(false);
+    await expect(window.getByTestId(toWorkspaceTreeTestId(deletedFolderRelativePath))).toHaveCount(0);
+  } finally {
+    await app.close().catch(() => undefined);
+  }
+});
+
 test('Ctrl+W prompts for dirty untitled files and supports Cancel and Don\'t save', async () => {
   test.slow();
 

@@ -181,6 +181,7 @@ export const FileTreeNode = memo(function FileTreeNode({
   onSelectNode,
   onStartCreateFile,
   onStartCreateFolder,
+  onStartDelete,
   onStartRename,
   onSubmitEdit,
   expandedFolders,
@@ -202,6 +203,7 @@ export const FileTreeNode = memo(function FileTreeNode({
   onSelectNode?: (node: ExplorerSelectedNode) => void;
   onStartCreateFile?: (entryType: 'file', parentPath?: string) => void;
   onStartCreateFolder?: (entryType: 'folder', parentPath?: string) => void;
+  onStartDelete?: (path: string, entryType: 'file' | 'folder') => void;
   onStartRename?: (path: string, entryType: 'file' | 'folder') => void;
   onSubmitEdit?: () => void;
   expandedFolders: Set<string>;
@@ -284,12 +286,12 @@ export const FileTreeNode = memo(function FileTreeNode({
 
       if (node.path !== WORKSPACE_ROOT_PATH) {
         items.push({ label: 'Rename', action: () => onStartRename?.(node.path, 'folder') });
+        items.push({ label: 'Delete', action: () => onStartDelete?.(node.path, 'folder') });
+        items.push({ label: '---', action: noop });
       }
 
       return [
         ...items,
-        { label: 'Delete', action: noop },
-        { label: '---', action: noop },
         { label: 'Set as Simulation Top', action: noop },
         { label: 'Copy Path', action: noop },
       ];
@@ -299,13 +301,13 @@ export const FileTreeNode = memo(function FileTreeNode({
       { label: 'Open in Editor', action: openFileFromContextMenu },
       { label: '---', action: noop },
       { label: 'Rename', action: () => onStartRename?.(node.path, 'file') },
-      { label: 'Delete', action: noop },
+      { label: 'Delete', action: () => onStartDelete?.(node.path, 'file') },
       { label: '---', action: noop },
       { label: 'Set as Simulation Top', action: noop },
       { label: 'Copy Path', action: noop },
       { label: 'Copy Relative Path', action: noop },
     ];
-  }, [node.path, node.type, onStartCreateFile, onStartCreateFolder, onStartRename, openFileFromContextMenu]);
+  }, [node.path, node.type, onStartCreateFile, onStartCreateFolder, onStartDelete, onStartRename, openFileFromContextMenu]);
 
   if (isEditingCurrentNode && treeEditSession) {
     return (
@@ -360,6 +362,7 @@ export const FileTreeNode = memo(function FileTreeNode({
               onSelectNode={onSelectNode}
               onStartCreateFile={onStartCreateFile}
               onStartCreateFolder={onStartCreateFolder}
+              onStartDelete={onStartDelete}
               onStartRename={onStartRename}
               onSubmitEdit={onSubmitEdit}
               expandedFolders={expandedFolders}
@@ -484,6 +487,7 @@ export const FileTreeNode = memo(function FileTreeNode({
             onSelectNode={onSelectNode}
             onStartCreateFile={onStartCreateFile}
             onStartCreateFolder={onStartCreateFolder}
+            onStartDelete={onStartDelete}
             onStartRename={onStartRename}
             onSubmitEdit={onSubmitEdit}
             expandedFolders={expandedFolders}

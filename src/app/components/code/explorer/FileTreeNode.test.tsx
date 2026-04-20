@@ -160,6 +160,7 @@ describe('FileTreeNode', () => {
     const onToggleFolder = vi.fn();
     const onFileOpen = vi.fn();
     const onFilePreview = vi.fn();
+    const onStartDelete = vi.fn();
 
     render(
       <FileTreeNode
@@ -175,6 +176,7 @@ describe('FileTreeNode', () => {
         activeFileId="rtl/core/cpu_top.v"
         onFileOpen={onFileOpen}
         onFilePreview={onFilePreview}
+        onStartDelete={onStartDelete}
         expandedFolders={new Set()}
         onToggleFolder={onToggleFolder}
         gitPathStates={{}}
@@ -197,6 +199,11 @@ describe('FileTreeNode', () => {
     expect(onFileOpen).toHaveBeenCalledTimes(2);
     expect(screen.queryByRole('button', { name: /Open in Editor/i })).not.toBeInTheDocument();
     expect(screen.getByText('cpu_top.v')).toBeInTheDocument();
+
+    fireEvent.contextMenu(node, { clientX: 100, clientY: 120 });
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    expect(onStartDelete).toHaveBeenCalledWith('rtl/core/cpu_top.v', 'file');
   });
 
   it('does not keep a file highlighted while another folder is selected', () => {
@@ -232,6 +239,8 @@ describe('FileTreeNode', () => {
   });
 
   it('shows the static folder context menu entries when right-clicking a folder', () => {
+    const onStartDelete = vi.fn();
+
     render(
       <FileTreeNode
         node={{
@@ -247,6 +256,7 @@ describe('FileTreeNode', () => {
         activeFileId=""
         onFileOpen={vi.fn()}
         onFilePreview={vi.fn()}
+        onStartDelete={onStartDelete}
         expandedFolders={new Set()}
         onToggleFolder={vi.fn()}
         gitPathStates={{}}
@@ -257,6 +267,39 @@ describe('FileTreeNode', () => {
 
     expect(screen.getByRole('button', { name: /New File/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Copy Path/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    expect(onStartDelete).toHaveBeenCalledWith('rtl', 'folder');
+  });
+
+  it('omits the delete action for the workspace root context menu', () => {
+    render(
+      <FileTreeNode
+        node={{
+          id: '.',
+          path: '.',
+          name: 'workspace',
+          type: 'folder',
+          children: [],
+          hasLoadedChildren: true,
+          isLoading: false,
+        }}
+        depth={0}
+        activeFileId=""
+        onFileOpen={vi.fn()}
+        onFilePreview={vi.fn()}
+        onStartDelete={vi.fn()}
+        expandedFolders={new Set()}
+        onToggleFolder={vi.fn()}
+        gitPathStates={{}}
+      />,
+    );
+
+    fireEvent.contextMenu(screen.getByTestId('file-tree-node-root'), { clientX: 40, clientY: 60 });
+
+    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
   });
 
   it('keeps a clicked folder highlighted when the selected folder id matches', () => {

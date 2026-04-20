@@ -145,6 +145,18 @@ export function registerFilesystemHandlers(): void {
     await fs.mkdir(resolved, { recursive: true });
   });
 
+  ipcMain.handle(AsyncChannels.FS_DELETE_FILE, async (_event, filePath: unknown) => {
+    assertString(filePath, 'filePath');
+    const resolved = validatePathWithinRoot(getRoot(), filePath);
+    await fs.unlink(resolved);
+  });
+
+  ipcMain.handle(AsyncChannels.FS_DELETE_DIRECTORY, async (_event, dirPath: unknown) => {
+    assertString(dirPath, 'dirPath');
+    const resolved = validatePathWithinRoot(getRoot(), dirPath);
+    await fs.rm(resolved, { recursive: true, force: false });
+  });
+
   ipcMain.handle(AsyncChannels.FS_RENAME, async (_event, currentPath: unknown, nextPath: unknown) => {
     assertString(currentPath, 'currentPath');
     assertString(nextPath, 'nextPath');

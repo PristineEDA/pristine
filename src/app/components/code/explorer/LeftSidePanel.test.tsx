@@ -2,13 +2,14 @@ import type { ComponentProps } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetWorkspaceGitStatusStoreForTests } from '../../../git/workspaceGitStatus';
-import { getExplorerRenameTarget, LeftSidePanel } from './LeftSidePanel';
+import { getExplorerDeleteTarget, getExplorerRenameTarget, LeftSidePanel } from './LeftSidePanel';
 
 function renderLeftSidePanel(props: Partial<ComponentProps<typeof LeftSidePanel>> = {}) {
   const componentProps: ComponentProps<typeof LeftSidePanel> = {
     activeFileId: 'cpu_top',
     onCreateWorkspaceFile: vi.fn().mockResolvedValue(undefined),
     onCreateWorkspaceFolder: vi.fn().mockResolvedValue(undefined),
+    onDeleteWorkspaceEntry: vi.fn().mockResolvedValue(false),
     onFileOpen: vi.fn(),
     onFilePreview: vi.fn(),
     onLineJump: vi.fn(),
@@ -141,6 +142,7 @@ describe('LeftSidePanel', () => {
         activeFileId="rtl/core/cpu_top.v"
         onCreateWorkspaceFile={vi.fn().mockResolvedValue(undefined)}
         onCreateWorkspaceFolder={vi.fn().mockResolvedValue(undefined)}
+        onDeleteWorkspaceEntry={vi.fn().mockResolvedValue(false)}
         onFileOpen={vi.fn()}
         onFilePreview={vi.fn()}
         onLineJump={vi.fn()}
@@ -224,6 +226,162 @@ describe('LeftSidePanel', () => {
       path: 'rtl/peripherals/uart_rx.v',
       type: 'file',
     });
+  });
+
+  it('starts delete when Delete is pressed on document after selecting a file in the tree', async () => {
+    const onDeleteWorkspaceEntry = vi.fn().mockResolvedValue(false);
+
+    renderLeftSidePanel({
+      activeFileId: 'rtl/peripherals/uart_rx.v',
+      currentOutlineId: 'uart_rx',
+      onDeleteWorkspaceEntry,
+    });
+
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl'));
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals'));
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals_uart_rx_v'));
+
+    fireEvent.keyDown(document, { key: 'Delete' });
+
+    await waitFor(() => {
+      expect(onDeleteWorkspaceEntry).toHaveBeenCalledWith('rtl/peripherals/uart_rx.v', 'file');
+    });
+  });
+
+  it('starts delete when Monaco text input regains focus after selecting a file in the tree', async () => {
+    const onDeleteWorkspaceEntry = vi.fn().mockResolvedValue(false);
+
+    renderLeftSidePanel({
+      activeFileId: 'rtl/peripherals/uart_rx.v',
+      currentOutlineId: 'uart_rx',
+      onDeleteWorkspaceEntry,
+    });
+
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl'));
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals'));
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals_uart_rx_v'));
+
+    const monacoRoot = document.createElement('div');
+    monacoRoot.className = 'monaco-editor';
+    const monacoInput = document.createElement('textarea');
+    monacoInput.className = 'inputarea';
+    monacoRoot.appendChild(monacoInput);
+    document.body.appendChild(monacoRoot);
+
+    try {
+      monacoInput.focus();
+      fireEvent.keyDown(monacoInput, { key: 'Delete' });
+
+      await waitFor(() => {
+        expect(onDeleteWorkspaceEntry).toHaveBeenCalledWith('rtl/peripherals/uart_rx.v', 'file');
+      });
+    } finally {
+      monacoRoot.remove();
+    }
+  });
+
+  it('starts delete from the folder context menu for the selected node', async () => {
+    const onDeleteWorkspaceEntry = vi.fn().mockResolvedValue(false);
+
+    renderLeftSidePanel({
+      activeFileId: 'rtl/peripherals/uart_rx.v',
+      currentOutlineId: 'uart_rx',
+      onDeleteWorkspaceEntry,
+    });
+
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl'));
+    fireEvent.contextMenu(await screen.findByTestId('file-tree-node-rtl_peripherals'), { clientX: 50, clientY: 60 });
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    await waitFor(() => {
+      expect(onDeleteWorkspaceEntry).toHaveBeenCalledWith('rtl/peripherals', 'folder');
+    });
+  });
+
+  it('does not start delete while an explorer input is focused', async () => {
+    const onDeleteWorkspaceEntry = vi.fn().mockResolvedValue(false);
+
+    renderLeftSidePanel({
+      activeFileId: 'rtl/peripherals/uart_rx.v',
+      currentOutlineId: 'uart_rx',
+      onDeleteWorkspaceEntry,
+    });
+
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl'));
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals'));
+    fireEvent.click(screen.getByRole('button', { name: 'New File' }));
+
+    const draftInput = screen.getByRole('textbox');
+    draftInput.focus();
+    fireEvent.keyDown(document, { key: 'Delete' });
+
+    expect(onDeleteWorkspaceEntry).not.toHaveBeenCalled();
+  });
+
+  it('does not start delete while a non-Monaco textarea is focused', async () => {
+    const onDeleteWorkspaceEntry = vi.fn().mockResolvedValue(false);
+
+    renderLeftSidePanel({
+      activeFileId: 'rtl/peripherals/uart_rx.v',
+      currentOutlineId: 'uart_rx',
+      onDeleteWorkspaceEntry,
+    });
+
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl'));
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals'));
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals_uart_rx_v'));
+
+    const textarea = document.createElement('textarea');
+    document.body.appendChild(textarea);
+
+    try {
+      textarea.focus();
+      fireEvent.keyDown(textarea, { key: 'Delete' });
+
+      expect(onDeleteWorkspaceEntry).not.toHaveBeenCalled();
+    } finally {
+      textarea.remove();
+    }
+  });
+
+  it('does not start delete after Monaco receives a real pointer interaction outside the tree', async () => {
+    const onDeleteWorkspaceEntry = vi.fn().mockResolvedValue(false);
+
+    renderLeftSidePanel({
+      activeFileId: 'rtl/peripherals/uart_rx.v',
+      currentOutlineId: 'uart_rx',
+      onDeleteWorkspaceEntry,
+    });
+
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl'));
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals'));
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals_uart_rx_v'));
+
+    const monacoRoot = document.createElement('div');
+    monacoRoot.className = 'monaco-editor';
+    const monacoInput = document.createElement('textarea');
+    monacoInput.className = 'inputarea';
+    monacoRoot.appendChild(monacoInput);
+    document.body.appendChild(monacoRoot);
+
+    try {
+      fireEvent.pointerDown(monacoInput);
+      monacoInput.focus();
+      fireEvent.keyDown(monacoInput, { key: 'Delete' });
+
+      expect(onDeleteWorkspaceEntry).not.toHaveBeenCalled();
+    } finally {
+      monacoRoot.remove();
+    }
+  });
+
+  it('ignores delete targets for the workspace root', () => {
+    expect(getExplorerDeleteTarget({
+      id: '.',
+      path: '.',
+      type: 'root',
+      source: 'real',
+    })).toBeNull();
   });
 
   it('creates a real file from the selected folder through the draft row', async () => {

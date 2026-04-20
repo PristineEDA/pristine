@@ -30,6 +30,8 @@ export const AsyncChannels = {
   FS_WRITE_FILE: 'async:fs:write-file',
   FS_WRITE_FILE_ABSOLUTE: 'async:fs:write-file-absolute',
   FS_CREATE_DIRECTORY: 'async:fs:create-directory',
+  FS_DELETE_FILE: 'async:fs:delete-file',
+  FS_DELETE_DIRECTORY: 'async:fs:delete-directory',
   FS_RENAME: 'async:fs:rename',
   FS_READ_DIR: 'async:fs:read-dir',
   FS_STAT: 'async:fs:stat',

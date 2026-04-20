@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { WorkspaceProvider, useWorkspace } from './WorkspaceContext';
 
 const undoActionRun = vi.fn(() => Promise.resolve());
@@ -30,6 +30,8 @@ function WorkspaceHarness() {
       <div data-testid="bottom-panel">{workspace.showBottomPanel ? 'open' : 'closed'}</div>
       <div data-testid="dirty-files">{workspace.dirtyFileIds.join(',')}</div>
       <div data-testid="unsaved-dialog-files">{workspace.unsavedChangesDialog?.fileIds.join(',') ?? ''}</div>
+      <div data-testid="delete-dialog-target">{workspace.deleteConfirmationDialog?.targetPath ?? ''}</div>
+      <div data-testid="delete-dialog-type">{workspace.deleteConfirmationDialog?.entryType ?? ''}</div>
       <div data-testid="workspace-tree-refresh-token">{workspace.workspaceTreeRefreshToken}</div>
 
       <button onClick={() => workspace.setActiveView('simulation')}>set-view</button>
@@ -40,6 +42,8 @@ function WorkspaceHarness() {
       <button onClick={() => workspace.openPreviewFile('rtl/core/alu.v', 'alu.v')}>preview-alu</button>
       <button onClick={() => { void workspace.createWorkspaceFile('rtl/generated/new_file.sv'); }}>create-file</button>
       <button onClick={() => { void workspace.createWorkspaceFolder('rtl/generated'); }}>create-folder</button>
+      <button onClick={() => { void workspace.deleteWorkspaceEntry('rtl/core/reg_file.v', 'file'); }}>delete-reg</button>
+      <button onClick={() => { void workspace.deleteWorkspaceEntry('rtl/core', 'folder'); }}>delete-core-folder</button>
       <button onClick={() => { void workspace.renameWorkspaceEntry('rtl/core/reg_file.v', 'rtl/core/reg_file_renamed.v', 'file'); }}>rename-reg</button>
       <button onClick={() => { void workspace.renameWorkspaceEntry('rtl/core', 'rtl/renamed_core', 'folder'); }}>rename-core-folder</button>
       <button onClick={() => workspace.pinTab('rtl/core/alu.v')}>pin-alu</button>
@@ -62,6 +66,8 @@ function WorkspaceHarness() {
       <button onClick={() => { void workspace.confirmUnsavedChangesSave(); }}>confirm-save</button>
       <button onClick={() => workspace.discardUnsavedChanges()}>discard-unsaved</button>
       <button onClick={() => workspace.cancelUnsavedChanges()}>cancel-unsaved</button>
+      <button onClick={() => { void workspace.confirmDeleteConfirmation(); }}>confirm-delete</button>
+      <button onClick={() => workspace.cancelDeleteConfirmation()}>cancel-delete</button>
       <button onClick={() => workspace.closeFile('rtl/core/reg_file.v')}>close-reg</button>
       <button onClick={() => workspace.closeActiveTabInFocusedGroup()}>close-active</button>
       <button onClick={() => workspace.registerEditorRef('group-1', {
@@ -97,6 +103,14 @@ function StableActionHarness({ onSnapshot }: { onSnapshot: (snapshot: WorkspaceA
 }
 
 describe('WorkspaceContext', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    undoActionRun.mockClear();
+    redoActionRun.mockClear();
+    vi.mocked(window.electronAPI!.fs.deleteFile).mockResolvedValue(undefined);
+    vi.mocked(window.electronAPI!.fs.deleteDirectory).mockResolvedValue(undefined);
+  });
+
   it('tracks dirty files, saves the active file, and clears dirty state after saving', async () => {
     render(
       <WorkspaceProvider>
@@ -455,6 +469,141 @@ describe('WorkspaceContext', () => {
       expect(screen.getByTestId('groups')).toHaveTextContent('rtl/renamed_core/alu.v');
       expect(screen.getByTestId('active-tab')).toHaveTextContent('rtl/renamed_core/alu.v');
     });
+  });
+
+  it('deletes a workspace file after confirmation and refreshes the explorer token', async () => {
+    vi.mocked(window.electronAPI!.fs.exists).mockResolvedValue(true);
+
+    render(
+      <WorkspaceProvider>
+        <WorkspaceHarness />
+      </WorkspaceProvider>,
+    );
+
+    fireEvent.click(screen.getByText('delete-reg'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('delete-dialog-target')).toHaveTextContent('rtl/core/reg_file.v');
+      expect(screen.getByTestId('delete-dialog-type')).toHaveTextContent('file');
+    });
+
+    fireEvent.click(screen.getByText('confirm-delete'));
+
+    await waitFor(() => {
+      expect(window.electronAPI?.fs.deleteFile).toHaveBeenCalledWith('rtl/core/reg_file.v');
+      expect(screen.getByTestId('workspace-tree-refresh-token')).toHaveTextContent('1');
+      expect(screen.getByTestId('delete-dialog-target')).toHaveTextContent('');
+    });
+  });
+
+  it('closes deleted open files after confirmation', async () => {
+    vi.mocked(window.electronAPI!.fs.exists).mockResolvedValue(true);
+
+    render(
+      <WorkspaceProvider>
+        <WorkspaceHarness />
+      </WorkspaceProvider>,
+    );
+
+    fireEvent.click(screen.getByText('open-reg'));
+    expect(screen.getByTestId('tabs')).toHaveTextContent('rtl/core/reg_file.v');
+
+    fireEvent.click(screen.getByText('delete-reg'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('delete-dialog-target')).toHaveTextContent('rtl/core/reg_file.v');
+    });
+
+    fireEvent.click(screen.getByText('confirm-delete'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('tabs')).not.toHaveTextContent('rtl/core/reg_file.v');
+    });
+  });
+
+  it('deletes a folder recursively and closes affected open tabs', async () => {
+    vi.mocked(window.electronAPI!.fs.exists).mockResolvedValue(true);
+
+    render(
+      <WorkspaceProvider>
+        <WorkspaceHarness />
+      </WorkspaceProvider>,
+    );
+
+    fireEvent.click(screen.getByText('open-reg'));
+    fireEvent.click(screen.getByText('open-alu'));
+
+    fireEvent.click(screen.getByText('delete-core-folder'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('delete-dialog-target')).toHaveTextContent('rtl/core');
+      expect(screen.getByTestId('delete-dialog-type')).toHaveTextContent('folder');
+    });
+
+    fireEvent.click(screen.getByText('confirm-delete'));
+
+    await waitFor(() => {
+      expect(window.electronAPI?.fs.deleteDirectory).toHaveBeenCalledWith('rtl/core');
+      expect(screen.getByTestId('groups')).not.toHaveTextContent('rtl/core/reg_file.v');
+      expect(screen.getByTestId('groups')).not.toHaveTextContent('rtl/core/alu.v');
+      expect(screen.getByTestId('workspace-tree-refresh-token')).toHaveTextContent('1');
+    });
+  });
+
+  it('prompts for unsaved changes before showing delete confirmation', async () => {
+    vi.mocked(window.electronAPI!.fs.exists).mockResolvedValue(true);
+
+    render(
+      <WorkspaceProvider>
+        <WorkspaceHarness />
+      </WorkspaceProvider>,
+    );
+
+    fireEvent.click(screen.getByText('open-reg'));
+    fireEvent.click(screen.getByText('edit-reg'));
+    fireEvent.click(screen.getByText('delete-reg'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('unsaved-dialog-files')).toHaveTextContent('rtl/core/reg_file.v');
+    });
+    expect(screen.getByTestId('delete-dialog-target')).toHaveTextContent('');
+
+    fireEvent.click(screen.getByText('discard-unsaved'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('delete-dialog-target')).toHaveTextContent('rtl/core/reg_file.v');
+    });
+
+    fireEvent.click(screen.getByText('confirm-delete'));
+
+    await waitFor(() => {
+      expect(window.electronAPI?.fs.deleteFile).toHaveBeenCalledWith('rtl/core/reg_file.v');
+    });
+  });
+
+  it('cancels delete confirmation without mutating the workspace', async () => {
+    vi.mocked(window.electronAPI!.fs.exists).mockResolvedValue(true);
+
+    render(
+      <WorkspaceProvider>
+        <WorkspaceHarness />
+      </WorkspaceProvider>,
+    );
+
+    fireEvent.click(screen.getByText('open-reg'));
+    fireEvent.click(screen.getByText('delete-reg'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('delete-dialog-target')).toHaveTextContent('rtl/core/reg_file.v');
+    });
+
+    fireEvent.click(screen.getByText('cancel-delete'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('delete-dialog-target')).toHaveTextContent('');
+    });
+    expect(window.electronAPI?.fs.deleteFile).not.toHaveBeenCalled();
+    expect(screen.getByTestId('tabs')).toHaveTextContent('rtl/core/reg_file.v');
   });
 
   it('does not duplicate an existing tab', () => {

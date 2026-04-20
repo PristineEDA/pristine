@@ -8,6 +8,8 @@ const { mockHandle, mockFs } = vi.hoisted(() => ({
     readFile: vi.fn(),
     writeFile: vi.fn(),
     mkdir: vi.fn(),
+    unlink: vi.fn(),
+    rm: vi.fn(),
     rename: vi.fn(),
     readdir: vi.fn(),
     stat: vi.fn(),
@@ -47,6 +49,8 @@ describe('filesystem IPC handlers', () => {
     mockFs.readFile.mockReset();
     mockFs.writeFile.mockReset();
     mockFs.mkdir.mockReset();
+    mockFs.unlink.mockReset();
+    mockFs.rm.mockReset();
     mockFs.rename.mockReset();
     mockFs.readdir.mockReset();
     mockFs.stat.mockReset();
@@ -134,6 +138,29 @@ describe('filesystem IPC handlers', () => {
       expect(mockFs.rename).toHaveBeenCalledWith(
         expect.stringMatching(/safe[\\/]project[\\/]rtl[\\/]core[\\/]old\.v$/),
         expect.stringMatching(/safe[\\/]project[\\/]rtl[\\/]core[\\/]new\.v$/),
+      );
+    });
+  });
+
+  describe('FS_DELETE_FILE', () => {
+    it('deletes a project-scoped file', async () => {
+      const handler = getHandler('async:fs:delete-file');
+
+      await expect(handler({}, 'rtl/core/reg_file.v')).resolves.toBeUndefined();
+      expect(mockFs.unlink).toHaveBeenCalledWith(
+        expect.stringMatching(/safe[\\/]project[\\/]rtl[\\/]core[\\/]reg_file\.v$/),
+      );
+    });
+  });
+
+  describe('FS_DELETE_DIRECTORY', () => {
+    it('deletes a project-scoped directory recursively', async () => {
+      const handler = getHandler('async:fs:delete-directory');
+
+      await expect(handler({}, 'rtl/core')).resolves.toBeUndefined();
+      expect(mockFs.rm).toHaveBeenCalledWith(
+        expect.stringMatching(/safe[\\/]project[\\/]rtl[\\/]core$/),
+        { recursive: true, force: false },
       );
     });
   });

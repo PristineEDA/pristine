@@ -27,6 +27,7 @@ interface LeftSidePanelProps {
   activeFileId: string;
   onCreateWorkspaceFile: (targetPath: string) => Promise<void>;
   onCreateWorkspaceFolder: (targetPath: string) => Promise<void>;
+  onDeleteWorkspaceEntry: (targetPath: string, entryType: 'file' | 'folder') => Promise<boolean>;
   onFileOpen: (fileId: string, fileName: string) => void;
   onFilePreview: (fileId: string, fileName: string) => void;
   onLineJump: (line: number) => void;
@@ -67,6 +68,19 @@ export function getExplorerRenameTarget(
   return null;
 }
 
+export function getExplorerDeleteTarget(
+  selectedNode: ExplorerSelectedNode | null,
+): { path: string; type: 'file' | 'folder' } | null {
+  if (selectedNode?.source === 'real' && selectedNode.type !== 'root') {
+    return {
+      path: selectedNode.path,
+      type: selectedNode.type,
+    };
+  }
+
+  return null;
+}
+
 function isEditableKeyboardTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) {
     return false;
@@ -79,10 +93,22 @@ function isEditableKeyboardTarget(target: EventTarget | null): boolean {
   return Boolean(target.closest('input, textarea, select, [contenteditable="true"]'));
 }
 
+function isMonacoTextInputKeyboardTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  return Boolean(
+    target.closest('.monaco-editor')
+    && target.closest('textarea.inputarea, .inputarea, .native-edit-context'),
+  );
+}
+
 export function LeftSidePanel({
   activeFileId,
   onCreateWorkspaceFile,
   onCreateWorkspaceFolder,
+  onDeleteWorkspaceEntry,
   onFileOpen,
   onFilePreview,
   onLineJump,
@@ -94,6 +120,7 @@ export function LeftSidePanel({
 }: LeftSidePanelProps) {
   const treeContainerRef = useRef<HTMLDivElement | null>(null);
   const treeInteractionActiveRef = useRef(false);
+  const monacoDeleteSelectionArmedRef = useRef(false);
   const [selectedNode, setSelectedNode] = useState<ExplorerSelectedNode | null>(null);
   const [treeEditSession, setTreeEditSession] = useState<ExplorerTreeEditSession | null>(null);
   const [tab, setTab] = useState<'explorer' | 'outline'>('explorer');
@@ -128,17 +155,48 @@ export function LeftSidePanel({
   }, []);
 
   const handleDocumentKeyDown = useEffectEvent((event: KeyboardEvent) => {
+    const isMonacoKeyboardTarget = isMonacoTextInputKeyboardTarget(event.target);
+
+    if (event.key !== 'F2' && event.key !== 'Delete') {
+      if (isMonacoKeyboardTarget) {
+        monacoDeleteSelectionArmedRef.current = false;
+      }
+
+      return;
+    }
+
+    const editableKeyboardTarget = isEditableKeyboardTarget(event.target);
+    const deleteTarget = event.key === 'Delete' ? getExplorerDeleteTarget(selectedNode) : null;
+    const allowDeleteFromMonacoSelection = Boolean(
+      deleteTarget
+      && isMonacoKeyboardTarget
+      && monacoDeleteSelectionArmedRef.current,
+    );
+
     if (
-      event.key !== 'F2'
-      || event.altKey
+      event.altKey
       || event.ctrlKey
       || event.metaKey
       || event.shiftKey
       || tab !== 'explorer'
       || Boolean(treeEditSession)
-      || !treeInteractionActiveRef.current
-      || isEditableKeyboardTarget(event.target)
+      || (!treeInteractionActiveRef.current && !allowDeleteFromMonacoSelection)
+      || (editableKeyboardTarget && !allowDeleteFromMonacoSelection)
     ) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (event.key === 'Delete') {
+      monacoDeleteSelectionArmedRef.current = false;
+
+      if (!deleteTarget) {
+        return;
+      }
+
+      void startDeleteFromSelection();
       return;
     }
 
@@ -146,7 +204,6 @@ export function LeftSidePanel({
       return;
     }
 
-    event.preventDefault();
     startRenameFromSelection();
   });
 
@@ -155,6 +212,7 @@ export function LeftSidePanel({
 
     if (!treeContainer) {
       treeInteractionActiveRef.current = false;
+      monacoDeleteSelectionArmedRef.current = false;
       return;
     }
 
@@ -163,6 +221,7 @@ export function LeftSidePanel({
     }
 
     treeInteractionActiveRef.current = false;
+    monacoDeleteSelectionArmedRef.current = false;
   });
 
   useEffect(() => {
@@ -173,11 +232,11 @@ export function LeftSidePanel({
       handleDocumentPointerDown(event);
     };
 
-    document.addEventListener('keydown', keydownListener);
+    document.addEventListener('keydown', keydownListener, true);
     document.addEventListener('pointerdown', pointerDownListener, true);
 
     return () => {
-      document.removeEventListener('keydown', keydownListener);
+      document.removeEventListener('keydown', keydownListener, true);
       document.removeEventListener('pointerdown', pointerDownListener, true);
     };
   }, []);
@@ -211,17 +270,20 @@ export function LeftSidePanel({
 
   const handleNodeSelect = useCallback((nextNode: ExplorerSelectedNode) => {
     setSelectedNode(nextNode);
+    monacoDeleteSelectionArmedRef.current = nextNode.source === 'real' && nextNode.type !== 'root';
     focusTree();
   }, [focusTree]);
 
   const handleFilePreview = useCallback((fileId: string, fileName: string) => {
     setSelectedNode(createRealExplorerSelection(fileId, 'file'));
+    monacoDeleteSelectionArmedRef.current = true;
     onFilePreview(fileId, fileName);
     focusTree();
   }, [focusTree, onFilePreview]);
 
   const handleFileOpen = useCallback((fileId: string, fileName: string) => {
     setSelectedNode(createRealExplorerSelection(fileId, 'file'));
+    monacoDeleteSelectionArmedRef.current = true;
     onFileOpen(fileId, fileName);
     focusTree();
   }, [focusTree, onFileOpen]);
@@ -254,6 +316,34 @@ export function LeftSidePanel({
       startRenameForNode(renameTarget.path, renameTarget.type);
     }
   }, [activeFileId, selectedNode, startRenameForNode]);
+
+  const startDeleteForNode = useCallback(async (path: string, entryType: 'file' | 'folder') => {
+    const parentPath = getWorkspaceParentPath(path);
+
+    setSelectedNode(createRealExplorerSelection(path, entryType));
+
+    const deleted = await onDeleteWorkspaceEntry(path, entryType);
+    if (!deleted) {
+      focusTree();
+      return;
+    }
+
+    setSelectedNode(createRealExplorerSelection(
+      parentPath,
+      parentPath === WORKSPACE_ROOT_PATH ? 'root' : 'folder',
+    ));
+    focusTree();
+  }, [focusTree, onDeleteWorkspaceEntry]);
+
+  const startDeleteFromSelection = useCallback(async () => {
+    const deleteTarget = getExplorerDeleteTarget(selectedNode);
+
+    if (!deleteTarget) {
+      return;
+    }
+
+    await startDeleteForNode(deleteTarget.path, deleteTarget.type);
+  }, [selectedNode, startDeleteForNode]);
 
   const startCreateEntry = useCallback((entryType: 'file' | 'folder', parentPath = selectedParentPath) => {
     const resolvedParentPath = parentPath || WORKSPACE_ROOT_PATH;
@@ -378,11 +468,17 @@ export function LeftSidePanel({
       return;
     }
 
+    if (event.key === 'Delete') {
+      event.preventDefault();
+      void startDeleteFromSelection();
+      return;
+    }
+
     if (event.key === 'F2') {
       event.preventDefault();
       startRenameFromSelection();
     }
-  }, [startRenameFromSelection, tab, treeEditSession]);
+  }, [startDeleteFromSelection, startRenameFromSelection, tab, treeEditSession]);
 
   return (
     <div className="flex flex-col h-full bg-muted/40 overflow-hidden">
@@ -474,6 +570,7 @@ export function LeftSidePanel({
                 onSelectNode={handleNodeSelect}
                 onStartCreateFile={startCreateEntry}
                 onStartCreateFolder={startCreateEntry}
+                onStartDelete={startDeleteForNode}
                 onStartRename={startRenameForNode}
                 onSubmitEdit={handleTreeEditSubmit}
                 selectedNode={selectedNode}

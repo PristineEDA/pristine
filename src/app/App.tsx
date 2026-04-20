@@ -1,5 +1,6 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { MenuBar } from './components/code/shared/MenuBar';
+import { DeleteConfirmationDialog } from './components/code/shared/DeleteConfirmationDialog';
 import { UnsavedChangesDialog } from './components/code/shared/UnsavedChangesDialog';
 import { ActivityBar } from './components/code/shared/ActivityBar';
 import { LeftSidePanel } from './components/code/explorer/LeftSidePanel';
@@ -186,6 +187,7 @@ function AppLayout() {
     activeTabId,
     createWorkspaceFile,
     createWorkspaceFolder,
+    deleteWorkspaceEntry,
     openUntitledFile,
     openFile,
     openPreviewFile,
@@ -316,6 +318,13 @@ function AppLayout() {
     await createWorkspaceFolder(targetPath);
     queueRevealRequest(targetPath);
   }, [createWorkspaceFolder, queueRevealRequest]);
+
+  const handleDeleteWorkspaceEntry = useCallback(async (
+    targetPath: string,
+    entryType: 'file' | 'folder',
+  ) => {
+    return deleteWorkspaceEntry(targetPath, entryType);
+  }, [deleteWorkspaceEntry]);
 
   const handleRenameWorkspaceEntry = useCallback(async (
     currentPath: string,
@@ -513,6 +522,7 @@ function AppLayout() {
           activeFileId={activeTabId}
           onCreateWorkspaceFile={handleCreateWorkspaceFile}
           onCreateWorkspaceFolder={handleCreateWorkspaceFolder}
+          onDeleteWorkspaceEntry={handleDeleteWorkspaceEntry}
           onFileOpen={openWorkspaceFile}
           onFilePreview={openWorkspacePreviewFile}
           onLineJump={jumpTo}
@@ -637,6 +647,7 @@ function AppLayout() {
         onShowRightPanelChange={setShowRightPanel}
       />
       <UnsavedChangesDialog />
+      <DeleteConfirmationDialog />
 
       {mainContentView === 'code'
         ? (activeView === 'explorer'

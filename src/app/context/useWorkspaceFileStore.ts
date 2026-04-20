@@ -66,6 +66,22 @@ function renameWorkspacePathKeys<T>(
   return changed ? nextRecord : record;
 }
 
+function removeWorkspacePathKeys<T>(record: Record<string, T>, targetPrefix: string): Record<string, T> {
+  let changed = false;
+  const nextRecord: Record<string, T> = {};
+
+  Object.entries(record).forEach(([key, value]) => {
+    if (isWorkspaceRelativeFilePath(key) && isWithinWorkspacePath(key, targetPrefix)) {
+      changed = true;
+      return;
+    }
+
+    nextRecord[key] = value;
+  });
+
+  return changed ? nextRecord : record;
+}
+
 export function useWorkspaceFileStore() {
   const [fileContents, setFileContents] = useState<Record<string, string>>({});
   const [savedFileContents, setSavedFileContents] = useState<Record<string, string>>({});
@@ -357,6 +373,33 @@ export function useWorkspaceFileStore() {
     setSavingFiles((current) => removeKey(current, fileId));
   }, []);
 
+  const removeWorkspacePaths = useCallback((targetPrefix: string) => {
+    if (!targetPrefix) {
+      return;
+    }
+
+    setFileContents((current) => {
+      const next = removeWorkspacePathKeys(current, targetPrefix);
+      if (next !== current) {
+        fileContentsRef.current = next;
+      }
+      return next;
+    });
+
+    setSavedFileContents((current) => {
+      const next = removeWorkspacePathKeys(current, targetPrefix);
+      if (next !== current) {
+        savedFileContentsRef.current = next;
+      }
+      return next;
+    });
+
+    setLoadErrors((current) => removeWorkspacePathKeys(current, targetPrefix));
+    setSaveErrors((current) => removeWorkspacePathKeys(current, targetPrefix));
+    setLoadingFiles((current) => removeWorkspacePathKeys(current, targetPrefix));
+    setSavingFiles((current) => removeWorkspacePathKeys(current, targetPrefix));
+  }, []);
+
   const updateFileContent = useCallback((fileId: string, content: string) => {
     setFileContents((current) => {
       if (current[fileId] === content) {
@@ -589,6 +632,7 @@ export function useWorkspaceFileStore() {
     loadFileContent,
     loadingFiles,
     removeFile,
+    removeWorkspacePaths,
     renameFileState,
     renameWorkspacePaths,
     saveErrors,
