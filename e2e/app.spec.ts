@@ -2334,6 +2334,28 @@ test('status bar switches across primary and secondary navigation views', async 
   await app.close();
 });
 
+test('explorer status bar hover cards switch cleanly between adjacent items', async () => {
+  const { app, window } = await launchApp();
+
+  const statusBar = window.getByTestId('status-bar');
+  const branchTrigger = statusBar.getByTestId('status-bar-branch-label');
+  const syncTrigger = statusBar.getByText('Sync', { exact: true });
+  const branchCardTitle = window.getByText('Git Branch', { exact: true });
+  const syncCardTitle = window.getByText('Sync Status', { exact: true });
+
+  await expect(statusBar).toHaveAttribute('data-status-bar-id', 'code-explorer');
+
+  await branchTrigger.hover();
+  await expect(branchCardTitle).toBeVisible();
+
+  await syncTrigger.hover();
+
+  await expect(branchCardTitle).toHaveCount(0);
+  await expect(syncCardTitle).toBeVisible();
+
+  await app.close();
+});
+
 test('left sidebar keeps a fixed pixel width across window changes and manual resize', async () => {
   test.slow();
 
