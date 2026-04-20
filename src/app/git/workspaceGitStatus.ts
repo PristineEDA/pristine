@@ -6,6 +6,8 @@ export interface WorkspaceGitSnapshot extends WorkspaceGitStatusPayload {
   isLoading: boolean;
 }
 
+const GIT_REFRESH_DEBOUNCE_MS = 100;
+
 const EMPTY_WORKSPACE_GIT_STATUS: WorkspaceGitStatusPayload = {
   branchName: null,
   hasProjectFiles: false,
@@ -20,6 +22,7 @@ let currentSnapshot: WorkspaceGitSnapshot = {
 
 const listeners = new Set<() => void>();
 let inFlightLoad: Promise<void> | null = null;
+let refreshTimer: ReturnType<typeof setTimeout> | null = null;
 
 function emitChange() {
   listeners.forEach((listener) => listener());
@@ -110,7 +113,14 @@ export function getWorkspaceGitPathState(
 }
 
 export function refreshWorkspaceGitStatus() {
-  void loadWorkspaceGitStatus(true);
+  if (refreshTimer) {
+    clearTimeout(refreshTimer);
+  }
+
+  refreshTimer = setTimeout(() => {
+    refreshTimer = null;
+    void loadWorkspaceGitStatus(true);
+  }, GIT_REFRESH_DEBOUNCE_MS);
 }
 
 export function resetWorkspaceGitStatusStoreForTests() {
@@ -120,6 +130,10 @@ export function resetWorkspaceGitStatusStoreForTests() {
     pathStates: {},
   };
   inFlightLoad = null;
+  if (refreshTimer) {
+    clearTimeout(refreshTimer);
+    refreshTimer = null;
+  }
   listeners.clear();
 }
 

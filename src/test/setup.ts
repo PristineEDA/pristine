@@ -118,6 +118,7 @@ function createElectronApiMock() {
     onFullScreenChange: vi.fn(() => vi.fn()),
     onCloseRequested: vi.fn(() => vi.fn()),
     onWindowFocus: vi.fn(() => vi.fn()),
+    onWorkspaceChange: vi.fn(() => vi.fn()),
     fs: {
       readFile: vi.fn().mockResolvedValue(''),
       readFileAbsolute: vi.fn().mockResolvedValue(''),

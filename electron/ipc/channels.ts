@@ -59,6 +59,7 @@ export const StreamChannels = {
   AUTH_STATE_CHANGED: 'stream:auth:state-changed',
   AUTH_ERROR: 'stream:auth:error',
   CONFIG_CHANGED: 'stream:config:changed',
+  WORKSPACE_CHANGE: 'stream:workspace:change',
   SHELL_STDOUT: 'stream:shell:stdout',
   SHELL_STDERR: 'stream:shell:stderr',
   SHELL_EXIT: 'stream:shell:exit',

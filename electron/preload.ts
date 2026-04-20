@@ -2,7 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 import { SyncChannels, AsyncChannels, StreamChannels } from './ipc/channels.js';
 import type { SaveDialogResult } from './ipc/dialog.js';
 import type { LspCompletionResponse, LspDebugEvent, LspDiagnosticsEvent, LspHover, LspStateEvent, WorkspaceLocation } from '../types/systemverilog-lsp.js';
-import type { WorkspaceGitStatusPayload } from '../types/workspace-git.js';
+import type { WorkspaceGitChangeEvent, WorkspaceGitStatusPayload } from '../types/workspace-git.js';
 import type { MenuCommandEvent } from '../src/app/menu/applicationMenu.js';
 import type { WindowCloseDecision, WindowCloseRequest } from '../src/app/window/windowClose.js';
 import type { AuthView, DesktopAuthSession } from '../src/app/auth/types.js';
@@ -65,6 +65,11 @@ const electronAPI = {
     const handler = () => callback();
     ipcRenderer.on(StreamChannels.WINDOW_FOCUS, handler);
     return () => { ipcRenderer.removeListener(StreamChannels.WINDOW_FOCUS, handler); };
+  },
+  onWorkspaceChange: (callback: (payload: WorkspaceGitChangeEvent) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, payload: WorkspaceGitChangeEvent) => callback(payload);
+    ipcRenderer.on(StreamChannels.WORKSPACE_CHANGE, handler);
+    return () => { ipcRenderer.removeListener(StreamChannels.WORKSPACE_CHANGE, handler); };
   },
 
   // ── File System (async, project-dir scoped) ──

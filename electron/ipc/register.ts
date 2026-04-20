@@ -31,7 +31,7 @@ export function registerAllHandlers(
   registerDialogHandlers(getMainWindow);
   registerWindowHandlers(getMainWindow, setFloatingInfoWindowVisible, resolveCloseRequest);
   registerFilesystemHandlers();
-  registerGitHandlers();
+  registerGitHandlers(getMainWindow);
   registerLspHandlers(getMainWindow);
   registerShellHandlers(getMainWindow);
   registerTerminalHandlers(getMainWindow);

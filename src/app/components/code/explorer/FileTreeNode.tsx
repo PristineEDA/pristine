@@ -342,6 +342,99 @@ export function FileIcon({ name }: { name: string; language?: string }) {
   return <FileTypeBadge name={name} className="text-[10px] font-bold font-mono" />;
 }
 
+type ExplorerGitIndicatorState = Exclude<WorkspaceGitPathState, 'ignored'>;
+
+const EXPLORER_GIT_INDICATOR_ORDER: ExplorerGitIndicatorState[] = ['created', 'modified', 'deleted'];
+
+function isExplorerGitIndicatorState(
+  state: WorkspaceGitPathState | undefined,
+): state is ExplorerGitIndicatorState {
+  return state === 'created' || state === 'modified' || state === 'deleted';
+}
+
+function getExplorerGitToneClassName(state: ExplorerGitIndicatorState): string {
+  if (state === 'created') {
+    return 'text-ide-success';
+  }
+
+  if (state === 'deleted') {
+    return 'text-ide-error';
+  }
+
+  return 'text-ide-warning';
+}
+
+function getExplorerGitIndicatorStates(
+  node: WorkspaceTreeNode,
+  gitPathStates: Record<string, WorkspaceGitPathState>,
+): ExplorerGitIndicatorState[] {
+  if (node.type === 'file') {
+    const directState = gitPathStates[node.path];
+    return isExplorerGitIndicatorState(directState) ? [directState] : [];
+  }
+
+  const matchingStates = new Set<ExplorerGitIndicatorState>();
+  const nodePathPrefix = node.path === WORKSPACE_ROOT_PATH ? '' : `${node.path}/`;
+
+  Object.entries(gitPathStates).forEach(([path, state]) => {
+    if (!isExplorerGitIndicatorState(state)) {
+      return;
+    }
+
+    if (node.path === WORKSPACE_ROOT_PATH || path === node.path || path.startsWith(nodePathPrefix)) {
+      matchingStates.add(state);
+    }
+  });
+
+  return EXPLORER_GIT_INDICATOR_ORDER.filter((state) => matchingStates.has(state));
+}
+
+function getExplorerGitLabelClassName(
+  directGitPathState: WorkspaceGitPathState | undefined,
+  indicatorStates: ExplorerGitIndicatorState[],
+): string {
+  if (directGitPathState === 'ignored') {
+    return 'text-ide-text-muted-stronger dark:text-ide-text-muted';
+  }
+
+  const dominantState = indicatorStates[0];
+  if (dominantState) {
+    return getExplorerGitToneClassName(dominantState);
+  }
+
+  return 'text-foreground';
+}
+
+function ExplorerGitIndicators({
+  indicatorStates,
+  testId,
+}: {
+  indicatorStates: ExplorerGitIndicatorState[];
+  testId: string;
+}) {
+  if (indicatorStates.length === 0) {
+    return null;
+  }
+
+  return (
+    <span
+      data-testid={`file-tree-git-indicators-${testId}`}
+      className="ml-auto flex shrink-0 items-center gap-1.5 pr-2"
+    >
+      {indicatorStates.map((state) => (
+        <span
+          key={state}
+          data-testid={`file-tree-git-indicator-${state}-${testId}`}
+          className={`relative flex h-2.5 w-2.5 items-center justify-center rounded-full ${getExplorerGitToneClassName(state)}`}
+        >
+          <span className="absolute inset-0 rounded-full border border-current/80" />
+          <span className="h-1.5 w-1.5 rounded-full bg-current" />
+        </span>
+      ))}
+    </span>
+  );
+}
+
 function TreeEditInputRow({
   depth,
   errorMessage,
@@ -510,11 +603,11 @@ export const FileTreeNode = memo(function FileTreeNode({
   const isCutSource = workspaceClipboard?.mode === 'cut' && workspaceClipboard.sourcePath === node.path;
   const gitPathState = gitPathStates[node.path];
   const treeTestId = toTreeTestId(node.path);
-  const labelColorClassName = gitPathState === 'modified'
-    ? 'text-ide-warning'
-    : gitPathState === 'ignored'
-    ? 'text-ide-text-muted'
-    : 'text-foreground';
+  const gitIndicatorStates = useMemo(
+    () => getExplorerGitIndicatorStates(node, gitPathStates),
+    [gitPathStates, node],
+  );
+  const labelColorClassName = getExplorerGitLabelClassName(gitPathState, gitIndicatorStates);
   const rowIndentStyle = getTreeRowIndentStyle(depth);
   const isEditingCurrentNode = treeEditSession?.mode === 'rename' && treeEditSession.targetPath === node.path;
   const draftNode = useMemo(() => {
@@ -797,12 +890,15 @@ export const FileTreeNode = memo(function FileTreeNode({
             {isExpanded
               ? <FolderOpen size={14} className="text-ide-syntax-folder shrink-0" />
               : <Folder size={14} className="text-ide-syntax-folder shrink-0" />}
-            <span
-              data-testid={`file-tree-label-${treeTestId}`}
-              className={`text-[13px] flex-1 truncate ml-1 ${labelColorClassName}`}
-            >
-              {node.name}
+            <span className="ml-1 flex min-w-0 flex-1 items-center">
+              <span
+                data-testid={`file-tree-label-${treeTestId}`}
+                className={`min-w-0 truncate text-[13px] ${labelColorClassName}`}
+              >
+                {node.name}
+              </span>
             </span>
+            <ExplorerGitIndicators indicatorStates={gitIndicatorStates} testId={treeTestId} />
           </>
         ) : (
           <>
@@ -810,12 +906,15 @@ export const FileTreeNode = memo(function FileTreeNode({
             <span className="w-4 h-4 flex items-center justify-center shrink-0">
               <FileIcon name={node.name} />
             </span>
-            <span
-              data-testid={`file-tree-label-${treeTestId}`}
-              className={`text-[13px] flex-1 truncate ml-1 ${labelColorClassName}`}
-            >
-              {node.name}
+            <span className="ml-1 flex min-w-0 flex-1 items-center">
+              <span
+                data-testid={`file-tree-label-${treeTestId}`}
+                className={`min-w-0 truncate text-[13px] ${labelColorClassName}`}
+              >
+                {node.name}
+              </span>
             </span>
+            <ExplorerGitIndicators indicatorStates={gitIndicatorStates} testId={treeTestId} />
           </>
         )}
       </div>

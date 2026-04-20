@@ -1743,13 +1743,14 @@ test('explorer shows the real git branch and git file decorations for tracked an
     await ensureExplorerVisible(window);
 
     await expect(window.getByTestId('status-bar-branch-label')).toHaveText('e2e-git-ui');
-    await expect(window.getByTestId('file-tree-label-ignored-dir')).toHaveClass(/text-ide-text-muted/);
-    await expect(window.getByTestId('file-tree-label-ignored_log')).toHaveClass(/text-ide-text-muted/);
+    await expect(window.getByTestId('file-tree-label-ignored-dir')).toHaveClass(/text-ide-text-muted-stronger/);
+    await expect(window.getByTestId('file-tree-label-ignored_log')).toHaveClass(/text-ide-text-muted-stronger/);
 
     await window.getByTestId('file-tree-node-rtl').click();
     await window.getByTestId('file-tree-node-rtl_core').click();
 
     await expect(window.getByTestId('file-tree-label-rtl_core_reg_file_v')).toHaveClass(/text-ide-warning/);
+    await expect(window.getByTestId('file-tree-git-indicator-modified-rtl_core_reg_file_v')).toBeVisible();
 
     await window.getByTestId('file-tree-node-rtl_core_reg_file_v').dblclick();
 
@@ -1777,6 +1778,50 @@ test('explorer status bar updates the git branch label after refocusing the app 
     await notifyAppWindowFocused(app);
 
     await expect(window.getByTestId('status-bar-branch-label')).toHaveText('e2e-git-ui-next');
+  } finally {
+    await app.close();
+  }
+});
+
+test('explorer git decorations refresh after external workspace and branch changes', async () => {
+  test.slow();
+
+  const workspaceCopy = test.info().outputPath('git-auto-refresh-workspace');
+  createWorkspaceCopy(workspaceCopy);
+  initializeGitWorkspaceCopy(workspaceCopy, 'e2e-git-ui');
+  execFileSync('git', ['branch', 'e2e-git-ui-next'], { cwd: workspaceCopy, stdio: 'pipe', windowsHide: true });
+
+  const { app, window } = await launchApp({ projectRoot: workspaceCopy });
+
+  try {
+    await ensureExplorerVisible(window);
+    await window.getByTestId('file-tree-node-rtl').click();
+    await window.getByTestId('file-tree-node-rtl_core').click();
+
+    await expect(window.getByTestId('status-bar-branch-label')).toHaveText('e2e-git-ui');
+
+    fs.appendFileSync(path.join(workspaceCopy, 'rtl', 'core', 'cpu_top.sv'), '\n// e2e auto refresh marker\n', 'utf-8');
+    fs.writeFileSync(path.join(workspaceCopy, 'rtl', 'core', 'created_auto.v'), 'module created_auto; endmodule\n', 'utf-8');
+    fs.rmSync(path.join(workspaceCopy, 'rtl', 'core', 'alu.sv'));
+    execFileSync('git', ['switch', 'e2e-git-ui-next'], { cwd: workspaceCopy, stdio: 'pipe', windowsHide: true });
+
+    await expect(window.getByTestId('status-bar-branch-label')).toHaveText('e2e-git-ui-next');
+    await expect(window.getByTestId('file-tree-label-rtl_core_cpu_top_sv')).toHaveClass(/text-ide-warning/);
+    await expect(window.getByTestId('file-tree-label-rtl_core_created_auto_v')).toHaveClass(/text-ide-success/);
+    await expect(window.getByTestId('file-tree-git-indicator-created-rtl_core_created_auto_v')).toBeVisible();
+    await expect(window.getByTestId('file-tree-git-indicator-created-rtl_core')).toBeVisible();
+    await expect(window.getByTestId('file-tree-git-indicator-modified-rtl_core')).toBeVisible();
+    await expect(window.getByTestId('file-tree-git-indicator-deleted-rtl_core')).toBeVisible();
+
+    await expect.poll(async () => {
+      return window.getByTestId('file-tree-git-indicators-rtl_core').locator('[data-testid^="file-tree-git-indicator-"]').evaluateAll(
+        (elements) => elements.map((element) => (element as { getAttribute: (name: string) => string | null }).getAttribute('data-testid')),
+      );
+    }).toEqual([
+      'file-tree-git-indicator-created-rtl_core',
+      'file-tree-git-indicator-modified-rtl_core',
+      'file-tree-git-indicator-deleted-rtl_core',
+    ]);
   } finally {
     await app.close();
   }

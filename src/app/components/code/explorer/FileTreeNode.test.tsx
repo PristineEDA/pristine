@@ -601,7 +601,7 @@ describe('FileTreeNode', () => {
     expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' });
   });
 
-  it('colors git-modified files yellow and ignored folders gray', () => {
+  it('renders right-aligned git badges for files and strengthens ignored folder text in light mode', () => {
     const onToggleFolder = vi.fn();
 
     const { rerender } = render(
@@ -625,6 +625,8 @@ describe('FileTreeNode', () => {
     );
 
     expect(screen.getByTestId('file-tree-label-rtl_core_cpu_top_v')).toHaveClass('text-ide-warning');
+    expect(screen.getByTestId('file-tree-git-indicators-rtl_core_cpu_top_v')).toHaveClass('ml-auto');
+    expect(screen.getByTestId('file-tree-git-indicator-modified-rtl_core_cpu_top_v')).toBeInTheDocument();
 
     rerender(
       <FileTreeNode
@@ -647,6 +649,44 @@ describe('FileTreeNode', () => {
       />,
     );
 
-    expect(screen.getByTestId('file-tree-label-build')).toHaveClass('text-ide-text-muted');
+    expect(screen.getByTestId('file-tree-label-build')).toHaveClass('text-ide-text-muted-stronger');
+    expect(screen.queryByTestId('file-tree-git-indicators-build')).not.toBeInTheDocument();
+  });
+
+  it('aggregates created, modified, and deleted badges on parent folders in display order', () => {
+    render(
+      <FileTreeNode
+        node={{
+          id: 'rtl/core',
+          path: 'rtl/core',
+          name: 'core',
+          type: 'folder',
+          children: [],
+          hasLoadedChildren: true,
+          isLoading: false,
+        }}
+        depth={1}
+        activeFileId=""
+        onFileOpen={vi.fn()}
+        onFilePreview={vi.fn()}
+        expandedFolders={new Set()}
+        onToggleFolder={vi.fn()}
+        gitPathStates={{
+          'rtl/core/new_file.v': 'created',
+          'rtl/core/cpu_top.v': 'modified',
+          'rtl/core/old_file.v': 'deleted',
+        }}
+      />,
+    );
+
+    const indicators = screen.getByTestId('file-tree-git-indicators-rtl_core');
+    const indicatorIds = Array.from(indicators.querySelectorAll('[data-testid]')).map((element) => element.getAttribute('data-testid'));
+
+    expect(screen.getByTestId('file-tree-label-rtl_core')).toHaveClass('text-ide-success');
+    expect(indicatorIds).toEqual([
+      'file-tree-git-indicator-created-rtl_core',
+      'file-tree-git-indicator-modified-rtl_core',
+      'file-tree-git-indicator-deleted-rtl_core',
+    ]);
   });
 });

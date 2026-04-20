@@ -89,4 +89,43 @@ describe('workspaceGitStatus', () => {
     });
     expect(getWorkspaceGitPathState(result.current, 'rtl/core/reg_file.v')).toBe('modified');
   });
+
+  it('debounces repeated refresh requests into a single git status reload', async () => {
+    vi.mocked(window.electronAPI!.git.getStatus)
+      .mockResolvedValueOnce({
+        branchName: 'main',
+        hasProjectFiles: true,
+        isGitRepo: true,
+        pathStates: {},
+      })
+      .mockResolvedValue({
+        branchName: 'feature/git-ui',
+        hasProjectFiles: true,
+        isGitRepo: true,
+        pathStates: {
+          'rtl/core/new_file.v': 'created',
+        },
+      });
+
+    const { result } = renderHook(() => useWorkspaceGitStatus());
+
+    await waitFor(() => {
+      expect(result.current.branchName).toBe('main');
+    });
+
+    act(() => {
+      refreshWorkspaceGitStatus();
+      refreshWorkspaceGitStatus();
+      refreshWorkspaceGitStatus();
+    });
+
+    expect(window.electronAPI!.git.getStatus).toHaveBeenCalledTimes(1);
+
+    await waitFor(() => {
+      expect(window.electronAPI!.git.getStatus).toHaveBeenCalledTimes(2);
+      expect(result.current.branchName).toBe('feature/git-ui');
+    });
+
+    expect(getWorkspaceGitPathState(result.current, 'rtl/core/new_file.v')).toBe('created');
+  });
 });

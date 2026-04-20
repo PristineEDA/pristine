@@ -6,7 +6,7 @@ import type {
   LspStateEvent,
   WorkspaceLocation,
 } from './systemverilog-lsp';
-import type { WorkspaceGitStatusPayload } from './workspace-git';
+import type { WorkspaceGitChangeEvent, WorkspaceGitStatusPayload } from './workspace-git';
 import type { SaveDialogResult } from '../electron/ipc/dialog';
 import type { MenuCommandEvent } from '../src/app/menu/applicationMenu';
 import type { WindowCloseDecision, WindowCloseRequest } from '../src/app/window/windowClose';
@@ -36,6 +36,7 @@ export interface ElectronAPI {
   onFullScreenChange: (callback: (fullScreen: boolean) => void) => () => void;
   onCloseRequested: (callback: (request: WindowCloseRequest) => void) => () => void;
   onWindowFocus: (callback: () => void) => () => void;
+  onWorkspaceChange: (callback: (payload: WorkspaceGitChangeEvent) => void) => () => void;
 
   // File system (project-dir scoped)
   fs: {

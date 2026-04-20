@@ -490,6 +490,28 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     setWorkspaceTreeRefreshToken((current) => current + 1);
   }, []);
 
+  useEffect(() => {
+    const electronApi = typeof window === 'undefined' ? undefined : window.electronAPI;
+
+    if (!electronApi?.onWorkspaceChange) {
+      return undefined;
+    }
+
+    const disposeWorkspaceChange = electronApi.onWorkspaceChange((payload) => {
+      if (payload.refreshWorkspaceTree) {
+        bumpWorkspaceTreeRefreshToken();
+      }
+
+      if (payload.refreshGitStatus) {
+        refreshWorkspaceGitStatus();
+      }
+    });
+
+    return () => {
+      disposeWorkspaceChange();
+    };
+  }, [bumpWorkspaceTreeRefreshToken]);
+
   const rewriteRedirectedFileIds = useCallback((currentPrefix: string, nextPrefix: string) => {
     const nextRedirects: Record<string, string> = {};
 

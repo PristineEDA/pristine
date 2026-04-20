@@ -74,7 +74,7 @@ describe('git IPC handlers', () => {
     });
   });
 
-  it('parses branch, modified files, ignored files, and ignored folders from git status', async () => {
+  it('parses branch, created files, modified files, deleted files, and ignored paths from git status', async () => {
     mockReadDir.mockResolvedValue([createDirent('rtl'), createDirent('build')]);
     mockExecFile.mockImplementation((
       _command: string,
@@ -86,6 +86,7 @@ describe('git IPC handlers', () => {
         '## feature/git-ui...origin/feature/git-ui',
         ' M rtl/core/cpu_top.sv',
         'A  rtl/core/alu.v',
+        ' D rtl/core/legacy.v',
         'R  rtl/core/old_name.v -> rtl/core/new_name.v',
         '!! build/',
         '!! logs/sim.log',
@@ -99,11 +100,13 @@ describe('git IPC handlers', () => {
       hasProjectFiles: true,
       isGitRepo: true,
       pathStates: {
+        'rtl/core/alu.v': 'created',
         'rtl/core/cpu_top.sv': 'modified',
-        'rtl/core/alu.v': 'modified',
+        'rtl/core/legacy.v': 'deleted',
         'rtl/core/new_name.v': 'modified',
         build: 'ignored',
         'logs/sim.log': 'ignored',
+        'scratch/tmp.v': 'created',
       },
     });
 

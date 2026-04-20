@@ -172,6 +172,30 @@ export function useWorkspaceTree(revealRequest?: WorkspaceRevealRequest | null, 
   }, [initializeTree, refreshToken]);
 
   useEffect(() => {
+    if (!rootNode || workspaceAvailable !== true) {
+      return;
+    }
+
+    const pathsToLoad = Array.from(expandedFolders).filter((expandedPath) => {
+      if (expandedPath === WORKSPACE_ROOT_PATH) {
+        return false;
+      }
+
+      const expandedNode = findNode(rootNode, expandedPath);
+      return Boolean(
+        expandedNode
+        && expandedNode.type === 'folder'
+        && !expandedNode.hasLoadedChildren
+        && !expandedNode.isLoading,
+      );
+    });
+
+    pathsToLoad.forEach((expandedPath) => {
+      void loadDirectory(expandedPath);
+    });
+  }, [expandedFolders, loadDirectory, rootNode, workspaceAvailable]);
+
+  useEffect(() => {
     if (!revealRequest?.path || workspaceAvailable !== true) {
       return;
     }
@@ -195,20 +219,7 @@ export function useWorkspaceTree(revealRequest?: WorkspaceRevealRequest | null, 
 
       return next ?? current;
     });
-
-    const nextAncestorToLoad = ancestorPaths.find((ancestorPath) => {
-      if (ancestorPath === WORKSPACE_ROOT_PATH) {
-        return false;
-      }
-
-      const currentNode = findNode(rootNode, ancestorPath);
-      return !!currentNode && currentNode.type === 'folder' && !currentNode.hasLoadedChildren && !currentNode.isLoading;
-    });
-
-    if (nextAncestorToLoad) {
-      void loadDirectory(nextAncestorToLoad);
-    }
-  }, [loadDirectory, revealRequest, rootNode, workspaceAvailable]);
+  }, [revealRequest, workspaceAvailable]);
 
   const toggleFolder = useCallback((path: string) => {
     setExpandedFolders((current) => {
