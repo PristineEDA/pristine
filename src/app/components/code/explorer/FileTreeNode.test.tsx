@@ -16,6 +16,10 @@ function getContextMenuShortcut(label: string): HTMLElement {
   return shortcut;
 }
 
+function openContextMenuForNode(testId: string, coordinates = { clientX: 100, clientY: 120 }) {
+  fireEvent.contextMenu(screen.getByTestId(testId), coordinates);
+}
+
 describe('FileIcon', () => {
   it('renders extension-specific glyphs for supported workspace file types and falls back to the generic file icon', () => {
     const { rerender, container } = render(<FileIcon name="uart_tx.v" />);
@@ -189,24 +193,24 @@ describe('FileTreeNode', () => {
     fireEvent.doubleClick(node);
     expect(onFileOpen).toHaveBeenCalledWith('rtl/core/cpu_top.v', 'cpu_top.v');
 
-    fireEvent.contextMenu(node, { clientX: 100, clientY: 120 });
+    openContextMenuForNode('file-tree-node-rtl_core_cpu_top_v');
     fireEvent.click(getContextMenuItem('Open in Editor'));
 
     expect(onFileOpen).toHaveBeenCalledTimes(2);
     expect(screen.queryByRole('menuitem', { name: 'Open in Editor' })).not.toBeInTheDocument();
     expect(screen.getByText('cpu_top.v')).toBeInTheDocument();
 
-    fireEvent.contextMenu(node, { clientX: 100, clientY: 120 });
+    openContextMenuForNode('file-tree-node-rtl_core_cpu_top_v');
     fireEvent.click(getContextMenuItem('Copy'));
 
     expect(onStartCopy).toHaveBeenCalledWith('rtl/core/cpu_top.v', 'file');
 
-    fireEvent.contextMenu(node, { clientX: 100, clientY: 120 });
+    openContextMenuForNode('file-tree-node-rtl_core_cpu_top_v');
     fireEvent.click(getContextMenuItem('Cut'));
 
     expect(onStartCut).toHaveBeenCalledWith('rtl/core/cpu_top.v', 'file');
 
-    fireEvent.contextMenu(node, { clientX: 100, clientY: 120 });
+    openContextMenuForNode('file-tree-node-rtl_core_cpu_top_v');
     fireEvent.click(getContextMenuItem('Delete'));
 
     expect(onStartDelete).toHaveBeenCalledWith('rtl/core/cpu_top.v', 'file');
@@ -269,7 +273,7 @@ describe('FileTreeNode', () => {
       />,
     );
 
-    fireEvent.contextMenu(screen.getByTestId('file-tree-node-rtl'), { clientX: 40, clientY: 60 });
+    openContextMenuForNode('file-tree-node-rtl', { clientX: 40, clientY: 60 });
 
     expect(screen.getByRole('menu')).toHaveAttribute('data-slot', 'context-menu-content');
     expect(getContextMenuItem('New File')).toBeInTheDocument();
@@ -314,7 +318,7 @@ describe('FileTreeNode', () => {
       />,
     );
 
-    fireEvent.contextMenu(screen.getByTestId('file-tree-node-rtl'), { clientX: 40, clientY: 60 });
+    openContextMenuForNode('file-tree-node-rtl', { clientX: 40, clientY: 60 });
 
     expect(getContextMenuShortcut('Copy')).toHaveTextContent('⌘C');
     expect(getContextMenuShortcut('Cut')).toHaveTextContent('⌘X');
@@ -346,7 +350,7 @@ describe('FileTreeNode', () => {
       />,
     );
 
-    fireEvent.contextMenu(screen.getByTestId('file-tree-node-root'), { clientX: 40, clientY: 60 });
+    openContextMenuForNode('file-tree-node-root', { clientX: 40, clientY: 60 });
 
     expect(getContextMenuItem('Paste')).toHaveAttribute('data-disabled');
     expect(screen.queryByRole('menuitem', { name: 'Delete' })).not.toBeInTheDocument();
@@ -382,8 +386,127 @@ describe('FileTreeNode', () => {
     const node = screen.getByTestId('file-tree-node-rtl_core_cpu_top_v');
     expect(node.className).toContain('opacity-50');
 
-    fireEvent.contextMenu(node, { clientX: 100, clientY: 120 });
+    openContextMenuForNode('file-tree-node-rtl_core_cpu_top_v');
     expect(getContextMenuItem('Paste')).not.toHaveAttribute('data-disabled');
+  });
+
+  it('focuses the first enabled menu item on open and restores tree focus on Escape', () => {
+    const onRequestTreeFocus = vi.fn();
+
+    render(
+      <FileTreeNode
+        node={{
+          id: 'rtl/core/cpu_top.v',
+          path: 'rtl/core/cpu_top.v',
+          name: 'cpu_top.v',
+          type: 'file',
+          hasLoadedChildren: true,
+          isLoading: false,
+        }}
+        depth={1}
+        activeFileId=""
+        onFileOpen={vi.fn()}
+        onFilePreview={vi.fn()}
+        expandedFolders={new Set()}
+        onToggleFolder={vi.fn()}
+        onRequestTreeFocus={onRequestTreeFocus}
+        gitPathStates={{}}
+      />,
+    );
+
+    openContextMenuForNode('file-tree-node-rtl_core_cpu_top_v');
+
+    const firstItem = getContextMenuItem('Open in Editor');
+    expect(firstItem).toHaveFocus();
+
+    fireEvent.keyDown(firstItem, { key: 'Escape' });
+
+    expect(screen.queryByTestId('explorer-context-menu')).not.toBeInTheDocument();
+    expect(onRequestTreeFocus).toHaveBeenCalledTimes(1);
+  });
+
+  it('supports roving focus with Arrow keys, skips disabled items, and activates the focused item with Enter', () => {
+    const onStartRename = vi.fn();
+
+    render(
+      <FileTreeNode
+        node={{
+          id: 'rtl',
+          path: 'rtl',
+          name: 'rtl',
+          type: 'folder',
+          children: [],
+          hasLoadedChildren: true,
+          isLoading: false,
+        }}
+        depth={0}
+        activeFileId=""
+        onFileOpen={vi.fn()}
+        onFilePreview={vi.fn()}
+        onStartRename={onStartRename}
+        expandedFolders={new Set()}
+        onToggleFolder={vi.fn()}
+        gitPathStates={{}}
+      />,
+    );
+
+    openContextMenuForNode('file-tree-node-rtl', { clientX: 40, clientY: 60 });
+
+    const newFileItem = getContextMenuItem('New File');
+    expect(newFileItem).toHaveFocus();
+
+    fireEvent.keyDown(newFileItem, { key: 'ArrowDown' });
+    expect(getContextMenuItem('New Folder')).toHaveFocus();
+
+    fireEvent.keyDown(getContextMenuItem('New Folder'), { key: 'ArrowDown' });
+    expect(getContextMenuItem('Copy')).toHaveFocus();
+
+    fireEvent.keyDown(getContextMenuItem('Copy'), { key: 'ArrowDown' });
+    expect(getContextMenuItem('Cut')).toHaveFocus();
+
+    fireEvent.keyDown(getContextMenuItem('Cut'), { key: 'ArrowDown' });
+    expect(getContextMenuItem('Rename')).toHaveFocus();
+
+    fireEvent.keyDown(getContextMenuItem('Rename'), { key: 'Enter' });
+    expect(onStartRename).toHaveBeenCalledWith('rtl', 'folder');
+  });
+
+  it('supports Home and End keys and closes on Tab while restoring tree focus', () => {
+    const onRequestTreeFocus = vi.fn();
+
+    render(
+      <FileTreeNode
+        node={{
+          id: 'rtl/core/cpu_top.v',
+          path: 'rtl/core/cpu_top.v',
+          name: 'cpu_top.v',
+          type: 'file',
+          hasLoadedChildren: true,
+          isLoading: false,
+        }}
+        depth={1}
+        activeFileId=""
+        onFileOpen={vi.fn()}
+        onFilePreview={vi.fn()}
+        expandedFolders={new Set()}
+        onToggleFolder={vi.fn()}
+        onRequestTreeFocus={onRequestTreeFocus}
+        gitPathStates={{}}
+      />,
+    );
+
+    openContextMenuForNode('file-tree-node-rtl_core_cpu_top_v');
+
+    const firstItem = getContextMenuItem('Open in Editor');
+    fireEvent.keyDown(firstItem, { key: 'End' });
+    expect(getContextMenuItem('Copy Relative Path')).toHaveFocus();
+
+    fireEvent.keyDown(getContextMenuItem('Copy Relative Path'), { key: 'Home' });
+    expect(getContextMenuItem('Open in Editor')).toHaveFocus();
+
+    fireEvent.keyDown(getContextMenuItem('Open in Editor'), { key: 'Tab' });
+    expect(screen.queryByTestId('explorer-context-menu')).not.toBeInTheDocument();
+    expect(onRequestTreeFocus).toHaveBeenCalledTimes(1);
   });
 
   it('keeps a clicked folder highlighted when the selected folder id matches', () => {

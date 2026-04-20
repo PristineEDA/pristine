@@ -300,6 +300,42 @@ describe('LeftSidePanel', () => {
     });
   });
 
+  it('opens the selected explorer context menu when Shift+F10 is pressed on the tree', async () => {
+    const { container } = renderLeftSidePanel({
+      activeFileId: 'rtl/peripherals/uart_rx.v',
+      currentOutlineId: 'uart_rx',
+    });
+
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl'));
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals'));
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals_uart_rx_v'));
+
+    fireEvent.keyDown(container.querySelector('.explorer-tree-scrollbar') as HTMLElement, { key: 'F10', shiftKey: true });
+
+    expect(await screen.findByTestId('explorer-context-menu')).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: 'Open in Editor' })).toHaveFocus();
+  });
+
+  it('does not trigger explorer shortcuts while the explorer context menu owns focus', async () => {
+    const onDeleteWorkspaceEntry = vi.fn().mockResolvedValue(false);
+    const { container } = renderLeftSidePanel({
+      activeFileId: 'rtl/peripherals/uart_rx.v',
+      currentOutlineId: 'uart_rx',
+      onDeleteWorkspaceEntry,
+    });
+
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl'));
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals'));
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals_uart_rx_v'));
+
+    fireEvent.keyDown(container.querySelector('.explorer-tree-scrollbar') as HTMLElement, { key: 'F10', shiftKey: true });
+
+    const menuItem = await screen.findByRole('menuitem', { name: 'Open in Editor' });
+    fireEvent.keyDown(menuItem, { key: 'Delete' });
+
+    expect(onDeleteWorkspaceEntry).not.toHaveBeenCalled();
+  });
+
   it('starts cut when Ctrl+X is pressed on the explorer tree', async () => {
     const onCutWorkspaceEntry = vi.fn().mockResolvedValue(true);
     const { container } = renderLeftSidePanel({

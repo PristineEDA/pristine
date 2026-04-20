@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   ChevronRight, ChevronDown, Folder, FolderOpen,
 } from 'lucide-react';
@@ -34,28 +34,194 @@ interface ContextMenuSeparatorItem {
 
 type ExplorerContextMenuEntry = ContextMenuItem | ContextMenuSeparatorItem;
 
+export interface ExplorerContextMenuRequest {
+  path: string;
+  token: number;
+}
+
+function getFirstEnabledContextMenuItemIndex(items: ExplorerContextMenuEntry[]): number | null {
+  for (let index = 0; index < items.length; index += 1) {
+    const item = items[index];
+
+    if (item?.kind === 'item' && !item.disabled) {
+      return index;
+    }
+  }
+
+  return null;
+}
+
+function getLastEnabledContextMenuItemIndex(items: ExplorerContextMenuEntry[]): number | null {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index];
+
+    if (item?.kind === 'item' && !item.disabled) {
+      return index;
+    }
+  }
+
+  return null;
+}
+
+function getNextEnabledContextMenuItemIndex(
+  items: ExplorerContextMenuEntry[],
+  startIndex: number | null,
+  direction: 1 | -1,
+): number | null {
+  const enabledIndices = items.flatMap((item, index) => (
+    item.kind === 'item' && !item.disabled ? [index] : []
+  ));
+
+  if (enabledIndices.length === 0) {
+    return null;
+  }
+
+  if (startIndex === null) {
+    return direction === 1 ? enabledIndices[0] ?? null : enabledIndices[enabledIndices.length - 1] ?? null;
+  }
+
+  const currentPosition = enabledIndices.indexOf(startIndex);
+
+  if (currentPosition === -1) {
+    return direction === 1 ? enabledIndices[0] ?? null : enabledIndices[enabledIndices.length - 1] ?? null;
+  }
+
+  const nextPosition = (currentPosition + direction + enabledIndices.length) % enabledIndices.length;
+  return enabledIndices[nextPosition] ?? null;
+}
+
 function ExplorerContextMenu({
   items,
   onClose,
+  onRequestTreeFocus,
   x,
   y,
 }: {
   items: ExplorerContextMenuEntry[];
   onClose: () => void;
+  onRequestTreeFocus?: () => void;
   x: number;
   y: number;
 }) {
+  const itemRefs = useRef(new Map<number, HTMLDivElement | null>());
+  const [focusedItemIndex, setFocusedItemIndex] = useState<number | null>(() => getFirstEnabledContextMenuItemIndex(items));
+
+  const focusMenuItem = useCallback((index: number | null) => {
+    setFocusedItemIndex(index);
+
+    if (index === null) {
+      return;
+    }
+
+    itemRefs.current.get(index)?.focus();
+  }, []);
+
+  const restoreTreeFocus = useCallback((deferUntilAfterAction: boolean) => {
+    if (!onRequestTreeFocus) {
+      return;
+    }
+
+    if (deferUntilAfterAction) {
+      requestAnimationFrame(() => {
+        const activeElement = document.activeElement;
+
+        if (!activeElement || activeElement === document.body) {
+          onRequestTreeFocus();
+        }
+      });
+      return;
+    }
+
+    onRequestTreeFocus();
+  }, [onRequestTreeFocus]);
+
+  const closeMenu = useCallback((deferFocusRestore = false) => {
+    onClose();
+    restoreTreeFocus(deferFocusRestore);
+  }, [onClose, restoreTreeFocus]);
+
+  const activateMenuItem = useCallback((index: number) => {
+    const item = items[index];
+
+    if (!item || item.kind !== 'item' || item.disabled) {
+      return;
+    }
+
+    item.action();
+    closeMenu(true);
+  }, [closeMenu, items]);
+
+  const handleMenuKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      event.stopPropagation();
+      focusMenuItem(getNextEnabledContextMenuItemIndex(items, focusedItemIndex, 1));
+      return;
+    }
+
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      event.stopPropagation();
+      focusMenuItem(getNextEnabledContextMenuItemIndex(items, focusedItemIndex, -1));
+      return;
+    }
+
+    if (event.key === 'Home') {
+      event.preventDefault();
+      event.stopPropagation();
+      focusMenuItem(getFirstEnabledContextMenuItemIndex(items));
+      return;
+    }
+
+    if (event.key === 'End') {
+      event.preventDefault();
+      event.stopPropagation();
+      focusMenuItem(getLastEnabledContextMenuItemIndex(items));
+      return;
+    }
+
+    if (event.key === 'Enter' || event.key === ' ') {
+      if (focusedItemIndex === null) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      activateMenuItem(focusedItemIndex);
+      return;
+    }
+
+    if (event.key === 'Escape' || event.key === 'Tab') {
+      event.preventDefault();
+      event.stopPropagation();
+      closeMenu();
+    }
+  }, [activateMenuItem, closeMenu, focusMenuItem, focusedItemIndex, items]);
+
+  useLayoutEffect(() => {
+    const firstEnabledItemIndex = getFirstEnabledContextMenuItemIndex(items);
+    setFocusedItemIndex(firstEnabledItemIndex);
+
+    if (firstEnabledItemIndex === null) {
+      return;
+    }
+
+    itemRefs.current.get(firstEnabledItemIndex)?.focus();
+  }, [items]);
+
   return (
     <>
-      <div className="fixed inset-0 z-40" data-testid="explorer-context-menu-backdrop" onClick={onClose} />
+      <div className="fixed inset-0 z-40" data-testid="explorer-context-menu-backdrop" onClick={() => closeMenu()} />
       <div
         role="menu"
+        aria-orientation="vertical"
         data-testid="explorer-context-menu"
         data-slot="context-menu-content"
         className="fixed z-50 min-w-36 overflow-hidden rounded-md border bg-popover p-0.5 text-popover-foreground shadow-md"
         style={{ left: x, top: y }}
+        onKeyDown={handleMenuKeyDown}
       >
-        {items.map((item) =>
+        {items.map((item, index) =>
           item.kind === 'separator' ? (
             <div
               key={item.key}
@@ -66,25 +232,37 @@ function ExplorerContextMenu({
           ) : (
             <div
               key={item.label}
+              ref={(node) => {
+                itemRefs.current.set(index, node);
+              }}
               role="menuitem"
-              tabIndex={-1}
+              tabIndex={focusedItemIndex === index ? 0 : -1}
               data-testid={toExplorerContextMenuItemTestId(item.label)}
               data-slot="context-menu-item"
               data-variant={item.variant ?? 'default'}
               data-disabled={item.disabled ? '' : undefined}
               aria-disabled={item.disabled ? 'true' : undefined}
-              className={`relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1 text-[12px] outline-hidden select-none ${
+              className={`relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1 text-[12px] outline-hidden select-none focus:bg-accent focus:text-accent-foreground ${
                 item.disabled
                   ? 'pointer-events-none opacity-50'
                   : 'text-foreground hover:bg-accent hover:text-accent-foreground'
-              } ${item.variant === 'destructive' ? 'text-destructive hover:bg-destructive/10 hover:text-destructive' : ''}`}
+              } ${item.variant === 'destructive' ? 'text-destructive hover:bg-destructive/10 hover:text-destructive focus:bg-destructive/10 focus:text-destructive' : ''}`}
+              onFocus={() => {
+                if (!item.disabled) {
+                  setFocusedItemIndex(index);
+                }
+              }}
+              onMouseEnter={() => {
+                if (!item.disabled) {
+                  focusMenuItem(index);
+                }
+              }}
               onClick={() => {
                 if (item.disabled) {
                   return;
                 }
 
-                item.action();
-                onClose();
+                activateMenuItem(index);
               }}
             >
               {item.label}
@@ -289,6 +467,8 @@ export const FileTreeNode = memo(function FileTreeNode({
   workspaceClipboard,
   gitPathStates,
   onTreeInteract,
+  onRequestTreeFocus,
+  contextMenuRequest,
   revealRequest,
 }: {
   node: WorkspaceTreeNode;
@@ -315,10 +495,13 @@ export const FileTreeNode = memo(function FileTreeNode({
   workspaceClipboard?: WorkspaceClipboardState | null;
   gitPathStates: Record<string, WorkspaceGitPathState>;
   onTreeInteract?: () => void;
+  onRequestTreeFocus?: () => void;
+  contextMenuRequest?: ExplorerContextMenuRequest | null;
   revealRequest?: WorkspaceRevealRequest | null;
 }) {
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
   const rowRef = useRef<HTMLDivElement | null>(null);
+  const lastHandledContextMenuRequestTokenRef = useRef<number | null>(null);
   const isExpanded = expandedFolders.has(node.id);
   const isActive = node.id === activeFileId;
   const isSelected = selectedNode?.source === 'real' && selectedNode.path === node.path;
@@ -372,6 +555,29 @@ export const FileTreeNode = memo(function FileTreeNode({
 
     rowRef.current?.scrollIntoView({ block: 'nearest' });
   }, [node.path, revealRequest]);
+
+  useEffect(() => {
+    if (!contextMenuRequest || contextMenuRequest.path !== node.path) {
+      return;
+    }
+
+    if (lastHandledContextMenuRequestTokenRef.current === contextMenuRequest.token) {
+      return;
+    }
+
+    lastHandledContextMenuRequestTokenRef.current = contextMenuRequest.token;
+
+    const rowBounds = rowRef.current?.getBoundingClientRect();
+
+    if (!rowBounds) {
+      return;
+    }
+
+    setCtxMenu({
+      x: Math.round(rowBounds.left + 24),
+      y: Math.round(rowBounds.top + rowBounds.height / 2),
+    });
+  }, [contextMenuRequest, node.path]);
 
   const contextItems = useMemo<ExplorerContextMenuEntry[]>(() => {
     const pasteTargetType = node.path === WORKSPACE_ROOT_PATH ? 'root' : node.type;
@@ -541,6 +747,8 @@ export const FileTreeNode = memo(function FileTreeNode({
               workspaceClipboard={workspaceClipboard}
               gitPathStates={gitPathStates}
               onTreeInteract={onTreeInteract}
+              onRequestTreeFocus={onRequestTreeFocus}
+              contextMenuRequest={contextMenuRequest}
               revealRequest={revealRequest}
             />
           )
@@ -616,6 +824,7 @@ export const FileTreeNode = memo(function FileTreeNode({
         <ExplorerContextMenu
           items={contextItems}
           onClose={() => setCtxMenu(null)}
+          onRequestTreeFocus={onRequestTreeFocus}
           x={ctxMenu.x}
           y={ctxMenu.y}
         />
@@ -671,6 +880,8 @@ export const FileTreeNode = memo(function FileTreeNode({
             workspaceClipboard={workspaceClipboard}
             gitPathStates={gitPathStates}
             onTreeInteract={onTreeInteract}
+            onRequestTreeFocus={onRequestTreeFocus}
+            contextMenuRequest={contextMenuRequest}
             revealRequest={revealRequest}
           />
         )

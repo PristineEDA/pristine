@@ -4,7 +4,7 @@ import {
 } from 'lucide-react';
 import { useFileOutlines } from '../../../../data/mockDataLoader';
 import { refreshWorkspaceGitStatus, useWorkspaceGitStatus } from '../../../git/workspaceGitStatus';
-import { FileTreeNode } from './FileTreeNode';
+import { FileTreeNode, type ExplorerContextMenuRequest } from './FileTreeNode';
 import { OutlineNode } from './OutlineNode';
 import {
   DEFAULT_STARTUP_PROJECT_NAME,
@@ -118,7 +118,22 @@ export function getExplorerPasteTargetPath(
   return null;
 }
 
-type ExplorerKeyboardAction = 'rename' | 'delete' | 'copy' | 'cut' | 'paste' | 'clear-clipboard';
+function getExplorerContextMenuTargetPath(
+  selectedNode: ExplorerSelectedNode | null,
+  activeFileId: string,
+): string | null {
+  if (selectedNode?.source === 'real') {
+    return selectedNode.path;
+  }
+
+  if (isWorkspaceRelativeFilePath(activeFileId)) {
+    return activeFileId;
+  }
+
+  return null;
+}
+
+type ExplorerKeyboardAction = 'rename' | 'delete' | 'copy' | 'cut' | 'paste' | 'clear-clipboard' | 'open-context-menu';
 
 function getExplorerKeyboardAction(event: Pick<KeyboardEvent, 'key' | 'altKey' | 'ctrlKey' | 'metaKey' | 'shiftKey'>): ExplorerKeyboardAction | null {
   const normalizedKey = event.key.toLowerCase();
@@ -138,6 +153,14 @@ function getExplorerKeyboardAction(event: Pick<KeyboardEvent, 'key' | 'altKey' |
     }
 
     return null;
+  }
+
+  if (!event.altKey && !event.ctrlKey && !event.metaKey && event.shiftKey && event.key === 'F10') {
+    return 'open-context-menu';
+  }
+
+  if (!event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey && event.key === 'ContextMenu') {
+    return 'open-context-menu';
   }
 
   if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
@@ -195,6 +218,14 @@ function isMonacoTextInputKeyboardTarget(target: EventTarget | null): boolean {
   );
 }
 
+function isExplorerContextMenuTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  return Boolean(target.closest('[data-testid="explorer-context-menu"]'));
+}
+
 export function LeftSidePanel({
   activeFileId,
   onCreateWorkspaceFile,
@@ -219,6 +250,7 @@ export function LeftSidePanel({
   const monacoDeleteSelectionArmedRef = useRef(false);
   const [selectedNode, setSelectedNode] = useState<ExplorerSelectedNode | null>(null);
   const [treeEditSession, setTreeEditSession] = useState<ExplorerTreeEditSession | null>(null);
+  const [contextMenuRequest, setContextMenuRequest] = useState<ExplorerContextMenuRequest | null>(null);
   const [tab, setTab] = useState<'explorer' | 'outline'>('explorer');
   const fileOutlines = useFileOutlines();
   const gitStatus = useWorkspaceGitStatus();
@@ -319,7 +351,25 @@ export function LeftSidePanel({
     focusTree();
   }, [focusTree, onClearWorkspaceClipboard, workspaceClipboard]);
 
+  const openContextMenuForSelection = useCallback(() => {
+    const targetPath = getExplorerContextMenuTargetPath(selectedNode, activeFileId);
+
+    if (!targetPath) {
+      return;
+    }
+
+    treeInteractionActiveRef.current = true;
+    setContextMenuRequest((current) => ({
+      path: targetPath,
+      token: (current?.token ?? 0) + 1,
+    }));
+  }, [activeFileId, selectedNode]);
+
   const handleDocumentKeyDown = useEffectEvent((event: KeyboardEvent) => {
+    if (isExplorerContextMenuTarget(event.target)) {
+      return;
+    }
+
     const keyboardAction = getExplorerKeyboardAction(event);
     const isMonacoKeyboardTarget = isMonacoTextInputKeyboardTarget(event.target);
 
@@ -340,6 +390,9 @@ export function LeftSidePanel({
     const pasteTargetPath = keyboardAction === 'paste'
       ? getExplorerPasteTargetPath(selectedNode, activeFileId)
       : null;
+    const contextMenuTargetPath = keyboardAction === 'open-context-menu'
+      ? getExplorerContextMenuTargetPath(selectedNode, activeFileId)
+      : null;
     const allowDeleteFromMonacoSelection = Boolean(
       deleteTarget
       && isMonacoKeyboardTarget
@@ -353,6 +406,8 @@ export function LeftSidePanel({
       ? Boolean(clipboardTarget)
       : keyboardAction === 'paste'
       ? Boolean(workspaceClipboard && pasteTargetPath)
+      : keyboardAction === 'open-context-menu'
+      ? Boolean(contextMenuTargetPath)
       : Boolean(workspaceClipboard);
 
     if (
@@ -395,6 +450,11 @@ export function LeftSidePanel({
       return;
     }
 
+    if (keyboardAction === 'open-context-menu') {
+      openContextMenuForSelection();
+      return;
+    }
+
     clearClipboardOperation();
   });
 
@@ -404,6 +464,10 @@ export function LeftSidePanel({
     if (!treeContainer) {
       treeInteractionActiveRef.current = false;
       monacoDeleteSelectionArmedRef.current = false;
+      return;
+    }
+
+    if (isExplorerContextMenuTarget(event.target)) {
       return;
     }
 
@@ -659,12 +723,19 @@ export function LeftSidePanel({
       return;
     }
 
+    if (isExplorerContextMenuTarget(event.target)) {
+      return;
+    }
+
     const keyboardAction = getExplorerKeyboardAction(event.nativeEvent);
     const clipboardTarget = keyboardAction === 'copy' || keyboardAction === 'cut'
       ? getExplorerClipboardTarget(selectedNode, activeFileId)
       : null;
     const pasteTargetPath = keyboardAction === 'paste'
       ? getExplorerPasteTargetPath(selectedNode, activeFileId)
+      : null;
+    const contextMenuTargetPath = keyboardAction === 'open-context-menu'
+      ? getExplorerContextMenuTargetPath(selectedNode, activeFileId)
       : null;
 
     if (keyboardAction === 'delete' && getExplorerDeleteTarget(selectedNode)) {
@@ -697,6 +768,12 @@ export function LeftSidePanel({
       return;
     }
 
+    if (keyboardAction === 'open-context-menu' && contextMenuTargetPath) {
+      event.preventDefault();
+      openContextMenuForSelection();
+      return;
+    }
+
     if (keyboardAction === 'clear-clipboard' && workspaceClipboard) {
       event.preventDefault();
       clearClipboardOperation();
@@ -708,6 +785,7 @@ export function LeftSidePanel({
     startCopyFromSelection,
     startCutFromSelection,
     startDeleteFromSelection,
+    openContextMenuForSelection,
     startPasteFromSelection,
     startRenameFromSelection,
     tab,
@@ -816,6 +894,8 @@ export function LeftSidePanel({
                 treeEditValidation={treeEditValidation}
                 workspaceClipboard={workspaceClipboard}
                 onTreeInteract={focusTree}
+                onRequestTreeFocus={focusTree}
+                contextMenuRequest={contextMenuRequest}
                 gitPathStates={gitStatus.pathStates}
                 revealRequest={revealRequest}
               />
