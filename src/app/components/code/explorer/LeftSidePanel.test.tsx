@@ -2,19 +2,30 @@ import type { ComponentProps } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetWorkspaceGitStatusStoreForTests } from '../../../git/workspaceGitStatus';
-import { getExplorerDeleteTarget, getExplorerRenameTarget, LeftSidePanel } from './LeftSidePanel';
+import {
+  getExplorerClipboardTarget,
+  getExplorerDeleteTarget,
+  getExplorerPasteTargetPath,
+  getExplorerRenameTarget,
+  LeftSidePanel,
+} from './LeftSidePanel';
 
 function renderLeftSidePanel(props: Partial<ComponentProps<typeof LeftSidePanel>> = {}) {
   const componentProps: ComponentProps<typeof LeftSidePanel> = {
     activeFileId: 'cpu_top',
+    onClearWorkspaceClipboard: vi.fn(),
+    onCopyWorkspaceEntry: vi.fn().mockResolvedValue(true),
     onCreateWorkspaceFile: vi.fn().mockResolvedValue(undefined),
     onCreateWorkspaceFolder: vi.fn().mockResolvedValue(undefined),
+    onCutWorkspaceEntry: vi.fn().mockResolvedValue(true),
     onDeleteWorkspaceEntry: vi.fn().mockResolvedValue(false),
     onFileOpen: vi.fn(),
     onFilePreview: vi.fn(),
     onLineJump: vi.fn(),
+    onPasteWorkspaceEntry: vi.fn().mockResolvedValue(null),
     onRenameWorkspaceEntry: vi.fn().mockResolvedValue(undefined),
     currentOutlineId: 'cpu_top',
+    workspaceClipboard: null,
     ...props,
   };
 
@@ -140,14 +151,19 @@ describe('LeftSidePanel', () => {
     rerender(
       <LeftSidePanel
         activeFileId="rtl/core/cpu_top.v"
+        onClearWorkspaceClipboard={vi.fn()}
+        onCopyWorkspaceEntry={vi.fn().mockResolvedValue(true)}
         onCreateWorkspaceFile={vi.fn().mockResolvedValue(undefined)}
         onCreateWorkspaceFolder={vi.fn().mockResolvedValue(undefined)}
+        onCutWorkspaceEntry={vi.fn().mockResolvedValue(true)}
         onDeleteWorkspaceEntry={vi.fn().mockResolvedValue(false)}
         onFileOpen={vi.fn()}
         onFilePreview={vi.fn()}
         onLineJump={vi.fn()}
+        onPasteWorkspaceEntry={vi.fn().mockResolvedValue(null)}
         onRenameWorkspaceEntry={vi.fn().mockResolvedValue(undefined)}
         currentOutlineId="cpu_top"
+        workspaceClipboard={null}
       />,
     );
 
@@ -228,6 +244,22 @@ describe('LeftSidePanel', () => {
     });
   });
 
+  it('falls back to the highlighted active workspace file for explorer copy targets', () => {
+    expect(getExplorerClipboardTarget(null, 'rtl/peripherals/uart_rx.v')).toEqual({
+      path: 'rtl/peripherals/uart_rx.v',
+      type: 'file',
+    });
+  });
+
+  it('resolves paste targets to the selected file parent path', () => {
+    expect(getExplorerPasteTargetPath({
+      id: 'rtl/peripherals/uart_rx.v',
+      path: 'rtl/peripherals/uart_rx.v',
+      type: 'file',
+      source: 'real',
+    }, 'rtl/peripherals/uart_rx.v')).toBe('rtl/peripherals');
+  });
+
   it('starts delete when Delete is pressed on document after selecting a file in the tree', async () => {
     const onDeleteWorkspaceEntry = vi.fn().mockResolvedValue(false);
 
@@ -246,6 +278,96 @@ describe('LeftSidePanel', () => {
     await waitFor(() => {
       expect(onDeleteWorkspaceEntry).toHaveBeenCalledWith('rtl/peripherals/uart_rx.v', 'file');
     });
+  });
+
+  it('starts copy when Ctrl+C is pressed on document after selecting a file in the tree', async () => {
+    const onCopyWorkspaceEntry = vi.fn().mockResolvedValue(true);
+
+    renderLeftSidePanel({
+      activeFileId: 'rtl/peripherals/uart_rx.v',
+      currentOutlineId: 'uart_rx',
+      onCopyWorkspaceEntry,
+    });
+
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl'));
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals'));
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals_uart_rx_v'));
+
+    fireEvent.keyDown(document, { key: 'c', ctrlKey: true });
+
+    await waitFor(() => {
+      expect(onCopyWorkspaceEntry).toHaveBeenCalledWith('rtl/peripherals/uart_rx.v', 'file');
+    });
+  });
+
+  it('starts cut when Ctrl+X is pressed on the explorer tree', async () => {
+    const onCutWorkspaceEntry = vi.fn().mockResolvedValue(true);
+    const { container } = renderLeftSidePanel({
+      activeFileId: 'rtl/peripherals/uart_rx.v',
+      currentOutlineId: 'uart_rx',
+      onCutWorkspaceEntry,
+    });
+
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl'));
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals'));
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals_uart_rx_v'));
+
+    fireEvent.keyDown(container.querySelector('.explorer-tree-scrollbar') as HTMLElement, { key: 'x', ctrlKey: true });
+
+    await waitFor(() => {
+      expect(onCutWorkspaceEntry).toHaveBeenCalledWith('rtl/peripherals/uart_rx.v', 'file');
+    });
+  });
+
+  it('starts paste into the selected file parent when Ctrl+V is pressed and clipboard is armed', async () => {
+    const onPasteWorkspaceEntry = vi.fn().mockResolvedValue({
+      path: 'rtl/peripherals/uart_rx-copy.v',
+      entryType: 'file',
+    });
+
+    renderLeftSidePanel({
+      activeFileId: 'rtl/peripherals/uart_rx.v',
+      currentOutlineId: 'uart_rx',
+      onPasteWorkspaceEntry,
+      workspaceClipboard: {
+        sourcePath: 'rtl/peripherals/uart_rx.v',
+        entryType: 'file',
+        mode: 'copy',
+      },
+    });
+
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl'));
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals'));
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals_uart_rx_v'));
+
+    fireEvent.keyDown(document, { key: 'v', ctrlKey: true });
+
+    await waitFor(() => {
+      expect(onPasteWorkspaceEntry).toHaveBeenCalledWith('rtl/peripherals');
+    });
+  });
+
+  it('clears the clipboard when Escape is pressed while the explorer owns the interaction scope', async () => {
+    const onClearWorkspaceClipboard = vi.fn();
+
+    renderLeftSidePanel({
+      activeFileId: 'rtl/peripherals/uart_rx.v',
+      currentOutlineId: 'uart_rx',
+      onClearWorkspaceClipboard,
+      workspaceClipboard: {
+        sourcePath: 'rtl/peripherals/uart_rx.v',
+        entryType: 'file',
+        mode: 'copy',
+      },
+    });
+
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl'));
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals'));
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals_uart_rx_v'));
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    expect(onClearWorkspaceClipboard).toHaveBeenCalledTimes(1);
   });
 
   it('starts delete when Monaco text input regains focus after selecting a file in the tree', async () => {
@@ -339,6 +461,32 @@ describe('LeftSidePanel', () => {
       fireEvent.keyDown(textarea, { key: 'Delete' });
 
       expect(onDeleteWorkspaceEntry).not.toHaveBeenCalled();
+    } finally {
+      textarea.remove();
+    }
+  });
+
+  it('does not start copy while a non-Monaco textarea is focused', async () => {
+    const onCopyWorkspaceEntry = vi.fn().mockResolvedValue(true);
+
+    renderLeftSidePanel({
+      activeFileId: 'rtl/peripherals/uart_rx.v',
+      currentOutlineId: 'uart_rx',
+      onCopyWorkspaceEntry,
+    });
+
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl'));
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals'));
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals_uart_rx_v'));
+
+    const textarea = document.createElement('textarea');
+    document.body.appendChild(textarea);
+
+    try {
+      textarea.focus();
+      fireEvent.keyDown(textarea, { key: 'c', ctrlKey: true });
+
+      expect(onCopyWorkspaceEntry).not.toHaveBeenCalled();
     } finally {
       textarea.remove();
     }

@@ -160,6 +160,8 @@ describe('FileTreeNode', () => {
     const onToggleFolder = vi.fn();
     const onFileOpen = vi.fn();
     const onFilePreview = vi.fn();
+    const onStartCopy = vi.fn();
+    const onStartCut = vi.fn();
     const onStartDelete = vi.fn();
 
     render(
@@ -176,6 +178,8 @@ describe('FileTreeNode', () => {
         activeFileId="rtl/core/cpu_top.v"
         onFileOpen={onFileOpen}
         onFilePreview={onFilePreview}
+        onStartCopy={onStartCopy}
+        onStartCut={onStartCut}
         onStartDelete={onStartDelete}
         expandedFolders={new Set()}
         onToggleFolder={onToggleFolder}
@@ -199,6 +203,16 @@ describe('FileTreeNode', () => {
     expect(onFileOpen).toHaveBeenCalledTimes(2);
     expect(screen.queryByRole('button', { name: /Open in Editor/i })).not.toBeInTheDocument();
     expect(screen.getByText('cpu_top.v')).toBeInTheDocument();
+
+    fireEvent.contextMenu(node, { clientX: 100, clientY: 120 });
+    fireEvent.click(screen.getByRole('button', { name: 'Copy' }));
+
+    expect(onStartCopy).toHaveBeenCalledWith('rtl/core/cpu_top.v', 'file');
+
+    fireEvent.contextMenu(node, { clientX: 100, clientY: 120 });
+    fireEvent.click(screen.getByRole('button', { name: 'Cut' }));
+
+    expect(onStartCut).toHaveBeenCalledWith('rtl/core/cpu_top.v', 'file');
 
     fireEvent.contextMenu(node, { clientX: 100, clientY: 120 });
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
@@ -266,6 +280,9 @@ describe('FileTreeNode', () => {
     fireEvent.contextMenu(screen.getByTestId('file-tree-node-rtl'), { clientX: 40, clientY: 60 });
 
     expect(screen.getByRole('button', { name: /New File/i })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Copy' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Cut' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Paste' })).toBeDisabled();
     expect(screen.getByRole('button', { name: /Copy Path/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument();
 
@@ -299,7 +316,41 @@ describe('FileTreeNode', () => {
 
     fireEvent.contextMenu(screen.getByTestId('file-tree-node-root'), { clientX: 40, clientY: 60 });
 
+    expect(screen.getByRole('button', { name: 'Paste' })).toBeDisabled();
     expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
+  });
+
+  it('dims the cut source row and enables paste when clipboard data is available', () => {
+    render(
+      <FileTreeNode
+        node={{
+          id: 'rtl/core/cpu_top.v',
+          path: 'rtl/core/cpu_top.v',
+          name: 'cpu_top.v',
+          type: 'file',
+          hasLoadedChildren: true,
+          isLoading: false,
+        }}
+        depth={1}
+        activeFileId=""
+        onFileOpen={vi.fn()}
+        onFilePreview={vi.fn()}
+        expandedFolders={new Set()}
+        onToggleFolder={vi.fn()}
+        workspaceClipboard={{
+          sourcePath: 'rtl/core/cpu_top.v',
+          entryType: 'file',
+          mode: 'cut',
+        }}
+        gitPathStates={{}}
+      />,
+    );
+
+    const node = screen.getByTestId('file-tree-node-rtl_core_cpu_top_v');
+    expect(node.className).toContain('opacity-50');
+
+    fireEvent.contextMenu(node, { clientX: 100, clientY: 120 });
+    expect(screen.getByRole('button', { name: 'Paste' })).toBeEnabled();
   });
 
   it('keeps a clicked folder highlighted when the selected folder id matches', () => {

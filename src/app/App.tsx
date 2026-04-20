@@ -185,12 +185,16 @@ function AppLayout() {
     closeActiveTabInFocusedGroup,
     mainContentView,
     activeTabId,
+    clearWorkspaceClipboard,
+    copyWorkspaceEntry,
     createWorkspaceFile,
     createWorkspaceFolder,
+    cutWorkspaceEntry,
     deleteWorkspaceEntry,
     openUntitledFile,
     openFile,
     openPreviewFile,
+    pasteWorkspaceEntry,
     renameWorkspaceEntry,
     jumpToLine, jumpTo,
     showLeftPanel, setShowLeftPanel,
@@ -206,6 +210,7 @@ function AppLayout() {
     saveAllFiles,
     saveErrors,
     savingFiles,
+    workspaceClipboard,
     workspaceTreeRefreshToken,
   } = useWorkspace();
   const [quickOpenState, dispatchQuickOpen] = useReducer(quickOpenReducer, QUICK_OPEN_INITIAL_STATE);
@@ -318,6 +323,24 @@ function AppLayout() {
     await createWorkspaceFolder(targetPath);
     queueRevealRequest(targetPath);
   }, [createWorkspaceFolder, queueRevealRequest]);
+
+  const handleCopyWorkspaceEntry = useCallback((targetPath: string, entryType: 'file' | 'folder') => {
+    return copyWorkspaceEntry(targetPath, entryType);
+  }, [copyWorkspaceEntry]);
+
+  const handleCutWorkspaceEntry = useCallback((targetPath: string, entryType: 'file' | 'folder') => {
+    return cutWorkspaceEntry(targetPath, entryType);
+  }, [cutWorkspaceEntry]);
+
+  const handlePasteWorkspaceEntry = useCallback(async (destinationFolderPath: string) => {
+    const pastedEntry = await pasteWorkspaceEntry(destinationFolderPath);
+
+    if (pastedEntry) {
+      queueRevealRequest(pastedEntry.path);
+    }
+
+    return pastedEntry;
+  }, [pasteWorkspaceEntry, queueRevealRequest]);
 
   const handleDeleteWorkspaceEntry = useCallback(async (
     targetPath: string,
@@ -520,17 +543,22 @@ function AppLayout() {
       leftContent: (
         <LeftSidePanel
           activeFileId={activeTabId}
+          onClearWorkspaceClipboard={clearWorkspaceClipboard}
+          onCopyWorkspaceEntry={handleCopyWorkspaceEntry}
           onCreateWorkspaceFile={handleCreateWorkspaceFile}
           onCreateWorkspaceFolder={handleCreateWorkspaceFolder}
+          onCutWorkspaceEntry={handleCutWorkspaceEntry}
           onDeleteWorkspaceEntry={handleDeleteWorkspaceEntry}
           onFileOpen={openWorkspaceFile}
           onFilePreview={openWorkspacePreviewFile}
           onLineJump={jumpTo}
+          onPasteWorkspaceEntry={handlePasteWorkspaceEntry}
           onRenameWorkspaceEntry={handleRenameWorkspaceEntry}
           currentOutlineId={activeTabId}
           refreshToken={workspaceTreeRefreshToken}
           revealRequest={quickOpenState.revealRequest}
           onWorkspaceRefresh={invalidateWorkspaceFiles}
+          workspaceClipboard={workspaceClipboard}
         />
       ),
       topContent: <EditorSplitLayout jumpToLine={jumpToLine} onActiveFileReveal={handleEditorActiveFileReveal} />,

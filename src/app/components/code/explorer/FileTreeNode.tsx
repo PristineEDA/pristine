@@ -10,6 +10,7 @@ import {
   toTreeTestId,
   type ExplorerSelectedNode,
   type ExplorerTreeEditSession,
+  type WorkspaceClipboardState,
   type WorkspaceEntryNameValidationResult,
 } from '../../../workspace/workspaceFiles';
 import type { WorkspaceRevealRequest } from '../../../workspace/useWorkspaceTree';
@@ -19,6 +20,7 @@ import { FileTypeBadge } from '../shared/FileTypeBadge';
 interface ContextMenuItem {
   label: string;
   action: () => void;
+  disabled?: boolean;
 }
 
 const noop = () => {};
@@ -58,8 +60,20 @@ export function ContextMenu({
           ) : (
             <button
               key={i}
-              className="w-full text-left px-3 py-1 text-foreground hover:bg-primary hover:text-primary-foreground transition-colors text-[12px]"
-              onClick={() => { item.action(); onClose(); }}
+              disabled={item.disabled}
+              className={`w-full text-left px-3 py-1 transition-colors text-[12px] ${
+                item.disabled
+                  ? 'text-muted-foreground/60 cursor-default'
+                  : 'text-foreground hover:bg-primary hover:text-primary-foreground'
+              }`}
+              onClick={() => {
+                if (item.disabled) {
+                  return;
+                }
+
+                item.action();
+                onClose();
+              }}
             >
               {item.label}
             </button>
@@ -181,7 +195,10 @@ export const FileTreeNode = memo(function FileTreeNode({
   onSelectNode,
   onStartCreateFile,
   onStartCreateFolder,
+  onStartCopy,
+  onStartCut,
   onStartDelete,
+  onStartPaste,
   onStartRename,
   onSubmitEdit,
   expandedFolders,
@@ -189,6 +206,7 @@ export const FileTreeNode = memo(function FileTreeNode({
   selectedNode,
   treeEditSession,
   treeEditValidation,
+  workspaceClipboard,
   gitPathStates,
   onTreeInteract,
   revealRequest,
@@ -203,7 +221,10 @@ export const FileTreeNode = memo(function FileTreeNode({
   onSelectNode?: (node: ExplorerSelectedNode) => void;
   onStartCreateFile?: (entryType: 'file', parentPath?: string) => void;
   onStartCreateFolder?: (entryType: 'folder', parentPath?: string) => void;
+  onStartCopy?: (path: string, entryType: 'file' | 'folder') => void;
+  onStartCut?: (path: string, entryType: 'file' | 'folder') => void;
   onStartDelete?: (path: string, entryType: 'file' | 'folder') => void;
+  onStartPaste?: (path: string, entryType: ExplorerSelectedNode['type']) => void;
   onStartRename?: (path: string, entryType: 'file' | 'folder') => void;
   onSubmitEdit?: () => void;
   expandedFolders: Set<string>;
@@ -211,6 +232,7 @@ export const FileTreeNode = memo(function FileTreeNode({
   selectedNode?: ExplorerSelectedNode | null;
   treeEditSession?: ExplorerTreeEditSession | null;
   treeEditValidation?: WorkspaceEntryNameValidationResult | null;
+  workspaceClipboard?: WorkspaceClipboardState | null;
   gitPathStates: Record<string, WorkspaceGitPathState>;
   onTreeInteract?: () => void;
   revealRequest?: WorkspaceRevealRequest | null;
@@ -222,6 +244,7 @@ export const FileTreeNode = memo(function FileTreeNode({
   const isSelected = selectedNode?.source === 'real' && selectedNode.path === node.path;
   const isActiveFileHighlighted = !selectedNode && isActive;
   const isPersistentlyHighlighted = isSelected || isActiveFileHighlighted;
+  const isCutSource = workspaceClipboard?.mode === 'cut' && workspaceClipboard.sourcePath === node.path;
   const gitPathState = gitPathStates[node.path];
   const treeTestId = toTreeTestId(node.path);
   const labelColorClassName = gitPathState === 'modified'
@@ -271,6 +294,13 @@ export const FileTreeNode = memo(function FileTreeNode({
   }, [node.path, revealRequest]);
 
   const contextItems = useMemo<ContextMenuItem[]>(() => {
+    const pasteTargetType = node.path === WORKSPACE_ROOT_PATH ? 'root' : node.type;
+    const pasteItem: ContextMenuItem = {
+      label: 'Paste',
+      action: () => onStartPaste?.(node.path, pasteTargetType),
+      disabled: !workspaceClipboard,
+    };
+
     if (node.type === 'folder') {
       const items = [
         {
@@ -281,6 +311,10 @@ export const FileTreeNode = memo(function FileTreeNode({
           label: 'New Folder',
           action: () => onStartCreateFolder?.('folder', node.path),
         },
+        { label: '---', action: noop },
+        { label: 'Copy', action: () => onStartCopy?.(node.path, 'folder') },
+        { label: 'Cut', action: () => onStartCut?.(node.path, 'folder') },
+        pasteItem,
         { label: '---', action: noop },
       ];
 
@@ -300,6 +334,10 @@ export const FileTreeNode = memo(function FileTreeNode({
     return [
       { label: 'Open in Editor', action: openFileFromContextMenu },
       { label: '---', action: noop },
+      { label: 'Copy', action: () => onStartCopy?.(node.path, 'file') },
+      { label: 'Cut', action: () => onStartCut?.(node.path, 'file') },
+      pasteItem,
+      { label: '---', action: noop },
       { label: 'Rename', action: () => onStartRename?.(node.path, 'file') },
       { label: 'Delete', action: () => onStartDelete?.(node.path, 'file') },
       { label: '---', action: noop },
@@ -307,7 +345,19 @@ export const FileTreeNode = memo(function FileTreeNode({
       { label: 'Copy Path', action: noop },
       { label: 'Copy Relative Path', action: noop },
     ];
-  }, [node.path, node.type, onStartCreateFile, onStartCreateFolder, onStartDelete, onStartRename, openFileFromContextMenu]);
+  }, [
+    node.path,
+    node.type,
+    onStartCopy,
+    onStartCreateFile,
+    onStartCreateFolder,
+    onStartCut,
+    onStartDelete,
+    onStartPaste,
+    onStartRename,
+    openFileFromContextMenu,
+    workspaceClipboard,
+  ]);
 
   if (isEditingCurrentNode && treeEditSession) {
     return (
@@ -362,7 +412,10 @@ export const FileTreeNode = memo(function FileTreeNode({
               onSelectNode={onSelectNode}
               onStartCreateFile={onStartCreateFile}
               onStartCreateFolder={onStartCreateFolder}
+              onStartCopy={onStartCopy}
+              onStartCut={onStartCut}
               onStartDelete={onStartDelete}
+              onStartPaste={onStartPaste}
               onStartRename={onStartRename}
               onSubmitEdit={onSubmitEdit}
               expandedFolders={expandedFolders}
@@ -370,6 +423,7 @@ export const FileTreeNode = memo(function FileTreeNode({
               selectedNode={selectedNode}
               treeEditSession={treeEditSession}
               treeEditValidation={treeEditValidation}
+              workspaceClipboard={workspaceClipboard}
               gitPathStates={gitPathStates}
               onTreeInteract={onTreeInteract}
               revealRequest={revealRequest}
@@ -389,7 +443,7 @@ export const FileTreeNode = memo(function FileTreeNode({
           isPersistentlyHighlighted
             ? 'bg-primary/20 text-foreground hover:bg-primary/20'
             : 'text-foreground hover:bg-accent'
-        }`}
+        } ${isCutSource ? 'opacity-50' : ''}`}
         style={rowIndentStyle}
         onClick={() => {
           selectCurrentNode();
@@ -487,7 +541,10 @@ export const FileTreeNode = memo(function FileTreeNode({
             onSelectNode={onSelectNode}
             onStartCreateFile={onStartCreateFile}
             onStartCreateFolder={onStartCreateFolder}
+            onStartCopy={onStartCopy}
+            onStartCut={onStartCut}
             onStartDelete={onStartDelete}
+            onStartPaste={onStartPaste}
             onStartRename={onStartRename}
             onSubmitEdit={onSubmitEdit}
             expandedFolders={expandedFolders}
@@ -495,6 +552,7 @@ export const FileTreeNode = memo(function FileTreeNode({
             selectedNode={selectedNode}
             treeEditSession={treeEditSession}
             treeEditValidation={treeEditValidation}
+            workspaceClipboard={workspaceClipboard}
             gitPathStates={gitPathStates}
             onTreeInteract={onTreeInteract}
             revealRequest={revealRequest}

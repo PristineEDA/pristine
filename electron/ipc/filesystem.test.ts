@@ -8,6 +8,8 @@ const { mockHandle, mockFs } = vi.hoisted(() => ({
     readFile: vi.fn(),
     writeFile: vi.fn(),
     mkdir: vi.fn(),
+    copyFile: vi.fn(),
+    cp: vi.fn(),
     unlink: vi.fn(),
     rm: vi.fn(),
     rename: vi.fn(),
@@ -49,6 +51,8 @@ describe('filesystem IPC handlers', () => {
     mockFs.readFile.mockReset();
     mockFs.writeFile.mockReset();
     mockFs.mkdir.mockReset();
+    mockFs.copyFile.mockReset();
+    mockFs.cp.mockReset();
     mockFs.unlink.mockReset();
     mockFs.rm.mockReset();
     mockFs.rename.mockReset();
@@ -127,6 +131,35 @@ describe('filesystem IPC handlers', () => {
 
       await expect(handler({}, 'rtl/generated')).resolves.toBeUndefined();
       expect(mockFs.mkdir).toHaveBeenCalledWith(expect.stringMatching(/safe[\\/]project[\\/]rtl[\\/]generated$/), { recursive: true });
+    });
+  });
+
+  describe('FS_COPY_FILE', () => {
+    it('copies a project-scoped file into a new project-scoped path', async () => {
+      const handler = getHandler('async:fs:copy-file');
+
+      await expect(handler({}, 'rtl/core/reg_file.v', 'rtl/core/reg_file-copy.v')).resolves.toBeUndefined();
+      expect(mockFs.copyFile).toHaveBeenCalledWith(
+        expect.stringMatching(/safe[\\/]project[\\/]rtl[\\/]core[\\/]reg_file\.v$/),
+        expect.stringMatching(/safe[\\/]project[\\/]rtl[\\/]core[\\/]reg_file-copy\.v$/),
+      );
+    });
+  });
+
+  describe('FS_COPY_DIRECTORY', () => {
+    it('copies a project-scoped directory recursively into a new project-scoped path', async () => {
+      const handler = getHandler('async:fs:copy-directory');
+
+      await expect(handler({}, 'rtl/core', 'rtl/core-copy')).resolves.toBeUndefined();
+      expect(mockFs.cp).toHaveBeenCalledWith(
+        expect.stringMatching(/safe[\\/]project[\\/]rtl[\\/]core$/),
+        expect.stringMatching(/safe[\\/]project[\\/]rtl[\\/]core-copy$/),
+        {
+          recursive: true,
+          errorOnExist: true,
+          force: false,
+        },
+      );
     });
   });
 

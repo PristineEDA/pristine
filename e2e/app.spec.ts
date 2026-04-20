@@ -1568,6 +1568,120 @@ test('Explorer Delete shows unsaved changes first, then confirmation, before rec
   }
 });
 
+test('Explorer Copy creates a -copy file and keeps it after relaunch', async () => {
+  test.slow();
+
+  const workspaceCopy = test.info().outputPath('explorer-copy-file-workspace');
+  createWorkspaceCopy(workspaceCopy);
+
+  const copiedRelativePath = 'rtl/core/reg_file-copy.v';
+  const copiedAbsolutePath = path.join(workspaceCopy, 'rtl', 'core', 'reg_file-copy.v');
+  const copiedTreeTestId = toWorkspaceTreeTestId(copiedRelativePath);
+  const sourceTreeTestId = toWorkspaceTreeTestId('rtl/core/reg_file.v');
+  const { app, window } = await launchApp({ projectRoot: workspaceCopy });
+
+  try {
+    await ensureExplorerVisible(window);
+    await window.getByTestId('file-tree-node-rtl').click();
+    await window.getByTestId('file-tree-node-rtl_core').click();
+
+    await window.getByTestId(sourceTreeTestId).click({ button: 'right' });
+    await window.getByRole('button', { name: 'Copy', exact: true }).click();
+
+    await window.getByTestId('file-tree-node-rtl_core').click({ button: 'right' });
+    await window.getByRole('button', { name: 'Paste', exact: true }).click();
+
+    await expect.poll(() => fs.existsSync(copiedAbsolutePath), {
+      timeout: 15000,
+    }).toBe(true);
+    await expect(window.getByTestId(copiedTreeTestId)).toBeVisible();
+
+    await app.close();
+
+    const relaunched = await launchApp({ projectRoot: workspaceCopy });
+
+    try {
+      await ensureExplorerVisible(relaunched.window);
+      await relaunched.window.getByTestId('file-tree-node-rtl').click();
+      await relaunched.window.getByTestId('file-tree-node-rtl_core').click();
+      await expect(relaunched.window.getByTestId(copiedTreeTestId)).toBeVisible();
+
+      await relaunched.window.getByTestId(copiedTreeTestId).dblclick();
+      await expect(relaunched.window.getByTestId(`editor-tab-${copiedRelativePath}`)).toBeVisible();
+    } finally {
+      await relaunched.app.close();
+    }
+  } finally {
+    await app.close().catch(() => undefined);
+  }
+});
+
+test('Explorer Cut dims the source, Escape cancels it, and pasting to the workspace root moves the file', async () => {
+  test.slow();
+
+  const workspaceCopy = test.info().outputPath('explorer-cut-file-workspace');
+  createWorkspaceCopy(workspaceCopy);
+  const primaryModifier = process.platform === 'darwin' ? 'Meta' : 'Control';
+
+  const originalRelativePath = 'rtl/core/reg_file.v';
+  const movedRelativePath = 'reg_file.v';
+  const originalAbsolutePath = path.join(workspaceCopy, 'rtl', 'core', 'reg_file.v');
+  const movedAbsolutePath = path.join(workspaceCopy, 'reg_file.v');
+  const originalTreeTestId = toWorkspaceTreeTestId(originalRelativePath);
+  const movedTreeTestId = toWorkspaceTreeTestId(movedRelativePath);
+  const { app, window } = await launchApp({ projectRoot: workspaceCopy });
+
+  try {
+    await ensureExplorerVisible(window);
+    await window.getByTestId('file-tree-node-rtl').click();
+    await window.getByTestId('file-tree-node-rtl_core').click();
+
+    const sourceFileNode = window.getByTestId(originalTreeTestId);
+    const explorerTree = window.locator('.explorer-tree-scrollbar');
+
+    await sourceFileNode.click();
+    await explorerTree.focus();
+    await explorerTree.press(`${primaryModifier}+X`);
+    await expect(sourceFileNode).toHaveClass(/opacity-50/);
+
+    await explorerTree.press('Escape');
+    await expect(sourceFileNode).not.toHaveClass(/opacity-50/);
+
+    await explorerTree.focus();
+    await explorerTree.press(`${primaryModifier}+X`);
+    await expect(sourceFileNode).toHaveClass(/opacity-50/);
+
+    await window.getByTestId('file-tree-node-root').click({ button: 'right' });
+  await window.getByRole('button', { name: 'Paste', exact: true }).click();
+
+    await expect.poll(() => fs.existsSync(movedAbsolutePath), {
+      timeout: 15000,
+    }).toBe(true);
+    await expect.poll(() => fs.existsSync(originalAbsolutePath), {
+      timeout: 15000,
+    }).toBe(false);
+    await expect(window.getByTestId(originalTreeTestId)).toHaveCount(0);
+    await expect(window.getByTestId(movedTreeTestId)).toBeVisible();
+    await expect(window.getByTestId(movedTreeTestId)).not.toHaveClass(/opacity-50/);
+
+    await app.close();
+
+    const relaunched = await launchApp({ projectRoot: workspaceCopy });
+
+    try {
+      await ensureExplorerVisible(relaunched.window);
+      await expect(relaunched.window.getByTestId(movedTreeTestId)).toBeVisible();
+      await relaunched.window.getByTestId(movedTreeTestId).dblclick();
+      await expect(relaunched.window.getByTestId(`editor-tab-${movedRelativePath}`)).toBeVisible();
+      await expect(relaunched.window.getByTestId(originalTreeTestId)).toHaveCount(0);
+    } finally {
+      await relaunched.app.close();
+    }
+  } finally {
+    await app.close().catch(() => undefined);
+  }
+});
+
 test('Ctrl+W prompts for dirty untitled files and supports Cancel and Don\'t save', async () => {
   test.slow();
 

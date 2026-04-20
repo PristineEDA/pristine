@@ -32,17 +32,23 @@ import { useWorkspaceFileStore, type SaveFilesResult } from './useWorkspaceFileS
 import type { WindowCloseRequest } from '../window/windowClose';
 import { refreshWorkspaceGitStatus } from '../git/workspaceGitStatus';
 import {
+  createWorkspaceCopyName,
   getPathBaseName,
+  getWorkspaceParentPath,
   isWithinWorkspacePath,
   isWorkspaceRelativeFilePath,
+  joinWorkspacePath,
   replaceWorkspacePathPrefix,
+  type WorkspaceClipboardMode,
+  type WorkspaceClipboardState,
+  type WorkspaceEntryType,
 } from '../workspace/workspaceFiles';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 export type Tab = EditorTab;
 
-type UnsavedChangesDialogKind = 'close-app' | 'close-file' | 'review' | 'delete-entry';
+type UnsavedChangesDialogKind = 'close-app' | 'close-file' | 'review' | 'delete-entry' | 'copy-entry' | 'cut-entry';
 
 export interface UnsavedChangesDialogState {
   fileIds: string[];
@@ -63,6 +69,11 @@ export interface DeleteConfirmationDialogState {
 interface WorkspaceFileDeleteTarget {
   fileId: string;
   groupId: string;
+}
+
+interface WorkspacePasteResult {
+  path: string;
+  entryType: WorkspaceEntryType;
 }
 
 interface WorkspaceState {
@@ -93,6 +104,11 @@ interface WorkspaceState {
   openPreviewFileInGroup: (fileId: string, fileName: string, groupId: string) => void;
   createWorkspaceFile: (targetPath: string) => Promise<void>;
   createWorkspaceFolder: (targetPath: string) => Promise<void>;
+  workspaceClipboard: WorkspaceClipboardState | null;
+  copyWorkspaceEntry: (targetPath: string, entryType: WorkspaceEntryType) => Promise<boolean>;
+  cutWorkspaceEntry: (targetPath: string, entryType: WorkspaceEntryType) => Promise<boolean>;
+  clearWorkspaceClipboard: () => void;
+  pasteWorkspaceEntry: (destinationFolderPath: string) => Promise<WorkspacePasteResult | null>;
   deleteWorkspaceEntry: (targetPath: string, entryType: 'file' | 'folder') => Promise<boolean>;
   renameWorkspaceEntry: (currentPath: string, nextPath: string, entryType: 'file' | 'folder') => Promise<void>;
   pinTab: (tabId: string) => void;
@@ -188,6 +204,28 @@ function createUnsavedChangesDialogState(
     };
   }
 
+  if (kind === 'copy-entry') {
+    return {
+      fileIds,
+      kind,
+      title: 'Save changes before copying?',
+      description: fileIds.length === 1
+        ? `The file ${getTabName(fileIds[0] ?? '')} has unsaved changes.`
+        : `${fileIds.length} files have unsaved changes and are affected by this copy.`,
+    };
+  }
+
+  if (kind === 'cut-entry') {
+    return {
+      fileIds,
+      kind,
+      title: 'Save changes before cutting?',
+      description: fileIds.length === 1
+        ? `The file ${getTabName(fileIds[0] ?? '')} has unsaved changes.`
+        : `${fileIds.length} files have unsaved changes and are affected by this cut.`,
+    };
+  }
+
   return {
     fileIds,
     kind,
@@ -238,6 +276,57 @@ function collectWorkspaceFileDeleteTargets(
       fileId: tab.id,
       groupId: group.id,
     })));
+}
+
+function shouldBlockWorkspacePasteIntoDestination(
+  sourcePath: string,
+  entryType: WorkspaceEntryType,
+  destinationFolderPath: string,
+) {
+  return entryType === 'folder' && isWithinWorkspacePath(destinationFolderPath, sourcePath);
+}
+
+async function resolveWorkspacePastePath(options: {
+  destinationFolderPath: string;
+  entryType: WorkspaceEntryType;
+  exists: (filePath: string) => Promise<boolean>;
+  mode: WorkspaceClipboardMode;
+  sourcePath: string;
+}) {
+  const {
+    destinationFolderPath,
+    entryType,
+    exists,
+    mode,
+    sourcePath,
+  } = options;
+  const sourceName = getPathBaseName(sourcePath);
+  const sourceParentPath = getWorkspaceParentPath(sourcePath);
+
+  if (mode === 'cut' && destinationFolderPath === sourceParentPath) {
+    return null;
+  }
+
+  const directTargetPath = joinWorkspacePath(destinationFolderPath, sourceName);
+
+  if (mode === 'cut' && !(await exists(directTargetPath))) {
+    return directTargetPath;
+  }
+
+  let copyIndex = 1;
+
+  while (true) {
+    const candidatePath = joinWorkspacePath(
+      destinationFolderPath,
+      createWorkspaceCopyName(sourceName, entryType, copyIndex),
+    );
+
+    if (!(await exists(candidatePath))) {
+      return candidatePath;
+    }
+
+    copyIndex += 1;
+  }
 }
 
 const EMPTY_TABS: Tab[] = [];
@@ -340,6 +429,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const fileStore = useWorkspaceFileStore();
   const [unsavedChangesDialog, setUnsavedChangesDialog] = useState<UnsavedChangesDialogState | null>(null);
   const [deleteConfirmationDialog, setDeleteConfirmationDialog] = useState<DeleteConfirmationDialogState | null>(null);
+  const [workspaceClipboard, setWorkspaceClipboard] = useState<WorkspaceClipboardState | null>(null);
   const [untitledFiles, setUntitledFiles] = useState<Record<string, string>>({});
   const [workspaceTreeRefreshToken, setWorkspaceTreeRefreshToken] = useState(0);
   const unsavedChangesResolverRef = useRef<((result: 'save' | 'discard' | 'cancel') => void) | null>(null);
@@ -354,6 +444,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const layoutPanelsEnabledRef = useRef(layoutPanelsEnabled);
   const unsavedChangesDialogRef = useRef(unsavedChangesDialog);
   const deleteConfirmationDialogRef = useRef(deleteConfirmationDialog);
+  const workspaceClipboardRef = useRef(workspaceClipboard);
   const untitledFilesRef = useRef(untitledFiles);
   const fileIdRedirectsRef = useRef<Record<string, string>>({});
 
@@ -363,6 +454,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   layoutPanelsEnabledRef.current = layoutPanelsEnabled;
   unsavedChangesDialogRef.current = unsavedChangesDialog;
   deleteConfirmationDialogRef.current = deleteConfirmationDialog;
+  workspaceClipboardRef.current = workspaceClipboard;
   untitledFilesRef.current = untitledFiles;
 
   const resolveCurrentFileId = useCallback((fileId: string) => {
@@ -430,6 +522,36 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     });
 
     fileIdRedirectsRef.current = nextRedirects;
+  }, []);
+
+  const clearWorkspaceClipboard = useCallback(() => {
+    setWorkspaceClipboard(null);
+  }, []);
+
+  const rewriteWorkspaceClipboardPath = useCallback((currentPrefix: string, nextPrefix: string) => {
+    setWorkspaceClipboard((current) => {
+      if (!current || !isWithinWorkspacePath(current.sourcePath, currentPrefix)) {
+        return current;
+      }
+
+      const nextSourcePath = replaceWorkspacePathPrefix(current.sourcePath, currentPrefix, nextPrefix);
+      if (nextSourcePath === current.sourcePath) {
+        return current;
+      }
+
+      return {
+        ...current,
+        sourcePath: nextSourcePath,
+      };
+    });
+  }, []);
+
+  const removeWorkspaceClipboardTarget = useCallback((targetPath: string, entryType: WorkspaceEntryType) => {
+    setWorkspaceClipboard((current) => (
+      current && isWorkspaceDeleteTargetMatch(current.sourcePath, targetPath, entryType)
+        ? null
+        : current
+    ));
   }, []);
 
   const findTabName = useCallback((fileId: string) => {
@@ -741,22 +863,38 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     refreshWorkspaceGitStatus();
   }, [bumpWorkspaceTreeRefreshToken]);
 
-  const renameWorkspaceEntry = useCallback(async (
+  const maybeProceedWithUnsavedChanges = useCallback(async (
+    fileIds: string[],
+    kind: UnsavedChangesDialogKind,
+    onProceed: () => void | Promise<void>,
+  ) => {
+    const dirtyFileIds = getDirtyRequestedFileIds(fileIds);
+    if (dirtyFileIds.length === 0) {
+      await onProceed();
+      return true;
+    }
+
+    const decision = await requestUnsavedChangesConfirmation(dirtyFileIds, kind);
+    if (decision === 'cancel') {
+      return false;
+    }
+
+    await onProceed();
+    return true;
+  }, [getDirtyRequestedFileIds, requestUnsavedChangesConfirmation]);
+
+  const moveWorkspaceEntry = useCallback(async (
     currentPath: string,
     nextPath: string,
-    entryType: 'file' | 'folder',
+    entryType: WorkspaceEntryType,
   ) => {
     if (!currentPath || !nextPath || currentPath === nextPath) {
       return;
     }
 
     const fsApi = window.electronAPI?.fs;
-    if (!fsApi?.rename || !fsApi.exists) {
+    if (!fsApi?.rename) {
       throw new Error('Filesystem API unavailable');
-    }
-
-    if (await fsApi.exists(nextPath)) {
-      throw new Error('An entry with the same name already exists.');
     }
 
     await fsApi.rename(currentPath, nextPath);
@@ -780,29 +918,147 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     }
 
     rewriteRedirectedFileIds(currentPath, nextPath);
+    rewriteWorkspaceClipboardPath(currentPath, nextPath);
     bumpWorkspaceTreeRefreshToken();
     refreshWorkspaceGitStatus();
-  }, [bumpWorkspaceTreeRefreshToken, rewriteRedirectedFileIds]);
+  }, [bumpWorkspaceTreeRefreshToken, rewriteRedirectedFileIds, rewriteWorkspaceClipboardPath]);
 
-  const maybeProceedWithUnsavedChanges = useCallback(async (
-    fileIds: string[],
-    kind: UnsavedChangesDialogKind,
-    onProceed: () => void | Promise<void>,
+  const armWorkspaceClipboard = useCallback(async (
+    targetPath: string,
+    entryType: WorkspaceEntryType,
+    mode: WorkspaceClipboardMode,
   ) => {
-    const dirtyFileIds = getDirtyRequestedFileIds(fileIds);
-    if (dirtyFileIds.length === 0) {
-      await onProceed();
-      return true;
-    }
-
-    const decision = await requestUnsavedChangesConfirmation(dirtyFileIds, kind);
-    if (decision === 'cancel') {
+    if (!targetPath || targetPath === '.') {
       return false;
     }
 
-    await onProceed();
-    return true;
-  }, [getDirtyRequestedFileIds, requestUnsavedChangesConfirmation]);
+    const fsApi = window.electronAPI?.fs;
+    if (!fsApi?.exists) {
+      throw new Error('Filesystem API unavailable');
+    }
+
+    if (!(await fsApi.exists(targetPath))) {
+      if (workspaceClipboardRef.current?.sourcePath === targetPath) {
+        setWorkspaceClipboard(null);
+      }
+      return false;
+    }
+
+    const dirtyFileIds = fileStoreRef.current.dirtyFileIds.filter((fileId) => (
+      isWorkspaceRelativeFilePath(fileId) && isWorkspaceDeleteTargetMatch(fileId, targetPath, entryType)
+    ));
+
+    let armed = false;
+
+    const proceeded = await maybeProceedWithUnsavedChanges(
+      dirtyFileIds,
+      mode === 'copy' ? 'copy-entry' : 'cut-entry',
+      async () => {
+        setWorkspaceClipboard({
+          sourcePath: targetPath,
+          entryType,
+          mode,
+        });
+        armed = true;
+      },
+    );
+
+    return proceeded && armed;
+  }, [maybeProceedWithUnsavedChanges]);
+
+  const copyWorkspaceEntry = useCallback((targetPath: string, entryType: WorkspaceEntryType) => {
+    return armWorkspaceClipboard(targetPath, entryType, 'copy');
+  }, [armWorkspaceClipboard]);
+
+  const cutWorkspaceEntry = useCallback((targetPath: string, entryType: WorkspaceEntryType) => {
+    return armWorkspaceClipboard(targetPath, entryType, 'cut');
+  }, [armWorkspaceClipboard]);
+
+  const pasteWorkspaceEntry = useCallback(async (destinationFolderPath: string) => {
+    const clipboard = workspaceClipboardRef.current;
+
+    if (!clipboard) {
+      return null;
+    }
+
+    const fsApi = window.electronAPI?.fs;
+    if (!fsApi?.exists || !fsApi.copyFile || !fsApi.copyDirectory) {
+      throw new Error('Filesystem API unavailable');
+    }
+
+    if (!(await fsApi.exists(clipboard.sourcePath))) {
+      setWorkspaceClipboard(null);
+      return null;
+    }
+
+    if (!(await fsApi.exists(destinationFolderPath))) {
+      return null;
+    }
+
+    if (shouldBlockWorkspacePasteIntoDestination(
+      clipboard.sourcePath,
+      clipboard.entryType,
+      destinationFolderPath,
+    )) {
+      return null;
+    }
+
+    const nextPath = await resolveWorkspacePastePath({
+      destinationFolderPath,
+      entryType: clipboard.entryType,
+      exists: fsApi.exists,
+      mode: clipboard.mode,
+      sourcePath: clipboard.sourcePath,
+    });
+
+    if (!nextPath) {
+      return null;
+    }
+
+    if (clipboard.mode === 'cut') {
+      await moveWorkspaceEntry(clipboard.sourcePath, nextPath, clipboard.entryType);
+      setWorkspaceClipboard(null);
+      return {
+        path: nextPath,
+        entryType: clipboard.entryType,
+      };
+    }
+
+    if (clipboard.entryType === 'folder') {
+      await fsApi.copyDirectory(clipboard.sourcePath, nextPath);
+    } else {
+      await fsApi.copyFile(clipboard.sourcePath, nextPath);
+    }
+
+    bumpWorkspaceTreeRefreshToken();
+    refreshWorkspaceGitStatus();
+
+    return {
+      path: nextPath,
+      entryType: clipboard.entryType,
+    };
+  }, [bumpWorkspaceTreeRefreshToken, moveWorkspaceEntry]);
+
+  const renameWorkspaceEntry = useCallback(async (
+    currentPath: string,
+    nextPath: string,
+    entryType: 'file' | 'folder',
+  ) => {
+    if (!currentPath || !nextPath || currentPath === nextPath) {
+      return;
+    }
+
+    const fsApi = window.electronAPI?.fs;
+    if (!fsApi?.rename || !fsApi.exists) {
+      throw new Error('Filesystem API unavailable');
+    }
+
+    if (await fsApi.exists(nextPath)) {
+      throw new Error('An entry with the same name already exists.');
+    }
+
+    await moveWorkspaceEntry(currentPath, nextPath, entryType);
+  }, [moveWorkspaceEntry]);
 
   const deleteWorkspaceEntry = useCallback(async (
     targetPath: string,
@@ -852,6 +1108,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           }
 
           removeRedirectedFileIds(targetPath, entryType);
+          removeWorkspaceClipboardTarget(targetPath, entryType);
           bumpWorkspaceTreeRefreshToken();
           refreshWorkspaceGitStatus();
         });
@@ -864,6 +1121,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     closeWorkspaceDeleteTargets,
     maybeProceedWithUnsavedChanges,
     removeRedirectedFileIds,
+    removeWorkspaceClipboardTarget,
     requestDeleteConfirmation,
   ]);
 
@@ -1070,6 +1328,11 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       openPreviewFileInGroup: editorWorkspace.openPreviewFileInGroup,
       createWorkspaceFile,
       createWorkspaceFolder,
+      workspaceClipboard,
+      copyWorkspaceEntry,
+      cutWorkspaceEntry,
+      clearWorkspaceClipboard,
+      pasteWorkspaceEntry,
       deleteWorkspaceEntry,
       renameWorkspaceEntry,
       pinTab: editorWorkspace.pinTab,

@@ -45,6 +45,8 @@ export interface ElectronAPI {
     writeFile: (filePath: string, content: string) => Promise<void>;
     writeFileAbsolute: (filePath: string, content: string) => Promise<void>;
     createDirectory: (dirPath: string) => Promise<void>;
+    copyFile: (sourcePath: string, destinationPath: string) => Promise<void>;
+    copyDirectory: (sourcePath: string, destinationPath: string) => Promise<void>;
     deleteFile: (filePath: string) => Promise<void>;
     deleteDirectory: (dirPath: string) => Promise<void>;
     rename: (currentPath: string, nextPath: string) => Promise<void>;

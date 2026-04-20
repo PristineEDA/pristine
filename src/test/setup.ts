@@ -125,6 +125,8 @@ function createElectronApiMock() {
       writeFile: vi.fn(),
       writeFileAbsolute: vi.fn(),
       createDirectory: vi.fn(),
+      copyFile: vi.fn(),
+      copyDirectory: vi.fn(),
       deleteFile: vi.fn(),
       deleteDirectory: vi.fn(),
       rename: vi.fn(),

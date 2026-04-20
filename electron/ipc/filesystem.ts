@@ -145,6 +145,28 @@ export function registerFilesystemHandlers(): void {
     await fs.mkdir(resolved, { recursive: true });
   });
 
+  ipcMain.handle(AsyncChannels.FS_COPY_FILE, async (_event, sourcePath: unknown, destinationPath: unknown) => {
+    assertString(sourcePath, 'sourcePath');
+    assertString(destinationPath, 'destinationPath');
+    const resolvedSourcePath = validatePathWithinRoot(getRoot(), sourcePath);
+    const resolvedDestinationPath = validatePathWithinRoot(getRoot(), destinationPath);
+    await fs.mkdir(path.dirname(resolvedDestinationPath), { recursive: true });
+    await fs.copyFile(resolvedSourcePath, resolvedDestinationPath);
+  });
+
+  ipcMain.handle(AsyncChannels.FS_COPY_DIRECTORY, async (_event, sourcePath: unknown, destinationPath: unknown) => {
+    assertString(sourcePath, 'sourcePath');
+    assertString(destinationPath, 'destinationPath');
+    const resolvedSourcePath = validatePathWithinRoot(getRoot(), sourcePath);
+    const resolvedDestinationPath = validatePathWithinRoot(getRoot(), destinationPath);
+    await fs.mkdir(path.dirname(resolvedDestinationPath), { recursive: true });
+    await fs.cp(resolvedSourcePath, resolvedDestinationPath, {
+      recursive: true,
+      errorOnExist: true,
+      force: false,
+    });
+  });
+
   ipcMain.handle(AsyncChannels.FS_DELETE_FILE, async (_event, filePath: unknown) => {
     assertString(filePath, 'filePath');
     const resolved = validatePathWithinRoot(getRoot(), filePath);

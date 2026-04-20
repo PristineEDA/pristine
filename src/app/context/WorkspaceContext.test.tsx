@@ -32,6 +32,8 @@ function WorkspaceHarness() {
       <div data-testid="unsaved-dialog-files">{workspace.unsavedChangesDialog?.fileIds.join(',') ?? ''}</div>
       <div data-testid="delete-dialog-target">{workspace.deleteConfirmationDialog?.targetPath ?? ''}</div>
       <div data-testid="delete-dialog-type">{workspace.deleteConfirmationDialog?.entryType ?? ''}</div>
+      <div data-testid="clipboard-mode">{workspace.workspaceClipboard?.mode ?? ''}</div>
+      <div data-testid="clipboard-path">{workspace.workspaceClipboard?.sourcePath ?? ''}</div>
       <div data-testid="workspace-tree-refresh-token">{workspace.workspaceTreeRefreshToken}</div>
 
       <button onClick={() => workspace.setActiveView('simulation')}>set-view</button>
@@ -42,8 +44,14 @@ function WorkspaceHarness() {
       <button onClick={() => workspace.openPreviewFile('rtl/core/alu.v', 'alu.v')}>preview-alu</button>
       <button onClick={() => { void workspace.createWorkspaceFile('rtl/generated/new_file.sv'); }}>create-file</button>
       <button onClick={() => { void workspace.createWorkspaceFolder('rtl/generated'); }}>create-folder</button>
+      <button onClick={() => { void workspace.copyWorkspaceEntry('rtl/core/reg_file.v', 'file'); }}>copy-reg</button>
+      <button onClick={() => { void workspace.copyWorkspaceEntry('rtl/core', 'folder'); }}>copy-core-folder</button>
+      <button onClick={() => { void workspace.cutWorkspaceEntry('rtl/core/reg_file.v', 'file'); }}>cut-reg</button>
+      <button onClick={() => workspace.clearWorkspaceClipboard()}>clear-clipboard</button>
       <button onClick={() => { void workspace.deleteWorkspaceEntry('rtl/core/reg_file.v', 'file'); }}>delete-reg</button>
       <button onClick={() => { void workspace.deleteWorkspaceEntry('rtl/core', 'folder'); }}>delete-core-folder</button>
+      <button onClick={() => { void workspace.pasteWorkspaceEntry('rtl/core'); }}>paste-core</button>
+      <button onClick={() => { void workspace.pasteWorkspaceEntry('rtl'); }}>paste-rtl</button>
       <button onClick={() => { void workspace.renameWorkspaceEntry('rtl/core/reg_file.v', 'rtl/core/reg_file_renamed.v', 'file'); }}>rename-reg</button>
       <button onClick={() => { void workspace.renameWorkspaceEntry('rtl/core', 'rtl/renamed_core', 'folder'); }}>rename-core-folder</button>
       <button onClick={() => workspace.pinTab('rtl/core/alu.v')}>pin-alu</button>
@@ -107,8 +115,116 @@ describe('WorkspaceContext', () => {
     vi.clearAllMocks();
     undoActionRun.mockClear();
     redoActionRun.mockClear();
+    vi.mocked(window.electronAPI!.fs.copyFile).mockResolvedValue(undefined);
+    vi.mocked(window.electronAPI!.fs.copyDirectory).mockResolvedValue(undefined);
     vi.mocked(window.electronAPI!.fs.deleteFile).mockResolvedValue(undefined);
     vi.mocked(window.electronAPI!.fs.deleteDirectory).mockResolvedValue(undefined);
+  });
+
+  it('arms copy clipboard state, creates a -copy file on paste, and keeps the clipboard armed afterwards', async () => {
+    vi.mocked(window.electronAPI!.fs.exists).mockImplementation(async (filePath: string) => (
+      filePath === 'rtl/core/reg_file.v' || filePath === 'rtl/core'
+    ));
+
+    render(
+      <WorkspaceProvider>
+        <WorkspaceHarness />
+      </WorkspaceProvider>,
+    );
+
+    fireEvent.click(screen.getByText('copy-reg'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('clipboard-mode')).toHaveTextContent('copy');
+      expect(screen.getByTestId('clipboard-path')).toHaveTextContent('rtl/core/reg_file.v');
+    });
+
+    fireEvent.click(screen.getByText('paste-core'));
+
+    await waitFor(() => {
+      expect(window.electronAPI?.fs.copyFile).toHaveBeenCalledWith('rtl/core/reg_file.v', 'rtl/core/reg_file-copy.v');
+      expect(screen.getByTestId('workspace-tree-refresh-token')).toHaveTextContent('1');
+      expect(screen.getByTestId('clipboard-mode')).toHaveTextContent('copy');
+    });
+  });
+
+  it('copies folders through the directory copy API', async () => {
+    vi.mocked(window.electronAPI!.fs.exists).mockImplementation(async (filePath: string) => (
+      filePath === 'rtl/core' || filePath === 'rtl'
+    ));
+
+    render(
+      <WorkspaceProvider>
+        <WorkspaceHarness />
+      </WorkspaceProvider>,
+    );
+
+    fireEvent.click(screen.getByText('copy-core-folder'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('clipboard-mode')).toHaveTextContent('copy');
+      expect(screen.getByTestId('clipboard-path')).toHaveTextContent('rtl/core');
+    });
+
+    fireEvent.click(screen.getByText('paste-rtl'));
+
+    await waitFor(() => {
+      expect(window.electronAPI?.fs.copyDirectory).toHaveBeenCalledWith('rtl/core', 'rtl/core-copy');
+    });
+  });
+
+  it('cuts a workspace file, pastes it into a new folder, clears the clipboard, and updates open tabs', async () => {
+    vi.mocked(window.electronAPI!.fs.exists).mockImplementation(async (filePath: string) => (
+      filePath === 'rtl/core/reg_file.v' || filePath === 'rtl'
+    ));
+
+    render(
+      <WorkspaceProvider>
+        <WorkspaceHarness />
+      </WorkspaceProvider>,
+    );
+
+    fireEvent.click(screen.getByText('open-reg'));
+    fireEvent.click(screen.getByText('cut-reg'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('clipboard-mode')).toHaveTextContent('cut');
+    });
+
+    fireEvent.click(screen.getByText('paste-rtl'));
+
+    await waitFor(() => {
+      expect(window.electronAPI?.fs.rename).toHaveBeenCalledWith('rtl/core/reg_file.v', 'rtl/reg_file.v');
+      expect(screen.getByTestId('active-tab')).toHaveTextContent('rtl/reg_file.v');
+      expect(screen.getByTestId('tabs')).toHaveTextContent('rtl/reg_file.v');
+      expect(screen.getByTestId('clipboard-mode')).toHaveTextContent('');
+    });
+  });
+
+  it('prompts for unsaved changes before arming copy clipboard state', async () => {
+    vi.mocked(window.electronAPI!.fs.exists).mockResolvedValue(true);
+
+    render(
+      <WorkspaceProvider>
+        <WorkspaceHarness />
+      </WorkspaceProvider>,
+    );
+
+    fireEvent.click(screen.getByText('open-reg'));
+    fireEvent.click(screen.getByText('edit-reg'));
+    fireEvent.click(screen.getByText('copy-reg'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('unsaved-dialog-files')).toHaveTextContent('rtl/core/reg_file.v');
+    });
+    expect(screen.getByTestId('clipboard-mode')).toHaveTextContent('');
+
+    fireEvent.click(screen.getByText('discard-unsaved'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('clipboard-mode')).toHaveTextContent('copy');
+      expect(screen.getByTestId('clipboard-path')).toHaveTextContent('rtl/core/reg_file.v');
+    });
   });
 
   it('tracks dirty files, saves the active file, and clears dirty state after saving', async () => {

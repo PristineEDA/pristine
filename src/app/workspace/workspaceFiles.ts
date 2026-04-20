@@ -23,6 +23,16 @@ export interface WorkspaceDirectoryEntry {
   isFile: boolean;
 }
 
+export type WorkspaceEntryType = 'file' | 'folder';
+
+export type WorkspaceClipboardMode = 'copy' | 'cut';
+
+export interface WorkspaceClipboardState {
+  sourcePath: string;
+  entryType: WorkspaceEntryType;
+  mode: WorkspaceClipboardMode;
+}
+
 export type ExplorerSelectedNodeType = 'file' | 'folder' | 'root';
 export type ExplorerSelectedNodeSource = 'real' | 'draft';
 export type ExplorerTreeEditMode = 'rename' | 'create-file' | 'create-folder';
@@ -88,6 +98,33 @@ export function getPathBaseName(filePath: string): string {
   const normalized = filePath.replace(/\\/g, '/');
   const segments = normalized.split('/').filter(Boolean);
   return segments[segments.length - 1] ?? filePath;
+}
+
+export function splitWorkspaceEntryName(name: string): { stem: string; extension: string } {
+  const lastDotIndex = name.lastIndexOf('.');
+
+  if (lastDotIndex <= 0) {
+    return {
+      stem: name,
+      extension: '',
+    };
+  }
+
+  return {
+    stem: name.slice(0, lastDotIndex),
+    extension: name.slice(lastDotIndex),
+  };
+}
+
+export function createWorkspaceCopyName(name: string, entryType: WorkspaceEntryType, copyIndex = 1): string {
+  const suffix = copyIndex <= 1 ? '-copy' : `-copy-${copyIndex}`;
+
+  if (entryType === 'folder') {
+    return `${name}${suffix}`;
+  }
+
+  const { stem, extension } = splitWorkspaceEntryName(name);
+  return `${stem}${suffix}${extension}`;
 }
 
 export function getWorkspaceParentPath(filePath: string): string {
