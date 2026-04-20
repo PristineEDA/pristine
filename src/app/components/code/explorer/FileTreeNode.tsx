@@ -2,7 +2,16 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ChevronRight, ChevronDown, Folder, FolderOpen,
 } from 'lucide-react';
-import { WorkspaceTreeNode, toTreeTestId } from '../../../workspace/workspaceFiles';
+import {
+  WORKSPACE_ROOT_PATH,
+  WorkspaceTreeNode,
+  createExplorerDraftNode,
+  mergeWorkspaceChildrenWithDraft,
+  toTreeTestId,
+  type ExplorerSelectedNode,
+  type ExplorerTreeEditSession,
+  type WorkspaceEntryNameValidationResult,
+} from '../../../workspace/workspaceFiles';
 import type { WorkspaceRevealRequest } from '../../../workspace/useWorkspaceTree';
 import type { WorkspaceGitPathState } from '../../../../../types/workspace-git';
 import { FileTypeBadge } from '../shared/FileTypeBadge';
@@ -13,16 +22,6 @@ interface ContextMenuItem {
 }
 
 const noop = () => {};
-const FOLDER_CONTEXT_MENU_ITEMS: ContextMenuItem[] = [
-  { label: 'New File', action: noop },
-  { label: 'New Folder', action: noop },
-  { label: '---', action: noop },
-  { label: 'Rename', action: noop },
-  { label: 'Delete', action: noop },
-  { label: '---', action: noop },
-  { label: 'Set as Simulation Top', action: noop },
-  { label: 'Copy Path', action: noop },
-];
 const treeRowIndentStyleCache = new Map<number, React.CSSProperties>();
 
 function getTreeRowIndentStyle(depth: number): React.CSSProperties {
@@ -71,6 +70,105 @@ export function ContextMenu({
   );
 }
 
+function TreeEditInputRow({
+  depth,
+  errorMessage,
+  isDraft,
+  isExpanded,
+  isFolder,
+  isSelected,
+  isSubmitting,
+  testId,
+  value,
+  onBlur,
+  onCancel,
+  onChange,
+  onSubmit,
+}: {
+  depth: number;
+  errorMessage: string | null;
+  isDraft: boolean;
+  isExpanded?: boolean;
+  isFolder: boolean;
+  isSelected: boolean;
+  isSubmitting: boolean;
+  testId: string;
+  value: string;
+  onBlur: () => void;
+  onCancel: () => void;
+  onChange: (value: string) => void;
+  onSubmit: () => void;
+}) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  }, []);
+
+  return (
+    <div>
+      <div
+        data-testid={`file-tree-node-${testId}`}
+        className={`flex items-center gap-1 h-6 transition-colors ${
+          isSelected
+            ? 'bg-primary/20 text-foreground hover:bg-primary/20'
+            : 'text-foreground hover:bg-accent'
+        } ${isDraft ? 'opacity-65' : ''}`}
+        style={getTreeRowIndentStyle(depth)}
+      >
+        {isFolder ? (
+          <>
+            <span className="text-muted-foreground">
+              {isExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+            </span>
+            {isExpanded
+              ? <FolderOpen size={14} className="text-ide-syntax-folder shrink-0" />
+              : <Folder size={14} className="text-ide-syntax-folder shrink-0" />}
+          </>
+        ) : (
+          <>
+            <span className="w-3.5" />
+            <span className="w-4 h-4 flex items-center justify-center shrink-0">
+              <FileIcon name={value || 'new_file.sv'} />
+            </span>
+          </>
+        )}
+        <input
+          ref={inputRef}
+          data-testid={`file-tree-input-${testId}`}
+          value={value}
+          disabled={isSubmitting}
+          aria-invalid={errorMessage ? 'true' : 'false'}
+          className={`ml-1 h-5 flex-1 rounded border bg-background/80 px-2 text-[12px] outline-none transition-colors ${
+            errorMessage
+              ? 'border-destructive text-foreground focus:border-destructive'
+              : 'border-border text-foreground focus:border-primary'
+          } ${isSubmitting ? 'opacity-80' : ''}`}
+          onBlur={onBlur}
+          onChange={(event) => onChange(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              void onSubmit();
+            }
+
+            if (event.key === 'Escape') {
+              event.preventDefault();
+              onCancel();
+            }
+          }}
+        />
+      </div>
+      {errorMessage && (
+        <div className="px-3 py-1 text-[11px] text-destructive" style={{ paddingLeft: depth * 12 + 28 }}>
+          {errorMessage}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Recursive File Tree Node ─────────────────────────────────────────────────
 export const FileTreeNode = memo(function FileTreeNode({
   node,
@@ -78,11 +176,20 @@ export const FileTreeNode = memo(function FileTreeNode({
   activeFileId,
   onFileOpen,
   onFilePreview,
+  onCancelEdit,
+  onEditValueChange,
+  onSelectNode,
+  onStartCreateFile,
+  onStartCreateFolder,
+  onStartRename,
+  onSubmitEdit,
   expandedFolders,
   onToggleFolder,
-  onFolderSelect,
-  selectedFolderId,
+  selectedNode,
+  treeEditSession,
+  treeEditValidation,
   gitPathStates,
+  onTreeInteract,
   revealRequest,
 }: {
   node: WorkspaceTreeNode;
@@ -90,20 +197,29 @@ export const FileTreeNode = memo(function FileTreeNode({
   activeFileId: string;
   onFileOpen: (id: string, name: string) => void;
   onFilePreview: (id: string, name: string) => void;
+  onCancelEdit?: () => void;
+  onEditValueChange?: (value: string) => void;
+  onSelectNode?: (node: ExplorerSelectedNode) => void;
+  onStartCreateFile?: (entryType: 'file', parentPath?: string) => void;
+  onStartCreateFolder?: (entryType: 'folder', parentPath?: string) => void;
+  onStartRename?: (path: string, entryType: 'file' | 'folder') => void;
+  onSubmitEdit?: () => void;
   expandedFolders: Set<string>;
   onToggleFolder: (id: string) => void;
-  onFolderSelect?: (id: string) => void;
-  selectedFolderId?: string | null;
+  selectedNode?: ExplorerSelectedNode | null;
+  treeEditSession?: ExplorerTreeEditSession | null;
+  treeEditValidation?: WorkspaceEntryNameValidationResult | null;
   gitPathStates: Record<string, WorkspaceGitPathState>;
+  onTreeInteract?: () => void;
   revealRequest?: WorkspaceRevealRequest | null;
 }) {
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
   const rowRef = useRef<HTMLDivElement | null>(null);
   const isExpanded = expandedFolders.has(node.id);
   const isActive = node.id === activeFileId;
-  const isFolderSelected = node.type === 'folder' && node.id === selectedFolderId;
-  const isActiveFileHighlighted = !selectedFolderId && isActive;
-  const isPersistentlyHighlighted = isFolderSelected || isActiveFileHighlighted;
+  const isSelected = selectedNode?.source === 'real' && selectedNode.path === node.path;
+  const isActiveFileHighlighted = !selectedNode && isActive;
+  const isPersistentlyHighlighted = isSelected || isActiveFileHighlighted;
   const gitPathState = gitPathStates[node.path];
   const treeTestId = toTreeTestId(node.path);
   const labelColorClassName = gitPathState === 'modified'
@@ -112,10 +228,37 @@ export const FileTreeNode = memo(function FileTreeNode({
     ? 'text-ide-text-muted'
     : 'text-foreground';
   const rowIndentStyle = getTreeRowIndentStyle(depth);
+  const isEditingCurrentNode = treeEditSession?.mode === 'rename' && treeEditSession.targetPath === node.path;
+  const draftNode = useMemo(() => {
+    if (!treeEditSession || treeEditSession.mode === 'rename' || treeEditSession.parentPath !== node.path) {
+      return null;
+    }
+
+    return createExplorerDraftNode(
+      treeEditSession.parentPath,
+      treeEditSession.entryType,
+      treeEditSession.targetNodeId,
+      treeEditSession.value,
+    );
+  }, [node.path, treeEditSession]);
+  const childNodes = useMemo(
+    () => mergeWorkspaceChildrenWithDraft(node.children, draftNode),
+    [draftNode, node.children],
+  );
 
   const openFileFromContextMenu = useCallback(() => {
     onFileOpen(node.path, node.name);
   }, [node.name, node.path, onFileOpen]);
+
+  const selectCurrentNode = useCallback(() => {
+    onSelectNode?.({
+      id: node.id,
+      path: node.path,
+      type: node.path === WORKSPACE_ROOT_PATH ? 'root' : node.type,
+      source: 'real',
+    });
+    onTreeInteract?.();
+  }, [node.id, node.path, node.type, onSelectNode, onTreeInteract]);
 
   useEffect(() => {
     if (revealRequest?.path !== node.path) {
@@ -127,20 +270,112 @@ export const FileTreeNode = memo(function FileTreeNode({
 
   const contextItems = useMemo<ContextMenuItem[]>(() => {
     if (node.type === 'folder') {
-      return FOLDER_CONTEXT_MENU_ITEMS;
+      const items = [
+        {
+          label: 'New File',
+          action: () => onStartCreateFile?.('file', node.path),
+        },
+        {
+          label: 'New Folder',
+          action: () => onStartCreateFolder?.('folder', node.path),
+        },
+        { label: '---', action: noop },
+      ];
+
+      if (node.path !== WORKSPACE_ROOT_PATH) {
+        items.push({ label: 'Rename', action: () => onStartRename?.(node.path, 'folder') });
+      }
+
+      return [
+        ...items,
+        { label: 'Delete', action: noop },
+        { label: '---', action: noop },
+        { label: 'Set as Simulation Top', action: noop },
+        { label: 'Copy Path', action: noop },
+      ];
     }
 
     return [
       { label: 'Open in Editor', action: openFileFromContextMenu },
       { label: '---', action: noop },
-      { label: 'Rename', action: noop },
+      { label: 'Rename', action: () => onStartRename?.(node.path, 'file') },
       { label: 'Delete', action: noop },
       { label: '---', action: noop },
       { label: 'Set as Simulation Top', action: noop },
       { label: 'Copy Path', action: noop },
       { label: 'Copy Relative Path', action: noop },
     ];
-  }, [node.type, openFileFromContextMenu]);
+  }, [node.path, node.type, onStartCreateFile, onStartCreateFolder, onStartRename, openFileFromContextMenu]);
+
+  if (isEditingCurrentNode && treeEditSession) {
+    return (
+      <div>
+        <TreeEditInputRow
+          depth={depth}
+          errorMessage={treeEditSession.submitError ?? treeEditValidation?.errorMessage ?? null}
+          isDraft={false}
+          isExpanded={node.type === 'folder' ? isExpanded : undefined}
+          isFolder={node.type === 'folder'}
+          isSelected={true}
+          isSubmitting={treeEditSession.isSubmitting}
+          testId={treeTestId}
+          value={treeEditSession.value}
+          onBlur={() => onCancelEdit?.()}
+          onCancel={() => onCancelEdit?.()}
+          onChange={(value) => onEditValueChange?.(value)}
+          onSubmit={() => onSubmitEdit?.()}
+        />
+        {node.type === 'folder' && isExpanded && node.isLoading && (
+          <div className="text-[12px] text-muted-foreground pl-8 py-1">
+            Loading...
+          </div>
+        )}
+        {node.type === 'folder' && isExpanded && childNodes.map((child) => (
+          child.isDraft ? (
+            <TreeEditInputRow
+              key={child.id}
+              depth={depth + 1}
+              errorMessage={treeEditSession.submitError ?? treeEditValidation?.errorMessage ?? null}
+              isDraft={true}
+              isFolder={child.type === 'folder'}
+              isSelected={selectedNode?.source === 'draft' && selectedNode.id === child.id}
+              isSubmitting={treeEditSession.isSubmitting}
+              testId={toTreeTestId(child.path)}
+              value={treeEditSession.value}
+              onBlur={() => onCancelEdit?.()}
+              onCancel={() => onCancelEdit?.()}
+              onChange={(value) => onEditValueChange?.(value)}
+              onSubmit={() => onSubmitEdit?.()}
+            />
+          ) : (
+            <FileTreeNode
+              key={child.id}
+              node={child}
+              depth={depth + 1}
+              activeFileId={activeFileId}
+              onFileOpen={onFileOpen}
+              onFilePreview={onFilePreview}
+              onCancelEdit={onCancelEdit}
+              onEditValueChange={onEditValueChange}
+              onSelectNode={onSelectNode}
+              onStartCreateFile={onStartCreateFile}
+              onStartCreateFolder={onStartCreateFolder}
+              onStartRename={onStartRename}
+              onSubmitEdit={onSubmitEdit}
+              expandedFolders={expandedFolders}
+              onToggleFolder={onToggleFolder}
+              selectedNode={selectedNode}
+              treeEditSession={treeEditSession}
+              treeEditValidation={treeEditValidation}
+              gitPathStates={gitPathStates}
+              onTreeInteract={onTreeInteract}
+              revealRequest={revealRequest}
+            />
+          )
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -154,8 +389,8 @@ export const FileTreeNode = memo(function FileTreeNode({
         }`}
         style={rowIndentStyle}
         onClick={() => {
+          selectCurrentNode();
           if (node.type === 'folder') {
-            onFolderSelect?.(node.id);
             onToggleFolder(node.id);
             return;
           }
@@ -164,11 +399,13 @@ export const FileTreeNode = memo(function FileTreeNode({
         }}
         onDoubleClick={() => {
           if (node.type === 'file') {
+            selectCurrentNode();
             onFileOpen(node.path, node.name);
           }
         }}
         onContextMenu={(e) => {
           e.preventDefault();
+          selectCurrentNode();
           setCtxMenu({ x: e.clientX, y: e.clientY });
         }}
       >
@@ -217,21 +454,48 @@ export const FileTreeNode = memo(function FileTreeNode({
         </div>
       )}
 
-      {node.type === 'folder' && isExpanded && node.children?.map((child) => (
-        <FileTreeNode
-          key={child.id}
-          node={child}
-          depth={depth + 1}
-          activeFileId={activeFileId}
-          onFileOpen={onFileOpen}
-          onFilePreview={onFilePreview}
-          expandedFolders={expandedFolders}
-          onToggleFolder={onToggleFolder}
-          onFolderSelect={onFolderSelect}
-          selectedFolderId={selectedFolderId}
-          gitPathStates={gitPathStates}
-          revealRequest={revealRequest}
-        />
+      {node.type === 'folder' && isExpanded && childNodes.map((child) => (
+        child.isDraft && treeEditSession ? (
+          <TreeEditInputRow
+            key={child.id}
+            depth={depth + 1}
+            errorMessage={treeEditSession.submitError ?? treeEditValidation?.errorMessage ?? null}
+            isDraft={true}
+            isFolder={child.type === 'folder'}
+            isSelected={selectedNode?.source === 'draft' && selectedNode.id === child.id}
+            isSubmitting={treeEditSession.isSubmitting}
+            testId={toTreeTestId(child.path)}
+            value={treeEditSession.value}
+            onBlur={() => onCancelEdit?.()}
+            onCancel={() => onCancelEdit?.()}
+            onChange={(value) => onEditValueChange?.(value)}
+            onSubmit={() => onSubmitEdit?.()}
+          />
+        ) : (
+          <FileTreeNode
+            key={child.id}
+            node={child}
+            depth={depth + 1}
+            activeFileId={activeFileId}
+            onFileOpen={onFileOpen}
+            onFilePreview={onFilePreview}
+            onCancelEdit={onCancelEdit}
+            onEditValueChange={onEditValueChange}
+            onSelectNode={onSelectNode}
+            onStartCreateFile={onStartCreateFile}
+            onStartCreateFolder={onStartCreateFolder}
+            onStartRename={onStartRename}
+            onSubmitEdit={onSubmitEdit}
+            expandedFolders={expandedFolders}
+            onToggleFolder={onToggleFolder}
+            selectedNode={selectedNode}
+            treeEditSession={treeEditSession}
+            treeEditValidation={treeEditValidation}
+            gitPathStates={gitPathStates}
+            onTreeInteract={onTreeInteract}
+            revealRequest={revealRequest}
+          />
+        )
       ))}
     </div>
   );

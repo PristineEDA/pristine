@@ -29,6 +29,8 @@ export const AsyncChannels = {
   FS_LIST_FILES: 'async:fs:list-files',
   FS_WRITE_FILE: 'async:fs:write-file',
   FS_WRITE_FILE_ABSOLUTE: 'async:fs:write-file-absolute',
+  FS_CREATE_DIRECTORY: 'async:fs:create-directory',
+  FS_RENAME: 'async:fs:rename',
   FS_READ_DIR: 'async:fs:read-dir',
   FS_STAT: 'async:fs:stat',
   FS_EXISTS: 'async:fs:exists',

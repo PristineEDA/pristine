@@ -8,6 +8,7 @@ const { mockHandle, mockFs } = vi.hoisted(() => ({
     readFile: vi.fn(),
     writeFile: vi.fn(),
     mkdir: vi.fn(),
+    rename: vi.fn(),
     readdir: vi.fn(),
     stat: vi.fn(),
     access: vi.fn(),
@@ -46,6 +47,7 @@ describe('filesystem IPC handlers', () => {
     mockFs.readFile.mockReset();
     mockFs.writeFile.mockReset();
     mockFs.mkdir.mockReset();
+    mockFs.rename.mockReset();
     mockFs.readdir.mockReset();
     mockFs.stat.mockReset();
     mockFs.access.mockReset();
@@ -112,6 +114,27 @@ describe('filesystem IPC handlers', () => {
 
       await expect(handler({}, '/safe/external/out.v', 'module out; endmodule')).resolves.toBeUndefined();
       expect(mockFs.writeFile).toHaveBeenCalledWith(expect.any(String), 'module out; endmodule', 'utf-8');
+    });
+  });
+
+  describe('FS_CREATE_DIRECTORY', () => {
+    it('creates a project-scoped directory', async () => {
+      const handler = getHandler('async:fs:create-directory');
+
+      await expect(handler({}, 'rtl/generated')).resolves.toBeUndefined();
+      expect(mockFs.mkdir).toHaveBeenCalledWith(expect.stringMatching(/safe[\\/]project[\\/]rtl[\\/]generated$/), { recursive: true });
+    });
+  });
+
+  describe('FS_RENAME', () => {
+    it('renames a project-scoped file or folder', async () => {
+      const handler = getHandler('async:fs:rename');
+
+      await expect(handler({}, 'rtl/core/old.v', 'rtl/core/new.v')).resolves.toBeUndefined();
+      expect(mockFs.rename).toHaveBeenCalledWith(
+        expect.stringMatching(/safe[\\/]project[\\/]rtl[\\/]core[\\/]old\.v$/),
+        expect.stringMatching(/safe[\\/]project[\\/]rtl[\\/]core[\\/]new\.v$/),
+      );
     });
   });
 

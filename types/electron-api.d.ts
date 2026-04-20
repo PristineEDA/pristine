@@ -44,6 +44,8 @@ export interface ElectronAPI {
     listFiles: (dirPath?: string) => Promise<string[]>;
     writeFile: (filePath: string, content: string) => Promise<void>;
     writeFileAbsolute: (filePath: string, content: string) => Promise<void>;
+    createDirectory: (dirPath: string) => Promise<void>;
+    rename: (currentPath: string, nextPath: string) => Promise<void>;
     readDir: (dirPath: string) => Promise<Array<{
       name: string;
       isDirectory: boolean;

@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { refreshWorkspaceGitStatus } from '../git/workspaceGitStatus';
-import { isAbsoluteFilePath } from '../workspace/workspaceFiles';
+import {
+  isAbsoluteFilePath,
+  isWithinWorkspacePath,
+  isWorkspaceRelativeFilePath,
+  replaceWorkspacePathPrefix,
+} from '../workspace/workspaceFiles';
 
 export interface SaveFilesResult {
   savedFileIds: string[];
@@ -26,6 +31,39 @@ function removeKey<T>(record: Record<string, T>, key: string): Record<string, T>
   const nextRecord = { ...record };
   delete nextRecord[key];
   return nextRecord;
+}
+
+function renameKey<T>(record: Record<string, T>, currentKey: string, nextKey: string): Record<string, T> {
+  if (currentKey === nextKey || !(currentKey in record)) {
+    return record;
+  }
+
+  const nextRecord = { ...record };
+  const currentValue = nextRecord[currentKey]!;
+  delete nextRecord[currentKey];
+  nextRecord[nextKey] = currentValue;
+  return nextRecord;
+}
+
+function renameWorkspacePathKeys<T>(
+  record: Record<string, T>,
+  currentPrefix: string,
+  nextPrefix: string,
+): Record<string, T> {
+  let changed = false;
+  const nextRecord: Record<string, T> = {};
+
+  Object.entries(record).forEach(([key, value]) => {
+    if (isWorkspaceRelativeFilePath(key) && isWithinWorkspacePath(key, currentPrefix)) {
+      nextRecord[replaceWorkspacePathPrefix(key, currentPrefix, nextPrefix)] = value;
+      changed = true;
+      return;
+    }
+
+    nextRecord[key] = value;
+  });
+
+  return changed ? nextRecord : record;
 }
 
 export function useWorkspaceFileStore() {
@@ -232,6 +270,60 @@ export function useWorkspaceFileStore() {
       }
       return next;
     });
+  }, []);
+
+  const renameFileState = useCallback((currentFileId: string, nextFileId: string) => {
+    if (!currentFileId || !nextFileId || currentFileId === nextFileId) {
+      return;
+    }
+
+    setFileContents((current) => {
+      const next = renameKey(current, currentFileId, nextFileId);
+      if (next !== current) {
+        fileContentsRef.current = next;
+      }
+      return next;
+    });
+
+    setSavedFileContents((current) => {
+      const next = renameKey(current, currentFileId, nextFileId);
+      if (next !== current) {
+        savedFileContentsRef.current = next;
+      }
+      return next;
+    });
+
+    setLoadErrors((current) => renameKey(current, currentFileId, nextFileId));
+    setSaveErrors((current) => renameKey(current, currentFileId, nextFileId));
+    setLoadingFiles((current) => renameKey(current, currentFileId, nextFileId));
+    setSavingFiles((current) => renameKey(current, currentFileId, nextFileId));
+  }, []);
+
+  const renameWorkspacePaths = useCallback((currentPrefix: string, nextPrefix: string) => {
+    if (!currentPrefix || !nextPrefix || currentPrefix === nextPrefix) {
+      return;
+    }
+
+    setFileContents((current) => {
+      const next = renameWorkspacePathKeys(current, currentPrefix, nextPrefix);
+      if (next !== current) {
+        fileContentsRef.current = next;
+      }
+      return next;
+    });
+
+    setSavedFileContents((current) => {
+      const next = renameWorkspacePathKeys(current, currentPrefix, nextPrefix);
+      if (next !== current) {
+        savedFileContentsRef.current = next;
+      }
+      return next;
+    });
+
+    setLoadErrors((current) => renameWorkspacePathKeys(current, currentPrefix, nextPrefix));
+    setSaveErrors((current) => renameWorkspacePathKeys(current, currentPrefix, nextPrefix));
+    setLoadingFiles((current) => renameWorkspacePathKeys(current, currentPrefix, nextPrefix));
+    setSavingFiles((current) => renameWorkspacePathKeys(current, currentPrefix, nextPrefix));
   }, []);
 
   const removeFile = useCallback((fileId: string) => {
@@ -497,6 +589,8 @@ export function useWorkspaceFileStore() {
     loadFileContent,
     loadingFiles,
     removeFile,
+    renameFileState,
+    renameWorkspacePaths,
     saveErrors,
     saveFileContent,
     saveFiles,

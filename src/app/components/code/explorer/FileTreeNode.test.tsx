@@ -216,7 +216,12 @@ describe('FileTreeNode', () => {
         onFilePreview={vi.fn()}
         expandedFolders={new Set()}
         onToggleFolder={vi.fn()}
-        selectedFolderId="rtl"
+        selectedNode={{
+          id: 'rtl',
+          path: 'rtl',
+          type: 'folder',
+          source: 'real',
+        }}
         gitPathStates={{}}
       />,
     );
@@ -255,7 +260,7 @@ describe('FileTreeNode', () => {
   });
 
   it('keeps a clicked folder highlighted when the selected folder id matches', () => {
-    const onFolderSelect = vi.fn();
+    const onSelectNode = vi.fn();
     const onToggleFolder = vi.fn();
     const folderNode = {
       id: 'rtl',
@@ -276,15 +281,20 @@ describe('FileTreeNode', () => {
         onFilePreview={vi.fn()}
         expandedFolders={new Set()}
         onToggleFolder={onToggleFolder}
-        onFolderSelect={onFolderSelect}
-        selectedFolderId={null}
+        onSelectNode={onSelectNode}
+        selectedNode={null}
         gitPathStates={{}}
       />,
     );
 
     fireEvent.click(screen.getByTestId('file-tree-node-rtl'));
 
-    expect(onFolderSelect).toHaveBeenCalledWith('rtl');
+    expect(onSelectNode).toHaveBeenCalledWith({
+      id: 'rtl',
+      path: 'rtl',
+      type: 'folder',
+      source: 'real',
+    });
     expect(onToggleFolder).toHaveBeenCalledWith('rtl');
 
     rerender(
@@ -296,8 +306,13 @@ describe('FileTreeNode', () => {
         onFilePreview={vi.fn()}
         expandedFolders={new Set()}
         onToggleFolder={onToggleFolder}
-        onFolderSelect={onFolderSelect}
-        selectedFolderId="rtl"
+        onSelectNode={onSelectNode}
+        selectedNode={{
+          id: 'rtl',
+          path: 'rtl',
+          type: 'folder',
+          source: 'real',
+        }}
         gitPathStates={{}}
       />,
     );

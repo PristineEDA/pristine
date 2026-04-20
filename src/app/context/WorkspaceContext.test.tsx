@@ -38,6 +38,10 @@ function WorkspaceHarness() {
       <button onClick={() => workspace.openUntitledFile()}>open-untitled</button>
       <button onClick={() => workspace.openPreviewFile('rtl/core/reg_file.v', 'reg_file.v')}>preview-reg</button>
       <button onClick={() => workspace.openPreviewFile('rtl/core/alu.v', 'alu.v')}>preview-alu</button>
+      <button onClick={() => { void workspace.createWorkspaceFile('rtl/generated/new_file.sv'); }}>create-file</button>
+      <button onClick={() => { void workspace.createWorkspaceFolder('rtl/generated'); }}>create-folder</button>
+      <button onClick={() => { void workspace.renameWorkspaceEntry('rtl/core/reg_file.v', 'rtl/core/reg_file_renamed.v', 'file'); }}>rename-reg</button>
+      <button onClick={() => { void workspace.renameWorkspaceEntry('rtl/core', 'rtl/renamed_core', 'folder'); }}>rename-core-folder</button>
       <button onClick={() => workspace.pinTab('rtl/core/alu.v')}>pin-alu</button>
       <button onClick={() => workspace.openFile('rtl/core/reg_file.v', 'reg_file.v')}>open-existing</button>
       <button onClick={() => workspace.splitGroup('group-1')}>split-group-1</button>
@@ -133,6 +137,36 @@ describe('WorkspaceContext', () => {
 
     fireEvent.click(screen.getByText('clear-active'));
     expect(screen.getByTestId('dirty-files')).toHaveTextContent('');
+  });
+
+  it('creates a workspace file on disk and refreshes the explorer token', async () => {
+    render(
+      <WorkspaceProvider>
+        <WorkspaceHarness />
+      </WorkspaceProvider>,
+    );
+
+    fireEvent.click(screen.getByText('create-file'));
+
+    await waitFor(() => {
+      expect(window.electronAPI?.fs.writeFile).toHaveBeenCalledWith('rtl/generated/new_file.sv', '');
+      expect(screen.getByTestId('workspace-tree-refresh-token')).toHaveTextContent('1');
+    });
+  });
+
+  it('creates a workspace folder on disk and refreshes the explorer token', async () => {
+    render(
+      <WorkspaceProvider>
+        <WorkspaceHarness />
+      </WorkspaceProvider>,
+    );
+
+    fireEvent.click(screen.getByText('create-folder'));
+
+    await waitFor(() => {
+      expect(window.electronAPI?.fs.createDirectory).toHaveBeenCalledWith('rtl/generated');
+      expect(screen.getByTestId('workspace-tree-refresh-token')).toHaveTextContent('1');
+    });
   });
 
   it('saves untitled files through the native save dialog flow and refreshes the workspace tree when saved in-workspace', async () => {
@@ -385,6 +419,42 @@ describe('WorkspaceContext', () => {
 
     expect(screen.getByTestId('tabs')).toHaveTextContent('rtl/core/reg_file.v');
     expect(screen.getByTestId('active-tab')).toHaveTextContent('rtl/core/reg_file.v');
+  });
+
+  it('renames an open file and updates the active tab path', async () => {
+    render(
+      <WorkspaceProvider>
+        <WorkspaceHarness />
+      </WorkspaceProvider>,
+    );
+
+    fireEvent.click(screen.getByText('open-reg'));
+    fireEvent.click(screen.getByText('rename-reg'));
+
+    await waitFor(() => {
+      expect(window.electronAPI?.fs.rename).toHaveBeenCalledWith('rtl/core/reg_file.v', 'rtl/core/reg_file_renamed.v');
+      expect(screen.getByTestId('active-tab')).toHaveTextContent('rtl/core/reg_file_renamed.v');
+      expect(screen.getByTestId('tabs')).toHaveTextContent('rtl/core/reg_file_renamed.v');
+    });
+  });
+
+  it('renames an open folder and cascades the new prefix through open tabs', async () => {
+    render(
+      <WorkspaceProvider>
+        <WorkspaceHarness />
+      </WorkspaceProvider>,
+    );
+
+    fireEvent.click(screen.getByText('open-reg'));
+    fireEvent.click(screen.getByText('open-alu'));
+    fireEvent.click(screen.getByText('rename-core-folder'));
+
+    await waitFor(() => {
+      expect(window.electronAPI?.fs.rename).toHaveBeenCalledWith('rtl/core', 'rtl/renamed_core');
+      expect(screen.getByTestId('groups')).toHaveTextContent('rtl/renamed_core/reg_file.v');
+      expect(screen.getByTestId('groups')).toHaveTextContent('rtl/renamed_core/alu.v');
+      expect(screen.getByTestId('active-tab')).toHaveTextContent('rtl/renamed_core/alu.v');
+    });
   });
 
   it('does not duplicate an existing tab', () => {

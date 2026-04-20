@@ -79,6 +79,10 @@ const electronAPI = {
       ipcRenderer.invoke(AsyncChannels.FS_WRITE_FILE, filePath, content) as Promise<void>,
     writeFileAbsolute: (filePath: string, content: string) =>
       ipcRenderer.invoke(AsyncChannels.FS_WRITE_FILE_ABSOLUTE, filePath, content) as Promise<void>,
+    createDirectory: (dirPath: string) =>
+      ipcRenderer.invoke(AsyncChannels.FS_CREATE_DIRECTORY, dirPath) as Promise<void>,
+    rename: (currentPath: string, nextPath: string) =>
+      ipcRenderer.invoke(AsyncChannels.FS_RENAME, currentPath, nextPath) as Promise<void>,
     readDir: (dirPath: string) =>
       ipcRenderer.invoke(AsyncChannels.FS_READ_DIR, dirPath) as Promise<
         Array<{ name: string; isDirectory: boolean; isFile: boolean }>

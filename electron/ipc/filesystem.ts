@@ -139,6 +139,21 @@ export function registerFilesystemHandlers(): void {
     await fs.writeFile(resolved, content, 'utf-8');
   });
 
+  ipcMain.handle(AsyncChannels.FS_CREATE_DIRECTORY, async (_event, dirPath: unknown) => {
+    assertString(dirPath, 'dirPath');
+    const resolved = validatePathWithinRoot(getRoot(), dirPath);
+    await fs.mkdir(resolved, { recursive: true });
+  });
+
+  ipcMain.handle(AsyncChannels.FS_RENAME, async (_event, currentPath: unknown, nextPath: unknown) => {
+    assertString(currentPath, 'currentPath');
+    assertString(nextPath, 'nextPath');
+    const resolvedCurrentPath = validatePathWithinRoot(getRoot(), currentPath);
+    const resolvedNextPath = validatePathWithinRoot(getRoot(), nextPath);
+    await fs.mkdir(path.dirname(resolvedNextPath), { recursive: true });
+    await fs.rename(resolvedCurrentPath, resolvedNextPath);
+  });
+
   ipcMain.handle(AsyncChannels.FS_READ_DIR, async (_event, dirPath: unknown) => {
     assertString(dirPath, 'dirPath');
     const resolved = validatePathWithinRoot(getRoot(), dirPath);

@@ -1,7 +1,27 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import type { ComponentProps } from 'react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetWorkspaceGitStatusStoreForTests } from '../../../git/workspaceGitStatus';
-import { LeftSidePanel } from './LeftSidePanel';
+import { getExplorerRenameTarget, LeftSidePanel } from './LeftSidePanel';
+
+function renderLeftSidePanel(props: Partial<ComponentProps<typeof LeftSidePanel>> = {}) {
+  const componentProps: ComponentProps<typeof LeftSidePanel> = {
+    activeFileId: 'cpu_top',
+    onCreateWorkspaceFile: vi.fn().mockResolvedValue(undefined),
+    onCreateWorkspaceFolder: vi.fn().mockResolvedValue(undefined),
+    onFileOpen: vi.fn(),
+    onFilePreview: vi.fn(),
+    onLineJump: vi.fn(),
+    onRenameWorkspaceEntry: vi.fn().mockResolvedValue(undefined),
+    currentOutlineId: 'cpu_top',
+    ...props,
+  };
+
+  return {
+    ...render(<LeftSidePanel {...componentProps} />),
+    props: componentProps,
+  };
+}
 
 describe('LeftSidePanel', () => {
   beforeEach(() => {
@@ -28,15 +48,7 @@ describe('LeftSidePanel', () => {
   });
 
   it('renders only explorer and outline tabs', async () => {
-    render(
-      <LeftSidePanel
-        activeFileId="cpu_top"
-        onFileOpen={vi.fn()}
-        onFilePreview={vi.fn()}
-        onLineJump={vi.fn()}
-        currentOutlineId="cpu_top"
-      />,
-    );
+    renderLeftSidePanel();
 
     expect(screen.getByRole('button', { name: 'Explorer' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Outline' })).toBeInTheDocument();
@@ -48,15 +60,7 @@ describe('LeftSidePanel', () => {
     const onFileOpen = vi.fn();
     const onFilePreview = vi.fn();
 
-    render(
-      <LeftSidePanel
-        activeFileId="cpu_top"
-        onFileOpen={onFileOpen}
-        onFilePreview={onFilePreview}
-        onLineJump={vi.fn()}
-        currentOutlineId="cpu_top"
-      />,
-    );
+    renderLeftSidePanel({ onFileOpen, onFilePreview });
 
     fireEvent.click(await screen.findByTestId('file-tree-node-rtl'));
     fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals'));
@@ -68,15 +72,7 @@ describe('LeftSidePanel', () => {
   it('pins a file on explorer double click and applies the explorer hover scrollbar class', async () => {
     const onFileOpen = vi.fn();
 
-    const { container } = render(
-      <LeftSidePanel
-        activeFileId="cpu_top"
-        onFileOpen={onFileOpen}
-        onFilePreview={vi.fn()}
-        onLineJump={vi.fn()}
-        currentOutlineId="cpu_top"
-      />,
-    );
+    const { container } = renderLeftSidePanel({ onFileOpen });
 
     fireEvent.click(await screen.findByTestId('file-tree-node-rtl'));
     fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals'));
@@ -89,15 +85,10 @@ describe('LeftSidePanel', () => {
   });
 
   it('keeps a clicked explorer folder highlighted after the pointer leaves the tree', async () => {
-    render(
-      <LeftSidePanel
-        activeFileId="rtl/peripherals/uart_rx.v"
-        onFileOpen={vi.fn()}
-        onFilePreview={vi.fn()}
-        onLineJump={vi.fn()}
-        currentOutlineId="cpu_top"
-      />,
-    );
+    renderLeftSidePanel({
+      activeFileId: 'rtl/peripherals/uart_rx.v',
+      currentOutlineId: 'cpu_top',
+    });
 
     const folderNode = await screen.findByTestId('file-tree-node-rtl');
 
@@ -112,15 +103,10 @@ describe('LeftSidePanel', () => {
   });
 
   it('moves the persistent highlight from folders to files so only one explorer row stays highlighted', async () => {
-    render(
-      <LeftSidePanel
-        activeFileId="rtl/peripherals/uart_rx.v"
-        onFileOpen={vi.fn()}
-        onFilePreview={vi.fn()}
-        onLineJump={vi.fn()}
-        currentOutlineId="uart_rx"
-      />,
-    );
+    renderLeftSidePanel({
+      activeFileId: 'rtl/peripherals/uart_rx.v',
+      currentOutlineId: 'uart_rx',
+    });
 
     fireEvent.click(await screen.findByTestId('file-tree-node-rtl'));
     fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals'));
@@ -139,15 +125,10 @@ describe('LeftSidePanel', () => {
   });
 
   it('clears the selected folder highlight when another entry activates a file', async () => {
-    const { rerender } = render(
-      <LeftSidePanel
-        activeFileId="rtl/peripherals/uart_rx.v"
-        onFileOpen={vi.fn()}
-        onFilePreview={vi.fn()}
-        onLineJump={vi.fn()}
-        currentOutlineId="uart_rx"
-      />,
-    );
+    const { rerender } = renderLeftSidePanel({
+      activeFileId: 'rtl/peripherals/uart_rx.v',
+      currentOutlineId: 'uart_rx',
+    });
 
     fireEvent.click(await screen.findByTestId('file-tree-node-rtl'));
     fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals'));
@@ -158,9 +139,12 @@ describe('LeftSidePanel', () => {
     rerender(
       <LeftSidePanel
         activeFileId="rtl/core/cpu_top.v"
+        onCreateWorkspaceFile={vi.fn().mockResolvedValue(undefined)}
+        onCreateWorkspaceFolder={vi.fn().mockResolvedValue(undefined)}
         onFileOpen={vi.fn()}
         onFilePreview={vi.fn()}
         onLineJump={vi.fn()}
+        onRenameWorkspaceEntry={vi.fn().mockResolvedValue(undefined)}
         currentOutlineId="cpu_top"
       />,
     );
@@ -169,15 +153,7 @@ describe('LeftSidePanel', () => {
   });
 
   it('allows the workspace root row to collapse and expand', async () => {
-    render(
-      <LeftSidePanel
-        activeFileId="cpu_top"
-        onFileOpen={vi.fn()}
-        onFilePreview={vi.fn()}
-        onLineJump={vi.fn()}
-        currentOutlineId="cpu_top"
-      />,
-    );
+    renderLeftSidePanel();
 
     const rootNode = await screen.findByTestId('file-tree-node-root');
     expect(await screen.findByTestId('file-tree-node-rtl')).toBeInTheDocument();
@@ -190,15 +166,7 @@ describe('LeftSidePanel', () => {
   });
 
   it('collapses the workspace root when using collapse all', async () => {
-    render(
-      <LeftSidePanel
-        activeFileId="cpu_top"
-        onFileOpen={vi.fn()}
-        onFilePreview={vi.fn()}
-        onLineJump={vi.fn()}
-        currentOutlineId="cpu_top"
-      />,
-    );
+    renderLeftSidePanel();
 
     expect(await screen.findByTestId('file-tree-node-rtl')).toBeInTheDocument();
 
@@ -206,5 +174,99 @@ describe('LeftSidePanel', () => {
 
     expect(screen.getByTestId('file-tree-node-root')).toBeInTheDocument();
     expect(screen.queryByTestId('file-tree-node-rtl')).not.toBeInTheDocument();
+  });
+
+  it('starts inline rename with F2 for the selected explorer file and submits a real rename', async () => {
+    const onRenameWorkspaceEntry = vi.fn().mockResolvedValue(undefined);
+    const { container } = renderLeftSidePanel({
+      activeFileId: 'rtl/peripherals/uart_rx.v',
+      currentOutlineId: 'uart_rx',
+      onRenameWorkspaceEntry,
+    });
+
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl'));
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals'));
+
+    const fileNode = await screen.findByTestId('file-tree-node-rtl_peripherals_uart_rx_v');
+    fireEvent.click(fileNode);
+    fireEvent.keyDown(container.querySelector('.explorer-tree-scrollbar') as HTMLElement, { key: 'F2' });
+
+    const renameInput = await screen.findByTestId('file-tree-input-rtl_peripherals_uart_rx_v');
+    fireEvent.change(renameInput, { target: { value: 'uart_tx.v' } });
+    fireEvent.keyDown(renameInput, { key: 'Enter' });
+
+    await waitFor(() => {
+      expect(onRenameWorkspaceEntry).toHaveBeenCalledWith(
+        'rtl/peripherals/uart_rx.v',
+        'rtl/peripherals/uart_tx.v',
+        'file',
+      );
+    });
+  });
+
+  it('starts inline rename when F2 is pressed on document after selecting a file in the tree', async () => {
+    renderLeftSidePanel({
+      activeFileId: 'rtl/peripherals/uart_rx.v',
+      currentOutlineId: 'uart_rx',
+    });
+
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl'));
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals'));
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals_uart_rx_v'));
+
+    fireEvent.keyDown(document, { key: 'F2' });
+
+    expect(await screen.findByTestId('file-tree-input-rtl_peripherals_uart_rx_v')).toBeInTheDocument();
+  });
+
+  it('falls back to the highlighted active workspace file when F2 has no explicit tree selection', () => {
+    expect(getExplorerRenameTarget(null, 'rtl/peripherals/uart_rx.v')).toEqual({
+      path: 'rtl/peripherals/uart_rx.v',
+      type: 'file',
+    });
+  });
+
+  it('creates a real file from the selected folder through the draft row', async () => {
+    const onCreateWorkspaceFile = vi.fn().mockResolvedValue(undefined);
+
+    renderLeftSidePanel({
+      activeFileId: 'rtl/peripherals/uart_rx.v',
+      currentOutlineId: 'uart_rx',
+      onCreateWorkspaceFile,
+    });
+
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl'));
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals'));
+    fireEvent.click(screen.getByRole('button', { name: 'New File' }));
+
+    const draftInput = screen.getByRole('textbox');
+    fireEvent.change(draftInput, { target: { value: 'uart_tx.sv' } });
+    fireEvent.keyDown(draftInput, { key: 'Enter' });
+
+    await waitFor(() => {
+      expect(onCreateWorkspaceFile).toHaveBeenCalledWith('rtl/peripherals/uart_tx.sv');
+    });
+  });
+
+  it('removes an invalid draft folder when Enter is pressed', async () => {
+    const onCreateWorkspaceFolder = vi.fn().mockResolvedValue(undefined);
+
+    renderLeftSidePanel({
+      activeFileId: 'rtl/peripherals/uart_rx.v',
+      currentOutlineId: 'uart_rx',
+      onCreateWorkspaceFolder,
+    });
+
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl'));
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals'));
+    fireEvent.click(screen.getByRole('button', { name: 'New Folder' }));
+
+    const draftInput = screen.getByRole('textbox');
+    fireEvent.keyDown(draftInput, { key: 'Enter' });
+
+    await waitFor(() => {
+      expect(onCreateWorkspaceFolder).not.toHaveBeenCalled();
+      expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+    });
   });
 });

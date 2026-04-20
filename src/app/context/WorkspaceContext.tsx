@@ -30,7 +30,13 @@ import {
 } from './useWorkspaceEditorState';
 import { useWorkspaceFileStore, type SaveFilesResult } from './useWorkspaceFileStore';
 import type { WindowCloseRequest } from '../window/windowClose';
-import { getPathBaseName } from '../workspace/workspaceFiles';
+import { refreshWorkspaceGitStatus } from '../git/workspaceGitStatus';
+import {
+  getPathBaseName,
+  isWithinWorkspacePath,
+  isWorkspaceRelativeFilePath,
+  replaceWorkspacePathPrefix,
+} from '../workspace/workspaceFiles';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -71,6 +77,9 @@ interface WorkspaceState {
   openUntitledFile: (groupId?: string) => string;
   openPreviewFile: (fileId: string, fileName: string) => void;
   openPreviewFileInGroup: (fileId: string, fileName: string, groupId: string) => void;
+  createWorkspaceFile: (targetPath: string) => Promise<void>;
+  createWorkspaceFolder: (targetPath: string) => Promise<void>;
+  renameWorkspaceEntry: (currentPath: string, nextPath: string, entryType: 'file' | 'folder') => Promise<void>;
   pinTab: (tabId: string) => void;
   pinTabInGroup: (groupId: string, tabId: string) => void;
   closeFile: (fileId: string) => void;
@@ -312,6 +321,23 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     setWorkspaceTreeRefreshToken((current) => current + 1);
   }, []);
 
+  const rewriteRedirectedFileIds = useCallback((currentPrefix: string, nextPrefix: string) => {
+    const nextRedirects: Record<string, string> = {};
+
+    Object.entries(fileIdRedirectsRef.current).forEach(([key, value]) => {
+      const nextKey = isWorkspaceRelativeFilePath(key) && isWithinWorkspacePath(key, currentPrefix)
+        ? replaceWorkspacePathPrefix(key, currentPrefix, nextPrefix)
+        : key;
+      const nextValue = isWorkspaceRelativeFilePath(value) && isWithinWorkspacePath(value, currentPrefix)
+        ? replaceWorkspacePathPrefix(value, currentPrefix, nextPrefix)
+        : value;
+
+      nextRedirects[nextKey] = nextValue;
+    });
+
+    fileIdRedirectsRef.current = nextRedirects;
+  }, []);
+
   const findTabName = useCallback((fileId: string) => {
     for (const group of editorWorkspaceRef.current.editorGroups) {
       const tab = group.tabs.find((currentTab) => currentTab.id === fileId);
@@ -525,6 +551,80 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     }));
     return untitledId;
   }, []);
+
+  const createWorkspaceFile = useCallback(async (targetPath: string) => {
+    const fsApi = window.electronAPI?.fs;
+    if (!fsApi?.writeFile || !fsApi.exists) {
+      throw new Error('Filesystem API unavailable');
+    }
+
+    if (await fsApi.exists(targetPath)) {
+      throw new Error('An entry with the same name already exists.');
+    }
+
+    await fsApi.writeFile(targetPath, '');
+    fileStoreRef.current.initializeFile(targetPath, '');
+    bumpWorkspaceTreeRefreshToken();
+    refreshWorkspaceGitStatus();
+  }, [bumpWorkspaceTreeRefreshToken]);
+
+  const createWorkspaceFolder = useCallback(async (targetPath: string) => {
+    const fsApi = window.electronAPI?.fs;
+    if (!fsApi?.createDirectory || !fsApi.exists) {
+      throw new Error('Filesystem API unavailable');
+    }
+
+    if (await fsApi.exists(targetPath)) {
+      throw new Error('An entry with the same name already exists.');
+    }
+
+    await fsApi.createDirectory(targetPath);
+    bumpWorkspaceTreeRefreshToken();
+    refreshWorkspaceGitStatus();
+  }, [bumpWorkspaceTreeRefreshToken]);
+
+  const renameWorkspaceEntry = useCallback(async (
+    currentPath: string,
+    nextPath: string,
+    entryType: 'file' | 'folder',
+  ) => {
+    if (!currentPath || !nextPath || currentPath === nextPath) {
+      return;
+    }
+
+    const fsApi = window.electronAPI?.fs;
+    if (!fsApi?.rename || !fsApi.exists) {
+      throw new Error('Filesystem API unavailable');
+    }
+
+    if (await fsApi.exists(nextPath)) {
+      throw new Error('An entry with the same name already exists.');
+    }
+
+    await fsApi.rename(currentPath, nextPath);
+
+    if (entryType === 'file') {
+      fileStoreRef.current.renameFileState(currentPath, nextPath);
+      editorWorkspaceRef.current.renameFileId(currentPath, nextPath, getPathBaseName(nextPath));
+    } else {
+      fileStoreRef.current.renameWorkspacePaths(currentPath, nextPath);
+
+      const workspaceFileIdsToRename = Array.from(new Set(
+        editorWorkspaceRef.current.editorGroups
+          .flatMap((group) => group.tabs.map((tab) => tab.id))
+          .filter((fileId) => isWorkspaceRelativeFilePath(fileId) && isWithinWorkspacePath(fileId, currentPath)),
+      ));
+
+      workspaceFileIdsToRename.forEach((fileId) => {
+        const nextFileId = replaceWorkspacePathPrefix(fileId, currentPath, nextPath);
+        editorWorkspaceRef.current.renameFileId(fileId, nextFileId, getPathBaseName(nextFileId));
+      });
+    }
+
+    rewriteRedirectedFileIds(currentPath, nextPath);
+    bumpWorkspaceTreeRefreshToken();
+    refreshWorkspaceGitStatus();
+  }, [bumpWorkspaceTreeRefreshToken, rewriteRedirectedFileIds]);
 
   const maybeProceedWithUnsavedChanges = useCallback(async (
     fileIds: string[],
@@ -747,6 +847,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       openUntitledFile,
       openPreviewFile: editorWorkspace.openPreviewFile,
       openPreviewFileInGroup: editorWorkspace.openPreviewFileInGroup,
+      createWorkspaceFile,
+      createWorkspaceFolder,
+      renameWorkspaceEntry,
       pinTab: editorWorkspace.pinTab,
       pinTabInGroup: editorWorkspace.pinTabInGroup,
       closeFile,

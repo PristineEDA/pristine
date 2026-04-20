@@ -17,7 +17,7 @@ import type { EditorSelectionSnapshot } from './context/useWorkspaceEditorState'
 import { SidebarProvider } from './components/ui/sidebar';
 import { refreshWorkspaceGitStatus } from './git/workspaceGitStatus';
 import { useGlobalAppShortcuts } from './useGlobalAppShortcuts';
-import { isWorkspaceRelativeFilePath } from './workspace/workspaceFiles';
+import { getPathBaseName, isWorkspaceRelativeFilePath } from './workspace/workspaceFiles';
 
 const QUICK_OPEN_RECENT_LIMIT = 20;
 const EMPTY_QUICK_OPEN_FILES: QuickOpenFileEntry[] = [];
@@ -184,9 +184,12 @@ function AppLayout() {
     closeActiveTabInFocusedGroup,
     mainContentView,
     activeTabId,
+    createWorkspaceFile,
+    createWorkspaceFolder,
     openUntitledFile,
     openFile,
     openPreviewFile,
+    renameWorkspaceEntry,
     jumpToLine, jumpTo,
     showLeftPanel, setShowLeftPanel,
     showBottomPanel, setShowBottomPanel,
@@ -302,6 +305,26 @@ function AppLayout() {
     recordRecentFile(filePath, fileName);
     openPreviewFile(filePath, fileName);
   }, [openPreviewFile, queueRevealRequest, recordRecentFile]);
+
+  const handleCreateWorkspaceFile = useCallback(async (targetPath: string) => {
+    await createWorkspaceFile(targetPath);
+    openWorkspaceFile(targetPath, getPathBaseName(targetPath));
+    restoreActiveEditorFocus();
+  }, [createWorkspaceFile, openWorkspaceFile, restoreActiveEditorFocus]);
+
+  const handleCreateWorkspaceFolder = useCallback(async (targetPath: string) => {
+    await createWorkspaceFolder(targetPath);
+    queueRevealRequest(targetPath);
+  }, [createWorkspaceFolder, queueRevealRequest]);
+
+  const handleRenameWorkspaceEntry = useCallback(async (
+    currentPath: string,
+    nextPath: string,
+    entryType: 'file' | 'folder',
+  ) => {
+    await renameWorkspaceEntry(currentPath, nextPath, entryType);
+    queueRevealRequest(nextPath, { markActiveFileHandled: entryType === 'file' });
+  }, [queueRevealRequest, renameWorkspaceEntry]);
 
   const handleEditorActiveFileReveal = useCallback((filePath: string) => {
     queueRevealRequest(filePath, { markActiveFileHandled: true });
@@ -488,10 +511,12 @@ function AppLayout() {
       leftContent: (
         <LeftSidePanel
           activeFileId={activeTabId}
-          onCreateFile={handleCreateUntitledFile}
+          onCreateWorkspaceFile={handleCreateWorkspaceFile}
+          onCreateWorkspaceFolder={handleCreateWorkspaceFolder}
           onFileOpen={openWorkspaceFile}
           onFilePreview={openWorkspacePreviewFile}
           onLineJump={jumpTo}
+          onRenameWorkspaceEntry={handleRenameWorkspaceEntry}
           currentOutlineId={activeTabId}
           refreshToken={workspaceTreeRefreshToken}
           revealRequest={quickOpenState.revealRequest}

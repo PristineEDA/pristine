@@ -3,12 +3,15 @@ export const DEFAULT_STARTUP_PROJECT_NAME = 'retroSoC';
 export const WORKSPACE_ROOT_PATH = '.';
 
 const UNTITLED_FILE_ID_PATTERN = /^untitled-\d+$/i;
+const WINDOWS_RESERVED_NAME_PATTERN = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/i;
+const WINDOWS_INVALID_FILE_NAME_CHARS = /[\\/:*?"<>|]/;
 
 export interface WorkspaceTreeNode {
   id: string;
   path: string;
   name: string;
   type: 'file' | 'folder';
+  isDraft?: boolean;
   children?: WorkspaceTreeNode[];
   hasLoadedChildren: boolean;
   isLoading: boolean;
@@ -18,6 +21,43 @@ export interface WorkspaceDirectoryEntry {
   name: string;
   isDirectory: boolean;
   isFile: boolean;
+}
+
+export type ExplorerSelectedNodeType = 'file' | 'folder' | 'root';
+export type ExplorerSelectedNodeSource = 'real' | 'draft';
+export type ExplorerTreeEditMode = 'rename' | 'create-file' | 'create-folder';
+
+export interface ExplorerSelectedNode {
+  id: string;
+  path: string;
+  type: ExplorerSelectedNodeType;
+  source: ExplorerSelectedNodeSource;
+}
+
+export interface ExplorerTreeEditSession {
+  mode: ExplorerTreeEditMode;
+  targetNodeId: string;
+  targetPath: string;
+  parentPath: string;
+  entryType: 'file' | 'folder';
+  source: ExplorerSelectedNodeSource;
+  value: string;
+  isSubmitting: boolean;
+  submitError: string | null;
+}
+
+export interface WorkspaceEntryNameValidationResult {
+  isValid: boolean;
+  errorMessage: string | null;
+  normalizedName: string;
+  nextPath: string | null;
+}
+
+interface ValidateWorkspaceEntryNameOptions {
+  value: string;
+  parentPath: string;
+  rootNodes: WorkspaceTreeNode[];
+  currentPath?: string | null;
 }
 
 export function normalizeWorkspacePath(value: string): string {
@@ -48,6 +88,17 @@ export function getPathBaseName(filePath: string): string {
   const normalized = filePath.replace(/\\/g, '/');
   const segments = normalized.split('/').filter(Boolean);
   return segments[segments.length - 1] ?? filePath;
+}
+
+export function getWorkspaceParentPath(filePath: string): string {
+  const normalized = normalizeWorkspacePath(filePath);
+
+  if (normalized === WORKSPACE_ROOT_PATH) {
+    return WORKSPACE_ROOT_PATH;
+  }
+
+  const segments = normalized.split('/');
+  return segments.length <= 1 ? WORKSPACE_ROOT_PATH : segments.slice(0, -1).join('/');
 }
 
 export function isUntitledFileId(filePath: string): boolean {
@@ -282,6 +333,224 @@ export function toTreeTestId(path: string): string {
   }
 
   return normalized.replace(/[/.]/g, '_').replace(/[^A-Za-z0-9_-]/g, '-');
+}
+
+function getSortableWorkspaceNodeName(node: WorkspaceTreeNode): string {
+  if (node.isDraft && node.name.trim().length === 0) {
+    return '\uffff';
+  }
+
+  return node.name;
+}
+
+export function sortWorkspaceNodes(nodes: WorkspaceTreeNode[]): WorkspaceTreeNode[] {
+  return [...nodes].sort((left, right) => {
+    if (left.type !== right.type) {
+      return left.type === 'folder' ? -1 : 1;
+    }
+
+    return getSortableWorkspaceNodeName(left).localeCompare(
+      getSortableWorkspaceNodeName(right),
+      undefined,
+      { numeric: true, sensitivity: 'base' },
+    );
+  });
+}
+
+export function createExplorerDraftId(parentPath: string, entryType: 'file' | 'folder'): string {
+  return `draft:${entryType}:${normalizeWorkspacePath(parentPath)}`;
+}
+
+export function createExplorerDraftNode(
+  parentPath: string,
+  entryType: 'file' | 'folder',
+  draftId: string,
+  name = '',
+): WorkspaceTreeNode {
+  const fallbackSegment = entryType === 'folder' ? '__draft_folder__' : '__draft_file__';
+
+  return {
+    id: draftId,
+    path: joinWorkspacePath(parentPath, name.trim() || fallbackSegment),
+    name,
+    type: entryType,
+    isDraft: true,
+    children: entryType === 'folder' ? [] : undefined,
+    hasLoadedChildren: entryType !== 'folder',
+    isLoading: false,
+  };
+}
+
+export function mergeWorkspaceChildrenWithDraft(
+  children: WorkspaceTreeNode[] | undefined,
+  draftNode?: WorkspaceTreeNode | null,
+): WorkspaceTreeNode[] {
+  const nextChildren = children ? [...children] : [];
+
+  if (draftNode) {
+    nextChildren.push(draftNode);
+  }
+
+  return sortWorkspaceNodes(nextChildren);
+}
+
+export function findWorkspaceNode(
+  rootNodes: WorkspaceTreeNode[] | WorkspaceTreeNode | null,
+  targetPath: string,
+): WorkspaceTreeNode | null {
+  if (!rootNodes) {
+    return null;
+  }
+
+  const nodes = Array.isArray(rootNodes) ? rootNodes : [rootNodes];
+
+  for (const node of nodes) {
+    if (node.path === targetPath) {
+      return node;
+    }
+
+    if (!node.children?.length) {
+      continue;
+    }
+
+    const match = findWorkspaceNode(node.children, targetPath);
+    if (match) {
+      return match;
+    }
+  }
+
+  return null;
+}
+
+export function getWorkspaceChildrenForPath(
+  rootNodes: WorkspaceTreeNode[],
+  parentPath: string,
+): WorkspaceTreeNode[] {
+  if (parentPath === WORKSPACE_ROOT_PATH) {
+    return rootNodes[0]?.children ?? [];
+  }
+
+  const parentNode = findWorkspaceNode(rootNodes, parentPath);
+  return parentNode?.children ?? [];
+}
+
+export function isWithinWorkspacePath(path: string, prefixPath: string): boolean {
+  const normalizedPath = normalizeWorkspacePath(path);
+  const normalizedPrefixPath = normalizeWorkspacePath(prefixPath);
+
+  if (normalizedPrefixPath === WORKSPACE_ROOT_PATH) {
+    return normalizedPath !== WORKSPACE_ROOT_PATH;
+  }
+
+  return normalizedPath === normalizedPrefixPath || normalizedPath.startsWith(`${normalizedPrefixPath}/`);
+}
+
+export function replaceWorkspacePathPrefix(path: string, currentPrefix: string, nextPrefix: string): string {
+  const normalizedPath = normalizeWorkspacePath(path);
+  const normalizedCurrentPrefix = normalizeWorkspacePath(currentPrefix);
+  const normalizedNextPrefix = normalizeWorkspacePath(nextPrefix);
+
+  if (normalizedPath === normalizedCurrentPrefix) {
+    return normalizedNextPrefix;
+  }
+
+  if (normalizedCurrentPrefix === WORKSPACE_ROOT_PATH) {
+    return joinWorkspacePath(normalizedNextPrefix, normalizedPath);
+  }
+
+  const suffix = normalizedPath.slice(normalizedCurrentPrefix.length + 1);
+  return joinWorkspacePath(normalizedNextPrefix, suffix);
+}
+
+export function validateWorkspaceEntryName({
+  value,
+  parentPath,
+  rootNodes,
+  currentPath,
+}: ValidateWorkspaceEntryNameOptions): WorkspaceEntryNameValidationResult {
+  const normalizedName = value.trim();
+
+  if (currentPath && normalizeWorkspacePath(currentPath) === WORKSPACE_ROOT_PATH) {
+    return {
+      isValid: false,
+      errorMessage: 'The workspace root cannot be renamed.',
+      normalizedName,
+      nextPath: null,
+    };
+  }
+
+  if (normalizedName.length === 0) {
+    return {
+      isValid: false,
+      errorMessage: 'A name is required.',
+      normalizedName,
+      nextPath: null,
+    };
+  }
+
+  if (normalizedName === '.' || normalizedName === '..') {
+    return {
+      isValid: false,
+      errorMessage: 'Reserved path segments are not allowed.',
+      normalizedName,
+      nextPath: null,
+    };
+  }
+
+  if (WINDOWS_INVALID_FILE_NAME_CHARS.test(normalizedName)) {
+    return {
+      isValid: false,
+      errorMessage: 'Windows reserved characters are not allowed.',
+      normalizedName,
+      nextPath: null,
+    };
+  }
+
+  if (/[. ]$/.test(normalizedName)) {
+    return {
+      isValid: false,
+      errorMessage: 'Names cannot end with a period or a space.',
+      normalizedName,
+      nextPath: null,
+    };
+  }
+
+  if (WINDOWS_RESERVED_NAME_PATTERN.test(normalizedName)) {
+    return {
+      isValid: false,
+      errorMessage: 'Windows reserved device names are not allowed.',
+      normalizedName,
+      nextPath: null,
+    };
+  }
+
+  const nextPath = joinWorkspacePath(parentPath, normalizedName);
+  const nextPathKey = normalizeWorkspacePath(nextPath).toLowerCase();
+  const currentPathKey = currentPath ? normalizeWorkspacePath(currentPath).toLowerCase() : null;
+  const siblingPaths = new Set(
+    getWorkspaceChildrenForPath(rootNodes, parentPath)
+      .map((child) => normalizeWorkspacePath(child.path).toLowerCase()),
+  );
+
+  if (currentPathKey) {
+    siblingPaths.delete(currentPathKey);
+  }
+
+  if (siblingPaths.has(nextPathKey)) {
+    return {
+      isValid: false,
+      errorMessage: 'An entry with the same name already exists.',
+      normalizedName,
+      nextPath: null,
+    };
+  }
+
+  return {
+    isValid: true,
+    errorMessage: null,
+    normalizedName,
+    nextPath,
+  };
 }
 
 export function sortDirectoryEntries(entries: WorkspaceDirectoryEntry[]): WorkspaceDirectoryEntry[] {

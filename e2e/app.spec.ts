@@ -350,6 +350,10 @@ async function openNestedWorkspaceFile(
   }
 }
 
+function toWorkspaceTreeTestId(relativePath: string) {
+  return `file-tree-node-${relativePath.replace(/[/.]/g, '_').replace(/[^A-Za-z0-9_-]/g, '-')}`;
+}
+
 async function ensureExplorerVisible(window: Awaited<ReturnType<typeof launchApp>>['window']) {
   const leftPanel = window.getByTestId('panel-left-panel');
   const readmeNode = window.getByTestId('file-tree-node-README_md');
@@ -1362,6 +1366,100 @@ test('Ctrl+N creates an untitled file, Ctrl+S saves it, and explorer refreshes t
     }
   } finally {
     await app.close().catch(() => undefined);
+  }
+});
+
+test('Explorer New File creates a real workspace file and keeps it after relaunch', async () => {
+  test.slow();
+
+  const workspaceCopy = test.info().outputPath('explorer-create-file-workspace');
+  createWorkspaceCopy(workspaceCopy);
+
+  const createdFileName = `explorer_created_${Date.now()}.sv`;
+  const createdRelativePath = `rtl/core/${createdFileName}`;
+  const createdAbsolutePath = path.join(workspaceCopy, 'rtl', 'core', createdFileName);
+  const createdTreeTestId = toWorkspaceTreeTestId(createdRelativePath);
+  const { app, window } = await launchApp({ projectRoot: workspaceCopy });
+
+  try {
+    await ensureExplorerVisible(window);
+    await window.getByTestId('file-tree-node-rtl').click();
+    await window.getByTestId('file-tree-node-rtl_core').click();
+    await window.getByRole('button', { name: 'New File' }).click();
+
+    const draftInput = window.locator('.explorer-tree-scrollbar input').first();
+    await expect(draftInput).toBeVisible();
+    await draftInput.fill(createdFileName);
+    await draftInput.press('Enter');
+
+    await expect.poll(() => fs.existsSync(createdAbsolutePath), {
+      timeout: 15000,
+    }).toBe(true);
+    await expect(window.getByTestId(createdTreeTestId)).toBeVisible();
+    await expect(window.getByTestId(`editor-tab-${createdRelativePath}`)).toBeVisible();
+
+    await app.close();
+
+    const relaunched = await launchApp({ projectRoot: workspaceCopy });
+
+    try {
+      await ensureExplorerVisible(relaunched.window);
+      await relaunched.window.getByTestId('file-tree-node-rtl').click();
+      await relaunched.window.getByTestId('file-tree-node-rtl_core').click();
+      await expect(relaunched.window.getByTestId(createdTreeTestId)).toBeVisible();
+
+      await relaunched.window.getByTestId(createdTreeTestId).dblclick();
+      await expect(relaunched.window.getByTestId(`editor-tab-${createdRelativePath}`)).toBeVisible();
+    } finally {
+      await relaunched.app.close();
+    }
+  } finally {
+    await app.close().catch(() => undefined);
+  }
+});
+
+test('Explorer Rename cascades open child tabs when renaming a folder', async () => {
+  test.slow();
+
+  const workspaceCopy = test.info().outputPath('explorer-rename-folder-workspace');
+  createWorkspaceCopy(workspaceCopy);
+
+  const renamedFolderRelativePath = 'rtl/renamed_core';
+  const renamedFolderAbsolutePath = path.join(workspaceCopy, 'rtl', 'renamed_core');
+  const originalFolderAbsolutePath = path.join(workspaceCopy, 'rtl', 'core');
+  const renamedRegFilePath = `${renamedFolderRelativePath}/reg_file.v`;
+  const renamedAluFilePath = `${renamedFolderRelativePath}/alu.sv`;
+  const { app, window } = await launchApp({ projectRoot: workspaceCopy });
+
+  try {
+    await ensureExplorerVisible(window);
+    await openNestedWorkspaceFile(window, [
+      'file-tree-node-rtl',
+      'file-tree-node-rtl_core',
+      'file-tree-node-rtl_core_reg_file_v',
+    ], { finalAction: 'dblclick' });
+    await window.getByTestId('file-tree-node-rtl_core_alu_sv').dblclick();
+
+    const coreFolderNode = window.getByTestId('file-tree-node-rtl_core');
+    await coreFolderNode.click({ button: 'right' });
+    await window.getByRole('button', { name: 'Rename' }).click();
+
+    const renameInput = window.getByTestId('file-tree-input-rtl_core');
+    await expect(renameInput).toBeVisible();
+    await renameInput.fill('renamed_core');
+    await renameInput.press('Enter');
+
+    await expect(window.getByTestId(`editor-tab-${renamedRegFilePath}`)).toBeVisible();
+    await expect(window.getByTestId(`editor-tab-${renamedAluFilePath}`)).toBeVisible();
+    await expect(window.getByTestId('editor-breadcrumb')).toContainText('renamed_core');
+    await expect.poll(() => fs.existsSync(renamedFolderAbsolutePath), {
+      timeout: 15000,
+    }).toBe(true);
+    await expect.poll(() => fs.existsSync(originalFolderAbsolutePath), {
+      timeout: 15000,
+    }).toBe(false);
+  } finally {
+    await app.close();
   }
 });
 
