@@ -113,6 +113,7 @@ describe('git IPC handlers', () => {
     expect(mockExecFile).toHaveBeenCalledWith(
       'git',
       [
+        '--no-optional-locks',
         '-c',
         'status.relativePaths=true',
         'status',

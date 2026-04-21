@@ -2904,7 +2904,7 @@ test('menu bar avatar opens the account popover with desktop auth actions', asyn
   await app.close();
 });
 
-test('desktop auth session persists across app relaunch', async () => {
+test('desktop auth session persists across app relaunch without eager refresh', async () => {
   const refreshRequests: string[] = [];
   const refreshServer = createServer((request, response) => {
     if (request.method === 'POST' && request.url?.startsWith('/auth/v1/token?grant_type=refresh_token')) {
@@ -2971,6 +2971,7 @@ test('desktop auth session persists across app relaunch', async () => {
 
     await assertSignedInPopover(firstWindow);
     await expect.poll(() => refreshRequests.length).toBeGreaterThan(0);
+    const refreshCountAfterFirstLaunch = refreshRequests.length;
 
     await firstApp.close();
 
@@ -2982,7 +2983,8 @@ test('desktop auth session persists across app relaunch', async () => {
     const { app: secondApp, window: secondWindow } = secondLaunch;
 
     await assertSignedInPopover(secondWindow);
-    await expect.poll(() => refreshRequests.length).toBeGreaterThan(1);
+    await secondWindow.waitForTimeout(1000);
+    expect(refreshRequests.length).toBe(refreshCountAfterFirstLaunch);
 
     await secondApp.close();
   } finally {

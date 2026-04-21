@@ -153,6 +153,7 @@ function execGitStatus(root: string): Promise<string> {
     execFile(
       'git',
       [
+        '--no-optional-locks',
         '-c',
         'status.relativePaths=true',
         'status',

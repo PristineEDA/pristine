@@ -19,6 +19,7 @@ const DEFAULT_SUPABASE_URL = 'https://fsuyziugqxslwkaxcakv.supabase.co';
 const DEFAULT_SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_i5J8TuBBSJYZwep4Blkk1w_VryyHYPc';
 const CONFIG_SYNC_DEBOUNCE_MS = 1200;
 const ACCESS_TOKEN_REFRESH_BUFFER_MS = 60_000;
+const AUTH_SESSION_MIN_VALIDATION_DELAY_MS = 5_000;
 const AUTH_SESSION_VALIDATION_INTERVAL_MS = 15 * 60_000;
 const AUTH_SESSION_TRANSIENT_RETRY_DELAYS_MS = [30_000, 60_000, 5 * 60_000] as const;
 const CONFIG_SYNC_KEYS = [
@@ -66,9 +67,13 @@ interface AuthServiceExchangeResponse {
   sessionExpiresAt: number | null;
 }
 
+interface StoredSessionProfile extends DesktopAuthSession {
+  sessionExpiresAt: number | null;
+}
+
 interface StoredAuthSession {
   accessToken: string;
-  profile: DesktopAuthSession;
+  profile: StoredSessionProfile;
   refreshToken: string;
 }
 
@@ -105,6 +110,7 @@ let authSessionTransientFailureCount = 0;
 let configSyncTimer: ReturnType<typeof setTimeout> | null = null;
 let configSyncListenerInstalled = false;
 let isApplyingCloudSnapshot = false;
+let lastAuthErrorMessage: string | null = null;
 
 // ─── Environment ─────────────────────────────────────────────────────────────
 
@@ -252,7 +258,10 @@ function getNextValidationDelayMs(session: StoredAuthSession): number {
 
   const refreshDeadlineMs = expiresAt * 1000 - Date.now() - ACCESS_TOKEN_REFRESH_BUFFER_MS;
 
-  return Math.max(0, Math.min(AUTH_SESSION_VALIDATION_INTERVAL_MS, refreshDeadlineMs));
+  return Math.max(
+    AUTH_SESSION_MIN_VALIDATION_DELAY_MS,
+    Math.min(AUTH_SESSION_VALIDATION_INTERVAL_MS, refreshDeadlineMs),
+  );
 }
 
 function getTransientRetryDelayMs(): number {
@@ -282,6 +291,14 @@ function scheduleNextAuthSessionValidation(session: StoredAuthSession): void {
   scheduleAuthSessionValidation(getNextValidationDelayMs(session));
 }
 
+function ensureAuthSessionValidationScheduled(): void {
+  if (!authSession || authSessionValidationTimer || authSessionValidationInFlight) {
+    return;
+  }
+
+  scheduleNextAuthSessionValidation(authSession);
+}
+
 // ─── Broadcasts ──────────────────────────────────────────────────────────────
 
 function broadcast(channel: string, payload?: unknown): void {
@@ -300,14 +317,56 @@ function broadcast(channel: string, payload?: unknown): void {
 }
 
 function getPublicSession(session: StoredAuthSession | null): DesktopAuthSession | null {
-  return session?.profile ?? null;
+  if (!session) {
+    return null;
+  }
+
+  const {
+    avatarUrl,
+    email,
+    syncedAt,
+    userId,
+    username,
+  } = session.profile;
+
+  return {
+    avatarUrl,
+    email,
+    syncedAt,
+    userId,
+    username,
+  };
 }
 
-function emitAuthStateChanged(): void {
-  broadcast(StreamChannels.AUTH_STATE_CHANGED, getPublicSession(authSession));
+function arePublicSessionsEqual(
+  left: DesktopAuthSession | null,
+  right: DesktopAuthSession | null,
+): boolean {
+  if (!left || !right) {
+    return left === right;
+  }
+
+  return left.avatarUrl === right.avatarUrl
+    && left.email === right.email
+    && left.syncedAt === right.syncedAt
+    && left.userId === right.userId
+    && left.username === right.username;
+}
+
+function emitAuthStateChanged(previousSession: StoredAuthSession | null): void {
+  const nextPublicSession = getPublicSession(authSession);
+  const previousPublicSession = getPublicSession(previousSession);
+
+  if (lastAuthErrorMessage === null && arePublicSessionsEqual(previousPublicSession, nextPublicSession)) {
+    return;
+  }
+
+  lastAuthErrorMessage = null;
+  broadcast(StreamChannels.AUTH_STATE_CHANGED, nextPublicSession);
 }
 
 function emitAuthError(message: string): void {
+  lastAuthErrorMessage = message;
   broadcast(StreamChannels.AUTH_ERROR, message);
 }
 
@@ -399,8 +458,9 @@ async function validateAuthSession(forceRefresh: boolean): Promise<StoredAuthSes
         refreshToken: refreshedSession.refresh_token,
       };
 
+      const previousSession = authSession;
       persistAuthSession(nextSession);
-      emitAuthStateChanged();
+      emitAuthStateChanged(previousSession);
       scheduleNextAuthSessionValidation(nextSession);
       return nextSession;
     } catch (error) {
@@ -409,8 +469,9 @@ async function validateAuthSession(forceRefresh: boolean): Promise<StoredAuthSes
       }
 
       if (isTerminalRefreshFailure(error)) {
+        const previousSession = authSession;
         persistAuthSession(null);
-        emitAuthStateChanged();
+        emitAuthStateChanged(previousSession);
         emitAuthError(error instanceof Error ? error.message : 'The desktop session expired. Sign in again.');
         return null;
       }
@@ -490,6 +551,7 @@ async function pushLocalConfigToCloud(): Promise<AuthServiceConfigResponse | nul
     'Unable to sync local settings to the cloud.',
   );
 
+  const previousSession = authSession;
   persistAuthSession({
     ...session,
     profile: {
@@ -497,7 +559,7 @@ async function pushLocalConfigToCloud(): Promise<AuthServiceConfigResponse | nul
       syncedAt: snapshot.syncedAt,
     },
   });
-  emitAuthStateChanged();
+  emitAuthStateChanged(previousSession);
   return snapshot;
 }
 
@@ -526,6 +588,7 @@ async function pullCloudConfigFromCloud(): Promise<AuthServiceConfigResponse | n
     isApplyingCloudSnapshot = false;
   }
 
+  const previousSession = authSession;
   persistAuthSession({
     ...session,
     profile: {
@@ -533,7 +596,7 @@ async function pullCloudConfigFromCloud(): Promise<AuthServiceConfigResponse | n
       syncedAt: snapshot.syncedAt,
     },
   });
-  emitAuthStateChanged();
+  emitAuthStateChanged(previousSession);
   return snapshot;
 }
 
@@ -654,6 +717,7 @@ export async function handleAuthCallbackUrl(url: string): Promise<boolean> {
       'Unable to redeem the desktop sign-in code.',
     );
 
+    const previousSession = authSession;
     persistAuthSession({
       accessToken: exchangedSession.accessToken,
       profile: {
@@ -666,7 +730,7 @@ export async function handleAuthCallbackUrl(url: string): Promise<boolean> {
       },
       refreshToken: exchangedSession.refreshToken,
     });
-    emitAuthStateChanged();
+    emitAuthStateChanged(previousSession);
 
     if (authSession) {
       scheduleNextAuthSessionValidation(authSession);
@@ -717,17 +781,16 @@ export function registerAuthHandlers(): void {
   ipcMain.handle(AsyncChannels.AUTH_GET_SESSION, async () => {
     ensureAuthSessionLoaded();
 
-    if (authSession) {
-      scheduleAuthSessionValidation(0);
-    }
+    ensureAuthSessionValidationScheduled();
 
     return getPublicSession(authSession);
   });
 
   ipcMain.handle(AsyncChannels.AUTH_SIGN_OUT, async () => {
     await bestEffortRemoteSignOut();
+    const previousSession = authSession;
     persistAuthSession(null);
-    emitAuthStateChanged();
+    emitAuthStateChanged(previousSession);
     return true;
   });
 

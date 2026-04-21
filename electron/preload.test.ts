@@ -251,8 +251,8 @@ describe('preload bridge', () => {
     expect(onMenuCommand).toHaveBeenCalledWith({ action: 'open-settings' });
 
     const authStateHandler = mockOn.mock.calls.find((call) => call[0] === 'stream:auth:state-changed')?.[1];
-    authStateHandler({}, { userId: 'user-1', username: 'Alice', email: 'alice@example.com', avatarUrl: null, syncedAt: null, sessionExpiresAt: null });
-    expect(onAuthStateChanged).toHaveBeenCalledWith({ userId: 'user-1', username: 'Alice', email: 'alice@example.com', avatarUrl: null, syncedAt: null, sessionExpiresAt: null });
+    authStateHandler({}, { userId: 'user-1', username: 'Alice', email: 'alice@example.com', avatarUrl: null, syncedAt: null });
+    expect(onAuthStateChanged).toHaveBeenCalledWith({ userId: 'user-1', username: 'Alice', email: 'alice@example.com', avatarUrl: null, syncedAt: null });
 
     const authErrorHandler = mockOn.mock.calls.find((call) => call[0] === 'stream:auth:error')?.[1];
     authErrorHandler({}, 'Unable to sign in');

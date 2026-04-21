@@ -417,7 +417,6 @@ describe('MenuBar', () => {
     mockedUserSession = {
       avatarUrl: 'https://example.com/avatar.png',
       email: 'alice@example.com',
-      sessionExpiresAt: 1_900_000_000,
       syncedAt: '2026-04-18T12:00:00.000Z',
       userId: 'user-1',
       username: 'Alice Chen',
@@ -443,7 +442,6 @@ describe('MenuBar', () => {
     mockedUserSession = {
       avatarUrl: 'https://example.com/avatar.png',
       email: 'alice@example.com',
-      sessionExpiresAt: 1_900_000_000,
       syncedAt: '2026-04-18T12:00:00.000Z',
       userId: 'user-1',
       username: 'Alice Chen',
