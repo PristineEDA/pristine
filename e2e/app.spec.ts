@@ -414,6 +414,18 @@ async function positionExplorerNodeNearBottom(
   await expect(window.getByTestId(targetTestId)).toBeVisible();
 }
 
+async function readExplorerTreeScrollTop(window: Awaited<ReturnType<typeof launchApp>>['window']) {
+  const explorerTree = window.locator('.explorer-tree-scrollbar');
+
+  return explorerTree.evaluate((element) => {
+    type ScrollContainerLike = {
+      scrollTop: number;
+    };
+
+    return Math.round((element as unknown as ScrollContainerLike).scrollTop);
+  });
+}
+
 async function openBottomTerminal(window: Awaited<ReturnType<typeof launchApp>>['window']) {
   const toggleBottomPanel = window.getByTestId('toggle-bottom-panel');
   await expect(toggleBottomPanel).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
@@ -1788,6 +1800,111 @@ test('Explorer context menu opens upward near the bottom of the window so all ac
     expect(targetBottom).toBeGreaterThan(viewportHeight - 120);
     expect(menuBottom).toBeLessThanOrEqual(targetBottom + 2);
     expect(lastActionBottom).toBeLessThanOrEqual(viewportHeight - 1);
+  } finally {
+    await app.close().catch(() => undefined);
+  }
+});
+
+test('Explorer rename and delete keep the tree scroll position near the bottom after refreshes', async () => {
+  test.slow();
+
+  const workspaceCopy = test.info().outputPath('explorer-scroll-preservation-workspace');
+  createWorkspaceCopy(workspaceCopy);
+
+  const generatedFileCount = 40;
+  const renameSourceFileName = `zz_scroll_${String(generatedFileCount - 1).padStart(2, '0')}.sv`;
+  const renameTargetFileName = `zz_scroll_${String(generatedFileCount - 1).padStart(2, '0')}_renamed.sv`;
+  const deleteFileName = `zz_scroll_${String(generatedFileCount - 2).padStart(2, '0')}.sv`;
+  const renameSourceRelativePath = `rtl/core/${renameSourceFileName}`;
+  const renameTargetRelativePath = `rtl/core/${renameTargetFileName}`;
+  const deleteRelativePath = `rtl/core/${deleteFileName}`;
+  const renameSourceAbsolutePath = path.join(workspaceCopy, 'rtl', 'core', renameSourceFileName);
+  const renameTargetAbsolutePath = path.join(workspaceCopy, 'rtl', 'core', renameTargetFileName);
+  const deleteAbsolutePath = path.join(workspaceCopy, 'rtl', 'core', deleteFileName);
+  const renameSourceTreeTestId = toWorkspaceTreeTestId(renameSourceRelativePath);
+  const renameTargetTreeTestId = toWorkspaceTreeTestId(renameTargetRelativePath);
+  const deleteTreeTestId = toWorkspaceTreeTestId(deleteRelativePath);
+  const renameInputTestId = renameSourceTreeTestId.replace('file-tree-node-', 'file-tree-input-');
+
+  for (let index = 0; index < generatedFileCount; index += 1) {
+    const generatedFileName = `zz_scroll_${String(index).padStart(2, '0')}.sv`;
+    const generatedFilePath = path.join(workspaceCopy, 'rtl', 'core', generatedFileName);
+    fs.writeFileSync(
+      generatedFilePath,
+      `module ${generatedFileName.replace(/\.sv$/, '')};\nendmodule\n`,
+      'utf-8',
+    );
+  }
+
+  const { app, window } = await launchApp({ projectRoot: workspaceCopy });
+  const explorerTree = window.locator('.explorer-tree-scrollbar');
+
+  try {
+    await ensureExplorerVisible(window);
+    await openNestedWorkspaceFile(window, [
+      'file-tree-node-rtl',
+      'file-tree-node-rtl_core',
+    ]);
+
+    await positionExplorerNodeNearBottom(window, renameSourceTreeTestId);
+
+    const renameSourceNode = window.getByTestId(renameSourceTreeTestId);
+    await expect(renameSourceNode).toBeVisible();
+
+    const renameSourceBox = await renameSourceNode.boundingBox();
+    const viewportHeight = await window.evaluate(() => window.innerHeight);
+    if (!renameSourceBox) {
+      throw new Error('Expected rename source explorer node geometry to be measurable');
+    }
+
+    expect(renameSourceBox.y + renameSourceBox.height).toBeGreaterThan(viewportHeight - 120);
+
+    await renameSourceNode.click();
+    const beforeRenameScrollTop = await readExplorerTreeScrollTop(window);
+
+    await explorerTree.focus();
+    await explorerTree.press('F2');
+
+    const renameInput = window.getByTestId(renameInputTestId);
+    await expect(renameInput).toBeVisible();
+    await renameInput.fill(renameTargetFileName);
+    await renameInput.press('Enter');
+
+    await expect.poll(() => fs.existsSync(renameTargetAbsolutePath), {
+      timeout: 15000,
+    }).toBe(true);
+    await expect.poll(() => fs.existsSync(renameSourceAbsolutePath), {
+      timeout: 15000,
+    }).toBe(false);
+    await expect(window.getByTestId(renameTargetTreeTestId)).toBeVisible();
+
+    const afterRenameScrollTop = await readExplorerTreeScrollTop(window);
+    expect(afterRenameScrollTop).toBeGreaterThan(120);
+    expect(Math.abs(afterRenameScrollTop - beforeRenameScrollTop)).toBeLessThanOrEqual(40);
+
+    const deleteNode = window.getByTestId(deleteTreeTestId);
+    await expect(deleteNode).toBeVisible();
+    await deleteNode.click();
+
+    const beforeDeleteScrollTop = await readExplorerTreeScrollTop(window);
+
+    await explorerTree.focus();
+    await explorerTree.press('Delete');
+
+    await expect(window.getByTestId('delete-confirmation-dialog')).toBeVisible();
+    await expect(window.getByTestId('delete-confirmation-target')).toContainText(deleteFileName);
+    await window.getByTestId('delete-confirmation-confirm').click();
+
+    await expect(window.getByTestId('delete-confirmation-dialog')).toHaveCount(0);
+    await expect.poll(() => fs.existsSync(deleteAbsolutePath), {
+      timeout: 15000,
+    }).toBe(false);
+    await expect(window.getByTestId(deleteTreeTestId)).toHaveCount(0);
+    await expect(window.getByTestId(renameTargetTreeTestId)).toBeVisible();
+
+    const afterDeleteScrollTop = await readExplorerTreeScrollTop(window);
+    expect(afterDeleteScrollTop).toBeGreaterThan(120);
+    expect(Math.abs(afterDeleteScrollTop - beforeDeleteScrollTop)).toBeLessThanOrEqual(48);
   } finally {
     await app.close().catch(() => undefined);
   }

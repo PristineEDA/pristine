@@ -222,6 +222,36 @@ describe('LeftSidePanel', () => {
     });
   });
 
+  it('keeps the current explorer tree rendered during a refresh token bump so the scroll container state can persist', async () => {
+    const { container, props, rerender } = renderLeftSidePanel({
+      activeFileId: 'rtl/peripherals/uart_rx.v',
+      currentOutlineId: 'uart_rx',
+      refreshToken: 0,
+    });
+
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl'));
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals'));
+    await screen.findByTestId('file-tree-node-rtl_peripherals_uart_rx_v');
+
+    const tree = container.querySelector('.explorer-tree-scrollbar') as HTMLElement;
+    tree.scrollTop = 180;
+
+    rerender(
+      <LeftSidePanel
+        {...props}
+        refreshToken={1}
+      />,
+    );
+
+    expect(screen.queryByText('Loading workspace...')).not.toBeInTheDocument();
+    expect(tree.scrollTop).toBe(180);
+    expect(screen.getByTestId('file-tree-node-rtl_peripherals_uart_rx_v')).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('file-tree-node-rtl_peripherals_uart_rx_v')).toBeInTheDocument();
+    });
+  });
+
   it('starts inline rename when F2 is pressed on document after selecting a file in the tree', async () => {
     renderLeftSidePanel({
       activeFileId: 'rtl/peripherals/uart_rx.v',
