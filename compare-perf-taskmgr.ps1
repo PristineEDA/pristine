@@ -9,6 +9,9 @@ param(
     [ValidateRange(0.0, [double]::MaxValue)]
     [double]$ThresholdPercent = 3.0,
 
+    [ValidateRange(0.0, [double]::MaxValue)]
+    [double]$MemoryThresholdPercent = 0.5,
+
     [ValidateNotNullOrEmpty()]
     [string]$DevCommand = 'pnpm run dev',
 
@@ -18,14 +21,42 @@ param(
     [ValidateNotNullOrEmpty()]
     [string]$PackagedProcessName = 'Pristine',
 
-    [string]$PackagedExecutablePath
+    [string]$PackagedExecutablePath,
+
+    [string]$PerfSamplerPath
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $RepoRoot = $PSScriptRoot
-$PerfSamplerPath = Join-Path $RepoRoot 'perf-taskmgr.ps1'
+$DefaultPerfSamplerPath = Join-Path $RepoRoot 'perf-taskmgr.ps1'
+$HelperPath = Join-Path $RepoRoot 'perf-taskmgr.shared.ps1'
+
+if (-not (Test-Path -LiteralPath $HelperPath)) {
+    throw "Perf helper script was not found at '$HelperPath'."
+}
+
+. $HelperPath
+
+function Resolve-PerfSamplerPath {
+    param(
+        [string]$ExplicitPath
+    )
+
+    $candidatePath = if ([string]::IsNullOrWhiteSpace($ExplicitPath)) {
+        $DefaultPerfSamplerPath
+    }
+    else {
+        $ExplicitPath
+    }
+
+    if (-not (Test-Path -LiteralPath $candidatePath)) {
+        throw "Perf sampler script was not found at '$candidatePath'."
+    }
+
+    return (Resolve-Path -LiteralPath $candidatePath).Path
+}
 
 function Stop-PristineProcesses {
     Get-Process Pristine, Electron -ErrorAction SilentlyContinue |
@@ -96,46 +127,19 @@ function Invoke-PerfSample {
         [string]$ProcessName,
 
         [ValidateRange(1, [int]::MaxValue)]
-        [int]$DurationSeconds
+        [int]$DurationSeconds,
+
+        [Parameter(Mandatory = $true)]
+        [string]$PerfSamplerScriptPath
     )
 
-    if (-not (Test-Path -LiteralPath $PerfSamplerPath)) {
-        throw "Perf sampler script was not found at '$PerfSamplerPath'."
-    }
-
     $maxAttempts = 3
-    $pattern = '^Average .+ Utility \(estimated, last \d+ s\): (?<Average>\d+(?:\.\d+)?) %$'
 
     for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
         try {
-            $records = @(& $PerfSamplerPath -ProcessName $ProcessName -DurationSeconds $DurationSeconds 6>&1)
-            $lines = @(
-                $records | ForEach-Object {
-                    if ($_ -is [System.Management.Automation.InformationRecord]) {
-                        [string]$_.MessageData
-                    }
-                    elseif ($_ -is [System.Management.Automation.ErrorRecord]) {
-                        $_.ToString()
-                    }
-                    else {
-                        [string]$_
-                    }
-                }
-            )
-
-            foreach ($line in $lines) {
-                if (-not [string]::IsNullOrWhiteSpace($line)) {
-                    Write-Host $line
-                }
-            }
-
-            for ($index = $lines.Count - 1; $index -ge 0; $index--) {
-                if ($lines[$index] -match $pattern) {
-                    return [double]$Matches['Average']
-                }
-            }
-
-            throw "Could not parse the average utility line from perf-taskmgr output for process '$ProcessName'."
+            $records = @(& $PerfSamplerScriptPath -ProcessName $ProcessName -DurationSeconds $DurationSeconds -OutputFormat Json 2>&1)
+            $jsonText = (($records | ForEach-Object { [string]$_ }) -join [Environment]::NewLine).Trim()
+            return ConvertFrom-PerfSummaryJsonText -JsonText $jsonText
         }
         catch {
             if ($attempt -ge $maxAttempts) {
@@ -169,7 +173,10 @@ function Invoke-Scenario {
         [int]$WarmupSeconds,
 
         [ValidateRange(1, [int]::MaxValue)]
-        [int]$DurationSeconds
+        [int]$DurationSeconds,
+
+        [Parameter(Mandatory = $true)]
+        [string]$PerfSamplerScriptPath
     )
 
     $launcher = $null
@@ -199,11 +206,11 @@ function Invoke-Scenario {
             Start-Sleep -Seconds $WarmupSeconds
         }
 
-        $averageUtility = Invoke-PerfSample -ProcessName $ProcessName -DurationSeconds $DurationSeconds
+        $summary = Invoke-PerfSample -ProcessName $ProcessName -DurationSeconds $DurationSeconds -PerfSamplerScriptPath $PerfSamplerScriptPath
         return [pscustomobject]@{
             ScenarioName = $ScenarioName
             ProcessName = $ProcessName
-            AverageUtility = $averageUtility
+            Summary = $summary
         }
     }
     finally {
@@ -222,25 +229,44 @@ function Invoke-Scenario {
 }
 
 try {
+    $resolvedPerfSamplerPath = Resolve-PerfSamplerPath -ExplicitPath $PerfSamplerPath
     $packagedExecutable = Resolve-PackagedExecutablePath -ExplicitPath $PackagedExecutablePath
 
-    $devResult = Invoke-Scenario -ScenarioName 'Dev runtime sample' -ProcessName $DevProcessName -StartCommand $DevCommand -WorkingDirectory $RepoRoot -WarmupSeconds $WarmupSeconds -DurationSeconds $DurationSeconds
-    $packagedResult = Invoke-Scenario -ScenarioName 'Packaged runtime sample' -ProcessName $PackagedProcessName -ExecutablePath $packagedExecutable -WorkingDirectory (Split-Path -Parent $packagedExecutable) -WarmupSeconds $WarmupSeconds -DurationSeconds $DurationSeconds
+    $devResult = Invoke-Scenario -ScenarioName 'Dev runtime sample' -ProcessName $DevProcessName -StartCommand $DevCommand -WorkingDirectory $RepoRoot -WarmupSeconds $WarmupSeconds -DurationSeconds $DurationSeconds -PerfSamplerScriptPath $resolvedPerfSamplerPath
+    $packagedResult = Invoke-Scenario -ScenarioName 'Packaged runtime sample' -ProcessName $PackagedProcessName -ExecutablePath $packagedExecutable -WorkingDirectory (Split-Path -Parent $packagedExecutable) -WarmupSeconds $WarmupSeconds -DurationSeconds $DurationSeconds -PerfSamplerScriptPath $resolvedPerfSamplerPath
 
-    $absoluteDifference = [Math]::Round([Math]::Abs($devResult.AverageUtility - $packagedResult.AverageUtility), 2)
+    $report = New-PerfComparisonReport -DevSummary $devResult.Summary -PackagedSummary $packagedResult.Summary -ThresholdPercent $ThresholdPercent -MemoryThresholdPercent $MemoryThresholdPercent
 
     Write-Host '--------------------------------' -ForegroundColor DarkGray
-    Write-Host ("{0,-24} {1,8} %" -f $devResult.ScenarioName, $devResult.AverageUtility)
-    Write-Host ("{0,-24} {1,8} %" -f $packagedResult.ScenarioName, $packagedResult.AverageUtility)
-    Write-Host ("{0,-24} {1,8} %" -f 'Absolute difference', $absoluteDifference)
-    Write-Host ("{0,-24} {1,8} %" -f 'Threshold', $ThresholdPercent)
+    Write-Host ('{0,-28} {1,-30} {2,-30}' -f 'Metric', 'Dev', 'Packaged')
+    Write-Host ('{0,-28} {1,-30} {2,-30}' -f '------', '---', '--------')
+    foreach ($row in @($report.Rows)) {
+        Write-Host ('{0,-28} {1,-30} {2,-30}' -f $row.Label, $row.DevValue, $row.PackagedValue)
+    }
 
-    if ($absoluteDifference -gt $ThresholdPercent) {
-        Write-Error "Runtime utility difference exceeded the threshold: $absoluteDifference % > $ThresholdPercent %."
+    Write-Host ('{0,-28} {1}' -f 'Network access (dev)', $report.DevNetworkAccessSummary)
+    Write-Host ('{0,-28} {1}' -f 'Network access (packaged)', $report.PackagedNetworkAccessSummary)
+    Write-Host ('{0,-28} {1}' -f 'CPU absolute difference', (Format-PerfPercent -Percent $report.CpuAbsoluteDifferencePercent))
+    Write-Host ('{0,-28} {1}' -f 'CPU threshold', (Format-PerfPercent -Percent $report.ThresholdPercent))
+    Write-Host ('{0,-28} {1}' -f 'Memory absolute difference', (Format-PerfPercent -Percent $report.MemoryWorkingSetAverageAbsoluteDifferencePercent))
+    Write-Host ('{0,-28} {1}' -f 'Memory threshold', (Format-PerfPercent -Percent $report.MemoryThresholdPercent))
+
+    if (-not $report.IsWithinThreshold) {
+        $thresholdFailures = @()
+
+        if (-not $report.IsCpuWithinThreshold) {
+            $thresholdFailures += "CPU utility difference exceeded the threshold: $($report.CpuAbsoluteDifferencePercent) % > $($report.ThresholdPercent) %."
+        }
+
+        if (-not $report.IsMemoryWithinThreshold) {
+            $thresholdFailures += "Memory working set difference exceeded the threshold: $($report.MemoryWorkingSetAverageAbsoluteDifferencePercent) % > $($report.MemoryThresholdPercent) %."
+        }
+
+        Write-Error ('Runtime thresholds exceeded. ' + ($thresholdFailures -join ' '))
         exit 1
     }
 
-    Write-Host 'Runtime utility difference is within the threshold.' -ForegroundColor Green
+    Write-Host 'Runtime CPU and memory differences are within the threshold.' -ForegroundColor Green
     exit 0
 }
 catch {

@@ -1890,7 +1890,7 @@ test('Explorer context menu opens upward near the bottom of the window so all ac
       menu.boundingBox(),
       lastAction.boundingBox(),
       targetNode.boundingBox(),
-      window.evaluate(() => window.innerHeight),
+      window.evaluate(() => (globalThis as unknown as { innerHeight: number }).innerHeight),
     ]);
 
     if (!menuBox || !lastActionBox || !targetBox) {
@@ -1956,7 +1956,7 @@ test('Explorer rename and delete keep the tree scroll position near the bottom a
     await expect(renameSourceNode).toBeVisible();
 
     const renameSourceBox = await renameSourceNode.boundingBox();
-    const viewportHeight = await window.evaluate(() => window.innerHeight);
+    const viewportHeight = await window.evaluate(() => (globalThis as unknown as { innerHeight: number }).innerHeight);
     if (!renameSourceBox) {
       throw new Error('Expected rename source explorer node geometry to be measurable');
     }

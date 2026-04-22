@@ -251,7 +251,7 @@ describe('FileTreeNode', () => {
 
   it('opens the explorer context menu upward when the click is near the viewport bottom', () => {
     const originalInnerHeight = window.innerHeight;
-    const getBoundingClientRectMock = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function mockRect() {
+    const getBoundingClientRectMock = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function mockRect(this: HTMLElement) {
       if (this.getAttribute('data-testid') === 'explorer-context-menu') {
         return {
           x: 40,
