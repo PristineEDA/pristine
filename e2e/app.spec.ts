@@ -2381,11 +2381,21 @@ test('status bar switches across primary and secondary navigation views', async 
 
 test('explorer status bar hover cards switch cleanly between adjacent items', async () => {
   const { app, window } = await launchApp();
+  type FocusableTriggerNode = {
+    focus?: () => void;
+    getAttribute?: (name: string) => string | null;
+    parentElement?: FocusableTriggerNode | null;
+  };
+
   const focusHoverCardTrigger = async (label: Locator) => {
     await label.evaluate((element) => {
-      const trigger = element.closest('[data-slot="hover-card-trigger"]');
+      let trigger = element as unknown as FocusableTriggerNode | null;
 
-      if (!(trigger instanceof HTMLElement)) {
+      while (trigger && trigger.getAttribute?.('data-slot') !== 'hover-card-trigger') {
+        trigger = trigger.parentElement ?? null;
+      }
+
+      if (!trigger || typeof trigger.focus !== 'function') {
         throw new Error('Expected a hover-card trigger for the status bar item');
       }
 
