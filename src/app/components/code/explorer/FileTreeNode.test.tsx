@@ -25,6 +25,15 @@ describe('FileIcon', () => {
     const { rerender, container } = render(<FileIcon name="uart_tx.v" />);
     expect(container.querySelector('img[data-icon-key="verilog"]')).toBeInTheDocument();
 
+    rerender(<FileIcon name="uart_defs.vh" />);
+    expect(container.querySelector('img[data-icon-key="verilog-header"]')).toBeInTheDocument();
+
+    rerender(<FileIcon name="axi_if.sv" />);
+    expect(container.querySelector('img[data-icon-key="systemverilog"]')).toBeInTheDocument();
+
+    rerender(<FileIcon name="axi_pkg.svh" />);
+    expect(container.querySelector('img[data-icon-key="systemverilog-header"]')).toBeInTheDocument();
+
     rerender(<FileIcon name="Makefile" />);
     expect(container.querySelector('img[data-icon-key="makefile"]')).toBeInTheDocument();
 

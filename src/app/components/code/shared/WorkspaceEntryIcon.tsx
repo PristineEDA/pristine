@@ -12,7 +12,10 @@ import eslintIcon from 'material-icon-theme/icons/eslint.svg';
 import postcssIcon from 'material-icon-theme/icons/postcss.svg';
 import wranglerIcon from 'material-icon-theme/icons/wrangler.svg';
 import nextIcon from 'material-icon-theme/icons/next.svg';
-import verilogIcon from 'material-icon-theme/icons/verilog.svg';
+import verilogIcon from './icons/verilog.svg';
+import verilogHeaderIcon from './icons/verilog-header.svg';
+import systemverilogIcon from './icons/systemverilog.svg';
+import systemverilogHeaderIcon from './icons/systemverilog-header.svg';
 import cIcon from 'material-icon-theme/icons/c.svg';
 import cppIcon from 'material-icon-theme/icons/cpp.svg';
 import hIcon from 'material-icon-theme/icons/h.svg';
@@ -98,6 +101,12 @@ import folderDesktopIcon from 'material-icon-theme/icons/folder-desktop.svg';
 import folderDesktopOpenIcon from 'material-icon-theme/icons/folder-desktop-open.svg';
 import { WORKSPACE_ROOT_PATH } from '../../../workspace/workspaceFiles';
 
+type RtlWorkspaceFileIconKey =
+  | 'systemverilog'
+  | 'systemverilog-header'
+  | 'verilog'
+  | 'verilog-header';
+
 type WorkspaceFileIconKey =
   | 'assembly'
   | 'c'
@@ -135,7 +144,7 @@ type WorkspaceFileIconKey =
   | 'tsconfig'
   | 'typescript'
   | 'typescript-def'
-  | 'verilog'
+  | RtlWorkspaceFileIconKey
   | 'vite'
   | 'vitest'
   | 'wrangler'
@@ -212,6 +221,13 @@ interface WorkspaceFolderIconConfig {
   open: WorkspaceFolderIconKey;
 }
 
+const RTL_FILE_ICON_SOURCES: Record<RtlWorkspaceFileIconKey, string> = {
+  systemverilog: systemverilogIcon,
+  'systemverilog-header': systemverilogHeaderIcon,
+  verilog: verilogIcon,
+  'verilog-header': verilogHeaderIcon,
+};
+
 const FILE_ICON_SOURCES: Record<WorkspaceFileIconKey, string> = {
   assembly: assemblyIcon,
   c: cIcon,
@@ -249,12 +265,19 @@ const FILE_ICON_SOURCES: Record<WorkspaceFileIconKey, string> = {
   tsconfig: tsconfigIcon,
   typescript: typescriptIcon,
   'typescript-def': typescriptDefIcon,
-  verilog: verilogIcon,
   vite: viteIcon,
   vitest: vitestIcon,
   wrangler: wranglerIcon,
   xml: xmlIcon,
   yaml: yamlIcon,
+  ...RTL_FILE_ICON_SOURCES,
+};
+
+const RTL_FILE_EXTENSION_ICON_KEYS: Record<string, RtlWorkspaceFileIconKey> = {
+  'sv': 'systemverilog',
+  'svh': 'systemverilog-header',
+  'v': 'verilog',
+  'vh': 'verilog-header',
 };
 
 const FOLDER_ICON_SOURCES: Record<WorkspaceFolderIconKey, string> = {
@@ -399,21 +422,18 @@ const FILE_EXTENSION_ICON_KEYS: Record<string, WorkspaceFileIconKey> = {
   'scss': 'sass',
   'sh': 'console',
   'svg': 'svg',
-  'sv': 'verilog',
-  'svh': 'verilog',
   'tcl': 'tcl',
   'toml': 'toml',
   'ts': 'typescript',
   'tsx': 'react_ts',
-  'v': 'verilog',
   'vhd': 'verilog',
   'vhdl': 'verilog',
-  'vh': 'verilog',
   'webp': 'image',
   'xml': 'xml',
   'yaml': 'yaml',
   'yml': 'yaml',
   'zsh': 'console',
+  ...RTL_FILE_EXTENSION_ICON_KEYS,
 };
 
 const EXACT_FOLDER_ICON_KEYS: Record<string, WorkspaceFolderIconConfig> = {
