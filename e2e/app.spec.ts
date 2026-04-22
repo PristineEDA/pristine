@@ -2381,12 +2381,21 @@ test('status bar switches across primary and secondary navigation views', async 
 
 test('explorer status bar hover cards switch cleanly between adjacent items', async () => {
   const { app, window } = await launchApp();
+  const focusHoverCardTrigger = async (label: Locator) => {
+    await label.evaluate((element) => {
+      const trigger = element.closest('[data-slot="hover-card-trigger"]');
+
+      if (!(trigger instanceof HTMLElement)) {
+        throw new Error('Expected a hover-card trigger for the status bar item');
+      }
+
+      trigger.focus();
+    });
+  };
 
   const statusBar = window.getByTestId('status-bar');
   const branchLabel = statusBar.getByTestId('status-bar-branch-label');
   const syncLabel = statusBar.getByText('Sync', { exact: true });
-  const branchTrigger = branchLabel.locator('xpath=ancestor::*[@data-slot="hover-card-trigger"][1]');
-  const syncTrigger = syncLabel.locator('xpath=ancestor::*[@data-slot="hover-card-trigger"][1]');
   const branchCardTitle = window.getByText('Git Branch', { exact: true });
   const syncCardTitle = window.getByText('Sync Status', { exact: true });
 
@@ -2394,10 +2403,10 @@ test('explorer status bar hover cards switch cleanly between adjacent items', as
   await expect(branchLabel).toBeVisible();
   await expect(syncLabel).toBeVisible();
 
-  await branchTrigger.hover();
+  await focusHoverCardTrigger(branchLabel);
   await expect(branchCardTitle).toBeVisible();
 
-  await syncTrigger.hover();
+  await focusHoverCardTrigger(syncLabel);
 
   await expect(branchCardTitle).toHaveCount(0);
   await expect(syncCardTitle).toBeVisible();

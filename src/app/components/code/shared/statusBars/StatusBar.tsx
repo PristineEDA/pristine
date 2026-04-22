@@ -132,7 +132,7 @@ function StatusBarHoverItem({
   return (
     <HoverCard openDelay={STATUS_BAR_HOVER_OPEN_DELAY_MS} closeDelay={0}>
       <HoverCardTrigger asChild>
-        <div className={STATUS_BAR_HOVER_TRIGGER_CLASS_NAME}>
+        <div className={STATUS_BAR_HOVER_TRIGGER_CLASS_NAME} tabIndex={0}>
           {children}
         </div>
       </HoverCardTrigger>

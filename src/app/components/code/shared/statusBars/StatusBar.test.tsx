@@ -193,6 +193,20 @@ describe('StatusBar', () => {
     expect(await screen.findByText('Save Progress')).toBeInTheDocument();
   });
 
+  it('opens hover details when a status bar item receives keyboard focus', async () => {
+    render(
+      <StatusBar activeFileId="rtl/tb/tb_cpu_top.sv" cursorLine={18} cursorCol={4} />,
+    );
+
+    const branchTrigger = screen.getByTestId('status-bar-branch-label').closest('[data-slot="hover-card-trigger"]');
+
+    expect(branchTrigger).not.toBeNull();
+
+    (branchTrigger as HTMLElement).focus();
+
+    expect(await screen.findByText('Git Branch')).toBeInTheDocument();
+  });
+
   it('shows unsaved summaries and exposes Save All and review actions', () => {
     const onOpenUnsavedFiles = vi.fn();
     const onSaveAll = vi.fn();
