@@ -2383,12 +2383,16 @@ test('explorer status bar hover cards switch cleanly between adjacent items', as
   const { app, window } = await launchApp();
 
   const statusBar = window.getByTestId('status-bar');
-  const branchTrigger = statusBar.getByTestId('status-bar-branch-label');
-  const syncTrigger = statusBar.getByText('Sync', { exact: true });
+  const branchLabel = statusBar.getByTestId('status-bar-branch-label');
+  const syncLabel = statusBar.getByText('Sync', { exact: true });
+  const branchTrigger = branchLabel.locator('xpath=ancestor::*[@data-slot="hover-card-trigger"][1]');
+  const syncTrigger = syncLabel.locator('xpath=ancestor::*[@data-slot="hover-card-trigger"][1]');
   const branchCardTitle = window.getByText('Git Branch', { exact: true });
   const syncCardTitle = window.getByText('Sync Status', { exact: true });
 
   await expect(statusBar).toHaveAttribute('data-status-bar-id', 'code-explorer');
+  await expect(branchLabel).toBeVisible();
+  await expect(syncLabel).toBeVisible();
 
   await branchTrigger.hover();
   await expect(branchCardTitle).toBeVisible();

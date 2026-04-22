@@ -21,78 +21,21 @@ function openContextMenuForNode(testId: string, coordinates = { clientX: 100, cl
 }
 
 describe('FileIcon', () => {
-  it('renders extension-specific glyphs for supported workspace file types and falls back to the generic file icon', () => {
+  it('renders Material icon theme SVGs for covered file types and falls back to the generic file icon', () => {
     const { rerender, container } = render(<FileIcon name="uart_tx.v" />);
-    expect(screen.getByText('V')).toBeInTheDocument();
-
-    rerender(<FileIcon name="tb_uart.sv" />);
-    expect(screen.getByText('SV')).toBeInTheDocument();
-
-    rerender(<FileIcon name="defs.vh" />);
-    expect(screen.getByText('VH')).toBeInTheDocument();
-
-    rerender(<FileIcon name="tb_defs.svh" />);
-    expect(screen.getByText('SH')).toBeInTheDocument();
-
-    rerender(<FileIcon name="startup.c" />);
-    expect(screen.getByText('C')).toBeInTheDocument();
-
-    rerender(<FileIcon name="startup.hpp" />);
-    expect(screen.getByText('H')).toBeInTheDocument();
-
-    rerender(<FileIcon name="cocotb_test.py" />);
-    expect(screen.getByText('Py')).toBeInTheDocument();
-
-    rerender(<FileIcon name=".gitignore" />);
-    expect(screen.getByText('IG')).toHaveClass('text-ide-file-git');
-
-    rerender(<FileIcon name=".gitmodules" />);
-    expect(screen.getByText('GM')).toHaveClass('text-ide-file-git');
-
-    rerender(<FileIcon name="LICENSE" />);
-    expect(screen.getByText('LC')).toHaveClass('text-ide-file-license');
-
-    rerender(<FileIcon name="deploy.sh" />);
-    expect(screen.getByText('SH')).toHaveClass('text-ide-file-shell');
-
-    rerender(<FileIcon name="timing.xdc" />);
-    expect(screen.getByText('X')).toBeInTheDocument();
-
-    rerender(<FileIcon name="timing.sdc" />);
-    expect(screen.getByText('SD')).toBeInTheDocument();
-
-    rerender(<FileIcon name="build.tcl" />);
-    expect(screen.getByText('TC')).toBeInTheDocument();
+    expect(container.querySelector('img[data-icon-key="verilog"]')).toBeInTheDocument();
 
     rerender(<FileIcon name="Makefile" />);
-    expect(screen.getByText('MK')).toBeInTheDocument();
-
-    rerender(<FileIcon name="synth.ys" />);
-    expect(screen.getByText('YS')).toBeInTheDocument();
+    expect(container.querySelector('img[data-icon-key="makefile"]')).toBeInTheDocument();
 
     rerender(<FileIcon name="crt0.S" />);
-    expect(screen.getByText('AS')).toBeInTheDocument();
+    expect(container.querySelector('img[data-icon-key="assembly"]')).toBeInTheDocument();
 
-    rerender(<FileIcon name="memory.lds" />);
-    expect(screen.getByText('LD')).toBeInTheDocument();
-
-    rerender(<FileIcon name="sources.FL" />);
-    expect(screen.getByText('FL')).toBeInTheDocument();
-
-    rerender(<FileIcon name="manifest.json" />);
-    expect(screen.getByText('J')).toBeInTheDocument();
-
-    rerender(<FileIcon name="layout.xml" />);
-    expect(screen.getByText('XM')).toBeInTheDocument();
-
-    rerender(<FileIcon name="project.yml" />);
-    expect(screen.getByText('Y')).toBeInTheDocument();
-
-    rerender(<FileIcon name="README.md" />);
-    expect(screen.getByText('M')).toBeInTheDocument();
+    rerender(<FileIcon name="package.json" />);
+    expect(container.querySelector('img[data-icon-key="nodejs"]')).toBeInTheDocument();
 
     rerender(<FileIcon name="unknown.txt" />);
-    expect(container.querySelector('svg')).toBeInTheDocument();
+    expect(container.querySelector('img[data-icon-key="file"]')).toBeInTheDocument();
   });
 });
 
@@ -124,6 +67,7 @@ describe('FileTreeNode', () => {
     );
 
     expect(screen.queryByTestId('file-tree-node-rtl_uart_tx_v')).not.toBeInTheDocument();
+    expect(screen.getByTestId('file-tree-icon-rtl')).toHaveAttribute('data-icon-key', 'folder');
 
     fireEvent.click(screen.getByTestId('file-tree-node-rtl'));
     expect(onToggleFolder).toHaveBeenCalledWith('rtl');
@@ -149,6 +93,7 @@ describe('FileTreeNode', () => {
       />,
     );
 
+    expect(screen.getByTestId('file-tree-icon-rtl')).toHaveAttribute('data-icon-key', 'folder-open');
     expect(screen.getByTestId('file-tree-node-rtl_uart_tx_v')).toBeInTheDocument();
   });
 

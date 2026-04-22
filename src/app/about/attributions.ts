@@ -111,6 +111,13 @@ export const openSourceAttributionSections: AttributionSection[] = [
         license: 'ISC',
       },
       {
+        id: 'material-icon-theme',
+        name: 'Material Icon Theme',
+        url: 'https://github.com/material-extensions/vscode-material-icon-theme',
+        author: 'Material Extensions',
+        license: 'MIT',
+      },
+      {
         id: 'cmdk',
         name: 'cmdk',
         url: 'https://github.com/pacocoursey/cmdk',

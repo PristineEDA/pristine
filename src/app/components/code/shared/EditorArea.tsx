@@ -146,8 +146,7 @@ function EditorTab({
       <FileTypeBadge
         name={tab.name}
         testId={`editor-tab-badge-${tab.id}`}
-        className="shrink-0 text-[10px] font-bold font-mono"
-        fallbackClassName="text-foreground"
+        className="h-4 w-4"
       />
       <span
         data-testid={`editor-tab-title-${tab.id}`}

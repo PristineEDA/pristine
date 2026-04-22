@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
-  ChevronRight, ChevronDown, Folder, FolderOpen,
+  ChevronRight, ChevronDown,
 } from 'lucide-react';
 import {
   WORKSPACE_ROOT_PATH,
@@ -16,7 +16,7 @@ import {
 import type { WorkspaceRevealRequest } from '../../../workspace/useWorkspaceTree';
 import type { WorkspaceGitPathState } from '../../../../../types/workspace-git';
 import { formatShortcutLabel } from '../../../menu/shortcutLabels';
-import { FileTypeBadge } from '../shared/FileTypeBadge';
+import { WorkspaceFileIcon, WorkspaceFolderIcon } from '../shared/WorkspaceEntryIcon';
 
 interface ContextMenuItem {
   kind: 'item';
@@ -339,7 +339,7 @@ function getTreeRowIndentStyle(depth: number): React.CSSProperties {
 
 // ─── File Icon ────────────────────────────────────────────────────────────────
 export function FileIcon({ name }: { name: string; language?: string }) {
-  return <FileTypeBadge name={name} className="text-[10px] font-bold font-mono" />;
+  return <WorkspaceFileIcon name={name} className="h-4 w-4" />;
 }
 
 type ExplorerGitIndicatorState = Exclude<WorkspaceGitPathState, 'ignored'>;
@@ -487,9 +487,7 @@ function TreeEditInputRow({
             <span className="text-muted-foreground">
               {isExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
             </span>
-            {isExpanded
-              ? <FolderOpen size={14} className="text-ide-syntax-folder shrink-0" />
-              : <Folder size={14} className="text-ide-syntax-folder shrink-0" />}
+            <WorkspaceFolderIcon name={value || 'new_folder'} isOpen={Boolean(isExpanded)} className="h-4 w-4" />
           </>
         ) : (
           <>
@@ -887,9 +885,13 @@ export const FileTreeNode = memo(function FileTreeNode({
             <span className="text-muted-foreground">
               {isExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
             </span>
-            {isExpanded
-              ? <FolderOpen size={14} className="text-ide-syntax-folder shrink-0" />
-              : <Folder size={14} className="text-ide-syntax-folder shrink-0" />}
+            <WorkspaceFolderIcon
+              name={node.name}
+              isOpen={isExpanded}
+              isRoot={node.path === WORKSPACE_ROOT_PATH}
+              className="h-4 w-4"
+              testId={`file-tree-icon-${treeTestId}`}
+            />
             <span className="ml-1 flex min-w-0 flex-1 items-center">
               <span
                 data-testid={`file-tree-label-${treeTestId}`}
@@ -904,7 +906,7 @@ export const FileTreeNode = memo(function FileTreeNode({
           <>
             <span className="w-3.5" />
             <span className="w-4 h-4 flex items-center justify-center shrink-0">
-              <FileIcon name={node.name} />
+              <WorkspaceFileIcon name={node.name} className="h-4 w-4" testId={`file-tree-icon-${treeTestId}`} />
             </span>
             <span className="ml-1 flex min-w-0 flex-1 items-center">
               <span

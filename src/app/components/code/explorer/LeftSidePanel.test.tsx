@@ -237,6 +237,74 @@ describe('LeftSidePanel', () => {
     expect(await screen.findByTestId('file-tree-input-rtl_peripherals_uart_rx_v')).toBeInTheDocument();
   });
 
+  it('starts inline rename for a folder when F2 is pressed immediately after selecting it', async () => {
+    const onRenameWorkspaceEntry = vi.fn().mockResolvedValue(undefined);
+    const { container } = renderLeftSidePanel({
+      activeFileId: 'rtl/peripherals/uart_rx.v',
+      currentOutlineId: 'uart_rx',
+      onRenameWorkspaceEntry,
+    });
+
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl'));
+
+    const peripheralsFolderNode = await screen.findByTestId('file-tree-node-rtl_peripherals');
+    fireEvent.click(peripheralsFolderNode);
+    fireEvent.keyDown(container.querySelector('.explorer-tree-scrollbar') as HTMLElement, { key: 'F2' });
+
+    const renameInput = await screen.findByTestId('file-tree-input-rtl_peripherals');
+    fireEvent.change(renameInput, { target: { value: 'renamed_peripherals' } });
+    fireEvent.keyDown(renameInput, { key: 'Enter' });
+
+    await waitFor(() => {
+      expect(onRenameWorkspaceEntry).toHaveBeenCalledWith(
+        'rtl/peripherals',
+        'rtl/renamed_peripherals',
+        'folder',
+      );
+    });
+  });
+
+  it('keeps a newly selected folder as the rename target when a delayed tree-driven active file sync arrives', async () => {
+    const onRenameWorkspaceEntry = vi.fn().mockResolvedValue(undefined);
+    const { container, props, rerender } = renderLeftSidePanel({
+      activeFileId: 'cpu_top',
+      currentOutlineId: 'cpu_top',
+      onRenameWorkspaceEntry,
+    });
+
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl'));
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals'));
+
+    const fileNode = await screen.findByTestId('file-tree-node-rtl_peripherals_uart_rx_v');
+    fireEvent.click(fileNode);
+
+    const peripheralsFolderNode = await screen.findByTestId('file-tree-node-rtl_peripherals');
+    fireEvent.click(peripheralsFolderNode);
+
+    rerender(
+      <LeftSidePanel
+        {...props}
+        activeFileId="rtl/peripherals/uart_rx.v"
+        currentOutlineId="uart_rx"
+        onRenameWorkspaceEntry={onRenameWorkspaceEntry}
+      />,
+    );
+
+    fireEvent.keyDown(container.querySelector('.explorer-tree-scrollbar') as HTMLElement, { key: 'F2' });
+
+    const renameInput = await screen.findByTestId('file-tree-input-rtl_peripherals');
+    fireEvent.change(renameInput, { target: { value: 'renamed_peripherals' } });
+    fireEvent.keyDown(renameInput, { key: 'Enter' });
+
+    await waitFor(() => {
+      expect(onRenameWorkspaceEntry).toHaveBeenCalledWith(
+        'rtl/peripherals',
+        'rtl/renamed_peripherals',
+        'folder',
+      );
+    });
+  });
+
   it('falls back to the highlighted active workspace file when F2 has no explicit tree selection', () => {
     expect(getExplorerRenameTarget(null, 'rtl/peripherals/uart_rx.v')).toEqual({
       path: 'rtl/peripherals/uart_rx.v',

@@ -201,8 +201,8 @@ describe('EditorArea', () => {
     expect(screen.getByTestId('editor-tab-bar')).toHaveClass('h-[27px]');
     expect(screen.getByTestId('editor-split-right')).toHaveClass('px-1', 'cursor-pointer');
     expect(screen.getByTestId('editor-split-down')).toHaveClass('px-1', 'cursor-pointer');
-    expect(screen.getByTestId('editor-tab-badge-rtl/core/cpu_top.v')).toHaveTextContent('V');
-    expect(screen.getByTestId('editor-tab-badge-rtl/core/alu.v')).toHaveTextContent('V');
+    expect(screen.getByTestId('editor-tab-badge-rtl/core/cpu_top.v')).toHaveAttribute('data-icon-key', 'verilog');
+    expect(screen.getByTestId('editor-tab-badge-rtl/core/alu.v')).toHaveAttribute('data-icon-key', 'verilog');
 
     expect(onTabChange).toHaveBeenCalledWith('rtl/core/alu.v');
     expect(onTabClose).toHaveBeenCalledWith('rtl/core/cpu_top.v');
@@ -306,7 +306,7 @@ describe('EditorArea', () => {
     expect(onTabDragStart).toHaveBeenCalledWith('rtl/core/reg_file.v');
   });
 
-  it('uses the same file type badge mapping in editor tabs as the explorer', () => {
+  it('uses the same Material icon mapping in editor tabs as the explorer', () => {
     render(
       <EditorArea
         tabs={[
@@ -321,9 +321,9 @@ describe('EditorArea', () => {
       />,
     );
 
-    expect(screen.getByTestId('editor-tab-badge-scripts/build.tcl')).toHaveTextContent('TC');
-    expect(screen.getByTestId('editor-tab-badge-config/project.json')).toHaveTextContent('J');
-    expect(screen.getByTestId('editor-tab-badge-build/Makefile')).toHaveTextContent('MK');
+    expect(screen.getByTestId('editor-tab-badge-scripts/build.tcl')).toHaveAttribute('data-icon-key', 'tcl');
+    expect(screen.getByTestId('editor-tab-badge-config/project.json')).toHaveAttribute('data-icon-key', 'json');
+    expect(screen.getByTestId('editor-tab-badge-build/Makefile')).toHaveAttribute('data-icon-key', 'makefile');
   });
 
   it('routes assembly files to the assembly language and registers assembly highlighting', async () => {
@@ -341,7 +341,7 @@ describe('EditorArea', () => {
       expect(window.electronAPI!.fs.readFile).toHaveBeenCalledWith('startup/crt0.S', 'utf-8');
     });
 
-    expect(screen.getByTestId('editor-tab-badge-startup/crt0.S')).toHaveTextContent('AS');
+    expect(screen.getByTestId('editor-tab-badge-startup/crt0.S')).toHaveAttribute('data-icon-key', 'assembly');
     expect(await screen.findByTestId('monaco-editor')).toHaveAttribute('data-language', 'assembly');
     expect(mockMonaco.languages.register).toHaveBeenCalledWith({ id: 'assembly', extensions: ['.s', '.S'] });
     expect(mockMonaco.languages.setMonarchTokensProvider).toHaveBeenCalledWith('assembly', expect.any(Object));
@@ -449,7 +449,7 @@ describe('EditorArea', () => {
     await waitFor(() => {
       expect(window.electronAPI!.fs.readFile).toHaveBeenCalledWith('build/Makefile', 'utf-8');
     });
-    expect(screen.getByTestId('editor-tab-badge-build/Makefile')).toHaveTextContent('MK');
+    expect(screen.getByTestId('editor-tab-badge-build/Makefile')).toHaveAttribute('data-icon-key', 'makefile');
     expect(await screen.findByTestId('monaco-editor')).toHaveAttribute('data-language', 'makefile');
     expect(mockMonaco.languages.register).toHaveBeenCalledWith({ id: 'makefile', extensions: ['.mk'], filenames: ['Makefile'] });
     expect(mockMonaco.languages.setMonarchTokensProvider).toHaveBeenCalledWith('makefile', expect.any(Object));

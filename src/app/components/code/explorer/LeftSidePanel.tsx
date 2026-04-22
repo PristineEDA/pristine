@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import {
   FilePlus, FolderPlus, RefreshCw, ChevronsUpDown,
 } from 'lucide-react';
@@ -248,7 +249,9 @@ export function LeftSidePanel({
   const treeContainerRef = useRef<HTMLDivElement | null>(null);
   const treeInteractionActiveRef = useRef(false);
   const monacoDeleteSelectionArmedRef = useRef(false);
+  const pendingTreeDrivenActiveFileSelectionRef = useRef<string | null>(null);
   const [selectedNode, setSelectedNode] = useState<ExplorerSelectedNode | null>(null);
+  const latestSelectedNodeRef = useRef<ExplorerSelectedNode | null>(null);
   const [treeEditSession, setTreeEditSession] = useState<ExplorerTreeEditSession | null>(null);
   const [contextMenuRequest, setContextMenuRequest] = useState<ExplorerContextMenuRequest | null>(null);
   const [tab, setTab] = useState<'explorer' | 'outline'>('explorer');
@@ -262,6 +265,8 @@ export function LeftSidePanel({
     refreshTree,
     collapseAll,
   } = useWorkspaceTree(revealRequest, refreshToken);
+
+  latestSelectedNodeRef.current = selectedNode;
 
   const outline = fileOutlines[currentOutlineId] || [];
   const treeEditValidation = useMemo<WorkspaceEntryNameValidationResult | null>(() => {
@@ -498,7 +503,25 @@ export function LeftSidePanel({
 
   useEffect(() => {
     if (!activeFileId || treeEditSession || !isWorkspaceRelativeFilePath(activeFileId)) {
+      pendingTreeDrivenActiveFileSelectionRef.current = null;
       return;
+    }
+
+    const latestSelectedNode = latestSelectedNodeRef.current;
+    const hasNewerRealSelection = Boolean(
+      latestSelectedNode
+      && latestSelectedNode.source === 'real'
+      && latestSelectedNode.path !== activeFileId,
+    );
+
+    if (pendingTreeDrivenActiveFileSelectionRef.current === activeFileId) {
+      pendingTreeDrivenActiveFileSelectionRef.current = null;
+
+      if (hasNewerRealSelection) {
+        return;
+      }
+    } else {
+      pendingTreeDrivenActiveFileSelectionRef.current = null;
     }
 
     setSelectedNode(createRealExplorerSelection(activeFileId, 'file'));
@@ -524,20 +547,28 @@ export function LeftSidePanel({
   }, [selectedNode]);
 
   const handleNodeSelect = useCallback((nextNode: ExplorerSelectedNode) => {
-    setSelectedNode(nextNode);
+    flushSync(() => {
+      setSelectedNode(nextNode);
+    });
     monacoDeleteSelectionArmedRef.current = nextNode.source === 'real' && nextNode.type !== 'root';
     focusTree();
   }, [focusTree]);
 
   const handleFilePreview = useCallback((fileId: string, fileName: string) => {
-    setSelectedNode(createRealExplorerSelection(fileId, 'file'));
+    pendingTreeDrivenActiveFileSelectionRef.current = fileId;
+    flushSync(() => {
+      setSelectedNode(createRealExplorerSelection(fileId, 'file'));
+    });
     monacoDeleteSelectionArmedRef.current = true;
     onFilePreview(fileId, fileName);
     focusTree();
   }, [focusTree, onFilePreview]);
 
   const handleFileOpen = useCallback((fileId: string, fileName: string) => {
-    setSelectedNode(createRealExplorerSelection(fileId, 'file'));
+    pendingTreeDrivenActiveFileSelectionRef.current = fileId;
+    flushSync(() => {
+      setSelectedNode(createRealExplorerSelection(fileId, 'file'));
+    });
     monacoDeleteSelectionArmedRef.current = true;
     onFileOpen(fileId, fileName);
     focusTree();
