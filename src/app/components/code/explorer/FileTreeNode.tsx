@@ -301,7 +301,7 @@ function ExplorerContextMenu({
                 item.disabled
                   ? 'pointer-events-none opacity-50'
                   : 'text-foreground hover:bg-accent hover:text-accent-foreground'
-              } ${item.variant === 'destructive' ? 'text-destructive hover:bg-destructive/10 hover:text-destructive focus:bg-destructive/10 focus:text-destructive' : ''}`}
+              }`}
               onFocus={() => {
                 if (!item.disabled) {
                   setFocusedItemIndex(index);

@@ -241,6 +241,7 @@ describe('FileTreeNode', () => {
     expect(getContextMenuShortcut('Delete')).toHaveTextContent('Delete');
     expect(getContextMenuItem('Copy Path')).toBeInTheDocument();
     expect(getContextMenuItem('Delete')).toHaveAttribute('data-variant', 'destructive');
+    expect(getContextMenuItem('Delete')).not.toHaveClass('text-destructive', 'hover:bg-destructive/10', 'hover:text-destructive');
     expect(document.querySelectorAll('[data-slot="context-menu-separator"]')).toHaveLength(3);
 
     fireEvent.click(getContextMenuItem('Delete'));
