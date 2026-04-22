@@ -3,7 +3,12 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import ignore from 'ignore';
 import { AsyncChannels } from './channels.js';
-import { validatePathWithinRoot, assertString, assertValidEncoding } from './validators.js';
+import {
+  validateAbsolutePath,
+  validatePathWithinRoot,
+  assertString,
+  assertValidEncoding,
+} from './validators.js';
 
 let projectRoot: string | null = null;
 
@@ -104,6 +109,14 @@ export function registerFilesystemHandlers(): void {
     return fs.readFile(resolved, { encoding: enc });
   });
 
+  ipcMain.handle(AsyncChannels.FS_READ_FILE_ABSOLUTE, async (_event, filePath: unknown, encoding?: unknown) => {
+    assertString(filePath, 'filePath');
+    assertValidEncoding(encoding, 'encoding');
+    const resolved = validateAbsolutePath(filePath);
+    const enc = (encoding as BufferEncoding) ?? 'utf-8';
+    return fs.readFile(resolved, { encoding: enc });
+  });
+
   ipcMain.handle(AsyncChannels.FS_LIST_FILES, async (_event, dirPath: unknown = '.') => {
     assertString(dirPath, 'dirPath');
     const files = await listFilesRecursive(dirPath);
@@ -116,6 +129,63 @@ export function registerFilesystemHandlers(): void {
     const resolved = validatePathWithinRoot(getRoot(), filePath);
     await fs.mkdir(path.dirname(resolved), { recursive: true });
     await fs.writeFile(resolved, content, 'utf-8');
+  });
+
+  ipcMain.handle(AsyncChannels.FS_WRITE_FILE_ABSOLUTE, async (_event, filePath: unknown, content: unknown) => {
+    assertString(filePath, 'filePath');
+    assertString(content, 'content');
+    const resolved = validateAbsolutePath(filePath);
+    await fs.mkdir(path.dirname(resolved), { recursive: true });
+    await fs.writeFile(resolved, content, 'utf-8');
+  });
+
+  ipcMain.handle(AsyncChannels.FS_CREATE_DIRECTORY, async (_event, dirPath: unknown) => {
+    assertString(dirPath, 'dirPath');
+    const resolved = validatePathWithinRoot(getRoot(), dirPath);
+    await fs.mkdir(resolved, { recursive: true });
+  });
+
+  ipcMain.handle(AsyncChannels.FS_COPY_FILE, async (_event, sourcePath: unknown, destinationPath: unknown) => {
+    assertString(sourcePath, 'sourcePath');
+    assertString(destinationPath, 'destinationPath');
+    const resolvedSourcePath = validatePathWithinRoot(getRoot(), sourcePath);
+    const resolvedDestinationPath = validatePathWithinRoot(getRoot(), destinationPath);
+    await fs.mkdir(path.dirname(resolvedDestinationPath), { recursive: true });
+    await fs.copyFile(resolvedSourcePath, resolvedDestinationPath);
+  });
+
+  ipcMain.handle(AsyncChannels.FS_COPY_DIRECTORY, async (_event, sourcePath: unknown, destinationPath: unknown) => {
+    assertString(sourcePath, 'sourcePath');
+    assertString(destinationPath, 'destinationPath');
+    const resolvedSourcePath = validatePathWithinRoot(getRoot(), sourcePath);
+    const resolvedDestinationPath = validatePathWithinRoot(getRoot(), destinationPath);
+    await fs.mkdir(path.dirname(resolvedDestinationPath), { recursive: true });
+    await fs.cp(resolvedSourcePath, resolvedDestinationPath, {
+      recursive: true,
+      errorOnExist: true,
+      force: false,
+    });
+  });
+
+  ipcMain.handle(AsyncChannels.FS_DELETE_FILE, async (_event, filePath: unknown) => {
+    assertString(filePath, 'filePath');
+    const resolved = validatePathWithinRoot(getRoot(), filePath);
+    await fs.unlink(resolved);
+  });
+
+  ipcMain.handle(AsyncChannels.FS_DELETE_DIRECTORY, async (_event, dirPath: unknown) => {
+    assertString(dirPath, 'dirPath');
+    const resolved = validatePathWithinRoot(getRoot(), dirPath);
+    await fs.rm(resolved, { recursive: true, force: false });
+  });
+
+  ipcMain.handle(AsyncChannels.FS_RENAME, async (_event, currentPath: unknown, nextPath: unknown) => {
+    assertString(currentPath, 'currentPath');
+    assertString(nextPath, 'nextPath');
+    const resolvedCurrentPath = validatePathWithinRoot(getRoot(), currentPath);
+    const resolvedNextPath = validatePathWithinRoot(getRoot(), nextPath);
+    await fs.mkdir(path.dirname(resolvedNextPath), { recursive: true });
+    await fs.rename(resolvedCurrentPath, resolvedNextPath);
   });
 
   ipcMain.handle(AsyncChannels.FS_READ_DIR, async (_event, dirPath: unknown) => {

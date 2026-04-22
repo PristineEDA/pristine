@@ -52,4 +52,48 @@ describe('useWorkspaceTree', () => {
     expect(result.current.expandedFolders).toBe(expandedFoldersAfterFirstReveal);
     expect(window.electronAPI!.fs.readDir).toHaveBeenCalledTimes(3);
   });
+
+  it('reloads already expanded folders after a refresh token bump', async () => {
+    const { result, rerender } = renderHook(
+      ({ refreshToken }: { refreshToken: number }) => useWorkspaceTree(undefined, refreshToken),
+      {
+        initialProps: {
+          refreshToken: 0,
+        },
+      },
+    );
+
+    await waitFor(() => {
+      expect(result.current.workspaceAvailable).toBe(true);
+    });
+
+    act(() => {
+      result.current.toggleFolder('rtl');
+    });
+
+    await waitFor(() => {
+      expect(window.electronAPI!.fs.readDir).toHaveBeenCalledWith('rtl');
+    });
+
+    act(() => {
+      result.current.toggleFolder('rtl/peripherals');
+    });
+
+    await waitFor(() => {
+      expect(window.electronAPI!.fs.readDir).toHaveBeenCalledWith('rtl/peripherals');
+    });
+
+    const readDirCallCount = vi.mocked(window.electronAPI!.fs.readDir).mock.calls.length;
+
+    act(() => {
+      rerender({ refreshToken: 1 });
+    });
+
+    await waitFor(() => {
+      expect(window.electronAPI!.fs.readDir).toHaveBeenCalledTimes(readDirCallCount + 3);
+    });
+
+    expect(result.current.expandedFolders.has('rtl')).toBe(true);
+    expect(result.current.expandedFolders.has('rtl/peripherals')).toBe(true);
+  });
 });

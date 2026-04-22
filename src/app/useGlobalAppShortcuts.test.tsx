@@ -6,17 +6,23 @@ import { useGlobalAppShortcuts } from './useGlobalAppShortcuts';
 function ShortcutHarness({
   canToggleLayoutPanels = true,
   isQuickOpenVisible = false,
+  onCloseActiveTab = vi.fn(),
+  onOpenUntitledFile = vi.fn(),
 }: {
   canToggleLayoutPanels?: boolean;
   isQuickOpenVisible?: boolean;
+  onCloseActiveTab?: () => void;
+  onOpenUntitledFile?: () => void;
 }) {
   const [showBottomPanel, setShowBottomPanel] = useState(false);
   const [showLeftPanel, setShowLeftPanel] = useState(false);
 
   useGlobalAppShortcuts({
     canToggleLayoutPanels,
+    closeActiveTabInFocusedGroup: onCloseActiveTab,
     closeQuickOpen: vi.fn(),
     isQuickOpenVisible,
+    openUntitledFile: onOpenUntitledFile,
     openQuickOpen: vi.fn(),
     saveActiveFile: vi.fn(async () => true),
     setShowBottomPanel,
@@ -84,5 +90,23 @@ describe('useGlobalAppShortcuts', () => {
 
     expect(screen.getByTestId('left-panel-state')).toHaveTextContent('false');
     expect(screen.getByTestId('bottom-panel-state')).toHaveTextContent('false');
+  });
+
+  it('routes Ctrl+N and Ctrl+W to untitled creation and active-tab closing', () => {
+    const onOpenUntitledFile = vi.fn();
+    const onCloseActiveTab = vi.fn();
+
+    render(
+      <ShortcutHarness
+        onCloseActiveTab={onCloseActiveTab}
+        onOpenUntitledFile={onOpenUntitledFile}
+      />,
+    );
+
+    fireEvent.keyDown(document, { key: 'n', ctrlKey: true });
+    fireEvent.keyDown(document, { key: 'w', ctrlKey: true });
+
+    expect(onOpenUntitledFile).toHaveBeenCalledTimes(1);
+    expect(onCloseActiveTab).toHaveBeenCalledTimes(1);
   });
 });

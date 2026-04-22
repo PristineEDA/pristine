@@ -1,102 +1,41 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { ContextMenu, FileIcon, FileTreeNode } from './FileTreeNode';
+import { FileIcon, FileTreeNode } from './FileTreeNode';
+
+function getContextMenuItem(label: string): HTMLElement {
+  return screen.getByRole('menuitem', { name: label });
+}
+
+function getContextMenuShortcut(label: string): HTMLElement {
+  const shortcut = getContextMenuItem(label).querySelector('[data-slot="context-menu-shortcut"]');
+
+  if (!(shortcut instanceof HTMLElement)) {
+    throw new Error(`Context menu shortcut not found for label: ${label}`);
+  }
+
+  return shortcut;
+}
+
+function openContextMenuForNode(testId: string, coordinates = { clientX: 100, clientY: 120 }) {
+  fireEvent.contextMenu(screen.getByTestId(testId), coordinates);
+}
 
 describe('FileIcon', () => {
-  it('renders extension-specific glyphs for supported workspace file types and falls back to the generic file icon', () => {
+  it('renders Material icon theme SVGs for covered file types and falls back to the generic file icon', () => {
     const { rerender, container } = render(<FileIcon name="uart_tx.v" />);
-    expect(screen.getByText('V')).toBeInTheDocument();
-
-    rerender(<FileIcon name="tb_uart.sv" />);
-    expect(screen.getByText('SV')).toBeInTheDocument();
-
-    rerender(<FileIcon name="defs.vh" />);
-    expect(screen.getByText('VH')).toBeInTheDocument();
-
-    rerender(<FileIcon name="tb_defs.svh" />);
-    expect(screen.getByText('SH')).toBeInTheDocument();
-
-    rerender(<FileIcon name="startup.c" />);
-    expect(screen.getByText('C')).toBeInTheDocument();
-
-    rerender(<FileIcon name="startup.hpp" />);
-    expect(screen.getByText('H')).toBeInTheDocument();
-
-    rerender(<FileIcon name="cocotb_test.py" />);
-    expect(screen.getByText('Py')).toBeInTheDocument();
-
-    rerender(<FileIcon name=".gitignore" />);
-    expect(screen.getByText('IG')).toHaveClass('text-ide-file-git');
-
-    rerender(<FileIcon name=".gitmodules" />);
-    expect(screen.getByText('GM')).toHaveClass('text-ide-file-git');
-
-    rerender(<FileIcon name="LICENSE" />);
-    expect(screen.getByText('LC')).toHaveClass('text-ide-file-license');
-
-    rerender(<FileIcon name="deploy.sh" />);
-    expect(screen.getByText('SH')).toHaveClass('text-ide-file-shell');
-
-    rerender(<FileIcon name="timing.xdc" />);
-    expect(screen.getByText('X')).toBeInTheDocument();
-
-    rerender(<FileIcon name="timing.sdc" />);
-    expect(screen.getByText('SD')).toBeInTheDocument();
-
-    rerender(<FileIcon name="build.tcl" />);
-    expect(screen.getByText('TC')).toBeInTheDocument();
+    expect(container.querySelector('img[data-icon-key="verilog"]')).toBeInTheDocument();
 
     rerender(<FileIcon name="Makefile" />);
-    expect(screen.getByText('MK')).toBeInTheDocument();
-
-    rerender(<FileIcon name="synth.ys" />);
-    expect(screen.getByText('YS')).toBeInTheDocument();
+    expect(container.querySelector('img[data-icon-key="makefile"]')).toBeInTheDocument();
 
     rerender(<FileIcon name="crt0.S" />);
-    expect(screen.getByText('AS')).toBeInTheDocument();
+    expect(container.querySelector('img[data-icon-key="assembly"]')).toBeInTheDocument();
 
-    rerender(<FileIcon name="memory.lds" />);
-    expect(screen.getByText('LD')).toBeInTheDocument();
-
-    rerender(<FileIcon name="sources.FL" />);
-    expect(screen.getByText('FL')).toBeInTheDocument();
-
-    rerender(<FileIcon name="manifest.json" />);
-    expect(screen.getByText('J')).toBeInTheDocument();
-
-    rerender(<FileIcon name="layout.xml" />);
-    expect(screen.getByText('XM')).toBeInTheDocument();
-
-    rerender(<FileIcon name="project.yml" />);
-    expect(screen.getByText('Y')).toBeInTheDocument();
-
-    rerender(<FileIcon name="README.md" />);
-    expect(screen.getByText('M')).toBeInTheDocument();
+    rerender(<FileIcon name="package.json" />);
+    expect(container.querySelector('img[data-icon-key="nodejs"]')).toBeInTheDocument();
 
     rerender(<FileIcon name="unknown.txt" />);
-    expect(container.querySelector('svg')).toBeInTheDocument();
-  });
-});
-
-describe('ContextMenu', () => {
-  it('runs menu actions and closes when selecting an item or backdrop', () => {
-    const onClose = vi.fn();
-    const action = vi.fn();
-    const { container } = render(
-      <ContextMenu
-        x={20}
-        y={30}
-        onClose={onClose}
-        items={[{ label: 'Open in Editor', action }, { label: '---', action: vi.fn() }]}
-      />,
-    );
-
-    fireEvent.click(screen.getByRole('button', { name: /Open in Editor/i }));
-    expect(action).toHaveBeenCalledTimes(1);
-    expect(onClose).toHaveBeenCalledTimes(1);
-
-    fireEvent.click(container.querySelector('.fixed.inset-0.z-40') as HTMLElement);
-    expect(onClose).toHaveBeenCalledTimes(2);
+    expect(container.querySelector('img[data-icon-key="file"]')).toBeInTheDocument();
   });
 });
 
@@ -128,6 +67,7 @@ describe('FileTreeNode', () => {
     );
 
     expect(screen.queryByTestId('file-tree-node-rtl_uart_tx_v')).not.toBeInTheDocument();
+    expect(screen.getByTestId('file-tree-icon-rtl')).toHaveAttribute('data-icon-key', 'folder');
 
     fireEvent.click(screen.getByTestId('file-tree-node-rtl'));
     expect(onToggleFolder).toHaveBeenCalledWith('rtl');
@@ -153,6 +93,7 @@ describe('FileTreeNode', () => {
       />,
     );
 
+    expect(screen.getByTestId('file-tree-icon-rtl')).toHaveAttribute('data-icon-key', 'folder-open');
     expect(screen.getByTestId('file-tree-node-rtl_uart_tx_v')).toBeInTheDocument();
   });
 
@@ -160,6 +101,9 @@ describe('FileTreeNode', () => {
     const onToggleFolder = vi.fn();
     const onFileOpen = vi.fn();
     const onFilePreview = vi.fn();
+    const onStartCopy = vi.fn();
+    const onStartCut = vi.fn();
+    const onStartDelete = vi.fn();
 
     render(
       <FileTreeNode
@@ -175,6 +119,9 @@ describe('FileTreeNode', () => {
         activeFileId="rtl/core/cpu_top.v"
         onFileOpen={onFileOpen}
         onFilePreview={onFilePreview}
+        onStartCopy={onStartCopy}
+        onStartCut={onStartCut}
+        onStartDelete={onStartDelete}
         expandedFolders={new Set()}
         onToggleFolder={onToggleFolder}
         gitPathStates={{}}
@@ -191,12 +138,27 @@ describe('FileTreeNode', () => {
     fireEvent.doubleClick(node);
     expect(onFileOpen).toHaveBeenCalledWith('rtl/core/cpu_top.v', 'cpu_top.v');
 
-    fireEvent.contextMenu(node, { clientX: 100, clientY: 120 });
-    fireEvent.click(screen.getByRole('button', { name: /Open in Editor/i }));
+    openContextMenuForNode('file-tree-node-rtl_core_cpu_top_v');
+    fireEvent.click(getContextMenuItem('Open in Editor'));
 
     expect(onFileOpen).toHaveBeenCalledTimes(2);
-    expect(screen.queryByRole('button', { name: /Open in Editor/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Open in Editor' })).not.toBeInTheDocument();
     expect(screen.getByText('cpu_top.v')).toBeInTheDocument();
+
+    openContextMenuForNode('file-tree-node-rtl_core_cpu_top_v');
+    fireEvent.click(getContextMenuItem('Copy'));
+
+    expect(onStartCopy).toHaveBeenCalledWith('rtl/core/cpu_top.v', 'file');
+
+    openContextMenuForNode('file-tree-node-rtl_core_cpu_top_v');
+    fireEvent.click(getContextMenuItem('Cut'));
+
+    expect(onStartCut).toHaveBeenCalledWith('rtl/core/cpu_top.v', 'file');
+
+    openContextMenuForNode('file-tree-node-rtl_core_cpu_top_v');
+    fireEvent.click(getContextMenuItem('Delete'));
+
+    expect(onStartDelete).toHaveBeenCalledWith('rtl/core/cpu_top.v', 'file');
   });
 
   it('does not keep a file highlighted while another folder is selected', () => {
@@ -216,7 +178,12 @@ describe('FileTreeNode', () => {
         onFilePreview={vi.fn()}
         expandedFolders={new Set()}
         onToggleFolder={vi.fn()}
-        selectedFolderId="rtl"
+        selectedNode={{
+          id: 'rtl',
+          path: 'rtl',
+          type: 'folder',
+          source: 'real',
+        }}
         gitPathStates={{}}
       />,
     );
@@ -227,6 +194,54 @@ describe('FileTreeNode', () => {
   });
 
   it('shows the static folder context menu entries when right-clicking a folder', () => {
+    const onStartDelete = vi.fn();
+
+    render(
+      <FileTreeNode
+        node={{
+          id: 'rtl',
+          path: 'rtl',
+          name: 'rtl',
+          type: 'folder',
+          children: [],
+          hasLoadedChildren: true,
+          isLoading: false,
+        }}
+        depth={0}
+        activeFileId=""
+        onFileOpen={vi.fn()}
+        onFilePreview={vi.fn()}
+        onStartDelete={onStartDelete}
+        expandedFolders={new Set()}
+        onToggleFolder={vi.fn()}
+        gitPathStates={{}}
+      />,
+    );
+
+    openContextMenuForNode('file-tree-node-rtl', { clientX: 40, clientY: 60 });
+
+    expect(screen.getByRole('menu')).toHaveAttribute('data-slot', 'context-menu-content');
+    expect(getContextMenuItem('New File')).toBeInTheDocument();
+    expect(getContextMenuItem('Copy')).toBeInTheDocument();
+    expect(getContextMenuItem('Cut')).toBeInTheDocument();
+    expect(getContextMenuItem('Paste')).toHaveAttribute('data-disabled');
+    expect(getContextMenuShortcut('Copy')).toHaveTextContent('Ctrl+C');
+    expect(getContextMenuShortcut('Cut')).toHaveTextContent('Ctrl+X');
+    expect(getContextMenuShortcut('Paste')).toHaveTextContent('Ctrl+V');
+    expect(getContextMenuShortcut('Rename')).toHaveTextContent('F2');
+    expect(getContextMenuShortcut('Delete')).toHaveTextContent('Delete');
+    expect(getContextMenuItem('Copy Path')).toBeInTheDocument();
+    expect(getContextMenuItem('Delete')).toHaveAttribute('data-variant', 'destructive');
+    expect(document.querySelectorAll('[data-slot="context-menu-separator"]')).toHaveLength(3);
+
+    fireEvent.click(getContextMenuItem('Delete'));
+
+    expect(onStartDelete).toHaveBeenCalledWith('rtl', 'folder');
+  });
+
+  it('formats explorer context menu shortcuts with macOS symbols', () => {
+    window.electronAPI!.platform = 'darwin';
+
     render(
       <FileTreeNode
         node={{
@@ -248,14 +263,199 @@ describe('FileTreeNode', () => {
       />,
     );
 
-    fireEvent.contextMenu(screen.getByTestId('file-tree-node-rtl'), { clientX: 40, clientY: 60 });
+    openContextMenuForNode('file-tree-node-rtl', { clientX: 40, clientY: 60 });
 
-    expect(screen.getByRole('button', { name: /New File/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Copy Path/i })).toBeInTheDocument();
+    expect(getContextMenuShortcut('Copy')).toHaveTextContent('⌘C');
+    expect(getContextMenuShortcut('Cut')).toHaveTextContent('⌘X');
+    expect(getContextMenuShortcut('Paste')).toHaveTextContent('⌘V');
+    expect(getContextMenuShortcut('Rename')).toHaveTextContent('F2');
+    expect(getContextMenuShortcut('Delete')).toHaveTextContent('Delete');
+  });
+
+  it('omits the delete action for the workspace root context menu', () => {
+    render(
+      <FileTreeNode
+        node={{
+          id: '.',
+          path: '.',
+          name: 'workspace',
+          type: 'folder',
+          children: [],
+          hasLoadedChildren: true,
+          isLoading: false,
+        }}
+        depth={0}
+        activeFileId=""
+        onFileOpen={vi.fn()}
+        onFilePreview={vi.fn()}
+        onStartDelete={vi.fn()}
+        expandedFolders={new Set()}
+        onToggleFolder={vi.fn()}
+        gitPathStates={{}}
+      />,
+    );
+
+    openContextMenuForNode('file-tree-node-root', { clientX: 40, clientY: 60 });
+
+    expect(getContextMenuItem('Paste')).toHaveAttribute('data-disabled');
+    expect(screen.queryByRole('menuitem', { name: 'Delete' })).not.toBeInTheDocument();
+    expect(document.querySelectorAll('[data-slot="context-menu-separator"]')).toHaveLength(2);
+  });
+
+  it('dims the cut source row and enables paste when clipboard data is available', () => {
+    render(
+      <FileTreeNode
+        node={{
+          id: 'rtl/core/cpu_top.v',
+          path: 'rtl/core/cpu_top.v',
+          name: 'cpu_top.v',
+          type: 'file',
+          hasLoadedChildren: true,
+          isLoading: false,
+        }}
+        depth={1}
+        activeFileId=""
+        onFileOpen={vi.fn()}
+        onFilePreview={vi.fn()}
+        expandedFolders={new Set()}
+        onToggleFolder={vi.fn()}
+        workspaceClipboard={{
+          sourcePath: 'rtl/core/cpu_top.v',
+          entryType: 'file',
+          mode: 'cut',
+        }}
+        gitPathStates={{}}
+      />,
+    );
+
+    const node = screen.getByTestId('file-tree-node-rtl_core_cpu_top_v');
+    expect(node.className).toContain('opacity-50');
+
+    openContextMenuForNode('file-tree-node-rtl_core_cpu_top_v');
+    expect(getContextMenuItem('Paste')).not.toHaveAttribute('data-disabled');
+  });
+
+  it('focuses the first enabled menu item on open and restores tree focus on Escape', () => {
+    const onRequestTreeFocus = vi.fn();
+
+    render(
+      <FileTreeNode
+        node={{
+          id: 'rtl/core/cpu_top.v',
+          path: 'rtl/core/cpu_top.v',
+          name: 'cpu_top.v',
+          type: 'file',
+          hasLoadedChildren: true,
+          isLoading: false,
+        }}
+        depth={1}
+        activeFileId=""
+        onFileOpen={vi.fn()}
+        onFilePreview={vi.fn()}
+        expandedFolders={new Set()}
+        onToggleFolder={vi.fn()}
+        onRequestTreeFocus={onRequestTreeFocus}
+        gitPathStates={{}}
+      />,
+    );
+
+    openContextMenuForNode('file-tree-node-rtl_core_cpu_top_v');
+
+    const firstItem = getContextMenuItem('Open in Editor');
+    expect(firstItem).toHaveFocus();
+
+    fireEvent.keyDown(firstItem, { key: 'Escape' });
+
+    expect(screen.queryByTestId('explorer-context-menu')).not.toBeInTheDocument();
+    expect(onRequestTreeFocus).toHaveBeenCalledTimes(1);
+  });
+
+  it('supports roving focus with Arrow keys, skips disabled items, and activates the focused item with Enter', () => {
+    const onStartRename = vi.fn();
+
+    render(
+      <FileTreeNode
+        node={{
+          id: 'rtl',
+          path: 'rtl',
+          name: 'rtl',
+          type: 'folder',
+          children: [],
+          hasLoadedChildren: true,
+          isLoading: false,
+        }}
+        depth={0}
+        activeFileId=""
+        onFileOpen={vi.fn()}
+        onFilePreview={vi.fn()}
+        onStartRename={onStartRename}
+        expandedFolders={new Set()}
+        onToggleFolder={vi.fn()}
+        gitPathStates={{}}
+      />,
+    );
+
+    openContextMenuForNode('file-tree-node-rtl', { clientX: 40, clientY: 60 });
+
+    const newFileItem = getContextMenuItem('New File');
+    expect(newFileItem).toHaveFocus();
+
+    fireEvent.keyDown(newFileItem, { key: 'ArrowDown' });
+    expect(getContextMenuItem('New Folder')).toHaveFocus();
+
+    fireEvent.keyDown(getContextMenuItem('New Folder'), { key: 'ArrowDown' });
+    expect(getContextMenuItem('Copy')).toHaveFocus();
+
+    fireEvent.keyDown(getContextMenuItem('Copy'), { key: 'ArrowDown' });
+    expect(getContextMenuItem('Cut')).toHaveFocus();
+
+    fireEvent.keyDown(getContextMenuItem('Cut'), { key: 'ArrowDown' });
+    expect(getContextMenuItem('Rename')).toHaveFocus();
+
+    fireEvent.keyDown(getContextMenuItem('Rename'), { key: 'Enter' });
+    expect(onStartRename).toHaveBeenCalledWith('rtl', 'folder');
+  });
+
+  it('supports Home and End keys and closes on Tab while restoring tree focus', () => {
+    const onRequestTreeFocus = vi.fn();
+
+    render(
+      <FileTreeNode
+        node={{
+          id: 'rtl/core/cpu_top.v',
+          path: 'rtl/core/cpu_top.v',
+          name: 'cpu_top.v',
+          type: 'file',
+          hasLoadedChildren: true,
+          isLoading: false,
+        }}
+        depth={1}
+        activeFileId=""
+        onFileOpen={vi.fn()}
+        onFilePreview={vi.fn()}
+        expandedFolders={new Set()}
+        onToggleFolder={vi.fn()}
+        onRequestTreeFocus={onRequestTreeFocus}
+        gitPathStates={{}}
+      />,
+    );
+
+    openContextMenuForNode('file-tree-node-rtl_core_cpu_top_v');
+
+    const firstItem = getContextMenuItem('Open in Editor');
+    fireEvent.keyDown(firstItem, { key: 'End' });
+    expect(getContextMenuItem('Copy Relative Path')).toHaveFocus();
+
+    fireEvent.keyDown(getContextMenuItem('Copy Relative Path'), { key: 'Home' });
+    expect(getContextMenuItem('Open in Editor')).toHaveFocus();
+
+    fireEvent.keyDown(getContextMenuItem('Open in Editor'), { key: 'Tab' });
+    expect(screen.queryByTestId('explorer-context-menu')).not.toBeInTheDocument();
+    expect(onRequestTreeFocus).toHaveBeenCalledTimes(1);
   });
 
   it('keeps a clicked folder highlighted when the selected folder id matches', () => {
-    const onFolderSelect = vi.fn();
+    const onSelectNode = vi.fn();
     const onToggleFolder = vi.fn();
     const folderNode = {
       id: 'rtl',
@@ -276,15 +476,20 @@ describe('FileTreeNode', () => {
         onFilePreview={vi.fn()}
         expandedFolders={new Set()}
         onToggleFolder={onToggleFolder}
-        onFolderSelect={onFolderSelect}
-        selectedFolderId={null}
+        onSelectNode={onSelectNode}
+        selectedNode={null}
         gitPathStates={{}}
       />,
     );
 
     fireEvent.click(screen.getByTestId('file-tree-node-rtl'));
 
-    expect(onFolderSelect).toHaveBeenCalledWith('rtl');
+    expect(onSelectNode).toHaveBeenCalledWith({
+      id: 'rtl',
+      path: 'rtl',
+      type: 'folder',
+      source: 'real',
+    });
     expect(onToggleFolder).toHaveBeenCalledWith('rtl');
 
     rerender(
@@ -296,8 +501,13 @@ describe('FileTreeNode', () => {
         onFilePreview={vi.fn()}
         expandedFolders={new Set()}
         onToggleFolder={onToggleFolder}
-        onFolderSelect={onFolderSelect}
-        selectedFolderId="rtl"
+        onSelectNode={onSelectNode}
+        selectedNode={{
+          id: 'rtl',
+          path: 'rtl',
+          type: 'folder',
+          source: 'real',
+        }}
         gitPathStates={{}}
       />,
     );
@@ -336,7 +546,7 @@ describe('FileTreeNode', () => {
     expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' });
   });
 
-  it('colors git-modified files yellow and ignored folders gray', () => {
+  it('renders right-aligned git badges for files and strengthens ignored folder text in light mode', () => {
     const onToggleFolder = vi.fn();
 
     const { rerender } = render(
@@ -360,6 +570,8 @@ describe('FileTreeNode', () => {
     );
 
     expect(screen.getByTestId('file-tree-label-rtl_core_cpu_top_v')).toHaveClass('text-ide-warning');
+    expect(screen.getByTestId('file-tree-git-indicators-rtl_core_cpu_top_v')).toHaveClass('ml-auto');
+    expect(screen.getByTestId('file-tree-git-indicator-modified-rtl_core_cpu_top_v')).toBeInTheDocument();
 
     rerender(
       <FileTreeNode
@@ -382,6 +594,44 @@ describe('FileTreeNode', () => {
       />,
     );
 
-    expect(screen.getByTestId('file-tree-label-build')).toHaveClass('text-ide-text-muted');
+    expect(screen.getByTestId('file-tree-label-build')).toHaveClass('text-ide-text-muted-stronger');
+    expect(screen.queryByTestId('file-tree-git-indicators-build')).not.toBeInTheDocument();
+  });
+
+  it('aggregates created, modified, and deleted badges on parent folders in display order', () => {
+    render(
+      <FileTreeNode
+        node={{
+          id: 'rtl/core',
+          path: 'rtl/core',
+          name: 'core',
+          type: 'folder',
+          children: [],
+          hasLoadedChildren: true,
+          isLoading: false,
+        }}
+        depth={1}
+        activeFileId=""
+        onFileOpen={vi.fn()}
+        onFilePreview={vi.fn()}
+        expandedFolders={new Set()}
+        onToggleFolder={vi.fn()}
+        gitPathStates={{
+          'rtl/core/new_file.v': 'created',
+          'rtl/core/cpu_top.v': 'modified',
+          'rtl/core/old_file.v': 'deleted',
+        }}
+      />,
+    );
+
+    const indicators = screen.getByTestId('file-tree-git-indicators-rtl_core');
+    const indicatorIds = Array.from(indicators.querySelectorAll('[data-testid]')).map((element) => element.getAttribute('data-testid'));
+
+    expect(screen.getByTestId('file-tree-label-rtl_core')).toHaveClass('text-ide-success');
+    expect(indicatorIds).toEqual([
+      'file-tree-git-indicator-created-rtl_core',
+      'file-tree-git-indicator-modified-rtl_core',
+      'file-tree-git-indicator-deleted-rtl_core',
+    ]);
   });
 });

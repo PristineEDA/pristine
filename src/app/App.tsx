@@ -1,5 +1,6 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { MenuBar } from './components/code/shared/MenuBar';
+import { DeleteConfirmationDialog } from './components/code/shared/DeleteConfirmationDialog';
 import { UnsavedChangesDialog } from './components/code/shared/UnsavedChangesDialog';
 import { ActivityBar } from './components/code/shared/ActivityBar';
 import { LeftSidePanel } from './components/code/explorer/LeftSidePanel';
@@ -17,6 +18,7 @@ import type { EditorSelectionSnapshot } from './context/useWorkspaceEditorState'
 import { SidebarProvider } from './components/ui/sidebar';
 import { refreshWorkspaceGitStatus } from './git/workspaceGitStatus';
 import { useGlobalAppShortcuts } from './useGlobalAppShortcuts';
+import { getPathBaseName, isWorkspaceRelativeFilePath } from './workspace/workspaceFiles';
 
 const QUICK_OPEN_RECENT_LIMIT = 20;
 const EMPTY_QUICK_OPEN_FILES: QuickOpenFileEntry[] = [];
@@ -180,10 +182,20 @@ function AppLayout() {
   const {
     activeView, setActiveView,
     canToggleLayoutPanels,
+    closeActiveTabInFocusedGroup,
     mainContentView,
     activeTabId,
+    clearWorkspaceClipboard,
+    copyWorkspaceEntry,
+    createWorkspaceFile,
+    createWorkspaceFolder,
+    cutWorkspaceEntry,
+    deleteWorkspaceEntry,
+    openUntitledFile,
     openFile,
     openPreviewFile,
+    pasteWorkspaceEntry,
+    renameWorkspaceEntry,
     jumpToLine, jumpTo,
     showLeftPanel, setShowLeftPanel,
     showBottomPanel, setShowBottomPanel,
@@ -198,6 +210,8 @@ function AppLayout() {
     saveAllFiles,
     saveErrors,
     savingFiles,
+    workspaceClipboard,
+    workspaceTreeRefreshToken,
   } = useWorkspace();
   const [quickOpenState, dispatchQuickOpen] = useReducer(quickOpenReducer, QUICK_OPEN_INITIAL_STATE);
   const [explorerLeftPanelWidthPx, setExplorerLeftPanelWidthPx] = useState(EXPLORER_LEFT_PANEL_DEFAULT_WIDTH_PX);
@@ -259,7 +273,7 @@ function AppLayout() {
   }, []);
 
   const queueRevealRequest = useCallback((filePath: string, options?: { markActiveFileHandled?: boolean }) => {
-    if (!filePath) {
+    if (!filePath || !isWorkspaceRelativeFilePath(filePath)) {
       return;
     }
 
@@ -282,6 +296,11 @@ function AppLayout() {
     dispatchQuickOpen({ type: 'setSelectedIndex', index });
   }, []);
 
+  const handleCreateUntitledFile = useCallback(() => {
+    openUntitledFile();
+    restoreActiveEditorFocus();
+  }, [openUntitledFile, restoreActiveEditorFocus]);
+
   const openWorkspaceFile = useCallback((filePath: string, fileName: string) => {
     queueRevealRequest(filePath, { markActiveFileHandled: true });
     recordRecentFile(filePath, fileName);
@@ -294,6 +313,51 @@ function AppLayout() {
     openPreviewFile(filePath, fileName);
   }, [openPreviewFile, queueRevealRequest, recordRecentFile]);
 
+  const handleCreateWorkspaceFile = useCallback(async (targetPath: string) => {
+    await createWorkspaceFile(targetPath);
+    openWorkspaceFile(targetPath, getPathBaseName(targetPath));
+    restoreActiveEditorFocus();
+  }, [createWorkspaceFile, openWorkspaceFile, restoreActiveEditorFocus]);
+
+  const handleCreateWorkspaceFolder = useCallback(async (targetPath: string) => {
+    await createWorkspaceFolder(targetPath);
+    queueRevealRequest(targetPath);
+  }, [createWorkspaceFolder, queueRevealRequest]);
+
+  const handleCopyWorkspaceEntry = useCallback((targetPath: string, entryType: 'file' | 'folder') => {
+    return copyWorkspaceEntry(targetPath, entryType);
+  }, [copyWorkspaceEntry]);
+
+  const handleCutWorkspaceEntry = useCallback((targetPath: string, entryType: 'file' | 'folder') => {
+    return cutWorkspaceEntry(targetPath, entryType);
+  }, [cutWorkspaceEntry]);
+
+  const handlePasteWorkspaceEntry = useCallback(async (destinationFolderPath: string) => {
+    const pastedEntry = await pasteWorkspaceEntry(destinationFolderPath);
+
+    if (pastedEntry) {
+      queueRevealRequest(pastedEntry.path);
+    }
+
+    return pastedEntry;
+  }, [pasteWorkspaceEntry, queueRevealRequest]);
+
+  const handleDeleteWorkspaceEntry = useCallback(async (
+    targetPath: string,
+    entryType: 'file' | 'folder',
+  ) => {
+    return deleteWorkspaceEntry(targetPath, entryType);
+  }, [deleteWorkspaceEntry]);
+
+  const handleRenameWorkspaceEntry = useCallback(async (
+    currentPath: string,
+    nextPath: string,
+    entryType: 'file' | 'folder',
+  ) => {
+    await renameWorkspaceEntry(currentPath, nextPath, entryType);
+    queueRevealRequest(nextPath, { markActiveFileHandled: entryType === 'file' });
+  }, [queueRevealRequest, renameWorkspaceEntry]);
+
   const handleEditorActiveFileReveal = useCallback((filePath: string) => {
     queueRevealRequest(filePath, { markActiveFileHandled: true });
   }, [queueRevealRequest]);
@@ -304,8 +368,18 @@ function AppLayout() {
     }
 
     lastHandledActiveFileRevealRef.current = activeTabId;
-    queueRevealRequest(activeTabId);
+    if (isWorkspaceRelativeFilePath(activeTabId)) {
+      queueRevealRequest(activeTabId);
+    }
   }, [activeTabId, queueRevealRequest]);
+
+  useEffect(() => {
+    if (workspaceTreeRefreshToken === 0) {
+      return;
+    }
+
+    invalidateWorkspaceFiles();
+  }, [invalidateWorkspaceFiles, workspaceTreeRefreshToken]);
 
   useEffect(() => {
     const electronApi = typeof window === 'undefined' ? undefined : window.electronAPI;
@@ -469,12 +543,22 @@ function AppLayout() {
       leftContent: (
         <LeftSidePanel
           activeFileId={activeTabId}
+          onClearWorkspaceClipboard={clearWorkspaceClipboard}
+          onCopyWorkspaceEntry={handleCopyWorkspaceEntry}
+          onCreateWorkspaceFile={handleCreateWorkspaceFile}
+          onCreateWorkspaceFolder={handleCreateWorkspaceFolder}
+          onCutWorkspaceEntry={handleCutWorkspaceEntry}
+          onDeleteWorkspaceEntry={handleDeleteWorkspaceEntry}
           onFileOpen={openWorkspaceFile}
           onFilePreview={openWorkspacePreviewFile}
           onLineJump={jumpTo}
+          onPasteWorkspaceEntry={handlePasteWorkspaceEntry}
+          onRenameWorkspaceEntry={handleRenameWorkspaceEntry}
           currentOutlineId={activeTabId}
+          refreshToken={workspaceTreeRefreshToken}
           revealRequest={quickOpenState.revealRequest}
           onWorkspaceRefresh={invalidateWorkspaceFiles}
+          workspaceClipboard={workspaceClipboard}
         />
       ),
       topContent: <EditorSplitLayout jumpToLine={jumpToLine} onActiveFileReveal={handleEditorActiveFileReveal} />,
@@ -563,8 +647,10 @@ function AppLayout() {
 
   useGlobalAppShortcuts({
     canToggleLayoutPanels,
+    closeActiveTabInFocusedGroup,
     closeQuickOpen,
     isQuickOpenVisible: quickOpenState.isVisible,
+    openUntitledFile: handleCreateUntitledFile,
     openQuickOpen,
     saveActiveFile,
     setShowBottomPanel,
@@ -589,6 +675,7 @@ function AppLayout() {
         onShowRightPanelChange={setShowRightPanel}
       />
       <UnsavedChangesDialog />
+      <DeleteConfirmationDialog />
 
       {mainContentView === 'code'
         ? (activeView === 'explorer'

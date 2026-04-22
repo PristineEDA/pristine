@@ -1,4 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LspProblem } from '../../../../lsp/lspProblems';
 import { StatusBar } from './StatusBar';
@@ -147,6 +148,63 @@ describe('StatusBar', () => {
     expect(screen.getByText('Plain Text')).toBeInTheDocument();
     expect(screen.getByTestId('status-bar-error-count')).toHaveTextContent('0');
     expect(screen.getByTestId('status-bar-warning-count')).toHaveTextContent('0');
+  });
+
+  it('adds stronger hover highlights, delays hover card open, and closes it immediately on leave', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <StatusBar
+        activeFileId="rtl/tb/tb_cpu_top.sv"
+        cursorLine={18}
+        cursorCol={4}
+        dirtyFileCount={2}
+        savingFileCount={1}
+        onSaveAll={vi.fn()}
+      />,
+    );
+
+    const branchTrigger = screen.getByTestId('status-bar-branch-label').closest('[data-slot="hover-card-trigger"]');
+    const savingTrigger = screen.getByTestId('status-bar-saving-summary').closest('[data-slot="hover-card-trigger"]');
+
+    expect(branchTrigger).not.toBeNull();
+    expect(branchTrigger).toHaveClass('hover:bg-primary-foreground/30');
+    expect(branchTrigger).toHaveClass('dark:hover:bg-primary-foreground/10');
+    expect(savingTrigger).not.toBeNull();
+    expect(savingTrigger).toHaveClass('hover:bg-primary-foreground/30');
+    expect(savingTrigger).toHaveClass('dark:hover:bg-primary-foreground/10');
+
+    await user.hover(branchTrigger as HTMLElement);
+
+    expect(screen.queryByText('Git Branch')).not.toBeInTheDocument();
+
+    expect(await screen.findByText('Git Branch')).toBeInTheDocument();
+    expect(screen.getByText('Placeholder details about the current workspace branch.')).toBeInTheDocument();
+
+    await user.unhover(branchTrigger as HTMLElement);
+
+    await waitFor(() => {
+      expect(screen.queryByText('Git Branch')).not.toBeInTheDocument();
+    });
+
+    await user.hover(savingTrigger as HTMLElement);
+
+    expect(screen.queryByText('Save Progress')).not.toBeInTheDocument();
+    expect(await screen.findByText('Save Progress')).toBeInTheDocument();
+  });
+
+  it('opens hover details when a status bar item receives keyboard focus', async () => {
+    render(
+      <StatusBar activeFileId="rtl/tb/tb_cpu_top.sv" cursorLine={18} cursorCol={4} />,
+    );
+
+    const branchTrigger = screen.getByTestId('status-bar-branch-label').closest('[data-slot="hover-card-trigger"]');
+
+    expect(branchTrigger).not.toBeNull();
+
+    (branchTrigger as HTMLElement).focus();
+
+    expect(await screen.findByText('Git Branch')).toBeInTheDocument();
   });
 
   it('shows unsaved summaries and exposes Save All and review actions', () => {

@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import type { WorkspaceGitPathState } from '../../../../../types/workspace-git';
 import { getWorkspaceGitPathState, useWorkspaceGitStatus } from '../../../git/workspaceGitStatus';
-import { getWorkspaceSegments } from '../../../workspace/workspaceFiles';
+import { getDisplayPathSegments } from '../../../workspace/workspaceFiles';
 import { FileTypeBadge } from './FileTypeBadge';
 import { useEditorDocumentState } from './useEditorDocumentState';
 import type { SplitDirection } from '../../../editor/editorLayout';
@@ -51,6 +51,7 @@ interface Tab {
 interface EditorAreaProps {
   tabs: Tab[];
   activeTabId: string;
+  documentTabId?: string;
   onTabChange: (id: string) => void;
   onTabClose: (id: string) => void;
   onTabPin?: (id: string) => void;
@@ -69,6 +70,8 @@ interface EditorAreaProps {
   loadingFiles?: Record<string, boolean>;
   loadErrors?: Record<string, string>;
   onLoadFile?: (fileId: string) => void;
+  onNewShortcut?: () => void;
+  onCloseShortcut?: () => void;
   onSaveShortcut?: () => void;
   onContentChange?: (fileId: string, content: string) => void;
   onEditorMount?: (editor: any) => void;
@@ -143,8 +146,7 @@ function EditorTab({
       <FileTypeBadge
         name={tab.name}
         testId={`editor-tab-badge-${tab.id}`}
-        className="shrink-0 text-[10px] font-bold font-mono"
-        fallbackClassName="text-foreground"
+        className="h-4 w-4"
       />
       <span
         data-testid={`editor-tab-title-${tab.id}`}
@@ -189,15 +191,14 @@ function EditorTab({
 }
 
 // ─── Breadcrumb ───────────────────────────────────────────────────────────────
-function Breadcrumb({ filePath }: { filePath: string }) {
-  const segments = getWorkspaceSegments(filePath);
-
+function Breadcrumb({ segments }: { segments: string[] }) {
   return (
-    <div className="flex items-center gap-0.5 px-3 h-6 bg-background border-b border-border shrink-0">
+    <div data-testid="editor-breadcrumb" className="flex items-center gap-0.5 px-3 h-6 bg-background border-b border-border shrink-0">
       {segments.map((seg, i) => (
         <span key={i} className="flex items-center gap-0.5">
           {i > 0 && <ChevronRight size={11} className="text-muted-foreground/50" />}
           <span
+            data-testid={`editor-breadcrumb-segment-${i}`}
             className={`cursor-pointer hover:text-foreground transition-colors ${
               i === segments.length - 1 ? 'text-foreground' : 'text-muted-foreground'
             } text-[12px]`}
@@ -214,6 +215,7 @@ function Breadcrumb({ filePath }: { filePath: string }) {
 export function EditorArea({
   tabs,
   activeTabId,
+  documentTabId,
   onTabChange,
   onTabClose,
   onTabPin,
@@ -232,6 +234,8 @@ export function EditorArea({
   loadingFiles,
   loadErrors,
   onLoadFile,
+  onNewShortcut,
+  onCloseShortcut,
   onSaveShortcut,
   onContentChange,
   onEditorMount,
@@ -239,6 +243,7 @@ export function EditorArea({
   showDragInteractionShield,
   dragInteractionShieldTestId,
 }: EditorAreaProps) {
+  const resolvedActiveDocumentId = documentTabId ?? activeTabId;
   const lastAppliedRestoreRef = useRef({ activeTabId: '', restoreToken: 0 });
   const [activeModelReadyId, setActiveModelReadyId] = useState('');
   const gitStatus = useWorkspaceGitStatus();
@@ -252,16 +257,18 @@ export function EditorArea({
   } = useEditorDocumentState({
     tabs,
     activeTabId,
+    documentTabId: resolvedActiveDocumentId,
     contentCache,
     loadingFiles,
     loadErrors,
     onLoadFile,
     onContentChange,
   });
+  const breadcrumbSegments = activeTab ? getDisplayPathSegments(resolvedActiveDocumentId, activeTab.name) : [];
 
   // Jump to line
   useEffect(() => {
-    if (!jumpToLine || !editorRef.current || !isActiveTabReady || activeModelReadyId !== activeTabId) {
+    if (!jumpToLine || !editorRef.current || !isActiveTabReady || activeModelReadyId !== resolvedActiveDocumentId) {
       return;
     }
 
@@ -273,7 +280,7 @@ export function EditorArea({
         editor.setPosition({ lineNumber: jumpToLine, column: 1 });
         focusEditorInstance(editor);
         onCursorChange?.(jumpToLine, 1);
-        lastAppliedRestoreRef.current = { activeTabId, restoreToken: 0 };
+        lastAppliedRestoreRef.current = { activeTabId: resolvedActiveDocumentId, restoreToken: 0 };
       });
 
       return () => {
@@ -285,20 +292,22 @@ export function EditorArea({
     editor.setPosition({ lineNumber: jumpToLine, column: 1 });
     focusEditorInstance(editor);
     onCursorChange?.(jumpToLine, 1);
-    lastAppliedRestoreRef.current = { activeTabId, restoreToken: 0 };
-  }, [activeModelReadyId, activeTabId, isActiveTabReady, jumpToLine, editorRef, onCursorChange]);
+    lastAppliedRestoreRef.current = { activeTabId: resolvedActiveDocumentId, restoreToken: 0 };
+  }, [activeModelReadyId, resolvedActiveDocumentId, isActiveTabReady, jumpToLine, editorRef, onCursorChange]);
 
   useEffect(() => {
     const editor = editorRef.current;
-    const activeRestoreRequest = cursorRestoreRequest?.fileId === activeTabId ? cursorRestoreRequest : undefined;
+    const activeRestoreRequest = cursorRestoreRequest && (
+      cursorRestoreRequest.fileId === activeTabId || cursorRestoreRequest.fileId === resolvedActiveDocumentId
+    ) ? cursorRestoreRequest : undefined;
     const restoreToken = activeRestoreRequest?.token ?? 0;
 
-    if (!focused || !activeTabId || !isActiveTabReady || activeModelReadyId !== activeTabId || !editor || jumpToLine) {
+    if (!focused || !resolvedActiveDocumentId || !isActiveTabReady || activeModelReadyId !== resolvedActiveDocumentId || !editor || jumpToLine) {
       return;
     }
 
     const lastAppliedRestore = lastAppliedRestoreRef.current;
-    const needsRestore = lastAppliedRestore.activeTabId !== activeTabId || lastAppliedRestore.restoreToken !== restoreToken;
+    const needsRestore = lastAppliedRestore.activeTabId !== resolvedActiveDocumentId || lastAppliedRestore.restoreToken !== restoreToken;
     if (!needsRestore) {
       return;
     }
@@ -321,7 +330,7 @@ export function EditorArea({
       onCursorChange?.(nextPosition.lineNumber, nextPosition.column);
 
       lastAppliedRestoreRef.current = {
-        activeTabId,
+        activeTabId: resolvedActiveDocumentId,
         restoreToken: activeRestoreRequest ? 0 : restoreToken,
       };
 
@@ -351,6 +360,7 @@ export function EditorArea({
     jumpToLine,
     onCursorChange,
     onCursorRestoreRequestConsumed,
+    resolvedActiveDocumentId,
   ]);
 
   useEffect(() => {
@@ -427,7 +437,7 @@ export function EditorArea({
       </div>
 
       {/* Breadcrumb */}
-      {activeTab && <Breadcrumb filePath={activeTabId} />}
+      {activeTab && <Breadcrumb segments={breadcrumbSegments} />}
 
       {!isActiveTabReady ? (
         <EditorDocumentPlaceholder text={placeholderText} />
@@ -440,12 +450,14 @@ export function EditorArea({
           )}
         >
           <MonacoEditorPane
-            activeTabId={activeTabId}
+            activeTabId={resolvedActiveDocumentId}
             code={code}
             editorRef={editorRef}
             onActiveModelReady={setActiveModelReadyId}
             onCursorChange={onCursorChange}
+            onCloseShortcut={onCloseShortcut}
             onSaveShortcut={onSaveShortcut}
+            onNewShortcut={onNewShortcut}
             onContentChange={updateContent}
             onEditorMount={onEditorMount}
             onNavigateToLocation={onNavigateToLocation}

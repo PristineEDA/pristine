@@ -6,7 +6,6 @@ function createSession(overrides: Partial<DesktopAuthSession> = {}): DesktopAuth
   return {
     avatarUrl: null,
     email: 'alice@example.com',
-    sessionExpiresAt: null,
     syncedAt: null,
     userId: 'user-1',
     username: 'Alice',

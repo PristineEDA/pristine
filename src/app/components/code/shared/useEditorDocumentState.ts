@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { isAbsoluteFilePath, isUntitledFileId } from '../../../workspace/workspaceFiles';
 
 interface EditorDocumentTab {
   id: string;
@@ -8,6 +9,7 @@ interface EditorDocumentTab {
 interface UseEditorDocumentStateOptions {
   tabs: EditorDocumentTab[];
   activeTabId: string;
+  documentTabId?: string;
   contentCache?: Record<string, string>;
   loadingFiles?: Record<string, boolean>;
   loadErrors?: Record<string, string>;
@@ -18,6 +20,7 @@ interface UseEditorDocumentStateOptions {
 export function useEditorDocumentState({
   tabs,
   activeTabId,
+  documentTabId,
   contentCache,
   loadingFiles,
   loadErrors,
@@ -29,20 +32,21 @@ export function useEditorDocumentState({
   const [localLoadErrors, setLocalLoadErrors] = useState<Record<string, string>>({});
   const inFlightLoadsRef = useRef<Set<string>>(new Set());
   const isMountedRef = useRef(true);
+  const effectiveTabId = documentTabId ?? activeTabId;
 
   const resolvedContentCache = contentCache ?? localContentCache;
   const resolvedLoadingFiles = loadingFiles ?? localLoadingFiles;
   const resolvedLoadErrors = loadErrors ?? localLoadErrors;
-  const activeTabContent = activeTabId ? resolvedContentCache[activeTabId] : undefined;
-  const activeLoadError = activeTabId ? resolvedLoadErrors[activeTabId] : undefined;
-  const activeTab = tabs.find((tab) => tab.id === activeTabId);
-  const isActiveTabReady = Boolean(activeTabId) && activeTabContent !== undefined;
+  const activeTabContent = effectiveTabId ? resolvedContentCache[effectiveTabId] : undefined;
+  const activeLoadError = effectiveTabId ? resolvedLoadErrors[effectiveTabId] : undefined;
+  const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs.find((tab) => tab.id === effectiveTabId);
+  const isActiveTabReady = Boolean(effectiveTabId) && activeTabContent !== undefined;
   const code = activeTabContent ?? '';
-  const placeholderText = activeTabId
+  const placeholderText = effectiveTabId
     ? activeLoadError
-      ? `// Failed to load ${activeTab?.name ?? activeTabId}\n// ${activeLoadError}\n`
-      : resolvedLoadingFiles[activeTabId] || activeTabContent === undefined
-      ? `// ${activeTab?.name ?? activeTabId}\n// Loading file contents...\n`
+      ? `// Failed to load ${activeTab?.name ?? effectiveTabId}\n// ${activeLoadError}\n`
+      : resolvedLoadingFiles[effectiveTabId] || activeTabContent === undefined
+      ? `// ${activeTab?.name ?? effectiveTabId}\n// Loading file contents...\n`
       : ''
     : '';
 
@@ -51,37 +55,54 @@ export function useEditorDocumentState({
   }, []);
 
   useEffect(() => {
-    if (!activeTabId || activeTabContent !== undefined || inFlightLoadsRef.current.has(activeTabId)) {
+    if (!effectiveTabId || activeTabContent !== undefined || inFlightLoadsRef.current.has(effectiveTabId)) {
+      return;
+    }
+
+    if (isUntitledFileId(effectiveTabId)) {
+      if (onLoadFile) {
+        onLoadFile(effectiveTabId);
+        return;
+      }
+
+      setLocalContentCache((current) => ({ ...current, [effectiveTabId]: '' }));
+      setLocalLoadingFiles((current) => ({ ...current, [effectiveTabId]: false }));
       return;
     }
 
     if (onLoadFile) {
-      onLoadFile(activeTabId);
+      onLoadFile(effectiveTabId);
       return;
     }
 
     const fsApi = window.electronAPI?.fs;
     if (!fsApi) {
-      setLocalLoadErrors((current) => ({ ...current, [activeTabId]: 'Filesystem API unavailable' }));
+      setLocalLoadErrors((current) => ({ ...current, [effectiveTabId]: 'Filesystem API unavailable' }));
       return;
     }
 
-    inFlightLoadsRef.current.add(activeTabId);
-    setLocalLoadingFiles((current) => ({ ...current, [activeTabId]: true }));
-    void fsApi.readFile(activeTabId, 'utf-8')
+    const readFile = isAbsoluteFilePath(effectiveTabId) ? fsApi.readFileAbsolute : fsApi.readFile;
+    if (!readFile) {
+      setLocalLoadErrors((current) => ({ ...current, [effectiveTabId]: 'Filesystem API unavailable' }));
+      return;
+    }
+
+    inFlightLoadsRef.current.add(effectiveTabId);
+    setLocalLoadingFiles((current) => ({ ...current, [effectiveTabId]: true }));
+    void readFile(effectiveTabId, 'utf-8')
       .then((content) => {
         if (!isMountedRef.current) {
           return;
         }
 
-        setLocalContentCache((current) => ({ ...current, [activeTabId]: content }));
+        setLocalContentCache((current) => ({ ...current, [effectiveTabId]: content }));
         setLocalLoadErrors((current) => {
-          if (!current[activeTabId]) {
+          if (!current[effectiveTabId]) {
             return current;
           }
 
           const next = { ...current };
-          delete next[activeTabId];
+          delete next[effectiveTabId];
           return next;
         });
       })
@@ -91,30 +112,30 @@ export function useEditorDocumentState({
         }
 
         const message = error instanceof Error ? error.message : 'Unable to load file';
-        setLocalLoadErrors((current) => ({ ...current, [activeTabId]: message }));
+        setLocalLoadErrors((current) => ({ ...current, [effectiveTabId]: message }));
       })
       .finally(() => {
-        inFlightLoadsRef.current.delete(activeTabId);
+        inFlightLoadsRef.current.delete(effectiveTabId);
 
         if (!isMountedRef.current) {
           return;
         }
 
-        setLocalLoadingFiles((current) => ({ ...current, [activeTabId]: false }));
+        setLocalLoadingFiles((current) => ({ ...current, [effectiveTabId]: false }));
       });
-  }, [activeTabContent, activeTabId, onLoadFile]);
+  }, [activeTabContent, effectiveTabId, onLoadFile]);
 
   const updateContent = (value: string) => {
-    if (!activeTabId) {
+    if (!effectiveTabId) {
       return;
     }
 
     if (onContentChange) {
-      onContentChange(activeTabId, value);
+      onContentChange(effectiveTabId, value);
       return;
     }
 
-    setLocalContentCache((current) => ({ ...current, [activeTabId]: value }));
+    setLocalContentCache((current) => ({ ...current, [effectiveTabId]: value }));
   };
 
   return {

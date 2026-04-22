@@ -23,6 +23,21 @@ interface UserContextValue {
 
 const UserContext = createContext<UserContextValue | null>(null);
 
+function areDesktopSessionsEqual(
+  left: DesktopAuthSession | null,
+  right: DesktopAuthSession | null,
+): boolean {
+  if (!left || !right) {
+    return left === right;
+  }
+
+  return left.avatarUrl === right.avatarUrl
+    && left.email === right.email
+    && left.syncedAt === right.syncedAt
+    && left.userId === right.userId
+    && left.username === right.username;
+}
+
 export function UserProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<DesktopAuthSession | null>(null);
   const [status, setStatus] = useState<'loading' | 'signed-in' | 'signed-out'>('loading');
@@ -31,18 +46,22 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
   const applySessionUpdate = useEffectEvent((nextSession: DesktopAuthSession | null) => {
     startTransition(() => {
-      setSession(nextSession);
-      setStatus(nextSession ? 'signed-in' : 'signed-out');
+      setSession((currentSession) => (
+        areDesktopSessionsEqual(currentSession, nextSession) ? currentSession : nextSession
+      ));
+
+      const nextStatus = nextSession ? 'signed-in' : 'signed-out';
+      setStatus((currentStatus) => (currentStatus === nextStatus ? currentStatus : nextStatus));
 
       if (nextSession) {
-        setErrorMessage(null);
+        setErrorMessage((currentMessage) => (currentMessage === null ? currentMessage : null));
       }
     });
   });
 
   const applyErrorUpdate = useEffectEvent((message: string) => {
     startTransition(() => {
-      setErrorMessage(message);
+      setErrorMessage((currentMessage) => (currentMessage === message ? currentMessage : message));
     });
   });
 
@@ -80,7 +99,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
       disposeStateListener?.();
       disposeErrorListener?.();
     };
-  }, [applyErrorUpdate, applySessionUpdate]);
+  }, []);
 
   const value = useMemo<UserContextValue>(() => ({
     session,

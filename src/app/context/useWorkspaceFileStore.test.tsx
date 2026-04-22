@@ -102,6 +102,23 @@ describe('useWorkspaceFileStore', () => {
     expect(result.current.dirtyFiles['rtl/edit.v']).toBe(true);
   });
 
+  it('removes cached workspace state for every file under a deleted folder prefix', () => {
+    const { result } = renderHook(() => useWorkspaceFileStore());
+
+    act(() => {
+      result.current.updateFileContent('rtl/core/reg_file.v', 'module reg_file; endmodule');
+      result.current.updateFileContent('rtl/core/alu.v', 'module alu; endmodule');
+      result.current.updateFileContent('rtl/peripherals/uart_rx.v', 'module uart_rx; endmodule');
+      result.current.removeWorkspacePaths('rtl/core');
+    });
+
+    expect(result.current.fileContents['rtl/core/reg_file.v']).toBeUndefined();
+    expect(result.current.fileContents['rtl/core/alu.v']).toBeUndefined();
+    expect(result.current.fileContents['rtl/peripherals/uart_rx.v']).toBe('module uart_rx; endmodule');
+    expect(result.current.dirtyFiles['rtl/core/reg_file.v']).toBeUndefined();
+    expect(result.current.dirtyFiles['rtl/core/alu.v']).toBeUndefined();
+  });
+
   it('tracks dirty state across edit, save, and discard operations', async () => {
     vi.mocked(window.electronAPI!.fs.readFile).mockResolvedValueOnce('module edit; endmodule');
     vi.mocked(window.electronAPI!.fs.writeFile).mockResolvedValueOnce(undefined);
@@ -128,7 +145,9 @@ describe('useWorkspaceFileStore', () => {
     });
 
     expect(window.electronAPI?.fs.writeFile).toHaveBeenCalledWith('rtl/edit.v', 'module edit; logic dirty; endmodule');
-    expect(window.electronAPI?.git.getStatus).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(window.electronAPI?.git.getStatus).toHaveBeenCalledTimes(1);
+    });
     expect(result.current.dirtyFiles['rtl/edit.v']).toBe(false);
 
     act(() => {
@@ -162,7 +181,9 @@ describe('useWorkspaceFileStore', () => {
       savedFileIds: ['rtl/pass.v'],
       failedFileIds: ['rtl/fail.v'],
     });
-    expect(window.electronAPI?.git.getStatus).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(window.electronAPI?.git.getStatus).toHaveBeenCalledTimes(1);
+    });
     expect(result.current.dirtyFiles['rtl/pass.v']).toBe(false);
     expect(result.current.dirtyFiles['rtl/fail.v']).toBe(true);
   });

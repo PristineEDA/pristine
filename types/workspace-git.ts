@@ -1,4 +1,9 @@
-export type WorkspaceGitPathState = 'modified' | 'ignored';
+export type WorkspaceGitPathState = 'created' | 'modified' | 'deleted' | 'ignored';
+
+export interface WorkspaceGitChangeEvent {
+  refreshGitStatus: boolean;
+  refreshWorkspaceTree: boolean;
+}
 
 export interface WorkspaceGitStatusPayload {
   branchName: string | null;

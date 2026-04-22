@@ -19,6 +19,7 @@ Radix UI（https://github.com/radix-ui/primitives）Radix UI MIT
 Tailwind CSS（https://github.com/tailwindlabs/tailwindcss）Tailwind Labs MIT
 React Flow（https://github.com/xyflow/xyflow）xyflow MIT
 Lucide React（https://github.com/lucide-icons/lucide）Lucide ISC
+Material Icon Theme（https://github.com/material-extensions/vscode-material-icon-theme）Material Extensions MIT
 cmdk（https://github.com/pacocoursey/cmdk）Paco Coursey MIT
 class-variance-authority（https://github.com/joe-bell/cva）Joe Bell Apache-2.0
 clsx（https://github.com/lukeed/clsx）Luke Edwards MIT

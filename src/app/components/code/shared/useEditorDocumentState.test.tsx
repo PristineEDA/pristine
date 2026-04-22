@@ -137,4 +137,16 @@ describe('useEditorDocumentState', () => {
 
     expect(local.result.current.code).toBe('edited local');
   });
+
+  it('delegates untitled tabs to the shared loader when the workspace owns document state', () => {
+    const onLoadFile = vi.fn();
+
+    renderHook(() => useEditorDocumentState({
+      tabs: [{ id: 'untitled-1', name: 'untitled-1' }],
+      activeTabId: 'untitled-1',
+      onLoadFile,
+    }));
+
+    expect(onLoadFile).toHaveBeenCalledWith('untitled-1');
+  });
 });

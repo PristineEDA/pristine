@@ -134,8 +134,7 @@ const QuickOpenResultRow = memo(function QuickOpenResultRow({
       <div className="flex w-6 shrink-0 justify-end">
         <FileTypeBadge
           name={result.name}
-          className="text-[10px] leading-none"
-          fallbackClassName="text-muted-foreground"
+          className="h-4 w-4"
           testId={`quick-open-icon-${treeTestId}`}
         />
       </div>

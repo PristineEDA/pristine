@@ -239,6 +239,16 @@ async function launchApp(options?: { env?: Record<string, string | undefined>; p
   return { app, window, splashWindow };
 }
 
+async function setNextSaveDialogPath(
+  app: Awaited<ReturnType<typeof electron.launch>>,
+  filePath: string,
+) {
+  await app.evaluate(({ app: electronApp }, nextFilePath) => {
+    void electronApp;
+    process.env['PRISTINE_E2E_SAVE_DIALOG_PATH'] = nextFilePath;
+  }, filePath);
+}
+
 function createWorkspaceCopy(targetPath: string) {
   fs.rmSync(targetPath, { recursive: true, force: true });
   fs.cpSync(fixtureWorkspace, targetPath, { recursive: true });
@@ -338,6 +348,10 @@ async function openNestedWorkspaceFile(
 
     await node.click();
   }
+}
+
+function toWorkspaceTreeTestId(relativePath: string) {
+  return `file-tree-node-${relativePath.replace(/[/.]/g, '_').replace(/[^A-Za-z0-9_-]/g, '-')}`;
 }
 
 async function ensureExplorerVisible(window: Awaited<ReturnType<typeof launchApp>>['window']) {
@@ -1287,6 +1301,435 @@ test('ctrl+s saves an edited explorer file and clears the dirty indicator', asyn
   }
 });
 
+test('Ctrl+N creates an untitled file, Ctrl+S saves it, and explorer refreshes to show the saved file', async () => {
+  test.slow();
+
+  const workspaceCopy = test.info().outputPath('untitled-save-workspace');
+  createWorkspaceCopy(workspaceCopy);
+
+  const savedFileName = `untitled_e2e_${Date.now()}.sv`;
+  const savedRelativePath = `rtl/core/${savedFileName}`;
+  const savedAbsolutePath = path.join(workspaceCopy, 'rtl', 'core', savedFileName);
+  const savedTreeTestId = `file-tree-node-${savedRelativePath.replace(/[/.]/g, '_').replace(/[^A-Za-z0-9_-]/g, '-')}`;
+  const primaryModifier = process.platform === 'darwin' ? 'Meta' : 'Control';
+  const marker = 'module untitled_e2e; endmodule';
+  const { app, window } = await launchApp({ projectRoot: workspaceCopy });
+
+  try {
+    await ensureExplorerVisible(window);
+    await window.getByTestId('file-tree-node-README_md').click();
+    await waitForMonacoEditor(window);
+    await focusMonacoEditor(window);
+    await waitForMonacoEditorTextFocus(window);
+
+    await window.keyboard.press(`${primaryModifier}+N`);
+
+    await expect(window.getByTestId('editor-tab-untitled-1')).toBeVisible();
+    await expect(window.getByTestId('editor-tab-untitled-1')).toHaveClass(/bg-background/);
+
+    await window.keyboard.type(marker);
+    await expect(window.getByTestId('editor-tab-dirty-indicator-untitled-1')).toBeVisible();
+
+    await setNextSaveDialogPath(app, savedAbsolutePath);
+    await window.keyboard.press(`${primaryModifier}+S`);
+
+    await expect(window.getByTestId(`editor-tab-${savedRelativePath}`)).toBeVisible();
+    await expect(window.getByTestId(`editor-tab-${savedRelativePath}`)).toHaveClass(/bg-background/);
+    await expect(window.getByTestId(`editor-tab-dirty-indicator-${savedRelativePath}`)).toHaveCount(0);
+    await expect(window.getByTestId('editor-breadcrumb')).toContainText('retroSoC');
+    await expect(window.getByTestId('editor-breadcrumb')).toContainText('rtl');
+    await expect(window.getByTestId('editor-breadcrumb')).toContainText('core');
+    await expect(window.getByTestId('editor-breadcrumb')).toContainText(savedFileName);
+    await expect(window.getByTestId(savedTreeTestId)).toBeVisible();
+    await expect.poll(() => fs.readFileSync(savedAbsolutePath, 'utf-8')).toContain(marker);
+
+    await app.close();
+
+    const relaunched = await launchApp({ projectRoot: workspaceCopy });
+
+    try {
+      await ensureExplorerVisible(relaunched.window);
+      await relaunched.window.getByTestId('file-tree-node-rtl').click();
+      await relaunched.window.getByTestId('file-tree-node-rtl_core').click();
+      await relaunched.window.getByTestId(savedTreeTestId).click();
+
+      await waitForMonacoEditor(relaunched.window);
+      await expect(relaunched.window.getByTestId('editor-document-placeholder')).toHaveCount(0);
+      await expect(relaunched.window.locator('.monaco-editor .view-lines')).toContainText(marker);
+
+      await relaunched.window.getByTestId(savedTreeTestId).dblclick();
+      await expect(relaunched.window.getByTestId(`editor-tab-${savedRelativePath}`)).toBeVisible();
+      await expect(relaunched.window.getByTestId('editor-document-placeholder')).toHaveCount(0);
+      await expect(relaunched.window.locator('.monaco-editor .view-lines')).toContainText(marker);
+    } finally {
+      await relaunched.app.close();
+    }
+  } finally {
+    await app.close().catch(() => undefined);
+  }
+});
+
+test('Explorer New File creates a real workspace file and keeps it after relaunch', async () => {
+  test.slow();
+
+  const workspaceCopy = test.info().outputPath('explorer-create-file-workspace');
+  createWorkspaceCopy(workspaceCopy);
+
+  const createdFileName = `explorer_created_${Date.now()}.sv`;
+  const createdRelativePath = `rtl/core/${createdFileName}`;
+  const createdAbsolutePath = path.join(workspaceCopy, 'rtl', 'core', createdFileName);
+  const createdTreeTestId = toWorkspaceTreeTestId(createdRelativePath);
+  const { app, window } = await launchApp({ projectRoot: workspaceCopy });
+
+  try {
+    await ensureExplorerVisible(window);
+    await window.getByTestId('file-tree-node-rtl').click();
+    await window.getByTestId('file-tree-node-rtl_core').click();
+    await window.getByRole('button', { name: 'New File' }).click();
+
+    const draftInput = window.locator('.explorer-tree-scrollbar input').first();
+    await expect(draftInput).toBeVisible();
+    await draftInput.fill(createdFileName);
+    await draftInput.press('Enter');
+
+    await expect.poll(() => fs.existsSync(createdAbsolutePath), {
+      timeout: 15000,
+    }).toBe(true);
+    await expect(window.getByTestId(createdTreeTestId)).toBeVisible();
+    await expect(window.getByTestId(`editor-tab-${createdRelativePath}`)).toBeVisible();
+
+    await app.close();
+
+    const relaunched = await launchApp({ projectRoot: workspaceCopy });
+
+    try {
+      await ensureExplorerVisible(relaunched.window);
+      await relaunched.window.getByTestId('file-tree-node-rtl').click();
+      await relaunched.window.getByTestId('file-tree-node-rtl_core').click();
+      await expect(relaunched.window.getByTestId(createdTreeTestId)).toBeVisible();
+
+      await relaunched.window.getByTestId(createdTreeTestId).dblclick();
+      await expect(relaunched.window.getByTestId(`editor-tab-${createdRelativePath}`)).toBeVisible();
+    } finally {
+      await relaunched.app.close();
+    }
+  } finally {
+    await app.close().catch(() => undefined);
+  }
+});
+
+test('Explorer Rename cascades open child tabs when renaming a folder', async () => {
+  test.slow();
+
+  const workspaceCopy = test.info().outputPath('explorer-rename-folder-workspace');
+  createWorkspaceCopy(workspaceCopy);
+
+  const renamedFolderRelativePath = 'rtl/renamed_core';
+  const renamedFolderAbsolutePath = path.join(workspaceCopy, 'rtl', 'renamed_core');
+  const originalFolderAbsolutePath = path.join(workspaceCopy, 'rtl', 'core');
+  const renamedRegFilePath = `${renamedFolderRelativePath}/reg_file.v`;
+  const renamedAluFilePath = `${renamedFolderRelativePath}/alu.sv`;
+  const { app, window } = await launchApp({ projectRoot: workspaceCopy });
+  const explorerTree = window.locator('.explorer-tree-scrollbar');
+
+  try {
+    await ensureExplorerVisible(window);
+    await openNestedWorkspaceFile(window, [
+      'file-tree-node-rtl',
+      'file-tree-node-rtl_core',
+      'file-tree-node-rtl_core_reg_file_v',
+    ], { finalAction: 'dblclick' });
+    await window.getByTestId('file-tree-node-rtl_core_alu_sv').dblclick();
+
+    const coreFolderNode = window.getByTestId('file-tree-node-rtl_core');
+    await coreFolderNode.click();
+    await explorerTree.focus();
+    await explorerTree.press('F2');
+
+    const renameInput = window.getByTestId('file-tree-input-rtl_core');
+    await expect(renameInput).toBeVisible();
+    await renameInput.fill('renamed_core');
+    await renameInput.press('Enter');
+
+    await expect(window.getByTestId(`editor-tab-${renamedRegFilePath}`)).toBeVisible();
+    await expect(window.getByTestId(`editor-tab-${renamedAluFilePath}`)).toBeVisible();
+    await expect(window.getByTestId('editor-breadcrumb')).toContainText('renamed_core');
+    await expect.poll(() => fs.existsSync(renamedFolderAbsolutePath), {
+      timeout: 15000,
+    }).toBe(true);
+    await expect.poll(() => fs.existsSync(originalFolderAbsolutePath), {
+      timeout: 15000,
+    }).toBe(false);
+  } finally {
+    await app.close();
+  }
+});
+
+test('Explorer Delete removes a selected workspace file with the Delete key and keeps it deleted after relaunch', async () => {
+  test.slow();
+
+  const workspaceCopy = test.info().outputPath('explorer-delete-file-workspace');
+  createWorkspaceCopy(workspaceCopy);
+
+  const deletedRelativePath = 'rtl/core/reg_file.v';
+  const deletedAbsolutePath = path.join(workspaceCopy, 'rtl', 'core', 'reg_file.v');
+  const deletedTreeTestId = toWorkspaceTreeTestId(deletedRelativePath);
+  const { app, window } = await launchApp({ projectRoot: workspaceCopy });
+
+  try {
+    await ensureExplorerVisible(window);
+    await openNestedWorkspaceFile(window, [
+      'file-tree-node-rtl',
+      'file-tree-node-rtl_core',
+      'file-tree-node-rtl_core_reg_file_v',
+    ], { finalAction: 'dblclick' });
+
+    const fileNode = window.getByTestId(deletedTreeTestId);
+    const explorerTree = window.locator('.explorer-tree-scrollbar');
+    await fileNode.click();
+    await explorerTree.focus();
+    await explorerTree.press('Delete');
+
+    await expect(window.getByTestId('delete-confirmation-dialog')).toBeVisible();
+    await expect(window.getByTestId('delete-confirmation-target')).toContainText('reg_file.v');
+    await window.getByTestId('delete-confirmation-confirm').click();
+
+    await expect(window.getByTestId('delete-confirmation-dialog')).toHaveCount(0);
+    await expect(window.getByTestId(`editor-tab-${deletedRelativePath}`)).toHaveCount(0);
+    await expect.poll(() => fs.existsSync(deletedAbsolutePath), {
+      timeout: 15000,
+    }).toBe(false);
+    await expect(window.getByTestId(deletedTreeTestId)).toHaveCount(0);
+
+    await app.close();
+
+    const relaunched = await launchApp({ projectRoot: workspaceCopy });
+
+    try {
+      await ensureExplorerVisible(relaunched.window);
+      await relaunched.window.getByTestId('file-tree-node-rtl').click();
+      await relaunched.window.getByTestId('file-tree-node-rtl_core').click();
+      await expect(relaunched.window.getByTestId(deletedTreeTestId)).toHaveCount(0);
+    } finally {
+      await relaunched.app.close();
+    }
+  } finally {
+    await app.close().catch(() => undefined);
+  }
+});
+
+test('Explorer Delete shows unsaved changes first, then confirmation, before recursively deleting a folder', async () => {
+  test.slow();
+
+  const workspaceCopy = test.info().outputPath('explorer-delete-folder-workspace');
+  createWorkspaceCopy(workspaceCopy);
+
+  const deletedFolderRelativePath = 'rtl/core';
+  const deletedFolderAbsolutePath = path.join(workspaceCopy, 'rtl', 'core');
+  const deletedRegRelativePath = 'rtl/core/reg_file.v';
+  const deletedAluRelativePath = 'rtl/core/alu.sv';
+  const { app, window } = await launchApp({ projectRoot: workspaceCopy });
+  const explorerTree = window.locator('.explorer-tree-scrollbar');
+
+  try {
+    await ensureExplorerVisible(window);
+    await openNestedWorkspaceFile(window, [
+      'file-tree-node-rtl',
+      'file-tree-node-rtl_core',
+      'file-tree-node-rtl_core_reg_file_v',
+    ], { finalAction: 'dblclick' });
+    await waitForMonacoEditor(window);
+    await focusMonacoEditor(window);
+    await window.keyboard.type('\n// delete me');
+    await expect(window.getByTestId(`editor-tab-dirty-indicator-${deletedRegRelativePath}`)).toBeVisible();
+
+    await window.getByTestId('file-tree-node-rtl_core_alu_sv').dblclick();
+
+    const coreFolderNode = window.getByTestId(toWorkspaceTreeTestId(deletedFolderRelativePath));
+    await coreFolderNode.click();
+    await explorerTree.focus();
+    await explorerTree.press('Delete');
+
+    await expect(window.getByTestId('unsaved-changes-dialog')).toBeVisible();
+    await expect(window.getByTestId('unsaved-changes-dialog')).toContainText('reg_file.v');
+    await expect(window.getByTestId('delete-confirmation-dialog')).toHaveCount(0);
+
+    await window.getByTestId('unsaved-changes-discard').click();
+
+    await expect(window.getByTestId('delete-confirmation-dialog')).toBeVisible();
+    await expect(window.getByTestId('delete-confirmation-target')).toContainText('core');
+    await window.getByTestId('delete-confirmation-confirm').click();
+
+    await expect(window.getByTestId('delete-confirmation-dialog')).toHaveCount(0);
+    await expect(window.getByTestId(`editor-tab-${deletedRegRelativePath}`)).toHaveCount(0);
+    await expect(window.getByTestId(`editor-tab-${deletedAluRelativePath}`)).toHaveCount(0);
+    await expect.poll(() => fs.existsSync(deletedFolderAbsolutePath), {
+      timeout: 15000,
+    }).toBe(false);
+    await expect(window.getByTestId(toWorkspaceTreeTestId(deletedFolderRelativePath))).toHaveCount(0);
+  } finally {
+    await app.close().catch(() => undefined);
+  }
+});
+
+test('Explorer Copy creates a -copy file and keeps it after relaunch', async () => {
+  test.slow();
+
+  const workspaceCopy = test.info().outputPath('explorer-copy-file-workspace');
+  createWorkspaceCopy(workspaceCopy);
+  const primaryModifier = process.platform === 'darwin' ? 'Meta' : 'Control';
+
+  const copiedRelativePath = 'rtl/core/reg_file-copy.v';
+  const copiedAbsolutePath = path.join(workspaceCopy, 'rtl', 'core', 'reg_file-copy.v');
+  const copiedTreeTestId = toWorkspaceTreeTestId(copiedRelativePath);
+  const sourceTreeTestId = toWorkspaceTreeTestId('rtl/core/reg_file.v');
+  const { app, window } = await launchApp({ projectRoot: workspaceCopy });
+  const explorerTree = window.locator('.explorer-tree-scrollbar');
+
+  try {
+    await ensureExplorerVisible(window);
+    await window.getByTestId('file-tree-node-rtl').click();
+    await window.getByTestId('file-tree-node-rtl_core').click();
+
+    await window.getByTestId(sourceTreeTestId).click();
+    await explorerTree.focus();
+    await explorerTree.press(`${primaryModifier}+C`);
+    await explorerTree.press(`${primaryModifier}+V`);
+
+    await expect.poll(() => fs.existsSync(copiedAbsolutePath), {
+      timeout: 15000,
+    }).toBe(true);
+    await expect(window.getByTestId(copiedTreeTestId)).toBeVisible();
+
+    await app.close();
+
+    const relaunched = await launchApp({ projectRoot: workspaceCopy });
+
+    try {
+      await ensureExplorerVisible(relaunched.window);
+      await relaunched.window.getByTestId('file-tree-node-rtl').click();
+      await relaunched.window.getByTestId('file-tree-node-rtl_core').click();
+      await expect(relaunched.window.getByTestId(copiedTreeTestId)).toBeVisible();
+
+      await relaunched.window.getByTestId(copiedTreeTestId).dblclick();
+      await expect(relaunched.window.getByTestId(`editor-tab-${copiedRelativePath}`)).toBeVisible();
+    } finally {
+      await relaunched.app.close();
+    }
+  } finally {
+    await app.close().catch(() => undefined);
+  }
+});
+
+test('Explorer Cut dims the source, Escape cancels it, and pasting to the workspace root moves the file', async () => {
+  test.slow();
+
+  const workspaceCopy = test.info().outputPath('explorer-cut-file-workspace');
+  createWorkspaceCopy(workspaceCopy);
+  const primaryModifier = process.platform === 'darwin' ? 'Meta' : 'Control';
+
+  const originalRelativePath = 'rtl/core/reg_file.v';
+  const movedRelativePath = 'reg_file.v';
+  const originalAbsolutePath = path.join(workspaceCopy, 'rtl', 'core', 'reg_file.v');
+  const movedAbsolutePath = path.join(workspaceCopy, 'reg_file.v');
+  const originalTreeTestId = toWorkspaceTreeTestId(originalRelativePath);
+  const movedTreeTestId = toWorkspaceTreeTestId(movedRelativePath);
+  const { app, window } = await launchApp({ projectRoot: workspaceCopy });
+
+  try {
+    await ensureExplorerVisible(window);
+    await window.getByTestId('file-tree-node-rtl').click();
+    await window.getByTestId('file-tree-node-rtl_core').click();
+
+    const sourceFileNode = window.getByTestId(originalTreeTestId);
+    const explorerTree = window.locator('.explorer-tree-scrollbar');
+
+    await sourceFileNode.click();
+    await explorerTree.focus();
+    await explorerTree.press(`${primaryModifier}+X`);
+    await expect(sourceFileNode).toHaveClass(/opacity-50/);
+
+    await explorerTree.press('Escape');
+    await expect(sourceFileNode).not.toHaveClass(/opacity-50/);
+
+    await explorerTree.focus();
+    await explorerTree.press(`${primaryModifier}+X`);
+    await expect(sourceFileNode).toHaveClass(/opacity-50/);
+
+    await window.getByTestId('file-tree-node-README_md').click();
+    await explorerTree.focus();
+    await explorerTree.press(`${primaryModifier}+V`);
+
+    await expect.poll(() => fs.existsSync(movedAbsolutePath), {
+      timeout: 15000,
+    }).toBe(true);
+    await expect.poll(() => fs.existsSync(originalAbsolutePath), {
+      timeout: 15000,
+    }).toBe(false);
+    await expect(window.getByTestId(originalTreeTestId)).toHaveCount(0);
+    await expect(window.getByTestId(movedTreeTestId)).toBeVisible();
+    await expect(window.getByTestId(movedTreeTestId)).not.toHaveClass(/opacity-50/);
+
+    await app.close();
+
+    const relaunched = await launchApp({ projectRoot: workspaceCopy });
+
+    try {
+      await ensureExplorerVisible(relaunched.window);
+      await expect(relaunched.window.getByTestId(movedTreeTestId)).toBeVisible();
+      await relaunched.window.getByTestId(movedTreeTestId).dblclick();
+      await expect(relaunched.window.getByTestId(`editor-tab-${movedRelativePath}`)).toBeVisible();
+      await expect(relaunched.window.getByTestId(originalTreeTestId)).toHaveCount(0);
+    } finally {
+      await relaunched.app.close();
+    }
+  } finally {
+    await app.close().catch(() => undefined);
+  }
+});
+
+test('Ctrl+W prompts for dirty untitled files and supports Cancel and Don\'t save', async () => {
+  test.slow();
+
+  const workspaceCopy = test.info().outputPath('untitled-close-workspace');
+  createWorkspaceCopy(workspaceCopy);
+
+  const primaryModifier = process.platform === 'darwin' ? 'Meta' : 'Control';
+  const { app, window } = await launchApp({ projectRoot: workspaceCopy });
+
+  try {
+    await ensureExplorerVisible(window);
+    await window.getByTestId('file-tree-node-README_md').click();
+    await waitForMonacoEditor(window);
+    await focusMonacoEditor(window);
+    await waitForMonacoEditorTextFocus(window);
+
+    await window.keyboard.press(`${primaryModifier}+N`);
+    await expect(window.getByTestId('editor-tab-untitled-1')).toBeVisible();
+
+    await window.keyboard.type('module close_me; endmodule');
+    await expect(window.getByTestId('editor-tab-dirty-indicator-untitled-1')).toBeVisible();
+
+    await window.keyboard.press(`${primaryModifier}+W`);
+
+    await expect(window.getByTestId('unsaved-changes-dialog')).toBeVisible();
+    await expect(window.getByTestId('unsaved-changes-single-file')).toContainText('untitled-1');
+
+    await window.getByTestId('unsaved-changes-cancel').click();
+    await expect(window.getByTestId('unsaved-changes-dialog')).toHaveCount(0);
+    await expect(window.getByTestId('editor-tab-untitled-1')).toBeVisible();
+
+    await window.keyboard.press(`${primaryModifier}+W`);
+    await expect(window.getByTestId('unsaved-changes-dialog')).toBeVisible();
+    await window.getByTestId('unsaved-changes-discard').click();
+
+    await expect(window.getByTestId('editor-tab-untitled-1')).toHaveCount(0);
+    await expect(window.getByTestId('unsaved-changes-dialog')).toHaveCount(0);
+  } finally {
+    await app.close();
+  }
+});
+
 test('explorer shows the real git branch and git file decorations for tracked and ignored paths', async () => {
   test.slow();
 
@@ -1300,13 +1743,14 @@ test('explorer shows the real git branch and git file decorations for tracked an
     await ensureExplorerVisible(window);
 
     await expect(window.getByTestId('status-bar-branch-label')).toHaveText('e2e-git-ui');
-    await expect(window.getByTestId('file-tree-label-ignored-dir')).toHaveClass(/text-ide-text-muted/);
-    await expect(window.getByTestId('file-tree-label-ignored_log')).toHaveClass(/text-ide-text-muted/);
+    await expect(window.getByTestId('file-tree-label-ignored-dir')).toHaveClass(/text-ide-text-muted-stronger/);
+    await expect(window.getByTestId('file-tree-label-ignored_log')).toHaveClass(/text-ide-text-muted-stronger/);
 
     await window.getByTestId('file-tree-node-rtl').click();
     await window.getByTestId('file-tree-node-rtl_core').click();
 
     await expect(window.getByTestId('file-tree-label-rtl_core_reg_file_v')).toHaveClass(/text-ide-warning/);
+    await expect(window.getByTestId('file-tree-git-indicator-modified-rtl_core_reg_file_v')).toBeVisible();
 
     await window.getByTestId('file-tree-node-rtl_core_reg_file_v').dblclick();
 
@@ -1334,6 +1778,50 @@ test('explorer status bar updates the git branch label after refocusing the app 
     await notifyAppWindowFocused(app);
 
     await expect(window.getByTestId('status-bar-branch-label')).toHaveText('e2e-git-ui-next');
+  } finally {
+    await app.close();
+  }
+});
+
+test('explorer git decorations refresh after external workspace and branch changes', async () => {
+  test.slow();
+
+  const workspaceCopy = test.info().outputPath('git-auto-refresh-workspace');
+  createWorkspaceCopy(workspaceCopy);
+  initializeGitWorkspaceCopy(workspaceCopy, 'e2e-git-ui');
+  execFileSync('git', ['branch', 'e2e-git-ui-next'], { cwd: workspaceCopy, stdio: 'pipe', windowsHide: true });
+
+  const { app, window } = await launchApp({ projectRoot: workspaceCopy });
+
+  try {
+    await ensureExplorerVisible(window);
+    await window.getByTestId('file-tree-node-rtl').click();
+    await window.getByTestId('file-tree-node-rtl_core').click();
+
+    await expect(window.getByTestId('status-bar-branch-label')).toHaveText('e2e-git-ui');
+
+    fs.appendFileSync(path.join(workspaceCopy, 'rtl', 'core', 'cpu_top.sv'), '\n// e2e auto refresh marker\n', 'utf-8');
+    fs.writeFileSync(path.join(workspaceCopy, 'rtl', 'core', 'created_auto.v'), 'module created_auto; endmodule\n', 'utf-8');
+    fs.rmSync(path.join(workspaceCopy, 'rtl', 'core', 'alu.sv'));
+    execFileSync('git', ['switch', 'e2e-git-ui-next'], { cwd: workspaceCopy, stdio: 'pipe', windowsHide: true });
+
+    await expect(window.getByTestId('status-bar-branch-label')).toHaveText('e2e-git-ui-next');
+    await expect(window.getByTestId('file-tree-label-rtl_core_cpu_top_sv')).toHaveClass(/text-ide-warning/);
+    await expect(window.getByTestId('file-tree-label-rtl_core_created_auto_v')).toHaveClass(/text-ide-success/);
+    await expect(window.getByTestId('file-tree-git-indicator-created-rtl_core_created_auto_v')).toBeVisible();
+    await expect(window.getByTestId('file-tree-git-indicator-created-rtl_core')).toBeVisible();
+    await expect(window.getByTestId('file-tree-git-indicator-modified-rtl_core')).toBeVisible();
+    await expect(window.getByTestId('file-tree-git-indicator-deleted-rtl_core')).toBeVisible();
+
+    await expect.poll(async () => {
+      return window.getByTestId('file-tree-git-indicators-rtl_core').locator('[data-testid^="file-tree-git-indicator-"]').evaluateAll(
+        (elements) => elements.map((element) => (element as { getAttribute: (name: string) => string | null }).getAttribute('data-testid')),
+      );
+    }).toEqual([
+      'file-tree-git-indicator-created-rtl_core',
+      'file-tree-git-indicator-modified-rtl_core',
+      'file-tree-git-indicator-deleted-rtl_core',
+    ]);
   } finally {
     await app.close();
   }
@@ -1891,6 +2379,51 @@ test('status bar switches across primary and secondary navigation views', async 
   await app.close();
 });
 
+test('explorer status bar hover cards switch cleanly between adjacent items', async () => {
+  const { app, window } = await launchApp();
+  type FocusableTriggerNode = {
+    focus?: () => void;
+    getAttribute?: (name: string) => string | null;
+    parentElement?: FocusableTriggerNode | null;
+  };
+
+  const focusHoverCardTrigger = async (label: Locator) => {
+    await label.evaluate((element) => {
+      let trigger = element as unknown as FocusableTriggerNode | null;
+
+      while (trigger && trigger.getAttribute?.('data-slot') !== 'hover-card-trigger') {
+        trigger = trigger.parentElement ?? null;
+      }
+
+      if (!trigger || typeof trigger.focus !== 'function') {
+        throw new Error('Expected a hover-card trigger for the status bar item');
+      }
+
+      trigger.focus();
+    });
+  };
+
+  const statusBar = window.getByTestId('status-bar');
+  const branchLabel = statusBar.getByTestId('status-bar-branch-label');
+  const syncLabel = statusBar.getByText('Sync', { exact: true });
+  const branchCardTitle = window.getByText('Git Branch', { exact: true });
+  const syncCardTitle = window.getByText('Sync Status', { exact: true });
+
+  await expect(statusBar).toHaveAttribute('data-status-bar-id', 'code-explorer');
+  await expect(branchLabel).toBeVisible();
+  await expect(syncLabel).toBeVisible();
+
+  await focusHoverCardTrigger(branchLabel);
+  await expect(branchCardTitle).toBeVisible();
+
+  await focusHoverCardTrigger(syncLabel);
+
+  await expect(branchCardTitle).toHaveCount(0);
+  await expect(syncCardTitle).toBeVisible();
+
+  await app.close();
+});
+
 test('left sidebar keeps a fixed pixel width across window changes and manual resize', async () => {
   test.slow();
 
@@ -2394,7 +2927,7 @@ test('menu bar avatar opens the account popover with desktop auth actions', asyn
   await app.close();
 });
 
-test('desktop auth session persists across app relaunch', async () => {
+test('desktop auth session persists across app relaunch without eager refresh', async () => {
   const refreshRequests: string[] = [];
   const refreshServer = createServer((request, response) => {
     if (request.method === 'POST' && request.url?.startsWith('/auth/v1/token?grant_type=refresh_token')) {
@@ -2461,6 +2994,7 @@ test('desktop auth session persists across app relaunch', async () => {
 
     await assertSignedInPopover(firstWindow);
     await expect.poll(() => refreshRequests.length).toBeGreaterThan(0);
+    const refreshCountAfterFirstLaunch = refreshRequests.length;
 
     await firstApp.close();
 
@@ -2472,7 +3006,8 @@ test('desktop auth session persists across app relaunch', async () => {
     const { app: secondApp, window: secondWindow } = secondLaunch;
 
     await assertSignedInPopover(secondWindow);
-    await expect.poll(() => refreshRequests.length).toBeGreaterThan(1);
+    await secondWindow.waitForTimeout(1000);
+    expect(refreshRequests.length).toBe(refreshCountAfterFirstLaunch);
 
     await secondApp.close();
   } finally {

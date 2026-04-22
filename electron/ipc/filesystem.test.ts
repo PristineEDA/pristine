@@ -8,6 +8,11 @@ const { mockHandle, mockFs } = vi.hoisted(() => ({
     readFile: vi.fn(),
     writeFile: vi.fn(),
     mkdir: vi.fn(),
+    copyFile: vi.fn(),
+    cp: vi.fn(),
+    unlink: vi.fn(),
+    rm: vi.fn(),
+    rename: vi.fn(),
     readdir: vi.fn(),
     stat: vi.fn(),
     access: vi.fn(),
@@ -46,6 +51,11 @@ describe('filesystem IPC handlers', () => {
     mockFs.readFile.mockReset();
     mockFs.writeFile.mockReset();
     mockFs.mkdir.mockReset();
+    mockFs.copyFile.mockReset();
+    mockFs.cp.mockReset();
+    mockFs.unlink.mockReset();
+    mockFs.rm.mockReset();
+    mockFs.rename.mockReset();
     mockFs.readdir.mockReset();
     mockFs.stat.mockReset();
     mockFs.access.mockReset();
@@ -87,6 +97,13 @@ describe('filesystem IPC handlers', () => {
       const handler = getHandler('async:fs:read-file');
       await expect(handler({}, '../../etc/passwd')).rejects.toThrow('Path traversal denied');
     });
+
+    it('reads an absolute file path through the dedicated absolute channel', async () => {
+      mockFs.readFile.mockResolvedValue('absolute-content');
+      const handler = getHandler('async:fs:read-file-absolute');
+
+      await expect(handler({}, '/safe/external/main.v', 'utf-8')).resolves.toBe('absolute-content');
+    });
   });
 
   describe('FS_WRITE_FILE', () => {
@@ -98,6 +115,86 @@ describe('filesystem IPC handlers', () => {
     it('rejects non-string content', async () => {
       const handler = getHandler('async:fs:write-file');
       await expect(handler({}, 'file.v', 42)).rejects.toThrow('Expected string');
+    });
+
+    it('writes an absolute file path through the dedicated absolute channel', async () => {
+      const handler = getHandler('async:fs:write-file-absolute');
+
+      await expect(handler({}, '/safe/external/out.v', 'module out; endmodule')).resolves.toBeUndefined();
+      expect(mockFs.writeFile).toHaveBeenCalledWith(expect.any(String), 'module out; endmodule', 'utf-8');
+    });
+  });
+
+  describe('FS_CREATE_DIRECTORY', () => {
+    it('creates a project-scoped directory', async () => {
+      const handler = getHandler('async:fs:create-directory');
+
+      await expect(handler({}, 'rtl/generated')).resolves.toBeUndefined();
+      expect(mockFs.mkdir).toHaveBeenCalledWith(expect.stringMatching(/safe[\\/]project[\\/]rtl[\\/]generated$/), { recursive: true });
+    });
+  });
+
+  describe('FS_COPY_FILE', () => {
+    it('copies a project-scoped file into a new project-scoped path', async () => {
+      const handler = getHandler('async:fs:copy-file');
+
+      await expect(handler({}, 'rtl/core/reg_file.v', 'rtl/core/reg_file-copy.v')).resolves.toBeUndefined();
+      expect(mockFs.copyFile).toHaveBeenCalledWith(
+        expect.stringMatching(/safe[\\/]project[\\/]rtl[\\/]core[\\/]reg_file\.v$/),
+        expect.stringMatching(/safe[\\/]project[\\/]rtl[\\/]core[\\/]reg_file-copy\.v$/),
+      );
+    });
+  });
+
+  describe('FS_COPY_DIRECTORY', () => {
+    it('copies a project-scoped directory recursively into a new project-scoped path', async () => {
+      const handler = getHandler('async:fs:copy-directory');
+
+      await expect(handler({}, 'rtl/core', 'rtl/core-copy')).resolves.toBeUndefined();
+      expect(mockFs.cp).toHaveBeenCalledWith(
+        expect.stringMatching(/safe[\\/]project[\\/]rtl[\\/]core$/),
+        expect.stringMatching(/safe[\\/]project[\\/]rtl[\\/]core-copy$/),
+        {
+          recursive: true,
+          errorOnExist: true,
+          force: false,
+        },
+      );
+    });
+  });
+
+  describe('FS_RENAME', () => {
+    it('renames a project-scoped file or folder', async () => {
+      const handler = getHandler('async:fs:rename');
+
+      await expect(handler({}, 'rtl/core/old.v', 'rtl/core/new.v')).resolves.toBeUndefined();
+      expect(mockFs.rename).toHaveBeenCalledWith(
+        expect.stringMatching(/safe[\\/]project[\\/]rtl[\\/]core[\\/]old\.v$/),
+        expect.stringMatching(/safe[\\/]project[\\/]rtl[\\/]core[\\/]new\.v$/),
+      );
+    });
+  });
+
+  describe('FS_DELETE_FILE', () => {
+    it('deletes a project-scoped file', async () => {
+      const handler = getHandler('async:fs:delete-file');
+
+      await expect(handler({}, 'rtl/core/reg_file.v')).resolves.toBeUndefined();
+      expect(mockFs.unlink).toHaveBeenCalledWith(
+        expect.stringMatching(/safe[\\/]project[\\/]rtl[\\/]core[\\/]reg_file\.v$/),
+      );
+    });
+  });
+
+  describe('FS_DELETE_DIRECTORY', () => {
+    it('deletes a project-scoped directory recursively', async () => {
+      const handler = getHandler('async:fs:delete-directory');
+
+      await expect(handler({}, 'rtl/core')).resolves.toBeUndefined();
+      expect(mockFs.rm).toHaveBeenCalledWith(
+        expect.stringMatching(/safe[\\/]project[\\/]rtl[\\/]core$/),
+        { recursive: true, force: false },
+      );
     });
   });
 

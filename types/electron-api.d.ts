@@ -6,7 +6,8 @@ import type {
   LspStateEvent,
   WorkspaceLocation,
 } from './systemverilog-lsp';
-import type { WorkspaceGitStatusPayload } from './workspace-git';
+import type { WorkspaceGitChangeEvent, WorkspaceGitStatusPayload } from './workspace-git';
+import type { SaveDialogResult } from '../electron/ipc/dialog';
 import type { MenuCommandEvent } from '../src/app/menu/applicationMenu';
 import type { WindowCloseDecision, WindowCloseRequest } from '../src/app/window/windowClose';
 import type { AuthView, DesktopAuthSession } from '../src/app/auth/types';
@@ -35,12 +36,21 @@ export interface ElectronAPI {
   onFullScreenChange: (callback: (fullScreen: boolean) => void) => () => void;
   onCloseRequested: (callback: (request: WindowCloseRequest) => void) => () => void;
   onWindowFocus: (callback: () => void) => () => void;
+  onWorkspaceChange: (callback: (payload: WorkspaceGitChangeEvent) => void) => () => void;
 
   // File system (project-dir scoped)
   fs: {
     readFile: (filePath: string, encoding?: string) => Promise<string>;
+    readFileAbsolute: (filePath: string, encoding?: string) => Promise<string>;
     listFiles: (dirPath?: string) => Promise<string[]>;
     writeFile: (filePath: string, content: string) => Promise<void>;
+    writeFileAbsolute: (filePath: string, content: string) => Promise<void>;
+    createDirectory: (dirPath: string) => Promise<void>;
+    copyFile: (sourcePath: string, destinationPath: string) => Promise<void>;
+    copyDirectory: (sourcePath: string, destinationPath: string) => Promise<void>;
+    deleteFile: (filePath: string) => Promise<void>;
+    deleteDirectory: (dirPath: string) => Promise<void>;
+    rename: (currentPath: string, nextPath: string) => Promise<void>;
     readDir: (dirPath: string) => Promise<Array<{
       name: string;
       isDirectory: boolean;
@@ -54,6 +64,10 @@ export interface ElectronAPI {
       ctime: string;
     }>;
     exists: (filePath: string) => Promise<boolean>;
+  };
+
+  dialog: {
+    showSaveDialog: (defaultPath?: string) => Promise<SaveDialogResult>;
   };
 
   git: {

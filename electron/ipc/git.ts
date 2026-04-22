@@ -1,13 +1,30 @@
 import { ipcMain } from 'electron';
 import { execFile } from 'node:child_process';
+import { watch, type FSWatcher } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { AsyncChannels } from './channels.js';
-import type { WorkspaceGitStatusPayload } from '../../types/workspace-git.js';
+import { AsyncChannels, StreamChannels } from './channels.js';
+import type {
+  WorkspaceGitChangeEvent,
+  WorkspaceGitPathState,
+  WorkspaceGitStatusPayload,
+} from '../../types/workspace-git.js';
 
 const GIT_STATUS_MAX_BUFFER_BYTES = 1024 * 1024;
+const WORKSPACE_CHANGE_DEBOUNCE_MS = 160;
+
+type WorkspaceChangeStreamTarget = {
+  isDestroyed?: () => boolean;
+  webContents: {
+    send: (channel: string, payload: WorkspaceGitChangeEvent) => void;
+  };
+};
 
 let projectRoot: string | null = null;
+let getWorkspaceChangeTarget: (() => WorkspaceChangeStreamTarget | null) | null = null;
+let workspaceWatchers: FSWatcher[] = [];
+let queuedWorkspaceChange: WorkspaceGitChangeEvent | null = null;
+let workspaceChangeTimer: ReturnType<typeof setTimeout> | null = null;
 
 function getProjectRoot(): string {
   if (!projectRoot) {
@@ -67,6 +84,32 @@ function isTrackedChange(statusCode: string): boolean {
   return [...statusCode].some((code) => code !== ' ' && code !== '?' && code !== '!');
 }
 
+function resolveWorkspaceGitPathState(statusCode: string): WorkspaceGitPathState | undefined {
+  if (statusCode === '!!') {
+    return 'ignored';
+  }
+
+  if (statusCode === '??') {
+    return 'created';
+  }
+
+  const [indexStatus = ' ', workTreeStatus = ' '] = statusCode;
+
+  if (indexStatus === 'D' || workTreeStatus === 'D') {
+    return 'deleted';
+  }
+
+  if (indexStatus === 'A' || workTreeStatus === 'A') {
+    return 'created';
+  }
+
+  if (isTrackedChange(statusCode)) {
+    return 'modified';
+  }
+
+  return undefined;
+}
+
 function parseGitStatus(stdout: string): Pick<WorkspaceGitStatusPayload, 'branchName' | 'pathStates'> {
   const pathStates: WorkspaceGitStatusPayload['pathStates'] = {};
   let branchName: string | null = null;
@@ -92,17 +135,10 @@ function parseGitStatus(stdout: string): Pick<WorkspaceGitStatusPayload, 'branch
       return;
     }
 
-    if (statusCode === '!!') {
-      pathStates[statusPath] = 'ignored';
-      return;
-    }
+    const nextPathState = resolveWorkspaceGitPathState(statusCode);
 
-    if (statusCode === '??') {
-      return;
-    }
-
-    if (isTrackedChange(statusCode)) {
-      pathStates[statusPath] = 'modified';
+    if (nextPathState) {
+      pathStates[statusPath] = nextPathState;
     }
   });
 
@@ -117,6 +153,7 @@ function execGitStatus(root: string): Promise<string> {
     execFile(
       'git',
       [
+        '--no-optional-locks',
         '-c',
         'status.relativePaths=true',
         'status',
@@ -153,11 +190,150 @@ async function hasProjectFiles(root: string): Promise<boolean> {
   }
 }
 
-export function setGitProjectRoot(root: string): void {
-  projectRoot = path.resolve(root);
+function clearQueuedWorkspaceChange() {
+  if (workspaceChangeTimer) {
+    clearTimeout(workspaceChangeTimer);
+    workspaceChangeTimer = null;
+  }
+
+  queuedWorkspaceChange = null;
 }
 
-export function registerGitHandlers(): void {
+function closeWorkspaceWatchers() {
+  workspaceWatchers.forEach((watcher) => {
+    try {
+      watcher.close();
+    } catch {
+      // Ignore watcher disposal failures while switching projects.
+    }
+  });
+
+  workspaceWatchers = [];
+}
+
+function flushQueuedWorkspaceChange() {
+  workspaceChangeTimer = null;
+
+  if (!queuedWorkspaceChange) {
+    return;
+  }
+
+  const nextChange = queuedWorkspaceChange;
+  queuedWorkspaceChange = null;
+
+  const target = getWorkspaceChangeTarget?.();
+  if (!target || target.isDestroyed?.()) {
+    return;
+  }
+
+  target.webContents.send(StreamChannels.WORKSPACE_CHANGE, nextChange);
+}
+
+function queueWorkspaceChange(nextChange: WorkspaceGitChangeEvent) {
+  queuedWorkspaceChange = queuedWorkspaceChange
+    ? {
+      refreshGitStatus: queuedWorkspaceChange.refreshGitStatus || nextChange.refreshGitStatus,
+      refreshWorkspaceTree: queuedWorkspaceChange.refreshWorkspaceTree || nextChange.refreshWorkspaceTree,
+    }
+    : nextChange;
+
+  if (workspaceChangeTimer) {
+    return;
+  }
+
+  workspaceChangeTimer = setTimeout(flushQueuedWorkspaceChange, WORKSPACE_CHANGE_DEBOUNCE_MS);
+}
+
+function normalizeWatchedFilename(filename: string | Buffer | null): string {
+  if (filename === null) {
+    return '';
+  }
+
+  return filename.toString().replace(/\\/g, '/').replace(/^\.\//, '');
+}
+
+function watchPath(
+  targetPath: string,
+  listener: (eventType: string, filename: string) => void,
+  recursive: boolean,
+) {
+  const createWatcher = (useRecursive: boolean) => watch(
+    targetPath,
+    useRecursive ? { recursive: true, encoding: 'utf8' } : { encoding: 'utf8' },
+    (eventType, filename) => {
+      listener(eventType, normalizeWatchedFilename(filename));
+    },
+  );
+
+  try {
+    const watcher = createWatcher(recursive);
+    workspaceWatchers.push(watcher);
+    return;
+  } catch {
+    if (!recursive) {
+      return;
+    }
+  }
+
+  try {
+    const watcher = createWatcher(false);
+    workspaceWatchers.push(watcher);
+  } catch {
+    // Ignore unsupported watcher targets and fall back to focus-driven refreshes.
+  }
+}
+
+async function setupWorkspaceChangeWatchers() {
+  closeWorkspaceWatchers();
+  clearQueuedWorkspaceChange();
+
+  if (!projectRoot || !getWorkspaceChangeTarget) {
+    return;
+  }
+
+  const root = getProjectRoot();
+
+  watchPath(root, (eventType, filename) => {
+    if (filename === '.git' || filename.startsWith('.git/')) {
+      return;
+    }
+
+    queueWorkspaceChange({
+      refreshGitStatus: true,
+      refreshWorkspaceTree: eventType === 'rename',
+    });
+  }, true);
+
+  try {
+    const gitDirectoryPath = path.join(root, '.git');
+    const gitDirectoryStat = await fs.stat(gitDirectoryPath);
+
+    if (gitDirectoryStat.isDirectory()) {
+      watchPath(gitDirectoryPath, () => {
+        queueWorkspaceChange({
+          refreshGitStatus: true,
+          refreshWorkspaceTree: false,
+        });
+      }, true);
+    }
+  } catch {
+    // Non-git workspaces or unsupported git metadata layouts just skip live git watching.
+  }
+}
+
+export function setGitProjectRoot(root: string): void {
+  projectRoot = path.resolve(root);
+  void setupWorkspaceChangeWatchers();
+}
+
+export function registerGitHandlers(
+  nextGetWorkspaceChangeTarget?: () => WorkspaceChangeStreamTarget | null,
+): void {
+  if (nextGetWorkspaceChangeTarget) {
+    getWorkspaceChangeTarget = nextGetWorkspaceChangeTarget;
+    void setupWorkspaceChangeWatchers();
+  }
+
   ipcMain.handle(AsyncChannels.GIT_GET_STATUS, async (): Promise<WorkspaceGitStatusPayload> => {
     const root = getProjectRoot();
     const projectHasFiles = await hasProjectFiles(root);

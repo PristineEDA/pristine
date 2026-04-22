@@ -12,6 +12,14 @@ export function validatePathWithinRoot(projectRoot: string, targetPath: string):
   return resolved;
 }
 
+export function validateAbsolutePath(targetPath: string): string {
+  if (!path.isAbsolute(targetPath)) {
+    throw new Error(`Expected absolute path, got: ${targetPath}`);
+  }
+
+  return path.resolve(targetPath);
+}
+
 export function assertString(value: unknown, name: string): asserts value is string {
   if (typeof value !== 'string') {
     throw new Error(`Expected string for "${name}", got ${typeof value}`);

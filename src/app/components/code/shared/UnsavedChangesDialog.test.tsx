@@ -11,9 +11,12 @@ function UnsavedChangesDialogHarness() {
       <div data-testid="dirty-files">{workspace.dirtyFileIds.join(',')}</div>
       <button onClick={() => workspace.openFile('rtl/core/reg_file.v', 'reg_file.v')}>open-reg</button>
       <button onClick={() => workspace.openFile('rtl/core/alu.v', 'alu.v')}>open-alu</button>
+      <button onClick={() => workspace.openUntitledFile()}>open-untitled</button>
       <button onClick={() => workspace.updateFileContentInGroup('group-1', 'rtl/core/reg_file.v', 'module reg_file; logic dirty; endmodule')}>edit-reg</button>
       <button onClick={() => workspace.updateFileContentInGroup('group-1', 'rtl/core/alu.v', 'module alu; logic dirty; endmodule')}>edit-alu</button>
+      <button onClick={() => workspace.updateFileContent(workspace.activeTabId, 'module untitled; endmodule')}>edit-active</button>
       <button onClick={() => workspace.openUnsavedChangesDialog()}>open-unsaved-dialog</button>
+      <button onClick={() => workspace.closeActiveTabInFocusedGroup()}>close-active</button>
       <UnsavedChangesDialog />
     </div>
   );
@@ -60,5 +63,24 @@ describe('UnsavedChangesDialog', () => {
     await waitFor(() => {
       expect(screen.queryByTestId('unsaved-changes-dialog')).not.toBeInTheDocument();
     });
+  });
+
+  it('renders a dedicated three-button close confirmation for a single dirty tab', async () => {
+    render(
+      <WorkspaceProvider>
+        <UnsavedChangesDialogHarness />
+      </WorkspaceProvider>,
+    );
+
+    fireEvent.click(screen.getByText('open-untitled'));
+    fireEvent.click(screen.getByText('edit-active'));
+    fireEvent.click(screen.getByText('close-active'));
+
+    expect(await screen.findByTestId('unsaved-changes-single-file')).toBeVisible();
+    expect(screen.getByTestId('unsaved-changes-single-file')).toHaveTextContent('untitled-1');
+    expect(screen.getByTestId('unsaved-changes-cancel')).toHaveTextContent('Cancel');
+    expect(screen.getByTestId('unsaved-changes-discard')).toHaveTextContent("Don't save");
+    expect(screen.getByTestId('unsaved-changes-save')).toHaveTextContent('Save');
+    expect(screen.queryByTestId('unsaved-changes-file-list')).not.toBeInTheDocument();
   });
 });

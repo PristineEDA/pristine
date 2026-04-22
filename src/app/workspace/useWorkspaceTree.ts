@@ -65,7 +65,7 @@ function findNode(node: WorkspaceTreeNode | null, targetPath: string): Workspace
   return null;
 }
 
-export function useWorkspaceTree(revealRequest?: WorkspaceRevealRequest | null) {
+export function useWorkspaceTree(revealRequest?: WorkspaceRevealRequest | null, refreshToken = 0) {
   const [rootNode, setRootNode] = useState<WorkspaceTreeNode | null>(null);
   const [workspaceAvailable, setWorkspaceAvailable] = useState<boolean | null>(null);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(() => new Set([WORKSPACE_ROOT_PATH]));
@@ -94,7 +94,11 @@ export function useWorkspaceTree(revealRequest?: WorkspaceRevealRequest | null) 
       if (dirPath === WORKSPACE_ROOT_PATH) {
         const nextRootNode = createRootNode(children);
         setRootNode(nextRootNode);
-        setExpandedFolders(new Set([WORKSPACE_ROOT_PATH]));
+        setExpandedFolders((current) => {
+          const nextExpandedFolders = new Set(current);
+          nextExpandedFolders.add(WORKSPACE_ROOT_PATH);
+          return nextExpandedFolders;
+        });
         setWorkspaceAvailable(true);
         return;
       }
@@ -165,7 +169,31 @@ export function useWorkspaceTree(revealRequest?: WorkspaceRevealRequest | null) 
 
   useEffect(() => {
     void initializeTree();
-  }, [initializeTree]);
+  }, [initializeTree, refreshToken]);
+
+  useEffect(() => {
+    if (!rootNode || workspaceAvailable !== true) {
+      return;
+    }
+
+    const pathsToLoad = Array.from(expandedFolders).filter((expandedPath) => {
+      if (expandedPath === WORKSPACE_ROOT_PATH) {
+        return false;
+      }
+
+      const expandedNode = findNode(rootNode, expandedPath);
+      return Boolean(
+        expandedNode
+        && expandedNode.type === 'folder'
+        && !expandedNode.hasLoadedChildren
+        && !expandedNode.isLoading,
+      );
+    });
+
+    pathsToLoad.forEach((expandedPath) => {
+      void loadDirectory(expandedPath);
+    });
+  }, [expandedFolders, loadDirectory, rootNode, workspaceAvailable]);
 
   useEffect(() => {
     if (!revealRequest?.path || workspaceAvailable !== true) {
@@ -191,20 +219,7 @@ export function useWorkspaceTree(revealRequest?: WorkspaceRevealRequest | null) 
 
       return next ?? current;
     });
-
-    const nextAncestorToLoad = ancestorPaths.find((ancestorPath) => {
-      if (ancestorPath === WORKSPACE_ROOT_PATH) {
-        return false;
-      }
-
-      const currentNode = findNode(rootNode, ancestorPath);
-      return !!currentNode && currentNode.type === 'folder' && !currentNode.hasLoadedChildren && !currentNode.isLoading;
-    });
-
-    if (nextAncestorToLoad) {
-      void loadDirectory(nextAncestorToLoad);
-    }
-  }, [loadDirectory, revealRequest, rootNode, workspaceAvailable]);
+  }, [revealRequest, workspaceAvailable]);
 
   const toggleFolder = useCallback((path: string) => {
     setExpandedFolders((current) => {

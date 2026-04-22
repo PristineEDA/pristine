@@ -1,7 +1,8 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { SyncChannels, AsyncChannels, StreamChannels } from './ipc/channels.js';
+import type { SaveDialogResult } from './ipc/dialog.js';
 import type { LspCompletionResponse, LspDebugEvent, LspDiagnosticsEvent, LspHover, LspStateEvent, WorkspaceLocation } from '../types/systemverilog-lsp.js';
-import type { WorkspaceGitStatusPayload } from '../types/workspace-git.js';
+import type { WorkspaceGitChangeEvent, WorkspaceGitStatusPayload } from '../types/workspace-git.js';
 import type { MenuCommandEvent } from '../src/app/menu/applicationMenu.js';
 import type { WindowCloseDecision, WindowCloseRequest } from '../src/app/window/windowClose.js';
 import type { AuthView, DesktopAuthSession } from '../src/app/auth/types.js';
@@ -65,15 +66,36 @@ const electronAPI = {
     ipcRenderer.on(StreamChannels.WINDOW_FOCUS, handler);
     return () => { ipcRenderer.removeListener(StreamChannels.WINDOW_FOCUS, handler); };
   },
+  onWorkspaceChange: (callback: (payload: WorkspaceGitChangeEvent) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, payload: WorkspaceGitChangeEvent) => callback(payload);
+    ipcRenderer.on(StreamChannels.WORKSPACE_CHANGE, handler);
+    return () => { ipcRenderer.removeListener(StreamChannels.WORKSPACE_CHANGE, handler); };
+  },
 
   // ── File System (async, project-dir scoped) ──
   fs: {
     readFile: (filePath: string, encoding?: string) =>
       ipcRenderer.invoke(AsyncChannels.FS_READ_FILE, filePath, encoding) as Promise<string>,
+    readFileAbsolute: (filePath: string, encoding?: string) =>
+      ipcRenderer.invoke(AsyncChannels.FS_READ_FILE_ABSOLUTE, filePath, encoding) as Promise<string>,
     listFiles: (dirPath = '.') =>
       ipcRenderer.invoke(AsyncChannels.FS_LIST_FILES, dirPath) as Promise<string[]>,
     writeFile: (filePath: string, content: string) =>
       ipcRenderer.invoke(AsyncChannels.FS_WRITE_FILE, filePath, content) as Promise<void>,
+    writeFileAbsolute: (filePath: string, content: string) =>
+      ipcRenderer.invoke(AsyncChannels.FS_WRITE_FILE_ABSOLUTE, filePath, content) as Promise<void>,
+    createDirectory: (dirPath: string) =>
+      ipcRenderer.invoke(AsyncChannels.FS_CREATE_DIRECTORY, dirPath) as Promise<void>,
+    copyFile: (sourcePath: string, destinationPath: string) =>
+      ipcRenderer.invoke(AsyncChannels.FS_COPY_FILE, sourcePath, destinationPath) as Promise<void>,
+    copyDirectory: (sourcePath: string, destinationPath: string) =>
+      ipcRenderer.invoke(AsyncChannels.FS_COPY_DIRECTORY, sourcePath, destinationPath) as Promise<void>,
+    deleteFile: (filePath: string) =>
+      ipcRenderer.invoke(AsyncChannels.FS_DELETE_FILE, filePath) as Promise<void>,
+    deleteDirectory: (dirPath: string) =>
+      ipcRenderer.invoke(AsyncChannels.FS_DELETE_DIRECTORY, dirPath) as Promise<void>,
+    rename: (currentPath: string, nextPath: string) =>
+      ipcRenderer.invoke(AsyncChannels.FS_RENAME, currentPath, nextPath) as Promise<void>,
     readDir: (dirPath: string) =>
       ipcRenderer.invoke(AsyncChannels.FS_READ_DIR, dirPath) as Promise<
         Array<{ name: string; isDirectory: boolean; isFile: boolean }>
@@ -88,6 +110,11 @@ const electronAPI = {
       }>,
     exists: (filePath: string) =>
       ipcRenderer.invoke(AsyncChannels.FS_EXISTS, filePath) as Promise<boolean>,
+  },
+
+  dialog: {
+    showSaveDialog: (defaultPath?: string) =>
+      ipcRenderer.invoke(AsyncChannels.DIALOG_SHOW_SAVE, defaultPath) as Promise<SaveDialogResult>,
   },
 
   git: {

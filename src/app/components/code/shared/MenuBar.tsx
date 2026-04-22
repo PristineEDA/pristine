@@ -11,6 +11,7 @@ import {
   isAppMenuItem,
   type MenuCommandEvent,
 } from '../../../menu/applicationMenu';
+import { formatShortcutLabel, isMacOSPlatform } from '../../../menu/shortcutLabels';
 import { canToggleLayoutPanels as canUseLayoutPanels } from '../../../codeViewPanels';
 import { getDesktopAvatarCandidates } from '../../../auth/avatar';
 import type { DesktopAuthSession } from '../../../auth/types';
@@ -101,54 +102,6 @@ const settingsSectionTitleClassName = 'text-[13px] font-medium';
 const settingsSectionDescriptionClassName = 'text-[12px] text-muted-foreground';
 const userPopoverActionsClassName = 'grid grid-cols-2 gap-1.5';
 const userPopoverActionButtonClassName = 'h-8 w-full justify-center gap-1 whitespace-nowrap px-2.5 text-[11px] hover:cursor-pointer [&_svg]:size-3.5 disabled:cursor-not-allowed';
-
-function isMacOSPlatform(): boolean {
-  return typeof window !== 'undefined' && window.electronAPI?.platform === 'darwin';
-}
-
-function formatShortcutLabel(shortcut?: string): string {
-  if (!shortcut) {
-    return '';
-  }
-
-  const isMacOS = isMacOSPlatform();
-  const tokens = shortcut.split('+');
-  const keyToken = tokens[tokens.length - 1]?.toUpperCase() ?? '';
-  const modifierTokens = tokens.slice(0, -1);
-
-  if (isMacOS) {
-    const macModifiers = modifierTokens.map((token) => {
-      if (token === 'Mod') {
-        return '⌘';
-      }
-
-      if (token === 'Shift') {
-        return '⇧';
-      }
-
-      return token.toUpperCase();
-    });
-
-    return [...macModifiers, keyToken].join('');
-  }
-
-  const nonMacModifierOrder = ['Mod', 'Shift'];
-  const nonMacModifiers = [...modifierTokens]
-    .sort((leftToken, rightToken) => nonMacModifierOrder.indexOf(leftToken) - nonMacModifierOrder.indexOf(rightToken))
-    .map((token) => {
-      if (token === 'Mod') {
-        return 'Ctrl';
-      }
-
-      if (token === 'Shift') {
-        return 'Shift';
-      }
-
-      return token.toUpperCase();
-    });
-
-  return [...nonMacModifiers, keyToken].join('+');
-}
 
 function getMenuItemShortcut(menuLabel: string, itemName: string): string {
   return formatShortcutLabel(getApplicationMenuItemShortcut(menuLabel, itemName));

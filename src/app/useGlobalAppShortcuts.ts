@@ -2,8 +2,10 @@ import { useEffect, useEffectEvent } from 'react';
 
 interface UseGlobalAppShortcutsOptions {
   canToggleLayoutPanels: boolean;
+  closeActiveTabInFocusedGroup: () => void;
   closeQuickOpen: () => void;
   isQuickOpenVisible: boolean;
+  openUntitledFile: () => void;
   openQuickOpen: () => void;
   saveActiveFile: () => Promise<boolean>;
   setShowBottomPanel: (show: boolean) => void;
@@ -18,8 +20,10 @@ function isPrimaryModifierShortcut(event: KeyboardEvent): boolean {
 
 export function useGlobalAppShortcuts({
   canToggleLayoutPanels,
+  closeActiveTabInFocusedGroup,
   closeQuickOpen,
   isQuickOpenVisible,
+  openUntitledFile,
   openQuickOpen,
   saveActiveFile,
   setShowBottomPanel,
@@ -49,6 +53,18 @@ export function useGlobalAppShortcuts({
     if (key === 's') {
       event.preventDefault();
       void saveActiveFile();
+      return;
+    }
+
+    if (key === 'n') {
+      event.preventDefault();
+      openUntitledFile();
+      return;
+    }
+
+    if (key === 'w') {
+      event.preventDefault();
+      closeActiveTabInFocusedGroup();
       return;
     }
 

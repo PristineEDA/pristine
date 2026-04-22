@@ -36,6 +36,7 @@ interface EditorGroupWorkspaceActions {
   focusGroup: (groupId: string) => void;
   loadFileContent: (fileId: string) => void;
   openFileInGroup: (fileId: string, fileName: string, groupId: string) => void;
+  openUntitledFile: (groupId?: string) => string;
   pinTabInGroup: (groupId: string, tabId: string) => void;
   registerEditorRef: (groupId: string, editorInstance: any) => void;
   restoreEditorSelection: (snapshot: { groupId: string; fileId: string; line: number; col: number }) => void;
@@ -184,6 +185,7 @@ const EditorGroupLeaf = memo(function EditorGroupLeaf({
   onDragEnd,
   dragState,
   onActiveFileReveal,
+  resolveFileId,
   workspaceActionsRef,
 }: {
   group: EditorGroup;
@@ -203,6 +205,7 @@ const EditorGroupLeaf = memo(function EditorGroupLeaf({
   onDragEnd: () => void;
   dragState: DragState | null;
   onActiveFileReveal?: (fileId: string) => void;
+  resolveFileId: (fileId: string) => string;
   workspaceActionsRef: React.MutableRefObject<EditorGroupWorkspaceActions>;
 }) {
   const editorRef = useRef<any>(null);
@@ -228,6 +231,13 @@ const EditorGroupLeaf = memo(function EditorGroupLeaf({
       event.preventDefault();
       event.stopPropagation();
       workspaceActionsRef.current.closeActiveTabInFocusedGroup();
+      return;
+    }
+
+    if (key === 'n' && !event.shiftKey) {
+      event.preventDefault();
+      event.stopPropagation();
+      workspaceActionsRef.current.openUntitledFile(group.id);
       return;
     }
 
@@ -276,6 +286,7 @@ const EditorGroupLeaf = memo(function EditorGroupLeaf({
       <EditorArea
         tabs={group.tabs}
         activeTabId={group.activeTabId}
+        documentTabId={resolveFileId(group.activeTabId)}
         onTabChange={(tabId) => {
           onActiveFileReveal?.(tabId);
           workspaceActionsRef.current.setActiveTabIdInGroup(group.id, tabId);
@@ -292,7 +303,7 @@ const EditorGroupLeaf = memo(function EditorGroupLeaf({
             return;
           }
 
-          workspaceActionsRef.current.setCursorPos(line, col, group.id, group.activeTabId);
+          workspaceActionsRef.current.setCursorPos(line, col, group.id, resolveFileId(group.activeTabId));
         }}
         onSplitEditor={(direction) => workspaceActionsRef.current.splitGroup(group.id, direction)}
         onFocus={() => onFocus(group.id)}
@@ -305,6 +316,12 @@ const EditorGroupLeaf = memo(function EditorGroupLeaf({
         onLoadFile={workspaceActionsRef.current.loadFileContent}
         onSaveShortcut={() => {
           void workspaceActionsRef.current.saveActiveFile();
+        }}
+        onNewShortcut={() => {
+          workspaceActionsRef.current.openUntitledFile(group.id);
+        }}
+        onCloseShortcut={() => {
+          workspaceActionsRef.current.closeActiveTabInFocusedGroup();
         }}
         onContentChange={(fileId, content) => {
           workspaceActionsRef.current.updateFileContentInGroup(group.id, fileId, content);
@@ -351,9 +368,11 @@ export function EditorSplitLayout({
     editorGroups,
     moveTab,
     openFileInGroup,
+    openUntitledFile,
     pinTabInGroup,
     registerEditorRef,
     restoreEditorSelection,
+    resolveFileId,
     saveActiveFile,
     setActiveTabIdInGroup,
     setCursorPos,
@@ -371,6 +390,7 @@ export function EditorSplitLayout({
     focusGroup,
     loadFileContent,
     openFileInGroup,
+    openUntitledFile,
     pinTabInGroup,
     registerEditorRef,
     restoreEditorSelection,
@@ -389,6 +409,7 @@ export function EditorSplitLayout({
     focusGroup,
     loadFileContent,
     openFileInGroup,
+    openUntitledFile,
     pinTabInGroup,
     registerEditorRef,
     restoreEditorSelection,
@@ -481,6 +502,7 @@ export function EditorSplitLayout({
           onDragEnd={clearDragState}
           dragState={dragState}
           onActiveFileReveal={onActiveFileReveal}
+          resolveFileId={resolveFileId}
           workspaceActionsRef={workspaceActionsRef}
         />
       );

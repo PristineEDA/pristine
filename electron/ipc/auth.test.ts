@@ -104,7 +104,7 @@ function createStoredSession(overrides: TestStoredSessionOverrides = {}): TestSt
     profile: {
       avatarUrl: null,
       email: 'alice@example.com',
-      sessionExpiresAt: 1_700_000_000,
+      sessionExpiresAt: 1_900_000_000,
       syncedAt: null,
       userId: 'user-1',
       username: 'Alice',
@@ -132,6 +132,16 @@ function encodeStoredSession(session: TestStoredAuthSession): string {
 function decodeStoredSessionEnvelope(rawEnvelope: string): TestStoredAuthSession {
   const envelope = JSON.parse(rawEnvelope) as { encrypted: boolean; payload: string };
   return JSON.parse(Buffer.from(envelope.payload, 'base64').toString('utf-8')) as TestStoredAuthSession;
+}
+
+function toPublicSession(session: TestStoredAuthSession) {
+  return {
+    avatarUrl: session.profile.avatarUrl,
+    email: session.profile.email,
+    syncedAt: session.profile.syncedAt,
+    userId: session.profile.userId,
+    username: session.profile.username,
+  };
 }
 
 function createResponse(body: Record<string, unknown>, status: number = 200): Response {
@@ -175,6 +185,7 @@ async function importModule() {
 describe('auth IPC handlers', () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-04-21T00:00:00.000Z'));
     mockGetAllWindows.mockReset();
     mockGetAllWindows.mockReturnValue([]);
     mockGetConfigSnapshot.mockReset();
@@ -195,11 +206,54 @@ describe('auth IPC handlers', () => {
   });
 
   afterEach(() => {
-    vi.runOnlyPendingTimers();
+    vi.clearAllTimers();
     vi.useRealTimers();
   });
 
-  it('returns the cached desktop session immediately and refreshes it in the background', async () => {
+  it('returns the cached desktop session immediately and defers validation for fresh sessions', async () => {
+    const cachedSession = createStoredSession({
+      profile: {
+        sessionExpiresAt: 1_900_003_600,
+      },
+    });
+    const send = createWindowSendSpy();
+    mockFs.readFileSync.mockReturnValue(encodeStoredSession(cachedSession));
+    mockNetFetch.mockResolvedValueOnce(createResponse({
+      access_token: 'next-access-token',
+      expires_at: 2_000_000_000,
+      refresh_token: 'next-refresh-token',
+    }));
+
+    const { registerAuthHandlers } = await importModule();
+    registerAuthHandlers();
+
+    const getSession = getAsyncHandler(AsyncChannels.AUTH_GET_SESSION);
+    await expect(getSession({})).resolves.toEqual(toPublicSession(cachedSession));
+    expect(mockNetFetch).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(14 * 60_000);
+
+    expect(mockNetFetch).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    expect(mockNetFetch).toHaveBeenCalledTimes(1);
+    expect(mockNetFetch).toHaveBeenCalledWith(
+      'https://fsuyziugqxslwkaxcakv.supabase.co/auth/v1/token?grant_type=refresh_token',
+      expect.objectContaining({
+        body: JSON.stringify({ refresh_token: 'seed-refresh-token' }),
+        method: 'POST',
+      }),
+    );
+
+    const persistedSession = decodeStoredSessionEnvelope(mockFs.writeFileSync.mock.calls.at(-1)?.[1] as string);
+    expect(persistedSession.accessToken).toBe('next-access-token');
+    expect(persistedSession.refreshToken).toBe('next-refresh-token');
+    expect(persistedSession.profile.sessionExpiresAt).toBe(2_000_000_000);
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it('waits briefly before refreshing expired sessions to avoid startup hot loops', async () => {
     const cachedSession = createStoredSession({
       profile: {
         sessionExpiresAt: 1_600_000_000,
@@ -217,28 +271,16 @@ describe('auth IPC handlers', () => {
     registerAuthHandlers();
 
     const getSession = getAsyncHandler(AsyncChannels.AUTH_GET_SESSION);
-    await expect(getSession({})).resolves.toEqual(cachedSession.profile);
+    await expect(getSession({})).resolves.toEqual(toPublicSession(cachedSession));
+
+    await vi.advanceTimersByTimeAsync(4_999);
+
     expect(mockNetFetch).not.toHaveBeenCalled();
 
-    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(1);
 
     expect(mockNetFetch).toHaveBeenCalledTimes(1);
-    expect(mockNetFetch).toHaveBeenCalledWith(
-      'https://fsuyziugqxslwkaxcakv.supabase.co/auth/v1/token?grant_type=refresh_token',
-      expect.objectContaining({
-        body: JSON.stringify({ refresh_token: 'seed-refresh-token' }),
-        method: 'POST',
-      }),
-    );
-
-    const persistedSession = decodeStoredSessionEnvelope(mockFs.writeFileSync.mock.calls.at(-1)?.[1] as string);
-    expect(persistedSession.accessToken).toBe('next-access-token');
-    expect(persistedSession.refreshToken).toBe('next-refresh-token');
-    expect(persistedSession.profile.sessionExpiresAt).toBe(2_000_000_000);
-    expect(send).toHaveBeenCalledWith(StreamChannels.AUTH_STATE_CHANGED, {
-      ...cachedSession.profile,
-      sessionExpiresAt: 2_000_000_000,
-    });
+    expect(send).not.toHaveBeenCalled();
   });
 
   it('keeps the cached session and retries automatically after a transient refresh failure', async () => {
@@ -261,9 +303,9 @@ describe('auth IPC handlers', () => {
     registerAuthHandlers();
 
     const getSession = getAsyncHandler(AsyncChannels.AUTH_GET_SESSION);
-    await expect(getSession({})).resolves.toEqual(cachedSession.profile);
+    await expect(getSession({})).resolves.toEqual(toPublicSession(cachedSession));
 
-    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5_000);
 
     expect(mockNetFetch).toHaveBeenCalledTimes(1);
     expect(mockFs.unlinkSync).not.toHaveBeenCalled();
@@ -275,10 +317,7 @@ describe('auth IPC handlers', () => {
     const persistedSession = decodeStoredSessionEnvelope(mockFs.writeFileSync.mock.calls.at(-1)?.[1] as string);
     expect(persistedSession.accessToken).toBe('retry-access-token');
     expect(persistedSession.refreshToken).toBe('retry-refresh-token');
-    expect(send).toHaveBeenCalledWith(StreamChannels.AUTH_STATE_CHANGED, {
-      ...cachedSession.profile,
-      sessionExpiresAt: 2_100_000_000,
-    });
+    expect(send).not.toHaveBeenCalled();
   });
 
   it('clears the cached session when the refresh token is terminally invalid', async () => {
@@ -297,9 +336,9 @@ describe('auth IPC handlers', () => {
     registerAuthHandlers();
 
     const getSession = getAsyncHandler(AsyncChannels.AUTH_GET_SESSION);
-    await expect(getSession({})).resolves.toEqual(cachedSession.profile);
+    await expect(getSession({})).resolves.toEqual(toPublicSession(cachedSession));
 
-    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5_000);
 
     expect(mockFs.unlinkSync).toHaveBeenCalledWith(path.join('/tmp/pristine-user-data', 'auth-session.json'));
     expect(send).toHaveBeenCalledWith(StreamChannels.AUTH_STATE_CHANGED, null);

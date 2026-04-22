@@ -1,5 +1,6 @@
 import { BrowserWindow } from 'electron';
 import path from 'node:path';
+import { registerDialogHandlers, setDialogProjectRoot } from './dialog.js';
 import { registerWindowHandlers, setupWindowStreams } from './window.js';
 import { registerFilesystemHandlers, setProjectRoot as setFsRoot } from './filesystem.js';
 import { registerGitHandlers, setGitProjectRoot } from './git.js';
@@ -13,6 +14,7 @@ import type { WindowCloseDecision } from '../../src/app/window/windowClose.js';
 
 export function setProjectRoot(root: string): void {
   const resolved = path.resolve(root);
+  setDialogProjectRoot(resolved);
   setFsRoot(resolved);
   setGitProjectRoot(resolved);
   setLspProjectRoot(resolved);
@@ -26,9 +28,10 @@ export function registerAllHandlers(
   resolveCloseRequest: (requestId: number, decision: WindowCloseDecision) => boolean = () => false,
 ): void {
   registerPlatformHandler();
+  registerDialogHandlers(getMainWindow);
   registerWindowHandlers(getMainWindow, setFloatingInfoWindowVisible, resolveCloseRequest);
   registerFilesystemHandlers();
-  registerGitHandlers();
+  registerGitHandlers(getMainWindow);
   registerLspHandlers(getMainWindow);
   registerShellHandlers(getMainWindow);
   registerTerminalHandlers(getMainWindow);

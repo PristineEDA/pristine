@@ -65,6 +65,7 @@ describe('preload bridge', () => {
     const onFullScreenChange = vi.fn();
     const onCloseRequested = vi.fn();
     const onWindowFocus = vi.fn();
+    const onWorkspaceChange = vi.fn();
     const onStdout = vi.fn();
     const onStderr = vi.fn();
     const onShellExit = vi.fn();
@@ -82,9 +83,16 @@ describe('preload bridge', () => {
     api.close();
     api.resolveCloseRequest(3, 'proceed');
     api.setFloatingInfoWindowVisible(true);
+    api.dialog.showSaveDialog('untitled-1');
     api.fs.readFile('src/main.v', 'utf-8');
+    api.fs.readFileAbsolute('C:/external/main.v', 'utf-8');
     api.fs.listFiles('rtl');
     api.fs.writeFile('rtl/main.v', 'module main; endmodule');
+    api.fs.writeFileAbsolute('C:/external/main.v', 'module external; endmodule');
+    api.fs.createDirectory('rtl/generated');
+    api.fs.deleteFile('rtl/main.v');
+    api.fs.deleteDirectory('rtl/generated');
+    api.fs.rename('rtl/core/old.v', 'rtl/core/new.v');
     api.fs.readDir('rtl');
     api.fs.stat('rtl/main.v');
     api.fs.exists('rtl/main.v');
@@ -112,6 +120,7 @@ describe('preload bridge', () => {
     const disposeFullScreen = api.onFullScreenChange(onFullScreenChange);
     const disposeCloseRequest = api.onCloseRequested(onCloseRequested);
     const disposeWindowFocus = api.onWindowFocus(onWindowFocus);
+    const disposeWorkspaceChange = api.onWorkspaceChange(onWorkspaceChange);
     const disposeStdout = api.shell.onStdout(onStdout);
     const disposeStderr = api.shell.onStderr(onStderr);
     const disposeShellExit = api.shell.onExit(onShellExit);
@@ -135,9 +144,16 @@ describe('preload bridge', () => {
     expect(mockInvoke).toHaveBeenCalledWith('async:window:close');
     expect(mockInvoke).toHaveBeenCalledWith('async:window:resolve-close-request', 3, 'proceed');
     expect(mockInvoke).toHaveBeenCalledWith('async:window:set-floating-info-visibility', true);
+    expect(mockInvoke).toHaveBeenCalledWith('async:dialog:show-save', 'untitled-1');
     expect(mockInvoke).toHaveBeenCalledWith('async:fs:read-file', 'src/main.v', 'utf-8');
+    expect(mockInvoke).toHaveBeenCalledWith('async:fs:read-file-absolute', 'C:/external/main.v', 'utf-8');
     expect(mockInvoke).toHaveBeenCalledWith('async:fs:list-files', 'rtl');
     expect(mockInvoke).toHaveBeenCalledWith('async:fs:write-file', 'rtl/main.v', 'module main; endmodule');
+    expect(mockInvoke).toHaveBeenCalledWith('async:fs:write-file-absolute', 'C:/external/main.v', 'module external; endmodule');
+    expect(mockInvoke).toHaveBeenCalledWith('async:fs:create-directory', 'rtl/generated');
+    expect(mockInvoke).toHaveBeenCalledWith('async:fs:delete-file', 'rtl/main.v');
+    expect(mockInvoke).toHaveBeenCalledWith('async:fs:delete-directory', 'rtl/generated');
+    expect(mockInvoke).toHaveBeenCalledWith('async:fs:rename', 'rtl/core/old.v', 'rtl/core/new.v');
     expect(mockInvoke).toHaveBeenCalledWith('async:fs:read-dir', 'rtl');
     expect(mockInvoke).toHaveBeenCalledWith('async:fs:stat', 'rtl/main.v');
     expect(mockInvoke).toHaveBeenCalledWith('async:fs:exists', 'rtl/main.v');
@@ -164,6 +180,7 @@ describe('preload bridge', () => {
     expect(mockOn).toHaveBeenCalledWith('stream:window:full-screen-change', expect.any(Function));
     expect(mockOn).toHaveBeenCalledWith('stream:window:close-request', expect.any(Function));
     expect(mockOn).toHaveBeenCalledWith('stream:window:focus', expect.any(Function));
+    expect(mockOn).toHaveBeenCalledWith('stream:workspace:change', expect.any(Function));
     expect(mockOn).toHaveBeenCalledWith('stream:shell:stdout', expect.any(Function));
     expect(mockOn).toHaveBeenCalledWith('stream:shell:stderr', expect.any(Function));
     expect(mockOn).toHaveBeenCalledWith('stream:shell:exit', expect.any(Function));
@@ -192,6 +209,10 @@ describe('preload bridge', () => {
     const focusHandler = mockOn.mock.calls.find((call) => call[0] === 'stream:window:focus')?.[1];
     focusHandler({});
     expect(onWindowFocus).toHaveBeenCalledTimes(1);
+
+    const workspaceChangeHandler = mockOn.mock.calls.find((call) => call[0] === 'stream:workspace:change')?.[1];
+    workspaceChangeHandler({}, { refreshGitStatus: true, refreshWorkspaceTree: true });
+    expect(onWorkspaceChange).toHaveBeenCalledWith({ refreshGitStatus: true, refreshWorkspaceTree: true });
 
     const stdoutHandler = mockOn.mock.calls.find((call) => call[0] === 'stream:shell:stdout')?.[1];
     stdoutHandler({}, { id: 'shell-1', data: 'ok' });
@@ -230,8 +251,8 @@ describe('preload bridge', () => {
     expect(onMenuCommand).toHaveBeenCalledWith({ action: 'open-settings' });
 
     const authStateHandler = mockOn.mock.calls.find((call) => call[0] === 'stream:auth:state-changed')?.[1];
-    authStateHandler({}, { userId: 'user-1', username: 'Alice', email: 'alice@example.com', avatarUrl: null, syncedAt: null, sessionExpiresAt: null });
-    expect(onAuthStateChanged).toHaveBeenCalledWith({ userId: 'user-1', username: 'Alice', email: 'alice@example.com', avatarUrl: null, syncedAt: null, sessionExpiresAt: null });
+    authStateHandler({}, { userId: 'user-1', username: 'Alice', email: 'alice@example.com', avatarUrl: null, syncedAt: null });
+    expect(onAuthStateChanged).toHaveBeenCalledWith({ userId: 'user-1', username: 'Alice', email: 'alice@example.com', avatarUrl: null, syncedAt: null });
 
     const authErrorHandler = mockOn.mock.calls.find((call) => call[0] === 'stream:auth:error')?.[1];
     authErrorHandler({}, 'Unable to sign in');
@@ -245,6 +266,7 @@ describe('preload bridge', () => {
     disposeFullScreen();
     disposeCloseRequest();
     disposeWindowFocus();
+    disposeWorkspaceChange();
     disposeStdout();
     disposeStderr();
     disposeShellExit();
@@ -261,6 +283,7 @@ describe('preload bridge', () => {
     expect(mockRemoveListener).toHaveBeenCalledWith('stream:window:full-screen-change', fullScreenHandler);
     expect(mockRemoveListener).toHaveBeenCalledWith('stream:window:close-request', closeRequestHandler);
     expect(mockRemoveListener).toHaveBeenCalledWith('stream:window:focus', focusHandler);
+    expect(mockRemoveListener).toHaveBeenCalledWith('stream:workspace:change', workspaceChangeHandler);
     expect(mockRemoveListener).toHaveBeenCalledWith('stream:shell:stdout', stdoutHandler);
     expect(mockRemoveListener).toHaveBeenCalledWith('stream:shell:stderr', stderrHandler);
     expect(mockRemoveListener).toHaveBeenCalledWith('stream:shell:exit', shellExitHandler);

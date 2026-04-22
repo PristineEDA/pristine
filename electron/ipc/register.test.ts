@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { 
+  mockRegisterDialogHandlers,
+  mockSetDialogProjectRoot,
   mockRegisterWindowHandlers,
   mockSetupWindowStreams,
   mockRegisterFilesystemHandlers,
@@ -17,6 +19,8 @@ const {
   mockRegisterAuthHandlers,
   mockRegisterPlatformHandler,
 } = vi.hoisted(() => ({
+  mockRegisterDialogHandlers: vi.fn(),
+  mockSetDialogProjectRoot: vi.fn(),
   mockRegisterWindowHandlers: vi.fn(),
   mockSetupWindowStreams: vi.fn(),
   mockRegisterFilesystemHandlers: vi.fn(),
@@ -32,6 +36,11 @@ const {
   mockRegisterConfigHandlers: vi.fn(),
   mockRegisterAuthHandlers: vi.fn(),
   mockRegisterPlatformHandler: vi.fn(),
+}));
+
+vi.mock('./dialog.js', () => ({
+  registerDialogHandlers: (...args: unknown[]) => mockRegisterDialogHandlers(...args),
+  setDialogProjectRoot: (root: string) => mockSetDialogProjectRoot(root),
 }));
 
 vi.mock('./window.js', () => ({
@@ -86,6 +95,7 @@ describe('register helpers', () => {
   it('normalizes and forwards the project root to filesystem and shell handlers', () => {
     setProjectRoot('./workspace/../project-root');
 
+    expect(mockSetDialogProjectRoot).toHaveBeenCalledWith(expect.stringContaining('project-root'));
     expect(mockSetFsRoot).toHaveBeenCalledWith(expect.stringContaining('project-root'));
     expect(mockSetGitProjectRoot).toHaveBeenCalledWith(expect.stringContaining('project-root'));
     expect(mockSetLspProjectRoot).toHaveBeenCalledWith(expect.stringContaining('project-root'));
@@ -101,6 +111,7 @@ describe('register helpers', () => {
     registerAllHandlers(getMainWindow, setFloatingInfoWindowVisible, resolveCloseRequest);
 
     expect(mockRegisterPlatformHandler).toHaveBeenCalledTimes(1);
+    expect(mockRegisterDialogHandlers).toHaveBeenCalledWith(getMainWindow);
     expect(mockRegisterWindowHandlers).toHaveBeenCalledWith(getMainWindow, setFloatingInfoWindowVisible, resolveCloseRequest);
     expect(mockRegisterFilesystemHandlers).toHaveBeenCalledTimes(1);
     expect(mockRegisterGitHandlers).toHaveBeenCalledTimes(1);
