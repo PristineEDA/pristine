@@ -616,6 +616,7 @@ export const FileTreeNode = memo(function FileTreeNode({
   onRequestTreeFocus,
   contextMenuRequest,
   revealRequest,
+  onRevealHandled,
 }: {
   node: WorkspaceTreeNode;
   depth: number;
@@ -644,6 +645,7 @@ export const FileTreeNode = memo(function FileTreeNode({
   onRequestTreeFocus?: () => void;
   contextMenuRequest?: ExplorerContextMenuRequest | null;
   revealRequest?: WorkspaceRevealRequest | null;
+  onRevealHandled?: (token: number) => void;
 }) {
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
   const rowRef = useRef<HTMLDivElement | null>(null);
@@ -700,7 +702,8 @@ export const FileTreeNode = memo(function FileTreeNode({
     }
 
     rowRef.current?.scrollIntoView({ block: 'nearest' });
-  }, [node.path, revealRequest]);
+    onRevealHandled?.(revealRequest.token);
+  }, [node.path, onRevealHandled, revealRequest]);
 
   useEffect(() => {
     if (!contextMenuRequest || contextMenuRequest.path !== node.path) {
@@ -896,6 +899,7 @@ export const FileTreeNode = memo(function FileTreeNode({
               onRequestTreeFocus={onRequestTreeFocus}
               contextMenuRequest={contextMenuRequest}
               revealRequest={revealRequest}
+              onRevealHandled={onRevealHandled}
             />
           )
         ))}
@@ -986,7 +990,7 @@ export const FileTreeNode = memo(function FileTreeNode({
         />
       )}
 
-      {node.type === 'folder' && isExpanded && node.isLoading && (
+      {node.type === 'folder' && isExpanded && node.isLoading && !node.hasLoadedChildren && (
         <div className="text-[12px] text-muted-foreground pl-8 py-1">
           Loading...
         </div>
@@ -1039,6 +1043,7 @@ export const FileTreeNode = memo(function FileTreeNode({
             onRequestTreeFocus={onRequestTreeFocus}
             contextMenuRequest={contextMenuRequest}
             revealRequest={revealRequest}
+            onRevealHandled={onRevealHandled}
           />
         )
       ))}

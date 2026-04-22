@@ -252,6 +252,132 @@ describe('LeftSidePanel', () => {
     });
   });
 
+  it('does not re-scroll the same revealed file when a refresh rerenders the tree with the same reveal token', async () => {
+    const scrollIntoView = vi.spyOn(HTMLElement.prototype, 'scrollIntoView');
+    const revealRequest = { path: 'rtl/peripherals/uart_rx.v', token: 7 };
+    const { props, rerender } = renderLeftSidePanel({
+      activeFileId: 'rtl/peripherals/uart_rx.v',
+      currentOutlineId: 'uart_rx',
+      refreshToken: 0,
+      revealRequest,
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('file-tree-node-rtl_peripherals_uart_rx_v')).toBeInTheDocument();
+    });
+
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <LeftSidePanel
+        {...props}
+        refreshToken={1}
+        revealRequest={revealRequest}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('file-tree-node-rtl_peripherals_uart_rx_v')).toBeInTheDocument();
+    });
+
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+  });
+
+  it('compensates the explorer scroll position to keep a nearby anchor row stable during rename refreshes', async () => {
+    const electronApi = window.electronAPI!;
+    const onRenameWorkspaceEntry = vi.fn().mockResolvedValue(undefined);
+
+    vi.mocked(electronApi.fs.readDir).mockImplementation(async (dirPath: string) => {
+      if (dirPath === '.') {
+        return [{ name: 'rtl', isDirectory: true, isFile: false }];
+      }
+
+      if (dirPath === 'rtl') {
+        return [{ name: 'peripherals', isDirectory: true, isFile: false }];
+      }
+
+      if (dirPath === 'rtl/peripherals') {
+        return [
+          { name: 'uart_rx.v', isDirectory: false, isFile: true },
+          { name: 'uart_aux.v', isDirectory: false, isFile: true },
+        ];
+      }
+
+      return [];
+    });
+
+    const { container, props, rerender } = renderLeftSidePanel({
+      activeFileId: 'rtl/peripherals/uart_rx.v',
+      currentOutlineId: 'uart_rx',
+      refreshToken: 0,
+      onRenameWorkspaceEntry,
+    });
+
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl'));
+    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals'));
+
+    const fileNode = await screen.findByTestId('file-tree-node-rtl_peripherals_uart_rx_v');
+    await screen.findByTestId('file-tree-node-rtl_peripherals_uart_aux_v');
+    const tree = container.querySelector('.explorer-tree-scrollbar') as HTMLElement;
+    tree.scrollTop = 180;
+
+    let anchorTop = 120;
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function(this: HTMLElement) {
+      if (this.getAttribute('data-testid') === 'file-tree-node-rtl_peripherals_uart_aux_v') {
+        return {
+          x: 0,
+          y: anchorTop,
+          width: 120,
+          height: 24,
+          top: anchorTop,
+          right: 120,
+          bottom: anchorTop + 24,
+          left: 0,
+          toJSON: () => '',
+        } as DOMRect;
+      }
+
+      return {
+        x: 0,
+        y: 0,
+        width: 120,
+        height: 24,
+        top: 0,
+        right: 120,
+        bottom: 24,
+        left: 0,
+        toJSON: () => '',
+      } as DOMRect;
+    });
+
+    fireEvent.click(fileNode);
+    fireEvent.keyDown(tree, { key: 'F2' });
+
+    const renameInput = await screen.findByTestId('file-tree-input-rtl_peripherals_uart_rx_v');
+    fireEvent.change(renameInput, { target: { value: 'uart_tx.v' } });
+    fireEvent.keyDown(renameInput, { key: 'Enter' });
+
+    await waitFor(() => {
+      expect(onRenameWorkspaceEntry).toHaveBeenCalledWith(
+        'rtl/peripherals/uart_rx.v',
+        'rtl/peripherals/uart_tx.v',
+        'file',
+      );
+    });
+
+    anchorTop = 96;
+
+    rerender(
+      <LeftSidePanel
+        {...props}
+        refreshToken={1}
+        onRenameWorkspaceEntry={onRenameWorkspaceEntry}
+      />,
+    );
+
+    expect(tree.scrollTop).toBe(156);
+  });
+
   it('starts inline rename when F2 is pressed on document after selecting a file in the tree', async () => {
     renderLeftSidePanel({
       activeFileId: 'rtl/peripherals/uart_rx.v',

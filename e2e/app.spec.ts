@@ -426,6 +426,110 @@ async function readExplorerTreeScrollTop(window: Awaited<ReturnType<typeof launc
   });
 }
 
+async function readExplorerNodeTop(
+  window: Awaited<ReturnType<typeof launchApp>>['window'],
+  targetTestId: string,
+) {
+  const targetNode = window.getByTestId(targetTestId);
+  const targetBox = await targetNode.boundingBox();
+
+  if (!targetBox) {
+    throw new Error(`Expected explorer node ${targetTestId} geometry to be measurable`);
+  }
+
+  return Math.round(targetBox.y);
+}
+
+async function recordExplorerNodeTopTimeline(
+  window: Awaited<ReturnType<typeof launchApp>>['window'],
+  targetTestId: string,
+  sampleCount = 45,
+  delayMs = 16,
+) {
+  const explorerTree = window.locator('.explorer-tree-scrollbar');
+
+  return explorerTree.evaluate(async (element, options) => {
+    type RectLike = {
+      y: number;
+    };
+
+    type ScrollTargetLike = {
+      getBoundingClientRect: () => RectLike;
+    };
+
+    type ScrollContainerLike = {
+      querySelector: (selector: string) => ScrollTargetLike | null;
+    };
+
+    const scrollContainer = element as unknown as ScrollContainerLike;
+    const samples: number[] = [];
+
+    for (let index = 0; index < options.sampleCount; index += 1) {
+      const targetNode = scrollContainer.querySelector(`[data-testid="${options.targetTestId}"]`);
+
+      if (!targetNode) {
+        throw new Error(`Expected explorer node ${options.targetTestId} in the tree while recording motion`);
+      }
+
+      samples.push(Math.round(targetNode.getBoundingClientRect().y));
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, options.delayMs);
+      });
+    }
+
+    return samples;
+  }, { targetTestId, sampleCount, delayMs });
+}
+
+function countTimelineDirectionChanges(samples: number[]) {
+  let lastDirection = 0;
+  let directionChanges = 0;
+
+  for (let index = 1; index < samples.length; index += 1) {
+    const delta = samples[index] - samples[index - 1];
+
+    if (delta === 0) {
+      continue;
+    }
+
+    const direction = Math.sign(delta);
+
+    if (lastDirection !== 0 && direction !== lastDirection) {
+      directionChanges += 1;
+    }
+
+    lastDirection = direction;
+  }
+
+  return directionChanges;
+}
+
+async function recordExplorerTreeScrollTopTimeline(
+  window: Awaited<ReturnType<typeof launchApp>>['window'],
+  sampleCount = 45,
+  delayMs = 16,
+) {
+  const explorerTree = window.locator('.explorer-tree-scrollbar');
+
+  return explorerTree.evaluate(async (element, options) => {
+    type ScrollContainerLike = {
+      scrollTop: number;
+    };
+
+    const scrollContainer = element as unknown as ScrollContainerLike;
+    const samples: number[] = [];
+
+    for (let index = 0; index < options.sampleCount; index += 1) {
+      samples.push(Math.round(scrollContainer.scrollTop));
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, options.delayMs);
+      });
+    }
+
+    return samples;
+  }, { sampleCount, delayMs });
+}
+
 async function openBottomTerminal(window: Awaited<ReturnType<typeof launchApp>>['window']) {
   const toggleBottomPanel = window.getByTestId('toggle-bottom-panel');
   await expect(toggleBottomPanel).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
@@ -1861,6 +1965,7 @@ test('Explorer rename and delete keep the tree scroll position near the bottom a
 
     await renameSourceNode.click();
     const beforeRenameScrollTop = await readExplorerTreeScrollTop(window);
+    const beforeRenameAnchorTop = await readExplorerNodeTop(window, deleteTreeTestId);
 
     await explorerTree.focus();
     await explorerTree.press('F2');
@@ -1868,6 +1973,8 @@ test('Explorer rename and delete keep the tree scroll position near the bottom a
     const renameInput = window.getByTestId(renameInputTestId);
     await expect(renameInput).toBeVisible();
     await renameInput.fill(renameTargetFileName);
+    const renameScrollTimelinePromise = recordExplorerTreeScrollTopTimeline(window);
+    const renameAnchorTimelinePromise = recordExplorerNodeTopTimeline(window, deleteTreeTestId);
     await renameInput.press('Enter');
 
     await expect.poll(() => fs.existsSync(renameTargetAbsolutePath), {
@@ -1879,16 +1986,25 @@ test('Explorer rename and delete keep the tree scroll position near the bottom a
     await expect(window.getByTestId(renameTargetTreeTestId)).toBeVisible();
 
     const afterRenameScrollTop = await readExplorerTreeScrollTop(window);
+  const afterRenameAnchorTop = await readExplorerNodeTop(window, deleteTreeTestId);
+    const renameScrollTimeline = await renameScrollTimelinePromise;
+  const renameAnchorTimeline = await renameAnchorTimelinePromise;
     expect(afterRenameScrollTop).toBeGreaterThan(120);
     expect(Math.abs(afterRenameScrollTop - beforeRenameScrollTop)).toBeLessThanOrEqual(40);
+    expect(Math.max(...renameScrollTimeline) - Math.min(...renameScrollTimeline)).toBeLessThanOrEqual(2);
+  expect(Math.abs(afterRenameAnchorTop - beforeRenameAnchorTop)).toBeLessThanOrEqual(2);
+  expect(Math.max(...renameAnchorTimeline) - Math.min(...renameAnchorTimeline)).toBeLessThanOrEqual(2);
 
     const deleteNode = window.getByTestId(deleteTreeTestId);
     await expect(deleteNode).toBeVisible();
     await deleteNode.click();
 
     const beforeDeleteScrollTop = await readExplorerTreeScrollTop(window);
+  const beforeDeleteAnchorTop = await readExplorerNodeTop(window, renameTargetTreeTestId);
 
     await explorerTree.focus();
+    const deleteScrollTimelinePromise = recordExplorerTreeScrollTopTimeline(window);
+  const deleteAnchorTimelinePromise = recordExplorerNodeTopTimeline(window, renameTargetTreeTestId);
     await explorerTree.press('Delete');
 
     await expect(window.getByTestId('delete-confirmation-dialog')).toBeVisible();
@@ -1903,8 +2019,15 @@ test('Explorer rename and delete keep the tree scroll position near the bottom a
     await expect(window.getByTestId(renameTargetTreeTestId)).toBeVisible();
 
     const afterDeleteScrollTop = await readExplorerTreeScrollTop(window);
+    const afterDeleteAnchorTop = await readExplorerNodeTop(window, renameTargetTreeTestId);
+    const deleteScrollTimeline = await deleteScrollTimelinePromise;
+    const deleteAnchorTimeline = await deleteAnchorTimelinePromise;
     expect(afterDeleteScrollTop).toBeGreaterThan(120);
-    expect(Math.abs(afterDeleteScrollTop - beforeDeleteScrollTop)).toBeLessThanOrEqual(48);
+    expect(Math.abs(afterDeleteScrollTop - beforeDeleteScrollTop)).toBeLessThanOrEqual(24);
+    expect(Math.max(...deleteScrollTimeline) - Math.min(...deleteScrollTimeline)).toBeLessThanOrEqual(24);
+    expect(countTimelineDirectionChanges(deleteScrollTimeline)).toBe(0);
+    expect(Math.abs(afterDeleteAnchorTop - beforeDeleteAnchorTop)).toBeLessThanOrEqual(2);
+    expect(Math.max(...deleteAnchorTimeline) - Math.min(...deleteAnchorTimeline)).toBeLessThanOrEqual(2);
   } finally {
     await app.close().catch(() => undefined);
   }
