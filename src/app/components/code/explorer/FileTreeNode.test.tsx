@@ -248,6 +248,75 @@ describe('FileTreeNode', () => {
     expect(onStartDelete).toHaveBeenCalledWith('rtl', 'folder');
   });
 
+  it('opens the explorer context menu upward when the click is near the viewport bottom', () => {
+    const originalInnerHeight = window.innerHeight;
+    const getBoundingClientRectMock = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function mockRect() {
+      if (this.getAttribute('data-testid') === 'explorer-context-menu') {
+        return {
+          x: 40,
+          y: 190,
+          top: 190,
+          left: 40,
+          bottom: 350,
+          right: 200,
+          width: 160,
+          height: 160,
+          toJSON: () => ({}),
+        } as DOMRect;
+      }
+
+      return {
+        x: 0,
+        y: 0,
+        top: 0,
+        left: 0,
+        bottom: 0,
+        right: 0,
+        width: 0,
+        height: 0,
+        toJSON: () => ({}),
+      } as DOMRect;
+    });
+
+    Object.defineProperty(window, 'innerHeight', {
+      configurable: true,
+      value: 240,
+    });
+
+    render(
+      <FileTreeNode
+        node={{
+          id: 'rtl',
+          path: 'rtl',
+          name: 'rtl',
+          type: 'folder',
+          children: [],
+          hasLoadedChildren: true,
+          isLoading: false,
+        }}
+        depth={0}
+        activeFileId=""
+        onFileOpen={vi.fn()}
+        onFilePreview={vi.fn()}
+        expandedFolders={new Set()}
+        onToggleFolder={vi.fn()}
+        gitPathStates={{}}
+      />,
+    );
+
+    openContextMenuForNode('file-tree-node-rtl', { clientX: 40, clientY: 190 });
+
+    const menu = screen.getByTestId('explorer-context-menu');
+    expect(menu).toHaveAttribute('data-side', 'top');
+    expect(menu).toHaveStyle({ left: '40px', top: '30px' });
+
+    getBoundingClientRectMock.mockRestore();
+    Object.defineProperty(window, 'innerHeight', {
+      configurable: true,
+      value: originalInnerHeight,
+    });
+  });
+
   it('formats explorer context menu shortcuts with macOS symbols', () => {
     window.electronAPI!.platform = 'darwin';
 

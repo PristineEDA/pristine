@@ -376,6 +376,44 @@ async function ensureExplorerHidden(window: Awaited<ReturnType<typeof launchApp>
   await expect(readmeNode).toHaveCount(0);
 }
 
+async function positionExplorerNodeNearBottom(
+  window: Awaited<ReturnType<typeof launchApp>>['window'],
+  targetTestId: string,
+) {
+  const explorerTree = window.locator('.explorer-tree-scrollbar');
+
+  await explorerTree.evaluate((element, targetId) => {
+    type RectLike = {
+      bottom: number;
+    };
+
+    type ScrollTargetLike = {
+      getBoundingClientRect: () => RectLike;
+    };
+
+    type ScrollContainerLike = {
+      getBoundingClientRect: () => RectLike;
+      querySelector: (selector: string) => ScrollTargetLike | null;
+      scrollTop: number;
+    };
+
+    const scrollContainer = element as unknown as ScrollContainerLike;
+    const targetNode = scrollContainer.querySelector(`[data-testid="${targetId}"]`);
+
+    if (!targetNode) {
+      throw new Error(`Expected explorer node ${targetId} in the tree`);
+    }
+
+    const containerRect = scrollContainer.getBoundingClientRect();
+    const targetRect = targetNode.getBoundingClientRect();
+    const desiredBottom = containerRect.bottom - 12;
+
+    scrollContainer.scrollTop += targetRect.bottom - desiredBottom;
+  }, targetTestId);
+
+  await expect(window.getByTestId(targetTestId)).toBeVisible();
+}
+
 async function openBottomTerminal(window: Awaited<ReturnType<typeof launchApp>>['window']) {
   const toggleBottomPanel = window.getByTestId('toggle-bottom-panel');
   await expect(toggleBottomPanel).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
@@ -1683,6 +1721,73 @@ test('Explorer Cut dims the source, Escape cancels it, and pasting to the worksp
     } finally {
       await relaunched.app.close();
     }
+  } finally {
+    await app.close().catch(() => undefined);
+  }
+});
+
+test('Explorer context menu opens upward near the bottom of the window so all actions remain reachable', async () => {
+  test.slow();
+
+  const workspaceCopy = test.info().outputPath('explorer-context-menu-bottom-workspace');
+  createWorkspaceCopy(workspaceCopy);
+
+  const generatedFileCount = 36;
+  const targetFileName = `zz_context_menu_${String(generatedFileCount - 1).padStart(2, '0')}.sv`;
+  const targetRelativePath = `rtl/core/${targetFileName}`;
+  const targetTreeTestId = toWorkspaceTreeTestId(targetRelativePath);
+
+  for (let index = 0; index < generatedFileCount; index += 1) {
+    const generatedFileName = `zz_context_menu_${String(index).padStart(2, '0')}.sv`;
+    const generatedFilePath = path.join(workspaceCopy, 'rtl', 'core', generatedFileName);
+    fs.writeFileSync(
+      generatedFilePath,
+      `module ${generatedFileName.replace(/\.sv$/, '')};\nendmodule\n`,
+      'utf-8',
+    );
+  }
+
+  const { app, window } = await launchApp({ projectRoot: workspaceCopy });
+
+  try {
+    await ensureExplorerVisible(window);
+    await openNestedWorkspaceFile(window, [
+      'file-tree-node-rtl',
+      'file-tree-node-rtl_core',
+    ]);
+
+    await positionExplorerNodeNearBottom(window, targetTreeTestId);
+
+    const targetNode = window.getByTestId(targetTreeTestId);
+    await expect(targetNode).toBeVisible();
+
+    await targetNode.click({ button: 'right' });
+
+    const menu = window.getByTestId('explorer-context-menu');
+    const lastAction = window.getByRole('menuitem', { name: 'Copy Relative Path' });
+
+    await expect(menu).toBeVisible();
+    await expect(menu).toHaveAttribute('data-side', 'top');
+    await expect(lastAction).toBeVisible();
+
+    const [menuBox, lastActionBox, targetBox, viewportHeight] = await Promise.all([
+      menu.boundingBox(),
+      lastAction.boundingBox(),
+      targetNode.boundingBox(),
+      window.evaluate(() => window.innerHeight),
+    ]);
+
+    if (!menuBox || !lastActionBox || !targetBox) {
+      throw new Error('Expected explorer context menu geometry to be measurable');
+    }
+
+    const targetBottom = targetBox.y + targetBox.height;
+    const menuBottom = menuBox.y + menuBox.height;
+    const lastActionBottom = lastActionBox.y + lastActionBox.height;
+
+    expect(targetBottom).toBeGreaterThan(viewportHeight - 120);
+    expect(menuBottom).toBeLessThanOrEqual(targetBottom + 2);
+    expect(lastActionBottom).toBeLessThanOrEqual(viewportHeight - 1);
   } finally {
     await app.close().catch(() => undefined);
   }

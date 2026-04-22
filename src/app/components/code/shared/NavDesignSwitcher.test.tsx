@@ -35,8 +35,11 @@ describe('NavDesignSwitcher', () => {
   it('renders the first design as the active selection', () => {
     renderNavDesignSwitcher();
 
+    const logoBadge = screen.getByRole('button').firstElementChild;
+
     expect(screen.getByRole('button')).toHaveTextContent('retroSoC');
     expect(screen.getByRole('button')).toHaveTextContent('SoC');
+    expect(logoBadge).toHaveClass('bg-sidebar-primary', 'dark:bg-sidebar-primary-foreground', 'dark:text-sidebar');
   });
 
   it('opens the designs menu and updates the active design after selection', async () => {

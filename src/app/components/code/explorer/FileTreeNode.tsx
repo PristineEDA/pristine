@@ -34,6 +34,8 @@ interface ContextMenuSeparatorItem {
 
 type ExplorerContextMenuEntry = ContextMenuItem | ContextMenuSeparatorItem;
 
+const EXPLORER_CONTEXT_MENU_VIEWPORT_PADDING = 8;
+
 export interface ExplorerContextMenuRequest {
   path: string;
   token: number;
@@ -90,6 +92,28 @@ function getNextEnabledContextMenuItemIndex(
   return enabledIndices[nextPosition] ?? null;
 }
 
+function getExplorerContextMenuTop(menuHeight: number, y: number, viewportHeight: number): { top: number; side: 'top' | 'bottom' } {
+  const maxTop = Math.max(
+    EXPLORER_CONTEXT_MENU_VIEWPORT_PADDING,
+    viewportHeight - menuHeight - EXPLORER_CONTEXT_MENU_VIEWPORT_PADDING,
+  );
+
+  if (y + menuHeight + EXPLORER_CONTEXT_MENU_VIEWPORT_PADDING <= viewportHeight) {
+    return {
+      top: Math.min(y, maxTop),
+      side: 'bottom',
+    };
+  }
+
+  return {
+    top: Math.max(
+      EXPLORER_CONTEXT_MENU_VIEWPORT_PADDING,
+      Math.min(y - menuHeight, maxTop),
+    ),
+    side: 'top',
+  };
+}
+
 function ExplorerContextMenu({
   items,
   onClose,
@@ -104,7 +128,13 @@ function ExplorerContextMenu({
   y: number;
 }) {
   const itemRefs = useRef(new Map<number, HTMLDivElement | null>());
+  const menuRef = useRef<HTMLDivElement | null>(null);
   const [focusedItemIndex, setFocusedItemIndex] = useState<number | null>(() => getFirstEnabledContextMenuItemIndex(items));
+  const [menuPosition, setMenuPosition] = useState<{ left: number; top: number; side: 'top' | 'bottom' }>({
+    left: x,
+    top: y,
+    side: 'bottom',
+  });
 
   const focusMenuItem = useCallback((index: number | null) => {
     setFocusedItemIndex(index);
@@ -209,16 +239,41 @@ function ExplorerContextMenu({
     itemRefs.current.get(firstEnabledItemIndex)?.focus();
   }, [items]);
 
+  useLayoutEffect(() => {
+    const menuElement = menuRef.current;
+
+    if (!menuElement) {
+      return;
+    }
+
+    const { height } = menuElement.getBoundingClientRect();
+    const { top, side } = getExplorerContextMenuTop(height, y, window.innerHeight);
+
+    setMenuPosition((current) => {
+      if (current.left === x && current.top === top && current.side === side) {
+        return current;
+      }
+
+      return {
+        left: x,
+        top,
+        side,
+      };
+    });
+  }, [items, x, y]);
+
   return (
     <>
       <div className="fixed inset-0 z-40" data-testid="explorer-context-menu-backdrop" onClick={() => closeMenu()} />
       <div
+        ref={menuRef}
         role="menu"
         aria-orientation="vertical"
         data-testid="explorer-context-menu"
         data-slot="context-menu-content"
+        data-side={menuPosition.side}
         className="fixed z-50 min-w-36 overflow-hidden rounded-md border bg-popover p-0.5 text-popover-foreground shadow-md"
-        style={{ left: x, top: y }}
+        style={{ left: menuPosition.left, top: menuPosition.top }}
         onKeyDown={handleMenuKeyDown}
       >
         {items.map((item, index) =>
