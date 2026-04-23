@@ -167,9 +167,6 @@ jobs:
 
   runtime-perf:
     name: Runtime Perf ${{ matrix.id }}
-    if: ${{ always() && !cancelled() }}
-    needs:
-      - test
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
