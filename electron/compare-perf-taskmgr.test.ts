@@ -11,6 +11,28 @@ type HarnessResult = {
   status: number | null
   stdout: string
   stderr: string
+  artifacts: {
+    comparisonErrorText: string | null
+    comparisonReportJson: {
+      statusMessage: string
+      comparison: {
+        IsWithinThreshold: boolean
+      }
+      dev: {
+        processName: string
+      }
+      packaged: {
+        processName: string
+      }
+    } | null
+    comparisonReportText: string | null
+    devSummaryJson: {
+      processName: string
+    } | null
+    packagedSummaryJson: {
+      processName: string
+    } | null
+  }
 }
 
 function createHarnessEnvironment(): NodeJS.ProcessEnv {
@@ -61,6 +83,20 @@ describeOnWindows('compare perf task manager script', () => {
     expect(result.stderr).toBe('')
   })
 
+  it('writes detailed comparison artifacts for upload workflows', () => {
+    const result = runHarness('pass')
+
+    expect(result.artifacts.devSummaryJson?.processName).toBe('dev-powershell')
+    expect(result.artifacts.packagedSummaryJson?.processName).toBe('packaged-powershell')
+    expect(result.artifacts.comparisonReportJson?.dev.processName).toBe('powershell')
+    expect(result.artifacts.comparisonReportJson?.packaged.processName).toBe('powershell')
+    expect(result.artifacts.comparisonReportJson?.comparison.IsWithinThreshold).toBe(true)
+    expect(result.artifacts.comparisonReportJson?.statusMessage).toContain('within the threshold')
+    expect(result.artifacts.comparisonReportText).toContain('CPU absolute difference')
+    expect(result.artifacts.comparisonReportText).toContain('Memory threshold')
+    expect(result.artifacts.comparisonErrorText).toBeNull()
+  })
+
   it('fails when memory difference exceeds the configured threshold even if CPU stays within threshold', () => {
     const result = runHarness('memory-fail')
 
@@ -69,5 +105,7 @@ describeOnWindows('compare perf task manager script', () => {
     expect(result.stderr).toContain('Runtime thresholds exceeded.')
     expect(result.stderr).toContain('Memory working set')
     expect(result.stderr).toContain('exceeded the threshold')
+    expect(result.artifacts.comparisonReportJson?.comparison.IsWithinThreshold).toBe(false)
+    expect(result.artifacts.comparisonReportJson?.statusMessage).toContain('Runtime thresholds exceeded.')
   })
 })

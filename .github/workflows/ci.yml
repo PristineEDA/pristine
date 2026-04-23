@@ -230,6 +230,26 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: pnpm run ${{ matrix.package_script }}
 
+      - name: Run runtime performance comparison
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          $perfResultsDir = Join-Path $PWD 'perf-results'
+          New-Item -ItemType Directory -Path $perfResultsDir -Force | Out-Null
+          $consoleLogPath = Join-Path $perfResultsDir 'compare-perf-console.log'
+          & .\compare-perf-taskmgr.ps1 -DurationSeconds 30 -ThresholdPercent 3 -MemoryThresholdPercent 0.5 -ResultOutputDirectory $perfResultsDir *>&1 | Tee-Object -FilePath $consoleLogPath
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+
+      - name: Upload runtime performance artifacts
+        if: always() && runner.os == 'Windows' && hashFiles('perf-results/**') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-perf-${{ matrix.id }}
+          path: perf-results
+          if-no-files-found: error
+
       - name: Upload package artifacts
         if: always() && hashFiles('release/**') != ''
         uses: actions/upload-artifact@v4

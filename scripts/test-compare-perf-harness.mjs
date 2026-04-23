@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import os from 'node:os'
 import path from 'node:path'
@@ -121,6 +121,7 @@ function createTempPerfHarness(sequentialSummaries) {
   const tempDir = mkdtempSync(path.join(os.tmpdir(), 'pristine-compare-perf-'))
   const fakeSamplerPath = path.join(tempDir, 'fake-perf-sampler.ps1')
   const callCountPath = path.join(tempDir, 'perf-call-count.txt')
+  const resultOutputDirectory = path.join(tempDir, 'artifacts')
 
   writeFileSync(fakeSamplerPath, [
     '[CmdletBinding()]',
@@ -154,7 +155,24 @@ function createTempPerfHarness(sequentialSummaries) {
   return {
     tempDir,
     fakeSamplerPath,
+    resultOutputDirectory,
   }
+}
+
+function readArtifactJson(filePath) {
+  if (!existsSync(filePath)) {
+    return null
+  }
+
+  return JSON.parse(readFileSync(filePath, 'utf8'))
+}
+
+function readArtifactText(filePath) {
+  if (!existsSync(filePath)) {
+    return null
+  }
+
+  return readFileSync(filePath, 'utf8')
 }
 
 function runCompareScript(args) {
@@ -204,9 +222,19 @@ try {
     '-PackagedProcessName', 'powershell',
     '-PackagedExecutablePath', systemPowerShellPath,
     '-PerfSamplerPath', harness.fakeSamplerPath,
+    '-ResultOutputDirectory', harness.resultOutputDirectory,
   ])
 
-  process.stdout.write(JSON.stringify(result))
+  process.stdout.write(JSON.stringify({
+    ...result,
+    artifacts: {
+      comparisonErrorText: readArtifactText(path.join(harness.resultOutputDirectory, 'comparison-error.txt')),
+      comparisonReportJson: readArtifactJson(path.join(harness.resultOutputDirectory, 'comparison-report.json')),
+      comparisonReportText: readArtifactText(path.join(harness.resultOutputDirectory, 'comparison-report.txt')),
+      devSummaryJson: readArtifactJson(path.join(harness.resultOutputDirectory, 'dev-summary.json')),
+      packagedSummaryJson: readArtifactJson(path.join(harness.resultOutputDirectory, 'packaged-summary.json')),
+    },
+  }))
   process.exit(0)
 }
 catch (error) {

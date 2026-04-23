@@ -23,7 +23,9 @@ param(
 
     [string]$PackagedExecutablePath,
 
-    [string]$PerfSamplerPath
+    [string]$PerfSamplerPath,
+
+    [string]$ResultOutputDirectory
 )
 
 Set-StrictMode -Version Latest
@@ -155,6 +157,109 @@ function Write-PerfScriptError {
     [Console]::Error.WriteLine($Message)
 }
 
+function Get-PerfComparisonSummaryLines {
+    param(
+        [Parameter(Mandatory = $true)]
+        [object]$Report
+    )
+
+    $lines = @(
+        '--------------------------------',
+        ('{0,-28} {1,-30} {2,-30}' -f 'Metric', 'Dev', 'Packaged'),
+        ('{0,-28} {1,-30} {2,-30}' -f '------', '---', '--------')
+    )
+
+    foreach ($row in @($Report.Rows)) {
+        $lines += ('{0,-28} {1,-30} {2,-30}' -f $row.Label, $row.DevValue, $row.PackagedValue)
+    }
+
+    $lines += ('{0,-28} {1}' -f 'Network access (dev)', $Report.DevNetworkAccessSummary)
+    $lines += ('{0,-28} {1}' -f 'Network access (packaged)', $Report.PackagedNetworkAccessSummary)
+    $lines += ('{0,-28} {1}' -f 'CPU absolute difference', (Format-PerfPercent -Percent $Report.CpuAbsoluteDifferencePercent))
+    $lines += ('{0,-28} {1}' -f 'CPU threshold', (Format-PerfPercent -Percent $Report.ThresholdPercent))
+    $lines += ('{0,-28} {1}' -f 'Memory absolute difference', (Format-PerfPercent -Percent $Report.MemoryWorkingSetAverageAbsoluteDifferencePercent))
+    $lines += ('{0,-28} {1}' -f 'Memory threshold', (Format-PerfPercent -Percent $Report.MemoryThresholdPercent))
+
+    return $lines
+}
+
+function Export-PerfComparisonArtifacts {
+    param(
+        [string]$OutputDirectory,
+
+        [Parameter(Mandatory = $true)]
+        [object]$DevResult,
+
+        [Parameter(Mandatory = $true)]
+        [object]$PackagedResult,
+
+        [Parameter(Mandatory = $true)]
+        [object]$Report,
+
+        [Parameter(Mandatory = $true)]
+        [string[]]$SummaryLines,
+
+        [Parameter(Mandatory = $true)]
+        [string]$StatusMessage
+    )
+
+    if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
+        return
+    }
+
+    $artifactDirectory = New-Item -ItemType Directory -Path $OutputDirectory -Force
+    $artifactRoot = $artifactDirectory.FullName
+    $comparisonPayload = [pscustomobject]@{
+        generatedAt = (Get-Date).ToString('o')
+        statusMessage = $StatusMessage
+        dev = [pscustomobject]@{
+            scenarioName = $DevResult.ScenarioName
+            processName = $DevResult.ProcessName
+            summary = $DevResult.Summary
+        }
+        packaged = [pscustomobject]@{
+            scenarioName = $PackagedResult.ScenarioName
+            processName = $PackagedResult.ProcessName
+            summary = $PackagedResult.Summary
+        }
+        comparison = $Report
+    }
+
+    Write-PerfArtifactFile -Path (Join-Path $artifactRoot 'dev-summary.json') -Content ($DevResult.Summary | ConvertTo-Json -Depth 10)
+    Write-PerfArtifactFile -Path (Join-Path $artifactRoot 'packaged-summary.json') -Content ($PackagedResult.Summary | ConvertTo-Json -Depth 10)
+    Write-PerfArtifactFile -Path (Join-Path $artifactRoot 'comparison-report.json') -Content ($comparisonPayload | ConvertTo-Json -Depth 10)
+    Write-PerfArtifactFile -Path (Join-Path $artifactRoot 'comparison-report.txt') -Content ((@($SummaryLines) + @($StatusMessage)) -join [Environment]::NewLine)
+}
+
+function Export-PerfComparisonFailureArtifact {
+    param(
+        [string]$OutputDirectory,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Message
+    )
+
+    if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
+        return
+    }
+
+    $artifactDirectory = New-Item -ItemType Directory -Path $OutputDirectory -Force
+    Write-PerfArtifactFile -Path (Join-Path $artifactDirectory.FullName 'comparison-error.txt') -Content $Message
+}
+
+function Write-PerfArtifactFile {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Content
+    )
+
+    $utf8Encoding = [System.Text.UTF8Encoding]::new($false)
+    [System.IO.File]::WriteAllText($Path, $Content, $utf8Encoding)
+}
+
 function Wait-ForProcessFamily {
     param(
         [Parameter(Mandatory = $true)]
@@ -175,6 +280,76 @@ function Wait-ForProcessFamily {
     }
 
     return $false
+}
+
+function Start-ScenarioLauncher {
+    param(
+        [string]$StartCommand,
+
+        [string]$ExecutablePath,
+
+        [Parameter(Mandatory = $true)]
+        [string]$WorkingDirectory
+    )
+
+    if (-not [string]::IsNullOrWhiteSpace($StartCommand)) {
+        $job = Start-Job -ScriptBlock {
+            param(
+                [string]$ScenarioWorkingDirectory,
+                [string]$ScenarioCommand
+            )
+
+            Set-Location -LiteralPath $ScenarioWorkingDirectory
+            $ErrorActionPreference = 'Stop'
+            Invoke-Expression $ScenarioCommand
+        } -ArgumentList $WorkingDirectory, $StartCommand
+
+        return [pscustomobject]@{
+            Kind = 'job'
+            Handle = $job
+        }
+    }
+
+    $process = Start-Process -FilePath $ExecutablePath -WorkingDirectory $WorkingDirectory -PassThru
+
+    return [pscustomobject]@{
+        Kind = 'process'
+        Handle = $process
+    }
+}
+
+function Stop-ScenarioLauncher {
+    param(
+        [AllowNull()]
+        [object]$Launcher
+    )
+
+    if ($null -eq $Launcher -or $null -eq $Launcher.Handle) {
+        return
+    }
+
+    if ($Launcher.Kind -eq 'job') {
+        try {
+            if ($Launcher.Handle.State -notin @('Completed', 'Failed', 'Stopped')) {
+                Stop-Job -Job $Launcher.Handle -ErrorAction SilentlyContinue | Out-Null
+            }
+        }
+        catch {
+        }
+        finally {
+            Remove-Job -Job $Launcher.Handle -Force -ErrorAction SilentlyContinue | Out-Null
+        }
+
+        return
+    }
+
+    try {
+        if (-not $Launcher.Handle.HasExited) {
+            Stop-Process -Id $Launcher.Handle.Id -Force -ErrorAction SilentlyContinue
+        }
+    }
+    catch {
+    }
 }
 
 function Resolve-PackagedExecutablePath {
@@ -268,17 +443,7 @@ function Invoke-Scenario {
         Stop-PristineProcesses
         Write-Host "=== $ScenarioName ===" -ForegroundColor Cyan
 
-        if ($StartCommand) {
-            $launcher = Start-Process -FilePath 'powershell.exe' -WorkingDirectory $WorkingDirectory -ArgumentList @(
-                '-NoLogo',
-                '-NoProfile',
-                '-Command',
-                $StartCommand
-            ) -PassThru
-        }
-        else {
-            $launcher = Start-Process -FilePath $ExecutablePath -WorkingDirectory $WorkingDirectory -PassThru
-        }
+        $launcher = Start-ScenarioLauncher -StartCommand $StartCommand -ExecutablePath $ExecutablePath -WorkingDirectory $WorkingDirectory
 
         if (-not (Wait-ForProcessFamily -ProcessName $ProcessName)) {
             throw "Timed out waiting for process '$ProcessName' during scenario '$ScenarioName'."
@@ -299,17 +464,8 @@ function Invoke-Scenario {
     finally {
         Stop-ProcessFamily -ProcessName $ProcessName -ExcludeProcessIds @($PID)
 
-        if ($launcher) {
-            try {
-                if (-not $launcher.HasExited) {
-                    Stop-Process -Id $launcher.Id -Force -ErrorAction SilentlyContinue
-                }
-            }
-            catch {
-            }
-        }
-
         Stop-PristineProcesses
+        Stop-ScenarioLauncher -Launcher $launcher
     }
 }
 
@@ -321,20 +477,11 @@ try {
     $packagedResult = Invoke-Scenario -ScenarioName 'Packaged runtime sample' -ProcessName $PackagedProcessName -ExecutablePath $packagedExecutable -WorkingDirectory (Split-Path -Parent $packagedExecutable) -WarmupSeconds $WarmupSeconds -DurationSeconds $DurationSeconds -PerfSamplerScriptPath $resolvedPerfSamplerPath
 
     $report = New-PerfComparisonReport -DevSummary $devResult.Summary -PackagedSummary $packagedResult.Summary -ThresholdPercent $ThresholdPercent -MemoryThresholdPercent $MemoryThresholdPercent
+    $summaryLines = @(Get-PerfComparisonSummaryLines -Report $report)
 
-    Write-Host '--------------------------------' -ForegroundColor DarkGray
-    Write-Host ('{0,-28} {1,-30} {2,-30}' -f 'Metric', 'Dev', 'Packaged')
-    Write-Host ('{0,-28} {1,-30} {2,-30}' -f '------', '---', '--------')
-    foreach ($row in @($report.Rows)) {
-        Write-Host ('{0,-28} {1,-30} {2,-30}' -f $row.Label, $row.DevValue, $row.PackagedValue)
+    foreach ($summaryLine in $summaryLines) {
+        Write-Host $summaryLine
     }
-
-    Write-Host ('{0,-28} {1}' -f 'Network access (dev)', $report.DevNetworkAccessSummary)
-    Write-Host ('{0,-28} {1}' -f 'Network access (packaged)', $report.PackagedNetworkAccessSummary)
-    Write-Host ('{0,-28} {1}' -f 'CPU absolute difference', (Format-PerfPercent -Percent $report.CpuAbsoluteDifferencePercent))
-    Write-Host ('{0,-28} {1}' -f 'CPU threshold', (Format-PerfPercent -Percent $report.ThresholdPercent))
-    Write-Host ('{0,-28} {1}' -f 'Memory absolute difference', (Format-PerfPercent -Percent $report.MemoryWorkingSetAverageAbsoluteDifferencePercent))
-    Write-Host ('{0,-28} {1}' -f 'Memory threshold', (Format-PerfPercent -Percent $report.MemoryThresholdPercent))
 
     if (-not $report.IsWithinThreshold) {
         $thresholdFailures = @()
@@ -347,14 +494,19 @@ try {
             $thresholdFailures += "Memory working set difference exceeded the threshold: $($report.MemoryWorkingSetAverageAbsoluteDifferencePercent) % > $($report.MemoryThresholdPercent) %."
         }
 
-        Write-PerfScriptError -Message ('Runtime thresholds exceeded. ' + ($thresholdFailures -join ' '))
+        $statusMessage = 'Runtime thresholds exceeded. ' + ($thresholdFailures -join ' ')
+        Export-PerfComparisonArtifacts -OutputDirectory $ResultOutputDirectory -DevResult $devResult -PackagedResult $packagedResult -Report $report -SummaryLines $summaryLines -StatusMessage $statusMessage
+        Write-PerfScriptError -Message $statusMessage
         exit 1
     }
 
-    Write-Host 'Runtime CPU and memory differences are within the threshold.' -ForegroundColor Green
+    $statusMessage = 'Runtime CPU and memory differences are within the threshold.'
+    Export-PerfComparisonArtifacts -OutputDirectory $ResultOutputDirectory -DevResult $devResult -PackagedResult $packagedResult -Report $report -SummaryLines $summaryLines -StatusMessage $statusMessage
+    Write-Host $statusMessage -ForegroundColor Green
     exit 0
 }
 catch {
+    Export-PerfComparisonFailureArtifact -OutputDirectory $ResultOutputDirectory -Message $_.Exception.Message
     Write-PerfScriptError -Message $_.Exception.Message
     exit 2
 }
