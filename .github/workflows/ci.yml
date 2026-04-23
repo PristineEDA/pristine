@@ -165,44 +165,19 @@ jobs:
           path: coverage
           if-no-files-found: ignore
 
-  package:
-    name: Package ${{ matrix.id }}
-    if: needs.package-gate.outputs.enabled == 'true'
-    needs:
-      - test
-      - package-gate
+  runtime-perf:
+    name: Runtime Perf ${{ matrix.id }}
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - id: *platform_id_ubuntu_2204_x64
-            runner: *platform_runner_ubuntu_2204_x64
-            package_script: package:linux:x64
-          - id: *platform_id_ubuntu_2404_x64
-            runner: *platform_runner_ubuntu_2404_x64
-            package_script: package:linux:x64
           - id: *platform_id_windows_2025_x64
             runner: *platform_runner_windows_2025_x64
-            package_script: package:win:x64
+            builder_args: --win nsis portable --x64
           - id: *platform_id_windows_2022_x64
             runner: *platform_runner_windows_2022_x64
-            package_script: package:win:x64
-          - id: *platform_id_macos_26_x64
-            runner: *platform_runner_macos_26_x64
-            package_script: package:mac:x64
-          - id: *platform_id_macos_26_arm64
-            runner: *platform_runner_macos_26_arm64
-            package_script: package:mac:arm64
-          - id: *platform_id_macos_15_x64
-            runner: *platform_runner_macos_15_x64
-            package_script: package:mac:x64
-          - id: *platform_id_macos_15_arm64
-            runner: *platform_runner_macos_15_arm64
-            package_script: package:mac:arm64
-          - id: *platform_id_macos_14_arm64
-            runner: *platform_runner_macos_14_arm64
-            package_script: package:mac:arm64
+            builder_args: --win nsis portable --x64
 
     steps:
       - name: Checkout
@@ -219,6 +194,12 @@ jobs:
           node-version: 20
           cache: pnpm
 
+      - name: Setup Python for native rebuilds
+        if: runner.os == 'Windows'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -228,7 +209,126 @@ jobs:
       - name: Package application
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-        run: pnpm run ${{ matrix.package_script }}
+        run: pnpm run build:app && pnpm exec electron-builder ${{ matrix.builder_args }} --config electron-builder.yml --publish never
+
+      - name: Run runtime performance comparison
+        shell: powershell
+        run: |
+          $perfResultsDir = Join-Path $PWD 'perf-results'
+          New-Item -ItemType Directory -Path $perfResultsDir -Force | Out-Null
+          $consoleLogPath = Join-Path $perfResultsDir 'compare-perf-console.log'
+          & .\compare-perf-taskmgr.ps1 -DurationSeconds 30 -ThresholdPercent 3 -MemoryThresholdPercent 0.5 -ResultOutputDirectory $perfResultsDir *>&1 | Tee-Object -FilePath $consoleLogPath
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+
+      - name: Publish runtime performance summary
+        if: always()
+        shell: powershell
+        run: |
+          $summaryPath = $env:GITHUB_STEP_SUMMARY
+          if ([string]::IsNullOrWhiteSpace($summaryPath)) {
+            exit 0
+          }
+
+          $perfResultsDir = Join-Path $PWD 'perf-results'
+          $reportPath = Join-Path $perfResultsDir 'comparison-report.txt'
+          $errorPath = Join-Path $perfResultsDir 'comparison-error.txt'
+
+          if (-not (Test-Path -LiteralPath $reportPath) -and -not (Test-Path -LiteralPath $errorPath)) {
+            exit 0
+          }
+
+          Add-Content -LiteralPath $summaryPath -Value "## Runtime Perf ${{ matrix.id }}"
+          Add-Content -LiteralPath $summaryPath -Value ''
+          Add-Content -LiteralPath $summaryPath -Value '```text'
+
+          if (Test-Path -LiteralPath $reportPath) {
+            Get-Content -LiteralPath $reportPath | Add-Content -LiteralPath $summaryPath
+          } else {
+            Get-Content -LiteralPath $errorPath | Add-Content -LiteralPath $summaryPath
+          }
+
+          Add-Content -LiteralPath $summaryPath -Value '```'
+
+      - name: Upload runtime performance artifacts
+        if: always() && hashFiles('perf-results/**') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-perf-${{ matrix.id }}
+          path: perf-results
+          if-no-files-found: error
+
+  package:
+    name: Package ${{ matrix.id }}
+    if: needs.package-gate.outputs.enabled == 'true'
+    needs:
+      - test
+      - package-gate
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: *platform_id_ubuntu_2204_x64
+            runner: *platform_runner_ubuntu_2204_x64
+            builder_args: --linux AppImage deb --x64
+          - id: *platform_id_ubuntu_2404_x64
+            runner: *platform_runner_ubuntu_2404_x64
+            builder_args: --linux AppImage deb --x64
+          - id: *platform_id_windows_2025_x64
+            runner: *platform_runner_windows_2025_x64
+            builder_args: --win nsis portable --x64
+          - id: *platform_id_windows_2022_x64
+            runner: *platform_runner_windows_2022_x64
+            builder_args: --win nsis portable --x64
+          - id: *platform_id_macos_26_x64
+            runner: *platform_runner_macos_26_x64
+            builder_args: --mac dmg --x64
+          - id: *platform_id_macos_26_arm64
+            runner: *platform_runner_macos_26_arm64
+            builder_args: --mac dmg --arm64
+          - id: *platform_id_macos_15_x64
+            runner: *platform_runner_macos_15_x64
+            builder_args: --mac dmg --x64
+          - id: *platform_id_macos_15_arm64
+            runner: *platform_runner_macos_15_arm64
+            builder_args: --mac dmg --arm64
+          - id: *platform_id_macos_14_arm64
+            runner: *platform_runner_macos_14_arm64
+            builder_args: --mac dmg --arm64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Setup Python for native rebuilds
+        if: runner.os == 'Windows'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Prepare external assets
+        run: pnpm run prepare:assets
+
+      - name: Package application
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: pnpm run build:app && pnpm exec electron-builder ${{ matrix.builder_args }} --config electron-builder.yml --publish never
 
       - name: Upload package artifacts
         if: always() && hashFiles('release/**') != ''

@@ -313,6 +313,9 @@ describe('EditorArea', () => {
           { id: 'scripts/build.tcl', name: 'build.tcl' },
           { id: 'config/project.json', name: 'project.json' },
           { id: 'build/Makefile', name: 'Makefile' },
+          { id: 'rtl/include/cpu_defs.vh', name: 'cpu_defs.vh' },
+          { id: 'rtl/bus/axi_if.sv', name: 'axi_if.sv' },
+          { id: 'rtl/include/axi_pkg.svh', name: 'axi_pkg.svh' },
         ]}
         activeTabId="scripts/build.tcl"
         onTabChange={vi.fn()}
@@ -324,6 +327,9 @@ describe('EditorArea', () => {
     expect(screen.getByTestId('editor-tab-badge-scripts/build.tcl')).toHaveAttribute('data-icon-key', 'tcl');
     expect(screen.getByTestId('editor-tab-badge-config/project.json')).toHaveAttribute('data-icon-key', 'json');
     expect(screen.getByTestId('editor-tab-badge-build/Makefile')).toHaveAttribute('data-icon-key', 'makefile');
+    expect(screen.getByTestId('editor-tab-badge-rtl/include/cpu_defs.vh')).toHaveAttribute('data-icon-key', 'verilog-header');
+    expect(screen.getByTestId('editor-tab-badge-rtl/bus/axi_if.sv')).toHaveAttribute('data-icon-key', 'systemverilog');
+    expect(screen.getByTestId('editor-tab-badge-rtl/include/axi_pkg.svh')).toHaveAttribute('data-icon-key', 'systemverilog-header');
   });
 
   it('routes assembly files to the assembly language and registers assembly highlighting', async () => {

@@ -31,6 +31,18 @@ export default defineConfig({
           name: 'electron',
           environment: 'node',
           include: ['electron/**/*.test.ts'],
+          exclude: ['electron/compare-perf-taskmgr.test.ts'],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: 'electron-perf-scripts',
+          environment: 'node',
+          pool: 'threads',
+          fileParallelism: false,
+          maxWorkers: 1,
+          include: ['electron/compare-perf-taskmgr.test.ts'],
         },
       },
     ],

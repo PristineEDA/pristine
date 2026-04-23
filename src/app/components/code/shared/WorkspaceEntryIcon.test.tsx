@@ -22,6 +22,13 @@ describe('resolveWorkspaceFileIcon', () => {
     expect(resolveWorkspaceFileIcon('diagram.svg').key).toBe('svg');
     expect(resolveWorkspaceFileIcon('timing.xdc').key).toBe('file');
   });
+
+  it('distinguishes RTL language and header variants by extension', () => {
+    expect(resolveWorkspaceFileIcon('rtl/core/cpu_top.v').key).toBe('verilog');
+    expect(resolveWorkspaceFileIcon('rtl/include/cpu_defs.vh').key).toBe('verilog-header');
+    expect(resolveWorkspaceFileIcon('rtl/bus/axi_if.sv').key).toBe('systemverilog');
+    expect(resolveWorkspaceFileIcon('rtl/include/axi_pkg.svh').key).toBe('systemverilog-header');
+  });
 });
 
 describe('resolveWorkspaceFolderIcon', () => {

@@ -87,6 +87,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../../
 import { useSidebar } from '../../ui/sidebar';
 import { AboutDialog } from './AboutDialog';
 import { EditorFontAdvancedDialog } from './EditorFontAdvancedDialog';
+import { EditorThemeAdvancedDialog } from './EditorThemeAdvancedDialog';
 import { centerViewSwitchItemClassName } from './viewSwitcherStyles';
 
 const noDrag = { WebkitAppRegion: 'no-drag' as const };
@@ -517,6 +518,7 @@ export function MenuBar({
   const ref = useRef<HTMLDivElement>(null);
   const [aboutDialogOpen, setAboutDialogOpen] = useState(false);
   const [editorFontAdvancedDialogOpen, setEditorFontAdvancedDialogOpen] = useState(false);
+  const [editorThemeAdvancedDialogOpen, setEditorThemeAdvancedDialogOpen] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [settingsState, setSettingsState] = useState<MenuBarSettingsState>(getPersistedSettingsState);
   const layoutIconsEnabled = canUseLayoutPanels(mainContentView, activeView);
@@ -550,6 +552,7 @@ export function MenuBar({
       setSettingsState(getPersistedSettingsState());
     } else {
       setEditorFontAdvancedDialogOpen(false);
+      setEditorThemeAdvancedDialogOpen(false);
     }
 
     setSettingsDialogOpen(nextOpen);
@@ -557,6 +560,10 @@ export function MenuBar({
 
   const handleEditorFontAdvancedDialogOpenChange = useCallback((nextOpen: boolean) => {
     setEditorFontAdvancedDialogOpen(nextOpen);
+  }, []);
+
+  const handleEditorThemeAdvancedDialogOpenChange = useCallback((nextOpen: boolean) => {
+    setEditorThemeAdvancedDialogOpen(nextOpen);
   }, []);
 
   const handleCloseToTrayChange = (checked: boolean) => {
@@ -620,6 +627,11 @@ export function MenuBar({
     patchSettingsState({ editorTheme: nextTheme });
     setEditorTheme(nextTheme);
   };
+
+  const handleEditorThemeAdvancedSelect = useCallback((value: string) => {
+    handleEditorThemeChange(value);
+    setEditorThemeAdvancedDialogOpen(false);
+  }, [handleEditorThemeChange]);
 
   const handleEditorWordWrapChange = (value: string) => {
     const nextWordWrap = parseEditorWordWrap(value);
@@ -1278,6 +1290,18 @@ export function MenuBar({
                 searchPlaceholder="Search editor themes..."
                 emptyText="No editor theme found."
                 testId="settings-editor-theme-combobox"
+                action={(
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    data-testid="settings-editor-theme-advanced-button"
+                    className="shrink-0 hover:cursor-pointer"
+                    onClick={() => setEditorThemeAdvancedDialogOpen(true)}
+                  >
+                    Advanced
+                  </Button>
+                )}
               />
               <div className={settingsSectionClassName}>
                 <div className="space-y-1">
@@ -1503,6 +1527,14 @@ export function MenuBar({
           onOpenChange={handleEditorFontAdvancedDialogOpenChange}
           onSelectFontFamily={handleEditorFontAdvancedSelect}
           selectedFontFamily={settingsState.editorFontFamily}
+          dialogStyle={noDragInteractive as React.CSSProperties}
+        />
+
+        <EditorThemeAdvancedDialog
+          open={editorThemeAdvancedDialogOpen}
+          onOpenChange={handleEditorThemeAdvancedDialogOpenChange}
+          onSelectTheme={handleEditorThemeAdvancedSelect}
+          selectedTheme={settingsState.editorTheme}
           dialogStyle={noDragInteractive as React.CSSProperties}
         />
       </>

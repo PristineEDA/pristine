@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import {
   FilePlus, FolderPlus, RefreshCw, ChevronsUpDown,
@@ -14,6 +14,7 @@ import {
   getPathBaseName,
   getWorkspaceParentPath,
   isWorkspaceRelativeFilePath,
+  toTreeTestId,
   type ExplorerSelectedNode,
   type ExplorerTreeEditSession,
   type WorkspaceClipboardState,
@@ -246,14 +247,25 @@ export function LeftSidePanel({
   onWorkspaceRefresh,
   workspaceClipboard,
 }: LeftSidePanelProps) {
+  type ExplorerTreeScrollLock = {
+    anchorTestId: string | null;
+    anchorTop: number | null;
+    top: number;
+    releaseAfterRefreshToken: number;
+  };
+
   const treeContainerRef = useRef<HTMLDivElement | null>(null);
   const treeInteractionActiveRef = useRef(false);
   const monacoDeleteSelectionArmedRef = useRef(false);
   const pendingTreeDrivenActiveFileSelectionRef = useRef<string | null>(null);
+  const treeScrollLockRef = useRef<ExplorerTreeScrollLock | null>(null);
+  const treeScrollLockAnimationFrameRef = useRef<number | null>(null);
+  const treeScrollLockReleaseTimeoutRef = useRef<number | null>(null);
   const [selectedNode, setSelectedNode] = useState<ExplorerSelectedNode | null>(null);
   const latestSelectedNodeRef = useRef<ExplorerSelectedNode | null>(null);
   const [treeEditSession, setTreeEditSession] = useState<ExplorerTreeEditSession | null>(null);
   const [contextMenuRequest, setContextMenuRequest] = useState<ExplorerContextMenuRequest | null>(null);
+  const [handledRevealRequestToken, setHandledRevealRequestToken] = useState<number | null>(null);
   const [tab, setTab] = useState<'explorer' | 'outline'>('explorer');
   const fileOutlines = useFileOutlines();
   const gitStatus = useWorkspaceGitStatus();
@@ -269,6 +281,9 @@ export function LeftSidePanel({
   latestSelectedNodeRef.current = selectedNode;
 
   const outline = fileOutlines[currentOutlineId] || [];
+  const effectiveRevealRequest = revealRequest && revealRequest.token !== handledRevealRequestToken
+    ? revealRequest
+    : null;
   const treeEditValidation = useMemo<WorkspaceEntryNameValidationResult | null>(() => {
     if (!treeEditSession) {
       return null;
@@ -286,6 +301,138 @@ export function LeftSidePanel({
     treeInteractionActiveRef.current = true;
     treeContainerRef.current?.focus();
   }, []);
+
+  const syncTreeScrollLockPosition = useCallback(() => {
+    const treeScrollLock = treeScrollLockRef.current;
+    const treeContainer = treeContainerRef.current;
+
+    if (!treeScrollLock || !treeContainer) {
+      return false;
+    }
+
+    if (treeScrollLock.anchorTestId && treeScrollLock.anchorTop !== null) {
+      const anchorElement = treeContainer.querySelector<HTMLElement>(`[data-testid="${treeScrollLock.anchorTestId}"]`);
+
+      if (anchorElement) {
+        const currentAnchorTop = Math.round(anchorElement.getBoundingClientRect().top);
+        const delta = currentAnchorTop - treeScrollLock.anchorTop;
+
+        if (delta !== 0) {
+          treeContainer.scrollTop += delta;
+          treeScrollLock.top = Math.round(treeContainer.scrollTop);
+        }
+
+        return true;
+      }
+    }
+
+    if (Math.round(treeContainer.scrollTop) !== treeScrollLock.top) {
+      treeContainer.scrollTop = treeScrollLock.top;
+    }
+
+    return true;
+  }, []);
+
+  const stopTreeScrollLockLoop = useCallback(() => {
+    if (treeScrollLockAnimationFrameRef.current === null || typeof window === 'undefined') {
+      return;
+    }
+
+    window.cancelAnimationFrame(treeScrollLockAnimationFrameRef.current);
+    treeScrollLockAnimationFrameRef.current = null;
+  }, []);
+
+  const clearTreeScrollLockReleaseTimeout = useCallback(() => {
+    if (treeScrollLockReleaseTimeoutRef.current === null || typeof window === 'undefined') {
+      return;
+    }
+
+    window.clearTimeout(treeScrollLockReleaseTimeoutRef.current);
+    treeScrollLockReleaseTimeoutRef.current = null;
+  }, []);
+
+  const releaseTreeScrollLock = useCallback(() => {
+    clearTreeScrollLockReleaseTimeout();
+    treeScrollLockRef.current = null;
+    stopTreeScrollLockLoop();
+  }, [clearTreeScrollLockReleaseTimeout, stopTreeScrollLockLoop]);
+
+  const startTreeScrollLockLoop = useCallback(() => {
+    if (treeScrollLockAnimationFrameRef.current !== null || typeof window === 'undefined') {
+      return;
+    }
+
+    const syncScrollTop = () => {
+      if (!syncTreeScrollLockPosition()) {
+        treeScrollLockAnimationFrameRef.current = null;
+        return;
+      }
+
+      treeScrollLockAnimationFrameRef.current = window.requestAnimationFrame(syncScrollTop);
+    };
+
+    treeScrollLockAnimationFrameRef.current = window.requestAnimationFrame(syncScrollTop);
+  }, [syncTreeScrollLockPosition]);
+
+  const armTreeScrollLockForNextRefresh = useCallback((targetPath: string) => {
+    const treeContainer = treeContainerRef.current;
+
+    if (!treeContainer) {
+      treeScrollLockRef.current = null;
+      stopTreeScrollLockLoop();
+      clearTreeScrollLockReleaseTimeout();
+      return;
+    }
+
+    const top = Math.round(treeContainer.scrollTop);
+    const rowElements = Array.from(treeContainer.querySelectorAll<HTMLElement>('[data-testid^="file-tree-node-"]'));
+    const targetTestId = `file-tree-node-${toTreeTestId(targetPath)}`;
+    const targetIndex = rowElements.findIndex((element) => element.getAttribute('data-testid') === targetTestId);
+    const anchorElement = targetIndex >= 0
+      ? rowElements[targetIndex + 1] ?? rowElements[targetIndex - 1] ?? rowElements[targetIndex] ?? null
+      : null;
+
+    treeScrollLockRef.current = {
+      anchorTestId: anchorElement?.getAttribute('data-testid') ?? null,
+      anchorTop: anchorElement ? Math.round(anchorElement.getBoundingClientRect().top) : null,
+      top,
+      releaseAfterRefreshToken: refreshToken + 1,
+    };
+    treeContainer.scrollTop = top;
+    clearTreeScrollLockReleaseTimeout();
+    startTreeScrollLockLoop();
+  }, [clearTreeScrollLockReleaseTimeout, refreshToken, startTreeScrollLockLoop, stopTreeScrollLockLoop]);
+
+  const handleRevealHandled = useCallback((token: number) => {
+    setHandledRevealRequestToken((current) => (current === token ? current : token));
+  }, []);
+
+  useLayoutEffect(() => {
+    syncTreeScrollLockPosition();
+  }, [refreshToken, selectedNode, syncTreeScrollLockPosition, treeEditSession, treeNodes, workspaceAvailable]);
+
+  useEffect(() => {
+    const treeScrollLock = treeScrollLockRef.current;
+
+    if (!treeScrollLock || refreshToken < treeScrollLock.releaseAfterRefreshToken || typeof window === 'undefined') {
+      return;
+    }
+
+    clearTreeScrollLockReleaseTimeout();
+    treeScrollLockReleaseTimeoutRef.current = window.setTimeout(() => {
+      releaseTreeScrollLock();
+    }, 150);
+
+    return () => {
+      clearTreeScrollLockReleaseTimeout();
+    };
+  }, [clearTreeScrollLockReleaseTimeout, refreshToken, releaseTreeScrollLock]);
+
+  useEffect(() => {
+    return () => {
+      releaseTreeScrollLock();
+    };
+  }, [releaseTreeScrollLock]);
 
   const startCopyForNode = useCallback(async (path: string, entryType: WorkspaceEntryType) => {
     setSelectedNode(createRealExplorerSelection(path, entryType));
@@ -592,8 +739,7 @@ export function LeftSidePanel({
       isSubmitting: false,
       submitError: null,
     });
-    focusTree();
-  }, [focusTree]);
+  }, []);
 
   const startRenameFromSelection = useCallback(() => {
     const renameTarget = getExplorerRenameTarget(selectedNode, activeFileId);
@@ -607,9 +753,11 @@ export function LeftSidePanel({
     const parentPath = getWorkspaceParentPath(path);
 
     setSelectedNode(createRealExplorerSelection(path, entryType));
+    armTreeScrollLockForNextRefresh(path);
 
     const deleted = await onDeleteWorkspaceEntry(path, entryType);
     if (!deleted) {
+      releaseTreeScrollLock();
       focusTree();
       return;
     }
@@ -619,7 +767,7 @@ export function LeftSidePanel({
       parentPath === WORKSPACE_ROOT_PATH ? 'root' : 'folder',
     ));
     focusTree();
-  }, [focusTree, onDeleteWorkspaceEntry]);
+  }, [armTreeScrollLockForNextRefresh, focusTree, onDeleteWorkspaceEntry, releaseTreeScrollLock]);
 
   const startDeleteFromSelection = useCallback(async () => {
     const deleteTarget = getExplorerDeleteTarget(selectedNode);
@@ -654,8 +802,7 @@ export function LeftSidePanel({
       isSubmitting: false,
       submitError: null,
     });
-    focusTree();
-  }, [ensureFolderExpanded, focusTree, selectedParentPath]);
+  }, [ensureFolderExpanded, selectedParentPath]);
 
   const cancelTreeEdit = useCallback(() => {
     if (!treeEditSession || treeEditSession.isSubmitting) {
@@ -715,6 +862,10 @@ export function LeftSidePanel({
 
     try {
       if (treeEditSession.mode === 'rename') {
+        armTreeScrollLockForNextRefresh(treeEditSession.targetPath);
+      }
+
+      if (treeEditSession.mode === 'rename') {
         await onRenameWorkspaceEntry(
           treeEditSession.targetPath,
           treeEditValidation.nextPath,
@@ -732,6 +883,7 @@ export function LeftSidePanel({
       setTreeEditSession(null);
       focusTree();
     } catch (error: unknown) {
+      releaseTreeScrollLock();
       const message = error instanceof Error ? error.message : 'Unable to complete explorer action.';
       setTreeEditSession((current) => (current ? {
         ...current,
@@ -745,6 +897,8 @@ export function LeftSidePanel({
     onCreateWorkspaceFile,
     onCreateWorkspaceFolder,
     onRenameWorkspaceEntry,
+    armTreeScrollLockForNextRefresh,
+    releaseTreeScrollLock,
     treeEditSession,
     treeEditValidation,
   ]);
@@ -890,7 +1044,7 @@ export function LeftSidePanel({
           <div
             ref={treeContainerRef}
             tabIndex={0}
-            className="explorer-tree-scrollbar flex-1 overflow-y-auto overflow-x-hidden outline-none"
+            className="explorer-tree-scrollbar flex-1 overflow-y-auto overflow-x-hidden outline-none [overflow-anchor:none]"
             onKeyDown={handleTreeKeyDown}
           >
             {workspaceAvailable === null && (
@@ -928,7 +1082,8 @@ export function LeftSidePanel({
                 onRequestTreeFocus={focusTree}
                 contextMenuRequest={contextMenuRequest}
                 gitPathStates={gitStatus.pathStates}
-                revealRequest={revealRequest}
+                revealRequest={effectiveRevealRequest}
+                onRevealHandled={handleRevealHandled}
               />
             ))}
           </div>

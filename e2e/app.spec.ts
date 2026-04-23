@@ -376,6 +376,208 @@ async function ensureExplorerHidden(window: Awaited<ReturnType<typeof launchApp>
   await expect(readmeNode).toHaveCount(0);
 }
 
+async function positionExplorerNodeNearBottom(
+  window: Awaited<ReturnType<typeof launchApp>>['window'],
+  targetTestId: string,
+) {
+  const explorerTree = window.locator('.explorer-tree-scrollbar');
+
+  await explorerTree.evaluate((element, targetId) => {
+    type RectLike = {
+      bottom: number;
+    };
+
+    type ScrollTargetLike = {
+      getBoundingClientRect: () => RectLike;
+    };
+
+    type ScrollContainerLike = {
+      getBoundingClientRect: () => RectLike;
+      querySelector: (selector: string) => ScrollTargetLike | null;
+      scrollTop: number;
+    };
+
+    const scrollContainer = element as unknown as ScrollContainerLike;
+    const targetNode = scrollContainer.querySelector(`[data-testid="${targetId}"]`);
+
+    if (!targetNode) {
+      throw new Error(`Expected explorer node ${targetId} in the tree`);
+    }
+
+    const containerRect = scrollContainer.getBoundingClientRect();
+    const targetRect = targetNode.getBoundingClientRect();
+    const desiredBottom = containerRect.bottom - 12;
+
+    scrollContainer.scrollTop += targetRect.bottom - desiredBottom;
+  }, targetTestId);
+
+  await expect(window.getByTestId(targetTestId)).toBeVisible();
+}
+
+async function readExplorerTreeScrollTop(window: Awaited<ReturnType<typeof launchApp>>['window']) {
+  const explorerTree = window.locator('.explorer-tree-scrollbar');
+
+  return explorerTree.evaluate((element) => {
+    type ScrollContainerLike = {
+      scrollTop: number;
+    };
+
+    return Math.round((element as unknown as ScrollContainerLike).scrollTop);
+  });
+}
+
+async function readExplorerNodeTop(
+  window: Awaited<ReturnType<typeof launchApp>>['window'],
+  targetTestId: string,
+) {
+  const targetNode = window.getByTestId(targetTestId);
+  const targetBox = await targetNode.boundingBox();
+
+  if (!targetBox) {
+    throw new Error(`Expected explorer node ${targetTestId} geometry to be measurable`);
+  }
+
+  return Math.round(targetBox.y);
+}
+
+async function recordExplorerNodeTopTimeline(
+  window: Awaited<ReturnType<typeof launchApp>>['window'],
+  targetTestId: string,
+  sampleCount = 45,
+  delayMs = 16,
+) {
+  const explorerTree = window.locator('.explorer-tree-scrollbar');
+
+  return explorerTree.evaluate(async (element, options) => {
+    type RectLike = {
+      y: number;
+    };
+
+    type ScrollTargetLike = {
+      getBoundingClientRect: () => RectLike;
+    };
+
+    type ScrollContainerLike = {
+      querySelector: (selector: string) => ScrollTargetLike | null;
+    };
+
+    const scrollContainer = element as unknown as ScrollContainerLike;
+    const samples: number[] = [];
+
+    for (let index = 0; index < options.sampleCount; index += 1) {
+      const targetNode = scrollContainer.querySelector(`[data-testid="${options.targetTestId}"]`);
+
+      if (!targetNode) {
+        throw new Error(`Expected explorer node ${options.targetTestId} in the tree while recording motion`);
+      }
+
+      samples.push(Math.round(targetNode.getBoundingClientRect().y));
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, options.delayMs);
+      });
+    }
+
+    return samples;
+  }, { targetTestId, sampleCount, delayMs });
+}
+
+function countTimelineDirectionChanges(samples: number[]) {
+  let lastDirection = 0;
+  let directionChanges = 0;
+
+  for (let index = 1; index < samples.length; index += 1) {
+    const delta = samples[index] - samples[index - 1];
+
+    if (delta === 0) {
+      continue;
+    }
+
+    const direction = Math.sign(delta);
+
+    if (lastDirection !== 0 && direction !== lastDirection) {
+      directionChanges += 1;
+    }
+
+    lastDirection = direction;
+  }
+
+  return directionChanges;
+}
+
+async function recordExplorerTreeScrollTopTimeline(
+  window: Awaited<ReturnType<typeof launchApp>>['window'],
+  sampleCount = 45,
+  delayMs = 16,
+) {
+  const explorerTree = window.locator('.explorer-tree-scrollbar');
+
+  return explorerTree.evaluate(async (element, options) => {
+    type ScrollContainerLike = {
+      scrollTop: number;
+    };
+
+    const scrollContainer = element as unknown as ScrollContainerLike;
+    const samples: number[] = [];
+
+    for (let index = 0; index < options.sampleCount; index += 1) {
+      samples.push(Math.round(scrollContainer.scrollTop));
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, options.delayMs);
+      });
+    }
+
+    return samples;
+  }, { sampleCount, delayMs });
+}
+
+async function openExplorerRenameInput(
+  window: Awaited<ReturnType<typeof launchApp>>['window'],
+  explorerTree: Locator,
+  targetNode: Locator,
+  renameInputTestId: string,
+) {
+  const renameInput = window.getByTestId(renameInputTestId);
+
+  await targetNode.click();
+  await expect(targetNode).toHaveClass(/bg-primary\/20/);
+  await explorerTree.focus();
+  await expect(explorerTree).toBeFocused();
+  await explorerTree.press('F2');
+
+  try {
+    await expect(renameInput).toBeVisible({ timeout: 2000 });
+    return renameInput;
+  } catch {
+    await targetNode.click({ button: 'right' });
+    const renameMenuItem = window.getByRole('menuitem', { name: 'Rename' });
+    await expect(renameMenuItem).toBeVisible({ timeout: 2000 });
+    await renameMenuItem.click();
+    await expect(renameInput).toBeVisible({ timeout: 5000 });
+    return renameInput;
+  }
+}
+
+async function setExplorerRenameInputValue(
+  window: Awaited<ReturnType<typeof launchApp>>['window'],
+  renameInputTestId: string,
+  nextValue: string,
+) {
+  const renameInput = window.getByTestId(renameInputTestId);
+
+  await expect(renameInput).toBeVisible();
+  await renameInput.evaluate((inputElement) => {
+    const input = inputElement as unknown as {
+      focus: () => void;
+      select: () => void;
+    };
+    input.focus();
+    input.select();
+  });
+
+  await window.keyboard.insertText(nextValue);
+  await expect(window.getByTestId(renameInputTestId)).toHaveValue(nextValue);
+}
+
 async function openBottomTerminal(window: Awaited<ReturnType<typeof launchApp>>['window']) {
   const toggleBottomPanel = window.getByTestId('toggle-bottom-panel');
   await expect(toggleBottomPanel).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
@@ -1683,6 +1885,194 @@ test('Explorer Cut dims the source, Escape cancels it, and pasting to the worksp
     } finally {
       await relaunched.app.close();
     }
+  } finally {
+    await app.close().catch(() => undefined);
+  }
+});
+
+test('Explorer context menu opens upward near the bottom of the window so all actions remain reachable', async () => {
+  test.slow();
+
+  const workspaceCopy = test.info().outputPath('explorer-context-menu-bottom-workspace');
+  createWorkspaceCopy(workspaceCopy);
+
+  const generatedFileCount = 36;
+  const targetFileName = `zz_context_menu_${String(generatedFileCount - 1).padStart(2, '0')}.sv`;
+  const targetRelativePath = `rtl/core/${targetFileName}`;
+  const targetTreeTestId = toWorkspaceTreeTestId(targetRelativePath);
+
+  for (let index = 0; index < generatedFileCount; index += 1) {
+    const generatedFileName = `zz_context_menu_${String(index).padStart(2, '0')}.sv`;
+    const generatedFilePath = path.join(workspaceCopy, 'rtl', 'core', generatedFileName);
+    fs.writeFileSync(
+      generatedFilePath,
+      `module ${generatedFileName.replace(/\.sv$/, '')};\nendmodule\n`,
+      'utf-8',
+    );
+  }
+
+  const { app, window } = await launchApp({ projectRoot: workspaceCopy });
+
+  try {
+    await ensureExplorerVisible(window);
+    await openNestedWorkspaceFile(window, [
+      'file-tree-node-rtl',
+      'file-tree-node-rtl_core',
+    ]);
+
+    await positionExplorerNodeNearBottom(window, targetTreeTestId);
+
+    const targetNode = window.getByTestId(targetTreeTestId);
+    await expect(targetNode).toBeVisible();
+
+    await targetNode.click({ button: 'right' });
+
+    const menu = window.getByTestId('explorer-context-menu');
+    const lastAction = window.getByRole('menuitem', { name: 'Copy Relative Path' });
+
+    await expect(menu).toBeVisible();
+    await expect(menu).toHaveAttribute('data-side', 'top');
+    await expect(lastAction).toBeVisible();
+
+    const [menuBox, lastActionBox, targetBox, viewportHeight] = await Promise.all([
+      menu.boundingBox(),
+      lastAction.boundingBox(),
+      targetNode.boundingBox(),
+      window.evaluate(() => (globalThis as unknown as { innerHeight: number }).innerHeight),
+    ]);
+
+    if (!menuBox || !lastActionBox || !targetBox) {
+      throw new Error('Expected explorer context menu geometry to be measurable');
+    }
+
+    const targetBottom = targetBox.y + targetBox.height;
+    const menuBottom = menuBox.y + menuBox.height;
+    const lastActionBottom = lastActionBox.y + lastActionBox.height;
+
+    expect(targetBottom).toBeGreaterThan(viewportHeight - 120);
+    expect(menuBottom).toBeLessThanOrEqual(targetBottom + 2);
+    expect(lastActionBottom).toBeLessThanOrEqual(viewportHeight - 1);
+  } finally {
+    await app.close().catch(() => undefined);
+  }
+});
+
+test('Explorer rename and delete keep the tree scroll position near the bottom after refreshes', async () => {
+  test.slow();
+
+  const workspaceCopy = test.info().outputPath('explorer-scroll-preservation-workspace');
+  createWorkspaceCopy(workspaceCopy);
+
+  const generatedFileCount = 40;
+  const renameSourceFileName = `zz_scroll_${String(generatedFileCount - 1).padStart(2, '0')}.sv`;
+  const renameTargetFileName = `zz_scroll_${String(generatedFileCount - 1).padStart(2, '0')}_renamed.sv`;
+  const deleteFileName = `zz_scroll_${String(generatedFileCount - 2).padStart(2, '0')}.sv`;
+  const renameSourceRelativePath = `rtl/core/${renameSourceFileName}`;
+  const renameTargetRelativePath = `rtl/core/${renameTargetFileName}`;
+  const deleteRelativePath = `rtl/core/${deleteFileName}`;
+  const renameSourceAbsolutePath = path.join(workspaceCopy, 'rtl', 'core', renameSourceFileName);
+  const renameTargetAbsolutePath = path.join(workspaceCopy, 'rtl', 'core', renameTargetFileName);
+  const deleteAbsolutePath = path.join(workspaceCopy, 'rtl', 'core', deleteFileName);
+  const renameSourceTreeTestId = toWorkspaceTreeTestId(renameSourceRelativePath);
+  const renameTargetTreeTestId = toWorkspaceTreeTestId(renameTargetRelativePath);
+  const deleteTreeTestId = toWorkspaceTreeTestId(deleteRelativePath);
+  const renameInputTestId = renameSourceTreeTestId.replace('file-tree-node-', 'file-tree-input-');
+
+  for (let index = 0; index < generatedFileCount; index += 1) {
+    const generatedFileName = `zz_scroll_${String(index).padStart(2, '0')}.sv`;
+    const generatedFilePath = path.join(workspaceCopy, 'rtl', 'core', generatedFileName);
+    fs.writeFileSync(
+      generatedFilePath,
+      `module ${generatedFileName.replace(/\.sv$/, '')};\nendmodule\n`,
+      'utf-8',
+    );
+  }
+
+  const { app, window } = await launchApp({ projectRoot: workspaceCopy });
+  const explorerTree = window.locator('.explorer-tree-scrollbar');
+
+  try {
+    await ensureExplorerVisible(window);
+    await openNestedWorkspaceFile(window, [
+      'file-tree-node-rtl',
+      'file-tree-node-rtl_core',
+    ]);
+
+    await positionExplorerNodeNearBottom(window, renameSourceTreeTestId);
+
+    const renameSourceNode = window.getByTestId(renameSourceTreeTestId);
+    await expect(renameSourceNode).toBeVisible();
+
+    const renameSourceBox = await renameSourceNode.boundingBox();
+    const viewportHeight = await window.evaluate(() => (globalThis as unknown as { innerHeight: number }).innerHeight);
+    if (!renameSourceBox) {
+      throw new Error('Expected rename source explorer node geometry to be measurable');
+    }
+
+    expect(renameSourceBox.y + renameSourceBox.height).toBeGreaterThan(viewportHeight - 120);
+
+    const beforeRenameScrollTop = await readExplorerTreeScrollTop(window);
+    const beforeRenameAnchorTop = await readExplorerNodeTop(window, deleteTreeTestId);
+
+    await openExplorerRenameInput(window, explorerTree, renameSourceNode, renameInputTestId);
+    await setExplorerRenameInputValue(window, renameInputTestId, renameTargetFileName);
+    const renameScrollTimelinePromise = recordExplorerTreeScrollTopTimeline(window);
+    const renameAnchorTimelinePromise = recordExplorerNodeTopTimeline(window, deleteTreeTestId);
+    await window.keyboard.press('Enter');
+
+    await expect.poll(() => fs.existsSync(renameTargetAbsolutePath), {
+      timeout: 15000,
+    }).toBe(true);
+    await expect.poll(() => fs.existsSync(renameSourceAbsolutePath), {
+      timeout: 15000,
+    }).toBe(false);
+    await expect(window.getByTestId(renameTargetTreeTestId)).toBeVisible();
+
+    const afterRenameScrollTop = await readExplorerTreeScrollTop(window);
+  const afterRenameAnchorTop = await readExplorerNodeTop(window, deleteTreeTestId);
+    const renameScrollTimeline = await renameScrollTimelinePromise;
+  const renameAnchorTimeline = await renameAnchorTimelinePromise;
+    expect(afterRenameScrollTop).toBeGreaterThan(120);
+    expect(Math.abs(afterRenameScrollTop - beforeRenameScrollTop)).toBeLessThanOrEqual(40);
+    expect(Math.max(...renameScrollTimeline) - Math.min(...renameScrollTimeline)).toBeLessThanOrEqual(2);
+  expect(Math.abs(afterRenameAnchorTop - beforeRenameAnchorTop)).toBeLessThanOrEqual(2);
+  expect(Math.max(...renameAnchorTimeline) - Math.min(...renameAnchorTimeline)).toBeLessThanOrEqual(2);
+
+    const deleteNode = window.getByTestId(deleteTreeTestId);
+    await expect(deleteNode).toBeVisible();
+    await deleteNode.click();
+    await expect(deleteNode).toHaveClass(/bg-primary\/20/);
+
+    const beforeDeleteScrollTop = await readExplorerTreeScrollTop(window);
+  const beforeDeleteAnchorTop = await readExplorerNodeTop(window, renameTargetTreeTestId);
+
+    await explorerTree.focus();
+    await expect(explorerTree).toBeFocused();
+    const deleteScrollTimelinePromise = recordExplorerTreeScrollTopTimeline(window);
+  const deleteAnchorTimelinePromise = recordExplorerNodeTopTimeline(window, renameTargetTreeTestId);
+    await explorerTree.press('Delete');
+
+    await expect(window.getByTestId('delete-confirmation-dialog')).toBeVisible();
+    await expect(window.getByTestId('delete-confirmation-target')).toContainText(deleteFileName);
+    await window.getByTestId('delete-confirmation-confirm').click();
+
+    await expect(window.getByTestId('delete-confirmation-dialog')).toHaveCount(0);
+    await expect.poll(() => fs.existsSync(deleteAbsolutePath), {
+      timeout: 15000,
+    }).toBe(false);
+    await expect(window.getByTestId(deleteTreeTestId)).toHaveCount(0);
+    await expect(window.getByTestId(renameTargetTreeTestId)).toBeVisible();
+
+    const afterDeleteScrollTop = await readExplorerTreeScrollTop(window);
+    const afterDeleteAnchorTop = await readExplorerNodeTop(window, renameTargetTreeTestId);
+    const deleteScrollTimeline = await deleteScrollTimelinePromise;
+    const deleteAnchorTimeline = await deleteAnchorTimelinePromise;
+    expect(afterDeleteScrollTop).toBeGreaterThan(120);
+    expect(Math.abs(afterDeleteScrollTop - beforeDeleteScrollTop)).toBeLessThanOrEqual(24);
+    expect(Math.max(...deleteScrollTimeline) - Math.min(...deleteScrollTimeline)).toBeLessThanOrEqual(24);
+    expect(countTimelineDirectionChanges(deleteScrollTimeline)).toBe(0);
+    expect(Math.abs(afterDeleteAnchorTop - beforeDeleteAnchorTop)).toBeLessThanOrEqual(2);
+    expect(Math.max(...deleteAnchorTimeline) - Math.min(...deleteAnchorTimeline)).toBeLessThanOrEqual(2);
   } finally {
     await app.close().catch(() => undefined);
   }
@@ -3565,6 +3955,30 @@ test('advanced editor font picker closes after selecting a preview card and sync
   await expect(advancedDialog).toHaveCount(0)
   await expect(window.getByTestId('settings-editor-font-family-combobox')).toContainText('Victor Mono')
   await expect.poll(async () => readConfigValue(window, 'editor.fontFamily')).toBe('victor-mono')
+
+  await app.close()
+})
+
+test('advanced editor theme picker closes after selecting a preview card and syncs the theme setting', async () => {
+  const { app, window } = await launchApp()
+
+  await window.getByTestId('menu-settings-button').click()
+  await expect(window.getByTestId('settings-dialog')).toBeVisible()
+
+  const advancedDialog = window.locator('[data-testid="settings-editor-theme-advanced-dialog"]')
+  await window.getByTestId('settings-editor-theme-advanced-button').click()
+  await expect(advancedDialog).toBeVisible()
+
+  await expect(window.getByTestId('settings-editor-theme-preview-card-dracula')).toHaveAttribute('data-state', 'selected')
+  await expect(window.getByTestId('settings-editor-theme-preview-editor-github-dark')).toBeVisible()
+  await expect(window.getByTestId('settings-editor-theme-preview-line-module-github-dark')).toContainText('module alu(clk)')
+  await expect(window.getByTestId('settings-editor-theme-preview-selection-github-dark')).toContainText("sum = calc('RUN')")
+
+  await window.getByTestId('settings-editor-theme-preview-card-github-dark').click()
+
+  await expect(advancedDialog).toHaveCount(0)
+  await expect(window.getByTestId('settings-editor-theme-combobox')).toContainText('GitHub Dark')
+  await expect.poll(async () => readConfigValue(window, 'editor.theme')).toBe('github-dark')
 
   await app.close()
 })

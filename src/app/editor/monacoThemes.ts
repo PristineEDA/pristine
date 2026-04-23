@@ -4,14 +4,21 @@ import { claimMonacoRegistration, resetMonacoRegistrationForTests } from './mona
 import {
   type DraculaPalette,
   getRootThemeStyles,
+  resolveDraculaPalette,
   type StyleReader,
 } from './themeSource'
 
 type MonacoBaseTheme = 'vs' | 'vs-dark'
 
 const THEME_REGISTRATION_KEY = 'editor-themes'
+const DRACULA_BASE_THEME = 'vs-dark' as const satisfies MonacoBaseTheme
 
 interface StaticThemeDefinition {
+  base: MonacoBaseTheme
+  palette: DraculaPalette
+}
+
+export interface EditorThemePreview {
   base: MonacoBaseTheme
   palette: DraculaPalette
 }
@@ -221,6 +228,25 @@ const staticThemes: Record<Exclude<EditorThemeId, 'dracula'>, StaticThemeDefinit
   },
 }
 
+export function getEditorThemePreview(
+  themeId: EditorThemeId,
+  styles: StyleReader | null = getRootThemeStyles(),
+): EditorThemePreview {
+  if (themeId === DEFAULT_EDITOR_THEME) {
+    return {
+      base: DRACULA_BASE_THEME,
+      palette: resolveDraculaPalette(styles),
+    }
+  }
+
+  const staticTheme = staticThemes[themeId]
+
+  return {
+    base: staticTheme.base,
+    palette: staticTheme.palette,
+  }
+}
+
 export function getEditorThemeDefinition(
   themeId: EditorThemeId,
   styles: StyleReader | null = getRootThemeStyles(),
@@ -229,8 +255,8 @@ export function getEditorThemeDefinition(
     return createDraculaThemeDefinition(styles)
   }
 
-  const staticTheme = staticThemes[themeId]
-  return createThemeDefinition(staticTheme.base, staticTheme.palette)
+  const preview = getEditorThemePreview(themeId, styles)
+  return createThemeDefinition(preview.base, preview.palette)
 }
 
 export function registerEditorThemes(monaco: any): void {

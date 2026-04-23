@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   getWorkspaceAncestorPaths,
   WORKSPACE_ROOT_PATH,
@@ -65,10 +65,42 @@ function findNode(node: WorkspaceTreeNode | null, targetPath: string): Workspace
   return null;
 }
 
+function preserveFolderState(
+  currentNode: WorkspaceTreeNode | undefined,
+  nextNode: WorkspaceTreeNode,
+): WorkspaceTreeNode {
+  if (!currentNode || currentNode.type !== 'folder' || nextNode.type !== 'folder') {
+    return nextNode;
+  }
+
+  return {
+    ...nextNode,
+    children: currentNode.children ?? [],
+    hasLoadedChildren: currentNode.hasLoadedChildren,
+    isLoading: currentNode.isLoading,
+  };
+}
+
+function mergeDirectoryChildren(
+  currentChildren: WorkspaceTreeNode[] | undefined,
+  nextChildren: WorkspaceTreeNode[],
+): WorkspaceTreeNode[] {
+  const currentChildrenByPath = new Map((currentChildren ?? []).map((child) => [child.path, child]));
+
+  return nextChildren.map((child) => preserveFolderState(currentChildrenByPath.get(child.path), child));
+}
+
 export function useWorkspaceTree(revealRequest?: WorkspaceRevealRequest | null, refreshToken = 0) {
   const [rootNode, setRootNode] = useState<WorkspaceTreeNode | null>(null);
   const [workspaceAvailable, setWorkspaceAvailable] = useState<boolean | null>(null);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(() => new Set([WORKSPACE_ROOT_PATH]));
+  const rootNodeRef = useRef<WorkspaceTreeNode | null>(null);
+  const workspaceAvailableRef = useRef<boolean | null>(null);
+  const expandedFoldersRef = useRef<Set<string>>(new Set([WORKSPACE_ROOT_PATH]));
+
+  rootNodeRef.current = rootNode;
+  workspaceAvailableRef.current = workspaceAvailable;
+  expandedFoldersRef.current = expandedFolders;
 
   const loadDirectory = useCallback(async (dirPath: string) => {
     const fsApi = window.electronAPI?.fs;
@@ -92,8 +124,20 @@ export function useWorkspaceTree(revealRequest?: WorkspaceRevealRequest | null, 
       const children = entries.map((entry) => createWorkspaceNode(dirPath, entry));
 
       if (dirPath === WORKSPACE_ROOT_PATH) {
-        const nextRootNode = createRootNode(children);
-        setRootNode(nextRootNode);
+        setRootNode((current) => {
+          const mergedChildren = mergeDirectoryChildren(current?.children, children);
+
+          if (!current) {
+            return createRootNode(mergedChildren);
+          }
+
+          return {
+            ...current,
+            children: mergedChildren,
+            hasLoadedChildren: true,
+            isLoading: false,
+          };
+        });
         setExpandedFolders((current) => {
           const nextExpandedFolders = new Set(current);
           nextExpandedFolders.add(WORKSPACE_ROOT_PATH);
@@ -110,7 +154,7 @@ export function useWorkspaceTree(revealRequest?: WorkspaceRevealRequest | null, 
 
         const nextRootNode = updateNode(current, dirPath, (node) => ({
           ...node,
-          children,
+          children: mergeDirectoryChildren(node.children, children),
           hasLoadedChildren: true,
           isLoading: false,
         }));
@@ -148,8 +192,6 @@ export function useWorkspaceTree(revealRequest?: WorkspaceRevealRequest | null, 
       return;
     }
 
-    setWorkspaceAvailable(null);
-
     try {
       const exists = await fsApi.exists(WORKSPACE_ROOT_PATH);
       if (!exists) {
@@ -169,7 +211,50 @@ export function useWorkspaceTree(revealRequest?: WorkspaceRevealRequest | null, 
 
   useEffect(() => {
     void initializeTree();
-  }, [initializeTree, refreshToken]);
+  }, [initializeTree]);
+
+  const refreshExpandedTree = useCallback(async () => {
+    const fsApi = window.electronAPI?.fs;
+    if (!fsApi) {
+      setWorkspaceAvailable(false);
+      setRootNode(null);
+      return;
+    }
+
+    try {
+      const exists = await fsApi.exists(WORKSPACE_ROOT_PATH);
+      if (!exists) {
+        setWorkspaceAvailable(false);
+        setRootNode(null);
+        setExpandedFolders(new Set([WORKSPACE_ROOT_PATH]));
+        return;
+      }
+
+      if (workspaceAvailableRef.current !== true || !rootNodeRef.current) {
+        await loadDirectory(WORKSPACE_ROOT_PATH);
+        return;
+      }
+
+      await loadDirectory(WORKSPACE_ROOT_PATH);
+
+      const expandedPaths = Array.from(expandedFoldersRef.current).filter((path) => path !== WORKSPACE_ROOT_PATH);
+      for (const expandedPath of expandedPaths) {
+        await loadDirectory(expandedPath);
+      }
+    } catch {
+      setWorkspaceAvailable(false);
+      setRootNode(null);
+      setExpandedFolders(new Set([WORKSPACE_ROOT_PATH]));
+    }
+  }, [loadDirectory]);
+
+  useEffect(() => {
+    if (refreshToken === 0) {
+      return;
+    }
+
+    void refreshExpandedTree();
+  }, [refreshExpandedTree, refreshToken]);
 
   useEffect(() => {
     if (!rootNode || workspaceAvailable !== true) {
