@@ -1964,10 +1964,12 @@ test('Explorer rename and delete keep the tree scroll position near the bottom a
     expect(renameSourceBox.y + renameSourceBox.height).toBeGreaterThan(viewportHeight - 120);
 
     await renameSourceNode.click();
+    await expect(renameSourceNode).toHaveClass(/bg-primary\/20/);
     const beforeRenameScrollTop = await readExplorerTreeScrollTop(window);
     const beforeRenameAnchorTop = await readExplorerNodeTop(window, deleteTreeTestId);
 
     await explorerTree.focus();
+    await expect(explorerTree).toBeFocused();
     await explorerTree.press('F2');
 
     const renameInput = window.getByTestId(renameInputTestId);
@@ -1998,11 +2000,13 @@ test('Explorer rename and delete keep the tree scroll position near the bottom a
     const deleteNode = window.getByTestId(deleteTreeTestId);
     await expect(deleteNode).toBeVisible();
     await deleteNode.click();
+    await expect(deleteNode).toHaveClass(/bg-primary\/20/);
 
     const beforeDeleteScrollTop = await readExplorerTreeScrollTop(window);
   const beforeDeleteAnchorTop = await readExplorerNodeTop(window, renameTargetTreeTestId);
 
     await explorerTree.focus();
+    await expect(explorerTree).toBeFocused();
     const deleteScrollTimelinePromise = recordExplorerTreeScrollTopTimeline(window);
   const deleteAnchorTimelinePromise = recordExplorerNodeTopTimeline(window, renameTargetTreeTestId);
     await explorerTree.press('Delete');

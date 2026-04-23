@@ -174,10 +174,10 @@ jobs:
         include:
           - id: *platform_id_windows_2025_x64
             runner: *platform_runner_windows_2025_x64
-            package_script: package:win:x64
+            builder_args: --win nsis portable --x64
           - id: *platform_id_windows_2022_x64
             runner: *platform_runner_windows_2022_x64
-            package_script: package:win:x64
+            builder_args: --win nsis portable --x64
 
     steps:
       - name: Checkout
@@ -209,7 +209,7 @@ jobs:
       - name: Package application
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-        run: pnpm run ${{ matrix.package_script }} -- --publish never
+        run: pnpm run build:app && pnpm exec electron-builder ${{ matrix.builder_args }} --config electron-builder.yml --publish never
 
       - name: Run runtime performance comparison
         shell: powershell
@@ -243,31 +243,31 @@ jobs:
         include:
           - id: *platform_id_ubuntu_2204_x64
             runner: *platform_runner_ubuntu_2204_x64
-            package_script: package:linux:x64
+            builder_args: --linux AppImage deb --x64
           - id: *platform_id_ubuntu_2404_x64
             runner: *platform_runner_ubuntu_2404_x64
-            package_script: package:linux:x64
+            builder_args: --linux AppImage deb --x64
           - id: *platform_id_windows_2025_x64
             runner: *platform_runner_windows_2025_x64
-            package_script: package:win:x64
+            builder_args: --win nsis portable --x64
           - id: *platform_id_windows_2022_x64
             runner: *platform_runner_windows_2022_x64
-            package_script: package:win:x64
+            builder_args: --win nsis portable --x64
           - id: *platform_id_macos_26_x64
             runner: *platform_runner_macos_26_x64
-            package_script: package:mac:x64
+            builder_args: --mac dmg --x64
           - id: *platform_id_macos_26_arm64
             runner: *platform_runner_macos_26_arm64
-            package_script: package:mac:arm64
+            builder_args: --mac dmg --arm64
           - id: *platform_id_macos_15_x64
             runner: *platform_runner_macos_15_x64
-            package_script: package:mac:x64
+            builder_args: --mac dmg --x64
           - id: *platform_id_macos_15_arm64
             runner: *platform_runner_macos_15_arm64
-            package_script: package:mac:arm64
+            builder_args: --mac dmg --arm64
           - id: *platform_id_macos_14_arm64
             runner: *platform_runner_macos_14_arm64
-            package_script: package:mac:arm64
+            builder_args: --mac dmg --arm64
 
     steps:
       - name: Checkout
@@ -299,7 +299,7 @@ jobs:
       - name: Package application
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-        run: pnpm run ${{ matrix.package_script }} -- --publish never
+        run: pnpm run build:app && pnpm exec electron-builder ${{ matrix.builder_args }} --config electron-builder.yml --publish never
 
       - name: Upload package artifacts
         if: always() && hashFiles('release/**') != ''
