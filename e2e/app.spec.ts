@@ -3914,6 +3914,30 @@ test('advanced editor font picker closes after selecting a preview card and sync
   await app.close()
 })
 
+test('advanced editor theme picker closes after selecting a preview card and syncs the theme setting', async () => {
+  const { app, window } = await launchApp()
+
+  await window.getByTestId('menu-settings-button').click()
+  await expect(window.getByTestId('settings-dialog')).toBeVisible()
+
+  const advancedDialog = window.locator('[data-testid="settings-editor-theme-advanced-dialog"]')
+  await window.getByTestId('settings-editor-theme-advanced-button').click()
+  await expect(advancedDialog).toBeVisible()
+
+  await expect(window.getByTestId('settings-editor-theme-preview-card-dracula')).toHaveAttribute('data-state', 'selected')
+  await expect(window.getByTestId('settings-editor-theme-preview-editor-github-dark')).toBeVisible()
+  await expect(window.getByTestId('settings-editor-theme-preview-line-module-github-dark')).toContainText('module alu(clk)')
+  await expect(window.getByTestId('settings-editor-theme-preview-selection-github-dark')).toContainText("sum = calc('RUN')")
+
+  await window.getByTestId('settings-editor-theme-preview-card-github-dark').click()
+
+  await expect(advancedDialog).toHaveCount(0)
+  await expect(window.getByTestId('settings-editor-theme-combobox')).toContainText('GitHub Dark')
+  await expect.poll(async () => readConfigValue(window, 'editor.theme')).toBe('github-dark')
+
+  await app.close()
+})
+
 test('newly downloaded Monaco font options can be selected and persist to config', async () => {
   const { app, window } = await launchApp()
 

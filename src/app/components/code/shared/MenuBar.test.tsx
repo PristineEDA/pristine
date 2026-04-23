@@ -829,6 +829,37 @@ describe('MenuBar', () => {
     expect(setEditorFontFamilyMock).toHaveBeenCalledWith('victor-mono');
   });
 
+  it('opens the advanced editor theme picker and applies the selected preview card', async () => {
+    const user = userEvent.setup();
+
+    mockPersistedSettingsConfig({
+      editorTheme: 'dracula',
+    });
+
+    renderMenuBar();
+
+    await user.click(screen.getByTestId('menu-settings-button'));
+    expect(await screen.findByTestId('settings-dialog')).toBeVisible();
+
+    await user.click(screen.getByTestId('settings-editor-theme-advanced-button'));
+
+    expect(await screen.findByTestId('settings-editor-theme-advanced-dialog')).toBeVisible();
+    expect(screen.getByTestId('settings-editor-theme-advanced-grid')).toBeVisible();
+    expect(screen.getByTestId('settings-editor-theme-preview-card-dracula')).toHaveAttribute('data-state', 'selected');
+    expect(screen.getByTestId('settings-editor-theme-preview-editor-github-dark')).toBeVisible();
+    expect(screen.getByTestId('settings-editor-theme-preview-line-module-github-dark')).toHaveTextContent('module alu(clk)');
+    expect(screen.getByTestId('settings-editor-theme-preview-selection-github-dark')).toHaveTextContent("sum = calc('RUN')");
+
+    await user.click(screen.getByTestId('settings-editor-theme-preview-card-github-dark'));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('settings-editor-theme-advanced-dialog')).not.toBeInTheDocument();
+    });
+
+    expect(screen.getByTestId('settings-editor-theme-combobox')).toHaveTextContent('GitHub Dark');
+    expect(setEditorThemeMock).toHaveBeenCalledWith('github-dark');
+  });
+
   it('re-reads persisted settings each time the dialog opens', async () => {
     const user = userEvent.setup();
     mockPersistedSettingsConfig({

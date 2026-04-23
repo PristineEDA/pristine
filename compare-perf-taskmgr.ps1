@@ -72,6 +72,89 @@ function Stop-PristineProcesses {
         }
 }
 
+function Normalize-ProcessFamilyName {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ProcessName
+    )
+
+    if ($ProcessName.EndsWith('.exe', [System.StringComparison]::OrdinalIgnoreCase)) {
+        return $ProcessName.Substring(0, $ProcessName.Length - 4)
+    }
+
+    return $ProcessName
+}
+
+function Stop-ProcessFamily {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ProcessName,
+
+        [int[]]$ExcludeProcessIds = @(),
+
+        [ValidateRange(0, [int]::MaxValue)]
+        [int]$GracefulTimeoutSeconds = 5
+    )
+
+    $resolvedProcessName = Normalize-ProcessFamilyName -ProcessName $ProcessName
+    $excludedProcessIds = [System.Collections.Generic.HashSet[int]]::new()
+
+    foreach ($excludedProcessId in @($ExcludeProcessIds)) {
+        [void]$excludedProcessIds.Add([int]$excludedProcessId)
+    }
+
+    $matchingProcesses = @(
+        Get-Process -Name $resolvedProcessName -ErrorAction SilentlyContinue |
+            Where-Object { -not $excludedProcessIds.Contains([int]$_.Id) }
+    )
+
+    if ($matchingProcesses.Count -eq 0) {
+        return
+    }
+
+    $requestedGracefulClose = $false
+
+    foreach ($process in $matchingProcesses) {
+        try {
+            if (-not $process.HasExited) {
+                $requestedGracefulClose = $process.CloseMainWindow() -or $requestedGracefulClose
+            }
+        }
+        catch {
+        }
+    }
+
+    if ($requestedGracefulClose -and $GracefulTimeoutSeconds -gt 0) {
+        $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+
+        while ($stopwatch.Elapsed.TotalSeconds -lt $GracefulTimeoutSeconds) {
+            $remainingProcesses = @(
+                Get-Process -Name $resolvedProcessName -ErrorAction SilentlyContinue |
+                    Where-Object { -not $excludedProcessIds.Contains([int]$_.Id) }
+            )
+
+            if ($remainingProcesses.Count -eq 0) {
+                return
+            }
+
+            Start-Sleep -Milliseconds 250
+        }
+    }
+
+    Get-Process -Name $resolvedProcessName -ErrorAction SilentlyContinue |
+        Where-Object { -not $excludedProcessIds.Contains([int]$_.Id) } |
+        Stop-Process -Force -ErrorAction SilentlyContinue
+}
+
+function Write-PerfScriptError {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Message
+    )
+
+    [Console]::Error.WriteLine($Message)
+}
+
 function Wait-ForProcessFamily {
     param(
         [Parameter(Mandatory = $true)]
@@ -214,6 +297,8 @@ function Invoke-Scenario {
         }
     }
     finally {
+        Stop-ProcessFamily -ProcessName $ProcessName -ExcludeProcessIds @($PID)
+
         if ($launcher) {
             try {
                 if (-not $launcher.HasExited) {
@@ -262,7 +347,7 @@ try {
             $thresholdFailures += "Memory working set difference exceeded the threshold: $($report.MemoryWorkingSetAverageAbsoluteDifferencePercent) % > $($report.MemoryThresholdPercent) %."
         }
 
-        Write-Error ('Runtime thresholds exceeded. ' + ($thresholdFailures -join ' '))
+        Write-PerfScriptError -Message ('Runtime thresholds exceeded. ' + ($thresholdFailures -join ' '))
         exit 1
     }
 
@@ -270,6 +355,6 @@ try {
     exit 0
 }
 catch {
-    Write-Error $_.Exception.Message
+    Write-PerfScriptError -Message $_.Exception.Message
     exit 2
 }
