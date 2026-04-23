@@ -69,6 +69,30 @@ describe('attributions', () => {
           author: 'Dalton Menezes',
           license: 'MIT',
         }),
+        expect.objectContaining({
+          id: 'editor-theme-hackr-theme',
+          name: 'Hackr.io Theme',
+          author: 'Robert Johns',
+          license: 'MIT',
+        }),
+        expect.objectContaining({
+          id: 'editor-theme-light-owl',
+          name: 'Light Owl',
+          author: 'Sarah Drasner',
+          license: 'MIT',
+        }),
+        expect.objectContaining({
+          id: 'editor-theme-atom-one-light',
+          name: 'Atom One Light',
+          author: 'akamud',
+          license: 'MIT',
+        }),
+        expect.objectContaining({
+          id: 'editor-theme-slack-dark-mode',
+          name: 'Slack Theme Dark Mode',
+          author: 'Felipe Mendes',
+          license: 'MIT',
+        }),
       ]),
     );
   });

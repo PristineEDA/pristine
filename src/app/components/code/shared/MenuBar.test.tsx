@@ -847,19 +847,19 @@ describe('MenuBar', () => {
     expect(screen.getByTestId('settings-editor-theme-advanced-grid')).toBeVisible();
     expect(screen.getByTestId('settings-editor-theme-preview-card-dracula')).toHaveAttribute('data-state', 'selected');
     expect(screen.getByTestId('settings-editor-theme-preview-author-dracula')).toHaveTextContent('Dracula Theme');
-    expect(screen.getByTestId('settings-editor-theme-preview-editor-aura-soft-dark')).toBeVisible();
-    expect(screen.getByTestId('settings-editor-theme-preview-author-aura-soft-dark')).toHaveTextContent('Dalton Menezes');
-    expect(screen.getByTestId('settings-editor-theme-preview-line-module-aura-soft-dark')).toHaveTextContent('module alu(clk)');
-    expect(screen.getByTestId('settings-editor-theme-preview-selection-aura-soft-dark')).toHaveTextContent("sum = calc('RUN')");
+    expect(screen.getByTestId('settings-editor-theme-preview-editor-hackr-theme')).toBeVisible();
+    expect(screen.getByTestId('settings-editor-theme-preview-author-hackr-theme')).toHaveTextContent('Robert Johns');
+    expect(screen.getByTestId('settings-editor-theme-preview-line-module-hackr-theme')).toHaveTextContent('module alu(clk)');
+    expect(screen.getByTestId('settings-editor-theme-preview-selection-hackr-theme')).toHaveTextContent("sum = calc('RUN')");
 
-    await user.click(screen.getByTestId('settings-editor-theme-preview-card-aura-soft-dark'));
+    await user.click(screen.getByTestId('settings-editor-theme-preview-card-hackr-theme'));
 
     await waitFor(() => {
       expect(screen.queryByTestId('settings-editor-theme-advanced-dialog')).not.toBeInTheDocument();
     });
 
-    expect(screen.getByTestId('settings-editor-theme-combobox')).toHaveTextContent('Aura Soft Dark');
-    expect(setEditorThemeMock).toHaveBeenCalledWith('aura-soft-dark');
+    expect(screen.getByTestId('settings-editor-theme-combobox')).toHaveTextContent('Hackr.io Theme');
+    expect(setEditorThemeMock).toHaveBeenCalledWith('hackr-theme');
   });
 
   it('re-reads persisted settings each time the dialog opens', async () => {

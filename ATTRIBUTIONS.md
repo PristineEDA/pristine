@@ -53,6 +53,13 @@ Winter is Coming (Light)（https://github.com/johnpapa/vscode-winteriscoming）J
 Monokai Night（https://github.com/fabiospampinato/vscode-monokai-night）Fabio Spampinato MIT
 Aura Dark（https://github.com/daltonmenezes/aura-theme）Dalton Menezes MIT
 Aura Soft Dark（https://github.com/daltonmenezes/aura-theme）Dalton Menezes MIT
+Hackr.io Theme（https://github.com/route413devs/hackr-theme）Robert Johns MIT
+Light Owl（https://github.com/sdras/night-owl-vscode-theme）Sarah Drasner MIT
+Atom One Light（https://github.com/akamud/vscode-theme-onelight）akamud MIT
+Ayu Dark（https://github.com/ayu-theme/vscode-ayu）teabyii MIT
+One Monokai（https://github.com/azemoh/vscode-one-monokai）Joshua Azemoh MIT
+Snazzy Light（https://github.com/loilo/vscode-snazzy-light）Florian Reuschel MIT
+Slack Theme Dark Mode（https://github.com/slack-theme/visual-studio-code）Felipe Mendes MIT
 
 ## UI Components & Styling
 

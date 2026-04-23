@@ -3970,20 +3970,20 @@ test('advanced editor theme picker closes after selecting a preview card and syn
   await expect(advancedDialog).toBeVisible()
 
   const draculaCard = window.getByTestId('settings-editor-theme-preview-card-dracula')
-  const auraSoftDarkCard = window.getByTestId('settings-editor-theme-preview-card-aura-soft-dark')
+  const hackrThemeCard = window.getByTestId('settings-editor-theme-preview-card-hackr-theme')
 
   await expect(draculaCard).toHaveAttribute('data-state', 'selected')
   await expect(draculaCard).toContainText('Dracula Theme')
-  await expect(window.getByTestId('settings-editor-theme-preview-editor-aura-soft-dark')).toBeVisible()
-  await expect(auraSoftDarkCard).toContainText('Dalton Menezes')
-  await expect(window.getByTestId('settings-editor-theme-preview-line-module-aura-soft-dark')).toContainText('module alu(clk)')
-  await expect(window.getByTestId('settings-editor-theme-preview-selection-aura-soft-dark')).toContainText("sum = calc('RUN')")
+  await expect(window.getByTestId('settings-editor-theme-preview-editor-hackr-theme')).toBeVisible()
+  await expect(hackrThemeCard).toContainText('Robert Johns')
+  await expect(window.getByTestId('settings-editor-theme-preview-line-module-hackr-theme')).toContainText('module alu(clk)')
+  await expect(window.getByTestId('settings-editor-theme-preview-selection-hackr-theme')).toContainText("sum = calc('RUN')")
 
-  await auraSoftDarkCard.click()
+  await hackrThemeCard.click()
 
   await expect(advancedDialog).toHaveCount(0)
-  await expect(window.getByTestId('settings-editor-theme-combobox')).toContainText('Aura Soft Dark')
-  await expect.poll(async () => readConfigValue(window, 'editor.theme')).toBe('aura-soft-dark')
+  await expect(window.getByTestId('settings-editor-theme-combobox')).toContainText('Hackr.io Theme')
+  await expect.poll(async () => readConfigValue(window, 'editor.theme')).toBe('hackr-theme')
 
   await app.close()
 })

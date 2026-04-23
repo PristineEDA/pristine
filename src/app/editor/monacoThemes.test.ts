@@ -7,13 +7,13 @@ describe('monacoThemes', () => {
   it('includes the latest bundled editor theme additions', () => {
     expect(editorThemeOptions).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ value: 'synthwave-84', label: "Synthwave '84", author: 'Robb Owen' }),
-        expect.objectContaining({ value: 'shades-of-purple', label: 'Shades of Purple', author: 'Ahmad Awais' }),
-        expect.objectContaining({ value: 'winter-is-coming-dark-blue', label: 'Winter is Coming (Dark Blue)', author: 'John Papa' }),
-        expect.objectContaining({ value: 'aura-soft-dark', label: 'Aura Soft Dark', author: 'Dalton Menezes' }),
+        expect.objectContaining({ value: 'hackr-theme', label: 'Hackr.io Theme', author: 'Robert Johns' }),
+        expect.objectContaining({ value: 'light-owl', label: 'Light Owl', author: 'Sarah Drasner' }),
+        expect.objectContaining({ value: 'one-monokai', label: 'One Monokai', author: 'Joshua Azemoh' }),
+        expect.objectContaining({ value: 'slack-dark-mode', label: 'Slack Theme Dark Mode', author: 'Felipe Mendes' }),
       ]),
     )
-    expect(editorThemeOptions.length).toBeGreaterThanOrEqual(39)
+    expect(editorThemeOptions.length).toBeGreaterThanOrEqual(46)
   })
 
   it('exposes preview data for every editor theme option', () => {
