@@ -3970,20 +3970,20 @@ test('advanced editor theme picker closes after selecting a preview card and syn
   await expect(advancedDialog).toBeVisible()
 
   const draculaCard = window.getByTestId('settings-editor-theme-preview-card-dracula')
-  const catppuccinMochaCard = window.getByTestId('settings-editor-theme-preview-card-catppuccin-mocha')
+  const synthwave84Card = window.getByTestId('settings-editor-theme-preview-card-synthwave-84')
 
   await expect(draculaCard).toHaveAttribute('data-state', 'selected')
   await expect(draculaCard).toContainText('Dracula Theme')
-  await expect(window.getByTestId('settings-editor-theme-preview-editor-catppuccin-mocha')).toBeVisible()
-  await expect(catppuccinMochaCard).toContainText('Catppuccin Organization')
-  await expect(window.getByTestId('settings-editor-theme-preview-line-module-catppuccin-mocha')).toContainText('module alu(clk)')
-  await expect(window.getByTestId('settings-editor-theme-preview-selection-catppuccin-mocha')).toContainText("sum = calc('RUN')")
+  await expect(window.getByTestId('settings-editor-theme-preview-editor-synthwave-84')).toBeVisible()
+  await expect(synthwave84Card).toContainText('Robb Owen')
+  await expect(window.getByTestId('settings-editor-theme-preview-line-module-synthwave-84')).toContainText('module alu(clk)')
+  await expect(window.getByTestId('settings-editor-theme-preview-selection-synthwave-84')).toContainText("sum = calc('RUN')")
 
-  await catppuccinMochaCard.click()
+  await synthwave84Card.click()
 
   await expect(advancedDialog).toHaveCount(0)
-  await expect(window.getByTestId('settings-editor-theme-combobox')).toContainText('Catppuccin Mocha')
-  await expect.poll(async () => readConfigValue(window, 'editor.theme')).toBe('catppuccin-mocha')
+  await expect(window.getByTestId('settings-editor-theme-combobox')).toContainText("Synthwave '84")
+  await expect.poll(async () => readConfigValue(window, 'editor.theme')).toBe('synthwave-84')
 
   await app.close()
 })

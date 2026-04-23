@@ -38,6 +38,15 @@ Noctis（https://github.com/liviuschera/noctis）Liviu Schera MIT
 Noctis Lux（https://github.com/liviuschera/noctis）Liviu Schera MIT
 Moonlight II（https://github.com/atomiks/moonlight-vscode-theme）atomiks MIT
 Alabaster（https://github.com/tonsky/vscode-theme-alabaster）Nikita Prokopov MIT
+Synthwave '84（https://github.com/robb0wen/synthwave-vscode）Robb Owen MIT
+Andromeda（https://github.com/EliverLara/Andromeda）Eliver Lara MIT
+Bluloco Dark（https://github.com/uloco/theme-bluloco-dark）uloco LGPL-3.0
+Bluloco Light（https://github.com/uloco/theme-bluloco-light）uloco LGPL-3.0
+Cobalt2（https://github.com/wesbos/cobalt2-vscode）Wes Bos, Roberto Achar MIT
+Omni（https://github.com/getomni/visual-studio-code）Rocketseat (Joao Pedro Schmitz) MIT
+Horizon（https://github.com/jolaleye/horizon-theme-vscode）Jonathan Olaleye MIT
+Horizon Bright（https://github.com/jolaleye/horizon-theme-vscode）Jonathan Olaleye MIT
+Shades of Purple（https://github.com/ahmadawais/shades-of-purple-vscode）Ahmad Awais MIT
 
 ## UI Components & Styling
 

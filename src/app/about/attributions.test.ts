@@ -33,6 +33,24 @@ describe('attributions', () => {
           author: 'Nikita Prokopov',
           license: 'MIT',
         }),
+        expect.objectContaining({
+          id: 'editor-theme-synthwave-84',
+          name: "Synthwave '84",
+          author: 'Robb Owen',
+          license: 'MIT',
+        }),
+        expect.objectContaining({
+          id: 'editor-theme-bluloco-dark',
+          name: 'Bluloco Dark',
+          author: 'uloco',
+          license: 'LGPL-3.0',
+        }),
+        expect.objectContaining({
+          id: 'editor-theme-shades-of-purple',
+          name: 'Shades of Purple',
+          author: 'Ahmad Awais',
+          license: 'MIT',
+        }),
       ]),
     );
   });

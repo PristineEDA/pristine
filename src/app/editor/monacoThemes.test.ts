@@ -4,15 +4,16 @@ import { editorThemeOptions } from './editorSettings'
 import { getEditorThemeDefinition, getEditorThemePreview } from './monacoThemes'
 
 describe('monacoThemes', () => {
-  it('includes the first batch of additional bundled editor themes', () => {
+  it('includes the latest bundled editor theme additions', () => {
     expect(editorThemeOptions).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ value: 'catppuccin-mocha', label: 'Catppuccin Mocha', author: 'Catppuccin Organization' }),
-        expect.objectContaining({ value: 'moonlight-ii', label: 'Moonlight II', author: 'atomiks' }),
-        expect.objectContaining({ value: 'alabaster', label: 'Alabaster', author: 'Nikita Prokopov' }),
+        expect.objectContaining({ value: 'synthwave-84', label: "Synthwave '84", author: 'Robb Owen' }),
+        expect.objectContaining({ value: 'horizon-bright', label: 'Horizon Bright', author: 'Jonathan Olaleye' }),
+        expect.objectContaining({ value: 'shades-of-purple', label: 'Shades of Purple', author: 'Ahmad Awais' }),
       ]),
     )
-    expect(editorThemeOptions.length).toBeGreaterThanOrEqual(24)
+    expect(editorThemeOptions.length).toBeGreaterThanOrEqual(33)
   })
 
   it('exposes preview data for every editor theme option', () => {
