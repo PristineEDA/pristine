@@ -566,7 +566,10 @@ async function setExplorerRenameInputValue(
 
   await expect(renameInput).toBeVisible();
   await renameInput.evaluate((inputElement) => {
-    const input = inputElement as HTMLInputElement;
+    const input = inputElement as unknown as {
+      focus: () => void;
+      select: () => void;
+    };
     input.focus();
     input.select();
   });
