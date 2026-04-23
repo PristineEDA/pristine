@@ -739,8 +739,7 @@ export function LeftSidePanel({
       isSubmitting: false,
       submitError: null,
     });
-    focusTree();
-  }, [focusTree]);
+  }, []);
 
   const startRenameFromSelection = useCallback(() => {
     const renameTarget = getExplorerRenameTarget(selectedNode, activeFileId);
@@ -803,8 +802,7 @@ export function LeftSidePanel({
       isSubmitting: false,
       submitError: null,
     });
-    focusTree();
-  }, [ensureFolderExpanded, focusTree, selectedParentPath]);
+  }, [ensureFolderExpanded, selectedParentPath]);
 
   const cancelTreeEdit = useCallback(() => {
     if (!treeEditSession || treeEditSession.isSubmitting) {

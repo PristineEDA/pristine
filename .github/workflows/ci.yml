@@ -222,6 +222,35 @@ jobs:
             exit $LASTEXITCODE
           }
 
+      - name: Publish runtime performance summary
+        if: always()
+        shell: powershell
+        run: |
+          $summaryPath = $env:GITHUB_STEP_SUMMARY
+          if ([string]::IsNullOrWhiteSpace($summaryPath)) {
+            exit 0
+          }
+
+          $perfResultsDir = Join-Path $PWD 'perf-results'
+          $reportPath = Join-Path $perfResultsDir 'comparison-report.txt'
+          $errorPath = Join-Path $perfResultsDir 'comparison-error.txt'
+
+          if (-not (Test-Path -LiteralPath $reportPath) -and -not (Test-Path -LiteralPath $errorPath)) {
+            exit 0
+          }
+
+          Add-Content -LiteralPath $summaryPath -Value "## Runtime Perf ${{ matrix.id }}"
+          Add-Content -LiteralPath $summaryPath -Value ''
+          Add-Content -LiteralPath $summaryPath -Value '```text'
+
+          if (Test-Path -LiteralPath $reportPath) {
+            Get-Content -LiteralPath $reportPath | Add-Content -LiteralPath $summaryPath
+          } else {
+            Get-Content -LiteralPath $errorPath | Add-Content -LiteralPath $summaryPath
+          }
+
+          Add-Content -LiteralPath $summaryPath -Value '```'
+
       - name: Upload runtime performance artifacts
         if: always() && hashFiles('perf-results/**') != ''
         uses: actions/upload-artifact@v4
