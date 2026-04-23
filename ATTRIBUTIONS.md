@@ -12,6 +12,17 @@ Monaco Editor（https://github.com/microsoft/monaco-editor）Microsoft MIT
 xterm.js（https://github.com/xtermjs/xterm.js）xterm.js MIT
 xterm-addon-fit（https://github.com/xtermjs/xterm.js/tree/master/addons/addon-fit）xterm.js MIT
 
+## Bundled Editor Themes
+
+Dracula（https://github.com/dracula/visual-studio-code）Dracula Theme MIT
+GitHub Light（https://github.com/primer/github-vscode-theme）GitHub MIT
+GitHub Dark（https://github.com/primer/github-vscode-theme）GitHub MIT
+One Dark Pro（https://github.com/Binaryify/OneDark-Pro）Binaryify MIT
+Night Owl（https://github.com/sdras/night-owl-vscode-theme）Sarah Drasner MIT
+Tokyo Night（https://github.com/tokyo-night/tokyo-night-vscode-theme）enkia MIT
+Solarized Light（https://github.com/altercation/solarized）Ethan Schoonover MIT
+Solarized Dark（https://github.com/altercation/solarized）Ethan Schoonover MIT
+
 ## UI Components & Styling
 
 shadcn/ui（https://github.com/shadcn-ui/ui）shadcn MIT

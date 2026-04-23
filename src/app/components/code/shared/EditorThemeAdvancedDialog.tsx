@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react'
 import {
   editorThemeOptions,
+  getEditorThemeAuthor,
   getEditorThemeLabel,
   type EditorThemeId,
 } from '../../../editor/editorSettings'
@@ -32,6 +33,7 @@ function ThemePreviewCard({
   theme: EditorThemeId
 }) {
   const label = getEditorThemeLabel(theme)
+  const author = getEditorThemeAuthor(theme)
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key !== 'Enter' && event.key !== ' ') {
@@ -110,8 +112,16 @@ function ThemePreviewCard({
           </div>
         </div>
       </CardContent>
-      <CardFooter className="justify-center border-t border-border/70 bg-muted/35 px-3 py-2.5 text-[13px] font-medium text-foreground">
-        {label}
+      <CardFooter className="relative h-10 justify-center overflow-hidden border-t border-border/70 bg-muted/35 px-3 py-2.5 text-[13px] font-medium text-foreground">
+        <div className="absolute inset-x-0 top-1/2 flex -translate-y-1/2 flex-col items-center leading-none">
+          <span>{label}</span>
+          <span
+            className="mt-px text-[10px] font-normal text-muted-foreground"
+            data-testid={`settings-editor-theme-preview-author-${theme}`}
+          >
+            {author}
+          </span>
+        </div>
       </CardFooter>
     </Card>
   )

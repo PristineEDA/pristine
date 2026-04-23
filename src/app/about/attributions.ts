@@ -1,3 +1,5 @@
+import { editorThemeOptions } from '../editor/editorSettings';
+
 export type AttributionItem = {
   id: string;
   name: string;
@@ -14,6 +16,14 @@ export type AttributionSection = {
 
 export const ATTRIBUTIONS_DOCUMENT_TITLE = 'Open Source Attributions';
 export const ATTRIBUTIONS_DOCUMENT_DESCRIPTION = 'Pristine includes the following runtime open-source frameworks and packaged resources.';
+
+const bundledEditorThemeItems: AttributionItem[] = editorThemeOptions.map((option) => ({
+  id: `editor-theme-${option.value}`,
+  name: option.label,
+  url: option.sourceUrl,
+  author: option.author,
+  license: option.license,
+}));
 
 export const openSourceAttributionSections: AttributionSection[] = [
   {
@@ -70,6 +80,11 @@ export const openSourceAttributionSections: AttributionSection[] = [
         license: 'MIT',
       },
     ],
+  },
+  {
+    id: 'bundled-editor-themes',
+    title: 'Bundled Editor Themes',
+    items: bundledEditorThemeItems,
   },
   {
     id: 'ui-components-and-styling',

@@ -21,3 +21,4 @@ tmp*
 .tmp-*.cjs
 public/generated/
 binaries/
+perf-results/

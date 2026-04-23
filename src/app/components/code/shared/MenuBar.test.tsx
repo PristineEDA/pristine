@@ -846,7 +846,9 @@ describe('MenuBar', () => {
     expect(await screen.findByTestId('settings-editor-theme-advanced-dialog')).toBeVisible();
     expect(screen.getByTestId('settings-editor-theme-advanced-grid')).toBeVisible();
     expect(screen.getByTestId('settings-editor-theme-preview-card-dracula')).toHaveAttribute('data-state', 'selected');
+    expect(screen.getByTestId('settings-editor-theme-preview-author-dracula')).toHaveTextContent('Dracula Theme');
     expect(screen.getByTestId('settings-editor-theme-preview-editor-github-dark')).toBeVisible();
+    expect(screen.getByTestId('settings-editor-theme-preview-author-github-dark')).toHaveTextContent('GitHub');
     expect(screen.getByTestId('settings-editor-theme-preview-line-module-github-dark')).toHaveTextContent('module alu(clk)');
     expect(screen.getByTestId('settings-editor-theme-preview-selection-github-dark')).toHaveTextContent("sum = calc('RUN')");
 

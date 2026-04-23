@@ -236,14 +236,70 @@ export const editorFontFamilyOptions = [
 ] as const
 
 export const editorThemeOptions = [
-  { value: 'dracula', label: 'Dracula', description: 'Default dark theme with vivid accents.' },
-  { value: 'github-light', label: 'GitHub Light', description: 'Clean light theme inspired by GitHub.' },
-  { value: 'github-dark', label: 'GitHub Dark', description: 'GitHub-style dark theme with neutral contrast.' },
-  { value: 'one-dark-pro', label: 'One Dark Pro', description: 'Balanced dark theme with familiar VS Code tones.' },
-  { value: 'night-owl', label: 'Night Owl', description: 'High-contrast dark palette for long coding sessions.' },
-  { value: 'tokyo-night', label: 'Tokyo Night', description: 'Modern deep-blue theme with cool accents.' },
-  { value: 'solarized-light', label: 'Solarized Light', description: 'Soft light theme with reduced glare.' },
-  { value: 'solarized-dark', label: 'Solarized Dark', description: 'Muted dark theme based on Solarized.' },
+  {
+    value: 'dracula',
+    label: 'Dracula',
+    description: 'Default dark theme with vivid accents.',
+    author: 'Dracula Theme',
+    sourceUrl: 'https://github.com/dracula/visual-studio-code',
+    license: 'MIT',
+  },
+  {
+    value: 'github-light',
+    label: 'GitHub Light',
+    description: 'Clean light theme inspired by GitHub.',
+    author: 'GitHub',
+    sourceUrl: 'https://github.com/primer/github-vscode-theme',
+    license: 'MIT',
+  },
+  {
+    value: 'github-dark',
+    label: 'GitHub Dark',
+    description: 'GitHub-style dark theme with neutral contrast.',
+    author: 'GitHub',
+    sourceUrl: 'https://github.com/primer/github-vscode-theme',
+    license: 'MIT',
+  },
+  {
+    value: 'one-dark-pro',
+    label: 'One Dark Pro',
+    description: 'Balanced dark theme with familiar VS Code tones.',
+    author: 'Binaryify',
+    sourceUrl: 'https://github.com/Binaryify/OneDark-Pro',
+    license: 'MIT',
+  },
+  {
+    value: 'night-owl',
+    label: 'Night Owl',
+    description: 'High-contrast dark palette for long coding sessions.',
+    author: 'Sarah Drasner',
+    sourceUrl: 'https://github.com/sdras/night-owl-vscode-theme',
+    license: 'MIT',
+  },
+  {
+    value: 'tokyo-night',
+    label: 'Tokyo Night',
+    description: 'Modern deep-blue theme with cool accents.',
+    author: 'enkia',
+    sourceUrl: 'https://github.com/tokyo-night/tokyo-night-vscode-theme',
+    license: 'MIT',
+  },
+  {
+    value: 'solarized-light',
+    label: 'Solarized Light',
+    description: 'Soft light theme with reduced glare.',
+    author: 'Ethan Schoonover',
+    sourceUrl: 'https://github.com/altercation/solarized',
+    license: 'MIT',
+  },
+  {
+    value: 'solarized-dark',
+    label: 'Solarized Dark',
+    description: 'Muted dark theme based on Solarized.',
+    author: 'Ethan Schoonover',
+    sourceUrl: 'https://github.com/altercation/solarized',
+    license: 'MIT',
+  },
 ] as const
 
 export const editorWordWrapOptions = [
@@ -375,6 +431,10 @@ export function isEditorThemeId(value: unknown): value is EditorThemeId {
 
 export function getEditorThemeLabel(themeId: EditorThemeId): string {
   return editorThemeOptionsById.get(themeId)?.label ?? 'Dracula'
+}
+
+export function getEditorThemeAuthor(themeId: EditorThemeId): string {
+  return editorThemeOptionsById.get(themeId)?.author ?? 'Dracula Theme'
 }
 
 export function parseEditorTheme(value: unknown): EditorThemeId {

@@ -8,6 +8,9 @@ describe('monacoThemes', () => {
     for (const option of editorThemeOptions) {
       const preview = getEditorThemePreview(option.value, null)
 
+      expect(option.author.length).toBeGreaterThan(0)
+      expect(option.sourceUrl).toMatch(/^https:\/\//)
+      expect(option.license.length).toBeGreaterThan(0)
       expect(['vs', 'vs-dark']).toContain(preview.base)
       expect(preview.palette.background).toMatch(/^#.+/)
       expect(preview.palette.foreground).toMatch(/^#.+/)

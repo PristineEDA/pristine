@@ -3969,12 +3969,17 @@ test('advanced editor theme picker closes after selecting a preview card and syn
   await window.getByTestId('settings-editor-theme-advanced-button').click()
   await expect(advancedDialog).toBeVisible()
 
-  await expect(window.getByTestId('settings-editor-theme-preview-card-dracula')).toHaveAttribute('data-state', 'selected')
+  const draculaCard = window.getByTestId('settings-editor-theme-preview-card-dracula')
+  const githubDarkCard = window.getByTestId('settings-editor-theme-preview-card-github-dark')
+
+  await expect(draculaCard).toHaveAttribute('data-state', 'selected')
+  await expect(draculaCard).toContainText('Dracula Theme')
   await expect(window.getByTestId('settings-editor-theme-preview-editor-github-dark')).toBeVisible()
+  await expect(githubDarkCard).toContainText('GitHub')
   await expect(window.getByTestId('settings-editor-theme-preview-line-module-github-dark')).toContainText('module alu(clk)')
   await expect(window.getByTestId('settings-editor-theme-preview-selection-github-dark')).toContainText("sum = calc('RUN')")
 
-  await window.getByTestId('settings-editor-theme-preview-card-github-dark').click()
+  await githubDarkCard.click()
 
   await expect(advancedDialog).toHaveCount(0)
   await expect(window.getByTestId('settings-editor-theme-combobox')).toContainText('GitHub Dark')
