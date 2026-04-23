@@ -209,7 +209,7 @@ jobs:
       - name: Package application
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-        run: pnpm run ${{ matrix.package_script }}
+        run: pnpm run ${{ matrix.package_script }} -- --publish never
 
       - name: Run runtime performance comparison
         shell: powershell
@@ -299,7 +299,7 @@ jobs:
       - name: Package application
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-        run: pnpm run ${{ matrix.package_script }}
+        run: pnpm run ${{ matrix.package_script }} -- --publish never
 
       - name: Upload package artifacts
         if: always() && hashFiles('release/**') != ''
