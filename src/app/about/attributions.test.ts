@@ -21,6 +21,18 @@ describe('attributions', () => {
           author: 'GitHub',
           license: 'MIT',
         }),
+        expect.objectContaining({
+          id: 'editor-theme-catppuccin-mocha',
+          name: 'Catppuccin Mocha',
+          author: 'Catppuccin Organization',
+          license: 'MIT',
+        }),
+        expect.objectContaining({
+          id: 'editor-theme-alabaster',
+          name: 'Alabaster',
+          author: 'Nikita Prokopov',
+          license: 'MIT',
+        }),
       ]),
     );
   });

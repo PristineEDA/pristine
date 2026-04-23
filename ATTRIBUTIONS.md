@@ -22,6 +22,22 @@ Night Owl（https://github.com/sdras/night-owl-vscode-theme）Sarah Drasner MIT
 Tokyo Night（https://github.com/tokyo-night/tokyo-night-vscode-theme）enkia MIT
 Solarized Light（https://github.com/altercation/solarized）Ethan Schoonover MIT
 Solarized Dark（https://github.com/altercation/solarized）Ethan Schoonover MIT
+Atom One Dark（https://github.com/akamud/vscode-theme-onedark）akamud MIT
+Catppuccin Mocha（https://github.com/catppuccin/vscode）Catppuccin Organization MIT
+Catppuccin Latte（https://github.com/catppuccin/vscode）Catppuccin Organization MIT
+Nord（https://github.com/nordtheme/vscode）Sven Greb MIT
+Rose Pine（https://github.com/rose-pine/vscode）Rose Pine MIT
+Rose Pine Dawn（https://github.com/rose-pine/vscode）Rose Pine MIT
+Min Dark（https://github.com/miguelsolorio/min-theme）Miguel Solorio MIT
+Min Light（https://github.com/miguelsolorio/min-theme）Miguel Solorio MIT
+Gruvbox Dark Hard（https://github.com/jdinhify/vscode-theme-gruvbox）jdinhify MIT
+Gruvbox Light Hard（https://github.com/jdinhify/vscode-theme-gruvbox）jdinhify MIT
+Ayu Mirage（https://github.com/ayu-theme/vscode-ayu）teabyii MIT
+Ayu Light（https://github.com/ayu-theme/vscode-ayu）teabyii MIT
+Noctis（https://github.com/liviuschera/noctis）Liviu Schera MIT
+Noctis Lux（https://github.com/liviuschera/noctis）Liviu Schera MIT
+Moonlight II（https://github.com/atomiks/moonlight-vscode-theme）atomiks MIT
+Alabaster（https://github.com/tonsky/vscode-theme-alabaster）Nikita Prokopov MIT
 
 ## UI Components & Styling
 

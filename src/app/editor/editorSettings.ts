@@ -1,4 +1,5 @@
 import { IDE_MONO_FONT_FAMILY } from './themeSource'
+import { editorThemeCatalog, editorThemeCatalogById } from './themeCatalog'
 
 export const DEFAULT_EDITOR_FONT_SIZE = 13
 export const MIN_EDITOR_FONT_SIZE = 10
@@ -235,72 +236,14 @@ export const editorFontFamilyOptions = [
   },
 ] as const
 
-export const editorThemeOptions = [
-  {
-    value: 'dracula',
-    label: 'Dracula',
-    description: 'Default dark theme with vivid accents.',
-    author: 'Dracula Theme',
-    sourceUrl: 'https://github.com/dracula/visual-studio-code',
-    license: 'MIT',
-  },
-  {
-    value: 'github-light',
-    label: 'GitHub Light',
-    description: 'Clean light theme inspired by GitHub.',
-    author: 'GitHub',
-    sourceUrl: 'https://github.com/primer/github-vscode-theme',
-    license: 'MIT',
-  },
-  {
-    value: 'github-dark',
-    label: 'GitHub Dark',
-    description: 'GitHub-style dark theme with neutral contrast.',
-    author: 'GitHub',
-    sourceUrl: 'https://github.com/primer/github-vscode-theme',
-    license: 'MIT',
-  },
-  {
-    value: 'one-dark-pro',
-    label: 'One Dark Pro',
-    description: 'Balanced dark theme with familiar VS Code tones.',
-    author: 'Binaryify',
-    sourceUrl: 'https://github.com/Binaryify/OneDark-Pro',
-    license: 'MIT',
-  },
-  {
-    value: 'night-owl',
-    label: 'Night Owl',
-    description: 'High-contrast dark palette for long coding sessions.',
-    author: 'Sarah Drasner',
-    sourceUrl: 'https://github.com/sdras/night-owl-vscode-theme',
-    license: 'MIT',
-  },
-  {
-    value: 'tokyo-night',
-    label: 'Tokyo Night',
-    description: 'Modern deep-blue theme with cool accents.',
-    author: 'enkia',
-    sourceUrl: 'https://github.com/tokyo-night/tokyo-night-vscode-theme',
-    license: 'MIT',
-  },
-  {
-    value: 'solarized-light',
-    label: 'Solarized Light',
-    description: 'Soft light theme with reduced glare.',
-    author: 'Ethan Schoonover',
-    sourceUrl: 'https://github.com/altercation/solarized',
-    license: 'MIT',
-  },
-  {
-    value: 'solarized-dark',
-    label: 'Solarized Dark',
-    description: 'Muted dark theme based on Solarized.',
-    author: 'Ethan Schoonover',
-    sourceUrl: 'https://github.com/altercation/solarized',
-    license: 'MIT',
-  },
-] as const
+export const editorThemeOptions = editorThemeCatalog.map((theme) => ({
+  value: theme.value,
+  label: theme.label,
+  description: theme.description,
+  author: theme.author,
+  sourceUrl: theme.sourceUrl,
+  license: theme.license,
+}))
 
 export const editorWordWrapOptions = [
   { value: 'off', label: 'Off', description: 'Disable soft wrapping for long lines.' },
@@ -352,7 +295,7 @@ export const editorFoldingStrategyOptions = [
 ] as const
 
 export type EditorFontFamilyId = (typeof editorFontFamilyOptions)[number]['value']
-export type EditorThemeId = (typeof editorThemeOptions)[number]['value']
+export type EditorThemeId = (typeof editorThemeCatalog)[number]['value']
 export type EditorWordWrapMode = (typeof editorWordWrapOptions)[number]['value']
 export type EditorRenderWhitespaceMode = (typeof editorRenderWhitespaceOptions)[number]['value']
 export type EditorTabSize = (typeof editorTabSizeOptions)[number]['value']
@@ -380,10 +323,7 @@ const editorFontFamilyValues = new Set<EditorFontFamilyId>(editorFontFamilyOptio
 const editorFontFamilyOptionsById = new Map<EditorFontFamilyId, (typeof editorFontFamilyOptions)[number]>(
   editorFontFamilyOptions.map((option) => [option.value, option]),
 )
-const editorThemeValues = new Set<EditorThemeId>(editorThemeOptions.map((option) => option.value))
-const editorThemeOptionsById = new Map<EditorThemeId, (typeof editorThemeOptions)[number]>(
-  editorThemeOptions.map((option) => [option.value, option]),
-)
+const editorThemeValues = new Set<EditorThemeId>(editorThemeCatalog.map((option) => option.value))
 const editorWordWrapValues = new Set<EditorWordWrapMode>(editorWordWrapOptions.map((option) => option.value))
 const editorWordWrapOptionsById = new Map<EditorWordWrapMode, (typeof editorWordWrapOptions)[number]>(
   editorWordWrapOptions.map((option) => [option.value, option]),
@@ -430,11 +370,11 @@ export function isEditorThemeId(value: unknown): value is EditorThemeId {
 }
 
 export function getEditorThemeLabel(themeId: EditorThemeId): string {
-  return editorThemeOptionsById.get(themeId)?.label ?? 'Dracula'
+  return editorThemeCatalogById.get(themeId)?.label ?? 'Dracula'
 }
 
 export function getEditorThemeAuthor(themeId: EditorThemeId): string {
-  return editorThemeOptionsById.get(themeId)?.author ?? 'Dracula Theme'
+  return editorThemeCatalogById.get(themeId)?.author ?? 'Dracula Theme'
 }
 
 export function parseEditorTheme(value: unknown): EditorThemeId {

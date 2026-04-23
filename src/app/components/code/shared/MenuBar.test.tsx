@@ -847,19 +847,19 @@ describe('MenuBar', () => {
     expect(screen.getByTestId('settings-editor-theme-advanced-grid')).toBeVisible();
     expect(screen.getByTestId('settings-editor-theme-preview-card-dracula')).toHaveAttribute('data-state', 'selected');
     expect(screen.getByTestId('settings-editor-theme-preview-author-dracula')).toHaveTextContent('Dracula Theme');
-    expect(screen.getByTestId('settings-editor-theme-preview-editor-github-dark')).toBeVisible();
-    expect(screen.getByTestId('settings-editor-theme-preview-author-github-dark')).toHaveTextContent('GitHub');
-    expect(screen.getByTestId('settings-editor-theme-preview-line-module-github-dark')).toHaveTextContent('module alu(clk)');
-    expect(screen.getByTestId('settings-editor-theme-preview-selection-github-dark')).toHaveTextContent("sum = calc('RUN')");
+    expect(screen.getByTestId('settings-editor-theme-preview-editor-catppuccin-mocha')).toBeVisible();
+    expect(screen.getByTestId('settings-editor-theme-preview-author-catppuccin-mocha')).toHaveTextContent('Catppuccin Organization');
+    expect(screen.getByTestId('settings-editor-theme-preview-line-module-catppuccin-mocha')).toHaveTextContent('module alu(clk)');
+    expect(screen.getByTestId('settings-editor-theme-preview-selection-catppuccin-mocha')).toHaveTextContent("sum = calc('RUN')");
 
-    await user.click(screen.getByTestId('settings-editor-theme-preview-card-github-dark'));
+    await user.click(screen.getByTestId('settings-editor-theme-preview-card-catppuccin-mocha'));
 
     await waitFor(() => {
       expect(screen.queryByTestId('settings-editor-theme-advanced-dialog')).not.toBeInTheDocument();
     });
 
-    expect(screen.getByTestId('settings-editor-theme-combobox')).toHaveTextContent('GitHub Dark');
-    expect(setEditorThemeMock).toHaveBeenCalledWith('github-dark');
+    expect(screen.getByTestId('settings-editor-theme-combobox')).toHaveTextContent('Catppuccin Mocha');
+    expect(setEditorThemeMock).toHaveBeenCalledWith('catppuccin-mocha');
   });
 
   it('re-reads persisted settings each time the dialog opens', async () => {

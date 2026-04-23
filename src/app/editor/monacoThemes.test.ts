@@ -4,6 +4,17 @@ import { editorThemeOptions } from './editorSettings'
 import { getEditorThemeDefinition, getEditorThemePreview } from './monacoThemes'
 
 describe('monacoThemes', () => {
+  it('includes the first batch of additional bundled editor themes', () => {
+    expect(editorThemeOptions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ value: 'catppuccin-mocha', label: 'Catppuccin Mocha', author: 'Catppuccin Organization' }),
+        expect.objectContaining({ value: 'moonlight-ii', label: 'Moonlight II', author: 'atomiks' }),
+        expect.objectContaining({ value: 'alabaster', label: 'Alabaster', author: 'Nikita Prokopov' }),
+      ]),
+    )
+    expect(editorThemeOptions.length).toBeGreaterThanOrEqual(24)
+  })
+
   it('exposes preview data for every editor theme option', () => {
     for (const option of editorThemeOptions) {
       const preview = getEditorThemePreview(option.value, null)

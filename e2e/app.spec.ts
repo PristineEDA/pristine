@@ -3970,20 +3970,20 @@ test('advanced editor theme picker closes after selecting a preview card and syn
   await expect(advancedDialog).toBeVisible()
 
   const draculaCard = window.getByTestId('settings-editor-theme-preview-card-dracula')
-  const githubDarkCard = window.getByTestId('settings-editor-theme-preview-card-github-dark')
+  const catppuccinMochaCard = window.getByTestId('settings-editor-theme-preview-card-catppuccin-mocha')
 
   await expect(draculaCard).toHaveAttribute('data-state', 'selected')
   await expect(draculaCard).toContainText('Dracula Theme')
-  await expect(window.getByTestId('settings-editor-theme-preview-editor-github-dark')).toBeVisible()
-  await expect(githubDarkCard).toContainText('GitHub')
-  await expect(window.getByTestId('settings-editor-theme-preview-line-module-github-dark')).toContainText('module alu(clk)')
-  await expect(window.getByTestId('settings-editor-theme-preview-selection-github-dark')).toContainText("sum = calc('RUN')")
+  await expect(window.getByTestId('settings-editor-theme-preview-editor-catppuccin-mocha')).toBeVisible()
+  await expect(catppuccinMochaCard).toContainText('Catppuccin Organization')
+  await expect(window.getByTestId('settings-editor-theme-preview-line-module-catppuccin-mocha')).toContainText('module alu(clk)')
+  await expect(window.getByTestId('settings-editor-theme-preview-selection-catppuccin-mocha')).toContainText("sum = calc('RUN')")
 
-  await githubDarkCard.click()
+  await catppuccinMochaCard.click()
 
   await expect(advancedDialog).toHaveCount(0)
-  await expect(window.getByTestId('settings-editor-theme-combobox')).toContainText('GitHub Dark')
-  await expect.poll(async () => readConfigValue(window, 'editor.theme')).toBe('github-dark')
+  await expect(window.getByTestId('settings-editor-theme-combobox')).toContainText('Catppuccin Mocha')
+  await expect.poll(async () => readConfigValue(window, 'editor.theme')).toBe('catppuccin-mocha')
 
   await app.close()
 })
