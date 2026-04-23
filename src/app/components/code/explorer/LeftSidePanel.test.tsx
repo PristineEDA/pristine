@@ -210,6 +210,7 @@ describe('LeftSidePanel', () => {
     fireEvent.keyDown(container.querySelector('.explorer-tree-scrollbar') as HTMLElement, { key: 'F2' });
 
     const renameInput = await screen.findByTestId('file-tree-input-rtl_peripherals_uart_rx_v');
+    expect(renameInput).toHaveAttribute('spellcheck', 'false');
     fireEvent.change(renameInput, { target: { value: 'uart_tx.v' } });
     fireEvent.keyDown(renameInput, { key: 'Enter' });
 

@@ -557,6 +557,7 @@ function TreeEditInputRow({
           data-testid={`file-tree-input-${testId}`}
           value={value}
           disabled={isSubmitting}
+          spellCheck={false}
           aria-invalid={errorMessage ? 'true' : 'false'}
           className={`ml-1 h-5 flex-1 rounded border bg-background/80 px-2 text-[12px] outline-none transition-colors ${
             errorMessage
