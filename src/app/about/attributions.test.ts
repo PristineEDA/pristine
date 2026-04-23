@@ -51,6 +51,24 @@ describe('attributions', () => {
           author: 'Ahmad Awais',
           license: 'MIT',
         }),
+        expect.objectContaining({
+          id: 'editor-theme-winter-is-coming-dark-blue',
+          name: 'Winter is Coming (Dark Blue)',
+          author: 'John Papa',
+          license: 'MIT',
+        }),
+        expect.objectContaining({
+          id: 'editor-theme-monokai-night',
+          name: 'Monokai Night',
+          author: 'Fabio Spampinato',
+          license: 'MIT',
+        }),
+        expect.objectContaining({
+          id: 'editor-theme-aura-soft-dark',
+          name: 'Aura Soft Dark',
+          author: 'Dalton Menezes',
+          license: 'MIT',
+        }),
       ]),
     );
   });

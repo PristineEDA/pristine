@@ -47,6 +47,12 @@ Omni（https://github.com/getomni/visual-studio-code）Rocketseat (Joao Pedro Sc
 Horizon（https://github.com/jolaleye/horizon-theme-vscode）Jonathan Olaleye MIT
 Horizon Bright（https://github.com/jolaleye/horizon-theme-vscode）Jonathan Olaleye MIT
 Shades of Purple（https://github.com/ahmadawais/shades-of-purple-vscode）Ahmad Awais MIT
+Winter is Coming (Dark Blue)（https://github.com/johnpapa/vscode-winteriscoming）John Papa MIT
+Winter is Coming (Dark)（https://github.com/johnpapa/vscode-winteriscoming）John Papa MIT
+Winter is Coming (Light)（https://github.com/johnpapa/vscode-winteriscoming）John Papa, Brian Clark MIT
+Monokai Night（https://github.com/fabiospampinato/vscode-monokai-night）Fabio Spampinato MIT
+Aura Dark（https://github.com/daltonmenezes/aura-theme）Dalton Menezes MIT
+Aura Soft Dark（https://github.com/daltonmenezes/aura-theme）Dalton Menezes MIT
 
 ## UI Components & Styling
 

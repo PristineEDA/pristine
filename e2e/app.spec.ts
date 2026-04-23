@@ -3970,20 +3970,20 @@ test('advanced editor theme picker closes after selecting a preview card and syn
   await expect(advancedDialog).toBeVisible()
 
   const draculaCard = window.getByTestId('settings-editor-theme-preview-card-dracula')
-  const synthwave84Card = window.getByTestId('settings-editor-theme-preview-card-synthwave-84')
+  const auraSoftDarkCard = window.getByTestId('settings-editor-theme-preview-card-aura-soft-dark')
 
   await expect(draculaCard).toHaveAttribute('data-state', 'selected')
   await expect(draculaCard).toContainText('Dracula Theme')
-  await expect(window.getByTestId('settings-editor-theme-preview-editor-synthwave-84')).toBeVisible()
-  await expect(synthwave84Card).toContainText('Robb Owen')
-  await expect(window.getByTestId('settings-editor-theme-preview-line-module-synthwave-84')).toContainText('module alu(clk)')
-  await expect(window.getByTestId('settings-editor-theme-preview-selection-synthwave-84')).toContainText("sum = calc('RUN')")
+  await expect(window.getByTestId('settings-editor-theme-preview-editor-aura-soft-dark')).toBeVisible()
+  await expect(auraSoftDarkCard).toContainText('Dalton Menezes')
+  await expect(window.getByTestId('settings-editor-theme-preview-line-module-aura-soft-dark')).toContainText('module alu(clk)')
+  await expect(window.getByTestId('settings-editor-theme-preview-selection-aura-soft-dark')).toContainText("sum = calc('RUN')")
 
-  await synthwave84Card.click()
+  await auraSoftDarkCard.click()
 
   await expect(advancedDialog).toHaveCount(0)
-  await expect(window.getByTestId('settings-editor-theme-combobox')).toContainText("Synthwave '84")
-  await expect.poll(async () => readConfigValue(window, 'editor.theme')).toBe('synthwave-84')
+  await expect(window.getByTestId('settings-editor-theme-combobox')).toContainText('Aura Soft Dark')
+  await expect.poll(async () => readConfigValue(window, 'editor.theme')).toBe('aura-soft-dark')
 
   await app.close()
 })

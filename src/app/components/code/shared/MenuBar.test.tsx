@@ -847,19 +847,19 @@ describe('MenuBar', () => {
     expect(screen.getByTestId('settings-editor-theme-advanced-grid')).toBeVisible();
     expect(screen.getByTestId('settings-editor-theme-preview-card-dracula')).toHaveAttribute('data-state', 'selected');
     expect(screen.getByTestId('settings-editor-theme-preview-author-dracula')).toHaveTextContent('Dracula Theme');
-    expect(screen.getByTestId('settings-editor-theme-preview-editor-synthwave-84')).toBeVisible();
-    expect(screen.getByTestId('settings-editor-theme-preview-author-synthwave-84')).toHaveTextContent('Robb Owen');
-    expect(screen.getByTestId('settings-editor-theme-preview-line-module-synthwave-84')).toHaveTextContent('module alu(clk)');
-    expect(screen.getByTestId('settings-editor-theme-preview-selection-synthwave-84')).toHaveTextContent("sum = calc('RUN')");
+    expect(screen.getByTestId('settings-editor-theme-preview-editor-aura-soft-dark')).toBeVisible();
+    expect(screen.getByTestId('settings-editor-theme-preview-author-aura-soft-dark')).toHaveTextContent('Dalton Menezes');
+    expect(screen.getByTestId('settings-editor-theme-preview-line-module-aura-soft-dark')).toHaveTextContent('module alu(clk)');
+    expect(screen.getByTestId('settings-editor-theme-preview-selection-aura-soft-dark')).toHaveTextContent("sum = calc('RUN')");
 
-    await user.click(screen.getByTestId('settings-editor-theme-preview-card-synthwave-84'));
+    await user.click(screen.getByTestId('settings-editor-theme-preview-card-aura-soft-dark'));
 
     await waitFor(() => {
       expect(screen.queryByTestId('settings-editor-theme-advanced-dialog')).not.toBeInTheDocument();
     });
 
-    expect(screen.getByTestId('settings-editor-theme-combobox')).toHaveTextContent("Synthwave '84");
-    expect(setEditorThemeMock).toHaveBeenCalledWith('synthwave-84');
+    expect(screen.getByTestId('settings-editor-theme-combobox')).toHaveTextContent('Aura Soft Dark');
+    expect(setEditorThemeMock).toHaveBeenCalledWith('aura-soft-dark');
   });
 
   it('re-reads persisted settings each time the dialog opens', async () => {

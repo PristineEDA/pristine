@@ -7,13 +7,13 @@ describe('monacoThemes', () => {
   it('includes the latest bundled editor theme additions', () => {
     expect(editorThemeOptions).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ value: 'catppuccin-mocha', label: 'Catppuccin Mocha', author: 'Catppuccin Organization' }),
         expect.objectContaining({ value: 'synthwave-84', label: "Synthwave '84", author: 'Robb Owen' }),
-        expect.objectContaining({ value: 'horizon-bright', label: 'Horizon Bright', author: 'Jonathan Olaleye' }),
         expect.objectContaining({ value: 'shades-of-purple', label: 'Shades of Purple', author: 'Ahmad Awais' }),
+        expect.objectContaining({ value: 'winter-is-coming-dark-blue', label: 'Winter is Coming (Dark Blue)', author: 'John Papa' }),
+        expect.objectContaining({ value: 'aura-soft-dark', label: 'Aura Soft Dark', author: 'Dalton Menezes' }),
       ]),
     )
-    expect(editorThemeOptions.length).toBeGreaterThanOrEqual(33)
+    expect(editorThemeOptions.length).toBeGreaterThanOrEqual(39)
   })
 
   it('exposes preview data for every editor theme option', () => {
