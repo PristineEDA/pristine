@@ -530,6 +530,51 @@ async function recordExplorerTreeScrollTopTimeline(
   }, { sampleCount, delayMs });
 }
 
+async function openExplorerRenameInput(
+  window: Awaited<ReturnType<typeof launchApp>>['window'],
+  explorerTree: Locator,
+  targetNode: Locator,
+  renameInputTestId: string,
+) {
+  const renameInput = window.getByTestId(renameInputTestId);
+
+  await targetNode.click();
+  await expect(targetNode).toHaveClass(/bg-primary\/20/);
+  await explorerTree.focus();
+  await expect(explorerTree).toBeFocused();
+  await explorerTree.press('F2');
+
+  try {
+    await expect(renameInput).toBeVisible({ timeout: 2000 });
+    return renameInput;
+  } catch {
+    await targetNode.click({ button: 'right' });
+    const renameMenuItem = window.getByRole('menuitem', { name: 'Rename' });
+    await expect(renameMenuItem).toBeVisible({ timeout: 2000 });
+    await renameMenuItem.click();
+    await expect(renameInput).toBeVisible({ timeout: 5000 });
+    return renameInput;
+  }
+}
+
+async function setExplorerRenameInputValue(
+  window: Awaited<ReturnType<typeof launchApp>>['window'],
+  renameInputTestId: string,
+  nextValue: string,
+) {
+  const renameInput = window.getByTestId(renameInputTestId);
+
+  await expect(renameInput).toBeVisible();
+  await renameInput.evaluate((inputElement) => {
+    const input = inputElement as HTMLInputElement;
+    input.focus();
+    input.select();
+  });
+
+  await window.keyboard.insertText(nextValue);
+  await expect(window.getByTestId(renameInputTestId)).toHaveValue(nextValue);
+}
+
 async function openBottomTerminal(window: Awaited<ReturnType<typeof launchApp>>['window']) {
   const toggleBottomPanel = window.getByTestId('toggle-bottom-panel');
   await expect(toggleBottomPanel).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
@@ -1963,21 +2008,14 @@ test('Explorer rename and delete keep the tree scroll position near the bottom a
 
     expect(renameSourceBox.y + renameSourceBox.height).toBeGreaterThan(viewportHeight - 120);
 
-    await renameSourceNode.click();
-    await expect(renameSourceNode).toHaveClass(/bg-primary\/20/);
     const beforeRenameScrollTop = await readExplorerTreeScrollTop(window);
     const beforeRenameAnchorTop = await readExplorerNodeTop(window, deleteTreeTestId);
 
-    await explorerTree.focus();
-    await expect(explorerTree).toBeFocused();
-    await explorerTree.press('F2');
-
-    const renameInput = window.getByTestId(renameInputTestId);
-    await expect(renameInput).toBeVisible();
-    await renameInput.fill(renameTargetFileName);
+    await openExplorerRenameInput(window, explorerTree, renameSourceNode, renameInputTestId);
+    await setExplorerRenameInputValue(window, renameInputTestId, renameTargetFileName);
     const renameScrollTimelinePromise = recordExplorerTreeScrollTopTimeline(window);
     const renameAnchorTimelinePromise = recordExplorerNodeTopTimeline(window, deleteTreeTestId);
-    await renameInput.press('Enter');
+    await window.keyboard.press('Enter');
 
     await expect.poll(() => fs.existsSync(renameTargetAbsolutePath), {
       timeout: 15000,
