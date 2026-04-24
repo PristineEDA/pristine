@@ -3970,20 +3970,20 @@ test('advanced editor theme picker closes after selecting a preview card and syn
   await expect(advancedDialog).toBeVisible()
 
   const draculaCard = window.getByTestId('settings-editor-theme-preview-card-dracula')
-  const hackrThemeCard = window.getByTestId('settings-editor-theme-preview-card-hackr-theme')
+  const palenightThemeCard = window.getByTestId('settings-editor-theme-preview-card-palenight-theme')
 
   await expect(draculaCard).toHaveAttribute('data-state', 'selected')
   await expect(draculaCard).toContainText('Dracula Theme')
-  await expect(window.getByTestId('settings-editor-theme-preview-editor-hackr-theme')).toBeVisible()
-  await expect(hackrThemeCard).toContainText('Robert Johns')
-  await expect(window.getByTestId('settings-editor-theme-preview-line-module-hackr-theme')).toContainText('module alu(clk)')
-  await expect(window.getByTestId('settings-editor-theme-preview-selection-hackr-theme')).toContainText("sum = calc('RUN')")
+  await expect(window.getByTestId('settings-editor-theme-preview-editor-palenight-theme')).toBeVisible()
+  await expect(palenightThemeCard).toContainText('Olaolu Olawuyi')
+  await expect(window.getByTestId('settings-editor-theme-preview-line-module-palenight-theme')).toContainText('module alu(clk)')
+  await expect(window.getByTestId('settings-editor-theme-preview-selection-palenight-theme')).toContainText("sum = calc('RUN')")
 
-  await hackrThemeCard.click()
+  await palenightThemeCard.click()
 
   await expect(advancedDialog).toHaveCount(0)
-  await expect(window.getByTestId('settings-editor-theme-combobox')).toContainText('Hackr.io Theme')
-  await expect.poll(async () => readConfigValue(window, 'editor.theme')).toBe('hackr-theme')
+  await expect(window.getByTestId('settings-editor-theme-combobox')).toContainText('Palenight Theme')
+  await expect.poll(async () => readConfigValue(window, 'editor.theme')).toBe('palenight-theme')
 
   await app.close()
 })

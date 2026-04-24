@@ -60,6 +60,12 @@ Ayu Dark（https://github.com/ayu-theme/vscode-ayu）teabyii MIT
 One Monokai（https://github.com/azemoh/vscode-one-monokai）Joshua Azemoh MIT
 Snazzy Light（https://github.com/loilo/vscode-snazzy-light）Florian Reuschel MIT
 Slack Theme Dark Mode（https://github.com/slack-theme/visual-studio-code）Felipe Mendes MIT
+Palenight Theme（https://github.com/whizkydee/vscode-palenight-theme）Olaolu Olawuyi MIT
+Darcula Theme（https://github.com/rokoroku/vscode-theme-darcula）rokoroku MIT
+Catppuccin Frappe（https://github.com/catppuccin/vscode）Catppuccin Organization MIT
+Catppuccin Macchiato（https://github.com/catppuccin/vscode）Catppuccin Organization MIT
+Tokyo Night Storm（https://github.com/tokyo-night/tokyo-night-vscode-theme）enkia MIT
+Vue Theme（https://github.com/mariorodeghiero/vue-theme-vscode）Mario Rodeghiero MIT
 
 ## UI Components & Styling
 

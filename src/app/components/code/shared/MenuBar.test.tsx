@@ -847,19 +847,19 @@ describe('MenuBar', () => {
     expect(screen.getByTestId('settings-editor-theme-advanced-grid')).toBeVisible();
     expect(screen.getByTestId('settings-editor-theme-preview-card-dracula')).toHaveAttribute('data-state', 'selected');
     expect(screen.getByTestId('settings-editor-theme-preview-author-dracula')).toHaveTextContent('Dracula Theme');
-    expect(screen.getByTestId('settings-editor-theme-preview-editor-hackr-theme')).toBeVisible();
-    expect(screen.getByTestId('settings-editor-theme-preview-author-hackr-theme')).toHaveTextContent('Robert Johns');
-    expect(screen.getByTestId('settings-editor-theme-preview-line-module-hackr-theme')).toHaveTextContent('module alu(clk)');
-    expect(screen.getByTestId('settings-editor-theme-preview-selection-hackr-theme')).toHaveTextContent("sum = calc('RUN')");
+    expect(screen.getByTestId('settings-editor-theme-preview-editor-palenight-theme')).toBeVisible();
+    expect(screen.getByTestId('settings-editor-theme-preview-author-palenight-theme')).toHaveTextContent('Olaolu Olawuyi');
+    expect(screen.getByTestId('settings-editor-theme-preview-line-module-palenight-theme')).toHaveTextContent('module alu(clk)');
+    expect(screen.getByTestId('settings-editor-theme-preview-selection-palenight-theme')).toHaveTextContent("sum = calc('RUN')");
 
-    await user.click(screen.getByTestId('settings-editor-theme-preview-card-hackr-theme'));
+    await user.click(screen.getByTestId('settings-editor-theme-preview-card-palenight-theme'));
 
     await waitFor(() => {
       expect(screen.queryByTestId('settings-editor-theme-advanced-dialog')).not.toBeInTheDocument();
     });
 
-    expect(screen.getByTestId('settings-editor-theme-combobox')).toHaveTextContent('Hackr.io Theme');
-    expect(setEditorThemeMock).toHaveBeenCalledWith('hackr-theme');
+    expect(screen.getByTestId('settings-editor-theme-combobox')).toHaveTextContent('Palenight Theme');
+    expect(setEditorThemeMock).toHaveBeenCalledWith('palenight-theme');
   });
 
   it('re-reads persisted settings each time the dialog opens', async () => {

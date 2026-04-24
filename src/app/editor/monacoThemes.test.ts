@@ -7,13 +7,13 @@ describe('monacoThemes', () => {
   it('includes the latest bundled editor theme additions', () => {
     expect(editorThemeOptions).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ value: 'hackr-theme', label: 'Hackr.io Theme', author: 'Robert Johns' }),
-        expect.objectContaining({ value: 'light-owl', label: 'Light Owl', author: 'Sarah Drasner' }),
-        expect.objectContaining({ value: 'one-monokai', label: 'One Monokai', author: 'Joshua Azemoh' }),
-        expect.objectContaining({ value: 'slack-dark-mode', label: 'Slack Theme Dark Mode', author: 'Felipe Mendes' }),
+        expect.objectContaining({ value: 'palenight-theme', label: 'Palenight Theme', author: 'Olaolu Olawuyi' }),
+        expect.objectContaining({ value: 'catppuccin-frappe', label: 'Catppuccin Frappe', author: 'Catppuccin Organization' }),
+        expect.objectContaining({ value: 'tokyo-night-storm', label: 'Tokyo Night Storm', author: 'enkia' }),
+        expect.objectContaining({ value: 'vue-theme', label: 'Vue Theme', author: 'Mario Rodeghiero' }),
       ]),
     )
-    expect(editorThemeOptions.length).toBeGreaterThanOrEqual(46)
+    expect(editorThemeOptions.length).toBeGreaterThanOrEqual(52)
   })
 
   it('exposes preview data for every editor theme option', () => {

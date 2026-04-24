@@ -76,6 +76,36 @@ describe('attributions', () => {
           license: 'MIT',
         }),
         expect.objectContaining({
+          id: 'editor-theme-palenight-theme',
+          name: 'Palenight Theme',
+          author: 'Olaolu Olawuyi',
+          license: 'MIT',
+        }),
+        expect.objectContaining({
+          id: 'editor-theme-darcula-theme',
+          name: 'Darcula Theme',
+          author: 'rokoroku',
+          license: 'MIT',
+        }),
+        expect.objectContaining({
+          id: 'editor-theme-catppuccin-frappe',
+          name: 'Catppuccin Frappe',
+          author: 'Catppuccin Organization',
+          license: 'MIT',
+        }),
+        expect.objectContaining({
+          id: 'editor-theme-tokyo-night-storm',
+          name: 'Tokyo Night Storm',
+          author: 'enkia',
+          license: 'MIT',
+        }),
+        expect.objectContaining({
+          id: 'editor-theme-vue-theme',
+          name: 'Vue Theme',
+          author: 'Mario Rodeghiero',
+          license: 'MIT',
+        }),
+        expect.objectContaining({
           id: 'editor-theme-light-owl',
           name: 'Light Owl',
           author: 'Sarah Drasner',
