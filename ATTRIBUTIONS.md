@@ -16,7 +16,17 @@ xterm-addon-fit（https://github.com/xtermjs/xterm.js/tree/master/addons/addon-f
 
 Dracula（https://github.com/dracula/visual-studio-code）Dracula Theme MIT
 Dracula Theme Soft（https://github.com/dracula/visual-studio-code）Dracula Theme MIT
+Dracula At Night（https://github.com/bceskavich/dracula-at-night）Billy Ceskavich MIT
+OM Theme (Default Dracula Italic)（https://github.com/luizomf/omtheme）Otávio Miranda MIT
+Pink Cat Boo（https://github.com/ftsamoyed/PinkCatBoo）Fiona Fan MIT
+NarutoDark（https://github.com/Thomaz-Peres/Theme）Thomaz MIT
+MacOS Modern Dark - Ventura Xcode Default（https://github.com/davidbwaters/macos-modern-vscode-theme）David B. Waters MIT
+MacOS Modern Light - Ventura Xcode Default（https://github.com/davidbwaters/macos-modern-vscode-theme）David B. Waters MIT
+Dobri Next -A06- Amethyst（https://github.com/dobbbri/bunker）Sergio Dobri Apache-2.0
+Peacock (rainglow)（https://github.com/rainglow/vscode）Dayle Rees MIT
 GitHub Light（https://github.com/primer/github-vscode-theme）GitHub MIT
+Github Light Theme（https://github.com/yunlingz/vscode-theme-github-light）Hyzeta BSD-2-Clause
+Github Light Theme - Gray（https://github.com/yunlingz/vscode-theme-github-light）Hyzeta BSD-2-Clause
 GitHub Dark（https://github.com/primer/github-vscode-theme）GitHub MIT
 One Dark Pro（https://github.com/Binaryify/OneDark-Pro）Binaryify MIT
 One Dark Pro Flat（https://github.com/Binaryify/OneDark-Pro）Binaryify MIT
@@ -28,7 +38,6 @@ Theme Flat（https://github.com/tal7aouy/theme）Mhammed Talhaouy MIT
 Theme Mix（https://github.com/tal7aouy/theme）Mhammed Talhaouy MIT
 Theme Darker（https://github.com/tal7aouy/theme）Mhammed Talhaouy MIT
 Night Owl（https://github.com/sdras/night-owl-vscode-theme）Sarah Drasner MIT
-Night Owl (No Italics)（https://github.com/sdras/night-owl-vscode-theme）Sarah Drasner MIT
 Tokyo Night（https://github.com/tokyo-night/tokyo-night-vscode-theme）enkia MIT
 Solarized Light（https://github.com/altercation/solarized）Ethan Schoonover MIT
 Solarized Dark（https://github.com/altercation/solarized）Ethan Schoonover MIT
@@ -68,50 +77,62 @@ Synthwave '84（https://github.com/robb0wen/synthwave-vscode）Robb Owen MIT
 Andromeda（https://github.com/EliverLara/Andromeda）Eliver Lara MIT
 Andromeda Colorizer（https://github.com/EliverLara/Andromeda）Eliver Lara MIT
 Andromeda Bordered（https://github.com/EliverLara/Andromeda）Eliver Lara MIT
-Andromeda Italic（https://github.com/EliverLara/Andromeda）Eliver Lara MIT
-Andromeda Italic Bordered（https://github.com/EliverLara/Andromeda）Eliver Lara MIT
 Cobalt2（https://github.com/wesbos/cobalt2-vscode）Wes Bos, Roberto Achar MIT
 Omni（https://github.com/getomni/visual-studio-code）Rocketseat (Joao Pedro Schmitz) MIT
 Horizon（https://github.com/jolaleye/horizon-theme-vscode）Jonathan Olaleye MIT
 Horizon Bright（https://github.com/jolaleye/horizon-theme-vscode）Jonathan Olaleye MIT
 Winter is Coming (Dark Blue)（https://github.com/johnpapa/vscode-winteriscoming）John Papa MIT
-Winter is Coming (Dark Blue - No Italics)（https://github.com/johnpapa/vscode-winteriscoming）John Papa MIT
 Winter is Coming (Dark)（https://github.com/johnpapa/vscode-winteriscoming）John Papa MIT
 Winter is Coming (Light)（https://github.com/johnpapa/vscode-winteriscoming）John Papa, Brian Clark MIT
-Winter is Coming (Light - No Italics)（https://github.com/johnpapa/vscode-winteriscoming）John Papa, Brian Clark MIT
 Monokai Night（https://github.com/fabiospampinato/vscode-monokai-night）Fabio Spampinato MIT
 Aura Dark（https://github.com/daltonmenezes/aura-theme）Dalton Menezes MIT
 Aura Soft Dark（https://github.com/daltonmenezes/aura-theme）Dalton Menezes MIT
 Hackr.io Theme（https://github.com/route413devs/hackr-theme）Robert Johns MIT
 Light Owl（https://github.com/sdras/night-owl-vscode-theme）Sarah Drasner MIT
-Light Owl (No Italics)（https://github.com/sdras/night-owl-vscode-theme）Sarah Drasner MIT
 Atom One Light（https://github.com/akamud/vscode-theme-onelight）akamud MIT
 Ayu Dark（https://github.com/ayu-theme/vscode-ayu）teabyii MIT
 Ayu Dark Bordered（https://github.com/ayu-theme/vscode-ayu）teabyii MIT
 One Monokai（https://github.com/azemoh/vscode-one-monokai）Joshua Azemoh MIT
 Snazzy Light（https://github.com/loilo/vscode-snazzy-light）Florian Reuschel MIT
 Slack Theme Dark Mode（https://github.com/slack-theme/visual-studio-code）Felipe Mendes MIT
+Slack Theme Aubergine（https://github.com/felipemendes/slack-theme）Felipe Mendes MIT
+Slack Theme Aubergine Dark（https://github.com/felipemendes/slack-theme）Felipe Mendes MIT
+Slack Theme Monument（https://github.com/felipemendes/slack-theme）Felipe Mendes MIT
+Slack Theme Hoth（https://github.com/felipemendes/slack-theme）Felipe Mendes MIT
+Slack Theme Protanopia & Deuteranopia（https://github.com/felipemendes/slack-theme）Felipe Mendes MIT
+Slack Theme Choco Mint（https://github.com/felipemendes/slack-theme）Felipe Mendes MIT
+Slack Theme Ochin（https://github.com/felipemendes/slack-theme）Felipe Mendes MIT
+Slack Theme Work Hard（https://github.com/felipemendes/slack-theme）Felipe Mendes MIT
+Slack Theme Tritanopia（https://github.com/felipemendes/slack-theme）Felipe Mendes MIT
 Palenight Theme（https://github.com/whizkydee/vscode-palenight-theme）Olaolu Olawuyi MIT
-Palenight Italic（https://github.com/whizkydee/vscode-palenight-theme）Olaolu Olawuyi MIT
 Palenight Operator（https://github.com/whizkydee/vscode-palenight-theme）Olaolu Olawuyi MIT
 Palenight (Mild Contrast)（https://github.com/whizkydee/vscode-palenight-theme）Olaolu Olawuyi MIT
 Darcula Theme（https://github.com/rokoroku/vscode-theme-darcula）rokoroku MIT
+Darcula Pycharm with Dark GUI（https://github.com/garytyler/vscode-darcula-pycharm-theme）garytyler MIT
+Darcula Pycharm with Light GUI（https://github.com/garytyler/vscode-darcula-pycharm-theme）garytyler MIT
+Darcula Theme from IntelliJ（https://github.com/kevinvn1709/vscode-dracula-color-theme）Minh Tri Nguyen MIT
 Catppuccin Frappe（https://github.com/catppuccin/vscode）Catppuccin Organization MIT
 Catppuccin Macchiato（https://github.com/catppuccin/vscode）Catppuccin Organization MIT
 Tokyo Night Storm（https://github.com/tokyo-night/tokyo-night-vscode-theme）enkia MIT
 Vue Theme（https://github.com/mariorodeghiero/vue-theme-vscode）Mario Rodeghiero MIT
 Kanagawa（https://github.com/barklan/kanagawa.vscode）barklan MIT
 Hopscotch（https://github.com/idleberg/vscode-hopscotch）Jan T. Sott CC0-1.0
+Hopscotch Mono（https://github.com/idleberg/vscode-hopscotch）Jan T. Sott CC0-1.0
+Hopscotch [proofreader]（https://github.com/idleberg/vscode-hopscotch）Jan T. Sott CC0-1.0
 Monokai++（https://github.com/dcasella/monokai-plusplus）Davide Casella MIT
 Gruvbox Material Dark（https://github.com/sainnhe/gruvbox-material-vscode）sainnhe MIT
+Gruvbox Material Light（https://github.com/sainnhe/gruvbox-material-vscode）sainnhe MIT
 Atom Material Theme（https://github.com/tobiasalthoff/vscode-atom-material-theme）tobiasalthoff MIT
 Monokai Dark Soda（https://github.com/AdamCaviness/vs-code-theme-monokai-dark-soda）Adam Caviness MIT
+Mayukai Dark（https://github.com/GulajavaMinistudio/Mayukai-Theme）Gulajava Ministudio MIT
+Mayukai Mirage Gruvbox Darktooth（https://github.com/GulajavaMinistudio/Mayukai-Theme）Gulajava Ministudio MIT
 Mayukai Midnight（https://github.com/GulajavaMinistudio/Mayukai-Theme）Gulajava Ministudio MIT
 Deepdark Material Theme（https://github.com/onur-ozkan/vscode-deepdark-material）Nimda MIT
+Deepdark Material Theme | Full Black Version（https://github.com/onur-ozkan/vscode-deepdark-material）Nimda MIT
 Hack The Box（https://github.com/silofy/hackthebox）silofy MIT
+Hack The Box-Lite（https://github.com/silofy/hackthebox）silofy MIT
 GitHub Dark Dimmed（https://github.com/primer/github-vscode-theme）GitHub MIT
 Winter is Coming (Dark Black)（https://github.com/johnpapa/vscode-winteriscoming）John Papa MIT
-Winter is Coming (Dark Black - No Italics)（https://github.com/johnpapa/vscode-winteriscoming）John Papa MIT
 Copilot Theme（https://github.com/benjaminbenais/copilot-theme）Benjamin Benais MIT
 Tokyo Night Light（https://github.com/tokyo-night/tokyo-night-vscode-theme）enkia MIT
 Vue Theme High Contrast（https://github.com/mariorodeghiero/vue-theme-vscode）Mario Rodeghiero MIT
@@ -128,6 +149,10 @@ JellyFish（https://github.com/pawelborkar/vscode-jellyfish.git）Pawel Borkar A
 Spinel（https://github.com/Shopify/vscode-shopify-ruby）Shopify MIT
 Spinel Light（https://github.com/Shopify/vscode-shopify-ruby）Shopify MIT
 2017 Dark (Visual Studio - C/C++)（https://github.com/Microsoft/vscode-cpptools.git）Microsoft MIT
+Electron（https://github.com/kcmr/electron-theme-vscode）Kus Cámara MIT
+dark-plus-syntax（https://github.com/tcd/dark-plus-syntax）dunstontc MIT
+light-plus-syntax（https://github.com/tcd/dark-plus-syntax）dunstontc MIT
+light-plus-syntax (high contrast)（https://github.com/tcd/dark-plus-syntax）dunstontc MIT
 Light (Visual Studio - C/C++)（https://github.com/Microsoft/vscode-cpptools.git）Microsoft MIT
 Copilot Theme - Higher Contrast（https://github.com/benjaminbenais/copilot-theme）Benjamin Benais MIT
 
