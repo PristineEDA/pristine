@@ -51,7 +51,7 @@ function createSequentialSummaries(scenario) {
   if (scenario === 'memory-fail') {
     return [
       createSummary({
-        processName: 'dev-powershell',
+        processName: 'dev-cscript',
       }),
       createSummary({
         processName: 'packaged-wscript',
@@ -74,7 +74,7 @@ function createSequentialSummaries(scenario) {
 
   return [
     createSummary({
-      processName: 'dev-powershell',
+      processName: 'dev-cscript',
       cpu: {
         systemUtilityAveragePercent: 4.2,
         processUtilityAveragePercent: 0.4,
@@ -213,8 +213,9 @@ try {
     '-WarmupSeconds', '0',
     '-ThresholdPercent', '3',
     '-MemoryThresholdPercent', '0.5',
-    '-DevCommand', 'Start-Sleep -Seconds 60',
-    '-DevProcessName', 'powershell',
+    // Use cscript here so the harness never matches and kills the host PowerShell terminal.
+    '-DevCommand', ('cscript.exe //NoLogo "' + harness.fakePackagedScriptPath.replace(/"/g, '""') + '"'),
+    '-DevProcessName', 'cscript',
     '-PackagedProcessName', 'wscript',
     '-PackagedExecutablePath', harness.fakePackagedScriptPath,
     '-PerfSamplerPath', harness.fakeSamplerPath,
