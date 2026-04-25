@@ -21,9 +21,33 @@ describe('monacoThemes', () => {
         expect.objectContaining({ value: 'pink-cat-boo', label: 'Pink Cat Boo', author: 'Fiona Fan' }),
         expect.objectContaining({ value: 'naruto-dark', label: 'NarutoDark', author: 'Thomaz' }),
         expect.objectContaining({ value: 'macos-modern-dark-ventura-xcode-default', label: 'MacOS Modern Dark - Ventura Xcode Default', author: 'David B. Waters' }),
+        expect.objectContaining({ value: 'macos-modern-dark-ventura-xcode-civic', label: 'MacOS Modern Dark - Ventura Xcode Civic', author: 'David B. Waters' }),
+        expect.objectContaining({ value: 'macos-modern-dark-ventura-xcode', label: 'MacOS Modern Dark - Ventura Xcode', author: 'David B. Waters' }),
+        expect.objectContaining({ value: 'macos-modern-dark-xcode-civic', label: 'MacOS Modern Dark - Xcode Civic', author: 'David B. Waters' }),
+        expect.objectContaining({ value: 'macos-modern-dark-xcode-modern', label: 'MacOS Modern Dark - Xcode Modern', author: 'David B. Waters' }),
+        expect.objectContaining({ value: 'macos-modern-dark-xcode-default', label: 'MacOS Modern Dark - Xcode Default', author: 'David B. Waters' }),
+        expect.objectContaining({ value: 'macos-modern-light-ventura-xcode', label: 'MacOS Modern Light - Ventura Xcode', author: 'David B. Waters' }),
         expect.objectContaining({ value: 'macos-modern-light-ventura-xcode-default', label: 'MacOS Modern Light - Ventura Xcode Default', author: 'David B. Waters' }),
+        expect.objectContaining({ value: 'macos-modern-light-ventura-xcode-low-key', label: 'MacOS Modern Light - Ventura Xcode Low Key', author: 'David B. Waters' }),
+        expect.objectContaining({ value: 'dobri-next-a00-black', label: 'Dobri Next -A00- Black', author: 'Sergio Dobri' }),
+        expect.objectContaining({ value: 'dobri-next-a01-dark', label: 'Dobri Next -A01- Dark', author: 'Sergio Dobri' }),
+        expect.objectContaining({ value: 'dobri-next-a03-mirage', label: 'Dobri Next -A03- Mirage', author: 'Sergio Dobri' }),
+        expect.objectContaining({ value: 'dobri-next-a04-cobalt', label: 'Dobri Next -A04- Cobalt', author: 'Sergio Dobri' }),
+        expect.objectContaining({ value: 'dobri-next-a05-jaguar', label: 'Dobri Next -A05- Jaguar', author: 'Sergio Dobri' }),
         expect.objectContaining({ value: 'dobri-next-a06-amethyst', label: 'Dobri Next -A06- Amethyst', author: 'Sergio Dobri' }),
+        expect.objectContaining({ value: 'dobri-next-a07-oxford', label: 'Dobri Next -A07- Oxford', author: 'Sergio Dobri' }),
+        expect.objectContaining({ value: 'dobri-next-a09-arc-dark', label: 'Dobri Next -A09- Arc Dark', author: 'Sergio Dobri' }),
+        expect.objectContaining({ value: 'dobri-next-a10-adapta-nokto', label: 'Dobri Next -A10- Adapta Nokto', author: 'Sergio Dobri' }),
+        expect.objectContaining({ value: 'dobri-next-c02-indigo', label: 'Dobri Next -C02- Indigo', author: 'Sergio Dobri' }),
+        expect.objectContaining({ value: 'dobri-next-c03-cupcake', label: 'Dobri Next -C03- Cupcake', author: 'Sergio Dobri' }),
+        expect.objectContaining({ value: 'dobri-next-c09-eve', label: 'Dobri Next -C09- Eve', author: 'Sergio Dobri' }),
+        expect.objectContaining({ value: 'rainglow-allure', label: 'Allure (rainglow)', author: 'Dayle Rees' }),
+        expect.objectContaining({ value: 'rainglow-allure-light', label: 'Allure Light (rainglow)', author: 'Dayle Rees' }),
+        expect.objectContaining({ value: 'rainglow-arstotzka', label: 'Arstotzka (rainglow)', author: 'Dayle Rees' }),
+        expect.objectContaining({ value: 'rainglow-arstotzka-contrast', label: 'Arstotzka Contrast (rainglow)', author: 'Dayle Rees' }),
+        expect.objectContaining({ value: 'rainglow-arstotzka-light', label: 'Arstotzka Light (rainglow)', author: 'Dayle Rees' }),
         expect.objectContaining({ value: 'rainglow-peacock', label: 'Peacock (rainglow)', author: 'Dayle Rees' }),
+        expect.objectContaining({ value: 'rainglow-peacock-light', label: 'Peacock Light (rainglow)', author: 'Dayle Rees' }),
         expect.objectContaining({ value: 'noctis-azureus', label: 'Noctis Azureus', author: 'Liviu Schera' }),
         expect.objectContaining({ value: 'noctis-bordo', label: 'Noctis Bordo', author: 'Liviu Schera' }),
         expect.objectContaining({ value: 'noctis-obscuro', label: 'Noctis Obscuro', author: 'Liviu Schera' }),
@@ -36,7 +60,8 @@ describe('monacoThemes', () => {
         expect.objectContaining({ value: 'ayu-light-bordered', label: 'Ayu Light Bordered', author: 'teabyii' }),
         expect.objectContaining({ value: 'ayu-dark-bordered', label: 'Ayu Dark Bordered', author: 'teabyii' }),
         expect.objectContaining({ value: 'slack-aubergine', label: 'Slack Theme Aubergine', author: 'Felipe Mendes' }),
-        expect.objectContaining({ value: 'slack-aubergine-dark', label: 'Slack Theme Aubergine Dark', author: 'Felipe Mendes' }),
+        expect.objectContaining({ value: 'slack-aubergine-dark', label: 'Slack Theme Aubergine (Dark Base)', author: 'Felipe Mendes' }),
+        expect.objectContaining({ value: 'slack-aubergine-dark-editor', label: 'Slack Theme Aubergine Dark', author: 'Felipe Mendes' }),
         expect.objectContaining({ value: 'slack-monument', label: 'Slack Theme Monument', author: 'Felipe Mendes' }),
         expect.objectContaining({ value: 'slack-hoth', label: 'Slack Theme Hoth', author: 'Felipe Mendes' }),
         expect.objectContaining({ value: 'slack-choco-mint', label: 'Slack Theme Choco Mint', author: 'Felipe Mendes' }),
@@ -90,6 +115,7 @@ describe('monacoThemes', () => {
         expect.objectContaining({ value: 'hopscotch-mono', label: 'Hopscotch Mono', author: 'Jan T. Sott' }),
         expect.objectContaining({ value: 'hopscotch-proofreader', label: 'Hopscotch [proofreader]', author: 'Jan T. Sott' }),
         expect.objectContaining({ value: 'monokai-plusplus', label: 'Monokai++', author: 'Davide Casella' }),
+        expect.objectContaining({ value: 'monokai-plusplus-unified', label: 'Monokai++ Unified', author: 'Davide Casella' }),
         expect.objectContaining({ value: 'darcula-pycharm-dark-gui', label: 'Darcula Pycharm with Dark GUI', author: 'garytyler' }),
         expect.objectContaining({ value: 'darcula-pycharm-light-gui', label: 'Darcula Pycharm with Light GUI', author: 'garytyler' }),
         expect.objectContaining({ value: 'darcula-theme-from-intellij', label: 'Darcula Theme from IntelliJ', author: 'Minh Tri Nguyen' }),
@@ -105,12 +131,13 @@ describe('monacoThemes', () => {
         expect.objectContaining({ value: 'vue-theme', label: 'Vue Theme', author: 'Mario Rodeghiero' }),
       ]),
     )
-    expect(editorThemeOptions.length).toBeGreaterThanOrEqual(140)
+    expect(editorThemeOptions.length).toBeGreaterThanOrEqual(166)
   })
 
   it('preserves upstream Monaco base themes for Slack variants', () => {
     expect(getEditorThemePreview('slack-aubergine', null).base).toBe('vs')
     expect(getEditorThemePreview('slack-aubergine-dark', null).base).toBe('vs-dark')
+    expect(getEditorThemePreview('slack-aubergine-dark-editor', null).base).toBe('vs-dark')
     expect(getEditorThemePreview('slack-monument', null).base).toBe('vs-dark')
     expect(getEditorThemePreview('slack-hoth', null).base).toBe('vs')
     expect(getEditorThemePreview('slack-choco-mint', null).base).toBe('vs-dark')

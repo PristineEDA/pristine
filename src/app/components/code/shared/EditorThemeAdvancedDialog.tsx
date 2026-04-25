@@ -113,8 +113,13 @@ function ThemePreviewCard({
         </div>
       </CardContent>
       <CardFooter className="relative h-10 justify-center overflow-hidden border-t border-border/70 bg-muted/35 px-3 py-2.5 text-[13px] font-medium text-foreground">
-        <div className="absolute inset-x-0 top-1/2 flex -translate-y-1/2 flex-col items-center leading-none">
-          <span>{label}</span>
+        <div className="absolute inset-x-0 top-1/2 flex min-w-0 -translate-y-1/2 flex-col items-center leading-none">
+          <span
+            className="block w-full truncate px-3 text-center"
+            data-testid={`settings-editor-theme-preview-label-${theme}`}
+          >
+            {label}
+          </span>
           <span
             className="mt-px text-[10px] font-normal text-muted-foreground"
             data-testid={`settings-editor-theme-preview-author-${theme}`}

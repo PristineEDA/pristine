@@ -21,9 +21,33 @@ OM Theme (Default Dracula Italic)（https://github.com/luizomf/omtheme）Otávio
 Pink Cat Boo（https://github.com/ftsamoyed/PinkCatBoo）Fiona Fan MIT
 NarutoDark（https://github.com/Thomaz-Peres/Theme）Thomaz MIT
 MacOS Modern Dark - Ventura Xcode Default（https://github.com/davidbwaters/macos-modern-vscode-theme）David B. Waters MIT
+MacOS Modern Dark - Ventura Xcode Civic（https://github.com/davidbwaters/macos-modern-vscode-theme）David B. Waters MIT
+MacOS Modern Dark - Ventura Xcode（https://github.com/davidbwaters/macos-modern-vscode-theme）David B. Waters MIT
+MacOS Modern Dark - Xcode Civic（https://github.com/davidbwaters/macos-modern-vscode-theme）David B. Waters MIT
+MacOS Modern Dark - Xcode Modern（https://github.com/davidbwaters/macos-modern-vscode-theme）David B. Waters MIT
+MacOS Modern Dark - Xcode Default（https://github.com/davidbwaters/macos-modern-vscode-theme）David B. Waters MIT
+MacOS Modern Light - Ventura Xcode（https://github.com/davidbwaters/macos-modern-vscode-theme）David B. Waters MIT
 MacOS Modern Light - Ventura Xcode Default（https://github.com/davidbwaters/macos-modern-vscode-theme）David B. Waters MIT
+MacOS Modern Light - Ventura Xcode Low Key（https://github.com/davidbwaters/macos-modern-vscode-theme）David B. Waters MIT
+Dobri Next -A00- Black（https://github.com/dobbbri/bunker）Sergio Dobri Apache-2.0
+Dobri Next -A01- Dark（https://github.com/dobbbri/bunker）Sergio Dobri Apache-2.0
+Dobri Next -A03- Mirage（https://github.com/dobbbri/bunker）Sergio Dobri Apache-2.0
+Dobri Next -A04- Cobalt（https://github.com/dobbbri/bunker）Sergio Dobri Apache-2.0
+Dobri Next -A05- Jaguar（https://github.com/dobbbri/bunker）Sergio Dobri Apache-2.0
 Dobri Next -A06- Amethyst（https://github.com/dobbbri/bunker）Sergio Dobri Apache-2.0
+Dobri Next -A07- Oxford（https://github.com/dobbbri/bunker）Sergio Dobri Apache-2.0
+Dobri Next -A09- Arc Dark（https://github.com/dobbbri/bunker）Sergio Dobri Apache-2.0
+Dobri Next -A10- Adapta Nokto（https://github.com/dobbbri/bunker）Sergio Dobri Apache-2.0
+Dobri Next -C02- Indigo（https://github.com/dobbbri/bunker）Sergio Dobri Apache-2.0
+Dobri Next -C03- Cupcake（https://github.com/dobbbri/bunker）Sergio Dobri Apache-2.0
+Dobri Next -C09- Eve（https://github.com/dobbbri/bunker）Sergio Dobri Apache-2.0
+Allure (rainglow)（https://github.com/rainglow/vscode）Dayle Rees MIT
+Allure Light (rainglow)（https://github.com/rainglow/vscode）Dayle Rees MIT
+Arstotzka (rainglow)（https://github.com/rainglow/vscode）Dayle Rees MIT
+Arstotzka Contrast (rainglow)（https://github.com/rainglow/vscode）Dayle Rees MIT
+Arstotzka Light (rainglow)（https://github.com/rainglow/vscode）Dayle Rees MIT
 Peacock (rainglow)（https://github.com/rainglow/vscode）Dayle Rees MIT
+Peacock Light (rainglow)（https://github.com/rainglow/vscode）Dayle Rees MIT
 GitHub Light（https://github.com/primer/github-vscode-theme）GitHub MIT
 Github Light Theme（https://github.com/yunlingz/vscode-theme-github-light）Hyzeta BSD-2-Clause
 Github Light Theme - Gray（https://github.com/yunlingz/vscode-theme-github-light）Hyzeta BSD-2-Clause
@@ -96,6 +120,7 @@ One Monokai（https://github.com/azemoh/vscode-one-monokai）Joshua Azemoh MIT
 Snazzy Light（https://github.com/loilo/vscode-snazzy-light）Florian Reuschel MIT
 Slack Theme Dark Mode（https://github.com/slack-theme/visual-studio-code）Felipe Mendes MIT
 Slack Theme Aubergine（https://github.com/felipemendes/slack-theme）Felipe Mendes MIT
+Slack Theme Aubergine (Dark Base)（https://github.com/felipemendes/slack-theme）Felipe Mendes MIT
 Slack Theme Aubergine Dark（https://github.com/felipemendes/slack-theme）Felipe Mendes MIT
 Slack Theme Monument（https://github.com/felipemendes/slack-theme）Felipe Mendes MIT
 Slack Theme Hoth（https://github.com/felipemendes/slack-theme）Felipe Mendes MIT
@@ -120,6 +145,7 @@ Hopscotch（https://github.com/idleberg/vscode-hopscotch）Jan T. Sott CC0-1.0
 Hopscotch Mono（https://github.com/idleberg/vscode-hopscotch）Jan T. Sott CC0-1.0
 Hopscotch [proofreader]（https://github.com/idleberg/vscode-hopscotch）Jan T. Sott CC0-1.0
 Monokai++（https://github.com/dcasella/monokai-plusplus）Davide Casella MIT
+Monokai++ Unified（https://github.com/dcasella/monokai-plusplus）Davide Casella MIT
 Gruvbox Material Dark（https://github.com/sainnhe/gruvbox-material-vscode）sainnhe MIT
 Gruvbox Material Light（https://github.com/sainnhe/gruvbox-material-vscode）sainnhe MIT
 Atom Material Theme（https://github.com/tobiasalthoff/vscode-atom-material-theme）tobiasalthoff MIT

@@ -846,6 +846,8 @@ describe('MenuBar', () => {
     expect(await screen.findByTestId('settings-editor-theme-advanced-dialog')).toBeVisible();
     expect(screen.getByTestId('settings-editor-theme-advanced-grid')).toBeVisible();
     expect(screen.getByTestId('settings-editor-theme-preview-card-dracula')).toHaveAttribute('data-state', 'selected');
+    expect(screen.getByTestId('settings-editor-theme-preview-label-macos-modern-dark-ventura-xcode-default')).toHaveClass('truncate');
+    expect(screen.getByTestId('settings-editor-theme-preview-label-macos-modern-dark-ventura-xcode-default')).toHaveClass('w-full');
     expect(screen.getByTestId('settings-editor-theme-preview-author-dracula')).toHaveTextContent('Dracula Theme');
     expect(screen.getByTestId('settings-editor-theme-preview-editor-palenight-theme')).toBeVisible();
     expect(screen.getByTestId('settings-editor-theme-preview-author-palenight-theme')).toHaveTextContent('Olaolu Olawuyi');
