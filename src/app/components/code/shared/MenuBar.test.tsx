@@ -526,9 +526,10 @@ describe('MenuBar', () => {
 
   it('opens About from the Help menu using the shared attribution data', async () => {
     const user = userEvent.setup();
+    const firstAttributionSection = openSourceAttributionSections[0];
     const firstAttributionItem = openSourceAttributionSections[0]?.items[0];
 
-    if (!firstAttributionItem) {
+    if (!firstAttributionSection || !firstAttributionItem) {
       throw new Error('Expected at least one attribution item');
     }
 
@@ -543,9 +544,13 @@ describe('MenuBar', () => {
       expect(screen.getByText(section.title)).toBeInTheDocument();
     }
 
-    expect(screen.getByText(firstAttributionItem.name)).toBeInTheDocument();
-    expect(screen.getByText(firstAttributionItem.url)).toBeInTheDocument();
-    expect(screen.getByText(firstAttributionItem.author)).toBeInTheDocument();
+    const firstAttributionRow = screen.getByTestId(
+      `about-item-${firstAttributionSection.id}-${firstAttributionItem.id}`,
+    );
+
+    expect(firstAttributionRow).toHaveTextContent(firstAttributionItem.name);
+    expect(firstAttributionRow).toHaveTextContent(firstAttributionItem.url);
+    expect(firstAttributionRow).toHaveTextContent(firstAttributionItem.author);
   });
 
   it('opens About from native menu commands on macOS', async () => {

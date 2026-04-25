@@ -293,20 +293,20 @@ function Start-ScenarioLauncher {
     )
 
     if (-not [string]::IsNullOrWhiteSpace($StartCommand)) {
-        $job = Start-Job -ScriptBlock {
-            param(
-                [string]$ScenarioWorkingDirectory,
-                [string]$ScenarioCommand
-            )
+        $encodedCommandBytes = [System.Text.Encoding]::Unicode.GetBytes("Set-Location -LiteralPath '$($WorkingDirectory.Replace("'", "''"))'; `$ErrorActionPreference = 'Stop'; $StartCommand")
+        $encodedCommand = [Convert]::ToBase64String($encodedCommandBytes)
 
-            Set-Location -LiteralPath $ScenarioWorkingDirectory
-            $ErrorActionPreference = 'Stop'
-            Invoke-Expression $ScenarioCommand
-        } -ArgumentList $WorkingDirectory, $StartCommand
+        $process = Start-Process -FilePath 'powershell.exe' -ArgumentList @(
+            '-NoLogo',
+            '-NoProfile',
+            '-NonInteractive',
+            '-EncodedCommand',
+            $encodedCommand
+        ) -WorkingDirectory $WorkingDirectory -WindowStyle Hidden -PassThru
 
         return [pscustomobject]@{
-            Kind = 'job'
-            Handle = $job
+            Kind = 'process'
+            Handle = $process
         }
     }
 
@@ -325,21 +325,6 @@ function Stop-ScenarioLauncher {
     )
 
     if ($null -eq $Launcher -or $null -eq $Launcher.Handle) {
-        return
-    }
-
-    if ($Launcher.Kind -eq 'job') {
-        try {
-            if ($Launcher.Handle.State -notin @('Completed', 'Failed', 'Stopped')) {
-                Stop-Job -Job $Launcher.Handle -ErrorAction SilentlyContinue | Out-Null
-            }
-        }
-        catch {
-        }
-        finally {
-            Remove-Job -Job $Launcher.Handle -Force -ErrorAction SilentlyContinue | Out-Null
-        }
-
         return
     }
 
