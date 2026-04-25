@@ -31,7 +31,7 @@ describe('RightSidePanel', () => {
     );
 
     fireEvent.click(screen.getByRole('button', { name: /references/i }));
-    expect(await screen.findByText(/4 references · uart_tx\.v/i)).toBeInTheDocument();
+    expect(await screen.findByText(/4 references · uart_tx\.v/i, undefined, { timeout: PANEL_ITEM_TIMEOUT_MS })).toBeInTheDocument();
 
     fireEvent.click(await screen.findByText('L40', undefined, { timeout: PANEL_ITEM_TIMEOUT_MS }));
 

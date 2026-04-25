@@ -87,9 +87,9 @@ describeOnWindows('compare perf task manager script', () => {
     const result = runHarness('pass')
 
     expect(result.artifacts.devSummaryJson?.processName).toBe('dev-powershell')
-    expect(result.artifacts.packagedSummaryJson?.processName).toBe('packaged-powershell')
+    expect(result.artifacts.packagedSummaryJson?.processName).toBe('packaged-wscript')
     expect(result.artifacts.comparisonReportJson?.dev.processName).toBe('powershell')
-    expect(result.artifacts.comparisonReportJson?.packaged.processName).toBe('powershell')
+    expect(result.artifacts.comparisonReportJson?.packaged.processName).toBe('wscript')
     expect(result.artifacts.comparisonReportJson?.comparison.IsWithinThreshold).toBe(true)
     expect(result.artifacts.comparisonReportJson?.statusMessage).toContain('within the threshold')
     expect(result.artifacts.comparisonReportText).toContain('CPU absolute difference')

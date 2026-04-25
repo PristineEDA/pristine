@@ -7,14 +7,6 @@ import { fileURLToPath } from 'node:url'
 const scriptPath = fileURLToPath(import.meta.url)
 const repoRoot = path.resolve(path.dirname(scriptPath), '..')
 const compareScriptPath = path.join(repoRoot, 'compare-perf-taskmgr.ps1')
-const systemPowerShellPath = path.join(
-  process.env['SystemRoot'] ?? 'C:\\Windows',
-  'System32',
-  'WindowsPowerShell',
-  'v1.0',
-  'powershell.exe',
-)
-
 function createSummary(overrides = {}) {
   return {
     processName: 'default',
@@ -62,7 +54,7 @@ function createSequentialSummaries(scenario) {
         processName: 'dev-powershell',
       }),
       createSummary({
-        processName: 'packaged-powershell',
+        processName: 'packaged-wscript',
         cpu: {
           systemUtilityAveragePercent: 4.0,
           processUtilityAveragePercent: 0.55,
@@ -99,7 +91,7 @@ function createSequentialSummaries(scenario) {
       },
     }),
     createSummary({
-      processName: 'packaged-powershell',
+      processName: 'packaged-wscript',
       cpu: {
         systemUtilityAveragePercent: 4.0,
         processUtilityAveragePercent: 0.6,
@@ -120,6 +112,7 @@ function createSequentialSummaries(scenario) {
 function createTempPerfHarness(sequentialSummaries) {
   const tempDir = mkdtempSync(path.join(os.tmpdir(), 'pristine-compare-perf-'))
   const fakeSamplerPath = path.join(tempDir, 'fake-perf-sampler.ps1')
+  const fakePackagedScriptPath = path.join(tempDir, 'fake-packaged-app.vbs')
   const callCountPath = path.join(tempDir, 'perf-call-count.txt')
   const resultOutputDirectory = path.join(tempDir, 'artifacts')
 
@@ -152,9 +145,12 @@ function createTempPerfHarness(sequentialSummaries) {
     '',
   ].join('\r\n'), 'utf8')
 
+  writeFileSync(fakePackagedScriptPath, 'WScript.Sleep 60000\r\n', 'utf8')
+
   return {
     tempDir,
     fakeSamplerPath,
+    fakePackagedScriptPath,
     resultOutputDirectory,
   }
 }
@@ -219,8 +215,8 @@ try {
     '-MemoryThresholdPercent', '0.5',
     '-DevCommand', 'Start-Sleep -Seconds 60',
     '-DevProcessName', 'powershell',
-    '-PackagedProcessName', 'powershell',
-    '-PackagedExecutablePath', systemPowerShellPath,
+    '-PackagedProcessName', 'wscript',
+    '-PackagedExecutablePath', harness.fakePackagedScriptPath,
     '-PerfSamplerPath', harness.fakeSamplerPath,
     '-ResultOutputDirectory', harness.resultOutputDirectory,
   ])

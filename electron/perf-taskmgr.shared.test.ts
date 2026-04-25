@@ -39,7 +39,7 @@ function runPowerShellJson<T>(expression: string): T {
   const stdout = execFileSync(
     'powershell.exe',
     ['-NoLogo', '-NoProfile', '-Command', command],
-    { encoding: 'utf8' },
+    { encoding: 'utf8', windowsHide: true },
   )
 
   return JSON.parse(stdout.trim()) as T

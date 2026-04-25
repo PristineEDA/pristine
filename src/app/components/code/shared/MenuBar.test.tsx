@@ -526,9 +526,10 @@ describe('MenuBar', () => {
 
   it('opens About from the Help menu using the shared attribution data', async () => {
     const user = userEvent.setup();
+    const firstAttributionSection = openSourceAttributionSections[0];
     const firstAttributionItem = openSourceAttributionSections[0]?.items[0];
 
-    if (!firstAttributionItem) {
+    if (!firstAttributionSection || !firstAttributionItem) {
       throw new Error('Expected at least one attribution item');
     }
 
@@ -543,9 +544,13 @@ describe('MenuBar', () => {
       expect(screen.getByText(section.title)).toBeInTheDocument();
     }
 
-    expect(screen.getByText(firstAttributionItem.name)).toBeInTheDocument();
-    expect(screen.getByText(firstAttributionItem.url)).toBeInTheDocument();
-    expect(screen.getByText(firstAttributionItem.author)).toBeInTheDocument();
+    const firstAttributionRow = screen.getByTestId(
+      `about-item-${firstAttributionSection.id}-${firstAttributionItem.id}`,
+    );
+
+    expect(firstAttributionRow).toHaveTextContent(firstAttributionItem.name);
+    expect(firstAttributionRow).toHaveTextContent(firstAttributionItem.url);
+    expect(firstAttributionRow).toHaveTextContent(firstAttributionItem.author);
   });
 
   it('opens About from native menu commands on macOS', async () => {
@@ -846,18 +851,22 @@ describe('MenuBar', () => {
     expect(await screen.findByTestId('settings-editor-theme-advanced-dialog')).toBeVisible();
     expect(screen.getByTestId('settings-editor-theme-advanced-grid')).toBeVisible();
     expect(screen.getByTestId('settings-editor-theme-preview-card-dracula')).toHaveAttribute('data-state', 'selected');
-    expect(screen.getByTestId('settings-editor-theme-preview-editor-github-dark')).toBeVisible();
-    expect(screen.getByTestId('settings-editor-theme-preview-line-module-github-dark')).toHaveTextContent('module alu(clk)');
-    expect(screen.getByTestId('settings-editor-theme-preview-selection-github-dark')).toHaveTextContent("sum = calc('RUN')");
+    expect(screen.getByTestId('settings-editor-theme-preview-label-macos-modern-dark-ventura-xcode-default')).toHaveClass('truncate');
+    expect(screen.getByTestId('settings-editor-theme-preview-label-macos-modern-dark-ventura-xcode-default')).toHaveClass('w-full');
+    expect(screen.getByTestId('settings-editor-theme-preview-author-dracula')).toHaveTextContent('Dracula Theme');
+    expect(screen.getByTestId('settings-editor-theme-preview-editor-palenight-theme')).toBeVisible();
+    expect(screen.getByTestId('settings-editor-theme-preview-author-palenight-theme')).toHaveTextContent('Olaolu Olawuyi');
+    expect(screen.getByTestId('settings-editor-theme-preview-line-module-palenight-theme')).toHaveTextContent('module alu(clk)');
+    expect(screen.getByTestId('settings-editor-theme-preview-selection-palenight-theme')).toHaveTextContent("sum = calc('RUN')");
 
-    await user.click(screen.getByTestId('settings-editor-theme-preview-card-github-dark'));
+    await user.click(screen.getByTestId('settings-editor-theme-preview-card-palenight-theme'));
 
     await waitFor(() => {
       expect(screen.queryByTestId('settings-editor-theme-advanced-dialog')).not.toBeInTheDocument();
     });
 
-    expect(screen.getByTestId('settings-editor-theme-combobox')).toHaveTextContent('GitHub Dark');
-    expect(setEditorThemeMock).toHaveBeenCalledWith('github-dark');
+    expect(screen.getByTestId('settings-editor-theme-combobox')).toHaveTextContent('Palenight Theme');
+    expect(setEditorThemeMock).toHaveBeenCalledWith('palenight-theme');
   });
 
   it('re-reads persisted settings each time the dialog opens', async () => {

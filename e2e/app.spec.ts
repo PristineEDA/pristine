@@ -3969,16 +3969,21 @@ test('advanced editor theme picker closes after selecting a preview card and syn
   await window.getByTestId('settings-editor-theme-advanced-button').click()
   await expect(advancedDialog).toBeVisible()
 
-  await expect(window.getByTestId('settings-editor-theme-preview-card-dracula')).toHaveAttribute('data-state', 'selected')
-  await expect(window.getByTestId('settings-editor-theme-preview-editor-github-dark')).toBeVisible()
-  await expect(window.getByTestId('settings-editor-theme-preview-line-module-github-dark')).toContainText('module alu(clk)')
-  await expect(window.getByTestId('settings-editor-theme-preview-selection-github-dark')).toContainText("sum = calc('RUN')")
+  const draculaCard = window.getByTestId('settings-editor-theme-preview-card-dracula')
+  const palenightThemeCard = window.getByTestId('settings-editor-theme-preview-card-palenight-theme')
 
-  await window.getByTestId('settings-editor-theme-preview-card-github-dark').click()
+  await expect(draculaCard).toHaveAttribute('data-state', 'selected')
+  await expect(draculaCard).toContainText('Dracula Theme')
+  await expect(window.getByTestId('settings-editor-theme-preview-editor-palenight-theme')).toBeVisible()
+  await expect(palenightThemeCard).toContainText('Olaolu Olawuyi')
+  await expect(window.getByTestId('settings-editor-theme-preview-line-module-palenight-theme')).toContainText('module alu(clk)')
+  await expect(window.getByTestId('settings-editor-theme-preview-selection-palenight-theme')).toContainText("sum = calc('RUN')")
+
+  await palenightThemeCard.click()
 
   await expect(advancedDialog).toHaveCount(0)
-  await expect(window.getByTestId('settings-editor-theme-combobox')).toContainText('GitHub Dark')
-  await expect.poll(async () => readConfigValue(window, 'editor.theme')).toBe('github-dark')
+  await expect(window.getByTestId('settings-editor-theme-combobox')).toContainText('Palenight Theme')
+  await expect.poll(async () => readConfigValue(window, 'editor.theme')).toBe('palenight-theme')
 
   await app.close()
 })
