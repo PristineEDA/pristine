@@ -5,7 +5,7 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '../../ui/r
 export const EXPLORER_LEFT_PANEL_DEFAULT_WIDTH_PX = 240;
 export const EXPLORER_LEFT_PANEL_MIN_WIDTH_PX = 200;
 export const EXPLORER_LEFT_PANEL_MAX_WIDTH_PX = 480;
-export const EXPLORER_RIGHT_PANEL_MIN_WIDTH_PX = 200;
+export const EXPLORER_RIGHT_PANEL_MIN_WIDTH_PX = 260;
 export const EXPLORER_RIGHT_PANEL_MAX_WIDTH_PX = 560;
 
 function clampFixedLeftPanelWidth(width: number, minWidth: number, maxWidth: number) {

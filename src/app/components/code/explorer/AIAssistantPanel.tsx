@@ -46,6 +46,11 @@ interface ContextBadgeProps {
   meta?: string;
 }
 
+const toolbarDropdownContentClassName = 'w-48';
+const toolbarDropdownLabelClassName = 'text-xs text-muted-foreground';
+const toolbarDropdownItemClassName = 'items-start gap-2 py-2 text-xs';
+const toolbarSelectTriggerClassName = 'h-6 min-w-0 cursor-pointer px-2 text-muted-foreground';
+
 function ContextBadge({ fileName, description, meta }: ContextBadgeProps) {
   return (
     <Badge
@@ -108,23 +113,23 @@ function AgentModeMenu({
   return (
     <DropdownMenu modal={false} open={open} onOpenChange={onOpenChange}>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="xs" className="h-7 cursor-pointer px-2 text-primary">
+        <Button variant="ghost" size="xs" className={toolbarSelectTriggerClassName}>
           <Bot className="size-3" />
-          <span className="max-w-[52px] truncate text-[10px] font-medium">
+          <span className="max-w-[52px] truncate text-[10px] font-medium text-foreground">
             {selectedAgentOption?.label}
           </span>
           <ChevronUp className={`size-3 text-muted-foreground transition-transform ${open ? '' : 'rotate-180'}`} />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent side="top" align="start" className="w-56">
-        <DropdownMenuLabel className="text-xs text-muted-foreground">Mode</DropdownMenuLabel>
+      <DropdownMenuContent side="top" align="start" className={toolbarDropdownContentClassName}>
+        <DropdownMenuLabel className={toolbarDropdownLabelClassName}>Mode</DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuRadioGroup
           value={selectedAgent}
           onValueChange={(value) => onSelectAgent(value as AssistantAgentMode)}
         >
           {AGENT_OPTIONS.map((agent) => (
-            <DropdownMenuRadioItem key={agent.id} value={agent.id} className="items-start py-2 text-xs">
+            <DropdownMenuRadioItem key={agent.id} value={agent.id} className={toolbarDropdownItemClassName}>
               <div className="flex min-w-0 flex-col gap-0.5">
                 <span className="font-medium text-foreground">{agent.label}</span>
                 <span className="text-[10px] leading-snug text-muted-foreground">{agent.desc}</span>
@@ -151,19 +156,19 @@ function ModelMenu({
   return (
     <DropdownMenu modal={false} open={open} onOpenChange={onOpenChange}>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="xs" className="h-7 min-w-0 cursor-pointer px-2">
+        <Button variant="ghost" size="xs" className={toolbarSelectTriggerClassName}>
           <span className="max-w-[86px] truncate text-[10px] font-medium text-foreground">
             {selectedModel}
           </span>
           <ChevronUp className={`size-3 text-muted-foreground transition-transform ${open ? '' : 'rotate-180'}`} />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent side="top" align="start" className="w-56">
-        <DropdownMenuLabel className="text-xs text-muted-foreground">Model</DropdownMenuLabel>
+      <DropdownMenuContent side="top" align="start" className={toolbarDropdownContentClassName}>
+        <DropdownMenuLabel className={toolbarDropdownLabelClassName}>Model</DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuRadioGroup value={selectedModel} onValueChange={onSelectModel}>
           {MODEL_OPTIONS.map((model: AssistantModelOption) => (
-            <DropdownMenuRadioItem key={model.id} value={model.id} className="items-start py-2 text-xs">
+            <DropdownMenuRadioItem key={model.id} value={model.id} className={toolbarDropdownItemClassName}>
               <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                 <span className="truncate font-medium text-foreground">{model.label}</span>
                 <span className="text-[10px] leading-snug text-muted-foreground">ctx {model.tokens}</span>
@@ -262,7 +267,7 @@ export function AIAssistantPanel() {
             key={label}
             variant="secondary"
             size="xs"
-            className="h-6 cursor-pointer rounded-md px-2 text-[11px]"
+            className="h-6 cursor-pointer rounded-md px-2 text-[11px] hover:brightness-88"
             onClick={() => setInput(label)}
           >
             <Icon className="size-3" />
@@ -311,7 +316,7 @@ export function AIAssistantPanel() {
 
             {/* Bottom toolbar */}
             <div className="space-y-1 px-2 py-1.5">
-              <div className="flex min-w-0 items-center gap-1">
+              <div className="flex min-w-0 items-center">
                 {/* Attach button + dropdown */}
                 <DropdownMenu
                   modal={false}
@@ -326,13 +331,13 @@ export function AIAssistantPanel() {
                       <Plus className="size-3.5" />
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent side="top" align="start" className="w-48">
-                    <DropdownMenuLabel className="text-xs text-muted-foreground">Add context</DropdownMenuLabel>
+                  <DropdownMenuContent side="top" align="start" className={toolbarDropdownContentClassName}>
+                    <DropdownMenuLabel className={toolbarDropdownLabelClassName}>Add context</DropdownMenuLabel>
                     <DropdownMenuSeparator />
                     {ATTACH_OPTIONS.map(({ icon: Icon, label, desc }) => (
                       <DropdownMenuItem
                         key={label}
-                        className="items-start gap-2 py-2 text-xs"
+                        className={toolbarDropdownItemClassName}
                         onSelect={() => setAttachOpen(false)}
                       >
                         <Icon className="mt-0.5 size-3.5 text-muted-foreground" />
@@ -345,7 +350,7 @@ export function AIAssistantPanel() {
                   </DropdownMenuContent>
                 </DropdownMenu>
 
-                <div className="flex min-w-0 items-center gap-0.5">
+                <div className="flex min-w-0 items-center gap-0">
                   {/* Agent mode dropdown */}
                   <AgentModeMenu
                     open={agentOpen}
