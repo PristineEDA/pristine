@@ -655,8 +655,10 @@ function AppLayout() {
     saveActiveFile,
     setShowBottomPanel,
     setShowLeftPanel,
+    setShowRightPanel,
     showBottomPanel,
     showLeftPanel,
+    showRightPanel,
   });
 
   return (

@@ -41,11 +41,11 @@ describe('AIAssistantPanel', () => {
 
     openDropdown(/Agent/i);
     fireEvent.click(screen.getByRole('menuitemradio', { name: /Edit/i }));
-    expect(screen.getByText((_, element) => element?.textContent === 'edit · Claude Opus 4.6')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Edit/i })).toBeInTheDocument();
 
     openDropdown(/Claude Opus 4\.6/i);
     fireEvent.click(screen.getByRole('menuitemradio', { name: /GPT-5\.4/i }));
-    expect(screen.getByText((_, element) => element?.textContent === 'edit · GPT-5.4')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /GPT-5\.4/i })).toBeInTheDocument();
   });
 
   it('opens and closes the attachment menu', () => {
@@ -77,5 +77,6 @@ describe('AIAssistantPanel', () => {
     expect(screen.getByLabelText('Token usage')).toHaveAttribute('data-slot', 'progress');
     expect(screen.getByRole('button', { name: /Generate Testbench/i })).toHaveAttribute('data-slot', 'button');
     expect(container.querySelectorAll('[data-slot="badge"]')).toHaveLength(2);
+    expect(screen.queryByText(/Enter to send/i)).not.toBeInTheDocument();
   });
 });

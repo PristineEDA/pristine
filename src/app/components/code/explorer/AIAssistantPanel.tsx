@@ -287,7 +287,7 @@ export function AIAssistantPanel() {
         </div>
 
         {/* Main prompt card */}
-        <Card className="gap-0 rounded-lg border-border bg-card py-0 shadow-xs focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50">
+        <Card className="gap-0 rounded-lg border-border bg-card py-0 shadow-xs">
           <CardContent className="px-0">
             {/* Textarea */}
             <Textarea
@@ -401,14 +401,6 @@ export function AIAssistantPanel() {
             </div>
           </CardContent>
         </Card>
-
-        {/* Hint */}
-        <div className="flex items-center gap-2 px-0.5 text-[9px] text-muted-foreground">
-          <span>Enter to send · Shift+Enter newline</span>
-          <span className="ml-auto min-w-0 truncate">
-            <span>{selectedAgent}</span> · <span className="text-foreground">{selectedModel}</span>
-          </span>
-        </div>
       </div>
     </div>
   );

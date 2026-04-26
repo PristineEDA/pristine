@@ -353,11 +353,12 @@ describe('App', () => {
     }
   });
 
-  it('toggles the left and bottom panels with Ctrl+B and Ctrl+J', () => {
+  it('toggles the left, bottom, and right panels with Ctrl+B, Ctrl+J, and Ctrl+Alt+B', () => {
     render(<App />);
 
     expect(screen.getByTestId('menu-left-state')).toHaveTextContent('false');
     expect(screen.getByTestId('menu-bottom-state')).toHaveTextContent('false');
+    expect(screen.getByTestId('menu-right-state')).toHaveTextContent('false');
 
     fireEvent.keyDown(document, { key: 'b', ctrlKey: true });
     expect(screen.getByTestId('menu-left-state')).toHaveTextContent('true');
@@ -367,6 +368,10 @@ describe('App', () => {
     expect(screen.getByTestId('menu-bottom-state')).toHaveTextContent('true');
     expect(screen.getByTestId('bottom-panel')).toBeInTheDocument();
 
+    fireEvent.keyDown(document, { key: 'b', ctrlKey: true, altKey: true });
+    expect(screen.getByTestId('menu-right-state')).toHaveTextContent('true');
+    expect(screen.getByTestId('right-panel')).toBeInTheDocument();
+
     fireEvent.keyDown(document, { key: 'b', ctrlKey: true });
     expect(screen.getByTestId('menu-left-state')).toHaveTextContent('false');
     expect(screen.queryByTestId('left-panel')).not.toBeInTheDocument();
@@ -374,6 +379,10 @@ describe('App', () => {
     fireEvent.keyDown(document, { key: 'j', ctrlKey: true });
     expect(screen.getByTestId('menu-bottom-state')).toHaveTextContent('false');
     expect(screen.queryByTestId('bottom-panel')).not.toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: 'b', ctrlKey: true, altKey: true });
+    expect(screen.getByTestId('menu-right-state')).toHaveTextContent('false');
+    expect(screen.queryByTestId('right-panel')).not.toBeInTheDocument();
   });
 
   it('remembers panel visibility per code subview and disables layout interactions on unsupported pages', async () => {
@@ -411,8 +420,10 @@ describe('App', () => {
 
     fireEvent.keyDown(document, { key: 'b', ctrlKey: true });
     fireEvent.keyDown(document, { key: 'j', ctrlKey: true });
+    fireEvent.keyDown(document, { key: 'b', ctrlKey: true, altKey: true });
     expect(screen.getByTestId('menu-left-state')).toHaveTextContent('false');
     expect(screen.getByTestId('menu-bottom-state')).toHaveTextContent('false');
+    expect(screen.getByTestId('menu-right-state')).toHaveTextContent('false');
 
     fireEvent.click(screen.getByText('switch-whiteboard'));
     expect(screen.getByTestId('menu-layout-enabled')).toHaveTextContent('false');
