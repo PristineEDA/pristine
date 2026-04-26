@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useEffectEvent } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   Sparkles,
   Bot,
@@ -11,19 +11,172 @@ import {
   X,
 } from "lucide-react";
 import {
-  AGENT_COLORS,
   AGENT_OPTIONS,
   ATTACH_OPTIONS,
-  Check,
   DEFAULT_MODEL,
   MODEL_OPTIONS,
   QUICK_ACTIONS,
   getTokenLimitForModel,
   type AssistantAgentMode,
+  type AssistantAgentOption,
+  type AssistantModelOption,
 } from '../../aiAssistant/config';
 import { MessageThread } from '../../aiAssistant/MessageThread';
 import { useAIConversation } from '../../aiAssistant/useAIConversation';
+import { Badge } from '../../ui/badge';
+import { Button } from '../../ui/button';
+import { Card, CardContent } from '../../ui/card';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '../../ui/dropdown-menu';
+import { Progress } from '../../ui/progress';
+import { Separator } from '../../ui/separator';
+import { Textarea } from '../../ui/textarea';
 import { TooltipIconButton } from '../../ui/tooltip-icon-button';
+
+interface ContextBadgeProps {
+  fileName: string;
+  description?: string;
+  meta?: string;
+}
+
+function ContextBadge({ fileName, description, meta }: ContextBadgeProps) {
+  return (
+    <Badge
+      variant="outline"
+      className="h-6 max-w-full justify-start gap-1 rounded-md border-border bg-background px-2 text-[10px] font-normal text-muted-foreground shadow-xs hover:bg-accent hover:text-accent-foreground"
+    >
+      <FileCode2 className="size-3 text-muted-foreground" />
+      <span className="max-w-[72px] truncate font-medium text-foreground">{fileName}</span>
+      {description && (
+        <>
+          <span className="text-muted-foreground/60">·</span>
+          <span className="max-w-[92px] truncate">{description}</span>
+        </>
+      )}
+      {meta && <span className="text-muted-foreground/70">{meta}</span>}
+      <X className="ml-0.5 size-3 text-muted-foreground/70" aria-hidden="true" />
+    </Badge>
+  );
+}
+
+function TokenUsage({
+  maxTokens,
+  maxLabel,
+  tokenLabel,
+  tokenPct,
+  usedTokens,
+}: {
+  maxTokens: number;
+  maxLabel: string;
+  tokenLabel: string;
+  tokenPct: number;
+  usedTokens: number;
+}) {
+  return (
+    <div
+      className="ml-auto mr-1 flex min-w-0 items-center gap-1.5"
+      title={`${usedTokens.toLocaleString()} / ${maxTokens.toLocaleString()} tokens used`}
+    >
+      <Progress value={tokenPct} aria-label="Token usage" className="h-1.5 w-14 bg-muted" />
+      <span className="shrink-0 text-[9px] tabular-nums text-muted-foreground">
+        {tokenLabel}/{maxLabel}
+      </span>
+    </div>
+  );
+}
+
+function AgentModeMenu({
+  open,
+  selectedAgent,
+  selectedAgentOption,
+  onOpenChange,
+  onSelectAgent,
+}: {
+  open: boolean;
+  selectedAgent: AssistantAgentMode;
+  selectedAgentOption?: AssistantAgentOption;
+  onOpenChange: (open: boolean) => void;
+  onSelectAgent: (agent: AssistantAgentMode) => void;
+}) {
+  return (
+    <DropdownMenu modal={false} open={open} onOpenChange={onOpenChange}>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="xs" className="h-7 px-2 text-primary">
+          <Bot className="size-3" />
+          <span className="max-w-[52px] truncate text-[10px] font-medium">
+            {selectedAgentOption?.label}
+          </span>
+          <ChevronUp className={`size-3 text-muted-foreground transition-transform ${open ? '' : 'rotate-180'}`} />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent side="top" align="start" className="w-56">
+        <DropdownMenuLabel className="text-xs text-muted-foreground">Mode</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuRadioGroup
+          value={selectedAgent}
+          onValueChange={(value) => onSelectAgent(value as AssistantAgentMode)}
+        >
+          {AGENT_OPTIONS.map((agent) => (
+            <DropdownMenuRadioItem key={agent.id} value={agent.id} className="items-start py-2 text-xs">
+              <div className="flex min-w-0 flex-col gap-0.5">
+                <span className="font-medium text-foreground">{agent.label}</span>
+                <span className="text-[10px] leading-snug text-muted-foreground">{agent.desc}</span>
+              </div>
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function ModelMenu({
+  open,
+  selectedModel,
+  onOpenChange,
+  onSelectModel,
+}: {
+  open: boolean;
+  selectedModel: string;
+  onOpenChange: (open: boolean) => void;
+  onSelectModel: (model: string) => void;
+}) {
+  return (
+    <DropdownMenu modal={false} open={open} onOpenChange={onOpenChange}>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="xs" className="h-7 min-w-0 px-2">
+          <Cpu className="size-3 text-primary" />
+          <span className="max-w-[86px] truncate text-[10px] font-medium text-foreground">
+            {selectedModel}
+          </span>
+          <ChevronUp className={`size-3 text-muted-foreground transition-transform ${open ? '' : 'rotate-180'}`} />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent side="top" align="start" className="w-56">
+        <DropdownMenuLabel className="text-xs text-muted-foreground">Model</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuRadioGroup value={selectedModel} onValueChange={onSelectModel}>
+          {MODEL_OPTIONS.map((model: AssistantModelOption) => (
+            <DropdownMenuRadioItem key={model.id} value={model.id} className="items-start py-2 text-xs">
+              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className="truncate font-medium text-foreground">{model.label}</span>
+                <span className="text-[10px] leading-snug text-muted-foreground">ctx {model.tokens}</span>
+              </div>
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
 
 // ─── AI Assistant Panel ────────────────────────────────────────────────────────
 export function AIAssistantPanel() {
@@ -35,39 +188,29 @@ export function AIAssistantPanel() {
   const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const hasOpenDropdown = agentOpen || modelOpen || attachOpen;
+  const selectedAgentOption = AGENT_OPTIONS.find((agent) => agent.id === selectedAgent);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping]);
-
-  const handleOutsideDropdownMouseDown = useEffectEvent(() => {
-    setAgentOpen(false);
-    setModelOpen(false);
-    setAttachOpen(false);
-  });
-
-  // Close dropdowns when clicking outside while a menu is open
-  useEffect(() => {
-    if (!hasOpenDropdown) {
-      return;
-    }
-
-    const handler = () => {
-      handleOutsideDropdownMouseDown();
-    };
-
-    document.addEventListener("mousedown", handler);
-    return () => {
-      document.removeEventListener("mousedown", handler);
-    };
-  }, [hasOpenDropdown]);
 
   const autoResizeTextarea = () => {
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = "auto";
     el.style.height = Math.min(el.scrollHeight, 120) + "px";
+  };
+
+  const resetTextareaHeight = () => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+    }
+  };
+
+  const closeSiblingMenus = (menu: 'agent' | 'attach' | 'model') => {
+    if (menu !== 'agent') setAgentOpen(false);
+    if (menu !== 'attach') setAttachOpen(false);
+    if (menu !== 'model') setModelOpen(false);
   };
 
   // Token usage mock
@@ -87,388 +230,177 @@ export function AIAssistantPanel() {
       : `${maxTokens / 1000}k`;
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex h-full flex-col bg-background text-foreground">
       {/* Header */}
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-border shrink-0">
-        <Sparkles size={14} className="text-ide-syntax-keyword" />
-        <span
-          className="text-foreground text-[12px] font-[600]"
-        >
-          AI Assistant
-        </span>
+      <div className="flex shrink-0 items-center gap-2 px-3 py-2">
+        <div className="flex size-6 items-center justify-center rounded-md bg-primary/10 text-primary">
+          <Sparkles className="size-3.5" />
+        </div>
+        <span className="text-xs font-semibold">AI Assistant</span>
         <div className="ml-auto">
           <TooltipIconButton content="Clear conversation">
-            <button
+            <Button
               aria-label="Clear conversation"
-              className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+              variant="ghost"
+              size="icon-xs"
+              className="text-muted-foreground"
               onClick={() => {
                 clearConversation();
-                if (textareaRef.current) {
-                  textareaRef.current.style.height = 'auto';
-                }
+                resetTextareaHeight();
               }}
             >
-              <RefreshCw size={12} />
-            </button>
+              <RefreshCw className="size-3" />
+            </Button>
           </TooltipIconButton>
         </div>
       </div>
 
+      <Separator />
+
       {/* Quick actions */}
-      <div className="flex flex-wrap gap-1 px-2 py-1.5 border-b border-border shrink-0">
+      <div className="flex shrink-0 flex-wrap gap-1 px-2 py-1.5">
         {QUICK_ACTIONS.map(({ label, icon: Icon }) => (
-          <button
+          <Button
             key={label}
-            className="flex items-center gap-1 px-2 py-0.5 bg-muted hover:bg-primary text-muted-foreground hover:text-primary-foreground rounded transition-colors text-[11px]"
+            variant="secondary"
+            size="xs"
+            className="h-6 rounded-md px-2 text-[11px]"
             onClick={() => setInput(label)}
           >
-            <Icon size={10} />
+            <Icon className="size-3" />
             {label}
-          </button>
+          </Button>
         ))}
       </div>
 
+      <Separator />
+
       <MessageThread messages={messages} isTyping={isTyping} bottomRef={bottomRef} />
 
+      <Separator />
       {/* ── Copilot-style Input Box ── */}
-      <div className="px-2 pb-2 pt-1.5 border-t border-border shrink-0">
+      <div className="shrink-0 space-y-1.5 px-2 pb-2 pt-1.5">
         {/* Current task context chip */}
-        <div className="flex items-center gap-1 mb-1.5 flex-wrap">
-          <div
-            className="flex items-center gap-1 px-2 py-0.5 bg-accent rounded border border-ide-chat-input-border text-muted-foreground cursor-pointer hover:border-muted-foreground/70 transition-colors text-[10px]"
-          >
-            <FileCode2 size={9} className="text-emerald-500" />
-            <span className="text-blue-400">uart_tx.v</span>
-            <span className="text-muted-foreground/70">·</span>
-            <span>CLINT pipeline</span>
-            <span className="text-muted-foreground/70 mx-0.5">1/9</span>
-            <X
-              size={8}
-              className="hover:text-foreground ml-0.5"
-            />
-          </div>
-          <div
-            className="flex items-center gap-1 px-2 py-0.5 bg-accent rounded border border-ide-chat-input-border text-muted-foreground cursor-pointer hover:border-muted-foreground/70 transition-colors text-[10px]"
-          >
-            <FileCode2 size={9} className="text-ide-syntax-folder" />
-            <span className="text-ide-syntax-function">cpu_top.v</span>
-            <X
-              size={8}
-              className="hover:text-foreground ml-0.5"
-            />
-          </div>
+        <div className="flex flex-wrap items-center gap-1">
+          <ContextBadge fileName="uart_tx.v" description="CLINT pipeline" meta="1/9" />
+          <ContextBadge fileName="cpu_top.v" />
         </div>
 
         {/* Main prompt card */}
-        <div
-          className="rounded-lg border border-border bg-ide-chat-bg focus-within:border-ide-chat-muted transition-colors"
-          onMouseDown={(e) => e.stopPropagation()}
-        >
-          {/* Textarea */}
-          <textarea
-            ref={textareaRef}
-            value={input}
-            onChange={(e) => {
-              setInput(e.target.value);
-              autoResizeTextarea();
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                sendMessage();
-                if (textareaRef.current) {
-                  textareaRef.current.style.height = 'auto';
-                }
-              }
-            }}
-            placeholder="Ask a question about your RTL code… (Shift+Enter for new line)"
-            className="w-full bg-transparent text-ide-chat-text resize-none outline-none px-3 pt-2.5 pb-1 text-[12px] leading-[1.5] min-h-[38px] max-h-[120px] caret-[#f8f8f2]"
-            rows={1}
-          />
-
-          {/* Bottom toolbar */}
-          <div className="flex items-center gap-1 px-2 pb-2 pt-1 relative">
-            {/* Attach button + dropdown */}
-            <div
-              className="relative"
-              onMouseDown={(e) => e.stopPropagation()}
-            >
-              <TooltipIconButton content="Add attachment">
-                <button
-                  aria-label="Add attachment"
-                  onClick={() => {
-                    setAttachOpen((v) => !v);
-                    setAgentOpen(false);
-                    setModelOpen(false);
-                  }}
-                  className="flex items-center justify-center w-6 h-6 rounded text-ide-chat-muted hover:text-ide-chat-text hover:bg-ide-chat-input transition-colors"
-                >
-                  <Plus size={13} />
-                </button>
-              </TooltipIconButton>
-              {attachOpen && (
-                <div className="absolute bottom-full mb-1.5 left-0 z-50 w-44 bg-ide-chat-dropdown border border-ide-chat-border rounded-lg shadow-xl overflow-hidden">
-                  <div className="px-2 py-1 border-b border-ide-chat-border">
-                    <span
-                      className="text-ide-chat-muted text-[10px]"
-                    >
-                      Add context
-                    </span>
-                  </div>
-                  {ATTACH_OPTIONS.map(
-                    ({ icon: Icon, label, desc }) => (
-                      <button
-                        key={label}
-                        className="w-full flex items-start gap-2 px-2.5 py-2 hover:bg-ide-chat-hover transition-colors text-left"
-                        onClick={() => setAttachOpen(false)}
-                      >
-                        <Icon
-                          size={12}
-                          className="text-ide-chat-muted mt-0.5 shrink-0"
-                        />
-                        <div>
-                          <div
-                            className="text-ide-chat-text text-[11px]"
-                          >
-                            {label}
-                          </div>
-                          <div
-                            className="text-ide-chat-muted text-[10px]"
-                          >
-                            {desc}
-                          </div>
-                        </div>
-                      </button>
-                    ),
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Agent mode dropdown */}
-            <div
-              className="relative"
-              onMouseDown={(e) => e.stopPropagation()}
-            >
-              <button
-                onClick={() => {
-                  setAgentOpen((v) => !v);
-                  setModelOpen(false);
-                  setAttachOpen(false);
-                }}
-                className="flex items-center gap-1 px-1.5 h-6 rounded text-ide-chat-purple hover:bg-ide-chat-input transition-colors text-[11px]"
-              >
-                <Bot size={11} />
-                <span
-                  className="text-[10px] font-[500]"
-                >
-                  {
-                    AGENT_OPTIONS.find((a) => a.id === selectedAgent)
-                      ?.label
-                  }
-                </span>
-                <ChevronUp
-                  size={9}
-                  className={`transition-transform text-ide-chat-muted ${agentOpen ? "" : "rotate-180"}`}
-                />
-              </button>
-              {agentOpen && (
-                <div className="absolute bottom-full mb-1.5 left-0 z-50 w-52 bg-ide-chat-dropdown border border-ide-chat-border rounded-lg shadow-xl overflow-hidden">
-                  <div className="px-2 py-1 border-b border-ide-chat-border">
-                    <span
-                      className="text-ide-chat-muted text-[10px]"
-                    >
-                      Mode
-                    </span>
-                  </div>
-                  {AGENT_OPTIONS.map((a) => (
-                    <button
-                      key={a.id}
-                      className="w-full flex items-center gap-2 px-2.5 py-2 hover:bg-ide-chat-hover transition-colors text-left"
-                      onClick={() => {
-                        setSelectedAgent(a.id);
-                        setAgentOpen(false);
-                      }}
-                    >
-                      <div className="w-3.5 h-3.5 shrink-0 flex items-center justify-center">
-                        {selectedAgent === a.id && (
-                          <Check
-                            size={11}
-                            className="text-ide-chat-purple"
-                          />
-                        )}
-                      </div>
-                      <div>
-                        <div
-                          className="text-ide-chat-text"
-                          style={{
-                            fontSize: "11px",
-                            fontWeight:
-                              selectedAgent === a.id
-                                ? 600
-                                : 400,
-                          }}
-                        >
-                          {a.label}
-                        </div>
-                        <div
-                          className="text-ide-chat-muted text-[10px]"
-                        >
-                          {a.desc}
-                        </div>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Model dropdown */}
-            <div
-              className="relative"
-              onMouseDown={(e) => e.stopPropagation()}
-            >
-              <button
-                onClick={() => {
-                  setModelOpen((v) => !v);
-                  setAgentOpen(false);
-                  setAttachOpen(false);
-                }}
-                className="flex items-center gap-1 px-1.5 h-6 rounded text-ide-chat-cyan hover:bg-ide-chat-input transition-colors text-[11px]"
-              >
-                <Cpu size={10} />
-                <span
-                  className="max-w-[80px] truncate text-ide-chat-text-bright p-[0px] mx-[1px] my-[0px] text-[10px] font-[500]"
-                >
-                  {selectedModel}
-                </span>
-                <ChevronUp
-                  size={9}
-                  className={`transition-transform text-ide-chat-muted ${modelOpen ? "" : "rotate-180"}`}
-                />
-              </button>
-              {modelOpen && (
-                <div className="absolute bottom-full mb-1.5 left-0 z-50 w-52 bg-ide-chat-dropdown border border-ide-chat-border rounded-lg shadow-xl overflow-hidden">
-                  <div className="px-2 py-1 border-b border-ide-chat-border">
-                    <span
-                      className="text-ide-chat-muted text-[10px]"
-                    >
-                      Model
-                    </span>
-                  </div>
-                  {MODEL_OPTIONS.map((m) => (
-                    <button
-                      key={m.id}
-                      className="w-full flex items-center gap-2 px-2.5 py-2 hover:bg-ide-chat-hover transition-colors text-left"
-                      onClick={() => {
-                        setSelectedModel(m.id);
-                        setModelOpen(false);
-                      }}
-                    >
-                      <div className="w-3.5 h-3.5 shrink-0 flex items-center justify-center">
-                        {selectedModel === m.id && (
-                          <Check
-                            size={11}
-                            className="text-ide-chat-cyan"
-                          />
-                        )}
-                      </div>
-                      <div className="flex-1">
-                        <div
-                          className="text-ide-chat-text"
-                          style={{
-                            fontSize: "11px",
-                            fontWeight:
-                              selectedModel === m.id
-                                ? 600
-                                : 400,
-                          }}
-                        >
-                          {m.label}
-                        </div>
-                        <div
-                          className="text-ide-chat-muted text-[10px]"
-                        >
-                          ctx {m.tokens}
-                        </div>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Token usage */}
-            <div className="ml-auto flex items-center gap-1.5 mr-1">
-              <div
-                className="flex items-center gap-1"
-                title={`${usedTokens.toLocaleString()} / ${maxTokens.toLocaleString()} tokens used`}
-              >
-                {/* mini progress bar */}
-                <div className="w-12 h-1 bg-ide-chat-border rounded-full overflow-hidden">
-                  <div
-                    className="h-full rounded-full transition-all"
-                    style={{
-                      width: `${tokenPct}%`,
-                      background:
-                        tokenPct > 80
-                          ? "#ff5555"
-                          : tokenPct > 50
-                            ? "#ffb86c"
-                            : "#6272a4",
-                    }}
-                  />
-                </div>
-                <span
-                  className="text-ide-chat-muted text-[9px]"
-                >
-                  {tokenLabel}/{maxLabel}
-                </span>
-              </div>
-            </div>
-
-            {/* Send button */}
-            <TooltipIconButton content="Send (Enter)" wrapTrigger>
-              <button
-                aria-label="Send (Enter)"
-                onClick={() => {
+        <Card className="gap-0 rounded-lg border-border bg-card py-0 shadow-xs">
+          <CardContent className="px-0">
+            {/* Textarea */}
+            <Textarea
+              ref={textareaRef}
+              value={input}
+              onChange={(e) => {
+                setInput(e.target.value);
+                autoResizeTextarea();
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
                   sendMessage();
-                  if (textareaRef.current) {
-                    textareaRef.current.style.height = 'auto';
-                  }
-                }}
-                disabled={!input.trim()}
-                className={`flex items-center justify-center w-6 h-6 rounded transition-all ${
-                  input.trim()
-                    ? "bg-ide-chat-purple hover:bg-ide-chat-purple-hover text-ide-chat-hover shadow-md"
-                    : "bg-ide-chat-input text-ide-chat-border cursor-not-allowed"
-                }`}
-              >
-                <ArrowUp size={13} />
-              </button>
-            </TooltipIconButton>
-          </div>
-        </div>
+                  resetTextareaHeight();
+                }
+              }}
+              placeholder="Ask a question about your RTL code… (Shift+Enter for new line)"
+              className="min-h-[42px] max-h-[120px] resize-none rounded-b-none border-0 bg-transparent px-3 pb-1 pt-2.5 text-xs leading-relaxed shadow-none focus-visible:border-transparent focus-visible:ring-0 md:text-xs"
+              rows={1}
+            />
 
-        {/* Hint */}
-        <div className="flex items-center gap-2 mt-1 px-0.5">
-          <span
-            className="text-ide-chat-border text-[9px]"
-          >
-            Enter to send · Shift+Enter newline
-          </span>
-          <span
-            className="ml-auto text-ide-chat-border text-[9px]"
-          >
-            <span className="text-ide-chat-muted">
-              {selectedAgent}
-            </span>{" "}
-            ·{" "}
-            <span style={{ color: AGENT_COLORS[selectedAgent] }}>
-              {selectedModel}
-            </span>
-          </span>
-        </div>
+            <Separator />
+
+            {/* Bottom toolbar */}
+            <div className="flex min-w-0 items-center gap-1 px-2 py-1.5">
+              {/* Attach button + dropdown */}
+              <DropdownMenu
+                modal={false}
+                open={attachOpen}
+                onOpenChange={(open) => {
+                  setAttachOpen(open);
+                  if (open) closeSiblingMenus('attach');
+                }}
+              >
+                <DropdownMenuTrigger asChild>
+                  <Button aria-label="Add attachment" variant="ghost" size="icon-xs" className="text-muted-foreground">
+                    <Plus className="size-3.5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent side="top" align="start" className="w-48">
+                  <DropdownMenuLabel className="text-xs text-muted-foreground">Add context</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {ATTACH_OPTIONS.map(({ icon: Icon, label, desc }) => (
+                    <DropdownMenuItem
+                      key={label}
+                      className="items-start gap-2 py-2 text-xs"
+                      onSelect={() => setAttachOpen(false)}
+                    >
+                      <Icon className="mt-0.5 size-3.5 text-muted-foreground" />
+                      <div className="flex min-w-0 flex-col gap-0.5">
+                        <span className="font-medium text-foreground">{label}</span>
+                        <span className="text-[10px] leading-snug text-muted-foreground">{desc}</span>
+                      </div>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              {/* Agent mode dropdown */}
+              <AgentModeMenu
+                open={agentOpen}
+                selectedAgent={selectedAgent}
+                selectedAgentOption={selectedAgentOption}
+                onOpenChange={(open) => {
+                  setAgentOpen(open);
+                  if (open) closeSiblingMenus('agent');
+                }}
+                onSelectAgent={(agent) => {
+                  setSelectedAgent(agent);
+                  setAgentOpen(false);
+                }}
+              />
+
+              {/* Model dropdown */}
+              <ModelMenu
+                open={modelOpen}
+                selectedModel={selectedModel}
+                onOpenChange={(open) => {
+                  setModelOpen(open);
+                  if (open) closeSiblingMenus('model');
+                }}
+                onSelectModel={(model) => {
+                  setSelectedModel(model);
+                  setModelOpen(false);
+                }}
+              />
+
+              {/* Token usage */}
+              <TokenUsage
+                maxTokens={maxTokens}
+                maxLabel={maxLabel}
+                tokenLabel={tokenLabel}
+                tokenPct={tokenPct}
+                usedTokens={usedTokens}
+              />
+
+              {/* Send button */}
+              <TooltipIconButton content="Send (Enter)" wrapTrigger>
+                <Button
+                  aria-label="Send (Enter)"
+                  size="icon-xs"
+                  onClick={() => {
+                    sendMessage();
+                    resetTextareaHeight();
+                  }}
+                  disabled={!input.trim()}
+                >
+                  <ArrowUp className="size-3.5" />
+                </Button>
+              </TooltipIconButton>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

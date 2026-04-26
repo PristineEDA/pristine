@@ -1,5 +1,5 @@
 import { createRef, useLayoutEffect } from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getEditorFontFamilyStack } from '../../../editor/editorSettings';
 
@@ -375,6 +375,72 @@ describe('MonacoEditorPane', () => {
 
     clientWidthSpy.mockRestore();
     clientHeightSpy.mockRestore();
+  });
+
+  it('applies resize-driven layouts immediately and skips duplicate viewport sizes', () => {
+    const originalResizeObserver = globalThis.ResizeObserver;
+    const resizeObserverCallbacks: ResizeObserverCallback[] = [];
+    let currentWidth = 960;
+    let currentHeight = 540;
+
+    class ResizeObserverMock {
+      observe = vi.fn();
+      unobserve = vi.fn();
+      disconnect = vi.fn();
+
+      constructor(callback: ResizeObserverCallback) {
+        resizeObserverCallbacks.push(callback);
+      }
+    }
+
+    Object.defineProperty(globalThis, 'ResizeObserver', {
+      configurable: true,
+      writable: true,
+      value: ResizeObserverMock,
+    });
+
+    const clientWidthSpy = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(() => currentWidth);
+    const clientHeightSpy = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(() => currentHeight);
+
+    try {
+      render(
+        <MonacoEditorPane
+          activeTabId="rtl/core/cpu_top.sv"
+          code="module cpu_top; endmodule"
+          editorRef={createRef<any>()}
+        />,
+      );
+
+      const editorCalls = mockEditorComponent.mock.calls;
+      const lastEditorProps = editorCalls[editorCalls.length - 1]?.[0];
+
+      expect(lastEditorProps.options.automaticLayout).toBe(false);
+      expect(resizeObserverCallbacks).toHaveLength(1);
+
+      mockEditorInstance.layout.mockClear();
+      currentWidth = 1120;
+
+      act(() => {
+        resizeObserverCallbacks[0]?.([] as ResizeObserverEntry[], {} as ResizeObserver);
+      });
+
+      expect(mockEditorInstance.layout).toHaveBeenCalledTimes(1);
+      expect(mockEditorInstance.layout).toHaveBeenCalledWith({ width: 1120, height: 540 });
+
+      act(() => {
+        resizeObserverCallbacks[0]?.([] as ResizeObserverEntry[], {} as ResizeObserver);
+      });
+
+      expect(mockEditorInstance.layout).toHaveBeenCalledTimes(1);
+    } finally {
+      clientWidthSpy.mockRestore();
+      clientHeightSpy.mockRestore();
+      Object.defineProperty(globalThis, 'ResizeObserver', {
+        configurable: true,
+        writable: true,
+        value: originalResizeObserver,
+      });
+    }
   });
 
   it('updates content and renders the drag interaction shield when requested', () => {

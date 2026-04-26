@@ -99,9 +99,9 @@ export function MonacoEditorPane({
   const monacoInstanceRef = useRef(monaco);
   const canPropagateCursorChangesRef = useRef(true);
   const hostRef = useRef<HTMLDivElement | null>(null);
-  const layoutFrameRef = useRef<number | null>(null);
+  const lastLayoutViewportRef = useRef<EditorViewport | null>(null);
   const [mountedEditor, setMountedEditor] = useState<any>(null);
-  const queueEditorLayoutRef = useRef<() => void>(() => undefined);
+  const applyEditorLayoutRef = useRef<(options?: { force?: boolean }) => void>(() => undefined);
   const isSystemVerilogDocumentReady = Boolean(activeTabId) && editorLanguage === 'systemverilog' && isDocumentReady && !hasLoadError;
   const handleActiveModelReady = useEffectEvent((fileId: string) => {
     onActiveModelReady?.(fileId);
@@ -168,7 +168,7 @@ export function MonacoEditorPane({
     ...editorBehaviorOptions,
     lineNumbersMinChars: 4,
     folding: true,
-    automaticLayout: true,
+    automaticLayout: false,
     insertSpaces: true,
     rulers: [80, 120],
     bracketPairColorization: { enabled: true },
@@ -182,30 +182,21 @@ export function MonacoEditorPane({
     padding: { top: 8 },
   }), [editorBehaviorOptions]);
 
-  queueEditorLayoutRef.current = () => {
-    const applyLayout = () => {
-      layoutFrameRef.current = null;
+  applyEditorLayoutRef.current = ({ force = false }: { force?: boolean } = {}) => {
+    const editor = editorRef.current;
+    const viewport = getRenderableEditorViewport(hostRef.current);
 
-      const editor = editorRef.current;
-      const viewport = getRenderableEditorViewport(hostRef.current);
-
-      if (!editor || !viewport) {
-        return;
-      }
-
-      editor.layout(viewport);
-    };
-
-    if (typeof window === 'undefined' || !('requestAnimationFrame' in window)) {
-      applyLayout();
+    if (!editor || !viewport) {
       return;
     }
 
-    if (layoutFrameRef.current !== null) {
-      window.cancelAnimationFrame(layoutFrameRef.current);
+    const lastViewport = lastLayoutViewportRef.current;
+    if (!force && lastViewport && lastViewport.width === viewport.width && lastViewport.height === viewport.height) {
+      return;
     }
 
-    layoutFrameRef.current = window.requestAnimationFrame(applyLayout);
+    editor.layout(viewport);
+    lastLayoutViewportRef.current = viewport;
   };
 
   useEffect(() => {
@@ -219,7 +210,7 @@ export function MonacoEditorPane({
   useRegisterEditorLanguages(monaco);
 
   useEffect(() => {
-    queueEditorLayoutRef.current();
+    applyEditorLayoutRef.current({ force: true });
 
     const host = hostRef.current;
     if (!host || typeof ResizeObserver === 'undefined') {
@@ -227,7 +218,7 @@ export function MonacoEditorPane({
     }
 
     const resizeObserver = new ResizeObserver(() => {
-      queueEditorLayoutRef.current();
+      applyEditorLayoutRef.current();
     });
 
     resizeObserver.observe(host);
@@ -238,18 +229,7 @@ export function MonacoEditorPane({
   }, []);
 
   useEffect(() => {
-    return () => {
-      if (typeof window === 'undefined' || layoutFrameRef.current === null) {
-        return;
-      }
-
-      window.cancelAnimationFrame(layoutFrameRef.current);
-      layoutFrameRef.current = null;
-    };
-  }, []);
-
-  useEffect(() => {
-    queueEditorLayoutRef.current();
+    applyEditorLayoutRef.current({ force: true });
   }, [showDragInteractionShield]);
 
   useEffect(() => {
@@ -301,7 +281,7 @@ export function MonacoEditorPane({
     }
 
     editor.updateOptions(editorBehaviorOptions);
-    queueEditorLayoutRef.current();
+    applyEditorLayoutRef.current({ force: true });
   }, [editorBehaviorOptions, editorRef]);
 
   useEffect(() => {
@@ -314,7 +294,7 @@ export function MonacoEditorPane({
     }
 
     handleActiveModelReady(activeTabId);
-    queueEditorLayoutRef.current();
+    applyEditorLayoutRef.current({ force: true });
   }, [activeTabId, mountedEditor]);
 
   return (
@@ -346,7 +326,7 @@ export function MonacoEditorPane({
           if (activeTabId) {
             handleActiveModelReady(activeTabId);
           }
-          queueEditorLayoutRef.current();
+          applyEditorLayoutRef.current({ force: true });
           handleEditorMount(editor);
           if (
             onSaveShortcut

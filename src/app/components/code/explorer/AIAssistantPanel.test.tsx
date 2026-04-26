@@ -7,6 +7,10 @@ describe('AIAssistantPanel', () => {
     vi.useFakeTimers();
   });
 
+  const openDropdown = (name: RegExp) => {
+    fireEvent.pointerDown(screen.getByRole('button', { name }), { button: 0, ctrlKey: false });
+  };
+
   afterEach(() => {
     vi.runOnlyPendingTimers();
     vi.restoreAllMocks();
@@ -35,51 +39,44 @@ describe('AIAssistantPanel', () => {
   it('switches agent and model selections through their dropdowns', () => {
     render(<AIAssistantPanel />);
 
-    fireEvent.click(screen.getByRole('button', { name: /Agent/i }));
-    fireEvent.click(screen.getByRole('button', { name: /Edit/i }));
-    expect(screen.getByText((_, element) => element?.textContent === 'edit · Claude Opus 4.6')).toBeInTheDocument();
+    openDropdown(/Agent/i);
+    fireEvent.click(screen.getByRole('menuitemradio', { name: /Edit/i }));
+    expect(screen.getByRole('button', { name: /Edit/i })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /Claude Opus 4\.6/i }));
-    fireEvent.click(screen.getByRole('button', { name: /GPT-5\.4/i }));
-    expect(screen.getByText((_, element) => element?.textContent === 'edit · GPT-5.4')).toBeInTheDocument();
+    openDropdown(/Claude Opus 4\.6/i);
+    fireEvent.click(screen.getByRole('menuitemradio', { name: /GPT-5\.4/i }));
+    expect(screen.getByRole('button', { name: /GPT-5\.4/i })).toBeInTheDocument();
   });
 
   it('opens and closes the attachment menu', () => {
     render(<AIAssistantPanel />);
 
-    fireEvent.click(screen.getByRole('button', { name: /Add attachment/i }));
-    expect(screen.getByRole('button', { name: /Add Image/i })).toBeInTheDocument();
+    openDropdown(/Add attachment/i);
+    expect(screen.getByRole('menuitem', { name: /Add Image/i })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /Add Image/i }));
-    expect(screen.queryByRole('button', { name: /Add Image/i })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('menuitem', { name: /Add Image/i }));
+    expect(screen.queryByRole('menuitem', { name: /Add Image/i })).not.toBeInTheDocument();
   });
 
-  it('registers the document mousedown listener only while a dropdown is open', () => {
-    const addEventListenerSpy = vi.spyOn(document, 'addEventListener');
-    const removeEventListenerSpy = vi.spyOn(document, 'removeEventListener');
-
-    const getDocumentMouseDownRegistrations = () => addEventListenerSpy.mock.calls.filter(
-      ([eventName]) => eventName === 'mousedown',
-    );
-
-    const getDocumentMouseDownRemovals = () => removeEventListenerSpy.mock.calls.filter(
-      ([eventName]) => eventName === 'mousedown',
-    );
-
+  it('closes sibling dropdowns when another assistant menu opens', () => {
     render(<AIAssistantPanel />);
 
-    expect(getDocumentMouseDownRegistrations()).toHaveLength(0);
+    openDropdown(/Add attachment/i);
+    expect(screen.getByRole('menuitem', { name: /Add Image/i })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /Add attachment/i }));
+    openDropdown(/Agent/i);
 
-    expect(screen.getByRole('button', { name: /Add Image/i })).toBeInTheDocument();
-    expect(getDocumentMouseDownRegistrations()).toHaveLength(1);
-    expect(getDocumentMouseDownRemovals()).toHaveLength(0);
+    expect(screen.queryByRole('menuitem', { name: /Add Image/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('menuitemradio', { name: /Edit/i })).toBeInTheDocument();
+  });
 
-    fireEvent.mouseDown(document.body);
+  it('renders the shadcn primitives used by the assistant input', () => {
+    const { container } = render(<AIAssistantPanel />);
 
-    expect(screen.queryByRole('button', { name: /Add Image/i })).not.toBeInTheDocument();
-    expect(getDocumentMouseDownRegistrations()).toHaveLength(1);
-    expect(getDocumentMouseDownRemovals()).toHaveLength(1);
+    expect(screen.getByPlaceholderText(/Ask a question about your RTL code/i)).toHaveAttribute('data-slot', 'textarea');
+    expect(screen.getByLabelText('Token usage')).toHaveAttribute('data-slot', 'progress');
+    expect(screen.getByRole('button', { name: /Generate Testbench/i })).toHaveAttribute('data-slot', 'button');
+    expect(container.querySelectorAll('[data-slot="badge"]')).toHaveLength(2);
+    expect(screen.queryByText(/Enter to send/i)).not.toBeInTheDocument();
   });
 });

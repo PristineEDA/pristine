@@ -16,6 +16,7 @@ function ShortcutHarness({
 }) {
   const [showBottomPanel, setShowBottomPanel] = useState(false);
   const [showLeftPanel, setShowLeftPanel] = useState(false);
+  const [showRightPanel, setShowRightPanel] = useState(false);
 
   useGlobalAppShortcuts({
     canToggleLayoutPanels,
@@ -27,14 +28,17 @@ function ShortcutHarness({
     saveActiveFile: vi.fn(async () => true),
     setShowBottomPanel,
     setShowLeftPanel,
+    setShowRightPanel,
     showBottomPanel,
     showLeftPanel,
+    showRightPanel,
   });
 
   return (
     <div>
       <span data-testid="left-panel-state">{String(showLeftPanel)}</span>
       <span data-testid="bottom-panel-state">{String(showBottomPanel)}</span>
+      <span data-testid="right-panel-state">{String(showRightPanel)}</span>
     </div>
   );
 }
@@ -73,23 +77,28 @@ describe('useGlobalAppShortcuts', () => {
     expect(getDocumentKeydownRemovals()[0]).toEqual(['keydown', expect.any(Function)]);
   });
 
-  it('uses the latest panel visibility when Ctrl+B and Ctrl+J toggle panels', () => {
+  it('uses the latest panel visibility when Ctrl+B, Ctrl+J, and Ctrl+Alt+B toggle panels', () => {
     render(<ShortcutHarness />);
 
     expect(screen.getByTestId('left-panel-state')).toHaveTextContent('false');
     expect(screen.getByTestId('bottom-panel-state')).toHaveTextContent('false');
+    expect(screen.getByTestId('right-panel-state')).toHaveTextContent('false');
 
     fireEvent.keyDown(document, { key: 'b', ctrlKey: true });
     fireEvent.keyDown(document, { key: 'j', ctrlKey: true });
+    fireEvent.keyDown(document, { key: 'b', ctrlKey: true, altKey: true });
 
     expect(screen.getByTestId('left-panel-state')).toHaveTextContent('true');
     expect(screen.getByTestId('bottom-panel-state')).toHaveTextContent('true');
+    expect(screen.getByTestId('right-panel-state')).toHaveTextContent('true');
 
     fireEvent.keyDown(document, { key: 'b', ctrlKey: true });
     fireEvent.keyDown(document, { key: 'j', ctrlKey: true });
+    fireEvent.keyDown(document, { key: 'b', ctrlKey: true, altKey: true });
 
     expect(screen.getByTestId('left-panel-state')).toHaveTextContent('false');
     expect(screen.getByTestId('bottom-panel-state')).toHaveTextContent('false');
+    expect(screen.getByTestId('right-panel-state')).toHaveTextContent('false');
   });
 
   it('routes Ctrl+N and Ctrl+W to untitled creation and active-tab closing', () => {
