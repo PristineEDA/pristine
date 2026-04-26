@@ -10,7 +10,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 
-export type AssistantAgentMode = 'agent' | 'ask' | 'edit';
+export type AssistantAgentMode = 'agent' | 'ask' | 'plan';
 
 export interface AssistantQuickAction {
   label: string;
@@ -40,16 +40,16 @@ export const DEFAULT_MODEL = 'Claude Opus 4.6';
 export const DEFAULT_SIMULATED_RESPONSE = 'I understand your question. Based on the current RTL code context, I recommend checking the signal drive logic and timing constraints. Would you like me to generate a specific code example?';
 
 export const QUICK_ACTIONS: AssistantQuickAction[] = [
-  { label: 'Explain Code', icon: Lightbulb },
-  { label: 'Optimize Design', icon: Zap },
-  { label: 'Generate Testbench', icon: Code2 },
-  { label: 'Fix Bug', icon: Wrench },
+  { label: 'Explain', icon: Lightbulb },
+  { label: 'Optimize', icon: Zap },
+  { label: 'Test', icon: Code2 },
+  { label: 'Fix', icon: Wrench },
 ];
 
 export const AGENT_OPTIONS: AssistantAgentOption[] = [
-  { id: 'agent', label: 'Agent', desc: 'Autonomous multi-step tasks' },
-  { id: 'ask', label: 'Ask', desc: 'Ask questions about code' },
-  { id: 'edit', label: 'Edit', desc: 'Make targeted code edits' },
+  { id: 'agent', label: 'Agent', desc: 'autonomous multi-step tasks' },
+  { id: 'ask', label: 'Ask', desc: 'answer questions' },
+  { id: 'plan', label: 'Plan', desc: 'execuate multi-step plans' },
 ];
 
 export const MODEL_OPTIONS: AssistantModelOption[] = [
@@ -68,7 +68,7 @@ export const ATTACH_OPTIONS: AssistantAttachOption[] = [
 export const AGENT_COLORS: Record<AssistantAgentMode, string> = {
   agent: '#c586c0',
   ask: '#4ec9b0',
-  edit: '#dcdcaa',
+  plan: '#dcdcaa',
 };
 
 export function getTokenLimitForModel(selectedModel: string): number {

@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import { useInitialAIMessages } from '../../../data/mockDataLoader';
 import type { AIMessage } from '../../../data/mockData';
 import { DEFAULT_SIMULATED_RESPONSE } from './config';
 
@@ -16,19 +15,10 @@ function shouldIncludeCodeBlock(input: string) {
 }
 
 export function useAIConversation() {
-  const initialMessages = useInitialAIMessages();
   const [messages, setMessages] = useState<AIMessage[]>([]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const responseTimerRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    if (initialMessages.length === 0 || messages.length > 0) {
-      return;
-    }
-
-    setMessages(initialMessages);
-  }, [initialMessages, messages.length]);
 
   useEffect(() => () => {
     if (responseTimerRef.current !== null) {
@@ -76,7 +66,7 @@ export function useAIConversation() {
       responseTimerRef.current = null;
     }
 
-    setMessages(initialMessages);
+    setMessages([]);
     setInput('');
     setIsTyping(false);
   };

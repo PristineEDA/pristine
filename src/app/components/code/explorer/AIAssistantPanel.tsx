@@ -7,7 +7,6 @@ import {
   RefreshCw,
   ArrowUp,
   Plus,
-  Cpu,
   X,
 } from "lucide-react";
 import {
@@ -153,7 +152,6 @@ function ModelMenu({
     <DropdownMenu modal={false} open={open} onOpenChange={onOpenChange}>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="xs" className="h-7 min-w-0 px-2">
-          <Cpu className="size-3 text-primary" />
           <span className="max-w-[86px] truncate text-[10px] font-medium text-foreground">
             {selectedModel}
           </span>
@@ -282,8 +280,7 @@ export function AIAssistantPanel() {
       <div className="shrink-0 space-y-1.5 px-2 pb-2 pt-1.5">
         {/* Current task context chip */}
         <div className="flex flex-wrap items-center gap-1">
-          <ContextBadge fileName="uart_tx.v" description="CLINT pipeline" meta="1/9" />
-          <ContextBadge fileName="cpu_top.v" />
+          <ContextBadge fileName="uart_tx.v" description="uart_core" meta="240-349" />
         </div>
 
         {/* Main prompt card */}
@@ -304,100 +301,106 @@ export function AIAssistantPanel() {
                   resetTextareaHeight();
                 }
               }}
-              placeholder="Ask a question about your RTL code… (Shift+Enter for new line)"
-              className="min-h-[42px] max-h-[120px] resize-none rounded-b-none border-0 bg-transparent px-3 pb-1 pt-2.5 text-xs leading-relaxed shadow-none focus-visible:border-transparent focus-visible:ring-0 md:text-xs"
+              placeholder="describe your plans or tasks"
+              className="min-h-[52px] max-h-[120px] resize-none rounded-b-none border-0 bg-transparent px-3 pb-1 pt-2.5 text-xs leading-relaxed shadow-none focus-visible:border-transparent focus-visible:ring-0 md:text-xs"
               rows={1}
             />
 
             <Separator />
 
             {/* Bottom toolbar */}
-            <div className="flex min-w-0 items-center gap-1 px-2 py-1.5">
-              {/* Attach button + dropdown */}
-              <DropdownMenu
-                modal={false}
-                open={attachOpen}
-                onOpenChange={(open) => {
-                  setAttachOpen(open);
-                  if (open) closeSiblingMenus('attach');
-                }}
-              >
-                <DropdownMenuTrigger asChild>
-                  <Button aria-label="Add attachment" variant="ghost" size="icon-xs" className="text-muted-foreground">
-                    <Plus className="size-3.5" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent side="top" align="start" className="w-48">
-                  <DropdownMenuLabel className="text-xs text-muted-foreground">Add context</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  {ATTACH_OPTIONS.map(({ icon: Icon, label, desc }) => (
-                    <DropdownMenuItem
-                      key={label}
-                      className="items-start gap-2 py-2 text-xs"
-                      onSelect={() => setAttachOpen(false)}
-                    >
-                      <Icon className="mt-0.5 size-3.5 text-muted-foreground" />
-                      <div className="flex min-w-0 flex-col gap-0.5">
-                        <span className="font-medium text-foreground">{label}</span>
-                        <span className="text-[10px] leading-snug text-muted-foreground">{desc}</span>
-                      </div>
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-
-              {/* Agent mode dropdown */}
-              <AgentModeMenu
-                open={agentOpen}
-                selectedAgent={selectedAgent}
-                selectedAgentOption={selectedAgentOption}
-                onOpenChange={(open) => {
-                  setAgentOpen(open);
-                  if (open) closeSiblingMenus('agent');
-                }}
-                onSelectAgent={(agent) => {
-                  setSelectedAgent(agent);
-                  setAgentOpen(false);
-                }}
-              />
-
-              {/* Model dropdown */}
-              <ModelMenu
-                open={modelOpen}
-                selectedModel={selectedModel}
-                onOpenChange={(open) => {
-                  setModelOpen(open);
-                  if (open) closeSiblingMenus('model');
-                }}
-                onSelectModel={(model) => {
-                  setSelectedModel(model);
-                  setModelOpen(false);
-                }}
-              />
-
-              {/* Token usage */}
-              <TokenUsage
-                maxTokens={maxTokens}
-                maxLabel={maxLabel}
-                tokenLabel={tokenLabel}
-                tokenPct={tokenPct}
-                usedTokens={usedTokens}
-              />
-
-              {/* Send button */}
-              <TooltipIconButton content="Send (Enter)" wrapTrigger>
-                <Button
-                  aria-label="Send (Enter)"
-                  size="icon-xs"
-                  onClick={() => {
-                    sendMessage();
-                    resetTextareaHeight();
+            <div className="space-y-1 px-2 py-1.5">
+              <div className="flex min-w-0 items-center gap-1">
+                {/* Attach button + dropdown */}
+                <DropdownMenu
+                  modal={false}
+                  open={attachOpen}
+                  onOpenChange={(open) => {
+                    setAttachOpen(open);
+                    if (open) closeSiblingMenus('attach');
                   }}
-                  disabled={!input.trim()}
                 >
-                  <ArrowUp className="size-3.5" />
-                </Button>
-              </TooltipIconButton>
+                  <DropdownMenuTrigger asChild>
+                    <Button aria-label="Add attachment" variant="ghost" size="icon-xs" className="text-muted-foreground">
+                      <Plus className="size-3.5" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent side="top" align="start" className="w-48">
+                    <DropdownMenuLabel className="text-xs text-muted-foreground">Add context</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    {ATTACH_OPTIONS.map(({ icon: Icon, label, desc }) => (
+                      <DropdownMenuItem
+                        key={label}
+                        className="items-start gap-2 py-2 text-xs"
+                        onSelect={() => setAttachOpen(false)}
+                      >
+                        <Icon className="mt-0.5 size-3.5 text-muted-foreground" />
+                        <div className="flex min-w-0 flex-col gap-0.5">
+                          <span className="font-medium text-foreground">{label}</span>
+                          <span className="text-[10px] leading-snug text-muted-foreground">{desc}</span>
+                        </div>
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+
+                {/* Agent mode dropdown */}
+                <AgentModeMenu
+                  open={agentOpen}
+                  selectedAgent={selectedAgent}
+                  selectedAgentOption={selectedAgentOption}
+                  onOpenChange={(open) => {
+                    setAgentOpen(open);
+                    if (open) closeSiblingMenus('agent');
+                  }}
+                  onSelectAgent={(agent) => {
+                    setSelectedAgent(agent);
+                    setAgentOpen(false);
+                  }}
+                />
+
+                {/* Model dropdown */}
+                <ModelMenu
+                  open={modelOpen}
+                  selectedModel={selectedModel}
+                  onOpenChange={(open) => {
+                    setModelOpen(open);
+                    if (open) closeSiblingMenus('model');
+                  }}
+                  onSelectModel={(model) => {
+                    setSelectedModel(model);
+                    setModelOpen(false);
+                  }}
+                />
+
+                {/* Send button */}
+                <div className="ml-auto">
+                  <TooltipIconButton content="Send (Enter)" wrapTrigger>
+                    <Button
+                      aria-label="Send (Enter)"
+                      size="icon-xs"
+                      onClick={() => {
+                        sendMessage();
+                        resetTextareaHeight();
+                      }}
+                      disabled={!input.trim()}
+                    >
+                      <ArrowUp className="size-3.5" />
+                    </Button>
+                  </TooltipIconButton>
+                </div>
+              </div>
+
+              <div className="flex min-w-0 items-center">
+                {/* Token usage */}
+                <TokenUsage
+                  maxTokens={maxTokens}
+                  maxLabel={maxLabel}
+                  tokenLabel={tokenLabel}
+                  tokenPct={tokenPct}
+                  usedTokens={usedTokens}
+                />
+              </div>
             </div>
           </CardContent>
         </Card>
