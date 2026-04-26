@@ -35,6 +35,22 @@ function renderHorizontalGroup() {
   );
 }
 
+function renderHorizontalGroupWithPixelConstraints(groupWidth: number, defaultRightSize: number) {
+  render(
+    <div className="h-[400px]" style={{ width: `${groupWidth}px` }}>
+      <ResizablePanelGroup orientation="horizontal">
+        <ResizablePanel id="left" defaultSize={100 - defaultRightSize} minSize={10}>
+          <div>Left</div>
+        </ResizablePanel>
+        <ResizableHandle data-testid="horizontal-handle-fixed" />
+        <ResizablePanel id="right" defaultSize={defaultRightSize} minSizePx={320} maxSizePx={480}>
+          <div>Right</div>
+        </ResizablePanel>
+      </ResizablePanelGroup>
+    </div>
+  );
+}
+
 describe('resizable', () => {
   it('resizes adjacent horizontal panels when the handle is dragged', () => {
     renderHorizontalGroup();
@@ -81,5 +97,53 @@ describe('resizable', () => {
     expect(screen.getByTestId('panel-center').style.flexBasis).toBe('100%');
     expect(screen.queryByTestId('left-handle')).not.toBeInTheDocument();
     expect(screen.queryByTestId('right-handle')).not.toBeInTheDocument();
+  });
+
+  it('respects fixed pixel min and max sizes for horizontal panels at 1000px width', () => {
+    renderHorizontalGroupWithPixelConstraints(1000, 40);
+
+    const group = screen.getByText('Left').closest('[data-slot="resizable-panel-group"]') as HTMLElement;
+    mockGroupRect(group, 1000, 400);
+
+    const rightPanel = screen.getByTestId('panel-right');
+    const handle = screen.getByTestId('horizontal-handle-fixed');
+
+    expect(rightPanel.style.flexBasis).toBe('40%');
+
+    fireEvent.pointerDown(handle, { clientX: 600, clientY: 0, pointerId: 1 });
+    fireEvent.pointerMove(handle, { clientX: 900, clientY: 0, pointerId: 1 });
+    fireEvent.pointerUp(handle, { clientX: 900, clientY: 0, pointerId: 1 });
+
+    expect(rightPanel.style.flexBasis).toBe('32%');
+
+    fireEvent.pointerDown(handle, { clientX: 900, clientY: 0, pointerId: 2 });
+    fireEvent.pointerMove(handle, { clientX: 300, clientY: 0, pointerId: 2 });
+    fireEvent.pointerUp(handle, { clientX: 300, clientY: 0, pointerId: 2 });
+
+    expect(rightPanel.style.flexBasis).toBe('48%');
+  });
+
+  it('keeps the same fixed pixel constraints when the container width changes', () => {
+    renderHorizontalGroupWithPixelConstraints(1600, 25);
+
+    const group = screen.getByText('Left').closest('[data-slot="resizable-panel-group"]') as HTMLElement;
+    mockGroupRect(group, 1600, 400);
+
+    const rightPanel = screen.getByTestId('panel-right');
+    const handle = screen.getByTestId('horizontal-handle-fixed');
+
+    expect(rightPanel.style.flexBasis).toBe('25%');
+
+    fireEvent.pointerDown(handle, { clientX: 1200, clientY: 0, pointerId: 3 });
+    fireEvent.pointerMove(handle, { clientX: 1500, clientY: 0, pointerId: 3 });
+    fireEvent.pointerUp(handle, { clientX: 1500, clientY: 0, pointerId: 3 });
+
+    expect(rightPanel.style.flexBasis).toBe('20%');
+
+    fireEvent.pointerDown(handle, { clientX: 1500, clientY: 0, pointerId: 4 });
+    fireEvent.pointerMove(handle, { clientX: 900, clientY: 0, pointerId: 4 });
+    fireEvent.pointerUp(handle, { clientX: 900, clientY: 0, pointerId: 4 });
+
+    expect(rightPanel.style.flexBasis).toBe('30%');
   });
 });

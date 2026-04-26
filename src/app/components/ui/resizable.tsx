@@ -18,6 +18,8 @@ interface ResizablePanelProps extends React.HTMLAttributes<HTMLDivElement> {
   defaultSize?: number;
   minSize?: number;
   maxSize?: number;
+  minSizePx?: number;
+  maxSizePx?: number;
   id?: string;
   panelRef?: React.Ref<PanelImperativeHandle | null>;
   collapsed?: boolean;
@@ -57,6 +59,14 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
 
+function getPixelSizeAsPercentage(sizePx: number | undefined, containerSize: number) {
+  if (typeof sizePx !== 'number' || !Number.isFinite(sizePx) || containerSize <= 0) {
+    return undefined;
+  }
+
+  return clamp((sizePx / containerSize) * 100, 0, 100);
+}
+
 function getPanel(panels: PanelItem[], index: number) {
   const panel = panels[index];
   if (!panel) {
@@ -70,12 +80,18 @@ function getSize(sizes: number[], index: number) {
   return sizes[index] ?? 0;
 }
 
-function getPanelMinSize(panel: PanelItem) {
-  return panel.props.minSize ?? 0;
+function getPanelMinSize(panel: PanelItem, containerSize = 0) {
+  const minSize = panel.props.minSize ?? 0;
+  const minSizePx = getPixelSizeAsPercentage(panel.props.minSizePx, containerSize);
+
+  return minSizePx === undefined ? minSize : Math.max(minSize, minSizePx);
 }
 
-function getPanelMaxSize(panel: PanelItem) {
-  return panel.props.maxSize ?? 100;
+function getPanelMaxSize(panel: PanelItem, containerSize = 0) {
+  const maxSize = panel.props.maxSize ?? 100;
+  const maxSizePx = getPixelSizeAsPercentage(panel.props.maxSizePx, containerSize);
+
+  return maxSizePx === undefined ? maxSize : Math.min(maxSize, maxSizePx);
 }
 
 function distributeRemainingSpace(
@@ -83,16 +99,17 @@ function distributeRemainingSpace(
   previousSizes: number[],
   fixedIndex: number,
   fixedSize: number,
+  containerSize = 0,
 ) {
   if (panels.length === 1) {
     return [100];
   }
 
-  const next = panels.map((panel, index) => (index === fixedIndex ? fixedSize : getPanelMinSize(panel)));
+  const next = panels.map((panel, index) => (index === fixedIndex ? fixedSize : getPanelMinSize(panel, containerSize)));
   const otherIndices = panels.map((_, index) => index).filter((index) => index !== fixedIndex);
-  let remaining = 100 - fixedSize - otherIndices.reduce((sum, index) => sum + getPanelMinSize(getPanel(panels, index)), 0);
+  let remaining = 100 - fixedSize - otherIndices.reduce((sum, index) => sum + getPanelMinSize(getPanel(panels, index), containerSize), 0);
 
-  let adjustable = otherIndices.filter((index) => getSize(next, index) < getPanelMaxSize(getPanel(panels, index)));
+  let adjustable = otherIndices.filter((index) => getSize(next, index) < getPanelMaxSize(getPanel(panels, index), containerSize));
 
   while (remaining > 0.001 && adjustable.length > 0) {
     const weights = adjustable.map((index) => Math.max(getSize(previousSizes, index) - getPanelMinSize(getPanel(panels, index)), 0.01));
@@ -103,7 +120,7 @@ function distributeRemainingSpace(
       let consumed = 0;
 
       adjustable.forEach((index) => {
-        const available = getPanelMaxSize(getPanel(panels, index)) - getSize(next, index);
+        const available = getPanelMaxSize(getPanel(panels, index), containerSize) - getSize(next, index);
         const addition = Math.min(equalShare, available);
         next[index] = getSize(next, index) + addition;
         consumed += addition;
@@ -118,7 +135,7 @@ function distributeRemainingSpace(
       let consumed = 0;
 
       adjustable.forEach((index, weightIndex) => {
-        const available = getPanelMaxSize(getPanel(panels, index)) - getSize(next, index);
+        const available = getPanelMaxSize(getPanel(panels, index), containerSize) - getSize(next, index);
         const desired = remaining * ((weights[weightIndex] ?? 0) / totalWeight);
         const addition = Math.min(desired, available);
         next[index] = getSize(next, index) + addition;
@@ -132,7 +149,7 @@ function distributeRemainingSpace(
       remaining -= consumed;
     }
 
-    adjustable = adjustable.filter((index) => getSize(next, index) < getPanelMaxSize(getPanel(panels, index)) - 0.001);
+    adjustable = adjustable.filter((index) => getSize(next, index) < getPanelMaxSize(getPanel(panels, index), containerSize) - 0.001);
   }
 
   if (remaining > 0.001) {
@@ -207,20 +224,21 @@ function resizePanelByIndex(
   previousSizes: number[],
   panelIndex: number,
   requestedSize: number,
+  containerSize = 0,
 ) {
   const panel = getPanel(panels, panelIndex);
   const otherPanels = panels.filter((_, index) => index !== panelIndex);
   const minimumTarget = Math.max(
-    getPanelMinSize(panel),
-    100 - otherPanels.reduce((sum, otherPanel) => sum + getPanelMaxSize(otherPanel), 0),
+    getPanelMinSize(panel, containerSize),
+    100 - otherPanels.reduce((sum, otherPanel) => sum + getPanelMaxSize(otherPanel, containerSize), 0),
   );
   const maximumTarget = Math.min(
-    getPanelMaxSize(panel),
-    100 - otherPanels.reduce((sum, otherPanel) => sum + getPanelMinSize(otherPanel), 0),
+    getPanelMaxSize(panel, containerSize),
+    100 - otherPanels.reduce((sum, otherPanel) => sum + getPanelMinSize(otherPanel, containerSize), 0),
   );
   const nextSize = clamp(requestedSize, minimumTarget, maximumTarget);
 
-  return normalizeSizes(distributeRemainingSpace(panels, previousSizes, panelIndex, nextSize));
+  return normalizeSizes(distributeRemainingSpace(panels, previousSizes, panelIndex, nextSize, containerSize));
 }
 
 function adjustAdjacentSizes(
@@ -229,16 +247,17 @@ function adjustAdjacentSizes(
   leftIndex: number,
   rightIndex: number,
   deltaSize: number,
+  containerSize = 0,
 ) {
   const leftPanel = getPanel(panels, leftIndex);
   const rightPanel = getPanel(panels, rightIndex);
   const minDelta = Math.max(
-    getPanelMinSize(leftPanel) - getSize(previousSizes, leftIndex),
-    getSize(previousSizes, rightIndex) - getPanelMaxSize(rightPanel),
+    getPanelMinSize(leftPanel, containerSize) - getSize(previousSizes, leftIndex),
+    getSize(previousSizes, rightIndex) - getPanelMaxSize(rightPanel, containerSize),
   );
   const maxDelta = Math.min(
-    getPanelMaxSize(leftPanel) - getSize(previousSizes, leftIndex),
-    getSize(previousSizes, rightIndex) - getPanelMinSize(rightPanel),
+    getPanelMaxSize(leftPanel, containerSize) - getSize(previousSizes, leftIndex),
+    getSize(previousSizes, rightIndex) - getPanelMinSize(rightPanel, containerSize),
   );
   const clampedDelta = clamp(deltaSize, minDelta, maxDelta);
 
@@ -317,7 +336,10 @@ function ResizablePanelGroup({
             return;
           }
 
-          setSizes((currentSizes) => resizePanelByIndex(visiblePanels, currentSizes, index, nextRequestedSize));
+          const containerRect = containerRef.current?.getBoundingClientRect();
+          const containerSize = orientation === 'horizontal' ? containerRect?.width ?? 0 : containerRect?.height ?? 0;
+
+          setSizes((currentSizes) => resizePanelByIndex(visiblePanels, currentSizes, index, nextRequestedSize, containerSize));
         },
       });
     });
@@ -403,7 +425,7 @@ function ResizablePanelGroup({
           }
 
           const deltaSize = (deltaPixels / containerSize) * 100;
-          setSizes((currentSizes) => adjustAdjacentSizes(visiblePanels, currentSizes, leftIndex, rightIndex, deltaSize));
+          setSizes((currentSizes) => adjustAdjacentSizes(visiblePanels, currentSizes, leftIndex, rightIndex, deltaSize, containerSize));
         }}
       />,
     );

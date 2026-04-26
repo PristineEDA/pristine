@@ -108,7 +108,7 @@ function AgentModeMenu({
   return (
     <DropdownMenu modal={false} open={open} onOpenChange={onOpenChange}>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="xs" className="h-7 px-2 text-primary">
+        <Button variant="ghost" size="xs" className="h-7 cursor-pointer px-2 text-primary">
           <Bot className="size-3" />
           <span className="max-w-[52px] truncate text-[10px] font-medium">
             {selectedAgentOption?.label}
@@ -151,7 +151,7 @@ function ModelMenu({
   return (
     <DropdownMenu modal={false} open={open} onOpenChange={onOpenChange}>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="xs" className="h-7 min-w-0 px-2">
+        <Button variant="ghost" size="xs" className="h-7 min-w-0 cursor-pointer px-2">
           <span className="max-w-[86px] truncate text-[10px] font-medium text-foreground">
             {selectedModel}
           </span>
@@ -262,7 +262,7 @@ export function AIAssistantPanel() {
             key={label}
             variant="secondary"
             size="xs"
-            className="h-6 rounded-md px-2 text-[11px]"
+            className="h-6 cursor-pointer rounded-md px-2 text-[11px]"
             onClick={() => setInput(label)}
           >
             <Icon className="size-3" />
@@ -290,6 +290,7 @@ export function AIAssistantPanel() {
             <Textarea
               ref={textareaRef}
               value={input}
+              spellCheck={false}
               onChange={(e) => {
                 setInput(e.target.value);
                 autoResizeTextarea();
@@ -321,7 +322,7 @@ export function AIAssistantPanel() {
                   }}
                 >
                   <DropdownMenuTrigger asChild>
-                    <Button aria-label="Add attachment" variant="ghost" size="icon-xs" className="text-muted-foreground">
+                    <Button aria-label="Add attachment" variant="ghost" size="icon-xs" className="cursor-pointer text-muted-foreground">
                       <Plus className="size-3.5" />
                     </Button>
                   </DropdownMenuTrigger>
@@ -344,34 +345,36 @@ export function AIAssistantPanel() {
                   </DropdownMenuContent>
                 </DropdownMenu>
 
-                {/* Agent mode dropdown */}
-                <AgentModeMenu
-                  open={agentOpen}
-                  selectedAgent={selectedAgent}
-                  selectedAgentOption={selectedAgentOption}
-                  onOpenChange={(open) => {
-                    setAgentOpen(open);
-                    if (open) closeSiblingMenus('agent');
-                  }}
-                  onSelectAgent={(agent) => {
-                    setSelectedAgent(agent);
-                    setAgentOpen(false);
-                  }}
-                />
+                <div className="flex min-w-0 items-center gap-0.5">
+                  {/* Agent mode dropdown */}
+                  <AgentModeMenu
+                    open={agentOpen}
+                    selectedAgent={selectedAgent}
+                    selectedAgentOption={selectedAgentOption}
+                    onOpenChange={(open) => {
+                      setAgentOpen(open);
+                      if (open) closeSiblingMenus('agent');
+                    }}
+                    onSelectAgent={(agent) => {
+                      setSelectedAgent(agent);
+                      setAgentOpen(false);
+                    }}
+                  />
 
-                {/* Model dropdown */}
-                <ModelMenu
-                  open={modelOpen}
-                  selectedModel={selectedModel}
-                  onOpenChange={(open) => {
-                    setModelOpen(open);
-                    if (open) closeSiblingMenus('model');
-                  }}
-                  onSelectModel={(model) => {
-                    setSelectedModel(model);
-                    setModelOpen(false);
-                  }}
-                />
+                  {/* Model dropdown */}
+                  <ModelMenu
+                    open={modelOpen}
+                    selectedModel={selectedModel}
+                    onOpenChange={(open) => {
+                      setModelOpen(open);
+                      if (open) closeSiblingMenus('model');
+                    }}
+                    onSelectModel={(model) => {
+                      setSelectedModel(model);
+                      setModelOpen(false);
+                    }}
+                  />
+                </div>
 
                 {/* Send button */}
                 <div className="ml-auto">
@@ -379,6 +382,7 @@ export function AIAssistantPanel() {
                     <Button
                       aria-label="Send (Enter)"
                       size="icon-xs"
+                      className="cursor-pointer"
                       onClick={() => {
                         sendMessage();
                         resetTextareaHeight();

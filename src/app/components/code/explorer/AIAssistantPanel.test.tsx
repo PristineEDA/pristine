@@ -75,8 +75,17 @@ describe('AIAssistantPanel', () => {
     const { container } = render(<AIAssistantPanel />);
 
     expect(screen.getByPlaceholderText(/describe your plans or tasks/i)).toHaveAttribute('data-slot', 'textarea');
+    expect(screen.getByPlaceholderText(/describe your plans or tasks/i)).toHaveAttribute('spellcheck', 'false');
     expect(screen.getByLabelText('Token usage')).toHaveAttribute('data-slot', 'progress');
+    expect(screen.getByRole('button', { name: /Add attachment/i })).toHaveClass('cursor-pointer');
+    expect(screen.getByRole('button', { name: /Agent/i })).toHaveClass('cursor-pointer');
+    expect(screen.getByRole('button', { name: /Claude Opus 4\.6/i })).toHaveClass('cursor-pointer');
+    expect(screen.getByRole('button', { name: /Send \(Enter\)/i })).toHaveClass('cursor-pointer');
     expect(screen.getByRole('button', { name: /Explain/i })).toHaveAttribute('data-slot', 'button');
+    expect(screen.getByRole('button', { name: /Explain/i })).toHaveClass('cursor-pointer');
+    expect(screen.getByRole('button', { name: /Optimize/i })).toHaveClass('cursor-pointer');
+    expect(screen.getByRole('button', { name: /Test/i })).toHaveClass('cursor-pointer');
+    expect(screen.getByRole('button', { name: /Fix/i })).toHaveClass('cursor-pointer');
     expect(container.querySelectorAll('[data-slot="badge"]')).toHaveLength(1);
     expect(screen.queryByText(/Enter to send/i)).not.toBeInTheDocument();
   });
