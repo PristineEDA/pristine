@@ -20,7 +20,7 @@ describe('resolveWorkspaceFileIcon', () => {
     expect(resolveWorkspaceFileIcon('component.test.tsx').key).toBe('test-jsx');
     expect(resolveWorkspaceFileIcon('vite-env.d.ts').key).toBe('typescript-def');
     expect(resolveWorkspaceFileIcon('diagram.svg').key).toBe('svg');
-    expect(resolveWorkspaceFileIcon('timing.xdc').key).toBe('file');
+    expect(resolveWorkspaceFileIcon('unknown.txt').key).toBe('file');
   });
 
   it('distinguishes RTL language and header variants by extension', () => {
@@ -28,6 +28,42 @@ describe('resolveWorkspaceFileIcon', () => {
     expect(resolveWorkspaceFileIcon('rtl/include/cpu_defs.vh').key).toBe('verilog-header');
     expect(resolveWorkspaceFileIcon('rtl/bus/axi_if.sv').key).toBe('systemverilog');
     expect(resolveWorkspaceFileIcon('rtl/include/axi_pkg.svh').key).toBe('systemverilog-header');
+  });
+
+  it('resolves retroSoC EDA, constraint, documentation, and tool file types', () => {
+    const cases = [
+      ['Hazard3/doc/hazard3.adoc', 'asciidoc'],
+      ['Hazard3/doc/diagrams/debug_topology.drawio', 'drawio'],
+      ['Hazard3/example_soc/fpga/fpga_arty_a7.f', 'eda-filelist'],
+      ['rtl/filelist/pdk_sky130.fl', 'eda-filelist'],
+      ['syn/demo/synth_retrosoc.ys', 'yosys'],
+      ['Hazard3/test/sim/common/memmap.ld', 'linker-script'],
+      ['crt/lds/xip.lds', 'linker-script'],
+      ['sta/opensta/retrosoc.sdc', 'timing-constraint'],
+      ['Hazard3/example_soc/synth_vivado/constraints_io.xdc', 'fpga-constraint'],
+      ['Hazard3/example_soc/synth/fpga_icebreaker.pcf', 'fpga-constraint'],
+      ['Hazard3/example_soc/synth/fpga_ulx3s.lpf', 'fpga-constraint'],
+      ['syn/yosys/script/abc.constr', 'fpga-constraint'],
+      ['Hazard3/example_soc/arty7-openocd.cfg', 'eda-config'],
+      ['rtl/clusterip/archinfo/dv/smoke/xprop.config', 'eda-config'],
+      ['Hazard3/test/sim/sw_testcases/amo_smoke.gtkw', 'gtkwave'],
+      ['syn/yosys/script/filter_output.awk', 'awk'],
+      ['syn/yosys/script/abc-opt.script', 'tool-script'],
+      ['crt/ver.tmpl', 'template'],
+      ['rtl/clusterip/common/.verible-format', 'verible'],
+      ['rtl/clusterip/common/.verible-lint', 'verible'],
+      ['rtl/mini/lint.msg', 'log-message'],
+      ['Hazard3/test/sim/coremark/dist/barebones/core_portme.mak', 'makefile'],
+      ['rtl/mini/mpw/__pycache__/common.cpython-313.pyc', 'python'],
+      ['sdf-copy.svs2333', 'temp-file'],
+      ['helllo.bad', 'bad-file'],
+      ['Hazard3/test/sim/tb_cxxrtl/gdbinit', 'eda-config'],
+      ['Hazard3/test/sim/sw_testcases/runtests', 'tool-script'],
+    ] as const;
+
+    for (const [fileName, iconKey] of cases) {
+      expect(resolveWorkspaceFileIcon(fileName).key).toBe(iconKey);
+    }
   });
 });
 
