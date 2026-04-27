@@ -43,6 +43,24 @@ describe('FileIcon', () => {
     rerender(<FileIcon name="package.json" />);
     expect(container.querySelector('img[data-icon-key="nodejs"]')).toBeInTheDocument();
 
+    rerender(<FileIcon name="hazard3.adoc" />);
+    expect(container.querySelector('img[data-icon-key="asciidoc"]')).toBeInTheDocument();
+
+    rerender(<FileIcon name="soc.f" />);
+    expect(container.querySelector('img[data-icon-key="eda-filelist"]')).toBeInTheDocument();
+
+    rerender(<FileIcon name="retrosoc.sdc" />);
+    expect(container.querySelector('img[data-icon-key="timing-constraint"]')).toBeInTheDocument();
+
+    rerender(<FileIcon name="constraints_io.xdc" />);
+    expect(container.querySelector('img[data-icon-key="fpga-constraint"]')).toBeInTheDocument();
+
+    rerender(<FileIcon name="waves.gtkw" />);
+    expect(container.querySelector('img[data-icon-key="gtkwave"]')).toBeInTheDocument();
+
+    rerender(<FileIcon name="synth_retrosoc.ys" />);
+    expect(container.querySelector('img[data-icon-key="yosys"]')).toBeInTheDocument();
+
     rerender(<FileIcon name="unknown.txt" />);
     expect(container.querySelector('img[data-icon-key="file"]')).toBeInTheDocument();
   });

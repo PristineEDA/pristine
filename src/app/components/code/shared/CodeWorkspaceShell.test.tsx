@@ -1,7 +1,11 @@
 import { useState } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { CodeWorkspaceShell } from './CodeWorkspaceShell';
+import {
+  CodeWorkspaceShell,
+  EXPLORER_RIGHT_PANEL_MAX_WIDTH_PX,
+  EXPLORER_RIGHT_PANEL_MIN_WIDTH_PX,
+} from './CodeWorkspaceShell';
 
 const panelRecords: Array<{ id?: string; collapsed?: boolean }> = [];
 const handleRecords: Array<{ hidden?: boolean }> = [];
@@ -10,11 +14,16 @@ vi.mock('../../ui/resizable', () => ({
   ResizablePanelGroup: ({ children, orientation }: { children: React.ReactNode; orientation: string }) => (
     <div data-testid={`panel-group-${orientation}`}>{children}</div>
   ),
-  ResizablePanel: ({ children, id, collapsed }: { children: React.ReactNode; id?: string; collapsed?: boolean }) => {
+  ResizablePanel: ({ children, id, collapsed, minSizePx, maxSizePx }: { children: React.ReactNode; id?: string; collapsed?: boolean; minSizePx?: number; maxSizePx?: number }) => {
     panelRecords.push({ id, collapsed });
 
     return (
-      <div data-testid={`panel-${id ?? 'unknown'}`} data-collapsed={collapsed ? 'true' : 'false'}>
+      <div
+        data-testid={`panel-${id ?? 'unknown'}`}
+        data-collapsed={collapsed ? 'true' : 'false'}
+        data-min-size-px={minSizePx ?? ''}
+        data-max-size-px={maxSizePx ?? ''}
+      >
         {children}
       </div>
     );
@@ -57,6 +66,8 @@ describe('CodeWorkspaceShell', () => {
     expect(screen.getByText('Editor')).toBeInTheDocument();
     expect(screen.getByText('Terminal')).toBeInTheDocument();
     expect(screen.getByText('Inspector')).toBeInTheDocument();
+    expect(screen.getByTestId('panel-right')).toHaveAttribute('data-min-size-px', String(EXPLORER_RIGHT_PANEL_MIN_WIDTH_PX));
+    expect(screen.getByTestId('panel-right')).toHaveAttribute('data-max-size-px', String(EXPLORER_RIGHT_PANEL_MAX_WIDTH_PX));
     expect(panelRecords).toEqual([
       { id: 'left', collapsed: false },
       { id: 'center', collapsed: undefined },

@@ -16,6 +16,22 @@ import verilogIcon from './icons/verilog.svg';
 import verilogHeaderIcon from './icons/verilog-header.svg';
 import systemverilogIcon from './icons/systemverilog.svg';
 import systemverilogHeaderIcon from './icons/systemverilog-header.svg';
+import asciidocIcon from './icons/asciidoc.svg';
+import awkIcon from './icons/awk.svg';
+import badFileIcon from './icons/bad-file.svg';
+import drawioIcon from './icons/drawio.svg';
+import edaConfigIcon from './icons/eda-config.svg';
+import edaFilelistIcon from './icons/eda-filelist.svg';
+import fpgaConstraintIcon from './icons/fpga-constraint.svg';
+import gtkwaveIcon from './icons/gtkwave.svg';
+import linkerScriptIcon from './icons/linker-script.svg';
+import logMessageIcon from './icons/log-message.svg';
+import tempFileIcon from './icons/temp-file.svg';
+import templateIcon from './icons/template.svg';
+import timingConstraintIcon from './icons/timing-constraint.svg';
+import toolScriptIcon from './icons/tool-script.svg';
+import veribleIcon from './icons/verible.svg';
+import yosysIcon from './icons/yosys.svg';
 import cIcon from 'material-icon-theme/icons/c.svg';
 import cppIcon from 'material-icon-theme/icons/cpp.svg';
 import hIcon from 'material-icon-theme/icons/h.svg';
@@ -107,6 +123,24 @@ type RtlWorkspaceFileIconKey =
   | 'verilog'
   | 'verilog-header';
 
+type RetroSocWorkspaceFileIconKey =
+  | 'asciidoc'
+  | 'awk'
+  | 'bad-file'
+  | 'drawio'
+  | 'eda-config'
+  | 'eda-filelist'
+  | 'fpga-constraint'
+  | 'gtkwave'
+  | 'linker-script'
+  | 'log-message'
+  | 'temp-file'
+  | 'template'
+  | 'timing-constraint'
+  | 'tool-script'
+  | 'verible'
+  | 'yosys';
+
 type WorkspaceFileIconKey =
   | 'assembly'
   | 'c'
@@ -145,6 +179,7 @@ type WorkspaceFileIconKey =
   | 'typescript'
   | 'typescript-def'
   | RtlWorkspaceFileIconKey
+  | RetroSocWorkspaceFileIconKey
   | 'vite'
   | 'vitest'
   | 'wrangler'
@@ -228,6 +263,25 @@ const RTL_FILE_ICON_SOURCES: Record<RtlWorkspaceFileIconKey, string> = {
   'verilog-header': verilogHeaderIcon,
 };
 
+const RETROSOC_FILE_ICON_SOURCES: Record<RetroSocWorkspaceFileIconKey, string> = {
+  asciidoc: asciidocIcon,
+  awk: awkIcon,
+  'bad-file': badFileIcon,
+  drawio: drawioIcon,
+  'eda-config': edaConfigIcon,
+  'eda-filelist': edaFilelistIcon,
+  'fpga-constraint': fpgaConstraintIcon,
+  gtkwave: gtkwaveIcon,
+  'linker-script': linkerScriptIcon,
+  'log-message': logMessageIcon,
+  'temp-file': tempFileIcon,
+  template: templateIcon,
+  'timing-constraint': timingConstraintIcon,
+  'tool-script': toolScriptIcon,
+  verible: veribleIcon,
+  yosys: yosysIcon,
+};
+
 const FILE_ICON_SOURCES: Record<WorkspaceFileIconKey, string> = {
   assembly: assemblyIcon,
   c: cIcon,
@@ -271,6 +325,7 @@ const FILE_ICON_SOURCES: Record<WorkspaceFileIconKey, string> = {
   xml: xmlIcon,
   yaml: yamlIcon,
   ...RTL_FILE_ICON_SOURCES,
+  ...RETROSOC_FILE_ICON_SOURCES,
 };
 
 const RTL_FILE_EXTENSION_ICON_KEYS: Record<string, RtlWorkspaceFileIconKey> = {
@@ -278,6 +333,42 @@ const RTL_FILE_EXTENSION_ICON_KEYS: Record<string, RtlWorkspaceFileIconKey> = {
   'svh': 'systemverilog-header',
   'v': 'verilog',
   'vh': 'verilog-header',
+};
+
+const RETROSOC_FILE_NAME_ICON_KEYS: Record<string, WorkspaceFileIconKey> = {
+  'cleantests': 'tool-script',
+  'disable_timing_checklist': 'eda-config',
+  'gdbinit': 'eda-config',
+  'runtests': 'tool-script',
+  'xprop_config': 'eda-config',
+};
+
+const RETROSOC_FILE_EXTENSION_ICON_KEYS: Record<string, WorkspaceFileIconKey> = {
+  'adoc': 'asciidoc',
+  'awk': 'awk',
+  'bad': 'bad-file',
+  'cfg': 'eda-config',
+  'config': 'eda-config',
+  'constr': 'fpga-constraint',
+  'drawio': 'drawio',
+  'f': 'eda-filelist',
+  'fl': 'eda-filelist',
+  'gtkw': 'gtkwave',
+  'ld': 'linker-script',
+  'lds': 'linker-script',
+  'lpf': 'fpga-constraint',
+  'mak': 'makefile',
+  'msg': 'log-message',
+  'pcf': 'fpga-constraint',
+  'pyc': 'python',
+  'script': 'tool-script',
+  'sdc': 'timing-constraint',
+  'svs2333': 'temp-file',
+  'tmpl': 'template',
+  'verible-format': 'verible',
+  'verible-lint': 'verible',
+  'xdc': 'fpga-constraint',
+  'ys': 'yosys',
 };
 
 const FOLDER_ICON_SOURCES: Record<WorkspaceFolderIconKey, string> = {
@@ -366,6 +457,7 @@ const FILE_NAME_ICON_KEYS: Record<string, WorkspaceFileIconKey> = {
   'wrangler.json': 'wrangler',
   'wrangler.jsonc': 'wrangler',
   'wrangler.toml': 'wrangler',
+  ...RETROSOC_FILE_NAME_ICON_KEYS,
 };
 
 const FILE_NAME_PATTERNS: Array<[RegExp, WorkspaceFileIconKey]> = [
@@ -434,6 +526,7 @@ const FILE_EXTENSION_ICON_KEYS: Record<string, WorkspaceFileIconKey> = {
   'yml': 'yaml',
   'zsh': 'console',
   ...RTL_FILE_EXTENSION_ICON_KEYS,
+  ...RETROSOC_FILE_EXTENSION_ICON_KEYS,
 };
 
 const EXACT_FOLDER_ICON_KEYS: Record<string, WorkspaceFolderIconConfig> = {

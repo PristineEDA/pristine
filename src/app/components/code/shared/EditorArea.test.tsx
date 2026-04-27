@@ -316,6 +316,10 @@ describe('EditorArea', () => {
           { id: 'rtl/include/cpu_defs.vh', name: 'cpu_defs.vh' },
           { id: 'rtl/bus/axi_if.sv', name: 'axi_if.sv' },
           { id: 'rtl/include/axi_pkg.svh', name: 'axi_pkg.svh' },
+          { id: 'rtl/filelist/top.fl', name: 'top.fl' },
+          { id: 'sta/opensta/retrosoc.sdc', name: 'retrosoc.sdc' },
+          { id: 'syn/demo/synth_retrosoc.ys', name: 'synth_retrosoc.ys' },
+          { id: 'Hazard3/doc/hazard3.adoc', name: 'hazard3.adoc' },
         ]}
         activeTabId="scripts/build.tcl"
         onTabChange={vi.fn()}
@@ -330,6 +334,10 @@ describe('EditorArea', () => {
     expect(screen.getByTestId('editor-tab-badge-rtl/include/cpu_defs.vh')).toHaveAttribute('data-icon-key', 'verilog-header');
     expect(screen.getByTestId('editor-tab-badge-rtl/bus/axi_if.sv')).toHaveAttribute('data-icon-key', 'systemverilog');
     expect(screen.getByTestId('editor-tab-badge-rtl/include/axi_pkg.svh')).toHaveAttribute('data-icon-key', 'systemverilog-header');
+    expect(screen.getByTestId('editor-tab-badge-rtl/filelist/top.fl')).toHaveAttribute('data-icon-key', 'eda-filelist');
+    expect(screen.getByTestId('editor-tab-badge-sta/opensta/retrosoc.sdc')).toHaveAttribute('data-icon-key', 'timing-constraint');
+    expect(screen.getByTestId('editor-tab-badge-syn/demo/synth_retrosoc.ys')).toHaveAttribute('data-icon-key', 'yosys');
+    expect(screen.getByTestId('editor-tab-badge-Hazard3/doc/hazard3.adoc')).toHaveAttribute('data-icon-key', 'asciidoc');
   });
 
   it('routes assembly files to the assembly language and registers assembly highlighting', async () => {
