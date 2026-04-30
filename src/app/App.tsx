@@ -11,7 +11,13 @@ import { CodeWorkspaceShell, EXPLORER_LEFT_PANEL_DEFAULT_WIDTH_PX } from './comp
 import { AppStatusBar } from './components/code/shared/statusBars/AppStatusBar';
 import { QuickOpenPalette } from './components/code/shared/QuickOpenPalette';
 import { isMonacoTextInputFocused } from './editor/focusEditor';
-import { WorkspaceProvider, useWorkspace } from './context/WorkspaceContext';
+import {
+  WorkspaceProvider,
+  useWorkspaceDialogs,
+  useWorkspaceEditor,
+  useWorkspaceFiles,
+  useWorkspaceView,
+} from './context/WorkspaceContext';
 import { SidebarProvider } from './components/ui/sidebar';
 import { refreshWorkspaceGitStatus } from './git/workspaceGitStatus';
 import { useGlobalAppShortcuts } from './useGlobalAppShortcuts';
@@ -53,37 +59,41 @@ function AppLayout() {
   const {
     activeView, setActiveView,
     canToggleLayoutPanels,
-    closeActiveTabInFocusedGroup,
     mainContentView,
+    showLeftPanel, setShowLeftPanel,
+    showBottomPanel, setShowBottomPanel,
+    showRightPanel, setShowRightPanel,
+    workspaceTreeRefreshToken,
+  } = useWorkspaceView();
+  const {
     activeTabId,
+    captureEditorSelectionSnapshot,
+    closeActiveTabInFocusedGroup,
+    cursorLine, cursorCol,
+    focusActiveEditor,
+    jumpToLine, jumpTo,
+    openFile,
+    openPreviewFile,
+    openUntitledFile,
+    restoreEditorSelection,
+  } = useWorkspaceEditor();
+  const {
     clearWorkspaceClipboard,
     copyWorkspaceEntry,
     createWorkspaceFile,
     createWorkspaceFolder,
     cutWorkspaceEntry,
     deleteWorkspaceEntry,
-    openUntitledFile,
-    openFile,
-    openPreviewFile,
     pasteWorkspaceEntry,
     renameWorkspaceEntry,
-    jumpToLine, jumpTo,
-    showLeftPanel, setShowLeftPanel,
-    showBottomPanel, setShowBottomPanel,
-    showRightPanel, setShowRightPanel,
-    captureEditorSelectionSnapshot,
-    cursorLine, cursorCol,
     dirtyFileIds,
-    focusActiveEditor,
-    openUnsavedChangesDialog,
-    restoreEditorSelection,
     saveActiveFile,
     saveAllFiles,
     saveErrors,
     savingFiles,
     workspaceClipboard,
-    workspaceTreeRefreshToken,
-  } = useWorkspace();
+  } = useWorkspaceFiles();
+  const { openUnsavedChangesDialog } = useWorkspaceDialogs();
   const [explorerLeftPanelWidthPx, setExplorerLeftPanelWidthPx] = useState(EXPLORER_LEFT_PANEL_DEFAULT_WIDTH_PX);
 
   const handleActivityItemSelect = (nextView: string) => {
