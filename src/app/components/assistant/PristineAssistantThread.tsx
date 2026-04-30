@@ -45,6 +45,8 @@ import {
 } from '@/app/components/assistant-ui/quote';
 import { Reasoning } from '@/app/components/assistant-ui/reasoning';
 import { Sources } from '@/app/components/assistant-ui/sources';
+import { ToolFallback } from '@/app/components/assistant-ui/tool-fallback';
+import { ToolGroup } from '@/app/components/assistant-ui/tool-group';
 import { Button } from '../ui/button';
 import { TooltipIconButton } from "@/app/components/assistant-ui/tooltip-icon-button";
 import {
@@ -351,6 +353,8 @@ function AssistantMessage() {
                 ReasoningGroup: PristineReasoningGroup,
                 Source: PristineMessageSource,
                 Text: MarkdownText,
+                ToolGroup,
+                tools: { Fallback: ToolFallback },
               }}
             />
           </div>

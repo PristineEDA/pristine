@@ -34,6 +34,10 @@ type MessagePartComponents = {
   ReasoningGroup?: { displayName?: string; name?: string };
   Source?: { displayName?: string; name?: string };
   Text?: unknown;
+  ToolGroup?: { displayName?: string; name?: string };
+  tools?: {
+    Fallback?: { displayName?: string; name?: string };
+  };
 };
 
 function getComponentName(component: unknown) {
@@ -91,10 +95,14 @@ vi.mock('@assistant-ui/react', () => {
           data-has-reasoning-group-component={String(Boolean(components?.ReasoningGroup))}
           data-has-source-component={String(Boolean(components?.Source))}
           data-has-text-component={String(Boolean(components?.Text))}
+          data-has-tool-fallback-component={String(Boolean(components?.tools?.Fallback))}
+          data-has-tool-group-component={String(Boolean(components?.ToolGroup))}
           data-image-component={getComponentName(components?.Image)}
           data-reasoning-component={getComponentName(components?.Reasoning)}
           data-reasoning-group-component={getComponentName(components?.ReasoningGroup)}
           data-source-component={getComponentName(components?.Source)}
+          data-tool-fallback-component={getComponentName(components?.tools?.Fallback)}
+          data-tool-group-component={getComponentName(components?.ToolGroup)}
         />
       ),
       Quote: ({ children }: { children: (quote: { text: string; messageId: string }) => ReactNode }) => (
@@ -264,11 +272,17 @@ describe('PristineAssistantThread', () => {
     expect(messageParts[0]).toHaveAttribute('data-has-reasoning-component', 'false');
     expect(messageParts[0]).toHaveAttribute('data-has-reasoning-group-component', 'false');
     expect(messageParts[0]).toHaveAttribute('data-has-source-component', 'false');
+    expect(messageParts[0]).toHaveAttribute('data-has-tool-fallback-component', 'false');
+    expect(messageParts[0]).toHaveAttribute('data-has-tool-group-component', 'false');
     expect(messageParts[1]).toHaveAttribute('data-has-reasoning-component', 'true');
     expect(messageParts[1]).toHaveAttribute('data-reasoning-component', 'Reasoning');
     expect(messageParts[1]).toHaveAttribute('data-has-reasoning-group-component', 'true');
     expect(messageParts[1]).toHaveAttribute('data-reasoning-group-component', 'PristineReasoningGroup');
     expect(messageParts[1]).toHaveAttribute('data-has-source-component', 'true');
     expect(messageParts[1]).toHaveAttribute('data-source-component', 'PristineMessageSource');
+    expect(messageParts[1]).toHaveAttribute('data-has-tool-fallback-component', 'true');
+    expect(messageParts[1]).toHaveAttribute('data-tool-fallback-component', 'ToolFallback');
+    expect(messageParts[1]).toHaveAttribute('data-has-tool-group-component', 'true');
+    expect(messageParts[1]).toHaveAttribute('data-tool-group-component', 'ToolGroup');
   });
 });
