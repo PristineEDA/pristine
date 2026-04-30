@@ -7,6 +7,10 @@ import {
   mockPristineContextUsage,
 } from './pristineAssistantContext';
 import {
+  PRISTINE_DEFAULT_MODEL_ID,
+  mockPristineModelOptions,
+} from './pristineAssistantModels';
+import {
   mockPristineMentionCategories,
   mockPristineSlashCommands,
 } from './pristineAssistantTriggers';
@@ -16,6 +20,8 @@ const mocks = vi.hoisted(() => ({
   composerTriggerPopover: vi.fn(),
   contextDisplayBar: vi.fn(),
   makeAssistantToolUI: vi.fn(),
+  modelSelector: vi.fn(),
+  quoteBlock: vi.fn(),
   useAssistantInstructions: vi.fn(),
   useMentionAdapter: vi.fn(),
   useSlashCommandAdapter: vi.fn(),
@@ -82,6 +88,11 @@ vi.mock('@assistant-ui/react', () => {
           data-image-component={getComponentName(components?.Image)}
         />
       ),
+      Quote: ({ children }: { children: (quote: { text: string; messageId: string }) => ReactNode }) => (
+        <div data-testid="message-quote">
+          {children({ text: 'Selected RTL timing context', messageId: 'assistant-message-1' })}
+        </div>
+      ),
       Root,
     },
     ThreadPrimitive: {
@@ -137,8 +148,37 @@ vi.mock('@/app/components/assistant-ui/context-display', () => ({
   },
 }));
 
+vi.mock('@/app/components/assistant-ui/model-selector', () => ({
+  ModelSelector: (props: {
+    defaultValue?: string;
+    models: unknown[];
+    size?: string;
+    variant?: string;
+  }) => {
+    mocks.modelSelector(props);
+    return (
+      <div
+        data-testid="model-selector"
+        data-default-value={props.defaultValue}
+        data-model-count={props.models.length}
+        data-size={props.size}
+        data-variant={props.variant}
+      />
+    );
+  },
+}));
+
 vi.mock('@/app/components/assistant-ui/markdown-text', () => ({
   MarkdownText: () => <span>markdown text</span>,
+}));
+
+vi.mock('@/app/components/assistant-ui/quote', () => ({
+  ComposerQuotePreview: () => <div data-testid="composer-quote-preview" />,
+  QuoteBlock: (props: { messageId: string; text: string }) => {
+    mocks.quoteBlock(props);
+    return <div data-testid="quote-block">{props.text}</div>;
+  },
+  SelectionToolbar: () => <div data-testid="selection-toolbar" />,
 }));
 
 vi.mock('@/app/components/assistant-ui/tooltip-icon-button', () => ({
@@ -152,6 +192,8 @@ describe('PristineAssistantThread', () => {
     mocks.composerTriggerPopover.mockClear();
     mocks.contextDisplayBar.mockClear();
     mocks.makeAssistantToolUI.mockClear();
+    mocks.modelSelector.mockClear();
+    mocks.quoteBlock.mockClear();
     mocks.useAssistantInstructions.mockClear();
     mocks.useMentionAdapter.mockClear();
     mocks.useSlashCommandAdapter.mockClear();
@@ -186,6 +228,17 @@ describe('PristineAssistantThread', () => {
     expect(screen.getByTestId('trigger-popover-/')).toHaveAttribute('data-behavior', 'action');
     expect(screen.getByTestId('thread-messages')).toHaveAttribute('data-has-user', 'true');
     expect(screen.getByTestId('thread-messages')).toHaveAttribute('data-has-assistant', 'true');
+    expect(screen.getByTestId('model-selector')).toHaveAttribute('data-size', 'sm');
+    expect(screen.getByTestId('model-selector')).toHaveAttribute('data-variant', 'ghost');
+    expect(screen.getByTestId('model-selector')).toHaveAttribute('data-default-value', PRISTINE_DEFAULT_MODEL_ID);
+    expect(screen.getByTestId('model-selector')).toHaveAttribute('data-model-count', String(mockPristineModelOptions.length));
+    expect(screen.getByTestId('composer-quote-preview')).toBeInTheDocument();
+    expect(screen.getByTestId('selection-toolbar')).toBeInTheDocument();
+    expect(screen.getByTestId('quote-block')).toHaveTextContent('Selected RTL timing context');
+    expect(mocks.quoteBlock).toHaveBeenCalledWith({
+      messageId: 'assistant-message-1',
+      text: 'Selected RTL timing context',
+    });
 
     const messageParts = screen.getAllByTestId('message-parts');
     expect(messageParts).toHaveLength(2);

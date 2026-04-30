@@ -34,12 +34,22 @@ import { DirectiveText } from '@/app/components/assistant-ui/directive-text';
 import { File } from '@/app/components/assistant-ui/file';
 import { Image } from '@/app/components/assistant-ui/image';
 import { MarkdownText } from '@/app/components/assistant-ui/markdown-text';
+import { ModelSelector } from '@/app/components/assistant-ui/model-selector';
+import {
+  ComposerQuotePreview,
+  QuoteBlock,
+  SelectionToolbar,
+} from '@/app/components/assistant-ui/quote';
 import { Button } from '../ui/button';
 import { TooltipIconButton } from "@/app/components/assistant-ui/tooltip-icon-button";
 import {
   PRISTINE_CONTEXT_WINDOW,
   mockPristineContextUsage,
 } from './pristineAssistantContext';
+import {
+  PRISTINE_DEFAULT_MODEL_ID,
+  mockPristineModelOptions,
+} from './pristineAssistantModels';
 import {
   mockPristineMentionCategories,
   mockPristineSlashCommands,
@@ -245,6 +255,9 @@ function UserMessage() {
       <div className="flex max-w-[88%] flex-col items-end gap-2">
         <UserMessageAttachments />
         <div className={cn(messageSurfaceClassName, 'border-primary/20 bg-primary text-[12px] leading-relaxed text-primary-foreground')}>
+          <MessagePrimitive.Quote>
+            {(quote) => <QuoteBlock {...quote} />}
+          </MessagePrimitive.Quote>
           <MessagePrimitive.Parts components={{ File, Image: PristineMessageImage, Text: DirectiveText }} />
         </div>
       </div>
@@ -311,6 +324,7 @@ function Composer() {
     <ComposerPrimitive.Unstable_TriggerPopoverRoot>
       <ComposerPrimitive.Root className="relative rounded-md border border-border bg-background [--composer-padding:0.25rem] [--composer-radius:0.375rem] focus-within:border-ring focus-within:ring-[1px] focus-within:ring-ring/40">
         <ComposerPrimitive.AttachmentDropzone className="flex min-h-16 w-full flex-col rounded-md outline-none transition-colors data-[dragging=true]:bg-accent/30">
+          <ComposerQuotePreview />
           <ComposerAttachments />
           <ComposerPrimitive.Input
             autoFocus
@@ -320,12 +334,21 @@ function Composer() {
             aria-label="Message input"
           />
           <div className="flex min-h-8 items-center justify-between gap-2 border-t border-border/60 px-2 py-1">
-            <ContextDisplay.Bar
-              modelContextWindow={PRISTINE_CONTEXT_WINDOW}
-              usage={mockPristineContextUsage}
-              side="top"
-              className="h-6 rounded-md border border-border bg-muted/30 text-[10px] hover:bg-accent hover:text-accent-foreground"
-            />
+            <div className="flex min-w-0 items-center gap-1">
+              <ModelSelector
+                models={mockPristineModelOptions}
+                defaultValue={PRISTINE_DEFAULT_MODEL_ID}
+                variant="ghost"
+                size="sm"
+                contentClassName="min-w-52"
+              />
+              <ContextDisplay.Bar
+                modelContextWindow={PRISTINE_CONTEXT_WINDOW}
+                usage={mockPristineContextUsage}
+                side="top"
+                className="h-6 rounded-md border border-border bg-muted/30 text-[10px] hover:bg-accent hover:text-accent-foreground"
+              />
+            </div>
             <div className="flex items-center gap-1">
               <ComposerAddAttachment />
               <AuiIf condition={(s) => !s.thread.isRunning}>
@@ -393,6 +416,7 @@ export function PristineAssistantThread({ className }: PristineAssistantThreadPr
           }}
         />
       </ThreadPrimitive.Viewport>
+      <SelectionToolbar />
       <ThreadScrollToBottom />
       <div className="shrink-0 bg-background p-2">
         <Composer />
