@@ -414,11 +414,11 @@ function Composer() {
                 size="sm"
                 contentClassName="min-w-52"
               />
-              <ContextDisplay.Bar
+              <ContextDisplay.Ring
                 modelContextWindow={PRISTINE_CONTEXT_WINDOW}
                 usage={mockPristineContextUsage}
                 side="top"
-                className="h-6 rounded-md border border-border bg-muted/30 text-[10px] hover:bg-accent hover:text-accent-foreground"
+                className="size-6 rounded-md border border-border bg-muted/30 hover:bg-accent hover:text-accent-foreground"
               />
             </div>
             <div className="flex items-center gap-1">

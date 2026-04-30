@@ -18,7 +18,7 @@ import { PristineAssistantThread } from './PristineAssistantThread';
 
 const mocks = vi.hoisted(() => ({
   composerTriggerPopover: vi.fn(),
-  contextDisplayBar: vi.fn(),
+  contextDisplayRing: vi.fn(),
   makeAssistantToolUI: vi.fn(),
   modelSelector: vi.fn(),
   quoteBlock: vi.fn(),
@@ -160,9 +160,9 @@ vi.mock('@/app/components/assistant-ui/composer-trigger-popover', () => ({
 
 vi.mock('@/app/components/assistant-ui/context-display', () => ({
   ContextDisplay: {
-    Bar: (props: unknown) => {
-      mocks.contextDisplayBar(props);
-      return <div data-testid="context-display-bar" />;
+    Ring: (props: unknown) => {
+      mocks.contextDisplayRing(props);
+      return <div data-testid="context-display-ring" />;
     },
   },
 }));
@@ -209,7 +209,7 @@ vi.mock('@/app/components/assistant-ui/tooltip-icon-button', () => ({
 describe('PristineAssistantThread', () => {
   beforeEach(() => {
     mocks.composerTriggerPopover.mockClear();
-    mocks.contextDisplayBar.mockClear();
+    mocks.contextDisplayRing.mockClear();
     mocks.makeAssistantToolUI.mockClear();
     mocks.modelSelector.mockClear();
     mocks.quoteBlock.mockClear();
@@ -235,8 +235,8 @@ describe('PristineAssistantThread', () => {
     });
 
     expect(screen.getByPlaceholderText('Type @ for context, / for commands...')).toBeInTheDocument();
-    expect(screen.getByTestId('context-display-bar')).toBeInTheDocument();
-    expect(mocks.contextDisplayBar).toHaveBeenCalledWith(
+    expect(screen.getByTestId('context-display-ring')).toBeInTheDocument();
+    expect(mocks.contextDisplayRing).toHaveBeenCalledWith(
       expect.objectContaining({
         modelContextWindow: PRISTINE_CONTEXT_WINDOW,
         usage: mockPristineContextUsage,
