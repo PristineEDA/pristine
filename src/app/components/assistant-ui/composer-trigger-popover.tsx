@@ -1,12 +1,11 @@
 "use client";
 
 import { memo, useRef, type ComponentPropsWithoutRef, type FC } from "react";
-import { ComposerPrimitive } from "@assistant-ui/react";
 import type {
-  Unstable_DirectiveFormatter,
-  Unstable_TriggerItem,
-} from "@assistant-ui/core";
-import { unstable_defaultDirectiveFormatter } from "@assistant-ui/core";
+  Unstable_MentionDirective,
+  Unstable_SlashCommandAction,
+} from "@assistant-ui/react";
+import { ComposerPrimitive } from "@assistant-ui/react";
 import { ChevronLeftIcon, ChevronRightIcon, SparklesIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -14,18 +13,14 @@ type IconComponent = FC<{ className?: string }>;
 
 type DirectiveBehaviorProps = {
   /** Formatter used to serialize the selected item into composer text. */
-  formatter?: Unstable_DirectiveFormatter | undefined;
+  formatter: Unstable_MentionDirective["formatter"];
   /** Called after the directive text has been inserted into the composer. */
-  onInserted?: ((item: Unstable_TriggerItem) => void) | undefined;
+  onInserted?: Unstable_MentionDirective["onInserted"];
 };
 
-type ActionBehaviorProps = {
+type ActionBehaviorProps = Unstable_SlashCommandAction & {
   /** Formatter used to serialize the audit-trail chip (when `removeOnExecute` is false). */
-  formatter?: Unstable_DirectiveFormatter | undefined;
-  /** Invoked with the selected item at the moment of selection. */
-  onExecute: (item: Unstable_TriggerItem) => void;
-  /** If `true`, strip the trigger text from the composer after executing. @default false */
-  removeOnExecute?: boolean | undefined;
+  formatter?: Unstable_MentionDirective["formatter"];
 };
 
 type ComposerTriggerPopoverBaseProps = Omit<
@@ -214,12 +209,12 @@ const ComposerTriggerPopoverImpl: FC<ComposerTriggerPopoverProps> = ({
     >
       {directive ? (
         <ComposerPrimitive.Unstable_TriggerPopover.Directive
-          formatter={directive.formatter ?? unstable_defaultDirectiveFormatter}
+          formatter={directive.formatter}
           onInserted={directive.onInserted}
         />
       ) : action ? (
         <ComposerPrimitive.Unstable_TriggerPopover.Action
-          formatter={action.formatter ?? unstable_defaultDirectiveFormatter}
+          formatter={action.formatter}
           onExecute={action.onExecute}
           removeOnExecute={action.removeOnExecute}
         />

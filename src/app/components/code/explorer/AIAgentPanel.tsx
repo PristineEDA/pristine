@@ -154,7 +154,7 @@ function PendingShellCommandCard({
   );
 }
 
-function ApprovalDock({ baseUrl }: { baseUrl: string }) {
+export function ApprovalDock({ baseUrl }: { baseUrl: string }) {
   const {
     applyChange,
     busyActionId,

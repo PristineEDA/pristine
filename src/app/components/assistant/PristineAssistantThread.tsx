@@ -6,6 +6,8 @@ import {
   ThreadPrimitive,
   makeAssistantToolUI,
   useAssistantInstructions,
+  unstable_useMentionAdapter,
+  unstable_useSlashCommandAdapter,
 } from '@assistant-ui/react';
 import {
   ArrowDown,
@@ -25,9 +27,15 @@ import {
   ComposerAttachments,
   UserMessageAttachments,
 } from '@/app/components/assistant-ui/attachment';
+import { ComposerTriggerPopover } from '@/app/components/assistant-ui/composer-trigger-popover';
+import { DirectiveText } from '@/app/components/assistant-ui/directive-text';
 import { MarkdownText } from '@/app/components/assistant-ui/markdown-text';
 import { Button } from '../ui/button';
 import { TooltipIconButton } from "@/app/components/assistant-ui/tooltip-icon-button";
+import {
+  mockPristineMentionCategories,
+  mockPristineSlashCommands,
+} from './pristineAssistantTriggers';
 
 type PristineAssistantThreadProps = {
   className?: string;
@@ -70,6 +78,14 @@ type ShellCommandToolResult = {
 
 const messageSurfaceClassName = 'rounded-md border border-border bg-background px-3 py-2 shadow-xs';
 const actionButtonClassName = 'inline-flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-50';
+
+const triggerIconMap = {
+  context: FileCode2,
+  tools: Shell,
+  FileCode2,
+  Shell,
+  Sparkles,
+};
 
 function PreviewText({ value }: { value: string }) {
   return (
@@ -221,7 +237,7 @@ function UserMessage() {
       <div className="flex max-w-[88%] flex-col items-end gap-2">
         <UserMessageAttachments />
         <div className={cn(messageSurfaceClassName, 'border-primary/20 bg-primary text-[12px] leading-relaxed text-primary-foreground')}>
-          <MessagePrimitive.Parts />
+          <MessagePrimitive.Parts components={{ Text: DirectiveText }} />
         </div>
       </div>
     </MessagePrimitive.Root>
@@ -267,50 +283,69 @@ function ThreadScrollToBottom() {
 }
 
 function Composer() {
-  return (
-    <ComposerPrimitive.Root className="relative rounded-md border border-border bg-background [--composer-padding:0.25rem] [--composer-radius:0.375rem] focus-within:border-ring focus-within:ring-[1px] focus-within:ring-ring/40">
-      <ComposerPrimitive.AttachmentDropzone className="flex min-h-16 w-full flex-col rounded-md outline-none transition-colors data-[dragging=true]:bg-accent/30">
-        <ComposerAttachments />
-        <ComposerPrimitive.Input
-          autoFocus
-          className="max-h-36 min-h-16 w-full resize-none bg-transparent px-3 py-2 pr-20 text-[12px] leading-relaxed text-foreground outline-none placeholder:text-muted-foreground"
-          placeholder="Send a message..."
-          submitMode="enter"
-          aria-label="Message input"
-        />
-        <div className="absolute bottom-2 right-2 flex items-center gap-1">
-          <ComposerAddAttachment />
-          <AuiIf condition={(s) => !s.thread.isRunning}>
-            <ComposerPrimitive.Send asChild>
-              <TooltipIconButton
-                tooltip="Send message"
-                side="bottom"
-                variant="default"
-                size="icon"
-                className="size-6 rounded-md bg-primary text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50 cursor-pointer"
-                aria-label="Send message"
-              >
-                <ArrowUpIcon className="size-3" />
-              </TooltipIconButton>
-            </ComposerPrimitive.Send>
-          </AuiIf>
+  const mention = unstable_useMentionAdapter({ categories: mockPristineMentionCategories });
+  const slash = unstable_useSlashCommandAdapter({ commands: mockPristineSlashCommands });
 
-          <AuiIf condition={(s) => s.thread.isRunning}>
-            <ComposerPrimitive.Cancel asChild>
-              <Button
-                type="button"
-                variant="default"
-                size="icon"
-                className="size-6 rounded-md bg-primary text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50 cursor-pointer"
-                aria-label="Stop generating"
-              >
-                <SquareIcon className="size-3" />
-              </Button>
-            </ComposerPrimitive.Cancel>
-          </AuiIf>
-        </div>
-      </ComposerPrimitive.AttachmentDropzone>
-    </ComposerPrimitive.Root>
+  return (
+    <ComposerPrimitive.Unstable_TriggerPopoverRoot>
+      <ComposerPrimitive.Root className="relative rounded-md border border-border bg-background [--composer-padding:0.25rem] [--composer-radius:0.375rem] focus-within:border-ring focus-within:ring-[1px] focus-within:ring-ring/40">
+        <ComposerPrimitive.AttachmentDropzone className="flex min-h-16 w-full flex-col rounded-md outline-none transition-colors data-[dragging=true]:bg-accent/30">
+          <ComposerAttachments />
+          <ComposerPrimitive.Input
+            autoFocus
+            className="max-h-36 min-h-16 w-full resize-none bg-transparent px-3 py-2 pr-20 text-[12px] leading-relaxed text-foreground outline-none placeholder:text-muted-foreground"
+            placeholder="Type @ for context, / for commands..."
+            submitMode="enter"
+            aria-label="Message input"
+          />
+          <div className="absolute bottom-2 right-2 flex items-center gap-1">
+            <ComposerAddAttachment />
+            <AuiIf condition={(s) => !s.thread.isRunning}>
+              <ComposerPrimitive.Send asChild>
+                <TooltipIconButton
+                  tooltip="Send message"
+                  side="bottom"
+                  variant="default"
+                  size="icon"
+                  className="size-6 rounded-md bg-primary text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50 cursor-pointer"
+                  aria-label="Send message"
+                >
+                  <ArrowUpIcon className="size-3" />
+                </TooltipIconButton>
+              </ComposerPrimitive.Send>
+            </AuiIf>
+
+            <AuiIf condition={(s) => s.thread.isRunning}>
+              <ComposerPrimitive.Cancel asChild>
+                <Button
+                  type="button"
+                  variant="default"
+                  size="icon"
+                  className="size-6 rounded-md bg-primary text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50 cursor-pointer"
+                  aria-label="Stop generating"
+                >
+                  <SquareIcon className="size-3" />
+                </Button>
+              </ComposerPrimitive.Cancel>
+            </AuiIf>
+          </div>
+        </ComposerPrimitive.AttachmentDropzone>
+        <ComposerTriggerPopover
+          char="@"
+          adapter={mention.adapter}
+          directive={mention.directive}
+          iconMap={triggerIconMap}
+          fallbackIcon={Sparkles}
+        />
+        <ComposerTriggerPopover
+          char="/"
+          adapter={slash.adapter}
+          action={slash.action}
+          iconMap={triggerIconMap}
+          fallbackIcon={Sparkles}
+        />
+      </ComposerPrimitive.Root>
+    </ComposerPrimitive.Unstable_TriggerPopoverRoot>
   );
 }
 

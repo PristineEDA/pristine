@@ -1,8 +1,9 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
 import { AIAgentPanel } from './AIAgentPanel';
+import { useChatRuntime } from '@assistant-ui/react-ai-sdk';
 
 vi.mock('@assistant-ui/react', () => ({
   AssistantRuntimeProvider: ({ children }: { children: ReactNode }) => (
@@ -109,34 +110,17 @@ describe('AIAgentPanel', () => {
     vi.restoreAllMocks();
   });
 
-  it('renders the real agent shell and approved action buffers', async () => {
+  it('renders the real agent shell while approval buffers remain disabled', () => {
     render(<AIAgentPanel baseUrl="http://localhost:4111/" />);
 
     expect(screen.getByText('Pristine Agent')).toBeInTheDocument();
     expect(screen.getByTestId('assistant-thread')).toBeInTheDocument();
+    expect((useChatRuntime as Mock).mock.calls[0]?.[0].transport.options.api).toBe(
+      'http://localhost:4111/chat/pristineAgent',
+    );
 
-    expect(await screen.findByText('openrouter/openrouter/free')).toBeInTheDocument();
-    expect(screen.getByText('OpenRouter')).toHaveClass('text-ide-success');
-    expect(screen.getByText('MCP 1')).toBeInTheDocument();
-
-    expect(screen.getByText('Update foo helper')).toBeInTheDocument();
-    expect(screen.getByText('Run typecheck')).toBeInTheDocument();
-    expect(screen.getByText(/--- src\/foo\.ts/i)).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: /apply/i }));
-    await waitFor(() => {
-      expect(fetch).toHaveBeenCalledWith(
-        'http://localhost:4111/agent/pending-changes/change-1/apply',
-        expect.objectContaining({ method: 'POST' }),
-      );
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: /run/i }));
-    await waitFor(() => {
-      expect(fetch).toHaveBeenCalledWith(
-        'http://localhost:4111/agent/shell-commands/command-1/run',
-        expect.objectContaining({ method: 'POST' }),
-      );
-    });
+    expect(screen.queryByText('openrouter/openrouter/free')).not.toBeInTheDocument();
+    expect(screen.queryByText('Update foo helper')).not.toBeInTheDocument();
+    expect(fetch).not.toHaveBeenCalled();
   });
 });
