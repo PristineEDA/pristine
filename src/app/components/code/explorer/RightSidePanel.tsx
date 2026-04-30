@@ -1,6 +1,6 @@
 import { Suspense, lazy, useState } from "react";
 
-const AIAssistantPanel = lazy(() => import('./AIAssistantPanel').then((module) => ({ default: module.AIAssistantPanel })));
+const AIAgentPanel = lazy(() => import('./AIAgentPanel').then((module) => ({ default: module.AIAgentPanel })));
 const StaticCheckPanel = lazy(() => import('./StaticCheckPanel').then((module) => ({ default: module.StaticCheckPanel })));
 const ReferencesPanel = lazy(() => import('./ReferencesPanel').then((module) => ({ default: module.ReferencesPanel })));
 
@@ -45,7 +45,7 @@ export function RightSidePanel({
       <div className="flex-1 overflow-hidden">
         {tab === "ai" && (
           <Suspense fallback={<div className="flex h-full items-center justify-center text-muted-foreground text-[12px]">Loading assistant...</div>}>
-            <AIAssistantPanel />
+            <AIAgentPanel />
           </Suspense>
         )}
         {tab === "static" && (

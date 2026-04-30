@@ -14,7 +14,7 @@ describe('RightSidePanel', () => {
     );
 
     fireEvent.click(screen.getByRole('button', { name: /static check/i }));
-    expect(await screen.findByText(/Static Check Report/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Static Check Report/i, undefined, { timeout: PANEL_ITEM_TIMEOUT_MS })).toBeInTheDocument();
 
     fireEvent.click(await screen.findByRole('button', { name: /cpu_top\.v:65/i }, { timeout: PANEL_ITEM_TIMEOUT_MS }));
 

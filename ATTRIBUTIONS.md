@@ -201,6 +201,14 @@ node-pty（https://github.com/microsoft/node-pty）Microsoft MIT
 vscode-jsonrpc（https://github.com/microsoft/vscode-languageserver-node）Microsoft MIT
 ignore（https://github.com/kaelzhang/node-ignore）kaelzhang MIT
 
+## AI Agent Frameworks
+
+Mastra（https://github.com/mastra-ai/mastra）Mastra AI Apache-2.0
+@assistant-ui/react（https://github.com/assistant-ui/assistant-ui）AgentbaseAI Inc. MIT
+@assistant-ui/react-ai-sdk（https://github.com/assistant-ui/assistant-ui）AgentbaseAI Inc. MIT
+AI SDK（https://github.com/vercel/ai）Vercel Apache-2.0
+Zod（https://github.com/colinhacks/zod）Colin McDonnell MIT
+
 ## Bundled Font Packages (Fontsource)
 
 JetBrains Mono（https://github.com/fontsource/fontsource/tree/main/packages/jetbrains-mono）Fontsource OFL-1.1

@@ -19,9 +19,9 @@ import {
   type AssistantAgentMode,
   type AssistantAgentOption,
   type AssistantModelOption,
-} from '../../aiAssistant/config';
-import { MessageThread } from '../../aiAssistant/MessageThread';
-import { useAIConversation } from '../../aiAssistant/useAIConversation';
+} from './aiAssistant/config';
+import { MessageThread } from './aiAssistant/MessageThread';
+import { useAIConversation } from './aiAssistant/useAIConversation';
 import { Badge } from '../../ui/badge';
 import { Button } from '../../ui/button';
 import { Card, CardContent } from '../../ui/card';
