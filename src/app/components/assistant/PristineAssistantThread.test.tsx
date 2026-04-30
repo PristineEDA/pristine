@@ -1,5 +1,11 @@
-import { render, screen } from '@testing-library/react';
-import type { ReactNode } from 'react';
+import { fireEvent, render, screen } from '@testing-library/react';
+import type {
+  ChangeEventHandler,
+  CompositionEventHandler,
+  KeyboardEventHandler,
+  ReactElement,
+  ReactNode,
+} from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -18,6 +24,10 @@ import { PristineAssistantThread } from './PristineAssistantThread';
 
 const mocks = vi.hoisted(() => ({
   composerTriggerPopover: vi.fn(),
+  composerInputChange: vi.fn(),
+  composerInputCompositionEnd: vi.fn(),
+  composerInputCompositionStart: vi.fn(),
+  composerInputKeyDown: vi.fn(),
   contextDisplayRing: vi.fn(),
   makeAssistantToolUI: vi.fn(),
   modelSelector: vi.fn(),
@@ -40,6 +50,20 @@ type MessagePartComponents = {
   };
 };
 
+type ComposerInputMockProps = {
+  asChild?: boolean;
+  children?: ReactNode;
+  className?: string;
+  onChange?: ChangeEventHandler<HTMLTextAreaElement>;
+  onCompositionEnd?: CompositionEventHandler<HTMLTextAreaElement>;
+  onCompositionStart?: CompositionEventHandler<HTMLTextAreaElement>;
+  onKeyDown?: KeyboardEventHandler<HTMLTextAreaElement>;
+  placeholder?: string;
+  submitMode?: string;
+  value?: string;
+  'aria-label'?: string;
+};
+
 function getComponentName(component: unknown) {
   if (!component || (typeof component !== 'function' && typeof component !== 'object')) {
     return '';
@@ -49,7 +73,8 @@ function getComponentName(component: unknown) {
   return namedComponent.displayName ?? namedComponent.name;
 }
 
-vi.mock('@assistant-ui/react', () => {
+vi.mock('@assistant-ui/react', async () => {
+  const { cloneElement, isValidElement } = await vi.importActual<typeof import('react')>('react');
   const Root = ({ children, className }: { children?: ReactNode; className?: string }) => (
     <div className={className}>{children}</div>
   );
@@ -79,7 +104,35 @@ vi.mock('@assistant-ui/react', () => {
     ComposerPrimitive: {
       AttachmentDropzone: Root,
       Cancel: ({ children }: { children?: ReactNode }) => <>{children}</>,
-      Input: ({ submitMode: _submitMode, ...props }: { placeholder?: string; 'aria-label'?: string; submitMode?: string }) => <textarea {...props} />,
+      Input: ({ asChild, children, submitMode, ...props }: ComposerInputMockProps) => {
+        const inputProps = {
+          ...props,
+          'data-submit-mode': submitMode,
+          value: props.value ?? '',
+          onChange: ((event) => {
+            mocks.composerInputChange(event);
+            props.onChange?.(event);
+          }) satisfies ChangeEventHandler<HTMLTextAreaElement>,
+          onCompositionEnd: ((event) => {
+            mocks.composerInputCompositionEnd(event);
+            props.onCompositionEnd?.(event);
+          }) satisfies CompositionEventHandler<HTMLTextAreaElement>,
+          onCompositionStart: ((event) => {
+            mocks.composerInputCompositionStart(event);
+            props.onCompositionStart?.(event);
+          }) satisfies CompositionEventHandler<HTMLTextAreaElement>,
+          onKeyDown: ((event) => {
+            mocks.composerInputKeyDown(event);
+            props.onKeyDown?.(event);
+          }) satisfies KeyboardEventHandler<HTMLTextAreaElement>,
+        };
+
+        if (asChild && isValidElement(children)) {
+          return cloneElement(children as ReactElement<Partial<ComposerInputMockProps>>, inputProps);
+        }
+
+        return <textarea {...inputProps} />;
+      },
       Root,
       Send: ({ children }: { children?: ReactNode }) => <>{children}</>,
       Unstable_TriggerPopoverRoot: Root,
@@ -208,6 +261,10 @@ vi.mock('@/app/components/assistant-ui/tooltip-icon-button', () => ({
 
 describe('PristineAssistantThread', () => {
   beforeEach(() => {
+    mocks.composerInputChange.mockClear();
+    mocks.composerInputCompositionEnd.mockClear();
+    mocks.composerInputCompositionStart.mockClear();
+    mocks.composerInputKeyDown.mockClear();
     mocks.composerTriggerPopover.mockClear();
     mocks.contextDisplayRing.mockClear();
     mocks.makeAssistantToolUI.mockClear();
@@ -284,5 +341,31 @@ describe('PristineAssistantThread', () => {
     expect(messageParts[1]).toHaveAttribute('data-tool-fallback-component', 'ToolFallback');
     expect(messageParts[1]).toHaveAttribute('data-has-tool-group-component', 'true');
     expect(messageParts[1]).toHaveAttribute('data-tool-group-component', 'ToolGroup');
+  });
+
+  it('keeps Chinese IME draft text across composer rerenders', () => {
+    const { rerender } = render(<PristineAssistantThread className="custom-thread" />);
+    let input = screen.getByLabelText('Message input') as HTMLTextAreaElement;
+
+    expect(input).toHaveAttribute('data-submit-mode', 'enter');
+
+    fireEvent.compositionStart(input);
+    fireEvent.change(input, { target: { value: 'ni' } });
+    expect(input.value).toBe('ni');
+
+    rerender(<PristineAssistantThread className="custom-thread" />);
+    input = screen.getByLabelText('Message input') as HTMLTextAreaElement;
+    expect(input.value).toBe('ni');
+
+    fireEvent.keyDown(input, { code: 'Enter', key: 'Enter' });
+    expect(mocks.composerInputKeyDown).not.toHaveBeenCalled();
+
+    fireEvent.change(input, { target: { value: '你' } });
+    fireEvent.compositionEnd(input);
+    expect(input.value).toBe('你');
+    expect(mocks.composerInputCompositionEnd).toHaveBeenCalledTimes(1);
+
+    fireEvent.keyDown(input, { code: 'Enter', key: 'Enter' });
+    expect(mocks.composerInputKeyDown).toHaveBeenCalledTimes(1);
   });
 });

@@ -23,7 +23,20 @@ import {
   Sparkles,
   SquareIcon,
 } from 'lucide-react';
-import type { PropsWithChildren, ReactNode } from 'react';
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type ComponentPropsWithoutRef,
+  type CompositionEvent,
+  type KeyboardEvent,
+  type PropsWithChildren,
+  type ReactNode,
+} from 'react';
 
 import { cn } from '@/lib/utils';
 import {
@@ -103,6 +116,119 @@ type ShellCommandToolResult = {
 
 const messageSurfaceClassName = 'rounded-md border border-border bg-background px-3 py-2 shadow-xs';
 const actionButtonClassName = 'inline-flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-50';
+
+type TextareaValue = ComponentPropsWithoutRef<'textarea'>['value'];
+
+function toTextareaString(value: TextareaValue | undefined): string {
+  if (Array.isArray(value)) {
+    return value.join('\n');
+  }
+
+  if (value === undefined || value === null) {
+    return '';
+  }
+
+  return String(value);
+}
+
+const PristineComposerTextarea = forwardRef<HTMLTextAreaElement, ComponentPropsWithoutRef<'textarea'>>(
+  ({ defaultValue, onChange, onCompositionEnd, onCompositionStart, onKeyDown, value, ...props }, ref) => {
+    const [isComposing, setIsComposing] = useState(false);
+    const [localValue, setLocalValue] = useState(() => toTextareaString(value ?? defaultValue));
+    const lastControlledValueRef = useRef(toTextareaString(value));
+    const pendingCompositionValueRef = useRef<string | null>(null);
+    const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+    const setTextareaRef = useCallback(
+      (node: HTMLTextAreaElement | null) => {
+        textareaRef.current = node;
+
+        if (typeof ref === 'function') {
+          ref(node);
+        } else if (ref) {
+          ref.current = node;
+        }
+      },
+      [ref],
+    );
+
+    useLayoutEffect(() => {
+      const textarea = textareaRef.current;
+
+      if (!textarea) {
+        return;
+      }
+
+      textarea.style.height = 'auto';
+      textarea.style.height = `${textarea.scrollHeight}px`;
+    }, [localValue]);
+
+    useEffect(() => {
+      const nextValue = toTextareaString(value);
+
+      if (isComposing) {
+        lastControlledValueRef.current = nextValue;
+        return;
+      }
+
+      if (pendingCompositionValueRef.current !== null) {
+        if (nextValue === pendingCompositionValueRef.current) {
+          pendingCompositionValueRef.current = null;
+        } else if (nextValue === lastControlledValueRef.current) {
+          return;
+        } else {
+          pendingCompositionValueRef.current = null;
+        }
+      }
+
+      lastControlledValueRef.current = nextValue;
+      setLocalValue(nextValue);
+    }, [isComposing, value]);
+
+    const handleChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
+      setLocalValue(event.currentTarget.value);
+      onChange?.(event);
+    };
+
+    const handleCompositionStart = (event: CompositionEvent<HTMLTextAreaElement>) => {
+      setIsComposing(true);
+      onCompositionStart?.(event);
+    };
+
+    const handleCompositionEnd = (event: CompositionEvent<HTMLTextAreaElement>) => {
+      setIsComposing(false);
+      pendingCompositionValueRef.current = event.currentTarget.value;
+      setLocalValue(event.currentTarget.value);
+      onCompositionEnd?.(event);
+    };
+
+    const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+      const nativeEvent = event.nativeEvent as KeyboardEvent<HTMLTextAreaElement>['nativeEvent'] & {
+        isComposing?: boolean;
+      };
+
+      if (isComposing || nativeEvent.isComposing) {
+        return;
+      }
+
+      onKeyDown?.(event);
+    };
+
+    return (
+      <textarea
+        {...props}
+        ref={setTextareaRef}
+        value={localValue}
+        onChange={handleChange}
+        onCompositionEnd={handleCompositionEnd}
+        onCompositionStart={handleCompositionStart}
+        onKeyDown={handleKeyDown}
+      />
+    );
+  },
+);
+
+PristineComposerTextarea.displayName = 'PristineComposerTextarea';
 
 const triggerIconMap = {
   context: FileCode2,
@@ -399,12 +525,16 @@ function Composer() {
           <ComposerQuotePreview />
           <ComposerAttachments />
           <ComposerPrimitive.Input
+            asChild
             autoFocus
-            className="max-h-36 min-h-16 w-full resize-none bg-transparent px-3 py-2 text-[12px] leading-relaxed text-foreground outline-none placeholder:text-muted-foreground"
-            placeholder="Type @ for context, / for commands..."
             submitMode="enter"
-            aria-label="Message input"
-          />
+          >
+            <PristineComposerTextarea
+              className="max-h-36 min-h-16 w-full resize-none bg-transparent px-3 py-2 text-[12px] leading-relaxed text-foreground outline-none placeholder:text-muted-foreground"
+              placeholder="Type @ for context, / for commands..."
+              aria-label="Message input"
+            />
+          </ComposerPrimitive.Input>
           <div className="flex min-h-8 items-center justify-between gap-2 border-t border-border/60 px-2 py-1">
             <div className="flex min-w-0 items-center gap-1">
               <ModelSelector
