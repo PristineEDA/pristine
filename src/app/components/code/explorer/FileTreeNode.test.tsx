@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, userEvent } from '@/test/render';
 import { describe, expect, it, vi } from 'vitest';
 import { FileIcon, FileTreeNode } from './FileTreeNode';
 
@@ -21,53 +21,31 @@ function openContextMenuForNode(testId: string, coordinates = { clientX: 100, cl
 }
 
 describe('FileIcon', () => {
-  it('renders Material icon theme SVGs for covered file types and falls back to the generic file icon', () => {
-    const { rerender, container } = render(<FileIcon name="uart_tx.v" />);
-    expect(container.querySelector('img[data-icon-key="verilog"]')).toBeInTheDocument();
+  it.each([
+    ['uart_tx.v', 'verilog'],
+    ['uart_defs.vh', 'verilog-header'],
+    ['axi_if.sv', 'systemverilog'],
+    ['axi_pkg.svh', 'systemverilog-header'],
+    ['Makefile', 'makefile'],
+    ['crt0.S', 'assembly'],
+    ['package.json', 'nodejs'],
+    ['hazard3.adoc', 'asciidoc'],
+    ['soc.f', 'eda-filelist'],
+    ['retrosoc.sdc', 'timing-constraint'],
+    ['constraints_io.xdc', 'fpga-constraint'],
+    ['waves.gtkw', 'gtkwave'],
+    ['synth_retrosoc.ys', 'yosys'],
+    ['unknown.txt', 'file'],
+  ])('renders %s with the %s icon', (name, iconKey) => {
+    const { container } = render(<FileIcon name={name} />);
 
-    rerender(<FileIcon name="uart_defs.vh" />);
-    expect(container.querySelector('img[data-icon-key="verilog-header"]')).toBeInTheDocument();
-
-    rerender(<FileIcon name="axi_if.sv" />);
-    expect(container.querySelector('img[data-icon-key="systemverilog"]')).toBeInTheDocument();
-
-    rerender(<FileIcon name="axi_pkg.svh" />);
-    expect(container.querySelector('img[data-icon-key="systemverilog-header"]')).toBeInTheDocument();
-
-    rerender(<FileIcon name="Makefile" />);
-    expect(container.querySelector('img[data-icon-key="makefile"]')).toBeInTheDocument();
-
-    rerender(<FileIcon name="crt0.S" />);
-    expect(container.querySelector('img[data-icon-key="assembly"]')).toBeInTheDocument();
-
-    rerender(<FileIcon name="package.json" />);
-    expect(container.querySelector('img[data-icon-key="nodejs"]')).toBeInTheDocument();
-
-    rerender(<FileIcon name="hazard3.adoc" />);
-    expect(container.querySelector('img[data-icon-key="asciidoc"]')).toBeInTheDocument();
-
-    rerender(<FileIcon name="soc.f" />);
-    expect(container.querySelector('img[data-icon-key="eda-filelist"]')).toBeInTheDocument();
-
-    rerender(<FileIcon name="retrosoc.sdc" />);
-    expect(container.querySelector('img[data-icon-key="timing-constraint"]')).toBeInTheDocument();
-
-    rerender(<FileIcon name="constraints_io.xdc" />);
-    expect(container.querySelector('img[data-icon-key="fpga-constraint"]')).toBeInTheDocument();
-
-    rerender(<FileIcon name="waves.gtkw" />);
-    expect(container.querySelector('img[data-icon-key="gtkwave"]')).toBeInTheDocument();
-
-    rerender(<FileIcon name="synth_retrosoc.ys" />);
-    expect(container.querySelector('img[data-icon-key="yosys"]')).toBeInTheDocument();
-
-    rerender(<FileIcon name="unknown.txt" />);
-    expect(container.querySelector('img[data-icon-key="file"]')).toBeInTheDocument();
+    expect(container.querySelector(`img[data-icon-key="${iconKey}"]`)).toBeInTheDocument();
   });
 });
 
 describe('FileTreeNode', () => {
-  it('toggles folders and renders nested children only when expanded', () => {
+  it('toggles folders and renders nested children only when expanded', async () => {
+    const user = userEvent.setup();
     const onToggleFolder = vi.fn();
     const onFileOpen = vi.fn();
     const onFilePreview = vi.fn();
@@ -96,7 +74,7 @@ describe('FileTreeNode', () => {
     expect(screen.queryByTestId('file-tree-node-rtl_uart_tx_v')).not.toBeInTheDocument();
     expect(screen.getByTestId('file-tree-icon-rtl')).toHaveAttribute('data-icon-key', 'folder');
 
-    fireEvent.click(screen.getByTestId('file-tree-node-rtl'));
+    await user.click(screen.getByTestId('file-tree-node-rtl'));
     expect(onToggleFolder).toHaveBeenCalledWith('rtl');
 
     rerender(
@@ -124,7 +102,8 @@ describe('FileTreeNode', () => {
     expect(screen.getByTestId('file-tree-node-rtl_uart_tx_v')).toBeInTheDocument();
   });
 
-  it('previews on single click, pins on double click, and opens from the context menu', () => {
+  it('previews on single click, pins on double click, and opens from the context menu', async () => {
+    const user = userEvent.setup();
     const onToggleFolder = vi.fn();
     const onFileOpen = vi.fn();
     const onFilePreview = vi.fn();
@@ -159,31 +138,31 @@ describe('FileTreeNode', () => {
     expect(node.className).toContain('bg-primary/20');
     expect(node.className).toContain('hover:bg-primary/20');
 
-    fireEvent.click(node);
+    await user.click(node);
     expect(onFilePreview).toHaveBeenCalledWith('rtl/core/cpu_top.v', 'cpu_top.v');
 
-    fireEvent.doubleClick(node);
+    await user.dblClick(node);
     expect(onFileOpen).toHaveBeenCalledWith('rtl/core/cpu_top.v', 'cpu_top.v');
 
     openContextMenuForNode('file-tree-node-rtl_core_cpu_top_v');
-    fireEvent.click(getContextMenuItem('Open in Editor'));
+    await user.click(getContextMenuItem('Open in Editor'));
 
     expect(onFileOpen).toHaveBeenCalledTimes(2);
     expect(screen.queryByRole('menuitem', { name: 'Open in Editor' })).not.toBeInTheDocument();
     expect(screen.getByText('cpu_top.v')).toBeInTheDocument();
 
     openContextMenuForNode('file-tree-node-rtl_core_cpu_top_v');
-    fireEvent.click(getContextMenuItem('Copy'));
+    await user.click(getContextMenuItem('Copy'));
 
     expect(onStartCopy).toHaveBeenCalledWith('rtl/core/cpu_top.v', 'file');
 
     openContextMenuForNode('file-tree-node-rtl_core_cpu_top_v');
-    fireEvent.click(getContextMenuItem('Cut'));
+    await user.click(getContextMenuItem('Cut'));
 
     expect(onStartCut).toHaveBeenCalledWith('rtl/core/cpu_top.v', 'file');
 
     openContextMenuForNode('file-tree-node-rtl_core_cpu_top_v');
-    fireEvent.click(getContextMenuItem('Delete'));
+    await user.click(getContextMenuItem('Delete'));
 
     expect(onStartDelete).toHaveBeenCalledWith('rtl/core/cpu_top.v', 'file');
   });
