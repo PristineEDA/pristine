@@ -1,4 +1,5 @@
 @import 'tailwindcss' source(none);
+@import "tw-shimmer";
 
 @custom-variant dark (&:is(.dark *));
 @source '../**/*.{js,ts,jsx,tsx}';

@@ -1,4 +1,5 @@
 import {
+  AuiIf,
   ActionBarPrimitive,
   ComposerPrimitive,
   MessagePrimitive,
@@ -8,19 +9,21 @@ import {
 } from '@assistant-ui/react';
 import {
   ArrowDown,
-  ArrowUp,
+  ArrowUpIcon,
   Bot,
   Copy,
   FileCode2,
   RotateCcw,
   Shell,
   Sparkles,
-  Square,
+  SquareIcon,
   User,
 } from 'lucide-react';
 import type { PropsWithChildren, ReactNode } from 'react';
 
 import { cn } from '@/lib/utils';
+import { Button } from '../ui/button';
+import { TooltipIconButton } from "@/app/components/assistant-ui/tooltip-icon-button";
 
 type PristineAssistantThreadProps = {
   className?: string;
@@ -267,20 +270,43 @@ function ThreadScrollToBottom() {
 
 function Composer() {
   return (
-    <ComposerPrimitive.Root className="relative rounded-md border border-border bg-background shadow-sm focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/30">
+    <ComposerPrimitive.Root className="relative rounded-md border border-border bg-background focus-within:border-ring focus-within:ring-[1px] focus-within:ring-ring/40">
       <ComposerPrimitive.Input
-        autoFocus={false}
+        autoFocus
         className="max-h-36 min-h-16 w-full resize-none bg-transparent px-3 py-2 pr-11 text-[12px] leading-relaxed text-foreground outline-none placeholder:text-muted-foreground"
-        placeholder="Ask Pristine Agent"
+        placeholder="Send a message..."
         submitMode="enter"
+        aria-label="Message input"
       />
       <div className="absolute bottom-2 right-2 flex items-center gap-1">
-        <ComposerPrimitive.Cancel className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:hidden" aria-label="Stop generation">
-          <Square className="size-3" />
-        </ComposerPrimitive.Cancel>
-        <ComposerPrimitive.Send className="inline-flex size-7 items-center justify-center rounded-md bg-primary text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50" aria-label="Send message">
-          <ArrowUp className="size-3.5" />
-        </ComposerPrimitive.Send>
+        <AuiIf condition={(s) => !s.thread.isRunning}>
+          <ComposerPrimitive.Send asChild>
+            <TooltipIconButton
+              tooltip="Send message"
+              side="bottom"
+              variant="default"
+              size="icon"
+              className="size-6 rounded-md bg-primary text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50 cursor-pointer"
+              aria-label="Send message"
+            >
+              <ArrowUpIcon className="size-3" />
+            </TooltipIconButton>
+          </ComposerPrimitive.Send>
+        </AuiIf>
+
+        <AuiIf condition={(s) => s.thread.isRunning}>
+          <ComposerPrimitive.Cancel asChild>
+            <Button
+              type="button"
+              variant="default"
+              size="icon"
+              className="size-6 rounded-md bg-primary text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50 cursor-pointer"
+              aria-label="Stop generating"
+            >
+              <SquareIcon className="size-3" />
+            </Button>
+          </ComposerPrimitive.Cancel>
+        </AuiIf>
       </div>
     </ComposerPrimitive.Root>
   );
@@ -302,7 +328,7 @@ export function PristineAssistantThread({ className }: PristineAssistantThreadPr
         />
       </ThreadPrimitive.Viewport>
       <ThreadScrollToBottom />
-      <div className="shrink-0 border-t border-border bg-background p-2">
+      <div className="shrink-0 bg-background p-2">
         <Composer />
       </div>
     </ThreadPrimitive.Root>

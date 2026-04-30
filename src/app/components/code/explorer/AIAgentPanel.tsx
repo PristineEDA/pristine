@@ -258,7 +258,7 @@ export function AIAgentPanel({ baseUrl = getPristineAgentBaseUrl() }: AIAgentPan
           </div>
           <span className="text-xs font-semibold">Pristine Agent</span>
         </div>
-        <ApprovalDock baseUrl={normalizedBaseUrl} />
+        {/* <ApprovalDock baseUrl={normalizedBaseUrl} /> */}
         <PristineAssistantThread />
       </div>
     </AssistantRuntimeProvider>
