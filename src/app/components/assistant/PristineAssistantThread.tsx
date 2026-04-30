@@ -10,14 +10,12 @@ import {
 import {
   ArrowDown,
   ArrowUpIcon,
-  Bot,
   Copy,
   FileCode2,
   RotateCcw,
   Shell,
   Sparkles,
   SquareIcon,
-  User,
 } from 'lucide-react';
 import type { PropsWithChildren, ReactNode } from 'react';
 
@@ -65,7 +63,6 @@ type ShellCommandToolResult = {
 };
 
 const messageSurfaceClassName = 'rounded-md border border-border bg-background px-3 py-2 shadow-xs';
-const iconBubbleClassName = 'mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md border border-border bg-muted text-muted-foreground';
 const actionButtonClassName = 'inline-flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-50';
 
 function PreviewText({ value }: { value: string }) {
@@ -215,12 +212,9 @@ function ThreadWelcome() {
 function UserMessage() {
   return (
     <MessagePrimitive.Root className="flex justify-end px-1 py-2">
-      <div className="flex max-w-[88%] items-start gap-2">
-        <div className={cn(messageSurfaceClassName, 'border-primary/20 bg-primary text-primary-foreground')}>
+      <div className="flex max-w-[88%] items-start">
+        <div className={cn(messageSurfaceClassName, 'border-primary/20 bg-primary text-[12px] leading-relaxed text-primary-foreground')}>
           <MessagePrimitive.Parts />
-        </div>
-        <div className={cn(iconBubbleClassName, 'bg-primary text-primary-foreground')}>
-          <User className="size-3" />
         </div>
       </div>
     </MessagePrimitive.Root>
@@ -230,10 +224,7 @@ function UserMessage() {
 function AssistantMessage() {
   return (
     <MessagePrimitive.Root className="group flex px-1 py-2">
-      <div className="flex max-w-[92%] items-start gap-2">
-        <div className={iconBubbleClassName}>
-          <Bot className="size-3" />
-        </div>
+      <div className="flex max-w-[92%] items-start">
         <div className="min-w-0 flex-1">
           <div className={cn(messageSurfaceClassName, 'text-[12px] leading-relaxed')}>
             <MessagePrimitive.Parts />
