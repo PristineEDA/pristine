@@ -30,6 +30,9 @@ const mocks = vi.hoisted(() => ({
 type MessagePartComponents = {
   File?: { displayName?: string; name?: string };
   Image?: { displayName?: string; name?: string };
+  Reasoning?: { displayName?: string; name?: string };
+  ReasoningGroup?: { displayName?: string; name?: string };
+  Source?: { displayName?: string; name?: string };
   Text?: unknown;
 };
 
@@ -84,8 +87,14 @@ vi.mock('@assistant-ui/react', () => {
           data-file-component={getComponentName(components?.File)}
           data-has-file-component={String(Boolean(components?.File))}
           data-has-image-component={String(Boolean(components?.Image))}
+          data-has-reasoning-component={String(Boolean(components?.Reasoning))}
+          data-has-reasoning-group-component={String(Boolean(components?.ReasoningGroup))}
+          data-has-source-component={String(Boolean(components?.Source))}
           data-has-text-component={String(Boolean(components?.Text))}
           data-image-component={getComponentName(components?.Image)}
+          data-reasoning-component={getComponentName(components?.Reasoning)}
+          data-reasoning-group-component={getComponentName(components?.ReasoningGroup)}
+          data-source-component={getComponentName(components?.Source)}
         />
       ),
       Quote: ({ children }: { children: (quote: { text: string; messageId: string }) => ReactNode }) => (
@@ -115,8 +124,10 @@ vi.mock('@assistant-ui/react', () => {
       Viewport: Root,
     },
     makeAssistantToolUI: mocks.makeAssistantToolUI,
+    useAuiState: vi.fn(),
     unstable_useMentionAdapter: mocks.useMentionAdapter,
     unstable_useSlashCommandAdapter: mocks.useSlashCommandAdapter,
+    useScrollLock: () => vi.fn(),
     useAssistantInstructions: mocks.useAssistantInstructions,
   };
 });
@@ -249,5 +260,15 @@ describe('PristineAssistantThread', () => {
       expect(part).toHaveAttribute('data-has-image-component', 'true');
       expect(part).toHaveAttribute('data-image-component', 'PristineMessageImage');
     }
+
+    expect(messageParts[0]).toHaveAttribute('data-has-reasoning-component', 'false');
+    expect(messageParts[0]).toHaveAttribute('data-has-reasoning-group-component', 'false');
+    expect(messageParts[0]).toHaveAttribute('data-has-source-component', 'false');
+    expect(messageParts[1]).toHaveAttribute('data-has-reasoning-component', 'true');
+    expect(messageParts[1]).toHaveAttribute('data-reasoning-component', 'Reasoning');
+    expect(messageParts[1]).toHaveAttribute('data-has-reasoning-group-component', 'true');
+    expect(messageParts[1]).toHaveAttribute('data-reasoning-group-component', 'PristineReasoningGroup');
+    expect(messageParts[1]).toHaveAttribute('data-has-source-component', 'true');
+    expect(messageParts[1]).toHaveAttribute('data-source-component', 'PristineMessageSource');
   });
 });

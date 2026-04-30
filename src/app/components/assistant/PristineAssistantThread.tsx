@@ -5,10 +5,13 @@ import {
   MessagePrimitive,
   ThreadPrimitive,
   makeAssistantToolUI,
+  useAuiState,
   useAssistantInstructions,
   unstable_useMentionAdapter,
   unstable_useSlashCommandAdapter,
   type ImageMessagePartProps,
+  type ReasoningGroupProps,
+  type SourceMessagePartProps,
 } from '@assistant-ui/react';
 import {
   ArrowDown,
@@ -40,6 +43,8 @@ import {
   QuoteBlock,
   SelectionToolbar,
 } from '@/app/components/assistant-ui/quote';
+import { Reasoning } from '@/app/components/assistant-ui/reasoning';
+import { Sources } from '@/app/components/assistant-ui/sources';
 import { Button } from '../ui/button';
 import { TooltipIconButton } from "@/app/components/assistant-ui/tooltip-icon-button";
 import {
@@ -278,13 +283,76 @@ function PristineMessageImage({ filename, image }: ImageMessagePartProps) {
   );
 }
 
+function getSourceDisplayTitle(url: string, title?: string) {
+  if (title) {
+    return title;
+  }
+
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return url;
+  }
+}
+
+function PristineMessageSource({ sourceType, title, url }: SourceMessagePartProps) {
+  if (sourceType !== 'url' || !url) {
+    return null;
+  }
+
+  return (
+    <Sources.Root href={url} variant="outline">
+      <Sources.Icon url={url} />
+      <Sources.Title>{getSourceDisplayTitle(url, title)}</Sources.Title>
+    </Sources.Root>
+  );
+}
+
+function PristineReasoningGroup({ children, endIndex, startIndex }: ReasoningGroupProps) {
+  const isReasoningStreaming = useAuiState((state) => {
+    if (state.message.status?.type !== 'running') {
+      return false;
+    }
+
+    const lastIndex = state.message.parts.length - 1;
+    if (lastIndex < 0) {
+      return false;
+    }
+
+    const lastType = state.message.parts[lastIndex]?.type;
+    if (lastType !== 'reasoning') {
+      return false;
+    }
+
+    return lastIndex >= startIndex && lastIndex <= endIndex;
+  });
+
+  return (
+    <Reasoning.Root defaultOpen={isReasoningStreaming} variant="ghost">
+      <Reasoning.Trigger active={isReasoningStreaming} />
+      <Reasoning.Content aria-busy={isReasoningStreaming}>
+        <Reasoning.Text>{children}</Reasoning.Text>
+      </Reasoning.Content>
+    </Reasoning.Root>
+  );
+}
+
 function AssistantMessage() {
   return (
     <MessagePrimitive.Root className="group flex px-1 py-2">
       <div className="flex max-w-[92%] items-start">
         <div className="min-w-0 flex-1">
           <div className={cn(messageSurfaceClassName, 'text-[12px] leading-relaxed')}>
-            <MessagePrimitive.Parts components={{ File, Image: PristineMessageImage, Text: MarkdownText }} />
+            <MessagePrimitive.Parts
+              components={{
+                File,
+                Image: PristineMessageImage,
+                Reasoning,
+                ReasoningGroup: PristineReasoningGroup,
+                Source: PristineMessageSource,
+                Text: MarkdownText,
+              }}
+            />
           </div>
           <ActionBarPrimitive.Root
             autohide="not-last"
