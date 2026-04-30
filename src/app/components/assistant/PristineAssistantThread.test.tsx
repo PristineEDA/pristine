@@ -3,6 +3,10 @@ import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  PRISTINE_CONTEXT_WINDOW,
+  mockPristineContextUsage,
+} from './pristineAssistantContext';
+import {
   mockPristineMentionCategories,
   mockPristineSlashCommands,
 } from './pristineAssistantTriggers';
@@ -10,6 +14,7 @@ import { PristineAssistantThread } from './PristineAssistantThread';
 
 const mocks = vi.hoisted(() => ({
   composerTriggerPopover: vi.fn(),
+  contextDisplayBar: vi.fn(),
   makeAssistantToolUI: vi.fn(),
   useAssistantInstructions: vi.fn(),
   useMentionAdapter: vi.fn(),
@@ -98,6 +103,15 @@ vi.mock('@/app/components/assistant-ui/composer-trigger-popover', () => ({
   },
 }));
 
+vi.mock('@/app/components/assistant-ui/context-display', () => ({
+  ContextDisplay: {
+    Bar: (props: unknown) => {
+      mocks.contextDisplayBar(props);
+      return <div data-testid="context-display-bar" />;
+    },
+  },
+}));
+
 vi.mock('@/app/components/assistant-ui/markdown-text', () => ({
   MarkdownText: () => <span>markdown text</span>,
 }));
@@ -111,6 +125,7 @@ vi.mock('@/app/components/assistant-ui/tooltip-icon-button', () => ({
 describe('PristineAssistantThread', () => {
   beforeEach(() => {
     mocks.composerTriggerPopover.mockClear();
+    mocks.contextDisplayBar.mockClear();
     mocks.makeAssistantToolUI.mockClear();
     mocks.useAssistantInstructions.mockClear();
     mocks.useMentionAdapter.mockClear();
@@ -134,6 +149,14 @@ describe('PristineAssistantThread', () => {
     });
 
     expect(screen.getByPlaceholderText('Type @ for context, / for commands...')).toBeInTheDocument();
+    expect(screen.getByTestId('context-display-bar')).toBeInTheDocument();
+    expect(mocks.contextDisplayBar).toHaveBeenCalledWith(
+      expect.objectContaining({
+        modelContextWindow: PRISTINE_CONTEXT_WINDOW,
+        usage: mockPristineContextUsage,
+        side: 'top',
+      }),
+    );
     expect(screen.getByTestId('trigger-popover-@')).toHaveAttribute('data-behavior', 'directive');
     expect(screen.getByTestId('trigger-popover-/')).toHaveAttribute('data-behavior', 'action');
     expect(screen.getByTestId('thread-messages')).toHaveAttribute('data-has-user', 'true');
