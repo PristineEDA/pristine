@@ -4,23 +4,29 @@ import "@assistant-ui/react-markdown/styles/dot.css";
 
 import {
   type CodeHeaderProps,
-  MarkdownTextPrimitive,
-  unstable_memoizeMarkdownComponents as memoizeMarkdownComponents,
-  useIsMarkdownCodeBlock,
-} from "@assistant-ui/react-markdown";
+  StreamdownTextPrimitive,
+  type StreamdownTextComponents,
+  useIsStreamdownCodeBlock,
+} from "@assistant-ui/react-streamdown";
 import remarkGfm from "remark-gfm";
 import { type FC, memo, useState } from "react";
 import { CheckIcon, CopyIcon } from "lucide-react";
 
+import { MermaidDiagram } from "@/app/components/assistant-ui/mermaid-diagram";
 import { TooltipIconButton } from "@/app/components/assistant-ui/tooltip-icon-button";
 import { cn } from "@/lib/utils";
 
 const MarkdownTextImpl = () => {
   return (
-    <MarkdownTextPrimitive
+    <StreamdownTextPrimitive
       remarkPlugins={[remarkGfm]}
       className="aui-md"
-      components={defaultComponents}
+      components={{ ...defaultComponents, CodeHeader } as StreamdownTextComponents}
+      componentsByLanguage={{
+        mermaid: {
+          SyntaxHighlighter: MermaidDiagram,
+        },
+      }}
     />
   );
 };
@@ -66,7 +72,7 @@ const useCopyToClipboard = ({
   return { isCopied, copyToClipboard };
 };
 
-const defaultComponents = memoizeMarkdownComponents({
+const defaultComponents = {
   h1: ({ className, ...props }) => (
     <h1
       className={cn(
@@ -227,7 +233,7 @@ const defaultComponents = memoizeMarkdownComponents({
     />
   ),
   code: function Code({ className, ...props }) {
-    const isCodeBlock = useIsMarkdownCodeBlock();
+    const isCodeBlock = useIsStreamdownCodeBlock();
     return (
       <code
         className={cn(
@@ -239,5 +245,4 @@ const defaultComponents = memoizeMarkdownComponents({
       />
     );
   },
-  CodeHeader,
-});
+} satisfies StreamdownTextComponents;

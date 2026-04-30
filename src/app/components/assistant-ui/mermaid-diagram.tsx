@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuiState } from "@assistant-ui/react";
-import type { SyntaxHighlighterProps } from "@assistant-ui/react-markdown";
+import type { SyntaxHighlighterProps } from "@assistant-ui/react-streamdown";
 import mermaid from "mermaid";
 import { type FC, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";

@@ -20,6 +20,7 @@ import {
 import type { PropsWithChildren, ReactNode } from 'react';
 
 import { cn } from '@/lib/utils';
+import { MarkdownText } from '@/app/components/assistant-ui/markdown-text';
 import { Button } from '../ui/button';
 import { TooltipIconButton } from "@/app/components/assistant-ui/tooltip-icon-button";
 
@@ -227,7 +228,7 @@ function AssistantMessage() {
       <div className="flex max-w-[92%] items-start">
         <div className="min-w-0 flex-1">
           <div className={cn(messageSurfaceClassName, 'text-[12px] leading-relaxed')}>
-            <MessagePrimitive.Parts />
+            <MessagePrimitive.Parts components={{ Text: MarkdownText }} />
           </div>
           <ActionBarPrimitive.Root
             autohide="not-last"
