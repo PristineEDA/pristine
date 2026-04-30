@@ -21,6 +21,21 @@ const mocks = vi.hoisted(() => ({
   useSlashCommandAdapter: vi.fn(),
 }));
 
+type MessagePartComponents = {
+  File?: { displayName?: string; name?: string };
+  Image?: { displayName?: string; name?: string };
+  Text?: unknown;
+};
+
+function getComponentName(component: unknown) {
+  if (!component || (typeof component !== 'function' && typeof component !== 'object')) {
+    return '';
+  }
+
+  const namedComponent = component as { displayName?: string; name?: string };
+  return namedComponent.displayName ?? namedComponent.name;
+}
+
 vi.mock('@assistant-ui/react', () => {
   const Root = ({ children, className }: { children?: ReactNode; className?: string }) => (
     <div className={className}>{children}</div>
@@ -57,19 +72,29 @@ vi.mock('@assistant-ui/react', () => {
       Unstable_TriggerPopoverRoot: Root,
     },
     MessagePrimitive: {
-      Parts: ({ components }: { components?: { Text?: unknown } }) => (
-        <div data-testid="message-parts" data-has-text-component={String(Boolean(components?.Text))} />
+      Parts: ({ components }: { components?: MessagePartComponents }) => (
+        <div
+          data-testid="message-parts"
+          data-file-component={getComponentName(components?.File)}
+          data-has-file-component={String(Boolean(components?.File))}
+          data-has-image-component={String(Boolean(components?.Image))}
+          data-has-text-component={String(Boolean(components?.Text))}
+          data-image-component={getComponentName(components?.Image)}
+        />
       ),
       Root,
     },
     ThreadPrimitive: {
       Empty: Root,
-      Messages: ({ components }: { components: Record<string, unknown> }) => (
+      Messages: ({ components }: { components: { UserMessage?: () => ReactNode; AssistantMessage?: () => ReactNode } }) => (
         <div
           data-testid="thread-messages"
           data-has-user={String(Boolean(components.UserMessage))}
           data-has-assistant={String(Boolean(components.AssistantMessage))}
-        />
+        >
+          {components.UserMessage && <components.UserMessage />}
+          {components.AssistantMessage && <components.AssistantMessage />}
+        </div>
       ),
       Root,
       ScrollToBottom: Root,
@@ -161,5 +186,15 @@ describe('PristineAssistantThread', () => {
     expect(screen.getByTestId('trigger-popover-/')).toHaveAttribute('data-behavior', 'action');
     expect(screen.getByTestId('thread-messages')).toHaveAttribute('data-has-user', 'true');
     expect(screen.getByTestId('thread-messages')).toHaveAttribute('data-has-assistant', 'true');
+
+    const messageParts = screen.getAllByTestId('message-parts');
+    expect(messageParts).toHaveLength(2);
+    for (const part of messageParts) {
+      expect(part).toHaveAttribute('data-has-text-component', 'true');
+      expect(part).toHaveAttribute('data-has-file-component', 'true');
+      expect(part).toHaveAttribute('data-file-component', 'File');
+      expect(part).toHaveAttribute('data-has-image-component', 'true');
+      expect(part).toHaveAttribute('data-image-component', 'PristineMessageImage');
+    }
   });
 });

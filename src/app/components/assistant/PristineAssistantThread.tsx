@@ -8,6 +8,7 @@ import {
   useAssistantInstructions,
   unstable_useMentionAdapter,
   unstable_useSlashCommandAdapter,
+  type ImageMessagePartProps,
 } from '@assistant-ui/react';
 import {
   ArrowDown,
@@ -30,6 +31,8 @@ import {
 import { ContextDisplay } from '@/app/components/assistant-ui/context-display';
 import { ComposerTriggerPopover } from '@/app/components/assistant-ui/composer-trigger-popover';
 import { DirectiveText } from '@/app/components/assistant-ui/directive-text';
+import { File } from '@/app/components/assistant-ui/file';
+import { Image } from '@/app/components/assistant-ui/image';
 import { MarkdownText } from '@/app/components/assistant-ui/markdown-text';
 import { Button } from '../ui/button';
 import { TooltipIconButton } from "@/app/components/assistant-ui/tooltip-icon-button";
@@ -242,10 +245,23 @@ function UserMessage() {
       <div className="flex max-w-[88%] flex-col items-end gap-2">
         <UserMessageAttachments />
         <div className={cn(messageSurfaceClassName, 'border-primary/20 bg-primary text-[12px] leading-relaxed text-primary-foreground')}>
-          <MessagePrimitive.Parts components={{ Text: DirectiveText }} />
+          <MessagePrimitive.Parts components={{ File, Image: PristineMessageImage, Text: DirectiveText }} />
         </div>
       </div>
     </MessagePrimitive.Root>
+  );
+}
+
+function PristineMessageImage({ filename, image }: ImageMessagePartProps) {
+  const alt = filename || 'Image content';
+
+  return (
+    <Image.Root size="sm" variant="outline">
+      <Image.Zoom src={image} alt={alt}>
+        <Image.Preview src={image} alt={alt} />
+      </Image.Zoom>
+      <Image.Filename>{filename}</Image.Filename>
+    </Image.Root>
   );
 }
 
@@ -255,7 +271,7 @@ function AssistantMessage() {
       <div className="flex max-w-[92%] items-start">
         <div className="min-w-0 flex-1">
           <div className={cn(messageSurfaceClassName, 'text-[12px] leading-relaxed')}>
-            <MessagePrimitive.Parts components={{ Text: MarkdownText }} />
+            <MessagePrimitive.Parts components={{ File, Image: PristineMessageImage, Text: MarkdownText }} />
           </div>
           <ActionBarPrimitive.Root
             autohide="not-last"
