@@ -190,6 +190,47 @@ export const openSourceAttributionSections: AttributionSection[] = [
     ],
   },
   {
+    id: 'ai-agent-frameworks',
+    title: 'AI Agent Frameworks',
+    items: [
+      {
+        id: 'mastra',
+        name: 'Mastra',
+        url: 'https://github.com/mastra-ai/mastra',
+        author: 'Mastra AI',
+        license: 'Apache-2.0',
+      },
+      {
+        id: 'assistant-ui-react',
+        name: '@assistant-ui/react',
+        url: 'https://github.com/assistant-ui/assistant-ui',
+        author: 'AgentbaseAI Inc.',
+        license: 'MIT',
+      },
+      {
+        id: 'assistant-ui-react-ai-sdk',
+        name: '@assistant-ui/react-ai-sdk',
+        url: 'https://github.com/assistant-ui/assistant-ui',
+        author: 'AgentbaseAI Inc.',
+        license: 'MIT',
+      },
+      {
+        id: 'ai-sdk',
+        name: 'AI SDK',
+        url: 'https://github.com/vercel/ai',
+        author: 'Vercel',
+        license: 'Apache-2.0',
+      },
+      {
+        id: 'zod',
+        name: 'Zod',
+        url: 'https://github.com/colinhacks/zod',
+        author: 'Colin McDonnell',
+        license: 'MIT',
+      },
+    ],
+  },
+  {
     id: 'bundled-font-packages',
     title: 'Bundled Font Packages (Fontsource)',
     items: [

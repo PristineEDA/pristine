@@ -2,5 +2,5 @@
   "extends": "./tsconfig.json",
   "references": [],
   "include": ["src", "types"],
-  "exclude": ["src/app/components/whiteboard/legacy"]
+  "exclude": ["src/app/components/whiteboard/legacy", "src/app/components/code/explorer/legacy"]
 }

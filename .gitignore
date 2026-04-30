@@ -22,3 +22,4 @@ tmp*
 public/generated/
 binaries/
 perf-results/
+.pristine-agent/
