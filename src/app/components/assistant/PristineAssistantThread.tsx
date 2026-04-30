@@ -20,6 +20,11 @@ import {
 import type { PropsWithChildren, ReactNode } from 'react';
 
 import { cn } from '@/lib/utils';
+import {
+  ComposerAddAttachment,
+  ComposerAttachments,
+  UserMessageAttachments,
+} from '@/app/components/assistant-ui/attachment';
 import { MarkdownText } from '@/app/components/assistant-ui/markdown-text';
 import { Button } from '../ui/button';
 import { TooltipIconButton } from "@/app/components/assistant-ui/tooltip-icon-button";
@@ -213,7 +218,8 @@ function ThreadWelcome() {
 function UserMessage() {
   return (
     <MessagePrimitive.Root className="flex justify-end px-1 py-2">
-      <div className="flex max-w-[88%] items-start">
+      <div className="flex max-w-[88%] flex-col items-end gap-2">
+        <UserMessageAttachments />
         <div className={cn(messageSurfaceClassName, 'border-primary/20 bg-primary text-[12px] leading-relaxed text-primary-foreground')}>
           <MessagePrimitive.Parts />
         </div>
@@ -262,44 +268,48 @@ function ThreadScrollToBottom() {
 
 function Composer() {
   return (
-    <ComposerPrimitive.Root className="relative rounded-md border border-border bg-background focus-within:border-ring focus-within:ring-[1px] focus-within:ring-ring/40">
-      <ComposerPrimitive.Input
-        autoFocus
-        className="max-h-36 min-h-16 w-full resize-none bg-transparent px-3 py-2 pr-11 text-[12px] leading-relaxed text-foreground outline-none placeholder:text-muted-foreground"
-        placeholder="Send a message..."
-        submitMode="enter"
-        aria-label="Message input"
-      />
-      <div className="absolute bottom-2 right-2 flex items-center gap-1">
-        <AuiIf condition={(s) => !s.thread.isRunning}>
-          <ComposerPrimitive.Send asChild>
-            <TooltipIconButton
-              tooltip="Send message"
-              side="bottom"
-              variant="default"
-              size="icon"
-              className="size-6 rounded-md bg-primary text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50 cursor-pointer"
-              aria-label="Send message"
-            >
-              <ArrowUpIcon className="size-3" />
-            </TooltipIconButton>
-          </ComposerPrimitive.Send>
-        </AuiIf>
+    <ComposerPrimitive.Root className="relative rounded-md border border-border bg-background [--composer-padding:0.25rem] [--composer-radius:0.375rem] focus-within:border-ring focus-within:ring-[1px] focus-within:ring-ring/40">
+      <ComposerPrimitive.AttachmentDropzone className="flex min-h-16 w-full flex-col rounded-md outline-none transition-colors data-[dragging=true]:bg-accent/30">
+        <ComposerAttachments />
+        <ComposerPrimitive.Input
+          autoFocus
+          className="max-h-36 min-h-16 w-full resize-none bg-transparent px-3 py-2 pr-20 text-[12px] leading-relaxed text-foreground outline-none placeholder:text-muted-foreground"
+          placeholder="Send a message..."
+          submitMode="enter"
+          aria-label="Message input"
+        />
+        <div className="absolute bottom-2 right-2 flex items-center gap-1">
+          <ComposerAddAttachment />
+          <AuiIf condition={(s) => !s.thread.isRunning}>
+            <ComposerPrimitive.Send asChild>
+              <TooltipIconButton
+                tooltip="Send message"
+                side="bottom"
+                variant="default"
+                size="icon"
+                className="size-6 rounded-md bg-primary text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50 cursor-pointer"
+                aria-label="Send message"
+              >
+                <ArrowUpIcon className="size-3" />
+              </TooltipIconButton>
+            </ComposerPrimitive.Send>
+          </AuiIf>
 
-        <AuiIf condition={(s) => s.thread.isRunning}>
-          <ComposerPrimitive.Cancel asChild>
-            <Button
-              type="button"
-              variant="default"
-              size="icon"
-              className="size-6 rounded-md bg-primary text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50 cursor-pointer"
-              aria-label="Stop generating"
-            >
-              <SquareIcon className="size-3" />
-            </Button>
-          </ComposerPrimitive.Cancel>
-        </AuiIf>
-      </div>
+          <AuiIf condition={(s) => s.thread.isRunning}>
+            <ComposerPrimitive.Cancel asChild>
+              <Button
+                type="button"
+                variant="default"
+                size="icon"
+                className="size-6 rounded-md bg-primary text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50 cursor-pointer"
+                aria-label="Stop generating"
+              >
+                <SquareIcon className="size-3" />
+              </Button>
+            </ComposerPrimitive.Cancel>
+          </AuiIf>
+        </div>
+      </ComposerPrimitive.AttachmentDropzone>
     </ComposerPrimitive.Root>
   );
 }
