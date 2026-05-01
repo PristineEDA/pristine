@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { useFileOutlines } from '../../../../data/mockDataLoader';
 import { refreshWorkspaceGitStatus, useWorkspaceGitStatus } from '../../../git/workspaceGitStatus';
@@ -12,7 +12,6 @@ import {
   getPathBaseName,
   getWorkspaceParentPath,
   isWorkspaceRelativeFilePath,
-  toTreeTestId,
   type ExplorerSelectedNode,
   type ExplorerTreeEditSession,
   type WorkspaceClipboardState,
@@ -21,6 +20,25 @@ import {
   validateWorkspaceEntryName,
 } from '../../../workspace/workspaceFiles';
 import { useWorkspaceTree, type WorkspaceRevealRequest } from '../../../workspace/useWorkspaceTree';
+import {
+  getExplorerClipboardTarget,
+  getExplorerContextMenuTargetPath,
+  getExplorerDeleteTarget,
+  getExplorerKeyboardAction,
+  getExplorerPasteTargetPath,
+  getExplorerRenameTarget,
+  isEditableKeyboardTarget,
+  isExplorerContextMenuTarget,
+  isMonacoTextInputKeyboardTarget,
+} from './LeftSidePanelKeyboard';
+import { useExplorerTreeScrollLock } from './useExplorerTreeScrollLock';
+
+export {
+  getExplorerClipboardTarget,
+  getExplorerDeleteTarget,
+  getExplorerPasteTargetPath,
+  getExplorerRenameTarget,
+} from './LeftSidePanelKeyboard';
 
 interface LeftSidePanelProps {
   activeFileId: string;
@@ -54,175 +72,6 @@ function createRealExplorerSelection(path: string, type: ExplorerSelectedNode['t
   };
 }
 
-export function getExplorerRenameTarget(
-  selectedNode: ExplorerSelectedNode | null,
-  activeFileId: string,
-): { path: string; type: 'file' | 'folder' } | null {
-  if (selectedNode?.source === 'real' && selectedNode.type !== 'root') {
-    return {
-      path: selectedNode.path,
-      type: selectedNode.type,
-    };
-  }
-
-  if (isWorkspaceRelativeFilePath(activeFileId)) {
-    return {
-      path: activeFileId,
-      type: 'file',
-    };
-  }
-
-  return null;
-}
-
-export function getExplorerClipboardTarget(
-  selectedNode: ExplorerSelectedNode | null,
-  activeFileId: string,
-): { path: string; type: WorkspaceEntryType } | null {
-  if (selectedNode?.source === 'real' && selectedNode.type !== 'root') {
-    return {
-      path: selectedNode.path,
-      type: selectedNode.type,
-    };
-  }
-
-  if (isWorkspaceRelativeFilePath(activeFileId)) {
-    return {
-      path: activeFileId,
-      type: 'file',
-    };
-  }
-
-  return null;
-}
-
-export function getExplorerPasteTargetPath(
-  selectedNode: ExplorerSelectedNode | null,
-  activeFileId: string,
-): string | null {
-  if (selectedNode?.source === 'real') {
-    if (selectedNode.type === 'file') {
-      return getWorkspaceParentPath(selectedNode.path);
-    }
-
-    return selectedNode.path;
-  }
-
-  if (isWorkspaceRelativeFilePath(activeFileId)) {
-    return getWorkspaceParentPath(activeFileId);
-  }
-
-  return null;
-}
-
-function getExplorerContextMenuTargetPath(
-  selectedNode: ExplorerSelectedNode | null,
-  activeFileId: string,
-): string | null {
-  if (selectedNode?.source === 'real') {
-    return selectedNode.path;
-  }
-
-  if (isWorkspaceRelativeFilePath(activeFileId)) {
-    return activeFileId;
-  }
-
-  return null;
-}
-
-type ExplorerKeyboardAction = 'rename' | 'delete' | 'copy' | 'cut' | 'paste' | 'clear-clipboard' | 'open-context-menu';
-
-function getExplorerKeyboardAction(event: Pick<KeyboardEvent, 'key' | 'altKey' | 'ctrlKey' | 'metaKey' | 'shiftKey'>): ExplorerKeyboardAction | null {
-  const normalizedKey = event.key.toLowerCase();
-  const hasPrimaryModifier = (event.ctrlKey || event.metaKey) && !(event.ctrlKey && event.metaKey);
-
-  if (!event.altKey && !event.shiftKey && hasPrimaryModifier) {
-    if (normalizedKey === 'c') {
-      return 'copy';
-    }
-
-    if (normalizedKey === 'x') {
-      return 'cut';
-    }
-
-    if (normalizedKey === 'v') {
-      return 'paste';
-    }
-
-    return null;
-  }
-
-  if (!event.altKey && !event.ctrlKey && !event.metaKey && event.shiftKey && event.key === 'F10') {
-    return 'open-context-menu';
-  }
-
-  if (!event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey && event.key === 'ContextMenu') {
-    return 'open-context-menu';
-  }
-
-  if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
-    return null;
-  }
-
-  if (event.key === 'F2') {
-    return 'rename';
-  }
-
-  if (event.key === 'Delete') {
-    return 'delete';
-  }
-
-  if (event.key === 'Escape') {
-    return 'clear-clipboard';
-  }
-
-  return null;
-}
-
-export function getExplorerDeleteTarget(
-  selectedNode: ExplorerSelectedNode | null,
-): { path: string; type: 'file' | 'folder' } | null {
-  if (selectedNode?.source === 'real' && selectedNode.type !== 'root') {
-    return {
-      path: selectedNode.path,
-      type: selectedNode.type,
-    };
-  }
-
-  return null;
-}
-
-function isEditableKeyboardTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) {
-    return false;
-  }
-
-  if (target.isContentEditable) {
-    return true;
-  }
-
-  return Boolean(target.closest('input, textarea, select, [contenteditable="true"]'));
-}
-
-function isMonacoTextInputKeyboardTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) {
-    return false;
-  }
-
-  return Boolean(
-    target.closest('.monaco-editor')
-    && target.closest('textarea.inputarea, .inputarea, .native-edit-context'),
-  );
-}
-
-function isExplorerContextMenuTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) {
-    return false;
-  }
-
-  return Boolean(target.closest('[data-testid="explorer-context-menu"]'));
-}
-
 export function LeftSidePanel({
   activeFileId,
   onCreateWorkspaceFile,
@@ -242,20 +91,10 @@ export function LeftSidePanel({
   onWorkspaceRefresh,
   workspaceClipboard,
 }: LeftSidePanelProps) {
-  type ExplorerTreeScrollLock = {
-    anchorTestId: string | null;
-    anchorTop: number | null;
-    top: number;
-    releaseAfterRefreshToken: number;
-  };
-
   const treeContainerRef = useRef<HTMLDivElement | null>(null);
   const treeInteractionActiveRef = useRef(false);
   const monacoDeleteSelectionArmedRef = useRef(false);
   const pendingTreeDrivenActiveFileSelectionRef = useRef<string | null>(null);
-  const treeScrollLockRef = useRef<ExplorerTreeScrollLock | null>(null);
-  const treeScrollLockAnimationFrameRef = useRef<number | null>(null);
-  const treeScrollLockReleaseTimeoutRef = useRef<number | null>(null);
   const [selectedNode, setSelectedNode] = useState<ExplorerSelectedNode | null>(null);
   const latestSelectedNodeRef = useRef<ExplorerSelectedNode | null>(null);
   const [treeEditSession, setTreeEditSession] = useState<ExplorerTreeEditSession | null>(null);
@@ -297,137 +136,18 @@ export function LeftSidePanel({
     treeContainerRef.current?.focus();
   }, []);
 
-  const syncTreeScrollLockPosition = useCallback(() => {
-    const treeScrollLock = treeScrollLockRef.current;
-    const treeContainer = treeContainerRef.current;
-
-    if (!treeScrollLock || !treeContainer) {
-      return false;
-    }
-
-    if (treeScrollLock.anchorTestId && treeScrollLock.anchorTop !== null) {
-      const anchorElement = treeContainer.querySelector<HTMLElement>(`[data-testid="${treeScrollLock.anchorTestId}"]`);
-
-      if (anchorElement) {
-        const currentAnchorTop = Math.round(anchorElement.getBoundingClientRect().top);
-        const delta = currentAnchorTop - treeScrollLock.anchorTop;
-
-        if (delta !== 0) {
-          treeContainer.scrollTop += delta;
-          treeScrollLock.top = Math.round(treeContainer.scrollTop);
-        }
-
-        return true;
-      }
-    }
-
-    if (Math.round(treeContainer.scrollTop) !== treeScrollLock.top) {
-      treeContainer.scrollTop = treeScrollLock.top;
-    }
-
-    return true;
-  }, []);
-
-  const stopTreeScrollLockLoop = useCallback(() => {
-    if (treeScrollLockAnimationFrameRef.current === null || typeof window === 'undefined') {
-      return;
-    }
-
-    window.cancelAnimationFrame(treeScrollLockAnimationFrameRef.current);
-    treeScrollLockAnimationFrameRef.current = null;
-  }, []);
-
-  const clearTreeScrollLockReleaseTimeout = useCallback(() => {
-    if (treeScrollLockReleaseTimeoutRef.current === null || typeof window === 'undefined') {
-      return;
-    }
-
-    window.clearTimeout(treeScrollLockReleaseTimeoutRef.current);
-    treeScrollLockReleaseTimeoutRef.current = null;
-  }, []);
-
-  const releaseTreeScrollLock = useCallback(() => {
-    clearTreeScrollLockReleaseTimeout();
-    treeScrollLockRef.current = null;
-    stopTreeScrollLockLoop();
-  }, [clearTreeScrollLockReleaseTimeout, stopTreeScrollLockLoop]);
-
-  const startTreeScrollLockLoop = useCallback(() => {
-    if (treeScrollLockAnimationFrameRef.current !== null || typeof window === 'undefined') {
-      return;
-    }
-
-    const syncScrollTop = () => {
-      if (!syncTreeScrollLockPosition()) {
-        treeScrollLockAnimationFrameRef.current = null;
-        return;
-      }
-
-      treeScrollLockAnimationFrameRef.current = window.requestAnimationFrame(syncScrollTop);
-    };
-
-    treeScrollLockAnimationFrameRef.current = window.requestAnimationFrame(syncScrollTop);
-  }, [syncTreeScrollLockPosition]);
-
-  const armTreeScrollLockForNextRefresh = useCallback((targetPath: string) => {
-    const treeContainer = treeContainerRef.current;
-
-    if (!treeContainer) {
-      treeScrollLockRef.current = null;
-      stopTreeScrollLockLoop();
-      clearTreeScrollLockReleaseTimeout();
-      return;
-    }
-
-    const top = Math.round(treeContainer.scrollTop);
-    const rowElements = Array.from(treeContainer.querySelectorAll<HTMLElement>('[data-testid^="file-tree-node-"]'));
-    const targetTestId = `file-tree-node-${toTreeTestId(targetPath)}`;
-    const targetIndex = rowElements.findIndex((element) => element.getAttribute('data-testid') === targetTestId);
-    const anchorElement = targetIndex >= 0
-      ? rowElements[targetIndex + 1] ?? rowElements[targetIndex - 1] ?? rowElements[targetIndex] ?? null
-      : null;
-
-    treeScrollLockRef.current = {
-      anchorTestId: anchorElement?.getAttribute('data-testid') ?? null,
-      anchorTop: anchorElement ? Math.round(anchorElement.getBoundingClientRect().top) : null,
-      top,
-      releaseAfterRefreshToken: refreshToken + 1,
-    };
-    treeContainer.scrollTop = top;
-    clearTreeScrollLockReleaseTimeout();
-    startTreeScrollLockLoop();
-  }, [clearTreeScrollLockReleaseTimeout, refreshToken, startTreeScrollLockLoop, stopTreeScrollLockLoop]);
+  const {
+    armTreeScrollLockForNextRefresh,
+    releaseTreeScrollLock,
+  } = useExplorerTreeScrollLock({
+    refreshToken,
+    syncDependencies: [selectedNode, treeEditSession, treeNodes, workspaceAvailable],
+    treeContainerRef,
+  });
 
   const handleRevealHandled = useCallback((token: number) => {
     setHandledRevealRequestToken((current) => (current === token ? current : token));
   }, []);
-
-  useLayoutEffect(() => {
-    syncTreeScrollLockPosition();
-  }, [refreshToken, selectedNode, syncTreeScrollLockPosition, treeEditSession, treeNodes, workspaceAvailable]);
-
-  useEffect(() => {
-    const treeScrollLock = treeScrollLockRef.current;
-
-    if (!treeScrollLock || refreshToken < treeScrollLock.releaseAfterRefreshToken || typeof window === 'undefined') {
-      return;
-    }
-
-    clearTreeScrollLockReleaseTimeout();
-    treeScrollLockReleaseTimeoutRef.current = window.setTimeout(() => {
-      releaseTreeScrollLock();
-    }, 150);
-
-    return () => {
-      clearTreeScrollLockReleaseTimeout();
-    };
-  }, [clearTreeScrollLockReleaseTimeout, refreshToken, releaseTreeScrollLock]);
-
-  useEffect(() => {
-    return () => {
-      releaseTreeScrollLock();
-    };
-  }, [releaseTreeScrollLock]);
 
   const startCopyForNode = useCallback(async (path: string, entryType: WorkspaceEntryType) => {
     setSelectedNode(createRealExplorerSelection(path, entryType));
