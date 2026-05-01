@@ -58,6 +58,7 @@ export const FileTreeNodeRow = memo(function FileTreeNodeRow({
           </span>
           <WorkspaceFolderIcon
             name={node.name}
+            path={node.path}
             isOpen={isExpanded}
             isRoot={node.path === WORKSPACE_ROOT_PATH}
             className="h-4 w-4"
@@ -77,7 +78,7 @@ export const FileTreeNodeRow = memo(function FileTreeNodeRow({
         <>
           <span className="w-3.5" />
           <span className="w-4 h-4 flex items-center justify-center shrink-0">
-            <WorkspaceFileIcon name={node.name} className="h-4 w-4" testId={`file-tree-icon-${testId}`} />
+            <WorkspaceFileIcon name={node.name} path={node.path} className="h-4 w-4" testId={`file-tree-icon-${testId}`} />
           </span>
           <span className="ml-1 flex min-w-0 flex-1 items-center">
             <span

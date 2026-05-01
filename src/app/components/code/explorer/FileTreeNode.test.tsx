@@ -35,7 +35,7 @@ describe('FileIcon', () => {
     ['constraints_io.xdc', 'fpga-constraint'],
     ['waves.gtkw', 'gtkwave'],
     ['synth_retrosoc.ys', 'yosys'],
-    ['unknown.txt', 'file'],
+    ['unknown.txt', 'document'],
   ])('renders %s with the %s icon', (name, iconKey) => {
     const { container } = render(<FileIcon name={name} />);
 

@@ -15,12 +15,21 @@ describe('resolveWorkspaceFileIcon', () => {
     expect(resolveWorkspaceFileIcon('wrangler.jsonc').key).toBe('wrangler');
   });
 
+  it('supports exact full-path matches and longest suffix rules from Material Icon Theme', () => {
+    expect(resolveWorkspaceFileIcon('.github/labeler.yml').key).toBe('label');
+    expect(resolveWorkspaceFileIcon('.devcontainer/devcontainer.json').key).toBe('container');
+    expect(resolveWorkspaceFileIcon('src/bashly.yaml').key).toBe('bashly');
+    expect(resolveWorkspaceFileIcon('app/routes/user.routing.tsx').key).toBe('routing');
+    expect(resolveWorkspaceFileIcon('types/api.d.ts').key).toBe('typescript-def');
+    expect(resolveWorkspaceFileIcon('resources/views/welcome.blade.php').key).toBe('laravel');
+  });
+
   it('matches extension-based icons and preserves the generic fallback for uncovered file types', () => {
     expect(resolveWorkspaceFileIcon('crt0.S').key).toBe('assembly');
     expect(resolveWorkspaceFileIcon('component.test.tsx').key).toBe('test-jsx');
     expect(resolveWorkspaceFileIcon('vite-env.d.ts').key).toBe('typescript-def');
     expect(resolveWorkspaceFileIcon('diagram.svg').key).toBe('svg');
-    expect(resolveWorkspaceFileIcon('unknown.txt').key).toBe('file');
+    expect(resolveWorkspaceFileIcon('unknown.txt').key).toBe('document');
   });
 
   it('distinguishes RTL language and header variants by extension', () => {
@@ -68,13 +77,15 @@ describe('resolveWorkspaceFileIcon', () => {
 });
 
 describe('resolveWorkspaceFolderIcon', () => {
-  it('resolves exact names, token matches, and root folders to the expected Material icons', () => {
-    expect(resolveWorkspaceFolderIcon({ name: 'src', isOpen: false }).key).toBe('folder-src');
-    expect(resolveWorkspaceFolderIcon({ name: 'src', isOpen: true }).key).toBe('folder-src-open');
-    expect(resolveWorkspaceFolderIcon({ name: 'dist-electron', isOpen: true }).key).toBe('folder-dist-open');
-    expect(resolveWorkspaceFolderIcon({ name: 'test-results', isOpen: false }).key).toBe('folder-test');
-    expect(resolveWorkspaceFolderIcon({ name: '.git', isOpen: true }).key).toBe('folder-git-open');
-    expect(resolveWorkspaceFolderIcon({ name: WORKSPACE_ROOT_PATH, isOpen: true }).key).toBe('folder-root-open');
-    expect(resolveWorkspaceFolderIcon({ name: 'misc', isOpen: false }).key).toBe('folder');
+  it('resolves exact paths, exact names, token matches, and root folders to the expected Material icons', () => {
+    expect(resolveWorkspaceFolderIcon({ name: 'src', path: 'src', isOpen: false }).key).toBe('folder-src');
+    expect(resolveWorkspaceFolderIcon({ name: 'src', path: 'src', isOpen: true }).key).toBe('folder-src-open');
+    expect(resolveWorkspaceFolderIcon({ name: 'workflows', path: '.github/workflows', isOpen: true }).key).toBe('folder-gh-workflows-open');
+    expect(resolveWorkspaceFolderIcon({ name: 'schema', path: 'prisma/schema', isOpen: false }).key).toBe('folder-prisma');
+    expect(resolveWorkspaceFolderIcon({ name: 'dist-electron', path: 'dist-electron', isOpen: true }).key).toBe('folder-dist-open');
+    expect(resolveWorkspaceFolderIcon({ name: 'test-results', path: 'test-results', isOpen: false }).key).toBe('folder-test');
+    expect(resolveWorkspaceFolderIcon({ name: '.git', path: '.git', isOpen: true }).key).toBe('folder-git-open');
+    expect(resolveWorkspaceFolderIcon({ name: WORKSPACE_ROOT_PATH, path: WORKSPACE_ROOT_PATH, isOpen: true }).key).toBe('folder-root-open');
+    expect(resolveWorkspaceFolderIcon({ name: 'misc', path: 'misc', isOpen: false }).key).toBe('folder-other');
   });
 });
