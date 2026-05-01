@@ -1,12 +1,10 @@
 import { useCallback, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import {
-  FilePlus, FolderPlus, RefreshCw, ChevronsUpDown,
-} from 'lucide-react';
 import { useFileOutlines } from '../../../../data/mockDataLoader';
 import { refreshWorkspaceGitStatus, useWorkspaceGitStatus } from '../../../git/workspaceGitStatus';
 import { FileTreeNode, type ExplorerContextMenuRequest } from './FileTreeNode';
-import { OutlineNode } from './OutlineNode';
+import { ExplorerPanelTabs, ExplorerToolbar, type ExplorerPanelTab } from './LeftSidePanelChrome';
+import { OutlinePanel } from './LeftSidePanelOutline';
 import {
   DEFAULT_STARTUP_PROJECT_NAME,
   WORKSPACE_ROOT_PATH,
@@ -23,9 +21,6 @@ import {
   validateWorkspaceEntryName,
 } from '../../../workspace/workspaceFiles';
 import { useWorkspaceTree, type WorkspaceRevealRequest } from '../../../workspace/useWorkspaceTree';
-import { Button } from '../../ui/button';
-import { ScrollArea } from '../../ui/scroll-area';
-import { TooltipIconButton } from '../../ui/tooltip-icon-button';
 
 interface LeftSidePanelProps {
   activeFileId: string;
@@ -266,7 +261,7 @@ export function LeftSidePanel({
   const [treeEditSession, setTreeEditSession] = useState<ExplorerTreeEditSession | null>(null);
   const [contextMenuRequest, setContextMenuRequest] = useState<ExplorerContextMenuRequest | null>(null);
   const [handledRevealRequestToken, setHandledRevealRequestToken] = useState<number | null>(null);
-  const [tab, setTab] = useState<'explorer' | 'outline'>('explorer');
+  const [tab, setTab] = useState<ExplorerPanelTab>('explorer');
   const fileOutlines = useFileOutlines();
   const gitStatus = useWorkspaceGitStatus();
   const {
@@ -804,6 +799,20 @@ export function LeftSidePanel({
     });
   }, [ensureFolderExpanded, selectedParentPath]);
 
+  const handleCreateFile = useCallback(() => {
+    startCreateEntry('file');
+  }, [startCreateEntry]);
+
+  const handleCreateFolder = useCallback(() => {
+    startCreateEntry('folder');
+  }, [startCreateEntry]);
+
+  const handleRefreshExplorer = useCallback(() => {
+    onWorkspaceRefresh?.();
+    refreshTree();
+    refreshWorkspaceGitStatus();
+  }, [onWorkspaceRefresh, refreshTree]);
+
   const cancelTreeEdit = useCallback(() => {
     if (!treeEditSession || treeEditSession.isSubmitting) {
       return;
@@ -980,67 +989,18 @@ export function LeftSidePanel({
 
   return (
     <div className="flex flex-col h-full bg-muted/40 overflow-hidden">
-      {/* Tab bar */}
-      <div className="flex shrink-0 border-b border-border">
-        {(['explorer', 'outline'] as const).map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`px-3 py-2 transition-colors border-b-2 ${
-              tab === t
-                ? 'text-[11px] font-semibold text-foreground border-primary'
-                : 'text-[11px] text-muted-foreground border-transparent hover:text-foreground'
-            }`}
-          >
-            {t === 'explorer' ? 'Explorer' : 'Outline'}
-          </button>
-        ))}
-      </div>
+      <ExplorerPanelTabs activeTab={tab} onTabChange={setTab} />
 
       {/* Explorer */}
       {tab === 'explorer' && (
         <div className="flex flex-col flex-1 overflow-hidden">
-          <div className="flex items-center px-3 shrink-0">
-            <span className="flex-1 text-muted-foreground uppercase text-[11px] font-bold tracking-wide">
-              {DEFAULT_STARTUP_PROJECT_NAME}
-            </span>
-            <div className="flex items-center">
-              <TooltipIconButton content="New File">
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label="New File"
-                  className="text-muted-foreground hover:text-foreground"
-                  onClick={() => startCreateEntry('file')}
-                ><FilePlus size={14} /></Button>
-              </TooltipIconButton>
-              <TooltipIconButton content="New Folder">
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label="New Folder"
-                  className="text-muted-foreground hover:text-foreground"
-                  onClick={() => startCreateEntry('folder')}
-                ><FolderPlus size={14} /></Button>
-              </TooltipIconButton>
-              <TooltipIconButton content="Refresh">
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label="Refresh"
-                  className="text-muted-foreground hover:text-foreground"
-                  onClick={() => {
-                    onWorkspaceRefresh?.();
-                    refreshTree();
-                    refreshWorkspaceGitStatus();
-                  }}
-                ><RefreshCw size={13} /></Button>
-              </TooltipIconButton>
-              <TooltipIconButton content="Collapse All">
-                <Button variant="ghost" size="icon-sm" aria-label="Collapse All" className="text-muted-foreground hover:text-foreground" onClick={collapseAll}><ChevronsUpDown size={13} /></Button>
-              </TooltipIconButton>
-            </div>
-          </div>
+          <ExplorerToolbar
+            projectName={DEFAULT_STARTUP_PROJECT_NAME}
+            onCreateFile={handleCreateFile}
+            onCreateFolder={handleCreateFolder}
+            onRefresh={handleRefreshExplorer}
+            onCollapseAll={collapseAll}
+          />
           <div
             ref={treeContainerRef}
             tabIndex={0}
@@ -1092,24 +1052,11 @@ export function LeftSidePanel({
 
       {/* Outline */}
       {tab === 'outline' && (
-        <div className="flex flex-col flex-1 overflow-hidden">
-          <div className="px-3 py-1.5 shrink-0">
-            <span className="text-muted-foreground uppercase text-[11px] font-bold tracking-wide">
-              OUTLINE — {currentOutlineId || 'No file open'}
-            </span>
-          </div>
-          <ScrollArea className="flex-1">
-            {outline.length === 0 ? (
-              <div className="px-4 py-3 text-muted-foreground text-[12px]">
-                No outline information available
-              </div>
-            ) : (
-              outline.map((item) => (
-                <OutlineNode key={item.id} item={item} depth={0} onLineJump={onLineJump} />
-              ))
-            )}
-          </ScrollArea>
-        </div>
+        <OutlinePanel
+          currentOutlineId={currentOutlineId}
+          outline={outline}
+          onLineJump={onLineJump}
+        />
       )}
     </div>
   );

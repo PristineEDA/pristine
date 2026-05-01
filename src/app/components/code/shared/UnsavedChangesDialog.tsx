@@ -8,7 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '../../ui/dialog';
-import { useWorkspace } from '../../../context/WorkspaceContext';
+import { useWorkspaceDialogs, useWorkspaceFiles } from '../../../context/WorkspaceContext';
 import { getPathBaseName } from '../../../workspace/workspaceFiles';
 
 const EMPTY_FILE_IDS: string[] = [];
@@ -22,10 +22,12 @@ export function UnsavedChangesDialog() {
     cancelUnsavedChanges,
     confirmUnsavedChangesSave,
     discardUnsavedChanges,
+    unsavedChangesDialog,
+  } = useWorkspaceDialogs();
+  const {
     saveErrors,
     savingFiles,
-    unsavedChangesDialog,
-  } = useWorkspace();
+  } = useWorkspaceFiles();
 
   const requestedFileIds = unsavedChangesDialog?.fileIds ?? EMPTY_FILE_IDS;
   const [selectedFileIds, setSelectedFileIds] = useState<string[]>(requestedFileIds);
