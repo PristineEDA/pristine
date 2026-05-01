@@ -1,47 +1,30 @@
 import { useEffect, useEffectEvent, useRef, useState } from 'react';
+import { Settings, Sun, Moon } from 'lucide-react';
 import {
-  Settings, Minus, Square, X, Code2, Presentation, Workflow,
-  Sun, Moon,
-} from 'lucide-react';
-import {
-  applicationMenus,
-  getApplicationMenuItemAction,
-  getApplicationMenuItemShortcut,
-  isAppMenuItem,
+  type AppMenuAction,
   type MenuCommandEvent,
 } from '../../../menu/applicationMenu';
-import { formatShortcutLabel, isMacOSPlatform } from '../../../menu/shortcutLabels';
+import { isMacOSPlatform } from '../../../menu/shortcutLabels';
 import { canToggleLayoutPanels as canUseLayoutPanels } from '../../../codeViewPanels';
 import { useWorkspaceEditor, useWorkspaceFiles, useWorkspaceView } from '../../../context/WorkspaceContext';
 import { useTheme } from '../../../context/ThemeContext';
-import {
-  Menubar,
-  MenubarMenu,
-  MenubarTrigger,
-  MenubarContent,
-  MenubarItem,
-  MenubarSeparator,
-  MenubarShortcut,
-} from '../../ui/menubar';
-import { ToggleGroup, ToggleGroupItem } from '../../ui/toggle-group';
 import { Toggle } from '../../ui/toggle';
 import { Separator } from '../../ui/separator';
 import { Button } from '../../ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../../ui/tooltip';
 import { useSidebar } from '../../ui/sidebar';
 import { AboutDialog } from './AboutDialog';
+import { MenuBarApplicationMenu } from './MenuBarApplicationMenu';
 import { MenuBarSettingsDialogs, useMenuBarSettingsController } from './MenuBarSettingsDialog';
 import { UserAccountPopover } from './MenuBarUserAccountPopover';
-import { centerViewSwitchItemClassName } from './viewSwitcherStyles';
+import { MenuBarViewSwitcher } from './MenuBarViewSwitcher';
+import { MenuBarWindowControls } from './MenuBarWindowControls';
 
 const noDrag = { WebkitAppRegion: 'no-drag' as const };
 const noDragInteractive = {
   WebkitAppRegion: 'no-drag' as const,
   pointerEvents: 'auto' as const,
 };
-function getMenuItemShortcut(menuLabel: string, itemName: string): string {
-  return formatShortcutLabel(getApplicationMenuItemShortcut(menuLabel, itemName));
-}
 
 function isCloseShortcutPressed(event: KeyboardEvent): boolean {
   if (event.key.toLowerCase() !== 'q' || event.altKey || event.shiftKey) {
@@ -166,7 +149,7 @@ export function MenuBar({
     void window.electronAPI?.close();
   };
 
-  const handleMenuItemSelect = (action: ReturnType<typeof getApplicationMenuItemAction>) => {
+  const handleMenuItemSelect = (action: AppMenuAction | null) => {
     if (action === 'open-settings') {
       settingsController.openSettingsDialog();
       return;
@@ -298,35 +281,10 @@ export function MenuBar({
 
           {/* Menu items — shadcn Menubar */}
           {showWindowMenu && (
-            <Menubar className="h-8 border-0 rounded-none bg-transparent p-0 shadow-none" data-testid="menu-menubar" style={noDrag as React.CSSProperties}>
-              {applicationMenus.map((menu) => (
-                <MenubarMenu key={menu.label}>
-                  <MenubarTrigger className="px-2.5 h-6 text-[12px] font-normal rounded-sm">
-                    {menu.label}
-                  </MenubarTrigger>
-                  <MenubarContent align="start" sideOffset={4} className="min-w-36 p-0.5">
-                    {menu.items.map((item, index) => {
-                      if (!isAppMenuItem(item)) {
-                        return <MenubarSeparator key={`${menu.label}-separator-${index}`} className="my-0.5" />;
-                      }
-
-                      const action = getApplicationMenuItemAction(menu.label, item.name);
-                      const shortcut = getMenuItemShortcut(menu.label, item.name);
-
-                      return (
-                        <MenubarItem
-                          key={`${menu.label}-${item.name}`}
-                          className="px-2 py-1 text-[12px]"
-                          onSelect={() => handleMenuItemSelect(action)}
-                        >
-                          {item.name} <MenubarShortcut>{shortcut}</MenubarShortcut>
-                        </MenubarItem>
-                      );
-                    })}
-                  </MenubarContent>
-                </MenubarMenu>
-              ))}
-            </Menubar>
+            <MenuBarApplicationMenu
+              menuStyle={noDrag as React.CSSProperties}
+              onSelectAction={handleMenuItemSelect}
+            />
           )}
 
 
@@ -352,49 +310,11 @@ export function MenuBar({
           </TooltipIconButton>
 
           {/* Center view switcher — absolutely centered */}
-          <div
-            data-testid="center-view-switcher"
-            className="absolute left-1/2 -translate-x-1/2"
-            style={noDragInteractive as React.CSSProperties}
-          >
-          <ToggleGroup
-            type="single"
+          <MenuBarViewSwitcher
             value={mainContentView}
-            onValueChange={(value) => { if (value) setMainContentView(value as 'code' | 'whiteboard' | 'workflow'); }}
-            className="bg-muted rounded p-0.5 gap-0.5"
-          >
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="inline-flex">
-                  <ToggleGroupItem aria-label="Code" data-testid="center-view-code" value="code" className={centerViewSwitchItemClassName}>
-                    <Code2 size={13} />
-                  </ToggleGroupItem>
-                </span>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" sideOffset={6}>Code</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="inline-flex">
-                  <ToggleGroupItem aria-label="Whiteboard" data-testid="center-view-whiteboard" value="whiteboard" className={centerViewSwitchItemClassName}>
-                    <Presentation size={13} />
-                  </ToggleGroupItem>
-                </span>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" sideOffset={6}>Whiteboard</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="inline-flex">
-                  <ToggleGroupItem aria-label="Workflow" data-testid="center-view-workflow" value="workflow" className={centerViewSwitchItemClassName}>
-                    <Workflow size={13} />
-                  </ToggleGroupItem>
-                </span>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" sideOffset={6}>Workflow</TooltipContent>
-            </Tooltip>
-          </ToggleGroup>
-          </div>
+            onValueChange={setMainContentView}
+            interactiveStyle={noDragInteractive as React.CSSProperties}
+          />
 
           {/* Right side controls */}
           <div
@@ -498,32 +418,10 @@ export function MenuBar({
 
           {/* Window controls (hidden on macOS — native traffic lights used instead) */}
           {!isMacOS && (
-            <>
-              <button
-                data-testid="window-control-minimize"
-                className="w-9 h-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-                style={noDragInteractive as React.CSSProperties}
-                onClick={() => window.electronAPI?.minimize()}
-              >
-                <Minus size={14} />
-              </button>
-              <button
-                data-testid="window-control-maximize"
-                className="w-9 h-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-                style={noDragInteractive as React.CSSProperties}
-                onClick={() => window.electronAPI?.maximize()}
-              >
-                <Square size={12} />
-              </button>
-              <button
-                data-testid="window-control-close"
-                className="w-9 h-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-destructive/80 transition-colors"
-                style={noDragInteractive as React.CSSProperties}
-                onClick={requestAppClose}
-              >
-                <X size={14} />
-              </button>
-            </>
+            <MenuBarWindowControls
+              interactiveStyle={noDragInteractive as React.CSSProperties}
+              onRequestClose={requestAppClose}
+            />
           )}
 
           </div>
