@@ -1,5 +1,6 @@
 import type { ComponentProps } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetWorkspaceGitStatusStoreForTests } from '../../../git/workspaceGitStatus';
 import {
@@ -35,10 +36,29 @@ function renderLeftSidePanel(props: Partial<ComponentProps<typeof LeftSidePanel>
   };
 }
 
+type TestUser = ReturnType<typeof userEvent.setup>;
+
+let testUser: TestUser;
+
+async function clickExplorerNode(testId: string) {
+  await testUser.click(await screen.findByTestId(testId));
+}
+
+async function expandDefaultTree() {
+  await clickExplorerNode('file-tree-node-rtl');
+  await clickExplorerNode('file-tree-node-rtl_peripherals');
+}
+
+async function selectDefaultFile() {
+  await expandDefaultTree();
+  await clickExplorerNode('file-tree-node-rtl_peripherals_uart_rx_v');
+}
+
 describe('LeftSidePanel', () => {
   beforeEach(() => {
     const electronApi = window.electronAPI!;
 
+    testUser = userEvent.setup();
     resetWorkspaceGitStatusStoreForTests();
 
     vi.mocked(electronApi.fs.exists).mockResolvedValue(true);
@@ -74,9 +94,7 @@ describe('LeftSidePanel', () => {
 
     renderLeftSidePanel({ onFileOpen, onFilePreview });
 
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl'));
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals'));
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals_uart_rx_v'));
+    await selectDefaultFile();
 
     expect(onFilePreview).toHaveBeenCalledWith('rtl/peripherals/uart_rx.v', 'uart_rx.v');
   });
@@ -86,11 +104,10 @@ describe('LeftSidePanel', () => {
 
     const { container } = renderLeftSidePanel({ onFileOpen });
 
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl'));
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals'));
+    await expandDefaultTree();
 
     const fileNode = await screen.findByTestId('file-tree-node-rtl_peripherals_uart_rx_v');
-    fireEvent.doubleClick(fileNode);
+    await testUser.dblClick(fileNode);
 
     expect(onFileOpen).toHaveBeenCalledWith('rtl/peripherals/uart_rx.v', 'uart_rx.v');
     expect(container.querySelector('.explorer-tree-scrollbar')).not.toBeNull();
@@ -104,7 +121,7 @@ describe('LeftSidePanel', () => {
 
     const folderNode = await screen.findByTestId('file-tree-node-rtl');
 
-    fireEvent.click(folderNode);
+    await testUser.click(folderNode);
 
     expect(screen.getByTestId('file-tree-node-rtl').className).toContain('bg-primary/20');
     expect(screen.getByTestId('file-tree-node-rtl').className).toContain('hover:bg-primary/20');
@@ -120,8 +137,7 @@ describe('LeftSidePanel', () => {
       currentOutlineId: 'uart_rx',
     });
 
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl'));
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals'));
+    await expandDefaultTree();
 
     const folderNode = screen.getByTestId('file-tree-node-rtl_peripherals');
     const fileNode = await screen.findByTestId('file-tree-node-rtl_peripherals_uart_rx_v');
@@ -129,7 +145,7 @@ describe('LeftSidePanel', () => {
     expect(folderNode.className).toContain('bg-primary/20');
     expect(fileNode.className).not.toContain('hover:bg-primary/20');
 
-    fireEvent.click(fileNode);
+    await testUser.click(fileNode);
 
     expect(screen.getByTestId('file-tree-node-rtl_peripherals').className).not.toContain('hover:bg-primary/20');
     expect(screen.getByTestId('file-tree-node-rtl_peripherals_uart_rx_v').className).toContain('bg-primary/20');
@@ -142,8 +158,7 @@ describe('LeftSidePanel', () => {
       currentOutlineId: 'uart_rx',
     });
 
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl'));
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals'));
+    await expandDefaultTree();
 
     expect(screen.getByTestId('file-tree-node-rtl_peripherals').className).toContain('bg-primary/20');
     expect((await screen.findByTestId('file-tree-node-rtl_peripherals_uart_rx_v')).className).not.toContain('hover:bg-primary/20');
@@ -176,10 +191,10 @@ describe('LeftSidePanel', () => {
     const rootNode = await screen.findByTestId('file-tree-node-root');
     expect(await screen.findByTestId('file-tree-node-rtl')).toBeInTheDocument();
 
-    fireEvent.click(rootNode);
+    await testUser.click(rootNode);
     expect(screen.queryByTestId('file-tree-node-rtl')).not.toBeInTheDocument();
 
-    fireEvent.click(rootNode);
+    await testUser.click(rootNode);
     expect(await screen.findByTestId('file-tree-node-rtl')).toBeInTheDocument();
   });
 
@@ -188,7 +203,7 @@ describe('LeftSidePanel', () => {
 
     expect(await screen.findByTestId('file-tree-node-rtl')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Collapse All' }));
+    await testUser.click(screen.getByRole('button', { name: 'Collapse All' }));
 
     expect(screen.getByTestId('file-tree-node-root')).toBeInTheDocument();
     expect(screen.queryByTestId('file-tree-node-rtl')).not.toBeInTheDocument();
@@ -202,11 +217,10 @@ describe('LeftSidePanel', () => {
       onRenameWorkspaceEntry,
     });
 
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl'));
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals'));
+    await expandDefaultTree();
 
     const fileNode = await screen.findByTestId('file-tree-node-rtl_peripherals_uart_rx_v');
-    fireEvent.click(fileNode);
+    await testUser.click(fileNode);
     fireEvent.keyDown(container.querySelector('.explorer-tree-scrollbar') as HTMLElement, { key: 'F2' });
 
     const renameInput = await screen.findByTestId('file-tree-input-rtl_peripherals_uart_rx_v');
@@ -230,8 +244,7 @@ describe('LeftSidePanel', () => {
       refreshToken: 0,
     });
 
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl'));
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals'));
+    await expandDefaultTree();
     await screen.findByTestId('file-tree-node-rtl_peripherals_uart_rx_v');
 
     const tree = container.querySelector('.explorer-tree-scrollbar') as HTMLElement;
@@ -314,8 +327,7 @@ describe('LeftSidePanel', () => {
       onRenameWorkspaceEntry,
     });
 
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl'));
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals'));
+    await expandDefaultTree();
 
     const fileNode = await screen.findByTestId('file-tree-node-rtl_peripherals_uart_rx_v');
     await screen.findByTestId('file-tree-node-rtl_peripherals_uart_aux_v');
@@ -351,7 +363,7 @@ describe('LeftSidePanel', () => {
       } as DOMRect;
     });
 
-    fireEvent.click(fileNode);
+    await testUser.click(fileNode);
     fireEvent.keyDown(tree, { key: 'F2' });
 
     const renameInput = await screen.findByTestId('file-tree-input-rtl_peripherals_uart_rx_v');
@@ -385,9 +397,7 @@ describe('LeftSidePanel', () => {
       currentOutlineId: 'uart_rx',
     });
 
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl'));
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals'));
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals_uart_rx_v'));
+    await selectDefaultFile();
 
     fireEvent.keyDown(document, { key: 'F2' });
 
@@ -402,10 +412,10 @@ describe('LeftSidePanel', () => {
       onRenameWorkspaceEntry,
     });
 
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl'));
+    await clickExplorerNode('file-tree-node-rtl');
 
     const peripheralsFolderNode = await screen.findByTestId('file-tree-node-rtl_peripherals');
-    fireEvent.click(peripheralsFolderNode);
+    await testUser.click(peripheralsFolderNode);
     fireEvent.keyDown(container.querySelector('.explorer-tree-scrollbar') as HTMLElement, { key: 'F2' });
 
     const renameInput = await screen.findByTestId('file-tree-input-rtl_peripherals');
@@ -429,14 +439,13 @@ describe('LeftSidePanel', () => {
       onRenameWorkspaceEntry,
     });
 
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl'));
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals'));
+    await expandDefaultTree();
 
     const fileNode = await screen.findByTestId('file-tree-node-rtl_peripherals_uart_rx_v');
-    fireEvent.click(fileNode);
+    await testUser.click(fileNode);
 
     const peripheralsFolderNode = await screen.findByTestId('file-tree-node-rtl_peripherals');
-    fireEvent.click(peripheralsFolderNode);
+    await testUser.click(peripheralsFolderNode);
 
     rerender(
       <LeftSidePanel
@@ -494,9 +503,7 @@ describe('LeftSidePanel', () => {
       onDeleteWorkspaceEntry,
     });
 
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl'));
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals'));
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals_uart_rx_v'));
+    await selectDefaultFile();
 
     fireEvent.keyDown(document, { key: 'Delete' });
 
@@ -514,9 +521,7 @@ describe('LeftSidePanel', () => {
       onCopyWorkspaceEntry,
     });
 
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl'));
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals'));
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals_uart_rx_v'));
+    await selectDefaultFile();
 
     fireEvent.keyDown(document, { key: 'c', ctrlKey: true });
 
@@ -531,9 +536,7 @@ describe('LeftSidePanel', () => {
       currentOutlineId: 'uart_rx',
     });
 
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl'));
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals'));
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals_uart_rx_v'));
+    await selectDefaultFile();
 
     fireEvent.keyDown(container.querySelector('.explorer-tree-scrollbar') as HTMLElement, { key: 'F10', shiftKey: true });
 
@@ -549,9 +552,7 @@ describe('LeftSidePanel', () => {
       onDeleteWorkspaceEntry,
     });
 
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl'));
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals'));
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals_uart_rx_v'));
+    await selectDefaultFile();
 
     fireEvent.keyDown(container.querySelector('.explorer-tree-scrollbar') as HTMLElement, { key: 'F10', shiftKey: true });
 
@@ -569,9 +570,7 @@ describe('LeftSidePanel', () => {
       onCutWorkspaceEntry,
     });
 
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl'));
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals'));
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals_uart_rx_v'));
+    await selectDefaultFile();
 
     fireEvent.keyDown(container.querySelector('.explorer-tree-scrollbar') as HTMLElement, { key: 'x', ctrlKey: true });
 
@@ -597,9 +596,7 @@ describe('LeftSidePanel', () => {
       },
     });
 
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl'));
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals'));
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals_uart_rx_v'));
+    await selectDefaultFile();
 
     fireEvent.keyDown(document, { key: 'v', ctrlKey: true });
 
@@ -622,9 +619,7 @@ describe('LeftSidePanel', () => {
       },
     });
 
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl'));
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals'));
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals_uart_rx_v'));
+    await selectDefaultFile();
 
     fireEvent.keyDown(document, { key: 'Escape' });
 
@@ -640,9 +635,7 @@ describe('LeftSidePanel', () => {
       onDeleteWorkspaceEntry,
     });
 
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl'));
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals'));
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals_uart_rx_v'));
+    await selectDefaultFile();
 
     const monacoRoot = document.createElement('div');
     monacoRoot.className = 'monaco-editor';
@@ -672,9 +665,9 @@ describe('LeftSidePanel', () => {
       onDeleteWorkspaceEntry,
     });
 
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl'));
+    await clickExplorerNode('file-tree-node-rtl');
     fireEvent.contextMenu(await screen.findByTestId('file-tree-node-rtl_peripherals'), { clientX: 50, clientY: 60 });
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete' }));
+    await testUser.click(screen.getByRole('menuitem', { name: 'Delete' }));
 
     await waitFor(() => {
       expect(onDeleteWorkspaceEntry).toHaveBeenCalledWith('rtl/peripherals', 'folder');
@@ -690,9 +683,8 @@ describe('LeftSidePanel', () => {
       onDeleteWorkspaceEntry,
     });
 
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl'));
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals'));
-    fireEvent.click(screen.getByRole('button', { name: 'New File' }));
+    await expandDefaultTree();
+    await testUser.click(screen.getByRole('button', { name: 'New File' }));
 
     const draftInput = screen.getByRole('textbox');
     draftInput.focus();
@@ -710,9 +702,7 @@ describe('LeftSidePanel', () => {
       onDeleteWorkspaceEntry,
     });
 
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl'));
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals'));
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals_uart_rx_v'));
+    await selectDefaultFile();
 
     const textarea = document.createElement('textarea');
     document.body.appendChild(textarea);
@@ -736,9 +726,7 @@ describe('LeftSidePanel', () => {
       onCopyWorkspaceEntry,
     });
 
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl'));
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals'));
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals_uart_rx_v'));
+    await selectDefaultFile();
 
     const textarea = document.createElement('textarea');
     document.body.appendChild(textarea);
@@ -762,9 +750,7 @@ describe('LeftSidePanel', () => {
       onDeleteWorkspaceEntry,
     });
 
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl'));
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals'));
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals_uart_rx_v'));
+    await selectDefaultFile();
 
     const monacoRoot = document.createElement('div');
     monacoRoot.className = 'monaco-editor';
@@ -802,9 +788,8 @@ describe('LeftSidePanel', () => {
       onCreateWorkspaceFile,
     });
 
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl'));
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals'));
-    fireEvent.click(screen.getByRole('button', { name: 'New File' }));
+    await expandDefaultTree();
+    await testUser.click(screen.getByRole('button', { name: 'New File' }));
 
     const draftInput = screen.getByRole('textbox');
     fireEvent.change(draftInput, { target: { value: 'uart_tx.sv' } });
@@ -824,9 +809,8 @@ describe('LeftSidePanel', () => {
       onCreateWorkspaceFolder,
     });
 
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl'));
-    fireEvent.click(await screen.findByTestId('file-tree-node-rtl_peripherals'));
-    fireEvent.click(screen.getByRole('button', { name: 'New Folder' }));
+    await expandDefaultTree();
+    await testUser.click(screen.getByRole('button', { name: 'New Folder' }));
 
     const draftInput = screen.getByRole('textbox');
     fireEvent.keyDown(draftInput, { key: 'Enter' });

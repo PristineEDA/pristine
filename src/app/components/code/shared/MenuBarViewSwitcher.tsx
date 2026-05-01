@@ -36,22 +36,6 @@ export function MenuBarViewSwitcher({
           <TooltipTrigger asChild>
             <span className="inline-flex">
               <ToggleGroupItem
-                aria-label="Code"
-                data-testid="center-view-code"
-                value="code"
-                className={centerViewSwitchItemClassName}
-              >
-                <Code2 size={13} />
-              </ToggleGroupItem>
-            </span>
-          </TooltipTrigger>
-          <TooltipContent side="bottom" sideOffset={6}>Code</TooltipContent>
-        </Tooltip>
-
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span className="inline-flex">
-              <ToggleGroupItem
                 aria-label="Whiteboard"
                 data-testid="center-view-whiteboard"
                 value="whiteboard"
@@ -62,6 +46,22 @@ export function MenuBarViewSwitcher({
             </span>
           </TooltipTrigger>
           <TooltipContent side="bottom" sideOffset={6}>Whiteboard</TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="inline-flex">
+              <ToggleGroupItem
+                aria-label="Code"
+                data-testid="center-view-code"
+                value="code"
+                className={centerViewSwitchItemClassName}
+              >
+                <Code2 size={13} />
+              </ToggleGroupItem>
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" sideOffset={6}>Code</TooltipContent>
         </Tooltip>
 
         <Tooltip>

@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { WorkspaceProvider, useWorkspace } from './WorkspaceContext';
 
@@ -110,8 +111,17 @@ function StableActionHarness({ onSnapshot }: { onSnapshot: (snapshot: WorkspaceA
   return <WorkspaceHarness />;
 }
 
+type TestUser = ReturnType<typeof userEvent.setup>;
+
+let testUser: TestUser;
+
+async function clickHarnessButton(name: string) {
+  await testUser.click(screen.getByText(name));
+}
+
 describe('WorkspaceContext', () => {
   beforeEach(() => {
+    testUser = userEvent.setup();
     vi.clearAllMocks();
     undoActionRun.mockClear();
     redoActionRun.mockClear();
@@ -132,14 +142,14 @@ describe('WorkspaceContext', () => {
       </WorkspaceProvider>,
     );
 
-    fireEvent.click(screen.getByText('copy-reg'));
+    await clickHarnessButton('copy-reg');
 
     await waitFor(() => {
       expect(screen.getByTestId('clipboard-mode')).toHaveTextContent('copy');
       expect(screen.getByTestId('clipboard-path')).toHaveTextContent('rtl/core/reg_file.v');
     });
 
-    fireEvent.click(screen.getByText('paste-core'));
+    await clickHarnessButton('paste-core');
 
     await waitFor(() => {
       expect(window.electronAPI?.fs.copyFile).toHaveBeenCalledWith('rtl/core/reg_file.v', 'rtl/core/reg_file-copy.v');
@@ -159,14 +169,14 @@ describe('WorkspaceContext', () => {
       </WorkspaceProvider>,
     );
 
-    fireEvent.click(screen.getByText('copy-core-folder'));
+    await clickHarnessButton('copy-core-folder');
 
     await waitFor(() => {
       expect(screen.getByTestId('clipboard-mode')).toHaveTextContent('copy');
       expect(screen.getByTestId('clipboard-path')).toHaveTextContent('rtl/core');
     });
 
-    fireEvent.click(screen.getByText('paste-rtl'));
+    await clickHarnessButton('paste-rtl');
 
     await waitFor(() => {
       expect(window.electronAPI?.fs.copyDirectory).toHaveBeenCalledWith('rtl/core', 'rtl/core-copy');
@@ -184,14 +194,14 @@ describe('WorkspaceContext', () => {
       </WorkspaceProvider>,
     );
 
-    fireEvent.click(screen.getByText('open-reg'));
-    fireEvent.click(screen.getByText('cut-reg'));
+    await clickHarnessButton('open-reg');
+    await clickHarnessButton('cut-reg');
 
     await waitFor(() => {
       expect(screen.getByTestId('clipboard-mode')).toHaveTextContent('cut');
     });
 
-    fireEvent.click(screen.getByText('paste-rtl'));
+    await clickHarnessButton('paste-rtl');
 
     await waitFor(() => {
       expect(window.electronAPI?.fs.rename).toHaveBeenCalledWith('rtl/core/reg_file.v', 'rtl/reg_file.v');
@@ -210,16 +220,16 @@ describe('WorkspaceContext', () => {
       </WorkspaceProvider>,
     );
 
-    fireEvent.click(screen.getByText('open-reg'));
-    fireEvent.click(screen.getByText('edit-reg'));
-    fireEvent.click(screen.getByText('copy-reg'));
+    await clickHarnessButton('open-reg');
+    await clickHarnessButton('edit-reg');
+    await clickHarnessButton('copy-reg');
 
     await waitFor(() => {
       expect(screen.getByTestId('unsaved-dialog-files')).toHaveTextContent('rtl/core/reg_file.v');
     });
     expect(screen.getByTestId('clipboard-mode')).toHaveTextContent('');
 
-    fireEvent.click(screen.getByText('discard-unsaved'));
+    await clickHarnessButton('discard-unsaved');
 
     await waitFor(() => {
       expect(screen.getByTestId('clipboard-mode')).toHaveTextContent('copy');
@@ -234,12 +244,12 @@ describe('WorkspaceContext', () => {
       </WorkspaceProvider>,
     );
 
-    fireEvent.click(screen.getByText('open-reg'));
-    fireEvent.click(screen.getByText('edit-reg'));
+    await clickHarnessButton('open-reg');
+    await clickHarnessButton('edit-reg');
 
     expect(screen.getByTestId('dirty-files')).toHaveTextContent('rtl/core/reg_file.v');
 
-    fireEvent.click(screen.getByText('save-active'));
+    await clickHarnessButton('save-active');
 
     await act(async () => {
       await Promise.resolve();
@@ -256,16 +266,16 @@ describe('WorkspaceContext', () => {
       </WorkspaceProvider>,
     );
 
-    fireEvent.click(screen.getByText('open-untitled'));
+    await clickHarnessButton('open-untitled');
 
     expect(screen.getByTestId('tabs')).toHaveTextContent('untitled-1');
     expect(screen.getByTestId('active-tab')).toHaveTextContent('untitled-1');
     expect(screen.getByTestId('dirty-files')).toHaveTextContent('');
 
-    fireEvent.click(screen.getByText('edit-active'));
+    await clickHarnessButton('edit-active');
     expect(screen.getByTestId('dirty-files')).toHaveTextContent('untitled-1');
 
-    fireEvent.click(screen.getByText('clear-active'));
+    await clickHarnessButton('clear-active');
     expect(screen.getByTestId('dirty-files')).toHaveTextContent('');
   });
 
@@ -276,7 +286,7 @@ describe('WorkspaceContext', () => {
       </WorkspaceProvider>,
     );
 
-    fireEvent.click(screen.getByText('create-file'));
+    await clickHarnessButton('create-file');
 
     await waitFor(() => {
       expect(window.electronAPI?.fs.writeFile).toHaveBeenCalledWith('rtl/generated/new_file.sv', '');
@@ -291,7 +301,7 @@ describe('WorkspaceContext', () => {
       </WorkspaceProvider>,
     );
 
-    fireEvent.click(screen.getByText('create-folder'));
+    await clickHarnessButton('create-folder');
 
     await waitFor(() => {
       expect(window.electronAPI?.fs.createDirectory).toHaveBeenCalledWith('rtl/generated');
@@ -312,9 +322,9 @@ describe('WorkspaceContext', () => {
       </WorkspaceProvider>,
     );
 
-    fireEvent.click(screen.getByText('open-untitled'));
-    fireEvent.click(screen.getByText('edit-active'));
-    fireEvent.click(screen.getByText('save-active'));
+    await clickHarnessButton('open-untitled');
+    await clickHarnessButton('edit-active');
+    await clickHarnessButton('save-active');
 
     await waitFor(() => {
       expect(window.electronAPI?.dialog.showSaveDialog).toHaveBeenCalledWith('untitled-1');
@@ -336,8 +346,8 @@ describe('WorkspaceContext', () => {
       </WorkspaceProvider>,
     );
 
-    fireEvent.click(screen.getByText('open-untitled'));
-    fireEvent.click(screen.getByText('close-active'));
+    await clickHarnessButton('open-untitled');
+    await clickHarnessButton('close-active');
 
     await waitFor(() => {
       expect(screen.getByTestId('tabs')).not.toHaveTextContent('untitled-1');
@@ -355,9 +365,9 @@ describe('WorkspaceContext', () => {
       </WorkspaceProvider>,
     );
 
-    fireEvent.click(screen.getByText('register-editor'));
-    fireEvent.click(screen.getByText('undo-editor'));
-    fireEvent.click(screen.getByText('redo-editor'));
+    await clickHarnessButton('register-editor');
+    await clickHarnessButton('undo-editor');
+    await clickHarnessButton('redo-editor');
 
     await act(async () => {
       await Promise.resolve();
@@ -374,14 +384,14 @@ describe('WorkspaceContext', () => {
       </WorkspaceProvider>,
     );
 
-    fireEvent.click(screen.getByText('open-reg'));
-    fireEvent.click(screen.getByText('edit-reg'));
-    fireEvent.click(screen.getByText('open-alu'));
-    fireEvent.click(screen.getByText('edit-alu'));
+    await clickHarnessButton('open-reg');
+    await clickHarnessButton('edit-reg');
+    await clickHarnessButton('open-alu');
+    await clickHarnessButton('edit-alu');
 
     expect(screen.getByTestId('dirty-files')).toHaveTextContent('rtl/core/reg_file.v,rtl/core/alu.v');
 
-    fireEvent.click(screen.getByText('save-all'));
+    await clickHarnessButton('save-all');
 
     await waitFor(() => {
       expect(window.electronAPI?.fs.writeFile).toHaveBeenCalledWith('rtl/core/reg_file.v', 'module reg_file; logic dirty; endmodule');
@@ -400,9 +410,9 @@ describe('WorkspaceContext', () => {
       </WorkspaceProvider>,
     );
 
-    fireEvent.click(screen.getByText('open-reg'));
-    fireEvent.click(screen.getByText('edit-reg'));
-    fireEvent.click(screen.getByText('open-unsaved-dialog'));
+    await clickHarnessButton('open-reg');
+    await clickHarnessButton('edit-reg');
+    await clickHarnessButton('open-unsaved-dialog');
 
     await waitFor(() => {
       expect(screen.getByTestId('unsaved-dialog-files')).toHaveTextContent('rtl/core/reg_file.v');
@@ -416,15 +426,15 @@ describe('WorkspaceContext', () => {
       </WorkspaceProvider>,
     );
 
-    fireEvent.click(screen.getByText('open-reg'));
-    fireEvent.click(screen.getByText('edit-reg'));
-    fireEvent.click(screen.getByText('close-reg'));
+    await clickHarnessButton('open-reg');
+    await clickHarnessButton('edit-reg');
+    await clickHarnessButton('close-reg');
 
     await waitFor(() => {
       expect(screen.getByTestId('unsaved-dialog-files')).toHaveTextContent('rtl/core/reg_file.v');
     });
 
-    fireEvent.click(screen.getByText('discard-unsaved'));
+    await clickHarnessButton('discard-unsaved');
 
     await waitFor(() => {
       expect(screen.getByTestId('unsaved-dialog-files')).toHaveTextContent('');
@@ -439,15 +449,15 @@ describe('WorkspaceContext', () => {
       </WorkspaceProvider>,
     );
 
-    fireEvent.click(screen.getByText('open-untitled'));
-    fireEvent.click(screen.getByText('edit-active'));
-    fireEvent.click(screen.getByText('close-active'));
+    await clickHarnessButton('open-untitled');
+    await clickHarnessButton('edit-active');
+    await clickHarnessButton('close-active');
 
     await waitFor(() => {
       expect(screen.getByTestId('unsaved-dialog-files')).toHaveTextContent('untitled-1');
     });
 
-    fireEvent.click(screen.getByText('discard-unsaved'));
+    await clickHarnessButton('discard-unsaved');
 
     await waitFor(() => {
       expect(screen.getByTestId('tabs')).not.toHaveTextContent('untitled-1');
@@ -462,8 +472,8 @@ describe('WorkspaceContext', () => {
       </WorkspaceProvider>,
     );
 
-    fireEvent.click(screen.getByText('open-reg'));
-    fireEvent.click(screen.getByText('edit-reg'));
+    await clickHarnessButton('open-reg');
+    await clickHarnessButton('edit-reg');
 
     await waitFor(() => {
       expect(vi.mocked(window.electronAPI!.onCloseRequested).mock.calls.length).toBeGreaterThan(0);
@@ -480,7 +490,7 @@ describe('WorkspaceContext', () => {
       expect(screen.getByTestId('unsaved-dialog-files')).toHaveTextContent('rtl/core/reg_file.v');
     });
 
-    fireEvent.click(screen.getByText('confirm-save'));
+    await clickHarnessButton('confirm-save');
 
     await act(async () => {
       await Promise.resolve();
@@ -502,10 +512,10 @@ describe('WorkspaceContext', () => {
 
     expect(window.electronAPI?.onCloseRequested).toHaveBeenCalledTimes(1);
 
-    fireEvent.click(screen.getByText('open-reg'));
-    fireEvent.click(screen.getByText('edit-reg'));
-    fireEvent.click(screen.getByText('open-alu'));
-    fireEvent.click(screen.getByText('edit-alu'));
+    await clickHarnessButton('open-reg');
+    await clickHarnessButton('edit-reg');
+    await clickHarnessButton('open-alu');
+    await clickHarnessButton('edit-alu');
 
     await waitFor(() => {
       expect(screen.getByTestId('dirty-files')).toHaveTextContent('rtl/core/reg_file.v,rtl/core/alu.v');
@@ -527,9 +537,9 @@ describe('WorkspaceContext', () => {
       expect(snapshots.length).toBeGreaterThan(0);
     });
 
-    fireEvent.click(screen.getByText('open-reg'));
-    fireEvent.click(screen.getByText('edit-reg'));
-    fireEvent.click(screen.getByText('set-view'));
+    await clickHarnessButton('open-reg');
+    await clickHarnessButton('edit-reg');
+    await clickHarnessButton('set-view');
 
     await waitFor(() => {
       expect(screen.getByTestId('active-view')).toHaveTextContent('simulation');
@@ -538,14 +548,14 @@ describe('WorkspaceContext', () => {
     });
   });
 
-  it('opens a new file and activates it', () => {
+  it('opens a new file and activates it', async () => {
     render(
       <WorkspaceProvider>
         <WorkspaceHarness />
       </WorkspaceProvider>,
     );
 
-    fireEvent.click(screen.getByText('open-reg'));
+    await clickHarnessButton('open-reg');
 
     expect(screen.getByTestId('tabs')).toHaveTextContent('rtl/core/reg_file.v');
     expect(screen.getByTestId('active-tab')).toHaveTextContent('rtl/core/reg_file.v');
@@ -558,8 +568,8 @@ describe('WorkspaceContext', () => {
       </WorkspaceProvider>,
     );
 
-    fireEvent.click(screen.getByText('open-reg'));
-    fireEvent.click(screen.getByText('rename-reg'));
+    await clickHarnessButton('open-reg');
+    await clickHarnessButton('rename-reg');
 
     await waitFor(() => {
       expect(window.electronAPI?.fs.rename).toHaveBeenCalledWith('rtl/core/reg_file.v', 'rtl/core/reg_file_renamed.v');
@@ -575,9 +585,9 @@ describe('WorkspaceContext', () => {
       </WorkspaceProvider>,
     );
 
-    fireEvent.click(screen.getByText('open-reg'));
-    fireEvent.click(screen.getByText('open-alu'));
-    fireEvent.click(screen.getByText('rename-core-folder'));
+    await clickHarnessButton('open-reg');
+    await clickHarnessButton('open-alu');
+    await clickHarnessButton('rename-core-folder');
 
     await waitFor(() => {
       expect(window.electronAPI?.fs.rename).toHaveBeenCalledWith('rtl/core', 'rtl/renamed_core');
@@ -596,14 +606,14 @@ describe('WorkspaceContext', () => {
       </WorkspaceProvider>,
     );
 
-    fireEvent.click(screen.getByText('delete-reg'));
+    await clickHarnessButton('delete-reg');
 
     await waitFor(() => {
       expect(screen.getByTestId('delete-dialog-target')).toHaveTextContent('rtl/core/reg_file.v');
       expect(screen.getByTestId('delete-dialog-type')).toHaveTextContent('file');
     });
 
-    fireEvent.click(screen.getByText('confirm-delete'));
+    await clickHarnessButton('confirm-delete');
 
     await waitFor(() => {
       expect(window.electronAPI?.fs.deleteFile).toHaveBeenCalledWith('rtl/core/reg_file.v');
@@ -621,16 +631,16 @@ describe('WorkspaceContext', () => {
       </WorkspaceProvider>,
     );
 
-    fireEvent.click(screen.getByText('open-reg'));
+    await clickHarnessButton('open-reg');
     expect(screen.getByTestId('tabs')).toHaveTextContent('rtl/core/reg_file.v');
 
-    fireEvent.click(screen.getByText('delete-reg'));
+    await clickHarnessButton('delete-reg');
 
     await waitFor(() => {
       expect(screen.getByTestId('delete-dialog-target')).toHaveTextContent('rtl/core/reg_file.v');
     });
 
-    fireEvent.click(screen.getByText('confirm-delete'));
+    await clickHarnessButton('confirm-delete');
 
     await waitFor(() => {
       expect(screen.getByTestId('tabs')).not.toHaveTextContent('rtl/core/reg_file.v');
@@ -646,17 +656,17 @@ describe('WorkspaceContext', () => {
       </WorkspaceProvider>,
     );
 
-    fireEvent.click(screen.getByText('open-reg'));
-    fireEvent.click(screen.getByText('open-alu'));
+    await clickHarnessButton('open-reg');
+    await clickHarnessButton('open-alu');
 
-    fireEvent.click(screen.getByText('delete-core-folder'));
+    await clickHarnessButton('delete-core-folder');
 
     await waitFor(() => {
       expect(screen.getByTestId('delete-dialog-target')).toHaveTextContent('rtl/core');
       expect(screen.getByTestId('delete-dialog-type')).toHaveTextContent('folder');
     });
 
-    fireEvent.click(screen.getByText('confirm-delete'));
+    await clickHarnessButton('confirm-delete');
 
     await waitFor(() => {
       expect(window.electronAPI?.fs.deleteDirectory).toHaveBeenCalledWith('rtl/core');
@@ -675,22 +685,22 @@ describe('WorkspaceContext', () => {
       </WorkspaceProvider>,
     );
 
-    fireEvent.click(screen.getByText('open-reg'));
-    fireEvent.click(screen.getByText('edit-reg'));
-    fireEvent.click(screen.getByText('delete-reg'));
+    await clickHarnessButton('open-reg');
+    await clickHarnessButton('edit-reg');
+    await clickHarnessButton('delete-reg');
 
     await waitFor(() => {
       expect(screen.getByTestId('unsaved-dialog-files')).toHaveTextContent('rtl/core/reg_file.v');
     });
     expect(screen.getByTestId('delete-dialog-target')).toHaveTextContent('');
 
-    fireEvent.click(screen.getByText('discard-unsaved'));
+    await clickHarnessButton('discard-unsaved');
 
     await waitFor(() => {
       expect(screen.getByTestId('delete-dialog-target')).toHaveTextContent('rtl/core/reg_file.v');
     });
 
-    fireEvent.click(screen.getByText('confirm-delete'));
+    await clickHarnessButton('confirm-delete');
 
     await waitFor(() => {
       expect(window.electronAPI?.fs.deleteFile).toHaveBeenCalledWith('rtl/core/reg_file.v');
@@ -706,14 +716,14 @@ describe('WorkspaceContext', () => {
       </WorkspaceProvider>,
     );
 
-    fireEvent.click(screen.getByText('open-reg'));
-    fireEvent.click(screen.getByText('delete-reg'));
+    await clickHarnessButton('open-reg');
+    await clickHarnessButton('delete-reg');
 
     await waitFor(() => {
       expect(screen.getByTestId('delete-dialog-target')).toHaveTextContent('rtl/core/reg_file.v');
     });
 
-    fireEvent.click(screen.getByText('cancel-delete'));
+    await clickHarnessButton('cancel-delete');
 
     await waitFor(() => {
       expect(screen.getByTestId('delete-dialog-target')).toHaveTextContent('');
@@ -722,126 +732,131 @@ describe('WorkspaceContext', () => {
     expect(screen.getByTestId('tabs')).toHaveTextContent('rtl/core/reg_file.v');
   });
 
-  it('does not duplicate an existing tab', () => {
+  it('does not duplicate an existing tab', async () => {
     render(
       <WorkspaceProvider>
         <WorkspaceHarness />
       </WorkspaceProvider>,
     );
 
-    fireEvent.click(screen.getByText('open-reg'));
-    fireEvent.click(screen.getByText('open-existing'));
+    await clickHarnessButton('open-reg');
+    await clickHarnessButton('open-existing');
 
     expect(screen.getByTestId('tabs')).toHaveTextContent('rtl/core/reg_file.v');
     expect(screen.getByTestId('active-tab')).toHaveTextContent('rtl/core/reg_file.v');
   });
 
-  it('replaces the current preview tab and clears preview state when pinned later', () => {
+  it('replaces the current preview tab and clears preview state when pinned later', async () => {
     render(
       <WorkspaceProvider>
         <WorkspaceHarness />
       </WorkspaceProvider>,
     );
 
-    fireEvent.click(screen.getByText('preview-reg'));
+    await clickHarnessButton('preview-reg');
     expect(screen.getByTestId('tabs')).toHaveTextContent('rtl/core/reg_file.v');
     expect(screen.getByTestId('preview-tab')).toHaveTextContent('rtl/core/reg_file.v');
 
-    fireEvent.click(screen.getByText('preview-alu'));
+    await clickHarnessButton('preview-alu');
     expect(screen.getByTestId('tabs')).toHaveTextContent('rtl/core/alu.v');
     expect(screen.getByTestId('preview-tab')).toHaveTextContent('rtl/core/alu.v');
 
-    fireEvent.click(screen.getByText('open-existing'));
+    await clickHarnessButton('open-existing');
     expect(screen.getByTestId('tabs')).toHaveTextContent('rtl/core/alu.v,rtl/core/reg_file.v');
     expect(screen.getByTestId('preview-tab')).toHaveTextContent('rtl/core/alu.v');
 
-    fireEvent.click(screen.getByText('open-alu'));
+    await clickHarnessButton('open-alu');
     expect(screen.getByTestId('preview-tab')).toHaveTextContent('none');
   });
 
-  it('pins a preview tab without changing the tab order', () => {
+  it('pins a preview tab without changing the tab order', async () => {
     render(
       <WorkspaceProvider>
         <WorkspaceHarness />
       </WorkspaceProvider>,
     );
 
-    fireEvent.click(screen.getByText('preview-alu'));
+    await clickHarnessButton('preview-alu');
     expect(screen.getByTestId('preview-tab')).toHaveTextContent('rtl/core/alu.v');
 
-    fireEvent.click(screen.getByText('pin-alu'));
+    await clickHarnessButton('pin-alu');
 
     expect(screen.getByTestId('tabs')).toHaveTextContent('rtl/core/alu.v');
     expect(screen.getByTestId('active-tab')).toHaveTextContent('rtl/core/alu.v');
     expect(screen.getByTestId('preview-tab')).toHaveTextContent('none');
   });
 
-  it('opens files into the last focused split group', () => {
+  it('opens files into the last focused split group', async () => {
     render(
       <WorkspaceProvider>
         <WorkspaceHarness />
       </WorkspaceProvider>,
     );
 
-    fireEvent.click(screen.getByText('open-reg'));
-    fireEvent.click(screen.getByText('split-group-1'));
-    fireEvent.click(screen.getByText('open-alu'));
+    await clickHarnessButton('open-reg');
+    await clickHarnessButton('split-group-1');
+    await clickHarnessButton('open-alu');
 
     expect(screen.getByTestId('focused-group')).toHaveTextContent('group-2');
     expect(screen.getByTestId('groups')).toHaveTextContent('group-1:rtl/core/reg_file.v');
     expect(screen.getByTestId('groups')).toHaveTextContent('group-2:rtl/core/reg_file.v|rtl/core/alu.v');
   });
 
-  it('closes the active tab and selects the nearest neighbor', () => {
+  it('closes the active tab and selects the nearest neighbor', async () => {
     render(
       <WorkspaceProvider>
         <WorkspaceHarness />
       </WorkspaceProvider>,
     );
 
-    fireEvent.click(screen.getByText('open-reg'));
-    fireEvent.click(screen.getByText('open-alu'));
-    fireEvent.click(screen.getByText('activate-alu'));
-    fireEvent.click(screen.getByText('close-alu'));
+    await clickHarnessButton('open-reg');
+    await clickHarnessButton('open-alu');
+    await clickHarnessButton('activate-alu');
+    await clickHarnessButton('close-alu');
 
     expect(screen.getByTestId('tabs')).toHaveTextContent('rtl/core/reg_file.v');
     expect(screen.getByTestId('active-tab')).toHaveTextContent('rtl/core/reg_file.v');
   });
 
-  it('updates cursor position, active view, and bottom panel state', () => {
+  it('updates cursor position, active view, and bottom panel state', async () => {
     render(
       <WorkspaceProvider>
         <WorkspaceHarness />
       </WorkspaceProvider>,
     );
 
-    fireEvent.click(screen.getByText('set-view'));
-    fireEvent.click(screen.getByText('open-reg'));
-    fireEvent.click(screen.getByText('cursor'));
-    fireEvent.click(screen.getByText('hide-bottom'));
+    await clickHarnessButton('set-view');
+    await clickHarnessButton('open-reg');
+    await clickHarnessButton('cursor');
+    await clickHarnessButton('hide-bottom');
 
     expect(screen.getByTestId('active-view')).toHaveTextContent('simulation');
     expect(screen.getByTestId('cursor')).toHaveTextContent('8:16');
     expect(screen.getByTestId('bottom-panel')).toHaveTextContent('closed');
   });
 
-  it('resets jumpToLine after the debounce window', () => {
+  it('resets jumpToLine after the debounce window', async () => {
     vi.useFakeTimers();
 
-    render(
-      <WorkspaceProvider>
-        <WorkspaceHarness />
-      </WorkspaceProvider>,
-    );
+    try {
+      render(
+        <WorkspaceProvider>
+          <WorkspaceHarness />
+        </WorkspaceProvider>,
+      );
 
-    fireEvent.click(screen.getByText('jump'));
-    expect(screen.getByTestId('jump-line')).toHaveTextContent('42');
+      act(() => {
+        screen.getByText('jump').click();
+      });
+      expect(screen.getByTestId('jump-line')).toHaveTextContent('42');
 
-    act(() => {
-      vi.advanceTimersByTime(100);
-    });
+      act(() => {
+        vi.advanceTimersByTime(100);
+      });
 
-    expect(screen.getByTestId('jump-line')).toHaveTextContent('none');
-    vi.useRealTimers();
+      expect(screen.getByTestId('jump-line')).toHaveTextContent('none');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -1,5 +1,6 @@
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
 import { resetWorkspaceGitStatusStoreForTests } from './git/workspaceGitStatus';
@@ -173,8 +174,21 @@ vi.mock('./components/code/shared/QuickOpenPalette', () => ({
   ),
 }));
 
+type TestUser = ReturnType<typeof userEvent.setup>;
+
+let testUser: TestUser;
+
+async function clickText(text: string) {
+  await testUser.click(screen.getByText(text));
+}
+
+async function clickTestId(testId: string) {
+  await testUser.click(screen.getByTestId(testId));
+}
+
 describe('App', () => {
   beforeEach(() => {
+    testUser = userEvent.setup();
     renderRealActivityBar = false;
     resetWorkspaceGitStatusStoreForTests();
     vi.clearAllMocks();
@@ -185,7 +199,7 @@ describe('App', () => {
 
     expect(screen.queryByTestId('panel-left-panel')).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByText('toggle-left-panel'));
+    await clickText('toggle-left-panel');
 
     expect(screen.getByTestId('panel-left-panel')).toHaveStyle({ width: '240px' });
 
@@ -196,10 +210,10 @@ describe('App', () => {
 
     expect(screen.getByTestId('panel-left-panel')).toHaveStyle({ width: '300px' });
 
-    fireEvent.click(screen.getByText('select-simulation'));
+    await clickText('select-simulation');
     expect(await screen.findByTestId('code-view-simulation')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByText('select-explorer'));
+    await clickText('select-explorer');
 
     await waitFor(() => {
       expect(screen.getByTestId('panel-left-panel')).toHaveStyle({ width: '300px' });
@@ -229,41 +243,41 @@ describe('App', () => {
     expect(screen.getByTestId('status-bar-active-file')).toHaveTextContent('');
     expect(screen.getByTestId('status-bar-cursor')).toHaveTextContent('1:1');
 
-    fireEvent.click(screen.getByText('toggle-left-panel'));
+    await clickText('toggle-left-panel');
     expect(screen.getByTestId('menu-left-state')).toHaveTextContent('true');
     expect(screen.getByTestId('panel-left-panel')).toHaveStyle({ width: '240px' });
     expect(screen.getByTestId('left-panel')).toBeInTheDocument();
     expect(screen.getByTestId('left-active-file')).toHaveTextContent('');
 
-    fireEvent.click(screen.getByText('left-open'));
+    await clickText('left-open');
     expect(screen.getByTestId('editor-active-tab')).toHaveTextContent('rtl/core/reg_file.v');
     expect(screen.getByTestId('editor-tab-count')).toHaveTextContent('1');
     expect(screen.getByTestId('editor-jump-line')).toHaveTextContent('77');
 
-    fireEvent.click(screen.getByText('editor-cursor'));
+    await clickText('editor-cursor');
     expect(screen.getByTestId('status-bar-active-file')).toHaveTextContent('rtl/core/reg_file.v');
     expect(screen.getByTestId('status-bar-cursor')).toHaveTextContent('9:3');
 
-    fireEvent.click(screen.getByText('toggle-right-panel'));
+    await clickText('toggle-right-panel');
     expect(screen.getByTestId('menu-right-state')).toHaveTextContent('true');
     expect(screen.getByTestId('panel-right-panel')).toHaveAttribute('data-default-size', '22');
     expect(screen.getByTestId('right-panel')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByText('right-open'));
+    await clickText('right-open');
     expect(screen.getByTestId('editor-tab-count')).toHaveTextContent('2');
 
-    fireEvent.click(screen.getByText('editor-activate-alu'));
+    await clickText('editor-activate-alu');
     expect(screen.getByTestId('editor-active-tab')).toHaveTextContent('rtl/core/alu.v');
 
-    fireEvent.click(screen.getByText('toggle-bottom-panel'));
+    await clickText('toggle-bottom-panel');
     expect(screen.getByTestId('menu-bottom-state')).toHaveTextContent('true');
     expect(screen.getByTestId('panel-bottom-panel')).toHaveAttribute('data-default-size', '40');
     expect(screen.getByTestId('bottom-panel')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByText('close-bottom'));
+    await clickText('close-bottom');
     expect(screen.queryByTestId('bottom-panel')).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByText('select-simulation'));
+    await clickText('select-simulation');
     expect(await screen.findByTestId('code-view-simulation')).toBeInTheDocument();
     await waitFor(() => {
       expect(screen.getByTestId('activity-view')).toHaveTextContent('simulation');
@@ -278,7 +292,7 @@ describe('App', () => {
     expect(screen.getByTestId('simulation-bottom-panel-content')).toHaveTextContent('Bottom Panel');
     expect(screen.getByTestId('simulation-right-panel-content')).toHaveTextContent('Right Panel');
 
-    fireEvent.click(screen.getByText('select-explorer'));
+    await clickText('select-explorer');
     expect(screen.getByTestId('activity-view')).toHaveTextContent('explorer');
     expect(screen.getByTestId('status-bar-code-view')).toHaveTextContent('explorer');
     expect(screen.getByTestId('menu-left-state')).toHaveTextContent('true');
@@ -289,22 +303,22 @@ describe('App', () => {
   it('hides the activity bar outside code and restores the last selected code subview', async () => {
     render(<App />);
 
-    fireEvent.click(screen.getByText('select-synthesis'));
+    await clickText('select-synthesis');
     expect(await screen.findByTestId('code-view-synthesis')).toHaveTextContent('Synthesis');
 
-    fireEvent.click(screen.getByText('switch-whiteboard'));
+    await clickText('switch-whiteboard');
     expect(screen.getByTestId('main-content-view')).toHaveTextContent('whiteboard');
     expect(screen.queryByTestId('activity-bar')).not.toBeInTheDocument();
     expect(await screen.findByTestId('whiteboard-view')).toBeInTheDocument();
     expect(screen.getByTestId('status-bar-main-view')).toHaveTextContent('whiteboard');
 
-    fireEvent.click(screen.getByText('switch-workflow'));
+    await clickText('switch-workflow');
     expect(screen.getByTestId('main-content-view')).toHaveTextContent('workflow');
     expect(screen.queryByTestId('activity-bar')).not.toBeInTheDocument();
     expect(await screen.findByTestId('workflow-view')).toHaveTextContent('Workflow');
     expect(screen.getByTestId('status-bar-main-view')).toHaveTextContent('workflow');
 
-    fireEvent.click(screen.getByText('switch-code'));
+    await clickText('switch-code');
     expect(screen.getByTestId('main-content-view')).toHaveTextContent('code');
     expect(screen.getByTestId('activity-bar')).toBeInTheDocument();
     expect(screen.getByTestId('activity-view')).toHaveTextContent('synthesis');
@@ -319,16 +333,16 @@ describe('App', () => {
     expect(screen.getByTestId('menu-activity-bar-state')).toHaveTextContent('collapsed');
     expect(screen.getByTestId('activity-bar-state')).toHaveTextContent('collapsed');
 
-    fireEvent.click(screen.getByText('toggle-activity-bar'));
+    await clickText('toggle-activity-bar');
     expect(screen.getByTestId('menu-activity-bar-state')).toHaveTextContent('expanded');
     expect(screen.getByTestId('activity-bar-state')).toHaveTextContent('expanded');
 
-    fireEvent.click(screen.getByText('switch-whiteboard'));
+    await clickText('switch-whiteboard');
     expect(screen.getByTestId('main-content-view')).toHaveTextContent('whiteboard');
     expect(screen.queryByTestId('activity-bar')).not.toBeInTheDocument();
     expect(screen.getByTestId('menu-activity-bar-state')).toHaveTextContent('expanded');
 
-    fireEvent.click(screen.getByText('switch-code'));
+    await clickText('switch-code');
     expect(screen.getByTestId('main-content-view')).toHaveTextContent('code');
     expect(screen.getByTestId('activity-bar')).toBeInTheDocument();
     expect(screen.getByTestId('activity-bar-state')).toHaveTextContent('expanded');
@@ -340,12 +354,12 @@ describe('App', () => {
     try {
       render(<App />);
 
-      fireEvent.click(screen.getByTestId('activity-item-simulation'));
+      await clickTestId('activity-item-simulation');
 
       expect(await screen.findByTestId('code-view-simulation')).toBeInTheDocument();
       expect(screen.getByTestId('simulation-main-panel-content')).toHaveTextContent('Simulation Workspace');
 
-      fireEvent.click(screen.getByTestId('activity-item-physical'));
+      await clickTestId('activity-item-physical');
 
       expect(await screen.findByTestId('code-view-physical')).toHaveTextContent('Physical Design');
     } finally {
@@ -388,28 +402,28 @@ describe('App', () => {
   it('remembers panel visibility per code subview and disables layout interactions on unsupported pages', async () => {
     render(<App />);
 
-    fireEvent.click(screen.getByText('toggle-left-panel'));
-    fireEvent.click(screen.getByText('toggle-right-panel'));
+    await clickText('toggle-left-panel');
+    await clickText('toggle-right-panel');
 
     expect(screen.getByTestId('menu-left-state')).toHaveTextContent('true');
     expect(screen.getByTestId('menu-right-state')).toHaveTextContent('true');
     expect(screen.getByTestId('left-panel')).toBeInTheDocument();
     expect(screen.getByTestId('right-panel')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByText('select-simulation'));
+    await clickText('select-simulation');
     expect(await screen.findByTestId('menu-layout-enabled')).toHaveTextContent('true');
     expect(screen.getByTestId('menu-left-state')).toHaveTextContent('true');
     expect(screen.getByTestId('menu-bottom-state')).toHaveTextContent('true');
     expect(screen.getByTestId('menu-right-state')).toHaveTextContent('true');
 
-    fireEvent.click(screen.getByText('toggle-left-panel'));
-    fireEvent.click(screen.getByText('toggle-bottom-panel'));
+    await clickText('toggle-left-panel');
+    await clickText('toggle-bottom-panel');
     expect(screen.getByTestId('menu-left-state')).toHaveTextContent('false');
     expect(screen.getByTestId('menu-bottom-state')).toHaveTextContent('false');
     expect(screen.queryByTestId('panel-simulation-left-panel')).not.toBeInTheDocument();
     expect(screen.queryByTestId('panel-simulation-bottom-panel')).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByText('select-synthesis'));
+    await clickText('select-synthesis');
     expect(await screen.findByTestId('menu-layout-enabled')).toHaveTextContent('false');
     expect(screen.getByText('toggle-left-panel')).toBeDisabled();
     expect(screen.getByText('toggle-bottom-panel')).toBeDisabled();
@@ -425,19 +439,19 @@ describe('App', () => {
     expect(screen.getByTestId('menu-bottom-state')).toHaveTextContent('false');
     expect(screen.getByTestId('menu-right-state')).toHaveTextContent('false');
 
-    fireEvent.click(screen.getByText('switch-whiteboard'));
+    await clickText('switch-whiteboard');
     expect(screen.getByTestId('menu-layout-enabled')).toHaveTextContent('false');
 
-    fireEvent.click(screen.getByText('switch-code'));
+    await clickText('switch-code');
     expect(screen.getByTestId('activity-view')).toHaveTextContent('synthesis');
     expect(screen.getByTestId('menu-layout-enabled')).toHaveTextContent('false');
 
-    fireEvent.click(screen.getByText('select-simulation'));
+    await clickText('select-simulation');
     expect(await screen.findByTestId('menu-left-state')).toHaveTextContent('false');
     expect(screen.getByTestId('menu-bottom-state')).toHaveTextContent('false');
     expect(screen.getByTestId('menu-right-state')).toHaveTextContent('true');
 
-    fireEvent.click(screen.getByText('select-explorer'));
+    await clickText('select-explorer');
     expect(screen.getByTestId('menu-left-state')).toHaveTextContent('true');
     expect(screen.getByTestId('menu-right-state')).toHaveTextContent('true');
     expect(screen.getByTestId('menu-bottom-state')).toHaveTextContent('false');
@@ -458,15 +472,15 @@ describe('App', () => {
     expect(window.electronAPI?.fs.listFiles).toHaveBeenCalledWith('.');
     expect(screen.getByTestId('quick-open-mode')).toHaveTextContent('recent');
 
-    fireEvent.click(screen.getByText('quick-open-set-query'));
+    await clickText('quick-open-set-query');
     expect(screen.getByTestId('quick-open-query')).toHaveTextContent('alu');
 
-    fireEvent.click(screen.getByText('quick-open-select-alu'));
+    await clickText('quick-open-select-alu');
 
     expect(screen.queryByTestId('quick-open-overlay')).not.toBeInTheDocument();
     expect(screen.getByTestId('editor-active-tab')).toHaveTextContent('rtl/core/alu.v');
 
-    fireEvent.click(screen.getByText('toggle-left-panel'));
+    await clickText('toggle-left-panel');
     expect(screen.getByTestId('left-reveal-path')).toHaveTextContent('rtl/core/alu.v');
 
     fireEvent.keyDown(document, { key: 'p', ctrlKey: true });
@@ -478,21 +492,21 @@ describe('App', () => {
     expect(screen.queryByTestId('quick-open-overlay')).not.toBeInTheDocument();
   });
 
-  it('reveals the active file in explorer when editor tab activation changes or repeats', () => {
+  it('reveals the active file in explorer when editor tab activation changes or repeats', async () => {
     render(<App />);
 
-    fireEvent.click(screen.getByText('toggle-left-panel'));
-    fireEvent.click(screen.getByText('left-open'));
-    fireEvent.click(screen.getByText('toggle-right-panel'));
-    fireEvent.click(screen.getByText('right-open'));
-    fireEvent.click(screen.getByText('editor-activate-reg'));
+    await clickText('toggle-left-panel');
+    await clickText('left-open');
+    await clickText('toggle-right-panel');
+    await clickText('right-open');
+    await clickText('editor-activate-reg');
 
     expect(screen.getByTestId('editor-active-tab')).toHaveTextContent('rtl/core/reg_file.v');
     expect(screen.getByTestId('left-reveal-path')).toHaveTextContent('rtl/core/reg_file.v');
 
     const firstRevealToken = Number(screen.getByTestId('left-reveal-token').textContent);
 
-    fireEvent.click(screen.getByText('editor-activate-reg'));
+    await clickText('editor-activate-reg');
 
     expect(screen.getByTestId('left-reveal-path')).toHaveTextContent('rtl/core/reg_file.v');
     expect(Number(screen.getByTestId('left-reveal-token').textContent)).toBeGreaterThan(firstRevealToken);
@@ -512,7 +526,7 @@ describe('App', () => {
     fireEvent.keyDown(document, { key: 'p', ctrlKey: true });
     await screen.findByTestId('quick-open-overlay');
 
-    fireEvent.click(screen.getByText('quick-open-select-alu'));
+    await clickText('quick-open-select-alu');
 
     expect(screen.getByTestId('menu-left-state')).toHaveTextContent('false');
     expect(screen.getByTestId('activity-view')).toHaveTextContent('explorer');
@@ -529,9 +543,9 @@ describe('App', () => {
 
     render(<App />);
 
-    fireEvent.click(screen.getByText('toggle-left-panel'));
-    fireEvent.click(screen.getByText('left-open'));
-    fireEvent.click(screen.getByText('editor-cursor'));
+    await clickText('toggle-left-panel');
+    await clickText('left-open');
+    await clickText('editor-cursor');
 
     expect(screen.getByTestId('editor-active-tab')).toHaveTextContent('rtl/core/reg_file.v');
     expect(screen.getByTestId('status-bar-cursor')).toHaveTextContent('9:3');
@@ -539,8 +553,8 @@ describe('App', () => {
     fireEvent.keyDown(document, { key: 'p', ctrlKey: true });
     await screen.findByTestId('quick-open-overlay');
 
-    fireEvent.click(screen.getByText('quick-open-set-query'));
-    fireEvent.click(screen.getByText('quick-open-close'));
+    await clickText('quick-open-set-query');
+    await clickText('quick-open-close');
 
     expect(screen.queryByTestId('quick-open-overlay')).not.toBeInTheDocument();
     expect(screen.getByTestId('editor-active-tab')).toHaveTextContent('rtl/core/reg_file.v');
