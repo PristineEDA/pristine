@@ -8,8 +8,6 @@ import { OutlinePanel } from './LeftSidePanelOutline';
 import {
   DEFAULT_STARTUP_PROJECT_NAME,
   WORKSPACE_ROOT_PATH,
-  createExplorerDraftId,
-  getPathBaseName,
   getWorkspaceParentPath,
   isWorkspaceRelativeFilePath,
   type ExplorerSelectedNode,
@@ -21,16 +19,25 @@ import {
 } from '../../../workspace/workspaceFiles';
 import { useWorkspaceTree, type WorkspaceRevealRequest } from '../../../workspace/useWorkspaceTree';
 import {
+  canRunExplorerDocumentKeyboardAction,
   getExplorerClipboardTarget,
   getExplorerContextMenuTargetPath,
   getExplorerDeleteTarget,
   getExplorerKeyboardAction,
+  getExplorerKeyboardActionTargets,
   getExplorerPasteTargetPath,
   getExplorerRenameTarget,
+  hasExplorerKeyboardActionTarget,
   isEditableKeyboardTarget,
   isExplorerContextMenuTarget,
   isMonacoTextInputKeyboardTarget,
 } from './LeftSidePanelKeyboard';
+import {
+  createExplorerDraftEditState,
+  createExplorerRenameEditState,
+  createRealExplorerSelection,
+  getExplorerEditCancelSelection,
+} from './LeftSidePanelEditSession';
 import { useExplorerTreeScrollLock } from './useExplorerTreeScrollLock';
 
 export {
@@ -61,15 +68,6 @@ interface LeftSidePanelProps {
   revealRequest?: WorkspaceRevealRequest | null;
   onWorkspaceRefresh?: () => void;
   workspaceClipboard: WorkspaceClipboardState | null;
-}
-
-function createRealExplorerSelection(path: string, type: ExplorerSelectedNode['type']): ExplorerSelectedNode {
-  return {
-    id: path,
-    path,
-    type,
-    source: 'real',
-  };
 }
 
 export function LeftSidePanel({
@@ -249,42 +247,31 @@ export function LeftSidePanel({
     }
 
     const editableKeyboardTarget = isEditableKeyboardTarget(event.target);
-    const deleteTarget = keyboardAction === 'delete' ? getExplorerDeleteTarget(selectedNode) : null;
-    const renameTarget = keyboardAction === 'rename' ? getExplorerRenameTarget(selectedNode, activeFileId) : null;
-    const clipboardTarget = keyboardAction === 'copy' || keyboardAction === 'cut'
-      ? getExplorerClipboardTarget(selectedNode, activeFileId)
-      : null;
-    const pasteTargetPath = keyboardAction === 'paste'
-      ? getExplorerPasteTargetPath(selectedNode, activeFileId)
-      : null;
-    const contextMenuTargetPath = keyboardAction === 'open-context-menu'
-      ? getExplorerContextMenuTargetPath(selectedNode, activeFileId)
-      : null;
+    const targets = getExplorerKeyboardActionTargets({
+      activeFileId,
+      keyboardAction,
+      selectedNode,
+    });
     const allowDeleteFromMonacoSelection = Boolean(
-      deleteTarget
+      targets.deleteTarget
       && isMonacoKeyboardTarget
       && monacoDeleteSelectionArmedRef.current,
     );
-    const hasActionTarget = keyboardAction === 'delete'
-      ? Boolean(deleteTarget)
-      : keyboardAction === 'rename'
-      ? Boolean(renameTarget)
-      : keyboardAction === 'copy' || keyboardAction === 'cut'
-      ? Boolean(clipboardTarget)
-      : keyboardAction === 'paste'
-      ? Boolean(workspaceClipboard && pasteTargetPath)
-      : keyboardAction === 'open-context-menu'
-      ? Boolean(contextMenuTargetPath)
-      : Boolean(workspaceClipboard);
+    const hasActionTarget = hasExplorerKeyboardActionTarget({
+      keyboardAction,
+      targets,
+      workspaceClipboard,
+    });
 
-    if (
-      tab !== 'explorer'
-      || Boolean(treeEditSession)
-      || !hasActionTarget
-      || (!treeInteractionActiveRef.current && !allowDeleteFromMonacoSelection)
-      || (editableKeyboardTarget && keyboardAction !== 'delete')
-      || (editableKeyboardTarget && !allowDeleteFromMonacoSelection)
-    ) {
+    if (!canRunExplorerDocumentKeyboardAction({
+      allowDeleteFromMonacoSelection,
+      editableKeyboardTarget,
+      hasActionTarget,
+      keyboardAction,
+      tabIsExplorer: tab === 'explorer',
+      treeEditActive: Boolean(treeEditSession),
+      treeInteractionActive: treeInteractionActiveRef.current,
+    })) {
       return;
     }
 
@@ -437,23 +424,14 @@ export function LeftSidePanel({
   }, [focusTree, onFileOpen]);
 
   const startRenameForNode = useCallback((path: string, entryType: 'file' | 'folder') => {
-    if (path === WORKSPACE_ROOT_PATH) {
+    const editState = createExplorerRenameEditState({ entryType, path });
+
+    if (!editState) {
       return;
     }
 
-    const parentPath = getWorkspaceParentPath(path);
-    setSelectedNode(createRealExplorerSelection(path, entryType));
-    setTreeEditSession({
-      mode: 'rename',
-      targetNodeId: path,
-      targetPath: path,
-      parentPath,
-      entryType,
-      source: 'real',
-      value: getPathBaseName(path),
-      isSubmitting: false,
-      submitError: null,
-    });
+    setSelectedNode(editState.selectedNode);
+    setTreeEditSession(editState.treeEditSession);
   }, []);
 
   const startRenameFromSelection = useCallback(() => {
@@ -497,26 +475,13 @@ export function LeftSidePanel({
   const startCreateEntry = useCallback((entryType: 'file' | 'folder', parentPath = selectedParentPath) => {
     const resolvedParentPath = parentPath || WORKSPACE_ROOT_PATH;
     ensureFolderExpanded(resolvedParentPath);
-
-    const draftId = createExplorerDraftId(resolvedParentPath, entryType);
-
-    setSelectedNode({
-      id: draftId,
-      path: resolvedParentPath,
-      type: entryType,
-      source: 'draft',
-    });
-    setTreeEditSession({
-      mode: entryType === 'file' ? 'create-file' : 'create-folder',
-      targetNodeId: draftId,
-      targetPath: resolvedParentPath,
-      parentPath: resolvedParentPath,
+    const editState = createExplorerDraftEditState({
       entryType,
-      source: 'draft',
-      value: '',
-      isSubmitting: false,
-      submitError: null,
+      parentPath: resolvedParentPath,
     });
+
+    setSelectedNode(editState.selectedNode);
+    setTreeEditSession(editState.treeEditSession);
   }, [ensureFolderExpanded, selectedParentPath]);
 
   const handleCreateFile = useCallback(() => {
@@ -538,15 +503,8 @@ export function LeftSidePanel({
       return;
     }
 
-    const nextSelection = treeEditSession.mode === 'rename'
-      ? createRealExplorerSelection(treeEditSession.targetPath, treeEditSession.entryType)
-      : createRealExplorerSelection(
-          treeEditSession.parentPath,
-          treeEditSession.parentPath === WORKSPACE_ROOT_PATH ? 'root' : 'folder',
-        );
-
     setTreeEditSession(null);
-    setSelectedNode(nextSelection);
+    setSelectedNode(getExplorerEditCancelSelection(treeEditSession));
     focusTree();
   }, [focusTree, treeEditSession]);
 
@@ -642,47 +600,43 @@ export function LeftSidePanel({
     }
 
     const keyboardAction = getExplorerKeyboardAction(event.nativeEvent);
-    const clipboardTarget = keyboardAction === 'copy' || keyboardAction === 'cut'
-      ? getExplorerClipboardTarget(selectedNode, activeFileId)
-      : null;
-    const pasteTargetPath = keyboardAction === 'paste'
-      ? getExplorerPasteTargetPath(selectedNode, activeFileId)
-      : null;
-    const contextMenuTargetPath = keyboardAction === 'open-context-menu'
-      ? getExplorerContextMenuTargetPath(selectedNode, activeFileId)
-      : null;
+    const targets = getExplorerKeyboardActionTargets({
+      activeFileId,
+      keyboardAction,
+      selectedNode,
+    });
 
-    if (keyboardAction === 'delete' && getExplorerDeleteTarget(selectedNode)) {
+    if (keyboardAction === 'delete' && targets.deleteTarget) {
       event.preventDefault();
       void startDeleteFromSelection();
       return;
     }
 
-    if (keyboardAction === 'rename' && getExplorerRenameTarget(selectedNode, activeFileId)) {
+    if (keyboardAction === 'rename' && targets.renameTarget) {
       event.preventDefault();
       startRenameFromSelection();
       return;
     }
 
-    if (keyboardAction === 'copy' && clipboardTarget) {
+    if (keyboardAction === 'copy' && targets.clipboardTarget) {
       event.preventDefault();
       void startCopyFromSelection();
       return;
     }
 
-    if (keyboardAction === 'cut' && clipboardTarget) {
+    if (keyboardAction === 'cut' && targets.clipboardTarget) {
       event.preventDefault();
       void startCutFromSelection();
       return;
     }
 
-    if (keyboardAction === 'paste' && workspaceClipboard && pasteTargetPath) {
+    if (keyboardAction === 'paste' && workspaceClipboard && targets.pasteTargetPath) {
       event.preventDefault();
       void startPasteFromSelection();
       return;
     }
 
-    if (keyboardAction === 'open-context-menu' && contextMenuTargetPath) {
+    if (keyboardAction === 'open-context-menu' && targets.contextMenuTargetPath) {
       event.preventDefault();
       openContextMenuForSelection();
       return;

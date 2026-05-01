@@ -2,6 +2,7 @@ import {
   getWorkspaceParentPath,
   isWorkspaceRelativeFilePath,
   type ExplorerSelectedNode,
+  type WorkspaceClipboardState,
   type WorkspaceEntryType,
 } from '../../../workspace/workspaceFiles';
 
@@ -150,6 +151,114 @@ export function getExplorerDeleteTarget(
   }
 
   return null;
+}
+
+export interface ExplorerKeyboardActionTargets {
+  clipboardTarget: { path: string; type: WorkspaceEntryType } | null;
+  contextMenuTargetPath: string | null;
+  deleteTarget: { path: string; type: 'file' | 'folder' } | null;
+  pasteTargetPath: string | null;
+  renameTarget: { path: string; type: 'file' | 'folder' } | null;
+}
+
+export function getExplorerKeyboardActionTargets({
+  activeFileId,
+  keyboardAction,
+  selectedNode,
+}: {
+  activeFileId: string;
+  keyboardAction: ExplorerKeyboardAction | null;
+  selectedNode: ExplorerSelectedNode | null;
+}): ExplorerKeyboardActionTargets {
+  return {
+    clipboardTarget: keyboardAction === 'copy' || keyboardAction === 'cut'
+      ? getExplorerClipboardTarget(selectedNode, activeFileId)
+      : null,
+    contextMenuTargetPath: keyboardAction === 'open-context-menu'
+      ? getExplorerContextMenuTargetPath(selectedNode, activeFileId)
+      : null,
+    deleteTarget: keyboardAction === 'delete'
+      ? getExplorerDeleteTarget(selectedNode)
+      : null,
+    pasteTargetPath: keyboardAction === 'paste'
+      ? getExplorerPasteTargetPath(selectedNode, activeFileId)
+      : null,
+    renameTarget: keyboardAction === 'rename'
+      ? getExplorerRenameTarget(selectedNode, activeFileId)
+      : null,
+  };
+}
+
+export function hasExplorerKeyboardActionTarget({
+  keyboardAction,
+  targets,
+  workspaceClipboard,
+}: {
+  keyboardAction: ExplorerKeyboardAction | null;
+  targets: ExplorerKeyboardActionTargets;
+  workspaceClipboard: WorkspaceClipboardState | null;
+}): boolean {
+  if (keyboardAction === 'delete') {
+    return Boolean(targets.deleteTarget);
+  }
+
+  if (keyboardAction === 'rename') {
+    return Boolean(targets.renameTarget);
+  }
+
+  if (keyboardAction === 'copy' || keyboardAction === 'cut') {
+    return Boolean(targets.clipboardTarget);
+  }
+
+  if (keyboardAction === 'paste') {
+    return Boolean(workspaceClipboard && targets.pasteTargetPath);
+  }
+
+  if (keyboardAction === 'open-context-menu') {
+    return Boolean(targets.contextMenuTargetPath);
+  }
+
+  if (keyboardAction === 'clear-clipboard') {
+    return Boolean(workspaceClipboard);
+  }
+
+  return false;
+}
+
+export function canRunExplorerDocumentKeyboardAction({
+  allowDeleteFromMonacoSelection,
+  editableKeyboardTarget,
+  hasActionTarget,
+  keyboardAction,
+  tabIsExplorer,
+  treeEditActive,
+  treeInteractionActive,
+}: {
+  allowDeleteFromMonacoSelection: boolean;
+  editableKeyboardTarget: boolean;
+  hasActionTarget: boolean;
+  keyboardAction: ExplorerKeyboardAction;
+  tabIsExplorer: boolean;
+  treeEditActive: boolean;
+  treeInteractionActive: boolean;
+}): boolean {
+  if (!tabIsExplorer || treeEditActive || !hasActionTarget) {
+    return false;
+  }
+
+  if (!treeInteractionActive && !allowDeleteFromMonacoSelection) {
+    return false;
+  }
+
+  if (editableKeyboardTarget && keyboardAction !== 'delete') {
+    return false;
+  }
+
+  if (editableKeyboardTarget && !allowDeleteFromMonacoSelection) {
+    return false;
+  }
+
+  return true;
 }
 
 export function isEditableKeyboardTarget(target: EventTarget | null): boolean {
