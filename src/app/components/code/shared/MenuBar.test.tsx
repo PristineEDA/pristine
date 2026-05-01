@@ -456,9 +456,17 @@ describe('MenuBar', () => {
 
     renderMenuBar();
 
+    const centerViewButtons = Array.from(
+      screen.getByTestId('center-view-switcher').querySelectorAll('[data-testid^="center-view-"]'),
+    ).map((element) => element.getAttribute('data-testid'));
     const codeButton = screen.getByTestId('center-view-code');
     const whiteboardButton = screen.getByTestId('center-view-whiteboard');
 
+    expect(centerViewButtons).toEqual([
+      'center-view-whiteboard',
+      'center-view-code',
+      'center-view-workflow',
+    ]);
     expect(codeButton).toHaveAttribute('data-state', 'on');
     expect(codeButton).toHaveClass('data-[state=on]:bg-background', 'data-[state=on]:shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_1px_2px_rgba(15,23,42,0.08)]', 'data-[state=on]:border-border/80');
     expect(whiteboardButton).toHaveAttribute('data-state', 'off');

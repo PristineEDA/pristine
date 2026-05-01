@@ -1,4 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { EditorSettingsProvider, useEditorSettings } from './EditorSettingsContext'
 
@@ -124,12 +125,19 @@ function EditorSettingsProbe() {
 }
 
 describe('EditorSettingsContext', () => {
+  let user: ReturnType<typeof userEvent.setup>
+
   beforeEach(() => {
+    user = userEvent.setup()
     vi.mocked(window.electronAPI!.config.get).mockReset()
     vi.mocked(window.electronAPI!.config.set).mockReset()
     ensureEditorFontFamilyLoadedMock.mockReset()
     ensureEditorFontFamilyLoadedMock.mockResolvedValue(undefined)
   })
+
+  async function clickSetting(testId: string) {
+    await user.click(screen.getByTestId(testId))
+  }
 
   it('defaults to Dracula and 13px when persisted config is missing', () => {
     render(
@@ -223,103 +231,103 @@ describe('EditorSettingsContext', () => {
     expect(ensureEditorFontFamilyLoadedMock).toHaveBeenCalledWith('fira-code')
   })
 
-  it('persists each editor setting interaction once', () => {
+  it('persists each editor setting interaction once', async () => {
     render(
       <EditorSettingsProvider>
         <EditorSettingsProbe />
       </EditorSettingsProvider>,
     )
 
-    fireEvent.click(screen.getByTestId('set-theme'))
+    await clickSetting('set-theme')
     expect(window.electronAPI?.config.set).toHaveBeenCalledTimes(1)
     expect(window.electronAPI?.config.set).toHaveBeenLastCalledWith('editor.theme', 'github-dark')
 
-    fireEvent.click(screen.getByTestId('set-word-wrap'))
+    await clickSetting('set-word-wrap')
     expect(window.electronAPI?.config.set).toHaveBeenCalledTimes(2)
     expect(window.electronAPI?.config.set).toHaveBeenLastCalledWith('editor.wordWrap', 'bounded')
 
-    fireEvent.click(screen.getByTestId('set-font-size'))
+    await clickSetting('set-font-size')
     expect(window.electronAPI?.config.set).toHaveBeenCalledTimes(3)
     expect(window.electronAPI?.config.set).toHaveBeenLastCalledWith('editor.fontSize', 18)
   })
 
-  it('persists display settings, font settings and theme updates and clamps invalid values', () => {
+  it('persists display settings, font settings and theme updates and clamps invalid values', async () => {
     render(
       <EditorSettingsProvider>
         <EditorSettingsProbe />
       </EditorSettingsProvider>,
     )
 
-    fireEvent.click(screen.getByTestId('set-cursor-blinking'))
+    await clickSetting('set-cursor-blinking')
     expect(screen.getByTestId('editor-cursor-blinking')).toHaveTextContent('solid')
     expect(window.electronAPI?.config.set).toHaveBeenCalledWith('editor.cursorBlinking', 'solid')
 
-    fireEvent.click(screen.getByTestId('set-word-wrap'))
+    await clickSetting('set-word-wrap')
     expect(screen.getByTestId('editor-word-wrap')).toHaveTextContent('bounded')
     expect(window.electronAPI?.config.set).toHaveBeenCalledWith('editor.wordWrap', 'bounded')
 
-    fireEvent.click(screen.getByTestId('set-tab-size'))
+    await clickSetting('set-tab-size')
     expect(screen.getByTestId('editor-tab-size')).toHaveTextContent('2')
     expect(window.electronAPI?.config.set).toHaveBeenCalledWith('editor.tabSize', 2)
 
-    fireEvent.click(screen.getByTestId('set-render-whitespace'))
+    await clickSetting('set-render-whitespace')
     expect(screen.getByTestId('editor-render-whitespace')).toHaveTextContent('all')
     expect(window.electronAPI?.config.set).toHaveBeenCalledWith('editor.renderWhitespace', 'all')
 
-    fireEvent.click(screen.getByTestId('set-render-control-characters'))
+    await clickSetting('set-render-control-characters')
     expect(screen.getByTestId('editor-render-control-characters')).toHaveTextContent('true')
     expect(window.electronAPI?.config.set).toHaveBeenCalledWith('editor.renderControlCharacters', true)
 
-    fireEvent.click(screen.getByTestId('set-font-ligatures'))
+    await clickSetting('set-font-ligatures')
     expect(screen.getByTestId('editor-font-ligatures')).toHaveTextContent('false')
     expect(window.electronAPI?.config.set).toHaveBeenCalledWith('editor.fontLigatures', false)
 
-    fireEvent.click(screen.getByTestId('set-line-numbers'))
+    await clickSetting('set-line-numbers')
     expect(screen.getByTestId('editor-line-numbers')).toHaveTextContent('relative')
     expect(window.electronAPI?.config.set).toHaveBeenCalledWith('editor.lineNumbers', 'relative')
 
-    fireEvent.click(screen.getByTestId('set-smooth-scrolling'))
+    await clickSetting('set-smooth-scrolling')
     expect(screen.getByTestId('editor-smooth-scrolling')).toHaveTextContent('false')
     expect(window.electronAPI?.config.set).toHaveBeenCalledWith('editor.smoothScrolling', false)
 
-    fireEvent.click(screen.getByTestId('set-scroll-beyond-last-line'))
+    await clickSetting('set-scroll-beyond-last-line')
     expect(screen.getByTestId('editor-scroll-beyond-last-line')).toHaveTextContent('true')
     expect(window.electronAPI?.config.set).toHaveBeenCalledWith('editor.scrollBeyondLastLine', true)
 
-    fireEvent.click(screen.getByTestId('set-folding-strategy'))
+    await clickSetting('set-folding-strategy')
     expect(screen.getByTestId('editor-folding-strategy')).toHaveTextContent('auto')
     expect(window.electronAPI?.config.set).toHaveBeenCalledWith('editor.foldingStrategy', 'auto')
 
-    fireEvent.click(screen.getByTestId('set-minimap-enabled'))
+    await clickSetting('set-minimap-enabled')
     expect(screen.getByTestId('editor-minimap-enabled')).toHaveTextContent('false')
     expect(window.electronAPI?.config.set).toHaveBeenCalledWith('editor.minimap.enabled', false)
 
-    fireEvent.click(screen.getByTestId('set-glyph-margin'))
+    await clickSetting('set-glyph-margin')
     expect(screen.getByTestId('editor-glyph-margin')).toHaveTextContent('false')
     expect(window.electronAPI?.config.set).toHaveBeenCalledWith('editor.glyphMargin', false)
 
-    fireEvent.click(screen.getByTestId('set-bracket-pair-guides'))
+    await clickSetting('set-bracket-pair-guides')
     expect(screen.getByTestId('editor-bracket-pair-guides')).toHaveTextContent('false')
     expect(window.electronAPI?.config.set).toHaveBeenCalledWith('editor.guides.bracketPairs', false)
 
-    fireEvent.click(screen.getByTestId('set-indent-guides'))
+    await clickSetting('set-indent-guides')
     expect(screen.getByTestId('editor-indent-guides')).toHaveTextContent('false')
     expect(window.electronAPI?.config.set).toHaveBeenCalledWith('editor.guides.indentation', false)
 
-    fireEvent.click(screen.getByTestId('set-font-family'))
+    await clickSetting('set-font-family')
     expect(screen.getByTestId('editor-font-family')).toHaveTextContent('meslo-lg-dz')
     expect(window.electronAPI?.config.set).toHaveBeenCalledWith('editor.fontFamily', 'meslo-lg-dz')
     expect(ensureEditorFontFamilyLoadedMock).toHaveBeenCalledWith('meslo-lg-dz')
 
-    fireEvent.click(screen.getByTestId('set-font-size'))
+    await clickSetting('set-font-size')
     expect(screen.getByTestId('editor-font-size')).toHaveTextContent('18')
     expect(window.electronAPI?.config.set).toHaveBeenCalledWith('editor.fontSize', 18)
 
-    fireEvent.click(screen.getByTestId('set-theme'))
+    await clickSetting('set-theme')
     expect(screen.getByTestId('editor-theme')).toHaveTextContent('github-dark')
     expect(window.electronAPI?.config.set).toHaveBeenCalledWith('editor.theme', 'github-dark')
 
-    fireEvent.click(screen.getByTestId('set-invalid-font-size'))
+    await clickSetting('set-invalid-font-size')
     expect(screen.getByTestId('editor-font-size')).toHaveTextContent('24')
     expect(window.electronAPI?.config.set).toHaveBeenCalledWith('editor.fontSize', 24)
   })

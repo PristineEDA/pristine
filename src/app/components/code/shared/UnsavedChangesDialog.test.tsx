@@ -1,7 +1,18 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import { WorkspaceProvider, useWorkspace } from '../../../context/WorkspaceContext';
 import { UnsavedChangesDialog } from './UnsavedChangesDialog';
+
+type TestUser = ReturnType<typeof userEvent.setup>;
+
+async function clickText(user: TestUser, text: string) {
+  await user.click(screen.getByText(text));
+}
+
+async function clickTestId(user: TestUser, testId: string) {
+  await user.click(screen.getByTestId(testId));
+}
 
 function UnsavedChangesDialogHarness() {
   const workspace = useWorkspace();
@@ -24,27 +35,29 @@ function UnsavedChangesDialogHarness() {
 
 describe('UnsavedChangesDialog', () => {
   it('saves only the selected unsaved files and keeps the remaining files in the dialog', async () => {
+    const user = userEvent.setup();
+
     render(
       <WorkspaceProvider>
         <UnsavedChangesDialogHarness />
       </WorkspaceProvider>,
     );
 
-    fireEvent.click(screen.getByText('open-reg'));
-    fireEvent.click(screen.getByText('edit-reg'));
-    fireEvent.click(screen.getByText('open-alu'));
-    fireEvent.click(screen.getByText('edit-alu'));
-    fireEvent.click(screen.getByText('open-unsaved-dialog'));
+    await clickText(user, 'open-reg');
+    await clickText(user, 'edit-reg');
+    await clickText(user, 'open-alu');
+    await clickText(user, 'edit-alu');
+    await clickText(user, 'open-unsaved-dialog');
 
     expect(await screen.findByTestId('unsaved-changes-dialog')).toBeVisible();
     expect(screen.getByTestId('unsaved-changes-selection-summary')).toHaveTextContent('2 selected • 2 total');
 
-    fireEvent.click(screen.getByRole('checkbox', { name: /alu\.v rtl\/core\/alu\.v/i }));
+    await user.click(screen.getByRole('checkbox', { name: /alu\.v rtl\/core\/alu\.v/i }));
 
     expect(screen.getByTestId('unsaved-changes-selection-summary')).toHaveTextContent('1 selected • 2 total');
     expect(screen.getByTestId('unsaved-changes-save-all')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByTestId('unsaved-changes-save'));
+    await clickTestId(user, 'unsaved-changes-save');
 
     await waitFor(() => {
       expect(window.electronAPI?.fs.writeFile).toHaveBeenCalledWith('rtl/core/reg_file.v', 'module reg_file; logic dirty; endmodule');
@@ -58,7 +71,7 @@ describe('UnsavedChangesDialog', () => {
     expect(within(fileList).queryByText('reg_file.v')).not.toBeInTheDocument();
     expect(within(fileList).getByText('alu.v')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByTestId('unsaved-changes-cancel'));
+    await clickTestId(user, 'unsaved-changes-cancel');
 
     await waitFor(() => {
       expect(screen.queryByTestId('unsaved-changes-dialog')).not.toBeInTheDocument();
@@ -66,15 +79,17 @@ describe('UnsavedChangesDialog', () => {
   });
 
   it('renders a dedicated three-button close confirmation for a single dirty tab', async () => {
+    const user = userEvent.setup();
+
     render(
       <WorkspaceProvider>
         <UnsavedChangesDialogHarness />
       </WorkspaceProvider>,
     );
 
-    fireEvent.click(screen.getByText('open-untitled'));
-    fireEvent.click(screen.getByText('edit-active'));
-    fireEvent.click(screen.getByText('close-active'));
+    await clickText(user, 'open-untitled');
+    await clickText(user, 'edit-active');
+    await clickText(user, 'close-active');
 
     expect(await screen.findByTestId('unsaved-changes-single-file')).toBeVisible();
     expect(screen.getByTestId('unsaved-changes-single-file')).toHaveTextContent('untitled-1');

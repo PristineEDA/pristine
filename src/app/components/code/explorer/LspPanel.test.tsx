@@ -1,4 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LspDebugEvent } from '../../../../../types/systemverilog-lsp';
 
@@ -33,7 +34,9 @@ describe('LspPanel', () => {
     mockedSubscribeToDebugEvents.mockImplementation(() => vi.fn());
   });
 
-  it('renders paired request and response payloads behind a collapsible entry', () => {
+  it('renders paired request and response payloads behind a collapsible entry', async () => {
+    const user = userEvent.setup();
+
     mockEvents = [
       {
         sequence: 1,
@@ -63,7 +66,7 @@ describe('LspPanel', () => {
     expect(screen.getByText('Completed')).toBeInTheDocument();
     expect(queryJsonSnippet('"targetUri": "rtl/core/alu.sv"')).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /textDocument\/definition/i }));
+    await user.click(screen.getByRole('button', { name: /textDocument\/definition/i }));
 
     expect(screen.getByText('Request payload')).toBeInTheDocument();
     expect(screen.getByText('Response payload')).toBeInTheDocument();
@@ -72,7 +75,9 @@ describe('LspPanel', () => {
     })).toBeInTheDocument();
   });
 
-  it('filters diagnostics separately from paired responses', () => {
+  it('filters diagnostics separately from paired responses', async () => {
+    const user = userEvent.setup();
+
     mockEvents = [
       {
         sequence: 1,
@@ -118,15 +123,15 @@ describe('LspPanel', () => {
 
     render(<LspPanel />);
 
-    fireEvent.click(screen.getByTestId('lsp-filter-diagnostic'));
+    await user.click(screen.getByTestId('lsp-filter-diagnostic'));
 
     expect(screen.getByRole('button', { name: /textDocument\/publishDiagnostics/i })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /textDocument\/definition/i })).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /textDocument\/publishDiagnostics/i }));
+    await user.click(screen.getByRole('button', { name: /textDocument\/publishDiagnostics/i }));
     expect(screen.getByText('Undriven signal')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByTestId('lsp-filter-response'));
+    await user.click(screen.getByTestId('lsp-filter-response'));
 
     expect(screen.getByRole('button', { name: /textDocument\/definition/i })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /textDocument\/publishDiagnostics/i })).not.toBeInTheDocument();

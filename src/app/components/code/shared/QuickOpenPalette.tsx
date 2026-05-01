@@ -134,6 +134,7 @@ const QuickOpenResultRow = memo(function QuickOpenResultRow({
       <div className="flex w-6 shrink-0 justify-end">
         <FileTypeBadge
           name={result.name}
+          path={result.path}
           className="h-4 w-4"
           testId={`quick-open-icon-${treeTestId}`}
         />

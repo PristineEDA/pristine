@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { WorkspaceProvider, useWorkspace } from '../../../context/WorkspaceContext';
 import { EditorSplitLayout } from './EditorSplitLayout';
@@ -103,8 +104,21 @@ function fireDragEvent(element: HTMLElement, type: 'dragover' | 'drop', clientX:
   fireEvent(element, event);
 }
 
+type TestUser = ReturnType<typeof userEvent.setup>;
+
+let testUser: TestUser;
+
+async function clickText(text: string) {
+  await testUser.click(screen.getByText(text));
+}
+
+async function clickWithin(testId: string, text: string) {
+  await testUser.click(within(screen.getByTestId(testId)).getByText(text));
+}
+
 describe('EditorSplitLayout', () => {
   beforeEach(() => {
+    testUser = userEvent.setup();
     clearEditorAreaRenderCounts();
   });
 
@@ -118,43 +132,43 @@ describe('EditorSplitLayout', () => {
     expect(screen.getByTestId('editor-group-group-1')).not.toHaveClass('ring-1', 'ring-inset', 'ring-primary/50');
   });
 
-  it('creates a second editor group from the split action', () => {
+  it('creates a second editor group from the split action', async () => {
     render(
       <WorkspaceProvider>
         <LayoutHarness />
       </WorkspaceProvider>,
     );
 
-    fireEvent.click(screen.getByText('open-reg'));
-    fireEvent.click(within(screen.getByTestId('editor-group-group-1')).getByText('split-editor'));
+    await clickText('open-reg');
+    await clickWithin('editor-group-group-1', 'split-editor');
 
     expect(screen.getByTestId('editor-group-group-2')).toBeInTheDocument();
     expect(within(screen.getByTestId('editor-group-group-1')).getByTestId('mock-tabs')).toHaveTextContent('rtl/core/reg_file.v');
     expect(within(screen.getByTestId('editor-group-group-2')).getByTestId('mock-tabs')).toHaveTextContent('rtl/core/reg_file.v');
   });
 
-  it('supports creating a vertical split from the tab bar actions', () => {
+  it('supports creating a vertical split from the tab bar actions', async () => {
     render(
       <WorkspaceProvider>
         <LayoutHarness />
       </WorkspaceProvider>,
     );
 
-    fireEvent.click(screen.getByText('open-reg'));
-    fireEvent.click(within(screen.getByTestId('editor-group-group-1')).getByText('split-editor-down'));
+    await clickText('open-reg');
+    await clickWithin('editor-group-group-1', 'split-editor-down');
 
     expect(screen.getByTestId('editor-group-group-2')).toBeInTheDocument();
     expect(within(screen.getByTestId('editor-group-group-2')).getByTestId('mock-tabs')).toHaveTextContent('rtl/core/reg_file.v');
   });
 
-  it('creates a new split when a tab is dropped on the right edge', () => {
+  it('creates a new split when a tab is dropped on the right edge', async () => {
     render(
       <WorkspaceProvider>
         <LayoutHarness />
       </WorkspaceProvider>,
     );
 
-    fireEvent.click(screen.getByText('open-reg'));
+    await clickText('open-reg');
 
     const group = screen.getByTestId('editor-group-group-1');
     mockRect(group);
@@ -179,31 +193,31 @@ describe('EditorSplitLayout', () => {
     expect(screen.queryByTestId('editor-drag-shield-group-1')).not.toBeInTheDocument();
   });
 
-  it('pins a preview tab when the tab itself is double-clicked', () => {
+  it('pins a preview tab when the tab itself is double-clicked', async () => {
     render(
       <WorkspaceProvider>
         <LayoutHarness />
       </WorkspaceProvider>,
     );
 
-    fireEvent.click(screen.getByText('preview-reg'));
+    await clickText('preview-reg');
     const group = screen.getByTestId('editor-group-group-1');
     const previewTab = within(group).getByTestId('mock-tab-rtl/core/reg_file.v');
 
-    fireEvent.doubleClick(previewTab);
+    await testUser.dblClick(previewTab);
 
     expect(within(group).getByTestId('mock-active-tab')).toHaveTextContent('rtl/core/reg_file.v');
     expect(within(group).getByTestId('mock-preview-tabs')).toHaveTextContent('');
   });
 
-  it('pins a preview tab before drag state starts so cancelled drags still keep it', () => {
+  it('pins a preview tab before drag state starts so cancelled drags still keep it', async () => {
     render(
       <WorkspaceProvider>
         <LayoutHarness />
       </WorkspaceProvider>,
     );
 
-    fireEvent.click(screen.getByText('preview-reg'));
+    await clickText('preview-reg');
     const group = screen.getByTestId('editor-group-group-1');
     const previewTab = within(group).getByTestId('mock-tab-rtl/core/reg_file.v');
 
@@ -213,7 +227,7 @@ describe('EditorSplitLayout', () => {
     expect(screen.getByTestId('editor-drag-shield-group-1')).toBeInTheDocument();
   });
 
-  it('requests explorer reveal whenever a tab is activated, including repeated clicks on the active tab', () => {
+  it('requests explorer reveal whenever a tab is activated, including repeated clicks on the active tab', async () => {
     const onActiveFileReveal = vi.fn();
 
     render(
@@ -222,29 +236,29 @@ describe('EditorSplitLayout', () => {
       </WorkspaceProvider>,
     );
 
-    fireEvent.click(screen.getByText('open-reg'));
-    fireEvent.click(screen.getByText('open-alu'));
+    await clickText('open-reg');
+    await clickText('open-alu');
 
     const group = screen.getByTestId('editor-group-group-1');
     const aluTab = within(group).getByTestId('mock-tab-rtl/core/alu.v');
 
-    fireEvent.click(aluTab);
-    fireEvent.click(aluTab);
+    await testUser.click(aluTab);
+    await testUser.click(aluTab);
 
     expect(onActiveFileReveal).toHaveBeenNthCalledWith(1, 'rtl/core/alu.v');
     expect(onActiveFileReveal).toHaveBeenNthCalledWith(2, 'rtl/core/alu.v');
   });
 
-  it('moves a tab into an existing group when dropped in the center', () => {
+  it('moves a tab into an existing group when dropped in the center', async () => {
     render(
       <WorkspaceProvider>
         <LayoutHarness />
       </WorkspaceProvider>,
     );
 
-    fireEvent.click(screen.getByText('open-reg'));
-    fireEvent.click(screen.getByText('open-alu'));
-    fireEvent.click(within(screen.getByTestId('editor-group-group-1')).getByText('split-editor'));
+    await clickText('open-reg');
+    await clickText('open-alu');
+    await clickWithin('editor-group-group-1', 'split-editor');
 
     const sourceGroup = screen.getByTestId('editor-group-group-1');
     const targetGroup = screen.getByTestId('editor-group-group-2');
@@ -264,18 +278,18 @@ describe('EditorSplitLayout', () => {
     expect(within(targetGroup).getByTestId('mock-tabs')).toHaveTextContent('rtl/core/alu.v,rtl/core/reg_file.v');
   });
 
-  it('keeps an unchanged split group from rerendering when another group opens a file', () => {
+  it('keeps an unchanged split group from rerendering when another group opens a file', async () => {
     render(
       <WorkspaceProvider>
         <LayoutHarness />
       </WorkspaceProvider>,
     );
 
-    fireEvent.click(screen.getByText('open-reg'));
-    fireEvent.click(within(screen.getByTestId('editor-group-group-1')).getByText('split-editor'));
+    await clickText('open-reg');
+    await clickWithin('editor-group-group-1', 'split-editor');
 
     clearEditorAreaRenderCounts();
-    fireEvent.click(screen.getByText('open-alu'));
+    await clickText('open-alu');
 
     expect(within(screen.getByTestId('editor-group-group-1')).getByTestId('mock-tabs')).toHaveTextContent('rtl/core/reg_file.v');
     expect(within(screen.getByTestId('editor-group-group-2')).getByTestId('mock-tabs')).toHaveTextContent('rtl/core/reg_file.v,rtl/core/alu.v');
@@ -283,20 +297,20 @@ describe('EditorSplitLayout', () => {
     expect(getEditorAreaRenderCount('group-2')).toBeGreaterThan(0);
   });
 
-  it('cycles the focused group tabs to the right and reverses with Ctrl/Cmd+Shift+Tab', () => {
+  it('cycles the focused group tabs to the right and reverses with Ctrl/Cmd+Shift+Tab', async () => {
     render(
       <WorkspaceProvider>
         <LayoutHarness />
       </WorkspaceProvider>,
     );
 
-    fireEvent.click(screen.getByText('open-reg'));
-    fireEvent.click(screen.getByText('open-alu'));
-    fireEvent.click(screen.getByText('open-gitignore'));
+    await clickText('open-reg');
+    await clickText('open-alu');
+    await clickText('open-gitignore');
 
     const group = screen.getByTestId('editor-group-group-1');
     fireEvent.mouseDown(group);
-    fireEvent.click(within(group).getByTestId('mock-tab-rtl/core/alu.v'));
+    await testUser.click(within(group).getByTestId('mock-tab-rtl/core/alu.v'));
 
     fireEvent.keyDown(group, { key: 'Tab', ctrlKey: true });
     expect(within(group).getByTestId('mock-active-tab')).toHaveTextContent('.gitignore');
@@ -305,16 +319,16 @@ describe('EditorSplitLayout', () => {
     expect(within(group).getByTestId('mock-active-tab')).toHaveTextContent('rtl/core/alu.v');
   });
 
-  it('closes only the focused group active tab with Ctrl+W', () => {
+  it('closes only the focused group active tab with Ctrl+W', async () => {
     render(
       <WorkspaceProvider>
         <LayoutHarness />
       </WorkspaceProvider>,
     );
 
-    fireEvent.click(screen.getByText('open-reg'));
-    fireEvent.click(within(screen.getByTestId('editor-group-group-1')).getByText('split-editor'));
-    fireEvent.click(screen.getByText('open-alu'));
+    await clickText('open-reg');
+    await clickWithin('editor-group-group-1', 'split-editor');
+    await clickText('open-alu');
 
     const firstGroup = screen.getByTestId('editor-group-group-1');
     const secondGroup = screen.getByTestId('editor-group-group-2');
@@ -327,14 +341,14 @@ describe('EditorSplitLayout', () => {
     expect(within(secondGroup).getByTestId('mock-active-tab')).toHaveTextContent('rtl/core/reg_file.v');
   });
 
-  it('renders half-pane edge hot zones with animated neutral styling', () => {
+  it('renders half-pane edge hot zones with animated neutral styling', async () => {
     render(
       <WorkspaceProvider>
         <LayoutHarness />
       </WorkspaceProvider>,
     );
 
-    fireEvent.click(screen.getByText('open-reg'));
+    await clickText('open-reg');
 
     const group = screen.getByTestId('editor-group-group-1');
     mockRect(group);

@@ -145,6 +145,7 @@ function EditorTab({
     >
       <FileTypeBadge
         name={tab.name}
+        path={tab.id}
         testId={`editor-tab-badge-${tab.id}`}
         className="h-4 w-4"
       />

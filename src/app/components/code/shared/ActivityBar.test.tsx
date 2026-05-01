@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { ActivityBar } from './ActivityBar';
@@ -38,7 +38,8 @@ describe('ActivityBar', () => {
     expect(screen.queryByRole('button', { name: 'Extensions' })).not.toBeInTheDocument();
   });
 
-  it('does not apply pressed state or call the shared navigation handler when compile and run are clicked', () => {
+  it('does not apply pressed state or call the shared navigation handler when compile and run are clicked', async () => {
+    const user = userEvent.setup();
     const onItemSelect = vi.fn();
 
     renderActivityBar({ onItemSelect });
@@ -49,31 +50,33 @@ describe('ActivityBar', () => {
     expect(compileButton).not.toHaveAttribute('aria-pressed');
     expect(runButton).not.toHaveAttribute('aria-pressed');
 
-    fireEvent.click(runButton);
+    await user.click(runButton);
 
     expect(compileButton).not.toHaveAttribute('aria-pressed');
     expect(runButton).not.toHaveAttribute('aria-pressed');
     expect(onItemSelect).not.toHaveBeenCalled();
   });
 
-  it('forwards clicked item ids to the shared selection handler', () => {
+  it('forwards clicked item ids to the shared selection handler', async () => {
+    const user = userEvent.setup();
     const onItemSelect = vi.fn();
 
     renderActivityBar({ onItemSelect });
 
-    fireEvent.click(screen.getByTestId('activity-item-simulation'));
-    fireEvent.click(screen.getByTestId('activity-item-explorer'));
+    await user.click(screen.getByTestId('activity-item-simulation'));
+    await user.click(screen.getByTestId('activity-item-explorer'));
 
     expect(onItemSelect).toHaveBeenNthCalledWith(1, 'simulation');
     expect(onItemSelect).toHaveBeenNthCalledWith(2, 'explorer');
   });
 
-  it('forwards the id for collapsible top-level items to the shared selection handler', () => {
+  it('forwards the id for collapsible top-level items to the shared selection handler', async () => {
+    const user = userEvent.setup();
     const onItemSelect = vi.fn();
 
     renderActivityBar({ onItemSelect });
 
-    fireEvent.click(screen.getByTestId('activity-item-physical'));
+    await user.click(screen.getByTestId('activity-item-physical'));
 
     expect(onItemSelect).toHaveBeenCalledWith('physical');
   });
