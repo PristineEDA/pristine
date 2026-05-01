@@ -6,6 +6,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type Context,
   type ReactNode,
 } from 'react';
 import {
@@ -167,6 +168,101 @@ interface WorkspaceState {
   editorRef: React.MutableRefObject<any>;
   registerEditorRef: (groupId: string, editorInstance: any) => void;
 }
+
+type WorkspaceViewState = Pick<
+  WorkspaceState,
+  | 'activeView'
+  | 'setActiveView'
+  | 'mainContentView'
+  | 'setMainContentView'
+  | 'canToggleLayoutPanels'
+  | 'showLeftPanel'
+  | 'setShowLeftPanel'
+  | 'showBottomPanel'
+  | 'setShowBottomPanel'
+  | 'showRightPanel'
+  | 'setShowRightPanel'
+  | 'workspaceTreeRefreshToken'
+>;
+
+type WorkspaceEditorState = Pick<
+  WorkspaceState,
+  | 'editorGroups'
+  | 'editorLayout'
+  | 'focusedGroupId'
+  | 'focusGroup'
+  | 'focusActiveEditor'
+  | 'splitGroup'
+  | 'moveTab'
+  | 'cycleFocusedGroupTabs'
+  | 'closeActiveTabInFocusedGroup'
+  | 'tabs'
+  | 'activeTabId'
+  | 'openFile'
+  | 'resolveFileId'
+  | 'openFileInGroup'
+  | 'openUntitledFile'
+  | 'openPreviewFile'
+  | 'openPreviewFileInGroup'
+  | 'pinTab'
+  | 'pinTabInGroup'
+  | 'closeFile'
+  | 'closeFileInGroup'
+  | 'setActiveTabId'
+  | 'setActiveTabIdInGroup'
+  | 'jumpToLine'
+  | 'jumpTo'
+  | 'cursorLine'
+  | 'cursorCol'
+  | 'setCursorPos'
+  | 'getStoredCursorPosition'
+  | 'getCursorRestoreRequest'
+  | 'clearCursorRestoreRequest'
+  | 'captureEditorSelectionSnapshot'
+  | 'restoreEditorSelection'
+  | 'undoActiveEditor'
+  | 'redoActiveEditor'
+  | 'editorRef'
+  | 'registerEditorRef'
+>;
+
+type WorkspaceFileState = Pick<
+  WorkspaceState,
+  | 'createWorkspaceFile'
+  | 'createWorkspaceFolder'
+  | 'workspaceClipboard'
+  | 'copyWorkspaceEntry'
+  | 'cutWorkspaceEntry'
+  | 'clearWorkspaceClipboard'
+  | 'pasteWorkspaceEntry'
+  | 'deleteWorkspaceEntry'
+  | 'renameWorkspaceEntry'
+  | 'fileContents'
+  | 'loadingFiles'
+  | 'loadErrors'
+  | 'loadFileContent'
+  | 'updateFileContent'
+  | 'updateFileContentInGroup'
+  | 'dirtyFiles'
+  | 'dirtyFileIds'
+  | 'savingFiles'
+  | 'saveErrors'
+  | 'saveActiveFile'
+  | 'saveAllFiles'
+  | 'saveFiles'
+>;
+
+type WorkspaceDialogState = Pick<
+  WorkspaceState,
+  | 'unsavedChangesDialog'
+  | 'openUnsavedChangesDialog'
+  | 'confirmUnsavedChangesSave'
+  | 'discardUnsavedChanges'
+  | 'cancelUnsavedChanges'
+  | 'deleteConfirmationDialog'
+  | 'confirmDeleteConfirmation'
+  | 'cancelDeleteConfirmation'
+>;
 
 function createUnsavedChangesDialogState(
   kind: UnsavedChangesDialogKind,
@@ -410,11 +506,35 @@ function withModifiedEditorGroupsState(
 // ─── Context ────────────────────────────────────────────────────────────────
 
 const WorkspaceContext = createContext<WorkspaceState | null>(null);
+const WorkspaceViewContext = createContext<WorkspaceViewState | null>(null);
+const WorkspaceEditorContext = createContext<WorkspaceEditorState | null>(null);
+const WorkspaceFileContext = createContext<WorkspaceFileState | null>(null);
+const WorkspaceDialogContext = createContext<WorkspaceDialogState | null>(null);
+
+function useRequiredWorkspaceContext<T>(context: Context<T | null>, hookName: string): T {
+  const ctx = useContext(context);
+  if (!ctx) throw new Error(`${hookName} must be used within WorkspaceProvider`);
+  return ctx;
+}
 
 export function useWorkspace(): WorkspaceState {
-  const ctx = useContext(WorkspaceContext);
-  if (!ctx) throw new Error('useWorkspace must be used within WorkspaceProvider');
-  return ctx;
+  return useRequiredWorkspaceContext(WorkspaceContext, 'useWorkspace');
+}
+
+export function useWorkspaceView(): WorkspaceViewState {
+  return useRequiredWorkspaceContext(WorkspaceViewContext, 'useWorkspaceView');
+}
+
+export function useWorkspaceEditor(): WorkspaceEditorState {
+  return useRequiredWorkspaceContext(WorkspaceEditorContext, 'useWorkspaceEditor');
+}
+
+export function useWorkspaceFiles(): WorkspaceFileState {
+  return useRequiredWorkspaceContext(WorkspaceFileContext, 'useWorkspaceFiles');
+}
+
+export function useWorkspaceDialogs(): WorkspaceDialogState {
+  return useRequiredWorkspaceContext(WorkspaceDialogContext, 'useWorkspaceDialogs');
 }
 
 // ─── Provider ───────────────────────────────────────────────────────────────
@@ -1326,87 +1446,350 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     editorWorkspace.syncFocusedEditorRef();
   }, [editorWorkspace.syncFocusedEditorRef]);
 
+  const activeTabId = resolveCurrentFileId(editorWorkspace.activeTabId);
+  const workspaceValue = useMemo<WorkspaceState>(() => ({
+    activeView, setActiveView,
+    mainContentView, setMainContentView,
+    canToggleLayoutPanels: layoutPanelsEnabled,
+    editorGroups,
+    editorLayout: editorWorkspace.editorLayout,
+    focusedGroupId: editorWorkspace.focusedGroupId,
+    focusGroup: editorWorkspace.focusGroup,
+    focusActiveEditor: editorWorkspace.focusActiveEditor,
+    splitGroup: editorWorkspace.splitGroup,
+    moveTab: editorWorkspace.moveTab,
+    cycleFocusedGroupTabs: editorWorkspace.cycleFocusedGroupTabs,
+    closeActiveTabInFocusedGroup,
+    tabs,
+    activeTabId,
+    openFile: editorWorkspace.openFile,
+    resolveFileId: resolveCurrentFileId,
+    openFileInGroup: editorWorkspace.openFileInGroup,
+    openUntitledFile,
+    openPreviewFile: editorWorkspace.openPreviewFile,
+    openPreviewFileInGroup: editorWorkspace.openPreviewFileInGroup,
+    createWorkspaceFile,
+    createWorkspaceFolder,
+    workspaceClipboard,
+    copyWorkspaceEntry,
+    cutWorkspaceEntry,
+    clearWorkspaceClipboard,
+    pasteWorkspaceEntry,
+    deleteWorkspaceEntry,
+    renameWorkspaceEntry,
+    pinTab: editorWorkspace.pinTab,
+    pinTabInGroup: editorWorkspace.pinTabInGroup,
+    closeFile,
+    closeFileInGroup,
+    setActiveTabId: editorWorkspace.setActiveTabId,
+    setActiveTabIdInGroup: editorWorkspace.setActiveTabIdInGroup,
+    jumpToLine: editorWorkspace.jumpToLine,
+    jumpTo: editorWorkspace.jumpTo,
+    cursorLine: editorWorkspace.cursorLine,
+    cursorCol: editorWorkspace.cursorCol,
+    setCursorPos: editorWorkspace.setCursorPos,
+    getStoredCursorPosition: editorWorkspace.getStoredCursorPosition,
+    getCursorRestoreRequest: editorWorkspace.getCursorRestoreRequest,
+    clearCursorRestoreRequest: editorWorkspace.clearCursorRestoreRequest,
+    captureEditorSelectionSnapshot: editorWorkspace.captureEditorSelectionSnapshot,
+    restoreEditorSelection: editorWorkspace.restoreEditorSelection,
+    showLeftPanel: visiblePanelState.showLeftPanel,
+    setShowLeftPanel,
+    showBottomPanel: visiblePanelState.showBottomPanel,
+    setShowBottomPanel,
+    showRightPanel: visiblePanelState.showRightPanel,
+    setShowRightPanel,
+    workspaceTreeRefreshToken,
+    dirtyFiles: fileStore.dirtyFiles,
+    dirtyFileIds: fileStore.dirtyFileIds,
+    fileContents: fileStore.fileContents,
+    loadingFiles: fileStore.loadingFiles,
+    loadErrors: fileStore.loadErrors,
+    loadFileContent,
+    updateFileContent: fileStore.updateFileContent,
+    updateFileContentInGroup,
+    savingFiles: fileStore.savingFiles,
+    saveErrors: fileStore.saveErrors,
+    saveActiveFile,
+    saveAllFiles,
+    saveFiles,
+    undoActiveEditor,
+    redoActiveEditor,
+    unsavedChangesDialog,
+    openUnsavedChangesDialog,
+    confirmUnsavedChangesSave,
+    discardUnsavedChanges,
+    cancelUnsavedChanges,
+    deleteConfirmationDialog,
+    confirmDeleteConfirmation,
+    cancelDeleteConfirmation,
+    editorRef: editorWorkspace.editorRef,
+    registerEditorRef: editorWorkspace.registerEditorRef,
+  }), [
+    activeTabId,
+    activeView,
+    cancelDeleteConfirmation,
+    cancelUnsavedChanges,
+    clearWorkspaceClipboard,
+    closeActiveTabInFocusedGroup,
+    closeFile,
+    closeFileInGroup,
+    confirmDeleteConfirmation,
+    confirmUnsavedChangesSave,
+    copyWorkspaceEntry,
+    createWorkspaceFile,
+    createWorkspaceFolder,
+    cutWorkspaceEntry,
+    deleteConfirmationDialog,
+    deleteWorkspaceEntry,
+    discardUnsavedChanges,
+    editorGroups,
+    editorWorkspace.captureEditorSelectionSnapshot,
+    editorWorkspace.clearCursorRestoreRequest,
+    editorWorkspace.cycleFocusedGroupTabs,
+    editorWorkspace.cursorCol,
+    editorWorkspace.cursorLine,
+    editorWorkspace.editorLayout,
+    editorWorkspace.editorRef,
+    editorWorkspace.focusActiveEditor,
+    editorWorkspace.focusGroup,
+    editorWorkspace.focusedGroupId,
+    editorWorkspace.getCursorRestoreRequest,
+    editorWorkspace.getStoredCursorPosition,
+    editorWorkspace.jumpTo,
+    editorWorkspace.jumpToLine,
+    editorWorkspace.moveTab,
+    editorWorkspace.openFile,
+    editorWorkspace.openFileInGroup,
+    editorWorkspace.openPreviewFile,
+    editorWorkspace.openPreviewFileInGroup,
+    editorWorkspace.pinTab,
+    editorWorkspace.pinTabInGroup,
+    editorWorkspace.registerEditorRef,
+    editorWorkspace.restoreEditorSelection,
+    editorWorkspace.setActiveTabId,
+    editorWorkspace.setActiveTabIdInGroup,
+    editorWorkspace.setCursorPos,
+    editorWorkspace.splitGroup,
+    fileStore.dirtyFileIds,
+    fileStore.dirtyFiles,
+    fileStore.fileContents,
+    fileStore.loadErrors,
+    fileStore.loadingFiles,
+    fileStore.saveErrors,
+    fileStore.savingFiles,
+    fileStore.updateFileContent,
+    layoutPanelsEnabled,
+    loadFileContent,
+    mainContentView,
+    openUnsavedChangesDialog,
+    openUntitledFile,
+    pasteWorkspaceEntry,
+    redoActiveEditor,
+    renameWorkspaceEntry,
+    resolveCurrentFileId,
+    saveActiveFile,
+    saveAllFiles,
+    saveFiles,
+    setShowBottomPanel,
+    setShowLeftPanel,
+    setShowRightPanel,
+    tabs,
+    undoActiveEditor,
+    unsavedChangesDialog,
+    updateFileContentInGroup,
+    visiblePanelState.showBottomPanel,
+    visiblePanelState.showLeftPanel,
+    visiblePanelState.showRightPanel,
+    workspaceClipboard,
+    workspaceTreeRefreshToken,
+  ]);
+
+  const workspaceViewValue = useMemo<WorkspaceViewState>(() => ({
+    activeView: workspaceValue.activeView,
+    setActiveView: workspaceValue.setActiveView,
+    mainContentView: workspaceValue.mainContentView,
+    setMainContentView: workspaceValue.setMainContentView,
+    canToggleLayoutPanels: workspaceValue.canToggleLayoutPanels,
+    showLeftPanel: workspaceValue.showLeftPanel,
+    setShowLeftPanel: workspaceValue.setShowLeftPanel,
+    showBottomPanel: workspaceValue.showBottomPanel,
+    setShowBottomPanel: workspaceValue.setShowBottomPanel,
+    showRightPanel: workspaceValue.showRightPanel,
+    setShowRightPanel: workspaceValue.setShowRightPanel,
+    workspaceTreeRefreshToken: workspaceValue.workspaceTreeRefreshToken,
+  }), [
+    workspaceValue.activeView,
+    workspaceValue.canToggleLayoutPanels,
+    workspaceValue.mainContentView,
+    workspaceValue.setActiveView,
+    workspaceValue.setMainContentView,
+    workspaceValue.setShowBottomPanel,
+    workspaceValue.setShowLeftPanel,
+    workspaceValue.setShowRightPanel,
+    workspaceValue.showBottomPanel,
+    workspaceValue.showLeftPanel,
+    workspaceValue.showRightPanel,
+    workspaceValue.workspaceTreeRefreshToken,
+  ]);
+
+  const workspaceEditorValue = useMemo<WorkspaceEditorState>(() => ({
+    editorGroups: workspaceValue.editorGroups,
+    editorLayout: workspaceValue.editorLayout,
+    focusedGroupId: workspaceValue.focusedGroupId,
+    focusGroup: workspaceValue.focusGroup,
+    focusActiveEditor: workspaceValue.focusActiveEditor,
+    splitGroup: workspaceValue.splitGroup,
+    moveTab: workspaceValue.moveTab,
+    cycleFocusedGroupTabs: workspaceValue.cycleFocusedGroupTabs,
+    closeActiveTabInFocusedGroup: workspaceValue.closeActiveTabInFocusedGroup,
+    tabs: workspaceValue.tabs,
+    activeTabId: workspaceValue.activeTabId,
+    openFile: workspaceValue.openFile,
+    resolveFileId: workspaceValue.resolveFileId,
+    openFileInGroup: workspaceValue.openFileInGroup,
+    openUntitledFile: workspaceValue.openUntitledFile,
+    openPreviewFile: workspaceValue.openPreviewFile,
+    openPreviewFileInGroup: workspaceValue.openPreviewFileInGroup,
+    pinTab: workspaceValue.pinTab,
+    pinTabInGroup: workspaceValue.pinTabInGroup,
+    closeFile: workspaceValue.closeFile,
+    closeFileInGroup: workspaceValue.closeFileInGroup,
+    setActiveTabId: workspaceValue.setActiveTabId,
+    setActiveTabIdInGroup: workspaceValue.setActiveTabIdInGroup,
+    jumpToLine: workspaceValue.jumpToLine,
+    jumpTo: workspaceValue.jumpTo,
+    cursorLine: workspaceValue.cursorLine,
+    cursorCol: workspaceValue.cursorCol,
+    setCursorPos: workspaceValue.setCursorPos,
+    getStoredCursorPosition: workspaceValue.getStoredCursorPosition,
+    getCursorRestoreRequest: workspaceValue.getCursorRestoreRequest,
+    clearCursorRestoreRequest: workspaceValue.clearCursorRestoreRequest,
+    captureEditorSelectionSnapshot: workspaceValue.captureEditorSelectionSnapshot,
+    restoreEditorSelection: workspaceValue.restoreEditorSelection,
+    undoActiveEditor: workspaceValue.undoActiveEditor,
+    redoActiveEditor: workspaceValue.redoActiveEditor,
+    editorRef: workspaceValue.editorRef,
+    registerEditorRef: workspaceValue.registerEditorRef,
+  }), [
+    workspaceValue.activeTabId,
+    workspaceValue.captureEditorSelectionSnapshot,
+    workspaceValue.clearCursorRestoreRequest,
+    workspaceValue.closeActiveTabInFocusedGroup,
+    workspaceValue.closeFile,
+    workspaceValue.closeFileInGroup,
+    workspaceValue.cursorCol,
+    workspaceValue.cursorLine,
+    workspaceValue.cycleFocusedGroupTabs,
+    workspaceValue.editorGroups,
+    workspaceValue.editorLayout,
+    workspaceValue.editorRef,
+    workspaceValue.focusActiveEditor,
+    workspaceValue.focusGroup,
+    workspaceValue.focusedGroupId,
+    workspaceValue.getCursorRestoreRequest,
+    workspaceValue.getStoredCursorPosition,
+    workspaceValue.jumpTo,
+    workspaceValue.jumpToLine,
+    workspaceValue.moveTab,
+    workspaceValue.openFile,
+    workspaceValue.openFileInGroup,
+    workspaceValue.openPreviewFile,
+    workspaceValue.openPreviewFileInGroup,
+    workspaceValue.openUntitledFile,
+    workspaceValue.pinTab,
+    workspaceValue.pinTabInGroup,
+    workspaceValue.redoActiveEditor,
+    workspaceValue.registerEditorRef,
+    workspaceValue.resolveFileId,
+    workspaceValue.restoreEditorSelection,
+    workspaceValue.setActiveTabId,
+    workspaceValue.setActiveTabIdInGroup,
+    workspaceValue.setCursorPos,
+    workspaceValue.splitGroup,
+    workspaceValue.tabs,
+    workspaceValue.undoActiveEditor,
+  ]);
+
+  const workspaceFileValue = useMemo<WorkspaceFileState>(() => ({
+    createWorkspaceFile: workspaceValue.createWorkspaceFile,
+    createWorkspaceFolder: workspaceValue.createWorkspaceFolder,
+    workspaceClipboard: workspaceValue.workspaceClipboard,
+    copyWorkspaceEntry: workspaceValue.copyWorkspaceEntry,
+    cutWorkspaceEntry: workspaceValue.cutWorkspaceEntry,
+    clearWorkspaceClipboard: workspaceValue.clearWorkspaceClipboard,
+    pasteWorkspaceEntry: workspaceValue.pasteWorkspaceEntry,
+    deleteWorkspaceEntry: workspaceValue.deleteWorkspaceEntry,
+    renameWorkspaceEntry: workspaceValue.renameWorkspaceEntry,
+    fileContents: workspaceValue.fileContents,
+    loadingFiles: workspaceValue.loadingFiles,
+    loadErrors: workspaceValue.loadErrors,
+    loadFileContent: workspaceValue.loadFileContent,
+    updateFileContent: workspaceValue.updateFileContent,
+    updateFileContentInGroup: workspaceValue.updateFileContentInGroup,
+    dirtyFiles: workspaceValue.dirtyFiles,
+    dirtyFileIds: workspaceValue.dirtyFileIds,
+    savingFiles: workspaceValue.savingFiles,
+    saveErrors: workspaceValue.saveErrors,
+    saveActiveFile: workspaceValue.saveActiveFile,
+    saveAllFiles: workspaceValue.saveAllFiles,
+    saveFiles: workspaceValue.saveFiles,
+  }), [
+    workspaceValue.clearWorkspaceClipboard,
+    workspaceValue.copyWorkspaceEntry,
+    workspaceValue.createWorkspaceFile,
+    workspaceValue.createWorkspaceFolder,
+    workspaceValue.cutWorkspaceEntry,
+    workspaceValue.deleteWorkspaceEntry,
+    workspaceValue.dirtyFileIds,
+    workspaceValue.dirtyFiles,
+    workspaceValue.fileContents,
+    workspaceValue.loadErrors,
+    workspaceValue.loadFileContent,
+    workspaceValue.loadingFiles,
+    workspaceValue.pasteWorkspaceEntry,
+    workspaceValue.renameWorkspaceEntry,
+    workspaceValue.saveActiveFile,
+    workspaceValue.saveAllFiles,
+    workspaceValue.saveErrors,
+    workspaceValue.saveFiles,
+    workspaceValue.savingFiles,
+    workspaceValue.updateFileContent,
+    workspaceValue.updateFileContentInGroup,
+    workspaceValue.workspaceClipboard,
+  ]);
+
+  const workspaceDialogValue = useMemo<WorkspaceDialogState>(() => ({
+    unsavedChangesDialog: workspaceValue.unsavedChangesDialog,
+    openUnsavedChangesDialog: workspaceValue.openUnsavedChangesDialog,
+    confirmUnsavedChangesSave: workspaceValue.confirmUnsavedChangesSave,
+    discardUnsavedChanges: workspaceValue.discardUnsavedChanges,
+    cancelUnsavedChanges: workspaceValue.cancelUnsavedChanges,
+    deleteConfirmationDialog: workspaceValue.deleteConfirmationDialog,
+    confirmDeleteConfirmation: workspaceValue.confirmDeleteConfirmation,
+    cancelDeleteConfirmation: workspaceValue.cancelDeleteConfirmation,
+  }), [
+    workspaceValue.cancelDeleteConfirmation,
+    workspaceValue.cancelUnsavedChanges,
+    workspaceValue.confirmDeleteConfirmation,
+    workspaceValue.confirmUnsavedChangesSave,
+    workspaceValue.deleteConfirmationDialog,
+    workspaceValue.discardUnsavedChanges,
+    workspaceValue.openUnsavedChangesDialog,
+    workspaceValue.unsavedChangesDialog,
+  ]);
+
   return (
-    <WorkspaceContext.Provider value={{
-      activeView, setActiveView,
-      mainContentView, setMainContentView,
-      canToggleLayoutPanels: layoutPanelsEnabled,
-      editorGroups,
-      editorLayout: editorWorkspace.editorLayout,
-      focusedGroupId: editorWorkspace.focusedGroupId,
-      focusGroup: editorWorkspace.focusGroup,
-      focusActiveEditor: editorWorkspace.focusActiveEditor,
-      splitGroup: editorWorkspace.splitGroup,
-      moveTab: editorWorkspace.moveTab,
-      cycleFocusedGroupTabs: editorWorkspace.cycleFocusedGroupTabs,
-      closeActiveTabInFocusedGroup,
-      tabs,
-      activeTabId: resolveCurrentFileId(editorWorkspace.activeTabId),
-      openFile: editorWorkspace.openFile,
-      resolveFileId: resolveCurrentFileId,
-      openFileInGroup: editorWorkspace.openFileInGroup,
-      openUntitledFile,
-      openPreviewFile: editorWorkspace.openPreviewFile,
-      openPreviewFileInGroup: editorWorkspace.openPreviewFileInGroup,
-      createWorkspaceFile,
-      createWorkspaceFolder,
-      workspaceClipboard,
-      copyWorkspaceEntry,
-      cutWorkspaceEntry,
-      clearWorkspaceClipboard,
-      pasteWorkspaceEntry,
-      deleteWorkspaceEntry,
-      renameWorkspaceEntry,
-      pinTab: editorWorkspace.pinTab,
-      pinTabInGroup: editorWorkspace.pinTabInGroup,
-      closeFile,
-      closeFileInGroup,
-      setActiveTabId: editorWorkspace.setActiveTabId,
-      setActiveTabIdInGroup: editorWorkspace.setActiveTabIdInGroup,
-      jumpToLine: editorWorkspace.jumpToLine,
-      jumpTo: editorWorkspace.jumpTo,
-      cursorLine: editorWorkspace.cursorLine,
-      cursorCol: editorWorkspace.cursorCol,
-      setCursorPos: editorWorkspace.setCursorPos,
-      getStoredCursorPosition: editorWorkspace.getStoredCursorPosition,
-      getCursorRestoreRequest: editorWorkspace.getCursorRestoreRequest,
-      clearCursorRestoreRequest: editorWorkspace.clearCursorRestoreRequest,
-      captureEditorSelectionSnapshot: editorWorkspace.captureEditorSelectionSnapshot,
-      restoreEditorSelection: editorWorkspace.restoreEditorSelection,
-      showLeftPanel: visiblePanelState.showLeftPanel,
-      setShowLeftPanel,
-      showBottomPanel: visiblePanelState.showBottomPanel,
-      setShowBottomPanel,
-      showRightPanel: visiblePanelState.showRightPanel,
-      setShowRightPanel,
-      workspaceTreeRefreshToken,
-      dirtyFiles: fileStore.dirtyFiles,
-      dirtyFileIds: fileStore.dirtyFileIds,
-      fileContents: fileStore.fileContents,
-      loadingFiles: fileStore.loadingFiles,
-      loadErrors: fileStore.loadErrors,
-      loadFileContent,
-      updateFileContent: fileStore.updateFileContent,
-      updateFileContentInGroup,
-      savingFiles: fileStore.savingFiles,
-      saveErrors: fileStore.saveErrors,
-      saveActiveFile,
-      saveAllFiles,
-      saveFiles,
-      undoActiveEditor,
-      redoActiveEditor,
-      unsavedChangesDialog,
-      openUnsavedChangesDialog,
-      confirmUnsavedChangesSave,
-      discardUnsavedChanges,
-      cancelUnsavedChanges,
-      deleteConfirmationDialog,
-      confirmDeleteConfirmation,
-      cancelDeleteConfirmation,
-      editorRef: editorWorkspace.editorRef,
-      registerEditorRef: editorWorkspace.registerEditorRef,
-    }}>
-      {children}
-    </WorkspaceContext.Provider>
+    <WorkspaceViewContext.Provider value={workspaceViewValue}>
+      <WorkspaceEditorContext.Provider value={workspaceEditorValue}>
+        <WorkspaceFileContext.Provider value={workspaceFileValue}>
+          <WorkspaceDialogContext.Provider value={workspaceDialogValue}>
+            <WorkspaceContext.Provider value={workspaceValue}>
+              {children}
+            </WorkspaceContext.Provider>
+          </WorkspaceDialogContext.Provider>
+        </WorkspaceFileContext.Provider>
+      </WorkspaceEditorContext.Provider>
+    </WorkspaceViewContext.Provider>
   );
 }

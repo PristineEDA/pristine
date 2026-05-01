@@ -18,10 +18,11 @@ const LspPanel = lazy(() => import('./LspPanel').then((module) => ({ default: mo
 type BottomPanelTabId = 'terminal' | 'output' | 'problems' | 'debug' | 'lsp';
 
 interface BottomPanelProps {
+  layoutVersion?: string;
   onClose?: () => void;
 }
 
-export function BottomPanel({ onClose }: BottomPanelProps) {
+export function BottomPanel({ layoutVersion, onClose }: BottomPanelProps) {
   const [tab, setTab] = useState<BottomPanelTabId>('terminal');
   const problemsList = useLspProblems();
   const problemCounts = useMemo(() => summarizeLspProblems(problemsList), [problemsList]);
@@ -41,14 +42,14 @@ export function BottomPanel({ onClose }: BottomPanelProps) {
   ] as const;
 
   const panelContent = useMemo<Record<BottomPanelTabId, ReactNode>>(() => ({
-    terminal: <TerminalPanel />,
+    terminal: <TerminalPanel layoutVersion={layoutVersion} />,
     output: (
       <Suspense fallback={<div className="flex h-full items-center justify-center text-muted-foreground text-[12px]">Loading output...</div>}>
         <OutputPanel />
       </Suspense>
     ),
     problems: (
-      <div className="flex flex-col h-full">
+      <div className="flex h-full min-h-0 flex-col">
         <div className="flex flex-wrap items-center gap-2 px-3 py-1 border-b border-border shrink-0">
           <AlertCircle size={11} className="text-destructive" />
           <span className="text-destructive text-[11px]">{problemCounts.errorCount} errors</span>
@@ -65,7 +66,7 @@ export function BottomPanel({ onClose }: BottomPanelProps) {
       </div>
     ),
     debug: (
-      <div className="flex flex-col h-full">
+      <div className="flex h-full min-h-0 flex-col">
         <div className="flex items-center gap-2 px-3 py-1 border-b border-border shrink-0">
           <Button size="xs" className="text-[11px]">
             <Bug size={11} />
@@ -84,10 +85,10 @@ export function BottomPanel({ onClose }: BottomPanelProps) {
         <LspPanel />
       </Suspense>
     ),
-  }), [problemCounts.errorCount, problemCounts.hintCount, problemCounts.infoCount, problemCounts.warningCount, problemsList]);
+  }), [layoutVersion, problemCounts.errorCount, problemCounts.hintCount, problemCounts.infoCount, problemCounts.warningCount, problemsList]);
 
   return (
-    <div className="flex flex-col h-full bg-background border-t border-border overflow-hidden">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden border-t border-border bg-background">
       {/* Tab bar */}
       <div className="flex items-center h-8 bg-muted/40 border-b border-border shrink-0">
         {tabs.map((t) => (
@@ -134,7 +135,7 @@ export function BottomPanel({ onClose }: BottomPanelProps) {
       </div>
 
       {/* Panel content */}
-      <div className="flex-1 overflow-hidden">
+      <div className="min-h-0 flex-1 overflow-hidden">
         {panelContent[tab]}
       </div>
     </div>

@@ -12,7 +12,11 @@ import {
   writeTerminalSession,
 } from './terminalSessionStore';
 
-export function TerminalSurface() {
+interface TerminalSurfaceProps {
+  layoutVersion?: string;
+}
+
+export function TerminalSurface({ layoutVersion }: TerminalSurfaceProps) {
   const [sessionState, setSessionState] = useState(() => getTerminalSessionSnapshot());
   const isE2E = window.electronAPI?.isE2E === true;
   const { theme } = useTheme();
@@ -20,6 +24,9 @@ export function TerminalSurface() {
   const hostRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const renderedBufferRef = useRef(0);
+  const syncSizeRef = useRef<(() => void) | null>(null);
+  const pendingFrameRef = useRef<number | null>(null);
+  const pendingFollowUpFrameRef = useRef<number | null>(null);
 
   const syncE2EState = (buffer: string, pid: number | null) => {
     const host = hostRef.current;
@@ -35,6 +42,41 @@ export function TerminalSurface() {
 
     delete host.dataset['terminalPid'];
   };
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return undefined;
+    }
+
+    if (pendingFrameRef.current !== null) {
+      window.cancelAnimationFrame(pendingFrameRef.current);
+    }
+
+    if (pendingFollowUpFrameRef.current !== null) {
+      window.cancelAnimationFrame(pendingFollowUpFrameRef.current);
+    }
+
+    pendingFrameRef.current = window.requestAnimationFrame(() => {
+      syncSizeRef.current?.();
+      pendingFrameRef.current = null;
+      pendingFollowUpFrameRef.current = window.requestAnimationFrame(() => {
+        syncSizeRef.current?.();
+        pendingFollowUpFrameRef.current = null;
+      });
+    });
+
+    return () => {
+      if (pendingFrameRef.current !== null) {
+        window.cancelAnimationFrame(pendingFrameRef.current);
+        pendingFrameRef.current = null;
+      }
+
+      if (pendingFollowUpFrameRef.current !== null) {
+        window.cancelAnimationFrame(pendingFollowUpFrameRef.current);
+        pendingFollowUpFrameRef.current = null;
+      }
+    };
+  }, [layoutVersion]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -68,6 +110,7 @@ export function TerminalSurface() {
       fitAddon.fit();
       void resizeTerminalSession(term.cols, term.rows);
     };
+    syncSizeRef.current = syncSize;
 
     const syncFromStore = () => {
       const next = getTerminalSessionSnapshot();
@@ -90,10 +133,17 @@ export function TerminalSurface() {
       void writeTerminalSession(data);
     });
 
+    const observedElements = [
+      host,
+      host.parentElement,
+      host.closest('[data-panel-id="bottom-panel"]'),
+      host.closest('[data-panel-id="center-panel"]'),
+    ].filter((element): element is HTMLElement => element instanceof HTMLElement);
     const resizeObserver = typeof ResizeObserver !== 'undefined'
       ? new ResizeObserver(() => syncSize())
       : null;
-    resizeObserver?.observe(host);
+
+    observedElements.forEach((element) => resizeObserver?.observe(element));
 
     window.requestAnimationFrame(syncSize);
 
@@ -103,6 +153,7 @@ export function TerminalSurface() {
     });
 
     return () => {
+      syncSizeRef.current = null;
       resizeObserver?.disconnect();
       unsubscribe();
       inputSubscription.dispose();
@@ -114,13 +165,13 @@ export function TerminalSurface() {
 
   return (
     <div
-      className="relative flex h-full cursor-text overflow-hidden"
+      className="bottom-panel-scrollbar relative flex h-full min-h-0 min-w-0 flex-1 cursor-text overflow-hidden"
       style={{ backgroundColor: terminalTheme.background }}
     >
       <div
         ref={hostRef}
         data-testid="terminal-host"
-        className="h-full w-full px-2 py-1"
+        className="h-full min-h-0 min-w-0 w-full px-2 py-1"
         onClick={() => terminalRef.current?.focus()}
       />
       {sessionState.error && (

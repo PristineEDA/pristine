@@ -1,13 +1,13 @@
-import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { WorkspaceProvider, useWorkspace } from '../../../context/WorkspaceContext';
+import { render, screen, setupUser } from '@/test/render';
+import { WorkspaceProvider, useWorkspaceView } from '../../../context/WorkspaceContext';
 
 /**
  * Simple harness that exposes the mainContentView state + buttons to switch it.
  * This tests the context-level view switching without importing heavy components.
  */
 function ViewSwitchHarness() {
-  const { mainContentView, setMainContentView } = useWorkspace();
+  const { mainContentView, setMainContentView } = useWorkspaceView();
   return (
     <div>
       <span data-testid="current-view">{mainContentView}</span>
@@ -39,28 +39,31 @@ describe('View switching (code / whiteboard / workflow)', () => {
     expect(screen.queryByTestId('workflow-view')).toBeNull();
   });
 
-  it('switches to whiteboard view', () => {
+  it('switches to whiteboard view', async () => {
+    const user = setupUser();
     renderHarness();
-    fireEvent.click(screen.getByTestId('switch-whiteboard'));
+    await user.click(screen.getByTestId('switch-whiteboard'));
     expect(screen.getByTestId('current-view').textContent).toBe('whiteboard');
     expect(screen.getByTestId('whiteboard-view')).toBeTruthy();
     expect(screen.queryByTestId('code-view')).toBeNull();
   });
 
-  it('switches to workflow view', () => {
+  it('switches to workflow view', async () => {
+    const user = setupUser();
     renderHarness();
-    fireEvent.click(screen.getByTestId('switch-workflow'));
+    await user.click(screen.getByTestId('switch-workflow'));
     expect(screen.getByTestId('current-view').textContent).toBe('workflow');
     expect(screen.getByTestId('workflow-view')).toBeTruthy();
     expect(screen.queryByTestId('code-view')).toBeNull();
   });
 
-  it('switches back to code view from whiteboard', () => {
+  it('switches back to code view from whiteboard', async () => {
+    const user = setupUser();
     renderHarness();
-    fireEvent.click(screen.getByTestId('switch-whiteboard'));
+    await user.click(screen.getByTestId('switch-whiteboard'));
     expect(screen.getByTestId('whiteboard-view')).toBeTruthy();
 
-    fireEvent.click(screen.getByTestId('switch-code'));
+    await user.click(screen.getByTestId('switch-code'));
     expect(screen.getByTestId('current-view').textContent).toBe('code');
     expect(screen.getByTestId('code-view')).toBeTruthy();
     expect(screen.queryByTestId('whiteboard-view')).toBeNull();

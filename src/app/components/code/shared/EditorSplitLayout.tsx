@@ -9,7 +9,7 @@ import {
 } from 'react';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '../../ui/resizable';
 import { EditorArea } from './EditorArea';
-import { useWorkspace } from '../../../context/WorkspaceContext';
+import { useWorkspaceEditor, useWorkspaceFiles } from '../../../context/WorkspaceContext';
 import type { EditorDropPosition, EditorGroup, EditorLayoutNode, SplitDirection } from '../../../editor/editorLayout';
 import type { CursorRestoreRequest } from '../../../context/useWorkspaceEditorState';
 
@@ -357,14 +357,10 @@ export function EditorSplitLayout({
     closeFileInGroup,
     cycleFocusedGroupTabs,
     editorLayout,
-    fileContents,
     focusGroup,
     focusedGroupId,
     getCursorRestoreRequest,
     getStoredCursorPosition,
-    loadErrors,
-    loadFileContent,
-    loadingFiles,
     editorGroups,
     moveTab,
     openFileInGroup,
@@ -373,12 +369,18 @@ export function EditorSplitLayout({
     registerEditorRef,
     restoreEditorSelection,
     resolveFileId,
-    saveActiveFile,
     setActiveTabIdInGroup,
     setCursorPos,
     splitGroup,
+  } = useWorkspaceEditor();
+  const {
+    fileContents,
+    loadErrors,
+    loadFileContent,
+    loadingFiles,
+    saveActiveFile,
     updateFileContentInGroup,
-  } = useWorkspace();
+  } = useWorkspaceFiles();
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [dropTarget, setDropTarget] = useState<DropTargetState | null>(null);
   const moveTabRef = useRef(moveTab);

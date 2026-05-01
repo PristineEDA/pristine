@@ -124,11 +124,14 @@ describe('BottomPanel', () => {
   });
 
   it('filters output entries by text and severity', async () => {
-    render(<BottomPanel />);
+    const { container } = render(<BottomPanel />);
+
+    expect(container.firstChild).toHaveClass('min-h-0');
 
     fireEvent.click(screen.getByRole('button', { name: /^output$/i }));
 
-    expect(await screen.findByText(/RTL Analyzer v2\.4\.1 started/i)).toBeInTheDocument();
+    const initialEntry = await screen.findByText(/RTL Analyzer v2\.4\.1 started/i);
+    expect(initialEntry.closest('.bottom-panel-scrollbar')).not.toBeNull();
 
     const filterInput = await screen.findByPlaceholderText(/filter output/i);
     fireEvent.change(filterInput, { target: { value: 'cpu_top' } });

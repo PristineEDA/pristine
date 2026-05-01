@@ -2,7 +2,11 @@ import { Suspense, lazy } from 'react';
 
 const TerminalSurface = lazy(() => import('./TerminalSurface').then((module) => ({ default: module.TerminalSurface })));
 
-export function TerminalPanel() {
+interface TerminalPanelProps {
+  layoutVersion?: string;
+}
+
+export function TerminalPanel({ layoutVersion }: TerminalPanelProps) {
   return (
     <Suspense
       fallback={(
@@ -11,7 +15,7 @@ export function TerminalPanel() {
         </div>
       )}
     >
-      <TerminalSurface />
+      <TerminalSurface layoutVersion={layoutVersion} />
     </Suspense>
   );
 }

@@ -31,15 +31,40 @@
   background: var(--ide-text-muted);
 }
 
-.explorer-tree-scrollbar::-webkit-scrollbar-thumb {
+.explorer-tree-scrollbar::-webkit-scrollbar-thumb,
+.bottom-panel-scrollbar::-webkit-scrollbar-thumb {
   background: transparent;
 }
 
-.explorer-tree-scrollbar:hover::-webkit-scrollbar-thumb {
+.explorer-tree-scrollbar:hover::-webkit-scrollbar-thumb,
+.bottom-panel-scrollbar:hover::-webkit-scrollbar-thumb {
   background: var(--ide-text-dim);
 }
 
-.explorer-tree-scrollbar:hover::-webkit-scrollbar-thumb:hover {
+.explorer-tree-scrollbar:hover::-webkit-scrollbar-thumb:hover,
+.bottom-panel-scrollbar:hover::-webkit-scrollbar-thumb:hover {
+  background: var(--ide-text-muted);
+}
+
+.bottom-panel-scrollbar .xterm-viewport::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.bottom-panel-scrollbar .xterm-viewport::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.bottom-panel-scrollbar .xterm-viewport::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 3px;
+}
+
+.bottom-panel-scrollbar:hover .xterm-viewport::-webkit-scrollbar-thumb {
+  background: var(--ide-text-dim);
+}
+
+.bottom-panel-scrollbar:hover .xterm-viewport::-webkit-scrollbar-thumb:hover {
   background: var(--ide-text-muted);
 }
 

@@ -40,7 +40,7 @@ export function ProblemsTabPanel({ problems }: ProblemsTabPanelProps) {
   }, [problems]);
 
   return (
-    <div className="flex-1 overflow-y-auto py-1">
+    <div className="bottom-panel-scrollbar min-h-0 flex-1 overflow-y-auto py-1">
       {problems.length === 0 && (
         <div className="px-4 py-3 text-[12px] text-muted-foreground" data-testid="problems-tab-empty-state">
           No LSP diagnostics yet.

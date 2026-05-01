@@ -6,7 +6,7 @@ export function DebugConsole() {
   ];
 
   return (
-    <div className="flex-1 overflow-y-auto px-3 py-2 font-mono text-[12px]">
+    <div className="bottom-panel-scrollbar min-h-0 flex-1 overflow-y-auto px-3 py-2 font-mono text-[12px]">
       {logs.map((log, i) => (
         <div key={i} className={`leading-6 ${
           log.type === 'info' ? 'text-blue-400' : 'text-muted-foreground'

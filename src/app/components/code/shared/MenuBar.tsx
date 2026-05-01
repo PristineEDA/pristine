@@ -1,112 +1,30 @@
-import { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
+import { Settings, Sun, Moon } from 'lucide-react';
 import {
-  Settings, CircleUser, Minus, Square, X, Code2, Presentation, Workflow,
-  Sun, Moon,
-  LogIn, LogOut, RefreshCw, UserPlus,
-} from 'lucide-react';
-import {
-  applicationMenus,
-  getApplicationMenuItemAction,
-  getApplicationMenuItemShortcut,
-  isAppMenuItem,
+  type AppMenuAction,
   type MenuCommandEvent,
 } from '../../../menu/applicationMenu';
-import { formatShortcutLabel, isMacOSPlatform } from '../../../menu/shortcutLabels';
+import { isMacOSPlatform } from '../../../menu/shortcutLabels';
 import { canToggleLayoutPanels as canUseLayoutPanels } from '../../../codeViewPanels';
-import { getDesktopAvatarCandidates } from '../../../auth/avatar';
-import type { DesktopAuthSession } from '../../../auth/types';
-import { useEditorSettings } from '../../../context/EditorSettingsContext';
-import { useWorkspace } from '../../../context/WorkspaceContext';
-import { useTheme, type Theme } from '../../../context/ThemeContext';
-import { useUser } from '../../../context/UserContext';
-import {
-  DEFAULT_EDITOR_BRACKET_PAIR_GUIDES,
-  DEFAULT_EDITOR_FONT_LIGATURES,
-  EDITOR_FONT_FAMILY_CONFIG_KEY,
-  EDITOR_FONT_SIZE_CONFIG_KEY,
-  DEFAULT_EDITOR_SCROLL_BEYOND_LAST_LINE,
-  DEFAULT_EDITOR_SMOOTH_SCROLLING,
-  DEFAULT_EDITOR_GLYPH_MARGIN,
-  DEFAULT_EDITOR_INDENT_GUIDES,
-  DEFAULT_EDITOR_MINIMAP_ENABLED,
-  EDITOR_BRACKET_PAIR_GUIDES_CONFIG_KEY,
-  EDITOR_CURSOR_BLINKING_CONFIG_KEY,
-  EDITOR_FONT_LIGATURES_CONFIG_KEY,
-  EDITOR_FOLDING_STRATEGY_CONFIG_KEY,
-  EDITOR_THEME_CONFIG_KEY,
-  EDITOR_GLYPH_MARGIN_CONFIG_KEY,
-  EDITOR_INDENT_GUIDES_CONFIG_KEY,
-  EDITOR_LINE_NUMBERS_CONFIG_KEY,
-  EDITOR_MINIMAP_ENABLED_CONFIG_KEY,
-  EDITOR_RENDER_CONTROL_CHARACTERS_CONFIG_KEY,
-  EDITOR_RENDER_WHITESPACE_CONFIG_KEY,
-  EDITOR_SCROLL_BEYOND_LAST_LINE_CONFIG_KEY,
-  EDITOR_SMOOTH_SCROLLING_CONFIG_KEY,
-  EDITOR_TAB_SIZE_CONFIG_KEY,
-  EDITOR_WORD_WRAP_CONFIG_KEY,
-  editorCursorBlinkingOptions,
-  editorFontFamilyOptions,
-  editorFoldingStrategyOptions,
-  editorLineNumbersOptions,
-  editorRenderWhitespaceOptions,
-  editorTabSizeOptions,
-  editorThemeOptions,
-  editorWordWrapOptions,
-  parseEditorCursorBlinking,
-  parseEditorFontFamily,
-  parseEditorFoldingStrategy,
-  parseEditorLineNumbers,
-  parseEditorRenderControlCharacters,
-  parseEditorRenderWhitespace,
-  parseEditorTabSize,
-  parseEditorWordWrap,
-  parseEditorFontSize,
-  parseEditorTheme,
-} from '../../../editor/editorSettings';
-import {
-  Menubar,
-  MenubarMenu,
-  MenubarTrigger,
-  MenubarContent,
-  MenubarItem,
-  MenubarSeparator,
-  MenubarShortcut,
-} from '../../ui/menubar';
-import { ToggleGroup, ToggleGroupItem } from '../../ui/toggle-group';
+import { useWorkspaceEditor, useWorkspaceFiles, useWorkspaceView } from '../../../context/WorkspaceContext';
+import { useTheme } from '../../../context/ThemeContext';
 import { Toggle } from '../../ui/toggle';
 import { Separator } from '../../ui/separator';
 import { Button } from '../../ui/button';
-import { Avatar, AvatarFallback, AvatarImage } from '../../ui/avatar';
-import { Combobox, type ComboboxOption } from '../../ui/combobox';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../../ui/dialog';
-import { Popover, PopoverContent, PopoverTrigger } from '../../ui/popover';
-import { ScrollArea } from '../../ui/scroll-area';
-import { Slider } from '../../ui/slider';
-import { Switch } from '../../ui/switch';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../../ui/tooltip';
 import { useSidebar } from '../../ui/sidebar';
 import { AboutDialog } from './AboutDialog';
-import { EditorFontAdvancedDialog } from './EditorFontAdvancedDialog';
-import { EditorThemeAdvancedDialog } from './EditorThemeAdvancedDialog';
-import { centerViewSwitchItemClassName } from './viewSwitcherStyles';
+import { MenuBarApplicationMenu } from './MenuBarApplicationMenu';
+import { MenuBarSettingsDialogs, useMenuBarSettingsController } from './MenuBarSettingsDialog';
+import { UserAccountPopover } from './MenuBarUserAccountPopover';
+import { MenuBarViewSwitcher } from './MenuBarViewSwitcher';
+import { MenuBarWindowControls } from './MenuBarWindowControls';
 
 const noDrag = { WebkitAppRegion: 'no-drag' as const };
 const noDragInteractive = {
   WebkitAppRegion: 'no-drag' as const,
   pointerEvents: 'auto' as const,
 };
-const CLOSE_ACTION_CONFIG_KEY = 'window.closeActionPreference';
-const FLOATING_INFO_VISIBLE_CONFIG_KEY = 'ui.floatingInfoWindow.visible';
-const THEME_CONFIG_KEY = 'ui.theme';
-const settingsSectionClassName = 'rounded-md border border-border/85 bg-muted/55 px-3 py-2.5';
-const settingsSectionTitleClassName = 'text-[13px] font-medium';
-const settingsSectionDescriptionClassName = 'text-[12px] text-muted-foreground';
-const userPopoverActionsClassName = 'grid grid-cols-2 gap-1.5';
-const userPopoverActionButtonClassName = 'h-8 w-full justify-center gap-1 whitespace-nowrap px-2.5 text-[11px] hover:cursor-pointer [&_svg]:size-3.5 disabled:cursor-not-allowed';
-
-function getMenuItemShortcut(menuLabel: string, itemName: string): string {
-  return formatShortcutLabel(getApplicationMenuItemShortcut(menuLabel, itemName));
-}
 
 function isCloseShortcutPressed(event: KeyboardEvent): boolean {
   if (event.key.toLowerCase() !== 'q' || event.altKey || event.shiftKey) {
@@ -118,244 +36,6 @@ function isCloseShortcutPressed(event: KeyboardEvent): boolean {
   }
 
   return event.ctrlKey && !event.metaKey;
-}
-
-function getConfiguredCloseAction(): 'quit' | 'tray' {
-  const value = window.electronAPI?.config.get(CLOSE_ACTION_CONFIG_KEY);
-  return value === 'tray' ? 'tray' : 'quit';
-}
-
-function getFloatingInfoWindowVisible(): boolean {
-  return window.electronAPI?.config.get(FLOATING_INFO_VISIBLE_CONFIG_KEY) === true;
-}
-
-function getConfiguredTheme(): Theme {
-  return window.electronAPI?.config.get(THEME_CONFIG_KEY) === 'dark' ? 'dark' : 'light';
-}
-
-function getConfiguredEditorFontSize(): number {
-  return parseEditorFontSize(window.electronAPI?.config.get(EDITOR_FONT_SIZE_CONFIG_KEY));
-}
-
-function getConfiguredEditorFontFamily() {
-  return parseEditorFontFamily(window.electronAPI?.config.get(EDITOR_FONT_FAMILY_CONFIG_KEY));
-}
-
-function getConfiguredEditorTheme() {
-  return parseEditorTheme(window.electronAPI?.config.get(EDITOR_THEME_CONFIG_KEY));
-}
-
-function getConfiguredEditorWordWrap() {
-  return parseEditorWordWrap(window.electronAPI?.config.get(EDITOR_WORD_WRAP_CONFIG_KEY));
-}
-
-function getConfiguredEditorRenderWhitespace() {
-  return parseEditorRenderWhitespace(window.electronAPI?.config.get(EDITOR_RENDER_WHITESPACE_CONFIG_KEY));
-}
-
-function getConfiguredEditorFontLigatures() {
-  return getConfiguredEditorBooleanSetting(EDITOR_FONT_LIGATURES_CONFIG_KEY, DEFAULT_EDITOR_FONT_LIGATURES);
-}
-
-function getConfiguredEditorTabSize() {
-  return parseEditorTabSize(window.electronAPI?.config.get(EDITOR_TAB_SIZE_CONFIG_KEY));
-}
-
-function getConfiguredEditorCursorBlinking() {
-  return parseEditorCursorBlinking(window.electronAPI?.config.get(EDITOR_CURSOR_BLINKING_CONFIG_KEY));
-}
-
-function getConfiguredEditorRenderControlCharacters() {
-  return parseEditorRenderControlCharacters(window.electronAPI?.config.get(EDITOR_RENDER_CONTROL_CHARACTERS_CONFIG_KEY));
-}
-
-function getConfiguredEditorLineNumbers() {
-  return parseEditorLineNumbers(window.electronAPI?.config.get(EDITOR_LINE_NUMBERS_CONFIG_KEY));
-}
-
-function getConfiguredEditorSmoothScrolling() {
-  return getConfiguredEditorBooleanSetting(EDITOR_SMOOTH_SCROLLING_CONFIG_KEY, DEFAULT_EDITOR_SMOOTH_SCROLLING);
-}
-
-function getConfiguredEditorScrollBeyondLastLine() {
-  return getConfiguredEditorBooleanSetting(
-    EDITOR_SCROLL_BEYOND_LAST_LINE_CONFIG_KEY,
-    DEFAULT_EDITOR_SCROLL_BEYOND_LAST_LINE,
-  );
-}
-
-function getConfiguredEditorFoldingStrategy() {
-  return parseEditorFoldingStrategy(window.electronAPI?.config.get(EDITOR_FOLDING_STRATEGY_CONFIG_KEY));
-}
-
-function getConfiguredEditorBooleanSetting(configKey: string, defaultValue: boolean) {
-  const value = window.electronAPI?.config.get(configKey);
-  return typeof value === 'boolean' ? value : defaultValue;
-}
-
-function getConfiguredEditorMinimapEnabled() {
-  return getConfiguredEditorBooleanSetting(EDITOR_MINIMAP_ENABLED_CONFIG_KEY, DEFAULT_EDITOR_MINIMAP_ENABLED);
-}
-
-function getConfiguredEditorGlyphMargin() {
-  return getConfiguredEditorBooleanSetting(EDITOR_GLYPH_MARGIN_CONFIG_KEY, DEFAULT_EDITOR_GLYPH_MARGIN);
-}
-
-function getConfiguredEditorBracketPairGuides() {
-  return getConfiguredEditorBooleanSetting(EDITOR_BRACKET_PAIR_GUIDES_CONFIG_KEY, DEFAULT_EDITOR_BRACKET_PAIR_GUIDES);
-}
-
-function getConfiguredEditorIndentGuides() {
-  return getConfiguredEditorBooleanSetting(EDITOR_INDENT_GUIDES_CONFIG_KEY, DEFAULT_EDITOR_INDENT_GUIDES);
-}
-
-function getUserInitials(username: string): string {
-  const initials = username
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((segment) => segment[0]?.toUpperCase() ?? '')
-    .join('');
-
-  return initials || 'PR';
-}
-
-function formatSyncTimestamp(value: string | null): string {
-  if (!value) {
-    return 'Not synced yet';
-  }
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return 'Not synced yet';
-  }
-
-  return `Synced ${date.toLocaleString()}`;
-}
-
-function SessionAvatarImage({
-  alt,
-  session,
-}: {
-  alt: string;
-  session: DesktopAuthSession | null;
-}) {
-  const [candidateIndex, setCandidateIndex] = useState(0);
-  const candidateUrls = getDesktopAvatarCandidates(
-    session,
-    import.meta.env.VITE_PRISTINE_SUPABASE_URL,
-  );
-  const currentCandidateUrl = candidateUrls[candidateIndex] ?? null;
-
-  useEffect(() => {
-    setCandidateIndex(0);
-  }, [session?.avatarUrl, session?.userId]);
-
-  if (!currentCandidateUrl) {
-    return null;
-  }
-
-  return (
-    <AvatarImage
-      key={currentCandidateUrl}
-      alt={alt}
-      src={currentCandidateUrl}
-      onLoadingStatusChange={(status) => {
-        if (status !== 'error') {
-          return;
-        }
-
-        setCandidateIndex((currentIndex) => (
-          currentIndex + 1 < candidateUrls.length ? currentIndex + 1 : currentIndex
-        ));
-      }}
-    />
-  );
-}
-
-function getAvatarStateKey(session: DesktopAuthSession | null): string {
-  if (!session) {
-    return 'signed-out';
-  }
-
-  return `${session.userId}:${session.avatarUrl ?? 'fallback'}`;
-}
-
-function SettingsSwitchRow({
-  checked,
-  description,
-  onCheckedChange,
-  testId,
-  title,
-}: {
-  checked: boolean;
-  description: string;
-  onCheckedChange: (checked: boolean) => void;
-  testId: string;
-  title: string;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-4">
-      <div className="space-y-1">
-        <p className={settingsSectionTitleClassName}>{title}</p>
-        <p className={settingsSectionDescriptionClassName} data-testid={`${testId}-description`}>
-          {description}
-        </p>
-      </div>
-      <Switch checked={checked} data-testid={testId} onCheckedChange={onCheckedChange} />
-    </div>
-  );
-}
-
-function SettingsComboboxSection({
-  action,
-  description,
-  emptyText,
-  onValueChange,
-  options,
-  searchPlaceholder,
-  testId,
-  title,
-  value,
-}: {
-  action?: React.ReactNode;
-  description: string;
-  emptyText: string;
-  onValueChange: (value: string) => void;
-  options: ComboboxOption[];
-  searchPlaceholder: string;
-  testId: string;
-  title: string;
-  value: string;
-}) {
-  return (
-    <div className={settingsSectionClassName}>
-      <div className="space-y-2.5">
-        <div className="space-y-1">
-          <p className={settingsSectionTitleClassName}>{title}</p>
-          <p className={settingsSectionDescriptionClassName} data-testid={`${testId}-description`}>
-            {description}
-          </p>
-        </div>
-        <div className={action ? 'flex items-center gap-2' : undefined}>
-          <div className={action ? 'min-w-0 flex-1' : undefined}>
-            <Combobox
-              value={value}
-              onValueChange={onValueChange}
-              options={options}
-              placeholder={options.find((option) => option.value === value)?.label ?? options[0]?.label ?? ''}
-              searchPlaceholder={searchPlaceholder}
-              emptyText={emptyText}
-              triggerTestId={testId}
-              getOptionTestId={(optionValue) => `${testId.replace('-combobox', '-option')}-${optionValue}`}
-            />
-          </div>
-          {action}
-        </div>
-      </div>
-    </div>
-  );
 }
 
 function TooltipIconButton({
@@ -406,54 +86,6 @@ const PanelRightIcon = ({ size = 15, filled = false }: { size?: number; filled?:
   </svg>
 );
 
-interface MenuBarSettingsState {
-  closeToTrayEnabled: boolean;
-  floatingInfoWindowVisible: boolean;
-  theme: Theme;
-  editorCursorBlinking: ReturnType<typeof getConfiguredEditorCursorBlinking>;
-  editorBracketPairGuides: ReturnType<typeof getConfiguredEditorBracketPairGuides>;
-  editorFontFamily: ReturnType<typeof getConfiguredEditorFontFamily>;
-  editorFontLigatures: ReturnType<typeof getConfiguredEditorFontLigatures>;
-  editorFontSize: ReturnType<typeof getConfiguredEditorFontSize>;
-  editorFoldingStrategy: ReturnType<typeof getConfiguredEditorFoldingStrategy>;
-  editorGlyphMargin: ReturnType<typeof getConfiguredEditorGlyphMargin>;
-  editorIndentGuides: ReturnType<typeof getConfiguredEditorIndentGuides>;
-  editorLineNumbers: ReturnType<typeof getConfiguredEditorLineNumbers>;
-  editorMinimapEnabled: ReturnType<typeof getConfiguredEditorMinimapEnabled>;
-  editorRenderControlCharacters: ReturnType<typeof getConfiguredEditorRenderControlCharacters>;
-  editorRenderWhitespace: ReturnType<typeof getConfiguredEditorRenderWhitespace>;
-  editorScrollBeyondLastLine: ReturnType<typeof getConfiguredEditorScrollBeyondLastLine>;
-  editorSmoothScrolling: ReturnType<typeof getConfiguredEditorSmoothScrolling>;
-  editorTabSize: ReturnType<typeof getConfiguredEditorTabSize>;
-  editorTheme: ReturnType<typeof getConfiguredEditorTheme>;
-  editorWordWrap: ReturnType<typeof getConfiguredEditorWordWrap>;
-}
-
-function getPersistedSettingsState(): MenuBarSettingsState {
-  return {
-    closeToTrayEnabled: getConfiguredCloseAction() === 'tray',
-    floatingInfoWindowVisible: getFloatingInfoWindowVisible(),
-    theme: getConfiguredTheme(),
-    editorCursorBlinking: getConfiguredEditorCursorBlinking(),
-    editorBracketPairGuides: getConfiguredEditorBracketPairGuides(),
-    editorFontFamily: getConfiguredEditorFontFamily(),
-    editorFontLigatures: getConfiguredEditorFontLigatures(),
-    editorFontSize: getConfiguredEditorFontSize(),
-    editorFoldingStrategy: getConfiguredEditorFoldingStrategy(),
-    editorGlyphMargin: getConfiguredEditorGlyphMargin(),
-    editorIndentGuides: getConfiguredEditorIndentGuides(),
-    editorLineNumbers: getConfiguredEditorLineNumbers(),
-    editorMinimapEnabled: getConfiguredEditorMinimapEnabled(),
-    editorRenderControlCharacters: getConfiguredEditorRenderControlCharacters(),
-    editorRenderWhitespace: getConfiguredEditorRenderWhitespace(),
-    editorScrollBeyondLastLine: getConfiguredEditorScrollBeyondLastLine(),
-    editorSmoothScrolling: getConfiguredEditorSmoothScrolling(),
-    editorTabSize: getConfiguredEditorTabSize(),
-    editorTheme: getConfiguredEditorTheme(),
-    editorWordWrap: getConfiguredEditorWordWrap(),
-  };
-}
-
 interface MenuBarProps {
   showLeftPanel?: boolean;
   showBottomPanel?: boolean;
@@ -478,49 +110,21 @@ export function MenuBar({
   const {
     activeView,
     mainContentView,
+    setMainContentView,
+  } = useWorkspaceView();
+  const {
     redoActiveEditor,
+    undoActiveEditor,
+  } = useWorkspaceEditor();
+  const {
     saveActiveFile,
     saveAllFiles,
-    setMainContentView,
-    undoActiveEditor,
-  } = useWorkspace();
-  const {
-    setCursorBlinking: setEditorCursorBlinking,
-    setBracketPairGuides: setEditorBracketPairGuides,
-    setFontFamily: setEditorFontFamily,
-    setFontLigatures: setEditorFontLigatures,
-    setFontSize: setEditorFontSize,
-    setFoldingStrategy: setEditorFoldingStrategy,
-    setGlyphMargin: setEditorGlyphMargin,
-    setIndentGuides: setEditorIndentGuides,
-    setLineNumbers: setEditorLineNumbers,
-    setMinimapEnabled: setEditorMinimapEnabled,
-    setRenderControlCharacters: setEditorRenderControlCharacters,
-    setRenderWhitespace: setEditorRenderWhitespace,
-    setScrollBeyondLastLine: setEditorScrollBeyondLastLine,
-    setSmoothScrolling: setEditorSmoothScrolling,
-    setTabSize: setEditorTabSize,
-    setTheme: setEditorTheme,
-    setWordWrap: setEditorWordWrap,
-  } = useEditorSettings();
-  const { theme, setTheme, toggleTheme } = useTheme();
-  const {
-    clearError,
-    errorMessage,
-    isSyncing,
-    openAccountPage,
-    session,
-    signOut,
-    status,
-    syncCloudConfig,
-  } = useUser();
+  } = useWorkspaceFiles();
+  const { theme, toggleTheme } = useTheme();
+  const settingsController = useMenuBarSettingsController();
   const { state: activityBarState, toggleSidebar } = useSidebar();
   const ref = useRef<HTMLDivElement>(null);
   const [aboutDialogOpen, setAboutDialogOpen] = useState(false);
-  const [editorFontAdvancedDialogOpen, setEditorFontAdvancedDialogOpen] = useState(false);
-  const [editorThemeAdvancedDialogOpen, setEditorThemeAdvancedDialogOpen] = useState(false);
-  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
-  const [settingsState, setSettingsState] = useState<MenuBarSettingsState>(getPersistedSettingsState);
   const layoutIconsEnabled = canUseLayoutPanels(mainContentView, activeView);
   const activityBarToggleEnabled = mainContentView === 'code';
   const layoutIconClassName = [
@@ -537,165 +141,6 @@ export function MenuBar({
       ? 'hover:cursor-pointer hover:text-foreground hover:bg-accent'
       : 'opacity-40',
   ].join(' ');
-  const userAvatarFallback = getUserInitials(session?.username ?? 'Pristine User');
-  const userAvatarStateKey = getAvatarStateKey(session);
-  const userSyncLabel = formatSyncTimestamp(session?.syncedAt ?? null);
-  const isSignedIn = status === 'signed-in' && session !== null;
-  const isUserActionsDisabled = status === 'loading';
-
-  const patchSettingsState = useCallback((partialState: Partial<MenuBarSettingsState>) => {
-    setSettingsState((current) => ({ ...current, ...partialState }));
-  }, []);
-
-  const handleSettingsDialogOpenChange = useCallback((nextOpen: boolean) => {
-    if (nextOpen) {
-      setSettingsState(getPersistedSettingsState());
-    } else {
-      setEditorFontAdvancedDialogOpen(false);
-      setEditorThemeAdvancedDialogOpen(false);
-    }
-
-    setSettingsDialogOpen(nextOpen);
-  }, []);
-
-  const handleEditorFontAdvancedDialogOpenChange = useCallback((nextOpen: boolean) => {
-    setEditorFontAdvancedDialogOpen(nextOpen);
-  }, []);
-
-  const handleEditorThemeAdvancedDialogOpenChange = useCallback((nextOpen: boolean) => {
-    setEditorThemeAdvancedDialogOpen(nextOpen);
-  }, []);
-
-  const handleCloseToTrayChange = (checked: boolean) => {
-    patchSettingsState({ closeToTrayEnabled: checked });
-    void window.electronAPI?.config.set(CLOSE_ACTION_CONFIG_KEY, checked ? 'tray' : 'quit');
-  };
-
-  const handleFloatingInfoWindowVisibleChange = (checked: boolean) => {
-    patchSettingsState({ floatingInfoWindowVisible: checked });
-    void window.electronAPI?.config.set(FLOATING_INFO_VISIBLE_CONFIG_KEY, checked);
-    void window.electronAPI?.setFloatingInfoWindowVisible(checked);
-  };
-
-  const handleThemeModeChange = (checked: boolean) => {
-    const nextTheme = checked ? 'dark' : 'light';
-    patchSettingsState({ theme: nextTheme });
-    setTheme(nextTheme);
-  };
-
-  const handleEditorFontSizeChange = (value: number[]) => {
-    const nextValue = value[0] ?? settingsState.editorFontSize;
-    patchSettingsState({ editorFontSize: nextValue });
-  };
-
-  const handleEditorFontSizeCommit = (value: number[]) => {
-    const nextValue = value[0] ?? settingsState.editorFontSize;
-    patchSettingsState({ editorFontSize: nextValue });
-    setEditorFontSize(nextValue);
-  };
-
-  const handleEditorFontFamilyChange = (value: string) => {
-    const nextFontFamily = parseEditorFontFamily(value);
-    patchSettingsState({ editorFontFamily: nextFontFamily });
-    setEditorFontFamily(nextFontFamily);
-  };
-
-  const handleEditorFontAdvancedSelect = useCallback((value: string) => {
-    handleEditorFontFamilyChange(value);
-    setEditorFontAdvancedDialogOpen(false);
-  }, [handleEditorFontFamilyChange]);
-
-  const handleEditorFontLigaturesChange = (checked: boolean) => {
-    patchSettingsState({ editorFontLigatures: checked });
-    setEditorFontLigatures(checked);
-  };
-
-  const handleEditorTabSizeChange = (value: string) => {
-    const nextTabSize = parseEditorTabSize(value);
-    patchSettingsState({ editorTabSize: nextTabSize });
-    setEditorTabSize(nextTabSize);
-  };
-
-  const handleEditorCursorBlinkingChange = (value: string) => {
-    const nextCursorBlinking = parseEditorCursorBlinking(value);
-    patchSettingsState({ editorCursorBlinking: nextCursorBlinking });
-    setEditorCursorBlinking(nextCursorBlinking);
-  };
-
-  const handleEditorThemeChange = (value: string) => {
-    const nextTheme = parseEditorTheme(value);
-    patchSettingsState({ editorTheme: nextTheme });
-    setEditorTheme(nextTheme);
-  };
-
-  const handleEditorThemeAdvancedSelect = useCallback((value: string) => {
-    handleEditorThemeChange(value);
-    setEditorThemeAdvancedDialogOpen(false);
-  }, [handleEditorThemeChange]);
-
-  const handleEditorWordWrapChange = (value: string) => {
-    const nextWordWrap = parseEditorWordWrap(value);
-    patchSettingsState({ editorWordWrap: nextWordWrap });
-    setEditorWordWrap(nextWordWrap);
-  };
-
-  const handleEditorRenderWhitespaceChange = (value: string) => {
-    const nextRenderWhitespace = parseEditorRenderWhitespace(value);
-    patchSettingsState({ editorRenderWhitespace: nextRenderWhitespace });
-    setEditorRenderWhitespace(nextRenderWhitespace);
-  };
-
-  const handleEditorLineNumbersChange = (value: string) => {
-    const nextLineNumbers = parseEditorLineNumbers(value);
-    patchSettingsState({ editorLineNumbers: nextLineNumbers });
-    setEditorLineNumbers(nextLineNumbers);
-  };
-
-  const handleEditorSmoothScrollingChange = (checked: boolean) => {
-    patchSettingsState({ editorSmoothScrolling: checked });
-    setEditorSmoothScrolling(checked);
-  };
-
-  const handleEditorScrollBeyondLastLineChange = (checked: boolean) => {
-    patchSettingsState({ editorScrollBeyondLastLine: checked });
-    setEditorScrollBeyondLastLine(checked);
-  };
-
-  const handleEditorFoldingStrategyChange = (value: string) => {
-    const nextFoldingStrategy = parseEditorFoldingStrategy(value);
-    patchSettingsState({ editorFoldingStrategy: nextFoldingStrategy });
-    setEditorFoldingStrategy(nextFoldingStrategy);
-  };
-
-  const handleEditorRenderControlCharactersChange = (checked: boolean) => {
-    patchSettingsState({ editorRenderControlCharacters: checked });
-    setEditorRenderControlCharacters(checked);
-  };
-
-  const handleEditorMinimapEnabledChange = (checked: boolean) => {
-    patchSettingsState({ editorMinimapEnabled: checked });
-    setEditorMinimapEnabled(checked);
-  };
-
-  const handleEditorGlyphMarginChange = (checked: boolean) => {
-    patchSettingsState({ editorGlyphMargin: checked });
-    setEditorGlyphMargin(checked);
-  };
-
-  const handleEditorBracketPairGuidesChange = (checked: boolean) => {
-    patchSettingsState({ editorBracketPairGuides: checked });
-    setEditorBracketPairGuides(checked);
-  };
-
-  const handleEditorIndentGuidesChange = (checked: boolean) => {
-    patchSettingsState({ editorIndentGuides: checked });
-    setEditorIndentGuides(checked);
-  };
-
-  const openSettingsDialog = useCallback(() => {
-    handleSettingsDialogOpenChange(true);
-  }, [handleSettingsDialogOpenChange]);
-
   const openAboutDialog = () => {
     setAboutDialogOpen(true);
   };
@@ -704,9 +149,9 @@ export function MenuBar({
     void window.electronAPI?.close();
   };
 
-  const handleMenuItemSelect = (action: ReturnType<typeof getApplicationMenuItemAction>) => {
+  const handleMenuItemSelect = (action: AppMenuAction | null) => {
     if (action === 'open-settings') {
-      openSettingsDialog();
+      settingsController.openSettingsDialog();
       return;
     }
 
@@ -742,7 +187,7 @@ export function MenuBar({
 
   const handleNativeMenuCommand = useEffectEvent((payload: MenuCommandEvent) => {
     if (payload.action === 'open-settings') {
-      openSettingsDialog();
+      settingsController.openSettingsDialog();
       return;
     }
 
@@ -836,35 +281,10 @@ export function MenuBar({
 
           {/* Menu items — shadcn Menubar */}
           {showWindowMenu && (
-            <Menubar className="h-8 border-0 rounded-none bg-transparent p-0 shadow-none" data-testid="menu-menubar" style={noDrag as React.CSSProperties}>
-              {applicationMenus.map((menu) => (
-                <MenubarMenu key={menu.label}>
-                  <MenubarTrigger className="px-2.5 h-6 text-[12px] font-normal rounded-sm">
-                    {menu.label}
-                  </MenubarTrigger>
-                  <MenubarContent align="start" sideOffset={4} className="min-w-36 p-0.5">
-                    {menu.items.map((item, index) => {
-                      if (!isAppMenuItem(item)) {
-                        return <MenubarSeparator key={`${menu.label}-separator-${index}`} className="my-0.5" />;
-                      }
-
-                      const action = getApplicationMenuItemAction(menu.label, item.name);
-                      const shortcut = getMenuItemShortcut(menu.label, item.name);
-
-                      return (
-                        <MenubarItem
-                          key={`${menu.label}-${item.name}`}
-                          className="px-2 py-1 text-[12px]"
-                          onSelect={() => handleMenuItemSelect(action)}
-                        >
-                          {item.name} <MenubarShortcut>{shortcut}</MenubarShortcut>
-                        </MenubarItem>
-                      );
-                    })}
-                  </MenubarContent>
-                </MenubarMenu>
-              ))}
-            </Menubar>
+            <MenuBarApplicationMenu
+              menuStyle={noDrag as React.CSSProperties}
+              onSelectAction={handleMenuItemSelect}
+            />
           )}
 
 
@@ -890,49 +310,11 @@ export function MenuBar({
           </TooltipIconButton>
 
           {/* Center view switcher — absolutely centered */}
-          <div
-            data-testid="center-view-switcher"
-            className="absolute left-1/2 -translate-x-1/2"
-            style={noDragInteractive as React.CSSProperties}
-          >
-          <ToggleGroup
-            type="single"
+          <MenuBarViewSwitcher
             value={mainContentView}
-            onValueChange={(value) => { if (value) setMainContentView(value as 'code' | 'whiteboard' | 'workflow'); }}
-            className="bg-muted rounded p-0.5 gap-0.5"
-          >
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="inline-flex">
-                  <ToggleGroupItem aria-label="Code" data-testid="center-view-code" value="code" className={centerViewSwitchItemClassName}>
-                    <Code2 size={13} />
-                  </ToggleGroupItem>
-                </span>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" sideOffset={6}>Code</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="inline-flex">
-                  <ToggleGroupItem aria-label="Whiteboard" data-testid="center-view-whiteboard" value="whiteboard" className={centerViewSwitchItemClassName}>
-                    <Presentation size={13} />
-                  </ToggleGroupItem>
-                </span>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" sideOffset={6}>Whiteboard</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="inline-flex">
-                  <ToggleGroupItem aria-label="Workflow" data-testid="center-view-workflow" value="workflow" className={centerViewSwitchItemClassName}>
-                    <Workflow size={13} />
-                  </ToggleGroupItem>
-                </span>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" sideOffset={6}>Workflow</TooltipContent>
-            </Tooltip>
-          </ToggleGroup>
-          </div>
+            onValueChange={setMainContentView}
+            interactiveStyle={noDragInteractive as React.CSSProperties}
+          />
 
           {/* Right side controls */}
           <div
@@ -1024,180 +406,22 @@ export function MenuBar({
               aria-label="Settings"
               data-testid="menu-settings-button"
               className="w-8 h-full rounded-none text-muted-foreground hover:cursor-pointer hover:text-foreground"
-              onClick={openSettingsDialog}
+              onClick={settingsController.openSettingsDialog}
             >
               <Settings size={15} />
             </Button>
           </TooltipIconButton>
 
-          {/* User avatar */}
-          <Popover onOpenChange={(open) => {
-            if (open) {
-              clearError();
-            }
-          }}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="inline-flex h-full" style={noDragInteractive as React.CSSProperties}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      aria-label="User profile"
-                      data-testid="user-avatar-button"
-                      className="relative h-full w-8 rounded-none px-0 hover:cursor-pointer"
-                    >
-                      <Avatar key={userAvatarStateKey} className="size-6 border border-border/70 bg-muted/70">
-                        {isSignedIn ? <SessionAvatarImage alt={session.username} session={session} /> : null}
-                        <AvatarFallback className="bg-transparent text-[10px] font-semibold text-foreground">
-                          {isSignedIn ? userAvatarFallback : <CircleUser size={14} className="text-muted-foreground" />}
-                        </AvatarFallback>
-                      </Avatar>
-                      <span
-                        className={[
-                          'absolute bottom-1.5 right-1 rounded-full border border-background',
-                          status === 'loading' ? 'h-1.5 w-1.5 bg-muted-foreground/80' : '',
-                          isSignedIn ? 'h-2 w-2 bg-emerald-500' : '',
-                          status === 'signed-out' ? 'h-2 w-2 bg-amber-400' : '',
-                        ].join(' ')}
-                      />
-                    </Button>
-                  </PopoverTrigger>
-                </span>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" sideOffset={6}>
-                User profile
-              </TooltipContent>
-            </Tooltip>
-            <PopoverContent
-              align="end"
-              className="w-72 p-0"
-              data-testid="user-account-popover"
-              style={noDragInteractive as React.CSSProperties}
-            >
-              <div className="space-y-3 px-4 py-3">
-                {isSignedIn && session ? (
-                  <>
-                    <div className="flex items-center gap-3">
-                      <Avatar key={userAvatarStateKey} className="size-11 border border-border/80 bg-muted/70">
-                        <SessionAvatarImage alt={session.username} session={session} />
-                        <AvatarFallback className="text-sm font-semibold">{userAvatarFallback}</AvatarFallback>
-                      </Avatar>
-                      <div className="min-w-0 space-y-1">
-                        <p className="truncate text-sm font-semibold text-foreground" data-testid="user-account-name">
-                          {session.username}
-                        </p>
-                        <p className="truncate text-xs text-muted-foreground" data-testid="user-account-email">
-                          {session.email}
-                        </p>
-                        <p className="text-[11px] text-muted-foreground" data-testid="user-account-sync-status">
-                          {userSyncLabel}
-                        </p>
-                      </div>
-                    </div>
-                    <div className={userPopoverActionsClassName}>
-                      <Button
-                        variant="outline"
-                        className={userPopoverActionButtonClassName}
-                        data-testid="user-sync-config-button"
-                        disabled={isSyncing}
-                        onClick={() => {
-                          void syncCloudConfig();
-                        }}
-                      >
-                        <RefreshCw className={isSyncing ? 'animate-spin' : ''} />
-                        {isSyncing ? 'Syncing settings...' : 'Sync settings'}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        className={userPopoverActionButtonClassName}
-                        data-testid="user-sign-out-button"
-                        onClick={() => {
-                          void signOut();
-                        }}
-                      >
-                        <LogOut />
-                        Sign out
-                      </Button>
-                    </div>
-                  </>
-                ) : (
-                  <div className="grid gap-2">
-                    <div className="rounded-md border border-dashed border-border/80 bg-muted/40 px-3 py-3 text-xs text-muted-foreground">
-                      {status === 'loading'
-                        ? 'Checking the local desktop session...'
-                        : 'No account is linked to this desktop session yet.'}
-                    </div>
-                    <div className={userPopoverActionsClassName}>
-                      <Button
-                        className={userPopoverActionButtonClassName}
-                        data-testid="user-sign-in-button"
-                        disabled={isUserActionsDisabled}
-                        onClick={() => {
-                          void openAccountPage('login');
-                        }}
-                      >
-                        <LogIn />
-                        Sign in
-                      </Button>
-                      <Button
-                        variant="outline"
-                        className={userPopoverActionButtonClassName}
-                        data-testid="user-sign-up-button"
-                        disabled={isUserActionsDisabled}
-                        onClick={() => {
-                          void openAccountPage('signup');
-                        }}
-                      >
-                        <UserPlus />
-                        Create account
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
-                {errorMessage ? (
-                  <div
-                    className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive"
-                    data-testid="user-account-error"
-                  >
-                    {errorMessage}
-                  </div>
-                ) : null}
-              </div>
-            </PopoverContent>
-          </Popover>
+          <UserAccountPopover interactiveStyle={noDragInteractive as React.CSSProperties} />
 
           {showWindowMenu && <Separator data-testid="menu-avatar-separator" orientation="vertical" className="h-4 mx-1" />}
 
           {/* Window controls (hidden on macOS — native traffic lights used instead) */}
           {!isMacOS && (
-            <>
-              <button
-                data-testid="window-control-minimize"
-                className="w-9 h-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-                style={noDragInteractive as React.CSSProperties}
-                onClick={() => window.electronAPI?.minimize()}
-              >
-                <Minus size={14} />
-              </button>
-              <button
-                data-testid="window-control-maximize"
-                className="w-9 h-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-                style={noDragInteractive as React.CSSProperties}
-                onClick={() => window.electronAPI?.maximize()}
-              >
-                <Square size={12} />
-              </button>
-              <button
-                data-testid="window-control-close"
-                className="w-9 h-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-destructive/80 transition-colors"
-                style={noDragInteractive as React.CSSProperties}
-                onClick={requestAppClose}
-              >
-                <X size={14} />
-              </button>
-            </>
+            <MenuBarWindowControls
+              interactiveStyle={noDragInteractive as React.CSSProperties}
+              onRequestClose={requestAppClose}
+            />
           )}
 
           </div>
@@ -1209,332 +433,8 @@ export function MenuBar({
           dialogStyle={noDragInteractive as React.CSSProperties}
         />
 
-        <Dialog open={settingsDialogOpen} onOpenChange={handleSettingsDialogOpenChange}>
-          <DialogContent
-            data-testid="settings-dialog"
-            className="max-h-[85vh] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden sm:max-w-xl"
-            style={noDragInteractive as React.CSSProperties}
-          >
-            <DialogHeader>
-              <DialogTitle>Settings</DialogTitle>
-              <DialogDescription>
-                Manage appearance and window behavior preferences.
-              </DialogDescription>
-            </DialogHeader>
-            <ScrollArea className="min-h-0">
-              <div className="space-y-2.5 pr-4">
-              <div className={settingsSectionClassName}>
-                <div className="space-y-2.5">
-                  <div className="space-y-1">
-                    <p className={settingsSectionTitleClassName}>Code editor font size</p>
-                    <p className={settingsSectionDescriptionClassName} data-testid="editor-font-size-description">
-                      Adjust the Monaco editor font size used in code tabs.
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <Slider
-                      aria-label="Code editor font size"
-                      data-testid="settings-editor-font-size-slider"
-                      min={10}
-                      max={24}
-                      step={1}
-                      value={[settingsState.editorFontSize]}
-                      onValueChange={handleEditorFontSizeChange}
-                      onValueCommit={handleEditorFontSizeCommit}
-                    />
-                    <span
-                      className="min-w-10 text-right text-[13px] font-medium text-foreground"
-                      data-testid="settings-editor-font-size-value"
-                    >
-                      {settingsState.editorFontSize}px
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <SettingsComboboxSection
-                value={settingsState.editorFontFamily}
-                onValueChange={handleEditorFontFamilyChange}
-                options={editorFontFamilyOptions.map((option) => ({
-                  value: option.value,
-                  label: option.label,
-                  description: option.description,
-                }))}
-                title="Code editor font"
-                description="Choose the bundled monospace font used in Monaco editor tabs."
-                searchPlaceholder="Search editor fonts..."
-                emptyText="No editor font found."
-                testId="settings-editor-font-family-combobox"
-                action={(
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    data-testid="settings-editor-font-family-advanced-button"
-                    className="shrink-0 hover:cursor-pointer"
-                    onClick={() => setEditorFontAdvancedDialogOpen(true)}
-                  >
-                    Advanced
-                  </Button>
-                )}
-              />
-              <SettingsComboboxSection
-                value={settingsState.editorTheme}
-                onValueChange={handleEditorThemeChange}
-                options={editorThemeOptions.map((option) => ({
-                  value: option.value,
-                  label: option.label,
-                  description: option.description,
-                }))}
-                title="Code editor theme"
-                description="Choose the Monaco color theme used for source files."
-                searchPlaceholder="Search editor themes..."
-                emptyText="No editor theme found."
-                testId="settings-editor-theme-combobox"
-                action={(
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    data-testid="settings-editor-theme-advanced-button"
-                    className="shrink-0 hover:cursor-pointer"
-                    onClick={() => setEditorThemeAdvancedDialogOpen(true)}
-                  >
-                    Advanced
-                  </Button>
-                )}
-              />
-              <div className={settingsSectionClassName}>
-                <div className="space-y-1">
-                  <p className={settingsSectionTitleClassName}>Editor behavior &amp; display</p>
-                  <p className={settingsSectionDescriptionClassName} data-testid="editor-display-description">
-                    Configure Monaco behavior and display aids such as indentation, caret motion, wrapping, gutters, and guides.
-                  </p>
-                </div>
-              </div>
-              <SettingsComboboxSection
-                value={settingsState.editorWordWrap}
-                onValueChange={handleEditorWordWrapChange}
-                options={editorWordWrapOptions.map((option) => ({
-                  value: option.value,
-                  label: option.label,
-                  description: option.description,
-                }))}
-                title="Word wrap"
-                description="Control how Monaco wraps long lines inside the current editor viewport."
-                searchPlaceholder="Search word wrap modes..."
-                emptyText="No word wrap mode found."
-                testId="settings-editor-word-wrap-combobox"
-              />
-              <SettingsComboboxSection
-                value={String(settingsState.editorTabSize)}
-                onValueChange={handleEditorTabSizeChange}
-                options={editorTabSizeOptions.map((option) => ({
-                  value: String(option.value),
-                  label: option.label,
-                  description: option.description,
-                }))}
-                title="Tab size"
-                description="Choose how many spaces Monaco inserts and aligns when indentation uses tabs as spaces."
-                searchPlaceholder="Search tab sizes..."
-                emptyText="No tab size found."
-                testId="settings-editor-tab-size-combobox"
-              />
-              <SettingsComboboxSection
-                value={settingsState.editorCursorBlinking}
-                onValueChange={handleEditorCursorBlinkingChange}
-                options={editorCursorBlinkingOptions.map((option) => ({
-                  value: option.value,
-                  label: option.label,
-                  description: option.description,
-                }))}
-                title="Cursor blinking"
-                description="Control the caret animation Monaco uses while the editor has focus."
-                searchPlaceholder="Search cursor blinking modes..."
-                emptyText="No cursor blinking mode found."
-                testId="settings-editor-cursor-blinking-combobox"
-              />
-              <SettingsComboboxSection
-                value={settingsState.editorRenderWhitespace}
-                onValueChange={handleEditorRenderWhitespaceChange}
-                options={editorRenderWhitespaceOptions.map((option) => ({
-                  value: option.value,
-                  label: option.label,
-                  description: option.description,
-                }))}
-                title="Whitespace rendering"
-                description="Choose when visible whitespace markers should appear in the editor."
-                searchPlaceholder="Search whitespace modes..."
-                emptyText="No whitespace mode found."
-                testId="settings-editor-render-whitespace-combobox"
-              />
-              <SettingsComboboxSection
-                value={settingsState.editorLineNumbers}
-                onValueChange={handleEditorLineNumbersChange}
-                options={editorLineNumbersOptions.map((option) => ({
-                  value: option.value,
-                  label: option.label,
-                  description: option.description,
-                }))}
-                title="Line numbers"
-                description="Choose whether the editor gutter shows absolute, relative, or interval line numbers."
-                searchPlaceholder="Search line number modes..."
-                emptyText="No line number mode found."
-                testId="settings-editor-line-numbers-combobox"
-              />
-              <SettingsComboboxSection
-                value={settingsState.editorFoldingStrategy}
-                onValueChange={handleEditorFoldingStrategyChange}
-                options={editorFoldingStrategyOptions.map((option) => ({
-                  value: option.value,
-                  label: option.label,
-                  description: option.description,
-                }))}
-                title="Folding strategy"
-                description="Choose whether Monaco folds from indentation only or uses language-aware providers when possible."
-                searchPlaceholder="Search folding strategies..."
-                emptyText="No folding strategy found."
-                testId="settings-editor-folding-strategy-combobox"
-              />
-              <div className={settingsSectionClassName}>
-                <div className="space-y-3">
-                  <SettingsSwitchRow
-                    checked={settingsState.editorFontLigatures}
-                    description="Enable Monaco font ligatures when the selected code font supports them."
-                    onCheckedChange={handleEditorFontLigaturesChange}
-                    testId="settings-editor-font-ligatures-switch"
-                    title="Font ligatures"
-                  />
-                  <Separator />
-                  <SettingsSwitchRow
-                    checked={settingsState.editorSmoothScrolling}
-                    description="Animate editor scrolling with Monaco's smooth scrolling behavior."
-                    onCheckedChange={handleEditorSmoothScrollingChange}
-                    testId="settings-editor-smooth-scrolling-switch"
-                    title="Smooth scrolling"
-                  />
-                  <Separator />
-                  <SettingsSwitchRow
-                    checked={settingsState.editorScrollBeyondLastLine}
-                    description="Keep extra blank space after the final line so the cursor can scroll below the file end."
-                    onCheckedChange={handleEditorScrollBeyondLastLineChange}
-                    testId="settings-editor-scroll-beyond-last-line-switch"
-                    title="Scroll beyond last line"
-                  />
-                  <Separator />
-                  <SettingsSwitchRow
-                    checked={settingsState.editorRenderControlCharacters}
-                    description="Render control characters such as tabs and other non-printable glyphs using Monaco's built-in markers."
-                    onCheckedChange={handleEditorRenderControlCharactersChange}
-                    testId="settings-editor-render-control-characters-switch"
-                    title="Render control characters"
-                  />
-                  <Separator />
-                  <SettingsSwitchRow
-                    checked={settingsState.editorMinimapEnabled}
-                    description="Show Monaco's minimap overview on the right side of the editor."
-                    onCheckedChange={handleEditorMinimapEnabledChange}
-                    testId="settings-editor-minimap-switch"
-                    title="Show minimap"
-                  />
-                  <Separator />
-                  <SettingsSwitchRow
-                    checked={settingsState.editorGlyphMargin}
-                    description="Keep the glyph margin visible for breakpoints, decorations, and code markers."
-                    onCheckedChange={handleEditorGlyphMarginChange}
-                    testId="settings-editor-glyph-margin-switch"
-                    title="Show glyph margin"
-                  />
-                  <Separator />
-                  <SettingsSwitchRow
-                    checked={settingsState.editorBracketPairGuides}
-                    description="Render Monaco's bracket pair guide lines to make nested scopes easier to scan."
-                    onCheckedChange={handleEditorBracketPairGuidesChange}
-                    testId="settings-editor-bracket-pair-guides-switch"
-                    title="Bracket pair guides"
-                  />
-                  <Separator />
-                  <SettingsSwitchRow
-                    checked={settingsState.editorIndentGuides}
-                    description="Render indentation guide lines that follow the current block structure."
-                    onCheckedChange={handleEditorIndentGuidesChange}
-                    testId="settings-editor-indent-guides-switch"
-                    title="Indent guides"
-                  />
-                </div>
-              </div>
-              <div className={settingsSectionClassName}>
-                <div className="flex items-center justify-between gap-4">
-                  <div className="space-y-1">
-                    <p className={settingsSectionTitleClassName}>Dark mode</p>
-                    <p className={settingsSectionDescriptionClassName} data-testid="theme-mode-description">
-                      Switch between the default light theme and the dark theme.
-                    </p>
-                  </div>
-                  <Switch
-                    checked={settingsState.theme === 'dark'}
-                    data-testid="settings-theme-switch"
-                    onCheckedChange={handleThemeModeChange}
-                  />
-                </div>
-              </div>
-              <div className={settingsSectionClassName}>
-                <div className="flex items-center justify-between gap-4">
-                  <div className="space-y-1">
-                    <p className={settingsSectionTitleClassName}>Close to tray</p>
-                    <p className={settingsSectionDescriptionClassName} data-testid="close-behavior-description">
-                      Keep Pristine running in the tray when the window is closed.
-                    </p>
-                  </div>
-                  <Switch
-                    checked={settingsState.closeToTrayEnabled}
-                    data-testid="settings-close-to-tray-switch"
-                    onCheckedChange={handleCloseToTrayChange}
-                  />
-                </div>
-              </div>
-              <div className={settingsSectionClassName}>
-                <div className="flex items-center justify-between gap-4">
-                  <div className="space-y-1">
-                    <p className={settingsSectionTitleClassName}>Show floating info window</p>
-                    <p className={settingsSectionDescriptionClassName} data-testid="floating-info-window-description">
-                      Display a detached always-on-top info window even while Pristine is hidden to tray.
-                    </p>
-                  </div>
-                  <Switch
-                    checked={settingsState.floatingInfoWindowVisible}
-                    data-testid="settings-floating-info-window-switch"
-                    onCheckedChange={handleFloatingInfoWindowVisibleChange}
-                  />
-                </div>
-              </div>
-              </div>
-            </ScrollArea>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                data-testid="settings-close-button"
-                onClick={() => handleSettingsDialogOpenChange(false)}
-              >
-                Close
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        <EditorFontAdvancedDialog
-          open={editorFontAdvancedDialogOpen}
-          onOpenChange={handleEditorFontAdvancedDialogOpenChange}
-          onSelectFontFamily={handleEditorFontAdvancedSelect}
-          selectedFontFamily={settingsState.editorFontFamily}
-          dialogStyle={noDragInteractive as React.CSSProperties}
-        />
-
-        <EditorThemeAdvancedDialog
-          open={editorThemeAdvancedDialogOpen}
-          onOpenChange={handleEditorThemeAdvancedDialogOpenChange}
-          onSelectTheme={handleEditorThemeAdvancedSelect}
-          selectedTheme={settingsState.editorTheme}
+        <MenuBarSettingsDialogs
+          controller={settingsController}
           dialogStyle={noDragInteractive as React.CSSProperties}
         />
       </>

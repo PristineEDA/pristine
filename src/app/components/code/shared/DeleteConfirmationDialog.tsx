@@ -7,7 +7,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '../../ui/dialog';
-import { useWorkspace } from '../../../context/WorkspaceContext';
+import { useWorkspaceDialogs } from '../../../context/WorkspaceContext';
 import { getPathBaseName } from '../../../workspace/workspaceFiles';
 
 export function DeleteConfirmationDialog() {
@@ -15,7 +15,7 @@ export function DeleteConfirmationDialog() {
     cancelDeleteConfirmation,
     confirmDeleteConfirmation,
     deleteConfirmationDialog,
-  } = useWorkspace();
+  } = useWorkspaceDialogs();
 
   if (!deleteConfirmationDialog) {
     return null;
