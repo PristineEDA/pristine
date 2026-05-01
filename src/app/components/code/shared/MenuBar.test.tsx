@@ -34,47 +34,83 @@ const signOutMock = vi.fn(() => Promise.resolve(true));
 const syncCloudConfigMock = vi.fn(() => Promise.resolve(true));
 const undoActionRun = vi.fn(() => Promise.resolve());
 const redoActionRun = vi.fn(() => Promise.resolve());
-let mockedEditorBracketPairGuides = true;
-let mockedEditorCursorBlinking = 'smooth';
-let mockedEditorFontFamily = 'jetbrains-mono';
-let mockedEditorFontLigatures = true;
-let mockedEditorFontSize = 13;
-let mockedEditorFoldingStrategy = 'indentation';
-let mockedEditorGlyphMargin = true;
-let mockedEditorIndentGuides = true;
-let mockedEditorLineNumbers = 'on';
-let mockedEditorMinimapEnabled = true;
-let mockedEditorRenderControlCharacters = false;
-let mockedEditorRenderWhitespace = 'selection';
-let mockedEditorScrollBeyondLastLine = false;
-let mockedEditorSmoothScrolling = true;
-let mockedEditorTabSize = 4;
-let mockedEditorTheme = 'dracula';
-let mockedEditorWordWrap = 'off';
-let mockedTheme: 'light' | 'dark' = 'light';
-let mockedUserErrorMessage: string | null = null;
-let mockedUserIsSyncing = false;
-let mockedUserSession: DesktopAuthSession | null = null;
-let mockedUserStatus: 'loading' | 'signed-in' | 'signed-out' = 'signed-out';
+
+interface EditorSettingsMockState {
+  bracketPairGuides: boolean;
+  cursorBlinking: string;
+  fontFamily: string;
+  fontLigatures: boolean;
+  fontSize: number;
+  foldingStrategy: string;
+  glyphMargin: boolean;
+  indentGuides: boolean;
+  lineNumbers: string;
+  minimapEnabled: boolean;
+  renderControlCharacters: boolean;
+  renderWhitespace: string;
+  scrollBeyondLastLine: boolean;
+  smoothScrolling: boolean;
+  tabSize: number;
+  theme: string;
+  wordWrap: string;
+}
+
+interface UserMockState {
+  errorMessage: string | null;
+  isSyncing: boolean;
+  session: DesktopAuthSession | null;
+  status: 'loading' | 'signed-in' | 'signed-out';
+}
+
+const defaultEditorSettingsMockState: EditorSettingsMockState = {
+  bracketPairGuides: true,
+  cursorBlinking: 'smooth',
+  fontFamily: 'jetbrains-mono',
+  fontLigatures: true,
+  fontSize: 13,
+  foldingStrategy: 'indentation',
+  glyphMargin: true,
+  indentGuides: true,
+  lineNumbers: 'on',
+  minimapEnabled: true,
+  renderControlCharacters: false,
+  renderWhitespace: 'selection',
+  scrollBeyondLastLine: false,
+  smoothScrolling: true,
+  tabSize: 4,
+  theme: 'dracula',
+  wordWrap: 'off',
+};
+
+const defaultUserMockState: UserMockState = {
+  errorMessage: null,
+  isSyncing: false,
+  session: null,
+  status: 'signed-out',
+};
+
+const editorSettingsMockState: EditorSettingsMockState = { ...defaultEditorSettingsMockState };
+const themeMockState: { theme: 'light' | 'dark' } = { theme: 'light' };
+const userMockState: UserMockState = { ...defaultUserMockState };
 
 vi.mock('../../../context/EditorSettingsContext', () => ({
   useEditorSettings: () => ({
-    bracketPairGuides: mockedEditorBracketPairGuides,
-    cursorBlinking: mockedEditorCursorBlinking,
+    bracketPairGuides: editorSettingsMockState.bracketPairGuides,
+    cursorBlinking: editorSettingsMockState.cursorBlinking,
     fontFamilies: [],
-    fontFamily: mockedEditorFontFamily,
-    fontLigatures: mockedEditorFontLigatures,
-    fontSize: mockedEditorFontSize,
-    foldingStrategy: mockedEditorFoldingStrategy,
-    glyphMargin: mockedEditorGlyphMargin,
-    indentGuides: mockedEditorIndentGuides,
-    lineNumbers: mockedEditorLineNumbers,
-    minimapEnabled: mockedEditorMinimapEnabled,
-    renderControlCharacters: mockedEditorRenderControlCharacters,
-    renderWhitespace: mockedEditorRenderWhitespace,
-    scrollBeyondLastLine: mockedEditorScrollBeyondLastLine,
-    smoothScrolling: mockedEditorSmoothScrolling,
-    tabSize: mockedEditorTabSize,
+    fontFamily: editorSettingsMockState.fontFamily,
+    fontLigatures: editorSettingsMockState.fontLigatures,
+    fontSize: editorSettingsMockState.fontSize,
+    foldingStrategy: editorSettingsMockState.foldingStrategy,
+    glyphMargin: editorSettingsMockState.glyphMargin,
+    indentGuides: editorSettingsMockState.indentGuides,
+    lineNumbers: editorSettingsMockState.lineNumbers,
+    minimapEnabled: editorSettingsMockState.minimapEnabled,
+    renderControlCharacters: editorSettingsMockState.renderControlCharacters,
+    renderWhitespace: editorSettingsMockState.renderWhitespace,
+    scrollBeyondLastLine: editorSettingsMockState.scrollBeyondLastLine,
+    smoothScrolling: editorSettingsMockState.smoothScrolling,
+    tabSize: editorSettingsMockState.tabSize,
     setBracketPairGuides: setEditorBracketPairGuidesMock,
     setCursorBlinking: setEditorCursorBlinkingMock,
     setFontFamily: setEditorFontFamilyMock,
@@ -92,25 +128,25 @@ vi.mock('../../../context/EditorSettingsContext', () => ({
     setTabSize: setEditorTabSizeMock,
     setTheme: setEditorThemeMock,
     setWordWrap: setEditorWordWrapMock,
-    theme: mockedEditorTheme,
+    theme: editorSettingsMockState.theme,
     themes: [],
-    wordWrap: mockedEditorWordWrap,
+    wordWrap: editorSettingsMockState.wordWrap,
   }),
 }));
 
 vi.mock('../../../context/ThemeContext', () => ({
-  useTheme: () => ({ theme: mockedTheme, setTheme: setThemeMock, toggleTheme: toggleThemeMock }),
+  useTheme: () => ({ theme: themeMockState.theme, setTheme: setThemeMock, toggleTheme: toggleThemeMock }),
 }));
 
 vi.mock('../../../context/UserContext', () => ({
   useUser: () => ({
     clearError: clearUserErrorMock,
-    errorMessage: mockedUserErrorMessage,
-    isSyncing: mockedUserIsSyncing,
+    errorMessage: userMockState.errorMessage,
+    isSyncing: userMockState.isSyncing,
     openAccountPage: openAccountPageMock,
-    session: mockedUserSession,
+    session: userMockState.session,
     signOut: signOutMock,
-    status: mockedUserStatus,
+    status: userMockState.status,
     syncCloudConfig: syncCloudConfigMock,
   }),
 }));
@@ -119,30 +155,13 @@ vi.mock('../../../editor/fontLoader', () => ({
   ensureEditorFontFamilyLoaded: (fontFamily: string) => ensureEditorFontFamilyLoadedMock(fontFamily),
 }));
 
-beforeEach(() => {
-  mockedEditorBracketPairGuides = true;
-  mockedEditorCursorBlinking = 'smooth';
-  mockedEditorFontFamily = 'jetbrains-mono';
-  mockedEditorFontLigatures = true;
-  mockedEditorFontSize = 13;
-  mockedEditorFoldingStrategy = 'indentation';
-  mockedEditorGlyphMargin = true;
-  mockedEditorIndentGuides = true;
-  mockedEditorLineNumbers = 'on';
-  mockedEditorMinimapEnabled = true;
-  mockedEditorRenderControlCharacters = false;
-  mockedEditorRenderWhitespace = 'selection';
-  mockedEditorScrollBeyondLastLine = false;
-  mockedEditorSmoothScrolling = true;
-  mockedEditorTabSize = 4;
-  mockedEditorTheme = 'dracula';
-  mockedEditorWordWrap = 'off';
-  mockedTheme = 'light';
-  mockedUserErrorMessage = null;
-  mockedUserIsSyncing = false;
-  mockedUserSession = null;
-  mockedUserStatus = 'signed-out';
-  window.electronAPI!.platform = 'win32';
+function resetContextMockState() {
+  Object.assign(editorSettingsMockState, defaultEditorSettingsMockState);
+  Object.assign(userMockState, defaultUserMockState);
+  themeMockState.theme = 'light';
+}
+
+function resetEditorSettingsMocks() {
   ensureEditorFontFamilyLoadedMock.mockReset();
   ensureEditorFontFamilyLoadedMock.mockResolvedValue(undefined);
   setEditorBracketPairGuidesMock.mockReset();
@@ -162,8 +181,14 @@ beforeEach(() => {
   setEditorTabSizeMock.mockReset();
   setEditorThemeMock.mockReset();
   setEditorWordWrapMock.mockReset();
+}
+
+function resetThemeMocks() {
   setThemeMock.mockReset();
   toggleThemeMock.mockReset();
+}
+
+function resetUserMocks() {
   clearUserErrorMock.mockReset();
   openAccountPageMock.mockReset();
   openAccountPageMock.mockResolvedValue(true);
@@ -171,8 +196,15 @@ beforeEach(() => {
   signOutMock.mockResolvedValue(true);
   syncCloudConfigMock.mockReset();
   syncCloudConfigMock.mockResolvedValue(true);
+}
+
+function resetWorkspaceCommandMocks() {
   undoActionRun.mockClear();
   redoActionRun.mockClear();
+}
+
+function resetElectronApiMocks() {
+  window.electronAPI!.platform = 'win32';
   vi.mocked(window.electronAPI!.minimize).mockReset();
   vi.mocked(window.electronAPI!.maximize).mockReset();
   vi.mocked(window.electronAPI!.close).mockReset();
@@ -188,6 +220,15 @@ beforeEach(() => {
   vi.mocked(window.electronAPI!.config.set).mockReset();
   vi.mocked(window.electronAPI!.setFloatingInfoWindowVisible).mockReset();
   vi.mocked(window.electronAPI!.menu.onCommand).mockReset();
+}
+
+beforeEach(() => {
+  resetContextMockState();
+  resetEditorSettingsMocks();
+  resetThemeMocks();
+  resetUserMocks();
+  resetWorkspaceCommandMocks();
+  resetElectronApiMocks();
 });
 
 type PersistedSettingsOptions = {
@@ -288,26 +329,35 @@ function mockPersistedSettingsConfig(options: PersistedSettingsOptions = {}) {
   return persisted;
 }
 
-function renderMenuBar(props: React.ComponentProps<typeof MenuBar> = {}) {
-  return render(
+interface MenuBarTestHarnessProps {
+  menuBarProps?: React.ComponentProps<typeof MenuBar>;
+  withWorkspaceControls?: boolean;
+}
+
+function MenuBarTestHarness({
+  menuBarProps = {},
+  withWorkspaceControls = false,
+}: MenuBarTestHarnessProps) {
+  return (
     <SidebarProvider defaultOpen={false} keyboardShortcut={false}>
       <WorkspaceProvider>
         <SidebarStateProbe />
-        <MenuBar {...props} />
+        {withWorkspaceControls && <WorkspaceControls />}
+        <MenuBar {...menuBarProps} />
       </WorkspaceProvider>
-    </SidebarProvider>,
+    </SidebarProvider>
+  );
+}
+
+function renderMenuBar(props: React.ComponentProps<typeof MenuBar> = {}) {
+  return render(
+    <MenuBarTestHarness menuBarProps={props} />,
   );
 }
 
 function renderMenuBarWithControls(props: React.ComponentProps<typeof MenuBar> = {}) {
   return render(
-    <SidebarProvider defaultOpen={false} keyboardShortcut={false}>
-      <WorkspaceProvider>
-        <SidebarStateProbe />
-        <WorkspaceControls />
-        <MenuBar {...props} />
-      </WorkspaceProvider>
-    </SidebarProvider>,
+    <MenuBarTestHarness menuBarProps={props} withWorkspaceControls />,
   );
 }
 
@@ -413,8 +463,8 @@ describe('MenuBar', () => {
   it('shows the signed-in account summary and sync actions in the user account popover', async () => {
     const user = userEvent.setup();
 
-    mockedUserStatus = 'signed-in';
-    mockedUserSession = {
+    userMockState.status = 'signed-in';
+    userMockState.session = {
       avatarUrl: 'https://example.com/avatar.png',
       email: 'alice@example.com',
       syncedAt: '2026-04-18T12:00:00.000Z',
@@ -438,8 +488,8 @@ describe('MenuBar', () => {
   });
 
   it('restores the signed-out placeholder avatar after signing out from a signed-in session', () => {
-    mockedUserStatus = 'signed-in';
-    mockedUserSession = {
+    userMockState.status = 'signed-in';
+    userMockState.session = {
       avatarUrl: 'https://example.com/avatar.png',
       email: 'alice@example.com',
       syncedAt: '2026-04-18T12:00:00.000Z',
@@ -451,15 +501,10 @@ describe('MenuBar', () => {
 
     expect(screen.getByTestId('user-avatar-button').querySelector('svg')).toBeNull();
 
-    mockedUserStatus = 'signed-out';
-    mockedUserSession = null;
+    userMockState.status = 'signed-out';
+    userMockState.session = null;
     view.rerender(
-      <SidebarProvider defaultOpen={false} keyboardShortcut={false}>
-        <WorkspaceProvider>
-          <SidebarStateProbe />
-          <MenuBar />
-        </WorkspaceProvider>
-      </SidebarProvider>,
+      <MenuBarTestHarness />,
     );
 
     expect(screen.getByTestId('user-avatar-button').querySelector('svg')).toBeInTheDocument();
