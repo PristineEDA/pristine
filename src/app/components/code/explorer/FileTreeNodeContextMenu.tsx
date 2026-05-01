@@ -6,6 +6,12 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react';
 import { formatShortcutLabel } from '../../../menu/shortcutLabels';
+import {
+  WORKSPACE_ROOT_PATH,
+  type ExplorerSelectedNode,
+  type WorkspaceClipboardState,
+  type WorkspaceTreeNode,
+} from '../../../workspace/workspaceFiles';
 
 interface ContextMenuItem {
   kind: 'item';
@@ -141,6 +147,117 @@ export function createContextMenuItem({
     shortcut,
     variant,
   };
+}
+
+export function createExplorerTreeContextMenuItems({
+  node,
+  onOpenFile,
+  onStartCopy,
+  onStartCreateFile,
+  onStartCreateFolder,
+  onStartCut,
+  onStartDelete,
+  onStartPaste,
+  onStartRename,
+  workspaceClipboard,
+}: {
+  node: WorkspaceTreeNode;
+  onOpenFile: () => void;
+  onStartCopy?: (path: string, entryType: 'file' | 'folder') => void;
+  onStartCreateFile?: (entryType: 'file', parentPath?: string) => void;
+  onStartCreateFolder?: (entryType: 'folder', parentPath?: string) => void;
+  onStartCut?: (path: string, entryType: 'file' | 'folder') => void;
+  onStartDelete?: (path: string, entryType: 'file' | 'folder') => void;
+  onStartPaste?: (path: string, entryType: ExplorerSelectedNode['type']) => void;
+  onStartRename?: (path: string, entryType: 'file' | 'folder') => void;
+  workspaceClipboard?: WorkspaceClipboardState | null;
+}): ExplorerContextMenuEntry[] {
+  const pasteTargetType = node.path === WORKSPACE_ROOT_PATH ? 'root' : node.type;
+  const pasteItem = createContextMenuItem({
+    label: 'Paste',
+    action: () => onStartPaste?.(node.path, pasteTargetType),
+    disabled: !workspaceClipboard,
+    shortcut: 'Mod+V',
+  });
+
+  if (node.type === 'folder') {
+    const items: ExplorerContextMenuEntry[] = [
+      createContextMenuItem({
+        label: 'New File',
+        action: () => onStartCreateFile?.('file', node.path),
+      }),
+      createContextMenuItem({
+        label: 'New Folder',
+        action: () => onStartCreateFolder?.('folder', node.path),
+      }),
+      createContextMenuSeparator('create-separator'),
+      createContextMenuItem({
+        label: 'Copy',
+        action: () => onStartCopy?.(node.path, 'folder'),
+        shortcut: 'Mod+C',
+      }),
+      createContextMenuItem({
+        label: 'Cut',
+        action: () => onStartCut?.(node.path, 'folder'),
+        shortcut: 'Mod+X',
+      }),
+      pasteItem,
+      createContextMenuSeparator('clipboard-separator'),
+    ];
+
+    if (node.path !== WORKSPACE_ROOT_PATH) {
+      items.push(createContextMenuItem({
+        label: 'Rename',
+        action: () => onStartRename?.(node.path, 'folder'),
+        shortcut: 'F2',
+      }));
+      items.push(createContextMenuItem({
+        label: 'Delete',
+        action: () => onStartDelete?.(node.path, 'folder'),
+        shortcut: 'Delete',
+        variant: 'destructive',
+      }));
+      items.push(createContextMenuSeparator('manage-separator'));
+    }
+
+    return [
+      ...items,
+      createContextMenuItem({ label: 'Set as Simulation Top', action: () => {} }),
+      createContextMenuItem({ label: 'Copy Path', action: () => {} }),
+    ];
+  }
+
+  return [
+    createContextMenuItem({ label: 'Open in Editor', action: onOpenFile }),
+    createContextMenuSeparator('open-separator'),
+    createContextMenuItem({
+      label: 'Copy',
+      action: () => onStartCopy?.(node.path, 'file'),
+      shortcut: 'Mod+C',
+    }),
+    createContextMenuItem({
+      label: 'Cut',
+      action: () => onStartCut?.(node.path, 'file'),
+      shortcut: 'Mod+X',
+    }),
+    pasteItem,
+    createContextMenuSeparator('clipboard-separator'),
+    createContextMenuItem({
+      label: 'Rename',
+      action: () => onStartRename?.(node.path, 'file'),
+      shortcut: 'F2',
+    }),
+    createContextMenuItem({
+      label: 'Delete',
+      action: () => onStartDelete?.(node.path, 'file'),
+      shortcut: 'Delete',
+      variant: 'destructive',
+    }),
+    createContextMenuSeparator('manage-separator'),
+    createContextMenuItem({ label: 'Set as Simulation Top', action: () => {} }),
+    createContextMenuItem({ label: 'Copy Path', action: () => {} }),
+    createContextMenuItem({ label: 'Copy Relative Path', action: () => {} }),
+  ];
 }
 
 export function ExplorerContextMenu({
