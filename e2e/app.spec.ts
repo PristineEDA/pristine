@@ -12,6 +12,14 @@ const releaseRoot = path.join(__dirname, '..', 'release');
 const MONACO_READY_TIMEOUT_MS = 60000;
 const UI_READY_TIMEOUT_MS = 60000;
 
+function createTerminalScrollFloodCommand(markerPrefix: string, count: number) {
+  if (process.platform === 'win32') {
+    return `for ($i = 1; $i -le ${count}; $i++) { Write-Output "${markerPrefix}$i" }`;
+  }
+
+  return `i=1; while [ $i -le ${count} ]; do echo "${markerPrefix}$i"; i=$((i + 1)); done`;
+}
+
 function getE2EUserDataPath() {
   return test.info().outputPath('electron-user-data');
 }
@@ -3269,6 +3277,7 @@ test('terminal remains writable after left sidebar toggles while vertically scro
   const { app, window } = await launchApp();
   const bottomPanel = window.getByTestId('panel-bottom-panel');
   const terminalInput = window.locator('[data-testid="terminal-host"] .xterm-helper-textarea');
+  const scrollCommand = createTerminalScrollFloodCommand('__PRISTINE_SCROLL__', 120);
   const scrollMarker = '__PRISTINE_SCROLL__120';
   const afterToggleMarker = '__PRISTINE_AFTER_LEFT_TOGGLE__';
 
@@ -3305,7 +3314,7 @@ test('terminal remains writable after left sidebar toggles while vertically scro
 
   await expect(terminalInput).toHaveCount(1);
   await terminalInput.click();
-  await terminalInput.pressSequentially('for ($i = 1; $i -le 120; $i++) { Write-Output "__PRISTINE_SCROLL__$i" }');
+  await terminalInput.pressSequentially(scrollCommand);
   await terminalInput.press('Enter');
 
   await expect.poll(async () => readTerminalText(window), {
