@@ -95,6 +95,7 @@ function AppLayout() {
   } = useWorkspaceFiles();
   const { openUnsavedChangesDialog } = useWorkspaceDialogs();
   const [explorerLeftPanelWidthPx, setExplorerLeftPanelWidthPx] = useState(EXPLORER_LEFT_PANEL_DEFAULT_WIDTH_PX);
+  const explorerBottomPanelLayoutVersion = `${showLeftPanel}:${showRightPanel}:${showBottomPanel}:${explorerLeftPanelWidthPx}`;
 
   const handleActivityItemSelect = (nextView: string) => {
     setActiveView(nextView as typeof activeView);
@@ -317,7 +318,7 @@ function AppLayout() {
         />
       ),
       topContent: <EditorSplitLayout jumpToLine={jumpToLine} onActiveFileReveal={handleEditorActiveFileReveal} />,
-      bottomContent: <BottomPanel onClose={() => setShowBottomPanel(false)} />,
+      bottomContent: <BottomPanel layoutVersion={explorerBottomPanelLayoutVersion} onClose={() => setShowBottomPanel(false)} />,
       rightContent: (
         <RightSidePanel
           onFileOpen={openWorkspaceFile}

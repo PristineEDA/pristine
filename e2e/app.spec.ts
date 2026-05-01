@@ -3263,6 +3263,82 @@ test('terminal preserves output history across tab switches and bottom panel hid
   await app.close();
 });
 
+test('terminal remains writable after left sidebar toggles while vertically scrolled', async () => {
+  test.slow();
+
+  const { app, window } = await launchApp();
+  const bottomPanel = window.getByTestId('panel-bottom-panel');
+  const terminalInput = window.locator('[data-testid="terminal-host"] .xterm-helper-textarea');
+  const scrollMarker = '__PRISTINE_SCROLL__120';
+  const afterToggleMarker = '__PRISTINE_AFTER_LEFT_TOGGLE__';
+
+  await ensureExplorerVisible(window);
+  await openBottomTerminal(window);
+
+  await expect.poll(async () => readTerminalPid(window), {
+    timeout: 15000,
+  }).toBeGreaterThan(0);
+
+  const bottomResizeHandle = window.locator('[data-slot="resizable-handle"]').last();
+  const bottomResizeHandleBox = await bottomResizeHandle.boundingBox();
+
+  if (!bottomResizeHandleBox) {
+    throw new Error('Expected bottom panel resize handle geometry to be measurable');
+  }
+
+  await window.mouse.move(
+    bottomResizeHandleBox.x + bottomResizeHandleBox.width / 2,
+    bottomResizeHandleBox.y + bottomResizeHandleBox.height / 2,
+  );
+  await window.mouse.down();
+  await window.mouse.move(
+    bottomResizeHandleBox.x + bottomResizeHandleBox.width / 2,
+    bottomResizeHandleBox.y + bottomResizeHandleBox.height / 2 + 180,
+    { steps: 12 },
+  );
+  await window.mouse.up();
+
+  await expect.poll(async () => bottomPanel.evaluate((element) => {
+    const panel = element as { getBoundingClientRect: () => { height: number } };
+    return Math.round(panel.getBoundingClientRect().height);
+  })).toBeLessThan(170);
+
+  await expect(terminalInput).toHaveCount(1);
+  await terminalInput.click();
+  await terminalInput.pressSequentially('for ($i = 1; $i -le 120; $i++) { Write-Output "__PRISTINE_SCROLL__$i" }');
+  await terminalInput.press('Enter');
+
+  await expect.poll(async () => readTerminalText(window), {
+    timeout: 20000,
+  }).toContain(scrollMarker);
+
+  await expect.poll(async () => {
+    const terminalText = await readTerminalText(window);
+    return (terminalText?.match(/__PRISTINE_SCROLL__/g) ?? []).length;
+  }, {
+    timeout: 10000,
+  }).toBeGreaterThan(40);
+
+  await window.getByTestId('toggle-left-panel').click();
+  await expect(window.getByTestId('panel-left-panel')).toHaveCount(0);
+  await expect(window.getByTestId('terminal-host')).toBeVisible();
+
+  await window.getByTestId('toggle-left-panel').click();
+  await expect(window.getByTestId('panel-left-panel')).toBeVisible();
+  await expect(window.getByTestId('terminal-host')).toBeVisible();
+
+  await expect(terminalInput).toHaveCount(1);
+  await terminalInput.click();
+  await terminalInput.pressSequentially(`echo ${afterToggleMarker}`);
+  await terminalInput.press('Enter');
+
+  await expect.poll(async () => readTerminalText(window), {
+    timeout: 15000,
+  }).toContain(afterToggleMarker);
+
+  await app.close();
+});
+
 test('terminal bottom panel close button terminates the shell and reopening creates a new session', async () => {
   const { app, window } = await launchApp();
 

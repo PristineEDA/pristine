@@ -133,6 +133,7 @@ describe('TerminalSurface', () => {
     onDataCallback?.({ id: 'term-e2e', data: 'PS> dir\r\n' });
 
     const host = screen.getByTestId('terminal-host');
+    expect(host.parentElement).toHaveClass('bottom-panel-scrollbar', 'min-h-0', 'flex-1');
     await waitFor(() => expect(host).toHaveAttribute('data-terminal-text', 'PS> dir\r\n'));
     expect(host).toHaveAttribute('data-terminal-pid', '404');
 
@@ -152,5 +153,31 @@ describe('TerminalSurface', () => {
 
     await waitFor(() => expect(screen.getByText('Terminal failed to start')).toBeInTheDocument());
     expect(screen.getByText('Terminal backend is unavailable.')).toBeInTheDocument();
+  });
+
+  it('re-fits the terminal when the surrounding layout version changes', async () => {
+    const createMock = vi.fn().mockResolvedValue({ id: 'term-layout', pid: 505, shell: 'powershell.exe' });
+    const resizeMock = vi.fn().mockResolvedValue(true);
+    const baseApi = window.electronAPI as ElectronAPI;
+
+    window.electronAPI = {
+      ...baseApi,
+      terminal: {
+        ...baseApi.terminal,
+        create: createMock,
+        resize: resizeMock,
+      },
+    };
+
+    const view = render(<TerminalSurface layoutVersion="expanded" />);
+
+    await waitFor(() => expect(createMock).toHaveBeenCalled());
+    fitMock.mockClear();
+    resizeMock.mockClear();
+
+    view.rerender(<TerminalSurface layoutVersion="collapsed" />);
+
+    await waitFor(() => expect(fitMock).toHaveBeenCalled());
+    await waitFor(() => expect(resizeMock).toHaveBeenCalledWith('term-layout', 80, 24));
   });
 });

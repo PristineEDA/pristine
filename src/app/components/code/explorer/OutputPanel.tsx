@@ -21,7 +21,7 @@ export function OutputPanel() {
   }), [filterText, levelFilter, outputLog]);
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex h-full min-h-0 flex-col">
       <div className="flex items-center gap-2 px-3 py-1 border-b border-border shrink-0">
         <div className="flex items-center gap-1 bg-muted/50 rounded px-2 py-0.5 flex-1 max-w-48">
           <Search size={11} className="text-muted-foreground" />
@@ -49,7 +49,7 @@ export function OutputPanel() {
           </button>
         </TooltipIconButton>
       </div>
-      <div className="flex-1 overflow-y-auto px-2 py-1 font-mono text-[12px]">
+      <div className="bottom-panel-scrollbar min-h-0 flex-1 overflow-y-auto px-2 py-1 font-mono text-[12px]">
         {filtered.map((entry, i) => {
           const cfg = levelConfig[entry.level as keyof typeof levelConfig];
           return (

@@ -93,6 +93,6 @@ describe('ProblemsTabPanel', () => {
     expect(screen.queryByText('Infos')).not.toBeInTheDocument();
     expect(screen.queryByText('Hints')).not.toBeInTheDocument();
     expect(screen.getByTestId('problems-tab-empty-state')).toHaveTextContent('No LSP diagnostics yet.');
-    expect(container.firstChild).toHaveClass('flex-1', 'overflow-y-auto', 'py-1');
+    expect(container.firstChild).toHaveClass('bottom-panel-scrollbar', 'min-h-0', 'flex-1', 'overflow-y-auto', 'py-1');
   });
 });
