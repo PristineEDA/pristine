@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LspProblem } from '../../../lsp/lspProblems';
 import { BottomPanel } from './BottomPanel';
@@ -26,6 +27,12 @@ vi.mock('./terminalSessionStore', async (importOriginal) => {
     terminateTerminalSession: () => terminateTerminalSessionMock(),
   };
 });
+
+type TestUser = ReturnType<typeof userEvent.setup>;
+
+async function clickButton(user: TestUser, name: string | RegExp) {
+  await user.click(screen.getByRole('button', { name }));
+}
 
 describe('BottomPanel', () => {
   beforeEach(() => {
@@ -89,46 +96,49 @@ describe('BottomPanel', () => {
   });
 
   it('terminates the terminal session before closing the panel', async () => {
+    const user = userEvent.setup();
     const onClose = vi.fn();
 
     render(<BottomPanel onClose={onClose} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /close panel/i }));
+    await clickButton(user, /close panel/i);
 
     await waitFor(() => expect(terminateTerminalSessionMock).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
   });
 
   it('switches between tabs and closes the panel', async () => {
+    const user = userEvent.setup();
     const onClose = vi.fn();
 
     render(<BottomPanel onClose={onClose} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /problems \(6\)/i }));
+    await clickButton(user, /problems \(6\)/i);
     expect(await screen.findByText(/2 errors/i)).toBeInTheDocument();
     expect(await screen.findByText(/2 warnings/i)).toBeInTheDocument();
     expect(await screen.findByText(/1 infos/i)).toBeInTheDocument();
     expect(await screen.findByText(/1 hints/i)).toBeInTheDocument();
     expect(await screen.findByText(/Undriven signal/i)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /debug console/i }));
+    await clickButton(user, /debug console/i);
     expect(screen.getByRole('button', { name: /start debugging/i })).toBeInTheDocument();
     expect(screen.getByText(/Debug session not started/i)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /^lsp$/i }));
+    await clickButton(user, /^lsp$/i);
     expect(await screen.findByTestId('lsp-panel')).toBeInTheDocument();
     expect(screen.getByText(/No LSP debug events yet\./i)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /close panel/i }));
+    await clickButton(user, /close panel/i);
     expect(terminateTerminalSessionMock).toHaveBeenCalled();
   });
 
   it('filters output entries by text and severity', async () => {
+    const user = userEvent.setup();
     const { container } = render(<BottomPanel />);
 
     expect(container.firstChild).toHaveClass('min-h-0');
 
-    fireEvent.click(screen.getByRole('button', { name: /^output$/i }));
+    await clickButton(user, /^output$/i);
 
     const initialEntry = await screen.findByText(/RTL Analyzer v2\.4\.1 started/i);
     expect(initialEntry.closest('.bottom-panel-scrollbar')).not.toBeNull();
@@ -141,7 +151,7 @@ describe('BottomPanel', () => {
       expect(screen.queryByText(/RTL Analyzer v2\.4\.1 started/i)).not.toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /^INFO$/i }));
+    await clickButton(user, /^INFO$/i);
 
     await waitFor(() => {
       expect(screen.queryByText(/cpu_top\.v \[L56\]: Unconnected port alu_src_b/i)).not.toBeInTheDocument();

@@ -1,9 +1,11 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { OutlineNode } from './OutlineNode';
 
 describe('OutlineNode', () => {
-  it('toggles nested children for expandable outline items', () => {
+  it('toggles nested children for expandable outline items', async () => {
+    const user = userEvent.setup();
     const onLineJump = vi.fn();
 
     render(
@@ -25,15 +27,16 @@ describe('OutlineNode', () => {
 
     expect(screen.getByText('clk')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByText('uart_tx'));
+    await user.click(screen.getByText('uart_tx'));
     expect(screen.queryByText('clk')).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByText('uart_tx'));
+    await user.click(screen.getByText('uart_tx'));
     expect(screen.getByText('clk')).toBeInTheDocument();
     expect(onLineJump).not.toHaveBeenCalled();
   });
 
-  it('jumps to the target line for leaf nodes and explicit line links', () => {
+  it('jumps to the target line for leaf nodes and explicit line links', async () => {
+    const user = userEvent.setup();
     const onLineJump = vi.fn();
 
     render(
@@ -58,8 +61,8 @@ describe('OutlineNode', () => {
       </>,
     );
 
-    fireEvent.click(screen.getByText('ready'));
-    fireEvent.click(screen.getByText(':29'));
+    await user.click(screen.getByText('ready'));
+    await user.click(screen.getByText(':29'));
 
     expect(onLineJump).toHaveBeenNthCalledWith(1, 17);
     expect(onLineJump).toHaveBeenNthCalledWith(2, 29);
