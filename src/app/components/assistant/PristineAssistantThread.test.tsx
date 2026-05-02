@@ -98,8 +98,23 @@ vi.mock('@assistant-ui/react', async () => {
     ),
     ActionBarPrimitive: {
       Root,
-      Copy: ({ children }: { children?: ReactNode }) => <button type="button">{children}</button>,
-      Reload: ({ children }: { children?: ReactNode }) => <button type="button">{children}</button>,
+      Copy: ({ children, ...props }: { children?: ReactNode; className?: string; 'aria-label'?: string }) => <button type="button" {...props}>{children}</button>,
+      Reload: ({ children, ...props }: { children?: ReactNode; className?: string; 'aria-label'?: string }) => <button type="button" {...props}>{children}</button>,
+    },
+    BranchPickerPrimitive: {
+      Count: () => <span data-testid="branch-picker-count">2</span>,
+      Next: ({ children, ...props }: { children?: ReactNode; className?: string; 'aria-label'?: string }) => <button type="button" {...props}>{children}</button>,
+      Number: () => <span data-testid="branch-picker-number">1</span>,
+      Previous: ({ children, ...props }: { children?: ReactNode; className?: string; 'aria-label'?: string }) => <button type="button" {...props}>{children}</button>,
+      Root: ({ children, className, hideWhenSingleBranch }: { children?: ReactNode; className?: string; hideWhenSingleBranch?: boolean }) => (
+        <div
+          className={className}
+          data-hide-when-single-branch={String(Boolean(hideWhenSingleBranch))}
+          data-testid="branch-picker"
+        >
+          {children}
+        </div>
+      ),
     },
     ComposerPrimitive: {
       AttachmentDropzone: Root,
@@ -315,6 +330,19 @@ describe('PristineAssistantThread', () => {
       messageId: 'assistant-message-1',
       text: 'Selected RTL timing context',
     });
+
+    const assistantContainer = screen.getByTestId('assistant-message-container');
+    expect(assistantContainer).toHaveClass('w-full');
+    expect(assistantContainer).not.toHaveClass('max-w-[92%]');
+    const assistantSurface = screen.getByTestId('assistant-message-surface');
+    expect(assistantSurface).toHaveClass('rounded-md', 'bg-background');
+    expect(assistantSurface).not.toHaveClass('border', 'border-border', 'shadow-xs');
+    expect(screen.getByTestId('user-message-attachments').nextElementSibling).toHaveClass('border', 'border-primary/20');
+    expect(screen.getByTestId('branch-picker')).toHaveAttribute('data-hide-when-single-branch', 'true');
+    expect(screen.getByTestId('branch-picker-number')).toHaveTextContent('1');
+    expect(screen.getByTestId('branch-picker-count')).toHaveTextContent('2');
+    expect(screen.getByRole('button', { name: 'Previous response branch' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Next response branch' })).toBeInTheDocument();
 
     const messageParts = screen.getAllByTestId('message-parts');
     expect(messageParts).toHaveLength(2);

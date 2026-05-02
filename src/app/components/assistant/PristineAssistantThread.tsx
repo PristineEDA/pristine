@@ -1,6 +1,7 @@
 import {
   AuiIf,
   ActionBarPrimitive,
+  BranchPickerPrimitive,
   ComposerPrimitive,
   MessagePrimitive,
   ThreadPrimitive,
@@ -16,6 +17,8 @@ import {
 import {
   ArrowDown,
   ArrowUpIcon,
+  ChevronLeft,
+  ChevronRight,
   Copy,
   FileCode2,
   RotateCcw,
@@ -114,7 +117,8 @@ type ShellCommandToolResult = {
   stderr?: string;
 };
 
-const messageSurfaceClassName = 'rounded-md border border-border bg-background px-3 py-2 shadow-xs';
+const userMessageSurfaceClassName = 'rounded-md border border-border bg-background px-3 py-2 shadow-xs';
+const assistantMessageSurfaceClassName = 'rounded-md bg-background px-3 py-2';
 const actionButtonClassName = 'inline-flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-50';
 
 type TextareaValue = ComponentPropsWithoutRef<'textarea'>['value'];
@@ -387,7 +391,7 @@ function UserMessage() {
     <MessagePrimitive.Root className="flex justify-end px-1 py-2">
       <div className="flex max-w-[88%] flex-col items-end gap-2">
         <UserMessageAttachments />
-        <div className={cn(messageSurfaceClassName, 'border-primary/20 bg-primary text-[12px] leading-relaxed text-primary-foreground')}>
+        <div className={cn(userMessageSurfaceClassName, 'border-primary/20 bg-primary text-[12px] leading-relaxed text-primary-foreground')}>
           <MessagePrimitive.Quote>
             {(quote) => <QuoteBlock {...quote} />}
           </MessagePrimitive.Quote>
@@ -465,12 +469,33 @@ function PristineReasoningGroup({ children, endIndex, startIndex }: ReasoningGro
   );
 }
 
+function AssistantBranchPicker() {
+  return (
+    <BranchPickerPrimitive.Root
+      hideWhenSingleBranch
+      className="ml-auto flex items-center gap-0.5 text-[11px] text-muted-foreground"
+    >
+      <BranchPickerPrimitive.Previous className={actionButtonClassName} aria-label="Previous response branch">
+        <ChevronLeft className="size-3" />
+      </BranchPickerPrimitive.Previous>
+      <span className="tabular-nums">
+        <BranchPickerPrimitive.Number />
+        <span className="px-0.5">/</span>
+        <BranchPickerPrimitive.Count />
+      </span>
+      <BranchPickerPrimitive.Next className={actionButtonClassName} aria-label="Next response branch">
+        <ChevronRight className="size-3" />
+      </BranchPickerPrimitive.Next>
+    </BranchPickerPrimitive.Root>
+  );
+}
+
 function AssistantMessage() {
   return (
     <MessagePrimitive.Root className="group flex px-1 py-2">
-      <div className="flex max-w-[92%] items-start">
+      <div className="flex w-full items-start" data-testid="assistant-message-container">
         <div className="min-w-0 flex-1">
-          <div className={cn(messageSurfaceClassName, 'text-[12px] leading-relaxed')}>
+          <div className={cn(assistantMessageSurfaceClassName, 'text-[12px] leading-relaxed')} data-testid="assistant-message-surface">
             <MessagePrimitive.Parts
               components={{
                 File,
@@ -495,6 +520,7 @@ function AssistantMessage() {
             <ActionBarPrimitive.Reload className={actionButtonClassName} aria-label="Regenerate response">
               <RotateCcw className="size-3" />
             </ActionBarPrimitive.Reload>
+            <AssistantBranchPicker />
           </ActionBarPrimitive.Root>
         </div>
       </div>
