@@ -5,10 +5,11 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '../../ui/r
 export const EXPLORER_LEFT_PANEL_DEFAULT_WIDTH_PX = 240;
 export const EXPLORER_LEFT_PANEL_MIN_WIDTH_PX = 200;
 export const EXPLORER_LEFT_PANEL_MAX_WIDTH_PX = 480;
+export const EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX = 300;
 export const EXPLORER_RIGHT_PANEL_MIN_WIDTH_PX = 260;
 export const EXPLORER_RIGHT_PANEL_MAX_WIDTH_PX = 560;
 
-function clampFixedLeftPanelWidth(width: number, minWidth: number, maxWidth: number) {
+function clampFixedPanelWidth(width: number, minWidth: number, maxWidth: number) {
   return Math.min(Math.max(width, minWidth), maxWidth);
 }
 
@@ -32,9 +33,13 @@ interface CodeWorkspaceShellProps {
   onLeftFixedWidthChange?: React.Dispatch<React.SetStateAction<number>>;
   leftFixedMinWidthPx?: number;
   leftFixedMaxWidthPx?: number;
+  rightFixedWidthPx?: number;
+  onRightFixedWidthChange?: React.Dispatch<React.SetStateAction<number>>;
+  rightFixedMinWidthPx?: number;
+  rightFixedMaxWidthPx?: number;
 }
 
-function FixedLeftPanelResizeHandle({
+function FixedPanelResizeHandle({
   hidden,
   onDelta,
   testId,
@@ -111,31 +116,45 @@ export function CodeWorkspaceShell({
   onLeftFixedWidthChange,
   leftFixedMinWidthPx,
   leftFixedMaxWidthPx,
+  rightFixedWidthPx,
+  onRightFixedWidthChange,
+  rightFixedMinWidthPx,
+  rightFixedMaxWidthPx,
 }: CodeWorkspaceShellProps) {
   const hasFixedLeftPanel = typeof leftFixedWidthPx === 'number' && typeof onLeftFixedWidthChange === 'function';
+  const hasFixedRightPanel = typeof rightFixedWidthPx === 'number' && typeof onRightFixedWidthChange === 'function';
   const fixedLeftMinWidth = leftFixedMinWidthPx ?? EXPLORER_LEFT_PANEL_MIN_WIDTH_PX;
   const fixedLeftMaxWidth = leftFixedMaxWidthPx ?? EXPLORER_LEFT_PANEL_MAX_WIDTH_PX;
+  const fixedRightMinWidth = rightFixedMinWidthPx ?? EXPLORER_RIGHT_PANEL_MIN_WIDTH_PX;
+  const fixedRightMaxWidth = rightFixedMaxWidthPx ?? EXPLORER_RIGHT_PANEL_MAX_WIDTH_PX;
   const clampedLeftFixedWidth = hasFixedLeftPanel
-    ? clampFixedLeftPanelWidth(leftFixedWidthPx, fixedLeftMinWidth, fixedLeftMaxWidth)
+    ? clampFixedPanelWidth(leftFixedWidthPx, fixedLeftMinWidth, fixedLeftMaxWidth)
     : null;
+  const clampedRightFixedWidth = hasFixedRightPanel
+    ? clampFixedPanelWidth(rightFixedWidthPx, fixedRightMinWidth, fixedRightMaxWidth)
+    : null;
+
+  const centerPanelContent = (
+    <div className="relative h-full">
+      {overlay}
+
+      <ResizablePanelGroup orientation="vertical">
+        <ResizablePanel defaultSize={60} minSize={25} id={topPanelId}>
+          {topContent}
+        </ResizablePanel>
+
+        <ResizableHandle hidden={!showBottomPanel} />
+        <ResizablePanel defaultSize={40} minSize={15} maxSize={60} id={bottomPanelId} collapsed={!showBottomPanel}>
+          {showBottomPanel ? bottomContent : <div className="h-full" />}
+        </ResizablePanel>
+      </ResizablePanelGroup>
+    </div>
+  );
 
   const centerAndRightPanels = (
     <>
       <ResizablePanel defaultSize={55} minSize={30} id={centerPanelId}>
-        <div className="relative h-full">
-          {overlay}
-
-          <ResizablePanelGroup orientation="vertical">
-            <ResizablePanel defaultSize={60} minSize={25} id={topPanelId}>
-              {topContent}
-            </ResizablePanel>
-
-            <ResizableHandle hidden={!showBottomPanel} />
-            <ResizablePanel defaultSize={40} minSize={15} maxSize={60} id={bottomPanelId} collapsed={!showBottomPanel}>
-              {showBottomPanel ? bottomContent : <div className="h-full" />}
-            </ResizablePanel>
-          </ResizablePanelGroup>
-        </div>
+        {centerPanelContent}
       </ResizablePanel>
 
       <ResizableHandle hidden={!showRightPanel} />
@@ -177,11 +196,11 @@ export function CodeWorkspaceShell({
             </div>
           )}
 
-          <FixedLeftPanelResizeHandle
+          <FixedPanelResizeHandle
             hidden={!showLeftPanel}
             testId={`panel-handle-${leftPanelId}`}
             onDelta={(deltaPixels) => {
-              onLeftFixedWidthChange?.((currentWidth) => clampFixedLeftPanelWidth(
+              onLeftFixedWidthChange?.((currentWidth) => clampFixedPanelWidth(
                 currentWidth + deltaPixels,
                 fixedLeftMinWidth,
                 fixedLeftMaxWidth,
@@ -189,11 +208,54 @@ export function CodeWorkspaceShell({
             }}
           />
 
-          <div className="flex-1 min-w-0">
-            <ResizablePanelGroup orientation="horizontal">
-              {centerAndRightPanels}
-            </ResizablePanelGroup>
-          </div>
+          {hasFixedRightPanel ? (
+            <>
+              <div className="flex-1 min-w-0">
+                <ResizablePanelGroup orientation="horizontal">
+                  <ResizablePanel defaultSize={100} minSize={30} id={centerPanelId}>
+                    {centerPanelContent}
+                  </ResizablePanel>
+                </ResizablePanelGroup>
+              </div>
+
+              <FixedPanelResizeHandle
+                hidden={!showRightPanel}
+                testId={`panel-handle-${rightPanelId}`}
+                onDelta={(deltaPixels) => {
+                  onRightFixedWidthChange?.((currentWidth) => clampFixedPanelWidth(
+                    currentWidth - deltaPixels,
+                    fixedRightMinWidth,
+                    fixedRightMaxWidth,
+                  ));
+                }}
+              />
+
+              {showRightPanel && clampedRightFixedWidth !== null && (
+                <div
+                  data-slot="resizable-panel"
+                  data-testid={`panel-${rightPanelId}`}
+                  data-panel-id={rightPanelId}
+                  className="min-h-0 shrink-0 overflow-hidden"
+                  style={{
+                    width: `${clampedRightFixedWidth}px`,
+                    minWidth: `${clampedRightFixedWidth}px`,
+                    maxWidth: `${clampedRightFixedWidth}px`,
+                    flexBasis: `${clampedRightFixedWidth}px`,
+                    flexGrow: 0,
+                    flexShrink: 0,
+                  }}
+                >
+                  {rightContent}
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="flex-1 min-w-0">
+              <ResizablePanelGroup orientation="horizontal">
+                {centerAndRightPanels}
+              </ResizablePanelGroup>
+            </div>
+          )}
         </div>
       ) : (
         <div className="flex-1 min-w-0">

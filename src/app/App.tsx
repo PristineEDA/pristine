@@ -7,7 +7,11 @@ import { LeftSidePanel } from './components/code/explorer/LeftSidePanel';
 import { EditorSplitLayout } from './components/code/shared/EditorSplitLayout';
 import { RightSidePanel } from './components/code/explorer/RightSidePanel';
 import { BottomPanel } from './components/code/explorer/BottomPanel';
-import { CodeWorkspaceShell, EXPLORER_LEFT_PANEL_DEFAULT_WIDTH_PX } from './components/code/shared/CodeWorkspaceShell';
+import {
+  CodeWorkspaceShell,
+  EXPLORER_LEFT_PANEL_DEFAULT_WIDTH_PX,
+  EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX,
+} from './components/code/shared/CodeWorkspaceShell';
 import { AppStatusBar } from './components/code/shared/statusBars/AppStatusBar';
 import { QuickOpenPalette } from './components/code/shared/QuickOpenPalette';
 import { isMonacoTextInputFocused } from './editor/focusEditor';
@@ -95,6 +99,7 @@ function AppLayout() {
   } = useWorkspaceFiles();
   const { openUnsavedChangesDialog } = useWorkspaceDialogs();
   const [explorerLeftPanelWidthPx, setExplorerLeftPanelWidthPx] = useState(EXPLORER_LEFT_PANEL_DEFAULT_WIDTH_PX);
+  const [explorerRightPanelWidthPx, setExplorerRightPanelWidthPx] = useState(EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX);
   const explorerBottomPanelLayoutVersion = `${showLeftPanel}:${showRightPanel}:${showBottomPanel}:${explorerLeftPanelWidthPx}`;
 
   const handleActivityItemSelect = (nextView: string) => {
@@ -251,6 +256,8 @@ function AppLayout() {
     overlay,
     leftFixedWidthPx,
     onLeftFixedWidthChange,
+    rightFixedWidthPx,
+    onRightFixedWidthChange,
   }: {
     shellTestId?: string;
     leftPanelId: string;
@@ -265,6 +272,8 @@ function AppLayout() {
     overlay?: React.ReactNode;
     leftFixedWidthPx?: number;
     onLeftFixedWidthChange?: React.Dispatch<React.SetStateAction<number>>;
+    rightFixedWidthPx?: number;
+    onRightFixedWidthChange?: React.Dispatch<React.SetStateAction<number>>;
   }) => (
     <CodeWorkspaceShell
       shellTestId={shellTestId}
@@ -284,6 +293,8 @@ function AppLayout() {
       rightContent={rightContent}
       leftFixedWidthPx={leftFixedWidthPx}
       onLeftFixedWidthChange={onLeftFixedWidthChange}
+      rightFixedWidthPx={rightFixedWidthPx}
+      onRightFixedWidthChange={onRightFixedWidthChange}
     />
   );
 
@@ -296,6 +307,8 @@ function AppLayout() {
       rightPanelId: 'right-panel',
       leftFixedWidthPx: explorerLeftPanelWidthPx,
       onLeftFixedWidthChange: setExplorerLeftPanelWidthPx,
+      rightFixedWidthPx: explorerRightPanelWidthPx,
+      onRightFixedWidthChange: setExplorerRightPanelWidthPx,
       leftContent: (
         <LeftSidePanel
           activeFileId={activeTabId}

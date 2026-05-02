@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
+import { EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX } from './components/code/shared/CodeWorkspaceShell';
 import { resetWorkspaceGitStatusStoreForTests } from './git/workspaceGitStatus';
 
 let renderRealActivityBar = false;
@@ -260,7 +261,7 @@ describe('App', () => {
 
     await clickText('toggle-right-panel');
     expect(screen.getByTestId('menu-right-state')).toHaveTextContent('true');
-    expect(screen.getByTestId('panel-right-panel')).toHaveAttribute('data-default-size', '22');
+    expect(screen.getByTestId('panel-right-panel')).toHaveStyle({ width: `${EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX}px` });
     expect(screen.getByTestId('right-panel')).toBeInTheDocument();
 
     await clickText('right-open');
@@ -532,6 +533,53 @@ describe('App', () => {
     expect(screen.getByTestId('activity-view')).toHaveTextContent('explorer');
     expect(screen.getByTestId('editor-active-tab')).toHaveTextContent('rtl/core/alu.v');
     expect(screen.queryByTestId('left-panel')).not.toBeInTheDocument();
+  });
+
+  it('keeps explorer side widths independent when toggling either side panel', async () => {
+    render(<App />);
+
+    await clickText('toggle-left-panel');
+    await clickText('toggle-right-panel');
+
+    expect(screen.getByTestId('panel-left-panel')).toHaveStyle({ width: '240px' });
+    expect(screen.getByTestId('panel-right-panel')).toHaveStyle({ width: `${EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX}px` });
+
+    const leftHandle = screen.getByTestId('panel-handle-left-panel');
+    fireEvent.pointerDown(leftHandle, { clientX: 240, pointerId: 1 });
+    fireEvent.pointerMove(leftHandle, { clientX: 320, pointerId: 1 });
+    fireEvent.pointerUp(leftHandle, { clientX: 320, pointerId: 1 });
+
+    const rightHandle = screen.getByTestId('panel-handle-right-panel');
+    fireEvent.pointerDown(rightHandle, { clientX: 900, pointerId: 2 });
+    fireEvent.pointerMove(rightHandle, { clientX: 840, pointerId: 2 });
+    fireEvent.pointerUp(rightHandle, { clientX: 840, pointerId: 2 });
+
+    expect(screen.getByTestId('panel-left-panel')).toHaveStyle({ width: '320px' });
+    expect(screen.getByTestId('panel-right-panel')).toHaveStyle({ width: '360px' });
+
+    await clickText('toggle-left-panel');
+
+    expect(screen.queryByTestId('panel-left-panel')).not.toBeInTheDocument();
+    expect(screen.getByTestId('panel-right-panel')).toHaveStyle({ width: '360px' });
+
+    await clickText('toggle-left-panel');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('panel-left-panel')).toHaveStyle({ width: '320px' });
+    });
+    expect(screen.getByTestId('panel-right-panel')).toHaveStyle({ width: '360px' });
+
+    await clickText('toggle-right-panel');
+
+    expect(screen.queryByTestId('panel-right-panel')).not.toBeInTheDocument();
+    expect(screen.getByTestId('panel-left-panel')).toHaveStyle({ width: '320px' });
+
+    await clickText('toggle-right-panel');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('panel-right-panel')).toHaveStyle({ width: '360px' });
+    });
+    expect(screen.getByTestId('panel-left-panel')).toHaveStyle({ width: '320px' });
   });
 
   it('restores the previous editor file and cursor snapshot when quick open closes without a selection', async () => {
