@@ -8,6 +8,7 @@
   "scripts": {
     "prepare:assets": "node scripts/prepare-assets.mjs",
     "prepare:slang-server": "node scripts/prepare-slang-server.mjs",
+    "verify:node-pty-binary": "node scripts/verify-node-pty-binary.mjs",
     "build:app": "pnpm run prepare:assets && pnpm run prepare:slang-server && vite build",
     "predev": "pnpm run prepare:assets && pnpm run prepare:slang-server",
     "dev": "vite",
@@ -19,7 +20,7 @@
     "build": "pnpm run build:app",
     "preview": "pnpm run build:app && electron .",
     "package": "pnpm run build:app && electron-builder --config electron-builder.yml",
-    "package:win": "pnpm run build:app && electron-builder --win --config electron-builder.yml",
+    "package:win": "pnpm run build:app && pnpm run verify:node-pty-binary -- --platform win32 --arch x64 && electron-builder --win --config electron-builder.win.yml",
     "package:linux": "pnpm run build:app && electron-builder --linux --config electron-builder.yml",
     "package:mac": "pnpm run build:app && electron-builder --mac --config electron-builder.yml",
     "typecheck": "tsc --noEmit -p tsconfig.typecheck.json && tsc --noEmit -p tsconfig.node.json",
@@ -29,7 +30,7 @@
     "test:e2e": "playwright test --max-failures=1",
     "test:whiteboard:perf": "playwright test --config playwright.perf.config.ts e2e/whiteboard.perf.spec.ts",
     "package:linux:x64": "pnpm run build:app && electron-builder --linux AppImage deb --x64 --config electron-builder.yml",
-    "package:win:x64": "pnpm run build:app && electron-builder --win nsis portable --x64 --config electron-builder.yml",
+    "package:win:x64": "pnpm run build:app && pnpm run verify:node-pty-binary -- --platform win32 --arch x64 && electron-builder --win nsis portable --x64 --config electron-builder.win.yml",
     "package:mac:x64": "pnpm run build:app && electron-builder --mac dmg --x64 --config electron-builder.yml",
     "package:mac:arm64": "pnpm run build:app && electron-builder --mac dmg --arm64 --config electron-builder.yml"
   },
