@@ -277,12 +277,14 @@ describe('CodeWorkspaceShell', () => {
 
     fireEvent.click(screen.getByText('toggle-right'));
 
-    expect(screen.queryByTestId('panel-right')).not.toBeInTheDocument();
+    expect(screen.getByTestId('panel-right')).toHaveStyle({ width: '0px' });
+    expect(screen.getByTestId('panel-right')).toHaveAttribute('aria-hidden', 'true');
     expect(screen.getByTestId('left-width-value')).toHaveTextContent('340');
 
     fireEvent.click(screen.getByText('toggle-right'));
 
     expect(screen.getByTestId('panel-right')).toHaveStyle({ width: '360px' });
+    expect(screen.getByTestId('panel-right')).toHaveAttribute('aria-hidden', 'false');
     expect(screen.getByTestId('left-width-value')).toHaveTextContent('340');
 
     const rightHandleAfterReopen = screen.getByTestId('panel-handle-right');
@@ -299,5 +301,67 @@ describe('CodeWorkspaceShell', () => {
 
     expect(screen.getByTestId('right-width-value')).toHaveTextContent(String(EXPLORER_RIGHT_PANEL_MAX_WIDTH_PX));
     expect(screen.getByTestId('left-width-value')).toHaveTextContent('340');
+  });
+
+  it('keeps a previously opened fixed right panel mounted when hidden and shown again', () => {
+    let rightPanelMountCount = 0;
+
+    function StatefulRightPanelContent() {
+      const [instanceId] = useState(() => {
+        rightPanelMountCount += 1;
+        return rightPanelMountCount;
+      });
+
+      return <div data-testid="stateful-right-panel" data-instance-id={String(instanceId)}>Inspector</div>;
+    }
+
+    function FixedRightMountHarness() {
+      const [leftWidth] = useState(280);
+      const [showRight, setShowRight] = useState(true);
+
+      return (
+        <>
+          <button type="button" onClick={() => setShowRight((current) => !current)}>toggle-right</button>
+          <CodeWorkspaceShell
+            activityBar={<div>Activity</div>}
+            showLeftPanel={false}
+            showBottomPanel={false}
+            showRightPanel={showRight}
+            leftPanelId="left"
+            centerPanelId="center"
+            topPanelId="top"
+            bottomPanelId="bottom"
+            rightPanelId="right"
+            leftFixedWidthPx={leftWidth}
+            onLeftFixedWidthChange={() => leftWidth}
+            rightFixedWidthPx={EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX}
+            onRightFixedWidthChange={() => EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX}
+            leftContent={<div>Explorer</div>}
+            topContent={<div>Editor</div>}
+            bottomContent={<div>Terminal</div>}
+            rightContent={<StatefulRightPanelContent />}
+          />
+        </>
+      );
+    }
+
+    render(<FixedRightMountHarness />);
+
+    expect(screen.getByTestId('stateful-right-panel')).toHaveAttribute('data-instance-id', '1');
+    expect(rightPanelMountCount).toBe(1);
+
+    fireEvent.click(screen.getByText('toggle-right'));
+
+    expect(screen.getByTestId('panel-right')).toHaveStyle({ width: '0px' });
+    expect(screen.getByTestId('panel-right')).toHaveAttribute('aria-hidden', 'true');
+    expect(screen.getByTestId('stateful-right-panel')).toHaveAttribute('data-instance-id', '1');
+    expect(rightPanelMountCount).toBe(1);
+
+    fireEvent.click(screen.getByText('toggle-right'));
+
+    expect(screen.getByTestId('panel-right')).toHaveStyle({ width: '300px' });
+    expect(screen.getByTestId('panel-right')).toHaveAttribute('aria-hidden', 'false');
+    expect(screen.getByTestId('stateful-right-panel')).toHaveAttribute('data-instance-id', '1');
+    expect(rightPanelMountCount).toBe(1);
   });
 });

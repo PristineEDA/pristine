@@ -397,7 +397,8 @@ describe('App', () => {
 
     fireEvent.keyDown(document, { key: 'b', ctrlKey: true, altKey: true });
     expect(screen.getByTestId('menu-right-state')).toHaveTextContent('false');
-    expect(screen.queryByTestId('right-panel')).not.toBeInTheDocument();
+    expect(screen.getByTestId('panel-right-panel')).toHaveStyle({ width: '0px' });
+    expect(screen.getByTestId('panel-right-panel')).toHaveAttribute('aria-hidden', 'true');
   });
 
   it('remembers panel visibility per code subview and disables layout interactions on unsupported pages', async () => {
@@ -571,7 +572,8 @@ describe('App', () => {
 
     await clickText('toggle-right-panel');
 
-    expect(screen.queryByTestId('panel-right-panel')).not.toBeInTheDocument();
+    expect(screen.getByTestId('panel-right-panel')).toHaveStyle({ width: '0px' });
+    expect(screen.getByTestId('panel-right-panel')).toHaveAttribute('aria-hidden', 'true');
     expect(screen.getByTestId('panel-left-panel')).toHaveStyle({ width: '320px' });
 
     await clickText('toggle-right-panel');
