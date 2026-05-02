@@ -52,6 +52,7 @@ import {
   ComposerAttachments,
   UserMessageAttachments,
 } from '@/app/components/assistant-ui/attachment';
+import { ComposerModeSelector } from '@/app/components/assistant-ui/composer-mode-selector';
 import { ContextDisplay } from '@/app/components/assistant-ui/context-display';
 import { ComposerTriggerPopover } from '@/app/components/assistant-ui/composer-trigger-popover';
 import { DirectiveText } from '@/app/components/assistant-ui/directive-text';
@@ -593,7 +594,7 @@ function AssistantMessage() {
           <ActionBarPrimitive.Root
             autohide="not-last"
             hideWhenRunning
-            className="absolute left-0 top-full z-10 mt-1 flex min-w-40 items-center opacity-0 transition-opacity group-hover:opacity-100 data-[floating=true]:opacity-100"
+            className="absolute left-0 top-full z-10 flex min-w-40 items-center opacity-0 transition-opacity group-hover:opacity-100 data-[floating=true]:opacity-100"
             data-testid="assistant-message-action"
           >
             <ActionBarPrimitive.Reload className={actionButtonClassName} aria-label="Regenerate response">
@@ -651,6 +652,11 @@ function Composer() {
           </ComposerPrimitive.Input>
           <div className="flex min-h-8 items-center justify-between gap-2 border-t border-border/60 px-2 py-1">
             <div className="flex min-w-0 items-center gap-1">
+              <ComposerModeSelector
+                defaultValue="agent"
+                variant="ghost"
+                size="sm"
+              />
               <ModelSelector
                 providers={pristineModelProviders}
                 defaultValue={PRISTINE_DEFAULT_MODEL_ID}

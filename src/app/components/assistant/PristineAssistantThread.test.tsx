@@ -24,6 +24,7 @@ import { PristineAssistantThread } from './PristineAssistantThread';
 
 const mocks = vi.hoisted(() => ({
   composerTriggerPopover: vi.fn(),
+  composerModeSelector: vi.fn(),
   composerInputChange: vi.fn(),
   composerInputCompositionEnd: vi.fn(),
   composerInputCompositionStart: vi.fn(),
@@ -255,6 +256,24 @@ vi.mock('@/app/components/assistant-ui/context-display', () => ({
   },
 }));
 
+vi.mock('@/app/components/assistant-ui/composer-mode-selector', () => ({
+  ComposerModeSelector: (props: {
+    defaultValue?: string;
+    size?: string;
+    variant?: string;
+  }) => {
+    mocks.composerModeSelector(props);
+    return (
+      <div
+        data-testid="composer-mode-selector"
+        data-default-value={props.defaultValue}
+        data-size={props.size}
+        data-variant={props.variant}
+      />
+    );
+  },
+}));
+
 vi.mock('@/app/components/assistant-ui/model-selector', () => ({
   ModelSelector: (props: {
     defaultValue?: string;
@@ -296,6 +315,7 @@ vi.mock('@/app/components/assistant-ui/tooltip-icon-button', () => ({
 
 describe('PristineAssistantThread', () => {
   beforeEach(() => {
+    mocks.composerModeSelector.mockClear();
     mocks.composerInputChange.mockClear();
     mocks.composerInputCompositionEnd.mockClear();
     mocks.composerInputCompositionStart.mockClear();
@@ -342,6 +362,10 @@ describe('PristineAssistantThread', () => {
     expect(screen.getByTestId('thread-messages')).toHaveAttribute('data-has-assistant', 'true');
     const viewport = screen.getByTestId('thread-messages').parentElement;
     expect(viewport).toHaveClass('pristine-assistant-scrollbar', 'overflow-y-auto');
+    expect(screen.getByTestId('composer-mode-selector')).toHaveAttribute('data-size', 'sm');
+    expect(screen.getByTestId('composer-mode-selector')).toHaveAttribute('data-variant', 'ghost');
+    expect(screen.getByTestId('composer-mode-selector')).toHaveAttribute('data-default-value', 'agent');
+    expect(screen.getByTestId('composer-mode-selector').nextElementSibling).toBe(screen.getByTestId('model-selector'));
     expect(screen.getByTestId('model-selector')).toHaveAttribute('data-size', 'sm');
     expect(screen.getByTestId('model-selector')).toHaveAttribute('data-variant', 'ghost');
     expect(screen.getByTestId('model-selector')).toHaveAttribute('data-default-value', PRISTINE_DEFAULT_MODEL_ID);
