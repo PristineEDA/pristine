@@ -75,8 +75,8 @@ function getComponentName(component: unknown) {
 
 vi.mock('@assistant-ui/react', async () => {
   const { cloneElement, isValidElement } = await vi.importActual<typeof import('react')>('react');
-  const Root = ({ children, className }: { children?: ReactNode; className?: string }) => (
-    <div className={className}>{children}</div>
+  const Root = ({ children, className, ...props }: { children?: ReactNode; className?: string; [key: string]: unknown }) => (
+    <div className={className} {...props}>{children}</div>
   );
 
   mocks.makeAssistantToolUI.mockImplementation(({ toolName }: { toolName: string }) => {
@@ -99,6 +99,7 @@ vi.mock('@assistant-ui/react', async () => {
     ActionBarPrimitive: {
       Root,
       Copy: ({ children, ...props }: { children?: ReactNode; className?: string; 'aria-label'?: string }) => <button type="button" {...props}>{children}</button>,
+      Edit: ({ children, ...props }: { children?: ReactNode; className?: string; 'aria-label'?: string }) => <button type="button" {...props}>{children}</button>,
       Reload: ({ children, ...props }: { children?: ReactNode; className?: string; 'aria-label'?: string }) => <button type="button" {...props}>{children}</button>,
     },
     BranchPickerPrimitive: {
@@ -106,11 +107,13 @@ vi.mock('@assistant-ui/react', async () => {
       Next: ({ children, ...props }: { children?: ReactNode; className?: string; 'aria-label'?: string }) => <button type="button" {...props}>{children}</button>,
       Number: () => <span data-testid="branch-picker-number">1</span>,
       Previous: ({ children, ...props }: { children?: ReactNode; className?: string; 'aria-label'?: string }) => <button type="button" {...props}>{children}</button>,
-      Root: ({ children, className, hideWhenSingleBranch }: { children?: ReactNode; className?: string; hideWhenSingleBranch?: boolean }) => (
+      Root: ({ 'aria-label': ariaLabel, children, className, hideWhenSingleBranch }: { 'aria-label'?: string; children?: ReactNode; className?: string; hideWhenSingleBranch?: boolean }) => (
         <div
+          aria-label={ariaLabel}
           className={className}
           data-hide-when-single-branch={String(Boolean(hideWhenSingleBranch))}
           data-testid="branch-picker"
+          role="group"
         >
           {children}
         </div>
@@ -338,11 +341,21 @@ describe('PristineAssistantThread', () => {
     expect(assistantSurface).toHaveClass('rounded-md', 'bg-background');
     expect(assistantSurface).not.toHaveClass('border', 'border-border', 'shadow-xs');
     expect(screen.getByTestId('user-message-attachments').nextElementSibling).toHaveClass('border', 'border-primary/20');
-    expect(screen.getByTestId('branch-picker')).toHaveAttribute('data-hide-when-single-branch', 'true');
-    expect(screen.getByTestId('branch-picker-number')).toHaveTextContent('1');
-    expect(screen.getByTestId('branch-picker-count')).toHaveTextContent('2');
-    expect(screen.getByRole('button', { name: 'Previous response branch' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Next response branch' })).toBeInTheDocument();
+    const branchPickers = screen.getAllByTestId('branch-picker');
+    expect(branchPickers).toHaveLength(2);
+    for (const branchPicker of branchPickers) {
+      expect(branchPicker).toHaveAttribute('data-hide-when-single-branch', 'true');
+    }
+    expect(screen.getByRole('group', { name: 'user message branch' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'assistant response branch' })).toBeInTheDocument();
+    expect(screen.getAllByTestId('branch-picker-number')).toHaveLength(2);
+    expect(screen.getAllByTestId('branch-picker-count')).toHaveLength(2);
+    expect(screen.getByTestId('user-message-edit-action')).toHaveClass('mt-1', 'shrink-0');
+    expect(screen.getByRole('button', { name: 'Edit message' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Previous user message branch' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Next user message branch' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Previous assistant response branch' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Next assistant response branch' })).toBeInTheDocument();
 
     const messageParts = screen.getAllByTestId('message-parts');
     expect(messageParts).toHaveLength(2);

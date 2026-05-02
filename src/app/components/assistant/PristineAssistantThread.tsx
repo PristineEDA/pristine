@@ -21,6 +21,7 @@ import {
   ChevronRight,
   Copy,
   FileCode2,
+  Pencil,
   RotateCcw,
   Shell,
   Sparkles,
@@ -386,16 +387,57 @@ function ThreadWelcome() {
   );
 }
 
+function MessageBranchPicker({ label }: { label: string }) {
+  return (
+    <BranchPickerPrimitive.Root
+      hideWhenSingleBranch
+      className="ml-auto flex items-center gap-0.5 text-[11px] text-muted-foreground"
+      aria-label={label}
+    >
+      <BranchPickerPrimitive.Previous className={actionButtonClassName} aria-label={`Previous ${label}`}>
+        <ChevronLeft className="size-3" />
+      </BranchPickerPrimitive.Previous>
+      <span className="tabular-nums">
+        <BranchPickerPrimitive.Number />
+        <span className="px-0.5">/</span>
+        <BranchPickerPrimitive.Count />
+      </span>
+      <BranchPickerPrimitive.Next className={actionButtonClassName} aria-label={`Next ${label}`}>
+        <ChevronRight className="size-3" />
+      </BranchPickerPrimitive.Next>
+    </BranchPickerPrimitive.Root>
+  );
+}
+
 function UserMessage() {
   return (
-    <MessagePrimitive.Root className="flex justify-end px-1 py-2">
-      <div className="flex max-w-[88%] flex-col items-end gap-2">
-        <UserMessageAttachments />
-        <div className={cn(userMessageSurfaceClassName, 'border-primary/20 bg-primary text-[12px] leading-relaxed text-primary-foreground')}>
-          <MessagePrimitive.Quote>
-            {(quote) => <QuoteBlock {...quote} />}
-          </MessagePrimitive.Quote>
-          <MessagePrimitive.Parts components={{ File, Image: PristineMessageImage, Text: DirectiveText }} />
+    <MessagePrimitive.Root className="group flex justify-end px-1 py-2">
+      <div className="flex max-w-[88%] items-start gap-1">
+        <ActionBarPrimitive.Root
+          autohide="not-last"
+          hideWhenRunning
+          className="mt-1 flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 data-[floating=true]:opacity-100"
+          data-testid="user-message-edit-action"
+        >
+          <ActionBarPrimitive.Edit className={actionButtonClassName} aria-label="Edit message">
+            <Pencil className="size-3" />
+          </ActionBarPrimitive.Edit>
+        </ActionBarPrimitive.Root>
+        <div className="flex min-w-0 flex-1 flex-col items-end gap-2">
+          <UserMessageAttachments />
+          <div className={cn(userMessageSurfaceClassName, 'border-primary/20 bg-primary text-[12px] leading-relaxed text-primary-foreground')}>
+            <MessagePrimitive.Quote>
+              {(quote) => <QuoteBlock {...quote} />}
+            </MessagePrimitive.Quote>
+            <MessagePrimitive.Parts components={{ File, Image: PristineMessageImage, Text: DirectiveText }} />
+          </div>
+          <ActionBarPrimitive.Root
+            autohide="not-last"
+            hideWhenRunning
+            className="flex w-full items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 data-[floating=true]:opacity-100"
+          >
+            <MessageBranchPicker label="user message branch" />
+          </ActionBarPrimitive.Root>
         </div>
       </div>
     </MessagePrimitive.Root>
@@ -469,27 +511,6 @@ function PristineReasoningGroup({ children, endIndex, startIndex }: ReasoningGro
   );
 }
 
-function AssistantBranchPicker() {
-  return (
-    <BranchPickerPrimitive.Root
-      hideWhenSingleBranch
-      className="ml-auto flex items-center gap-0.5 text-[11px] text-muted-foreground"
-    >
-      <BranchPickerPrimitive.Previous className={actionButtonClassName} aria-label="Previous response branch">
-        <ChevronLeft className="size-3" />
-      </BranchPickerPrimitive.Previous>
-      <span className="tabular-nums">
-        <BranchPickerPrimitive.Number />
-        <span className="px-0.5">/</span>
-        <BranchPickerPrimitive.Count />
-      </span>
-      <BranchPickerPrimitive.Next className={actionButtonClassName} aria-label="Next response branch">
-        <ChevronRight className="size-3" />
-      </BranchPickerPrimitive.Next>
-    </BranchPickerPrimitive.Root>
-  );
-}
-
 function AssistantMessage() {
   return (
     <MessagePrimitive.Root className="group flex px-1 py-2">
@@ -520,7 +541,7 @@ function AssistantMessage() {
             <ActionBarPrimitive.Reload className={actionButtonClassName} aria-label="Regenerate response">
               <RotateCcw className="size-3" />
             </ActionBarPrimitive.Reload>
-            <AssistantBranchPicker />
+            <MessageBranchPicker label="assistant response branch" />
           </ActionBarPrimitive.Root>
         </div>
       </div>
