@@ -1,9 +1,14 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SparklesIcon } from 'lucide-react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ModelSelector, findModelSelection, getFirstModelId } from './model-selector';
+import {
+  ModelSelector,
+  filterProvidersByQuery,
+  findModelSelection,
+  getFirstModelId,
+} from './model-selector';
 import type { ModelProviderOption } from './model-selector';
 
 const mocks = vi.hoisted(() => ({
@@ -86,7 +91,7 @@ describe('ModelSelector', () => {
     expect(trigger).toHaveAttribute('data-variant', 'ghost');
     expect(trigger).toHaveAttribute('data-size', 'sm');
     expect(trigger).toHaveTextContent(/^OpenRouter Free$/);
-    expect(screen.queryByTestId('openrouter-provider-icon')).not.toBeInTheDocument();
+    expect(within(trigger).getByTestId('openrouter-provider-icon')).toBeInTheDocument();
     expect(trigger.querySelector('.text-muted-foreground')).toBeNull();
 
     await waitFor(() => {
@@ -98,14 +103,19 @@ describe('ModelSelector', () => {
 
     await user.click(trigger);
 
+    expect(
+      screen.getByRole('textbox', { name: 'Search providers' }),
+    ).toHaveAttribute('placeholder', 'Search providers...');
+
     const providerTrigger = getClosestSlot(
-      screen.getByRole('menuitem', { name: /OpenRouter\s*\(2\)/ }),
+      screen.getByRole('menuitem', { name: /OpenRouter\s*2/ }),
       'model-selector-provider',
     );
-    expect(providerTrigger).toHaveTextContent('OpenRouter (2)');
+    expect(providerTrigger).toHaveTextContent('OpenRouter');
+    expect(providerTrigger).toHaveTextContent('2');
     expect(providerTrigger).toHaveClass('text-[12px]');
-    expect(screen.queryByTestId('openrouter-provider-icon')).not.toBeInTheDocument();
-    expect(getClosestSlot(providerTrigger, 'model-selector-content')).toHaveClass('!w-24', '!min-w-24');
+    expect(within(providerTrigger).getByTestId('openrouter-provider-icon')).toBeInTheDocument();
+    expect(getClosestSlot(providerTrigger, 'model-selector-content')).toHaveClass('w-72', 'min-w-72');
 
     await user.hover(providerTrigger);
     const nextModel = await screen.findByText('openai/gpt-4.1-mini');
@@ -128,8 +138,54 @@ describe('ModelSelector', () => {
     });
   });
 
+  it('filters providers from the search field while preserving submenu selection', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <ModelSelector
+        providers={providers}
+        defaultValue="openrouter/openrouter/free"
+        variant="ghost"
+        size="sm"
+      />,
+    );
+
+    const trigger = screen.getByRole('button');
+    await waitFor(() => {
+      expect(mocks.register).toHaveBeenCalledTimes(1);
+    });
+
+    await user.click(trigger);
+    await user.type(screen.getByRole('textbox', { name: 'Search providers' }), 'anthropic');
+
+    expect(screen.queryByRole('menuitem', { name: /OpenRouter\s*2/ })).not.toBeInTheDocument();
+
+    const providerTrigger = getClosestSlot(
+      screen.getByRole('menuitem', { name: /Anthropic\s*1/ }),
+      'model-selector-provider',
+    );
+
+    await user.hover(providerTrigger);
+    const modelItem = getClosestSlot(
+      await screen.findByText('claude-sonnet-4.6'),
+      'model-selector-item',
+    );
+
+    fireEvent.click(modelItem);
+
+    await waitFor(() => {
+      expect(trigger).toHaveTextContent(/^Claude Sonnet 4\.6$/);
+      expect(mocks.register).toHaveBeenCalledTimes(2);
+    });
+    expect(mocks.register.mock.calls[1]?.[0].getModelContext()).toEqual({
+      config: { modelName: 'anthropic/claude-sonnet-4.6' },
+    });
+  });
+
   it('keeps model lookup helpers deterministic for provider groups', () => {
     expect(getFirstModelId(providers)).toBe('openrouter/openrouter/free');
+    expect(filterProvidersByQuery(providers, 'anthropic')).toEqual([providers[1]]);
+    expect(filterProvidersByQuery(providers, 'missing')).toEqual([]);
     expect(findModelSelection(providers, 'anthropic/claude-sonnet-4.6')).toMatchObject({
       model: { name: 'Claude Sonnet 4.6' },
       provider: { name: 'Anthropic' },

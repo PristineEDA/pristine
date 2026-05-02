@@ -14,7 +14,9 @@ describe('pristineAssistantModels', () => {
     );
 
     for (const providerId of ['anthropic', 'google', 'mastra', 'openai', 'openrouter']) {
-      expect(providersById.get(providerId)?.models.length).toBeGreaterThan(0);
+      const provider = providersById.get(providerId);
+      expect(provider?.models.length).toBeGreaterThan(0);
+      expect(provider?.icon).toBeTruthy();
     }
 
     const allModelIds = pristineModelProviders.flatMap((provider) =>

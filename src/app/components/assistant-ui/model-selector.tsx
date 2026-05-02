@@ -8,12 +8,12 @@ import {
   useEffect,
   useMemo,
   useState,
-
   type ComponentPropsWithoutRef,
+  type KeyboardEvent,
   type ReactNode,
 } from "react";
 import type { VariantProps } from "class-variance-authority";
-import { CheckIcon, ChevronDownIcon } from "lucide-react";
+import { CheckIcon, ChevronDownIcon, SearchIcon } from "lucide-react";
 import { useAssistantApi } from "@assistant-ui/react";
 import { cn } from "@/lib/utils";
 import {
@@ -25,6 +25,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/app/components/ui/dropdown-menu";
+import { Input } from "@/app/components/ui/input";
 import { selectTriggerVariants } from "@/app/components/assistant-ui/select";
 
 export type ModelOption = {
@@ -112,6 +113,22 @@ export function findModelSelection(
   }
 
   return undefined;
+}
+
+export function filterProvidersByQuery(
+  providers: readonly ModelProviderOption[],
+  query: string,
+) {
+  const normalizedQuery = query.trim().toLowerCase();
+
+  if (!normalizedQuery) {
+    return providers;
+  }
+
+  return providers.filter((provider) =>
+    provider.name.toLowerCase().includes(normalizedQuery) ||
+    provider.id.toLowerCase().includes(normalizedQuery),
+  );
 }
 
 export type ModelSelectorRootProps = {
@@ -218,10 +235,19 @@ function ModelSelectorValue() {
     return <span className="truncate text-muted-foreground">Select model</span>;
   }
 
-  const { model } = selection;
+  const { model, provider } = selection;
 
   return (
     <span className="flex min-w-0 items-center gap-2">
+      {provider.icon && (
+        <span
+          data-slot="model-selector-value-icon"
+          aria-hidden="true"
+          className="flex size-4 shrink-0 items-center justify-center [&_img]:size-full [&_svg]:size-4"
+        >
+          {provider.icon}
+        </span>
+      )}
       <span className="min-w-0 truncate font-normal">{model.name}</span>
     </span>
   );
@@ -238,21 +264,66 @@ function ModelSelectorContent({
   ...props
 }: ModelSelectorContentProps) {
   const { providers } = useModelSelectorContext();
+  const [searchQuery, setSearchQuery] = useState("");
+  const filteredProviders = useMemo(
+    () => filterProvidersByQuery(providers, searchQuery),
+    [providers, searchQuery],
+  );
+
+  const handleSearchKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
+      event.stopPropagation();
+      return;
+    }
+
+    if (event.key === "Escape" && searchQuery) {
+      event.stopPropagation();
+      setSearchQuery("");
+    }
+  };
 
   return (
     <DropdownMenuContent
       data-slot="model-selector-content"
       align={align}
       className={cn(
-        "max-h-[min(28rem,var(--radix-dropdown-menu-content-available-height))] !w-48 !min-w-48 overflow-y-auto",
+        "max-h-[min(28rem,var(--radix-dropdown-menu-content-available-height))] w-72 min-w-72 overflow-y-auto p-0",
         className,
       )}
       {...props}
     >
       {children ??
-        providers.map((provider) => (
-          <ModelSelectorProvider key={provider.id} provider={provider} />
-        ))}
+        <>
+          <div
+            data-slot="model-selector-search"
+            className="sticky top-0 z-10 border-b bg-popover p-2"
+            onClick={(event) => event.stopPropagation()}
+            onPointerDown={(event) => event.stopPropagation()}
+          >
+            <div className="relative">
+              <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                aria-label="Search providers"
+                placeholder="Search providers..."
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                onKeyDown={handleSearchKeyDown}
+                className="h-8 border-0 bg-muted/60 pl-8 pr-2 text-[12px] shadow-none focus-visible:ring-1"
+              />
+            </div>
+          </div>
+          <div data-slot="model-selector-provider-list" className="p-1">
+            {filteredProviders.length > 0 ? (
+              filteredProviders.map((provider) => (
+                <ModelSelectorProvider key={provider.id} provider={provider} />
+              ))
+            ) : (
+              <div className="px-2 py-6 text-center text-[12px] text-muted-foreground">
+                No providers found
+              </div>
+            )}
+          </div>
+        </>}
     </DropdownMenuContent>
   );
 }
@@ -277,8 +348,20 @@ function ModelSelectorProvider({
         className={cn("min-w-0 text-[12px]", className)}
         {...props}
       >
+        {provider.icon && (
+          <span
+            data-slot="model-selector-provider-icon"
+            aria-hidden="true"
+            className="flex size-4 shrink-0 items-center justify-center [&_img]:size-full [&_svg]:size-4"
+          >
+            {provider.icon}
+          </span>
+        )}
         <span className="min-w-0 flex-1 truncate font-normal">
-          {`${provider.name} (${provider.models.length})`}
+          {provider.name}
+        </span>
+        <span className="mr-4 shrink-0 text-[10px] text-muted-foreground">
+          {provider.models.length}
         </span>
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent
