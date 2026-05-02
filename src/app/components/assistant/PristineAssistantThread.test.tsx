@@ -350,7 +350,11 @@ describe('PristineAssistantThread', () => {
     expect(screen.getByRole('group', { name: 'assistant response branch' })).toBeInTheDocument();
     expect(screen.getAllByTestId('branch-picker-number')).toHaveLength(2);
     expect(screen.getAllByTestId('branch-picker-count')).toHaveLength(2);
-    expect(screen.getByTestId('user-message-edit-action')).toHaveClass('mt-1', 'shrink-0');
+    expect(screen.getByTestId('user-message-edit-action')).toHaveClass('absolute', 'right-full', 'top-1', 'mr-1');
+    expect(screen.getByTestId('user-message-edit-action')).not.toHaveClass('shrink-0');
+    expect(screen.getByTestId('user-message-branch-action')).toHaveClass('absolute', 'right-0', 'top-full', 'z-10');
+    expect(screen.getByTestId('user-message-branch-action')).not.toHaveClass('w-full');
+    expect(screen.getByTestId('assistant-message-action')).toHaveClass('absolute', 'left-0', 'top-full', 'z-10');
     expect(screen.getByRole('button', { name: 'Edit message' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Previous user message branch' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Next user message branch' })).toBeInTheDocument();

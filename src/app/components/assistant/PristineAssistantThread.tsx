@@ -412,11 +412,11 @@ function MessageBranchPicker({ label }: { label: string }) {
 function UserMessage() {
   return (
     <MessagePrimitive.Root className="group flex justify-end px-1 py-2">
-      <div className="flex max-w-[88%] items-start gap-1">
+      <div className="relative flex max-w-[88%] items-start">
         <ActionBarPrimitive.Root
           autohide="not-last"
           hideWhenRunning
-          className="mt-1 flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 data-[floating=true]:opacity-100"
+          className="absolute right-full top-1 mr-1 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 data-[floating=true]:opacity-100"
           data-testid="user-message-edit-action"
         >
           <ActionBarPrimitive.Edit className={actionButtonClassName} aria-label="Edit message">
@@ -434,7 +434,8 @@ function UserMessage() {
           <ActionBarPrimitive.Root
             autohide="not-last"
             hideWhenRunning
-            className="flex w-full items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 data-[floating=true]:opacity-100"
+            className="absolute right-0 top-full z-10 mt-1 flex min-w-24 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 data-[floating=true]:opacity-100"
+            data-testid="user-message-branch-action"
           >
             <MessageBranchPicker label="user message branch" />
           </ActionBarPrimitive.Root>
@@ -515,7 +516,7 @@ function AssistantMessage() {
   return (
     <MessagePrimitive.Root className="group flex px-1 py-2">
       <div className="flex w-full items-start" data-testid="assistant-message-container">
-        <div className="min-w-0 flex-1">
+        <div className="relative min-w-0 flex-1">
           <div className={cn(assistantMessageSurfaceClassName, 'text-[12px] leading-relaxed')} data-testid="assistant-message-surface">
             <MessagePrimitive.Parts
               components={{
@@ -533,7 +534,8 @@ function AssistantMessage() {
           <ActionBarPrimitive.Root
             autohide="not-last"
             hideWhenRunning
-            className="mt-1 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 data-[floating=true]:opacity-100"
+            className="absolute left-0 top-full z-10 mt-1 flex min-w-40 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 data-[floating=true]:opacity-100"
+            data-testid="assistant-message-action"
           >
             <ActionBarPrimitive.Copy className={actionButtonClassName} aria-label="Copy response">
               <Copy className="size-3" />
