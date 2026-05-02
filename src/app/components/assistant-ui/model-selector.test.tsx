@@ -23,7 +23,11 @@ const providers = [
     id: 'openrouter',
     name: 'OpenRouter',
     description: 'Gateway models',
-    icon: <SparklesIcon className="size-4" />,
+    icon: (
+      <span data-testid="openrouter-provider-icon">
+        <SparklesIcon className="size-4" />
+      </span>
+    ),
     models: [
       {
         id: 'openrouter/openrouter/free',
@@ -81,8 +85,9 @@ describe('ModelSelector', () => {
     expect(trigger).toHaveAttribute('data-slot', 'model-selector-trigger');
     expect(trigger).toHaveAttribute('data-variant', 'ghost');
     expect(trigger).toHaveAttribute('data-size', 'sm');
-    expect(trigger).toHaveTextContent('OpenRouter Free');
-    expect(trigger).toHaveTextContent('OpenRouter');
+    expect(trigger).toHaveTextContent(/^OpenRouter Free$/);
+    expect(screen.queryByTestId('openrouter-provider-icon')).not.toBeInTheDocument();
+    expect(trigger.querySelector('.text-muted-foreground')).toBeNull();
 
     await waitFor(() => {
       expect(mocks.register).toHaveBeenCalledTimes(1);
@@ -94,20 +99,29 @@ describe('ModelSelector', () => {
     await user.click(trigger);
 
     const providerTrigger = getClosestSlot(
-      screen.getByRole('menuitem', { name: 'OpenRouter2' }),
+      screen.getByRole('menuitem', { name: /OpenRouter\s*\(2\)/ }),
       'model-selector-provider',
     );
-    expect(providerTrigger).toHaveTextContent('2');
+    expect(providerTrigger).toHaveTextContent('OpenRouter (2)');
+    expect(providerTrigger).toHaveClass('text-[12px]');
+    expect(screen.queryByTestId('openrouter-provider-icon')).not.toBeInTheDocument();
+    expect(getClosestSlot(providerTrigger, 'model-selector-content')).toHaveClass('!w-24', '!min-w-24');
 
     await user.hover(providerTrigger);
-    const nextModel = await screen.findByText('GPT 4.1 Mini');
+    const nextModel = await screen.findByText('openai/gpt-4.1-mini');
+    const nextModelItem = getClosestSlot(nextModel, 'model-selector-item');
+    expect(nextModelItem).toHaveClass('text-[12px]');
+    expect(nextModelItem).toHaveTextContent('openai/gpt-4.1-mini');
+    expect(nextModelItem).not.toHaveTextContent('GPT 4.1 Mini');
+    expect(getClosestSlot(nextModel, 'model-selector-models')).toHaveClass('w-50', 'min-w-50');
 
-    fireEvent.click(getClosestSlot(nextModel, 'model-selector-item'));
+    fireEvent.click(nextModelItem);
 
     await waitFor(() => {
-      expect(trigger).toHaveTextContent('GPT 4.1 Mini');
+      expect(trigger).toHaveTextContent(/^GPT 4\.1 Mini$/);
       expect(mocks.register).toHaveBeenCalledTimes(2);
     });
+    expect(trigger.querySelector('.text-muted-foreground')).toBeNull();
     expect(mocks.unregister).toHaveBeenCalledTimes(1);
     expect(mocks.register.mock.calls[1]?.[0].getModelContext()).toEqual({
       config: { modelName: 'openrouter/openai/gpt-4.1-mini' },

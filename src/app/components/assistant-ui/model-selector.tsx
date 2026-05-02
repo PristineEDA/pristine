@@ -218,19 +218,11 @@ function ModelSelectorValue() {
     return <span className="truncate text-muted-foreground">Select model</span>;
   }
 
-  const { model, provider } = selection;
+  const { model } = selection;
 
   return (
     <span className="flex min-w-0 items-center gap-2">
-      {provider.icon && (
-        <span className="flex size-4 shrink-0 items-center justify-center [&_svg]:size-4">
-          {provider.icon}
-        </span>
-      )}
-      <span className="min-w-0 truncate font-medium">{model.name}</span>
-      <span className="hidden max-w-20 truncate text-muted-foreground sm:inline">
-        {provider.name}
-      </span>
+      <span className="min-w-0 truncate font-normal">{model.name}</span>
     </span>
   );
 }
@@ -252,7 +244,7 @@ function ModelSelectorContent({
       data-slot="model-selector-content"
       align={align}
       className={cn(
-        "max-h-[min(28rem,var(--radix-dropdown-menu-content-available-height))] min-w-64 overflow-y-auto",
+        "max-h-[min(28rem,var(--radix-dropdown-menu-content-available-height))] !w-48 !min-w-48 overflow-y-auto",
         className,
       )}
       {...props}
@@ -282,22 +274,16 @@ function ModelSelectorProvider({
       <DropdownMenuSubTrigger
         data-slot="model-selector-provider"
         disabled={provider.disabled || provider.models.length === 0}
-        className={cn("min-w-0", className)}
+        className={cn("min-w-0 text-[12px]", className)}
         {...props}
       >
-        {provider.icon && (
-          <span className="flex size-4 shrink-0 items-center justify-center [&_svg]:size-4">
-            {provider.icon}
-          </span>
-        )}
-        <span className="min-w-0 flex-1 truncate font-medium">{provider.name}</span>
-        <span className="mr-4 shrink-0 text-[10px] text-muted-foreground">
-          {provider.models.length}
+        <span className="min-w-0 flex-1 truncate font-normal">
+          {`${provider.name} (${provider.models.length})`}
         </span>
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent
         data-slot="model-selector-models"
-        className="max-h-[min(28rem,var(--radix-dropdown-menu-content-available-height))] min-w-80 overflow-y-auto"
+        className="max-h-[min(28rem,var(--radix-dropdown-menu-content-available-height))] w-50 min-w-50 overflow-y-auto"
       >
         {provider.models.map((model) => (
           <ModelSelectorItem
@@ -345,20 +331,17 @@ function ModelSelectorItem({
     <DropdownMenuItem
       data-slot="model-selector-item"
       data-selected={String(isSelected)}
-      textValue={model.name}
+      textValue={model.description ?? model.id}
       className={cn(
-        "min-w-0 gap-2 pr-8",
+        "min-w-0 gap-2 text-[12px]",
         isSelected && "bg-accent text-accent-foreground",
         className,
       )}
       onSelect={handleSelect}
       {...props}
     >
-      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="truncate font-medium">{model.name}</span>
-        <span className="truncate text-[10px] text-muted-foreground">
-          {model.description ?? model.id}
-        </span>
+      <span className="min-w-0 flex-1 truncate font-normal">
+        {model.description ?? model.id}
       </span>
       {provider?.id && <span className="sr-only">{provider.name}</span>}
       {isSelected && (
