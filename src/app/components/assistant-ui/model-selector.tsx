@@ -7,6 +7,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ComponentPropsWithoutRef,
   type KeyboardEvent,
@@ -235,19 +236,10 @@ function ModelSelectorValue() {
     return <span className="truncate text-muted-foreground">Select model</span>;
   }
 
-  const { model, provider } = selection;
+  const { model } = selection;
 
   return (
     <span className="flex min-w-0 items-center gap-2">
-      {provider.icon && (
-        <span
-          data-slot="model-selector-value-icon"
-          aria-hidden="true"
-          className="flex size-4 shrink-0 items-center justify-center [&_img]:size-full [&_svg]:size-4"
-        >
-          {provider.icon}
-        </span>
-      )}
       <span className="min-w-0 truncate font-normal">{model.name}</span>
     </span>
   );
@@ -265,20 +257,82 @@ function ModelSelectorContent({
 }: ModelSelectorContentProps) {
   const { providers } = useModelSelectorContext();
   const [searchQuery, setSearchQuery] = useState("");
+  const [activeSearchIndex, setActiveSearchIndex] = useState(0);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const shouldRestoreSearchFocusRef = useRef(false);
+  const hasSearchQuery = searchQuery.trim().length > 0;
   const filteredProviders = useMemo(
     () => filterProvidersByQuery(providers, searchQuery),
     [providers, searchQuery],
   );
+  const normalizedActiveSearchIndex = filteredProviders.length > 0
+    ? Math.min(activeSearchIndex, filteredProviders.length - 1)
+    : 0;
+  const activeSearchProviderId = hasSearchQuery
+    ? filteredProviders[normalizedActiveSearchIndex]?.id
+    : undefined;
+
+  useEffect(() => {
+    if (!shouldRestoreSearchFocusRef.current) {
+      return undefined;
+    }
+
+    shouldRestoreSearchFocusRef.current = false;
+
+    const input = searchInputRef.current;
+    if (!input) {
+      return undefined;
+    }
+
+    const restoreFocus = () => {
+      input.focus();
+      const caretPosition = input.value.length;
+      input.setSelectionRange?.(caretPosition, caretPosition);
+    };
+
+    if (typeof window === "undefined") {
+      restoreFocus();
+      return undefined;
+    }
+
+    const frame = window.requestAnimationFrame(restoreFocus);
+    return () => {
+      window.cancelAnimationFrame(frame);
+    };
+  }, [searchQuery]);
+
+  const updateSearchQuery = (nextQuery: string) => {
+    shouldRestoreSearchFocusRef.current = document.activeElement === searchInputRef.current;
+    setActiveSearchIndex(0);
+    setSearchQuery(nextQuery);
+  };
 
   const handleSearchKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
+    if (event.key !== "Tab") {
       event.stopPropagation();
+    }
+
+    if (!hasSearchQuery || filteredProviders.length === 0) {
+      if (event.key === "Escape" && searchQuery) {
+        updateSearchQuery("");
+      }
+      return;
+    }
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setActiveSearchIndex((currentIndex) => Math.min(currentIndex + 1, filteredProviders.length - 1));
+      return;
+    }
+
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setActiveSearchIndex((currentIndex) => Math.max(currentIndex - 1, 0));
       return;
     }
 
     if (event.key === "Escape" && searchQuery) {
-      event.stopPropagation();
-      setSearchQuery("");
+      updateSearchQuery("");
     }
   };
 
@@ -287,7 +341,7 @@ function ModelSelectorContent({
       data-slot="model-selector-content"
       align={align}
       className={cn(
-        "max-h-[min(28rem,var(--radix-dropdown-menu-content-available-height))] w-72 min-w-72 overflow-y-auto p-0",
+        "max-h-[min(28rem,var(--radix-dropdown-menu-content-available-height))] w-52 min-w-52 overflow-y-auto p-0",
         className,
       )}
       {...props}
@@ -303,10 +357,14 @@ function ModelSelectorContent({
             <div className="relative">
               <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
+                ref={searchInputRef}
                 aria-label="Search providers"
+                aria-activedescendant={activeSearchProviderId
+                  ? `model-selector-provider-${activeSearchProviderId}`
+                  : undefined}
                 placeholder="Search providers..."
                 value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
+                onChange={(event) => updateSearchQuery(event.target.value)}
                 onKeyDown={handleSearchKeyDown}
                 className="h-8 border-0 bg-muted/60 pl-8 pr-2 text-[12px] shadow-none focus-visible:ring-1"
               />
@@ -315,7 +373,11 @@ function ModelSelectorContent({
           <div data-slot="model-selector-provider-list" className="p-1">
             {filteredProviders.length > 0 ? (
               filteredProviders.map((provider) => (
-                <ModelSelectorProvider key={provider.id} provider={provider} />
+                <ModelSelectorProvider
+                  key={provider.id}
+                  provider={provider}
+                  searchSelected={provider.id === activeSearchProviderId}
+                />
               ))
             ) : (
               <div className="px-2 py-6 text-center text-[12px] text-muted-foreground">
@@ -333,26 +395,37 @@ export type ModelSelectorProviderProps = Omit<
   "children"
 > & {
   provider: ModelProviderOption;
+  searchSelected?: boolean;
 };
 
 function ModelSelectorProvider({
   provider,
+  searchSelected = false,
   className,
   ...props
 }: ModelSelectorProviderProps) {
   return (
     <DropdownMenuSub>
       <DropdownMenuSubTrigger
+        id={`model-selector-provider-${provider.id}`}
         data-slot="model-selector-provider"
+        data-search-selected={searchSelected ? "true" : "false"}
         disabled={provider.disabled || provider.models.length === 0}
-        className={cn("min-w-0 text-[12px]", className)}
+        className={cn(
+          "min-w-0 text-[12px]",
+          searchSelected && "bg-accent text-accent-foreground",
+          className,
+        )}
         {...props}
       >
         {provider.icon && (
           <span
             data-slot="model-selector-provider-icon"
             aria-hidden="true"
-            className="flex size-4 shrink-0 items-center justify-center [&_img]:size-full [&_svg]:size-4"
+            className={cn(
+              "flex size-4 shrink-0 items-center justify-center [&_img]:size-full [&_svg]:size-4",
+              searchSelected && "text-accent-foreground",
+            )}
           >
             {provider.icon}
           </span>
@@ -360,7 +433,12 @@ function ModelSelectorProvider({
         <span className="min-w-0 flex-1 truncate font-normal">
           {provider.name}
         </span>
-        <span className="mr-4 shrink-0 text-[10px] text-muted-foreground">
+        <span
+          className={cn(
+            "mr-4 shrink-0 text-[10px]",
+            searchSelected ? "text-accent-foreground/80" : "text-muted-foreground",
+          )}
+        >
           {provider.models.length}
         </span>
       </DropdownMenuSubTrigger>

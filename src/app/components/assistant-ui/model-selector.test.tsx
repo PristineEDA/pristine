@@ -91,7 +91,7 @@ describe('ModelSelector', () => {
     expect(trigger).toHaveAttribute('data-variant', 'ghost');
     expect(trigger).toHaveAttribute('data-size', 'sm');
     expect(trigger).toHaveTextContent(/^OpenRouter Free$/);
-    expect(within(trigger).getByTestId('openrouter-provider-icon')).toBeInTheDocument();
+    expect(within(trigger).queryByTestId('openrouter-provider-icon')).not.toBeInTheDocument();
     expect(trigger.querySelector('.text-muted-foreground')).toBeNull();
 
     await waitFor(() => {
@@ -115,7 +115,7 @@ describe('ModelSelector', () => {
     expect(providerTrigger).toHaveTextContent('2');
     expect(providerTrigger).toHaveClass('text-[12px]');
     expect(within(providerTrigger).getByTestId('openrouter-provider-icon')).toBeInTheDocument();
-    expect(getClosestSlot(providerTrigger, 'model-selector-content')).toHaveClass('w-72', 'min-w-72');
+    expect(getClosestSlot(providerTrigger, 'model-selector-content')).toHaveClass('w-52', 'min-w-52');
 
     await user.hover(providerTrigger);
     const nextModel = await screen.findByText('openai/gpt-4.1-mini');
@@ -156,7 +156,30 @@ describe('ModelSelector', () => {
     });
 
     await user.click(trigger);
-    await user.type(screen.getByRole('textbox', { name: 'Search providers' }), 'anthropic');
+    const searchInput = screen.getByRole('textbox', { name: 'Search providers' });
+
+    await user.click(searchInput);
+    await user.keyboard('a');
+
+    await waitFor(() => {
+      expect(searchInput).toHaveFocus();
+    });
+    expect(searchInput).toHaveValue('a');
+
+    const firstMatchedProvider = getClosestSlot(
+      screen.getByRole('menuitem', { name: /Anthropic\s*1/ }),
+      'model-selector-provider',
+    );
+    expect(firstMatchedProvider).toHaveAttribute('data-search-selected', 'true');
+    expect(firstMatchedProvider).toHaveClass('bg-accent', 'text-accent-foreground');
+    expect(searchInput).toHaveAttribute('aria-activedescendant', 'model-selector-provider-anthropic');
+
+    await user.keyboard('nthropic');
+
+    await waitFor(() => {
+      expect(searchInput).toHaveFocus();
+    });
+    expect(searchInput).toHaveValue('anthropic');
 
     expect(screen.queryByRole('menuitem', { name: /OpenRouter\s*2/ })).not.toBeInTheDocument();
 
@@ -164,6 +187,7 @@ describe('ModelSelector', () => {
       screen.getByRole('menuitem', { name: /Anthropic\s*1/ }),
       'model-selector-provider',
     );
+    expect(providerTrigger).toHaveAttribute('data-search-selected', 'true');
 
     await user.hover(providerTrigger);
     const modelItem = getClosestSlot(
@@ -180,6 +204,63 @@ describe('ModelSelector', () => {
     expect(mocks.register.mock.calls[1]?.[0].getModelContext()).toEqual({
       config: { modelName: 'anthropic/claude-sonnet-4.6' },
     });
+  });
+
+  it('moves the active matched provider with ArrowUp and ArrowDown while search focus stays in the input', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <ModelSelector
+        providers={providers}
+        defaultValue="openrouter/openrouter/free"
+        variant="ghost"
+        size="sm"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(mocks.register).toHaveBeenCalledTimes(1);
+    });
+
+    await user.click(screen.getByRole('button'));
+
+    const searchInput = screen.getByRole('textbox', { name: 'Search providers' });
+    await user.click(searchInput);
+    await user.keyboard('r');
+
+    const getOpenRouterProvider = () => getClosestSlot(
+      screen.getByRole('menuitem', { name: /OpenRouter\s*2/ }),
+      'model-selector-provider',
+    );
+    const getAnthropicProvider = () => getClosestSlot(
+      screen.getByRole('menuitem', { name: /Anthropic\s*1/ }),
+      'model-selector-provider',
+    );
+
+    await waitFor(() => {
+      expect(searchInput).toHaveFocus();
+      expect(searchInput).toHaveAttribute('aria-activedescendant', 'model-selector-provider-openrouter');
+    });
+    expect(getOpenRouterProvider()).toHaveAttribute('data-search-selected', 'true');
+    expect(getAnthropicProvider()).toHaveAttribute('data-search-selected', 'false');
+
+    await user.keyboard('{ArrowDown}');
+
+    await waitFor(() => {
+      expect(searchInput).toHaveFocus();
+      expect(searchInput).toHaveAttribute('aria-activedescendant', 'model-selector-provider-anthropic');
+    });
+    expect(getOpenRouterProvider()).toHaveAttribute('data-search-selected', 'false');
+    expect(getAnthropicProvider()).toHaveAttribute('data-search-selected', 'true');
+
+    await user.keyboard('{ArrowUp}');
+
+    await waitFor(() => {
+      expect(searchInput).toHaveFocus();
+      expect(searchInput).toHaveAttribute('aria-activedescendant', 'model-selector-provider-openrouter');
+    });
+    expect(getOpenRouterProvider()).toHaveAttribute('data-search-selected', 'true');
+    expect(getAnthropicProvider()).toHaveAttribute('data-search-selected', 'false');
   });
 
   it('keeps model lookup helpers deterministic for provider groups', () => {

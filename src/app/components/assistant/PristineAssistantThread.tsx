@@ -662,7 +662,7 @@ function Composer() {
                 modelContextWindow={PRISTINE_CONTEXT_WINDOW}
                 usage={mockPristineContextUsage}
                 side="top"
-                className="size-6 rounded-md border border-border bg-muted/30 hover:bg-accent hover:text-accent-foreground"
+                className="size-6 rounded-md hover:bg-muted/10 hover:text-muted-foreground"
               />
             </div>
             <div className="flex items-center gap-1">
