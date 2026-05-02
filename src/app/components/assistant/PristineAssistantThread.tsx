@@ -445,6 +445,44 @@ function UserMessage() {
   );
 }
 
+function UserEditComposer() {
+  return (
+    <MessagePrimitive.Root className="flex justify-end px-1 py-2" data-testid="user-edit-composer-root">
+      <ComposerPrimitive.Root
+        className={cn(
+          userMessageSurfaceClassName,
+          'flex w-full max-w-[88%] flex-col border-primary/20 bg-primary text-primary-foreground',
+        )}
+        data-testid="user-edit-composer"
+      >
+        <ComposerPrimitive.Input asChild autoFocus submitMode="enter">
+          <PristineComposerTextarea
+            className="max-h-36 min-h-14 w-full resize-none bg-transparent px-3 py-2 text-[12px] leading-relaxed text-primary-foreground outline-none placeholder:text-primary-foreground/70"
+            aria-label="Edit message input"
+          />
+        </ComposerPrimitive.Input>
+        <div className="flex min-h-8 items-center justify-end gap-2 border-t border-primary-foreground/20 px-2 py-1">
+          <ComposerPrimitive.Cancel asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="xs"
+              className="text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground"
+            >
+              Cancel
+            </Button>
+          </ComposerPrimitive.Cancel>
+          <ComposerPrimitive.Send asChild>
+            <Button type="button" variant="secondary" size="xs">
+              Update
+            </Button>
+          </ComposerPrimitive.Send>
+        </div>
+      </ComposerPrimitive.Root>
+    </MessagePrimitive.Root>
+  );
+}
+
 function PristineMessageImage({ filename, image }: ImageMessagePartProps) {
   const alt = filename || 'Image content';
 
@@ -663,6 +701,7 @@ export function PristineAssistantThread({ className }: PristineAssistantThreadPr
           components={{
             AssistantMessage,
             SystemMessage,
+            UserEditComposer,
             UserMessage,
           }}
         />

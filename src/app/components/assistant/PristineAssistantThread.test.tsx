@@ -121,7 +121,7 @@ vi.mock('@assistant-ui/react', async () => {
     },
     ComposerPrimitive: {
       AttachmentDropzone: Root,
-      Cancel: ({ children }: { children?: ReactNode }) => <>{children}</>,
+      Cancel: ({ children }: { children?: ReactNode }) => <div data-testid="composer-cancel">{children}</div>,
       Input: ({ asChild, children, submitMode, ...props }: ComposerInputMockProps) => {
         const inputProps = {
           ...props,
@@ -152,7 +152,7 @@ vi.mock('@assistant-ui/react', async () => {
         return <textarea {...inputProps} />;
       },
       Root,
-      Send: ({ children }: { children?: ReactNode }) => <>{children}</>,
+      Send: ({ children }: { children?: ReactNode }) => <div data-testid="composer-send">{children}</div>,
       Unstable_TriggerPopoverRoot: Root,
     },
     MessagePrimitive: {
@@ -185,13 +185,15 @@ vi.mock('@assistant-ui/react', async () => {
     },
     ThreadPrimitive: {
       Empty: Root,
-      Messages: ({ components }: { components: { UserMessage?: () => ReactNode; AssistantMessage?: () => ReactNode } }) => (
+      Messages: ({ components }: { components: { UserMessage?: () => ReactNode; UserEditComposer?: () => ReactNode; AssistantMessage?: () => ReactNode } }) => (
         <div
           data-testid="thread-messages"
           data-has-user={String(Boolean(components.UserMessage))}
+          data-has-user-edit-composer={String(Boolean(components.UserEditComposer))}
           data-has-assistant={String(Boolean(components.AssistantMessage))}
         >
           {components.UserMessage && <components.UserMessage />}
+          {components.UserEditComposer && <components.UserEditComposer />}
           {components.AssistantMessage && <components.AssistantMessage />}
         </div>
       ),
@@ -321,6 +323,7 @@ describe('PristineAssistantThread', () => {
     expect(screen.getByTestId('trigger-popover-@')).toHaveAttribute('data-behavior', 'directive');
     expect(screen.getByTestId('trigger-popover-/')).toHaveAttribute('data-behavior', 'action');
     expect(screen.getByTestId('thread-messages')).toHaveAttribute('data-has-user', 'true');
+    expect(screen.getByTestId('thread-messages')).toHaveAttribute('data-has-user-edit-composer', 'true');
     expect(screen.getByTestId('thread-messages')).toHaveAttribute('data-has-assistant', 'true');
     expect(screen.getByTestId('model-selector')).toHaveAttribute('data-size', 'sm');
     expect(screen.getByTestId('model-selector')).toHaveAttribute('data-variant', 'ghost');
@@ -356,6 +359,13 @@ describe('PristineAssistantThread', () => {
     expect(screen.getByTestId('user-message-branch-action')).not.toHaveClass('w-full');
     expect(screen.getByTestId('assistant-message-action')).toHaveClass('absolute', 'left-0', 'top-full', 'z-10');
     expect(screen.getByRole('button', { name: 'Edit message' })).toBeInTheDocument();
+    expect(screen.getByTestId('user-edit-composer-root')).toHaveClass('justify-end');
+    expect(screen.getByTestId('user-edit-composer')).toHaveClass('max-w-[88%]', 'border-primary/20', 'bg-primary');
+    expect(screen.getByLabelText('Edit message input')).toHaveClass('text-primary-foreground');
+    expect(screen.getByText('Cancel')).toBeInTheDocument();
+    expect(screen.getByText('Update')).toBeInTheDocument();
+    expect(screen.getAllByTestId('composer-cancel')).toHaveLength(1);
+    expect(screen.getAllByTestId('composer-send')).toHaveLength(2);
     expect(screen.getByRole('button', { name: 'Previous user message branch' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Next user message branch' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Previous assistant response branch' })).toBeInTheDocument();
@@ -405,9 +415,35 @@ describe('PristineAssistantThread', () => {
     fireEvent.keyDown(input, { code: 'Enter', key: 'Enter' });
     expect(mocks.composerInputKeyDown).not.toHaveBeenCalled();
 
-    fireEvent.change(input, { target: { value: '你' } });
+    fireEvent.change(input, { target: { value: 'final draft' } });
     fireEvent.compositionEnd(input);
-    expect(input.value).toBe('你');
+    expect(input.value).toBe('final draft');
+    expect(mocks.composerInputCompositionEnd).toHaveBeenCalledTimes(1);
+
+    fireEvent.keyDown(input, { code: 'Enter', key: 'Enter' });
+    expect(mocks.composerInputKeyDown).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps Chinese IME draft text across user edit composer rerenders', () => {
+    const { rerender } = render(<PristineAssistantThread className="custom-thread" />);
+    let input = screen.getByLabelText('Edit message input') as HTMLTextAreaElement;
+
+    expect(input).toHaveAttribute('data-submit-mode', 'enter');
+
+    fireEvent.compositionStart(input);
+    fireEvent.change(input, { target: { value: 'ni' } });
+    expect(input.value).toBe('ni');
+
+    rerender(<PristineAssistantThread className="custom-thread" />);
+    input = screen.getByLabelText('Edit message input') as HTMLTextAreaElement;
+    expect(input.value).toBe('ni');
+
+    fireEvent.keyDown(input, { code: 'Enter', key: 'Enter' });
+    expect(mocks.composerInputKeyDown).not.toHaveBeenCalled();
+
+    fireEvent.change(input, { target: { value: 'final edit' } });
+    fireEvent.compositionEnd(input);
+    expect(input.value).toBe('final edit');
     expect(mocks.composerInputCompositionEnd).toHaveBeenCalledTimes(1);
 
     fireEvent.keyDown(input, { code: 'Enter', key: 'Enter' });
