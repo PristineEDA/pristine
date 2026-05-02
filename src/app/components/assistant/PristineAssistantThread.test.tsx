@@ -155,7 +155,20 @@ vi.mock('@assistant-ui/react', async () => {
       Send: ({ children }: { children?: ReactNode }) => <div data-testid="composer-send">{children}</div>,
       Unstable_TriggerPopoverRoot: Root,
     },
+    ErrorPrimitive: {
+      Message: ({ className }: { className?: string }) => (
+        <span className={className} data-testid="assistant-error-message">
+          Assistant failed to complete the request
+        </span>
+      ),
+      Root: ({ children, className }: { children?: ReactNode; className?: string }) => (
+        <div className={className} data-testid="assistant-error-alert" role="alert">
+          {children}
+        </div>
+      ),
+    },
     MessagePrimitive: {
+      Error: ({ children }: { children?: ReactNode }) => <div data-testid="message-error-slot">{children}</div>,
       Parts: ({ components }: { components?: MessagePartComponents }) => (
         <div
           data-testid="message-parts"
@@ -343,6 +356,15 @@ describe('PristineAssistantThread', () => {
     const assistantSurface = screen.getByTestId('assistant-message-surface');
     expect(assistantSurface).toHaveClass('rounded-md', 'bg-background');
     expect(assistantSurface).not.toHaveClass('border', 'border-border', 'shadow-xs');
+    expect(assistantSurface).toContainElement(screen.getByTestId('message-error-slot'));
+    expect(screen.getByRole('alert')).toHaveTextContent('Assistant failed to complete the request');
+    expect(screen.getByTestId('assistant-error-alert')).toHaveClass(
+      'border-destructive',
+      'bg-destructive/10',
+      'text-[12px]',
+      'text-destructive',
+    );
+    expect(screen.getByTestId('assistant-error-message')).toHaveClass('line-clamp-2');
     expect(screen.getByTestId('user-message-attachments').nextElementSibling).toHaveClass('border', 'border-primary/20');
     const branchPickers = screen.getAllByTestId('branch-picker');
     expect(branchPickers).toHaveLength(2);

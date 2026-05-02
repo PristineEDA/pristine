@@ -3,6 +3,7 @@ import {
   ActionBarPrimitive,
   BranchPickerPrimitive,
   ComposerPrimitive,
+  ErrorPrimitive,
   MessagePrimitive,
   ThreadPrimitive,
   makeAssistantToolUI,
@@ -21,11 +22,14 @@ import {
   ChevronRight,
   Copy,
   FileCode2,
+  LoaderIcon,
   Pencil,
   RotateCcw,
   Shell,
   Sparkles,
   SquareIcon,
+  ThumbsUp,
+  ThumbsDown,
 } from 'lucide-react';
 import {
   forwardRef,
@@ -550,6 +554,16 @@ function PristineReasoningGroup({ children, endIndex, startIndex }: ReasoningGro
   );
 }
 
+function MessageError() {
+  return (
+    <MessagePrimitive.Error>
+      <ErrorPrimitive.Root className="mt-2 rounded-md border border-destructive bg-destructive/10 p-2 text-[12px] leading-relaxed text-destructive dark:bg-destructive/5 dark:text-red-200">
+        <ErrorPrimitive.Message className="line-clamp-2" />
+      </ErrorPrimitive.Root>
+    </MessagePrimitive.Error>
+  );
+}
+
 function AssistantMessage() {
   return (
     <MessagePrimitive.Root className="group flex px-1 py-2">
@@ -568,19 +582,32 @@ function AssistantMessage() {
                 tools: { Fallback: ToolFallback },
               }}
             />
+            <MessageError />
+            <AuiIf condition={(s) => s.thread.isRunning && s.message.content.length === 0}>
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <LoaderIcon className="size-4 animate-spin" />
+                <span className="text-[12px]">Thinking...</span>
+              </div>
+            </AuiIf>
           </div>
           <ActionBarPrimitive.Root
             autohide="not-last"
             hideWhenRunning
-            className="absolute left-0 top-full z-10 mt-1 flex min-w-40 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 data-[floating=true]:opacity-100"
+            className="absolute left-0 top-full z-10 mt-1 flex min-w-40 items-center opacity-0 transition-opacity group-hover:opacity-100 data-[floating=true]:opacity-100"
             data-testid="assistant-message-action"
           >
-            <ActionBarPrimitive.Copy className={actionButtonClassName} aria-label="Copy response">
-              <Copy className="size-3" />
-            </ActionBarPrimitive.Copy>
             <ActionBarPrimitive.Reload className={actionButtonClassName} aria-label="Regenerate response">
               <RotateCcw className="size-3" />
             </ActionBarPrimitive.Reload>
+            <ActionBarPrimitive.Copy className={actionButtonClassName} aria-label="Copy response">
+              <Copy className="size-3" />
+            </ActionBarPrimitive.Copy>
+            <ActionBarPrimitive.FeedbackPositive className={actionButtonClassName} aria-label="Good response">
+              <ThumbsUp className="size-3" />
+            </ActionBarPrimitive.FeedbackPositive>
+            <ActionBarPrimitive.FeedbackNegative className={actionButtonClassName} aria-label="Bad response">
+              <ThumbsDown className="size-3" />
+            </ActionBarPrimitive.FeedbackNegative>
             <MessageBranchPicker label="assistant response branch" />
           </ActionBarPrimitive.Root>
         </div>
