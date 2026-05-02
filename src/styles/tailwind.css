@@ -31,6 +31,10 @@
   background: var(--ide-text-muted);
 }
 
+.pristine-assistant-scrollbar {
+  scrollbar-gutter: stable;
+}
+
 .explorer-tree-scrollbar::-webkit-scrollbar-thumb,
 .bottom-panel-scrollbar::-webkit-scrollbar-thumb {
   background: transparent;

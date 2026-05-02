@@ -1,7 +1,9 @@
 import {
   AuiIf,
   ActionBarPrimitive,
+  BranchPickerPrimitive,
   ComposerPrimitive,
+  ErrorPrimitive,
   MessagePrimitive,
   ThreadPrimitive,
   makeAssistantToolUI,
@@ -16,12 +18,18 @@ import {
 import {
   ArrowDown,
   ArrowUpIcon,
+  ChevronLeft,
+  ChevronRight,
   Copy,
   FileCode2,
+  LoaderIcon,
+  Pencil,
   RotateCcw,
   Shell,
   Sparkles,
   SquareIcon,
+  ThumbsUp,
+  ThumbsDown,
 } from 'lucide-react';
 import {
   forwardRef,
@@ -44,6 +52,7 @@ import {
   ComposerAttachments,
   UserMessageAttachments,
 } from '@/app/components/assistant-ui/attachment';
+import { ComposerModeSelector } from '@/app/components/assistant-ui/composer-mode-selector';
 import { ContextDisplay } from '@/app/components/assistant-ui/context-display';
 import { ComposerTriggerPopover } from '@/app/components/assistant-ui/composer-trigger-popover';
 import { DirectiveText } from '@/app/components/assistant-ui/directive-text';
@@ -68,7 +77,7 @@ import {
 } from './pristineAssistantContext';
 import {
   PRISTINE_DEFAULT_MODEL_ID,
-  mockPristineModelOptions,
+  pristineModelProviders,
 } from './pristineAssistantModels';
 import {
   mockPristineMentionCategories,
@@ -114,7 +123,8 @@ type ShellCommandToolResult = {
   stderr?: string;
 };
 
-const messageSurfaceClassName = 'rounded-md border border-border bg-background px-3 py-2 shadow-xs';
+const userMessageSurfaceClassName = 'rounded-md border border-border bg-background px-3 py-2 shadow-xs';
+const assistantMessageSurfaceClassName = 'rounded-md bg-background px-3 py-2';
 const actionButtonClassName = 'inline-flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-50';
 
 type TextareaValue = ComponentPropsWithoutRef<'textarea'>['value'];
@@ -382,18 +392,98 @@ function ThreadWelcome() {
   );
 }
 
+function MessageBranchPicker({ label }: { label: string }) {
+  return (
+    <BranchPickerPrimitive.Root
+      hideWhenSingleBranch
+      className="ml-auto flex items-center gap-0.5 text-[11px] text-muted-foreground"
+      aria-label={label}
+    >
+      <BranchPickerPrimitive.Previous className={actionButtonClassName} aria-label={`Previous ${label}`}>
+        <ChevronLeft className="size-3" />
+      </BranchPickerPrimitive.Previous>
+      <span className="tabular-nums">
+        <BranchPickerPrimitive.Number />
+        <span className="px-0.5">/</span>
+        <BranchPickerPrimitive.Count />
+      </span>
+      <BranchPickerPrimitive.Next className={actionButtonClassName} aria-label={`Next ${label}`}>
+        <ChevronRight className="size-3" />
+      </BranchPickerPrimitive.Next>
+    </BranchPickerPrimitive.Root>
+  );
+}
+
 function UserMessage() {
   return (
-    <MessagePrimitive.Root className="flex justify-end px-1 py-2">
-      <div className="flex max-w-[88%] flex-col items-end gap-2">
-        <UserMessageAttachments />
-        <div className={cn(messageSurfaceClassName, 'border-primary/20 bg-primary text-[12px] leading-relaxed text-primary-foreground')}>
-          <MessagePrimitive.Quote>
-            {(quote) => <QuoteBlock {...quote} />}
-          </MessagePrimitive.Quote>
-          <MessagePrimitive.Parts components={{ File, Image: PristineMessageImage, Text: DirectiveText }} />
+    <MessagePrimitive.Root className="group flex justify-end px-1 py-2">
+      <div className="relative flex max-w-[88%] items-start">
+        <ActionBarPrimitive.Root
+          autohide="not-last"
+          hideWhenRunning
+          className="absolute right-full top-1 mr-1 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 data-[floating=true]:opacity-100"
+          data-testid="user-message-edit-action"
+        >
+          <ActionBarPrimitive.Edit className={actionButtonClassName} aria-label="Edit message">
+            <Pencil className="size-3" />
+          </ActionBarPrimitive.Edit>
+        </ActionBarPrimitive.Root>
+        <div className="flex min-w-0 flex-1 flex-col items-end gap-2">
+          <UserMessageAttachments />
+          <div className={cn(userMessageSurfaceClassName, 'border-primary/20 bg-primary text-[12px] leading-relaxed text-primary-foreground')}>
+            <MessagePrimitive.Quote>
+              {(quote) => <QuoteBlock {...quote} />}
+            </MessagePrimitive.Quote>
+            <MessagePrimitive.Parts components={{ File, Image: PristineMessageImage, Text: DirectiveText }} />
+          </div>
+          <ActionBarPrimitive.Root
+            autohide="not-last"
+            hideWhenRunning
+            className="absolute right-0 top-full z-10 mt-1 flex min-w-24 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 data-[floating=true]:opacity-100"
+            data-testid="user-message-branch-action"
+          >
+            <MessageBranchPicker label="user message branch" />
+          </ActionBarPrimitive.Root>
         </div>
       </div>
+    </MessagePrimitive.Root>
+  );
+}
+
+function UserEditComposer() {
+  return (
+    <MessagePrimitive.Root className="flex justify-end px-1 py-2" data-testid="user-edit-composer-root">
+      <ComposerPrimitive.Root
+        className={cn(
+          userMessageSurfaceClassName,
+          'flex w-full max-w-[88%] flex-col border-primary/20 bg-primary text-primary-foreground',
+        )}
+        data-testid="user-edit-composer"
+      >
+        <ComposerPrimitive.Input asChild autoFocus submitMode="enter">
+          <PristineComposerTextarea
+            className="max-h-36 min-h-14 w-full resize-none bg-transparent px-3 py-2 text-[12px] leading-relaxed text-primary-foreground outline-none placeholder:text-primary-foreground/70"
+            aria-label="Edit message input"
+          />
+        </ComposerPrimitive.Input>
+        <div className="flex min-h-8 items-center justify-end gap-2 border-t border-primary-foreground/20 px-2 py-1">
+          <ComposerPrimitive.Cancel asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="xs"
+              className="text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground"
+            >
+              Cancel
+            </Button>
+          </ComposerPrimitive.Cancel>
+          <ComposerPrimitive.Send asChild>
+            <Button type="button" variant="secondary" size="xs">
+              Update
+            </Button>
+          </ComposerPrimitive.Send>
+        </div>
+      </ComposerPrimitive.Root>
     </MessagePrimitive.Root>
   );
 }
@@ -465,12 +555,22 @@ function PristineReasoningGroup({ children, endIndex, startIndex }: ReasoningGro
   );
 }
 
+function MessageError() {
+  return (
+    <MessagePrimitive.Error>
+      <ErrorPrimitive.Root className="mt-2 rounded-md border border-destructive bg-destructive/10 p-2 text-[12px] leading-relaxed text-destructive dark:bg-destructive/5 dark:text-red-200">
+        <ErrorPrimitive.Message className="line-clamp-2" />
+      </ErrorPrimitive.Root>
+    </MessagePrimitive.Error>
+  );
+}
+
 function AssistantMessage() {
   return (
     <MessagePrimitive.Root className="group flex px-1 py-2">
-      <div className="flex max-w-[92%] items-start">
-        <div className="min-w-0 flex-1">
-          <div className={cn(messageSurfaceClassName, 'text-[12px] leading-relaxed')}>
+      <div className="flex w-full items-start" data-testid="assistant-message-container">
+        <div className="relative min-w-0 flex-1">
+          <div className={cn(assistantMessageSurfaceClassName, 'text-[12px] leading-relaxed')} data-testid="assistant-message-surface">
             <MessagePrimitive.Parts
               components={{
                 File,
@@ -483,18 +583,33 @@ function AssistantMessage() {
                 tools: { Fallback: ToolFallback },
               }}
             />
+            <MessageError />
+            <AuiIf condition={(s) => s.thread.isRunning && s.message.content.length === 0}>
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <LoaderIcon className="size-4 animate-spin" />
+                <span className="text-[12px]">Thinking...</span>
+              </div>
+            </AuiIf>
           </div>
           <ActionBarPrimitive.Root
             autohide="not-last"
             hideWhenRunning
-            className="mt-1 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 data-[floating=true]:opacity-100"
+            className="absolute left-0 top-full z-10 flex min-w-40 items-center opacity-0 transition-opacity group-hover:opacity-100 data-[floating=true]:opacity-100"
+            data-testid="assistant-message-action"
           >
-            <ActionBarPrimitive.Copy className={actionButtonClassName} aria-label="Copy response">
-              <Copy className="size-3" />
-            </ActionBarPrimitive.Copy>
             <ActionBarPrimitive.Reload className={actionButtonClassName} aria-label="Regenerate response">
               <RotateCcw className="size-3" />
             </ActionBarPrimitive.Reload>
+            <ActionBarPrimitive.Copy className={actionButtonClassName} aria-label="Copy response">
+              <Copy className="size-3" />
+            </ActionBarPrimitive.Copy>
+            <ActionBarPrimitive.FeedbackPositive className={actionButtonClassName} aria-label="Good response">
+              <ThumbsUp className="size-3" />
+            </ActionBarPrimitive.FeedbackPositive>
+            <ActionBarPrimitive.FeedbackNegative className={actionButtonClassName} aria-label="Bad response">
+              <ThumbsDown className="size-3" />
+            </ActionBarPrimitive.FeedbackNegative>
+            <MessageBranchPicker label="assistant response branch" />
           </ActionBarPrimitive.Root>
         </div>
       </div>
@@ -537,18 +652,23 @@ function Composer() {
           </ComposerPrimitive.Input>
           <div className="flex min-h-8 items-center justify-between gap-2 border-t border-border/60 px-2 py-1">
             <div className="flex min-w-0 items-center gap-1">
+              <ComposerModeSelector
+                defaultValue="agent"
+                variant="ghost"
+                size="sm"
+              />
               <ModelSelector
-                models={mockPristineModelOptions}
+                providers={pristineModelProviders}
                 defaultValue={PRISTINE_DEFAULT_MODEL_ID}
                 variant="ghost"
                 size="sm"
-                contentClassName="min-w-52"
+                contentClassName="min-w-64"
               />
               <ContextDisplay.Ring
                 modelContextWindow={PRISTINE_CONTEXT_WINDOW}
                 usage={mockPristineContextUsage}
                 side="top"
-                className="size-6 rounded-md border border-border bg-muted/30 hover:bg-accent hover:text-accent-foreground"
+                className="size-6 rounded-md hover:bg-muted/10 hover:text-muted-foreground"
               />
             </div>
             <div className="flex items-center gap-1">
@@ -608,12 +728,13 @@ export function PristineAssistantThread({ className }: PristineAssistantThreadPr
     <ThreadPrimitive.Root className={cn('relative flex min-h-0 flex-1 flex-col bg-background', className)}>
       <PristineAssistantInstructions />
       <PristineAssistantToolUIs />
-      <ThreadPrimitive.Viewport className="flex-1 overflow-y-auto px-2 py-1" autoScroll turnAnchor="bottom">
+      <ThreadPrimitive.Viewport className="pristine-assistant-scrollbar flex-1 overflow-y-auto px-2 py-1" autoScroll turnAnchor="bottom">
         <ThreadWelcome />
         <ThreadPrimitive.Messages
           components={{
             AssistantMessage,
             SystemMessage,
+            UserEditComposer,
             UserMessage,
           }}
         />

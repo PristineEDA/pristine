@@ -14,7 +14,7 @@ import {
 } from './pristineAssistantContext';
 import {
   PRISTINE_DEFAULT_MODEL_ID,
-  mockPristineModelOptions,
+  pristineModelProviders,
 } from './pristineAssistantModels';
 import {
   mockPristineMentionCategories,
@@ -24,6 +24,7 @@ import { PristineAssistantThread } from './PristineAssistantThread';
 
 const mocks = vi.hoisted(() => ({
   composerTriggerPopover: vi.fn(),
+  composerModeSelector: vi.fn(),
   composerInputChange: vi.fn(),
   composerInputCompositionEnd: vi.fn(),
   composerInputCompositionStart: vi.fn(),
@@ -75,8 +76,8 @@ function getComponentName(component: unknown) {
 
 vi.mock('@assistant-ui/react', async () => {
   const { cloneElement, isValidElement } = await vi.importActual<typeof import('react')>('react');
-  const Root = ({ children, className }: { children?: ReactNode; className?: string }) => (
-    <div className={className}>{children}</div>
+  const Root = ({ children, className, ...props }: { children?: ReactNode; className?: string; [key: string]: unknown }) => (
+    <div className={className} {...props}>{children}</div>
   );
 
   mocks.makeAssistantToolUI.mockImplementation(({ toolName }: { toolName: string }) => {
@@ -98,12 +99,32 @@ vi.mock('@assistant-ui/react', async () => {
     ),
     ActionBarPrimitive: {
       Root,
-      Copy: ({ children }: { children?: ReactNode }) => <button type="button">{children}</button>,
-      Reload: ({ children }: { children?: ReactNode }) => <button type="button">{children}</button>,
+      Copy: ({ children, ...props }: { children?: ReactNode; className?: string; 'aria-label'?: string }) => <button type="button" {...props}>{children}</button>,
+      Edit: ({ children, ...props }: { children?: ReactNode; className?: string; 'aria-label'?: string }) => <button type="button" {...props}>{children}</button>,
+      FeedbackNegative: ({ children, ...props }: { children?: ReactNode; className?: string; 'aria-label'?: string }) => <button type="button" {...props}>{children}</button>,
+      FeedbackPositive: ({ children, ...props }: { children?: ReactNode; className?: string; 'aria-label'?: string }) => <button type="button" {...props}>{children}</button>,
+      Reload: ({ children, ...props }: { children?: ReactNode; className?: string; 'aria-label'?: string }) => <button type="button" {...props}>{children}</button>,
+    },
+    BranchPickerPrimitive: {
+      Count: () => <span data-testid="branch-picker-count">2</span>,
+      Next: ({ children, ...props }: { children?: ReactNode; className?: string; 'aria-label'?: string }) => <button type="button" {...props}>{children}</button>,
+      Number: () => <span data-testid="branch-picker-number">1</span>,
+      Previous: ({ children, ...props }: { children?: ReactNode; className?: string; 'aria-label'?: string }) => <button type="button" {...props}>{children}</button>,
+      Root: ({ 'aria-label': ariaLabel, children, className, hideWhenSingleBranch }: { 'aria-label'?: string; children?: ReactNode; className?: string; hideWhenSingleBranch?: boolean }) => (
+        <div
+          aria-label={ariaLabel}
+          className={className}
+          data-hide-when-single-branch={String(Boolean(hideWhenSingleBranch))}
+          data-testid="branch-picker"
+          role="group"
+        >
+          {children}
+        </div>
+      ),
     },
     ComposerPrimitive: {
       AttachmentDropzone: Root,
-      Cancel: ({ children }: { children?: ReactNode }) => <>{children}</>,
+      Cancel: ({ children }: { children?: ReactNode }) => <div data-testid="composer-cancel">{children}</div>,
       Input: ({ asChild, children, submitMode, ...props }: ComposerInputMockProps) => {
         const inputProps = {
           ...props,
@@ -134,10 +155,23 @@ vi.mock('@assistant-ui/react', async () => {
         return <textarea {...inputProps} />;
       },
       Root,
-      Send: ({ children }: { children?: ReactNode }) => <>{children}</>,
+      Send: ({ children }: { children?: ReactNode }) => <div data-testid="composer-send">{children}</div>,
       Unstable_TriggerPopoverRoot: Root,
     },
+    ErrorPrimitive: {
+      Message: ({ className }: { className?: string }) => (
+        <span className={className} data-testid="assistant-error-message">
+          Assistant failed to complete the request
+        </span>
+      ),
+      Root: ({ children, className }: { children?: ReactNode; className?: string }) => (
+        <div className={className} data-testid="assistant-error-alert" role="alert">
+          {children}
+        </div>
+      ),
+    },
     MessagePrimitive: {
+      Error: ({ children }: { children?: ReactNode }) => <div data-testid="message-error-slot">{children}</div>,
       Parts: ({ components }: { components?: MessagePartComponents }) => (
         <div
           data-testid="message-parts"
@@ -167,13 +201,15 @@ vi.mock('@assistant-ui/react', async () => {
     },
     ThreadPrimitive: {
       Empty: Root,
-      Messages: ({ components }: { components: { UserMessage?: () => ReactNode; AssistantMessage?: () => ReactNode } }) => (
+      Messages: ({ components }: { components: { UserMessage?: () => ReactNode; UserEditComposer?: () => ReactNode; AssistantMessage?: () => ReactNode } }) => (
         <div
           data-testid="thread-messages"
           data-has-user={String(Boolean(components.UserMessage))}
+          data-has-user-edit-composer={String(Boolean(components.UserEditComposer))}
           data-has-assistant={String(Boolean(components.AssistantMessage))}
         >
           {components.UserMessage && <components.UserMessage />}
+          {components.UserEditComposer && <components.UserEditComposer />}
           {components.AssistantMessage && <components.AssistantMessage />}
         </div>
       ),
@@ -220,10 +256,28 @@ vi.mock('@/app/components/assistant-ui/context-display', () => ({
   },
 }));
 
+vi.mock('@/app/components/assistant-ui/composer-mode-selector', () => ({
+  ComposerModeSelector: (props: {
+    defaultValue?: string;
+    size?: string;
+    variant?: string;
+  }) => {
+    mocks.composerModeSelector(props);
+    return (
+      <div
+        data-testid="composer-mode-selector"
+        data-default-value={props.defaultValue}
+        data-size={props.size}
+        data-variant={props.variant}
+      />
+    );
+  },
+}));
+
 vi.mock('@/app/components/assistant-ui/model-selector', () => ({
   ModelSelector: (props: {
     defaultValue?: string;
-    models: unknown[];
+    providers: unknown[];
     size?: string;
     variant?: string;
   }) => {
@@ -232,7 +286,7 @@ vi.mock('@/app/components/assistant-ui/model-selector', () => ({
       <div
         data-testid="model-selector"
         data-default-value={props.defaultValue}
-        data-model-count={props.models.length}
+        data-provider-count={props.providers.length}
         data-size={props.size}
         data-variant={props.variant}
       />
@@ -261,6 +315,7 @@ vi.mock('@/app/components/assistant-ui/tooltip-icon-button', () => ({
 
 describe('PristineAssistantThread', () => {
   beforeEach(() => {
+    mocks.composerModeSelector.mockClear();
     mocks.composerInputChange.mockClear();
     mocks.composerInputCompositionEnd.mockClear();
     mocks.composerInputCompositionStart.mockClear();
@@ -303,11 +358,18 @@ describe('PristineAssistantThread', () => {
     expect(screen.getByTestId('trigger-popover-@')).toHaveAttribute('data-behavior', 'directive');
     expect(screen.getByTestId('trigger-popover-/')).toHaveAttribute('data-behavior', 'action');
     expect(screen.getByTestId('thread-messages')).toHaveAttribute('data-has-user', 'true');
+    expect(screen.getByTestId('thread-messages')).toHaveAttribute('data-has-user-edit-composer', 'true');
     expect(screen.getByTestId('thread-messages')).toHaveAttribute('data-has-assistant', 'true');
+    const viewport = screen.getByTestId('thread-messages').parentElement;
+    expect(viewport).toHaveClass('pristine-assistant-scrollbar', 'overflow-y-auto');
+    expect(screen.getByTestId('composer-mode-selector')).toHaveAttribute('data-size', 'sm');
+    expect(screen.getByTestId('composer-mode-selector')).toHaveAttribute('data-variant', 'ghost');
+    expect(screen.getByTestId('composer-mode-selector')).toHaveAttribute('data-default-value', 'agent');
+    expect(screen.getByTestId('composer-mode-selector').nextElementSibling).toBe(screen.getByTestId('model-selector'));
     expect(screen.getByTestId('model-selector')).toHaveAttribute('data-size', 'sm');
     expect(screen.getByTestId('model-selector')).toHaveAttribute('data-variant', 'ghost');
     expect(screen.getByTestId('model-selector')).toHaveAttribute('data-default-value', PRISTINE_DEFAULT_MODEL_ID);
-    expect(screen.getByTestId('model-selector')).toHaveAttribute('data-model-count', String(mockPristineModelOptions.length));
+    expect(screen.getByTestId('model-selector')).toHaveAttribute('data-provider-count', String(pristineModelProviders.length));
     expect(screen.getByTestId('composer-quote-preview')).toBeInTheDocument();
     expect(screen.getByTestId('selection-toolbar')).toBeInTheDocument();
     expect(screen.getByTestId('quote-block')).toHaveTextContent('Selected RTL timing context');
@@ -315,6 +377,49 @@ describe('PristineAssistantThread', () => {
       messageId: 'assistant-message-1',
       text: 'Selected RTL timing context',
     });
+
+    const assistantContainer = screen.getByTestId('assistant-message-container');
+    expect(assistantContainer).toHaveClass('w-full');
+    expect(assistantContainer).not.toHaveClass('max-w-[92%]');
+    const assistantSurface = screen.getByTestId('assistant-message-surface');
+    expect(assistantSurface).toHaveClass('rounded-md', 'bg-background');
+    expect(assistantSurface).not.toHaveClass('border', 'border-border', 'shadow-xs');
+    expect(assistantSurface).toContainElement(screen.getByTestId('message-error-slot'));
+    expect(screen.getByRole('alert')).toHaveTextContent('Assistant failed to complete the request');
+    expect(screen.getByTestId('assistant-error-alert')).toHaveClass(
+      'border-destructive',
+      'bg-destructive/10',
+      'text-[12px]',
+      'text-destructive',
+    );
+    expect(screen.getByTestId('assistant-error-message')).toHaveClass('line-clamp-2');
+    expect(screen.getByTestId('user-message-attachments').nextElementSibling).toHaveClass('border', 'border-primary/20');
+    const branchPickers = screen.getAllByTestId('branch-picker');
+    expect(branchPickers).toHaveLength(2);
+    for (const branchPicker of branchPickers) {
+      expect(branchPicker).toHaveAttribute('data-hide-when-single-branch', 'true');
+    }
+    expect(screen.getByRole('group', { name: 'user message branch' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'assistant response branch' })).toBeInTheDocument();
+    expect(screen.getAllByTestId('branch-picker-number')).toHaveLength(2);
+    expect(screen.getAllByTestId('branch-picker-count')).toHaveLength(2);
+    expect(screen.getByTestId('user-message-edit-action')).toHaveClass('absolute', 'right-full', 'top-1', 'mr-1');
+    expect(screen.getByTestId('user-message-edit-action')).not.toHaveClass('shrink-0');
+    expect(screen.getByTestId('user-message-branch-action')).toHaveClass('absolute', 'right-0', 'top-full', 'z-10');
+    expect(screen.getByTestId('user-message-branch-action')).not.toHaveClass('w-full');
+    expect(screen.getByTestId('assistant-message-action')).toHaveClass('absolute', 'left-0', 'top-full', 'z-10');
+    expect(screen.getByRole('button', { name: 'Edit message' })).toBeInTheDocument();
+    expect(screen.getByTestId('user-edit-composer-root')).toHaveClass('justify-end');
+    expect(screen.getByTestId('user-edit-composer')).toHaveClass('max-w-[88%]', 'border-primary/20', 'bg-primary');
+    expect(screen.getByLabelText('Edit message input')).toHaveClass('text-primary-foreground');
+    expect(screen.getByText('Cancel')).toBeInTheDocument();
+    expect(screen.getByText('Update')).toBeInTheDocument();
+    expect(screen.getAllByTestId('composer-cancel')).toHaveLength(1);
+    expect(screen.getAllByTestId('composer-send')).toHaveLength(2);
+    expect(screen.getByRole('button', { name: 'Previous user message branch' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Next user message branch' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Previous assistant response branch' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Next assistant response branch' })).toBeInTheDocument();
 
     const messageParts = screen.getAllByTestId('message-parts');
     expect(messageParts).toHaveLength(2);
@@ -360,9 +465,35 @@ describe('PristineAssistantThread', () => {
     fireEvent.keyDown(input, { code: 'Enter', key: 'Enter' });
     expect(mocks.composerInputKeyDown).not.toHaveBeenCalled();
 
-    fireEvent.change(input, { target: { value: '你' } });
+    fireEvent.change(input, { target: { value: 'final draft' } });
     fireEvent.compositionEnd(input);
-    expect(input.value).toBe('你');
+    expect(input.value).toBe('final draft');
+    expect(mocks.composerInputCompositionEnd).toHaveBeenCalledTimes(1);
+
+    fireEvent.keyDown(input, { code: 'Enter', key: 'Enter' });
+    expect(mocks.composerInputKeyDown).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps Chinese IME draft text across user edit composer rerenders', () => {
+    const { rerender } = render(<PristineAssistantThread className="custom-thread" />);
+    let input = screen.getByLabelText('Edit message input') as HTMLTextAreaElement;
+
+    expect(input).toHaveAttribute('data-submit-mode', 'enter');
+
+    fireEvent.compositionStart(input);
+    fireEvent.change(input, { target: { value: 'ni' } });
+    expect(input.value).toBe('ni');
+
+    rerender(<PristineAssistantThread className="custom-thread" />);
+    input = screen.getByLabelText('Edit message input') as HTMLTextAreaElement;
+    expect(input.value).toBe('ni');
+
+    fireEvent.keyDown(input, { code: 'Enter', key: 'Enter' });
+    expect(mocks.composerInputKeyDown).not.toHaveBeenCalled();
+
+    fireEvent.change(input, { target: { value: 'final edit' } });
+    fireEvent.compositionEnd(input);
+    expect(input.value).toBe('final edit');
     expect(mocks.composerInputCompositionEnd).toHaveBeenCalledTimes(1);
 
     fireEvent.keyDown(input, { code: 'Enter', key: 'Enter' });

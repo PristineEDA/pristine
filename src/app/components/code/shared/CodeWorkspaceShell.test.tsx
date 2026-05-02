@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import {
   CodeWorkspaceShell,
+  EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX,
   EXPLORER_RIGHT_PANEL_MAX_WIDTH_PX,
   EXPLORER_RIGHT_PANEL_MIN_WIDTH_PX,
 } from './CodeWorkspaceShell';
@@ -191,5 +192,112 @@ describe('CodeWorkspaceShell', () => {
       { id: 'bottom', collapsed: true },
       { id: 'right', collapsed: true },
     ]);
+  });
+
+  it('preserves the opposite fixed side width when either explorer side is toggled', () => {
+    panelRecords.length = 0;
+    handleRecords.length = 0;
+
+    function FixedSideHarness() {
+      const [leftWidth, setLeftWidth] = useState(280);
+      const [rightWidth, setRightWidth] = useState(EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX);
+      const [showLeft, setShowLeft] = useState(true);
+      const [showRight, setShowRight] = useState(true);
+
+      return (
+        <>
+          <span data-testid="left-width-value">{leftWidth}</span>
+          <span data-testid="right-width-value">{rightWidth}</span>
+          <button type="button" onClick={() => setShowLeft((current) => !current)}>toggle-left</button>
+          <button type="button" onClick={() => setShowRight((current) => !current)}>toggle-right</button>
+          <CodeWorkspaceShell
+            activityBar={<div>Activity</div>}
+            overlay={<div>Overlay</div>}
+            showLeftPanel={showLeft}
+            showBottomPanel
+            showRightPanel={showRight}
+            leftPanelId="left"
+            centerPanelId="center"
+            topPanelId="top"
+            bottomPanelId="bottom"
+            rightPanelId="right"
+            leftFixedWidthPx={leftWidth}
+            onLeftFixedWidthChange={setLeftWidth}
+            rightFixedWidthPx={rightWidth}
+            onRightFixedWidthChange={setRightWidth}
+            leftContent={<div>Explorer</div>}
+            topContent={<div>Editor</div>}
+            bottomContent={<div>Terminal</div>}
+            rightContent={<div>Inspector</div>}
+          />
+        </>
+      );
+    }
+
+    render(<FixedSideHarness />);
+
+    expect(screen.getByTestId('panel-left')).toHaveStyle({ width: '280px' });
+    expect(screen.getByTestId('panel-right')).toHaveStyle({ width: '300px' });
+    expect(panelRecords).toEqual([
+      { id: 'center', collapsed: undefined },
+      { id: 'top', collapsed: undefined },
+      { id: 'bottom', collapsed: false },
+    ]);
+    expect(handleRecords).toEqual([
+      { hidden: false },
+    ]);
+
+    const leftHandle = screen.getByTestId('panel-handle-left');
+    fireEvent.pointerDown(leftHandle, { clientX: 280, pointerId: 1 });
+    fireEvent.pointerMove(leftHandle, { clientX: 340, pointerId: 1 });
+    fireEvent.pointerUp(leftHandle, { clientX: 340, pointerId: 1 });
+
+    expect(screen.getByTestId('left-width-value')).toHaveTextContent('340');
+    expect(screen.getByTestId('right-width-value')).toHaveTextContent('300');
+
+    const rightHandle = screen.getByTestId('panel-handle-right');
+    fireEvent.pointerDown(rightHandle, { clientX: 700, pointerId: 2 });
+    fireEvent.pointerMove(rightHandle, { clientX: 640, pointerId: 2 });
+    fireEvent.pointerUp(rightHandle, { clientX: 640, pointerId: 2 });
+
+    expect(screen.getByTestId('right-width-value')).toHaveTextContent('360');
+    expect(screen.getByTestId('left-width-value')).toHaveTextContent('340');
+    expect(screen.getByTestId('panel-right')).toHaveStyle({ width: '360px' });
+
+    fireEvent.click(screen.getByText('toggle-left'));
+
+    expect(screen.queryByTestId('panel-left')).not.toBeInTheDocument();
+    expect(screen.getByTestId('right-width-value')).toHaveTextContent('360');
+    expect(screen.getByTestId('panel-right')).toHaveStyle({ width: '360px' });
+
+    fireEvent.click(screen.getByText('toggle-left'));
+
+    expect(screen.getByTestId('panel-left')).toHaveStyle({ width: '340px' });
+    expect(screen.getByTestId('right-width-value')).toHaveTextContent('360');
+
+    fireEvent.click(screen.getByText('toggle-right'));
+
+    expect(screen.queryByTestId('panel-right')).not.toBeInTheDocument();
+    expect(screen.getByTestId('left-width-value')).toHaveTextContent('340');
+
+    fireEvent.click(screen.getByText('toggle-right'));
+
+    expect(screen.getByTestId('panel-right')).toHaveStyle({ width: '360px' });
+    expect(screen.getByTestId('left-width-value')).toHaveTextContent('340');
+
+    const rightHandleAfterReopen = screen.getByTestId('panel-handle-right');
+    fireEvent.pointerDown(rightHandleAfterReopen, { clientX: 640, pointerId: 3 });
+    fireEvent.pointerMove(rightHandleAfterReopen, { clientX: 1200, pointerId: 3 });
+    fireEvent.pointerUp(rightHandleAfterReopen, { clientX: 1200, pointerId: 3 });
+
+    expect(screen.getByTestId('right-width-value')).toHaveTextContent(String(EXPLORER_RIGHT_PANEL_MIN_WIDTH_PX));
+
+    const rightHandleAfterMinClamp = screen.getByTestId('panel-handle-right');
+    fireEvent.pointerDown(rightHandleAfterMinClamp, { clientX: 1200, pointerId: 4 });
+    fireEvent.pointerMove(rightHandleAfterMinClamp, { clientX: 0, pointerId: 4 });
+    fireEvent.pointerUp(rightHandleAfterMinClamp, { clientX: 0, pointerId: 4 });
+
+    expect(screen.getByTestId('right-width-value')).toHaveTextContent(String(EXPLORER_RIGHT_PANEL_MAX_WIDTH_PX));
+    expect(screen.getByTestId('left-width-value')).toHaveTextContent('340');
   });
 });

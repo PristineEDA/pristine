@@ -1,26 +1,24 @@
-import { BrainCircuit, Cpu, Zap } from 'lucide-react';
+import { ModelProviderLogo } from '@/app/components/assistant-ui/model-provider-logo';
+import type { ModelProviderOption } from '@/app/components/assistant-ui/model-selector';
+import {
+  mastraStudioModelCatalog,
+  type MastraStudioModelProvider,
+} from './mastraStudioModelCatalog.generated';
 
-import type { ModelOption } from '@/app/components/assistant-ui/model-selector';
+export const PRISTINE_DEFAULT_MODEL_ID = 'openrouter/openrouter/free';
 
-export const PRISTINE_DEFAULT_MODEL_ID = 'pristine-hdl';
+function getProviderDescription(provider: MastraStudioModelProvider) {
+  return `${provider.models.length} Mastra Studio models`;
+}
 
-export const mockPristineModelOptions = [
-  {
-    id: 'pristine-fast',
-    name: 'Pristine Fast',
-    description: 'Quick coding passes',
-    icon: <Zap className="size-4" />,
-  },
-  {
-    id: PRISTINE_DEFAULT_MODEL_ID,
-    name: 'Pristine HDL',
-    description: 'RTL-aware default',
-    icon: <Cpu className="size-4" />,
-  },
-  {
-    id: 'pristine-deep',
-    name: 'Pristine Deep',
-    description: 'Deeper reasoning passes',
-    icon: <BrainCircuit className="size-4" />,
-  },
-] satisfies ModelOption[];
+export const pristineModelProviders = mastraStudioModelCatalog.map((provider) => ({
+  id: provider.id,
+  name: provider.name,
+  description: getProviderDescription(provider),
+  icon: <ModelProviderLogo providerId={provider.id} providerName={provider.name} />,
+  models: provider.models.map((model) => ({
+    id: model.id,
+    name: model.name,
+    description: model.modelId,
+  })),
+})) satisfies ModelProviderOption[];
