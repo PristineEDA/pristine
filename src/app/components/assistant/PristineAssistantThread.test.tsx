@@ -23,6 +23,7 @@ import {
 import { PristineAssistantThread } from './PristineAssistantThread';
 
 const mocks = vi.hoisted(() => ({
+  applyChange: vi.fn(),
   composerTriggerPopover: vi.fn(),
   composerModeSelector: vi.fn(),
   composerInputChange: vi.fn(),
@@ -30,9 +31,15 @@ const mocks = vi.hoisted(() => ({
   composerInputCompositionStart: vi.fn(),
   composerInputKeyDown: vi.fn(),
   contextDisplayRing: vi.fn(),
+  discardChange: vi.fn(),
+  discardCommand: vi.fn(),
   makeAssistantToolUI: vi.fn(),
   modelSelector: vi.fn(),
   quoteBlock: vi.fn(),
+  refreshApprovals: vi.fn(),
+  runCommand: vi.fn(),
+  toolPropsByName: {} as Record<string, unknown>,
+  useAgentApprovals: vi.fn(),
   useAssistantInstructions: vi.fn(),
   useMentionAdapter: vi.fn(),
   useSlashCommandAdapter: vi.fn(),
@@ -80,8 +87,12 @@ vi.mock('@assistant-ui/react', async () => {
     <div className={className} {...props}>{children}</div>
   );
 
-  mocks.makeAssistantToolUI.mockImplementation(({ toolName }: { toolName: string }) => {
-    const ToolUI = () => <div data-testid={`tool-ui-${toolName}`} />;
+  mocks.makeAssistantToolUI.mockImplementation(({ render, toolName }: { render: (props: unknown) => ReactNode; toolName: string }) => {
+    const ToolUI = () => (
+      <div data-testid={`tool-ui-${toolName}`}>
+        {mocks.toolPropsByName[toolName] ? render(mocks.toolPropsByName[toolName]) : null}
+      </div>
+    );
     return ToolUI;
   });
   mocks.useMentionAdapter.mockImplementation((options: unknown) => ({
@@ -229,6 +240,10 @@ vi.mock('@assistant-ui/react', async () => {
   };
 });
 
+vi.mock('@/app/components/code/explorer/useAgentApprovals', () => ({
+  useAgentApprovals: mocks.useAgentApprovals,
+}));
+
 vi.mock('@/app/components/assistant-ui/attachment', () => ({
   ComposerAddAttachment: () => <button type="button">Attach</button>,
   ComposerAttachments: () => <div data-testid="composer-attachments" />,
@@ -315,6 +330,7 @@ vi.mock('@/app/components/assistant-ui/tooltip-icon-button', () => ({
 
 describe('PristineAssistantThread', () => {
   beforeEach(() => {
+    mocks.applyChange.mockClear();
     mocks.composerModeSelector.mockClear();
     mocks.composerInputChange.mockClear();
     mocks.composerInputCompositionEnd.mockClear();
@@ -322,9 +338,32 @@ describe('PristineAssistantThread', () => {
     mocks.composerInputKeyDown.mockClear();
     mocks.composerTriggerPopover.mockClear();
     mocks.contextDisplayRing.mockClear();
+    mocks.discardChange.mockClear();
+    mocks.discardCommand.mockClear();
     mocks.makeAssistantToolUI.mockClear();
     mocks.modelSelector.mockClear();
     mocks.quoteBlock.mockClear();
+    mocks.refreshApprovals.mockClear();
+    mocks.runCommand.mockClear();
+    for (const toolName of Object.keys(mocks.toolPropsByName)) {
+      delete mocks.toolPropsByName[toolName];
+    }
+    mocks.useAgentApprovals.mockReset();
+    mocks.useAgentApprovals.mockReturnValue({
+      applyChange: mocks.applyChange,
+      busyActionId: null,
+      discardChange: mocks.discardChange,
+      discardCommand: mocks.discardCommand,
+      refresh: mocks.refreshApprovals,
+      runCommand: mocks.runCommand,
+      snapshot: {
+        commands: [],
+        changes: [],
+        error: null,
+        isLoading: false,
+        status: null,
+      },
+    });
     mocks.useAssistantInstructions.mockClear();
     mocks.useMentionAdapter.mockClear();
     mocks.useSlashCommandAdapter.mockClear();
@@ -446,6 +485,175 @@ describe('PristineAssistantThread', () => {
     expect(messageParts[1]).toHaveAttribute('data-tool-fallback-component', 'ToolFallback');
     expect(messageParts[1]).toHaveAttribute('data-has-tool-group-component', 'true');
     expect(messageParts[1]).toHaveAttribute('data-tool-group-component', 'ToolGroup');
+  });
+
+  it('renders file change approvals inside the proposal tool UI', () => {
+    mocks.toolPropsByName['propose_file_change'] = {
+      args: {
+        kind: 'update',
+        path: 'src/foo.ts',
+        summary: 'Fallback summary',
+      },
+      result: {
+        id: 'change-1',
+        kind: 'update',
+        path: 'src/foo.ts',
+        status: 'pending',
+        summary: 'Fallback summary',
+        unifiedDiff: 'fallback diff',
+      },
+      status: { type: 'complete' },
+    };
+    mocks.useAgentApprovals.mockReturnValue({
+      applyChange: mocks.applyChange,
+      busyActionId: null,
+      discardChange: mocks.discardChange,
+      discardCommand: mocks.discardCommand,
+      refresh: mocks.refreshApprovals,
+      runCommand: mocks.runCommand,
+      snapshot: {
+        commands: [],
+        changes: [
+          {
+            createdAt: '2026-01-01T00:00:00.000Z',
+            id: 'change-1',
+            kind: 'update',
+            path: 'src/foo.ts',
+            status: 'pending',
+            summary: 'Update foo helper',
+            unifiedDiff: '--- src/foo.ts\n+++ src/foo.ts\n@@\n-old\n+new',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+        error: null,
+        isLoading: false,
+        status: null,
+      },
+    });
+
+    render(<PristineAssistantThread agentBaseUrl="http://localhost:4111" />);
+
+    expect(mocks.useAgentApprovals).toHaveBeenCalledWith('http://localhost:4111');
+    expect(screen.getByTestId('tool-ui-propose_file_change')).toHaveTextContent('Update foo helper');
+    expect(screen.getByText('src/foo.ts')).toBeInTheDocument();
+    expect(screen.getByText(/\+new/u)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Apply file change' }));
+    expect(mocks.applyChange).toHaveBeenCalledWith('change-1');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Discard file change' }));
+    expect(mocks.discardChange).toHaveBeenCalledWith('change-1');
+  });
+
+  it('renders shell command approvals inside the proposal tool UI', () => {
+    mocks.toolPropsByName['propose_shell_command'] = {
+      args: {
+        args: ['typecheck'],
+        command: 'pnpm',
+        cwd: '.',
+        summary: 'Fallback command summary',
+      },
+      result: {
+        args: ['typecheck'],
+        command: 'pnpm',
+        cwd: '.',
+        id: 'command-1',
+        status: 'pending',
+        summary: 'Fallback command summary',
+      },
+      status: { type: 'complete' },
+    };
+    mocks.useAgentApprovals.mockReturnValue({
+      applyChange: mocks.applyChange,
+      busyActionId: null,
+      discardChange: mocks.discardChange,
+      discardCommand: mocks.discardCommand,
+      refresh: mocks.refreshApprovals,
+      runCommand: mocks.runCommand,
+      snapshot: {
+        commands: [
+          {
+            args: ['typecheck'],
+            command: 'pnpm',
+            createdAt: '2026-01-01T00:00:00.000Z',
+            cwd: '.',
+            id: 'command-1',
+            status: 'pending',
+            summary: 'Run typecheck',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+        changes: [],
+        error: null,
+        isLoading: false,
+        status: null,
+      },
+    });
+
+    render(<PristineAssistantThread agentBaseUrl="http://localhost:4111" />);
+
+    expect(screen.getByTestId('tool-ui-propose_shell_command')).toHaveTextContent('Run typecheck');
+    expect(screen.getByText('pnpm typecheck')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Run shell command' }));
+    expect(mocks.runCommand).toHaveBeenCalledWith('command-1');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Discard shell command' }));
+    expect(mocks.discardCommand).toHaveBeenCalledWith('command-1');
+  });
+
+  it('renders completed shell command output from the latest approval snapshot', () => {
+    mocks.toolPropsByName['propose_shell_command'] = {
+      args: {
+        args: ['test:unit'],
+        command: 'pnpm',
+        cwd: '.',
+      },
+      result: {
+        args: ['test:unit'],
+        command: 'pnpm',
+        cwd: '.',
+        id: 'command-2',
+        status: 'pending',
+        summary: 'Run unit tests',
+      },
+      status: { type: 'complete' },
+    };
+    mocks.useAgentApprovals.mockReturnValue({
+      applyChange: mocks.applyChange,
+      busyActionId: null,
+      discardChange: mocks.discardChange,
+      discardCommand: mocks.discardCommand,
+      refresh: mocks.refreshApprovals,
+      runCommand: mocks.runCommand,
+      snapshot: {
+        commands: [
+          {
+            args: ['test:unit'],
+            command: 'pnpm',
+            createdAt: '2026-01-01T00:00:00.000Z',
+            cwd: '.',
+            exitCode: 0,
+            id: 'command-2',
+            status: 'completed',
+            stdout: '90 files passed',
+            summary: 'Run unit tests',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+        changes: [],
+        error: null,
+        isLoading: false,
+        status: null,
+      },
+    });
+
+    render(<PristineAssistantThread agentBaseUrl="http://localhost:4111" />);
+
+    expect(screen.getByTestId('tool-ui-propose_shell_command')).toHaveTextContent('completed');
+    expect(screen.getByTestId('tool-ui-propose_shell_command')).toHaveTextContent('exit 0');
+    expect(screen.getByText('90 files passed')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Run shell command' })).not.toBeInTheDocument();
   });
 
   it('keeps Chinese IME draft text across composer rerenders', () => {
