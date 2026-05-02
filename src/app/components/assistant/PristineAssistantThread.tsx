@@ -722,7 +722,7 @@ export function PristineAssistantThread({ className }: PristineAssistantThreadPr
     <ThreadPrimitive.Root className={cn('relative flex min-h-0 flex-1 flex-col bg-background', className)}>
       <PristineAssistantInstructions />
       <PristineAssistantToolUIs />
-      <ThreadPrimitive.Viewport className="flex-1 overflow-y-auto px-2 py-1" autoScroll turnAnchor="bottom">
+      <ThreadPrimitive.Viewport className="pristine-assistant-scrollbar flex-1 overflow-y-auto px-2 py-1" autoScroll turnAnchor="bottom">
         <ThreadWelcome />
         <ThreadPrimitive.Messages
           components={{

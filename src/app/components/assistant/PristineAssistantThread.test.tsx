@@ -100,6 +100,8 @@ vi.mock('@assistant-ui/react', async () => {
       Root,
       Copy: ({ children, ...props }: { children?: ReactNode; className?: string; 'aria-label'?: string }) => <button type="button" {...props}>{children}</button>,
       Edit: ({ children, ...props }: { children?: ReactNode; className?: string; 'aria-label'?: string }) => <button type="button" {...props}>{children}</button>,
+      FeedbackNegative: ({ children, ...props }: { children?: ReactNode; className?: string; 'aria-label'?: string }) => <button type="button" {...props}>{children}</button>,
+      FeedbackPositive: ({ children, ...props }: { children?: ReactNode; className?: string; 'aria-label'?: string }) => <button type="button" {...props}>{children}</button>,
       Reload: ({ children, ...props }: { children?: ReactNode; className?: string; 'aria-label'?: string }) => <button type="button" {...props}>{children}</button>,
     },
     BranchPickerPrimitive: {
@@ -338,6 +340,8 @@ describe('PristineAssistantThread', () => {
     expect(screen.getByTestId('thread-messages')).toHaveAttribute('data-has-user', 'true');
     expect(screen.getByTestId('thread-messages')).toHaveAttribute('data-has-user-edit-composer', 'true');
     expect(screen.getByTestId('thread-messages')).toHaveAttribute('data-has-assistant', 'true');
+    const viewport = screen.getByTestId('thread-messages').parentElement;
+    expect(viewport).toHaveClass('pristine-assistant-scrollbar', 'overflow-y-auto');
     expect(screen.getByTestId('model-selector')).toHaveAttribute('data-size', 'sm');
     expect(screen.getByTestId('model-selector')).toHaveAttribute('data-variant', 'ghost');
     expect(screen.getByTestId('model-selector')).toHaveAttribute('data-default-value', PRISTINE_DEFAULT_MODEL_ID);
