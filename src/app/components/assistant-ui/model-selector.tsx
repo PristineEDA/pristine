@@ -1,26 +1,31 @@
 "use client";
 
 import {
-  memo,
-  useState,
-  useEffect,
   createContext,
+  memo,
+  useCallback,
   useContext,
+  useEffect,
+  useMemo,
+  useState,
+
   type ComponentPropsWithoutRef,
   type ReactNode,
 } from "react";
-import { Select as SelectPrimitive } from "radix-ui";
 import type { VariantProps } from "class-variance-authority";
-import { CheckIcon } from "lucide-react";
+import { CheckIcon, ChevronDownIcon } from "lucide-react";
 import { useAssistantApi } from "@assistant-ui/react";
 import { cn } from "@/lib/utils";
 import {
-  SelectRoot,
-  SelectTrigger,
-  SelectContent,
-  type SelectItem,
-  type selectTriggerVariants,
-} from "@/app/components/assistant-ui/select";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from "@/app/components/ui/dropdown-menu";
+import { selectTriggerVariants } from "@/app/components/assistant-ui/select";
 
 export type ModelOption = {
   id: string;
@@ -30,9 +35,25 @@ export type ModelOption = {
   disabled?: boolean;
 };
 
+export type ModelProviderOption = {
+  id: string;
+  name: string;
+  description?: string;
+  icon?: ReactNode;
+  disabled?: boolean;
+  models: readonly ModelOption[];
+};
+
+type ModelSelection = {
+  model: ModelOption;
+  provider: ModelProviderOption;
+};
+
 type ModelSelectorContextValue = {
-  models: ModelOption[];
-  value: string | undefined;
+  providers: readonly ModelProviderOption[];
+  selectedModelId: string;
+  selection: ModelSelection | undefined;
+  onValueChange: (value: string) => void;
 };
 
 const ModelSelectorContext = createContext<ModelSelectorContextValue | null>(
@@ -49,8 +70,53 @@ function useModelSelectorContext() {
   return ctx;
 }
 
+function createFallbackProvider(models: readonly ModelOption[] | undefined) {
+  return [
+    {
+      id: "models",
+      name: "Models",
+      models: models ?? [],
+    },
+  ] satisfies readonly ModelProviderOption[];
+}
+
+function normalizeProviders({
+  models,
+  providers,
+}: {
+  models?: readonly ModelOption[];
+  providers?: readonly ModelProviderOption[];
+}) {
+  return providers ?? createFallbackProvider(models);
+}
+
+export function getFirstModelId(
+  providers: readonly ModelProviderOption[],
+): string {
+  return providers.find((provider) => provider.models.length > 0)?.models[0]?.id ?? "";
+}
+
+export function findModelSelection(
+  providers: readonly ModelProviderOption[],
+  modelId: string | undefined,
+): ModelSelection | undefined {
+  if (!modelId) {
+    return undefined;
+  }
+
+  for (const provider of providers) {
+    const model = provider.models.find((item) => item.id === modelId);
+    if (model) {
+      return { model, provider };
+    }
+  }
+
+  return undefined;
+}
+
 export type ModelSelectorRootProps = {
-  models: ModelOption[];
+  providers?: readonly ModelProviderOption[];
+  models?: readonly ModelOption[];
   value?: string;
   onValueChange?: (value: string) => void;
   defaultValue?: string;
@@ -61,29 +127,64 @@ export type ModelSelectorRootProps = {
 };
 
 function ModelSelectorRoot({
+  providers: providersProp,
   models,
-  defaultValue: defaultValueProp,
+  defaultValue,
   children,
-  value,
-  ...selectProps
+  value: controlledValue,
+  onValueChange: controlledOnValueChange,
+  ...menuProps
 }: ModelSelectorRootProps) {
-  const defaultValue = defaultValueProp ?? models[0]?.id;
+  const providers = useMemo(
+    () => normalizeProviders({ models, providers: providersProp }),
+    [models, providersProp],
+  );
+  const fallbackValue = defaultValue ?? getFirstModelId(providers);
+  const [internalValue, setInternalValue] = useState(fallbackValue);
+  const selectedModelId = controlledValue ?? internalValue;
+  const selection = useMemo(
+    () => findModelSelection(providers, selectedModelId),
+    [providers, selectedModelId],
+  );
+
+  useEffect(() => {
+    if (controlledValue === undefined && !selectedModelId && fallbackValue) {
+      setInternalValue(fallbackValue);
+    }
+  }, [controlledValue, fallbackValue, selectedModelId]);
+
+  const handleValueChange = useCallback(
+    (nextValue: string) => {
+      if (controlledValue === undefined) {
+        setInternalValue(nextValue);
+      }
+
+      controlledOnValueChange?.(nextValue);
+    },
+    [controlledOnValueChange, controlledValue],
+  );
+
+  const contextValue = useMemo<ModelSelectorContextValue>(
+    () => ({
+      providers,
+      selectedModelId,
+      selection,
+      onValueChange: handleValueChange,
+    }),
+    [handleValueChange, providers, selectedModelId, selection],
+  );
+
   return (
-    <ModelSelectorContext.Provider value={{ models, value }}>
-      <SelectRoot
-        {...(defaultValue !== undefined ? { defaultValue } : undefined)}
-        {...(value !== undefined ? { value } : undefined)}
-        {...selectProps}
-      >
-        {children}
-      </SelectRoot>
+    <ModelSelectorContext.Provider value={contextValue}>
+      <DropdownMenu {...menuProps}>{children}</DropdownMenu>
     </ModelSelectorContext.Provider>
   );
 }
 
 export type ModelSelectorTriggerProps = ComponentPropsWithoutRef<
-  typeof SelectTrigger
->;
+  typeof DropdownMenuTrigger
+> &
+  VariantProps<typeof selectTriggerVariants>;
 
 function ModelSelectorTrigger({
   className,
@@ -93,123 +194,179 @@ function ModelSelectorTrigger({
   ...props
 }: ModelSelectorTriggerProps) {
   return (
-    <SelectTrigger
+    <DropdownMenuTrigger
       data-slot="model-selector-trigger"
-      variant={variant}
-      size={size}
-      className={cn("aui-model-selector-trigger", className)}
+      data-variant={variant ?? "outline"}
+      data-size={size ?? "default"}
+      className={cn(
+        "aui-model-selector-trigger min-w-0",
+        selectTriggerVariants({ variant, size }),
+        className,
+      )}
       {...props}
     >
       {children ?? <ModelSelectorValue />}
-    </SelectTrigger>
+      <ChevronDownIcon className="size-4 shrink-0 opacity-50" />
+    </DropdownMenuTrigger>
   );
 }
 
-/**
- * Renders the selected model display in the trigger.
- *
- * Bypasses Radix Select.Value to avoid the empty-on-SSR issue caused by
- * Select items living inside a Portal (not rendered server-side).
- * Falls back to Select.Value for uncontrolled (defaultValue-only) usage.
- */
 function ModelSelectorValue() {
-  const { models, value } = useModelSelectorContext();
-  const selectedModel =
-    value != null ? models.find((m) => m.id === value) : undefined;
+  const { selection } = useModelSelectorContext();
 
-  if (!selectedModel) {
-    return <SelectPrimitive.Value />;
+  if (!selection) {
+    return <span className="truncate text-muted-foreground">Select model</span>;
   }
 
+  const { model, provider } = selection;
+
   return (
-    <span>
-      <span className="flex items-center gap-2">
-        {selectedModel.icon && (
-          <span className="flex size-4 shrink-0 items-center justify-center [&_svg]:size-4">
-            {selectedModel.icon}
-          </span>
-        )}
-        <span className="truncate font-medium">{selectedModel.name}</span>
+    <span className="flex min-w-0 items-center gap-2">
+      {provider.icon && (
+        <span className="flex size-4 shrink-0 items-center justify-center [&_svg]:size-4">
+          {provider.icon}
+        </span>
+      )}
+      <span className="min-w-0 truncate font-medium">{model.name}</span>
+      <span className="hidden max-w-20 truncate text-muted-foreground sm:inline">
+        {provider.name}
       </span>
     </span>
   );
 }
 
 export type ModelSelectorContentProps = ComponentPropsWithoutRef<
-  typeof SelectContent
+  typeof DropdownMenuContent
 >;
 
 function ModelSelectorContent({
   className,
   children,
+  align = "start",
   ...props
 }: ModelSelectorContentProps) {
-  const { models } = useModelSelectorContext();
+  const { providers } = useModelSelectorContext();
 
   return (
-    <SelectContent
+    <DropdownMenuContent
       data-slot="model-selector-content"
-      className={cn("min-w-[180px]", className)}
-      {...props}
-    >
-      {children ??
-        models.map((model) => (
-          <ModelSelectorItem
-            key={model.id}
-            model={model}
-            {...(model.disabled ? { disabled: true } : undefined)}
-          />
-        ))}
-    </SelectContent>
-  );
-}
-
-export type ModelSelectorItemProps = Omit<
-  ComponentPropsWithoutRef<typeof SelectItem>,
-  "value" | "children"
-> & {
-  model: ModelOption;
-};
-
-function ModelSelectorItem({
-  model,
-  className,
-  ...props
-}: ModelSelectorItemProps) {
-  return (
-    <SelectPrimitive.Item
-      data-slot="model-selector-item"
-      value={model.id}
-      textValue={model.name}
+      align={align}
       className={cn(
-        "relative flex w-full cursor-default select-none items-center gap-2 rounded-lg py-2 ps-3 pe-9 text-sm outline-none",
-        "focus:bg-accent focus:text-accent-foreground",
-        "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+        "max-h-[min(28rem,var(--radix-dropdown-menu-content-available-height))] min-w-64 overflow-y-auto",
         className,
       )}
       {...props}
     >
-      <span className="absolute end-3 flex size-4 items-center justify-center">
-        <SelectPrimitive.ItemIndicator>
-          <CheckIcon className="size-4" />
-        </SelectPrimitive.ItemIndicator>
-      </span>
-      <SelectPrimitive.ItemText>
-        <span className="flex items-center gap-2">
-          {model.icon && (
-            <span className="flex size-4 shrink-0 items-center justify-center [&_svg]:size-4">
-              {model.icon}
-            </span>
-          )}
-          <span className="truncate font-medium">{model.name}</span>
+      {children ??
+        providers.map((provider) => (
+          <ModelSelectorProvider key={provider.id} provider={provider} />
+        ))}
+    </DropdownMenuContent>
+  );
+}
+
+export type ModelSelectorProviderProps = Omit<
+  ComponentPropsWithoutRef<typeof DropdownMenuSubTrigger>,
+  "children"
+> & {
+  provider: ModelProviderOption;
+};
+
+function ModelSelectorProvider({
+  provider,
+  className,
+  ...props
+}: ModelSelectorProviderProps) {
+  return (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger
+        data-slot="model-selector-provider"
+        disabled={provider.disabled || provider.models.length === 0}
+        className={cn("min-w-0", className)}
+        {...props}
+      >
+        {provider.icon && (
+          <span className="flex size-4 shrink-0 items-center justify-center [&_svg]:size-4">
+            {provider.icon}
+          </span>
+        )}
+        <span className="min-w-0 flex-1 truncate font-medium">{provider.name}</span>
+        <span className="mr-4 shrink-0 text-[10px] text-muted-foreground">
+          {provider.models.length}
         </span>
-      </SelectPrimitive.ItemText>
-      {model.description && (
-        <span className="truncate text-muted-foreground text-xs">
-          {model.description}
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent
+        data-slot="model-selector-models"
+        className="max-h-[min(28rem,var(--radix-dropdown-menu-content-available-height))] min-w-80 overflow-y-auto"
+      >
+        {provider.models.map((model) => (
+          <ModelSelectorItem
+            key={model.id}
+            provider={provider}
+            model={model}
+            {...(model.disabled ? { disabled: true } : undefined)}
+          />
+        ))}
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
+  );
+}
+
+export type ModelSelectorItemProps = Omit<
+  ComponentPropsWithoutRef<typeof DropdownMenuItem>,
+  "children"
+> & {
+  model: ModelOption;
+  provider?: ModelProviderOption;
+};
+
+function ModelSelectorItem({
+  model,
+  provider,
+  className,
+  onSelect,
+  ...props
+}: ModelSelectorItemProps) {
+  const { selectedModelId, onValueChange } = useModelSelectorContext();
+  const isSelected = model.id === selectedModelId;
+  const handleSelect: NonNullable<ModelSelectorItemProps["onSelect"]> = (
+    event,
+  ) => {
+    onSelect?.(event);
+
+    if (event.defaultPrevented || model.disabled) {
+      return;
+    }
+
+    onValueChange(model.id);
+  };
+
+  return (
+    <DropdownMenuItem
+      data-slot="model-selector-item"
+      data-selected={String(isSelected)}
+      textValue={model.name}
+      className={cn(
+        "min-w-0 gap-2 pr-8",
+        isSelected && "bg-accent text-accent-foreground",
+        className,
+      )}
+      onSelect={handleSelect}
+      {...props}
+    >
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="truncate font-medium">{model.name}</span>
+        <span className="truncate text-[10px] text-muted-foreground">
+          {model.description ?? model.id}
+        </span>
+      </span>
+      {provider?.id && <span className="sr-only">{provider.name}</span>}
+      {isSelected && (
+        <span className="absolute right-2 flex size-4 items-center justify-center">
+          <CheckIcon className="size-4" />
         </span>
       )}
-    </SelectPrimitive.Item>
+    </DropdownMenuItem>
   );
 }
 
@@ -223,19 +380,22 @@ const ModelSelectorImpl = ({
   onValueChange: controlledOnValueChange,
   defaultValue,
   models,
+  providers,
   variant,
   size,
   contentClassName,
   ...forwardedProps
 }: ModelSelectorProps) => {
+  const normalizedProviders = useMemo(
+    () => normalizeProviders({ models, providers }),
+    [models, providers],
+  );
   const isControlled = controlledValue !== undefined;
   const [internalValue, setInternalValue] = useState(
-    () => defaultValue ?? models[0]?.id ?? "",
+    () => defaultValue ?? getFirstModelId(normalizedProviders),
   );
-
   const value = isControlled ? controlledValue : internalValue;
   const onValueChange = controlledOnValueChange ?? setInternalValue;
-
   const api = useAssistantApi();
 
   useEffect(() => {
@@ -247,7 +407,7 @@ const ModelSelectorImpl = ({
 
   return (
     <ModelSelectorRoot
-      models={models}
+      providers={normalizedProviders}
       value={value}
       onValueChange={onValueChange}
       {...forwardedProps}
@@ -263,6 +423,7 @@ type ModelSelectorComponent = typeof ModelSelectorImpl & {
   Root: typeof ModelSelectorRoot;
   Trigger: typeof ModelSelectorTrigger;
   Content: typeof ModelSelectorContent;
+  Provider: typeof ModelSelectorProvider;
   Item: typeof ModelSelectorItem;
   Value: typeof ModelSelectorValue;
 };
@@ -275,6 +436,7 @@ ModelSelector.displayName = "ModelSelector";
 ModelSelector.Root = ModelSelectorRoot;
 ModelSelector.Trigger = ModelSelectorTrigger;
 ModelSelector.Content = ModelSelectorContent;
+ModelSelector.Provider = ModelSelectorProvider;
 ModelSelector.Item = ModelSelectorItem;
 ModelSelector.Value = ModelSelectorValue;
 
@@ -283,6 +445,7 @@ export {
   ModelSelectorRoot,
   ModelSelectorTrigger,
   ModelSelectorContent,
+  ModelSelectorProvider,
   ModelSelectorItem,
   ModelSelectorValue,
 };

@@ -8,6 +8,7 @@
   "scripts": {
     "prepare:assets": "node scripts/prepare-assets.mjs",
     "prepare:slang-server": "node scripts/prepare-slang-server.mjs",
+    "generate:mastra-model-catalog": "node scripts/generate-mastra-model-catalog.mjs",
     "verify:node-pty-binary": "node scripts/verify-node-pty-binary.mjs",
     "build:app": "pnpm run prepare:assets && pnpm run prepare:slang-server && vite build",
     "predev": "pnpm run prepare:assets && pnpm run prepare:slang-server",

@@ -76,7 +76,7 @@ import {
 } from './pristineAssistantContext';
 import {
   PRISTINE_DEFAULT_MODEL_ID,
-  mockPristineModelOptions,
+  pristineModelProviders,
 } from './pristineAssistantModels';
 import {
   mockPristineMentionCategories,
@@ -652,11 +652,11 @@ function Composer() {
           <div className="flex min-h-8 items-center justify-between gap-2 border-t border-border/60 px-2 py-1">
             <div className="flex min-w-0 items-center gap-1">
               <ModelSelector
-                models={mockPristineModelOptions}
+                providers={pristineModelProviders}
                 defaultValue={PRISTINE_DEFAULT_MODEL_ID}
                 variant="ghost"
                 size="sm"
-                contentClassName="min-w-52"
+                contentClassName="min-w-64"
               />
               <ContextDisplay.Ring
                 modelContextWindow={PRISTINE_CONTEXT_WINDOW}

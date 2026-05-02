@@ -1,26 +1,55 @@
-import { BrainCircuit, Cpu, Zap } from 'lucide-react';
+import {
+  Bot,
+  BrainCircuit,
+  Cloud,
+  Cpu,
+  Globe2,
+  Network,
+  Sparkles,
+  Zap,
+  type LucideIcon,
+} from 'lucide-react';
 
-import type { ModelOption } from '@/app/components/assistant-ui/model-selector';
+import type { ModelProviderOption } from '@/app/components/assistant-ui/model-selector';
+import {
+  mastraStudioModelCatalog,
+  type MastraStudioModelProvider,
+} from './mastraStudioModelCatalog.generated';
 
-export const PRISTINE_DEFAULT_MODEL_ID = 'pristine-hdl';
+export const PRISTINE_DEFAULT_MODEL_ID = 'openrouter/openrouter/free';
 
-export const mockPristineModelOptions = [
-  {
-    id: 'pristine-fast',
-    name: 'Pristine Fast',
-    description: 'Quick coding passes',
-    icon: <Zap className="size-4" />,
-  },
-  {
-    id: PRISTINE_DEFAULT_MODEL_ID,
-    name: 'Pristine HDL',
-    description: 'RTL-aware default',
-    icon: <Cpu className="size-4" />,
-  },
-  {
-    id: 'pristine-deep',
-    name: 'Pristine Deep',
-    description: 'Deeper reasoning passes',
-    icon: <BrainCircuit className="size-4" />,
-  },
-] satisfies ModelOption[];
+const providerIconMap: Record<string, LucideIcon> = {
+  amazon: Cloud,
+  anthropic: BrainCircuit,
+  azure: Cloud,
+  cohere: Bot,
+  deepseek: Cpu,
+  google: Globe2,
+  groq: Zap,
+  mastra: Sparkles,
+  mistral: Sparkles,
+  openai: Sparkles,
+  openrouter: Network,
+  xai: Bot,
+};
+
+function getProviderIcon(providerId: string) {
+  const Icon = providerIconMap[providerId] ?? Bot;
+  return <Icon className="size-4" />;
+}
+
+function getProviderDescription(provider: MastraStudioModelProvider) {
+  return `${provider.models.length} Mastra Studio models`;
+}
+
+export const pristineModelProviders = mastraStudioModelCatalog.map((provider) => ({
+  id: provider.id,
+  name: provider.name,
+  description: getProviderDescription(provider),
+  icon: getProviderIcon(provider.id),
+  models: provider.models.map((model) => ({
+    id: model.id,
+    name: model.name,
+    description: model.modelId,
+  })),
+})) satisfies ModelProviderOption[];

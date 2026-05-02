@@ -1,8 +1,10 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { SparklesIcon } from 'lucide-react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ModelSelector } from './model-selector';
+import { ModelSelector, findModelSelection, getFirstModelId } from './model-selector';
+import type { ModelProviderOption } from './model-selector';
 
 const mocks = vi.hoisted(() => ({
   modelContext: vi.fn(),
@@ -16,51 +18,108 @@ vi.mock('@assistant-ui/react', () => ({
   }),
 }));
 
-const models = [
+const providers = [
   {
-    id: 'pristine-fast',
-    name: 'Pristine Fast',
-    description: 'Quick coding passes',
+    id: 'openrouter',
+    name: 'OpenRouter',
+    description: 'Gateway models',
     icon: <SparklesIcon className="size-4" />,
+    models: [
+      {
+        id: 'openrouter/openrouter/free',
+        name: 'OpenRouter Free',
+        description: 'openrouter/free',
+      },
+      {
+        id: 'openrouter/openai/gpt-4.1-mini',
+        name: 'GPT 4.1 Mini',
+        description: 'openai/gpt-4.1-mini',
+      },
+    ],
   },
   {
-    id: 'pristine-hdl',
-    name: 'Pristine HDL',
-    description: 'RTL-aware default',
+    id: 'anthropic',
+    name: 'Anthropic',
+    models: [
+      {
+        id: 'anthropic/claude-sonnet-4.6',
+        name: 'Claude Sonnet 4.6',
+        description: 'claude-sonnet-4.6',
+      },
+    ],
   },
-];
+] satisfies ModelProviderOption[];
+
+function getClosestSlot(element: HTMLElement, slot: string) {
+  const match = element.closest(`[data-slot="${slot}"]`);
+  expect(match).toBeInstanceOf(HTMLElement);
+  return match as HTMLElement;
+}
 
 describe('ModelSelector', () => {
   beforeEach(() => {
     mocks.modelContext.mockReturnValue({ register: mocks.register });
     mocks.register.mockReturnValue(mocks.unregister);
+    mocks.modelContext.mockClear();
     mocks.register.mockClear();
     mocks.unregister.mockClear();
   });
 
-  it('renders the selected mock model with sm ghost trigger styling', async () => {
+  it('renders a provider submenu selector and registers the selected model context', async () => {
+    const user = userEvent.setup();
+
     render(
       <ModelSelector
-        models={models}
-        defaultValue="pristine-fast"
+        providers={providers}
+        defaultValue="openrouter/openrouter/free"
         variant="ghost"
         size="sm"
       />,
     );
 
-    const trigger = screen.getByRole('combobox');
+    const trigger = screen.getByRole('button');
     expect(trigger).toHaveAttribute('data-slot', 'model-selector-trigger');
     expect(trigger).toHaveAttribute('data-variant', 'ghost');
     expect(trigger).toHaveAttribute('data-size', 'sm');
-    expect(trigger).toHaveTextContent('Pristine Fast');
+    expect(trigger).toHaveTextContent('OpenRouter Free');
+    expect(trigger).toHaveTextContent('OpenRouter');
 
     await waitFor(() => {
       expect(mocks.register).toHaveBeenCalledTimes(1);
     });
-
-    const provider = mocks.register.mock.calls[0]?.[0];
-    expect(provider.getModelContext()).toEqual({
-      config: { modelName: 'pristine-fast' },
+    expect(mocks.register.mock.calls[0]?.[0].getModelContext()).toEqual({
+      config: { modelName: 'openrouter/openrouter/free' },
     });
+
+    await user.click(trigger);
+
+    const providerTrigger = getClosestSlot(
+      screen.getByRole('menuitem', { name: 'OpenRouter2' }),
+      'model-selector-provider',
+    );
+    expect(providerTrigger).toHaveTextContent('2');
+
+    await user.hover(providerTrigger);
+    const nextModel = await screen.findByText('GPT 4.1 Mini');
+
+    fireEvent.click(getClosestSlot(nextModel, 'model-selector-item'));
+
+    await waitFor(() => {
+      expect(trigger).toHaveTextContent('GPT 4.1 Mini');
+      expect(mocks.register).toHaveBeenCalledTimes(2);
+    });
+    expect(mocks.unregister).toHaveBeenCalledTimes(1);
+    expect(mocks.register.mock.calls[1]?.[0].getModelContext()).toEqual({
+      config: { modelName: 'openrouter/openai/gpt-4.1-mini' },
+    });
+  });
+
+  it('keeps model lookup helpers deterministic for provider groups', () => {
+    expect(getFirstModelId(providers)).toBe('openrouter/openrouter/free');
+    expect(findModelSelection(providers, 'anthropic/claude-sonnet-4.6')).toMatchObject({
+      model: { name: 'Claude Sonnet 4.6' },
+      provider: { name: 'Anthropic' },
+    });
+    expect(findModelSelection(providers, 'missing/model')).toBeUndefined();
   });
 });

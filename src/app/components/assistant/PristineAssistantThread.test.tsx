@@ -14,7 +14,7 @@ import {
 } from './pristineAssistantContext';
 import {
   PRISTINE_DEFAULT_MODEL_ID,
-  mockPristineModelOptions,
+  pristineModelProviders,
 } from './pristineAssistantModels';
 import {
   mockPristineMentionCategories,
@@ -258,7 +258,7 @@ vi.mock('@/app/components/assistant-ui/context-display', () => ({
 vi.mock('@/app/components/assistant-ui/model-selector', () => ({
   ModelSelector: (props: {
     defaultValue?: string;
-    models: unknown[];
+    providers: unknown[];
     size?: string;
     variant?: string;
   }) => {
@@ -267,7 +267,7 @@ vi.mock('@/app/components/assistant-ui/model-selector', () => ({
       <div
         data-testid="model-selector"
         data-default-value={props.defaultValue}
-        data-model-count={props.models.length}
+        data-provider-count={props.providers.length}
         data-size={props.size}
         data-variant={props.variant}
       />
@@ -345,7 +345,7 @@ describe('PristineAssistantThread', () => {
     expect(screen.getByTestId('model-selector')).toHaveAttribute('data-size', 'sm');
     expect(screen.getByTestId('model-selector')).toHaveAttribute('data-variant', 'ghost');
     expect(screen.getByTestId('model-selector')).toHaveAttribute('data-default-value', PRISTINE_DEFAULT_MODEL_ID);
-    expect(screen.getByTestId('model-selector')).toHaveAttribute('data-model-count', String(mockPristineModelOptions.length));
+    expect(screen.getByTestId('model-selector')).toHaveAttribute('data-provider-count', String(pristineModelProviders.length));
     expect(screen.getByTestId('composer-quote-preview')).toBeInTheDocument();
     expect(screen.getByTestId('selection-toolbar')).toBeInTheDocument();
     expect(screen.getByTestId('quote-block')).toHaveTextContent('Selected RTL timing context');
