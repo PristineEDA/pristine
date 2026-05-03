@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, userEvent } from '@/test/render';
 import { describe, expect, it, vi } from 'vitest';
 import { FileIcon, FileTreeNode } from './FileTreeNode';
+import { createExplorerTreeContextMenuItems } from './FileTreeNodeContextMenu';
 
 function getContextMenuItem(label: string): HTMLElement {
   return screen.getByRole('menuitem', { name: label });
@@ -528,6 +529,48 @@ describe('FileTreeNode', () => {
     fireEvent.keyDown(getContextMenuItem('Open in Editor'), { key: 'Tab' });
     expect(screen.queryByTestId('explorer-context-menu')).not.toBeInTheDocument();
     expect(onRequestTreeFocus).toHaveBeenCalledTimes(1);
+  });
+
+  it('marks inline edit context menu actions to skip restoring tree focus', () => {
+    const folderNode = {
+      id: 'rtl',
+      path: 'rtl',
+      name: 'rtl',
+      type: 'folder' as const,
+      children: [],
+      hasLoadedChildren: true,
+      isLoading: false,
+    };
+    const fileNode = {
+      id: 'rtl/core/cpu_top.v',
+      path: 'rtl/core/cpu_top.v',
+      name: 'cpu_top.v',
+      type: 'file' as const,
+      hasLoadedChildren: true,
+      isLoading: false,
+    };
+
+    const folderItems = createExplorerTreeContextMenuItems({
+      node: folderNode,
+      onOpenFile: vi.fn(),
+      onStartCreateFile: vi.fn(),
+      onStartCreateFolder: vi.fn(),
+      onStartRename: vi.fn(),
+    });
+    const fileItems = createExplorerTreeContextMenuItems({
+      node: fileNode,
+      onOpenFile: vi.fn(),
+      onStartRename: vi.fn(),
+    });
+
+    expect(folderItems).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'item', label: 'New File', restoreTreeFocusOnClose: false }),
+      expect.objectContaining({ kind: 'item', label: 'New Folder', restoreTreeFocusOnClose: false }),
+      expect.objectContaining({ kind: 'item', label: 'Rename', restoreTreeFocusOnClose: false }),
+    ]));
+    expect(fileItems).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'item', label: 'Rename', restoreTreeFocusOnClose: false }),
+    ]));
   });
 
   it('keeps a clicked folder highlighted when the selected folder id matches', () => {

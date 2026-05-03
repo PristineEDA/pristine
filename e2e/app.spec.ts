@@ -571,17 +571,11 @@ async function setExplorerRenameInputValue(
   nextValue: string,
 ) {
   const renameInput = window.getByTestId(renameInputTestId);
+  const selectAllShortcut = process.platform === 'darwin' ? 'Meta+A' : 'Control+A';
 
   await expect(renameInput).toBeVisible();
-  await renameInput.evaluate((inputElement) => {
-    const input = inputElement as unknown as {
-      focus: () => void;
-      select: () => void;
-    };
-    input.focus();
-    input.select();
-  });
-
+  await renameInput.click();
+  await window.keyboard.press(selectAllShortcut);
   await window.keyboard.insertText(nextValue);
   await expect(window.getByTestId(renameInputTestId)).toHaveValue(nextValue);
 }

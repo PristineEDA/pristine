@@ -18,6 +18,7 @@ interface ContextMenuItem {
   label: string;
   action: () => void;
   disabled?: boolean;
+  restoreTreeFocusOnClose?: boolean;
   shortcut?: string;
   variant?: 'default' | 'destructive';
 }
@@ -130,12 +131,14 @@ export function createContextMenuItem({
   action,
   disabled,
   label,
+  restoreTreeFocusOnClose,
   shortcut,
   variant,
 }: {
   action: () => void;
   disabled?: boolean;
   label: string;
+  restoreTreeFocusOnClose?: boolean;
   shortcut?: string;
   variant?: 'default' | 'destructive';
 }): ContextMenuItem {
@@ -144,6 +147,7 @@ export function createContextMenuItem({
     label,
     action,
     disabled,
+    restoreTreeFocusOnClose,
     shortcut,
     variant,
   };
@@ -185,10 +189,12 @@ export function createExplorerTreeContextMenuItems({
       createContextMenuItem({
         label: 'New File',
         action: () => onStartCreateFile?.('file', node.path),
+        restoreTreeFocusOnClose: false,
       }),
       createContextMenuItem({
         label: 'New Folder',
         action: () => onStartCreateFolder?.('folder', node.path),
+        restoreTreeFocusOnClose: false,
       }),
       createContextMenuSeparator('create-separator'),
       createContextMenuItem({
@@ -209,6 +215,7 @@ export function createExplorerTreeContextMenuItems({
       items.push(createContextMenuItem({
         label: 'Rename',
         action: () => onStartRename?.(node.path, 'folder'),
+        restoreTreeFocusOnClose: false,
         shortcut: 'F2',
       }));
       items.push(createContextMenuItem({
@@ -245,6 +252,7 @@ export function createExplorerTreeContextMenuItems({
     createContextMenuItem({
       label: 'Rename',
       action: () => onStartRename?.(node.path, 'file'),
+      restoreTreeFocusOnClose: false,
       shortcut: 'F2',
     }),
     createContextMenuItem({
@@ -311,9 +319,11 @@ export function ExplorerContextMenu({
     onRequestTreeFocus();
   }, [onRequestTreeFocus]);
 
-  const closeMenu = useCallback((deferFocusRestore = false) => {
+  const closeMenu = useCallback((deferFocusRestore = false, restoreTreeFocusOnClose = true) => {
     onClose();
-    restoreTreeFocus(deferFocusRestore);
+    if (restoreTreeFocusOnClose) {
+      restoreTreeFocus(deferFocusRestore);
+    }
   }, [onClose, restoreTreeFocus]);
 
   const activateMenuItem = useCallback((index: number) => {
@@ -324,7 +334,7 @@ export function ExplorerContextMenu({
     }
 
     item.action();
-    closeMenu(true);
+    closeMenu(true, item.restoreTreeFocusOnClose ?? true);
   }, [closeMenu, items]);
 
   const handleMenuKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
