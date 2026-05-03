@@ -2,7 +2,7 @@ import { renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
 import { getAgentThreadMessages } from './agentApi';
-import { usePristineThreadMessagesBootstrap } from './pristineThreadRuntime';
+import { createPristineChatRequestBody, usePristineThreadMessagesBootstrap } from './pristineThreadRuntime';
 
 vi.mock('./agentApi', async () => {
   const actual = await vi.importActual<typeof import('./agentApi')>('./agentApi');
@@ -16,6 +16,33 @@ vi.mock('./agentApi', async () => {
 describe('usePristineThreadMessagesBootstrap', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('writes the active thread under Mastra memory options', () => {
+    const requestBody = createPristineChatRequestBody({
+      body: {
+        config: { model: 'test-model' },
+        memory: { resource: 'pristine:workspace:c:/workspace/pristine' },
+      },
+      id: 'thread-1',
+      messageId: 'message-1',
+      messages: [],
+      requestMetadata: { source: 'test' },
+      trigger: 'submit-message',
+    });
+
+    expect(requestBody).toMatchObject({
+      config: { model: 'test-model' },
+      memory: {
+        resource: 'pristine:workspace:c:/workspace/pristine',
+        thread: 'thread-1',
+      },
+      messageId: 'message-1',
+      messages: [],
+      metadata: { source: 'test' },
+      trigger: 'submit-message',
+    });
+    expect(requestBody).not.toHaveProperty('threadId');
   });
 
   it('loads persisted messages for existing remote threads', async () => {
@@ -58,8 +85,8 @@ describe('usePristineThreadMessagesBootstrap', () => {
 
     renderHook(() => usePristineThreadMessagesBootstrap({
       baseUrl: 'http://localhost:4111',
-      threadId: '__LOCALID_thread-1',
-      remoteId: 'thread-1',
+      threadId: '__optimistic__thread-1',
+      remoteId: '__optimistic__thread-1',
       setMessages,
     }));
 

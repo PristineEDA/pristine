@@ -459,6 +459,41 @@ describe('App', () => {
     expect(screen.getByTestId('menu-bottom-state')).toHaveTextContent('false');
   });
 
+  it('does not carry the simulation right panel into explorer after returning from higher-priority navigation', async () => {
+    render(<App />);
+
+    await clickText('select-simulation');
+    expect(await screen.findByTestId('menu-right-state')).toHaveTextContent('true');
+
+    await clickText('toggle-left-panel');
+    await clickText('toggle-bottom-panel');
+    expect(screen.getByTestId('menu-left-state')).toHaveTextContent('false');
+    expect(screen.getByTestId('menu-bottom-state')).toHaveTextContent('false');
+    expect(screen.getByTestId('menu-right-state')).toHaveTextContent('true');
+
+    await clickText('select-synthesis');
+    expect(await screen.findByTestId('menu-layout-enabled')).toHaveTextContent('false');
+
+    await clickText('switch-whiteboard');
+    expect(screen.getByTestId('main-content-view')).toHaveTextContent('whiteboard');
+
+    await clickText('switch-workflow');
+    expect(screen.getByTestId('main-content-view')).toHaveTextContent('workflow');
+
+    await clickText('switch-code');
+    expect(screen.getByTestId('activity-view')).toHaveTextContent('synthesis');
+    expect(screen.getByTestId('menu-layout-enabled')).toHaveTextContent('false');
+
+    await clickText('select-simulation');
+    expect(await screen.findByTestId('menu-right-state')).toHaveTextContent('true');
+
+    await clickText('select-explorer');
+    expect(screen.getByTestId('menu-left-state')).toHaveTextContent('false');
+    expect(screen.getByTestId('menu-right-state')).toHaveTextContent('false');
+    expect(screen.queryByTestId('panel-left-panel')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('panel-right-panel')).not.toBeInTheDocument();
+  });
+
   it('opens quick open with Ctrl+P, resets the query on reopen, and selects a file', async () => {
     vi.mocked(window.electronAPI!.fs.listFiles).mockResolvedValue([
       'README.md',

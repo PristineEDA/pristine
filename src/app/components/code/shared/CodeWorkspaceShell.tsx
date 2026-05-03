@@ -123,7 +123,7 @@ export function CodeWorkspaceShell({
 }: CodeWorkspaceShellProps) {
   const hasFixedLeftPanel = typeof leftFixedWidthPx === 'number' && typeof onLeftFixedWidthChange === 'function';
   const hasFixedRightPanel = typeof rightFixedWidthPx === 'number' && typeof onRightFixedWidthChange === 'function';
-  const fixedRightPanelWasOpenedRef = useRef(showRightPanel);
+  const fixedRightPanelWasOpenedRef = useRef(hasFixedRightPanel && showRightPanel);
   const fixedLeftMinWidth = leftFixedMinWidthPx ?? EXPLORER_LEFT_PANEL_MIN_WIDTH_PX;
   const fixedLeftMaxWidth = leftFixedMaxWidthPx ?? EXPLORER_LEFT_PANEL_MAX_WIDTH_PX;
   const fixedRightMinWidth = rightFixedMinWidthPx ?? EXPLORER_RIGHT_PANEL_MIN_WIDTH_PX;

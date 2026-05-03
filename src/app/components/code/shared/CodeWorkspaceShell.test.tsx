@@ -364,4 +364,50 @@ describe('CodeWorkspaceShell', () => {
     expect(screen.getByTestId('stateful-right-panel')).toHaveAttribute('data-instance-id', '1');
     expect(rightPanelMountCount).toBe(1);
   });
+
+  it('does not treat a non-fixed shell mount as a previously opened fixed right panel', () => {
+    const { rerender } = render(
+      <CodeWorkspaceShell
+        activityBar={<div>Activity</div>}
+        showLeftPanel={false}
+        showBottomPanel
+        showRightPanel
+        leftPanelId="simulation-left"
+        centerPanelId="simulation-center"
+        topPanelId="simulation-top"
+        bottomPanelId="simulation-bottom"
+        rightPanelId="simulation-right"
+        leftContent={<div>Simulation Left</div>}
+        topContent={<div>Simulation Main</div>}
+        bottomContent={<div>Simulation Bottom</div>}
+        rightContent={<div>Simulation Right</div>}
+      />,
+    );
+
+    expect(screen.getByTestId('panel-simulation-right')).toBeInTheDocument();
+
+    rerender(
+      <CodeWorkspaceShell
+        activityBar={<div>Activity</div>}
+        showLeftPanel={false}
+        showBottomPanel={false}
+        showRightPanel={false}
+        leftPanelId="left"
+        centerPanelId="center"
+        topPanelId="top"
+        bottomPanelId="bottom"
+        rightPanelId="right"
+        leftFixedWidthPx={280}
+        onLeftFixedWidthChange={() => 280}
+        rightFixedWidthPx={EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX}
+        onRightFixedWidthChange={() => EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX}
+        leftContent={<div>Explorer</div>}
+        topContent={<div>Editor</div>}
+        bottomContent={<div>Terminal</div>}
+        rightContent={<div>Inspector</div>}
+      />,
+    );
+
+    expect(screen.queryByTestId('panel-right')).not.toBeInTheDocument();
+  });
 });

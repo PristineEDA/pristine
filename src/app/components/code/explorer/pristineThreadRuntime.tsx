@@ -27,6 +27,7 @@ import {
 } from './agentApi';
 
 const MAX_THREAD_TITLE_LENGTH = 60;
+const OPTIMISTIC_THREAD_ID_PREFIX = '__optimistic__';
 
 type TitleAssistantStreamChunk =
   | {
@@ -98,6 +99,50 @@ function createMessageRepository<TMessage>(
   return {
     headId: formatAdapter.getId(messages[messages.length - 1]!),
     messages: items,
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isOptimisticThreadId(id: string | undefined): boolean {
+  return typeof id === 'string' && id.startsWith(OPTIMISTIC_THREAD_ID_PREFIX);
+}
+
+function isPersistedRemoteThread(threadId: string, remoteId: string | undefined): remoteId is string {
+  return Boolean(remoteId) && threadId === remoteId && !isOptimisticThreadId(threadId);
+}
+
+type PristineSendMessagesRequestOptions = {
+  body?: Record<string, unknown>;
+  id: string;
+  messageId?: string;
+  messages: UIMessage[];
+  requestMetadata: unknown;
+  trigger: string;
+};
+
+export function createPristineChatRequestBody({
+  body,
+  id,
+  messageId,
+  messages,
+  requestMetadata,
+  trigger,
+}: PristineSendMessagesRequestOptions) {
+  const existingMemory = isRecord(body?.memory) ? body.memory : undefined;
+
+  return {
+    ...body,
+    messages,
+    trigger,
+    messageId,
+    metadata: requestMetadata,
+    memory: {
+      ...existingMemory,
+      thread: id,
+    },
   };
 }
 
@@ -206,9 +251,8 @@ export function usePristineThreadMessagesBootstrap({
       };
     }
 
-    // New threads receive a local temporary id until the first send initializes them.
-    // Only bootstrap persisted history for already-existing remote threads.
-    if (threadId !== remoteId) {
+    // New threads use assistant-ui optimistic ids until a persisted thread identity exists.
+    if (!isPersistedRemoteThread(threadId, remoteId)) {
       return () => {
         cancelled = true;
       };
@@ -304,15 +348,7 @@ export function usePristineAgentRuntime({ baseUrl, initialThreadId }: UsePristin
     () => new AssistantChatTransport<UIMessage>({
       api: `${baseUrl}/chat/pristineAgent`,
       prepareSendMessagesRequest: async (options) => ({
-        body: {
-          ...options.body,
-          id: options.id,
-          threadId: options.id,
-          messages: options.messages,
-          trigger: options.trigger,
-          messageId: options.messageId,
-          metadata: options.requestMetadata,
-        },
+        body: createPristineChatRequestBody(options),
       }),
     }),
     [baseUrl],
