@@ -23,6 +23,7 @@ import {
   editorTabSizeOptions,
   editorWordWrapOptions,
   getEditorCursorBlinkingLabel,
+  getEditorFontFamilyAuthor,
   getEditorFontFamilyLabel,
   getEditorFoldingStrategyLabel,
   getEditorLineNumbersLabel,
@@ -84,6 +85,9 @@ describe('editorSettings', () => {
     expect(getEditorFontFamilyLabel('m-plus-code-latin-50')).toBe('M PLUS Code Latin 50')
     expect(getEditorFontFamilyLabel('meslo-lg-mdz')).toBe('Meslo LG MDZ')
     expect(getEditorFontFamilyLabel('meslo-lg-sdz')).toBe('Meslo LG SDZ')
+    expect(getEditorFontFamilyAuthor('jetbrains-mono')).toBe('JetBrains')
+    expect(getEditorFontFamilyAuthor('victor-mono')).toBe('Rubjo Vampjoen')
+    expect(getEditorFontFamilyAuthor('monaspace-neon')).toBe('GitHub Next')
   })
 
   it('parses Monaco display enum settings and falls back to defaults for invalid values', () => {

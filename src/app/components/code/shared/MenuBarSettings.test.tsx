@@ -183,7 +183,7 @@ describe('MenuBar settings', () => {
     expect(window.electronAPI?.setFloatingInfoWindowVisible).toHaveBeenCalledWith(false);
   }, 15000);
 
-  it('opens the advanced editor font picker and applies the selected preview card', async () => {
+  it('opens the advanced editor font picker, filters preview cards, and applies the selected preview card', async () => {
     const user = userEvent.setup();
 
     mockPersistedSettingsConfig({
@@ -198,11 +198,44 @@ describe('MenuBar settings', () => {
     await user.click(screen.getByTestId('settings-editor-font-family-advanced-button'));
 
     expect(await screen.findByTestId('settings-editor-font-family-advanced-dialog')).toBeVisible();
+    expect(screen.getByTestId('settings-editor-font-family-current-section')).toBeVisible();
+    expect(screen.getByTestId('settings-editor-font-family-available-section')).toBeVisible();
     expect(screen.getByTestId('settings-editor-font-family-advanced-grid')).toBeVisible();
+    expect(screen.getByText('Current')).toBeInTheDocument();
+    expect(screen.getByText('Available fonts')).toBeInTheDocument();
+    const searchInput = screen.getByTestId('settings-editor-font-family-advanced-search-input');
+    expect(searchInput).toHaveAttribute('placeholder', 'Search editor fonts...');
+    expect(searchInput).toHaveClass('border-foreground/20');
+    await waitFor(() => {
+      expect(searchInput).not.toHaveFocus();
+      expect(screen.getByTestId('settings-editor-font-family-advanced-close-button')).toHaveFocus();
+    });
+    expect(screen.getByTestId('settings-editor-font-family-current-card-fira-code')).toHaveAttribute('data-state', 'unselected');
+    expect(screen.getByTestId('settings-editor-font-family-current-author-fira-code')).toHaveTextContent('Nikita Prokopov');
     expect(screen.getByTestId('settings-editor-font-family-preview-card-fira-code')).toHaveAttribute('data-state', 'selected');
     expect(screen.getByTestId('settings-editor-font-family-preview-letters-victor-mono')).toHaveTextContent('AaBbCcDdEe');
     expect(screen.getByTestId('settings-editor-font-family-preview-digits-victor-mono')).toHaveTextContent('0123456789');
+    expect(screen.getByTestId('settings-editor-font-family-preview-author-victor-mono')).toHaveTextContent('Rubjo Vampjoen');
     expect(ensureEditorFontFamilyLoadedMock).toHaveBeenCalledWith('victor-mono');
+
+    await user.type(searchInput, 'fira');
+
+    expect(screen.getByTestId('settings-editor-font-family-current-card-fira-code')).toBeVisible();
+    expect(screen.getByTestId('settings-editor-font-family-preview-card-fira-code')).toHaveAttribute('data-state', 'selected');
+    expect(screen.queryByTestId('settings-editor-font-family-preview-card-victor-mono')).not.toBeInTheDocument();
+
+    await user.clear(searchInput);
+    await user.type(searchInput, 'zzz');
+
+    expect(screen.getByTestId('settings-editor-font-family-current-card-fira-code')).toBeVisible();
+    expect(screen.getByTestId('settings-editor-font-family-advanced-empty-state')).toHaveTextContent('No editor font found.');
+    expect(screen.queryByTestId('settings-editor-font-family-preview-card-fira-code')).not.toBeInTheDocument();
+
+    await user.clear(searchInput);
+    await user.type(searchInput, 'victor');
+
+    expect(screen.getByTestId('settings-editor-font-family-preview-card-victor-mono')).toHaveAttribute('data-state', 'unselected');
+    expect(screen.queryByTestId('settings-editor-font-family-preview-card-fira-code')).not.toBeInTheDocument();
 
     await user.click(screen.getByTestId('settings-editor-font-family-preview-card-victor-mono'));
 
