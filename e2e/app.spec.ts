@@ -384,6 +384,13 @@ async function ensureExplorerHidden(window: Awaited<ReturnType<typeof launchApp>
   await expect(readmeNode).toHaveCount(0);
 }
 
+async function readElementPixelWidth(locator: Locator) {
+  return locator.evaluate((element) => {
+    const node = element as { getBoundingClientRect?: () => { width: number } };
+    return Math.round(node.getBoundingClientRect?.().width ?? 0);
+  });
+}
+
 async function positionExplorerNodeNearBottom(
   window: Awaited<ReturnType<typeof launchApp>>['window'],
   targetTestId: string,
@@ -2733,6 +2740,93 @@ test('activity bar switches code subpages and menu bar keeps higher-priority pag
   await window.getByTestId('activity-item-explorer').click();
   await expect(window.getByTestId('panel-left-panel')).toBeVisible();
   await expect(window.getByTestId('panel-right-panel')).toBeVisible();
+
+  await app.close();
+});
+
+test('assistant chat list expansion widens the whole right sidebar and supports internal drag resize', async () => {
+  test.slow();
+
+  const { app, window } = await launchApp();
+
+  await ensureExplorerVisible(window);
+
+  const rightPanelToggle = window.getByTestId('toggle-right-panel');
+  const rightPanel = window.getByTestId('panel-right-panel');
+  const assistantMainPanel = window.getByTestId('assistant-main-panel');
+  const chatListToggle = window.getByTestId('assistant-thread-list-toggle');
+  const chatListPanel = window.getByTestId('assistant-thread-list-panel');
+  const chatListResizeHandle = window.getByTestId('assistant-thread-list-resize-handle');
+
+  await expect(rightPanelToggle).toBeEnabled();
+  await rightPanelToggle.click();
+
+  await expect(rightPanel).toBeVisible();
+  await expect(chatListPanel).toHaveCount(0);
+
+  const initialRightPanelWidth = await readElementPixelWidth(rightPanel);
+  const initialAssistantWidth = await readElementPixelWidth(assistantMainPanel);
+
+  expect(initialRightPanelWidth).toBeGreaterThanOrEqual(295);
+  expect(initialRightPanelWidth).toBeLessThanOrEqual(305);
+  expect(initialAssistantWidth).toBeGreaterThanOrEqual(295);
+  expect(initialAssistantWidth).toBeLessThanOrEqual(305);
+
+  await chatListToggle.click();
+
+  await expect(chatListPanel).toBeVisible();
+
+  const expandedRightPanelWidth = await readElementPixelWidth(rightPanel);
+  const expandedAssistantWidth = await readElementPixelWidth(assistantMainPanel);
+  const expandedChatListWidth = await readElementPixelWidth(chatListPanel);
+
+  expect(expandedChatListWidth).toBeGreaterThanOrEqual(275);
+  expect(expandedChatListWidth).toBeLessThanOrEqual(285);
+  expect(expandedRightPanelWidth).toBeGreaterThan(initialRightPanelWidth + 250);
+  expect(expandedAssistantWidth).toBeGreaterThanOrEqual(initialAssistantWidth - 2);
+  expect(expandedAssistantWidth).toBeLessThanOrEqual(initialAssistantWidth + 2);
+
+  await chatListResizeHandle.evaluate((element) => {
+    const handle = element as {
+      dispatchEvent: (event: unknown) => void;
+      ownerDocument?: {
+        defaultView?: {
+          PointerEvent?: new (type: string, init?: Record<string, boolean | number>) => unknown;
+        };
+      };
+    };
+    const PointerEventCtor = handle.ownerDocument?.defaultView?.PointerEvent;
+
+    if (!PointerEventCtor) {
+      return;
+    }
+
+    handle.dispatchEvent(new PointerEventCtor('pointerdown', {
+      bubbles: true,
+      clientX: 620,
+      pointerId: 11,
+    }));
+    handle.dispatchEvent(new PointerEventCtor('pointermove', {
+      bubbles: true,
+      clientX: 560,
+      pointerId: 11,
+    }));
+    handle.dispatchEvent(new PointerEventCtor('pointerup', {
+      bubbles: true,
+      clientX: 560,
+      pointerId: 11,
+    }));
+  });
+
+  await expect.poll(() => readElementPixelWidth(chatListPanel)).toBeGreaterThanOrEqual(335);
+  await expect.poll(() => readElementPixelWidth(chatListPanel)).toBeLessThanOrEqual(345);
+
+  const resizedRightPanelWidth = await readElementPixelWidth(rightPanel);
+  const resizedAssistantWidth = await readElementPixelWidth(assistantMainPanel);
+
+  expect(resizedRightPanelWidth).toBeGreaterThan(expandedRightPanelWidth + 50);
+  expect(resizedAssistantWidth).toBeGreaterThanOrEqual(initialAssistantWidth - 2);
+  expect(resizedAssistantWidth).toBeLessThanOrEqual(initialAssistantWidth + 2);
 
   await app.close();
 });

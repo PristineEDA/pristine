@@ -4,18 +4,26 @@ const AIAgentPanel = lazy(() => import('./AIAgentPanel').then((module) => ({ def
 const StaticCheckPanel = lazy(() => import('./StaticCheckPanel').then((module) => ({ default: module.StaticCheckPanel })));
 const ReferencesPanel = lazy(() => import('./ReferencesPanel').then((module) => ({ default: module.ReferencesPanel })));
 
+const DEFAULT_THREAD_LIST_WIDTH = 140;
+
 interface RightSidePanelProps {
   onFileOpen: (fileId: string, fileName: string) => void;
   onLineJump: (line: number) => void;
+  onThreadListExpandedChange?: (expanded: boolean) => void;
+  onThreadListWidthChange?: (width: number) => void;
 }
 
 export function RightSidePanel({
   onFileOpen,
   onLineJump,
+  onThreadListExpandedChange,
+  onThreadListWidthChange,
 }: RightSidePanelProps) {
   const [tab, setTab] = useState<
     "ai" | "static" | "references"
   >("ai");
+  const [threadListExpanded, setThreadListExpanded] = useState(false);
+  const [threadListWidth, setThreadListWidth] = useState(DEFAULT_THREAD_LIST_WIDTH);
 
   const tabs = [
     { id: "ai", label: "AI Assistant" },
@@ -45,7 +53,18 @@ export function RightSidePanel({
       <div className="flex-1 overflow-hidden">
         {tab === "ai" && (
           <Suspense fallback={<div className="flex h-full items-center justify-center text-muted-foreground text-[12px]">Loading assistant...</div>}>
-            <AIAgentPanel />
+            <AIAgentPanel
+              initialThreadListExpanded={threadListExpanded}
+              initialThreadListWidth={threadListWidth}
+              onThreadListExpandedChange={(nextExpanded) => {
+                setThreadListExpanded(nextExpanded);
+                onThreadListExpandedChange?.(nextExpanded);
+              }}
+              onThreadListWidthChange={(nextWidth) => {
+                setThreadListWidth(nextWidth);
+                onThreadListWidthChange?.(nextWidth);
+              }}
+            />
           </Suspense>
         )}
         {tab === "static" && (

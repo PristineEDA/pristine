@@ -4,6 +4,8 @@ import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 
 import { PristineAssistantThread } from '../../assistant/PristineAssistantThread';
 import { ThreadList } from '../../assistant-ui/thread-list';
+import { Toggle } from '../../ui/toggle';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../../ui/tooltip';
 import {
   getPristineAgentBaseUrl,
   normalizeAgentBaseUrl,
@@ -12,13 +14,21 @@ import { usePristineAgentRuntime } from './pristineThreadRuntime';
 
 const ACTIVE_THREAD_CONFIG_KEY = 'explorer.aiAssistant.activeThreadId';
 const THREAD_LIST_WIDTH_CONFIG_KEY = 'explorer.aiAssistant.threadListWidth';
-const DEFAULT_THREAD_LIST_WIDTH = 280;
-const MIN_THREAD_LIST_WIDTH = 220;
+const MIN_THREAD_LIST_WIDTH = 140;
+const DEFAULT_THREAD_LIST_WIDTH = MIN_THREAD_LIST_WIDTH;
 const MAX_THREAD_LIST_WIDTH = 420;
-const MIN_CHAT_PANEL_WIDTH = 320;
+const THREAD_LIST_TOGGLE_CLASS_NAME = [
+  'h-7 w-8 rounded-none border-0 px-0 text-muted-foreground',
+  'data-[state=on]:text-foreground',
+  'hover:cursor-pointer hover:text-foreground hover:bg-accent',
+].join(' ');
 
 type AIAgentPanelProps = {
   baseUrl?: string;
+  initialThreadListExpanded?: boolean;
+  initialThreadListWidth?: number;
+  onThreadListExpandedChange?: (expanded: boolean) => void;
+  onThreadListWidthChange?: (width: number) => void;
 };
 
 function readStoredThreadId(): string | undefined {
@@ -40,32 +50,53 @@ export function normalizeThreadListWidth(value: unknown): number {
   return Math.min(MAX_THREAD_LIST_WIDTH, Math.max(MIN_THREAD_LIST_WIDTH, Math.round(value)));
 }
 
-function clampThreadListWidth(nextWidth: number, containerWidth: number): number {
-  const maxWidth = Math.min(
-    MAX_THREAD_LIST_WIDTH,
-    Math.max(MIN_THREAD_LIST_WIDTH, Math.round(containerWidth) - MIN_CHAT_PANEL_WIDTH),
+function PanelRightIcon({ size = 15, filled = false }: { size?: number; filled?: boolean }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      {filled ? <rect x="12" y="3" width="9" height="18" rx="2" fill="currentColor" stroke="none" /> : null}
+      <rect width="18" height="18" x="3" y="3" rx="2" />
+      <path d="M12 3v18" />
+    </svg>
   );
-
-  return Math.min(maxWidth, Math.max(MIN_THREAD_LIST_WIDTH, Math.round(nextWidth)));
 }
 
-export function AIAgentPanel({ baseUrl = getPristineAgentBaseUrl() }: AIAgentPanelProps) {
+export function AIAgentPanel({
+  baseUrl = getPristineAgentBaseUrl(),
+  initialThreadListExpanded = false,
+  initialThreadListWidth,
+  onThreadListExpandedChange,
+  onThreadListWidthChange,
+}: AIAgentPanelProps) {
   const normalizedBaseUrl = useMemo(() => normalizeAgentBaseUrl(baseUrl), [baseUrl]);
   const initialThreadId = useMemo(() => readStoredThreadId(), []);
+  const [isThreadListExpanded, setIsThreadListExpanded] = useState(initialThreadListExpanded);
   const [threadListWidth, setThreadListWidth] = useState(() => (
-    normalizeThreadListWidth(window.electronAPI?.config.get(THREAD_LIST_WIDTH_CONFIG_KEY))
+    initialThreadListWidth === undefined
+      ? normalizeThreadListWidth(window.electronAPI?.config.get(THREAD_LIST_WIDTH_CONFIG_KEY))
+      : normalizeThreadListWidth(initialThreadListWidth)
   ));
+  const currentThreadListWidthRef = useRef(threadListWidth);
   const runtime = usePristineAgentRuntime({
     baseUrl: normalizedBaseUrl,
     initialThreadId,
   });
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const isResizingRef = useRef(false);
-  const currentWidthRef = useRef(threadListWidth);
+  const resizeStartPointerXRef = useRef<number | null>(null);
   const lastPersistedThreadIdRef = useRef<string | null | undefined>(undefined);
 
   useEffect(() => {
-    currentWidthRef.current = threadListWidth;
+    setIsThreadListExpanded(initialThreadListExpanded);
+  }, [initialThreadListExpanded]);
+
+  useEffect(() => {
+    if (initialThreadListWidth === undefined) {
+      return;
+    }
+
+    setThreadListWidth(normalizeThreadListWidth(initialThreadListWidth));
+  }, [initialThreadListWidth]);
+
+  useEffect(() => {
+    currentThreadListWidthRef.current = threadListWidth;
   }, [threadListWidth]);
 
   const persistActiveThreadId = useEffectEvent(() => {
@@ -86,48 +117,34 @@ export function AIAgentPanel({ baseUrl = getPristineAgentBaseUrl() }: AIAgentPan
     });
   }, [persistActiveThreadId, runtime]);
 
-  const handlePointerMove = useEffectEvent((event: PointerEvent) => {
-    if (!isResizingRef.current || !containerRef.current) {
+  const updateThreadListWidth = useEffectEvent((nextWidth: number) => {
+    const normalizedWidth = normalizeThreadListWidth(nextWidth);
+
+    setThreadListWidth((currentWidth) => {
+      if (currentWidth === normalizedWidth) {
+        return currentWidth;
+      }
+
+      currentThreadListWidthRef.current = normalizedWidth;
+      onThreadListWidthChange?.(normalizedWidth);
+      return normalizedWidth;
+    });
+  });
+
+  const endResize = useEffectEvent((pointerId?: number, target?: EventTarget | null) => {
+    if (resizeStartPointerXRef.current === null) {
       return;
     }
 
-    const bounds = containerRef.current.getBoundingClientRect();
-    const nextWidth = clampThreadListWidth(bounds.right - event.clientX, bounds.width);
+    resizeStartPointerXRef.current = null;
+    document.body.style.removeProperty('cursor');
+    document.body.style.removeProperty('user-select');
+    void window.electronAPI?.config.set(THREAD_LIST_WIDTH_CONFIG_KEY, currentThreadListWidthRef.current);
 
-    if (nextWidth !== currentWidthRef.current) {
-      setThreadListWidth(nextWidth);
+    if (target instanceof HTMLElement && pointerId !== undefined) {
+      target.releasePointerCapture?.(pointerId);
     }
   });
-
-  const handlePointerUp = useEffectEvent(() => {
-    if (!isResizingRef.current) {
-      return;
-    }
-
-    isResizingRef.current = false;
-    document.body.style.cursor = '';
-    document.body.style.userSelect = '';
-    void window.electronAPI?.config.set(THREAD_LIST_WIDTH_CONFIG_KEY, currentWidthRef.current);
-  });
-
-  useEffect(() => {
-    const handleWindowPointerMove = (event: PointerEvent) => {
-      handlePointerMove(event);
-    };
-    const handleWindowPointerUp = () => {
-      handlePointerUp();
-    };
-
-    window.addEventListener('pointermove', handleWindowPointerMove);
-    window.addEventListener('pointerup', handleWindowPointerUp);
-    window.addEventListener('pointercancel', handleWindowPointerUp);
-
-    return () => {
-      window.removeEventListener('pointermove', handleWindowPointerMove);
-      window.removeEventListener('pointerup', handleWindowPointerUp);
-      window.removeEventListener('pointercancel', handleWindowPointerUp);
-    };
-  }, [handlePointerMove, handlePointerUp]);
 
   const handleResizePointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
     if (event.button !== 0) {
@@ -135,50 +152,91 @@ export function AIAgentPanel({ baseUrl = getPristineAgentBaseUrl() }: AIAgentPan
     }
 
     event.preventDefault();
-    isResizingRef.current = true;
+    resizeStartPointerXRef.current = event.clientX;
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  };
+
+  const handleThreadListExpandedChange = (nextExpanded: boolean) => {
+    setIsThreadListExpanded(nextExpanded);
+    onThreadListExpandedChange?.(nextExpanded);
   };
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
       <div
-        ref={containerRef}
         data-testid="assistant-panel-root"
         className="flex h-full min-h-0 min-w-0 bg-background text-foreground"
       >
-        <div className="flex min-w-0 flex-1 flex-col border-r border-border bg-background">
-          <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
-            <div className="flex size-6 items-center justify-center rounded-md bg-primary/10 text-primary">
-              <Server className="size-3.5" />
+        <div className={[
+          'flex min-w-0 flex-1 flex-col bg-background',
+          isThreadListExpanded ? 'border-r border-border' : '',
+        ].join(' ')} data-testid="assistant-main-panel">
+          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-2">
+            <div className="flex min-w-0 items-center gap-2">
+              <div className="flex size-6 items-center justify-center rounded-md bg-primary/10 text-primary">
+                <Server className="size-3.5" />
+              </div>
+              <span className="truncate text-xs font-semibold">Pristine Agent</span>
             </div>
-            <span className="text-xs font-semibold">Pristine Agent</span>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Toggle
+                    aria-label="Toggle chat list sidebar"
+                    data-testid="assistant-thread-list-toggle"
+                    pressed={isThreadListExpanded}
+                    className={THREAD_LIST_TOGGLE_CLASS_NAME}
+                    onPressedChange={handleThreadListExpandedChange}
+                  >
+                    <PanelRightIcon size={15} filled={isThreadListExpanded} />
+                  </Toggle>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" sideOffset={6}>Toggle chat list</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </div>
           <PristineAssistantThread agentBaseUrl={normalizedBaseUrl} />
         </div>
-        <button
-          type="button"
-          aria-label="Resize thread list"
-          data-testid="assistant-thread-list-resize-handle"
-          onPointerDown={handleResizePointerDown}
-          className="group flex w-2 shrink-0 cursor-col-resize items-center justify-center bg-border/30 transition-colors hover:bg-primary/20"
-        >
-          <GripVertical className="size-3 text-muted-foreground transition-colors group-hover:text-foreground" />
-        </button>
-        <aside
-          data-testid="assistant-thread-list-panel"
-          className="flex h-full shrink-0 flex-col bg-muted/20"
-          style={{ width: threadListWidth }}
-        >
-          <div className="flex shrink-0 items-center border-b border-border px-3 py-2">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-              Threads
-            </span>
-          </div>
-          <div className="min-h-0 flex-1 overflow-y-auto p-2">
-            <ThreadList />
-          </div>
-        </aside>
+        {isThreadListExpanded ? (
+          <>
+            <button
+              type="button"
+              aria-label="Resize chat list"
+              data-testid="assistant-thread-list-resize-handle"
+              onPointerDown={handleResizePointerDown}
+              onPointerMove={(event) => {
+                if (resizeStartPointerXRef.current === null) {
+                  return;
+                }
+
+                const deltaPixels = resizeStartPointerXRef.current - event.clientX;
+                updateThreadListWidth(currentThreadListWidthRef.current + deltaPixels);
+                resizeStartPointerXRef.current = event.clientX;
+              }}
+              onPointerUp={(event) => endResize(event.pointerId, event.currentTarget)}
+              onPointerCancel={(event) => endResize(event.pointerId, event.currentTarget)}
+              className="group relative flex w-2 shrink-0 cursor-col-resize items-center justify-center bg-border/40 transition-colors hover:bg-primary/20 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-1"
+            >
+              <GripVertical className="size-3 text-muted-foreground transition-colors group-hover:text-foreground" />
+            </button>
+            <aside
+              data-testid="assistant-thread-list-panel"
+              className="flex h-full shrink-0 flex-col bg-muted/20"
+              style={{ width: threadListWidth }}
+            >
+              <div className="flex shrink-0 items-center border-b border-border px-3 py-2">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  Chats
+                </span>
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto p-2">
+                <ThreadList />
+              </div>
+            </aside>
+          </>
+        ) : null}
       </div>
     </AssistantRuntimeProvider>
   );

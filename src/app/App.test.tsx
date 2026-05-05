@@ -133,9 +133,13 @@ vi.mock('./components/code/shared/EditorSplitLayout', async () => {
 });
 
 vi.mock('./components/code/explorer/RightSidePanel', () => ({
-  RightSidePanel: ({ onFileOpen, onLineJump }: any) => (
+  RightSidePanel: ({ onFileOpen, onLineJump, onThreadListExpandedChange, onThreadListWidthChange }: any) => (
     <div data-testid="right-panel">
       <button onClick={() => { onFileOpen('rtl/core/alu.v', 'alu.v'); onLineJump(33); }}>right-open</button>
+      <button onClick={() => onThreadListExpandedChange?.(true)}>assistant-expand-thread-list</button>
+      <button onClick={() => onThreadListExpandedChange?.(false)}>assistant-collapse-thread-list</button>
+      <button onClick={() => onThreadListWidthChange?.(280)}>assistant-thread-list-width-280</button>
+      <button onClick={() => onThreadListWidthChange?.(340)}>assistant-thread-list-width-340</button>
     </div>
   ),
 }));
@@ -617,6 +621,26 @@ describe('App', () => {
       expect(screen.getByTestId('panel-right-panel')).toHaveStyle({ width: '360px' });
     });
     expect(screen.getByTestId('panel-left-panel')).toHaveStyle({ width: '320px' });
+  });
+
+  it('widens the whole explorer right sidebar when the assistant chat list expands', async () => {
+    render(<App />);
+
+    await clickText('toggle-right-panel');
+
+    expect(screen.getByTestId('panel-right-panel')).toHaveStyle({ width: `${EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX}px` });
+
+    await clickText('assistant-expand-thread-list');
+
+    expect(screen.getByTestId('panel-right-panel')).toHaveStyle({ width: '448px' });
+
+    await clickText('assistant-thread-list-width-340');
+
+    expect(screen.getByTestId('panel-right-panel')).toHaveStyle({ width: '648px' });
+
+    await clickText('assistant-collapse-thread-list');
+
+    expect(screen.getByTestId('panel-right-panel')).toHaveStyle({ width: `${EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX}px` });
   });
 
   it('restores the previous editor file and cursor snapshot when quick open closes without a selection', async () => {

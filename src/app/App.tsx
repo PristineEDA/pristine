@@ -10,6 +10,8 @@ import { BottomPanel } from './components/code/explorer/BottomPanel';
 import {
   CodeWorkspaceShell,
   EXPLORER_LEFT_PANEL_DEFAULT_WIDTH_PX,
+  EXPLORER_RIGHT_PANEL_MAX_WIDTH_PX,
+  EXPLORER_RIGHT_PANEL_MIN_WIDTH_PX,
   EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX,
 } from './components/code/shared/CodeWorkspaceShell';
 import { AppStatusBar } from './components/code/shared/statusBars/AppStatusBar';
@@ -30,6 +32,7 @@ import { useQuickOpenController } from './useQuickOpenController';
 
 const WhiteboardView = lazy(() => import('./components/whiteboard/WhiteboardView').then((module) => ({ default: module.WhiteboardView })));
 const WorkflowView = lazy(() => import('./components/workflow/WorkflowView').then((module) => ({ default: module.WorkflowView })));
+const ASSISTANT_THREAD_LIST_RESIZE_HANDLE_WIDTH_PX = 8;
 
 // ─── ResizeHandle ────────────────────────────────────────────────────────────
 
@@ -99,8 +102,16 @@ function AppLayout() {
   } = useWorkspaceFiles();
   const { openUnsavedChangesDialog } = useWorkspaceDialogs();
   const [explorerLeftPanelWidthPx, setExplorerLeftPanelWidthPx] = useState(EXPLORER_LEFT_PANEL_DEFAULT_WIDTH_PX);
-  const [explorerRightPanelWidthPx, setExplorerRightPanelWidthPx] = useState(EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX);
+  const [explorerAssistantPanelWidthPx, setExplorerAssistantPanelWidthPx] = useState(EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX);
+  const [assistantThreadListExpanded, setAssistantThreadListExpanded] = useState(false);
+  const [assistantThreadListWidthPx, setAssistantThreadListWidthPx] = useState(140);
   const explorerBottomPanelLayoutVersion = `${showLeftPanel}:${showRightPanel}:${showBottomPanel}:${explorerLeftPanelWidthPx}`;
+  const assistantThreadListExtraWidthPx = assistantThreadListExpanded
+    ? assistantThreadListWidthPx + ASSISTANT_THREAD_LIST_RESIZE_HANDLE_WIDTH_PX
+    : 0;
+  const explorerRightPanelWidthPx = explorerAssistantPanelWidthPx + assistantThreadListExtraWidthPx;
+  const explorerRightPanelMinWidthPx = EXPLORER_RIGHT_PANEL_MIN_WIDTH_PX + assistantThreadListExtraWidthPx;
+  const explorerRightPanelMaxWidthPx = EXPLORER_RIGHT_PANEL_MAX_WIDTH_PX + assistantThreadListExtraWidthPx;
 
   const handleActivityItemSelect = (nextView: string) => {
     setActiveView(nextView as typeof activeView);
@@ -258,6 +269,8 @@ function AppLayout() {
     onLeftFixedWidthChange,
     rightFixedWidthPx,
     onRightFixedWidthChange,
+    rightFixedMinWidthPx,
+    rightFixedMaxWidthPx,
   }: {
     shellTestId?: string;
     leftPanelId: string;
@@ -274,6 +287,8 @@ function AppLayout() {
     onLeftFixedWidthChange?: React.Dispatch<React.SetStateAction<number>>;
     rightFixedWidthPx?: number;
     onRightFixedWidthChange?: React.Dispatch<React.SetStateAction<number>>;
+    rightFixedMinWidthPx?: number;
+    rightFixedMaxWidthPx?: number;
   }) => (
     <CodeWorkspaceShell
       shellTestId={shellTestId}
@@ -295,6 +310,8 @@ function AppLayout() {
       onLeftFixedWidthChange={onLeftFixedWidthChange}
       rightFixedWidthPx={rightFixedWidthPx}
       onRightFixedWidthChange={onRightFixedWidthChange}
+      rightFixedMinWidthPx={rightFixedMinWidthPx}
+      rightFixedMaxWidthPx={rightFixedMaxWidthPx}
     />
   );
 
@@ -308,7 +325,18 @@ function AppLayout() {
       leftFixedWidthPx: explorerLeftPanelWidthPx,
       onLeftFixedWidthChange: setExplorerLeftPanelWidthPx,
       rightFixedWidthPx: explorerRightPanelWidthPx,
-      onRightFixedWidthChange: setExplorerRightPanelWidthPx,
+      onRightFixedWidthChange: (nextValue) => {
+        setExplorerAssistantPanelWidthPx((currentWidth) => {
+          const currentTotalWidth = currentWidth + assistantThreadListExtraWidthPx;
+          const nextTotalWidth = typeof nextValue === 'function'
+            ? nextValue(currentTotalWidth)
+            : nextValue;
+
+          return nextTotalWidth - assistantThreadListExtraWidthPx;
+        });
+      },
+      rightFixedMinWidthPx: explorerRightPanelMinWidthPx,
+      rightFixedMaxWidthPx: explorerRightPanelMaxWidthPx,
       leftContent: (
         <LeftSidePanel
           activeFileId={activeTabId}
@@ -336,6 +364,8 @@ function AppLayout() {
         <RightSidePanel
           onFileOpen={openWorkspaceFile}
           onLineJump={jumpTo}
+          onThreadListExpandedChange={setAssistantThreadListExpanded}
+          onThreadListWidthChange={setAssistantThreadListWidthPx}
         />
       ),
       overlay: (
