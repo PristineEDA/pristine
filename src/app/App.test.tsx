@@ -293,9 +293,13 @@ describe('App', () => {
     expect(screen.getByTestId('panel-simulation-bottom-panel')).toBeInTheDocument();
     expect(screen.getByTestId('panel-simulation-right-panel')).toBeInTheDocument();
     expect(screen.getByTestId('simulation-left-panel-content')).toHaveTextContent('Left Panel');
+    expect(screen.getByTestId('simulation-left-panel-content')).toHaveTextContent('Coming soon');
     expect(screen.getByTestId('simulation-main-panel-content')).toHaveTextContent('Simulation Workspace');
+    expect(screen.getByTestId('simulation-main-panel-content')).toHaveTextContent('Coming soon');
     expect(screen.getByTestId('simulation-bottom-panel-content')).toHaveTextContent('Bottom Panel');
+    expect(screen.getByTestId('simulation-bottom-panel-content')).toHaveTextContent('Coming soon');
     expect(screen.getByTestId('simulation-right-panel-content')).toHaveTextContent('Right Panel');
+    expect(screen.getByTestId('simulation-right-panel-content')).toHaveTextContent('Coming soon');
 
     await clickText('select-explorer');
     expect(screen.getByTestId('activity-view')).toHaveTextContent('explorer');
@@ -310,6 +314,7 @@ describe('App', () => {
 
     await clickText('select-synthesis');
     expect(await screen.findByTestId('code-view-synthesis')).toHaveTextContent('Synthesis');
+    expect(screen.getByTestId('code-view-synthesis')).toHaveTextContent('Coming soon');
 
     await clickText('switch-whiteboard');
     expect(screen.getByTestId('main-content-view')).toHaveTextContent('whiteboard');
@@ -330,6 +335,7 @@ describe('App', () => {
     expect(screen.getByTestId('status-bar-main-view')).toHaveTextContent('code');
     expect(screen.getByTestId('status-bar-code-view')).toHaveTextContent('synthesis');
     expect(await screen.findByTestId('code-view-synthesis')).toHaveTextContent('Synthesis');
+    expect(screen.getByTestId('code-view-synthesis')).toHaveTextContent('Coming soon');
   });
 
   it('keeps the activity bar collapse state when switching away from and back to code', async () => {
@@ -367,6 +373,7 @@ describe('App', () => {
       await clickTestId('activity-item-physical');
 
       expect(await screen.findByTestId('code-view-physical')).toHaveTextContent('Physical Design');
+      expect(screen.getByTestId('code-view-physical')).toHaveTextContent('Coming soon');
     } finally {
       renderRealActivityBar = false;
     }

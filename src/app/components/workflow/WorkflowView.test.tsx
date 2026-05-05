@@ -79,11 +79,12 @@ describe('WorkflowView', () => {
     expect(screen.getByTestId('react-flow-provider')).toBeInTheDocument();
     expect(screen.getByTestId('react-flow')).toHaveAttribute('data-node-count', String(workflowNodes.length));
     expect(screen.getByTestId('react-flow-background')).toHaveAttribute('data-variant', 'dots');
-    expect(screen.getByTestId('react-flow-controls')).toBeInTheDocument();
-    expect(screen.getByTestId('react-flow-minimap')).toBeInTheDocument();
+    expect(screen.queryByTestId('react-flow-controls')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('react-flow-minimap')).not.toBeInTheDocument();
     expect(screen.getByTestId('react-flow-panel')).toHaveAttribute('data-position', 'top-left');
     expect(screen.getByText('mock-run-2026-05-03')).toBeInTheDocument();
-    expect(screen.getByTestId('workflow-animation-toggle')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('workflow-animation-toggle')).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByTestId('workflow-animation-toggle')).toHaveTextContent('Off');
   });
 
   it('toggles data flow edge animation without changing the graph structure', async () => {
@@ -94,16 +95,17 @@ describe('WorkflowView', () => {
     const toggle = screen.getByTestId('workflow-animation-toggle');
     const initialRender = reactFlowMock.render.mock.lastCall;
     expect(initialRender).toBeDefined();
-    expect(initialRender![0].edges.every((edge: { animated?: boolean }) => edge.animated)).toBe(true);
+    expect(initialRender![0].edges.every((edge: { animated?: boolean }) => edge.animated === false)).toBe(true);
 
     await user.click(toggle);
 
-    expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    expect(toggle).toHaveTextContent('On');
 
     const toggledRender = reactFlowMock.render.mock.lastCall;
     expect(toggledRender).toBeDefined();
     expect(toggledRender![0].edges).toHaveLength(initialRender![0].edges.length);
-    expect(toggledRender![0].edges.every((edge: { animated?: boolean }) => edge.animated === false)).toBe(true);
+    expect(toggledRender![0].edges.every((edge: { animated?: boolean }) => edge.animated === true)).toBe(true);
   });
 
   it('registers every Mastra Studio workflow node type', () => {

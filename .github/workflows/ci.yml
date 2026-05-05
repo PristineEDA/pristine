@@ -152,7 +152,7 @@ jobs:
       - name: Run E2E tests on Windows 2022 with known flaky case skipped
         if: matrix.id == 'windows-2022-x64'
         run: >-
-          pnpm test:e2e --
+          pnpm exec playwright test --max-failures=1
           --grep-invert "Explorer rename and delete keep the tree scroll position near the bottom after refreshes"
 
       - name: Upload Playwright report

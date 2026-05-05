@@ -2,8 +2,6 @@ import { useMemo, useState } from 'react';
 import {
   Background,
   BackgroundVariant,
-  Controls,
-  MiniMap,
   Panel,
   ReactFlow,
   ReactFlowProvider,
@@ -35,7 +33,7 @@ export function WorkflowView({
 }
 
 function WorkflowCanvas({ title, description, testId }: Required<WorkflowViewProps>) {
-  const [showDataFlowAnimation, setShowDataFlowAnimation] = useState(true);
+  const [showDataFlowAnimation, setShowDataFlowAnimation] = useState(false);
   const [nodes, , onNodesChange] = useNodesState(workflowNodes);
   const [baseEdges, , onEdgesChange] = useEdgesState(workflowEdges);
   const edges = useMemo(
@@ -94,8 +92,8 @@ function WorkflowCanvas({ title, description, testId }: Required<WorkflowViewPro
             </div>
           </div>
         </Panel>
-        <MiniMap pannable zoomable nodeStrokeWidth={3} className="border border-border bg-background/95" />
-        <Controls position="bottom-left" showInteractive={false} />
+        {/* <MiniMap pannable zoomable nodeStrokeWidth={3} className="border border-border bg-background/95" /> */}
+        {/* <Controls position="bottom-left" showInteractive={false} /> */}
         <Background variant={BackgroundVariant.Dots} gap={12} size={0.5} />
       </ReactFlow>
     </div>
