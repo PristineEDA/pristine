@@ -602,6 +602,13 @@ describe('PristineAssistantThread', () => {
     expect(mocks.discardCommand).toHaveBeenCalledWith('command-1');
   });
 
+  it('shows a shadcn skeleton while persisted thread messages are loading', () => {
+    render(<PristineAssistantThread isThreadLoading />);
+
+    expect(screen.getByTestId('assistant-thread-loading-skeleton')).toBeInTheDocument();
+    expect(screen.queryByTestId('thread-messages')).not.toBeInTheDocument();
+  });
+
   it('renders completed shell command output from the latest approval snapshot', () => {
     mocks.toolPropsByName['propose_shell_command'] = {
       args: {

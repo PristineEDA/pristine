@@ -66,9 +66,32 @@ describe('Reasoning', () => {
     );
 
     const root = container.querySelector('[data-slot="reasoning-root"]');
+    const trigger = screen.getByRole('button');
+    const content = container.querySelector('[data-slot="reasoning-content"]');
+
     expect(root).toHaveAttribute('data-variant', 'ghost');
     expect(root).not.toHaveClass('border');
+    expect(trigger).toHaveClass('text-[12px]', 'leading-relaxed');
+    expect(container.querySelector('[data-slot="reasoning-trigger-icon"]')).not.toBeInTheDocument();
+    expect(content).toHaveClass('text-[12px]', 'leading-relaxed');
+    expect(container.querySelector('[data-slot="reasoning-fade"]')).not.toBeInTheDocument();
     expect(screen.getByText('Review timing paths')).toHaveAttribute('data-slot', 'reasoning-text');
+    expect(screen.getByText('Review timing paths')).not.toHaveClass('ps-6');
+    expect(screen.getByText('Review timing paths')).toHaveClass('pristine-assistant-scrollbar', 'overflow-y-auto');
+  });
+
+  it('keeps muted reasoning containers available for assistant-specific styling', () => {
+    const { container } = render(
+      <Reasoning.Root variant="muted" defaultOpen>
+        <Reasoning.Trigger />
+        <Reasoning.Content>
+          <Reasoning.Text>Muted reasoning</Reasoning.Text>
+        </Reasoning.Content>
+      </Reasoning.Root>,
+    );
+
+    expect(container.querySelector('[data-slot="reasoning-root"]')).toHaveAttribute('data-variant', 'muted');
+    expect(container.querySelector('[data-slot="reasoning-root"]')).toHaveClass('bg-muted/50');
   });
 
   it('keeps the default grouped reasoning behavior available for mock reasoning parts', () => {

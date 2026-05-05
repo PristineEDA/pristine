@@ -48,6 +48,7 @@ describe('usePristineThreadMessagesBootstrap', () => {
 
   it('loads persisted messages for existing remote threads', async () => {
     const setMessages = vi.fn();
+    const setIsThreadLoading = vi.fn();
 
     (getAgentThreadMessages as Mock).mockResolvedValue({
       uiMessages: [{ id: 'message-1', role: 'assistant', parts: [] }],
@@ -68,6 +69,7 @@ describe('usePristineThreadMessagesBootstrap', () => {
       baseUrl: 'http://localhost:4111',
       threadId: 'thread-1',
       remoteId: 'thread-1',
+      setIsThreadLoading,
       setMessages,
     }));
 
@@ -76,18 +78,22 @@ describe('usePristineThreadMessagesBootstrap', () => {
     });
 
     expect(setMessages).toHaveBeenNthCalledWith(1, []);
+    expect(setIsThreadLoading).toHaveBeenNthCalledWith(1, true);
     await waitFor(() => {
       expect(setMessages).toHaveBeenLastCalledWith([{ id: 'message-1', role: 'assistant', parts: [] }]);
     });
+    expect(setIsThreadLoading).toHaveBeenLastCalledWith(false);
   });
 
   it('skips persisted bootstrap for freshly initialized local threads', async () => {
     const setMessages = vi.fn();
+    const setIsThreadLoading = vi.fn();
 
     renderHook(() => usePristineThreadMessagesBootstrap({
       baseUrl: 'http://localhost:4111',
       threadId: '__optimistic__thread-1',
       remoteId: '__optimistic__thread-1',
+      setIsThreadLoading,
       setMessages,
     }));
 
@@ -95,5 +101,26 @@ describe('usePristineThreadMessagesBootstrap', () => {
       expect(getAgentThreadMessages).not.toHaveBeenCalled();
     });
     expect(setMessages).not.toHaveBeenCalled();
+    expect(setIsThreadLoading).toHaveBeenCalledWith(false);
+  });
+
+  it('keeps the skeleton active while a persisted thread remote identity is still resolving', async () => {
+    const setMessages = vi.fn();
+    const setIsThreadLoading = vi.fn();
+
+    renderHook(() => usePristineThreadMessagesBootstrap({
+      baseUrl: 'http://localhost:4111',
+      threadId: 'thread-1',
+      remoteId: undefined,
+      setIsThreadLoading,
+      setMessages,
+    }));
+
+    await waitFor(() => {
+      expect(getAgentThreadMessages).not.toHaveBeenCalled();
+    });
+
+    expect(setMessages).toHaveBeenCalledWith([]);
+    expect(setIsThreadLoading).toHaveBeenCalledWith(true);
   });
 });

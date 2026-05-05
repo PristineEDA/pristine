@@ -76,7 +76,7 @@ export function AIAgentPanel({
       : normalizeThreadListWidth(initialThreadListWidth)
   ));
   const currentThreadListWidthRef = useRef(threadListWidth);
-  const runtime = usePristineAgentRuntime({
+  const { isThreadLoading, runtime } = usePristineAgentRuntime({
     baseUrl: normalizedBaseUrl,
     initialThreadId,
   });
@@ -197,7 +197,7 @@ export function AIAgentPanel({
               </Tooltip>
             </TooltipProvider>
           </div>
-          <PristineAssistantThread agentBaseUrl={normalizedBaseUrl} />
+          <PristineAssistantThread agentBaseUrl={normalizedBaseUrl} isThreadLoading={isThreadLoading} />
         </div>
         {isThreadListExpanded ? (
           <>

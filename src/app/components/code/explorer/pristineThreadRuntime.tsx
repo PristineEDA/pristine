@@ -13,7 +13,7 @@ import {
 import { AssistantChatTransport, useAISDKRuntime } from '@assistant-ui/react-ai-sdk';
 import { useChat } from '@ai-sdk/react';
 import type { UIMessage } from 'ai';
-import { useEffect, useMemo, useRef, type FC, type PropsWithChildren } from 'react';
+import { useEffect, useMemo, useRef, useState, type FC, type PropsWithChildren } from 'react';
 
 import {
   archiveAgentThread,
@@ -242,6 +242,7 @@ type PristineThreadMessagesBootstrapOptions = {
   baseUrl: string;
   threadId: string;
   remoteId: string | undefined;
+  setIsThreadLoading: (isLoading: boolean) => void;
   setMessages: ReturnType<typeof useChat<UIMessage>>['setMessages'];
 };
 
@@ -249,6 +250,7 @@ export function usePristineThreadMessagesBootstrap({
   baseUrl,
   threadId,
   remoteId,
+  setIsThreadLoading,
   setMessages,
 }: PristineThreadMessagesBootstrapOptions) {
   const latestRemoteIdRef = useRef<string | undefined>(remoteId);
@@ -261,6 +263,7 @@ export function usePristineThreadMessagesBootstrap({
     let cancelled = false;
 
     if (!remoteId) {
+      setIsThreadLoading(Boolean(threadId) && !isOptimisticThreadId(threadId));
       setMessages([]);
       return () => {
         cancelled = true;
@@ -269,11 +272,13 @@ export function usePristineThreadMessagesBootstrap({
 
     // New threads use assistant-ui optimistic ids until a persisted thread identity exists.
     if (!isPersistedRemoteThread(threadId, remoteId)) {
+      setIsThreadLoading(false);
       return () => {
         cancelled = true;
       };
     }
 
+    setIsThreadLoading(true);
     setMessages([]);
 
     void (async () => {
@@ -285,6 +290,7 @@ export function usePristineThreadMessagesBootstrap({
         }
 
         setMessages(response.uiMessages);
+        setIsThreadLoading(false);
       } catch (error) {
         if (cancelled || latestRemoteIdRef.current !== remoteId) {
           return;
@@ -292,13 +298,14 @@ export function usePristineThreadMessagesBootstrap({
 
         console.error('Failed to bootstrap persisted thread messages:', error);
         setMessages([]);
+        setIsThreadLoading(false);
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [baseUrl, remoteId, setMessages, threadId]);
+  }, [baseUrl, remoteId, setIsThreadLoading, setMessages, threadId]);
 }
 
 export function createPristineThreadListAdapter(baseUrl: string): RemoteThreadListAdapter {
@@ -361,8 +368,9 @@ type UsePristineAgentRuntimeOptions = {
 
 export function usePristineAgentRuntime({ baseUrl, initialThreadId }: UsePristineAgentRuntimeOptions) {
   const adapter = useMemo(() => createPristineThreadListAdapter(baseUrl), [baseUrl]);
+  const [isThreadLoading, setIsThreadLoading] = useState(Boolean(initialThreadId));
 
-  return useRemoteThreadListRuntime({
+  const runtime = useRemoteThreadListRuntime({
     runtimeHook: function RuntimeHook() {
       const id = useAssistantState((state) => state.threadListItem.id);
       const remoteId = useAssistantState((state) => state.threadListItem.remoteId);
@@ -396,6 +404,7 @@ export function usePristineAgentRuntime({ baseUrl, initialThreadId }: UsePristin
         baseUrl,
         threadId: id,
         remoteId,
+        setIsThreadLoading,
         setMessages: chat.setMessages,
       });
 
@@ -412,4 +421,9 @@ export function usePristineAgentRuntime({ baseUrl, initialThreadId }: UsePristin
     allowNesting: true,
     ...(initialThreadId ? { threadId: initialThreadId } : {}),
   });
+
+  return useMemo(() => ({
+    isThreadLoading,
+    runtime,
+  }), [isThreadLoading, runtime]);
 }

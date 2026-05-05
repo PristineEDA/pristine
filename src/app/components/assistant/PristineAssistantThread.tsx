@@ -84,6 +84,7 @@ import {
 import { useAgentApprovals } from '@/app/components/code/explorer/useAgentApprovals';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
+import { Skeleton } from '../ui/skeleton';
 import { TooltipIconButton } from "@/app/components/assistant-ui/tooltip-icon-button";
 import {
   PRISTINE_CONTEXT_WINDOW,
@@ -101,6 +102,7 @@ import {
 type PristineAssistantThreadProps = {
   agentBaseUrl?: string;
   className?: string;
+  isThreadLoading?: boolean;
 };
 
 type FileChangeToolArgs = {
@@ -628,6 +630,38 @@ function ThreadWelcome() {
   );
 }
 
+function ThreadMessagesSkeleton() {
+  return (
+    <div
+      data-testid="assistant-thread-loading-skeleton"
+      aria-busy="true"
+      aria-label="Loading chat messages"
+      className="flex min-h-full flex-col gap-4 px-1 py-2"
+    >
+      <div className="flex">
+        <div className="flex w-full max-w-[88%] flex-col gap-2 rounded-md bg-background px-3 py-2">
+          <Skeleton className="h-3 w-24" />
+          <Skeleton className="h-3 w-full" />
+          <Skeleton className="h-3 w-5/6" />
+        </div>
+      </div>
+      <div className="flex justify-end">
+        <div className="flex w-full max-w-[72%] flex-col gap-2 rounded-md border border-border bg-background px-3 py-2">
+          <Skeleton className="h-3 w-20 self-end" />
+          <Skeleton className="h-3 w-full" />
+        </div>
+      </div>
+      <div className="flex">
+        <div className="flex w-full max-w-[82%] flex-col gap-2 rounded-md bg-background px-3 py-2">
+          <Skeleton className="h-3 w-28" />
+          <Skeleton className="h-3 w-full" />
+          <Skeleton className="h-3 w-2/3" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function MessageBranchPicker({ label }: { label: string }) {
   return (
     <BranchPickerPrimitive.Root
@@ -782,7 +816,7 @@ function PristineReasoningGroup({ children, endIndex, startIndex }: ReasoningGro
   });
 
   return (
-    <Reasoning.Root defaultOpen={isReasoningStreaming} variant="ghost">
+    <Reasoning.Root defaultOpen={isReasoningStreaming} variant="muted">
       <Reasoning.Trigger active={isReasoningStreaming} />
       <Reasoning.Content aria-busy={isReasoningStreaming}>
         <Reasoning.Text>{children}</Reasoning.Text>
@@ -959,22 +993,28 @@ function Composer() {
   );
 }
 
-export function PristineAssistantThread({ agentBaseUrl, className }: PristineAssistantThreadProps) {
+export function PristineAssistantThread({ agentBaseUrl, className, isThreadLoading = false }: PristineAssistantThreadProps) {
   return (
     <AgentApprovalProvider agentBaseUrl={agentBaseUrl}>
       <ThreadPrimitive.Root className={cn('relative flex min-h-0 flex-1 flex-col bg-background', className)}>
         <PristineAssistantInstructions />
         <PristineAssistantToolUIs />
         <ThreadPrimitive.Viewport className="pristine-assistant-scrollbar flex-1 overflow-y-auto px-2 py-1" autoScroll turnAnchor="bottom">
-          <ThreadWelcome />
-          <ThreadPrimitive.Messages
-            components={{
-              AssistantMessage,
-              SystemMessage,
-              UserEditComposer,
-              UserMessage,
-            }}
-          />
+          {isThreadLoading ? (
+            <ThreadMessagesSkeleton />
+          ) : (
+            <>
+              <ThreadWelcome />
+              <ThreadPrimitive.Messages
+                components={{
+                  AssistantMessage,
+                  SystemMessage,
+                  UserEditComposer,
+                  UserMessage,
+                }}
+              />
+            </>
+          )}
         </ThreadPrimitive.Viewport>
         <SelectionToolbar />
         <ThreadScrollToBottom />

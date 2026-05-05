@@ -6,8 +6,8 @@ import { AIAgentPanel, normalizeThreadListWidth } from './AIAgentPanel';
 import { usePristineAgentRuntime } from './pristineThreadRuntime';
 
 const mocks = vi.hoisted(() => ({
-  pristineAssistantThread: vi.fn(({ agentBaseUrl }: { agentBaseUrl?: string }) => (
-    <div data-agent-base-url={agentBaseUrl} data-testid="assistant-thread" />
+  pristineAssistantThread: vi.fn(({ agentBaseUrl, isThreadLoading }: { agentBaseUrl?: string; isThreadLoading?: boolean }) => (
+    <div data-agent-base-url={agentBaseUrl} data-is-thread-loading={String(Boolean(isThreadLoading))} data-testid="assistant-thread" />
   )),
   threadList: vi.fn(() => <div data-testid="assistant-thread-list" />),
   threadSubscription: undefined as (() => void) | undefined,
@@ -48,7 +48,7 @@ describe('AIAgentPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    mocks.usePristineAgentRuntime.mockReturnValue(mocks.runtime);
+    mocks.usePristineAgentRuntime.mockReturnValue({ isThreadLoading: false, runtime: mocks.runtime });
     (mocks.runtime.threads.mainItem.getState as Mock).mockReturnValue({ remoteId: 'thread-remote-1' });
 
     (window.electronAPI?.config.get as Mock).mockImplementation((key: string) => {
@@ -75,9 +75,10 @@ describe('AIAgentPanel', () => {
     expect(screen.getByTestId('assistant-thread-list-toggle')).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getByTestId('assistant-thread')).toBeInTheDocument();
     expect(screen.getByTestId('assistant-thread')).toHaveAttribute('data-agent-base-url', 'http://localhost:4111');
+    expect(screen.getByTestId('assistant-thread')).toHaveAttribute('data-is-thread-loading', 'false');
     expect(screen.queryByTestId('assistant-thread-list-panel')).not.toBeInTheDocument();
     expect(mocks.pristineAssistantThread).toHaveBeenCalledWith(
-      expect.objectContaining({ agentBaseUrl: 'http://localhost:4111' }),
+      expect.objectContaining({ agentBaseUrl: 'http://localhost:4111', isThreadLoading: false }),
       undefined,
     );
     expect(usePristineAgentRuntime).toHaveBeenCalledWith(
@@ -101,6 +102,14 @@ describe('AIAgentPanel', () => {
     mocks.threadSubscription?.();
 
     expect(configSet).toHaveBeenCalledWith('explorer.aiAssistant.activeThreadId', 'thread-remote-2');
+  });
+
+  it('forwards thread bootstrap loading state into the assistant thread surface', () => {
+    mocks.usePristineAgentRuntime.mockReturnValue({ isThreadLoading: true, runtime: mocks.runtime });
+
+    render(<AIAgentPanel baseUrl="http://localhost:4111/" initialThreadListExpanded={false} />);
+
+    expect(screen.getByTestId('assistant-thread')).toHaveAttribute('data-is-thread-loading', 'true');
   });
 
   it('defaults the chat list to collapsed and expands it on demand', () => {
