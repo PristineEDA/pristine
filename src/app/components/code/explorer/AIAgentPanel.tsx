@@ -10,13 +10,15 @@ import {
   getPristineAgentBaseUrl,
   normalizeAgentBaseUrl,
 } from './agentApi';
+import {
+  ASSISTANT_THREAD_LIST_DEFAULT_WIDTH_PX,
+  ASSISTANT_THREAD_LIST_MAX_WIDTH_PX,
+  ASSISTANT_THREAD_LIST_MIN_WIDTH_PX,
+} from './assistantPanelLayout';
 import { usePristineAgentRuntime } from './pristineThreadRuntime';
 
 const ACTIVE_THREAD_CONFIG_KEY = 'explorer.aiAssistant.activeThreadId';
 const THREAD_LIST_WIDTH_CONFIG_KEY = 'explorer.aiAssistant.threadListWidth';
-const MIN_THREAD_LIST_WIDTH = 140;
-const DEFAULT_THREAD_LIST_WIDTH = MIN_THREAD_LIST_WIDTH;
-const MAX_THREAD_LIST_WIDTH = 420;
 const THREAD_LIST_TOGGLE_CLASS_NAME = [
   'h-7 w-8 rounded-none border-0 px-0 text-muted-foreground',
   'data-[state=on]:text-foreground',
@@ -44,10 +46,13 @@ function readStoredThreadId(): string | undefined {
 
 export function normalizeThreadListWidth(value: unknown): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
-    return DEFAULT_THREAD_LIST_WIDTH;
+    return ASSISTANT_THREAD_LIST_DEFAULT_WIDTH_PX;
   }
 
-  return Math.min(MAX_THREAD_LIST_WIDTH, Math.max(MIN_THREAD_LIST_WIDTH, Math.round(value)));
+  return Math.min(
+    ASSISTANT_THREAD_LIST_MAX_WIDTH_PX,
+    Math.max(ASSISTANT_THREAD_LIST_MIN_WIDTH_PX, Math.round(value)),
+  );
 }
 
 function PanelRightIcon({ size = 15, filled = false }: { size?: number; filled?: boolean }) {

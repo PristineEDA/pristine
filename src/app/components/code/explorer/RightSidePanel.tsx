@@ -1,12 +1,11 @@
 import { Suspense, lazy, useState } from "react";
 
 import { Skeleton } from "../../ui/skeleton";
+import { ASSISTANT_THREAD_LIST_DEFAULT_WIDTH_PX } from "./assistantPanelLayout";
 
 const AIAgentPanel = lazy(() => import('./AIAgentPanel').then((module) => ({ default: module.AIAgentPanel })));
 const StaticCheckPanel = lazy(() => import('./StaticCheckPanel').then((module) => ({ default: module.StaticCheckPanel })));
 const ReferencesPanel = lazy(() => import('./ReferencesPanel').then((module) => ({ default: module.ReferencesPanel })));
-
-const DEFAULT_THREAD_LIST_WIDTH = 140;
 
 function AssistantPanelSkeleton() {
   return (
@@ -66,7 +65,7 @@ export function RightSidePanel({
     "ai" | "static" | "references"
   >("ai");
   const [threadListExpanded, setThreadListExpanded] = useState(false);
-  const [threadListWidth, setThreadListWidth] = useState(DEFAULT_THREAD_LIST_WIDTH);
+  const [threadListWidth, setThreadListWidth] = useState(ASSISTANT_THREAD_LIST_DEFAULT_WIDTH_PX);
 
   const tabs = [
     { id: "ai", label: "AI Assistant" },

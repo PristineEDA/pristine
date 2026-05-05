@@ -83,6 +83,7 @@ describe('ModelSelector', () => {
         defaultValue="openrouter/openrouter/free"
         variant="ghost"
         size="sm"
+        className="!px-1.5 !text-[10px] [&>svg]:!size-3"
       />,
     );
 
@@ -90,6 +91,7 @@ describe('ModelSelector', () => {
     expect(trigger).toHaveAttribute('data-slot', 'model-selector-trigger');
     expect(trigger).toHaveAttribute('data-variant', 'ghost');
     expect(trigger).toHaveAttribute('data-size', 'sm');
+    expect(trigger).toHaveClass('!px-1.5', '!text-[10px]', '[&>svg]:!size-3');
     expect(trigger).toHaveTextContent(/^OpenRouter Free$/);
     expect(within(trigger).queryByTestId('openrouter-provider-icon')).not.toBeInTheDocument();
     expect(trigger.querySelector('.text-muted-foreground')).toBeNull();

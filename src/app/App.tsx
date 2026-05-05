@@ -8,6 +8,10 @@ import { EditorSplitLayout } from './components/code/shared/EditorSplitLayout';
 import { RightSidePanel } from './components/code/explorer/RightSidePanel';
 import { BottomPanel } from './components/code/explorer/BottomPanel';
 import {
+  ASSISTANT_THREAD_LIST_DEFAULT_WIDTH_PX,
+  ASSISTANT_THREAD_LIST_RESIZE_HANDLE_WIDTH_PX,
+} from './components/code/explorer/assistantPanelLayout';
+import {
   CodeWorkspaceShell,
   EXPLORER_LEFT_PANEL_DEFAULT_WIDTH_PX,
   EXPLORER_RIGHT_PANEL_MAX_WIDTH_PX,
@@ -32,7 +36,6 @@ import { useQuickOpenController } from './useQuickOpenController';
 
 const WhiteboardView = lazy(() => import('./components/whiteboard/WhiteboardView').then((module) => ({ default: module.WhiteboardView })));
 const WorkflowView = lazy(() => import('./components/workflow/WorkflowView').then((module) => ({ default: module.WorkflowView })));
-const ASSISTANT_THREAD_LIST_RESIZE_HANDLE_WIDTH_PX = 8;
 
 // ─── ResizeHandle ────────────────────────────────────────────────────────────
 
@@ -104,7 +107,7 @@ function AppLayout() {
   const [explorerLeftPanelWidthPx, setExplorerLeftPanelWidthPx] = useState(EXPLORER_LEFT_PANEL_DEFAULT_WIDTH_PX);
   const [explorerAssistantPanelWidthPx, setExplorerAssistantPanelWidthPx] = useState(EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX);
   const [assistantThreadListExpanded, setAssistantThreadListExpanded] = useState(false);
-  const [assistantThreadListWidthPx, setAssistantThreadListWidthPx] = useState(140);
+  const [assistantThreadListWidthPx, setAssistantThreadListWidthPx] = useState(ASSISTANT_THREAD_LIST_DEFAULT_WIDTH_PX);
   const explorerBottomPanelLayoutVersion = `${showLeftPanel}:${showRightPanel}:${showBottomPanel}:${explorerLeftPanelWidthPx}`;
   const assistantThreadListExtraWidthPx = assistantThreadListExpanded
     ? assistantThreadListWidthPx + ASSISTANT_THREAD_LIST_RESIZE_HANDLE_WIDTH_PX

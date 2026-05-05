@@ -515,6 +515,7 @@ function ModelSelectorItem({
 }
 
 export type ModelSelectorProps = Omit<ModelSelectorRootProps, "children"> &
+  Pick<ModelSelectorTriggerProps, "className"> &
   VariantProps<typeof selectTriggerVariants> & {
     contentClassName?: string;
   };
@@ -525,6 +526,7 @@ const ModelSelectorImpl = ({
   defaultValue,
   models,
   providers,
+  className,
   variant,
   size,
   contentClassName,
@@ -556,7 +558,7 @@ const ModelSelectorImpl = ({
       onValueChange={onValueChange}
       {...forwardedProps}
     >
-      <ModelSelectorTrigger variant={variant} size={size} />
+      <ModelSelectorTrigger className={className} variant={variant} size={size} />
       <ModelSelectorContent className={contentClassName} />
     </ModelSelectorRoot>
   );

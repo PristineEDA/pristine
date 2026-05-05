@@ -5,6 +5,10 @@ import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import {
+  ASSISTANT_THREAD_LIST_DEFAULT_WIDTH_PX,
+  ASSISTANT_THREAD_LIST_RESIZE_HANDLE_WIDTH_PX,
+} from '../src/app/components/code/explorer/assistantPanelLayout';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const fixtureWorkspace = path.join(__dirname, '..', 'test', 'fixtures', 'workspace');
@@ -2747,6 +2751,11 @@ test('activity bar switches code subpages and menu bar keeps higher-priority pag
 test('assistant chat list expansion widens the whole right sidebar and supports internal drag resize', async () => {
   test.slow();
 
+  const chatListResizeDeltaPx = 60;
+  const expectedExpandedChatListWidthPx = ASSISTANT_THREAD_LIST_DEFAULT_WIDTH_PX;
+  const expectedExpandedRightPanelExtraWidthPx = expectedExpandedChatListWidthPx + ASSISTANT_THREAD_LIST_RESIZE_HANDLE_WIDTH_PX;
+  const expectedResizedChatListWidthPx = expectedExpandedChatListWidthPx + chatListResizeDeltaPx;
+
   const { app, window } = await launchApp();
 
   await ensureExplorerVisible(window);
@@ -2780,9 +2789,9 @@ test('assistant chat list expansion widens the whole right sidebar and supports 
   const expandedAssistantWidth = await readElementPixelWidth(assistantMainPanel);
   const expandedChatListWidth = await readElementPixelWidth(chatListPanel);
 
-  expect(expandedChatListWidth).toBeGreaterThanOrEqual(275);
-  expect(expandedChatListWidth).toBeLessThanOrEqual(285);
-  expect(expandedRightPanelWidth).toBeGreaterThan(initialRightPanelWidth + 250);
+  expect(expandedChatListWidth).toBeGreaterThanOrEqual(expectedExpandedChatListWidthPx - 5);
+  expect(expandedChatListWidth).toBeLessThanOrEqual(expectedExpandedChatListWidthPx + 5);
+  expect(expandedRightPanelWidth).toBeGreaterThanOrEqual(initialRightPanelWidth + expectedExpandedRightPanelExtraWidthPx - 5);
   expect(expandedAssistantWidth).toBeGreaterThanOrEqual(initialAssistantWidth - 2);
   expect(expandedAssistantWidth).toBeLessThanOrEqual(initialAssistantWidth + 2);
 
@@ -2818,8 +2827,8 @@ test('assistant chat list expansion widens the whole right sidebar and supports 
     }));
   });
 
-  await expect.poll(() => readElementPixelWidth(chatListPanel)).toBeGreaterThanOrEqual(335);
-  await expect.poll(() => readElementPixelWidth(chatListPanel)).toBeLessThanOrEqual(345);
+  await expect.poll(() => readElementPixelWidth(chatListPanel)).toBeGreaterThanOrEqual(expectedResizedChatListWidthPx - 5);
+  await expect.poll(() => readElementPixelWidth(chatListPanel)).toBeLessThanOrEqual(expectedResizedChatListWidthPx + 5);
 
   const resizedRightPanelWidth = await readElementPixelWidth(rightPanel);
   const resizedAssistantWidth = await readElementPixelWidth(assistantMainPanel);

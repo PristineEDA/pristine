@@ -144,6 +144,7 @@ type ShellCommandToolResult = {
 const userMessageSurfaceClassName = 'rounded-md border border-border bg-background px-3 py-2 shadow-xs';
 const assistantMessageSurfaceClassName = 'rounded-md bg-background px-3 py-2';
 const actionButtonClassName = 'inline-flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-50';
+const composerSelectorTriggerClassName = '!h-7 !gap-1 !px-1.5 !text-[10px] [&>span]:!gap-1 [&>svg]:!size-3';
 
 type TextareaValue = ComponentPropsWithoutRef<'textarea'>['value'];
 
@@ -893,7 +894,11 @@ function SystemMessage() {
 
 function ThreadScrollToBottom() {
   return (
-    <ThreadPrimitive.ScrollToBottom className="absolute bottom-24 right-3 inline-flex size-7 items-center justify-center rounded-md border border-border bg-background text-muted-foreground shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground disabled:hidden">
+    <ThreadPrimitive.ScrollToBottom
+      aria-label="Scroll to latest message"
+      data-testid="thread-scroll-to-bottom"
+      className="absolute -top-10 right-2 z-10 inline-flex size-7 items-center justify-center rounded-md border border-border bg-background text-muted-foreground shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground disabled:hidden"
+    >
       <ArrowDown className="size-3.5" />
     </ThreadPrimitive.ScrollToBottom>
   );
@@ -922,18 +927,22 @@ function Composer() {
           </ComposerPrimitive.Input>
           <div className="flex min-h-8 items-center justify-between gap-2 border-t border-border/60 px-2 py-1">
             <div className="flex min-w-0 items-center gap-1">
-              <ComposerModeSelector
-                defaultValue="agent"
-                variant="ghost"
-                size="sm"
-              />
-              <ModelSelector
-                providers={pristineModelProviders}
-                defaultValue={PRISTINE_DEFAULT_MODEL_ID}
-                variant="ghost"
-                size="sm"
-                contentClassName="min-w-64"
-              />
+              <div className="flex min-w-0 items-center gap-0.5">
+                <ComposerModeSelector
+                  defaultValue="agent"
+                  variant="ghost"
+                  size="sm"
+                  className={composerSelectorTriggerClassName}
+                />
+                <ModelSelector
+                  providers={pristineModelProviders}
+                  defaultValue={PRISTINE_DEFAULT_MODEL_ID}
+                  variant="ghost"
+                  size="sm"
+                  className={composerSelectorTriggerClassName}
+                  contentClassName="min-w-64"
+                />
+              </div>
               <ContextDisplay.Ring
                 modelContextWindow={PRISTINE_CONTEXT_WINDOW}
                 usage={mockPristineContextUsage}
@@ -1017,8 +1026,8 @@ export function PristineAssistantThread({ agentBaseUrl, className, isThreadLoadi
           )}
         </ThreadPrimitive.Viewport>
         <SelectionToolbar />
-        <ThreadScrollToBottom />
-        <div className="shrink-0 bg-background p-2">
+        <div className="relative shrink-0 bg-background p-2">
+          <ThreadScrollToBottom />
           <Composer />
         </div>
       </ThreadPrimitive.Root>
