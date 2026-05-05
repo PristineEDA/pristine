@@ -268,7 +268,7 @@ const triggerIconMap = {
 
 function PreviewText({ value }: { value: string }) {
   return (
-    <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border bg-muted/40 p-2 font-mono text-[10px] leading-relaxed text-muted-foreground">
+    <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border bg-muted/40 p-2 font-mono text-[12px] leading-relaxed text-muted-foreground">
       {value}
     </pre>
   );
@@ -285,11 +285,11 @@ function ToolPanel({
   title: string;
 }>) {
   return (
-    <div className="my-2 overflow-hidden rounded-md border border-border bg-muted/30 text-[11px]">
+    <div className="my-2 overflow-hidden rounded-md border border-border bg-muted/30 text-[12px] leading-relaxed">
       <div className="flex items-center gap-2 border-b border-border bg-muted/40 px-2 py-1.5 text-muted-foreground">
         {icon}
         <span className="min-w-0 flex-1 truncate font-medium text-foreground">{title}</span>
-        <span className="rounded-sm border border-border bg-background px-1.5 py-0.5 text-[9px] uppercase tracking-normal text-muted-foreground">
+        <span className="rounded-sm border border-border bg-background px-1.5 py-0.5 text-[12px] leading-none uppercase tracking-normal text-muted-foreground">
           {status}
         </span>
       </div>
@@ -305,8 +305,8 @@ function ToolMetaLine({ label, value }: { label: string; value?: string }) {
 
   return (
     <div className="flex min-w-0 items-center gap-2">
-      <span className="shrink-0 text-[10px] text-muted-foreground/70">{label}</span>
-      <span className="min-w-0 truncate font-mono text-[10px] text-foreground">{value}</span>
+      <span className="shrink-0 text-[12px] leading-relaxed text-muted-foreground/70">{label}</span>
+      <span className="min-w-0 truncate font-mono text-[12px] leading-relaxed text-foreground">{value}</span>
     </div>
   );
 }
@@ -415,7 +415,7 @@ function ApprovalError({ error }: { error?: string | null }) {
   }
 
   return (
-    <div className="rounded-md border border-destructive/30 bg-destructive/10 px-2 py-1.5 text-[10px] leading-relaxed text-destructive" role="alert">
+    <div className="rounded-md border border-destructive/30 bg-destructive/10 px-2 py-1.5 text-[12px] leading-relaxed text-destructive" role="alert">
       {error}
     </div>
   );
@@ -427,7 +427,7 @@ function ApprovalStatusBadge({ status }: { status?: string }) {
   }
 
   return (
-    <Badge variant="outline" className="h-5 rounded-md px-1.5 text-[9px] font-normal text-muted-foreground">
+    <Badge variant="outline" className="h-5 rounded-md px-1.5 text-[12px] leading-none font-normal text-muted-foreground">
       {status}
     </Badge>
   );

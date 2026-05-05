@@ -535,6 +535,7 @@ describe('PristineAssistantThread', () => {
 
     expect(mocks.useAgentApprovals).toHaveBeenCalledWith('http://localhost:4111');
     expect(screen.getByTestId('tool-ui-propose_file_change')).toHaveTextContent('Update foo helper');
+  expect(screen.getByTestId('tool-ui-propose_file_change').firstElementChild).toHaveClass('text-[12px]', 'leading-relaxed');
     expect(screen.getByText('src/foo.ts')).toBeInTheDocument();
     expect(screen.getByText(/\+new/u)).toBeInTheDocument();
 

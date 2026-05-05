@@ -44,8 +44,13 @@ describe('ToolGroup', () => {
     );
 
     const root = container.querySelector('[data-slot="tool-group-root"]');
+    const trigger = container.querySelector('[data-slot="tool-group-trigger"]');
+    const content = container.querySelector('[data-slot="tool-group-content"]');
+
     expect(root).toHaveAttribute('data-variant', 'outline');
     expect(root).toHaveClass('border');
+    expect(trigger).toHaveClass('text-[12px]', 'leading-relaxed');
+    expect(content).toHaveClass('text-[12px]', 'leading-relaxed');
     expect(container.querySelector('[data-slot="tool-group-trigger-label"]')).toHaveTextContent('3 tool calls');
     expect(screen.getByText('trace_signal')).toBeInTheDocument();
   });
@@ -61,8 +66,11 @@ describe('ToolGroup', () => {
     );
 
     const root = container.querySelector('[data-slot="tool-group-root"]');
+    const trigger = container.querySelector('[data-slot="tool-group-trigger"]');
+
     expect(root).toHaveAttribute('data-variant', 'ghost');
     expect(root).not.toHaveClass('border');
+    expect(trigger).toHaveClass('text-[12px]', 'leading-relaxed');
     expect(container.querySelector('[data-slot="tool-group-trigger-loader"]')).toBeInTheDocument();
     expect(container.querySelector('[data-slot="tool-group-trigger-label"]')).toHaveTextContent('1 tool call');
   });
