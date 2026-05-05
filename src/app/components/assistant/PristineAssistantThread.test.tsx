@@ -83,9 +83,21 @@ function getComponentName(component: unknown) {
 
 vi.mock('@assistant-ui/react', async () => {
   const { cloneElement, isValidElement } = await vi.importActual<typeof import('react')>('react');
-  const Root = ({ children, className, ...props }: { children?: ReactNode; className?: string; [key: string]: unknown }) => (
-    <div className={className} {...props}>{children}</div>
-  );
+  const Root = ({
+    autoScroll: _autoScroll,
+    children,
+    className,
+    hideWhenRunning: _hideWhenRunning,
+    turnAnchor: _turnAnchor,
+    ...props
+  }: {
+    autoScroll?: boolean;
+    children?: ReactNode;
+    className?: string;
+    hideWhenRunning?: boolean;
+    turnAnchor?: string;
+    [key: string]: unknown;
+  }) => <div className={className} {...props}>{children}</div>;
 
   mocks.makeAssistantToolUI.mockImplementation(({ render, toolName }: { render: (props: unknown) => ReactNode; toolName: string }) => {
     const ToolUI = () => (

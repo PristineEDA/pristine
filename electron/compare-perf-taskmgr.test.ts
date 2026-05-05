@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest'
 const describeOnWindows = process.platform === 'win32' ? describe : describe.skip
 const repoRoot = path.resolve(__dirname, '..')
 const harnessPath = path.join(repoRoot, 'scripts', 'test-compare-perf-harness.mjs')
+const harnessTimeoutMs = 15_000
 
 type HarnessResult = {
   status: number | null
@@ -81,7 +82,7 @@ describeOnWindows('compare perf task manager script', () => {
     expect(result.stdout).toContain('Memory threshold')
     expect(result.stdout).toContain('Runtime CPU and memory differences are within the threshold.')
     expect(result.stderr).toBe('')
-  })
+  }, harnessTimeoutMs)
 
   it('writes detailed comparison artifacts for upload workflows', () => {
     const result = runHarness('pass')
@@ -95,7 +96,7 @@ describeOnWindows('compare perf task manager script', () => {
     expect(result.artifacts.comparisonReportText).toContain('CPU absolute difference')
     expect(result.artifacts.comparisonReportText).toContain('Memory threshold')
     expect(result.artifacts.comparisonErrorText).toBeNull()
-  })
+  }, harnessTimeoutMs)
 
   it('fails when memory difference exceeds the configured threshold even if CPU stays within threshold', () => {
     const result = runHarness('memory-fail')
@@ -107,5 +108,5 @@ describeOnWindows('compare perf task manager script', () => {
     expect(result.stderr).toContain('exceeded the threshold')
     expect(result.artifacts.comparisonReportJson?.comparison.IsWithinThreshold).toBe(false)
     expect(result.artifacts.comparisonReportJson?.statusMessage).toContain('Runtime thresholds exceeded.')
-  })
+  }, harnessTimeoutMs)
 })
