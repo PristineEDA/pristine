@@ -34,6 +34,8 @@ interface NavMainProps {
   onItemSelect: (view: string) => void;
 }
 
+const activityBarActiveButtonClassName = 'cursor-pointer data-[active=true]:bg-sidebar-primary/12 data-[active=true]:text-sidebar-primary dark:data-[active=true]:bg-sidebar-primary-foreground/20 dark:data-[active=true]:text-sidebar-primary-foreground';
+
 export function NavMain({ items, activeView, onItemSelect }: NavMainProps) {
   return (
     <SidebarGroup>
@@ -51,7 +53,7 @@ export function NavMain({ items, activeView, onItemSelect }: NavMainProps) {
                   aria-label={item.title}
                   data-testid={`activity-item-${item.id}`}
                   onClick={() => onItemSelect(item.id)}
-                  className="cursor-pointer"
+                  className={activityBarActiveButtonClassName}
                 >
                   {item.icon && <item.icon />}
                   <span>{item.title}</span>
@@ -75,7 +77,7 @@ export function NavMain({ items, activeView, onItemSelect }: NavMainProps) {
                     aria-label={item.title}
                     data-testid={`activity-item-${item.id}`}
                     onClick={() => onItemSelect(item.id)}
-                    className="cursor-pointer"
+                    className={activityBarActiveButtonClassName}
                   >
                     {item.icon && <item.icon />}
                     <span>{item.title}</span>

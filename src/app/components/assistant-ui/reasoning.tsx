@@ -1,10 +1,9 @@
 "use client";
 
-import { memo, useCallback, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { cva, type VariantProps } from "class-variance-authority";
-import { BrainIcon, ChevronDownIcon } from "lucide-react";
+import { ChevronDownIcon } from "lucide-react";
 import {
-  useScrollLock,
   useAuiState,
   type ReasoningMessagePartComponent,
   type ReasoningGroupComponent,
@@ -18,6 +17,62 @@ import {
 import { cn } from "@/lib/utils";
 
 const ANIMATION_DURATION = 200;
+
+function useStableScrollLock<T extends HTMLElement = HTMLElement>(
+  animatedElementRef: React.RefObject<T | null>,
+  animationDuration: number,
+) {
+  const scrollContainerRef = useRef<HTMLElement | null>(null);
+  const cleanupRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    return () => {
+      cleanupRef.current?.();
+    };
+  }, []);
+
+  return useCallback(() => {
+    cleanupRef.current?.();
+
+    if (!scrollContainerRef.current && animatedElementRef.current) {
+      let element: HTMLElement | null = animatedElementRef.current;
+
+      while (element) {
+        const { overflowY } = getComputedStyle(element);
+
+        if (overflowY === "scroll" || overflowY === "auto") {
+          scrollContainerRef.current = element;
+          break;
+        }
+
+        element = element.parentElement;
+      }
+    }
+
+    const scrollContainer = scrollContainerRef.current;
+
+    if (!scrollContainer) {
+      return;
+    }
+
+    const scrollPosition = scrollContainer.scrollTop;
+    const resetPosition = () => {
+      scrollContainer.scrollTop = scrollPosition;
+    };
+
+    scrollContainer.addEventListener("scroll", resetPosition);
+
+    const timeoutId = window.setTimeout(() => {
+      scrollContainer.removeEventListener("scroll", resetPosition);
+      cleanupRef.current = null;
+    }, animationDuration);
+
+    cleanupRef.current = () => {
+      window.clearTimeout(timeoutId);
+      scrollContainer.removeEventListener("scroll", resetPosition);
+    };
+  }, [animationDuration, animatedElementRef]);
+}
 
 const reasoningVariants = cva("aui-reasoning-root mb-4 w-full", {
   variants: {
@@ -53,7 +108,7 @@ function ReasoningRoot({
 }: ReasoningRootProps) {
   const collapsibleRef = useRef<HTMLDivElement>(null);
   const [uncontrolledOpen, setUncontrolledOpen] = useState(defaultOpen);
-  const lockScroll = useScrollLock(collapsibleRef, ANIMATION_DURATION);
+  const lockScroll = useStableScrollLock(collapsibleRef, ANIMATION_DURATION);
 
   const isControlled = controlledOpen !== undefined;
   const isOpen = isControlled ? controlledOpen : uncontrolledOpen;
@@ -131,15 +186,11 @@ function ReasoningTrigger({
     <CollapsibleTrigger
       data-slot="reasoning-trigger"
       className={cn(
-        "aui-reasoning-trigger group/trigger flex max-w-[75%] items-center gap-2 py-1 text-muted-foreground text-sm transition-colors hover:text-foreground",
+        "aui-reasoning-trigger group/trigger flex max-w-[75%] items-center gap-2 py-1 text-[12px] leading-relaxed text-muted-foreground transition-colors hover:text-foreground",
         className,
       )}
       {...props}
     >
-      <BrainIcon
-        data-slot="reasoning-trigger-icon"
-        className="aui-reasoning-trigger-icon size-4 shrink-0"
-      />
       <span
         data-slot="reasoning-trigger-label"
         className="aui-reasoning-trigger-label-wrapper relative inline-block leading-none"
@@ -177,7 +228,7 @@ function ReasoningContent({
     <CollapsibleContent
       data-slot="reasoning-content"
       className={cn(
-        "aui-reasoning-content relative overflow-hidden text-muted-foreground text-sm outline-none",
+        "aui-reasoning-content relative overflow-hidden text-[12px] leading-relaxed text-muted-foreground outline-none",
         "group/collapsible-content ease-out",
         "data-[state=closed]:animate-collapsible-up",
         "data-[state=open]:animate-collapsible-down",
@@ -190,7 +241,6 @@ function ReasoningContent({
       {...props}
     >
       {children}
-      <ReasoningFade />
     </CollapsibleContent>
   );
 }
@@ -200,7 +250,7 @@ function ReasoningText({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="reasoning-text"
       className={cn(
-        "aui-reasoning-text relative z-0 max-h-64 space-y-4 overflow-y-auto ps-6 pt-2 pb-2 leading-relaxed",
+        "aui-reasoning-text pristine-assistant-scrollbar relative z-0 max-h-64 space-y-4 overflow-y-auto pt-2 pb-2 text-[12px] leading-relaxed",
         "transform-gpu transition-[transform,opacity]",
         "group-data-[state=open]/collapsible-content:animate-in",
         "group-data-[state=closed]/collapsible-content:animate-out",

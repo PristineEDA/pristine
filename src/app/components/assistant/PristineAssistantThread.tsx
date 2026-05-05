@@ -18,22 +18,27 @@ import {
 import {
   ArrowDown,
   ArrowUpIcon,
+  Check,
   ChevronLeft,
   ChevronRight,
   Copy,
   FileCode2,
   LoaderIcon,
   Pencil,
+  Play,
   RotateCcw,
   Shell,
   Sparkles,
   SquareIcon,
   ThumbsUp,
   ThumbsDown,
+  Trash2,
 } from 'lucide-react';
 import {
+  createContext,
   forwardRef,
   useCallback,
+  useContext,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -69,7 +74,17 @@ import { Reasoning } from '@/app/components/assistant-ui/reasoning';
 import { Sources } from '@/app/components/assistant-ui/sources';
 import { ToolFallback } from '@/app/components/assistant-ui/tool-fallback';
 import { ToolGroup } from '@/app/components/assistant-ui/tool-group';
+import {
+  type PendingChangeKind,
+  type PendingChangeStatus,
+  type PendingFileChange,
+  type PendingShellCommand,
+  type ShellCommandStatus,
+} from '@/app/components/code/explorer/agentApi';
+import { useAgentApprovals } from '@/app/components/code/explorer/useAgentApprovals';
+import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
+import { Skeleton } from '../ui/skeleton';
 import { TooltipIconButton } from "@/app/components/assistant-ui/tooltip-icon-button";
 import {
   PRISTINE_CONTEXT_WINDOW,
@@ -85,7 +100,9 @@ import {
 } from './pristineAssistantTriggers';
 
 type PristineAssistantThreadProps = {
+  agentBaseUrl?: string;
   className?: string;
+  isThreadLoading?: boolean;
 };
 
 type FileChangeToolArgs = {
@@ -119,6 +136,7 @@ type ShellCommandToolResult = {
   cwd?: string;
   summary?: string;
   status?: string;
+  exitCode?: number | null;
   stdout?: string;
   stderr?: string;
 };
@@ -126,6 +144,7 @@ type ShellCommandToolResult = {
 const userMessageSurfaceClassName = 'rounded-md border border-border bg-background px-3 py-2 shadow-xs';
 const assistantMessageSurfaceClassName = 'rounded-md bg-background px-3 py-2';
 const actionButtonClassName = 'inline-flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-50';
+const composerSelectorTriggerClassName = '!h-7 !gap-1 !px-1.5 !text-[10px] [&>span]:!gap-1 [&>svg]:!size-3';
 
 type TextareaValue = ComponentPropsWithoutRef<'textarea'>['value'];
 
@@ -250,7 +269,7 @@ const triggerIconMap = {
 
 function PreviewText({ value }: { value: string }) {
   return (
-    <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border bg-muted/40 p-2 font-mono text-[10px] leading-relaxed text-muted-foreground">
+    <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border bg-muted/40 p-2 font-mono text-[12px] leading-relaxed text-muted-foreground">
       {value}
     </pre>
   );
@@ -267,11 +286,11 @@ function ToolPanel({
   title: string;
 }>) {
   return (
-    <div className="my-2 overflow-hidden rounded-md border border-border bg-muted/30 text-[11px]">
+    <div className="my-2 overflow-hidden rounded-md border border-border bg-muted/30 text-[12px] leading-relaxed">
       <div className="flex items-center gap-2 border-b border-border bg-muted/40 px-2 py-1.5 text-muted-foreground">
         {icon}
         <span className="min-w-0 flex-1 truncate font-medium text-foreground">{title}</span>
-        <span className="rounded-sm border border-border bg-background px-1.5 py-0.5 text-[9px] uppercase tracking-normal text-muted-foreground">
+        <span className="rounded-sm border border-border bg-background px-1.5 py-0.5 text-[12px] leading-none uppercase tracking-normal text-muted-foreground">
           {status}
         </span>
       </div>
@@ -287,8 +306,8 @@ function ToolMetaLine({ label, value }: { label: string; value?: string }) {
 
   return (
     <div className="flex min-w-0 items-center gap-2">
-      <span className="shrink-0 text-[10px] text-muted-foreground/70">{label}</span>
-      <span className="min-w-0 truncate font-mono text-[10px] text-foreground">{value}</span>
+      <span className="shrink-0 text-[12px] leading-relaxed text-muted-foreground/70">{label}</span>
+      <span className="min-w-0 truncate font-mono text-[12px] leading-relaxed text-foreground">{value}</span>
     </div>
   );
 }
@@ -301,22 +320,233 @@ function formatToolStatus(status: { type: string }, hasResult: boolean): string 
   return status.type;
 }
 
+type AgentApprovalContextValue = ReturnType<typeof useAgentApprovals>;
+
+const AgentApprovalContext = createContext<AgentApprovalContextValue | null>(null);
+
+function AgentApprovalProvider({ agentBaseUrl, children }: PropsWithChildren<{ agentBaseUrl?: string }>) {
+  if (!agentBaseUrl) {
+    return <>{children}</>;
+  }
+
+  return <AgentApprovalProviderInner baseUrl={agentBaseUrl}>{children}</AgentApprovalProviderInner>;
+}
+
+function AgentApprovalProviderInner({ baseUrl, children }: PropsWithChildren<{ baseUrl: string }>) {
+  const approvals = useAgentApprovals(baseUrl);
+
+  return (
+    <AgentApprovalContext.Provider value={approvals}>
+      {children}
+    </AgentApprovalContext.Provider>
+  );
+}
+
+function useAgentApprovalContext() {
+  return useContext(AgentApprovalContext);
+}
+
+type FileChangeApprovalView = {
+  id?: string;
+  kind?: PendingChangeKind | string;
+  path?: string;
+  targetPath?: string;
+  summary: string;
+  status?: PendingChangeStatus | string;
+  unifiedDiff?: string;
+};
+
+type ShellCommandApprovalView = {
+  id?: string;
+  command?: string;
+  args: string[];
+  cwd?: string;
+  summary: string;
+  status?: ShellCommandStatus | string;
+  exitCode?: number | null;
+  stdout?: string;
+  stderr?: string;
+};
+
+function getFileChangeApprovalView(
+  args: FileChangeToolArgs,
+  result: FileChangeToolResult | undefined,
+  changes: PendingFileChange[],
+): FileChangeApprovalView {
+  const storedChange = result?.id ? changes.find((change) => change.id === result.id) : undefined;
+
+  return {
+    id: storedChange?.id ?? result?.id,
+    kind: storedChange?.kind ?? result?.kind ?? args.kind,
+    path: storedChange?.path ?? result?.path ?? args.path,
+    targetPath: storedChange?.targetPath ?? result?.targetPath ?? args.targetPath,
+    summary: storedChange?.summary ?? result?.summary ?? args.summary ?? 'File change proposal',
+    status: storedChange?.status ?? result?.status,
+    unifiedDiff: storedChange?.unifiedDiff ?? result?.unifiedDiff,
+  };
+}
+
+function getShellCommandApprovalView(
+  args: ShellCommandToolArgs,
+  result: ShellCommandToolResult | undefined,
+  commands: PendingShellCommand[],
+): ShellCommandApprovalView {
+  const storedCommand = result?.id ? commands.find((command) => command.id === result.id) : undefined;
+
+  return {
+    id: storedCommand?.id ?? result?.id,
+    command: storedCommand?.command ?? result?.command ?? args.command,
+    args: storedCommand?.args ?? result?.args ?? args.args ?? [],
+    cwd: storedCommand?.cwd ?? result?.cwd ?? args.cwd,
+    summary: storedCommand?.summary ?? result?.summary ?? args.summary ?? 'Shell command proposal',
+    status: storedCommand?.status ?? result?.status,
+    exitCode: storedCommand?.exitCode ?? result?.exitCode,
+    stdout: storedCommand?.stdout ?? result?.stdout,
+    stderr: storedCommand?.stderr ?? result?.stderr,
+  };
+}
+
+function formatApprovalStatus(runtimeStatus: { type: string }, approvalStatus: string | undefined, hasResult: boolean): string {
+  return approvalStatus ?? formatToolStatus(runtimeStatus, hasResult);
+}
+
+function ApprovalError({ error }: { error?: string | null }) {
+  if (!error) {
+    return null;
+  }
+
+  return (
+    <div className="rounded-md border border-destructive/30 bg-destructive/10 px-2 py-1.5 text-[12px] leading-relaxed text-destructive" role="alert">
+      {error}
+    </div>
+  );
+}
+
+function ApprovalStatusBadge({ status }: { status?: string }) {
+  if (!status) {
+    return null;
+  }
+
+  return (
+    <Badge variant="outline" className="h-5 rounded-md px-1.5 text-[12px] leading-none font-normal text-muted-foreground">
+      {status}
+    </Badge>
+  );
+}
+
+function FileChangeApprovalActions({
+  approval,
+  change,
+}: {
+  approval: AgentApprovalContextValue | null;
+  change: FileChangeApprovalView;
+}) {
+  const changeId = change.id;
+
+  if (!approval || !changeId || change.status !== 'pending') {
+    return null;
+  }
+
+  const applyActionId = `change:${changeId}:apply`;
+  const discardActionId = `change:${changeId}:discard`;
+  const isBusy = approval.busyActionId === applyActionId || approval.busyActionId === discardActionId;
+
+  return (
+    <div className="flex justify-end gap-1.5">
+      <Button
+        type="button"
+        size="xs"
+        variant="ghost"
+        className="h-6 text-muted-foreground"
+        disabled={isBusy}
+        aria-label="Discard file change"
+        onClick={() => approval.discardChange(changeId)}
+      >
+        <Trash2 className="size-3" />
+        Discard
+      </Button>
+      <Button
+        type="button"
+        size="xs"
+        className="h-6"
+        disabled={isBusy}
+        aria-label="Apply file change"
+        onClick={() => approval.applyChange(changeId)}
+      >
+        <Check className="size-3" />
+        Apply
+      </Button>
+    </div>
+  );
+}
+
+function ShellCommandApprovalActions({
+  approval,
+  command,
+}: {
+  approval: AgentApprovalContextValue | null;
+  command: ShellCommandApprovalView;
+}) {
+  const commandId = command.id;
+
+  if (!approval || !commandId || command.status !== 'pending') {
+    return null;
+  }
+
+  const runActionId = `command:${commandId}:run`;
+  const discardActionId = `command:${commandId}:discard`;
+  const isBusy = approval.busyActionId === runActionId || approval.busyActionId === discardActionId;
+
+  return (
+    <div className="flex justify-end gap-1.5">
+      <Button
+        type="button"
+        size="xs"
+        variant="ghost"
+        className="h-6 text-muted-foreground"
+        disabled={isBusy}
+        aria-label="Discard shell command"
+        onClick={() => approval.discardCommand(commandId)}
+      >
+        <Trash2 className="size-3" />
+        Discard
+      </Button>
+      <Button
+        type="button"
+        size="xs"
+        className="h-6"
+        disabled={isBusy}
+        aria-label="Run shell command"
+        onClick={() => approval.runCommand(commandId)}
+      >
+        <Play className="size-3" />
+        Run
+      </Button>
+    </div>
+  );
+}
+
 const ProposedFileChangeToolUI = makeAssistantToolUI<FileChangeToolArgs, FileChangeToolResult>({
   toolName: 'propose_file_change',
   render: ({ args, result, status }) => {
-    const path = result?.path ?? args.path;
-    const title = result?.summary ?? args.summary ?? 'File change proposal';
+    const approval = useAgentApprovalContext();
+    const change = getFileChangeApprovalView(args, result, approval?.snapshot.changes ?? []);
 
     return (
       <ToolPanel
         icon={<FileCode2 className="size-3" />}
-        status={formatToolStatus(status, Boolean(result))}
-        title={title}
+        status={formatApprovalStatus(status, change.status, Boolean(result))}
+        title={change.summary}
       >
-        <ToolMetaLine label="path" value={path} />
-        <ToolMetaLine label="kind" value={result?.kind ?? args.kind} />
-        <ToolMetaLine label="target" value={result?.targetPath ?? args.targetPath} />
-        {result?.unifiedDiff && <PreviewText value={result.unifiedDiff} />}
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+          <ApprovalStatusBadge status={change.kind} />
+          <ApprovalStatusBadge status={change.status} />
+        </div>
+        <ToolMetaLine label="path" value={change.path} />
+        <ToolMetaLine label="target" value={change.targetPath} />
+        {change.unifiedDiff && <PreviewText value={change.unifiedDiff} />}
+        <ApprovalError error={change.id ? approval?.snapshot.error : null} />
+        <FileChangeApprovalActions approval={approval} change={change} />
       </ToolPanel>
     );
   },
@@ -325,19 +555,28 @@ const ProposedFileChangeToolUI = makeAssistantToolUI<FileChangeToolArgs, FileCha
 const ProposedShellCommandToolUI = makeAssistantToolUI<ShellCommandToolArgs, ShellCommandToolResult>({
   toolName: 'propose_shell_command',
   render: ({ args, result, status }) => {
-    const command = [result?.command ?? args.command, ...(result?.args ?? args.args ?? [])].filter(Boolean).join(' ');
-    const title = result?.summary ?? args.summary ?? 'Shell command proposal';
+    const approval = useAgentApprovalContext();
+    const command = getShellCommandApprovalView(args, result, approval?.snapshot.commands ?? []);
+    const commandLine = [command.command, ...command.args].filter(Boolean).join(' ');
 
     return (
       <ToolPanel
         icon={<Shell className="size-3" />}
-        status={formatToolStatus(status, Boolean(result))}
-        title={title}
+        status={formatApprovalStatus(status, command.status, Boolean(result))}
+        title={command.summary}
       >
-        <ToolMetaLine label="cmd" value={command} />
-        <ToolMetaLine label="cwd" value={result?.cwd ?? args.cwd} />
-        {result?.stdout && <PreviewText value={result.stdout} />}
-        {result?.stderr && <PreviewText value={result.stderr} />}
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+          <ApprovalStatusBadge status={command.status} />
+          {command.exitCode !== undefined && command.exitCode !== null && (
+            <ApprovalStatusBadge status={`exit ${command.exitCode}`} />
+          )}
+        </div>
+        <ToolMetaLine label="cmd" value={commandLine} />
+        <ToolMetaLine label="cwd" value={command.cwd} />
+        {command.stdout && <PreviewText value={command.stdout} />}
+        {command.stderr && <PreviewText value={command.stderr} />}
+        <ApprovalError error={command.id ? approval?.snapshot.error : null} />
+        <ShellCommandApprovalActions approval={approval} command={command} />
       </ToolPanel>
     );
   },
@@ -389,6 +628,38 @@ function ThreadWelcome() {
         </div>
       </div>
     </ThreadPrimitive.Empty>
+  );
+}
+
+function ThreadMessagesSkeleton() {
+  return (
+    <div
+      data-testid="assistant-thread-loading-skeleton"
+      aria-busy="true"
+      aria-label="Loading chat messages"
+      className="flex min-h-full flex-col gap-4 px-1 py-2"
+    >
+      <div className="flex">
+        <div className="flex w-full max-w-[88%] flex-col gap-2 rounded-md bg-background px-3 py-2">
+          <Skeleton className="h-3 w-24" />
+          <Skeleton className="h-3 w-full" />
+          <Skeleton className="h-3 w-5/6" />
+        </div>
+      </div>
+      <div className="flex justify-end">
+        <div className="flex w-full max-w-[72%] flex-col gap-2 rounded-md border border-border bg-background px-3 py-2">
+          <Skeleton className="h-3 w-20 self-end" />
+          <Skeleton className="h-3 w-full" />
+        </div>
+      </div>
+      <div className="flex">
+        <div className="flex w-full max-w-[82%] flex-col gap-2 rounded-md bg-background px-3 py-2">
+          <Skeleton className="h-3 w-28" />
+          <Skeleton className="h-3 w-full" />
+          <Skeleton className="h-3 w-2/3" />
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -546,7 +817,7 @@ function PristineReasoningGroup({ children, endIndex, startIndex }: ReasoningGro
   });
 
   return (
-    <Reasoning.Root defaultOpen={isReasoningStreaming} variant="ghost">
+    <Reasoning.Root defaultOpen={isReasoningStreaming} variant="muted">
       <Reasoning.Trigger active={isReasoningStreaming} />
       <Reasoning.Content aria-busy={isReasoningStreaming}>
         <Reasoning.Text>{children}</Reasoning.Text>
@@ -623,7 +894,11 @@ function SystemMessage() {
 
 function ThreadScrollToBottom() {
   return (
-    <ThreadPrimitive.ScrollToBottom className="absolute bottom-24 right-3 inline-flex size-7 items-center justify-center rounded-md border border-border bg-background text-muted-foreground shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground disabled:hidden">
+    <ThreadPrimitive.ScrollToBottom
+      aria-label="Scroll to latest message"
+      data-testid="thread-scroll-to-bottom"
+      className="absolute -top-10 right-2 z-10 inline-flex size-7 items-center justify-center rounded-md border border-border bg-background text-muted-foreground shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground disabled:hidden"
+    >
       <ArrowDown className="size-3.5" />
     </ThreadPrimitive.ScrollToBottom>
   );
@@ -652,18 +927,22 @@ function Composer() {
           </ComposerPrimitive.Input>
           <div className="flex min-h-8 items-center justify-between gap-2 border-t border-border/60 px-2 py-1">
             <div className="flex min-w-0 items-center gap-1">
-              <ComposerModeSelector
-                defaultValue="agent"
-                variant="ghost"
-                size="sm"
-              />
-              <ModelSelector
-                providers={pristineModelProviders}
-                defaultValue={PRISTINE_DEFAULT_MODEL_ID}
-                variant="ghost"
-                size="sm"
-                contentClassName="min-w-64"
-              />
+              <div className="flex min-w-0 items-center gap-0.5">
+                <ComposerModeSelector
+                  defaultValue="agent"
+                  variant="ghost"
+                  size="sm"
+                  className={composerSelectorTriggerClassName}
+                />
+                <ModelSelector
+                  providers={pristineModelProviders}
+                  defaultValue={PRISTINE_DEFAULT_MODEL_ID}
+                  variant="ghost"
+                  size="sm"
+                  className={composerSelectorTriggerClassName}
+                  contentClassName="min-w-64"
+                />
+              </div>
               <ContextDisplay.Ring
                 modelContextWindow={PRISTINE_CONTEXT_WINDOW}
                 usage={mockPristineContextUsage}
@@ -723,27 +1002,35 @@ function Composer() {
   );
 }
 
-export function PristineAssistantThread({ className }: PristineAssistantThreadProps) {
+export function PristineAssistantThread({ agentBaseUrl, className, isThreadLoading = false }: PristineAssistantThreadProps) {
   return (
-    <ThreadPrimitive.Root className={cn('relative flex min-h-0 flex-1 flex-col bg-background', className)}>
-      <PristineAssistantInstructions />
-      <PristineAssistantToolUIs />
-      <ThreadPrimitive.Viewport className="pristine-assistant-scrollbar flex-1 overflow-y-auto px-2 py-1" autoScroll turnAnchor="bottom">
-        <ThreadWelcome />
-        <ThreadPrimitive.Messages
-          components={{
-            AssistantMessage,
-            SystemMessage,
-            UserEditComposer,
-            UserMessage,
-          }}
-        />
-      </ThreadPrimitive.Viewport>
-      <SelectionToolbar />
-      <ThreadScrollToBottom />
-      <div className="shrink-0 bg-background p-2">
-        <Composer />
-      </div>
-    </ThreadPrimitive.Root>
+    <AgentApprovalProvider agentBaseUrl={agentBaseUrl}>
+      <ThreadPrimitive.Root className={cn('relative flex min-h-0 flex-1 flex-col bg-background', className)}>
+        <PristineAssistantInstructions />
+        <PristineAssistantToolUIs />
+        <ThreadPrimitive.Viewport className="pristine-assistant-scrollbar flex-1 overflow-y-auto px-2 py-1" autoScroll turnAnchor="bottom">
+          {isThreadLoading ? (
+            <ThreadMessagesSkeleton />
+          ) : (
+            <>
+              <ThreadWelcome />
+              <ThreadPrimitive.Messages
+                components={{
+                  AssistantMessage,
+                  SystemMessage,
+                  UserEditComposer,
+                  UserMessage,
+                }}
+              />
+            </>
+          )}
+        </ThreadPrimitive.Viewport>
+        <SelectionToolbar />
+        <div className="relative shrink-0 bg-background p-2">
+          <ThreadScrollToBottom />
+          <Composer />
+        </div>
+      </ThreadPrimitive.Root>
+    </AgentApprovalProvider>
   );
 }

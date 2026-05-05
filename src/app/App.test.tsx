@@ -133,9 +133,13 @@ vi.mock('./components/code/shared/EditorSplitLayout', async () => {
 });
 
 vi.mock('./components/code/explorer/RightSidePanel', () => ({
-  RightSidePanel: ({ onFileOpen, onLineJump }: any) => (
+  RightSidePanel: ({ onFileOpen, onLineJump, onThreadListExpandedChange, onThreadListWidthChange }: any) => (
     <div data-testid="right-panel">
       <button onClick={() => { onFileOpen('rtl/core/alu.v', 'alu.v'); onLineJump(33); }}>right-open</button>
+      <button onClick={() => onThreadListExpandedChange?.(true)}>assistant-expand-thread-list</button>
+      <button onClick={() => onThreadListExpandedChange?.(false)}>assistant-collapse-thread-list</button>
+      <button onClick={() => onThreadListWidthChange?.(280)}>assistant-thread-list-width-280</button>
+      <button onClick={() => onThreadListWidthChange?.(340)}>assistant-thread-list-width-340</button>
     </div>
   ),
 }));
@@ -289,9 +293,13 @@ describe('App', () => {
     expect(screen.getByTestId('panel-simulation-bottom-panel')).toBeInTheDocument();
     expect(screen.getByTestId('panel-simulation-right-panel')).toBeInTheDocument();
     expect(screen.getByTestId('simulation-left-panel-content')).toHaveTextContent('Left Panel');
+    expect(screen.getByTestId('simulation-left-panel-content')).toHaveTextContent('Coming soon');
     expect(screen.getByTestId('simulation-main-panel-content')).toHaveTextContent('Simulation Workspace');
+    expect(screen.getByTestId('simulation-main-panel-content')).toHaveTextContent('Coming soon');
     expect(screen.getByTestId('simulation-bottom-panel-content')).toHaveTextContent('Bottom Panel');
+    expect(screen.getByTestId('simulation-bottom-panel-content')).toHaveTextContent('Coming soon');
     expect(screen.getByTestId('simulation-right-panel-content')).toHaveTextContent('Right Panel');
+    expect(screen.getByTestId('simulation-right-panel-content')).toHaveTextContent('Coming soon');
 
     await clickText('select-explorer');
     expect(screen.getByTestId('activity-view')).toHaveTextContent('explorer');
@@ -306,6 +314,7 @@ describe('App', () => {
 
     await clickText('select-synthesis');
     expect(await screen.findByTestId('code-view-synthesis')).toHaveTextContent('Synthesis');
+    expect(screen.getByTestId('code-view-synthesis')).toHaveTextContent('Coming soon');
 
     await clickText('switch-whiteboard');
     expect(screen.getByTestId('main-content-view')).toHaveTextContent('whiteboard');
@@ -326,6 +335,7 @@ describe('App', () => {
     expect(screen.getByTestId('status-bar-main-view')).toHaveTextContent('code');
     expect(screen.getByTestId('status-bar-code-view')).toHaveTextContent('synthesis');
     expect(await screen.findByTestId('code-view-synthesis')).toHaveTextContent('Synthesis');
+    expect(screen.getByTestId('code-view-synthesis')).toHaveTextContent('Coming soon');
   });
 
   it('keeps the activity bar collapse state when switching away from and back to code', async () => {
@@ -363,6 +373,7 @@ describe('App', () => {
       await clickTestId('activity-item-physical');
 
       expect(await screen.findByTestId('code-view-physical')).toHaveTextContent('Physical Design');
+      expect(screen.getByTestId('code-view-physical')).toHaveTextContent('Coming soon');
     } finally {
       renderRealActivityBar = false;
     }
@@ -397,7 +408,8 @@ describe('App', () => {
 
     fireEvent.keyDown(document, { key: 'b', ctrlKey: true, altKey: true });
     expect(screen.getByTestId('menu-right-state')).toHaveTextContent('false');
-    expect(screen.queryByTestId('right-panel')).not.toBeInTheDocument();
+    expect(screen.getByTestId('panel-right-panel')).toHaveStyle({ width: '0px' });
+    expect(screen.getByTestId('panel-right-panel')).toHaveAttribute('aria-hidden', 'true');
   });
 
   it('remembers panel visibility per code subview and disables layout interactions on unsupported pages', async () => {
@@ -456,6 +468,41 @@ describe('App', () => {
     expect(screen.getByTestId('menu-left-state')).toHaveTextContent('true');
     expect(screen.getByTestId('menu-right-state')).toHaveTextContent('true');
     expect(screen.getByTestId('menu-bottom-state')).toHaveTextContent('false');
+  });
+
+  it('does not carry the simulation right panel into explorer after returning from higher-priority navigation', async () => {
+    render(<App />);
+
+    await clickText('select-simulation');
+    expect(await screen.findByTestId('menu-right-state')).toHaveTextContent('true');
+
+    await clickText('toggle-left-panel');
+    await clickText('toggle-bottom-panel');
+    expect(screen.getByTestId('menu-left-state')).toHaveTextContent('false');
+    expect(screen.getByTestId('menu-bottom-state')).toHaveTextContent('false');
+    expect(screen.getByTestId('menu-right-state')).toHaveTextContent('true');
+
+    await clickText('select-synthesis');
+    expect(await screen.findByTestId('menu-layout-enabled')).toHaveTextContent('false');
+
+    await clickText('switch-whiteboard');
+    expect(screen.getByTestId('main-content-view')).toHaveTextContent('whiteboard');
+
+    await clickText('switch-workflow');
+    expect(screen.getByTestId('main-content-view')).toHaveTextContent('workflow');
+
+    await clickText('switch-code');
+    expect(screen.getByTestId('activity-view')).toHaveTextContent('synthesis');
+    expect(screen.getByTestId('menu-layout-enabled')).toHaveTextContent('false');
+
+    await clickText('select-simulation');
+    expect(await screen.findByTestId('menu-right-state')).toHaveTextContent('true');
+
+    await clickText('select-explorer');
+    expect(screen.getByTestId('menu-left-state')).toHaveTextContent('false');
+    expect(screen.getByTestId('menu-right-state')).toHaveTextContent('false');
+    expect(screen.queryByTestId('panel-left-panel')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('panel-right-panel')).not.toBeInTheDocument();
   });
 
   it('opens quick open with Ctrl+P, resets the query on reopen, and selects a file', async () => {
@@ -571,7 +618,8 @@ describe('App', () => {
 
     await clickText('toggle-right-panel');
 
-    expect(screen.queryByTestId('panel-right-panel')).not.toBeInTheDocument();
+    expect(screen.getByTestId('panel-right-panel')).toHaveStyle({ width: '0px' });
+    expect(screen.getByTestId('panel-right-panel')).toHaveAttribute('aria-hidden', 'true');
     expect(screen.getByTestId('panel-left-panel')).toHaveStyle({ width: '320px' });
 
     await clickText('toggle-right-panel');
@@ -580,6 +628,26 @@ describe('App', () => {
       expect(screen.getByTestId('panel-right-panel')).toHaveStyle({ width: '360px' });
     });
     expect(screen.getByTestId('panel-left-panel')).toHaveStyle({ width: '320px' });
+  });
+
+  it('widens the whole explorer right sidebar when the assistant chat list expands', async () => {
+    render(<App />);
+
+    await clickText('toggle-right-panel');
+
+    expect(screen.getByTestId('panel-right-panel')).toHaveStyle({ width: `${EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX}px` });
+
+    await clickText('assistant-expand-thread-list');
+
+    expect(screen.getByTestId('panel-right-panel')).toHaveStyle({ width: '448px' });
+
+    await clickText('assistant-thread-list-width-340');
+
+    expect(screen.getByTestId('panel-right-panel')).toHaveStyle({ width: '648px' });
+
+    await clickText('assistant-collapse-thread-list');
+
+    expect(screen.getByTestId('panel-right-panel')).toHaveStyle({ width: `${EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX}px` });
   });
 
   it('restores the previous editor file and cursor snapshot when quick open closes without a selection', async () => {

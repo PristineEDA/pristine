@@ -12,6 +12,15 @@ async function clickButton(user: TestUser, name: RegExp) {
 }
 
 describe('RightSidePanel', () => {
+  it('shows an assistant skeleton while the AI panel chunk is still loading', () => {
+    render(
+      <RightSidePanel onFileOpen={vi.fn()} onLineJump={vi.fn()} />,
+    );
+
+    expect(screen.getByTestId('assistant-panel-suspense-skeleton')).toBeInTheDocument();
+    expect(screen.queryByText(/Loading assistant/i)).not.toBeInTheDocument();
+  });
+
   it('navigates static check items to their source file and line', async () => {
     const user = userEvent.setup();
     const onFileOpen = vi.fn();

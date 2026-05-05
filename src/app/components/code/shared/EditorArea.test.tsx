@@ -523,7 +523,7 @@ describe('EditorArea', () => {
     await waitFor(() => {
       expect(window.electronAPI!.fs.readFile).toHaveBeenCalledWith('scripts/common.mk', 'utf-8');
     });
-    expect(screen.getByTestId('monaco-editor')).toHaveAttribute('data-language', 'makefile');
+    expect(await screen.findByTestId('monaco-editor')).toHaveAttribute('data-language', 'makefile');
   });
 
   it('configures monaco, loads file content, reacts to cursor changes, and jumps to the target line', async () => {

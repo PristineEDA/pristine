@@ -1,3 +1,5 @@
+import type { UIMessage } from 'ai';
+
 const DEFAULT_AGENT_BASE_URL = 'http://localhost:4111';
 
 export type AgentStatus = {
@@ -57,6 +59,34 @@ export type PendingShellCommandsResponse = {
   commands: PendingShellCommand[];
 };
 
+export type AgentThreadStatus = 'regular' | 'archived';
+
+export type AgentThread = {
+  id: string;
+  title?: string;
+  resourceId: string | null;
+  status: AgentThreadStatus;
+  createdAt: string;
+  updatedAt: string;
+  isLegacy: boolean;
+};
+
+export type AgentThreadsResponse = {
+  resourceId: string;
+  threads: AgentThread[];
+};
+
+export type AgentThreadResponse = {
+  thread: AgentThread;
+};
+
+export type AgentThreadMessagesResponse<TMessage = UIMessage> = {
+  thread: AgentThread;
+  messages: unknown[];
+  uiMessages: TMessage[];
+  total: number;
+};
+
 export class AgentApiError extends Error {
   constructor(message: string, readonly status?: number) {
     super(message);
@@ -70,6 +100,19 @@ export function normalizeAgentBaseUrl(baseUrl: string): string {
 
 export function getPristineAgentBaseUrl(): string {
   return normalizeAgentBaseUrl(import.meta.env.VITE_PRISTINE_AGENT_URL ?? DEFAULT_AGENT_BASE_URL);
+}
+
+function encodePathSegment(value: string): string {
+  return encodeURIComponent(value);
+}
+
+function createJsonRequestInit(method: string, body?: unknown): RequestInit {
+  return body === undefined
+    ? { method }
+    : {
+        method,
+        body: JSON.stringify(body),
+      };
 }
 
 function getErrorMessageFromPayload(payload: unknown): string {
@@ -88,6 +131,9 @@ export async function fetchAgentJson<T>(baseUrl: string, path: string, init: Req
   const headers = new Headers(init.headers);
   if (!headers.has('Accept')) {
     headers.set('Accept', 'application/json');
+  }
+  if (init.body !== undefined && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
   }
 
   const response = await fetch(`${normalizeAgentBaseUrl(baseUrl)}${path}`, {
@@ -108,4 +154,46 @@ export async function fetchAgentJson<T>(baseUrl: string, path: string, init: Req
 
 export function postAgentAction<T>(baseUrl: string, path: string): Promise<T> {
   return fetchAgentJson<T>(baseUrl, path, { method: 'POST' });
+}
+
+export function listAgentThreads(baseUrl: string): Promise<AgentThreadsResponse> {
+  return fetchAgentJson<AgentThreadsResponse>(baseUrl, '/agent/threads');
+}
+
+export function getAgentThread(baseUrl: string, threadId: string): Promise<AgentThreadResponse> {
+  return fetchAgentJson<AgentThreadResponse>(baseUrl, `/agent/threads/${encodePathSegment(threadId)}`);
+}
+
+export function getAgentThreadMessages<TMessage = UIMessage>(
+  baseUrl: string,
+  threadId: string,
+): Promise<AgentThreadMessagesResponse<TMessage>> {
+  return fetchAgentJson<AgentThreadMessagesResponse<TMessage>>(
+    baseUrl,
+    `/agent/threads/${encodePathSegment(threadId)}/messages`,
+  );
+}
+
+export function renameAgentThread(baseUrl: string, threadId: string, title: string): Promise<AgentThreadResponse> {
+  return fetchAgentJson<AgentThreadResponse>(
+    baseUrl,
+    `/agent/threads/${encodePathSegment(threadId)}`,
+    createJsonRequestInit('PUT', { title }),
+  );
+}
+
+export function archiveAgentThread(baseUrl: string, threadId: string): Promise<AgentThreadResponse> {
+  return postAgentAction<AgentThreadResponse>(baseUrl, `/agent/threads/${encodePathSegment(threadId)}/archive`);
+}
+
+export function unarchiveAgentThread(baseUrl: string, threadId: string): Promise<AgentThreadResponse> {
+  return postAgentAction<AgentThreadResponse>(baseUrl, `/agent/threads/${encodePathSegment(threadId)}/unarchive`);
+}
+
+export function deleteAgentThread(baseUrl: string, threadId: string): Promise<{ deleted: boolean; threadId: string }> {
+  return fetchAgentJson<{ deleted: boolean; threadId: string }>(
+    baseUrl,
+    `/agent/threads/${encodePathSegment(threadId)}`,
+    { method: 'DELETE' },
+  );
 }

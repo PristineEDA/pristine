@@ -1,18 +1,22 @@
 import { Button } from "@/app/components/ui/button";
+import { Input } from "@/app/components/ui/input";
 import { Skeleton } from "@/app/components/ui/skeleton";
 import {
   AuiIf,
   ThreadListItemMorePrimitive,
   ThreadListItemPrimitive,
   ThreadListPrimitive,
+  useAuiState,
+  useThreadListItemRuntime,
 } from "@assistant-ui/react";
 import {
   ArchiveIcon,
   MoreHorizontalIcon,
+  Pencil,
   PlusIcon,
   TrashIcon,
 } from "lucide-react";
-import type { FC } from "react";
+import { useEffect, useRef, useState, type FC } from "react";
 
 export const ThreadList: FC = () => {
   return (
@@ -35,10 +39,10 @@ const ThreadListNew: FC = () => {
     <ThreadListPrimitive.New asChild>
       <Button
         variant="outline"
-        className="aui-thread-list-new h-9 justify-start gap-2 rounded-lg px-3 text-sm hover:bg-muted data-active:bg-muted"
+        className="aui-thread-list-new h-9 justify-start gap-2 rounded-lg px-3 text-[12px] leading-relaxed hover:bg-muted data-active:bg-muted"
       >
         <PlusIcon className="size-4" />
-        New Thread
+        New Chat
       </Button>
     </ThreadListPrimitive.New>
   );
@@ -62,19 +66,157 @@ const ThreadListSkeleton: FC = () => {
 };
 
 const ThreadListItem: FC = () => {
+  const threadTitle = useAuiState((state) => state.threadListItem.title ?? '');
+  const threadId = useAuiState((state) => state.threadListItem.id);
+  const threadListItemRuntime = useThreadListItemRuntime();
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const suppressNextBlurRef = useRef(false);
+  const [draftTitle, setDraftTitle] = useState(threadTitle);
+  const [isEditing, setIsEditing] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [renameError, setRenameError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setDraftTitle(threadTitle);
+    setIsEditing(false);
+    setIsSubmitting(false);
+    setRenameError(null);
+    suppressNextBlurRef.current = false;
+  }, [threadId, threadTitle]);
+
+  useEffect(() => {
+    if (!isEditing) {
+      return;
+    }
+
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  }, [isEditing]);
+
+  const startEditing = () => {
+    if (isSubmitting) {
+      return;
+    }
+
+    setDraftTitle(threadTitle);
+    setRenameError(null);
+    setIsEditing(true);
+  };
+
+  const stopEditing = ({ suppressBlur = false }: { suppressBlur?: boolean } = {}) => {
+    if (isSubmitting) {
+      return;
+    }
+
+    suppressNextBlurRef.current = suppressBlur;
+    setDraftTitle(threadTitle);
+    setRenameError(null);
+    setIsEditing(false);
+  };
+
+  const focusRenameInput = () => {
+    requestAnimationFrame(() => {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    });
+  };
+
+  const submitRename = async () => {
+    if (isSubmitting) {
+      return;
+    }
+
+    const nextTitle = draftTitle.replace(/\s+/gu, ' ').trim();
+    const currentTitle = threadTitle.replace(/\s+/gu, ' ').trim();
+
+    if (!nextTitle) {
+      setRenameError('Chat title cannot be empty.');
+      focusRenameInput();
+      return;
+    }
+
+    if (nextTitle === currentTitle) {
+      setRenameError(null);
+      setIsEditing(false);
+      return;
+    }
+
+    setIsSubmitting(true);
+    setRenameError(null);
+
+    try {
+      await threadListItemRuntime.rename(nextTitle);
+      setIsEditing(false);
+    } catch (error: unknown) {
+      setRenameError(error instanceof Error ? error.message : 'Unable to rename chat.');
+      focusRenameInput();
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
-    <ThreadListItemPrimitive.Root className="aui-thread-list-item group flex h-9 items-center gap-2 rounded-lg transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:outline-none data-active:bg-muted">
-      <ThreadListItemPrimitive.Trigger className="aui-thread-list-item-trigger flex h-full min-w-0 flex-1 items-center px-3 text-start text-sm">
-        <span className="aui-thread-list-item-title min-w-0 flex-1 truncate">
-          <ThreadListItemPrimitive.Title fallback="New Chat" />
-        </span>
-      </ThreadListItemPrimitive.Trigger>
-      <ThreadListItemMore />
-    </ThreadListItemPrimitive.Root>
+    <div className="flex flex-col gap-1">
+      <ThreadListItemPrimitive.Root className="aui-thread-list-item group flex h-9 items-center gap-2 rounded-lg text-[12px] leading-relaxed transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:outline-none data-active:bg-muted">
+        {isEditing ? (
+          <div className="flex min-w-0 flex-1 items-center px-2">
+            <Input
+              ref={inputRef}
+              aria-invalid={renameError ? 'true' : 'false'}
+              aria-label="Rename chat"
+              className="h-7 text-[12px] leading-relaxed"
+              data-testid="thread-list-rename-input"
+              disabled={isSubmitting}
+              spellCheck={false}
+              value={draftTitle}
+              onBlur={() => {
+                if (suppressNextBlurRef.current) {
+                  suppressNextBlurRef.current = false;
+                  return;
+                }
+
+                if (!isEditing || isSubmitting) {
+                  return;
+                }
+
+                void submitRename();
+              }}
+              onChange={(event) => {
+                setDraftTitle(event.currentTarget.value);
+                setRenameError(null);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  void submitRename();
+                }
+
+                if (event.key === 'Escape') {
+                  event.preventDefault();
+                  stopEditing({ suppressBlur: true });
+                }
+              }}
+            />
+          </div>
+        ) : (
+          <ThreadListItemPrimitive.Trigger className="aui-thread-list-item-trigger flex h-full min-w-0 flex-1 items-center px-3 text-start text-[12px] leading-relaxed">
+            <span className="aui-thread-list-item-title min-w-0 flex-1 truncate">
+              <ThreadListItemPrimitive.Title fallback="New Chat" />
+            </span>
+          </ThreadListItemPrimitive.Trigger>
+        )}
+        {isEditing ? null : <ThreadListItemMore onRenameStart={startEditing} />}
+      </ThreadListItemPrimitive.Root>
+      {renameError ? (
+        <p className="px-3 text-[11px] text-destructive" role="alert">
+          {renameError}
+        </p>
+      ) : null}
+    </div>
   );
 };
 
-const ThreadListItemMore: FC = () => {
+const ThreadListItemMore = ({ onRenameStart }: { onRenameStart: () => void }) => {
   return (
     <ThreadListItemMorePrimitive.Root>
       <ThreadListItemMorePrimitive.Trigger asChild>
@@ -92,14 +234,21 @@ const ThreadListItemMore: FC = () => {
         align="start"
         className="aui-thread-list-item-more-content z-50 min-w-32 overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
       >
+        <ThreadListItemMorePrimitive.Item
+          className="aui-thread-list-item-more-item flex cursor-pointer select-none items-center gap-2 rounded-sm px-2 py-1.5 text-[12px] leading-relaxed outline-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
+          onSelect={onRenameStart}
+        >
+          <Pencil className="size-4" />
+          Rename
+        </ThreadListItemMorePrimitive.Item>
         <ThreadListItemPrimitive.Archive asChild>
-          <ThreadListItemMorePrimitive.Item className="aui-thread-list-item-more-item flex cursor-pointer select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground">
+          <ThreadListItemMorePrimitive.Item className="aui-thread-list-item-more-item flex cursor-pointer select-none items-center gap-2 rounded-sm px-2 py-1.5 text-[12px] leading-relaxed outline-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground">
             <ArchiveIcon className="size-4" />
             Archive
           </ThreadListItemMorePrimitive.Item>
         </ThreadListItemPrimitive.Archive>
         <ThreadListItemPrimitive.Delete asChild>
-          <ThreadListItemMorePrimitive.Item className="aui-thread-list-item-more-item flex cursor-pointer select-none items-center gap-2 rounded-sm px-2 py-1.5 text-destructive text-sm outline-none hover:bg-destructive/10 hover:text-destructive focus:bg-destructive/10 focus:text-destructive">
+          <ThreadListItemMorePrimitive.Item className="aui-thread-list-item-more-item flex cursor-pointer select-none items-center gap-2 rounded-sm px-2 py-1.5 text-[12px] leading-relaxed text-destructive outline-none hover:bg-destructive/10 hover:text-destructive focus:bg-destructive/10 focus:text-destructive">
             <TrashIcon className="size-4" />
             Delete
           </ThreadListItemMorePrimitive.Item>

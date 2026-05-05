@@ -111,7 +111,7 @@ function ToolFallbackTrigger({
     <CollapsibleTrigger
       data-slot="tool-fallback-trigger"
       className={cn(
-        "aui-tool-fallback-trigger group/trigger flex w-full items-center gap-2 px-4 text-sm transition-colors",
+        "aui-tool-fallback-trigger group/trigger flex w-full items-center gap-2 px-4 text-[12px] leading-relaxed transition-colors",
         className,
       )}
       {...props}
@@ -166,7 +166,7 @@ function ToolFallbackContent({
     <CollapsibleContent
       data-slot="tool-fallback-content"
       className={cn(
-        "aui-tool-fallback-content relative overflow-hidden text-sm outline-none",
+        "aui-tool-fallback-content relative overflow-hidden text-[12px] leading-relaxed outline-none",
         "group/collapsible-content ease-out",
         "data-[state=closed]:animate-collapsible-up",
         "data-[state=open]:animate-collapsible-down",

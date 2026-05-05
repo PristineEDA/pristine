@@ -107,14 +107,14 @@ function SelectionToolbarQuote({
     <SelectionToolbarPrimitive.Quote
       data-slot="selection-toolbar-quote"
       className={cn(
-        "flex items-center gap-1.5 rounded-md px-2.5 py-1 text-popover-foreground text-sm transition-colors hover:bg-accent",
+        "flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[12px] leading-relaxed text-popover-foreground transition-colors hover:bg-accent",
         className,
       )}
       {...props}
     >
       {children ?? (
         <>
-          <QuoteIcon className="size-3.5" />
+          <QuoteIcon className="size-3" />
           Quote
         </>
       )}

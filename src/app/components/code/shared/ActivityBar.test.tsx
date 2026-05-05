@@ -87,7 +87,13 @@ describe('ActivityBar', () => {
     const explorerButton = screen.getByTestId('activity-item-explorer');
 
     expect(explorerButton).toHaveAttribute('data-active', 'true');
-    expect(explorerButton).toHaveClass('rounded-md', 'data-[active=true]:bg-sidebar-accent', 'data-[active=true]:text-sidebar-accent-foreground');
+    expect(explorerButton).toHaveClass(
+      'rounded-md',
+      'data-[active=true]:bg-sidebar-primary/12',
+      'data-[active=true]:text-sidebar-primary',
+      'dark:data-[active=true]:bg-sidebar-primary-foreground/20',
+      'dark:data-[active=true]:text-sidebar-primary-foreground',
+    );
   });
 
   it('adds a pointer cursor on hover for navigation and action buttons', () => {

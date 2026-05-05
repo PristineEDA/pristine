@@ -52,6 +52,8 @@ describe('ToolFallback', () => {
       />,
     );
 
+    expect(container.querySelector('[data-slot="tool-fallback-trigger"]')).toHaveClass('text-[12px]', 'leading-relaxed');
+    expect(container.querySelector('[data-slot="tool-fallback-content"]')).toHaveClass('text-[12px]', 'leading-relaxed');
     expect(container.querySelector('[data-slot="tool-fallback-root"]')).toHaveClass('border');
     expect(screen.getByText('inspect_workspace')).toBeInTheDocument();
     expect(screen.getByText('{"path":"src/top.sv"}')).toBeInTheDocument();

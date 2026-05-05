@@ -123,6 +123,7 @@ export function CodeWorkspaceShell({
 }: CodeWorkspaceShellProps) {
   const hasFixedLeftPanel = typeof leftFixedWidthPx === 'number' && typeof onLeftFixedWidthChange === 'function';
   const hasFixedRightPanel = typeof rightFixedWidthPx === 'number' && typeof onRightFixedWidthChange === 'function';
+  const fixedRightPanelWasOpenedRef = useRef(hasFixedRightPanel && showRightPanel);
   const fixedLeftMinWidth = leftFixedMinWidthPx ?? EXPLORER_LEFT_PANEL_MIN_WIDTH_PX;
   const fixedLeftMaxWidth = leftFixedMaxWidthPx ?? EXPLORER_LEFT_PANEL_MAX_WIDTH_PX;
   const fixedRightMinWidth = rightFixedMinWidthPx ?? EXPLORER_RIGHT_PANEL_MIN_WIDTH_PX;
@@ -133,6 +134,13 @@ export function CodeWorkspaceShell({
   const clampedRightFixedWidth = hasFixedRightPanel
     ? clampFixedPanelWidth(rightFixedWidthPx, fixedRightMinWidth, fixedRightMaxWidth)
     : null;
+
+  if (hasFixedRightPanel && showRightPanel) {
+    fixedRightPanelWasOpenedRef.current = true;
+  }
+
+  const shouldRenderFixedRightPanel = hasFixedRightPanel
+    && (showRightPanel || fixedRightPanelWasOpenedRef.current);
 
   const centerPanelContent = (
     <div className="relative h-full">
@@ -230,17 +238,21 @@ export function CodeWorkspaceShell({
                 }}
               />
 
-              {showRightPanel && clampedRightFixedWidth !== null && (
+              {shouldRenderFixedRightPanel && clampedRightFixedWidth !== null && (
                 <div
                   data-slot="resizable-panel"
                   data-testid={`panel-${rightPanelId}`}
                   data-panel-id={rightPanelId}
-                  className="min-h-0 shrink-0 overflow-hidden"
+                  aria-hidden={!showRightPanel}
+                  className={cn(
+                    'min-h-0 shrink-0 overflow-hidden',
+                    !showRightPanel && 'pointer-events-none invisible',
+                  )}
                   style={{
-                    width: `${clampedRightFixedWidth}px`,
-                    minWidth: `${clampedRightFixedWidth}px`,
-                    maxWidth: `${clampedRightFixedWidth}px`,
-                    flexBasis: `${clampedRightFixedWidth}px`,
+                    width: `${showRightPanel ? clampedRightFixedWidth : 0}px`,
+                    minWidth: `${showRightPanel ? clampedRightFixedWidth : 0}px`,
+                    maxWidth: `${showRightPanel ? clampedRightFixedWidth : 0}px`,
+                    flexBasis: `${showRightPanel ? clampedRightFixedWidth : 0}px`,
                     flexGrow: 0,
                     flexShrink: 0,
                   }}

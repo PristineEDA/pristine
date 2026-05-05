@@ -8,8 +8,14 @@ import { EditorSplitLayout } from './components/code/shared/EditorSplitLayout';
 import { RightSidePanel } from './components/code/explorer/RightSidePanel';
 import { BottomPanel } from './components/code/explorer/BottomPanel';
 import {
+  ASSISTANT_THREAD_LIST_DEFAULT_WIDTH_PX,
+  ASSISTANT_THREAD_LIST_RESIZE_HANDLE_WIDTH_PX,
+} from './components/code/explorer/assistantPanelLayout';
+import {
   CodeWorkspaceShell,
   EXPLORER_LEFT_PANEL_DEFAULT_WIDTH_PX,
+  EXPLORER_RIGHT_PANEL_MAX_WIDTH_PX,
+  EXPLORER_RIGHT_PANEL_MIN_WIDTH_PX,
   EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX,
 } from './components/code/shared/CodeWorkspaceShell';
 import { AppStatusBar } from './components/code/shared/statusBars/AppStatusBar';
@@ -36,6 +42,23 @@ const WorkflowView = lazy(() => import('./components/workflow/WorkflowView').the
 const MainContentFallback = () => (
   <div className="flex flex-1 items-center justify-center bg-background text-muted-foreground text-sm">
     Loading view...
+  </div>
+);
+
+const PlaceholderView = ({
+  title,
+  description = 'Coming soon',
+  testId,
+}: {
+  title: string;
+  description?: string;
+  testId: string;
+}) => (
+  <div data-testid={testId} className="flex h-full w-full items-center justify-center bg-background text-muted-foreground">
+    <div className="text-center">
+      <p className="text-lg font-medium">{title}</p>
+      <p className="mt-1 text-sm">{description}</p>
+    </div>
   </div>
 );
 
@@ -99,8 +122,16 @@ function AppLayout() {
   } = useWorkspaceFiles();
   const { openUnsavedChangesDialog } = useWorkspaceDialogs();
   const [explorerLeftPanelWidthPx, setExplorerLeftPanelWidthPx] = useState(EXPLORER_LEFT_PANEL_DEFAULT_WIDTH_PX);
-  const [explorerRightPanelWidthPx, setExplorerRightPanelWidthPx] = useState(EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX);
+  const [explorerAssistantPanelWidthPx, setExplorerAssistantPanelWidthPx] = useState(EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX);
+  const [assistantThreadListExpanded, setAssistantThreadListExpanded] = useState(false);
+  const [assistantThreadListWidthPx, setAssistantThreadListWidthPx] = useState(ASSISTANT_THREAD_LIST_DEFAULT_WIDTH_PX);
   const explorerBottomPanelLayoutVersion = `${showLeftPanel}:${showRightPanel}:${showBottomPanel}:${explorerLeftPanelWidthPx}`;
+  const assistantThreadListExtraWidthPx = assistantThreadListExpanded
+    ? assistantThreadListWidthPx + ASSISTANT_THREAD_LIST_RESIZE_HANDLE_WIDTH_PX
+    : 0;
+  const explorerRightPanelWidthPx = explorerAssistantPanelWidthPx + assistantThreadListExtraWidthPx;
+  const explorerRightPanelMinWidthPx = EXPLORER_RIGHT_PANEL_MIN_WIDTH_PX + assistantThreadListExtraWidthPx;
+  const explorerRightPanelMaxWidthPx = EXPLORER_RIGHT_PANEL_MAX_WIDTH_PX + assistantThreadListExtraWidthPx;
 
   const handleActivityItemSelect = (nextView: string) => {
     setActiveView(nextView as typeof activeView);
@@ -232,7 +263,7 @@ function AppLayout() {
   }, []);
 
   const renderPanelPlaceholder = (title: string, testId: string) => (
-    <WorkflowView title={title} testId={testId} />
+    <PlaceholderView title={title} testId={testId} />
   );
 
   const activityBar = (
@@ -258,6 +289,8 @@ function AppLayout() {
     onLeftFixedWidthChange,
     rightFixedWidthPx,
     onRightFixedWidthChange,
+    rightFixedMinWidthPx,
+    rightFixedMaxWidthPx,
   }: {
     shellTestId?: string;
     leftPanelId: string;
@@ -274,6 +307,8 @@ function AppLayout() {
     onLeftFixedWidthChange?: React.Dispatch<React.SetStateAction<number>>;
     rightFixedWidthPx?: number;
     onRightFixedWidthChange?: React.Dispatch<React.SetStateAction<number>>;
+    rightFixedMinWidthPx?: number;
+    rightFixedMaxWidthPx?: number;
   }) => (
     <CodeWorkspaceShell
       shellTestId={shellTestId}
@@ -295,6 +330,8 @@ function AppLayout() {
       onLeftFixedWidthChange={onLeftFixedWidthChange}
       rightFixedWidthPx={rightFixedWidthPx}
       onRightFixedWidthChange={onRightFixedWidthChange}
+      rightFixedMinWidthPx={rightFixedMinWidthPx}
+      rightFixedMaxWidthPx={rightFixedMaxWidthPx}
     />
   );
 
@@ -308,7 +345,18 @@ function AppLayout() {
       leftFixedWidthPx: explorerLeftPanelWidthPx,
       onLeftFixedWidthChange: setExplorerLeftPanelWidthPx,
       rightFixedWidthPx: explorerRightPanelWidthPx,
-      onRightFixedWidthChange: setExplorerRightPanelWidthPx,
+      onRightFixedWidthChange: (nextValue) => {
+        setExplorerAssistantPanelWidthPx((currentWidth) => {
+          const currentTotalWidth = currentWidth + assistantThreadListExtraWidthPx;
+          const nextTotalWidth = typeof nextValue === 'function'
+            ? nextValue(currentTotalWidth)
+            : nextValue;
+
+          return nextTotalWidth - assistantThreadListExtraWidthPx;
+        });
+      },
+      rightFixedMinWidthPx: explorerRightPanelMinWidthPx,
+      rightFixedMaxWidthPx: explorerRightPanelMaxWidthPx,
       leftContent: (
         <LeftSidePanel
           activeFileId={activeTabId}
@@ -336,6 +384,8 @@ function AppLayout() {
         <RightSidePanel
           onFileOpen={openWorkspaceFile}
           onLineJump={jumpTo}
+          onThreadListExpandedChange={setAssistantThreadListExpanded}
+          onThreadListWidthChange={setAssistantThreadListWidthPx}
         />
       ),
       overlay: (
@@ -387,7 +437,7 @@ function AppLayout() {
         />
         <div className="flex-1 min-h-0">
           <Suspense fallback={<MainContentFallback />}>
-            <WorkflowView title={placeholder.title} testId={placeholder.testId} />
+            <PlaceholderView title={placeholder.title} testId={placeholder.testId} />
           </Suspense>
         </div>
       </div>

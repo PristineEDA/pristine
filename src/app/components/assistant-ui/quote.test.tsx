@@ -42,10 +42,14 @@ describe('Quote UI', () => {
   });
 
   it('renders the floating selection toolbar quote action', () => {
-    render(<SelectionToolbar />);
+    const { container } = render(<SelectionToolbar />);
 
-    expect(screen.getByText('Quote')).toHaveAttribute('data-slot', 'selection-toolbar-quote');
-    expect(screen.getByText('Quote').closest('[data-slot="selection-toolbar"]')).toBeInTheDocument();
+    const quoteAction = screen.getByText('Quote');
+
+    expect(quoteAction).toHaveAttribute('data-slot', 'selection-toolbar-quote');
+    expect(quoteAction).toHaveClass('text-[12px]', 'leading-relaxed');
+    expect(quoteAction.closest('[data-slot="selection-toolbar"]')).toBeInTheDocument();
+    expect(container.querySelector('[data-slot="selection-toolbar-quote"] svg')).toHaveClass('size-3');
   });
 
   it('renders the composer quote preview with a dismiss button', () => {

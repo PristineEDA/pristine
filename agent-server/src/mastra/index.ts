@@ -3,11 +3,12 @@ import path from "node:path";
 
 import { chatRoute } from "@mastra/ai-sdk";
 import { Mastra } from "@mastra/core";
+import { MASTRA_RESOURCE_ID_KEY } from "@mastra/core/di";
 import { LibSQLStore } from "@mastra/libsql";
 
 import { pristineAgent } from "./agents/pristine-agent";
 import { agentDataDir, agentHost, agentPort } from "./lib/config";
-import { agentRoutes } from "./routes/agent-routes";
+import { agentRoutes, workspaceThreadResourceId } from "./routes/agent-routes";
 
 mkdirSync(agentDataDir, { recursive: true });
 
@@ -20,6 +21,15 @@ export const mastra = new Mastra({
   server: {
     host: agentHost,
     port: agentPort,
+    middleware: async (context, next) => {
+      const requestContext = context.get("requestContext");
+
+      if (!requestContext.has(MASTRA_RESOURCE_ID_KEY)) {
+        requestContext.set(MASTRA_RESOURCE_ID_KEY, workspaceThreadResourceId);
+      }
+
+      await next();
+    },
     apiRoutes: [
       chatRoute({
         path: "/chat/:agentId",

@@ -1,265 +1,247 @@
 import { AssistantRuntimeProvider } from '@assistant-ui/react';
-import { AssistantChatTransport, useChatRuntime } from '@assistant-ui/react-ai-sdk';
-import {
-  Check,
-  FileCode2,
-  Play,
-  RefreshCw,
-  Server,
-  Shell,
-  ShieldCheck,
-  Trash2,
-} from 'lucide-react';
-import { useMemo } from 'react';
+import { GripVertical, Server } from 'lucide-react';
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 
 import { PristineAssistantThread } from '../../assistant/PristineAssistantThread';
-import { Badge } from '../../ui/badge';
-import { Button } from '../../ui/button';
-import { Separator } from '../../ui/separator';
-import { TooltipIconButton } from '../../ui/tooltip-icon-button';
+import { ThreadList } from '../../assistant-ui/thread-list';
+import { Toggle } from '../../ui/toggle';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../../ui/tooltip';
 import {
   getPristineAgentBaseUrl,
   normalizeAgentBaseUrl,
-  type PendingFileChange,
-  type PendingShellCommand,
 } from './agentApi';
-import { useAgentApprovals } from './useAgentApprovals';
+import {
+  ASSISTANT_THREAD_LIST_DEFAULT_WIDTH_PX,
+  ASSISTANT_THREAD_LIST_MAX_WIDTH_PX,
+  ASSISTANT_THREAD_LIST_MIN_WIDTH_PX,
+} from './assistantPanelLayout';
+import { usePristineAgentRuntime } from './pristineThreadRuntime';
+
+const ACTIVE_THREAD_CONFIG_KEY = 'explorer.aiAssistant.activeThreadId';
+const THREAD_LIST_WIDTH_CONFIG_KEY = 'explorer.aiAssistant.threadListWidth';
+const THREAD_LIST_TOGGLE_CLASS_NAME = [
+  'h-7 w-8 rounded-none border-0 px-0 text-muted-foreground',
+  'data-[state=on]:text-foreground',
+  'hover:cursor-pointer hover:text-foreground hover:bg-accent',
+].join(' ');
 
 type AIAgentPanelProps = {
   baseUrl?: string;
+  initialThreadListExpanded?: boolean;
+  initialThreadListWidth?: number;
+  onThreadListExpandedChange?: (expanded: boolean) => void;
+  onThreadListWidthChange?: (width: number) => void;
 };
 
-const pendingLimit = 4;
+function readStoredThreadId(): string | undefined {
+  const value = window.electronAPI?.config.get(ACTIVE_THREAD_CONFIG_KEY);
 
-function ProviderBadge({ enabled, label }: { enabled: boolean; label: string }) {
-  return (
-    <Badge
-      variant="outline"
-      className={`h-5 rounded-md px-1.5 text-[9px] font-normal ${enabled ? 'border-ide-success/50 text-ide-success' : 'text-muted-foreground'}`}
-    >
-      {label}
-    </Badge>
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const trimmedValue = value.trim();
+  return trimmedValue ? trimmedValue : undefined;
+}
+
+export function normalizeThreadListWidth(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return ASSISTANT_THREAD_LIST_DEFAULT_WIDTH_PX;
+  }
+
+  return Math.min(
+    ASSISTANT_THREAD_LIST_MAX_WIDTH_PX,
+    Math.max(ASSISTANT_THREAD_LIST_MIN_WIDTH_PX, Math.round(value)),
   );
 }
 
-function PendingFileChangeCard({
-  busyActionId,
-  change,
-  onApply,
-  onDiscard,
-}: {
-  busyActionId: string | null;
-  change: PendingFileChange;
-  onApply: (changeId: string) => void;
-  onDiscard: (changeId: string) => void;
-}) {
-  const applyActionId = `change:${change.id}:apply`;
-  const discardActionId = `change:${change.id}:discard`;
-  const isBusy = busyActionId === applyActionId || busyActionId === discardActionId;
-
+function PanelRightIcon({ size = 15, filled = false }: { size?: number; filled?: boolean }) {
   return (
-    <div className="rounded-md border border-border bg-background p-2 shadow-xs">
-      <div className="flex min-w-0 items-center gap-2">
-        <FileCode2 className="size-3.5 shrink-0 text-ide-info" />
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-[11px] font-medium text-foreground">{change.summary}</div>
-          <div className="truncate font-mono text-[10px] text-muted-foreground">
-            {change.targetPath ? `${change.path} -> ${change.targetPath}` : change.path}
-          </div>
-        </div>
-        <Badge variant="outline" className="h-5 rounded-md px-1.5 text-[9px] font-normal text-muted-foreground">
-          {change.kind}
-        </Badge>
-      </div>
-      {change.unifiedDiff && (
-        <pre className="mt-2 max-h-24 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted/50 p-2 font-mono text-[10px] leading-relaxed text-muted-foreground">
-          {change.unifiedDiff}
-        </pre>
-      )}
-      <div className="mt-2 flex justify-end gap-1.5">
-        <Button
-          size="xs"
-          variant="ghost"
-          className="h-6 text-muted-foreground"
-          disabled={isBusy}
-          onClick={() => onDiscard(change.id)}
-        >
-          <Trash2 className="size-3" />
-          Discard
-        </Button>
-        <Button
-          size="xs"
-          className="h-6"
-          disabled={isBusy}
-          onClick={() => onApply(change.id)}
-        >
-          <Check className="size-3" />
-          Apply
-        </Button>
-      </div>
-    </div>
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      {filled ? <rect x="12" y="3" width="9" height="18" rx="2" fill="currentColor" stroke="none" /> : null}
+      <rect width="18" height="18" x="3" y="3" rx="2" />
+      <path d="M12 3v18" />
+    </svg>
   );
 }
 
-function PendingShellCommandCard({
-  busyActionId,
-  command,
-  onDiscard,
-  onRun,
-}: {
-  busyActionId: string | null;
-  command: PendingShellCommand;
-  onDiscard: (commandId: string) => void;
-  onRun: (commandId: string) => void;
-}) {
-  const runActionId = `command:${command.id}:run`;
-  const discardActionId = `command:${command.id}:discard`;
-  const isBusy = busyActionId === runActionId || busyActionId === discardActionId;
-  const commandLine = [command.command, ...command.args].join(' ');
-
-  return (
-    <div className="rounded-md border border-border bg-background p-2 shadow-xs">
-      <div className="flex min-w-0 items-center gap-2">
-        <Shell className="size-3.5 shrink-0 text-ide-warning" />
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-[11px] font-medium text-foreground">{command.summary}</div>
-          <div className="truncate font-mono text-[10px] text-muted-foreground">{commandLine}</div>
-        </div>
-        <Badge variant="outline" className="h-5 rounded-md px-1.5 text-[9px] font-normal text-muted-foreground">
-          {command.cwd}
-        </Badge>
-      </div>
-      <div className="mt-2 flex justify-end gap-1.5">
-        <Button
-          size="xs"
-          variant="ghost"
-          className="h-6 text-muted-foreground"
-          disabled={isBusy}
-          onClick={() => onDiscard(command.id)}
-        >
-          <Trash2 className="size-3" />
-          Discard
-        </Button>
-        <Button
-          size="xs"
-          className="h-6"
-          disabled={isBusy}
-          onClick={() => onRun(command.id)}
-        >
-          <Play className="size-3" />
-          Run
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-export function ApprovalDock({ baseUrl }: { baseUrl: string }) {
-  const {
-    applyChange,
-    busyActionId,
-    discardChange,
-    discardCommand,
-    refresh,
-    runCommand,
-    snapshot,
-  } = useAgentApprovals(baseUrl);
-  const pendingChanges = snapshot.changes.filter((change) => change.status === 'pending').slice(0, pendingLimit);
-  const pendingCommands = snapshot.commands.filter((command) => command.status === 'pending').slice(0, pendingLimit);
-  const hasPendingItems = pendingChanges.length > 0 || pendingCommands.length > 0;
-
-  return (
-    <div className="shrink-0 border-b border-border bg-muted/30">
-      <div className="flex items-center gap-2 px-3 py-2">
-        <div className={`size-2 rounded-full ${snapshot.error ? 'bg-destructive' : 'bg-ide-success'}`} />
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-[11px] font-medium text-foreground">
-            {snapshot.status?.model ?? 'Agent server'}
-          </div>
-          <div className="truncate text-[10px] text-muted-foreground">{baseUrl}</div>
-        </div>
-        <TooltipIconButton content="Refresh agent status" side="bottom">
-          <Button
-            aria-label="Refresh agent status"
-            size="icon-xs"
-            variant="ghost"
-            className="text-muted-foreground"
-            onClick={refresh}
-          >
-            <RefreshCw className={`size-3 ${snapshot.isLoading ? 'animate-spin' : ''}`} />
-          </Button>
-        </TooltipIconButton>
-      </div>
-
-      {snapshot.status && (
-        <div className="flex flex-wrap gap-1 px-3 pb-2">
-          <ProviderBadge enabled={snapshot.status.providers.openrouter} label="OpenRouter" />
-          <ProviderBadge enabled={snapshot.status.providers.openai} label="OpenAI" />
-          <ProviderBadge enabled={snapshot.status.providers.anthropic} label="Anthropic" />
-          <ProviderBadge enabled={snapshot.status.providers.google} label="Google" />
-          <Badge variant="outline" className="h-5 rounded-md px-1.5 text-[9px] font-normal text-muted-foreground">
-            MCP {snapshot.status.mcpServers.length}
-          </Badge>
-        </div>
-      )}
-
-      {snapshot.error && (
-        <div className="mx-3 mb-2 rounded-md border border-destructive/30 bg-destructive/10 px-2 py-1.5 text-[11px] text-destructive">
-          {snapshot.error}
-        </div>
-      )}
-
-      {hasPendingItems && (
-        <>
-          <Separator />
-          <div className="max-h-72 space-y-2 overflow-y-auto p-2">
-            <div className="flex items-center gap-2 px-1 text-[10px] font-medium uppercase tracking-normal text-muted-foreground">
-              <ShieldCheck className="size-3" />
-              Pending approvals
-            </div>
-            {pendingChanges.map((change) => (
-              <PendingFileChangeCard
-                key={change.id}
-                busyActionId={busyActionId}
-                change={change}
-                onApply={applyChange}
-                onDiscard={discardChange}
-              />
-            ))}
-            {pendingCommands.map((command) => (
-              <PendingShellCommandCard
-                key={command.id}
-                busyActionId={busyActionId}
-                command={command}
-                onDiscard={discardCommand}
-                onRun={runCommand}
-              />
-            ))}
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-export function AIAgentPanel({ baseUrl = getPristineAgentBaseUrl() }: AIAgentPanelProps) {
+export function AIAgentPanel({
+  baseUrl = getPristineAgentBaseUrl(),
+  initialThreadListExpanded = false,
+  initialThreadListWidth,
+  onThreadListExpandedChange,
+  onThreadListWidthChange,
+}: AIAgentPanelProps) {
   const normalizedBaseUrl = useMemo(() => normalizeAgentBaseUrl(baseUrl), [baseUrl]);
-  const transport = useMemo(() => new AssistantChatTransport({
-    api: `${normalizedBaseUrl}/chat/pristineAgent`,
-  }), [normalizedBaseUrl]);
-  const runtime = useChatRuntime({ transport });
+  const initialThreadId = useMemo(() => readStoredThreadId(), []);
+  const [isThreadListExpanded, setIsThreadListExpanded] = useState(initialThreadListExpanded);
+  const [threadListWidth, setThreadListWidth] = useState(() => (
+    initialThreadListWidth === undefined
+      ? normalizeThreadListWidth(window.electronAPI?.config.get(THREAD_LIST_WIDTH_CONFIG_KEY))
+      : normalizeThreadListWidth(initialThreadListWidth)
+  ));
+  const currentThreadListWidthRef = useRef(threadListWidth);
+  const { isThreadLoading, runtime } = usePristineAgentRuntime({
+    baseUrl: normalizedBaseUrl,
+    initialThreadId,
+  });
+  const resizeStartPointerXRef = useRef<number | null>(null);
+  const lastPersistedThreadIdRef = useRef<string | null | undefined>(undefined);
+
+  useEffect(() => {
+    setIsThreadListExpanded(initialThreadListExpanded);
+  }, [initialThreadListExpanded]);
+
+  useEffect(() => {
+    if (initialThreadListWidth === undefined) {
+      return;
+    }
+
+    setThreadListWidth(normalizeThreadListWidth(initialThreadListWidth));
+  }, [initialThreadListWidth]);
+
+  useEffect(() => {
+    currentThreadListWidthRef.current = threadListWidth;
+  }, [threadListWidth]);
+
+  const persistActiveThreadId = useEffectEvent(() => {
+    const remoteId = runtime.threads.mainItem.getState().remoteId ?? null;
+
+    if (lastPersistedThreadIdRef.current === remoteId) {
+      return;
+    }
+
+    lastPersistedThreadIdRef.current = remoteId;
+    void window.electronAPI?.config.set(ACTIVE_THREAD_CONFIG_KEY, remoteId);
+  });
+
+  useEffect(() => {
+    persistActiveThreadId();
+    return runtime.threads.subscribe(() => {
+      persistActiveThreadId();
+    });
+  }, [persistActiveThreadId, runtime]);
+
+  const updateThreadListWidth = useEffectEvent((nextWidth: number) => {
+    const normalizedWidth = normalizeThreadListWidth(nextWidth);
+
+    setThreadListWidth((currentWidth) => {
+      if (currentWidth === normalizedWidth) {
+        return currentWidth;
+      }
+
+      currentThreadListWidthRef.current = normalizedWidth;
+      onThreadListWidthChange?.(normalizedWidth);
+      return normalizedWidth;
+    });
+  });
+
+  const endResize = useEffectEvent((pointerId?: number, target?: EventTarget | null) => {
+    if (resizeStartPointerXRef.current === null) {
+      return;
+    }
+
+    resizeStartPointerXRef.current = null;
+    document.body.style.removeProperty('cursor');
+    document.body.style.removeProperty('user-select');
+    void window.electronAPI?.config.set(THREAD_LIST_WIDTH_CONFIG_KEY, currentThreadListWidthRef.current);
+
+    if (target instanceof HTMLElement && pointerId !== undefined) {
+      target.releasePointerCapture?.(pointerId);
+    }
+  });
+
+  const handleResizePointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (event.button !== 0) {
+      return;
+    }
+
+    event.preventDefault();
+    resizeStartPointerXRef.current = event.clientX;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  };
+
+  const handleThreadListExpandedChange = (nextExpanded: boolean) => {
+    setIsThreadListExpanded(nextExpanded);
+    onThreadListExpandedChange?.(nextExpanded);
+  };
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
-      <div className="flex h-full min-h-0 flex-col bg-background text-foreground">
-        <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
-          <div className="flex size-6 items-center justify-center rounded-md bg-primary/10 text-primary">
-            <Server className="size-3.5" />
+      <div
+        data-testid="assistant-panel-root"
+        className="flex h-full min-h-0 min-w-0 bg-background text-foreground"
+      >
+        <div className={[
+          'flex min-w-0 flex-1 flex-col bg-background',
+          isThreadListExpanded ? 'border-r border-border' : '',
+        ].join(' ')} data-testid="assistant-main-panel">
+          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-2">
+            <div className="flex min-w-0 items-center gap-2">
+              <div className="flex size-6 items-center justify-center rounded-md bg-primary/10 text-primary">
+                <Server className="size-3.5" />
+              </div>
+              <span className="truncate text-xs font-semibold">Pristine Agent</span>
+            </div>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Toggle
+                    aria-label="Toggle chat list sidebar"
+                    data-testid="assistant-thread-list-toggle"
+                    pressed={isThreadListExpanded}
+                    className={THREAD_LIST_TOGGLE_CLASS_NAME}
+                    onPressedChange={handleThreadListExpandedChange}
+                  >
+                    <PanelRightIcon size={15} filled={isThreadListExpanded} />
+                  </Toggle>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" sideOffset={6}>Toggle chat list</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </div>
-          <span className="text-xs font-semibold">Pristine Agent</span>
+          <PristineAssistantThread agentBaseUrl={normalizedBaseUrl} isThreadLoading={isThreadLoading} />
         </div>
-        {/* <ApprovalDock baseUrl={normalizedBaseUrl} /> */}
-        <PristineAssistantThread />
+        {isThreadListExpanded ? (
+          <>
+            <button
+              type="button"
+              aria-label="Resize chat list"
+              data-testid="assistant-thread-list-resize-handle"
+              onPointerDown={handleResizePointerDown}
+              onPointerMove={(event) => {
+                if (resizeStartPointerXRef.current === null) {
+                  return;
+                }
+
+                const deltaPixels = resizeStartPointerXRef.current - event.clientX;
+                updateThreadListWidth(currentThreadListWidthRef.current + deltaPixels);
+                resizeStartPointerXRef.current = event.clientX;
+              }}
+              onPointerUp={(event) => endResize(event.pointerId, event.currentTarget)}
+              onPointerCancel={(event) => endResize(event.pointerId, event.currentTarget)}
+              className="group relative flex w-2 shrink-0 cursor-col-resize items-center justify-center bg-border/40 transition-colors hover:bg-primary/20 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-1"
+            >
+              <GripVertical className="size-3 text-muted-foreground transition-colors group-hover:text-foreground" />
+            </button>
+            <aside
+              data-testid="assistant-thread-list-panel"
+              className="flex h-full shrink-0 flex-col bg-muted/20"
+              style={{ width: threadListWidth }}
+            >
+              <div className="flex shrink-0 items-center border-b border-border px-3 py-2">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  Chats
+                </span>
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto p-2">
+                <ThreadList />
+              </div>
+            </aside>
+          </>
+        ) : null}
       </div>
     </AssistantRuntimeProvider>
   );
