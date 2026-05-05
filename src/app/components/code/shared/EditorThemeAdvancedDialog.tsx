@@ -8,11 +8,8 @@ import {
 import { getEditorThemePreview, type EditorThemePreview } from '../../../editor/monacoThemes'
 import { getRootThemeStyles } from '../../../editor/themeSource'
 import { cn } from '../../../../lib/utils'
-import { Button } from '../../ui/button'
 import { Card, CardContent, CardFooter } from '../../ui/card'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../../ui/dialog'
-import { Input } from '../../ui/input'
-import { ScrollArea } from '../../ui/scroll-area'
+import { AdvancedPickerLayout, filterOptionsByLabel } from './AdvancedPickerLayout'
 
 type EditorThemeAdvancedDialogProps = {
   dialogStyle?: CSSProperties
@@ -24,17 +21,6 @@ type EditorThemeAdvancedDialogProps = {
 
 const advancedThemeSearchPlaceholder = 'Search editor themes...'
 const advancedThemeSearchEmptyText = 'No editor theme found.'
-const advancedThemeSearchInputClassName = 'border-foreground/20 bg-background text-sm hover:border-foreground/35'
-
-function filterThemeOptionsByLabel(query: string) {
-  const normalizedQuery = query.trim().toLowerCase()
-
-  if (!normalizedQuery) {
-    return editorThemeOptions
-  }
-
-  return editorThemeOptions.filter((option) => option.label.toLowerCase().includes(normalizedQuery))
-}
 
 function ThemePreviewCard({
   isSelected,
@@ -173,99 +159,50 @@ export function EditorThemeAdvancedDialog({
     }
   }, [open])
 
-  const filteredAvailableThemeOptions = useMemo(() => filterThemeOptionsByLabel(searchQuery), [searchQuery])
+  const filteredAvailableThemeOptions = useMemo(() => filterOptionsByLabel(editorThemeOptions, searchQuery), [searchQuery])
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        data-testid="settings-editor-theme-advanced-dialog"
-        className="max-h-[85vh] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden sm:max-w-6xl"
-        onOpenAutoFocus={(event) => {
-          event.preventDefault()
-          document
-            .querySelector<HTMLButtonElement>('[data-testid="settings-editor-theme-advanced-close-button"]')
-            ?.focus()
-        }}
-        style={dialogStyle}
-      >
-        <DialogHeader>
-          <DialogTitle>Advanced theme picker</DialogTitle>
-          <DialogDescription>
-            Preview Monaco color themes in a compact editor layout before applying them to code tabs.
-          </DialogDescription>
-        </DialogHeader>
-        <ScrollArea className="min-h-0" data-testid="settings-editor-theme-advanced-scroll-area">
-          <div className="space-y-8 pr-4">
-            <section data-testid="settings-editor-theme-current-section" className="space-y-3">
-              <div className="space-y-1">
-                <h3 className="text-sm font-medium text-foreground">Current</h3>
-                <p className="text-xs leading-5 text-muted-foreground">
-                  The theme currently used by Monaco editor tabs.
-                </p>
-              </div>
-              <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                <ThemePreviewCard
-                  isSelected={false}
-                  preview={getEditorThemePreview(selectedTheme, themeStyles)}
-                  testIdPrefix="settings-editor-theme-current"
-                  theme={selectedTheme}
-                />
-              </div>
-            </section>
-            <section data-testid="settings-editor-theme-available-section" className="space-y-3">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-                <div className="min-w-0 space-y-1">
-                  <h3 className="text-sm font-medium text-foreground">Available themes</h3>
-                  <p className="text-xs leading-5 text-muted-foreground">
-                    Choose from the bundled Monaco themes available for the editor.
-                  </p>
-                </div>
-                <div className="w-full shrink-0 sm:w-72">
-                  <Input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(event) => setSearchQuery(event.target.value)}
-                    placeholder={advancedThemeSearchPlaceholder}
-                    data-testid="settings-editor-theme-advanced-search-input"
-                    className={advancedThemeSearchInputClassName}
-                  />
-                </div>
-              </div>
-              <div data-testid="settings-editor-theme-advanced-grid" className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                {filteredAvailableThemeOptions.length > 0 ? (
-                  filteredAvailableThemeOptions.map((option) => (
-                    <ThemePreviewCard
-                      key={option.value}
-                      isSelected={option.value === selectedTheme}
-                      onSelect={onSelectTheme}
-                      preview={getEditorThemePreview(option.value, themeStyles)}
-                      testIdPrefix="settings-editor-theme-preview"
-                      theme={option.value}
-                    />
-                  ))
-                ) : (
-                  <div
-                    className="col-span-full flex min-h-32 items-center justify-center rounded-md border border-dashed border-border/70 px-4 text-center text-sm text-muted-foreground"
-                    data-testid="settings-editor-theme-advanced-empty-state"
-                  >
-                    {advancedThemeSearchEmptyText}
-                  </div>
-                )}
-              </div>
-            </section>
-          </div>
-        </ScrollArea>
-        <DialogFooter>
-          <Button
-            type="button"
-            variant="outline"
-            data-testid="settings-editor-theme-advanced-close-button"
-            onClick={() => onOpenChange(false)}
-          >
-            Close
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <AdvancedPickerLayout
+      availableEmptyStateTestId="settings-editor-theme-advanced-empty-state"
+      availableEmptyText={advancedThemeSearchEmptyText}
+      availableGridContent={filteredAvailableThemeOptions.map((option) => (
+        <ThemePreviewCard
+          key={option.value}
+          isSelected={option.value === selectedTheme}
+          onSelect={onSelectTheme}
+          preview={getEditorThemePreview(option.value, themeStyles)}
+          testIdPrefix="settings-editor-theme-preview"
+          theme={option.value}
+        />
+      ))}
+      availableGridTestId="settings-editor-theme-advanced-grid"
+      availableHasItems={filteredAvailableThemeOptions.length > 0}
+      availableSectionDescription="Choose from the bundled Monaco themes available for the editor."
+      availableSectionTestId="settings-editor-theme-available-section"
+      availableSectionTitle="Available themes"
+      closeButtonTestId="settings-editor-theme-advanced-close-button"
+      currentGridContent={
+        <ThemePreviewCard
+          isSelected={false}
+          preview={getEditorThemePreview(selectedTheme, themeStyles)}
+          testIdPrefix="settings-editor-theme-current"
+          theme={selectedTheme}
+        />
+      }
+      currentSectionDescription="The theme currently used by Monaco editor tabs."
+      currentSectionTestId="settings-editor-theme-current-section"
+      currentSectionTitle="Current"
+      description="Preview Monaco color themes in a compact editor layout before applying them to code tabs."
+      dialogStyle={dialogStyle}
+      dialogTestId="settings-editor-theme-advanced-dialog"
+      onOpenChange={onOpenChange}
+      open={open}
+      scrollAreaTestId="settings-editor-theme-advanced-scroll-area"
+      searchInputTestId="settings-editor-theme-advanced-search-input"
+      searchPlaceholder={advancedThemeSearchPlaceholder}
+      searchValue={searchQuery}
+      title="Advanced theme picker"
+      onSearchValueChange={setSearchQuery}
+    />
   )
 }

@@ -198,6 +198,8 @@ describe('MenuBar settings', () => {
     await user.click(screen.getByTestId('settings-editor-font-family-advanced-button'));
 
     expect(await screen.findByTestId('settings-editor-font-family-advanced-dialog')).toBeVisible();
+    expect(screen.getByTestId('settings-editor-font-family-advanced-dialog')).toHaveClass('h-[85vh]');
+    expect(screen.getByTestId('settings-editor-font-family-advanced-scroll-area')).toHaveClass('h-full');
     expect(screen.getByTestId('settings-editor-font-family-current-section')).toBeVisible();
     expect(screen.getByTestId('settings-editor-font-family-available-section')).toBeVisible();
     expect(screen.getByTestId('settings-editor-font-family-advanced-grid')).toBeVisible();
@@ -262,6 +264,8 @@ describe('MenuBar settings', () => {
     await user.click(screen.getByTestId('settings-editor-theme-advanced-button'));
 
     expect(await screen.findByTestId('settings-editor-theme-advanced-dialog')).toBeVisible();
+    expect(screen.getByTestId('settings-editor-theme-advanced-dialog')).toHaveClass('h-[85vh]');
+    expect(screen.getByTestId('settings-editor-theme-advanced-scroll-area')).toHaveClass('h-full');
     expect(screen.getByTestId('settings-editor-theme-current-section')).toBeVisible();
     expect(screen.getByTestId('settings-editor-theme-available-section')).toBeVisible();
     expect(screen.getByTestId('settings-editor-theme-advanced-grid')).toBeVisible();
