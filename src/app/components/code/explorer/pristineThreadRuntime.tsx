@@ -120,8 +120,18 @@ type PristineSendMessagesRequestOptions = {
   messageId?: string;
   messages: UIMessage[];
   requestMetadata: unknown;
+  threadResourceId?: string;
   trigger: string;
 };
+
+function readThreadResourceId(value: unknown): string | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const resourceId = value.resourceId;
+  return typeof resourceId === 'string' && resourceId.trim() ? resourceId : undefined;
+}
 
 export function createPristineChatRequestBody({
   body,
@@ -129,9 +139,14 @@ export function createPristineChatRequestBody({
   messageId,
   messages,
   requestMetadata,
+  threadResourceId,
   trigger,
 }: PristineSendMessagesRequestOptions) {
   const existingMemory = isRecord(body?.memory) ? body.memory : undefined;
+  const existingMemoryResourceId = typeof existingMemory?.resource === 'string' && existingMemory.resource.trim()
+    ? existingMemory.resource
+    : undefined;
+  const resolvedThreadResourceId = threadResourceId ?? existingMemoryResourceId;
 
   return {
     ...body,
@@ -141,6 +156,7 @@ export function createPristineChatRequestBody({
     metadata: requestMetadata,
     memory: {
       ...existingMemory,
+      ...(resolvedThreadResourceId ? { resource: resolvedThreadResourceId } : {}),
       thread: id,
     },
   };
@@ -344,22 +360,33 @@ type UsePristineAgentRuntimeOptions = {
 };
 
 export function usePristineAgentRuntime({ baseUrl, initialThreadId }: UsePristineAgentRuntimeOptions) {
-  const transport = useMemo(
-    () => new AssistantChatTransport<UIMessage>({
-      api: `${baseUrl}/chat/pristineAgent`,
-      prepareSendMessagesRequest: async (options) => ({
-        body: createPristineChatRequestBody(options),
-      }),
-    }),
-    [baseUrl],
-  );
   const adapter = useMemo(() => createPristineThreadListAdapter(baseUrl), [baseUrl]);
 
   return useRemoteThreadListRuntime({
     runtimeHook: function RuntimeHook() {
       const id = useAssistantState((state) => state.threadListItem.id);
       const remoteId = useAssistantState((state) => state.threadListItem.remoteId);
+      const threadCustom = useAssistantState((state) => state.threadListItem.custom);
       const aui = useAssistantApi();
+      const threadResourceId = readThreadResourceId(threadCustom);
+      const threadResourceIdRef = useRef<string | undefined>(threadResourceId);
+      const transport = useMemo(
+        () => new AssistantChatTransport<UIMessage>({
+          api: `${baseUrl}/chat/pristineAgent`,
+          prepareSendMessagesRequest: async (options) => ({
+            body: createPristineChatRequestBody({
+              ...options,
+              threadResourceId: threadResourceIdRef.current,
+            }),
+          }),
+        }),
+        [baseUrl],
+      );
+
+      useEffect(() => {
+        threadResourceIdRef.current = threadResourceId;
+      }, [threadResourceId]);
+
       const chat = useChat<UIMessage>({
         id,
         transport,

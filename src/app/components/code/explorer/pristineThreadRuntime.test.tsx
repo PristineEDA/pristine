@@ -18,16 +18,17 @@ describe('usePristineThreadMessagesBootstrap', () => {
     vi.clearAllMocks();
   });
 
-  it('writes the active thread under Mastra memory options', () => {
+  it('writes the active thread and resource under Mastra memory options', () => {
     const requestBody = createPristineChatRequestBody({
       body: {
         config: { model: 'test-model' },
-        memory: { resource: 'pristine:workspace:c:/workspace/pristine' },
+        memory: { resource: 'pristine:workspace:stale' },
       },
       id: 'thread-1',
       messageId: 'message-1',
       messages: [],
       requestMetadata: { source: 'test' },
+      threadResourceId: 'pristine:workspace:c:/workspace/pristine',
       trigger: 'submit-message',
     });
 

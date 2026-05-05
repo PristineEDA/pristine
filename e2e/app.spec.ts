@@ -571,7 +571,6 @@ async function setExplorerRenameInputValue(
   nextValue: string,
 ) {
   const renameInput = window.getByTestId(renameInputTestId);
-  const selectAllShortcut = process.platform === 'darwin' ? 'Meta+A' : 'Control+A';
 
   await expect(renameInput).toBeVisible();
   try {
@@ -580,9 +579,11 @@ async function setExplorerRenameInputValue(
     await renameInput.focus();
     await expect(renameInput).toBeFocused();
   }
-  await window.keyboard.press(selectAllShortcut);
-  await window.keyboard.insertText(nextValue);
-  await expect(window.getByTestId(renameInputTestId)).toHaveValue(nextValue);
+
+  // Drive the input directly so Windows Electron focus jitter cannot blur and
+  // cancel the inline rename session between select-all and text entry.
+  await renameInput.fill(nextValue);
+  await expect(renameInput).toHaveValue(nextValue);
 }
 
 async function openBottomTerminal(window: Awaited<ReturnType<typeof launchApp>>['window']) {
