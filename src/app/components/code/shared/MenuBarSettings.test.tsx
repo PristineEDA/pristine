@@ -1,4 +1,4 @@
-import { act, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { getEditorFontFamilyLabel } from '../../../editor/editorSettings';
@@ -225,7 +225,7 @@ describe('MenuBar settings', () => {
     expect(screen.queryByTestId('settings-editor-font-family-preview-card-victor-mono')).not.toBeInTheDocument();
 
     await user.clear(searchInput);
-    await user.type(searchInput, 'zzz');
+    fireEvent.change(searchInput, { target: { value: 'zzz' } });
 
     expect(screen.getByTestId('settings-editor-font-family-current-card-fira-code')).toBeVisible();
     expect(screen.getByTestId('settings-editor-font-family-advanced-empty-state')).toHaveTextContent('No editor font found.');
@@ -247,7 +247,7 @@ describe('MenuBar settings', () => {
     expect(setEditorFontFamilyMock).toHaveBeenCalledWith('victor-mono');
   });
 
-  it('opens the advanced editor theme picker and applies the selected preview card', async () => {
+  it('opens the advanced editor theme picker, filters preview cards, and applies the selected preview card', async () => {
     const user = userEvent.setup();
 
     mockPersistedSettingsConfig({
@@ -262,7 +262,21 @@ describe('MenuBar settings', () => {
     await user.click(screen.getByTestId('settings-editor-theme-advanced-button'));
 
     expect(await screen.findByTestId('settings-editor-theme-advanced-dialog')).toBeVisible();
+    expect(screen.getByTestId('settings-editor-theme-current-section')).toBeVisible();
+    expect(screen.getByTestId('settings-editor-theme-available-section')).toBeVisible();
     expect(screen.getByTestId('settings-editor-theme-advanced-grid')).toBeVisible();
+    expect(screen.getByText('Current')).toBeInTheDocument();
+    expect(screen.getByText('Available themes')).toBeInTheDocument();
+    const searchInput = screen.getByTestId('settings-editor-theme-advanced-search-input');
+    expect(searchInput).toHaveAttribute('placeholder', 'Search editor themes...');
+    expect(searchInput).toHaveClass('border-foreground/20');
+    await waitFor(() => {
+      expect(searchInput).not.toHaveFocus();
+      expect(screen.getByTestId('settings-editor-theme-advanced-close-button')).toHaveFocus();
+    });
+    expect(screen.getByTestId('settings-editor-theme-current-card-dracula')).toHaveAttribute('data-state', 'unselected');
+    expect(screen.getByTestId('settings-editor-theme-current-author-dracula')).toHaveTextContent('Dracula Theme');
+    expect(screen.getByTestId('settings-editor-theme-current-editor-dracula')).toBeVisible();
     expect(screen.getByTestId('settings-editor-theme-preview-card-dracula')).toHaveAttribute('data-state', 'selected');
     expect(screen.getByTestId('settings-editor-theme-preview-label-macos-modern-dark-ventura-xcode-default')).toHaveClass('truncate');
     expect(screen.getByTestId('settings-editor-theme-preview-label-macos-modern-dark-ventura-xcode-default')).toHaveClass('w-full');
@@ -271,6 +285,17 @@ describe('MenuBar settings', () => {
     expect(screen.getByTestId('settings-editor-theme-preview-author-palenight-theme')).toHaveTextContent('Olaolu Olawuyi');
     expect(screen.getByTestId('settings-editor-theme-preview-line-module-palenight-theme')).toHaveTextContent('module alu(clk)');
     expect(screen.getByTestId('settings-editor-theme-preview-selection-palenight-theme')).toHaveTextContent("sum = calc('RUN')");
+
+    await user.type(searchInput, 'zzz');
+
+    expect(screen.getByTestId('settings-editor-theme-current-card-dracula')).toBeVisible();
+    expect(screen.getByTestId('settings-editor-theme-advanced-empty-state')).toHaveTextContent('No editor theme found.');
+    expect(screen.queryByTestId('settings-editor-theme-preview-card-dracula')).not.toBeInTheDocument();
+
+    fireEvent.change(searchInput, { target: { value: 'palenight' } });
+
+    expect(screen.getByTestId('settings-editor-theme-preview-card-palenight-theme')).toHaveAttribute('data-state', 'unselected');
+    expect(screen.queryByTestId('settings-editor-theme-preview-card-dracula')).not.toBeInTheDocument();
 
     await user.click(screen.getByTestId('settings-editor-theme-preview-card-palenight-theme'));
 
