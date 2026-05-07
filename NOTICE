@@ -1,0 +1,8 @@
+Pristine bundles third-party open-source software and packaged resources.
+
+The project license for Pristine is provided in LICENSE.
+The current third-party attribution inventory is provided in ATTRIBUTIONS.md.
+
+Packaged desktop builds place these notice materials under resources/licenses.
+
+This NOTICE file is the baseline bundled notice surface for packaged builds. Fuller preserved third-party license and notice text can be added here as the packaged notice generation flow is expanded.

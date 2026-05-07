@@ -3,6 +3,7 @@
   "productName": "Pristine",
   "private": true,
   "version": "0.0.1",
+  "license": "Apache-2.0",
   "type": "module",
   "main": "dist-electron/main.js",
   "scripts": {

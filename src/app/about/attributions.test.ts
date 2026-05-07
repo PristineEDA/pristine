@@ -3,6 +3,38 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { formatAttributionsMarkdown, openSourceAttributionSections } from './attributions';
 
+const directRuntimeDependencyAttributionIds = new Map([
+  ['@ai-sdk/react', 'ai-sdk-react'],
+  ['@assistant-ui/react', 'assistant-ui-react'],
+  ['@assistant-ui/react-ai-sdk', 'assistant-ui-react-ai-sdk'],
+  ['@assistant-ui/react-markdown', 'assistant-ui-react-markdown'],
+  ['@assistant-ui/react-streamdown', 'assistant-ui-react-streamdown'],
+  ['@monaco-editor/react', 'monaco-editor-react'],
+  ['@xterm/addon-fit', 'xterm-addon-fit'],
+  ['@xterm/xterm', 'xterm'],
+  ['@xyflow/react', 'react-flow'],
+  ['ai', 'ai-sdk'],
+  ['class-variance-authority', 'class-variance-authority'],
+  ['clsx', 'clsx'],
+  ['cmdk', 'cmdk'],
+  ['ignore', 'ignore'],
+  ['lucide-react', 'lucide-react'],
+  ['material-icon-theme', 'material-icon-theme'],
+  ['mermaid', 'mermaid'],
+  ['monaco-editor', 'monaco-editor'],
+  ['node-pty', 'node-pty'],
+  ['radix-ui', 'radix-ui'],
+  ['react', 'react'],
+  ['react-dom', 'react-dom'],
+  ['react-shiki', 'react-shiki'],
+  ['remark-gfm', 'remark-gfm'],
+  ['streamdown', 'streamdown'],
+  ['tailwind-merge', 'tailwind-merge'],
+  ['tw-shimmer', 'tw-shimmer'],
+  ['vscode-jsonrpc', 'vscode-jsonrpc'],
+  ['zustand', 'zustand'],
+]);
+
 describe('attributions', () => {
   it('includes the bundled editor themes in the shared attribution data', () => {
     const bundledEditorThemesSection = openSourceAttributionSections.find((section) => section.id === 'bundled-editor-themes');
@@ -828,5 +860,20 @@ describe('attributions', () => {
     const actualMarkdown = fs.readFileSync(path.resolve(process.cwd(), 'ATTRIBUTIONS.md'), 'utf8').replace(/\r\n/g, '\n');
 
     expect(actualMarkdown).toBe(expectedMarkdown);
+  });
+
+  it('covers every direct runtime dependency with an explicit attribution mapping', () => {
+    const manifest = JSON.parse(fs.readFileSync(path.resolve(process.cwd(), 'package.json'), 'utf8')) as {
+      dependencies?: Record<string, string>;
+    };
+    const packageDependencies = Object.keys(manifest.dependencies ?? {}).sort();
+    const mappedDependencies = [...directRuntimeDependencyAttributionIds.keys()].sort();
+    const attributionIds = new Set(openSourceAttributionSections.flatMap((section) => section.items.map((item) => item.id)));
+    const missingAttributionEntries = [...directRuntimeDependencyAttributionIds.entries()]
+      .filter(([, attributionId]) => !attributionIds.has(attributionId))
+      .map(([dependencyName, attributionId]) => `${dependencyName} -> ${attributionId}`);
+
+    expect(mappedDependencies).toEqual(packageDependencies);
+    expect(missingAttributionEntries).toEqual([]);
   });
 });
