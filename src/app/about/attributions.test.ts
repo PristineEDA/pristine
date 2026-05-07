@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { formatAttributionsMarkdown, formatNoticeMarkdown, openSourceAttributionSections } from './attributions';
+import { buildNoticeMarkdown } from '../../../scripts/generate-notice';
+import { formatAttributionsMarkdown, openSourceAttributionSections } from './attributions';
 
 const directRuntimeDependencyAttributionIds = new Map([
   ['@ai-sdk/react', 'ai-sdk-react'],
@@ -863,10 +864,22 @@ describe('attributions', () => {
   });
 
   it('keeps NOTICE in sync with the shared attribution data', () => {
-    const expectedMarkdown = formatNoticeMarkdown();
+    const expectedMarkdown = buildNoticeMarkdown();
     const actualMarkdown = fs.readFileSync(path.resolve(process.cwd(), 'NOTICE'), 'utf8').replace(/\r\n/g, '\n');
 
     expect(actualMarkdown).toBe(expectedMarkdown);
+  });
+
+  it('includes full-text license and font notice sections in NOTICE', () => {
+    const noticeMarkdown = buildNoticeMarkdown();
+
+    expect(noticeMarkdown).toContain('### Apache License 2.0');
+    expect(noticeMarkdown).toContain('### SIL Open Font License 1.1');
+    expect(noticeMarkdown).toContain('### Ubuntu Font Licence 1.0');
+    expect(noticeMarkdown).toContain('### Bitstream Vera / Arev / Public Domain Notices');
+    expect(noticeMarkdown).toContain('SIL OPEN FONT LICENSE Version 1.1');
+    expect(noticeMarkdown).toContain('UBUNTU FONT LICENCE Version 1.0');
+    expect(noticeMarkdown).toContain('Bitstream Vera Fonts Copyright');
   });
 
   it('covers every direct runtime dependency with an explicit attribution mapping', () => {
