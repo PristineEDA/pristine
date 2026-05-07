@@ -50,6 +50,9 @@ import {
 export type Tab = EditorTab;
 
 type UnsavedChangesDialogKind = 'close-app' | 'close-file' | 'review' | 'delete-entry' | 'copy-entry' | 'cut-entry';
+type SaveFilesOptions = {
+  contentOverrides?: Record<string, string>;
+};
 
 export interface UnsavedChangesDialogState {
   fileIds: string[];
@@ -825,7 +828,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     resolveDeleteConfirmation(false);
   }, [resolveDeleteConfirmation]);
 
-  const saveFiles = useCallback((fileIds: string[]) => {
+  const saveFiles = useCallback((fileIds: string[], options?: SaveFilesOptions) => {
     const uniqueFileIds = Array.from(new Set(fileIds.filter(Boolean)));
 
     return (async (): Promise<SaveFilesResult> => {
@@ -840,8 +843,13 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           continue;
         }
 
+        const contentOverride = options?.contentOverrides?.[resolvedFileId] ?? options?.contentOverrides?.[fileId];
+
         if (!untitledFilesRef.current[resolvedFileId]) {
-          const saved = await fileStoreRef.current.saveFileContent(resolvedFileId);
+          const saved = await fileStoreRef.current.saveFileContent(
+            resolvedFileId,
+            contentOverride === undefined ? undefined : { content: contentOverride },
+          );
           if (saved) {
             savedFileIds.push(fileId);
           } else {
@@ -860,9 +868,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         }
 
         const targetFileId = dialogResult.workspaceRelativePath ?? dialogResult.filePath;
-        const currentContent = fileStoreRef.current.fileContents[resolvedFileId] ?? '';
+        const currentContent = contentOverride ?? fileStoreRef.current.fileContents[resolvedFileId] ?? '';
         const saved = await fileStoreRef.current.saveFileContent(resolvedFileId, {
           absolute: dialogResult.workspaceRelativePath === null,
+          content: contentOverride,
           targetPath: dialogResult.workspaceRelativePath ?? dialogResult.filePath,
         });
 
@@ -918,7 +927,24 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       return false;
     }
 
-    return (await saveFiles([resolvedFileId])).failedFileIds.length === 0;
+    const editorModel = editorWorkspaceRef.current.editorRef.current?.getModel?.();
+    const normalizedResolvedFileId = resolvedFileId.replace(/\\/g, '/');
+    const editorModelPaths = [
+      typeof editorModel?.uri?.path === 'string' ? editorModel.uri.path : undefined,
+      typeof editorModel?.uri?.fsPath === 'string' ? editorModel.uri.fsPath : undefined,
+    ]
+      .filter((path): path is string => Boolean(path))
+      .map((path) => path.replace(/\\/g, '/').replace(/^\/+/, ''));
+    const editorContent = editorModelPaths.some((path) => (
+      path === normalizedResolvedFileId || path.endsWith(`/${normalizedResolvedFileId}`)
+    )) && typeof editorModel?.getValue === 'function'
+      ? editorModel.getValue()
+      : undefined;
+
+    return (await saveFiles(
+      [resolvedFileId],
+      editorContent === undefined ? undefined : { contentOverrides: { [resolvedFileId]: editorContent } },
+    )).failedFileIds.length === 0;
   }, [resolveCurrentFileId, saveFiles]);
 
   const runActiveEditorAction = useCallback(async (actionId: 'undo' | 'redo') => {

@@ -188,6 +188,34 @@ describe('useWorkspaceFileStore', () => {
     expect(result.current.dirtyFiles['rtl/fail.v']).toBe(true);
   });
 
+  it('persists an explicit save content override and clears dirty state against that saved content', async () => {
+    vi.mocked(window.electronAPI!.fs.readFile).mockResolvedValueOnce('module edit; endmodule');
+
+    const { result } = renderHook(() => useWorkspaceFileStore());
+
+    act(() => {
+      result.current.loadFileContent('rtl/edit.v');
+    });
+
+    await waitFor(() => {
+      expect(result.current.fileContents['rtl/edit.v']).toBe('module edit; endmodule');
+    });
+
+    act(() => {
+      result.current.updateFileContent('rtl/edit.v', 'module edit; logic dirty; endmodule');
+    });
+
+    const latestEditorContent = 'module edit; logic latest_from_editor; endmodule';
+
+    await act(async () => {
+      await result.current.saveFileContent('rtl/edit.v', { content: latestEditorContent });
+    });
+
+    expect(window.electronAPI?.fs.writeFile).toHaveBeenCalledWith('rtl/edit.v', latestEditorContent);
+    expect(result.current.fileContents['rtl/edit.v']).toBe(latestEditorContent);
+    expect(result.current.dirtyFiles['rtl/edit.v']).toBe(false);
+  });
+
   it('retains dirty state and exposes save errors when a save fails', async () => {
     vi.mocked(window.electronAPI!.fs.readFile).mockResolvedValueOnce('module fail; endmodule');
     vi.mocked(window.electronAPI!.fs.writeFile).mockRejectedValueOnce(new Error('Disk full'));

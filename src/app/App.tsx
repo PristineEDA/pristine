@@ -34,7 +34,6 @@ import { useGlobalAppShortcuts } from './useGlobalAppShortcuts';
 import { getPathBaseName } from './workspace/workspaceFiles';
 import { useQuickOpenController } from './useQuickOpenController';
 
-const WhiteboardView = lazy(() => import('./components/whiteboard/WhiteboardView').then((module) => ({ default: module.WhiteboardView })));
 const WorkflowView = lazy(() => import('./components/workflow/WorkflowView').then((module) => ({ default: module.WorkflowView })));
 
 // ─── ResizeHandle ────────────────────────────────────────────────────────────
@@ -505,11 +504,7 @@ function AppLayout() {
             ? renderSimulationWorkspace()
             : renderCodePlaceholder())
         : mainContentView === 'whiteboard' ? (
-          <div className="flex-1 min-h-0">
-            <Suspense fallback={<MainContentFallback />}>
-              <WhiteboardView />
-            </Suspense>
-          </div>
+          <PlaceholderView title="Whiteboard" testId="whiteboard-view" />
         ) : (
           <div className="flex-1 min-h-0">
             <Suspense fallback={<MainContentFallback />}>

@@ -84,10 +84,6 @@ vi.mock('./components/code/shared/ActivityBar', async () => {
   };
 });
 
-vi.mock('./components/whiteboard/WhiteboardView', () => ({
-  WhiteboardView: () => <div data-testid="whiteboard-view">whiteboard</div>,
-}));
-
 vi.mock('./components/workflow/WorkflowView', () => ({
   WorkflowView: ({ title = 'Workflow', testId = 'workflow-view' }: { title?: string; testId?: string }) => (
     <div data-testid={testId}>{title}</div>
@@ -320,6 +316,8 @@ describe('App', () => {
     expect(screen.getByTestId('main-content-view')).toHaveTextContent('whiteboard');
     expect(screen.queryByTestId('activity-bar')).not.toBeInTheDocument();
     expect(await screen.findByTestId('whiteboard-view')).toBeInTheDocument();
+    expect(screen.getByTestId('whiteboard-view')).toHaveTextContent('Whiteboard');
+    expect(screen.getByTestId('whiteboard-view')).toHaveTextContent('Coming soon');
     expect(screen.getByTestId('status-bar-main-view')).toHaveTextContent('whiteboard');
 
     await clickText('switch-workflow');

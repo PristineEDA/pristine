@@ -1,4 +1,4 @@
-import type { CSSProperties } from 'react'
+import { type CSSProperties, useEffect, useMemo, useState } from 'react'
 import {
   editorThemeOptions,
   getEditorThemeAuthor,
@@ -8,10 +8,8 @@ import {
 import { getEditorThemePreview, type EditorThemePreview } from '../../../editor/monacoThemes'
 import { getRootThemeStyles } from '../../../editor/themeSource'
 import { cn } from '../../../../lib/utils'
-import { Button } from '../../ui/button'
 import { Card, CardContent, CardFooter } from '../../ui/card'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../../ui/dialog'
-import { ScrollArea } from '../../ui/scroll-area'
+import { AdvancedPickerLayout, filterOptionsByLabel } from './AdvancedPickerLayout'
 
 type EditorThemeAdvancedDialogProps = {
   dialogStyle?: CSSProperties
@@ -21,21 +19,31 @@ type EditorThemeAdvancedDialogProps = {
   selectedTheme: EditorThemeId
 }
 
+const advancedThemeSearchPlaceholder = 'Search editor themes...'
+const advancedThemeSearchEmptyText = 'No editor theme found.'
+
 function ThemePreviewCard({
   isSelected,
   onSelect,
   preview,
+  testIdPrefix,
   theme,
 }: {
   isSelected: boolean
-  onSelect: (theme: EditorThemeId) => void
+  onSelect?: (theme: EditorThemeId) => void
   preview: EditorThemePreview
+  testIdPrefix: 'settings-editor-theme-current' | 'settings-editor-theme-preview'
   theme: EditorThemeId
 }) {
   const label = getEditorThemeLabel(theme)
   const author = getEditorThemeAuthor(theme)
+  const isInteractive = Boolean(onSelect)
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!onSelect) {
+      return
+    }
+
     if (event.key !== 'Enter' && event.key !== ' ') {
       return
     }
@@ -44,25 +52,28 @@ function ThemePreviewCard({
     onSelect(theme)
   }
 
+  const handleSelect = onSelect ? () => onSelect(theme) : undefined
+
   return (
     <Card
       aria-label={`Select ${label}`}
-      aria-pressed={isSelected}
+      aria-pressed={isInteractive ? isSelected : undefined}
       className={cn(
-        'gap-0 overflow-hidden py-0 transition-[border-color,background-color,box-shadow] hover:cursor-pointer hover:border-accent-foreground/20 hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-        isSelected && 'border-primary/60 shadow-sm',
+        'gap-0 overflow-hidden py-0 transition-[border-color,background-color,box-shadow]',
+        isInteractive && 'hover:cursor-pointer hover:border-accent-foreground/20 hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+        isSelected && 'border-black shadow-sm',
       )}
       data-state={isSelected ? 'selected' : 'unselected'}
-      data-testid={`settings-editor-theme-preview-card-${theme}`}
-      onClick={() => onSelect(theme)}
-      onKeyDown={handleKeyDown}
-      role="button"
-      tabIndex={0}
+      data-testid={`${testIdPrefix}-card-${theme}`}
+      onClick={handleSelect}
+      onKeyDown={isInteractive ? handleKeyDown : undefined}
+      role={isInteractive ? 'button' : undefined}
+      tabIndex={isInteractive ? 0 : undefined}
     >
       <CardContent className="flex min-h-32 items-center justify-center px-3 py-6 sm:px-4">
         <div
           className="w-full max-w-[15rem] overflow-hidden rounded-md border shadow-sm"
-          data-testid={`settings-editor-theme-preview-editor-${theme}`}
+          data-testid={`${testIdPrefix}-editor-${theme}`}
           style={{
             backgroundColor: preview.palette.background,
             borderColor: `${preview.palette.comment}44`,
@@ -83,10 +94,10 @@ function ThemePreviewCard({
               <div>4</div>
             </div>
             <div className="space-y-0.5 px-2 py-2" style={{ color: preview.palette.foreground }}>
-              <div className="truncate" data-testid={`settings-editor-theme-preview-line-comment-${theme}`}>
+              <div className="truncate" data-testid={`${testIdPrefix}-line-comment-${theme}`}>
                 <span style={{ color: preview.palette.comment }}>// timing path</span>
               </div>
-              <div className="truncate" data-testid={`settings-editor-theme-preview-line-module-${theme}`}>
+              <div className="truncate" data-testid={`${testIdPrefix}-line-module-${theme}`}>
                 <span style={{ color: preview.palette.pink }}>module</span>{' '}
                 <span style={{ color: preview.palette.cyan }}>alu</span>
                 <span style={{ color: preview.palette.foreground }}>(</span>
@@ -95,7 +106,7 @@ function ThemePreviewCard({
               </div>
               <div
                 className="truncate rounded-sm px-1"
-                data-testid={`settings-editor-theme-preview-selection-${theme}`}
+                data-testid={`${testIdPrefix}-selection-${theme}`}
                 style={{ backgroundColor: preview.palette.selection }}
               >
                 <span style={{ color: preview.palette.orange }}>sum</span>{' '}
@@ -105,7 +116,7 @@ function ThemePreviewCard({
                 <span style={{ color: preview.palette.yellow }}>'RUN'</span>
                 <span style={{ color: preview.palette.foreground }}>)</span>
               </div>
-              <div className="truncate" data-testid={`settings-editor-theme-preview-line-end-${theme}`}>
+              <div className="truncate" data-testid={`${testIdPrefix}-line-end-${theme}`}>
                 <span style={{ color: preview.palette.pink }}>endmodule</span>
               </div>
             </div>
@@ -116,13 +127,13 @@ function ThemePreviewCard({
         <div className="absolute inset-x-0 top-1/2 flex min-w-0 -translate-y-1/2 flex-col items-center leading-none">
           <span
             className="block w-full truncate px-3 text-center"
-            data-testid={`settings-editor-theme-preview-label-${theme}`}
+            data-testid={`${testIdPrefix}-label-${theme}`}
           >
             {label}
           </span>
           <span
             className="mt-px text-[10px] font-normal text-muted-foreground"
-            data-testid={`settings-editor-theme-preview-author-${theme}`}
+            data-testid={`${testIdPrefix}-author-${theme}`}
           >
             {author}
           </span>
@@ -139,47 +150,59 @@ export function EditorThemeAdvancedDialog({
   open,
   selectedTheme,
 }: EditorThemeAdvancedDialogProps) {
+  const [searchQuery, setSearchQuery] = useState('')
   const themeStyles = getRootThemeStyles()
 
+  useEffect(() => {
+    if (!open) {
+      setSearchQuery('')
+    }
+  }, [open])
+
+  const filteredAvailableThemeOptions = useMemo(() => filterOptionsByLabel(editorThemeOptions, searchQuery), [searchQuery])
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        data-testid="settings-editor-theme-advanced-dialog"
-        className="max-h-[85vh] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden sm:max-w-6xl"
-        style={dialogStyle}
-      >
-        <DialogHeader>
-          <DialogTitle>Advanced theme picker</DialogTitle>
-          <DialogDescription>
-            Preview Monaco color themes in a compact editor layout before applying them to code tabs.
-          </DialogDescription>
-        </DialogHeader>
-        <ScrollArea className="min-h-0" data-testid="settings-editor-theme-advanced-scroll-area">
-          <div className="pr-4">
-            <div data-testid="settings-editor-theme-advanced-grid" className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {editorThemeOptions.map((option) => (
-                <ThemePreviewCard
-                  key={option.value}
-                  isSelected={option.value === selectedTheme}
-                  onSelect={onSelectTheme}
-                  preview={getEditorThemePreview(option.value, themeStyles)}
-                  theme={option.value}
-                />
-              ))}
-            </div>
-          </div>
-        </ScrollArea>
-        <DialogFooter>
-          <Button
-            type="button"
-            variant="outline"
-            data-testid="settings-editor-theme-advanced-close-button"
-            onClick={() => onOpenChange(false)}
-          >
-            Close
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <AdvancedPickerLayout
+      availableEmptyStateTestId="settings-editor-theme-advanced-empty-state"
+      availableEmptyText={advancedThemeSearchEmptyText}
+      availableGridContent={filteredAvailableThemeOptions.map((option) => (
+        <ThemePreviewCard
+          key={option.value}
+          isSelected={option.value === selectedTheme}
+          onSelect={onSelectTheme}
+          preview={getEditorThemePreview(option.value, themeStyles)}
+          testIdPrefix="settings-editor-theme-preview"
+          theme={option.value}
+        />
+      ))}
+      availableGridTestId="settings-editor-theme-advanced-grid"
+      availableHasItems={filteredAvailableThemeOptions.length > 0}
+      availableSectionDescription="Choose from the bundled Monaco themes available for the editor."
+      availableSectionTestId="settings-editor-theme-available-section"
+      availableSectionTitle="Available themes"
+      closeButtonTestId="settings-editor-theme-advanced-close-button"
+      currentGridContent={
+        <ThemePreviewCard
+          isSelected={false}
+          preview={getEditorThemePreview(selectedTheme, themeStyles)}
+          testIdPrefix="settings-editor-theme-current"
+          theme={selectedTheme}
+        />
+      }
+      currentSectionDescription="The theme currently used by Monaco editor tabs."
+      currentSectionTestId="settings-editor-theme-current-section"
+      currentSectionTitle="Current"
+      description="Preview Monaco color themes in a compact editor layout before applying them to code tabs."
+      dialogStyle={dialogStyle}
+      dialogTestId="settings-editor-theme-advanced-dialog"
+      onOpenChange={onOpenChange}
+      open={open}
+      scrollAreaTestId="settings-editor-theme-advanced-scroll-area"
+      searchInputTestId="settings-editor-theme-advanced-search-input"
+      searchPlaceholder={advancedThemeSearchPlaceholder}
+      searchValue={searchQuery}
+      title="Advanced theme picker"
+      onSearchValueChange={setSearchQuery}
+    />
   )
 }

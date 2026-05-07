@@ -14,6 +14,7 @@ export interface SaveFilesResult {
 
 interface SaveFileContentOptions {
   absolute?: boolean;
+  content?: string;
   targetPath?: string;
 }
 
@@ -481,7 +482,7 @@ export function useWorkspaceFileStore() {
     }
 
     const targetPath = options?.targetPath ?? fileId;
-    const currentContent = fileContentsRef.current[fileId];
+    const currentContent = options?.content ?? fileContentsRef.current[fileId];
     const savedContent = savedFileContentsRef.current[fileId];
     if (currentContent === undefined) {
       return false;
@@ -541,6 +542,18 @@ export function useWorkspaceFileStore() {
           savedFileContentsRef.current = next;
           return next;
         });
+
+        if (options?.content !== undefined) {
+          setFileContents((current) => {
+            if (current[fileId] === currentContent) {
+              return current;
+            }
+
+            const next = { ...current, [fileId]: currentContent };
+            fileContentsRef.current = next;
+            return next;
+          });
+        }
       }
 
       if (refreshGitStatusAfterSuccess) {
