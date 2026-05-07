@@ -6,6 +6,7 @@ import { WorkspaceProvider, useWorkspace } from './WorkspaceContext';
 
 const undoActionRun = vi.fn(() => Promise.resolve());
 const redoActionRun = vi.fn(() => Promise.resolve());
+let registeredEditorInstance: any;
 
 type WorkspaceActionSnapshot = Pick<ReturnType<typeof useWorkspace>,
   'closeFile'
@@ -81,6 +82,7 @@ function WorkspaceHarness() {
       <button onClick={() => workspace.closeActiveTabInFocusedGroup()}>close-active</button>
       <button onClick={() => workspace.registerEditorRef('group-1', {
         getAction: (actionId: string) => ({ run: actionId === 'undo' ? undoActionRun : redoActionRun }),
+        ...registeredEditorInstance,
       })}>register-editor</button>
       <button onClick={() => { void workspace.undoActiveEditor(); }}>undo-editor</button>
       <button onClick={() => { void workspace.redoActiveEditor(); }}>redo-editor</button>
@@ -125,6 +127,7 @@ describe('WorkspaceContext', () => {
     vi.clearAllMocks();
     undoActionRun.mockClear();
     redoActionRun.mockClear();
+    registeredEditorInstance = undefined;
     vi.mocked(window.electronAPI!.fs.copyFile).mockResolvedValue(undefined);
     vi.mocked(window.electronAPI!.fs.copyDirectory).mockResolvedValue(undefined);
     vi.mocked(window.electronAPI!.fs.deleteFile).mockResolvedValue(undefined);
@@ -256,6 +259,37 @@ describe('WorkspaceContext', () => {
     });
 
     expect(window.electronAPI?.fs.writeFile).toHaveBeenCalledWith('rtl/core/reg_file.v', 'module reg_file; logic dirty; endmodule');
+    expect(screen.getByTestId('dirty-files')).toHaveTextContent('');
+  });
+
+  it('saves the latest active editor model content when it is ahead of the workspace store', async () => {
+    render(
+      <WorkspaceProvider>
+        <WorkspaceHarness />
+      </WorkspaceProvider>,
+    );
+
+    await clickHarnessButton('open-reg');
+    await clickHarnessButton('edit-reg');
+
+    const latestEditorContent = 'module reg_file; logic latest_from_editor; endmodule';
+    registeredEditorInstance = {
+      getModel: () => ({
+        getValue: () => latestEditorContent,
+        uri: {
+          path: '/rtl/core/reg_file.v',
+        },
+      }),
+    };
+
+    await clickHarnessButton('register-editor');
+    await clickHarnessButton('save-active');
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(window.electronAPI?.fs.writeFile).toHaveBeenCalledWith('rtl/core/reg_file.v', latestEditorContent);
     expect(screen.getByTestId('dirty-files')).toHaveTextContent('');
   });
 
