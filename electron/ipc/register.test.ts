@@ -17,6 +17,7 @@ const {
   mockSetTerminalProjectRoot,
   mockRegisterConfigHandlers,
   mockRegisterAuthHandlers,
+  mockRegisterNoticeHandlers,
   mockRegisterPlatformHandler,
 } = vi.hoisted(() => ({
   mockRegisterDialogHandlers: vi.fn(),
@@ -35,6 +36,7 @@ const {
   mockSetTerminalProjectRoot: vi.fn(),
   mockRegisterConfigHandlers: vi.fn(),
   mockRegisterAuthHandlers: vi.fn(),
+  mockRegisterNoticeHandlers: vi.fn(),
   mockRegisterPlatformHandler: vi.fn(),
 }));
 
@@ -81,6 +83,10 @@ vi.mock('./auth.js', () => ({
   registerAuthHandlers: () => mockRegisterAuthHandlers(),
 }));
 
+vi.mock('./notices.js', () => ({
+  registerNoticeHandlers: () => mockRegisterNoticeHandlers(),
+}));
+
 vi.mock('./platform.js', () => ({
   registerPlatformHandler: () => mockRegisterPlatformHandler(),
 }));
@@ -120,6 +126,7 @@ describe('register helpers', () => {
     expect(mockRegisterTerminalHandlers).toHaveBeenCalledWith(getMainWindow);
     expect(mockRegisterConfigHandlers).toHaveBeenCalledTimes(1);
     expect(mockRegisterAuthHandlers).toHaveBeenCalledTimes(1);
+    expect(mockRegisterNoticeHandlers).toHaveBeenCalledTimes(1);
   });
 
   it('re-exports setupWindowStreams', () => {

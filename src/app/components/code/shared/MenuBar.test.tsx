@@ -208,6 +208,36 @@ describe('MenuBar', () => {
     expect(screen.getByText('Bundled Binaries & Extra Resources')).toBeInTheDocument();
   });
 
+  it('reveals bundled notice files from the Help menu and About dialog', async () => {
+    const user = userEvent.setup();
+
+    renderMenuBar();
+
+    await user.click(screen.getByText('Help'));
+    await user.click(await screen.findByText('Open Notice Files'));
+
+    expect(window.electronAPI?.notices.revealBundledFiles).toHaveBeenCalledTimes(1);
+
+    await user.click(screen.getByText('Help'));
+    await user.click(await screen.findByText('About'));
+    await user.click(await screen.findByTestId('about-open-notice-files-button'));
+
+    expect(window.electronAPI?.notices.revealBundledFiles).toHaveBeenCalledTimes(2);
+  });
+
+  it('reveals bundled notice files from native menu commands on macOS', async () => {
+    window.electronAPI!.platform = 'darwin';
+
+    renderMenuBar();
+
+    const menuCommandHandler = vi.mocked(window.electronAPI!.menu.onCommand).mock.calls[0]?.[0];
+    await act(async () => {
+      menuCommandHandler?.({ action: 'open-notice-files' });
+    });
+
+    expect(window.electronAPI?.notices.revealBundledFiles).toHaveBeenCalledTimes(1);
+  });
+
   it('routes save, undo, and redo through the shared workspace commands', async () => {
     const user = userEvent.setup();
 

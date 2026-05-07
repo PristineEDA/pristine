@@ -86,6 +86,9 @@ export function createElectronApiMock(): ElectronAPI {
     menu: {
       onCommand: vi.fn(() => vi.fn()),
     },
+    notices: {
+      revealBundledFiles: vi.fn().mockResolvedValue(true),
+    },
     auth: {
       openAccountPage: vi.fn().mockResolvedValue(true),
       getSession: vi.fn().mockResolvedValue(null),

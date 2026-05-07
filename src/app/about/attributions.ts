@@ -17,6 +17,9 @@ export type AttributionSection = {
 export const ATTRIBUTIONS_DOCUMENT_TITLE = 'Open Source Attributions';
 export const ATTRIBUTIONS_DOCUMENT_DESCRIPTION =
   'Pristine includes the following runtime open-source frameworks and packaged resources. Packaged desktop builds also ship bundled copies of LICENSE, ATTRIBUTIONS.md, and NOTICE under resources/licenses.';
+export const NOTICE_DOCUMENT_TITLE = 'Bundled Third-Party Notice Summary';
+export const NOTICE_DOCUMENT_DESCRIPTION =
+  'Pristine bundles third-party open-source software and packaged resources. Packaged desktop builds place LICENSE, ATTRIBUTIONS.md, and NOTICE under resources/licenses.';
 
 const bundledEditorThemeItems: AttributionItem[] = editorThemeOptions.map((option) => ({
   id: `editor-theme-${option.value}`,
@@ -540,6 +543,31 @@ export function formatAttributionsMarkdown(sections: AttributionSection[] = open
     ATTRIBUTIONS_DOCUMENT_DESCRIPTION,
     '',
     renderedSections,
+    '',
+  ].join('\n');
+}
+
+export function formatNoticeMarkdown(sections: AttributionSection[] = openSourceAttributionSections): string {
+  return [
+    `# ${NOTICE_DOCUMENT_TITLE}`,
+    '',
+    NOTICE_DOCUMENT_DESCRIPTION,
+    '',
+    'This NOTICE file is generated from the shared attribution data. ATTRIBUTIONS.md remains the readable inventory, and LICENSE provides the project license text for Pristine itself.',
+    '',
+    '## Included Notice Files',
+    '',
+    '- LICENSE',
+    '- ATTRIBUTIONS.md',
+    '- NOTICE',
+    '',
+    '## Covered Sections',
+    '',
+    ...sections.map((section) => `- ${section.title}`),
+    '',
+    '## Third-Party Inventory',
+    '',
+    'See ATTRIBUTIONS.md for the complete per-project inventory used by this bundled notice summary.',
     '',
   ].join('\n');
 }

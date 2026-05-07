@@ -16,6 +16,7 @@ export const AsyncChannels = {
   AUTH_GET_SESSION: 'async:auth:get-session',
   AUTH_SIGN_OUT: 'async:auth:sign-out',
   AUTH_SYNC_CONFIG: 'async:auth:sync-config',
+  NOTICES_REVEAL_BUNDLED_FILES: 'async:notices:reveal-bundled-files',
   DIALOG_SHOW_SAVE: 'async:dialog:show-save',
   WINDOW_MINIMIZE: 'async:window:minimize',
   WINDOW_MAXIMIZE: 'async:window:maximize',

@@ -148,7 +148,9 @@ function showMainWindow(): void {
   mainWindow.focus();
 }
 
-function openRendererDialogFromApplicationMenu(action: Extract<AppMenuAction, 'open-settings' | 'open-about'>): void {
+function dispatchRendererMenuActionFromApplicationMenu(
+  action: Extract<AppMenuAction, 'open-settings' | 'open-about' | 'open-notice-files'>,
+): void {
   const existingWindow = mainWindow;
 
   showMainWindow();
@@ -171,8 +173,8 @@ function openRendererDialogFromApplicationMenu(action: Extract<AppMenuAction, 'o
 }
 
 function handleApplicationMenuAction(action: AppMenuAction): void {
-  if (action === 'open-settings' || action === 'open-about') {
-    openRendererDialogFromApplicationMenu(action);
+  if (action === 'open-settings' || action === 'open-about' || action === 'open-notice-files') {
+    dispatchRendererMenuActionFromApplicationMenu(action);
     return;
   }
 
@@ -203,7 +205,7 @@ function createMacOSApplicationMenu(): Menu {
         {
           label: `About ${APP_DISPLAY_NAME}`,
           click: () => {
-            openRendererDialogFromApplicationMenu('open-about');
+            dispatchRendererMenuActionFromApplicationMenu('open-about');
           },
         },
         { type: 'separator' },
