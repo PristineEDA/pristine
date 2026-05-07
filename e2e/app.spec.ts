@@ -2288,44 +2288,15 @@ test('ctrl+z does not restore the loading placeholder after undo returns a file 
   }
 });
 
-test('menu bar switches to the whiteboard view and renders the React Flow UI chrome', async () => {
-  const { app, window } = await launchApp();
-
-  await switchToWhiteboard(window);
-  await expect(window.getByTestId('whiteboard-react-flow')).toHaveClass(/light/);
-  await expect(window.locator('[data-testid="whiteboard-controls-wrapper"] .react-flow__controls')).toBeVisible();
-  await expect(window.getByTestId('rf__minimap')).toBeVisible();
-  await expect(window.getByTestId('rf__background')).toBeVisible();
-
-  await app.close();
-});
-
-test('whiteboard creates draggable nodes on the React Flow canvas', async () => {
+test('menu bar switches to the whiteboard placeholder view', async () => {
   const { app, window } = await launchApp();
 
   await switchToWhiteboard(window);
 
-  const addNodeButton = window.getByTestId('whiteboard-add-node');
-  await expect(addNodeButton).toBeVisible();
-
-  await addNodeButton.click();
-  await expect(window.getByTestId('whiteboard-node-count')).toHaveText('Nodes: 1');
-
-  const node = window.locator('.react-flow__node').filter({ hasText: 'Node 1' });
-  await expect(node).toBeVisible();
-
-  const box = await node.boundingBox();
-  if (!box) {
-    throw new Error('Node 1 bounding box was not available');
-  }
-
-  await window.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-  await window.mouse.down();
-  await window.mouse.move(box.x + box.width / 2 + 120, box.y + box.height / 2 + 80, { steps: 12 });
-  await window.mouse.up();
-
-  await expect(window.getByTestId('whiteboard-last-dragged-node')).not.toHaveText('Last drag: none');
-  await expect(window.getByTestId('whiteboard-last-dragged-node')).toContainText('node-1:');
+  const whiteboardView = window.getByTestId('whiteboard-view');
+  await expect(whiteboardView).toBeVisible();
+  await expect(whiteboardView).toContainText('Whiteboard');
+  await expect(whiteboardView).toContainText('Coming soon');
 
   await app.close();
 });

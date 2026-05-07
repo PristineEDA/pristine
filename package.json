@@ -30,7 +30,6 @@
     "test:unit": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test --max-failures=1",
-    "test:whiteboard:perf": "playwright test --config playwright.perf.config.ts e2e/whiteboard.perf.spec.ts",
     "package:linux:x64": "pnpm run build:app && electron-builder --linux AppImage deb --x64 --config electron-builder.yml",
     "package:win:x64": "pnpm run build:app && pnpm run verify:node-pty-binary -- --platform win32 --arch x64 && electron-builder --win nsis portable --x64 --config electron-builder.win.yml",
     "package:mac:x64": "pnpm run build:app && electron-builder --mac dmg --x64 --config electron-builder.yml",

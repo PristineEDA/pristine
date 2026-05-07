@@ -9,7 +9,7 @@ describe('resolveWorkspaceFileIcon', () => {
     expect(resolveWorkspaceFileIcon('pnpm-lock.yaml').key).toBe('pnpm');
     expect(resolveWorkspaceFileIcon('tsconfig.node.json').key).toBe('tsconfig');
     expect(resolveWorkspaceFileIcon('vite.config.web.ts').key).toBe('vite');
-    expect(resolveWorkspaceFileIcon('playwright.perf.config.ts').key).toBe('playwright');
+    expect(resolveWorkspaceFileIcon('playwright.config.ts').key).toBe('playwright');
     expect(resolveWorkspaceFileIcon('vitest.config.ts').key).toBe('vitest');
     expect(resolveWorkspaceFileIcon('eslint.config.mjs').key).toBe('eslint');
     expect(resolveWorkspaceFileIcon('wrangler.jsonc').key).toBe('wrangler');
