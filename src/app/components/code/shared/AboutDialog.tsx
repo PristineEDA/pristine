@@ -11,6 +11,8 @@ import { ScrollArea } from '../../ui/scroll-area';
 type AboutDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onRevealBundledNoticeFiles?: () => void;
+  canRevealBundledNoticeFiles?: boolean;
   dialogStyle?: CSSProperties;
 };
 
@@ -18,7 +20,13 @@ const aboutGridClassName = 'grid grid-cols-[minmax(0,1fr)_minmax(0,1.8fr)_minmax
 const aboutHeaderCellClassName = 'min-w-0 text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground';
 const aboutValueCellClassName = 'min-w-0 break-words';
 
-export function AboutDialog({ open, onOpenChange, dialogStyle }: AboutDialogProps) {
+export function AboutDialog({
+  open,
+  onOpenChange,
+  onRevealBundledNoticeFiles,
+  canRevealBundledNoticeFiles = false,
+  dialogStyle,
+}: AboutDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
@@ -73,6 +81,16 @@ export function AboutDialog({ open, onOpenChange, dialogStyle }: AboutDialogProp
           </div>
         </ScrollArea>
         <DialogFooter>
+          {canRevealBundledNoticeFiles ? (
+            <Button
+              type="button"
+              variant="outline"
+              data-testid="about-open-notice-files-button"
+              onClick={onRevealBundledNoticeFiles}
+            >
+              Open Notice Files
+            </Button>
+          ) : null}
           <Button type="button" variant="outline" data-testid="about-close-button" onClick={() => onOpenChange(false)}>
             Close
           </Button>

@@ -10,6 +10,7 @@ import { registerTerminalHandlers, setTerminalProjectRoot } from './terminal.js'
 import { registerConfigHandlers } from './config.js';
 import { registerPlatformHandler } from './platform.js';
 import { registerAuthHandlers } from './auth.js';
+import { registerNoticeHandlers } from './notices.js';
 import type { WindowCloseDecision } from '../../src/app/window/windowClose.js';
 
 export function setProjectRoot(root: string): void {
@@ -37,6 +38,7 @@ export function registerAllHandlers(
   registerTerminalHandlers(getMainWindow);
   registerConfigHandlers();
   registerAuthHandlers();
+  registerNoticeHandlers();
 }
 
 export { setupWindowStreams };

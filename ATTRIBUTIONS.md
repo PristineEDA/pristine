@@ -1,6 +1,6 @@
 # Open Source Attributions
 
-Pristine includes the following runtime open-source frameworks and packaged resources.
+Pristine includes the following runtime open-source frameworks and packaged resources. Packaged desktop builds also ship bundled copies of LICENSE, ATTRIBUTIONS.md, and NOTICE under resources/licenses.
 
 ## Desktop Runtime & Editors
 
@@ -206,8 +206,20 @@ ignore（https://github.com/kaelzhang/node-ignore）kaelzhang MIT
 Mastra（https://github.com/mastra-ai/mastra）Mastra AI Apache-2.0
 @assistant-ui/react（https://github.com/assistant-ui/assistant-ui）AgentbaseAI Inc. MIT
 @assistant-ui/react-ai-sdk（https://github.com/assistant-ui/assistant-ui）AgentbaseAI Inc. MIT
+@assistant-ui/react-markdown（https://github.com/assistant-ui/assistant-ui）AgentbaseAI Inc. MIT
+@assistant-ui/react-streamdown（https://github.com/assistant-ui/assistant-ui）AgentbaseAI Inc. MIT
 AI SDK（https://github.com/vercel/ai）Vercel Apache-2.0
+@ai-sdk/react（https://github.com/vercel/ai）Vercel Apache-2.0
 Zod（https://github.com/colinhacks/zod）Colin McDonnell MIT
+
+## Content Rendering, Diagrams & State
+
+Mermaid（https://github.com/mermaid-js/mermaid）Knut Sveidqvist MIT
+react-shiki（https://github.com/AVGVSTVS96/react-shiki）Bassim Shahidy MIT
+remark-gfm（https://github.com/remarkjs/remark-gfm）Titus Wormer MIT
+streamdown（https://github.com/vercel/streamdown）Hayden Bleasel Apache-2.0
+tw-shimmer（https://github.com/assistant-ui/assistant-ui）AgentbaseAI Inc. MIT
+zustand（https://github.com/pmndrs/zustand）Paul Henschel MIT
 
 ## Bundled Font Packages (Fontsource)
 

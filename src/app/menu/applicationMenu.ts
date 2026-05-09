@@ -1,6 +1,14 @@
 export const APP_DISPLAY_NAME = 'Pristine';
 
-export type AppMenuAction = 'open-settings' | 'open-about' | 'save-file' | 'save-all-files' | 'undo-editor' | 'redo-editor' | 'close-app';
+export type AppMenuAction =
+  | 'open-settings'
+  | 'open-about'
+  | 'open-notice-files'
+  | 'save-file'
+  | 'save-all-files'
+  | 'undo-editor'
+  | 'redo-editor'
+  | 'close-app';
 
 export type AppMenuItem = {
   kind: 'item';
@@ -59,6 +67,7 @@ export const applicationMenus: AppMenuSection[] = [
       { kind: 'item', name: 'Documentation' },
       { kind: 'item', name: 'Check for Update...' },
       { kind: 'separator' },
+      { kind: 'item', name: 'Open Notice Files', action: 'open-notice-files' },
       { kind: 'item', name: 'About', action: 'open-about' },
     ],
   },

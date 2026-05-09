@@ -127,6 +127,10 @@ export interface ElectronAPI {
     onCommand: (callback: (payload: MenuCommandEvent) => void) => () => void;
   };
 
+  notices: {
+    revealBundledFiles: () => Promise<boolean>;
+  };
+
   auth: {
     openAccountPage: (view: AuthView) => Promise<boolean>;
     getSession: () => Promise<DesktopAuthSession | null>;

@@ -218,6 +218,8 @@ function resetElectronApiMocks() {
   vi.mocked(window.electronAPI!.config.set).mockReset();
   vi.mocked(window.electronAPI!.setFloatingInfoWindowVisible).mockReset();
   vi.mocked(window.electronAPI!.menu.onCommand).mockReset();
+  vi.mocked(window.electronAPI!.notices.revealBundledFiles).mockReset();
+  vi.mocked(window.electronAPI!.notices.revealBundledFiles).mockResolvedValue(true);
 }
 
 beforeEach(() => {

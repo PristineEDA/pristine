@@ -240,6 +240,11 @@ const electronAPI = {
     },
   },
 
+  notices: {
+    revealBundledFiles: () =>
+      ipcRenderer.invoke(AsyncChannels.NOTICES_REVEAL_BUNDLED_FILES) as Promise<boolean>,
+  },
+
   auth: {
     openAccountPage: (view: AuthView) =>
       ipcRenderer.invoke(AsyncChannels.AUTH_OPEN_ACCOUNT_PAGE, view) as Promise<boolean>,

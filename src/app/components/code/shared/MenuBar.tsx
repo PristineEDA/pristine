@@ -145,6 +145,10 @@ export function MenuBar({
     setAboutDialogOpen(true);
   };
 
+  const revealBundledNoticeFiles = () => {
+    void window.electronAPI?.notices.revealBundledFiles();
+  };
+
   const requestAppClose = () => {
     void window.electronAPI?.close();
   };
@@ -157,6 +161,11 @@ export function MenuBar({
 
     if (action === 'open-about') {
       openAboutDialog();
+      return;
+    }
+
+    if (action === 'open-notice-files') {
+      revealBundledNoticeFiles();
       return;
     }
 
@@ -193,6 +202,11 @@ export function MenuBar({
 
     if (payload.action === 'open-about') {
       openAboutDialog();
+      return;
+    }
+
+    if (payload.action === 'open-notice-files') {
+      revealBundledNoticeFiles();
       return;
     }
 
@@ -430,6 +444,8 @@ export function MenuBar({
         <AboutDialog
           open={aboutDialogOpen}
           onOpenChange={setAboutDialogOpen}
+          onRevealBundledNoticeFiles={revealBundledNoticeFiles}
+          canRevealBundledNoticeFiles={Boolean(window.electronAPI?.notices?.revealBundledFiles)}
           dialogStyle={noDragInteractive as React.CSSProperties}
         />
 

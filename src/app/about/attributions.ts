@@ -15,7 +15,8 @@ export type AttributionSection = {
 };
 
 export const ATTRIBUTIONS_DOCUMENT_TITLE = 'Open Source Attributions';
-export const ATTRIBUTIONS_DOCUMENT_DESCRIPTION = 'Pristine includes the following runtime open-source frameworks and packaged resources.';
+export const ATTRIBUTIONS_DOCUMENT_DESCRIPTION =
+  'Pristine includes the following runtime open-source frameworks and packaged resources. Packaged desktop builds also ship bundled copies of LICENSE, ATTRIBUTIONS.md, and NOTICE under resources/licenses.';
 
 const bundledEditorThemeItems: AttributionItem[] = editorThemeOptions.map((option) => ({
   id: `editor-theme-${option.value}`,
@@ -215,8 +216,29 @@ export const openSourceAttributionSections: AttributionSection[] = [
         license: 'MIT',
       },
       {
+        id: 'assistant-ui-react-markdown',
+        name: '@assistant-ui/react-markdown',
+        url: 'https://github.com/assistant-ui/assistant-ui',
+        author: 'AgentbaseAI Inc.',
+        license: 'MIT',
+      },
+      {
+        id: 'assistant-ui-react-streamdown',
+        name: '@assistant-ui/react-streamdown',
+        url: 'https://github.com/assistant-ui/assistant-ui',
+        author: 'AgentbaseAI Inc.',
+        license: 'MIT',
+      },
+      {
         id: 'ai-sdk',
         name: 'AI SDK',
+        url: 'https://github.com/vercel/ai',
+        author: 'Vercel',
+        license: 'Apache-2.0',
+      },
+      {
+        id: 'ai-sdk-react',
+        name: '@ai-sdk/react',
         url: 'https://github.com/vercel/ai',
         author: 'Vercel',
         license: 'Apache-2.0',
@@ -226,6 +248,54 @@ export const openSourceAttributionSections: AttributionSection[] = [
         name: 'Zod',
         url: 'https://github.com/colinhacks/zod',
         author: 'Colin McDonnell',
+        license: 'MIT',
+      },
+    ],
+  },
+  {
+    id: 'content-rendering-diagrams-and-state',
+    title: 'Content Rendering, Diagrams & State',
+    items: [
+      {
+        id: 'mermaid',
+        name: 'Mermaid',
+        url: 'https://github.com/mermaid-js/mermaid',
+        author: 'Knut Sveidqvist',
+        license: 'MIT',
+      },
+      {
+        id: 'react-shiki',
+        name: 'react-shiki',
+        url: 'https://github.com/AVGVSTVS96/react-shiki',
+        author: 'Bassim Shahidy',
+        license: 'MIT',
+      },
+      {
+        id: 'remark-gfm',
+        name: 'remark-gfm',
+        url: 'https://github.com/remarkjs/remark-gfm',
+        author: 'Titus Wormer',
+        license: 'MIT',
+      },
+      {
+        id: 'streamdown',
+        name: 'streamdown',
+        url: 'https://github.com/vercel/streamdown',
+        author: 'Hayden Bleasel',
+        license: 'Apache-2.0',
+      },
+      {
+        id: 'tw-shimmer',
+        name: 'tw-shimmer',
+        url: 'https://github.com/assistant-ui/assistant-ui',
+        author: 'AgentbaseAI Inc.',
+        license: 'MIT',
+      },
+      {
+        id: 'zustand',
+        name: 'zustand',
+        url: 'https://github.com/pmndrs/zustand',
+        author: 'Paul Henschel',
         license: 'MIT',
       },
     ],

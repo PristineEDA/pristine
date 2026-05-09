@@ -15,6 +15,12 @@ extraResources:
     to: binaries
     filter:
       - '**/*'
+  - from: .
+    to: licenses
+    filter:
+      - LICENSE
+      - ATTRIBUTIONS.md
+      - NOTICE
 asar: true
 asarUnpack:
   - node_modules/node-pty/**
