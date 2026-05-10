@@ -2915,7 +2915,7 @@ test('assistant chat list expansion widens the whole right sidebar and supports 
 
   await expect(chatListPanel).toBeVisible();
 
-  const expandedChatListWidth = await waitForElementPixelWidthBetween(
+  await waitForElementPixelWidthBetween(
     chatListPanel,
     expectedExpandedChatListWidthPx - 5,
     expectedExpandedChatListWidthPx + 5,
@@ -2927,7 +2927,7 @@ test('assistant chat list expansion widens the whole right sidebar and supports 
     initialRightPanelWidth + expectedExpandedRightPanelExtraWidthPx + 5,
   );
   const expandedRightPanelWidth = await readElementPixelWidth(rightPanel);
-  const expandedAssistantWidth = await waitForElementPixelWidthBetween(
+  await waitForElementPixelWidthBetween(
     assistantMainPanel,
     initialAssistantWidth - 2,
     initialAssistantWidth + 2,
