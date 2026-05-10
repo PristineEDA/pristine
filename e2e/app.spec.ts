@@ -388,11 +388,23 @@ async function ensureExplorerHidden(window: Awaited<ReturnType<typeof launchApp>
   await expect(readmeNode).toHaveCount(0);
 }
 
+async function expectCollapsedPanel(panel: Locator) {
+  await expect(panel).toHaveAttribute('aria-hidden', 'true');
+  await expect(panel).not.toBeVisible();
+}
+
 async function readElementPixelWidth(locator: Locator) {
   return locator.evaluate((element) => {
     const node = element as { getBoundingClientRect?: () => { width: number } };
     return Math.round(node.getBoundingClientRect?.().width ?? 0);
   });
+}
+
+async function waitForElementPixelWidthBetween(locator: Locator, minWidth: number, maxWidth: number) {
+  await expect.poll(() => readElementPixelWidth(locator)).toBeGreaterThanOrEqual(minWidth);
+  await expect.poll(() => readElementPixelWidth(locator)).toBeLessThanOrEqual(maxWidth);
+
+  return readElementPixelWidth(locator);
 }
 
 async function positionExplorerNodeNearBottom(
@@ -2793,8 +2805,8 @@ test('activity bar switches code subpages and menu bar keeps higher-priority pag
 
   await window.getByTestId('toggle-left-panel').click();
   await window.getByTestId('toggle-bottom-panel').click();
-  await expect(window.getByTestId('panel-simulation-left-panel')).toHaveCount(0);
-  await expect(window.getByTestId('panel-simulation-bottom-panel')).toHaveCount(0);
+  await expectCollapsedPanel(window.getByTestId('panel-simulation-left-panel'));
+  await expectCollapsedPanel(window.getByTestId('panel-simulation-bottom-panel'));
   await expect(window.getByTestId('panel-simulation-right-panel')).toBeVisible();
 
   await window.getByTestId('activity-item-synthesis').click();
@@ -2840,8 +2852,8 @@ test('activity bar switches code subpages and menu bar keeps higher-priority pag
   await expect(window.getByTestId('toggle-right-panel')).toBeDisabled();
 
   await window.getByTestId('activity-item-simulation').click();
-  await expect(window.getByTestId('panel-simulation-left-panel')).toHaveCount(0);
-  await expect(window.getByTestId('panel-simulation-bottom-panel')).toHaveCount(0);
+  await expectCollapsedPanel(window.getByTestId('panel-simulation-left-panel'));
+  await expectCollapsedPanel(window.getByTestId('panel-simulation-bottom-panel'));
   await expect(window.getByTestId('panel-simulation-right-panel')).toBeVisible();
   await expect(window.getByTestId('toggle-left-panel')).toBeEnabled();
   await expect(window.getByTestId('toggle-bottom-panel')).toBeEnabled();
@@ -2893,27 +2905,36 @@ test('assistant chat list expansion widens the whole right sidebar and supports 
   await expect(rightPanel).toBeVisible();
   await expect(chatListPanel).toHaveCount(0);
 
-  const initialRightPanelWidth = await readElementPixelWidth(rightPanel);
-  const initialAssistantWidth = await readElementPixelWidth(assistantMainPanel);
-
-  expect(initialRightPanelWidth).toBeGreaterThanOrEqual(295);
-  expect(initialRightPanelWidth).toBeLessThanOrEqual(305);
-  expect(initialAssistantWidth).toBeGreaterThanOrEqual(295);
-  expect(initialAssistantWidth).toBeLessThanOrEqual(305);
+  const initialRightPanelWidth = await waitForElementPixelWidthBetween(rightPanel, 295, 305);
+  const initialAssistantWidth = await waitForElementPixelWidthBetween(assistantMainPanel, 295, 305);
+  const expectedResizedRightPanelWidthPx = initialRightPanelWidth
+    + expectedResizedChatListWidthPx
+    + ASSISTANT_THREAD_LIST_RESIZE_HANDLE_WIDTH_PX;
 
   await chatListToggle.click();
 
   await expect(chatListPanel).toBeVisible();
 
+  const expandedChatListWidth = await waitForElementPixelWidthBetween(
+    chatListPanel,
+    expectedExpandedChatListWidthPx - 5,
+    expectedExpandedChatListWidthPx + 5,
+  );
+  await expect.poll(() => readElementPixelWidth(rightPanel)).toBeGreaterThanOrEqual(
+    initialRightPanelWidth + expectedExpandedRightPanelExtraWidthPx - 5,
+  );
+  await expect.poll(() => readElementPixelWidth(rightPanel)).toBeLessThanOrEqual(
+    initialRightPanelWidth + expectedExpandedRightPanelExtraWidthPx + 5,
+  );
   const expandedRightPanelWidth = await readElementPixelWidth(rightPanel);
-  const expandedAssistantWidth = await readElementPixelWidth(assistantMainPanel);
-  const expandedChatListWidth = await readElementPixelWidth(chatListPanel);
+  const expandedAssistantWidth = await waitForElementPixelWidthBetween(
+    assistantMainPanel,
+    initialAssistantWidth - 2,
+    initialAssistantWidth + 2,
+  );
 
-  expect(expandedChatListWidth).toBeGreaterThanOrEqual(expectedExpandedChatListWidthPx - 5);
-  expect(expandedChatListWidth).toBeLessThanOrEqual(expectedExpandedChatListWidthPx + 5);
   expect(expandedRightPanelWidth).toBeGreaterThanOrEqual(initialRightPanelWidth + expectedExpandedRightPanelExtraWidthPx - 5);
-  expect(expandedAssistantWidth).toBeGreaterThanOrEqual(initialAssistantWidth - 2);
-  expect(expandedAssistantWidth).toBeLessThanOrEqual(initialAssistantWidth + 2);
+  expect(expandedRightPanelWidth).toBeLessThanOrEqual(initialRightPanelWidth + expectedExpandedRightPanelExtraWidthPx + 5);
 
   await chatListResizeHandle.evaluate((element) => {
     const handle = element as {
@@ -2949,6 +2970,10 @@ test('assistant chat list expansion widens the whole right sidebar and supports 
 
   await expect.poll(() => readElementPixelWidth(chatListPanel)).toBeGreaterThanOrEqual(expectedResizedChatListWidthPx - 5);
   await expect.poll(() => readElementPixelWidth(chatListPanel)).toBeLessThanOrEqual(expectedResizedChatListWidthPx + 5);
+  await expect.poll(() => readElementPixelWidth(rightPanel)).toBeGreaterThanOrEqual(expectedResizedRightPanelWidthPx - 5);
+  await expect.poll(() => readElementPixelWidth(rightPanel)).toBeLessThanOrEqual(expectedResizedRightPanelWidthPx + 5);
+  await expect.poll(() => readElementPixelWidth(assistantMainPanel)).toBeGreaterThanOrEqual(initialAssistantWidth - 2);
+  await expect.poll(() => readElementPixelWidth(assistantMainPanel)).toBeLessThanOrEqual(initialAssistantWidth + 2);
 
   const resizedRightPanelWidth = await readElementPixelWidth(rightPanel);
   const resizedAssistantWidth = await readElementPixelWidth(assistantMainPanel);
@@ -3552,7 +3577,7 @@ test('terminal remains writable after left sidebar toggles while vertically scro
   }).toBeGreaterThan(40);
 
   await window.getByTestId('toggle-left-panel').click();
-  await expect(window.getByTestId('panel-left-panel')).toHaveCount(0);
+  await expectCollapsedPanel(window.getByTestId('panel-left-panel'));
   await expect(window.getByTestId('terminal-host')).toBeVisible();
 
   await window.getByTestId('toggle-left-panel').click();
