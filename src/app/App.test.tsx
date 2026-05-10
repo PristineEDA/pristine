@@ -9,6 +9,7 @@ import { resetWorkspaceGitStatusStoreForTests } from './git/workspaceGitStatus';
 let renderRealActivityBar = false;
 
 vi.mock('./components/ui/resizable', () => ({
+  PANEL_TRANSITION_DURATION_MS: 300,
   ResizablePanelGroup: ({ children }: { children: React.ReactNode }) => <div data-testid="panel-group">{children}</div>,
   ResizablePanel: ({ children, id, minSize, defaultSize, collapsed }: any) => {
     if (collapsed) {
@@ -195,6 +196,12 @@ async function clickTestId(testId: string) {
   await testUser.click(screen.getByTestId(testId));
 }
 
+async function waitForPanelWidth(testId: string, width: string) {
+  await waitFor(() => {
+    expect(screen.getByTestId(testId)).toHaveStyle({ width });
+  });
+}
+
 describe('App', () => {
   beforeEach(() => {
     testUser = userEvent.setup();
@@ -210,7 +217,7 @@ describe('App', () => {
 
     await clickText('toggle-left-panel');
 
-    expect(screen.getByTestId('panel-left-panel')).toHaveStyle({ width: '240px' });
+    await waitForPanelWidth('panel-left-panel', '240px');
 
     const leftHandle = screen.getByTestId('panel-handle-left-panel');
     fireEvent.pointerDown(leftHandle, { clientX: 240, pointerId: 1 });
@@ -254,7 +261,7 @@ describe('App', () => {
 
     await clickText('toggle-left-panel');
     expect(screen.getByTestId('menu-left-state')).toHaveTextContent('true');
-    expect(screen.getByTestId('panel-left-panel')).toHaveStyle({ width: '240px' });
+    await waitForPanelWidth('panel-left-panel', '240px');
     expect(screen.getByTestId('left-panel')).toBeInTheDocument();
     expect(screen.getByTestId('left-active-file')).toHaveTextContent('');
 
@@ -269,7 +276,7 @@ describe('App', () => {
 
     await clickText('toggle-right-panel');
     expect(screen.getByTestId('menu-right-state')).toHaveTextContent('true');
-    expect(screen.getByTestId('panel-right-panel')).toHaveStyle({ width: `${EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX}px` });
+    await waitForPanelWidth('panel-right-panel', `${EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX}px`);
     expect(screen.getByTestId('right-panel')).toBeInTheDocument();
 
     await clickText('right-open');
@@ -405,7 +412,8 @@ describe('App', () => {
 
     fireEvent.keyDown(document, { key: 'b', ctrlKey: true });
     expect(screen.getByTestId('menu-left-state')).toHaveTextContent('false');
-    expect(screen.queryByTestId('left-panel')).not.toBeInTheDocument();
+    expect(screen.getByTestId('panel-left-panel')).toHaveStyle({ width: '0px' });
+    expect(screen.getByTestId('panel-left-panel')).toHaveAttribute('aria-hidden', 'true');
 
     fireEvent.keyDown(document, { key: 'j', ctrlKey: true });
     expect(screen.getByTestId('menu-bottom-state')).toHaveTextContent('false');
@@ -593,8 +601,8 @@ describe('App', () => {
     await clickText('toggle-left-panel');
     await clickText('toggle-right-panel');
 
-    expect(screen.getByTestId('panel-left-panel')).toHaveStyle({ width: '240px' });
-    expect(screen.getByTestId('panel-right-panel')).toHaveStyle({ width: `${EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX}px` });
+    await waitForPanelWidth('panel-left-panel', '240px');
+    await waitForPanelWidth('panel-right-panel', `${EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX}px`);
 
     const leftHandle = screen.getByTestId('panel-handle-left-panel');
     fireEvent.pointerDown(leftHandle, { clientX: 240, pointerId: 1 });
@@ -611,7 +619,8 @@ describe('App', () => {
 
     await clickText('toggle-left-panel');
 
-    expect(screen.queryByTestId('panel-left-panel')).not.toBeInTheDocument();
+    expect(screen.getByTestId('panel-left-panel')).toHaveStyle({ width: '0px' });
+    expect(screen.getByTestId('panel-left-panel')).toHaveAttribute('aria-hidden', 'true');
     expect(screen.getByTestId('panel-right-panel')).toHaveStyle({ width: '360px' });
 
     await clickText('toggle-left-panel');
@@ -640,7 +649,7 @@ describe('App', () => {
 
     await clickText('toggle-right-panel');
 
-    expect(screen.getByTestId('panel-right-panel')).toHaveStyle({ width: `${EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX}px` });
+    await waitForPanelWidth('panel-right-panel', `${EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX}px`);
 
     await clickText('assistant-expand-thread-list');
 

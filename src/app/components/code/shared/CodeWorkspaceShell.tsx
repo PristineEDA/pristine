@@ -1,6 +1,11 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
-import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '../../ui/resizable';
+import {
+  PANEL_TRANSITION_DURATION_MS,
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from '../../ui/resizable';
 
 export const EXPLORER_LEFT_PANEL_DEFAULT_WIDTH_PX = 240;
 export const EXPLORER_LEFT_PANEL_MIN_WIDTH_PX = 200;
@@ -9,8 +14,134 @@ export const EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX = 300;
 export const EXPLORER_RIGHT_PANEL_MIN_WIDTH_PX = 260;
 export const EXPLORER_RIGHT_PANEL_MAX_WIDTH_PX = 560;
 
+const FIXED_PANEL_TRANSITION_STYLE = {
+  transitionDuration: `${PANEL_TRANSITION_DURATION_MS}ms`,
+  transitionProperty: 'width, min-width, max-width, flex-basis',
+} satisfies React.CSSProperties;
+
 function clampFixedPanelWidth(width: number, minWidth: number, maxWidth: number) {
   return Math.min(Math.max(width, minWidth), maxWidth);
+}
+
+type AnimatedPresencePhase = 'hidden' | 'entering' | 'visible' | 'exiting';
+
+function useAnimatedPanelPresence(isVisible: boolean) {
+  const [phase, setPhase] = useState<AnimatedPresencePhase>(() => (isVisible ? 'visible' : 'hidden'));
+  const enterTimeoutRef = useRef<number | null>(null);
+  const exitTimeoutRef = useRef<number | null>(null);
+
+  useLayoutEffect(() => {
+    if (enterTimeoutRef.current !== null) {
+      window.clearTimeout(enterTimeoutRef.current);
+      enterTimeoutRef.current = null;
+    }
+
+    if (exitTimeoutRef.current !== null) {
+      window.clearTimeout(exitTimeoutRef.current);
+      exitTimeoutRef.current = null;
+    }
+
+    if (isVisible) {
+      setPhase((currentPhase) => {
+        if (currentPhase === 'hidden') {
+          enterTimeoutRef.current = window.setTimeout(() => {
+            setPhase('visible');
+            enterTimeoutRef.current = null;
+          }, 0);
+
+          return 'entering';
+        }
+
+        return 'visible';
+      });
+
+      return () => {
+        if (enterTimeoutRef.current !== null) {
+          window.clearTimeout(enterTimeoutRef.current);
+          enterTimeoutRef.current = null;
+        }
+      };
+    }
+
+    setPhase((currentPhase) => {
+      if (currentPhase === 'hidden') {
+        return currentPhase;
+      }
+
+      exitTimeoutRef.current = window.setTimeout(() => {
+        setPhase('hidden');
+        exitTimeoutRef.current = null;
+      }, PANEL_TRANSITION_DURATION_MS);
+
+      return 'exiting';
+    });
+
+    return () => {
+      if (enterTimeoutRef.current !== null) {
+        window.clearTimeout(enterTimeoutRef.current);
+        enterTimeoutRef.current = null;
+      }
+
+      if (exitTimeoutRef.current !== null) {
+        window.clearTimeout(exitTimeoutRef.current);
+        exitTimeoutRef.current = null;
+      }
+    };
+  }, [isVisible]);
+
+  return {
+    isExpanded: phase === 'visible',
+    shouldRender: phase !== 'hidden',
+  };
+}
+
+function useAnimatedPanelExpansion(isVisible: boolean, shouldRender: boolean) {
+  const [isExpanded, setIsExpanded] = useState(() => isVisible);
+  const previousShouldRenderRef = useRef(shouldRender);
+  const enterTimeoutRef = useRef<number | null>(null);
+
+  useLayoutEffect(() => {
+    if (enterTimeoutRef.current !== null) {
+      window.clearTimeout(enterTimeoutRef.current);
+      enterTimeoutRef.current = null;
+    }
+
+    const wasRendered = previousShouldRenderRef.current;
+    previousShouldRenderRef.current = shouldRender;
+
+    if (!shouldRender) {
+      setIsExpanded(false);
+      return;
+    }
+
+    if (!isVisible) {
+      setIsExpanded(false);
+      return;
+    }
+
+    if (isExpanded) {
+      return;
+    }
+
+    if (wasRendered) {
+      setIsExpanded(true);
+      return;
+    }
+
+    enterTimeoutRef.current = window.setTimeout(() => {
+      setIsExpanded(true);
+      enterTimeoutRef.current = null;
+    }, 0);
+
+    return () => {
+      if (enterTimeoutRef.current !== null) {
+        window.clearTimeout(enterTimeoutRef.current);
+        enterTimeoutRef.current = null;
+      }
+    };
+  }, [isVisible, shouldRender]);
+
+  return isExpanded;
 }
 
 interface CodeWorkspaceShellProps {
@@ -123,6 +254,9 @@ export function CodeWorkspaceShell({
 }: CodeWorkspaceShellProps) {
   const hasFixedLeftPanel = typeof leftFixedWidthPx === 'number' && typeof onLeftFixedWidthChange === 'function';
   const hasFixedRightPanel = typeof rightFixedWidthPx === 'number' && typeof onRightFixedWidthChange === 'function';
+  const leftPanelPresence = useAnimatedPanelPresence(showLeftPanel);
+  const bottomPanelPresence = useAnimatedPanelPresence(showBottomPanel);
+  const rightPanelPresence = useAnimatedPanelPresence(showRightPanel);
   const fixedRightPanelWasOpenedRef = useRef(hasFixedRightPanel && showRightPanel);
   const fixedLeftMinWidth = leftFixedMinWidthPx ?? EXPLORER_LEFT_PANEL_MIN_WIDTH_PX;
   const fixedLeftMaxWidth = leftFixedMaxWidthPx ?? EXPLORER_LEFT_PANEL_MAX_WIDTH_PX;
@@ -141,6 +275,7 @@ export function CodeWorkspaceShell({
 
   const shouldRenderFixedRightPanel = hasFixedRightPanel
     && (showRightPanel || fixedRightPanelWasOpenedRef.current);
+  const isFixedRightPanelExpanded = useAnimatedPanelExpansion(showRightPanel, shouldRenderFixedRightPanel);
 
   const centerPanelContent = (
     <div className="relative h-full">
@@ -153,7 +288,7 @@ export function CodeWorkspaceShell({
 
         <ResizableHandle hidden={!showBottomPanel} />
         <ResizablePanel defaultSize={40} minSize={15} maxSize={60} id={bottomPanelId} collapsed={!showBottomPanel}>
-          {showBottomPanel ? bottomContent : <div className="h-full" />}
+          {bottomPanelPresence.shouldRender ? bottomContent : <div className="h-full" />}
         </ResizablePanel>
       </ResizablePanelGroup>
     </div>
@@ -174,7 +309,7 @@ export function CodeWorkspaceShell({
         id={rightPanelId}
         collapsed={!showRightPanel}
       >
-        {showRightPanel ? rightContent : <div className="h-full" />}
+        {rightPanelPresence.shouldRender ? rightContent : <div className="h-full" />}
       </ResizablePanel>
     </>
   );
@@ -185,19 +320,24 @@ export function CodeWorkspaceShell({
 
       {hasFixedLeftPanel ? (
         <div className="flex flex-1 min-w-0">
-          {showLeftPanel && clampedLeftFixedWidth !== null && (
+          {leftPanelPresence.shouldRender && clampedLeftFixedWidth !== null && (
             <div
               data-slot="resizable-panel"
               data-testid={`panel-${leftPanelId}`}
               data-panel-id={leftPanelId}
-              className="min-h-0 shrink-0 overflow-hidden"
+              aria-hidden={showLeftPanel ? 'false' : 'true'}
+              className={cn(
+                'min-h-0 shrink-0 overflow-hidden',
+                !showLeftPanel && 'pointer-events-none select-none',
+              )}
               style={{
-                width: `${clampedLeftFixedWidth}px`,
-                minWidth: `${clampedLeftFixedWidth}px`,
-                maxWidth: `${clampedLeftFixedWidth}px`,
-                flexBasis: `${clampedLeftFixedWidth}px`,
+                width: `${leftPanelPresence.isExpanded ? clampedLeftFixedWidth : 0}px`,
+                minWidth: `${leftPanelPresence.isExpanded ? clampedLeftFixedWidth : 0}px`,
+                maxWidth: `${leftPanelPresence.isExpanded ? clampedLeftFixedWidth : 0}px`,
+                flexBasis: `${leftPanelPresence.isExpanded ? clampedLeftFixedWidth : 0}px`,
                 flexGrow: 0,
                 flexShrink: 0,
+                ...FIXED_PANEL_TRANSITION_STYLE,
               }}
             >
               {leftContent}
@@ -243,18 +383,19 @@ export function CodeWorkspaceShell({
                   data-slot="resizable-panel"
                   data-testid={`panel-${rightPanelId}`}
                   data-panel-id={rightPanelId}
-                  aria-hidden={!showRightPanel}
+                  aria-hidden={showRightPanel ? 'false' : 'true'}
                   className={cn(
                     'min-h-0 shrink-0 overflow-hidden',
-                    !showRightPanel && 'pointer-events-none invisible',
+                    !showRightPanel && 'pointer-events-none select-none',
                   )}
                   style={{
-                    width: `${showRightPanel ? clampedRightFixedWidth : 0}px`,
-                    minWidth: `${showRightPanel ? clampedRightFixedWidth : 0}px`,
-                    maxWidth: `${showRightPanel ? clampedRightFixedWidth : 0}px`,
-                    flexBasis: `${showRightPanel ? clampedRightFixedWidth : 0}px`,
+                    width: `${isFixedRightPanelExpanded ? clampedRightFixedWidth : 0}px`,
+                    minWidth: `${isFixedRightPanelExpanded ? clampedRightFixedWidth : 0}px`,
+                    maxWidth: `${isFixedRightPanelExpanded ? clampedRightFixedWidth : 0}px`,
+                    flexBasis: `${isFixedRightPanelExpanded ? clampedRightFixedWidth : 0}px`,
                     flexGrow: 0,
                     flexShrink: 0,
+                    ...FIXED_PANEL_TRANSITION_STYLE,
                   }}
                 >
                   {rightContent}
@@ -273,7 +414,7 @@ export function CodeWorkspaceShell({
         <div className="flex-1 min-w-0">
           <ResizablePanelGroup orientation="horizontal">
             <ResizablePanel defaultSize={18} minSize={12} maxSize={35} id={leftPanelId} collapsed={!showLeftPanel}>
-              {showLeftPanel ? leftContent : <div className="h-full" />}
+              {leftPanelPresence.shouldRender ? leftContent : <div className="h-full" />}
             </ResizablePanel>
 
             <ResizableHandle hidden={!showLeftPanel} />
