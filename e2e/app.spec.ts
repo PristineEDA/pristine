@@ -2334,17 +2334,78 @@ test('menu bar switches to the BlockSuite whiteboard editor', async () => {
       () => whiteboardHost.evaluate((host) => Boolean((host as HTMLElement & { shadowRoot?: unknown }).shadowRoot)),
       { timeout: UI_READY_TIMEOUT_MS },
     )
-    .toBe(true);
+    .toBe(false);
   await expect
     .poll(
       () =>
         whiteboardEditor.evaluate((editor) => {
           const root = (editor as HTMLElement & { getRootNode: () => { nodeType: number } }).getRootNode();
-          return root.nodeType === 11 && 'host' in root;
+          return root.nodeType === 9;
         }),
       { timeout: UI_READY_TIMEOUT_MS },
     )
     .toBe(true);
+
+  const noteEditor = whiteboardView.locator('.inline-editor[contenteditable="true"]').first();
+  await noteEditor.click({ force: true });
+  await window.keyboard.type('/');
+  await expect(window.locator('affine-slash-menu')).toHaveCount(1, { timeout: UI_READY_TIMEOUT_MS });
+  await window.keyboard.press('Escape');
+
+  const noteBackground = whiteboardView.locator('edgeless-note-background').first();
+  const getBackgroundColor = (element: unknown) => {
+    const browserGlobal = globalThis as unknown as {
+      getComputedStyle: (element: unknown) => { backgroundColor: string };
+    };
+
+    return browserGlobal.getComputedStyle(element).backgroundColor;
+  };
+  const initialNoteBackground = await noteBackground.evaluate(getBackgroundColor);
+
+  await window.evaluate(() => {
+    const browserGlobal = globalThis as unknown as {
+      document: {
+        querySelector: (selector: string) => unknown | null;
+      };
+    };
+    const edgelessRoot = browserGlobal.document.querySelector('affine-edgeless-root') as {
+      gfx?: {
+        selection?: {
+          set: (selection: { elements: string[] }) => void;
+        };
+      };
+    } | null;
+    const note = browserGlobal.document.querySelector('affine-edgeless-note') as {
+      model?: {
+        id?: string;
+      };
+      getAttribute?: (name: string) => string | null;
+    } | null;
+    const noteId = note?.model?.id ?? note?.getAttribute?.('data-block-id');
+
+    if (!edgelessRoot?.gfx?.selection || !noteId) {
+      throw new Error('Expected selectable BlockSuite note on the whiteboard');
+    }
+
+    edgelessRoot.gfx.selection.set({ elements: [noteId] });
+  });
+
+  const noteStyleButton = window.locator('affine-toolbar-widget editor-icon-button[aria-label="Note Style"]');
+  await expect(noteStyleButton).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await noteStyleButton.click();
+  const yellowSwatch = window.locator('edgeless-color-panel .color-unit[aria-label="Yellow"]');
+  await expect(yellowSwatch).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await yellowSwatch.click();
+  await expect
+    .poll(() => noteBackground.evaluate(getBackgroundColor), {
+      timeout: UI_READY_TIMEOUT_MS,
+    })
+    .not.toBe(initialNoteBackground);
+  await expect
+    .poll(() => noteBackground.evaluate(getBackgroundColor), {
+      timeout: UI_READY_TIMEOUT_MS,
+    })
+    .toBe('rgb(253, 230, 138)');
   expect(whiteboardErrors.filter((message) => message.includes('Illegal constructor'))).toEqual([]);
 
   await app.close();

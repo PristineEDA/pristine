@@ -20,7 +20,7 @@ import {
 } from './blocksuiteRuntime';
 
 export interface MountBlockSuiteWhiteboardOptions {
-  host: HTMLElement | ShadowRoot;
+  host: HTMLElement;
   store: Store;
   workspace: Workspace;
 }

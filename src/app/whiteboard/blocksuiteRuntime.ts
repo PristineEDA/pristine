@@ -69,7 +69,6 @@ class PristineEdgelessEditor extends SignalWatcher(WithDisposable(ShadowlessElem
       overflow: hidden;
       color-scheme: light;
       isolation: isolate;
-      contain: layout paint style;
       background: var(--affine-background-primary-color, #ffffff);
       color: var(--affine-text-primary-color, #121212);
       font-family: var(--affine-font-family, Inter, ui-sans-serif, system-ui, sans-serif);

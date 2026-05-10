@@ -19,10 +19,6 @@ const whiteboardThemeStyle = {
   color: 'var(--affine-text-primary-color, #121212)',
 } as CSSProperties;
 
-function getWhiteboardShadowRoot(host: HTMLDivElement) {
-  return host.shadowRoot ?? host.attachShadow({ mode: 'open' });
-}
-
 export function WhiteboardView() {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -43,12 +39,11 @@ export function WhiteboardView() {
     setErrorMessage(null);
 
     try {
-      const mountRoot = getWhiteboardShadowRoot(host);
-      mountRoot.replaceChildren();
+      host.replaceChildren();
 
       const whiteboardStore = createWhiteboardStore();
       const mountedWhiteboard = mountBlockSuiteWhiteboard({
-        host: mountRoot,
+        host,
         store: whiteboardStore.store,
         workspace: whiteboardStore.workspace,
       });
@@ -62,7 +57,7 @@ export function WhiteboardView() {
         setIsReady(true);
       }
     } catch (error) {
-      host.shadowRoot?.replaceChildren();
+      host.replaceChildren();
       cleanup?.();
 
       if (!disposed) {

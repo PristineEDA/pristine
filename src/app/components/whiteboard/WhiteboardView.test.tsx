@@ -17,7 +17,7 @@ describe('WhiteboardView', () => {
   const getWhiteboardHost = () => screen.getByTestId('whiteboard-host') as HTMLDivElement;
 
   const getMountedEditor = () => {
-    const editor = getWhiteboardHost().shadowRoot?.querySelector('[data-testid="whiteboard-edgeless-editor"]');
+    const editor = getWhiteboardHost().querySelector('[data-testid="whiteboard-edgeless-editor"]');
 
     if (!editor) {
       throw new Error('Whiteboard editor is not mounted');
@@ -61,10 +61,10 @@ describe('WhiteboardView', () => {
       expect(screen.queryByText('Loading whiteboard...')).not.toBeInTheDocument();
     });
     expect(screen.getByTestId('whiteboard-view')).toHaveAttribute('data-theme', 'light');
-    expect(getWhiteboardHost().shadowRoot).not.toBeNull();
+    expect(getWhiteboardHost().shadowRoot).toBeNull();
     expect(mountBlockSuiteWhiteboard).toHaveBeenCalledTimes(1);
     expect(mountBlockSuiteWhiteboard).toHaveBeenCalledWith(expect.objectContaining({
-      host: getWhiteboardHost().shadowRoot,
+      host: getWhiteboardHost(),
     }));
   });
 
