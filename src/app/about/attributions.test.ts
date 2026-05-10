@@ -11,6 +11,8 @@ const directRuntimeDependencyAttributionIds = new Map([
   ['@assistant-ui/react-markdown', 'assistant-ui-react-markdown'],
   ['@assistant-ui/react-streamdown', 'assistant-ui-react-streamdown'],
   ['@monaco-editor/react', 'monaco-editor-react'],
+  ['@preact/signals-core', 'preact-signals-core'],
+  ['@toeverything/theme', 'toeverything-theme'],
   ['@xterm/addon-fit', 'xterm-addon-fit'],
   ['@xterm/xterm', 'xterm'],
   ['@xyflow/react', 'react-flow'],
@@ -19,6 +21,7 @@ const directRuntimeDependencyAttributionIds = new Map([
   ['clsx', 'clsx'],
   ['cmdk', 'cmdk'],
   ['ignore', 'ignore'],
+  ['lit', 'lit'],
   ['lucide-react', 'lucide-react'],
   ['material-icon-theme', 'material-icon-theme'],
   ['mermaid', 'mermaid'],
@@ -29,6 +32,7 @@ const directRuntimeDependencyAttributionIds = new Map([
   ['react-dom', 'react-dom'],
   ['react-shiki', 'react-shiki'],
   ['remark-gfm', 'remark-gfm'],
+  ['rxjs', 'rxjs'],
   ['streamdown', 'streamdown'],
   ['tailwind-merge', 'tailwind-merge'],
   ['tw-shimmer', 'tw-shimmer'],
@@ -874,12 +878,15 @@ describe('attributions', () => {
     const noticeMarkdown = buildNoticeMarkdown();
 
     expect(noticeMarkdown).toContain('### Apache License 2.0');
+    expect(noticeMarkdown).toContain('### BSD 3-Clause License');
+    expect(noticeMarkdown).toContain('### Mozilla Public License 2.0');
     expect(noticeMarkdown).toContain('### SIL Open Font License 1.1');
     expect(noticeMarkdown).toContain('### Ubuntu Font Licence 1.0');
     expect(noticeMarkdown).toContain('### Bitstream Vera / Arev / Public Domain Notices');
     expect(noticeMarkdown).toContain('SIL OPEN FONT LICENSE Version 1.1');
     expect(noticeMarkdown).toContain('UBUNTU FONT LICENCE Version 1.0');
     expect(noticeMarkdown).toContain('Bitstream Vera Fonts Copyright');
+    expect(noticeMarkdown).toContain('Mozilla Public License Version 2.0');
   });
 
   it('covers every direct runtime dependency with an explicit attribution mapping', () => {

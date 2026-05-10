@@ -99,8 +99,20 @@ jobs:
           node-version: 20
           cache: pnpm
 
+      - name: Cache BlockSuite workspace
+        uses: actions/cache@v4
+        with:
+          path: .pristine-vendor/affine-blocksuite/v0.26.3-7946007
+          key: blocksuite-${{ runner.os }}-v0.26.3-7946007-${{ hashFiles('config/blocksuite-upstream.json', 'scripts/prepare-blocksuite.mjs') }}
+
+      - name: Prepare BlockSuite workspace
+        run: node scripts/prepare-blocksuite.mjs
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Verify BlockSuite workspace
+        run: node scripts/prepare-blocksuite.mjs --verify
 
       - name: Prepare external assets
         run: pnpm run prepare:assets
@@ -200,6 +212,15 @@ jobs:
           node-version: 20
           cache: pnpm
 
+      - name: Cache BlockSuite workspace
+        uses: actions/cache@v4
+        with:
+          path: .pristine-vendor/affine-blocksuite/v0.26.3-7946007
+          key: blocksuite-${{ runner.os }}-v0.26.3-7946007-${{ hashFiles('config/blocksuite-upstream.json', 'scripts/prepare-blocksuite.mjs') }}
+
+      - name: Prepare BlockSuite workspace
+        run: node scripts/prepare-blocksuite.mjs
+
       - name: Setup Python for native rebuilds
         if: runner.os == 'Windows'
         uses: actions/setup-python@v5
@@ -208,6 +229,9 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Verify BlockSuite workspace
+        run: node scripts/prepare-blocksuite.mjs --verify
 
       - name: Prepare external assets
         run: pnpm run prepare:assets
@@ -319,6 +343,15 @@ jobs:
           node-version: 20
           cache: pnpm
 
+      - name: Cache BlockSuite workspace
+        uses: actions/cache@v4
+        with:
+          path: .pristine-vendor/affine-blocksuite/v0.26.3-7946007
+          key: blocksuite-${{ runner.os }}-v0.26.3-7946007-${{ hashFiles('config/blocksuite-upstream.json', 'scripts/prepare-blocksuite.mjs') }}
+
+      - name: Prepare BlockSuite workspace
+        run: node scripts/prepare-blocksuite.mjs
+
       - name: Setup Python for native rebuilds
         if: runner.os == 'Windows'
         uses: actions/setup-python@v5
@@ -327,6 +360,9 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Verify BlockSuite workspace
+        run: node scripts/prepare-blocksuite.mjs --verify
 
       - name: Prepare external assets
         run: pnpm run prepare:assets

@@ -1,0 +1,22 @@
+{
+  "repository": "https://github.com/toeverything/AFFiNE.git",
+  "tag": "v0.26.3",
+  "resolvedCommit": "79460072bb7eda53834d88229c1de06c3697951c",
+  "vendorRoot": ".pristine-vendor/affine-blocksuite",
+  "workspaceName": "v0.26.3-7946007",
+  "sparsePaths": [
+    "blocksuite/affine",
+    "blocksuite/framework",
+    "blocksuite/tsconfig.json",
+    "package.json",
+    "tsconfig.json",
+    "tsconfig.web.json"
+  ],
+  "requiredPackagePaths": [
+    "blocksuite/affine/all/package.json",
+    "blocksuite/framework/global/package.json",
+    "blocksuite/framework/std/package.json",
+    "blocksuite/framework/store/package.json",
+    "blocksuite/framework/sync/package.json"
+  ]
+}

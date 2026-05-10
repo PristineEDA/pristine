@@ -17,6 +17,17 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedIndexedAccess": true,
     "paths": {
+      "@blocksuite/affine/ext-loader": ["./types/blocksuite-affine-shims/ext-loader.d.ts"],
+      "@blocksuite/affine/extensions/store": ["./types/blocksuite-affine-shims/extensions-store.d.ts"],
+      "@blocksuite/affine/extensions/view": ["./types/blocksuite-affine-shims/extensions-view.d.ts"],
+      "@blocksuite/affine/global/lit": ["./types/blocksuite-affine-shims/global-lit.d.ts"],
+      "@blocksuite/affine/model": ["./types/blocksuite-affine-shims/model.d.ts"],
+      "@blocksuite/affine/shared/services": ["./types/blocksuite-affine-shims/shared-services.d.ts"],
+      "@blocksuite/affine/shared/utils": ["./types/blocksuite-affine-shims/shared-utils.d.ts"],
+      "@blocksuite/affine/std": ["./types/blocksuite-affine-shims/std.d.ts"],
+      "@blocksuite/affine/std/effects": ["./types/blocksuite-affine-shims/std-effects.d.ts"],
+      "@blocksuite/affine/store": ["./types/blocksuite-affine-shims/store.d.ts"],
+      "@blocksuite/affine/store/test": ["./types/blocksuite-affine-shims/store-test.d.ts"],
       "@/*": ["./src/*"]
     }
   },

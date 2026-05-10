@@ -2288,15 +2288,64 @@ test('ctrl+z does not restore the loading placeholder after undo returns a file 
   }
 });
 
-test('menu bar switches to the whiteboard placeholder view', async () => {
+test('menu bar switches to the BlockSuite whiteboard editor', async () => {
   const { app, window } = await launchApp();
+  const whiteboardErrors: string[] = [];
+
+  window.on('pageerror', (error) => {
+    whiteboardErrors.push(error.message);
+  });
+  window.on('console', (message) => {
+    if (message.type() === 'error') {
+      whiteboardErrors.push(message.text());
+    }
+  });
 
   await switchToWhiteboard(window);
 
   const whiteboardView = window.getByTestId('whiteboard-view');
+  const whiteboardHost = window.getByTestId('whiteboard-host');
+  const whiteboardEditor = window.getByTestId('whiteboard-edgeless-editor');
   await expect(whiteboardView).toBeVisible();
   await expect(whiteboardView).toContainText('Whiteboard');
-  await expect(whiteboardView).toContainText('Coming soon');
+  await expect(whiteboardView).toHaveAttribute('data-theme', 'light');
+  await expect(whiteboardEditor).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect(whiteboardEditor).toHaveAttribute('data-theme', 'light');
+  await expect(whiteboardEditor).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+  await expect(whiteboardView.locator('pristine-edgeless-editor')).toHaveCount(1);
+  await expect(whiteboardView.locator('editor-host')).toHaveCount(1, { timeout: UI_READY_TIMEOUT_MS });
+  await expect(whiteboardView.locator('affine-edgeless-root')).toHaveCount(1, { timeout: UI_READY_TIMEOUT_MS });
+  const toolbarWrapper = whiteboardView.locator('edgeless-toolbar-widget .edgeless-toolbar-wrapper');
+  await expect(toolbarWrapper).toHaveAttribute('data-app-theme', 'light', { timeout: UI_READY_TIMEOUT_MS });
+  await expect
+    .poll(
+      () =>
+        toolbarWrapper.evaluate((element) => {
+          const browserGlobal = globalThis as unknown as {
+            getComputedStyle: (element: unknown) => { getPropertyValue: (name: string) => string };
+          };
+          return browserGlobal.getComputedStyle(element).getPropertyValue('--affine-background-overlay-panel-color').trim();
+        }),
+      { timeout: UI_READY_TIMEOUT_MS },
+    )
+    .toBe('rgb(251, 251, 252)');
+  await expect
+    .poll(
+      () => whiteboardHost.evaluate((host) => Boolean((host as HTMLElement & { shadowRoot?: unknown }).shadowRoot)),
+      { timeout: UI_READY_TIMEOUT_MS },
+    )
+    .toBe(true);
+  await expect
+    .poll(
+      () =>
+        whiteboardEditor.evaluate((editor) => {
+          const root = (editor as HTMLElement & { getRootNode: () => { nodeType: number } }).getRootNode();
+          return root.nodeType === 11 && 'host' in root;
+        }),
+      { timeout: UI_READY_TIMEOUT_MS },
+    )
+    .toBe(true);
+  expect(whiteboardErrors.filter((message) => message.includes('Illegal constructor'))).toEqual([]);
 
   await app.close();
 });
