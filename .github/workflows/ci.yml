@@ -236,10 +236,14 @@ jobs:
       - name: Prepare external assets
         run: pnpm run prepare:assets
 
+      - name: Verify Windows node-pty binary
+        if: runner.os == 'Windows'
+        run: pnpm run verify:node-pty-binary -- --platform win32 --arch x64
+
       - name: Package application
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-        run: pnpm run build:app && pnpm exec electron-builder ${{ matrix.builder_args }} --config electron-builder.yml --publish never
+        run: pnpm run build:app && pnpm run prepare:package-app && pnpm exec electron-builder --projectDir .pristine-package/app ${{ matrix.builder_args }} --config electron-builder.yml --publish never
 
       - name: Run runtime performance comparison
         shell: powershell
@@ -367,10 +371,14 @@ jobs:
       - name: Prepare external assets
         run: pnpm run prepare:assets
 
+      - name: Verify Windows node-pty binary
+        if: runner.os == 'Windows'
+        run: pnpm run verify:node-pty-binary -- --platform win32 --arch x64
+
       - name: Package application
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-        run: pnpm run build:app && pnpm exec electron-builder ${{ matrix.builder_args }} --config electron-builder.yml --publish never
+        run: pnpm run build:app && pnpm run prepare:package-app && pnpm exec electron-builder --projectDir .pristine-package/app ${{ matrix.builder_args }} --config electron-builder.yml --publish never
 
       - name: Upload package artifacts
         if: always() && hashFiles('release/**') != ''
