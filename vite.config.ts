@@ -160,6 +160,142 @@ function createVanillaExtractStubModule(source: string, id: string): string {
   return declarations.join('\n')
 }
 
+function createRuntimeCssModule(exports: Record<string, string | number>, css: string, id: string): string {
+  const moduleHash = createHash('sha1').update(normalizePathForVite(id)).digest('hex').slice(0, 8)
+  const stylesheetId = `pristine-ve-${moduleHash}`
+  const declarations = Object.entries(exports).map(([exportName, value]) => {
+    return `export const ${exportName} = ${JSON.stringify(value)};`
+  })
+
+  return [
+    `const stylesheetId = ${JSON.stringify(stylesheetId)};`,
+    `const cssText = ${JSON.stringify(css)};`,
+    `if (typeof document !== 'undefined' && !document.getElementById(stylesheetId)) {`,
+    `  const style = document.createElement('style');`,
+    `  style.id = stylesheetId;`,
+    `  style.textContent = cssText;`,
+    `  document.head.append(style);`,
+    `}`,
+    ...declarations,
+  ].join('\n')
+}
+
+function createKnownVanillaExtractModule(normalizedId: string, id: string): string | null {
+  const className = (exportName: string, sourceId = id) => {
+    const moduleHash = createHash('sha1').update(normalizePathForVite(sourceId)).digest('hex').slice(0, 8)
+    return `ve_${moduleHash}_${exportName}`
+  }
+
+  if (normalizedId.endsWith('/blocks/note/src/note-edgeless-block.css.ts')) {
+    const edgelessNoteContainer = className('edgelessNoteContainer')
+    const collapseButton = className('collapseButton')
+    const noteBackground = className('noteBackground')
+    const clipContainer = className('clipContainer')
+    const collapsedContent = className('collapsedContent')
+    const activePadding = 20
+    const css = `
+.${edgelessNoteContainer} {
+  height: 100%;
+  padding: 24px;
+  box-sizing: border-box;
+  pointer-events: all;
+  transform-origin: 0 0;
+  font-weight: 400;
+  line-height: var(--affine-line-height);
+}
+.${collapseButton} {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  z-index: 2;
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  opacity: 0.2;
+  transition: opacity 0.3s;
+}
+.${collapseButton}:hover {
+  opacity: 1;
+}
+.${collapseButton}.flip {
+  transform: translateX(-50%) rotate(180deg);
+}
+.${noteBackground} {
+  position: absolute;
+  border-color: var(--affine-black10);
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+}
+.${edgelessNoteContainer}[data-editing="true"] .${noteBackground} {
+  left: -${activePadding}px;
+  top: -${activePadding}px;
+  width: calc(100% + ${activePadding * 2}px);
+  height: calc(100% + ${activePadding * 2}px);
+  transition: left 0.3s, top 0.3s, width 0.3s, height 0.3s;
+  box-shadow: var(--affine-active-shadow);
+}
+.${clipContainer} {
+  width: 100%;
+  height: 100%;
+}
+.${collapsedContent} {
+  position: absolute;
+  background: var(--affine-white);
+  opacity: 0.5;
+  pointer-events: none;
+  border: 2px var(--affine-blue) solid;
+  border-top: unset;
+  border-radius: 0 0 8px 8px;
+}`
+
+    return createRuntimeCssModule(
+      {
+        ACTIVE_NOTE_EXTRA_PADDING: activePadding,
+        edgelessNoteContainer,
+        collapseButton,
+        noteBackground,
+        clipContainer,
+        collapsedContent,
+      },
+      css,
+      id,
+    )
+  }
+
+  if (normalizedId.endsWith('/blocks/note/src/components/edgeless-note-background.css.ts')) {
+    const background = className('background')
+    const noteCssId = id.replace(/components[\\/]edgeless-note-background\.css\.ts$/, 'note-edgeless-block.css.ts')
+    const edgelessNoteContainer = className('edgelessNoteContainer', noteCssId)
+    const activePadding = 20
+    const css = `
+.${background} {
+  position: absolute;
+  border-color: var(--affine-black10);
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+}
+.${edgelessNoteContainer}[data-editing="true"] .${background} {
+  left: -${activePadding}px;
+  top: -${activePadding}px;
+  width: calc(100% + ${activePadding * 2}px);
+  height: calc(100% + ${activePadding * 2}px);
+  transition: left 0.3s, top 0.3s, width 0.3s, height 0.3s;
+  box-shadow: var(--affine-active-shadow);
+}`
+
+    return createRuntimeCssModule({ background }, css, id)
+  }
+
+  return null
+}
+
 function blocksuiteVanillaExtractStubPlugin() {
   return {
     name: 'pristine-blocksuite-vanilla-extract-stub',
@@ -169,6 +305,15 @@ function blocksuiteVanillaExtractStubPlugin() {
 
       if (!isVendoredBlockSuitePath(normalizedId) || !normalizedId.endsWith('.css.ts')) {
         return null
+      }
+
+      const knownModule = createKnownVanillaExtractModule(normalizedId, id)
+
+      if (knownModule) {
+        return {
+          code: knownModule,
+          map: null,
+        }
       }
 
       return {

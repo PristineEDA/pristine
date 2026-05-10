@@ -2312,7 +2312,8 @@ test('menu bar switches to the BlockSuite whiteboard editor', async () => {
   await expect(whiteboardEditor).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
   await expect(whiteboardEditor).toHaveAttribute('data-theme', 'light');
   await expect(whiteboardEditor).toHaveCSS('background-color', 'rgb(255, 255, 255)');
-  await expect(whiteboardView.locator('pristine-edgeless-editor')).toHaveCount(1);
+  await expect(whiteboardView.locator('edgeless-editor')).toHaveCount(1);
+  await expect(whiteboardView.locator('.affine-edgeless-viewport')).toHaveCount(1);
   await expect(whiteboardView.locator('editor-host')).toHaveCount(1, { timeout: UI_READY_TIMEOUT_MS });
   await expect(whiteboardView.locator('affine-edgeless-root')).toHaveCount(1, { timeout: UI_READY_TIMEOUT_MS });
   const toolbarWrapper = whiteboardView.locator('edgeless-toolbar-widget .edgeless-toolbar-wrapper');
@@ -2352,7 +2353,45 @@ test('menu bar switches to the BlockSuite whiteboard editor', async () => {
   await expect(window.locator('affine-slash-menu')).toHaveCount(1, { timeout: UI_READY_TIMEOUT_MS });
   await window.keyboard.press('Escape');
 
+  await noteEditor.click({ force: true });
+  const noteContainer = whiteboardView.locator('[data-testid="edgeless-note-container"]').first();
+  await expect(noteContainer).toHaveAttribute('data-editing', 'true', { timeout: UI_READY_TIMEOUT_MS });
   const noteBackground = whiteboardView.locator('edgeless-note-background').first();
+  await expect(noteBackground).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  const noteBackgroundVisualState = await noteBackground.evaluate((element) => {
+    const browserGlobal = globalThis as unknown as {
+      getComputedStyle: (element: unknown) => {
+        boxShadow: string;
+        height: string;
+        left: string;
+        position: string;
+        top: string;
+        transitionProperty: string;
+        width: string;
+      };
+    };
+    const style = browserGlobal.getComputedStyle(element);
+    const rect = (element as { getBoundingClientRect: () => { height: number; width: number } }).getBoundingClientRect();
+
+    return {
+      boxShadow: style.boxShadow,
+      height: rect.height,
+      left: style.left,
+      position: style.position,
+      top: style.top,
+      transitionProperty: style.transitionProperty,
+      width: rect.width,
+      cssWidth: style.width,
+      cssHeight: style.height,
+    };
+  });
+  expect(noteBackgroundVisualState.position).toBe('absolute');
+  expect(noteBackgroundVisualState.width).toBeGreaterThan(0);
+  expect(noteBackgroundVisualState.height).toBeGreaterThan(0);
+  expect(noteBackgroundVisualState.cssWidth).not.toBe('auto');
+  expect(noteBackgroundVisualState.cssHeight).not.toBe('auto');
+  expect(noteBackgroundVisualState.transitionProperty).toContain('left');
+  expect(noteBackgroundVisualState.boxShadow).not.toBe('none');
   const getBackgroundColor = (element: unknown) => {
     const browserGlobal = globalThis as unknown as {
       getComputedStyle: (element: unknown) => { backgroundColor: string };

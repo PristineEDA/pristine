@@ -15,7 +15,7 @@ export interface Store {
     };
   };
   dispose: () => void;
-  get: <T>(extension: new (...args: any[]) => T) => T;
+  get: <T = any>(extension: unknown) => T;
 }
 
 export interface Workspace {

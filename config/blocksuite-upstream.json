@@ -8,6 +8,9 @@
     "blocksuite/affine",
     "blocksuite/framework",
     "blocksuite/tsconfig.json",
+    "packages/frontend/core/src/blocksuite",
+    "packages/frontend/core/src/components/hooks/use-block-suite-editor.ts",
+    "packages/frontend/core/src/components/page-detail-editor.tsx",
     "package.json",
     "tsconfig.json",
     "tsconfig.web.json"
@@ -18,5 +21,14 @@
     "blocksuite/framework/std/package.json",
     "blocksuite/framework/store/package.json",
     "blocksuite/framework/sync/package.json"
+  ],
+  "referencePackagePaths": [
+    "packages/frontend/core/src/blocksuite/block-suite-editor/blocksuite-editor.tsx",
+    "packages/frontend/core/src/blocksuite/block-suite-editor/lit-adaper.tsx",
+    "packages/frontend/core/src/blocksuite/editors/edgeless-editor.ts",
+    "packages/frontend/core/src/blocksuite/editors/index.ts",
+    "packages/frontend/core/src/blocksuite/manager/store.ts",
+    "packages/frontend/core/src/blocksuite/manager/view.ts",
+    "packages/frontend/core/src/blocksuite/view-extensions/edgeless-block-header/patch.tsx"
   ]
 }

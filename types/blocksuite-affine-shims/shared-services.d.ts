@@ -29,3 +29,5 @@ export function ParseDocUrlExtension(service: {
 }): ExtensionType;
 
 export const ThemeExtensionIdentifier: unknown;
+
+export const ThemeProvider: unknown;

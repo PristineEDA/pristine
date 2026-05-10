@@ -33,14 +33,17 @@ describe('WhiteboardView', () => {
       dispose: vi.fn(),
     }));
     vi.mocked(mountBlockSuiteWhiteboard).mockImplementation(({ host }) => {
+      const container = document.createElement('div') as never;
       const editor = document.createElement('div') as never;
       (editor as HTMLElement).dataset.testid = 'whiteboard-edgeless-editor';
-      host.append(editor as HTMLElement);
+      (container as HTMLElement).append(editor as HTMLElement);
+      host.append(container as HTMLElement);
 
       return {
+        container,
         editor,
         dispose: vi.fn(() => {
-          (editor as HTMLElement).remove();
+          (container as HTMLElement).remove();
         }),
       };
     });

@@ -135,6 +135,7 @@ async function writeMarker(vendorPath, config) {
     resolvedCommit: config.resolvedCommit,
     sparsePaths: config.sparsePaths,
     requiredPackagePaths: config.requiredPackagePaths,
+    referencePackagePaths: config.referencePackagePaths ?? [],
     preparedAt: new Date().toISOString(),
   };
 

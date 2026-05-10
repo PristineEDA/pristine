@@ -1,12 +1,13 @@
 import { SignalWatcher, WithDisposable } from '@blocksuite/affine/global/lit';
+import { ThemeProvider } from '@blocksuite/affine/shared/services';
 import { BlockStdScope, ShadowlessElement } from '@blocksuite/affine/std';
 import { effects as stdEffects } from '@blocksuite/affine/std/effects';
 import type { ExtensionType, Store } from '@blocksuite/affine/store';
-import { computed, signal } from '@preact/signals-core';
+import type { Subscription } from 'rxjs';
 import { css, html, nothing } from 'lit';
 import { guard } from 'lit/directives/guard.js';
 
-export const PRISTINE_EDGELESS_EDITOR_TAG = 'pristine-edgeless-editor';
+export const PRISTINE_EDGELESS_EDITOR_TAG = 'edgeless-editor';
 
 export type PristineEdgelessEditorElement = PristineEdgelessEditor & HTMLElement;
 
@@ -60,48 +61,39 @@ export function createPristineEdgelessEditorElement() {
 
 class PristineEdgelessEditor extends SignalWatcher(WithDisposable(ShadowlessElement)) {
   static override styles = css`
-    pristine-edgeless-editor {
+    edgeless-editor {
+      font-family: var(--affine-font-family);
+      background: var(--affine-background-primary-color);
       display: block;
       width: 100%;
       height: 100%;
       min-width: 0;
       min-height: 0;
-      overflow: hidden;
       color-scheme: light;
-      isolation: isolate;
-      background: var(--affine-background-primary-color, #ffffff);
-      color: var(--affine-text-primary-color, #121212);
-      font-family: var(--affine-font-family, Inter, ui-sans-serif, system-ui, sans-serif);
     }
 
-    pristine-edgeless-editor *,
-    pristine-edgeless-editor *::before,
-    pristine-edgeless-editor *::after {
+    edgeless-editor * {
       box-sizing: border-box;
-      border-color: var(--affine-border-color, #e3e2e4);
-      outline-color: var(--affine-primary-color, #1e96eb);
     }
 
-    pristine-edgeless-editor button,
-    pristine-edgeless-editor input,
-    pristine-edgeless-editor label,
-    pristine-edgeless-editor select,
-    pristine-edgeless-editor textarea {
-      font-family: inherit;
+    @media print {
+      edgeless-editor {
+        height: auto;
+      }
     }
 
-    pristine-edgeless-editor > .pristine-edgeless-viewport {
-      position: relative;
-      width: 100%;
+    .affine-edgeless-viewport {
+      display: block;
       height: 100%;
-      min-width: 0;
-      min-height: 0;
-      overflow: hidden;
+      position: relative;
+      overflow: clip;
+      container-name: viewport;
+      container-type: inline-size;
     }
 
-    pristine-edgeless-editor editor-host,
-    pristine-edgeless-editor affine-edgeless-root,
-    pristine-edgeless-editor gfx-viewport {
+    edgeless-editor editor-host,
+    edgeless-editor affine-edgeless-root,
+    edgeless-editor gfx-viewport {
       display: block;
       width: 100%;
       height: 100%;
@@ -110,61 +102,72 @@ class PristineEdgelessEditor extends SignalWatcher(WithDisposable(ShadowlessElem
 
   private _mountedStd: BlockStdScope | null = null;
 
-  private readonly _doc = signal<Store | null>(null);
+  private _doc: Store | null = null;
 
-  private readonly _specs = signal<ExtensionType[]>([]);
+  private _rootAddedSubscription: Subscription | null = null;
 
-  private readonly _std = computed(() => {
-    const doc = this._doc.value;
+  private _specs: ExtensionType[] = [];
 
-    if (!doc) {
-      return null;
-    }
-
-    return new BlockStdScope({
-      store: doc,
-      extensions: this._specs.value,
-    });
-  });
+  std: BlockStdScope | null = null;
 
   get doc() {
-    return this._doc.value;
+    return this._doc;
   }
 
   set doc(doc: Store | null) {
-    this._unmountCurrentStd();
-    this._doc.value = doc;
+    if (this._doc === doc) {
+      return;
+    }
+
+    this._doc = doc;
+    this._recreateStd();
   }
 
   get specs() {
-    return this._specs.value;
+    return this._specs;
   }
 
   set specs(specs: ExtensionType[]) {
-    this._unmountCurrentStd();
-    this._specs.value = specs;
+    if (this._specs === specs) {
+      return;
+    }
+
+    this._specs = specs;
+    this._recreateStd();
+  }
+
+  get host() {
+    try {
+      return this.std?.host ?? null;
+    } catch {
+      return null;
+    }
   }
 
   get editorHost() {
-    return this._std.peek()?.host ?? null;
+    return this.host;
   }
 
   override connectedCallback() {
     super.connectedCallback();
+    this._recreateStd();
+  }
 
-    const doc = this._doc.peek();
-    if (doc) {
-      this._disposables.add(doc.slots.rootAdded.subscribe(() => this.requestUpdate()));
-    }
+  override async getUpdateComplete(): Promise<boolean> {
+    const result = await super.getUpdateComplete();
+    await (this.host as (HTMLElement & { updateComplete?: Promise<unknown> }) | null)?.updateComplete;
+    return result;
   }
 
   override disconnectedCallback() {
+    this._rootAddedSubscription?.unsubscribe();
+    this._rootAddedSubscription = null;
     this._unmountCurrentStd();
     super.disconnectedCallback();
   }
 
   override updated() {
-    const std = this._std.peek();
+    const std = this.std;
 
     if (!std || this._mountedStd === std) {
       return;
@@ -181,21 +184,42 @@ class PristineEdgelessEditor extends SignalWatcher(WithDisposable(ShadowlessElem
     this._mountedStd = std;
   }
 
+  private _recreateStd() {
+    this._rootAddedSubscription?.unsubscribe();
+    this._rootAddedSubscription = null;
+    this._unmountCurrentStd();
+
+    if (!this._doc) {
+      this.std = null;
+      this.requestUpdate();
+      return;
+    }
+
+    this.std = new BlockStdScope({
+      store: this._doc,
+      extensions: this._specs,
+    });
+    this._rootAddedSubscription = this._doc.slots.rootAdded.subscribe(() => this.requestUpdate());
+    this.requestUpdate();
+  }
+
   private _unmountCurrentStd() {
     this._mountedStd?.unmount();
     this._mountedStd = null;
   }
 
   override render() {
-    const doc = this._doc.value;
-    const std = this._std.value;
+    const doc = this._doc;
+    const std = this.std;
 
     if (!doc?.root || !std) {
       return nothing;
     }
 
+    const theme = std.get(ThemeProvider).edgeless$.value;
+
     return html`
-      <div class="pristine-edgeless-viewport">
+      <div class="affine-edgeless-viewport" data-theme=${theme}>
         ${guard([std], () => std.render())}
       </div>
     `;
