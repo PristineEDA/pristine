@@ -382,6 +382,7 @@ function AppLayout() {
       bottomContent: <BottomPanel layoutVersion={explorerBottomPanelLayoutVersion} onClose={() => setShowBottomPanel(false)} />,
       rightContent: (
         <RightSidePanel
+          currentOutlineId={activeTabId}
           onFileOpen={openWorkspaceFile}
           onLineJump={jumpTo}
           onThreadListExpandedChange={setAssistantThreadListExpanded}

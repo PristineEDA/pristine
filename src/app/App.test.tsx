@@ -138,8 +138,9 @@ vi.mock('./components/code/shared/EditorSplitLayout', async () => {
 });
 
 vi.mock('./components/code/explorer/RightSidePanel', () => ({
-  RightSidePanel: ({ onFileOpen, onLineJump, onThreadListExpandedChange, onThreadListWidthChange }: any) => (
+  RightSidePanel: ({ currentOutlineId, onFileOpen, onLineJump, onThreadListExpandedChange, onThreadListWidthChange }: any) => (
     <div data-testid="right-panel">
+      <span data-testid="right-outline-file">{currentOutlineId}</span>
       <button onClick={() => { onFileOpen('rtl/core/alu.v', 'alu.v'); onLineJump(33); }}>right-open</button>
       <button onClick={() => onThreadListExpandedChange?.(true)}>assistant-expand-thread-list</button>
       <button onClick={() => onThreadListExpandedChange?.(false)}>assistant-collapse-thread-list</button>
@@ -278,12 +279,14 @@ describe('App', () => {
     expect(screen.getByTestId('menu-right-state')).toHaveTextContent('true');
     await waitForPanelWidth('panel-right-panel', `${EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX}px`);
     expect(screen.getByTestId('right-panel')).toBeInTheDocument();
+    expect(screen.getByTestId('right-outline-file')).toHaveTextContent('rtl/core/reg_file.v');
 
     await clickText('right-open');
     expect(screen.getByTestId('editor-tab-count')).toHaveTextContent('2');
 
     await clickText('editor-activate-alu');
     expect(screen.getByTestId('editor-active-tab')).toHaveTextContent('rtl/core/alu.v');
+    expect(screen.getByTestId('right-outline-file')).toHaveTextContent('rtl/core/alu.v');
 
     await clickText('toggle-bottom-panel');
     expect(screen.getByTestId('menu-bottom-state')).toHaveTextContent('true');
