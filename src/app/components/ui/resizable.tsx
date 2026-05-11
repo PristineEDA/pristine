@@ -512,13 +512,13 @@ function ResizableHandleView({
       className={cn(
         'relative flex shrink-0 items-center justify-center bg-border focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-1',
         orientation === 'horizontal'
-          ? 'h-full w-px cursor-col-resize after:absolute after:inset-y-0 after:left-1/2 after:w-1 after:-translate-x-1/2'
-          : 'h-px w-full cursor-row-resize after:absolute after:left-0 after:top-1/2 after:h-1 after:w-full after:-translate-y-1/2',
+          ? 'h-full w-px cursor-ew-resize after:absolute after:inset-y-0 after:left-1/2 after:w-1 after:-translate-x-1/2'
+          : 'h-px w-full cursor-ns-resize after:absolute after:left-0 after:top-1/2 after:h-1 after:w-full after:-translate-y-1/2',
         className,
       )}
       onPointerDown={(event) => {
         startPositionRef.current = orientation === 'horizontal' ? event.clientX : event.clientY;
-        document.body.style.cursor = orientation === 'horizontal' ? 'col-resize' : 'row-resize';
+        document.body.style.cursor = orientation === 'horizontal' ? 'ew-resize' : 'ns-resize';
         document.body.style.userSelect = 'none';
         event.currentTarget.setPointerCapture?.(event.pointerId);
       }}

@@ -35,6 +35,22 @@ function renderHorizontalGroup() {
   );
 }
 
+function renderVerticalGroup() {
+  return render(
+    <div className="h-[400px] w-[1000px]">
+      <ResizablePanelGroup orientation="vertical">
+        <ResizablePanel id="top" defaultSize={25} minSize={10}>
+          <div>Top</div>
+        </ResizablePanel>
+        <ResizableHandle data-testid="vertical-handle" />
+        <ResizablePanel id="bottom" defaultSize={75} minSize={20}>
+          <div>Bottom</div>
+        </ResizablePanel>
+      </ResizablePanelGroup>
+    </div>
+  );
+}
+
 function renderHorizontalGroupWithPixelConstraints(groupWidth: number, defaultRightSize: number) {
   render(
     <div className="h-[400px]" style={{ width: `${groupWidth}px` }}>
@@ -64,13 +80,40 @@ describe('resizable', () => {
 
     expect(leftPanel.style.flexBasis).toBe('20%');
     expect(rightPanel.style.flexBasis).toBe('80%');
+    expect(handle).toHaveClass('cursor-ew-resize');
 
     fireEvent.pointerDown(handle, { clientX: 200, clientY: 0, pointerId: 1 });
+    expect(document.body.style.cursor).toBe('ew-resize');
     fireEvent.pointerMove(handle, { clientX: 300, clientY: 0, pointerId: 1 });
     fireEvent.pointerUp(handle, { clientX: 300, clientY: 0, pointerId: 1 });
 
     expect(leftPanel.style.flexBasis).toBe('30%');
     expect(rightPanel.style.flexBasis).toBe('70%');
+    expect(document.body.style.cursor).toBe('');
+  });
+
+  it('resizes adjacent vertical panels when the handle is dragged and uses ns-resize cursor semantics', () => {
+    renderVerticalGroup();
+
+    const group = screen.getByText('Top').closest('[data-slot="resizable-panel-group"]') as HTMLElement;
+    mockGroupRect(group, 1000, 400);
+
+    const topPanel = screen.getByTestId('panel-top');
+    const bottomPanel = screen.getByTestId('panel-bottom');
+    const handle = screen.getByTestId('vertical-handle');
+
+    expect(topPanel.style.flexBasis).toBe('25%');
+    expect(bottomPanel.style.flexBasis).toBe('75%');
+    expect(handle).toHaveClass('cursor-ns-resize');
+
+    fireEvent.pointerDown(handle, { clientX: 0, clientY: 100, pointerId: 5 });
+    expect(document.body.style.cursor).toBe('ns-resize');
+    fireEvent.pointerMove(handle, { clientX: 0, clientY: 160, pointerId: 5 });
+    fireEvent.pointerUp(handle, { clientX: 0, clientY: 160, pointerId: 5 });
+
+    expect(topPanel.style.flexBasis).toBe('40%');
+    expect(bottomPanel.style.flexBasis).toBe('60%');
+    expect(document.body.style.cursor).toBe('');
   });
 
   it('respects collapsed panels and keeps only visible panels in the layout flow', () => {

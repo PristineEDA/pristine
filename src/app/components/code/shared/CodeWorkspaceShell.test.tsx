@@ -218,9 +218,13 @@ describe('CodeWorkspaceShell', () => {
 
     const leftHandle = screen.getByTestId('panel-handle-left');
 
+    expect(leftHandle).toHaveClass('cursor-ew-resize');
+
     fireEvent.pointerDown(leftHandle, { clientX: 240, pointerId: 1 });
+    expect(document.body.style.cursor).toBe('ew-resize');
     fireEvent.pointerMove(leftHandle, { clientX: 320, pointerId: 1 });
     fireEvent.pointerUp(leftHandle, { clientX: 320, pointerId: 1 });
+    expect(document.body.style.cursor).toBe('');
 
     expect(screen.getByTestId('left-width-value')).toHaveTextContent('320');
     expect(screen.getByTestId('panel-left')).toHaveStyle({ width: '320px' });
@@ -334,6 +338,11 @@ describe('CodeWorkspaceShell', () => {
     ]);
 
     const leftHandle = screen.getByTestId('panel-handle-left');
+    const rightHandle = screen.getByTestId('panel-handle-right');
+
+    expect(leftHandle).toHaveClass('cursor-ew-resize');
+    expect(rightHandle).toHaveClass('cursor-ew-resize');
+
     fireEvent.pointerDown(leftHandle, { clientX: 280, pointerId: 1 });
     fireEvent.pointerMove(leftHandle, { clientX: 340, pointerId: 1 });
     fireEvent.pointerUp(leftHandle, { clientX: 340, pointerId: 1 });
@@ -341,7 +350,6 @@ describe('CodeWorkspaceShell', () => {
     expect(screen.getByTestId('left-width-value')).toHaveTextContent('340');
     expect(screen.getByTestId('right-width-value')).toHaveTextContent('300');
 
-    const rightHandle = screen.getByTestId('panel-handle-right');
     fireEvent.pointerDown(rightHandle, { clientX: 700, pointerId: 2 });
     fireEvent.pointerMove(rightHandle, { clientX: 640, pointerId: 2 });
     fireEvent.pointerUp(rightHandle, { clientX: 640, pointerId: 2 });

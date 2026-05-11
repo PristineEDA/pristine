@@ -2,18 +2,26 @@ import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { parseCodeLayoutMargin } from '../../../editor/editorSettings';
 import {
+  EXPLORER_LEFT_PANEL_MAX_WIDTH_PX,
+  EXPLORER_LEFT_PANEL_MIN_WIDTH_PX,
+  EXPLORER_RIGHT_PANEL_MAX_WIDTH_PX,
+  EXPLORER_RIGHT_PANEL_MIN_WIDTH_PX,
+} from './codeWorkspaceLayout';
+import {
   PANEL_TRANSITION_DURATION_MS,
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
 } from '../../ui/resizable';
 
-export const EXPLORER_LEFT_PANEL_DEFAULT_WIDTH_PX = 240;
-export const EXPLORER_LEFT_PANEL_MIN_WIDTH_PX = 200;
-export const EXPLORER_LEFT_PANEL_MAX_WIDTH_PX = 480;
-export const EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX = 300;
-export const EXPLORER_RIGHT_PANEL_MIN_WIDTH_PX = 260;
-export const EXPLORER_RIGHT_PANEL_MAX_WIDTH_PX = 560;
+export {
+  EXPLORER_LEFT_PANEL_DEFAULT_WIDTH_PX,
+  EXPLORER_LEFT_PANEL_MAX_WIDTH_PX,
+  EXPLORER_LEFT_PANEL_MIN_WIDTH_PX,
+  EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX,
+  EXPLORER_RIGHT_PANEL_MAX_WIDTH_PX,
+  EXPLORER_RIGHT_PANEL_MIN_WIDTH_PX,
+} from './codeWorkspaceLayout';
 
 const FIXED_PANEL_TRANSITION_STYLE = {
   transitionDuration: `${PANEL_TRANSITION_DURATION_MS}ms`,
@@ -237,12 +245,12 @@ function FixedPanelResizeHandle({
       data-slot="resizable-handle"
       data-testid={testId}
       className={cn(
-        'relative flex h-full w-px shrink-0 cursor-col-resize items-center justify-center bg-border focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-1',
+        'relative flex h-full w-px shrink-0 cursor-ew-resize items-center justify-center bg-border focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-1',
         'after:absolute after:inset-y-0 after:left-1/2 after:w-1 after:-translate-x-1/2',
       )}
       onPointerDown={(event) => {
         startPositionRef.current = event.clientX;
-        document.body.style.cursor = 'col-resize';
+        document.body.style.cursor = 'ew-resize';
         document.body.style.userSelect = 'none';
         event.currentTarget.setPointerCapture?.(event.pointerId);
       }}

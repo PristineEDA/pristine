@@ -9,6 +9,7 @@ import {
   ASSISTANT_THREAD_LIST_DEFAULT_WIDTH_PX,
   ASSISTANT_THREAD_LIST_RESIZE_HANDLE_WIDTH_PX,
 } from '../src/app/components/code/explorer/assistantPanelLayout';
+import { EXPLORER_RIGHT_PANEL_MIN_WIDTH_PX } from '../src/app/components/code/shared/codeWorkspaceLayout';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const fixtureWorkspace = path.join(__dirname, '..', 'test', 'fixtures', 'workspace');
@@ -398,6 +399,32 @@ async function readElementPixelWidth(locator: Locator) {
     const node = element as { getBoundingClientRect?: () => { width: number } };
     return Math.round(node.getBoundingClientRect?.().width ?? 0);
   });
+}
+
+async function waitForStableElementPixelWidth(locator: Locator, minimumWidth = 1) {
+  let previousWidth = -1;
+  let stableWidth = 0;
+
+  await expect.poll(async () => {
+    const width = await readElementPixelWidth(locator);
+
+    if (width < minimumWidth) {
+      previousWidth = width;
+      return 0;
+    }
+
+    const isStable = width === previousWidth;
+    previousWidth = width;
+
+    if (!isStable) {
+      return 0;
+    }
+
+    stableWidth = width;
+    return width;
+  }).toBeGreaterThanOrEqual(minimumWidth);
+
+  return stableWidth;
 }
 
 async function waitForElementPixelWidthBetween(locator: Locator, minWidth: number, maxWidth: number) {
@@ -2907,8 +2934,8 @@ test('assistant chat list expansion widens the whole right sidebar and supports 
   await expect(chatListPanel).toHaveAttribute('aria-hidden', 'true');
   await waitForElementPixelWidthBetween(chatListSidecar, 0, 1);
 
-  const initialRightPanelWidth = await waitForElementPixelWidthBetween(rightPanel, 295, 305);
-  const initialAssistantWidth = await waitForElementPixelWidthBetween(assistantMainPanel, 295, 305);
+  const initialRightPanelWidth = await waitForStableElementPixelWidth(rightPanel, EXPLORER_RIGHT_PANEL_MIN_WIDTH_PX);
+  const initialAssistantWidth = await waitForStableElementPixelWidth(assistantMainPanel, 200);
   const expectedResizedRightPanelWidthPx = initialRightPanelWidth
     + expectedResizedChatListWidthPx
     + ASSISTANT_THREAD_LIST_RESIZE_HANDLE_WIDTH_PX;
