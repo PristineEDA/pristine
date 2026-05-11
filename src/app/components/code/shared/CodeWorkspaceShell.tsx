@@ -1,5 +1,6 @@
 import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
+import { parseCodeLayoutMargin } from '../../../editor/editorSettings';
 import {
   PANEL_TRANSITION_DURATION_MS,
   ResizableHandle,
@@ -168,6 +169,39 @@ interface CodeWorkspaceShellProps {
   onRightFixedWidthChange?: React.Dispatch<React.SetStateAction<number>>;
   rightFixedMinWidthPx?: number;
   rightFixedMaxWidthPx?: number;
+  layoutMarginPx?: number;
+}
+
+function getPanelLayoutMarginStyle(layoutMarginPx: number): React.CSSProperties {
+  const insetSize = `${layoutMarginPx}px`;
+
+  return {
+    height: `calc(100% - ${layoutMarginPx * 2}px)`,
+    margin: insetSize,
+    width: `calc(100% - ${layoutMarginPx * 2}px)`,
+  };
+}
+
+function PanelLayoutMarginFrame({
+  children,
+  layoutMarginPx,
+  panelId,
+}: {
+  children: React.ReactNode;
+  layoutMarginPx: number;
+  panelId: string;
+}) {
+  return (
+    <div className="h-full w-full min-h-0 min-w-0 overflow-hidden">
+      <div
+        data-testid={`panel-${panelId}-layout-margin`}
+        className="h-full w-full min-h-0 min-w-0 overflow-hidden"
+        style={getPanelLayoutMarginStyle(layoutMarginPx)}
+      >
+        {children}
+      </div>
+    </div>
+  );
 }
 
 function FixedPanelResizeHandle({
@@ -251,6 +285,7 @@ export function CodeWorkspaceShell({
   onRightFixedWidthChange,
   rightFixedMinWidthPx,
   rightFixedMaxWidthPx,
+  layoutMarginPx,
 }: CodeWorkspaceShellProps) {
   const hasFixedLeftPanel = typeof leftFixedWidthPx === 'number' && typeof onLeftFixedWidthChange === 'function';
   const hasFixedRightPanel = typeof rightFixedWidthPx === 'number' && typeof onRightFixedWidthChange === 'function';
@@ -268,6 +303,7 @@ export function CodeWorkspaceShell({
   const clampedRightFixedWidth = hasFixedRightPanel
     ? clampFixedPanelWidth(rightFixedWidthPx, fixedRightMinWidth, fixedRightMaxWidth)
     : null;
+  const resolvedLayoutMarginPx = parseCodeLayoutMargin(layoutMarginPx);
 
   if (hasFixedRightPanel && showRightPanel) {
     fixedRightPanelWasOpenedRef.current = true;
@@ -283,12 +319,18 @@ export function CodeWorkspaceShell({
 
       <ResizablePanelGroup orientation="vertical">
         <ResizablePanel defaultSize={60} minSize={25} id={topPanelId}>
-          {topContent}
+          <PanelLayoutMarginFrame panelId={topPanelId} layoutMarginPx={resolvedLayoutMarginPx}>
+            {topContent}
+          </PanelLayoutMarginFrame>
         </ResizablePanel>
 
         <ResizableHandle hidden={!showBottomPanel} />
         <ResizablePanel defaultSize={40} minSize={15} maxSize={60} id={bottomPanelId} collapsed={!showBottomPanel}>
-          {bottomPanelPresence.shouldRender ? bottomContent : <div className="h-full" />}
+          {bottomPanelPresence.shouldRender ? (
+            <PanelLayoutMarginFrame panelId={bottomPanelId} layoutMarginPx={resolvedLayoutMarginPx}>
+              {bottomContent}
+            </PanelLayoutMarginFrame>
+          ) : <div className="h-full" />}
         </ResizablePanel>
       </ResizablePanelGroup>
     </div>
@@ -309,7 +351,11 @@ export function CodeWorkspaceShell({
         id={rightPanelId}
         collapsed={!showRightPanel}
       >
-        {rightPanelPresence.shouldRender ? rightContent : <div className="h-full" />}
+        {rightPanelPresence.shouldRender ? (
+          <PanelLayoutMarginFrame panelId={rightPanelId} layoutMarginPx={resolvedLayoutMarginPx}>
+            {rightContent}
+          </PanelLayoutMarginFrame>
+        ) : <div className="h-full" />}
       </ResizablePanel>
     </>
   );
@@ -340,7 +386,9 @@ export function CodeWorkspaceShell({
                 ...FIXED_PANEL_TRANSITION_STYLE,
               }}
             >
-              {leftContent}
+              <PanelLayoutMarginFrame panelId={leftPanelId} layoutMarginPx={resolvedLayoutMarginPx}>
+                {leftContent}
+              </PanelLayoutMarginFrame>
             </div>
           )}
 
@@ -398,7 +446,9 @@ export function CodeWorkspaceShell({
                     ...FIXED_PANEL_TRANSITION_STYLE,
                   }}
                 >
-                  {rightContent}
+                  <PanelLayoutMarginFrame panelId={rightPanelId} layoutMarginPx={resolvedLayoutMarginPx}>
+                    {rightContent}
+                  </PanelLayoutMarginFrame>
                 </div>
               )}
             </>
@@ -414,7 +464,11 @@ export function CodeWorkspaceShell({
         <div className="flex-1 min-w-0">
           <ResizablePanelGroup orientation="horizontal">
             <ResizablePanel defaultSize={18} minSize={12} maxSize={35} id={leftPanelId} collapsed={!showLeftPanel}>
-              {leftPanelPresence.shouldRender ? leftContent : <div className="h-full" />}
+              {leftPanelPresence.shouldRender ? (
+                <PanelLayoutMarginFrame panelId={leftPanelId} layoutMarginPx={resolvedLayoutMarginPx}>
+                  {leftContent}
+                </PanelLayoutMarginFrame>
+              ) : <div className="h-full" />}
             </ResizablePanel>
 
             <ResizableHandle hidden={!showLeftPanel} />
