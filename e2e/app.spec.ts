@@ -2896,6 +2896,7 @@ test('assistant chat list expansion widens the whole right sidebar and supports 
   const rightPanel = window.getByTestId('panel-right-panel');
   const assistantMainPanel = window.getByTestId('assistant-main-panel');
   const chatListToggle = window.getByTestId('assistant-thread-list-toggle');
+  const chatListSidecar = window.getByTestId('assistant-thread-list-sidecar');
   const chatListPanel = window.getByTestId('assistant-thread-list-panel');
   const chatListResizeHandle = window.getByTestId('assistant-thread-list-resize-handle');
 
@@ -2903,7 +2904,8 @@ test('assistant chat list expansion widens the whole right sidebar and supports 
   await rightPanelToggle.click();
 
   await expect(rightPanel).toBeVisible();
-  await expect(chatListPanel).toHaveCount(0);
+  await expect(chatListPanel).toHaveAttribute('aria-hidden', 'true');
+  await waitForElementPixelWidthBetween(chatListSidecar, 0, 1);
 
   const initialRightPanelWidth = await waitForElementPixelWidthBetween(rightPanel, 295, 305);
   const initialAssistantWidth = await waitForElementPixelWidthBetween(assistantMainPanel, 295, 305);
@@ -2981,6 +2983,18 @@ test('assistant chat list expansion widens the whole right sidebar and supports 
   expect(resizedRightPanelWidth).toBeGreaterThan(expandedRightPanelWidth + 50);
   expect(resizedAssistantWidth).toBeGreaterThanOrEqual(initialAssistantWidth - 2);
   expect(resizedAssistantWidth).toBeLessThanOrEqual(initialAssistantWidth + 2);
+
+  await chatListToggle.click();
+
+  await expect(chatListPanel).toHaveAttribute('aria-hidden', 'true');
+  await waitForElementPixelWidthBetween(chatListSidecar, 0, 1);
+  await expect.poll(() => readElementPixelWidth(rightPanel)).toBeGreaterThanOrEqual(initialRightPanelWidth - 5);
+  await expect.poll(() => readElementPixelWidth(rightPanel)).toBeLessThanOrEqual(initialRightPanelWidth + 5);
+  await waitForElementPixelWidthBetween(
+    assistantMainPanel,
+    initialAssistantWidth - 2,
+    initialAssistantWidth + 2,
+  );
 
   await app.close();
 });
