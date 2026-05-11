@@ -92,8 +92,14 @@ describe('resizable', () => {
       </div>
     );
 
-    expect(screen.queryByTestId('panel-left')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('panel-right')).not.toBeInTheDocument();
+    expect(screen.getByTestId('panel-left')).toHaveAttribute('aria-hidden', 'true');
+    expect(screen.getByTestId('panel-left')).toHaveAttribute('data-collapsed', 'true');
+    expect(screen.getByTestId('panel-left').style.flexBasis).toBe('0%');
+    expect(screen.getByTestId('panel-left').style.transitionDuration).toBe('300ms');
+    expect(screen.getByTestId('panel-left').style.transitionProperty).toBe('flex-basis');
+    expect(screen.getByTestId('panel-right')).toHaveAttribute('aria-hidden', 'true');
+    expect(screen.getByTestId('panel-right')).toHaveAttribute('data-collapsed', 'true');
+    expect(screen.getByTestId('panel-right').style.flexBasis).toBe('0%');
     expect(screen.getByTestId('panel-center').style.flexBasis).toBe('100%');
     expect(screen.queryByTestId('left-handle')).not.toBeInTheDocument();
     expect(screen.queryByTestId('right-handle')).not.toBeInTheDocument();

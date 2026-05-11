@@ -388,11 +388,23 @@ async function ensureExplorerHidden(window: Awaited<ReturnType<typeof launchApp>
   await expect(readmeNode).toHaveCount(0);
 }
 
+async function expectCollapsedPanel(panel: Locator) {
+  await expect(panel).toHaveAttribute('aria-hidden', 'true');
+  await expect(panel).not.toBeVisible();
+}
+
 async function readElementPixelWidth(locator: Locator) {
   return locator.evaluate((element) => {
     const node = element as { getBoundingClientRect?: () => { width: number } };
     return Math.round(node.getBoundingClientRect?.().width ?? 0);
   });
+}
+
+async function waitForElementPixelWidthBetween(locator: Locator, minWidth: number, maxWidth: number) {
+  await expect.poll(() => readElementPixelWidth(locator)).toBeGreaterThanOrEqual(minWidth);
+  await expect.poll(() => readElementPixelWidth(locator)).toBeLessThanOrEqual(maxWidth);
+
+  return readElementPixelWidth(locator);
 }
 
 async function positionExplorerNodeNearBottom(
@@ -2288,15 +2300,164 @@ test('ctrl+z does not restore the loading placeholder after undo returns a file 
   }
 });
 
-test('menu bar switches to the whiteboard placeholder view', async () => {
+test('menu bar switches to the BlockSuite whiteboard editor', async () => {
   const { app, window } = await launchApp();
+  const whiteboardErrors: string[] = [];
+
+  window.on('pageerror', (error) => {
+    whiteboardErrors.push(error.message);
+  });
+  window.on('console', (message) => {
+    if (message.type() === 'error') {
+      whiteboardErrors.push(message.text());
+    }
+  });
 
   await switchToWhiteboard(window);
 
   const whiteboardView = window.getByTestId('whiteboard-view');
+  const whiteboardHost = window.getByTestId('whiteboard-host');
+  const whiteboardEditor = window.getByTestId('whiteboard-edgeless-editor');
   await expect(whiteboardView).toBeVisible();
   await expect(whiteboardView).toContainText('Whiteboard');
-  await expect(whiteboardView).toContainText('Coming soon');
+  await expect(whiteboardView).toHaveAttribute('data-theme', 'light');
+  await expect(whiteboardEditor).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect(whiteboardEditor).toHaveAttribute('data-theme', 'light');
+  await expect(whiteboardEditor).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+  await expect(whiteboardView.locator('edgeless-editor')).toHaveCount(1);
+  await expect(whiteboardView.locator('.affine-edgeless-viewport')).toHaveCount(1);
+  await expect(whiteboardView.locator('editor-host')).toHaveCount(1, { timeout: UI_READY_TIMEOUT_MS });
+  await expect(whiteboardView.locator('affine-edgeless-root')).toHaveCount(1, { timeout: UI_READY_TIMEOUT_MS });
+  const toolbarWrapper = whiteboardView.locator('edgeless-toolbar-widget .edgeless-toolbar-wrapper');
+  await expect(toolbarWrapper).toHaveAttribute('data-app-theme', 'light', { timeout: UI_READY_TIMEOUT_MS });
+  await expect
+    .poll(
+      () =>
+        toolbarWrapper.evaluate((element) => {
+          const browserGlobal = globalThis as unknown as {
+            getComputedStyle: (element: unknown) => { getPropertyValue: (name: string) => string };
+          };
+          return browserGlobal.getComputedStyle(element).getPropertyValue('--affine-background-overlay-panel-color').trim();
+        }),
+      { timeout: UI_READY_TIMEOUT_MS },
+    )
+    .toBe('rgb(251, 251, 252)');
+  await expect
+    .poll(
+      () => whiteboardHost.evaluate((host) => Boolean((host as HTMLElement & { shadowRoot?: unknown }).shadowRoot)),
+      { timeout: UI_READY_TIMEOUT_MS },
+    )
+    .toBe(false);
+  await expect
+    .poll(
+      () =>
+        whiteboardEditor.evaluate((editor) => {
+          const root = (editor as HTMLElement & { getRootNode: () => { nodeType: number } }).getRootNode();
+          return root.nodeType === 9;
+        }),
+      { timeout: UI_READY_TIMEOUT_MS },
+    )
+    .toBe(true);
+
+  const noteEditor = whiteboardView.locator('.inline-editor[contenteditable="true"]').first();
+  await noteEditor.click({ force: true });
+  await window.keyboard.type('/');
+  await expect(window.locator('affine-slash-menu')).toHaveCount(1, { timeout: UI_READY_TIMEOUT_MS });
+  await window.keyboard.press('Escape');
+
+  await noteEditor.click({ force: true });
+  const noteContainer = whiteboardView.locator('[data-testid="edgeless-note-container"]').first();
+  await expect(noteContainer).toHaveAttribute('data-editing', 'true', { timeout: UI_READY_TIMEOUT_MS });
+  const noteBackground = whiteboardView.locator('edgeless-note-background').first();
+  await expect(noteBackground).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  const noteBackgroundVisualState = await noteBackground.evaluate((element) => {
+    const browserGlobal = globalThis as unknown as {
+      getComputedStyle: (element: unknown) => {
+        boxShadow: string;
+        height: string;
+        left: string;
+        position: string;
+        top: string;
+        transitionProperty: string;
+        width: string;
+      };
+    };
+    const style = browserGlobal.getComputedStyle(element);
+    const rect = (element as { getBoundingClientRect: () => { height: number; width: number } }).getBoundingClientRect();
+
+    return {
+      boxShadow: style.boxShadow,
+      height: rect.height,
+      left: style.left,
+      position: style.position,
+      top: style.top,
+      transitionProperty: style.transitionProperty,
+      width: rect.width,
+      cssWidth: style.width,
+      cssHeight: style.height,
+    };
+  });
+  expect(noteBackgroundVisualState.position).toBe('absolute');
+  expect(noteBackgroundVisualState.width).toBeGreaterThan(0);
+  expect(noteBackgroundVisualState.height).toBeGreaterThan(0);
+  expect(noteBackgroundVisualState.cssWidth).not.toBe('auto');
+  expect(noteBackgroundVisualState.cssHeight).not.toBe('auto');
+  expect(noteBackgroundVisualState.transitionProperty).toContain('left');
+  expect(noteBackgroundVisualState.boxShadow).not.toBe('none');
+  const getBackgroundColor = (element: unknown) => {
+    const browserGlobal = globalThis as unknown as {
+      getComputedStyle: (element: unknown) => { backgroundColor: string };
+    };
+
+    return browserGlobal.getComputedStyle(element).backgroundColor;
+  };
+  const initialNoteBackground = await noteBackground.evaluate(getBackgroundColor);
+
+  await window.evaluate(() => {
+    const browserGlobal = globalThis as unknown as {
+      document: {
+        querySelector: (selector: string) => unknown | null;
+      };
+    };
+    const edgelessRoot = browserGlobal.document.querySelector('affine-edgeless-root') as {
+      gfx?: {
+        selection?: {
+          set: (selection: { elements: string[] }) => void;
+        };
+      };
+    } | null;
+    const note = browserGlobal.document.querySelector('affine-edgeless-note') as {
+      model?: {
+        id?: string;
+      };
+      getAttribute?: (name: string) => string | null;
+    } | null;
+    const noteId = note?.model?.id ?? note?.getAttribute?.('data-block-id');
+
+    if (!edgelessRoot?.gfx?.selection || !noteId) {
+      throw new Error('Expected selectable BlockSuite note on the whiteboard');
+    }
+
+    edgelessRoot.gfx.selection.set({ elements: [noteId] });
+  });
+
+  const noteStyleButton = window.locator('affine-toolbar-widget editor-icon-button[aria-label="Note Style"]');
+  await expect(noteStyleButton).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await noteStyleButton.click();
+  const yellowSwatch = window.locator('edgeless-color-panel .color-unit[aria-label="Yellow"]');
+  await expect(yellowSwatch).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await yellowSwatch.click();
+  await expect
+    .poll(() => noteBackground.evaluate(getBackgroundColor), {
+      timeout: UI_READY_TIMEOUT_MS,
+    })
+    .not.toBe(initialNoteBackground);
+  await expect
+    .poll(() => noteBackground.evaluate(getBackgroundColor), {
+      timeout: UI_READY_TIMEOUT_MS,
+    })
+    .toBe('rgb(253, 230, 138)');
+  expect(whiteboardErrors.filter((message) => message.includes('Illegal constructor'))).toEqual([]);
 
   await app.close();
 });
@@ -2644,8 +2805,8 @@ test('activity bar switches code subpages and menu bar keeps higher-priority pag
 
   await window.getByTestId('toggle-left-panel').click();
   await window.getByTestId('toggle-bottom-panel').click();
-  await expect(window.getByTestId('panel-simulation-left-panel')).toHaveCount(0);
-  await expect(window.getByTestId('panel-simulation-bottom-panel')).toHaveCount(0);
+  await expectCollapsedPanel(window.getByTestId('panel-simulation-left-panel'));
+  await expectCollapsedPanel(window.getByTestId('panel-simulation-bottom-panel'));
   await expect(window.getByTestId('panel-simulation-right-panel')).toBeVisible();
 
   await window.getByTestId('activity-item-synthesis').click();
@@ -2691,8 +2852,8 @@ test('activity bar switches code subpages and menu bar keeps higher-priority pag
   await expect(window.getByTestId('toggle-right-panel')).toBeDisabled();
 
   await window.getByTestId('activity-item-simulation').click();
-  await expect(window.getByTestId('panel-simulation-left-panel')).toHaveCount(0);
-  await expect(window.getByTestId('panel-simulation-bottom-panel')).toHaveCount(0);
+  await expectCollapsedPanel(window.getByTestId('panel-simulation-left-panel'));
+  await expectCollapsedPanel(window.getByTestId('panel-simulation-bottom-panel'));
   await expect(window.getByTestId('panel-simulation-right-panel')).toBeVisible();
   await expect(window.getByTestId('toggle-left-panel')).toBeEnabled();
   await expect(window.getByTestId('toggle-bottom-panel')).toBeEnabled();
@@ -2735,6 +2896,7 @@ test('assistant chat list expansion widens the whole right sidebar and supports 
   const rightPanel = window.getByTestId('panel-right-panel');
   const assistantMainPanel = window.getByTestId('assistant-main-panel');
   const chatListToggle = window.getByTestId('assistant-thread-list-toggle');
+  const chatListSidecar = window.getByTestId('assistant-thread-list-sidecar');
   const chatListPanel = window.getByTestId('assistant-thread-list-panel');
   const chatListResizeHandle = window.getByTestId('assistant-thread-list-resize-handle');
 
@@ -2742,29 +2904,39 @@ test('assistant chat list expansion widens the whole right sidebar and supports 
   await rightPanelToggle.click();
 
   await expect(rightPanel).toBeVisible();
-  await expect(chatListPanel).toHaveCount(0);
+  await expect(chatListPanel).toHaveAttribute('aria-hidden', 'true');
+  await waitForElementPixelWidthBetween(chatListSidecar, 0, 1);
 
-  const initialRightPanelWidth = await readElementPixelWidth(rightPanel);
-  const initialAssistantWidth = await readElementPixelWidth(assistantMainPanel);
-
-  expect(initialRightPanelWidth).toBeGreaterThanOrEqual(295);
-  expect(initialRightPanelWidth).toBeLessThanOrEqual(305);
-  expect(initialAssistantWidth).toBeGreaterThanOrEqual(295);
-  expect(initialAssistantWidth).toBeLessThanOrEqual(305);
+  const initialRightPanelWidth = await waitForElementPixelWidthBetween(rightPanel, 295, 305);
+  const initialAssistantWidth = await waitForElementPixelWidthBetween(assistantMainPanel, 295, 305);
+  const expectedResizedRightPanelWidthPx = initialRightPanelWidth
+    + expectedResizedChatListWidthPx
+    + ASSISTANT_THREAD_LIST_RESIZE_HANDLE_WIDTH_PX;
 
   await chatListToggle.click();
 
   await expect(chatListPanel).toBeVisible();
 
+  await waitForElementPixelWidthBetween(
+    chatListPanel,
+    expectedExpandedChatListWidthPx - 5,
+    expectedExpandedChatListWidthPx + 5,
+  );
+  await expect.poll(() => readElementPixelWidth(rightPanel)).toBeGreaterThanOrEqual(
+    initialRightPanelWidth + expectedExpandedRightPanelExtraWidthPx - 5,
+  );
+  await expect.poll(() => readElementPixelWidth(rightPanel)).toBeLessThanOrEqual(
+    initialRightPanelWidth + expectedExpandedRightPanelExtraWidthPx + 5,
+  );
   const expandedRightPanelWidth = await readElementPixelWidth(rightPanel);
-  const expandedAssistantWidth = await readElementPixelWidth(assistantMainPanel);
-  const expandedChatListWidth = await readElementPixelWidth(chatListPanel);
+  await waitForElementPixelWidthBetween(
+    assistantMainPanel,
+    initialAssistantWidth - 2,
+    initialAssistantWidth + 2,
+  );
 
-  expect(expandedChatListWidth).toBeGreaterThanOrEqual(expectedExpandedChatListWidthPx - 5);
-  expect(expandedChatListWidth).toBeLessThanOrEqual(expectedExpandedChatListWidthPx + 5);
   expect(expandedRightPanelWidth).toBeGreaterThanOrEqual(initialRightPanelWidth + expectedExpandedRightPanelExtraWidthPx - 5);
-  expect(expandedAssistantWidth).toBeGreaterThanOrEqual(initialAssistantWidth - 2);
-  expect(expandedAssistantWidth).toBeLessThanOrEqual(initialAssistantWidth + 2);
+  expect(expandedRightPanelWidth).toBeLessThanOrEqual(initialRightPanelWidth + expectedExpandedRightPanelExtraWidthPx + 5);
 
   await chatListResizeHandle.evaluate((element) => {
     const handle = element as {
@@ -2800,6 +2972,10 @@ test('assistant chat list expansion widens the whole right sidebar and supports 
 
   await expect.poll(() => readElementPixelWidth(chatListPanel)).toBeGreaterThanOrEqual(expectedResizedChatListWidthPx - 5);
   await expect.poll(() => readElementPixelWidth(chatListPanel)).toBeLessThanOrEqual(expectedResizedChatListWidthPx + 5);
+  await expect.poll(() => readElementPixelWidth(rightPanel)).toBeGreaterThanOrEqual(expectedResizedRightPanelWidthPx - 5);
+  await expect.poll(() => readElementPixelWidth(rightPanel)).toBeLessThanOrEqual(expectedResizedRightPanelWidthPx + 5);
+  await expect.poll(() => readElementPixelWidth(assistantMainPanel)).toBeGreaterThanOrEqual(initialAssistantWidth - 2);
+  await expect.poll(() => readElementPixelWidth(assistantMainPanel)).toBeLessThanOrEqual(initialAssistantWidth + 2);
 
   const resizedRightPanelWidth = await readElementPixelWidth(rightPanel);
   const resizedAssistantWidth = await readElementPixelWidth(assistantMainPanel);
@@ -2807,6 +2983,18 @@ test('assistant chat list expansion widens the whole right sidebar and supports 
   expect(resizedRightPanelWidth).toBeGreaterThan(expandedRightPanelWidth + 50);
   expect(resizedAssistantWidth).toBeGreaterThanOrEqual(initialAssistantWidth - 2);
   expect(resizedAssistantWidth).toBeLessThanOrEqual(initialAssistantWidth + 2);
+
+  await chatListToggle.click();
+
+  await expect(chatListPanel).toHaveAttribute('aria-hidden', 'true');
+  await waitForElementPixelWidthBetween(chatListSidecar, 0, 1);
+  await expect.poll(() => readElementPixelWidth(rightPanel)).toBeGreaterThanOrEqual(initialRightPanelWidth - 5);
+  await expect.poll(() => readElementPixelWidth(rightPanel)).toBeLessThanOrEqual(initialRightPanelWidth + 5);
+  await waitForElementPixelWidthBetween(
+    assistantMainPanel,
+    initialAssistantWidth - 2,
+    initialAssistantWidth + 2,
+  );
 
   await app.close();
 });
@@ -3403,7 +3591,7 @@ test('terminal remains writable after left sidebar toggles while vertically scro
   }).toBeGreaterThan(40);
 
   await window.getByTestId('toggle-left-panel').click();
-  await expect(window.getByTestId('panel-left-panel')).toHaveCount(0);
+  await expectCollapsedPanel(window.getByTestId('panel-left-panel'));
   await expect(window.getByTestId('terminal-host')).toBeVisible();
 
   await window.getByTestId('toggle-left-panel').click();

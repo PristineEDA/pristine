@@ -76,7 +76,8 @@ describe('AIAgentPanel', () => {
     expect(screen.getByTestId('assistant-thread')).toBeInTheDocument();
     expect(screen.getByTestId('assistant-thread')).toHaveAttribute('data-agent-base-url', 'http://localhost:4111');
     expect(screen.getByTestId('assistant-thread')).toHaveAttribute('data-is-thread-loading', 'false');
-    expect(screen.queryByTestId('assistant-thread-list-panel')).not.toBeInTheDocument();
+    expect(screen.getByTestId('assistant-thread-list-panel')).toHaveAttribute('aria-hidden', 'true');
+    expect(screen.getByTestId('assistant-thread-list-sidecar')).toHaveStyle({ width: '0px' });
     expect(mocks.pristineAssistantThread).toHaveBeenCalledWith(
       expect.objectContaining({ agentBaseUrl: 'http://localhost:4111', isThreadLoading: false }),
       undefined,
@@ -124,13 +125,16 @@ describe('AIAgentPanel', () => {
     render(<AIAgentPanel baseUrl="http://localhost:4111/" initialThreadListExpanded={false} />);
 
     expect(screen.getByTestId('assistant-thread-list-toggle')).toHaveAttribute('aria-pressed', 'false');
-    expect(screen.queryByTestId('assistant-thread-list-panel')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('assistant-thread-list-resize-handle')).not.toBeInTheDocument();
+    expect(screen.getByTestId('assistant-thread-list-panel')).toHaveAttribute('aria-hidden', 'true');
+    expect(screen.getByTestId('assistant-thread-list-sidecar')).toHaveStyle({ width: '0px' });
+    expect(screen.getByTestId('assistant-thread-list-resize-handle')).toBeDisabled();
 
     fireEvent.click(screen.getByTestId('assistant-thread-list-toggle'));
 
     expect(screen.getByTestId('assistant-thread-list-toggle')).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByTestId('assistant-thread-list-panel')).toHaveStyle({ width: '140px' });
+    expect(screen.getByTestId('assistant-thread-list-panel')).toHaveAttribute('aria-hidden', 'false');
+    expect(screen.getByTestId('assistant-thread-list-sidecar')).toHaveStyle({ width: '148px' });
+    expect(screen.getByTestId('assistant-thread-list-resize-handle')).not.toBeDisabled();
   });
 
   it('clamps very small chat list widths to the reduced minimum', () => {
@@ -158,7 +162,7 @@ describe('AIAgentPanel', () => {
     fireEvent.pointerMove(resizeHandle, { clientX: 620, pointerId: 1 });
 
     expect(onThreadListWidthChange).toHaveBeenLastCalledWith(310);
-    expect(screen.getByTestId('assistant-thread-list-panel')).toHaveStyle({ width: '310px' });
+    expect(screen.getByTestId('assistant-thread-list-sidecar')).toHaveStyle({ width: '318px' });
 
     fireEvent.pointerUp(resizeHandle, { clientX: 620, pointerId: 1 });
 
@@ -169,7 +173,14 @@ describe('AIAgentPanel', () => {
     fireEvent.click(toggle);
 
     expect(onThreadListExpandedChange).toHaveBeenCalledWith(false);
-    expect(screen.queryByTestId('assistant-thread-list-panel')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('assistant-thread-list-resize-handle')).not.toBeInTheDocument();
+    expect(screen.getByTestId('assistant-thread-list-panel')).toHaveAttribute('aria-hidden', 'true');
+    expect(screen.getByTestId('assistant-thread-list-sidecar')).toHaveStyle({ width: '0px' });
+    expect(screen.getByTestId('assistant-thread-list-resize-handle')).toBeDisabled();
+
+    fireEvent.click(toggle);
+
+    expect(onThreadListExpandedChange).toHaveBeenLastCalledWith(true);
+    expect(screen.getByTestId('assistant-thread-list-panel')).toHaveAttribute('aria-hidden', 'false');
+    expect(screen.getByTestId('assistant-thread-list-sidecar')).toHaveStyle({ width: '318px' });
   });
 });

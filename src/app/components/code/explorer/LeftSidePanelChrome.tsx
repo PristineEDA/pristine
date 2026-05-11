@@ -1,13 +1,21 @@
 import {
   ChevronsUpDown,
   FilePlus,
+  FolderCodeIcon,
   FolderPlus,
+  ListTree,
   RefreshCw,
 } from 'lucide-react';
+import { IconTabToggleGroup } from '../shared/IconTabToggleGroup';
 import { Button } from '../../ui/button';
 import { TooltipIconButton } from '../../ui/tooltip-icon-button';
 
 export type ExplorerPanelTab = 'explorer' | 'outline';
+
+const explorerPanelTabs = [
+  { value: 'explorer', label: 'Explorer', icon: FolderCodeIcon, testId: 'left-panel-tab-explorer' },
+  { value: 'outline', label: 'Outline', icon: ListTree, testId: 'left-panel-tab-outline' },
+] as const;
 
 export function ExplorerPanelTabs({
   activeTab,
@@ -17,20 +25,15 @@ export function ExplorerPanelTabs({
   onTabChange: (tab: ExplorerPanelTab) => void;
 }) {
   return (
-    <div className="flex shrink-0 border-b border-border">
-      {(['explorer', 'outline'] as const).map((tab) => (
-        <button
-          key={tab}
-          onClick={() => onTabChange(tab)}
-          className={`px-3 py-2 transition-colors border-b-2 ${
-            activeTab === tab
-              ? 'text-[11px] font-semibold text-foreground border-primary'
-              : 'text-[11px] text-muted-foreground border-transparent hover:text-foreground'
-          }`}
-        >
-          {tab === 'explorer' ? 'Explorer' : 'Outline'}
-        </button>
-      ))}
+    <div className="flex shrink-0 items-center border-b border-border px-2 py-1.5">
+      <IconTabToggleGroup
+        items={explorerPanelTabs}
+        value={activeTab}
+        onValueChange={(tab) => onTabChange(tab as ExplorerPanelTab)}
+        groupLabel="Left panel tabs"
+        groupTestId="left-panel-tabs"
+        tooltipSide="bottom"
+      />
     </div>
   );
 }

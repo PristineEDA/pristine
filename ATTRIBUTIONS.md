@@ -9,6 +9,7 @@ React（https://github.com/facebook/react）Meta MIT
 React DOM（https://github.com/facebook/react）Meta MIT
 Monaco Editor（https://github.com/microsoft/monaco-editor）Microsoft MIT
 @monaco-editor/react（https://github.com/suren-atoyan/monaco-react）Suren Atoyan MIT
+@blocksuite/affine（https://github.com/toeverything/AFFiNE/tree/v0.26.3/blocksuite）TOEVERYTHING MIT
 xterm.js（https://github.com/xtermjs/xterm.js）xterm.js MIT
 xterm-addon-fit（https://github.com/xtermjs/xterm.js/tree/master/addons/addon-fit）xterm.js MIT
 
@@ -194,12 +195,16 @@ cmdk（https://github.com/pacocoursey/cmdk）Paco Coursey MIT
 class-variance-authority（https://github.com/joe-bell/cva）Joe Bell Apache-2.0
 clsx（https://github.com/lukeed/clsx）Luke Edwards MIT
 tailwind-merge（https://github.com/dcastil/tailwind-merge）dcastil MIT
+Lit（https://github.com/lit/lit）Google LLC BSD-3-Clause
+@toeverything/theme（https://github.com/toeverything/design）TOEVERYTHING MPL-2.0
 
 ## Runtime Services & Utilities
 
 node-pty（https://github.com/microsoft/node-pty）Microsoft MIT
 vscode-jsonrpc（https://github.com/microsoft/vscode-languageserver-node）Microsoft MIT
 ignore（https://github.com/kaelzhang/node-ignore）kaelzhang MIT
+@preact/signals-core（https://github.com/preactjs/signals）Preact MIT
+RxJS（https://github.com/ReactiveX/rxjs）ReactiveX Apache-2.0
 
 ## AI Agent Frameworks
 

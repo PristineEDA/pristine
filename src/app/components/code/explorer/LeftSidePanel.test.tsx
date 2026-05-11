@@ -82,8 +82,11 @@ describe('LeftSidePanel', () => {
   it('renders only explorer and outline tabs', async () => {
     renderLeftSidePanel();
 
-    expect(screen.getByRole('button', { name: 'Explorer' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Outline' })).toBeInTheDocument();
+    expect(screen.getByTestId('left-panel-tabs')).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'Explorer' })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'Outline' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Explorer' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Outline' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /problems/i })).not.toBeInTheDocument();
     expect(await screen.findByTestId('file-tree-node-rtl')).toBeInTheDocument();
   });

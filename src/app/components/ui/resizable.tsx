@@ -4,6 +4,13 @@ import { cn } from '@/lib/utils';
 
 type Orientation = 'horizontal' | 'vertical';
 
+export const PANEL_TRANSITION_DURATION_MS = 300;
+
+const RESIZABLE_PANEL_TRANSITION_STYLE = {
+  transitionDuration: `${PANEL_TRANSITION_DURATION_MS}ms`,
+  transitionProperty: 'flex-basis',
+} satisfies React.CSSProperties;
+
 export interface PanelImperativeHandle {
   resize: (size: number | `${number}%`) => void;
 }
@@ -315,11 +322,32 @@ function ResizablePanelGroup({
     () => visiblePanels.map((panel) => `${panel.props.id ?? panel.key}:${panel.props.defaultSize ?? 'auto'}:${panel.props.minSize ?? 0}:${panel.props.maxSize ?? 100}`).join('|'),
     [visiblePanels],
   );
-  const [sizes, setSizes] = React.useState<number[]>(() => buildInitialSizes(visiblePanels));
+  const [sizeState, setSizeState] = React.useState(() => ({
+    signature: visibleSignature,
+    values: buildInitialSizes(visiblePanels),
+  }));
+  const effectiveSizes = React.useMemo(
+    () => (sizeState.signature === visibleSignature ? sizeState.values : buildInitialSizes(visiblePanels)),
+    [sizeState.signature, sizeState.values, visiblePanels, visibleSignature],
+  );
 
   React.useEffect(() => {
-    setSizes(buildInitialSizes(visiblePanels));
-  }, [visibleSignature]);
+    if (sizeState.signature === visibleSignature) {
+      return;
+    }
+
+    setSizeState({
+      signature: visibleSignature,
+      values: buildInitialSizes(visiblePanels),
+    });
+  }, [sizeState.signature, visiblePanels, visibleSignature]);
+
+  const updateVisibleSizes = React.useCallback((updater: (currentSizes: number[]) => number[]) => {
+    setSizeState((currentState) => ({
+      signature: visibleSignature,
+      values: updater(currentState.signature === visibleSignature ? currentState.values : buildInitialSizes(visiblePanels)),
+    }));
+  }, [visiblePanels, visibleSignature]);
 
   React.useEffect(() => {
     sequence.forEach((item) => {
@@ -339,7 +367,7 @@ function ResizablePanelGroup({
           const containerRect = containerRef.current?.getBoundingClientRect();
           const containerSize = orientation === 'horizontal' ? containerRect?.width ?? 0 : containerRect?.height ?? 0;
 
-          setSizes((currentSizes) => resizePanelByIndex(visiblePanels, currentSizes, index, nextRequestedSize, containerSize));
+          updateVisibleSizes((currentSizes) => resizePanelByIndex(visiblePanels, currentSizes, index, nextRequestedSize, containerSize));
         },
       });
     });
@@ -366,9 +394,7 @@ function ResizablePanelGroup({
   sequence.forEach((item, index) => {
     if (item.kind === 'panel') {
       const panelIndex = panelIndexByKey.get(item.key);
-      if (panelIndex === undefined) {
-        return;
-      }
+      const panelSize = item.props.collapsed ? 0 : effectiveSizes[panelIndex ?? -1] ?? 0;
 
       renderItems.push(
         <div
@@ -376,11 +402,18 @@ function ResizablePanelGroup({
           data-slot="resizable-panel"
           data-testid={item.props.id ? `panel-${item.props.id}` : undefined}
           data-panel-id={item.props.id}
-          className={cn('min-h-0 min-w-0 overflow-hidden', item.props.className)}
+          data-collapsed={item.props.collapsed ? 'true' : 'false'}
+          aria-hidden={item.props.collapsed ? 'true' : 'false'}
+          className={cn(
+            'min-h-0 min-w-0 overflow-hidden',
+            item.props.collapsed && 'pointer-events-none select-none',
+            item.props.className,
+          )}
           style={{
-            flexBasis: `${sizes[panelIndex] ?? 0}%`,
+            flexBasis: `${panelSize}%`,
             flexGrow: 0,
             flexShrink: 0,
+            ...RESIZABLE_PANEL_TRANSITION_STYLE,
           }}
         >
           {item.props.children}
@@ -425,7 +458,7 @@ function ResizablePanelGroup({
           }
 
           const deltaSize = (deltaPixels / containerSize) * 100;
-          setSizes((currentSizes) => adjustAdjacentSizes(visiblePanels, currentSizes, leftIndex, rightIndex, deltaSize, containerSize));
+          updateVisibleSizes((currentSizes) => adjustAdjacentSizes(visiblePanels, currentSizes, leftIndex, rightIndex, deltaSize, containerSize));
         }}
       />,
     );

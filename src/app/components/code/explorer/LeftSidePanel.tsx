@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { useFileOutlines } from '../../../../data/mockDataLoader';
 import { refreshWorkspaceGitStatus, useWorkspaceGitStatus } from '../../../git/workspaceGitStatus';
 import { FileTreeNode, type ExplorerContextMenuRequest } from './FileTreeNode';
 import { ExplorerPanelTabs, ExplorerToolbar, type ExplorerPanelTab } from './LeftSidePanelChrome';
-import { OutlinePanel } from './LeftSidePanelOutline';
+import { FileOutlinePanel } from './FileOutlinePanel';
 import {
   DEFAULT_STARTUP_PROJECT_NAME,
   WORKSPACE_ROOT_PATH,
@@ -99,7 +98,6 @@ export function LeftSidePanel({
   const [contextMenuRequest, setContextMenuRequest] = useState<ExplorerContextMenuRequest | null>(null);
   const [handledRevealRequestToken, setHandledRevealRequestToken] = useState<number | null>(null);
   const [tab, setTab] = useState<ExplorerPanelTab>('explorer');
-  const fileOutlines = useFileOutlines();
   const gitStatus = useWorkspaceGitStatus();
   const {
     treeNodes,
@@ -112,7 +110,6 @@ export function LeftSidePanel({
 
   latestSelectedNodeRef.current = selectedNode;
 
-  const outline = fileOutlines[currentOutlineId] || [];
   const effectiveRevealRequest = revealRequest && revealRequest.token !== handledRevealRequestToken
     ? revealRequest
     : null;
@@ -726,9 +723,8 @@ export function LeftSidePanel({
 
       {/* Outline */}
       {tab === 'outline' && (
-        <OutlinePanel
+        <FileOutlinePanel
           currentOutlineId={currentOutlineId}
-          outline={outline}
           onLineJump={onLineJump}
         />
       )}

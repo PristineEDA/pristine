@@ -11,7 +11,16 @@ import {
 const panelRecords: Array<{ id?: string; collapsed?: boolean }> = [];
 const handleRecords: Array<{ hidden?: boolean }> = [];
 
+function latestPanelRecords(count: number) {
+  return panelRecords.slice(-count);
+}
+
+function latestHandleRecords(count: number) {
+  return handleRecords.slice(-count);
+}
+
 vi.mock('../../ui/resizable', () => ({
+  PANEL_TRANSITION_DURATION_MS: 300,
   ResizablePanelGroup: ({ children, orientation }: { children: React.ReactNode; orientation: string }) => (
     <div data-testid={`panel-group-${orientation}`}>{children}</div>
   ),
@@ -69,14 +78,14 @@ describe('CodeWorkspaceShell', () => {
     expect(screen.getByText('Inspector')).toBeInTheDocument();
     expect(screen.getByTestId('panel-right')).toHaveAttribute('data-min-size-px', String(EXPLORER_RIGHT_PANEL_MIN_WIDTH_PX));
     expect(screen.getByTestId('panel-right')).toHaveAttribute('data-max-size-px', String(EXPLORER_RIGHT_PANEL_MAX_WIDTH_PX));
-    expect(panelRecords).toEqual([
+    expect(latestPanelRecords(5)).toEqual([
       { id: 'left', collapsed: false },
       { id: 'center', collapsed: undefined },
       { id: 'top', collapsed: undefined },
       { id: 'bottom', collapsed: false },
       { id: 'right', collapsed: false },
     ]);
-    expect(handleRecords).toEqual([
+    expect(latestHandleRecords(3)).toEqual([
       { hidden: false },
       { hidden: false },
       { hidden: false },
@@ -119,13 +128,13 @@ describe('CodeWorkspaceShell', () => {
 
     expect(screen.getByTestId('panel-left')).toHaveStyle({ width: '240px' });
     expect(screen.getByTestId('panel-handle-left')).toBeInTheDocument();
-    expect(panelRecords).toEqual([
+    expect(latestPanelRecords(4)).toEqual([
       { id: 'center', collapsed: undefined },
       { id: 'top', collapsed: undefined },
       { id: 'bottom', collapsed: false },
       { id: 'right', collapsed: false },
     ]);
-    expect(handleRecords).toEqual([
+    expect(latestHandleRecords(2)).toEqual([
       { hidden: false },
       { hidden: false },
     ]);
@@ -180,12 +189,12 @@ describe('CodeWorkspaceShell', () => {
     expect(screen.queryByText('Terminal')).not.toBeInTheDocument();
     expect(screen.queryByText('Inspector')).not.toBeInTheDocument();
     expect(screen.getByText('Editor')).toBeInTheDocument();
-    expect(handleRecords).toEqual([
+    expect(latestHandleRecords(3)).toEqual([
       { hidden: true },
       { hidden: true },
       { hidden: true },
     ]);
-    expect(panelRecords).toEqual([
+    expect(latestPanelRecords(5)).toEqual([
       { id: 'left', collapsed: true },
       { id: 'center', collapsed: undefined },
       { id: 'top', collapsed: undefined },
@@ -238,12 +247,12 @@ describe('CodeWorkspaceShell', () => {
 
     expect(screen.getByTestId('panel-left')).toHaveStyle({ width: '280px' });
     expect(screen.getByTestId('panel-right')).toHaveStyle({ width: '300px' });
-    expect(panelRecords).toEqual([
+    expect(latestPanelRecords(3)).toEqual([
       { id: 'center', collapsed: undefined },
       { id: 'top', collapsed: undefined },
       { id: 'bottom', collapsed: false },
     ]);
-    expect(handleRecords).toEqual([
+    expect(latestHandleRecords(1)).toEqual([
       { hidden: false },
     ]);
 
@@ -266,7 +275,10 @@ describe('CodeWorkspaceShell', () => {
 
     fireEvent.click(screen.getByText('toggle-left'));
 
-    expect(screen.queryByTestId('panel-left')).not.toBeInTheDocument();
+    expect(screen.getByTestId('panel-left')).toHaveStyle({ width: '0px' });
+    expect(screen.getByTestId('panel-left')).toHaveAttribute('aria-hidden', 'true');
+    expect(screen.getByTestId('panel-left').style.transitionDuration).toBe('300ms');
+    expect(screen.getByTestId('panel-left').style.transitionProperty).toBe('width, min-width, max-width, flex-basis');
     expect(screen.getByTestId('right-width-value')).toHaveTextContent('360');
     expect(screen.getByTestId('panel-right')).toHaveStyle({ width: '360px' });
 
@@ -279,6 +291,8 @@ describe('CodeWorkspaceShell', () => {
 
     expect(screen.getByTestId('panel-right')).toHaveStyle({ width: '0px' });
     expect(screen.getByTestId('panel-right')).toHaveAttribute('aria-hidden', 'true');
+    expect(screen.getByTestId('panel-right').style.transitionDuration).toBe('300ms');
+    expect(screen.getByTestId('panel-right').style.transitionProperty).toBe('width, min-width, max-width, flex-basis');
     expect(screen.getByTestId('left-width-value')).toHaveTextContent('340');
 
     fireEvent.click(screen.getByText('toggle-right'));

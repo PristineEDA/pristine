@@ -1,11 +1,24 @@
+import { BetweenHorizontalStart, ListTree, ShieldCheck, Sparkles } from 'lucide-react';
 import { Suspense, lazy, useState } from "react";
 
+import { IconTabToggleGroup } from '../shared/IconTabToggleGroup';
 import { Skeleton } from "../../ui/skeleton";
+import { TooltipProvider } from '../../ui/tooltip';
 import { ASSISTANT_THREAD_LIST_DEFAULT_WIDTH_PX } from "./assistantPanelLayout";
 
 const AIAgentPanel = lazy(() => import('./AIAgentPanel').then((module) => ({ default: module.AIAgentPanel })));
+const FileOutlinePanel = lazy(() => import('./FileOutlinePanel').then((module) => ({ default: module.FileOutlinePanel })));
 const StaticCheckPanel = lazy(() => import('./StaticCheckPanel').then((module) => ({ default: module.StaticCheckPanel })));
 const ReferencesPanel = lazy(() => import('./ReferencesPanel').then((module) => ({ default: module.ReferencesPanel })));
+
+type RightSidePanelTab = 'ai' | 'static' | 'references' | 'outline';
+
+const rightPanelTabs = [
+  { value: 'ai', label: 'AI Assistant', icon: Sparkles, testId: 'right-panel-tab-ai' },
+  { value: 'static', label: 'Static Check', icon: ShieldCheck, testId: 'right-panel-tab-static' },
+  { value: 'references', label: 'References', icon: BetweenHorizontalStart, testId: 'right-panel-tab-references' },
+  { value: 'outline', label: 'Outline', icon: ListTree, testId: 'right-panel-tab-outline' },
+] as const;
 
 function AssistantPanelSkeleton() {
   return (
@@ -49,6 +62,7 @@ function AssistantPanelSkeleton() {
 }
 
 interface RightSidePanelProps {
+  currentOutlineId: string;
   onFileOpen: (fileId: string, fileName: string) => void;
   onLineJump: (line: number) => void;
   onThreadListExpandedChange?: (expanded: boolean) => void;
@@ -56,76 +70,75 @@ interface RightSidePanelProps {
 }
 
 export function RightSidePanel({
+  currentOutlineId,
   onFileOpen,
   onLineJump,
   onThreadListExpandedChange,
   onThreadListWidthChange,
 }: RightSidePanelProps) {
-  const [tab, setTab] = useState<
-    "ai" | "static" | "references"
-  >("ai");
+  const [tab, setTab] = useState<RightSidePanelTab>('ai');
   const [threadListExpanded, setThreadListExpanded] = useState(false);
   const [threadListWidth, setThreadListWidth] = useState(ASSISTANT_THREAD_LIST_DEFAULT_WIDTH_PX);
 
-  const tabs = [
-    { id: "ai", label: "AI Assistant" },
-    { id: "static", label: "Static Check" },
-    { id: "references", label: "References" },
-  ] as const;
-
   return (
-    <div className="flex flex-col h-full bg-muted/40 overflow-hidden">
-      {/* Tab bar */}
-      <div className="flex shrink-0 border-b border-border">
-        {tabs.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className={`px-3 py-2 transition-colors border-b-2 ${
-              tab === t.id
-                ? "text-[11px] font-semibold text-foreground border-primary"
-                : "text-[11px] text-muted-foreground border-transparent hover:text-foreground"
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+    <TooltipProvider delayDuration={0}>
+      <div className="flex flex-col h-full bg-muted/40 overflow-hidden">
+        <div className="flex shrink-0 items-center border-b border-border px-2 py-1.5">
+          <IconTabToggleGroup
+            items={rightPanelTabs}
+            value={tab}
+            onValueChange={(nextValue) => {
+              setTab(nextValue as RightSidePanelTab);
+            }}
+            groupLabel="Right panel tabs"
+            groupTestId="right-panel-tabs"
+            tooltipSide="bottom"
+          />
+        </div>
 
-      <div className="flex-1 overflow-hidden">
-        {tab === "ai" && (
-          <Suspense fallback={<AssistantPanelSkeleton />}>
-            <AIAgentPanel
-              initialThreadListExpanded={threadListExpanded}
-              initialThreadListWidth={threadListWidth}
-              onThreadListExpandedChange={(nextExpanded) => {
-                setThreadListExpanded(nextExpanded);
-                onThreadListExpandedChange?.(nextExpanded);
-              }}
-              onThreadListWidthChange={(nextWidth) => {
-                setThreadListWidth(nextWidth);
-                onThreadListWidthChange?.(nextWidth);
-              }}
-            />
-          </Suspense>
-        )}
-        {tab === "static" && (
-          <Suspense fallback={<div className="flex h-full items-center justify-center text-muted-foreground text-[12px]">Loading checks...</div>}>
-            <StaticCheckPanel
-              onFileOpen={onFileOpen}
-              onLineJump={onLineJump}
-            />
-          </Suspense>
-        )}
-        {tab === "references" && (
-          <Suspense fallback={<div className="flex h-full items-center justify-center text-muted-foreground text-[12px]">Loading references...</div>}>
-            <ReferencesPanel
-              onFileOpen={onFileOpen}
-              onLineJump={onLineJump}
-            />
-          </Suspense>
-        )}
+        <div className="flex-1 overflow-hidden">
+          {tab === "ai" && (
+            <Suspense fallback={<AssistantPanelSkeleton />}>
+              <AIAgentPanel
+                initialThreadListExpanded={threadListExpanded}
+                initialThreadListWidth={threadListWidth}
+                onThreadListExpandedChange={(nextExpanded) => {
+                  setThreadListExpanded(nextExpanded);
+                  onThreadListExpandedChange?.(nextExpanded);
+                }}
+                onThreadListWidthChange={(nextWidth) => {
+                  setThreadListWidth(nextWidth);
+                  onThreadListWidthChange?.(nextWidth);
+                }}
+              />
+            </Suspense>
+          )}
+          {tab === "static" && (
+            <Suspense fallback={<div className="flex h-full items-center justify-center text-muted-foreground text-[12px]">Loading checks...</div>}>
+              <StaticCheckPanel
+                onFileOpen={onFileOpen}
+                onLineJump={onLineJump}
+              />
+            </Suspense>
+          )}
+          {tab === "references" && (
+            <Suspense fallback={<div className="flex h-full items-center justify-center text-muted-foreground text-[12px]">Loading references...</div>}>
+              <ReferencesPanel
+                onFileOpen={onFileOpen}
+                onLineJump={onLineJump}
+              />
+            </Suspense>
+          )}
+          {tab === 'outline' && (
+            <Suspense fallback={<div className="flex h-full items-center justify-center text-muted-foreground text-[12px]">Loading outline...</div>}>
+              <FileOutlinePanel
+                currentOutlineId={currentOutlineId}
+                onLineJump={onLineJump}
+              />
+            </Suspense>
+          )}
+        </div>
       </div>
-    </div>
+    </TooltipProvider>
   );
 }

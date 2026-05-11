@@ -23,3 +23,5 @@ public/generated/
 binaries/
 perf-results/
 .pristine-agent/
+.pristine-vendor/
+.pristine-package/

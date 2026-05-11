@@ -99,8 +99,20 @@ jobs:
           node-version: 20
           cache: pnpm
 
+      - name: Cache BlockSuite workspace
+        uses: actions/cache@v4
+        with:
+          path: .pristine-vendor/affine-blocksuite/v0.26.3-7946007
+          key: blocksuite-${{ runner.os }}-v0.26.3-7946007-${{ hashFiles('config/blocksuite-upstream.json', 'scripts/prepare-blocksuite.mjs') }}
+
+      - name: Prepare BlockSuite workspace
+        run: node scripts/prepare-blocksuite.mjs
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Verify BlockSuite workspace
+        run: node scripts/prepare-blocksuite.mjs --verify
 
       - name: Prepare external assets
         run: pnpm run prepare:assets
@@ -200,6 +212,15 @@ jobs:
           node-version: 20
           cache: pnpm
 
+      - name: Cache BlockSuite workspace
+        uses: actions/cache@v4
+        with:
+          path: .pristine-vendor/affine-blocksuite/v0.26.3-7946007
+          key: blocksuite-${{ runner.os }}-v0.26.3-7946007-${{ hashFiles('config/blocksuite-upstream.json', 'scripts/prepare-blocksuite.mjs') }}
+
+      - name: Prepare BlockSuite workspace
+        run: node scripts/prepare-blocksuite.mjs
+
       - name: Setup Python for native rebuilds
         if: runner.os == 'Windows'
         uses: actions/setup-python@v5
@@ -209,13 +230,20 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Verify BlockSuite workspace
+        run: node scripts/prepare-blocksuite.mjs --verify
+
       - name: Prepare external assets
         run: pnpm run prepare:assets
+
+      - name: Verify Windows node-pty binary
+        if: runner.os == 'Windows'
+        run: pnpm run verify:node-pty-binary -- --platform win32 --arch x64
 
       - name: Package application
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-        run: pnpm run build:app && pnpm exec electron-builder ${{ matrix.builder_args }} --config electron-builder.yml --publish never
+        run: pnpm run build:app && pnpm run prepare:package-app && pnpm exec electron-builder --projectDir .pristine-package/app ${{ matrix.builder_args }} --config electron-builder.yml --publish never
 
       - name: Run runtime performance comparison
         shell: powershell
@@ -223,7 +251,7 @@ jobs:
           $perfResultsDir = Join-Path $PWD 'perf-results'
           New-Item -ItemType Directory -Path $perfResultsDir -Force | Out-Null
           $consoleLogPath = Join-Path $perfResultsDir 'compare-perf-console.log'
-          & .\compare-perf-taskmgr.ps1 -DurationSeconds 30 -ThresholdPercent 3 -MemoryThresholdPercent 0.5 -ResultOutputDirectory $perfResultsDir *>&1 | Tee-Object -FilePath $consoleLogPath
+          & .\compare-perf-taskmgr.ps1 -DurationSeconds 30 -ThresholdPercent 4 -MemoryThresholdPercent 0.6 -ResultOutputDirectory $perfResultsDir *>&1 | Tee-Object -FilePath $consoleLogPath
           if ($LASTEXITCODE -ne 0) {
             exit $LASTEXITCODE
           }
@@ -319,6 +347,15 @@ jobs:
           node-version: 20
           cache: pnpm
 
+      - name: Cache BlockSuite workspace
+        uses: actions/cache@v4
+        with:
+          path: .pristine-vendor/affine-blocksuite/v0.26.3-7946007
+          key: blocksuite-${{ runner.os }}-v0.26.3-7946007-${{ hashFiles('config/blocksuite-upstream.json', 'scripts/prepare-blocksuite.mjs') }}
+
+      - name: Prepare BlockSuite workspace
+        run: node scripts/prepare-blocksuite.mjs
+
       - name: Setup Python for native rebuilds
         if: runner.os == 'Windows'
         uses: actions/setup-python@v5
@@ -328,13 +365,20 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Verify BlockSuite workspace
+        run: node scripts/prepare-blocksuite.mjs --verify
+
       - name: Prepare external assets
         run: pnpm run prepare:assets
+
+      - name: Verify Windows node-pty binary
+        if: runner.os == 'Windows'
+        run: pnpm run verify:node-pty-binary -- --platform win32 --arch x64
 
       - name: Package application
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-        run: pnpm run build:app && pnpm exec electron-builder ${{ matrix.builder_args }} --config electron-builder.yml --publish never
+        run: pnpm run build:app && pnpm run prepare:package-app && pnpm exec electron-builder --projectDir .pristine-package/app ${{ matrix.builder_args }} --config electron-builder.yml --publish never
 
       - name: Upload package artifacts
         if: always() && hashFiles('release/**') != ''

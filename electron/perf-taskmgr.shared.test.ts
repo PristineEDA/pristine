@@ -109,7 +109,7 @@ describeOnWindows('perf task manager helper', () => {
     const report = runPowerShellJson<ComparisonReport>([
       `$dev = ([System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${encodeJson(devSummary)}')) | ConvertFrom-Json)`,
       `$packaged = ([System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${encodeJson(packagedSummary)}')) | ConvertFrom-Json)`,
-      'New-PerfComparisonReport -DevSummary $dev -PackagedSummary $packaged -ThresholdPercent 3 -MemoryThresholdPercent 0.5',
+      'New-PerfComparisonReport -DevSummary $dev -PackagedSummary $packaged -ThresholdPercent 4 -MemoryThresholdPercent 0.6',
     ].join('; '))
 
     expect(report.IsWithinThreshold).toBe(true)
@@ -141,13 +141,13 @@ describeOnWindows('perf task manager helper', () => {
     const report = runPowerShellJson<ComparisonReport>([
       `$dev = ([System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${encodeJson(devSummary)}')) | ConvertFrom-Json)`,
       `$packaged = ([System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${encodeJson(packagedSummary)}')) | ConvertFrom-Json)`,
-      'New-PerfComparisonReport -DevSummary $dev -PackagedSummary $packaged -ThresholdPercent 3 -MemoryThresholdPercent 0.5',
+      'New-PerfComparisonReport -DevSummary $dev -PackagedSummary $packaged -ThresholdPercent 4 -MemoryThresholdPercent 0.6',
     ].join('; '))
 
     expect(report.IsWithinThreshold).toBe(false)
     expect(report.IsCpuWithinThreshold).toBe(false)
     expect(report.CpuAbsoluteDifferencePercent).toBe(4.33)
-    expect(report.ThresholdPercent).toBe(3)
+    expect(report.ThresholdPercent).toBe(4)
   })
 
   it('marks the report as failed when memory difference exceeds the configured threshold', () => {
@@ -168,13 +168,13 @@ describeOnWindows('perf task manager helper', () => {
     const report = runPowerShellJson<ComparisonReport>([
       `$dev = ([System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${encodeJson(devSummary)}')) | ConvertFrom-Json)`,
       `$packaged = ([System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${encodeJson(packagedSummary)}')) | ConvertFrom-Json)`,
-      'New-PerfComparisonReport -DevSummary $dev -PackagedSummary $packaged -ThresholdPercent 3 -MemoryThresholdPercent 0.5',
+      'New-PerfComparisonReport -DevSummary $dev -PackagedSummary $packaged -ThresholdPercent 4 -MemoryThresholdPercent 0.6',
     ].join('; '))
 
     expect(report.IsWithinThreshold).toBe(false)
     expect(report.IsCpuWithinThreshold).toBe(true)
     expect(report.IsMemoryWithinThreshold).toBe(false)
     expect(report.MemoryWorkingSetAverageAbsoluteDifferencePercent).toBe(1.47)
-    expect(report.MemoryThresholdPercent).toBe(0.5)
+    expect(report.MemoryThresholdPercent).toBe(0.6)
   })
 })

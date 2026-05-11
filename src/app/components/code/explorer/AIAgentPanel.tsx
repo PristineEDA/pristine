@@ -4,6 +4,7 @@ import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 
 import { PristineAssistantThread } from '../../assistant/PristineAssistantThread';
 import { ThreadList } from '../../assistant-ui/thread-list';
+import { PANEL_TRANSITION_DURATION_MS } from '../../ui/resizable';
 import { Toggle } from '../../ui/toggle';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../../ui/tooltip';
 import {
@@ -14,6 +15,7 @@ import {
   ASSISTANT_THREAD_LIST_DEFAULT_WIDTH_PX,
   ASSISTANT_THREAD_LIST_MAX_WIDTH_PX,
   ASSISTANT_THREAD_LIST_MIN_WIDTH_PX,
+  ASSISTANT_THREAD_LIST_RESIZE_HANDLE_WIDTH_PX,
 } from './assistantPanelLayout';
 import { usePristineAgentRuntime } from './pristineThreadRuntime';
 
@@ -24,6 +26,10 @@ const THREAD_LIST_TOGGLE_CLASS_NAME = [
   'data-[state=on]:text-foreground',
   'hover:cursor-pointer hover:text-foreground hover:bg-accent',
 ].join(' ');
+const THREAD_LIST_SIDECAR_TRANSITION_STYLE = {
+  transitionDuration: `${PANEL_TRANSITION_DURATION_MS}ms`,
+  transitionProperty: 'width, min-width, max-width, flex-basis',
+} satisfies React.CSSProperties;
 
 type AIAgentPanelProps = {
   baseUrl?: string;
@@ -75,6 +81,7 @@ export function AIAgentPanel({
   const normalizedBaseUrl = useMemo(() => normalizeAgentBaseUrl(baseUrl), [baseUrl]);
   const initialThreadId = useMemo(() => readStoredThreadId(), []);
   const [isThreadListExpanded, setIsThreadListExpanded] = useState(initialThreadListExpanded);
+  const [isThreadListResizing, setIsThreadListResizing] = useState(false);
   const [threadListWidth, setThreadListWidth] = useState(() => (
     initialThreadListWidth === undefined
       ? normalizeThreadListWidth(window.electronAPI?.config.get(THREAD_LIST_WIDTH_CONFIG_KEY))
@@ -87,6 +94,9 @@ export function AIAgentPanel({
   });
   const resizeStartPointerXRef = useRef<number | null>(null);
   const lastPersistedThreadIdRef = useRef<string | null | undefined>(undefined);
+  const threadListSidecarWidth = isThreadListExpanded
+    ? threadListWidth + ASSISTANT_THREAD_LIST_RESIZE_HANDLE_WIDTH_PX
+    : 0;
 
   useEffect(() => {
     setIsThreadListExpanded(initialThreadListExpanded);
@@ -141,6 +151,7 @@ export function AIAgentPanel({
       return;
     }
 
+    setIsThreadListResizing(false);
     resizeStartPointerXRef.current = null;
     document.body.style.removeProperty('cursor');
     document.body.style.removeProperty('user-select');
@@ -157,6 +168,7 @@ export function AIAgentPanel({
     }
 
     event.preventDefault();
+    setIsThreadListResizing(true);
     resizeStartPointerXRef.current = event.clientX;
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
@@ -204,44 +216,59 @@ export function AIAgentPanel({
           </div>
           <PristineAssistantThread agentBaseUrl={normalizedBaseUrl} isThreadLoading={isThreadLoading} />
         </div>
-        {isThreadListExpanded ? (
-          <>
-            <button
-              type="button"
-              aria-label="Resize chat list"
-              data-testid="assistant-thread-list-resize-handle"
-              onPointerDown={handleResizePointerDown}
-              onPointerMove={(event) => {
-                if (resizeStartPointerXRef.current === null) {
-                  return;
-                }
+        <div
+          data-testid="assistant-thread-list-sidecar"
+          aria-hidden={isThreadListExpanded ? 'false' : 'true'}
+          className={[
+            'flex h-full min-h-0 shrink-0 overflow-hidden',
+            isThreadListExpanded ? '' : 'pointer-events-none select-none',
+          ].join(' ')}
+          style={{
+            width: `${threadListSidecarWidth}px`,
+            minWidth: `${threadListSidecarWidth}px`,
+            maxWidth: `${threadListSidecarWidth}px`,
+            flexBasis: `${threadListSidecarWidth}px`,
+            flexGrow: 0,
+            flexShrink: 0,
+            ...(isThreadListResizing ? {} : THREAD_LIST_SIDECAR_TRANSITION_STYLE),
+          }}
+        >
+          <button
+            type="button"
+            aria-label="Resize chat list"
+            data-testid="assistant-thread-list-resize-handle"
+            disabled={!isThreadListExpanded}
+            onPointerDown={handleResizePointerDown}
+            onPointerMove={(event) => {
+              if (resizeStartPointerXRef.current === null) {
+                return;
+              }
 
-                const deltaPixels = resizeStartPointerXRef.current - event.clientX;
-                updateThreadListWidth(currentThreadListWidthRef.current + deltaPixels);
-                resizeStartPointerXRef.current = event.clientX;
-              }}
-              onPointerUp={(event) => endResize(event.pointerId, event.currentTarget)}
-              onPointerCancel={(event) => endResize(event.pointerId, event.currentTarget)}
-              className="group relative flex w-2 shrink-0 cursor-col-resize items-center justify-center bg-border/40 transition-colors hover:bg-primary/20 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-1"
-            >
-              <GripVertical className="size-3 text-muted-foreground transition-colors group-hover:text-foreground" />
-            </button>
-            <aside
-              data-testid="assistant-thread-list-panel"
-              className="flex h-full shrink-0 flex-col bg-muted/20"
-              style={{ width: threadListWidth }}
-            >
-              <div className="flex shrink-0 items-center border-b border-border px-3 py-2">
-                <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                  Chats
-                </span>
-              </div>
-              <div className="min-h-0 flex-1 overflow-y-auto p-2">
-                <ThreadList />
-              </div>
-            </aside>
-          </>
-        ) : null}
+              const deltaPixels = resizeStartPointerXRef.current - event.clientX;
+              updateThreadListWidth(currentThreadListWidthRef.current + deltaPixels);
+              resizeStartPointerXRef.current = event.clientX;
+            }}
+            onPointerUp={(event) => endResize(event.pointerId, event.currentTarget)}
+            onPointerCancel={(event) => endResize(event.pointerId, event.currentTarget)}
+            className="group relative flex w-2 shrink-0 cursor-col-resize items-center justify-center bg-border/40 transition-colors hover:bg-primary/20 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:pointer-events-none"
+          >
+            <GripVertical className="size-3 text-muted-foreground transition-colors group-hover:text-foreground" />
+          </button>
+          <aside
+            data-testid="assistant-thread-list-panel"
+            aria-hidden={isThreadListExpanded ? 'false' : 'true'}
+            className="flex h-full min-w-0 flex-1 flex-col bg-muted/20"
+          >
+            <div className="flex shrink-0 items-center border-b border-border px-3 py-2">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                Chats
+              </span>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto p-2">
+              <ThreadList />
+            </div>
+          </aside>
+        </div>
       </div>
     </AssistantRuntimeProvider>
   );

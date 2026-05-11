@@ -1,8 +1,6 @@
 import { useState } from "react"
 import { ArrowUpRightIcon, FileTextIcon, FolderCodeIcon, ImageIcon, InfoIcon } from "lucide-react"
 import { Button } from "../../ui/button"
-import { ToggleGroup, ToggleGroupItem } from "../../ui/toggle-group"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../ui/tooltip"
 import {
   Empty,
   EmptyContent,
@@ -11,12 +9,16 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "../../ui/empty"
-import { centerViewSwitchItemClassName } from "./viewSwitcherStyles"
+import { IconTabToggleGroup } from "./IconTabToggleGroup"
 
 type EmptyProjectTab = 'info' | 'image' | 'summary'
 
-const emptyProjectTabClassName = `${centerViewSwitchItemClassName} w-8 h-8 rounded-md`
-const emptyWallpaperPath = "/generated/empty-wallpaper.png"
+const emptyWallpaperPath = "./generated/empty-wallpaper.png"
+const emptyProjectTabs = [
+  { value: 'info', label: 'Info', icon: InfoIcon, testId: 'empty-project-tab-info' },
+  { value: 'image', label: 'Image', icon: ImageIcon, testId: 'empty-project-tab-image' },
+  { value: 'summary', label: 'Summary', icon: FileTextIcon, testId: 'empty-project-tab-summary' },
+] as const
 
 function InfoContent() {
   return (
@@ -105,67 +107,33 @@ export function EmptyProject() {
   return (
     <div className="relative flex h-full w-full items-center justify-center overflow-hidden">
       <div className="relative flex h-full w-full items-center justify-center">
-        <TooltipProvider delayDuration={0}>
-          {isImageTab ? (
-            <div className="relative h-full w-full">
-              {renderTabContent()}
-            </div>
-          ) : (
-            <div className="flex w-full items-center justify-center px-6 pr-20 md:px-12 md:pr-24">
-              <Empty className="max-w-4xl">
-                {renderTabContent()}
-              </Empty>
-            </div>
-          )}
-
-          <div
-            className="absolute top-1/2 right-2 z-10 -translate-y-1/2"
-            data-testid="empty-project-tabs"
-          >
-            <ToggleGroup
-              type="single"
-              orientation="vertical"
-              value={activeTab}
-              onValueChange={(value) => {
-                if (value) {
-                  setActiveTab(value as EmptyProjectTab)
-                }
-              }}
-              className="flex-col rounded bg-muted p-0.5 gap-0.5"
-            >
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="inline-flex">
-                    <ToggleGroupItem aria-label="Info" data-testid="empty-project-tab-info" value="info" className={emptyProjectTabClassName}>
-                      <InfoIcon size={13} />
-                    </ToggleGroupItem>
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent side="right" sideOffset={6}>Info</TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="inline-flex">
-                    <ToggleGroupItem aria-label="Image" data-testid="empty-project-tab-image" value="image" className={emptyProjectTabClassName}>
-                      <ImageIcon size={13} />
-                    </ToggleGroupItem>
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent side="right" sideOffset={6}>Image</TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="inline-flex">
-                    <ToggleGroupItem aria-label="Summary" data-testid="empty-project-tab-summary" value="summary" className={emptyProjectTabClassName}>
-                      <FileTextIcon size={13} />
-                    </ToggleGroupItem>
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent side="right" sideOffset={6}>Summary</TooltipContent>
-              </Tooltip>
-            </ToggleGroup>
+        {isImageTab ? (
+          <div className="relative h-full w-full">
+            {renderTabContent()}
           </div>
-        </TooltipProvider>
+        ) : (
+          <div className="flex w-full items-center justify-center px-6 pr-20 md:px-12 md:pr-24">
+            <Empty className="max-w-4xl">
+              {renderTabContent()}
+            </Empty>
+          </div>
+        )}
+
+        <div
+          className="absolute top-1/2 right-2 z-10 -translate-y-1/2"
+          data-testid="empty-project-tabs"
+        >
+          <IconTabToggleGroup
+            items={emptyProjectTabs}
+            value={activeTab}
+            onValueChange={(value) => {
+              setActiveTab(value as EmptyProjectTab)
+            }}
+            orientation="vertical"
+            groupLabel="Empty project tabs"
+            tooltipSide="right"
+          />
+        </div>
       </div>
     </div>
   )
