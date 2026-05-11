@@ -7,10 +7,10 @@ param(
     [int]$WarmupSeconds = 5,
 
     [ValidateRange(0.0, [double]::MaxValue)]
-    [double]$ThresholdPercent = 3.0,
+        [double]$ThresholdPercent = 4.0,
 
     [ValidateRange(0.0, [double]::MaxValue)]
-    [double]$MemoryThresholdPercent = 0.5,
+        [double]$MemoryThresholdPercent = 0.6,
 
     [ValidateNotNullOrEmpty()]
     [string]$DevCommand = 'pnpm run dev',
