@@ -16,7 +16,7 @@ import { centerViewSwitchItemClassName } from "./viewSwitcherStyles"
 type EmptyProjectTab = 'info' | 'image' | 'summary'
 
 const emptyProjectTabClassName = `${centerViewSwitchItemClassName} w-8 h-8 rounded-md`
-const emptyWallpaperPath = "/generated/empty-wallpaper.png"
+const emptyWallpaperPath = "./generated/empty-wallpaper.png"
 
 function InfoContent() {
   return (

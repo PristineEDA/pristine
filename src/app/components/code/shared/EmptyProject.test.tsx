@@ -23,7 +23,7 @@ describe('EmptyProject', () => {
     await user.click(screen.getByTestId('empty-project-tab-image'));
     expect(screen.getByTestId('empty-project-tab-image')).toHaveAttribute('data-state', 'on');
     expect(screen.getByTestId('empty-project-image-panel')).toBeInTheDocument();
-    expect(screen.getByTestId('empty-project-image')).toHaveAttribute('src', '/generated/empty-wallpaper.png');
+    expect(screen.getByTestId('empty-project-image')).toHaveAttribute('src', './generated/empty-wallpaper.png');
     expect(screen.getByAltText('Empty project preview')).toBeInTheDocument();
 
     await user.click(screen.getByTestId('empty-project-tab-summary'));
