@@ -161,6 +161,36 @@ describe('EditorSplitLayout', () => {
     expect(within(screen.getByTestId('editor-group-group-2')).getByTestId('mock-tabs')).toHaveTextContent('rtl/core/reg_file.v');
   });
 
+  it('uses ew-resize for horizontal split handles', async () => {
+    render(
+      <WorkspaceProvider>
+        <LayoutHarness />
+      </WorkspaceProvider>,
+    );
+
+    await clickText('open-reg');
+    await clickWithin('editor-group-group-1', 'split-editor');
+
+    const handle = document.querySelector('[data-slot="resizable-handle"].cursor-ew-resize');
+
+    expect(handle).not.toBeNull();
+  });
+
+  it('uses ns-resize for vertical split handles', async () => {
+    render(
+      <WorkspaceProvider>
+        <LayoutHarness />
+      </WorkspaceProvider>,
+    );
+
+    await clickText('open-reg');
+    await clickWithin('editor-group-group-1', 'split-editor-down');
+
+    const handle = document.querySelector('[data-slot="resizable-handle"].cursor-ns-resize');
+
+    expect(handle).not.toBeNull();
+  });
+
   it('creates a new split when a tab is dropped on the right edge', async () => {
     render(
       <WorkspaceProvider>

@@ -30,6 +30,7 @@ describe('MenuBar settings', () => {
     window.electronAPI!.platform = 'darwin';
     mockPersistedSettingsConfig({
       appTheme: 'dark',
+      codeLayoutMargin: 8,
       closeAction: 'tray',
       floatingInfoWindowVisible: true,
       fontFamily: 'fira-code',
@@ -46,6 +47,7 @@ describe('MenuBar settings', () => {
 
     expect(await screen.findByTestId('settings-dialog')).toBeVisible();
     expect(screen.getByTestId('settings-editor-font-family-combobox')).toHaveTextContent(getEditorFontFamilyLabel('fira-code'));
+    expect(screen.getByTestId('settings-code-layout-margin-value')).toHaveTextContent('8px');
   });
 
   it('opens settings from the File menu using the shared settings behavior', async () => {
@@ -53,6 +55,7 @@ describe('MenuBar settings', () => {
 
     mockPersistedSettingsConfig({
       appTheme: 'dark',
+      codeLayoutMargin: 8,
       closeAction: 'tray',
       floatingInfoWindowVisible: true,
       fontFamily: 'fira-code',
@@ -70,6 +73,7 @@ describe('MenuBar settings', () => {
     expect(screen.getByTestId('settings-editor-font-family-combobox')).toHaveTextContent(getEditorFontFamilyLabel('fira-code'));
     expect(screen.getByTestId('settings-editor-font-family-advanced-button')).toBeVisible();
     expect(screen.getByTestId('settings-editor-font-size-value')).toHaveTextContent('18px');
+    expect(screen.getByTestId('settings-code-layout-margin-value')).toHaveTextContent('8px');
     expect(screen.getByTestId('settings-editor-theme-combobox')).toHaveTextContent('Night Owl');
   });
 
@@ -78,6 +82,7 @@ describe('MenuBar settings', () => {
     mockPersistedSettingsConfig({
       appTheme: 'dark',
       bracketPairGuides: false,
+      codeLayoutMargin: 3,
       closeAction: 'tray',
       cursorBlinking: 'solid',
       floatingInfoWindowVisible: true,
@@ -104,6 +109,8 @@ describe('MenuBar settings', () => {
 
     expect(await screen.findByTestId('settings-dialog')).toBeVisible();
     expect(screen.getByTestId('settings-editor-font-family-combobox')).toHaveTextContent(getEditorFontFamilyLabel('fira-code'));
+    expect(screen.getByTestId('settings-code-layout-margin-slider')).toBeVisible();
+    expect(screen.getByTestId('settings-code-layout-margin-value')).toHaveTextContent('3px');
     expect(screen.getByTestId('settings-editor-font-size-value')).toHaveTextContent('18px');
     expect(screen.getByTestId('settings-editor-theme-combobox')).toHaveTextContent('Night Owl');
     expect(screen.getByTestId('settings-editor-word-wrap-combobox')).toHaveTextContent('Bounded');
@@ -316,6 +323,7 @@ describe('MenuBar settings', () => {
     mockPersistedSettingsConfig({
       appTheme: 'dark',
       bracketPairGuides: false,
+      codeLayoutMargin: 2,
       closeAction: 'tray',
       cursorBlinking: 'solid',
       floatingInfoWindowVisible: true,
@@ -342,6 +350,7 @@ describe('MenuBar settings', () => {
 
     expect(await screen.findByTestId('settings-dialog')).toBeVisible();
     expect(screen.getByTestId('settings-editor-font-family-combobox')).toHaveTextContent(getEditorFontFamilyLabel('fira-code'));
+    expect(screen.getByTestId('settings-code-layout-margin-value')).toHaveTextContent('2px');
     expect(screen.getByTestId('settings-editor-font-size-value')).toHaveTextContent('18px');
     expect(screen.getByTestId('settings-editor-theme-combobox')).toHaveTextContent('Night Owl');
     expect(screen.getByTestId('settings-editor-word-wrap-combobox')).toHaveTextContent('Bounded');
@@ -364,6 +373,7 @@ describe('MenuBar settings', () => {
     mockPersistedSettingsConfig({
       appTheme: 'light',
       bracketPairGuides: true,
+      codeLayoutMargin: 10,
       closeAction: 'quit',
       cursorBlinking: 'smooth',
       floatingInfoWindowVisible: false,
@@ -388,6 +398,7 @@ describe('MenuBar settings', () => {
 
     expect(await screen.findByTestId('settings-dialog')).toBeVisible();
     expect(screen.getByTestId('settings-editor-font-family-combobox')).toHaveTextContent('JetBrains Mono');
+    expect(screen.getByTestId('settings-code-layout-margin-value')).toHaveTextContent('10px');
     expect(screen.getByTestId('settings-editor-font-size-value')).toHaveTextContent('12px');
     expect(screen.getByTestId('settings-editor-theme-combobox')).toHaveTextContent('GitHub Light');
     expect(screen.getByTestId('settings-editor-word-wrap-combobox')).toHaveTextContent('Off');

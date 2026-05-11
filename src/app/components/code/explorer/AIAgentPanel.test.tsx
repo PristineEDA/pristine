@@ -158,13 +158,17 @@ describe('AIAgentPanel', () => {
 
     const resizeHandle = screen.getByTestId('assistant-thread-list-resize-handle');
 
+  expect(resizeHandle).toHaveClass('cursor-ew-resize');
+
     fireEvent.pointerDown(resizeHandle, { button: 0, clientX: 650, pointerId: 1 });
+  expect(document.body.style.cursor).toBe('ew-resize');
     fireEvent.pointerMove(resizeHandle, { clientX: 620, pointerId: 1 });
 
     expect(onThreadListWidthChange).toHaveBeenLastCalledWith(310);
     expect(screen.getByTestId('assistant-thread-list-sidecar')).toHaveStyle({ width: '318px' });
 
     fireEvent.pointerUp(resizeHandle, { clientX: 620, pointerId: 1 });
+  expect(document.body.style.cursor).toBe('');
 
     expect(window.electronAPI?.config.set).toHaveBeenCalledWith('explorer.aiAssistant.threadListWidth', 310);
 

@@ -7,6 +7,7 @@ import { WorkspaceProvider, useWorkspace } from '../../../context/WorkspaceConte
 import { SidebarProvider, useSidebar } from '../../ui/sidebar';
 
 export const ensureEditorFontFamilyLoadedMock = vi.fn<(fontFamily: string) => Promise<void>>(() => Promise.resolve());
+export const setCodeLayoutMarginMock = vi.fn();
 export const setEditorFontSizeMock = vi.fn();
 export const setEditorFontFamilyMock = vi.fn();
 export const setEditorFontLigaturesMock = vi.fn();
@@ -35,6 +36,7 @@ export const redoActionRun = vi.fn(() => Promise.resolve());
 
 interface EditorSettingsMockState {
   bracketPairGuides: boolean;
+  codeLayoutMargin: number;
   cursorBlinking: string;
   fontFamily: string;
   fontLigatures: boolean;
@@ -62,6 +64,7 @@ interface UserMockState {
 
 const defaultEditorSettingsMockState: EditorSettingsMockState = {
   bracketPairGuides: true,
+  codeLayoutMargin: 6,
   cursorBlinking: 'smooth',
   fontFamily: 'jetbrains-mono',
   fontLigatures: true,
@@ -94,6 +97,7 @@ export const userMockState: UserMockState = { ...defaultUserMockState };
 vi.mock('../../../context/EditorSettingsContext', () => ({
   useEditorSettings: () => ({
     bracketPairGuides: editorSettingsMockState.bracketPairGuides,
+    codeLayoutMargin: editorSettingsMockState.codeLayoutMargin,
     cursorBlinking: editorSettingsMockState.cursorBlinking,
     fontFamilies: [],
     fontFamily: editorSettingsMockState.fontFamily,
@@ -109,6 +113,7 @@ vi.mock('../../../context/EditorSettingsContext', () => ({
     scrollBeyondLastLine: editorSettingsMockState.scrollBeyondLastLine,
     smoothScrolling: editorSettingsMockState.smoothScrolling,
     tabSize: editorSettingsMockState.tabSize,
+    setCodeLayoutMargin: setCodeLayoutMarginMock,
     setBracketPairGuides: setEditorBracketPairGuidesMock,
     setCursorBlinking: setEditorCursorBlinkingMock,
     setFontFamily: setEditorFontFamilyMock,
@@ -162,6 +167,7 @@ function resetContextMockState() {
 function resetEditorSettingsMocks() {
   ensureEditorFontFamilyLoadedMock.mockReset();
   ensureEditorFontFamilyLoadedMock.mockResolvedValue(undefined);
+  setCodeLayoutMarginMock.mockReset();
   setEditorBracketPairGuidesMock.mockReset();
   setEditorCursorBlinkingMock.mockReset();
   setEditorFontFamilyMock.mockReset();
@@ -234,6 +240,7 @@ beforeEach(() => {
 export type PersistedSettingsOptions = {
   appTheme?: 'light' | 'dark';
   bracketPairGuides?: boolean;
+  codeLayoutMargin?: number;
   closeAction?: 'quit' | 'tray';
   cursorBlinking?: string;
   floatingInfoWindowVisible?: boolean;
@@ -258,6 +265,7 @@ export function mockPersistedSettingsConfig(options: PersistedSettingsOptions = 
   const persisted = {
     appTheme: 'light' as const,
     bracketPairGuides: true,
+    codeLayoutMargin: 6,
     closeAction: 'quit' as const,
     cursorBlinking: 'smooth',
     floatingInfoWindowVisible: false,
@@ -285,6 +293,8 @@ export function mockPersistedSettingsConfig(options: PersistedSettingsOptions = 
         return persisted.appTheme;
       case 'editor.guides.bracketPairs':
         return persisted.bracketPairGuides;
+      case 'code.layoutMargin':
+        return persisted.codeLayoutMargin;
       case 'window.closeActionPreference':
         return persisted.closeAction;
       case 'editor.cursorBlinking':

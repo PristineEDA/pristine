@@ -19,6 +19,14 @@ function latestHandleRecords(count: number) {
   return handleRecords.slice(-count);
 }
 
+function expectLayoutMarginFrame(testId: string, layoutMarginPx: number) {
+  expect(screen.getByTestId(testId)).toHaveStyle({
+    height: `calc(100% - ${layoutMarginPx * 2}px)`,
+    margin: `${layoutMarginPx}px`,
+    width: `calc(100% - ${layoutMarginPx * 2}px)`,
+  });
+}
+
 vi.mock('../../ui/resizable', () => ({
   PANEL_TRANSITION_DURATION_MS: 300,
   ResizablePanelGroup: ({ children, orientation }: { children: React.ReactNode; orientation: string }) => (
@@ -76,6 +84,10 @@ describe('CodeWorkspaceShell', () => {
     expect(screen.getByText('Editor')).toBeInTheDocument();
     expect(screen.getByText('Terminal')).toBeInTheDocument();
     expect(screen.getByText('Inspector')).toBeInTheDocument();
+    expectLayoutMarginFrame('panel-left-layout-margin', 6);
+    expectLayoutMarginFrame('panel-top-layout-margin', 6);
+    expectLayoutMarginFrame('panel-bottom-layout-margin', 6);
+    expectLayoutMarginFrame('panel-right-layout-margin', 6);
     expect(screen.getByTestId('panel-right')).toHaveAttribute('data-min-size-px', String(EXPLORER_RIGHT_PANEL_MIN_WIDTH_PX));
     expect(screen.getByTestId('panel-right')).toHaveAttribute('data-max-size-px', String(EXPLORER_RIGHT_PANEL_MAX_WIDTH_PX));
     expect(latestPanelRecords(5)).toEqual([
@@ -90,6 +102,71 @@ describe('CodeWorkspaceShell', () => {
       { hidden: false },
       { hidden: false },
     ]);
+  });
+
+  it('applies explicit layout margin values without changing fixed panel width math', () => {
+    panelRecords.length = 0;
+    handleRecords.length = 0;
+
+    const { rerender } = render(
+      <CodeWorkspaceShell
+        activityBar={<div>Activity</div>}
+        showLeftPanel
+        showBottomPanel
+        showRightPanel
+        leftPanelId="left"
+        centerPanelId="center"
+        topPanelId="top"
+        bottomPanelId="bottom"
+        rightPanelId="right"
+        leftFixedWidthPx={240}
+        onLeftFixedWidthChange={() => 240}
+        rightFixedWidthPx={EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX}
+        onRightFixedWidthChange={() => EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX}
+        leftContent={<div>Explorer</div>}
+        topContent={<div>Editor</div>}
+        bottomContent={<div>Terminal</div>}
+        rightContent={<div>Inspector</div>}
+        layoutMarginPx={10}
+      />,
+    );
+
+    expect(screen.getByTestId('panel-left')).toHaveStyle({ width: '240px' });
+    expect(screen.getByTestId('panel-right')).toHaveStyle({ width: '300px' });
+    expectLayoutMarginFrame('panel-left-layout-margin', 10);
+    expectLayoutMarginFrame('panel-top-layout-margin', 10);
+    expectLayoutMarginFrame('panel-bottom-layout-margin', 10);
+    expectLayoutMarginFrame('panel-right-layout-margin', 10);
+
+    rerender(
+      <CodeWorkspaceShell
+        activityBar={<div>Activity</div>}
+        showLeftPanel
+        showBottomPanel
+        showRightPanel
+        leftPanelId="left"
+        centerPanelId="center"
+        topPanelId="top"
+        bottomPanelId="bottom"
+        rightPanelId="right"
+        leftFixedWidthPx={240}
+        onLeftFixedWidthChange={() => 240}
+        rightFixedWidthPx={EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX}
+        onRightFixedWidthChange={() => EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX}
+        leftContent={<div>Explorer</div>}
+        topContent={<div>Editor</div>}
+        bottomContent={<div>Terminal</div>}
+        rightContent={<div>Inspector</div>}
+        layoutMarginPx={0}
+      />,
+    );
+
+    expect(screen.getByTestId('panel-left')).toHaveStyle({ width: '240px' });
+    expect(screen.getByTestId('panel-right')).toHaveStyle({ width: '300px' });
+    expectLayoutMarginFrame('panel-left-layout-margin', 0);
+    expectLayoutMarginFrame('panel-top-layout-margin', 0);
+    expectLayoutMarginFrame('panel-bottom-layout-margin', 0);
+    expectLayoutMarginFrame('panel-right-layout-margin', 0);
   });
 
   it('renders a fixed-width left panel and clamps drag updates', () => {
@@ -141,9 +218,13 @@ describe('CodeWorkspaceShell', () => {
 
     const leftHandle = screen.getByTestId('panel-handle-left');
 
+    expect(leftHandle).toHaveClass('cursor-ew-resize');
+
     fireEvent.pointerDown(leftHandle, { clientX: 240, pointerId: 1 });
+    expect(document.body.style.cursor).toBe('ew-resize');
     fireEvent.pointerMove(leftHandle, { clientX: 320, pointerId: 1 });
     fireEvent.pointerUp(leftHandle, { clientX: 320, pointerId: 1 });
+    expect(document.body.style.cursor).toBe('');
 
     expect(screen.getByTestId('left-width-value')).toHaveTextContent('320');
     expect(screen.getByTestId('panel-left')).toHaveStyle({ width: '320px' });
@@ -257,6 +338,11 @@ describe('CodeWorkspaceShell', () => {
     ]);
 
     const leftHandle = screen.getByTestId('panel-handle-left');
+    const rightHandle = screen.getByTestId('panel-handle-right');
+
+    expect(leftHandle).toHaveClass('cursor-ew-resize');
+    expect(rightHandle).toHaveClass('cursor-ew-resize');
+
     fireEvent.pointerDown(leftHandle, { clientX: 280, pointerId: 1 });
     fireEvent.pointerMove(leftHandle, { clientX: 340, pointerId: 1 });
     fireEvent.pointerUp(leftHandle, { clientX: 340, pointerId: 1 });
@@ -264,7 +350,6 @@ describe('CodeWorkspaceShell', () => {
     expect(screen.getByTestId('left-width-value')).toHaveTextContent('340');
     expect(screen.getByTestId('right-width-value')).toHaveTextContent('300');
 
-    const rightHandle = screen.getByTestId('panel-handle-right');
     fireEvent.pointerDown(rightHandle, { clientX: 700, pointerId: 2 });
     fireEvent.pointerMove(rightHandle, { clientX: 640, pointerId: 2 });
     fireEvent.pointerUp(rightHandle, { clientX: 640, pointerId: 2 });

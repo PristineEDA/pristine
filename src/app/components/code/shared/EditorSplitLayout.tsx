@@ -98,7 +98,7 @@ function ResizeHandle({ direction }: { direction: SplitDirection }) {
   return (
     <ResizableHandle
       className={`group relative flex items-center justify-center ${
-        direction === 'horizontal' ? 'w-1 cursor-col-resize' : 'h-1 cursor-row-resize'
+        direction === 'horizontal' ? 'w-1 cursor-ew-resize' : 'h-1 cursor-ns-resize'
       } bg-border hover:bg-primary transition-colors z-10`}
     >
       <div

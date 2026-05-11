@@ -170,7 +170,7 @@ export function AIAgentPanel({
     event.preventDefault();
     setIsThreadListResizing(true);
     resizeStartPointerXRef.current = event.clientX;
-    document.body.style.cursor = 'col-resize';
+    document.body.style.cursor = 'ew-resize';
     document.body.style.userSelect = 'none';
     event.currentTarget.setPointerCapture?.(event.pointerId);
   };
@@ -250,7 +250,7 @@ export function AIAgentPanel({
             }}
             onPointerUp={(event) => endResize(event.pointerId, event.currentTarget)}
             onPointerCancel={(event) => endResize(event.pointerId, event.currentTarget)}
-            className="group relative flex w-2 shrink-0 cursor-col-resize items-center justify-center bg-border/40 transition-colors hover:bg-primary/20 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:pointer-events-none"
+            className="group relative flex w-2 shrink-0 cursor-ew-resize items-center justify-center bg-border/40 transition-colors hover:bg-primary/20 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:pointer-events-none"
           >
             <GripVertical className="size-3 text-muted-foreground transition-colors group-hover:text-foreground" />
           </button>

@@ -1,5 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
+  CODE_LAYOUT_MARGIN_CONFIG_KEY,
+  DEFAULT_CODE_LAYOUT_MARGIN,
   DEFAULT_EDITOR_CURSOR_BLINKING,
   DEFAULT_EDITOR_BRACKET_PAIR_GUIDES,
   DEFAULT_EDITOR_FONT_FAMILY,
@@ -44,6 +46,7 @@ import {
   type EditorWordWrapMode,
   parseEditorCursorBlinking,
   parseEditorBracketPairGuides,
+  parseCodeLayoutMargin,
   parseEditorFontFamily,
   parseEditorFontLigatures,
   parseEditorFontSize,
@@ -63,6 +66,7 @@ import {
 import { ensureEditorFontFamilyLoaded } from '../editor/fontLoader'
 
 interface EditorSettingsState {
+  codeLayoutMargin: number
   cursorBlinking: EditorCursorBlinkingMode
   bracketPairGuides: boolean
   fontFamily: EditorFontFamilyId
@@ -83,6 +87,7 @@ interface EditorSettingsState {
 }
 
 interface EditorSettingsContextValue extends EditorSettingsState {
+  setCodeLayoutMargin: (layoutMargin: number) => void
   setCursorBlinking: (cursorBlinking: EditorCursorBlinkingMode) => void
   setBracketPairGuides: (enabled: boolean) => void
   setFontFamily: (fontFamily: EditorFontFamilyId) => void
@@ -115,6 +120,11 @@ type EditorSettingDefinitions = {
 const EditorSettingsContext = createContext<EditorSettingsContextValue | null>(null)
 
 const EDITOR_SETTING_DEFINITIONS: EditorSettingDefinitions = {
+  codeLayoutMargin: {
+    configKey: CODE_LAYOUT_MARGIN_CONFIG_KEY,
+    fallback: DEFAULT_CODE_LAYOUT_MARGIN,
+    parseValue: parseCodeLayoutMargin,
+  },
   cursorBlinking: {
     configKey: EDITOR_CURSOR_BLINKING_CONFIG_KEY,
     fallback: DEFAULT_EDITOR_CURSOR_BLINKING,
@@ -225,6 +235,7 @@ function persistConfiguredEditorSetting<T>(definition: EditorSettingDefinition<T
 
 function getInitialEditorSettingsState(): EditorSettingsState {
   return {
+    codeLayoutMargin: readConfiguredEditorSetting(EDITOR_SETTING_DEFINITIONS.codeLayoutMargin),
     cursorBlinking: readConfiguredEditorSetting(EDITOR_SETTING_DEFINITIONS.cursorBlinking),
     bracketPairGuides: readConfiguredEditorSetting(EDITOR_SETTING_DEFINITIONS.bracketPairGuides),
     fontFamily: readConfiguredEditorSetting(EDITOR_SETTING_DEFINITIONS.fontFamily),
@@ -270,6 +281,7 @@ export function EditorSettingsProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const settingActions = useMemo(() => ({
+    setCodeLayoutMargin: (value: number) => updateSetting('codeLayoutMargin', value),
     setCursorBlinking: (value: EditorCursorBlinkingMode) => updateSetting('cursorBlinking', value),
     setBracketPairGuides: (value: boolean) => updateSetting('bracketPairGuides', value),
     setFontFamily: (value: EditorFontFamilyId) => updateSetting('fontFamily', value),
