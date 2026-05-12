@@ -1,6 +1,6 @@
-import { useCallback, useState, type CSSProperties, type ReactNode } from 'react';
+import { useCallback, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import { useEditorSettings } from '../../../context/EditorSettingsContext';
-import { useTheme, type Theme } from '../../../context/ThemeContext';
+import { useTheme } from '../../../context/ThemeContext';
 import {
   DEFAULT_EDITOR_BRACKET_PAIR_GUIDES,
   DEFAULT_EDITOR_FONT_LIGATURES,
@@ -24,7 +24,6 @@ import {
   EDITOR_SCROLL_BEYOND_LAST_LINE_CONFIG_KEY,
   EDITOR_SMOOTH_SCROLLING_CONFIG_KEY,
   EDITOR_TAB_SIZE_CONFIG_KEY,
-  EDITOR_THEME_CONFIG_KEY,
   EDITOR_WORD_WRAP_CONFIG_KEY,
   editorCursorBlinkingOptions,
   editorFoldingStrategyOptions,
@@ -32,7 +31,6 @@ import {
   editorLineNumbersOptions,
   editorRenderWhitespaceOptions,
   editorTabSizeOptions,
-  editorThemeOptions,
   editorWordWrapOptions,
   parseEditorCursorBlinking,
   parseEditorFoldingStrategy,
@@ -42,9 +40,15 @@ import {
   parseEditorRenderControlCharacters,
   parseEditorRenderWhitespace,
   parseEditorTabSize,
-  parseEditorTheme,
   parseEditorWordWrap,
 } from '../../../editor/editorSettings';
+import {
+  parseConfiguredColorThemeId,
+  parseImportedColorThemeRecords,
+  WORKBENCH_COLOR_THEME_CONFIG_KEY,
+  WORKBENCH_IMPORTED_THEMES_CONFIG_KEY,
+} from '../../../theme/colorThemeRegistry';
+import type { ColorThemeOption } from '../../../theme/colorThemeTypes';
 import { Button } from '../../ui/button';
 import { Combobox, type ComboboxOption } from '../../ui/combobox';
 import {
@@ -64,7 +68,6 @@ import { EditorThemeAdvancedDialog } from './EditorThemeAdvancedDialog';
 
 const CLOSE_ACTION_CONFIG_KEY = 'window.closeActionPreference';
 const FLOATING_INFO_VISIBLE_CONFIG_KEY = 'ui.floatingInfoWindow.visible';
-const THEME_CONFIG_KEY = 'ui.theme';
 const settingsSectionClassName = 'rounded-md border border-border/85 bg-muted/55 px-3 py-2.5';
 const settingsSectionTitleClassName = 'text-[13px] font-medium';
 const settingsSectionDescriptionClassName = 'text-[12px] text-muted-foreground';
@@ -72,7 +75,7 @@ const settingsSectionDescriptionClassName = 'text-[12px] text-muted-foreground';
 export interface MenuBarSettingsState {
   closeToTrayEnabled: boolean;
   floatingInfoWindowVisible: boolean;
-  theme: Theme;
+  themeId: string;
   editorCursorBlinking: ReturnType<typeof getConfiguredEditorCursorBlinking>;
   editorBracketPairGuides: ReturnType<typeof getConfiguredEditorBracketPairGuides>;
   editorFontFamily: ReturnType<typeof getConfiguredEditorFontFamily>;
@@ -88,7 +91,6 @@ export interface MenuBarSettingsState {
   editorScrollBeyondLastLine: ReturnType<typeof getConfiguredEditorScrollBeyondLastLine>;
   editorSmoothScrolling: ReturnType<typeof getConfiguredEditorSmoothScrolling>;
   editorTabSize: ReturnType<typeof getConfiguredEditorTabSize>;
-  editorTheme: ReturnType<typeof getConfiguredEditorTheme>;
   editorWordWrap: ReturnType<typeof getConfiguredEditorWordWrap>;
 }
 
@@ -101,8 +103,11 @@ function getFloatingInfoWindowVisible(): boolean {
   return window.electronAPI?.config.get(FLOATING_INFO_VISIBLE_CONFIG_KEY) === true;
 }
 
-function getConfiguredTheme(): Theme {
-  return window.electronAPI?.config.get(THEME_CONFIG_KEY) === 'dark' ? 'dark' : 'light';
+function getConfiguredThemeId(): string {
+  return parseConfiguredColorThemeId(
+    window.electronAPI?.config.get(WORKBENCH_COLOR_THEME_CONFIG_KEY),
+    parseImportedColorThemeRecords(window.electronAPI?.config.get(WORKBENCH_IMPORTED_THEMES_CONFIG_KEY)),
+  );
 }
 
 function getConfiguredEditorFontSize(): number {
@@ -111,10 +116,6 @@ function getConfiguredEditorFontSize(): number {
 
 function getConfiguredEditorFontFamily() {
   return parseEditorFontFamily(window.electronAPI?.config.get(EDITOR_FONT_FAMILY_CONFIG_KEY));
-}
-
-function getConfiguredEditorTheme() {
-  return parseEditorTheme(window.electronAPI?.config.get(EDITOR_THEME_CONFIG_KEY));
 }
 
 function getConfiguredEditorWordWrap() {
@@ -185,7 +186,7 @@ function getPersistedSettingsState(): MenuBarSettingsState {
   return {
     closeToTrayEnabled: getConfiguredCloseAction() === 'tray',
     floatingInfoWindowVisible: getFloatingInfoWindowVisible(),
-    theme: getConfiguredTheme(),
+    themeId: getConfiguredThemeId(),
     editorCursorBlinking: getConfiguredEditorCursorBlinking(),
     editorBracketPairGuides: getConfiguredEditorBracketPairGuides(),
     editorFontFamily: getConfiguredEditorFontFamily(),
@@ -201,7 +202,6 @@ function getPersistedSettingsState(): MenuBarSettingsState {
     editorScrollBeyondLastLine: getConfiguredEditorScrollBeyondLastLine(),
     editorSmoothScrolling: getConfiguredEditorSmoothScrolling(),
     editorTabSize: getConfiguredEditorTabSize(),
-    editorTheme: getConfiguredEditorTheme(),
     editorWordWrap: getConfiguredEditorWordWrap(),
   };
 }
@@ -299,14 +299,32 @@ export function useMenuBarSettingsController() {
     setScrollBeyondLastLine: setEditorScrollBeyondLastLine,
     setSmoothScrolling: setEditorSmoothScrolling,
     setTabSize: setEditorTabSize,
-    setTheme: setEditorTheme,
     setWordWrap: setEditorWordWrap,
   } = useEditorSettings();
-  const { setTheme } = useTheme();
+  const {
+    availableThemes,
+    getThemePreview,
+    importTheme,
+    isImportingTheme,
+    setTheme,
+  } = useTheme();
   const [editorFontAdvancedDialogOpen, setEditorFontAdvancedDialogOpen] = useState(false);
-  const [editorThemeAdvancedDialogOpen, setEditorThemeAdvancedDialogOpen] = useState(false);
+  const [themeAdvancedDialogOpen, setThemeAdvancedDialogOpen] = useState(false);
+  const [importedThemeOptionOverride, setImportedThemeOptionOverride] = useState<ColorThemeOption | null>(null);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [settingsState, setSettingsState] = useState<MenuBarSettingsState>(getPersistedSettingsState);
+
+  const availableThemeOptions = useMemo(() => {
+    if (!importedThemeOptionOverride) {
+      return availableThemes;
+    }
+
+    if (availableThemes.some((option) => option.value === importedThemeOptionOverride.value)) {
+      return availableThemes;
+    }
+
+    return [...availableThemes, importedThemeOptionOverride];
+  }, [availableThemes, importedThemeOptionOverride]);
 
   const patchSettingsState = useCallback((partialState: Partial<MenuBarSettingsState>) => {
     setSettingsState((current) => ({ ...current, ...partialState }));
@@ -315,9 +333,10 @@ export function useMenuBarSettingsController() {
   const handleSettingsDialogOpenChange = useCallback((nextOpen: boolean) => {
     if (nextOpen) {
       setSettingsState(getPersistedSettingsState());
+      setImportedThemeOptionOverride(null);
     } else {
       setEditorFontAdvancedDialogOpen(false);
-      setEditorThemeAdvancedDialogOpen(false);
+      setThemeAdvancedDialogOpen(false);
     }
 
     setSettingsDialogOpen(nextOpen);
@@ -327,8 +346,8 @@ export function useMenuBarSettingsController() {
     setEditorFontAdvancedDialogOpen(nextOpen);
   }, []);
 
-  const handleEditorThemeAdvancedDialogOpenChange = useCallback((nextOpen: boolean) => {
-    setEditorThemeAdvancedDialogOpen(nextOpen);
+  const handleThemeAdvancedDialogOpenChange = useCallback((nextOpen: boolean) => {
+    setThemeAdvancedDialogOpen(nextOpen);
   }, []);
 
   const handleCloseToTrayChange = (checked: boolean) => {
@@ -342,11 +361,21 @@ export function useMenuBarSettingsController() {
     void window.electronAPI?.setFloatingInfoWindowVisible(checked);
   };
 
-  const handleThemeModeChange = (checked: boolean) => {
-    const nextTheme = checked ? 'dark' : 'light';
-    patchSettingsState({ theme: nextTheme });
-    setTheme(nextTheme);
-  };
+  const handleThemeChange = useCallback((value: string) => {
+    patchSettingsState({ themeId: value });
+    setTheme(value);
+  }, [patchSettingsState, setTheme]);
+
+  const handleThemeImport = useCallback(async () => {
+    const importedTheme = await importTheme();
+
+    if (!importedTheme) {
+      return;
+    }
+
+    setImportedThemeOptionOverride(importedTheme);
+    patchSettingsState({ themeId: importedTheme.value });
+  }, [importTheme, patchSettingsState]);
 
   const handleEditorFontSizeChange = (value: number[]) => {
     const nextValue = value[0] ?? settingsState.editorFontSize;
@@ -387,16 +416,10 @@ export function useMenuBarSettingsController() {
     setEditorCursorBlinking(nextCursorBlinking);
   };
 
-  const handleEditorThemeChange = (value: string) => {
-    const nextTheme = parseEditorTheme(value);
-    patchSettingsState({ editorTheme: nextTheme });
-    setEditorTheme(nextTheme);
-  };
-
-  const handleEditorThemeAdvancedSelect = useCallback((value: string) => {
-    handleEditorThemeChange(value);
-    setEditorThemeAdvancedDialogOpen(false);
-  }, [handleEditorThemeChange]);
+  const handleThemeAdvancedSelect = useCallback((value: string) => {
+    handleThemeChange(value);
+    setThemeAdvancedDialogOpen(false);
+  }, [handleThemeChange]);
 
   const handleEditorWordWrapChange = (value: string) => {
     const nextWordWrap = parseEditorWordWrap(value);
@@ -463,7 +486,8 @@ export function useMenuBarSettingsController() {
 
   return {
     editorFontAdvancedDialogOpen,
-    editorThemeAdvancedDialogOpen,
+    availableThemeOptions,
+    getThemePreview,
     handleCloseToTrayChange,
     handleEditorBracketPairGuidesChange,
     handleEditorCursorBlinkingChange,
@@ -483,16 +507,18 @@ export function useMenuBarSettingsController() {
     handleEditorScrollBeyondLastLineChange,
     handleEditorSmoothScrollingChange,
     handleEditorTabSizeChange,
-    handleEditorThemeAdvancedDialogOpenChange,
-    handleEditorThemeAdvancedSelect,
-    handleEditorThemeChange,
+    handleThemeAdvancedDialogOpenChange,
+    handleThemeAdvancedSelect,
+    handleThemeChange,
+    handleThemeImport,
     handleEditorWordWrapChange,
     handleFloatingInfoWindowVisibleChange,
     handleSettingsDialogOpenChange,
-    handleThemeModeChange,
+    isImportingTheme,
     openSettingsDialog,
     settingsDialogOpen,
     settingsState,
+    themeAdvancedDialogOpen,
   };
 }
 
@@ -507,7 +533,8 @@ export function MenuBarSettingsDialogs({
 }) {
   const {
     editorFontAdvancedDialogOpen,
-    editorThemeAdvancedDialogOpen,
+    availableThemeOptions,
+    getThemePreview,
     handleCloseToTrayChange,
     handleEditorBracketPairGuidesChange,
     handleEditorCursorBlinkingChange,
@@ -527,15 +554,17 @@ export function MenuBarSettingsDialogs({
     handleEditorScrollBeyondLastLineChange,
     handleEditorSmoothScrollingChange,
     handleEditorTabSizeChange,
-    handleEditorThemeAdvancedDialogOpenChange,
-    handleEditorThemeAdvancedSelect,
-    handleEditorThemeChange,
+    handleThemeAdvancedDialogOpenChange,
+    handleThemeAdvancedSelect,
+    handleThemeChange,
+    handleThemeImport,
     handleEditorWordWrapChange,
     handleFloatingInfoWindowVisibleChange,
     handleSettingsDialogOpenChange,
-    handleThemeModeChange,
+    isImportingTheme,
     settingsDialogOpen,
     settingsState,
+    themeAdvancedDialogOpen,
   } = controller;
 
   return (
@@ -549,11 +578,52 @@ export function MenuBarSettingsDialogs({
           <DialogHeader>
             <DialogTitle>Settings</DialogTitle>
             <DialogDescription>
-              Manage appearance and window behavior preferences.
+              Manage workbench appearance, editor behavior, and window preferences.
             </DialogDescription>
           </DialogHeader>
           <ScrollArea className="min-h-0">
             <div className="space-y-2.5 pr-4">
+              <SettingsComboboxSection
+                value={settingsState.themeId}
+                onValueChange={handleThemeChange}
+                options={availableThemeOptions.map((option) => ({
+                  value: option.value,
+                  label: option.label,
+                  description: option.description,
+                }))}
+                title="UI theme"
+                description="Choose the VS Code color theme used across Pristine UI, Monaco, and the terminal. Imported themes fall back to the matching built-in 2026 base theme for missing tokens."
+                searchPlaceholder="Search UI themes..."
+                emptyText="No UI theme found."
+                testId="settings-theme-combobox"
+                action={(
+                  <div className="flex shrink-0 items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      data-testid="settings-theme-advanced-button"
+                      className="hover:cursor-pointer"
+                      onClick={() => controller.handleThemeAdvancedDialogOpenChange(true)}
+                    >
+                      Advanced
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      data-testid="settings-theme-import-button"
+                      className="hover:cursor-pointer"
+                      disabled={isImportingTheme}
+                      onClick={() => {
+                        void handleThemeImport();
+                      }}
+                    >
+                      {isImportingTheme ? 'Importing...' : 'Import'}
+                    </Button>
+                  </div>
+                )}
+              />
               <div className={settingsSectionClassName}>
                 <div className="space-y-2.5">
                   <div className="space-y-1">
@@ -603,32 +673,6 @@ export function MenuBarSettingsDialogs({
                     data-testid="settings-editor-font-family-advanced-button"
                     className="shrink-0 hover:cursor-pointer"
                     onClick={() => controller.handleEditorFontAdvancedDialogOpenChange(true)}
-                  >
-                    Advanced
-                  </Button>
-                )}
-              />
-              <SettingsComboboxSection
-                value={settingsState.editorTheme}
-                onValueChange={handleEditorThemeChange}
-                options={editorThemeOptions.map((option) => ({
-                  value: option.value,
-                  label: option.label,
-                  description: option.description,
-                }))}
-                title="Code editor theme"
-                description="Choose the Monaco color theme used for source files."
-                searchPlaceholder="Search editor themes..."
-                emptyText="No editor theme found."
-                testId="settings-editor-theme-combobox"
-                action={(
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    data-testid="settings-editor-theme-advanced-button"
-                    className="shrink-0 hover:cursor-pointer"
-                    onClick={() => controller.handleEditorThemeAdvancedDialogOpenChange(true)}
                   >
                     Advanced
                   </Button>
@@ -796,21 +840,6 @@ export function MenuBarSettingsDialogs({
               <div className={settingsSectionClassName}>
                 <div className="flex items-center justify-between gap-4">
                   <div className="space-y-1">
-                    <p className={settingsSectionTitleClassName}>Dark mode</p>
-                    <p className={settingsSectionDescriptionClassName} data-testid="theme-mode-description">
-                      Switch between the default light theme and the dark theme.
-                    </p>
-                  </div>
-                  <Switch
-                    checked={settingsState.theme === 'dark'}
-                    data-testid="settings-theme-switch"
-                    onCheckedChange={handleThemeModeChange}
-                  />
-                </div>
-              </div>
-              <div className={settingsSectionClassName}>
-                <div className="flex items-center justify-between gap-4">
-                  <div className="space-y-1">
                     <p className={settingsSectionTitleClassName}>Close to tray</p>
                     <p className={settingsSectionDescriptionClassName} data-testid="close-behavior-description">
                       Keep Pristine running in the tray when the window is closed.
@@ -862,11 +891,13 @@ export function MenuBarSettingsDialogs({
       />
 
       <EditorThemeAdvancedDialog
-        open={editorThemeAdvancedDialogOpen}
-        onOpenChange={handleEditorThemeAdvancedDialogOpenChange}
-        onSelectTheme={handleEditorThemeAdvancedSelect}
-        selectedTheme={settingsState.editorTheme}
+        availableThemes={availableThemeOptions}
         dialogStyle={dialogStyle}
+        getThemePreview={getThemePreview}
+        open={themeAdvancedDialogOpen}
+        onOpenChange={handleThemeAdvancedDialogOpenChange}
+        onSelectTheme={handleThemeAdvancedSelect}
+        selectedTheme={settingsState.themeId}
       />
     </>
   );

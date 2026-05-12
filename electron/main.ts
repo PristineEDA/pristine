@@ -23,10 +23,19 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MINIMUM_SPLASH_DURATION_MS = 3000;
 const CLOSE_ACTION_CONFIG_KEY = 'window.closeActionPreference';
 const FLOATING_INFO_VISIBLE_CONFIG_KEY = 'ui.floatingInfoWindow.visible';
+const WORKBENCH_COLOR_THEME_KIND_CONFIG_KEY = 'workbench.colorThemeKind';
+const WORKBENCH_FLOATING_INFO_BACKGROUND_COLOR_CONFIG_KEY = 'workbench.floatingInfoBackgroundColor';
+const WORKBENCH_SPLASH_BACKGROUND_COLOR_CONFIG_KEY = 'workbench.splashBackgroundColor';
+const WORKBENCH_STARTUP_BACKGROUND_COLOR_CONFIG_KEY = 'workbench.startupBackgroundColor';
 const AUTH_CALLBACK_PROTOCOL = 'pristine';
 const FLOATING_INFO_WINDOW_TITLE = 'Pristine Floating Info';
 const FLOATING_INFO_WINDOW_WIDTH = 60;
 const FLOATING_INFO_WINDOW_HEIGHT = 24;
+const DEFAULT_STARTUP_BACKGROUND_COLOR = '#121314';
+const DEFAULT_SPLASH_BACKGROUND_COLOR = '#191A1B';
+const DEFAULT_FLOATING_INFO_BACKGROUND_COLOR = '#121314';
+
+type ThemeKind = 'light' | 'dark';
 
 let mainWindow: BrowserWindow | null = null;
 let splashWindow: BrowserWindow | null = null;
@@ -118,6 +127,33 @@ function getSplashHtmlPath(): string {
 
 function getFloatingInfoRendererUrl(): string {
   return new URL('floating-info.html', process.env['VITE_DEV_SERVER_URL']).toString();
+}
+
+function getConfiguredThemeKind(): ThemeKind {
+  return getConfigValue(WORKBENCH_COLOR_THEME_KIND_CONFIG_KEY) === 'light' ? 'light' : 'dark';
+}
+
+function getConfiguredWindowBackgroundColor(configKey: string, fallback: string): string {
+  const value = getConfigValue(configKey);
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : fallback;
+}
+
+function createRendererSurfaceQuery(backgroundColor: string): Record<string, string> {
+  return {
+    backgroundColor,
+    themeKind: getConfiguredThemeKind(),
+  };
+}
+
+function withRendererSurfaceQuery(rendererUrl: string, backgroundColor: string): string {
+  const url = new URL(rendererUrl);
+  const query = createRendererSurfaceQuery(backgroundColor);
+
+  for (const [key, value] of Object.entries(query)) {
+    url.searchParams.set(key, value);
+  }
+
+  return url.toString();
 }
 
 function createTrayIcon() {
@@ -291,6 +327,10 @@ function createFloatingInfoWindow(): BrowserWindow {
   }
 
   const { x, y } = getFloatingInfoWindowPosition();
+  const backgroundColor = getConfiguredWindowBackgroundColor(
+    WORKBENCH_FLOATING_INFO_BACKGROUND_COLOR_CONFIG_KEY,
+    DEFAULT_FLOATING_INFO_BACKGROUND_COLOR,
+  );
   const window = new BrowserWindow({
     width: FLOATING_INFO_WINDOW_WIDTH,
     height: FLOATING_INFO_WINDOW_HEIGHT,
@@ -310,7 +350,7 @@ function createFloatingInfoWindow(): BrowserWindow {
     focusable: true,
     show: false,
     title: FLOATING_INFO_WINDOW_TITLE,
-    backgroundColor: '#111827',
+    backgroundColor,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -320,9 +360,11 @@ function createFloatingInfoWindow(): BrowserWindow {
   });
 
   if (process.env['VITE_DEV_SERVER_URL']) {
-    window.loadURL(getFloatingInfoRendererUrl());
+    window.loadURL(withRendererSurfaceQuery(getFloatingInfoRendererUrl(), backgroundColor));
   } else {
-    window.loadFile(getFloatingInfoRendererPath());
+    window.loadFile(getFloatingInfoRendererPath(), {
+      query: createRendererSurfaceQuery(backgroundColor),
+    });
   }
 
   window.setAlwaysOnTop(true, 'screen-saver');
@@ -435,6 +477,10 @@ function createTray(): Tray {
 }
 
 function createSplashWindow(): BrowserWindow {
+  const backgroundColor = getConfiguredWindowBackgroundColor(
+    WORKBENCH_SPLASH_BACKGROUND_COLOR_CONFIG_KEY,
+    DEFAULT_SPLASH_BACKGROUND_COLOR,
+  );
   const window = new BrowserWindow({
     width: 720,
     height: 405,
@@ -446,7 +492,7 @@ function createSplashWindow(): BrowserWindow {
     show: true,
     center: true,
     skipTaskbar: true,
-    backgroundColor: '#0b1020',
+    backgroundColor,
     autoHideMenuBar: true,
     webPreferences: {
       nodeIntegration: false,
@@ -456,7 +502,9 @@ function createSplashWindow(): BrowserWindow {
     },
   });
 
-  window.loadFile(getSplashHtmlPath());
+  window.loadFile(getSplashHtmlPath(), {
+    query: createRendererSurfaceQuery(backgroundColor),
+  });
   window.on('closed', () => {
     if (splashWindow === window) {
       splashWindow = null;
@@ -470,6 +518,10 @@ function createSplashWindow(): BrowserWindow {
 function createMainWindow(): BrowserWindow {
   const isMac = process.platform === 'darwin';
   const preloadFile = getPreloadPath();
+  const backgroundColor = getConfiguredWindowBackgroundColor(
+    WORKBENCH_STARTUP_BACKGROUND_COLOR_CONFIG_KEY,
+    DEFAULT_STARTUP_BACKGROUND_COLOR,
+  );
 
   const window = new BrowserWindow({
     width: 1440,
@@ -478,6 +530,7 @@ function createMainWindow(): BrowserWindow {
     minHeight: 600,
     frame: isMac,
     show: false,
+    backgroundColor,
     titleBarStyle: isMac ? 'hiddenInset' : undefined,
     trafficLightPosition: isMac ? { x: 12, y: 10 } : undefined,
     webPreferences: {

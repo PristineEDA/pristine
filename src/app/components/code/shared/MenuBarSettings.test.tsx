@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { getEditorFontFamilyLabel } from '../../../editor/editorSettings';
 import {
   ensureEditorFontFamilyLoadedMock,
+  importThemeMock,
   mockPersistedSettingsConfig,
   renderMenuBar,
   setEditorBracketPairGuidesMock,
@@ -20,7 +21,6 @@ import {
   setEditorScrollBeyondLastLineMock,
   setEditorSmoothScrollingMock,
   setEditorTabSizeMock,
-  setEditorThemeMock,
   setEditorWordWrapMock,
   setThemeMock,
 } from './MenuBar.testSupport';
@@ -29,12 +29,11 @@ describe('MenuBar settings', () => {
   it('opens settings from native menu commands on macOS', async () => {
     window.electronAPI!.platform = 'darwin';
     mockPersistedSettingsConfig({
-      appTheme: 'dark',
+      colorTheme: 'vscode-2026-dark',
       closeAction: 'tray',
       floatingInfoWindowVisible: true,
       fontFamily: 'fira-code',
       fontSize: 18,
-      editorTheme: 'night-owl',
     });
 
     renderMenuBar();
@@ -53,12 +52,11 @@ describe('MenuBar settings', () => {
     const user = userEvent.setup();
 
     mockPersistedSettingsConfig({
-      appTheme: 'dark',
+      colorTheme: 'vscode-2026-dark',
       closeAction: 'tray',
       floatingInfoWindowVisible: true,
       fontFamily: 'fira-code',
       fontSize: 18,
-      editorTheme: 'night-owl',
     });
 
     renderMenuBar();
@@ -70,15 +68,17 @@ describe('MenuBar settings', () => {
     expect(await screen.findByTestId('settings-dialog')).toBeVisible();
     expect(screen.getByTestId('settings-editor-font-family-combobox')).toHaveTextContent(getEditorFontFamilyLabel('fira-code'));
     expect(screen.getByTestId('settings-editor-font-family-advanced-button')).toBeVisible();
+    expect(screen.getByTestId('settings-theme-advanced-button')).toBeVisible();
+    expect(screen.getByTestId('settings-theme-import-button')).toBeVisible();
     expect(screen.getByTestId('settings-editor-font-size-value')).toHaveTextContent('18px');
     expect(screen.queryByTestId('settings-code-layout-margin-slider')).not.toBeInTheDocument();
-    expect(screen.getByTestId('settings-editor-theme-combobox')).toHaveTextContent('Night Owl');
+    expect(screen.getByTestId('settings-theme-combobox')).toHaveTextContent('Dark 2026');
   });
 
-  it('shows editor settings plus theme, close-to-tray and floating info window visibility', async () => {
+  it('shows editor settings plus the unified theme, close-to-tray and floating info window visibility', async () => {
     const user = userEvent.setup();
     mockPersistedSettingsConfig({
-      appTheme: 'dark',
+      colorTheme: 'vscode-2026-dark',
       bracketPairGuides: false,
       closeAction: 'tray',
       cursorBlinking: 'solid',
@@ -96,7 +96,6 @@ describe('MenuBar settings', () => {
       scrollBeyondLastLine: true,
       smoothScrolling: false,
       tabSize: 8,
-      editorTheme: 'night-owl',
       wordWrap: 'bounded',
     });
 
@@ -106,9 +105,9 @@ describe('MenuBar settings', () => {
 
     expect(await screen.findByTestId('settings-dialog')).toBeVisible();
     expect(screen.getByTestId('settings-editor-font-family-combobox')).toHaveTextContent(getEditorFontFamilyLabel('fira-code'));
-  expect(screen.queryByTestId('settings-code-layout-margin-slider')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('settings-code-layout-margin-slider')).not.toBeInTheDocument();
     expect(screen.getByTestId('settings-editor-font-size-value')).toHaveTextContent('18px');
-    expect(screen.getByTestId('settings-editor-theme-combobox')).toHaveTextContent('Night Owl');
+    expect(screen.getByTestId('settings-theme-combobox')).toHaveTextContent('Dark 2026');
     expect(screen.getByTestId('settings-editor-word-wrap-combobox')).toHaveTextContent('Bounded');
     expect(screen.getByTestId('settings-editor-tab-size-combobox')).toHaveTextContent('8 spaces');
     expect(screen.getByTestId('settings-editor-cursor-blinking-combobox')).toHaveTextContent('Solid');
@@ -123,7 +122,6 @@ describe('MenuBar settings', () => {
     expect(screen.getByTestId('settings-editor-glyph-margin-switch')).toHaveAttribute('data-state', 'unchecked');
     expect(screen.getByTestId('settings-editor-bracket-pair-guides-switch')).toHaveAttribute('data-state', 'unchecked');
     expect(screen.getByTestId('settings-editor-indent-guides-switch')).toHaveAttribute('data-state', 'unchecked');
-    expect(screen.getByTestId('settings-theme-switch')).toHaveAttribute('data-state', 'checked');
     expect(screen.getByTestId('settings-close-to-tray-switch')).toHaveAttribute('data-state', 'checked');
     expect(screen.getByTestId('settings-floating-info-window-switch')).toHaveAttribute('data-state', 'checked');
 
@@ -141,8 +139,8 @@ describe('MenuBar settings', () => {
     await user.click(await screen.findByTestId('settings-editor-line-numbers-option-interval'));
     await user.click(screen.getByTestId('settings-editor-folding-strategy-combobox'));
     await user.click(await screen.findByTestId('settings-editor-folding-strategy-option-indentation'));
-    await user.click(screen.getByTestId('settings-editor-theme-combobox'));
-    await user.click(await screen.findByTestId('settings-editor-theme-option-github-dark'));
+    await user.click(screen.getByTestId('settings-theme-combobox'));
+    await user.click(await screen.findByTestId('settings-theme-option-vscode-2026-light'));
     await user.click(screen.getByTestId('settings-editor-font-ligatures-switch'));
     await user.click(screen.getByTestId('settings-editor-render-control-characters-switch'));
     await user.click(screen.getByTestId('settings-editor-smooth-scrolling-switch'));
@@ -151,16 +149,14 @@ describe('MenuBar settings', () => {
     await user.click(screen.getByTestId('settings-editor-glyph-margin-switch'));
     await user.click(screen.getByTestId('settings-editor-bracket-pair-guides-switch'));
     await user.click(screen.getByTestId('settings-editor-indent-guides-switch'));
-    await user.click(screen.getByTestId('settings-theme-switch'));
     await user.click(screen.getByTestId('settings-close-to-tray-switch'));
     await user.click(screen.getByTestId('settings-floating-info-window-switch'));
 
     expect(screen.getByTestId('settings-editor-font-family-combobox')).toHaveTextContent('Victor Mono');
     expect(screen.getByTestId('settings-editor-word-wrap-combobox')).toHaveTextContent('On');
     expect(screen.getByTestId('settings-editor-tab-size-combobox')).toHaveTextContent('2 spaces');
-    expect(screen.getByTestId('settings-editor-theme-combobox')).toHaveTextContent('GitHub Dark');
+    expect(screen.getByTestId('settings-theme-combobox')).toHaveTextContent('Light 2026');
     expect(screen.getByTestId('settings-editor-font-ligatures-switch')).toHaveAttribute('data-state', 'checked');
-    expect(screen.getByTestId('settings-theme-switch')).toHaveAttribute('data-state', 'unchecked');
     expect(screen.getByTestId('settings-close-to-tray-switch')).toHaveAttribute('data-state', 'unchecked');
     expect(screen.getByTestId('settings-floating-info-window-switch')).toHaveAttribute('data-state', 'unchecked');
 
@@ -179,8 +175,7 @@ describe('MenuBar settings', () => {
     expect(setEditorGlyphMarginMock).toHaveBeenCalledWith(true);
     expect(setEditorBracketPairGuidesMock).toHaveBeenCalledWith(true);
     expect(setEditorIndentGuidesMock).toHaveBeenCalledWith(true);
-    expect(setEditorThemeMock).toHaveBeenCalledWith('github-dark');
-    expect(setThemeMock).toHaveBeenCalledWith('light');
+    expect(setThemeMock).toHaveBeenCalledWith('vscode-2026-light');
     expect(window.electronAPI?.config.set).toHaveBeenCalledWith('window.closeActionPreference', 'quit');
     expect(window.electronAPI?.config.set).toHaveBeenCalledWith('ui.floatingInfoWindow.visible', false);
     expect(window.electronAPI?.setFloatingInfoWindowVisible).toHaveBeenCalledWith(false);
@@ -252,11 +247,11 @@ describe('MenuBar settings', () => {
     expect(setEditorFontFamilyMock).toHaveBeenCalledWith('victor-mono');
   });
 
-  it('opens the advanced editor theme picker, filters preview cards, and applies the selected preview card', async () => {
+  it('opens the advanced theme picker, filters preview cards, and applies the selected preview card', async () => {
     const user = userEvent.setup();
 
     mockPersistedSettingsConfig({
-      editorTheme: 'dracula',
+      colorTheme: 'vscode-2026-dark',
     });
 
     renderMenuBar();
@@ -264,60 +259,88 @@ describe('MenuBar settings', () => {
     await user.click(screen.getByTestId('menu-settings-button'));
     expect(await screen.findByTestId('settings-dialog')).toBeVisible();
 
-    await user.click(screen.getByTestId('settings-editor-theme-advanced-button'));
+    await user.click(screen.getByTestId('settings-theme-advanced-button'));
 
-    expect(await screen.findByTestId('settings-editor-theme-advanced-dialog')).toBeVisible();
-    expect(screen.getByTestId('settings-editor-theme-advanced-dialog')).toHaveClass('h-[85vh]');
-    expect(screen.getByTestId('settings-editor-theme-advanced-scroll-area')).toHaveClass('h-full');
-    expect(screen.getByTestId('settings-editor-theme-current-section')).toBeVisible();
-    expect(screen.getByTestId('settings-editor-theme-available-section')).toBeVisible();
-    expect(screen.getByTestId('settings-editor-theme-advanced-grid')).toBeVisible();
+    expect(await screen.findByTestId('settings-theme-advanced-dialog')).toBeVisible();
+    expect(screen.getByTestId('settings-theme-advanced-dialog')).toHaveClass('h-[85vh]');
+    expect(screen.getByTestId('settings-theme-advanced-scroll-area')).toHaveClass('h-full');
+    expect(screen.getByTestId('settings-theme-current-section')).toBeVisible();
+    expect(screen.getByTestId('settings-theme-available-section')).toBeVisible();
+    expect(screen.getByTestId('settings-theme-advanced-grid')).toBeVisible();
     expect(screen.getByText('Current')).toBeInTheDocument();
     expect(screen.getByText('Available themes')).toBeInTheDocument();
-    const searchInput = screen.getByTestId('settings-editor-theme-advanced-search-input');
-    expect(searchInput).toHaveAttribute('placeholder', 'Search editor themes...');
+    const searchInput = screen.getByTestId('settings-theme-advanced-search-input');
+    expect(searchInput).toHaveAttribute('placeholder', 'Search UI themes...');
     expect(searchInput).toHaveClass('border-foreground/20');
     await waitFor(() => {
       expect(searchInput).not.toHaveFocus();
-      expect(screen.getByTestId('settings-editor-theme-advanced-close-button')).toHaveFocus();
+      expect(screen.getByTestId('settings-theme-advanced-close-button')).toHaveFocus();
     });
-    expect(screen.getByTestId('settings-editor-theme-current-card-dracula')).toHaveAttribute('data-state', 'unselected');
-    expect(screen.getByTestId('settings-editor-theme-current-author-dracula')).toHaveTextContent('Dracula Theme');
-    expect(screen.getByTestId('settings-editor-theme-current-editor-dracula')).toBeVisible();
-    expect(screen.getByTestId('settings-editor-theme-preview-card-dracula')).toHaveAttribute('data-state', 'selected');
-    expect(screen.getByTestId('settings-editor-theme-preview-label-macos-modern-dark-ventura-xcode-default')).toHaveClass('truncate');
-    expect(screen.getByTestId('settings-editor-theme-preview-label-macos-modern-dark-ventura-xcode-default')).toHaveClass('w-full');
-    expect(screen.getByTestId('settings-editor-theme-preview-author-dracula')).toHaveTextContent('Dracula Theme');
-    expect(screen.getByTestId('settings-editor-theme-preview-editor-palenight-theme')).toBeVisible();
-    expect(screen.getByTestId('settings-editor-theme-preview-author-palenight-theme')).toHaveTextContent('Olaolu Olawuyi');
-    expect(screen.getByTestId('settings-editor-theme-preview-line-module-palenight-theme')).toHaveTextContent('module alu(clk)');
-    expect(screen.getByTestId('settings-editor-theme-preview-selection-palenight-theme')).toHaveTextContent("sum = calc('RUN')");
+    expect(screen.getByTestId('settings-theme-current-card-vscode-2026-dark')).toHaveAttribute('data-state', 'unselected');
+    expect(screen.getByTestId('settings-theme-current-author-vscode-2026-dark')).toHaveTextContent('Microsoft');
+    expect(screen.getByTestId('settings-theme-current-editor-vscode-2026-dark')).toBeVisible();
+    expect(screen.getByTestId('settings-theme-preview-card-vscode-2026-dark')).toHaveAttribute('data-state', 'selected');
+    expect(screen.getByTestId('settings-theme-preview-label-vscode-2026-light')).toHaveClass('truncate');
+    expect(screen.getByTestId('settings-theme-preview-label-vscode-2026-light')).toHaveClass('w-full');
+    expect(screen.getByTestId('settings-theme-preview-author-vscode-2026-light')).toHaveTextContent('Microsoft');
+    expect(screen.getByTestId('settings-theme-preview-editor-vscode-2026-light')).toBeVisible();
+    expect(screen.getByTestId('settings-theme-preview-line-module-vscode-2026-light')).toHaveTextContent('module alu(clk)');
+    expect(screen.getByTestId('settings-theme-preview-selection-vscode-2026-light')).toHaveTextContent("sum = calc('RUN')");
 
     await user.type(searchInput, 'zzz');
 
-    expect(screen.getByTestId('settings-editor-theme-current-card-dracula')).toBeVisible();
-    expect(screen.getByTestId('settings-editor-theme-advanced-empty-state')).toHaveTextContent('No editor theme found.');
-    expect(screen.queryByTestId('settings-editor-theme-preview-card-dracula')).not.toBeInTheDocument();
+    expect(screen.getByTestId('settings-theme-current-card-vscode-2026-dark')).toBeVisible();
+    expect(screen.getByTestId('settings-theme-advanced-empty-state')).toHaveTextContent('No UI theme found.');
+    expect(screen.queryByTestId('settings-theme-preview-card-vscode-2026-dark')).not.toBeInTheDocument();
 
-    fireEvent.change(searchInput, { target: { value: 'palenight' } });
+    fireEvent.change(searchInput, { target: { value: 'light' } });
 
-    expect(screen.getByTestId('settings-editor-theme-preview-card-palenight-theme')).toHaveAttribute('data-state', 'unselected');
-    expect(screen.queryByTestId('settings-editor-theme-preview-card-dracula')).not.toBeInTheDocument();
+    expect(screen.getByTestId('settings-theme-preview-card-vscode-2026-light')).toHaveAttribute('data-state', 'unselected');
+    expect(screen.queryByTestId('settings-theme-preview-card-vscode-2026-dark')).not.toBeInTheDocument();
 
-    await user.click(screen.getByTestId('settings-editor-theme-preview-card-palenight-theme'));
+    await user.click(screen.getByTestId('settings-theme-preview-card-vscode-2026-light'));
 
     await waitFor(() => {
-      expect(screen.queryByTestId('settings-editor-theme-advanced-dialog')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('settings-theme-advanced-dialog')).not.toBeInTheDocument();
     });
 
-    expect(screen.getByTestId('settings-editor-theme-combobox')).toHaveTextContent('Palenight Theme');
-    expect(setEditorThemeMock).toHaveBeenCalledWith('palenight-theme');
+    expect(screen.getByTestId('settings-theme-combobox')).toHaveTextContent('Light 2026');
+    expect(setThemeMock).toHaveBeenCalledWith('vscode-2026-light');
+  });
+
+  it('imports a local UI theme from settings and selects it immediately', async () => {
+    const user = userEvent.setup();
+
+    importThemeMock.mockResolvedValue({
+      value: 'imported-solarized-dark',
+      label: 'Solarized Dark',
+      description: 'Imported from solarized-dark.json.',
+      author: 'Imported theme',
+      kind: 'dark',
+      source: 'imported',
+    });
+
+    mockPersistedSettingsConfig({
+      colorTheme: 'vscode-2026-dark',
+    });
+
+    renderMenuBar();
+
+    await user.click(screen.getByTestId('menu-settings-button'));
+    expect(await screen.findByTestId('settings-dialog')).toBeVisible();
+
+    await user.click(screen.getByTestId('settings-theme-import-button'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('settings-theme-combobox')).toHaveTextContent('Solarized Dark');
+    });
+    expect(importThemeMock).toHaveBeenCalledTimes(1);
   });
 
   it('re-reads persisted settings each time the dialog opens', async () => {
     const user = userEvent.setup();
     mockPersistedSettingsConfig({
-      appTheme: 'dark',
+      colorTheme: 'vscode-2026-dark',
       bracketPairGuides: false,
       closeAction: 'tray',
       cursorBlinking: 'solid',
@@ -335,7 +358,6 @@ describe('MenuBar settings', () => {
       scrollBeyondLastLine: true,
       smoothScrolling: false,
       tabSize: 8,
-      editorTheme: 'night-owl',
       wordWrap: 'bounded',
     });
 
@@ -345,9 +367,9 @@ describe('MenuBar settings', () => {
 
     expect(await screen.findByTestId('settings-dialog')).toBeVisible();
     expect(screen.getByTestId('settings-editor-font-family-combobox')).toHaveTextContent(getEditorFontFamilyLabel('fira-code'));
-  expect(screen.queryByTestId('settings-code-layout-margin-slider')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('settings-code-layout-margin-slider')).not.toBeInTheDocument();
     expect(screen.getByTestId('settings-editor-font-size-value')).toHaveTextContent('18px');
-    expect(screen.getByTestId('settings-editor-theme-combobox')).toHaveTextContent('Night Owl');
+    expect(screen.getByTestId('settings-theme-combobox')).toHaveTextContent('Dark 2026');
     expect(screen.getByTestId('settings-editor-word-wrap-combobox')).toHaveTextContent('Bounded');
     expect(screen.getByTestId('settings-editor-tab-size-combobox')).toHaveTextContent('8 spaces');
     expect(screen.getByTestId('settings-editor-cursor-blinking-combobox')).toHaveTextContent('Solid');
@@ -359,14 +381,13 @@ describe('MenuBar settings', () => {
     expect(screen.getByTestId('settings-editor-smooth-scrolling-switch')).toHaveAttribute('data-state', 'unchecked');
     expect(screen.getByTestId('settings-editor-scroll-beyond-last-line-switch')).toHaveAttribute('data-state', 'checked');
     expect(screen.getByTestId('settings-editor-minimap-switch')).toHaveAttribute('data-state', 'unchecked');
-    expect(screen.getByTestId('settings-theme-switch')).toHaveAttribute('data-state', 'checked');
     expect(screen.getByTestId('settings-close-to-tray-switch')).toHaveAttribute('data-state', 'checked');
     expect(screen.getByTestId('settings-floating-info-window-switch')).toHaveAttribute('data-state', 'checked');
 
     await user.click(screen.getByTestId('settings-close-button'));
 
     mockPersistedSettingsConfig({
-      appTheme: 'light',
+      colorTheme: 'vscode-2026-light',
       bracketPairGuides: true,
       closeAction: 'quit',
       cursorBlinking: 'smooth',
@@ -384,7 +405,6 @@ describe('MenuBar settings', () => {
       scrollBeyondLastLine: false,
       smoothScrolling: true,
       tabSize: 4,
-      editorTheme: 'github-light',
       wordWrap: 'off',
     });
 
@@ -392,9 +412,9 @@ describe('MenuBar settings', () => {
 
     expect(await screen.findByTestId('settings-dialog')).toBeVisible();
     expect(screen.getByTestId('settings-editor-font-family-combobox')).toHaveTextContent('JetBrains Mono');
-  expect(screen.queryByTestId('settings-code-layout-margin-slider')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('settings-code-layout-margin-slider')).not.toBeInTheDocument();
     expect(screen.getByTestId('settings-editor-font-size-value')).toHaveTextContent('12px');
-    expect(screen.getByTestId('settings-editor-theme-combobox')).toHaveTextContent('GitHub Light');
+    expect(screen.getByTestId('settings-theme-combobox')).toHaveTextContent('Light 2026');
     expect(screen.getByTestId('settings-editor-word-wrap-combobox')).toHaveTextContent('Off');
     expect(screen.getByTestId('settings-editor-tab-size-combobox')).toHaveTextContent('4 spaces');
     expect(screen.getByTestId('settings-editor-cursor-blinking-combobox')).toHaveTextContent('Smooth');
@@ -406,7 +426,6 @@ describe('MenuBar settings', () => {
     expect(screen.getByTestId('settings-editor-smooth-scrolling-switch')).toHaveAttribute('data-state', 'checked');
     expect(screen.getByTestId('settings-editor-scroll-beyond-last-line-switch')).toHaveAttribute('data-state', 'unchecked');
     expect(screen.getByTestId('settings-editor-minimap-switch')).toHaveAttribute('data-state', 'checked');
-    expect(screen.getByTestId('settings-theme-switch')).toHaveAttribute('data-state', 'unchecked');
     expect(screen.getByTestId('settings-close-to-tray-switch')).toHaveAttribute('data-state', 'unchecked');
     expect(screen.getByTestId('settings-floating-info-window-switch')).toHaveAttribute('data-state', 'unchecked');
   });

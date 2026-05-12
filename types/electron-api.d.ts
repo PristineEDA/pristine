@@ -7,7 +7,7 @@ import type {
   WorkspaceLocation,
 } from './systemverilog-lsp';
 import type { WorkspaceGitChangeEvent, WorkspaceGitStatusPayload } from './workspace-git';
-import type { SaveDialogResult } from '../electron/ipc/dialog';
+import type { OpenThemeDialogResult, SaveDialogResult } from '../electron/ipc/dialog';
 import type { MenuCommandEvent } from '../src/app/menu/applicationMenu';
 import type { WindowCloseDecision, WindowCloseRequest } from '../src/app/window/windowClose';
 import type { AuthView, DesktopAuthSession } from '../src/app/auth/types';
@@ -68,6 +68,7 @@ export interface ElectronAPI {
 
   dialog: {
     showSaveDialog: (defaultPath?: string) => Promise<SaveDialogResult>;
+    showOpenThemeDialog: () => Promise<OpenThemeDialogResult>;
   };
 
   git: {

@@ -402,6 +402,7 @@ Covered components:
 - node-pty (Runtime Services & Utilities; declared as MIT)
 - vscode-jsonrpc (Runtime Services & Utilities; declared as MIT)
 - ignore (Runtime Services & Utilities; declared as MIT)
+- jsonc-parser (Runtime Services & Utilities; declared as MIT)
 - @preact/signals-core (Runtime Services & Utilities; declared as MIT)
 - @assistant-ui/react (AI Agent Frameworks; declared as MIT)
 - @assistant-ui/react-ai-sdk (AI Agent Frameworks; declared as MIT)

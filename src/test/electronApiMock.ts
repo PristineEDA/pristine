@@ -47,6 +47,10 @@ export function createElectronApiMock(): ElectronAPI {
         filePath: null,
         workspaceRelativePath: null,
       }),
+      showOpenThemeDialog: vi.fn().mockResolvedValue({
+        canceled: true,
+        filePath: null,
+      }),
     },
     git: {
       getStatus: vi.fn().mockResolvedValue({

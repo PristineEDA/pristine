@@ -206,4 +206,66 @@ describe('config IPC handlers', () => {
 
     dispose();
   });
+
+  it('skips saving and broadcasting structurally equal array and object values', async () => {
+    mockFs.readFileSync.mockReturnValue(JSON.stringify({
+      'workbench.importedColorThemes': [
+        {
+          id: 'imported-night',
+          label: 'Night',
+          path: 'themes/night.json',
+          description: 'Imported from night.json.',
+          author: 'Imported theme',
+          kind: 'dark',
+        },
+      ],
+      'editor.options': {
+        fontSize: 13,
+        guides: {
+          indentation: true,
+          bracketPairs: true,
+        },
+      },
+    }));
+    const send = vi.fn();
+    mockGetAllWindows.mockReturnValue([
+      {
+        isDestroyed: () => false,
+        webContents: {
+          isDestroyed: () => false,
+          send,
+        },
+      },
+    ]);
+
+    const { onConfigValueChanged, setConfigValue } = await importModule();
+    const listener = vi.fn();
+    const dispose = onConfigValueChanged(listener);
+
+    setConfigValue('workbench.importedColorThemes', [
+      {
+        id: 'imported-night',
+        label: 'Night',
+        path: 'themes/night.json',
+        description: 'Imported from night.json.',
+        author: 'Imported theme',
+        kind: 'dark',
+      },
+    ]);
+    setConfigValue('editor.options', {
+      guides: {
+        bracketPairs: true,
+        indentation: true,
+      },
+      fontSize: 13,
+    });
+
+    vi.advanceTimersByTime(300);
+
+    expect(mockFs.writeFileSync).not.toHaveBeenCalled();
+    expect(listener).not.toHaveBeenCalled();
+    expect(send).not.toHaveBeenCalled();
+
+    dispose();
+  });
 });

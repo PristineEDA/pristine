@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { SyncChannels, AsyncChannels, StreamChannels } from './ipc/channels.js';
-import type { SaveDialogResult } from './ipc/dialog.js';
+import type { OpenThemeDialogResult, SaveDialogResult } from './ipc/dialog.js';
 import type { LspCompletionResponse, LspDebugEvent, LspDiagnosticsEvent, LspHover, LspStateEvent, WorkspaceLocation } from '../types/systemverilog-lsp.js';
 import type { WorkspaceGitChangeEvent, WorkspaceGitStatusPayload } from '../types/workspace-git.js';
 import type { MenuCommandEvent } from '../src/app/menu/applicationMenu.js';
@@ -115,6 +115,8 @@ const electronAPI = {
   dialog: {
     showSaveDialog: (defaultPath?: string) =>
       ipcRenderer.invoke(AsyncChannels.DIALOG_SHOW_SAVE, defaultPath) as Promise<SaveDialogResult>,
+    showOpenThemeDialog: () =>
+      ipcRenderer.invoke(AsyncChannels.DIALOG_SHOW_OPEN_THEME) as Promise<OpenThemeDialogResult>,
   },
 
   git: {

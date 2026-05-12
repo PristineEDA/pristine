@@ -210,6 +210,13 @@ export const openSourceAttributionSections: AttributionSection[] = [
         license: 'MIT',
       },
       {
+        id: 'jsonc-parser',
+        name: 'jsonc-parser',
+        url: 'https://github.com/microsoft/node-jsonc-parser',
+        author: 'Microsoft',
+        license: 'MIT',
+      },
+      {
         id: 'preact-signals-core',
         name: '@preact/signals-core',
         url: 'https://github.com/preactjs/signals',

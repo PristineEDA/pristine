@@ -4,7 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getEditorFontFamilyStack } from '../../../editor/editorSettings';
 
 const mockedUseRegisterEditorLanguages = vi.fn();
-const mockedRegisterEditorThemes = vi.fn();
+const mockedRegisterBuiltInMonacoThemes = vi.fn();
+const mockedDefineMonacoTheme = vi.fn();
 const mockedGetEditorLanguage = vi.fn((filePath: string) => (filePath.endsWith('.sv') ? 'systemverilog' : 'verilog'));
 const mockedEnsureLspRegistered = vi.fn();
 const mockedAttachLspDocument = vi.fn((_args?: unknown) => vi.fn());
@@ -25,7 +26,6 @@ let mockedEditorRenderWhitespace = 'selection';
 let mockedEditorScrollBeyondLastLine = false;
 let mockedEditorSmoothScrolling = true;
 let mockedEditorTabSize = 4;
-let mockedEditorTheme = 'dracula';
 let mockedEditorWordWrap = 'off';
 
 const {
@@ -124,8 +124,38 @@ vi.mock('@monaco-editor/react', () => ({
 
 vi.mock('../../../editor/configureMonacoLoader', () => ({}));
 
-vi.mock('../../../editor/monacoThemes', () => ({
-  registerEditorThemes: (monaco: unknown) => mockedRegisterEditorThemes(monaco),
+vi.mock('../../../theme/monacoColorTheme', () => ({
+  registerBuiltInMonacoThemes: (monaco: unknown) => mockedRegisterBuiltInMonacoThemes(monaco),
+  defineMonacoTheme: (monaco: unknown, theme: unknown) => mockedDefineMonacoTheme(monaco, theme),
+}));
+
+vi.mock('../../../context/ThemeContext', () => ({
+  useTheme: () => ({
+    theme: 'dark',
+    themeId: 'vscode-2026-dark',
+    activeTheme: {
+      id: 'vscode-2026-dark',
+      label: 'Dark 2026',
+      description: 'Built-in VS Code 2026 dark color theme.',
+      author: 'Microsoft',
+      kind: 'dark',
+      source: 'builtin',
+      colors: {
+        'editor.background': '#121314',
+        'editor.foreground': '#BBBEBF',
+      },
+      tokenColors: [],
+      semanticHighlighting: true,
+      semanticTokenColors: {},
+    },
+    availableThemes: [],
+    importedThemes: [],
+    isImportingTheme: false,
+    getThemePreview: vi.fn(),
+    importTheme: vi.fn(),
+    setTheme: vi.fn(),
+    toggleTheme: vi.fn(),
+  }),
 }));
 
 vi.mock('../../../editor/registerLanguages', () => ({
@@ -167,7 +197,6 @@ vi.mock('../../../context/EditorSettingsContext', () => ({
     setTabSize: vi.fn(),
     setTheme: vi.fn(),
     setWordWrap: vi.fn(),
-    theme: mockedEditorTheme,
     themes: [],
     wordWrap: mockedEditorWordWrap,
   }),
@@ -206,7 +235,6 @@ describe('MonacoEditorPane', () => {
     mockedEditorScrollBeyondLastLine = false;
     mockedEditorSmoothScrolling = true;
     mockedEditorTabSize = 4;
-    mockedEditorTheme = 'dracula';
     mockedEditorWordWrap = 'off';
     mockedEnsureLspRegistered.mockReset();
     mockedAttachLspDocument.mockReset();
@@ -242,7 +270,8 @@ describe('MonacoEditorPane', () => {
     expect(screen.getByTestId('monaco-editor')).toHaveTextContent('module cpu_top; endmodule');
     expect(mockedGetEditorLanguage).toHaveBeenCalledWith('rtl/core/cpu_top.sv');
     expect(mockedUseRegisterEditorLanguages).toHaveBeenCalledWith(mockMonaco);
-    expect(mockedRegisterEditorThemes).toHaveBeenCalledWith(mockMonaco);
+    expect(mockedRegisterBuiltInMonacoThemes).toHaveBeenCalledWith(mockMonaco);
+    expect(mockedDefineMonacoTheme).toHaveBeenCalledWith(mockMonaco, expect.objectContaining({ id: 'vscode-2026-dark' }));
     expect(mockedEnsureLspRegistered).toHaveBeenCalledWith(mockMonaco);
     expect(mockedAttachLspDocument).toHaveBeenCalledWith(expect.objectContaining({
       monaco: mockMonaco,
@@ -276,7 +305,7 @@ describe('MonacoEditorPane', () => {
     expect(lastEditorProps.options.smoothScrolling).toBe(true);
     expect(lastEditorProps.options.tabSize).toBe(4);
     expect(lastEditorProps.keepCurrentModel).toBe(true);
-    expect(lastEditorProps.theme).toBe('dracula');
+    expect(lastEditorProps.theme).toBe('vscode-2026-dark');
     expect(lastEditorProps.options.wordWrap).toBe('off');
   });
 
@@ -300,7 +329,7 @@ describe('MonacoEditorPane', () => {
     expect(mockedAttachLspDocument).not.toHaveBeenCalled();
   });
 
-  it('applies persisted editor display, font size and theme settings to Monaco', async () => {
+  it('applies persisted editor display and font size settings to Monaco while the UI theme comes from ThemeContext', async () => {
     mockedEditorCursorBlinking = 'solid';
     mockedEditorBracketPairGuides = false;
     mockedEditorFontFamily = 'monaspace-neon';
@@ -316,7 +345,6 @@ describe('MonacoEditorPane', () => {
     mockedEditorScrollBeyondLastLine = true;
     mockedEditorSmoothScrolling = false;
     mockedEditorTabSize = 2;
-    mockedEditorTheme = 'github-dark';
     mockedEditorWordWrap = 'on';
 
     const clientWidthSpy = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(960);
@@ -346,7 +374,7 @@ describe('MonacoEditorPane', () => {
     expect(lastEditorProps.options.scrollBeyondLastLine).toBe(true);
     expect(lastEditorProps.options.smoothScrolling).toBe(false);
     expect(lastEditorProps.options.tabSize).toBe(2);
-    expect(lastEditorProps.theme).toBe('github-dark');
+    expect(lastEditorProps.theme).toBe('vscode-2026-dark');
     expect(lastEditorProps.options.wordWrap).toBe('on');
     expect(mockEditorInstance.updateOptions).toHaveBeenCalledWith({
       cursorBlinking: 'solid',

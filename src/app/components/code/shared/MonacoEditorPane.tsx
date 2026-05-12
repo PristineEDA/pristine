@@ -2,11 +2,12 @@ import Editor, { useMonaco } from '@monaco-editor/react';
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 import '../../../editor/configureMonacoLoader';
 import { getEditorFontFamilyStack } from '../../../editor/editorSettings';
-import { registerEditorThemes } from '../../../editor/monacoThemes';
 import { useRegisterEditorLanguages } from '../../../editor/registerLanguages';
 import { systemVerilogLspBridge } from '../../../lsp/systemVerilogLspBridge';
 import { getEditorLanguage } from '../../../workspace/workspaceFiles';
 import { useEditorSettings } from '../../../context/EditorSettingsContext';
+import { useTheme } from '../../../context/ThemeContext';
+import { defineMonacoTheme, registerBuiltInMonacoThemes } from '../../../theme/monacoColorTheme';
 
 interface EditorViewport {
   width: number;
@@ -91,9 +92,9 @@ export function MonacoEditorPane({
     scrollBeyondLastLine,
     smoothScrolling,
     tabSize,
-    theme,
     wordWrap,
   } = useEditorSettings();
+  const { activeTheme, themeId } = useTheme();
   const editorFontFamily = getEditorFontFamilyStack(fontFamily);
   const editorLanguage = getEditorLanguage(activeTabId);
   const monacoInstanceRef = useRef(monaco);
@@ -289,6 +290,14 @@ export function MonacoEditorPane({
   }, [editorFontFamily, fontLigatures, fontSize, monaco]);
 
   useEffect(() => {
+    if (!monaco) {
+      return;
+    }
+
+    defineMonacoTheme(monaco, activeTheme);
+  }, [activeTheme, monaco]);
+
+  useEffect(() => {
     if (!activeTabId || !mountedEditor) {
       return;
     }
@@ -313,10 +322,11 @@ export function MonacoEditorPane({
         keepCurrentModel
         saveViewState={false}
         value={code}
-        theme={theme}
+        theme={themeId}
         beforeMount={(nextMonaco) => {
           monacoInstanceRef.current = nextMonaco;
-          registerEditorThemes(nextMonaco);
+          registerBuiltInMonacoThemes(nextMonaco);
+          defineMonacoTheme(nextMonaco, activeTheme);
         }}
         onMount={(editor) => {
           const activeMonaco = monacoInstanceRef.current;
