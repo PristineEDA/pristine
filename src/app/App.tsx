@@ -21,8 +21,6 @@ import {
 import { AppStatusBar } from './components/code/shared/statusBars/AppStatusBar';
 import { QuickOpenPalette } from './components/code/shared/QuickOpenPalette';
 import { isMonacoTextInputFocused } from './editor/focusEditor';
-import { parseCodeLayoutMargin } from './editor/editorSettings';
-import { useEditorSettings } from './context/EditorSettingsContext';
 import {
   WorkspaceProvider,
   useWorkspaceDialogs,
@@ -45,48 +43,20 @@ const MainContentFallback = () => (
   <div aria-hidden="true" className="flex flex-1 bg-background" />
 );
 
-function getCodeLayoutMarginFrameStyle(layoutMarginPx: number): React.CSSProperties {
-  return {
-    height: `calc(100% - ${layoutMarginPx * 2}px)`,
-    margin: `${layoutMarginPx}px`,
-    width: `calc(100% - ${layoutMarginPx * 2}px)`,
-  };
-}
-
 const PlaceholderView = ({
   title,
   description = 'Coming soon',
-  layoutMarginPx,
   testId,
 }: {
   title: string;
   description?: string;
-  layoutMarginPx?: number;
   testId: string;
 }) => {
-  const content = (
+  return (
     <div data-testid={testId} className="flex h-full w-full items-center justify-center bg-muted/40 text-muted-foreground">
       <div className="text-center">
         <p className="text-lg font-medium">{title}</p>
         <p className="mt-1 text-sm">{description}</p>
-      </div>
-    </div>
-  );
-
-  if (layoutMarginPx === undefined) {
-    return content;
-  }
-
-  const resolvedLayoutMarginPx = parseCodeLayoutMargin(layoutMarginPx);
-
-  return (
-    <div className="h-full w-full min-h-0 min-w-0 overflow-hidden">
-      <div
-        data-testid={`${testId}-layout-margin`}
-        className="h-full w-full min-h-0 min-w-0 overflow-hidden"
-        style={getCodeLayoutMarginFrameStyle(resolvedLayoutMarginPx)}
-      >
-        {content}
       </div>
     </div>
   );
@@ -113,7 +83,6 @@ const codeViewPlaceholderConfig = {
 
 // ─── AppLayout (consumes context) ────────────────────────────────────────────
 function AppLayout() {
-  const { codeLayoutMargin } = useEditorSettings();
   const {
     activeView, setActiveView,
     canToggleLayoutPanels,
@@ -362,7 +331,6 @@ function AppLayout() {
       onRightFixedWidthChange={onRightFixedWidthChange}
       rightFixedMinWidthPx={rightFixedMinWidthPx}
       rightFixedMaxWidthPx={rightFixedMaxWidthPx}
-      layoutMarginPx={codeLayoutMargin}
     />
   );
 
@@ -471,7 +439,6 @@ function AppLayout() {
             <PlaceholderView
               title={placeholder.title}
               testId={placeholder.testId}
-              layoutMarginPx={codeLayoutMargin}
             />
           </Suspense>
         </div>

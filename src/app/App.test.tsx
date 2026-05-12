@@ -7,11 +7,6 @@ import { EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX } from './components/code/shared/
 import { resetWorkspaceGitStatusStoreForTests } from './git/workspaceGitStatus';
 
 let renderRealActivityBar = false;
-let mockedCodeLayoutMargin = 6;
-
-vi.mock('./context/EditorSettingsContext', () => ({
-  useEditorSettings: () => ({ codeLayoutMargin: mockedCodeLayoutMargin }),
-}));
 
 vi.mock('./components/ui/resizable', () => ({
   PANEL_TRANSITION_DURATION_MS: 300,
@@ -208,19 +203,10 @@ async function waitForPanelWidth(testId: string, width: string) {
   });
 }
 
-function expectLayoutMarginFrame(testId: string, layoutMarginPx: number) {
-  expect(screen.getByTestId(testId)).toHaveStyle({
-    height: `calc(100% - ${layoutMarginPx * 2}px)`,
-    margin: `${layoutMarginPx}px`,
-    width: `calc(100% - ${layoutMarginPx * 2}px)`,
-  });
-}
-
 describe('App', () => {
   beforeEach(() => {
     testUser = userEvent.setup();
     renderRealActivityBar = false;
-    mockedCodeLayoutMargin = 6;
     resetWorkspaceGitStatusStoreForTests();
     vi.clearAllMocks();
   });
@@ -320,10 +306,10 @@ describe('App', () => {
     expect(screen.getByTestId('panel-simulation-left-panel')).toBeInTheDocument();
     expect(screen.getByTestId('panel-simulation-bottom-panel')).toBeInTheDocument();
     expect(screen.getByTestId('panel-simulation-right-panel')).toBeInTheDocument();
-    expectLayoutMarginFrame('panel-simulation-left-panel-layout-margin', 6);
-    expectLayoutMarginFrame('panel-simulation-main-panel-layout-margin', 6);
-    expectLayoutMarginFrame('panel-simulation-bottom-panel-layout-margin', 6);
-    expectLayoutMarginFrame('panel-simulation-right-panel-layout-margin', 6);
+    expect(screen.queryByTestId('panel-simulation-left-panel-layout-margin')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('panel-simulation-main-panel-layout-margin')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('panel-simulation-bottom-panel-layout-margin')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('panel-simulation-right-panel-layout-margin')).not.toBeInTheDocument();
     expect(screen.getByTestId('simulation-left-panel-content')).toHaveTextContent('Left Panel');
     expect(screen.getByTestId('simulation-left-panel-content')).toHaveTextContent('Coming soon');
     expect(screen.getByTestId('simulation-left-panel-content')).toHaveClass('bg-muted/40');
@@ -346,14 +332,13 @@ describe('App', () => {
   });
 
   it('hides the activity bar outside code and restores the last selected code subview', async () => {
-    mockedCodeLayoutMargin = 10;
     render(<App />);
 
     await clickText('select-synthesis');
     expect(await screen.findByTestId('code-view-synthesis')).toHaveTextContent('Synthesis');
     expect(screen.getByTestId('code-view-synthesis')).toHaveTextContent('Coming soon');
     expect(screen.getByTestId('code-view-synthesis')).toHaveClass('bg-muted/40');
-    expectLayoutMarginFrame('code-view-synthesis-layout-margin', 10);
+    expect(screen.queryByTestId('code-view-synthesis-layout-margin')).not.toBeInTheDocument();
 
     await clickText('switch-whiteboard');
     expect(screen.getByTestId('main-content-view')).toHaveTextContent('whiteboard');

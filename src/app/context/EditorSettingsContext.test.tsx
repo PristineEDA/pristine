@@ -11,7 +11,6 @@ vi.mock('../editor/fontLoader', () => ({
 
 function EditorSettingsProbe() {
   const {
-    codeLayoutMargin,
     cursorBlinking,
     bracketPairGuides,
     fontFamily,
@@ -27,7 +26,6 @@ function EditorSettingsProbe() {
     scrollBeyondLastLine,
     smoothScrolling,
     tabSize,
-    setCodeLayoutMargin,
     setCursorBlinking,
     setBracketPairGuides,
     setFontFamily,
@@ -52,7 +50,6 @@ function EditorSettingsProbe() {
   return (
     <div>
       <span data-testid="editor-cursor-blinking">{cursorBlinking}</span>
-      <span data-testid="code-layout-margin">{codeLayoutMargin}</span>
       <span data-testid="editor-bracket-pair-guides">{String(bracketPairGuides)}</span>
       <span data-testid="editor-font-family">{fontFamily}</span>
       <span data-testid="editor-font-ligatures">{String(fontLigatures)}</span>
@@ -71,15 +68,6 @@ function EditorSettingsProbe() {
       <span data-testid="editor-word-wrap">{wordWrap}</span>
       <button data-testid="set-cursor-blinking" onClick={() => setCursorBlinking('solid')}>
         Set cursor blinking
-      </button>
-      <button data-testid="set-code-layout-margin" onClick={() => setCodeLayoutMargin(9)}>
-        Set code layout margin
-      </button>
-      <button data-testid="set-invalid-code-layout-margin-high" onClick={() => setCodeLayoutMargin(99)}>
-        Set invalid code layout margin high
-      </button>
-      <button data-testid="set-invalid-code-layout-margin-low" onClick={() => setCodeLayoutMargin(-3)}>
-        Set invalid code layout margin low
       </button>
       <button data-testid="set-bracket-pair-guides" onClick={() => setBracketPairGuides(false)}>
         Set bracket pair guides
@@ -159,7 +147,6 @@ describe('EditorSettingsContext', () => {
     )
 
     expect(screen.getByTestId('editor-font-size')).toHaveTextContent('13')
-    expect(screen.getByTestId('code-layout-margin')).toHaveTextContent('6')
     expect(screen.getByTestId('editor-font-family')).toHaveTextContent('jetbrains-mono')
     expect(screen.getByTestId('editor-font-ligatures')).toHaveTextContent('true')
     expect(screen.getByTestId('editor-word-wrap')).toHaveTextContent('off')
@@ -183,9 +170,7 @@ describe('EditorSettingsContext', () => {
     vi.mocked(window.electronAPI!.config.get).mockImplementation((key: string) =>
       key === 'editor.fontFamily'
         ? 'fira-code'
-        : key === 'code.layoutMargin'
-          ? 4
-          : key === 'editor.fontSize'
+        : key === 'editor.fontSize'
           ? 17
           : key === 'editor.theme'
             ? 'night-owl'
@@ -227,7 +212,6 @@ describe('EditorSettingsContext', () => {
     )
 
     expect(screen.getByTestId('editor-font-family')).toHaveTextContent('fira-code')
-    expect(screen.getByTestId('code-layout-margin')).toHaveTextContent('4')
     expect(screen.getByTestId('editor-font-size')).toHaveTextContent('17')
     expect(screen.getByTestId('editor-font-ligatures')).toHaveTextContent('false')
     expect(screen.getByTestId('editor-word-wrap')).toHaveTextContent('on')
@@ -267,7 +251,7 @@ describe('EditorSettingsContext', () => {
     expect(window.electronAPI?.config.set).toHaveBeenLastCalledWith('editor.fontSize', 18)
   })
 
-  it('persists display settings, font settings and theme updates and clamps invalid values', async () => {
+  it('persists display settings, font settings and theme updates and clamps invalid font sizes', async () => {
     render(
       <EditorSettingsProvider>
         <EditorSettingsProbe />
@@ -277,10 +261,6 @@ describe('EditorSettingsContext', () => {
     await clickSetting('set-cursor-blinking')
     expect(screen.getByTestId('editor-cursor-blinking')).toHaveTextContent('solid')
     expect(window.electronAPI?.config.set).toHaveBeenCalledWith('editor.cursorBlinking', 'solid')
-
-    await clickSetting('set-code-layout-margin')
-    expect(screen.getByTestId('code-layout-margin')).toHaveTextContent('9')
-    expect(window.electronAPI?.config.set).toHaveBeenCalledWith('code.layoutMargin', 9)
 
     await clickSetting('set-word-wrap')
     expect(screen.getByTestId('editor-word-wrap')).toHaveTextContent('bounded')
@@ -350,13 +330,5 @@ describe('EditorSettingsContext', () => {
     await clickSetting('set-invalid-font-size')
     expect(screen.getByTestId('editor-font-size')).toHaveTextContent('24')
     expect(window.electronAPI?.config.set).toHaveBeenCalledWith('editor.fontSize', 24)
-
-    await clickSetting('set-invalid-code-layout-margin-high')
-    expect(screen.getByTestId('code-layout-margin')).toHaveTextContent('10')
-    expect(window.electronAPI?.config.set).toHaveBeenCalledWith('code.layoutMargin', 10)
-
-    await clickSetting('set-invalid-code-layout-margin-low')
-    expect(screen.getByTestId('code-layout-margin')).toHaveTextContent('0')
-    expect(window.electronAPI?.config.set).toHaveBeenCalledWith('code.layoutMargin', 0)
   })
 })

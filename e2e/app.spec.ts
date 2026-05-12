@@ -1644,8 +1644,13 @@ test('Explorer New File creates a real workspace file and keeps it after relaunc
   try {
     await ensureExplorerVisible(window);
     await window.getByTestId('file-tree-node-rtl').click();
-    await window.getByTestId('file-tree-node-rtl_core').click();
-    await window.getByRole('button', { name: 'New File' }).click();
+    const coreFolderNode = window.getByTestId('file-tree-node-rtl_core');
+    await coreFolderNode.click();
+    await coreFolderNode.click({ button: 'right' });
+
+    const newFileMenuItem = window.getByRole('menuitem', { name: 'New File' });
+    await expect(newFileMenuItem).toBeVisible({ timeout: 2000 });
+    await newFileMenuItem.click();
 
     const draftInput = window.locator('.explorer-tree-scrollbar input').first();
     await expect(draftInput).toBeVisible();
@@ -1837,24 +1842,32 @@ test('Explorer Copy creates a -copy file and keeps it after relaunch', async () 
 
   const workspaceCopy = test.info().outputPath('explorer-copy-file-workspace');
   createWorkspaceCopy(workspaceCopy);
-  const primaryModifier = process.platform === 'darwin' ? 'Meta' : 'Control';
 
   const copiedRelativePath = 'rtl/core/reg_file-copy.v';
   const copiedAbsolutePath = path.join(workspaceCopy, 'rtl', 'core', 'reg_file-copy.v');
   const copiedTreeTestId = toWorkspaceTreeTestId(copiedRelativePath);
   const sourceTreeTestId = toWorkspaceTreeTestId('rtl/core/reg_file.v');
   const { app, window } = await launchApp({ projectRoot: workspaceCopy });
-  const explorerTree = window.locator('.explorer-tree-scrollbar');
 
   try {
     await ensureExplorerVisible(window);
     await window.getByTestId('file-tree-node-rtl').click();
-    await window.getByTestId('file-tree-node-rtl_core').click();
+    const coreFolderNode = window.getByTestId('file-tree-node-rtl_core');
+    await coreFolderNode.click();
 
-    await window.getByTestId(sourceTreeTestId).click();
-    await explorerTree.focus();
-    await explorerTree.press(`${primaryModifier}+C`);
-    await explorerTree.press(`${primaryModifier}+V`);
+    const sourceNode = window.getByTestId(sourceTreeTestId);
+    await sourceNode.click();
+    await expect(sourceNode).toHaveClass(/bg-primary\/20/);
+
+    await sourceNode.click({ button: 'right' });
+    const copyMenuItem = window.getByTestId('explorer-context-menu-item-copy');
+    await expect(copyMenuItem).toBeVisible({ timeout: 2000 });
+    await copyMenuItem.click();
+
+    await coreFolderNode.click({ button: 'right' });
+    const pasteMenuItem = window.getByTestId('explorer-context-menu-item-paste');
+    await expect(pasteMenuItem).toBeVisible({ timeout: 2000 });
+    await pasteMenuItem.click();
 
     await expect.poll(() => fs.existsSync(copiedAbsolutePath), {
       timeout: 15000,
@@ -2771,15 +2784,13 @@ test('ctrl+p quick open escape restores the previous editor cursor position and 
   await app.close();
 });
 
-test('explorer root supports toggle and collapse all behaviors', async () => {
+test('explorer root supports toggle behavior', async () => {
   const { app, window } = await launchApp();
 
   await ensureExplorerVisible(window);
-  const collapseAllButton = window.getByRole('button', { name: 'Collapse All' });
   const rootNode = window.getByTestId('file-tree-node-root');
   const rtlNode = window.getByTestId('file-tree-node-rtl');
 
-  await expect(collapseAllButton).toBeVisible();
   await expect(rootNode).toBeVisible();
   await expect(rtlNode).toBeVisible();
 
@@ -2789,13 +2800,6 @@ test('explorer root supports toggle and collapse all behaviors', async () => {
 
     await rootNode.click();
     await expect(rtlNode).toBeVisible();
-  });
-
-  await test.step('collapse all hides root children while keeping root visible', async () => {
-    await collapseAllButton.click();
-
-    await expect(rootNode).toBeVisible();
-    await expect(rtlNode).toHaveCount(0);
   });
 
   await app.close();

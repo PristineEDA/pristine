@@ -4,11 +4,7 @@ import { editorThemeCatalog, editorThemeCatalogById } from './themeCatalog'
 export const DEFAULT_EDITOR_FONT_SIZE = 13
 export const MIN_EDITOR_FONT_SIZE = 10
 export const MAX_EDITOR_FONT_SIZE = 24
-export const DEFAULT_CODE_LAYOUT_MARGIN = 6
-export const MIN_CODE_LAYOUT_MARGIN = 0
-export const MAX_CODE_LAYOUT_MARGIN = 10
 
-export const CODE_LAYOUT_MARGIN_CONFIG_KEY = 'code.layoutMargin'
 export const EDITOR_FONT_SIZE_CONFIG_KEY = 'editor.fontSize'
 export const EDITOR_FONT_FAMILY_CONFIG_KEY = 'editor.fontFamily'
 export const EDITOR_THEME_CONFIG_KEY = 'editor.theme'
@@ -434,18 +430,6 @@ export function parseEditorFontSize(value: unknown): number {
   }
 
   return clampEditorFontSize(value)
-}
-
-export function clampCodeLayoutMargin(value: number): number {
-  return Math.min(MAX_CODE_LAYOUT_MARGIN, Math.max(MIN_CODE_LAYOUT_MARGIN, Math.round(value)))
-}
-
-export function parseCodeLayoutMargin(value: unknown): number {
-  if (typeof value !== 'number' || Number.isNaN(value)) {
-    return DEFAULT_CODE_LAYOUT_MARGIN
-  }
-
-  return clampCodeLayoutMargin(value)
 }
 
 function parseEditorBooleanSetting(value: unknown, defaultValue: boolean): boolean {

@@ -2,9 +2,6 @@ import { useCallback, useState, type CSSProperties, type ReactNode } from 'react
 import { useEditorSettings } from '../../../context/EditorSettingsContext';
 import { useTheme, type Theme } from '../../../context/ThemeContext';
 import {
-  CODE_LAYOUT_MARGIN_CONFIG_KEY,
-  MAX_CODE_LAYOUT_MARGIN,
-  MIN_CODE_LAYOUT_MARGIN,
   DEFAULT_EDITOR_BRACKET_PAIR_GUIDES,
   DEFAULT_EDITOR_FONT_LIGATURES,
   DEFAULT_EDITOR_GLYPH_MARGIN,
@@ -37,7 +34,6 @@ import {
   editorTabSizeOptions,
   editorThemeOptions,
   editorWordWrapOptions,
-  parseCodeLayoutMargin,
   parseEditorCursorBlinking,
   parseEditorFoldingStrategy,
   parseEditorFontFamily,
@@ -75,7 +71,6 @@ const settingsSectionDescriptionClassName = 'text-[12px] text-muted-foreground';
 
 export interface MenuBarSettingsState {
   closeToTrayEnabled: boolean;
-  codeLayoutMargin: ReturnType<typeof getConfiguredCodeLayoutMargin>;
   floatingInfoWindowVisible: boolean;
   theme: Theme;
   editorCursorBlinking: ReturnType<typeof getConfiguredEditorCursorBlinking>;
@@ -108,10 +103,6 @@ function getFloatingInfoWindowVisible(): boolean {
 
 function getConfiguredTheme(): Theme {
   return window.electronAPI?.config.get(THEME_CONFIG_KEY) === 'dark' ? 'dark' : 'light';
-}
-
-function getConfiguredCodeLayoutMargin(): number {
-  return parseCodeLayoutMargin(window.electronAPI?.config.get(CODE_LAYOUT_MARGIN_CONFIG_KEY));
 }
 
 function getConfiguredEditorFontSize(): number {
@@ -193,7 +184,6 @@ function getConfiguredEditorIndentGuides() {
 function getPersistedSettingsState(): MenuBarSettingsState {
   return {
     closeToTrayEnabled: getConfiguredCloseAction() === 'tray',
-    codeLayoutMargin: getConfiguredCodeLayoutMargin(),
     floatingInfoWindowVisible: getFloatingInfoWindowVisible(),
     theme: getConfiguredTheme(),
     editorCursorBlinking: getConfiguredEditorCursorBlinking(),
@@ -294,7 +284,6 @@ function SettingsComboboxSection({
 
 export function useMenuBarSettingsController() {
   const {
-    setCodeLayoutMargin,
     setCursorBlinking: setEditorCursorBlinking,
     setBracketPairGuides: setEditorBracketPairGuides,
     setFontFamily: setEditorFontFamily,
@@ -368,17 +357,6 @@ export function useMenuBarSettingsController() {
     const nextValue = value[0] ?? settingsState.editorFontSize;
     patchSettingsState({ editorFontSize: nextValue });
     setEditorFontSize(nextValue);
-  };
-
-  const handleCodeLayoutMarginChange = (value: number[]) => {
-    const nextValue = parseCodeLayoutMargin(value[0] ?? settingsState.codeLayoutMargin);
-    patchSettingsState({ codeLayoutMargin: nextValue });
-  };
-
-  const handleCodeLayoutMarginCommit = (value: number[]) => {
-    const nextValue = parseCodeLayoutMargin(value[0] ?? settingsState.codeLayoutMargin);
-    patchSettingsState({ codeLayoutMargin: nextValue });
-    setCodeLayoutMargin(nextValue);
   };
 
   const handleEditorFontFamilyChange = (value: string) => {
@@ -486,8 +464,6 @@ export function useMenuBarSettingsController() {
   return {
     editorFontAdvancedDialogOpen,
     editorThemeAdvancedDialogOpen,
-    handleCodeLayoutMarginChange,
-    handleCodeLayoutMarginCommit,
     handleCloseToTrayChange,
     handleEditorBracketPairGuidesChange,
     handleEditorCursorBlinkingChange,
@@ -532,8 +508,6 @@ export function MenuBarSettingsDialogs({
   const {
     editorFontAdvancedDialogOpen,
     editorThemeAdvancedDialogOpen,
-    handleCodeLayoutMarginChange,
-    handleCodeLayoutMarginCommit,
     handleCloseToTrayChange,
     handleEditorBracketPairGuidesChange,
     handleEditorCursorBlinkingChange,
@@ -604,34 +578,6 @@ export function MenuBarSettingsDialogs({
                       data-testid="settings-editor-font-size-value"
                     >
                       {settingsState.editorFontSize}px
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <div className={settingsSectionClassName}>
-                <div className="space-y-2.5">
-                  <div className="space-y-1">
-                    <p className={settingsSectionTitleClassName}>Code layout margin</p>
-                    <p className={settingsSectionDescriptionClassName} data-testid="code-layout-margin-description">
-                      Adjust spacing around code viewer panels and placeholder views.
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <Slider
-                      aria-label="Code layout margin"
-                      data-testid="settings-code-layout-margin-slider"
-                      min={MIN_CODE_LAYOUT_MARGIN}
-                      max={MAX_CODE_LAYOUT_MARGIN}
-                      step={1}
-                      value={[settingsState.codeLayoutMargin]}
-                      onValueChange={handleCodeLayoutMarginChange}
-                      onValueCommit={handleCodeLayoutMarginCommit}
-                    />
-                    <span
-                      className="min-w-10 text-right text-[13px] font-medium text-foreground"
-                      data-testid="settings-code-layout-margin-value"
-                    >
-                      {settingsState.codeLayoutMargin}px
                     </span>
                   </div>
                 </div>
