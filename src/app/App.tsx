@@ -197,7 +197,6 @@ function AppLayout() {
     handleQuickOpenQueryChange,
     handleQuickOpenSelect,
     handleQuickOpenSelectedIndexChange,
-    invalidateWorkspaceFiles,
     isQuickOpenRecentMode,
     openQuickOpen,
     openWorkspaceFile,
@@ -406,7 +405,6 @@ function AppLayout() {
           currentOutlineId={activeTabId}
           refreshToken={workspaceTreeRefreshToken}
           revealRequest={quickOpenState.revealRequest}
-          onWorkspaceRefresh={invalidateWorkspaceFiles}
           workspaceClipboard={workspaceClipboard}
         />
       ),
