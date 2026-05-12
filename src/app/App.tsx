@@ -42,9 +42,7 @@ const WhiteboardView = lazy(() => import('./components/whiteboard/WhiteboardView
 // ─── ResizeHandle ────────────────────────────────────────────────────────────
 
 const MainContentFallback = () => (
-  <div className="flex flex-1 items-center justify-center bg-background text-muted-foreground text-sm">
-    Loading view...
-  </div>
+  <div aria-hidden="true" className="flex flex-1 bg-background" />
 );
 
 function getCodeLayoutMarginFrameStyle(layoutMarginPx: number): React.CSSProperties {
