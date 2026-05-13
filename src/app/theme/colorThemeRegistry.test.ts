@@ -651,6 +651,93 @@ describe('colorThemeRegistry', () => {
     expect(kanagawaTheme?.colors['terminal.background']).toBe('#1F1F28')
   })
 
+  it('resolves eleventh-batch vendored upstream GitHub Light, Winter is Coming, Slack, Hopscotch, Gruvbox Material, and Mayukai themes through the manifest', () => {
+    const firstSlackAubergineDarkEditorTheme = getBundledColorTheme('slack-aubergine-dark-editor')
+    const secondSlackAubergineDarkEditorTheme = getBundledColorTheme('slack-aubergine-dark-editor')
+
+    expect(firstSlackAubergineDarkEditorTheme).toBe(secondSlackAubergineDarkEditorTheme)
+
+    const batchThemeExpectations = [
+      { id: 'github-light-theme', kind: 'light' },
+      { id: 'github-light-theme-gray', kind: 'light' },
+      { id: 'winter-is-coming-dark-blue', kind: 'dark' },
+      { id: 'winter-is-coming-light', kind: 'light' },
+      { id: 'winter-is-coming-dark-black', kind: 'dark' },
+      { id: 'slack-dark-mode', kind: 'dark' },
+      { id: 'slack-aubergine', kind: 'dark' },
+      { id: 'slack-aubergine-dark', kind: 'dark' },
+      { id: 'slack-aubergine-dark-editor', kind: 'dark' },
+      { id: 'slack-monument', kind: 'dark' },
+      { id: 'slack-hoth', kind: 'light' },
+      { id: 'slack-protanopia-deuteranopia', kind: 'dark' },
+      { id: 'slack-choco-mint', kind: 'dark' },
+      { id: 'slack-ochin', kind: 'dark' },
+      { id: 'slack-work-hard', kind: 'dark' },
+      { id: 'slack-tritanopia', kind: 'dark' },
+      { id: 'hopscotch', kind: 'dark' },
+      { id: 'hopscotch-mono', kind: 'dark' },
+      { id: 'hopscotch-proofreader', kind: 'dark' },
+      { id: 'gruvbox-material-dark', kind: 'dark' },
+      { id: 'gruvbox-material-light', kind: 'light' },
+      { id: 'mayukai-dark', kind: 'dark' },
+      { id: 'mayukai-mirage-gruvbox-darktooth', kind: 'dark' },
+      { id: 'mayukai-midnight', kind: 'dark' },
+    ] as const
+
+    for (const { id, kind } of batchThemeExpectations) {
+      expect(getBundledColorTheme(id)).toEqual(expect.objectContaining({
+        id,
+        kind,
+        source: 'bundled',
+      }))
+    }
+
+    expect(firstSlackAubergineDarkEditorTheme).toEqual(expect.objectContaining({
+      id: 'slack-aubergine-dark-editor',
+      kind: 'dark',
+      source: 'bundled',
+    }))
+    expect(firstSlackAubergineDarkEditorTheme?.colors['activityBar.background']).toBe('#261C25')
+    expect(firstSlackAubergineDarkEditorTheme?.colors['editor.background']).toBe('#3E313C')
+    expect(firstSlackAubergineDarkEditorTheme?.colors['editor.foreground']).toBe('#f6f6f4')
+    expect(firstSlackAubergineDarkEditorTheme?.colors['editorLineNumber.foreground']).toBe('#b9b9b9')
+
+    const githubLightThemeGray = getBundledColorTheme('github-light-theme-gray')
+    expect(githubLightThemeGray?.colors['activityBar.background']).toBe('#f0f0f0')
+    expect(githubLightThemeGray?.colors['editor.background']).toBe('#f0f0f0')
+    expect(githubLightThemeGray?.colors['editorLineNumber.foreground']).toBe('#babbbc')
+    expect(githubLightThemeGray?.colors['editorLineNumber.activeForeground']).toBe('#000000')
+
+    const winterIsComingLightTheme = getBundledColorTheme('winter-is-coming-light')
+    expect(winterIsComingLightTheme?.colors['editor.background']).toBe('#FFFFFF')
+    expect(winterIsComingLightTheme?.colors['editor.foreground']).toBe('#236ebf')
+    expect(winterIsComingLightTheme?.colors['editorLineNumber.foreground']).toBe('#2f86d2')
+
+    const hopscotchProofreaderTheme = getBundledColorTheme('hopscotch-proofreader')
+    expect(hopscotchProofreaderTheme?.colors['activityBar.background']).toBe('#392f4b')
+    expect(hopscotchProofreaderTheme?.colors['editor.background']).toBe('#322931')
+    expect(hopscotchProofreaderTheme?.colors['editorLineNumber.foreground']).toBe('#b9b5b8')
+    expect(hopscotchProofreaderTheme?.tokenColors).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        settings: expect.objectContaining({
+          foreground: '#b9b5b8',
+        }),
+      }),
+    ]))
+
+    const gruvboxMaterialDarkTheme = getBundledColorTheme('gruvbox-material-dark')
+    expect(gruvboxMaterialDarkTheme?.colors['activityBar.background']).toBe('#292828')
+    expect(gruvboxMaterialDarkTheme?.colors['editor.background']).toBe('#292828')
+    expect(gruvboxMaterialDarkTheme?.colors['editorLineNumber.foreground']).toBe('#7c6f64')
+    expect(gruvboxMaterialDarkTheme?.colors['editorLineNumber.activeForeground']).toBe('#928374')
+
+    const mayukaiMidnightTheme = getBundledColorTheme('mayukai-midnight')
+    expect(mayukaiMidnightTheme?.colors['activityBar.background']).toBe('#0d131f')
+    expect(mayukaiMidnightTheme?.colors['editor.background']).toBe('#141824')
+    expect(mayukaiMidnightTheme?.colors['editorLineNumber.activeForeground']).toBe('#707a8ccc')
+    expect(mayukaiMidnightTheme?.colors['terminal.background']).toBe('#1b1c24')
+  })
+
   it('prefers vendored upstream theme JSON for the first batch and caches resolved instances', () => {
     const firstTheme = getBundledColorTheme('one-dark-pro')
     const secondTheme = getBundledColorTheme('one-dark-pro')

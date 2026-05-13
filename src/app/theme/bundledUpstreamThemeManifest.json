@@ -1030,5 +1030,197 @@
     "version": "1.5.1",
     "assetDirectory": "kanagawa",
     "themePath": "themes/kanagawa-color-theme.json"
+  },
+  {
+    "id": "github-light-theme",
+    "publisher": "Hyzeta",
+    "extensionName": "vscode-theme-github-light",
+    "version": "7.14.2",
+    "assetDirectory": "vscode-theme-github-light",
+    "themePath": "themes/Github-Light-Theme-color-theme.json"
+  },
+  {
+    "id": "github-light-theme-gray",
+    "publisher": "Hyzeta",
+    "extensionName": "vscode-theme-github-light",
+    "version": "7.14.2",
+    "assetDirectory": "vscode-theme-github-light",
+    "themePath": "themes/Github-Light-Theme-Gray-color-theme.json"
+  },
+  {
+    "id": "winter-is-coming-dark-blue",
+    "publisher": "johnpapa",
+    "extensionName": "winteriscoming",
+    "version": "1.4.4",
+    "assetDirectory": "winteriscoming",
+    "themePath": "themes/WinterIsComing-dark-blue-color-theme.json"
+  },
+  {
+    "id": "winter-is-coming-light",
+    "publisher": "johnpapa",
+    "extensionName": "winteriscoming",
+    "version": "1.4.4",
+    "assetDirectory": "winteriscoming",
+    "themePath": "themes/WinterIsComing-light-color-theme.json"
+  },
+  {
+    "id": "winter-is-coming-dark-black",
+    "publisher": "johnpapa",
+    "extensionName": "winteriscoming",
+    "version": "1.4.4",
+    "assetDirectory": "winteriscoming",
+    "themePath": "themes/WinterIsComing-dark-color-theme.json"
+  },
+  {
+    "id": "slack-dark-mode",
+    "publisher": "felipe-mendes",
+    "extensionName": "slack-theme",
+    "version": "1.9.17",
+    "assetDirectory": "slack-theme",
+    "themePath": "themes/dark-mode.json"
+  },
+  {
+    "id": "slack-aubergine",
+    "publisher": "felipe-mendes",
+    "extensionName": "slack-theme",
+    "version": "1.9.17",
+    "assetDirectory": "slack-theme",
+    "themePath": "themes/aubergine-new.json"
+  },
+  {
+    "id": "slack-aubergine-dark",
+    "publisher": "felipe-mendes",
+    "extensionName": "slack-theme",
+    "version": "1.9.17",
+    "assetDirectory": "slack-theme",
+    "themePath": "themes/aubergine.json"
+  },
+  {
+    "id": "slack-aubergine-dark-editor",
+    "publisher": "felipe-mendes",
+    "extensionName": "slack-theme",
+    "version": "1.9.17",
+    "assetDirectory": "slack-theme",
+    "themePath": "themes/aubergine-dark.json"
+  },
+  {
+    "id": "slack-monument",
+    "publisher": "felipe-mendes",
+    "extensionName": "slack-theme",
+    "version": "1.9.17",
+    "assetDirectory": "slack-theme",
+    "themePath": "themes/monument.json"
+  },
+  {
+    "id": "slack-hoth",
+    "publisher": "felipe-mendes",
+    "extensionName": "slack-theme",
+    "version": "1.9.17",
+    "assetDirectory": "slack-theme",
+    "themePath": "themes/hoth.json"
+  },
+  {
+    "id": "slack-protanopia-deuteranopia",
+    "publisher": "felipe-mendes",
+    "extensionName": "slack-theme",
+    "version": "1.9.17",
+    "assetDirectory": "slack-theme",
+    "themePath": "themes/protanopia-deuteranopia.json"
+  },
+  {
+    "id": "slack-choco-mint",
+    "publisher": "felipe-mendes",
+    "extensionName": "slack-theme",
+    "version": "1.9.17",
+    "assetDirectory": "slack-theme",
+    "themePath": "themes/choco-mint.json"
+  },
+  {
+    "id": "slack-ochin",
+    "publisher": "felipe-mendes",
+    "extensionName": "slack-theme",
+    "version": "1.9.17",
+    "assetDirectory": "slack-theme",
+    "themePath": "themes/ochin.json"
+  },
+  {
+    "id": "slack-work-hard",
+    "publisher": "felipe-mendes",
+    "extensionName": "slack-theme",
+    "version": "1.9.17",
+    "assetDirectory": "slack-theme",
+    "themePath": "themes/work-hard.json"
+  },
+  {
+    "id": "slack-tritanopia",
+    "publisher": "felipe-mendes",
+    "extensionName": "slack-theme",
+    "version": "1.9.17",
+    "assetDirectory": "slack-theme",
+    "themePath": "themes/tritanopia.json"
+  },
+  {
+    "id": "hopscotch",
+    "publisher": "idleberg",
+    "extensionName": "hopscotch",
+    "version": "0.8.2",
+    "assetDirectory": "hopscotch",
+    "themePath": "themes/Hopscotch.json"
+  },
+  {
+    "id": "hopscotch-mono",
+    "publisher": "idleberg",
+    "extensionName": "hopscotch",
+    "version": "0.8.2",
+    "assetDirectory": "hopscotch",
+    "themePath": "themes/Hopscotch Mono.json"
+  },
+  {
+    "id": "hopscotch-proofreader",
+    "publisher": "idleberg",
+    "extensionName": "hopscotch",
+    "version": "0.8.2",
+    "assetDirectory": "hopscotch",
+    "themePath": "themes/Hopscotch [proofreader].json"
+  },
+  {
+    "id": "gruvbox-material-dark",
+    "publisher": "sainnhe",
+    "extensionName": "gruvbox-material",
+    "version": "6.5.2",
+    "assetDirectory": "gruvbox-material",
+    "themePath": "themes/gruvbox-material-dark.json"
+  },
+  {
+    "id": "gruvbox-material-light",
+    "publisher": "sainnhe",
+    "extensionName": "gruvbox-material",
+    "version": "6.5.2",
+    "assetDirectory": "gruvbox-material",
+    "themePath": "themes/gruvbox-material-light.json"
+  },
+  {
+    "id": "mayukai-dark",
+    "publisher": "GulajavaMinistudio",
+    "extensionName": "mayukaithemevsc",
+    "version": "3.2.5",
+    "assetDirectory": "mayukaithemevsc",
+    "themePath": "themes/Mayukai-darker-color-theme.json"
+  },
+  {
+    "id": "mayukai-mirage-gruvbox-darktooth",
+    "publisher": "GulajavaMinistudio",
+    "extensionName": "mayukaithemevsc",
+    "version": "3.2.5",
+    "assetDirectory": "mayukaithemevsc",
+    "themePath": "themes/Mayukai-mirage-gruvbox-color-theme.json"
+  },
+  {
+    "id": "mayukai-midnight",
+    "publisher": "GulajavaMinistudio",
+    "extensionName": "mayukaithemevsc",
+    "version": "3.2.5",
+    "assetDirectory": "mayukaithemevsc",
+    "themePath": "themes/Mayukai-midnight.json"
   }
 ]

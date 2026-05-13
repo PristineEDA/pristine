@@ -189,6 +189,18 @@ describe('ThemeContext', () => {
     expectConfiguredThemeState('atom-one-light', 'light');
   });
 
+  it('accepts eleventh-batch vendored dark bundled theme ids from config and keeps the DOM in dark mode', () => {
+    renderWithConfiguredThemeId('slack-aubergine-dark-editor');
+
+    expectConfiguredThemeState('slack-aubergine-dark-editor', 'dark');
+  });
+
+  it('accepts eleventh-batch vendored light bundled theme ids from config and keeps the DOM in light mode', () => {
+    renderWithConfiguredThemeId('github-light-theme-gray');
+
+    expectConfiguredThemeState('github-light-theme-gray', 'light');
+  });
+
   it('persists theme updates to the unified config keys and keeps the DOM class in sync', () => {
     render(
       <ThemeProvider>

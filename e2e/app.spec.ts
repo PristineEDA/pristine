@@ -4392,6 +4392,51 @@ test('tenth-batch vendored upstream Atom One Light bundled UI theme selection pe
   });
 });
 
+test('eleventh-batch vendored upstream Slack Aubergine Dark bundled UI theme selection persists across app relaunch and updates Monaco and terminal styling', async () => {
+  test.slow();
+
+  await assertBundledThemeSelectionPersistsAcrossRelaunch({
+    searchText: 'slack theme aubergine dark',
+    themeId: 'slack-aubergine-dark-editor',
+    themeLabel: 'Slack Theme Aubergine Dark',
+    isDark: true,
+    expectedMonacoColors: {
+      background: '#3E313C',
+      lineNumber: ['#B9B9B9', '#BBBEBF', '#F6F6F4'],
+    },
+  });
+});
+
+test('eleventh-batch vendored upstream Github Light Theme - Gray bundled UI theme selection persists across app relaunch and updates Monaco and terminal styling', async () => {
+  test.slow();
+
+  await assertBundledThemeSelectionPersistsAcrossRelaunch({
+    searchText: 'github light theme - gray',
+    themeId: 'github-light-theme-gray',
+    themeLabel: 'Github Light Theme - Gray',
+    isDark: false,
+    expectedMonacoColors: {
+      background: '#F0F0F0',
+      lineNumber: ['#BABBBC', '#000000'],
+    },
+  });
+});
+
+test('eleventh-batch vendored upstream Mayukai Midnight bundled UI theme selection persists across app relaunch and updates Monaco and terminal styling', async () => {
+  test.slow();
+
+  await assertBundledThemeSelectionPersistsAcrossRelaunch({
+    searchText: 'mayukai midnight',
+    themeId: 'mayukai-midnight',
+    themeLabel: 'Mayukai Midnight',
+    isDark: true,
+    expectedMonacoColors: {
+      background: '#141824',
+      lineNumber: ['#707A8C66', '#707A8CCC', '#CBCCC6'],
+    },
+  });
+});
+
 test('code editor settings persist across app relaunch', async () => {
   test.slow();
 
