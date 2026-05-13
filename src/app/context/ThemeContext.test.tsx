@@ -113,6 +113,24 @@ describe('ThemeContext', () => {
     expect(window.electronAPI?.config.set).toHaveBeenCalledWith('workbench.colorTheme', 'github-light-default');
   });
 
+  it('accepts third-batch vendored light bundled theme ids from config and keeps the DOM in light mode', () => {
+    vi.mocked(window.electronAPI!.config.get).mockImplementation((key: string) =>
+      key === 'workbench.colorTheme' ? 'solarized-light' : null,
+    );
+
+    render(
+      <ThemeProvider>
+        <ThemeProbe />
+      </ThemeProvider>,
+    );
+
+    expect(screen.getByTestId('current-theme')).toHaveTextContent('light');
+    expect(screen.getByTestId('current-theme-id')).toHaveTextContent('solarized-light');
+    expect(document.documentElement).not.toHaveClass('dark');
+    expect(document.documentElement).toHaveAttribute('data-color-theme-id', 'solarized-light');
+    expect(window.electronAPI?.config.set).toHaveBeenCalledWith('workbench.colorTheme', 'solarized-light');
+  });
+
   it('persists theme updates to the unified config keys and keeps the DOM class in sync', () => {
     render(
       <ThemeProvider>

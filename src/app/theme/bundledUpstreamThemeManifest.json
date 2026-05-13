@@ -144,6 +144,70 @@
     "themePath": "themes/rose-pine-dawn-color-theme.json"
   },
   {
+    "id": "gruvbox-dark-medium",
+    "publisher": "jdinhlife",
+    "extensionName": "gruvbox",
+    "version": "1.29.1",
+    "assetDirectory": "gruvbox",
+    "themePath": "themes/gruvbox-dark-medium.json"
+  },
+  {
+    "id": "gruvbox-dark-hard",
+    "publisher": "jdinhlife",
+    "extensionName": "gruvbox",
+    "version": "1.29.1",
+    "assetDirectory": "gruvbox",
+    "themePath": "themes/gruvbox-dark-hard.json"
+  },
+  {
+    "id": "gruvbox-dark-soft",
+    "publisher": "jdinhlife",
+    "extensionName": "gruvbox",
+    "version": "1.29.1",
+    "assetDirectory": "gruvbox",
+    "themePath": "themes/gruvbox-dark-soft.json"
+  },
+  {
+    "id": "gruvbox-light-medium",
+    "publisher": "jdinhlife",
+    "extensionName": "gruvbox",
+    "version": "1.29.1",
+    "assetDirectory": "gruvbox",
+    "themePath": "themes/gruvbox-light-medium.json"
+  },
+  {
+    "id": "gruvbox-light-hard",
+    "publisher": "jdinhlife",
+    "extensionName": "gruvbox",
+    "version": "1.29.1",
+    "assetDirectory": "gruvbox",
+    "themePath": "themes/gruvbox-light-hard.json"
+  },
+  {
+    "id": "gruvbox-light-soft",
+    "publisher": "jdinhlife",
+    "extensionName": "gruvbox",
+    "version": "1.29.1",
+    "assetDirectory": "gruvbox",
+    "themePath": "themes/gruvbox-light-soft.json"
+  },
+  {
+    "id": "solarized-light",
+    "publisher": "ryanolsonx",
+    "extensionName": "solarized",
+    "version": "3.0.0",
+    "assetDirectory": "solarized",
+    "themePath": "themes/legacy-solarized-light-color-theme.json"
+  },
+  {
+    "id": "solarized-dark",
+    "publisher": "ryanolsonx",
+    "extensionName": "solarized",
+    "version": "3.0.0",
+    "assetDirectory": "solarized",
+    "themePath": "themes/legacy-solarized-dark-color-theme.json"
+  },
+  {
     "id": "ayu-mirage",
     "publisher": "teabyii",
     "extensionName": "ayu",
@@ -152,7 +216,23 @@
     "themePath": "ayu-mirage-unbordered.json"
   },
   {
+    "id": "ayu-mirage-bordered",
+    "publisher": "teabyii",
+    "extensionName": "ayu",
+    "version": "1.1.12",
+    "assetDirectory": "ayu",
+    "themePath": "ayu-mirage.json"
+  },
+  {
     "id": "ayu-light",
+    "publisher": "teabyii",
+    "extensionName": "ayu",
+    "version": "1.1.12",
+    "assetDirectory": "ayu",
+    "themePath": "ayu-light-unbordered.json"
+  },
+  {
+    "id": "ayu-light-bordered",
     "publisher": "teabyii",
     "extensionName": "ayu",
     "version": "1.1.12",
@@ -161,6 +241,14 @@
   },
   {
     "id": "ayu-dark",
+    "publisher": "teabyii",
+    "extensionName": "ayu",
+    "version": "1.1.12",
+    "assetDirectory": "ayu",
+    "themePath": "ayu-dark-unbordered.json"
+  },
+  {
+    "id": "ayu-dark-bordered",
     "publisher": "teabyii",
     "extensionName": "ayu",
     "version": "1.1.12",

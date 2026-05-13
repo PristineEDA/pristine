@@ -108,6 +108,48 @@ describe('colorThemeRegistry', () => {
     expect(darkTheme?.tokenColors.length ?? 0).toBeGreaterThan(100)
   })
 
+  it('resolves third-batch vendored upstream bundled themes and preserves VS Code fallback colors when upstream keys are missing', () => {
+    const firstGruvboxTheme = getBundledColorTheme('gruvbox-dark-medium')
+    const secondGruvboxTheme = getBundledColorTheme('gruvbox-dark-medium')
+    const solarizedLightTheme = getBundledColorTheme('solarized-light')
+    const ayuLightTheme = getBundledColorTheme('ayu-light')
+    const ayuLightBorderedTheme = getBundledColorTheme('ayu-light-bordered')
+
+    expect(firstGruvboxTheme).toBe(secondGruvboxTheme)
+    expect(firstGruvboxTheme).toEqual(expect.objectContaining({
+      id: 'gruvbox-dark-medium',
+      kind: 'dark',
+      source: 'bundled',
+    }))
+    expect(firstGruvboxTheme?.colors['editor.background']).toBe('#282828')
+    expect(firstGruvboxTheme?.colors['editorLineNumber.foreground']).toBe('#665c54')
+    expect(firstGruvboxTheme?.colors['editorLineNumber.activeForeground']).toBe('#BBBEBF')
+    expect(firstGruvboxTheme?.tokenColors.length ?? 0).toBeGreaterThan(100)
+
+    expect(solarizedLightTheme).toEqual(expect.objectContaining({
+      id: 'solarized-light',
+      kind: 'light',
+      source: 'bundled',
+    }))
+    expect(solarizedLightTheme?.colors['editor.background']).toBe('#fdf6e3')
+    expect(solarizedLightTheme?.colors['editorLineNumber.activeForeground']).toBe('#6f7776')
+    expect(solarizedLightTheme?.tokenColors.length ?? 0).toBeGreaterThan(50)
+
+    expect(ayuLightTheme).toEqual(expect.objectContaining({
+      id: 'ayu-light',
+      kind: 'light',
+      source: 'bundled',
+    }))
+    expect(ayuLightBorderedTheme).toEqual(expect.objectContaining({
+      id: 'ayu-light-bordered',
+      kind: 'light',
+      source: 'bundled',
+    }))
+    expect(ayuLightTheme?.colors['editor.background']).toBe('#f8f9fa')
+    expect(ayuLightBorderedTheme?.colors['editor.background']).toBe('#fcfcfc')
+    expect(ayuLightTheme?.colors['editor.background']).not.toBe(ayuLightBorderedTheme?.colors['editor.background'])
+  })
+
   it('prefers vendored upstream theme JSON for the first batch and caches resolved instances', () => {
     const firstTheme = getBundledColorTheme('one-dark-pro')
     const secondTheme = getBundledColorTheme('one-dark-pro')

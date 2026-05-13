@@ -77,6 +77,14 @@ const defaultColorThemeOptions: ColorThemeOption[] = [
     kind: 'light',
     source: 'bundled',
   },
+  {
+    value: 'gruvbox-dark-medium',
+    label: 'Gruvbox Dark Medium',
+    description: 'Balanced Gruvbox dark variant with warm retro contrast.',
+    author: 'jdinhify',
+    kind: 'dark',
+    source: 'bundled',
+  },
 ];
 
 const defaultThemePreviews: Record<string, ColorThemePreviewPalette> = {
@@ -159,6 +167,22 @@ const defaultThemePreviews: Record<string, ColorThemePreviewPalette> = {
     yellow: '#9a6700',
     red: '#cf222e',
     orange: '#953800',
+  },
+  'gruvbox-dark-medium': {
+    surface: '#282828',
+    background: '#282828',
+    input: '#282828',
+    selection: '#689d6a40',
+    comment: '#928374',
+    foreground: '#ebdbb2',
+    brightForeground: '#fbf1c7',
+    pink: '#b16286',
+    purple: '#d3869b',
+    cyan: '#8ec07c',
+    green: '#b8bb26',
+    yellow: '#fabd2f',
+    red: '#fb4934',
+    orange: '#fe8019',
   },
 };
 

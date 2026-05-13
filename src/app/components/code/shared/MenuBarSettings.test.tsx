@@ -410,6 +410,40 @@ describe('MenuBar settings', () => {
     expect(setThemeMock).toHaveBeenCalledWith('github-light-default');
   });
 
+  it('shows third-batch vendored upstream dark bundled UI themes in the advanced picker and applies them through the shared theme setting', async () => {
+    const user = userEvent.setup();
+
+    mockPersistedSettingsConfig({
+      colorTheme: 'vscode-2026-dark',
+    });
+
+    renderMenuBar();
+
+    await user.click(screen.getByTestId('menu-settings-button'));
+    expect(await screen.findByTestId('settings-dialog')).toBeVisible();
+
+    await user.click(screen.getByTestId('settings-theme-advanced-button'));
+    expect(await screen.findByTestId('settings-theme-advanced-dialog')).toBeVisible();
+
+    const searchInput = screen.getByTestId('settings-theme-advanced-search-input');
+    await user.clear(searchInput);
+    await user.type(searchInput, 'gruvbox dark medium');
+
+    expect(screen.getByTestId('settings-theme-preview-card-gruvbox-dark-medium')).toHaveAttribute('data-state', 'unselected');
+    expect(screen.getByTestId('settings-theme-preview-label-gruvbox-dark-medium')).toHaveTextContent('Gruvbox Dark Medium');
+    expect(screen.getByTestId('settings-theme-preview-author-gruvbox-dark-medium')).toHaveTextContent('jdinhify');
+    expect(screen.getByTestId('settings-theme-preview-line-module-gruvbox-dark-medium')).toHaveTextContent('module alu(clk)');
+
+    await user.click(screen.getByTestId('settings-theme-preview-card-gruvbox-dark-medium'));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('settings-theme-advanced-dialog')).not.toBeInTheDocument();
+    });
+
+    expect(screen.getByTestId('settings-theme-combobox')).toHaveTextContent('Gruvbox Dark Medium');
+    expect(setThemeMock).toHaveBeenCalledWith('gruvbox-dark-medium');
+  });
+
   it('imports a local UI theme from settings and selects it immediately', async () => {
     const user = userEvent.setup();
 

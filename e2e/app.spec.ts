@@ -731,7 +731,11 @@ async function readMonacoAppearanceSnapshot(
       editorRoot.querySelector('.monaco-editor-background') ??
       editorRoot.querySelector('.margin') ??
       editorRoot;
-    const lineNumberElement = editorRoot.querySelector('.margin .line-numbers') ?? editorRoot.querySelector('.line-numbers');
+    const lineNumberElement =
+      editorRoot.querySelector('.margin .line-numbers.active-line-number') ??
+      editorRoot.querySelector('.line-numbers.active-line-number') ??
+      editorRoot.querySelector('.margin .line-numbers') ??
+      editorRoot.querySelector('.line-numbers');
     const textLayer =
       editorRoot.querySelector('.view-lines .view-line') ??
       editorRoot.querySelector('.view-lines') ??
@@ -3961,16 +3965,24 @@ async function expectBundledMonacoTheme(
   await expect.poll(async () => {
     const snapshot = await readMonacoAppearanceSnapshot(page, expectedColors);
 
-    return snapshot
-      ? {
-          backgroundMatches: snapshot.backgroundColor === snapshot.expectedBackgroundColor,
-          lineNumberMatches: snapshot.lineNumberColor === snapshot.expectedLineNumberColor,
-        }
-      : null;
-  }).toEqual({
-    backgroundMatches: true,
-    lineNumberMatches: true,
-  });
+    if (!snapshot) {
+      return null;
+    }
+
+    if (
+      snapshot.backgroundColor === snapshot.expectedBackgroundColor
+      && snapshot.lineNumberColor === snapshot.expectedLineNumberColor
+    ) {
+      return null;
+    }
+
+    return {
+      backgroundColor: snapshot.backgroundColor,
+      expectedBackgroundColor: snapshot.expectedBackgroundColor,
+      lineNumberColor: snapshot.lineNumberColor,
+      expectedLineNumberColor: snapshot.expectedLineNumberColor,
+    };
+  }).toEqual(null);
 }
 
 async function expectBundledTerminalTheme(page: Awaited<ReturnType<typeof launchApp>>['window']) {
@@ -4006,6 +4018,7 @@ async function openFileAndAssertBundledTheme(
   await expect(page.locator('.monaco-editor .view-lines')).toContainText('module reg_file', {
     timeout: MONACO_READY_TIMEOUT_MS,
   });
+  await focusMonacoEditor(page);
   await expectBundledMonacoTheme(page, expectedMonacoColors);
 
   await openBottomTerminal(page);
@@ -4127,6 +4140,36 @@ test('second-batch vendored upstream dark bundled UI theme selection persists ac
     expectedMonacoColors: {
       background: '#24283b',
       lineNumber: '#8089b3',
+    },
+  });
+});
+
+test('third-batch vendored upstream light bundled UI theme selection persists across app relaunch and updates Monaco and terminal styling', async () => {
+  test.slow();
+
+  await assertBundledThemeSelectionPersistsAcrossRelaunch({
+    searchText: 'solarized light',
+    themeId: 'solarized-light',
+    themeLabel: 'Solarized Light',
+    isDark: false,
+    expectedMonacoColors: {
+      background: '#fdf6e3',
+      lineNumber: '#6f7776',
+    },
+  });
+});
+
+test('third-batch vendored upstream dark bundled UI theme selection persists across app relaunch and updates Monaco and terminal styling', async () => {
+  test.slow();
+
+  await assertBundledThemeSelectionPersistsAcrossRelaunch({
+    searchText: 'gruvbox dark medium',
+    themeId: 'gruvbox-dark-medium',
+    themeLabel: 'Gruvbox Dark Medium',
+    isDark: true,
+    expectedMonacoColors: {
+      background: '#282828',
+      lineNumber: '#BBBEBF',
     },
   });
 });
