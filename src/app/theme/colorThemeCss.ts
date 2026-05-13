@@ -58,6 +58,7 @@ export function getAppliedColorThemeVariables(theme: ResolvedColorTheme): Record
     '--ide-hover': pickThemeColor(theme, ['list.hoverBackground', 'toolbar.hoverBackground'], preview.selection),
     '--ide-tab-hover': pickThemeColor(theme, ['tab.hoverBackground', 'tab.activeBackground'], preview.surface),
     '--ide-editor-bg': pickThemeColor(theme, ['editor.background'], preview.background),
+    '--ide-terminal-bg': pickThemeColor(theme, ['terminal.background', 'editor.background', 'panel.background'], preview.background),
     '--ide-text': foreground,
     '--ide-text-muted': pickThemeColor(theme, ['descriptionForeground', 'editorLineNumber.foreground'], preview.comment),
     '--ide-text-muted-stronger': pickThemeColor(theme, ['sideBarTitle.foreground', 'titleBar.activeForeground', 'statusBar.foreground'], preview.foreground),

@@ -19,8 +19,13 @@ const whiteboardThemeStyle = {
   color: 'var(--affine-text-primary-color, #121212)',
 } as CSSProperties;
 
-export function WhiteboardView() {
+interface WhiteboardViewProps {
+  isActive?: boolean;
+}
+
+export function WhiteboardView({ isActive = true }: WhiteboardViewProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
+  const activateWhiteboardRef = useRef<(() => void) | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isReady, setIsReady] = useState(false);
   const [mountVersion, setMountVersion] = useState(0);
@@ -52,6 +57,7 @@ export function WhiteboardView() {
         mountedWhiteboard.dispose();
         whiteboardStore.dispose();
       };
+      activateWhiteboardRef.current = mountedWhiteboard.activate;
 
       if (!disposed) {
         setIsReady(true);
@@ -67,9 +73,24 @@ export function WhiteboardView() {
 
     return () => {
       disposed = true;
+      activateWhiteboardRef.current = null;
       cleanup?.();
     };
   }, [mountVersion]);
+
+  useEffect(() => {
+    if (!isActive || !isReady || errorMessage) {
+      return undefined;
+    }
+
+    let animationFrameId = window.requestAnimationFrame(() => {
+      activateWhiteboardRef.current?.();
+    });
+
+    return () => {
+      window.cancelAnimationFrame(animationFrameId);
+    };
+  }, [errorMessage, isActive, isReady]);
 
   return (
     <section

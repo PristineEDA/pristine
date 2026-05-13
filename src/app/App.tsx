@@ -40,7 +40,9 @@ const WhiteboardView = lazy(() => import('./components/whiteboard/WhiteboardView
 // ─── ResizeHandle ────────────────────────────────────────────────────────────
 
 const MainContentFallback = () => (
-  <div aria-hidden="true" className="flex flex-1 bg-background" />
+  <div className="flex flex-1 items-center justify-center bg-background text-muted-foreground text-sm">
+    Loading view...
+  </div>
 );
 
 const PlaceholderView = ({
@@ -51,16 +53,14 @@ const PlaceholderView = ({
   title: string;
   description?: string;
   testId: string;
-}) => {
-  return (
-    <div data-testid={testId} className="flex h-full w-full items-center justify-center bg-muted/40 text-muted-foreground">
-      <div className="text-center">
-        <p className="text-lg font-medium">{title}</p>
-        <p className="mt-1 text-sm">{description}</p>
-      </div>
+}) => (
+  <div data-testid={testId} className="flex h-full w-full items-center justify-center bg-background text-muted-foreground">
+    <div className="text-center">
+      <p className="text-lg font-medium">{title}</p>
+      <p className="mt-1 text-sm">{description}</p>
     </div>
-  );
-};
+  </div>
+);
 
 const codeViewPlaceholderConfig = {
   simulation: {
@@ -436,10 +436,7 @@ function AppLayout() {
         />
         <div className="flex-1 min-h-0">
           <Suspense fallback={<MainContentFallback />}>
-            <PlaceholderView
-              title={placeholder.title}
-              testId={placeholder.testId}
-            />
+            <PlaceholderView title={placeholder.title} testId={placeholder.testId} />
           </Suspense>
         </div>
       </div>
@@ -507,11 +504,9 @@ function AppLayout() {
             ? renderSimulationWorkspace()
             : renderCodePlaceholder())
         : mainContentView === 'whiteboard' ? (
-          <div className="flex-1 min-h-0">
-            <Suspense fallback={<MainContentFallback />}>
-              <WhiteboardView />
-            </Suspense>
-          </div>
+          <Suspense fallback={<MainContentFallback />}>
+            <WhiteboardView />
+          </Suspense>
         ) : (
           <div className="flex-1 min-h-0">
             <Suspense fallback={<MainContentFallback />}>

@@ -29,6 +29,7 @@ export interface MountBlockSuiteWhiteboardOptions {
 export interface MountedBlockSuiteWhiteboard {
   container: PristineAffineEditorContainer;
   editor: PristineEdgelessEditorElement;
+  activate: () => void;
   dispose: () => void;
 }
 
@@ -159,6 +160,19 @@ function createEditorContainer(store: Store, editor: PristineEdgelessEditorEleme
   return container;
 }
 
+function activateBlockSuiteWhiteboard(editor: PristineEdgelessEditorElement): void {
+  editor.updateComplete
+    .then(() => {
+      window.dispatchEvent(new Event('resize'));
+      editor.requestUpdate();
+
+      const root = editor.querySelector<HTMLElement & { requestUpdate?: () => void }>('affine-edgeless-root');
+      root?.requestUpdate?.();
+      root?.click();
+    })
+    .catch(console.error);
+}
+
 export function mountBlockSuiteWhiteboard({
   host,
   store,
@@ -166,7 +180,6 @@ export function mountBlockSuiteWhiteboard({
 }: MountBlockSuiteWhiteboardOptions): MountedBlockSuiteWhiteboard {
   const editor = createPristineEdgelessEditorElement();
   const container = createEditorContainer(store, editor);
-  let disposed = false;
 
   editor.dataset.testid = 'whiteboard-edgeless-editor';
   editor.dataset.theme = 'light';
@@ -180,21 +193,11 @@ export function mountBlockSuiteWhiteboard({
   container.replaceChildren(editor);
   host.replaceChildren(container);
 
-  editor.updateComplete
-    .then(() => {
-      if (disposed) {
-        return;
-      }
-
-      editor.querySelector<HTMLElement>('affine-edgeless-root')?.click();
-    })
-    .catch(console.error);
-
   return {
     container,
     editor,
+    activate: () => activateBlockSuiteWhiteboard(editor),
     dispose: () => {
-      disposed = true;
       editor.doc = null;
       editor.specs = [];
       container.remove();
