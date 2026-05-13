@@ -23,6 +23,32 @@ function ThemeProbe() {
   );
 }
 
+function renderWithConfiguredThemeId(themeId: string | null) {
+  vi.mocked(window.electronAPI!.config.get).mockImplementation((key: string) =>
+    key === 'workbench.colorTheme' ? themeId : null,
+  );
+
+  render(
+    <ThemeProvider>
+      <ThemeProbe />
+    </ThemeProvider>,
+  );
+}
+
+function expectConfiguredThemeState(themeId: string, themeKind: 'dark' | 'light') {
+  expect(screen.getByTestId('current-theme')).toHaveTextContent(themeKind);
+  expect(screen.getByTestId('current-theme-id')).toHaveTextContent(themeId);
+
+  if (themeKind === 'dark') {
+    expect(document.documentElement).toHaveClass('dark');
+  } else {
+    expect(document.documentElement).not.toHaveClass('dark');
+  }
+
+  expect(document.documentElement).toHaveAttribute('data-color-theme-id', themeId);
+  expect(window.electronAPI?.config.set).toHaveBeenCalledWith('workbench.colorTheme', themeId);
+}
+
 describe('ThemeContext', () => {
   beforeEach(() => {
     document.documentElement.classList.remove('dark');
@@ -62,163 +88,69 @@ describe('ThemeContext', () => {
   });
 
   it('accepts bundled third-party theme ids from config and applies them through the unified provider', () => {
-    vi.mocked(window.electronAPI!.config.get).mockImplementation((key: string) =>
-      key === 'workbench.colorTheme' ? 'pink-cat-boo' : null,
-    );
+    renderWithConfiguredThemeId('pink-cat-boo');
 
-    render(
-      <ThemeProvider>
-        <ThemeProbe />
-      </ThemeProvider>,
-    );
-
-    expect(screen.getByTestId('current-theme')).toHaveTextContent('dark');
-    expect(screen.getByTestId('current-theme-id')).toHaveTextContent('pink-cat-boo');
-    expect(document.documentElement).toHaveAttribute('data-color-theme-id', 'pink-cat-boo');
-    expect(window.electronAPI?.config.set).toHaveBeenCalledWith('workbench.colorTheme', 'pink-cat-boo');
+    expectConfiguredThemeState('pink-cat-boo', 'dark');
   });
 
   it('accepts vendored upstream bundled theme ids from config and applies them through the unified provider', () => {
-    vi.mocked(window.electronAPI!.config.get).mockImplementation((key: string) =>
-      key === 'workbench.colorTheme' ? 'one-dark-pro' : null,
-    );
+    renderWithConfiguredThemeId('one-dark-pro');
 
-    render(
-      <ThemeProvider>
-        <ThemeProbe />
-      </ThemeProvider>,
-    );
-
-    expect(screen.getByTestId('current-theme')).toHaveTextContent('dark');
-    expect(screen.getByTestId('current-theme-id')).toHaveTextContent('one-dark-pro');
-    expect(document.documentElement).toHaveAttribute('data-color-theme-id', 'one-dark-pro');
-    expect(window.electronAPI?.config.set).toHaveBeenCalledWith('workbench.colorTheme', 'one-dark-pro');
+    expectConfiguredThemeState('one-dark-pro', 'dark');
   });
 
   it('accepts second-batch vendored light bundled theme ids from config and keeps the DOM in light mode', () => {
-    vi.mocked(window.electronAPI!.config.get).mockImplementation((key: string) =>
-      key === 'workbench.colorTheme' ? 'github-light-default' : null,
-    );
+    renderWithConfiguredThemeId('github-light-default');
 
-    render(
-      <ThemeProvider>
-        <ThemeProbe />
-      </ThemeProvider>,
-    );
-
-    expect(screen.getByTestId('current-theme')).toHaveTextContent('light');
-    expect(screen.getByTestId('current-theme-id')).toHaveTextContent('github-light-default');
-    expect(document.documentElement).not.toHaveClass('dark');
-    expect(document.documentElement).toHaveAttribute('data-color-theme-id', 'github-light-default');
-    expect(window.electronAPI?.config.set).toHaveBeenCalledWith('workbench.colorTheme', 'github-light-default');
+    expectConfiguredThemeState('github-light-default', 'light');
   });
 
   it('accepts third-batch vendored light bundled theme ids from config and keeps the DOM in light mode', () => {
-    vi.mocked(window.electronAPI!.config.get).mockImplementation((key: string) =>
-      key === 'workbench.colorTheme' ? 'solarized-light' : null,
-    );
+    renderWithConfiguredThemeId('solarized-light');
 
-    render(
-      <ThemeProvider>
-        <ThemeProbe />
-      </ThemeProvider>,
-    );
-
-    expect(screen.getByTestId('current-theme')).toHaveTextContent('light');
-    expect(screen.getByTestId('current-theme-id')).toHaveTextContent('solarized-light');
-    expect(document.documentElement).not.toHaveClass('dark');
-    expect(document.documentElement).toHaveAttribute('data-color-theme-id', 'solarized-light');
-    expect(window.electronAPI?.config.set).toHaveBeenCalledWith('workbench.colorTheme', 'solarized-light');
+    expectConfiguredThemeState('solarized-light', 'light');
   });
 
   it('accepts fourth-batch vendored dark bundled theme ids from config and keeps the DOM in dark mode', () => {
-    vi.mocked(window.electronAPI!.config.get).mockImplementation((key: string) =>
-      key === 'workbench.colorTheme' ? 'night-owl' : null,
-    );
+    renderWithConfiguredThemeId('night-owl');
 
-    render(
-      <ThemeProvider>
-        <ThemeProbe />
-      </ThemeProvider>,
-    );
-
-    expect(screen.getByTestId('current-theme')).toHaveTextContent('dark');
-    expect(screen.getByTestId('current-theme-id')).toHaveTextContent('night-owl');
-    expect(document.documentElement).toHaveClass('dark');
-    expect(document.documentElement).toHaveAttribute('data-color-theme-id', 'night-owl');
-    expect(window.electronAPI?.config.set).toHaveBeenCalledWith('workbench.colorTheme', 'night-owl');
+    expectConfiguredThemeState('night-owl', 'dark');
   });
 
   it('accepts fourth-batch vendored light bundled theme ids from config and keeps the DOM in light mode', () => {
-    vi.mocked(window.electronAPI!.config.get).mockImplementation((key: string) =>
-      key === 'workbench.colorTheme' ? 'noctis-lux' : null,
-    );
+    renderWithConfiguredThemeId('noctis-lux');
 
-    render(
-      <ThemeProvider>
-        <ThemeProbe />
-      </ThemeProvider>,
-    );
-
-    expect(screen.getByTestId('current-theme')).toHaveTextContent('light');
-    expect(screen.getByTestId('current-theme-id')).toHaveTextContent('noctis-lux');
-    expect(document.documentElement).not.toHaveClass('dark');
-    expect(document.documentElement).toHaveAttribute('data-color-theme-id', 'noctis-lux');
-    expect(window.electronAPI?.config.set).toHaveBeenCalledWith('workbench.colorTheme', 'noctis-lux');
+    expectConfiguredThemeState('noctis-lux', 'light');
   });
 
   it('accepts fifth-batch vendored dark bundled theme ids from config and keeps the DOM in dark mode', () => {
-    vi.mocked(window.electronAPI!.config.get).mockImplementation((key: string) =>
-      key === 'workbench.colorTheme' ? 'macos-modern-dark-ventura-xcode-default' : null,
-    );
+    renderWithConfiguredThemeId('macos-modern-dark-ventura-xcode-default');
 
-    render(
-      <ThemeProvider>
-        <ThemeProbe />
-      </ThemeProvider>,
-    );
-
-    expect(screen.getByTestId('current-theme')).toHaveTextContent('dark');
-    expect(screen.getByTestId('current-theme-id')).toHaveTextContent('macos-modern-dark-ventura-xcode-default');
-    expect(document.documentElement).toHaveClass('dark');
-    expect(document.documentElement).toHaveAttribute('data-color-theme-id', 'macos-modern-dark-ventura-xcode-default');
-    expect(window.electronAPI?.config.set).toHaveBeenCalledWith('workbench.colorTheme', 'macos-modern-dark-ventura-xcode-default');
+    expectConfiguredThemeState('macos-modern-dark-ventura-xcode-default', 'dark');
   });
 
   it('accepts fifth-batch vendored light bundled theme ids from config and keeps the DOM in light mode', () => {
-    vi.mocked(window.electronAPI!.config.get).mockImplementation((key: string) =>
-      key === 'workbench.colorTheme' ? 'macos-modern-light-ventura-xcode-low-key' : null,
-    );
+    renderWithConfiguredThemeId('macos-modern-light-ventura-xcode-low-key');
 
-    render(
-      <ThemeProvider>
-        <ThemeProbe />
-      </ThemeProvider>,
-    );
-
-    expect(screen.getByTestId('current-theme')).toHaveTextContent('light');
-    expect(screen.getByTestId('current-theme-id')).toHaveTextContent('macos-modern-light-ventura-xcode-low-key');
-    expect(document.documentElement).not.toHaveClass('dark');
-    expect(document.documentElement).toHaveAttribute('data-color-theme-id', 'macos-modern-light-ventura-xcode-low-key');
-    expect(window.electronAPI?.config.set).toHaveBeenCalledWith('workbench.colorTheme', 'macos-modern-light-ventura-xcode-low-key');
+    expectConfiguredThemeState('macos-modern-light-ventura-xcode-low-key', 'light');
   });
 
   it('accepts sixth-batch vendored Dobri bundled theme ids from config and keeps the DOM in dark mode', () => {
-    vi.mocked(window.electronAPI!.config.get).mockImplementation((key: string) =>
-      key === 'workbench.colorTheme' ? 'dobri-next-a06-amethyst' : null,
-    );
+    renderWithConfiguredThemeId('dobri-next-a06-amethyst');
 
-    render(
-      <ThemeProvider>
-        <ThemeProbe />
-      </ThemeProvider>,
-    );
+    expectConfiguredThemeState('dobri-next-a06-amethyst', 'dark');
+  });
 
-    expect(screen.getByTestId('current-theme')).toHaveTextContent('dark');
-    expect(screen.getByTestId('current-theme-id')).toHaveTextContent('dobri-next-a06-amethyst');
-    expect(document.documentElement).toHaveClass('dark');
-    expect(document.documentElement).toHaveAttribute('data-color-theme-id', 'dobri-next-a06-amethyst');
-    expect(window.electronAPI?.config.set).toHaveBeenCalledWith('workbench.colorTheme', 'dobri-next-a06-amethyst');
+  it('accepts seventh-batch vendored dark bundled theme ids from config and keeps the DOM in dark mode', () => {
+    renderWithConfiguredThemeId('github-dark-high-contrast');
+
+    expectConfiguredThemeState('github-dark-high-contrast', 'dark');
+  });
+
+  it('accepts seventh-batch vendored light bundled theme ids from config and keeps the DOM in light mode', () => {
+    renderWithConfiguredThemeId('github-light-high-contrast');
+
+    expectConfiguredThemeState('github-light-high-contrast', 'light');
   });
 
   it('persists theme updates to the unified config keys and keeps the DOM class in sync', () => {

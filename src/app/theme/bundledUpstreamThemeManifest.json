@@ -574,5 +574,77 @@
     "version": "1.1.6",
     "assetDirectory": "bunker",
     "themePath": "themes/Dobri-C09.json"
+  },
+  {
+    "id": "one-dark-pro-flat",
+    "publisher": "zhuangtongfa",
+    "extensionName": "Material-theme",
+    "version": "3.19.0",
+    "assetDirectory": "material-theme",
+    "themePath": "themes/OneDark-Pro-flat.json"
+  },
+  {
+    "id": "one-dark-pro-darker",
+    "publisher": "zhuangtongfa",
+    "extensionName": "Material-theme",
+    "version": "3.19.0",
+    "assetDirectory": "material-theme",
+    "themePath": "themes/OneDark-Pro-darker.json"
+  },
+  {
+    "id": "one-dark-pro-mix",
+    "publisher": "zhuangtongfa",
+    "extensionName": "Material-theme",
+    "version": "3.19.0",
+    "assetDirectory": "material-theme",
+    "themePath": "themes/OneDark-Pro-mix.json"
+  },
+  {
+    "id": "one-dark-pro-night-flat",
+    "publisher": "zhuangtongfa",
+    "extensionName": "Material-theme",
+    "version": "3.19.0",
+    "assetDirectory": "material-theme",
+    "themePath": "themes/OneDark-Pro-night-flat.json"
+  },
+  {
+    "id": "github-light-high-contrast",
+    "publisher": "GitHub",
+    "extensionName": "github-vscode-theme",
+    "version": "6.3.5",
+    "assetDirectory": "github-vscode-theme",
+    "themePath": "themes/light-high-contrast.json"
+  },
+  {
+    "id": "github-dark-high-contrast",
+    "publisher": "GitHub",
+    "extensionName": "github-vscode-theme",
+    "version": "6.3.5",
+    "assetDirectory": "github-vscode-theme",
+    "themePath": "themes/dark-high-contrast.json"
+  },
+  {
+    "id": "github-light-colorblind",
+    "publisher": "GitHub",
+    "extensionName": "github-vscode-theme",
+    "version": "6.3.5",
+    "assetDirectory": "github-vscode-theme",
+    "themePath": "themes/light-colorblind.json"
+  },
+  {
+    "id": "github-dark-colorblind",
+    "publisher": "GitHub",
+    "extensionName": "github-vscode-theme",
+    "version": "6.3.5",
+    "assetDirectory": "github-vscode-theme",
+    "themePath": "themes/dark-colorblind.json"
+  },
+  {
+    "id": "dracula-soft",
+    "publisher": "dracula-theme",
+    "extensionName": "theme-dracula",
+    "version": "2.25.1",
+    "assetDirectory": "theme-dracula",
+    "themePath": "theme/dracula-soft.json"
   }
 ]

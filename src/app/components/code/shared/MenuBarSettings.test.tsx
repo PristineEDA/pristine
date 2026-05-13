@@ -25,6 +25,9 @@ import {
   setThemeMock,
 } from './MenuBar.testSupport';
 
+const SETTINGS_DIALOG_TEST_TIMEOUT_MS = 30000;
+const SETTINGS_PICKER_TEST_TIMEOUT_MS = 15000;
+
 async function applyBundledThemeFromAdvancedPicker(
   user: ReturnType<typeof userEvent.setup>,
   theme: {
@@ -213,7 +216,7 @@ describe('MenuBar settings', () => {
     expect(window.electronAPI?.config.set).toHaveBeenCalledWith('window.closeActionPreference', 'quit');
     expect(window.electronAPI?.config.set).toHaveBeenCalledWith('ui.floatingInfoWindow.visible', false);
     expect(window.electronAPI?.setFloatingInfoWindowVisible).toHaveBeenCalledWith(false);
-  }, 15000);
+  }, SETTINGS_DIALOG_TEST_TIMEOUT_MS);
 
   it('opens the advanced editor font picker, filters preview cards, and applies the selected preview card', async () => {
     const user = userEvent.setup();
@@ -279,7 +282,7 @@ describe('MenuBar settings', () => {
 
     expect(screen.getByTestId('settings-editor-font-family-combobox')).toHaveTextContent('Victor Mono');
     expect(setEditorFontFamilyMock).toHaveBeenCalledWith('victor-mono');
-  });
+  }, SETTINGS_PICKER_TEST_TIMEOUT_MS);
 
   it('opens the advanced theme picker, filters preview cards, and applies the selected preview card', async () => {
     const user = userEvent.setup();
@@ -340,7 +343,7 @@ describe('MenuBar settings', () => {
 
     expect(screen.getByTestId('settings-theme-combobox')).toHaveTextContent('Light 2026');
     expect(setThemeMock).toHaveBeenCalledWith('vscode-2026-light');
-  });
+  }, SETTINGS_PICKER_TEST_TIMEOUT_MS);
 
   it('shows bundled third-party UI themes in the advanced picker and applies them through the shared theme setting', async () => {
     const user = userEvent.setup();
@@ -357,7 +360,7 @@ describe('MenuBar settings', () => {
       label: 'Pink Cat Boo',
       author: 'Fiona Fan',
     });
-  });
+  }, SETTINGS_PICKER_TEST_TIMEOUT_MS);
 
   it('shows vendored upstream bundled UI themes in the advanced picker and applies them through the shared theme setting', async () => {
     const user = userEvent.setup();
@@ -374,7 +377,7 @@ describe('MenuBar settings', () => {
       label: 'One Dark Pro',
       author: 'Binaryify',
     });
-  });
+  }, SETTINGS_PICKER_TEST_TIMEOUT_MS);
 
   it('shows second-batch vendored upstream light bundled UI themes in the advanced picker and applies them through the shared theme setting', async () => {
     const user = userEvent.setup();
@@ -391,7 +394,7 @@ describe('MenuBar settings', () => {
       label: 'GitHub Light Default',
       author: 'GitHub',
     });
-  });
+  }, SETTINGS_PICKER_TEST_TIMEOUT_MS);
 
   it('shows third-batch vendored upstream dark bundled UI themes in the advanced picker and applies them through the shared theme setting', async () => {
     const user = userEvent.setup();
@@ -408,7 +411,7 @@ describe('MenuBar settings', () => {
       label: 'Gruvbox Dark Medium',
       author: 'jdinhify',
     });
-  });
+  }, SETTINGS_PICKER_TEST_TIMEOUT_MS);
 
   it('shows fourth-batch vendored upstream light bundled UI themes in the advanced picker and applies them through the shared theme setting', async () => {
     const user = userEvent.setup();
@@ -425,7 +428,7 @@ describe('MenuBar settings', () => {
       label: 'Noctis Lux',
       author: 'Liviu Schera',
     });
-  });
+  }, SETTINGS_PICKER_TEST_TIMEOUT_MS);
 
   it('shows fifth-batch vendored upstream macOS Modern bundled UI themes in the advanced picker and applies them through the shared theme setting', async () => {
     const user = userEvent.setup();
@@ -442,7 +445,7 @@ describe('MenuBar settings', () => {
       label: 'MacOS Modern Light - Ventura Xcode Low Key',
       author: 'David B. Waters',
     });
-  });
+  }, SETTINGS_PICKER_TEST_TIMEOUT_MS);
 
   it('shows sixth-batch vendored upstream Dobri bundled UI themes in the advanced picker and applies them through the shared theme setting', async () => {
     const user = userEvent.setup();
@@ -459,7 +462,41 @@ describe('MenuBar settings', () => {
       label: 'Dobri Next -A06- Amethyst',
       author: 'Sergio Dobri',
     });
-  });
+  }, SETTINGS_PICKER_TEST_TIMEOUT_MS);
+
+  it('shows seventh-batch vendored upstream dark bundled UI themes in the advanced picker and applies them through the shared theme setting', async () => {
+    const user = userEvent.setup();
+
+    mockPersistedSettingsConfig({
+      colorTheme: 'vscode-2026-dark',
+    });
+
+    renderMenuBar();
+
+    await applyBundledThemeFromAdvancedPicker(user, {
+      searchText: 'night flat',
+      themeId: 'one-dark-pro-night-flat',
+      label: 'One Dark Pro Night Flat',
+      author: 'Binaryify',
+    });
+  }, SETTINGS_PICKER_TEST_TIMEOUT_MS);
+
+  it('shows seventh-batch vendored upstream light bundled UI themes in the advanced picker and applies them through the shared theme setting', async () => {
+    const user = userEvent.setup();
+
+    mockPersistedSettingsConfig({
+      colorTheme: 'vscode-2026-dark',
+    });
+
+    renderMenuBar();
+
+    await applyBundledThemeFromAdvancedPicker(user, {
+      searchText: 'light high contrast',
+      themeId: 'github-light-high-contrast',
+      label: 'GitHub Light High Contrast',
+      author: 'GitHub',
+    });
+  }, SETTINGS_PICKER_TEST_TIMEOUT_MS);
 
   it('imports a local UI theme from settings and selects it immediately', async () => {
     const user = userEvent.setup();

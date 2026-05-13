@@ -4272,6 +4272,36 @@ test('sixth-batch vendored upstream Dobri C-series bundled UI theme selection pe
   });
 });
 
+test('seventh-batch vendored upstream One Dark Pro dark bundled UI theme selection persists across app relaunch and updates Monaco and terminal styling', async () => {
+  test.slow();
+
+  await assertBundledThemeSelectionPersistsAcrossRelaunch({
+    searchText: 'night flat',
+    themeId: 'one-dark-pro-night-flat',
+    themeLabel: 'One Dark Pro Night Flat',
+    isDark: true,
+    expectedMonacoColors: {
+      background: '#16191d',
+      lineNumber: ['#667187', '#abb2bf'],
+    },
+  });
+});
+
+test('seventh-batch vendored upstream GitHub light accessibility bundled UI theme selection persists across app relaunch and updates Monaco and terminal styling', async () => {
+  test.slow();
+
+  await assertBundledThemeSelectionPersistsAcrossRelaunch({
+    searchText: 'light high contrast',
+    themeId: 'github-light-high-contrast',
+    themeLabel: 'GitHub Light High Contrast',
+    isDark: false,
+    expectedMonacoColors: {
+      background: '#ffffff',
+      lineNumber: ['#88929d', '#0e1116'],
+    },
+  });
+});
+
 test('code editor settings persist across app relaunch', async () => {
   test.slow();
 

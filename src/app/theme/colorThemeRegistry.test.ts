@@ -273,6 +273,52 @@ describe('colorThemeRegistry', () => {
     expect(eveTheme?.colors['terminal.background']).toBe('#191A1B')
   })
 
+  it('resolves seventh-batch vendored upstream One Dark Pro, GitHub accessibility, and Dracula Soft themes', () => {
+    const firstNightFlatTheme = getBundledColorTheme('one-dark-pro-night-flat')
+    const secondNightFlatTheme = getBundledColorTheme('one-dark-pro-night-flat')
+    const githubLightHighContrastTheme = getBundledColorTheme('github-light-high-contrast')
+    const githubDarkHighContrastTheme = getBundledColorTheme('github-dark-high-contrast')
+    const draculaSoftTheme = getBundledColorTheme('dracula-soft')
+
+    expect(firstNightFlatTheme).toBe(secondNightFlatTheme)
+    expect(firstNightFlatTheme).toEqual(expect.objectContaining({
+      id: 'one-dark-pro-night-flat',
+      kind: 'dark',
+      source: 'bundled',
+    }))
+    expect(firstNightFlatTheme?.colors['editor.background']).toBe('#16191d')
+    expect(firstNightFlatTheme?.colors['editorLineNumber.foreground']).toBe('#667187')
+    expect(firstNightFlatTheme?.colors['terminal.background']).toBe('#16191d')
+
+    expect(githubLightHighContrastTheme).toEqual(expect.objectContaining({
+      id: 'github-light-high-contrast',
+      kind: 'light',
+      source: 'bundled',
+    }))
+    expect(githubLightHighContrastTheme?.colors['editor.background']).toBe('#ffffff')
+    expect(githubLightHighContrastTheme?.colors['editorLineNumber.activeForeground']).toBe('#0e1116')
+    expect(githubLightHighContrastTheme?.colors['input.background']).toBe('#ffffff')
+
+    expect(githubDarkHighContrastTheme).toEqual(expect.objectContaining({
+      id: 'github-dark-high-contrast',
+      kind: 'dark',
+      source: 'bundled',
+    }))
+    expect(githubDarkHighContrastTheme?.colors['editor.background']).toBe('#0a0c10')
+    expect(githubDarkHighContrastTheme?.colors['editorLineNumber.activeForeground']).toBe('#f0f3f6')
+    expect(githubDarkHighContrastTheme?.colors['input.background']).toBe('#0a0c10')
+
+    expect(draculaSoftTheme).toEqual(expect.objectContaining({
+      id: 'dracula-soft',
+      kind: 'dark',
+      source: 'bundled',
+    }))
+    expect(draculaSoftTheme?.colors['editor.background']).toBe('#282A36')
+    expect(draculaSoftTheme?.colors['editorLineNumber.foreground']).toBe('#7b7f8b')
+    expect(draculaSoftTheme?.colors['editorLineNumber.activeForeground']).toBe('#BBBEBF')
+    expect(draculaSoftTheme?.colors['terminal.background']).toBe('#282A36')
+  })
+
   it('prefers vendored upstream theme JSON for the first batch and caches resolved instances', () => {
     const firstTheme = getBundledColorTheme('one-dark-pro')
     const secondTheme = getBundledColorTheme('one-dark-pro')

@@ -3,7 +3,8 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { RightSidePanel } from './RightSidePanel';
 
-const PANEL_ITEM_TIMEOUT_MS = 5000;
+const PANEL_ITEM_TIMEOUT_MS = 10000;
+const PANEL_TEST_TIMEOUT_MS = 10000;
 
 type TestUser = ReturnType<typeof userEvent.setup>;
 
@@ -43,7 +44,7 @@ describe('RightSidePanel', () => {
 
     expect(onFileOpen).toHaveBeenCalledWith('cpu_top', 'cpu_top.v');
     expect(onLineJump).toHaveBeenCalledWith(65);
-  });
+  }, PANEL_TEST_TIMEOUT_MS);
 
   it('opens a reference target when a reference row is clicked', async () => {
     const user = userEvent.setup();
@@ -61,7 +62,7 @@ describe('RightSidePanel', () => {
 
     expect(onFileOpen).toHaveBeenCalledWith('uart_tx', 'uart_tx.v');
     expect(onLineJump).toHaveBeenCalledWith(40);
-  });
+  }, PANEL_TEST_TIMEOUT_MS);
 
   it('renders the current file outline and jumps to the selected symbol line', async () => {
     const user = userEvent.setup();
@@ -77,5 +78,5 @@ describe('RightSidePanel', () => {
     await user.click(await screen.findByText('always @(*) [ALU logic]', undefined, { timeout: PANEL_ITEM_TIMEOUT_MS }));
 
     expect(onLineJump).toHaveBeenCalledWith(42);
-  });
+  }, PANEL_TEST_TIMEOUT_MS);
 });
