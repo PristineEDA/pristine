@@ -478,5 +478,101 @@
     "version": "2.3.19",
     "assetDirectory": "macos-modern-theme",
     "themePath": "themes/color/big-sur-light/xcode-low-key.json"
+  },
+  {
+    "id": "dobri-next-a00-black",
+    "publisher": "sldobri",
+    "extensionName": "bunker",
+    "version": "1.1.6",
+    "assetDirectory": "bunker",
+    "themePath": "themes/Dobri-A00.json"
+  },
+  {
+    "id": "dobri-next-a01-dark",
+    "publisher": "sldobri",
+    "extensionName": "bunker",
+    "version": "1.1.6",
+    "assetDirectory": "bunker",
+    "themePath": "themes/Dobri-A01.json"
+  },
+  {
+    "id": "dobri-next-a03-mirage",
+    "publisher": "sldobri",
+    "extensionName": "bunker",
+    "version": "1.1.6",
+    "assetDirectory": "bunker",
+    "themePath": "themes/Dobri-A03.json"
+  },
+  {
+    "id": "dobri-next-a04-cobalt",
+    "publisher": "sldobri",
+    "extensionName": "bunker",
+    "version": "1.1.6",
+    "assetDirectory": "bunker",
+    "themePath": "themes/Dobri-A04.json"
+  },
+  {
+    "id": "dobri-next-a05-jaguar",
+    "publisher": "sldobri",
+    "extensionName": "bunker",
+    "version": "1.1.6",
+    "assetDirectory": "bunker",
+    "themePath": "themes/Dobri-A05.json"
+  },
+  {
+    "id": "dobri-next-a06-amethyst",
+    "publisher": "sldobri",
+    "extensionName": "bunker",
+    "version": "1.1.6",
+    "assetDirectory": "bunker",
+    "themePath": "themes/Dobri-A06.json"
+  },
+  {
+    "id": "dobri-next-a07-oxford",
+    "publisher": "sldobri",
+    "extensionName": "bunker",
+    "version": "1.1.6",
+    "assetDirectory": "bunker",
+    "themePath": "themes/Dobri-A07.json"
+  },
+  {
+    "id": "dobri-next-a09-arc-dark",
+    "publisher": "sldobri",
+    "extensionName": "bunker",
+    "version": "1.1.6",
+    "assetDirectory": "bunker",
+    "themePath": "themes/Dobri-A09.json"
+  },
+  {
+    "id": "dobri-next-a10-adapta-nokto",
+    "publisher": "sldobri",
+    "extensionName": "bunker",
+    "version": "1.1.6",
+    "assetDirectory": "bunker",
+    "themePath": "themes/Dobri-A10.json"
+  },
+  {
+    "id": "dobri-next-c02-indigo",
+    "publisher": "sldobri",
+    "extensionName": "bunker",
+    "version": "1.1.6",
+    "assetDirectory": "bunker",
+    "themePath": "themes/Dobri-C02.json"
+  },
+  {
+    "id": "dobri-next-c03-cupcake",
+    "publisher": "sldobri",
+    "extensionName": "bunker",
+    "version": "1.1.6",
+    "assetDirectory": "bunker",
+    "themePath": "themes/Dobri-C03.json"
+  },
+  {
+    "id": "dobri-next-c09-eve",
+    "publisher": "sldobri",
+    "extensionName": "bunker",
+    "version": "1.1.6",
+    "assetDirectory": "bunker",
+    "themePath": "themes/Dobri-C09.json"
   }
 ]

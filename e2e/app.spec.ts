@@ -4242,6 +4242,36 @@ test('fifth-batch vendored upstream light macOS Modern bundled UI theme selectio
   });
 });
 
+test('sixth-batch vendored upstream Dobri A-series bundled UI theme selection persists across app relaunch and updates Monaco and terminal styling', async () => {
+  test.slow();
+
+  await assertBundledThemeSelectionPersistsAcrossRelaunch({
+    searchText: 'amethyst',
+    themeId: 'dobri-next-a06-amethyst',
+    themeLabel: 'Dobri Next -A06- Amethyst',
+    isDark: true,
+    expectedMonacoColors: {
+      background: '#150022',
+      lineNumber: ['#5C6370', '#BBBEBF', '#f5f5f5'],
+    },
+  });
+});
+
+test('sixth-batch vendored upstream Dobri C-series bundled UI theme selection persists across app relaunch and updates Monaco and terminal styling', async () => {
+  test.slow();
+
+  await assertBundledThemeSelectionPersistsAcrossRelaunch({
+    searchText: 'cupcake',
+    themeId: 'dobri-next-c03-cupcake',
+    themeLabel: 'Dobri Next -C03- Cupcake',
+    isDark: true,
+    expectedMonacoColors: {
+      background: '#0b1015',
+      lineNumber: ['#858889', '#BBBEBF', '#f5f5f5'],
+    },
+  });
+});
+
 test('code editor settings persist across app relaunch', async () => {
   test.slow();
 

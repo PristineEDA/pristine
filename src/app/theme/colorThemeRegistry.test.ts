@@ -228,6 +228,51 @@ describe('colorThemeRegistry', () => {
     expect(venturaLightTheme?.colors['input.background']).toBe('#fcfcfc')
   })
 
+  it('resolves sixth-batch vendored upstream Dobri themes across A-series and C-series files', () => {
+    const firstAmethystTheme = getBundledColorTheme('dobri-next-a06-amethyst')
+    const secondAmethystTheme = getBundledColorTheme('dobri-next-a06-amethyst')
+    const oxfordTheme = getBundledColorTheme('dobri-next-a07-oxford')
+    const cupcakeTheme = getBundledColorTheme('dobri-next-c03-cupcake')
+    const eveTheme = getBundledColorTheme('dobri-next-c09-eve')
+
+    expect(firstAmethystTheme).toBe(secondAmethystTheme)
+    expect(firstAmethystTheme).toEqual(expect.objectContaining({
+      id: 'dobri-next-a06-amethyst',
+      kind: 'dark',
+      source: 'bundled',
+    }))
+    expect(firstAmethystTheme?.colors['editor.background']).toBe('#150022')
+    expect(firstAmethystTheme?.colors['editorLineNumber.foreground']).toBe('#5C6370')
+    expect(firstAmethystTheme?.colors['editorLineNumber.activeForeground']).toBe('#BBBEBF')
+
+    expect(oxfordTheme).toEqual(expect.objectContaining({
+      id: 'dobri-next-a07-oxford',
+      kind: 'dark',
+      source: 'bundled',
+    }))
+    expect(oxfordTheme?.colors['editor.background']).toBe('#263238')
+    expect(oxfordTheme?.colors['activityBarBadge.background']).toBe('#64CA69')
+    expect(oxfordTheme?.colors['input.background']).toBe('#263238')
+
+    expect(cupcakeTheme).toEqual(expect.objectContaining({
+      id: 'dobri-next-c03-cupcake',
+      kind: 'dark',
+      source: 'bundled',
+    }))
+    expect(cupcakeTheme?.colors['editor.background']).toBe('#0b1015')
+    expect(cupcakeTheme?.colors['editorLineNumber.foreground']).toBe('#858889')
+    expect(cupcakeTheme?.colors['editorLineNumber.activeForeground']).toBe('#BBBEBF')
+
+    expect(eveTheme).toEqual(expect.objectContaining({
+      id: 'dobri-next-c09-eve',
+      kind: 'dark',
+      source: 'bundled',
+    }))
+    expect(eveTheme?.colors['editor.foreground']).toBe('#97a7c8ff')
+    expect(eveTheme?.colors['terminal.ansiCyan']).toBe('#89DDFF')
+    expect(eveTheme?.colors['terminal.background']).toBe('#191A1B')
+  })
+
   it('prefers vendored upstream theme JSON for the first batch and caches resolved instances', () => {
     const firstTheme = getBundledColorTheme('one-dark-pro')
     const secondTheme = getBundledColorTheme('one-dark-pro')

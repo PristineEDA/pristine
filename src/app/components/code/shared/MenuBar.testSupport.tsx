@@ -117,6 +117,14 @@ const defaultColorThemeOptions: ColorThemeOption[] = [
     kind: 'light',
     source: 'bundled',
   },
+  {
+    value: 'dobri-next-a06-amethyst',
+    label: 'Dobri Next -A06- Amethyst',
+    description: 'Deep amethyst editor chrome with neon-violet highlights and saturated candy syntax accents.',
+    author: 'Sergio Dobri',
+    kind: 'dark',
+    source: 'bundled',
+  },
 ];
 
 const defaultThemePreviews: Record<string, ColorThemePreviewPalette> = {
@@ -279,6 +287,22 @@ const defaultThemePreviews: Record<string, ColorThemePreviewPalette> = {
     yellow: '#546348',
     red: '#853e64',
     orange: '#323E7D',
+  },
+  'dobri-next-a06-amethyst': {
+    surface: '#150022',
+    background: '#150022',
+    input: '#0b1015',
+    selection: '#3F005B',
+    comment: '#5C6370',
+    foreground: '#f5f5f5',
+    brightForeground: '#A61EFF',
+    pink: '#FB467B',
+    purple: '#CB6CFE',
+    cyan: '#56D6D6',
+    green: '#C3E88D',
+    yellow: '#FFCC00',
+    red: '#FB467B',
+    orange: '#F78C6C',
   },
 };
 

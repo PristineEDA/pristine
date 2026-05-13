@@ -444,6 +444,23 @@ describe('MenuBar settings', () => {
     });
   });
 
+  it('shows sixth-batch vendored upstream Dobri bundled UI themes in the advanced picker and applies them through the shared theme setting', async () => {
+    const user = userEvent.setup();
+
+    mockPersistedSettingsConfig({
+      colorTheme: 'vscode-2026-dark',
+    });
+
+    renderMenuBar();
+
+    await applyBundledThemeFromAdvancedPicker(user, {
+      searchText: 'amethyst',
+      themeId: 'dobri-next-a06-amethyst',
+      label: 'Dobri Next -A06- Amethyst',
+      author: 'Sergio Dobri',
+    });
+  });
+
   it('imports a local UI theme from settings and selects it immediately', async () => {
     const user = userEvent.setup();
 
