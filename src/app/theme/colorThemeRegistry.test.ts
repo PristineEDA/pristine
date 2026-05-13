@@ -35,6 +35,18 @@ describe('colorThemeRegistry', () => {
         author: 'Binaryify',
         source: 'bundled',
       }),
+      expect.objectContaining({
+        value: 'github-light-default',
+        label: 'GitHub Light Default',
+        author: 'GitHub',
+        source: 'bundled',
+      }),
+      expect.objectContaining({
+        value: 'tokyo-night-storm',
+        label: 'Tokyo Night Storm',
+        author: 'enkia',
+        source: 'bundled',
+      }),
     ]))
   })
 
@@ -60,15 +72,40 @@ describe('colorThemeRegistry', () => {
   })
 
   it('keeps bundled light themes accessible as unified workbench themes', () => {
-    const theme = getBundledColorTheme('github-light')
+    const theme = getBundledColorTheme('github-light-default')
 
     expect(theme).toEqual(expect.objectContaining({
-      id: 'github-light',
+      id: 'github-light-default',
       kind: 'light',
       source: 'bundled',
     }))
-    expect(theme?.colors['editor.background']).toMatch(/^#.+/)
+    expect(theme?.colors['editor.background']).toBe('#ffffff')
+    expect(theme?.colors['editorLineNumber.foreground']).toBe('#8c959f')
     expect(theme?.colors['terminal.foreground']).toMatch(/^#.+/)
+  })
+
+  it('resolves second-batch vendored upstream bundled themes through the manifest and caches them', () => {
+    const firstLightTheme = getBundledColorTheme('github-light-default')
+    const secondLightTheme = getBundledColorTheme('github-light-default')
+    const darkTheme = getBundledColorTheme('tokyo-night-storm')
+
+    expect(firstLightTheme).toBe(secondLightTheme)
+    expect(firstLightTheme).toEqual(expect.objectContaining({
+      id: 'github-light-default',
+      kind: 'light',
+      source: 'bundled',
+    }))
+    expect(firstLightTheme?.colors['editor.background']).toBe('#ffffff')
+    expect(firstLightTheme?.colors['editorLineNumber.foreground']).toBe('#8c959f')
+
+    expect(darkTheme).toEqual(expect.objectContaining({
+      id: 'tokyo-night-storm',
+      kind: 'dark',
+      source: 'bundled',
+    }))
+    expect(darkTheme?.colors['editor.background']).toBe('#24283b')
+    expect(darkTheme?.colors['editorLineNumber.foreground']).toBe('#3b4261')
+    expect(darkTheme?.tokenColors.length ?? 0).toBeGreaterThan(100)
   })
 
   it('prefers vendored upstream theme JSON for the first batch and caches resolved instances', () => {

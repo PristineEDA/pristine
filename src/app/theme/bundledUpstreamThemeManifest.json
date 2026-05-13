@@ -24,6 +24,30 @@
     "themePath": "themes/dark.json"
   },
   {
+    "id": "github-dark-default",
+    "publisher": "GitHub",
+    "extensionName": "github-vscode-theme",
+    "version": "6.3.5",
+    "assetDirectory": "github-vscode-theme",
+    "themePath": "themes/dark-default.json"
+  },
+  {
+    "id": "github-light-default",
+    "publisher": "GitHub",
+    "extensionName": "github-vscode-theme",
+    "version": "6.3.5",
+    "assetDirectory": "github-vscode-theme",
+    "themePath": "themes/light-default.json"
+  },
+  {
+    "id": "github-dark-dimmed",
+    "publisher": "GitHub",
+    "extensionName": "github-vscode-theme",
+    "version": "6.3.5",
+    "assetDirectory": "github-vscode-theme",
+    "themePath": "themes/dark-dimmed.json"
+  },
+  {
     "id": "one-dark-pro",
     "publisher": "zhuangtongfa",
     "extensionName": "Material-theme",
@@ -40,12 +64,52 @@
     "themePath": "themes/tokyo-night-color-theme.json"
   },
   {
+    "id": "tokyo-night-light",
+    "publisher": "enkia",
+    "extensionName": "tokyo-night",
+    "version": "1.1.2",
+    "assetDirectory": "tokyo-night",
+    "themePath": "themes/tokyo-night-light-color-theme.json"
+  },
+  {
+    "id": "tokyo-night-storm",
+    "publisher": "enkia",
+    "extensionName": "tokyo-night",
+    "version": "1.1.2",
+    "assetDirectory": "tokyo-night",
+    "themePath": "themes/tokyo-night-storm-color-theme.json"
+  },
+  {
     "id": "catppuccin-mocha",
     "publisher": "Catppuccin",
     "extensionName": "catppuccin-vsc",
     "version": "3.19.0",
     "assetDirectory": "catppuccin-vsc",
     "themePath": "themes/mocha.json"
+  },
+  {
+    "id": "catppuccin-latte",
+    "publisher": "Catppuccin",
+    "extensionName": "catppuccin-vsc",
+    "version": "3.19.0",
+    "assetDirectory": "catppuccin-vsc",
+    "themePath": "themes/latte.json"
+  },
+  {
+    "id": "catppuccin-frappe",
+    "publisher": "Catppuccin",
+    "extensionName": "catppuccin-vsc",
+    "version": "3.19.0",
+    "assetDirectory": "catppuccin-vsc",
+    "themePath": "themes/frappe.json"
+  },
+  {
+    "id": "catppuccin-macchiato",
+    "publisher": "Catppuccin",
+    "extensionName": "catppuccin-vsc",
+    "version": "3.19.0",
+    "assetDirectory": "catppuccin-vsc",
+    "themePath": "themes/macchiato.json"
   },
   {
     "id": "nord",
@@ -64,11 +128,43 @@
     "themePath": "themes/rose-pine-color-theme.json"
   },
   {
+    "id": "rose-pine-moon",
+    "publisher": "mvllow",
+    "extensionName": "rose-pine",
+    "version": "2.15.2",
+    "assetDirectory": "rose-pine",
+    "themePath": "themes/rose-pine-moon-color-theme.json"
+  },
+  {
+    "id": "rose-pine-dawn",
+    "publisher": "mvllow",
+    "extensionName": "rose-pine",
+    "version": "2.15.2",
+    "assetDirectory": "rose-pine",
+    "themePath": "themes/rose-pine-dawn-color-theme.json"
+  },
+  {
     "id": "ayu-mirage",
     "publisher": "teabyii",
     "extensionName": "ayu",
     "version": "1.1.12",
     "assetDirectory": "ayu",
     "themePath": "ayu-mirage-unbordered.json"
+  },
+  {
+    "id": "ayu-light",
+    "publisher": "teabyii",
+    "extensionName": "ayu",
+    "version": "1.1.12",
+    "assetDirectory": "ayu",
+    "themePath": "ayu-light.json"
+  },
+  {
+    "id": "ayu-dark",
+    "publisher": "teabyii",
+    "extensionName": "ayu",
+    "version": "1.1.12",
+    "assetDirectory": "ayu",
+    "themePath": "ayu-dark.json"
   }
 ]

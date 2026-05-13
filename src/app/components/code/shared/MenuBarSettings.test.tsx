@@ -376,6 +376,40 @@ describe('MenuBar settings', () => {
     expect(setThemeMock).toHaveBeenCalledWith('one-dark-pro');
   });
 
+  it('shows second-batch vendored upstream light bundled UI themes in the advanced picker and applies them through the shared theme setting', async () => {
+    const user = userEvent.setup();
+
+    mockPersistedSettingsConfig({
+      colorTheme: 'vscode-2026-dark',
+    });
+
+    renderMenuBar();
+
+    await user.click(screen.getByTestId('menu-settings-button'));
+    expect(await screen.findByTestId('settings-dialog')).toBeVisible();
+
+    await user.click(screen.getByTestId('settings-theme-advanced-button'));
+    expect(await screen.findByTestId('settings-theme-advanced-dialog')).toBeVisible();
+
+    const searchInput = screen.getByTestId('settings-theme-advanced-search-input');
+    await user.clear(searchInput);
+    await user.type(searchInput, 'github light default');
+
+    expect(screen.getByTestId('settings-theme-preview-card-github-light-default')).toHaveAttribute('data-state', 'unselected');
+    expect(screen.getByTestId('settings-theme-preview-label-github-light-default')).toHaveTextContent('GitHub Light Default');
+    expect(screen.getByTestId('settings-theme-preview-author-github-light-default')).toHaveTextContent('GitHub');
+    expect(screen.getByTestId('settings-theme-preview-line-module-github-light-default')).toHaveTextContent('module alu(clk)');
+
+    await user.click(screen.getByTestId('settings-theme-preview-card-github-light-default'));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('settings-theme-advanced-dialog')).not.toBeInTheDocument();
+    });
+
+    expect(screen.getByTestId('settings-theme-combobox')).toHaveTextContent('GitHub Light Default');
+    expect(setThemeMock).toHaveBeenCalledWith('github-light-default');
+  });
+
   it('imports a local UI theme from settings and selects it immediately', async () => {
     const user = userEvent.setup();
 

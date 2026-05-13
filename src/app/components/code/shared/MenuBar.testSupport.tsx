@@ -69,6 +69,14 @@ const defaultColorThemeOptions: ColorThemeOption[] = [
     kind: 'dark',
     source: 'bundled',
   },
+  {
+    value: 'github-light-default',
+    label: 'GitHub Light Default',
+    description: 'Modern GitHub light default with clean paper surfaces and refined Primer accent colors.',
+    author: 'GitHub',
+    kind: 'light',
+    source: 'bundled',
+  },
 ];
 
 const defaultThemePreviews: Record<string, ColorThemePreviewPalette> = {
@@ -135,6 +143,22 @@ const defaultThemePreviews: Record<string, ColorThemePreviewPalette> = {
     yellow: '#e5c07b',
     red: '#e06c75',
     orange: '#d19a66',
+  },
+  'github-light-default': {
+    surface: '#f6f8fa',
+    background: '#ffffff',
+    input: '#ffffff',
+    selection: '#ddf4ff',
+    comment: '#6e7781',
+    foreground: '#1f2328',
+    brightForeground: '#24292f',
+    pink: '#bf3989',
+    purple: '#8250df',
+    cyan: '#0550ae',
+    green: '#116329',
+    yellow: '#9a6700',
+    red: '#cf222e',
+    orange: '#953800',
   },
 };
 

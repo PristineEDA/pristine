@@ -3929,10 +3929,8 @@ test('settings UI theme selection persists across app relaunch', async () => {
   await secondApp.close();
 });
 
-test('bundled UI theme selection persists across app relaunch and updates Monaco and terminal styling', async () => {
-  test.slow();
-
-  const readThemeSnapshot = async (page: Awaited<ReturnType<typeof launchApp>>['window']) => ({
+async function readBundledThemeSnapshot(page: Awaited<ReturnType<typeof launchApp>>['window']) {
+  return {
     ...(await page.evaluate(() => {
       const browserGlobal = globalThis as typeof globalThis & {
         document: {
@@ -3953,45 +3951,83 @@ test('bundled UI theme selection persists across app relaunch and updates Monaco
       };
     })),
     stored: await readConfigValue(page, 'workbench.colorTheme'),
+  };
+}
+
+async function expectBundledMonacoTheme(
+  page: Awaited<ReturnType<typeof launchApp>>['window'],
+  expectedColors: { background: string; lineNumber: string },
+) {
+  await expect.poll(async () => {
+    const snapshot = await readMonacoAppearanceSnapshot(page, expectedColors);
+
+    return snapshot
+      ? {
+          backgroundMatches: snapshot.backgroundColor === snapshot.expectedBackgroundColor,
+          lineNumberMatches: snapshot.lineNumberColor === snapshot.expectedLineNumberColor,
+        }
+      : null;
+  }).toEqual({
+    backgroundMatches: true,
+    lineNumberMatches: true,
   });
+}
 
-  const expectBundledMonacoTheme = async (page: Awaited<ReturnType<typeof launchApp>>['window']) => {
-    await expect.poll(async () => {
-      const snapshot = await readMonacoAppearanceSnapshot(page, {
-        background: '#202330',
-        lineNumber: '#FFF0F5',
-      });
+async function expectBundledTerminalTheme(page: Awaited<ReturnType<typeof launchApp>>['window']) {
+  await expect.poll(async () => {
+    const themeState = await readTerminalThemeSnapshot(page);
 
-      return snapshot
-        ? {
-            backgroundMatches: snapshot.backgroundColor === snapshot.expectedBackgroundColor,
-            lineNumberMatches: snapshot.lineNumberColor === snapshot.expectedLineNumberColor,
-          }
-        : null;
-    }).toEqual({
-      backgroundMatches: true,
-      lineNumberMatches: true,
-    });
-  };
+    return {
+      hasBackground: Boolean(themeState.terminalBackground),
+      hasExpectedBackground: Boolean(themeState.expectedBackground),
+      backgroundMatches: themeState.terminalBackground === themeState.expectedBackground,
+    };
+  }, {
+    timeout: 15000,
+  }).toEqual({
+    hasBackground: true,
+    hasExpectedBackground: true,
+    backgroundMatches: true,
+  });
+}
 
-  const expectBundledTerminalTheme = async (page: Awaited<ReturnType<typeof launchApp>>['window']) => {
-    await expect.poll(async () => {
-      const themeState = await readTerminalThemeSnapshot(page);
+async function openFileAndAssertBundledTheme(
+  page: Awaited<ReturnType<typeof launchApp>>['window'],
+  expectedMonacoColors: { background: string; lineNumber: string },
+) {
+  await ensureExplorerVisible(page);
+  await openNestedWorkspaceFile(page, [
+    'file-tree-node-rtl',
+    'file-tree-node-rtl_core',
+    'file-tree-node-rtl_core_reg_file_v',
+  ]);
+  await expect(page.getByTestId('editor-tab-rtl/core/reg_file.v')).toBeVisible();
+  await waitForMonacoEditor(page);
+  await expect(page.locator('.monaco-editor .view-lines')).toContainText('module reg_file', {
+    timeout: MONACO_READY_TIMEOUT_MS,
+  });
+  await expectBundledMonacoTheme(page, expectedMonacoColors);
 
-      return {
-        hasBackground: Boolean(themeState.terminalBackground),
-        hasExpectedBackground: Boolean(themeState.expectedBackground),
-        backgroundMatches: themeState.terminalBackground === themeState.expectedBackground,
-      };
-    }, {
-      timeout: 15000,
-    }).toEqual({
-      hasBackground: true,
-      hasExpectedBackground: true,
-      backgroundMatches: true,
-    });
-  };
+  await openBottomTerminal(page);
+  await expect.poll(async () => readTerminalPid(page), {
+    timeout: 15000,
+  }).toBeGreaterThan(0);
+  await expectBundledTerminalTheme(page);
+}
 
+async function assertBundledThemeSelectionPersistsAcrossRelaunch({
+  searchText,
+  themeId,
+  themeLabel,
+  isDark,
+  expectedMonacoColors,
+}: {
+  searchText: string;
+  themeId: string;
+  themeLabel: string;
+  isDark: boolean;
+  expectedMonacoColors: { background: string; lineNumber: string };
+}) {
   const firstLaunch = await launchApp();
   const { app: firstApp, window: firstWindow } = firstLaunch;
 
@@ -3999,214 +4035,100 @@ test('bundled UI theme selection persists across app relaunch and updates Monaco
   await expect(firstWindow.getByTestId('settings-dialog')).toBeVisible();
   await firstWindow.getByTestId('settings-theme-advanced-button').click();
   await expect(firstWindow.getByTestId('settings-theme-advanced-dialog')).toBeVisible();
-  await firstWindow.getByTestId('settings-theme-advanced-search-input').fill('pink');
-  await firstWindow.getByTestId('settings-theme-preview-card-pink-cat-boo').click();
+  await firstWindow.getByTestId('settings-theme-advanced-search-input').fill(searchText);
+  await firstWindow.getByTestId(`settings-theme-preview-card-${themeId}`).click();
 
-  await expect.poll(async () => readThemeSnapshot(firstWindow)).toEqual({
-    isDark: true,
-    themeId: 'pink-cat-boo',
-    stored: 'pink-cat-boo',
+  await expect.poll(async () => readBundledThemeSnapshot(firstWindow)).toEqual({
+    isDark,
+    themeId,
+    stored: themeId,
   });
 
   await firstWindow.getByTestId('settings-close-button').click();
   await expect(firstWindow.getByTestId('settings-dialog')).toHaveCount(0);
 
-  await ensureExplorerVisible(firstWindow);
-  await openNestedWorkspaceFile(firstWindow, [
-    'file-tree-node-rtl',
-    'file-tree-node-rtl_core',
-    'file-tree-node-rtl_core_reg_file_v',
-  ]);
-  await expect(firstWindow.getByTestId('editor-tab-rtl/core/reg_file.v')).toBeVisible();
-  await waitForMonacoEditor(firstWindow);
-  await expect(firstWindow.locator('.monaco-editor .view-lines')).toContainText('module reg_file', {
-    timeout: MONACO_READY_TIMEOUT_MS,
-  });
-  await expectBundledMonacoTheme(firstWindow);
-
-  await openBottomTerminal(firstWindow);
-  await expect.poll(async () => readTerminalPid(firstWindow), {
-    timeout: 15000,
-  }).toBeGreaterThan(0);
-  await expectBundledTerminalTheme(firstWindow);
+  await openFileAndAssertBundledTheme(firstWindow, expectedMonacoColors);
 
   await firstApp.close();
 
   const secondLaunch = await launchApp();
   const { app: secondApp, window: secondWindow } = secondLaunch;
 
-  await expect.poll(async () => readThemeSnapshot(secondWindow)).toEqual({
-    isDark: true,
-    themeId: 'pink-cat-boo',
-    stored: 'pink-cat-boo',
+  await expect.poll(async () => readBundledThemeSnapshot(secondWindow)).toEqual({
+    isDark,
+    themeId,
+    stored: themeId,
   });
 
-  await ensureExplorerVisible(secondWindow);
-  await openNestedWorkspaceFile(secondWindow, [
-    'file-tree-node-rtl',
-    'file-tree-node-rtl_core',
-    'file-tree-node-rtl_core_reg_file_v',
-  ]);
-  await expect(secondWindow.getByTestId('editor-tab-rtl/core/reg_file.v')).toBeVisible();
-  await waitForMonacoEditor(secondWindow);
-  await expect(secondWindow.locator('.monaco-editor .view-lines')).toContainText('module reg_file', {
-    timeout: MONACO_READY_TIMEOUT_MS,
-  });
-  await expectBundledMonacoTheme(secondWindow);
-
-  await openBottomTerminal(secondWindow);
-  await expect.poll(async () => readTerminalPid(secondWindow), {
-    timeout: 15000,
-  }).toBeGreaterThan(0);
-  await expectBundledTerminalTheme(secondWindow);
+  await openFileAndAssertBundledTheme(secondWindow, expectedMonacoColors);
 
   await secondWindow.getByTestId('menu-settings-button').click();
   await expect(secondWindow.getByTestId('settings-dialog')).toBeVisible();
-  await expect(secondWindow.getByTestId('settings-theme-combobox')).toContainText('Pink Cat Boo');
+  await expect(secondWindow.getByTestId('settings-theme-combobox')).toContainText(themeLabel);
   await secondWindow.getByTestId('settings-close-button').click();
   await expect(secondWindow.getByTestId('settings-dialog')).toHaveCount(0);
 
   await secondApp.close();
+}
+
+test('bundled UI theme selection persists across app relaunch and updates Monaco and terminal styling', async () => {
+  test.slow();
+
+  await assertBundledThemeSelectionPersistsAcrossRelaunch({
+    searchText: 'pink',
+    themeId: 'pink-cat-boo',
+    themeLabel: 'Pink Cat Boo',
+    isDark: true,
+    expectedMonacoColors: {
+      background: '#202330',
+      lineNumber: '#FFF0F5',
+    },
+  });
 });
 
 test('vendored upstream bundled UI theme selection persists across app relaunch and updates Monaco and terminal styling', async () => {
   test.slow();
 
-  const readThemeSnapshot = async (page: Awaited<ReturnType<typeof launchApp>>['window']) => ({
-    ...(await page.evaluate(() => {
-      const browserGlobal = globalThis as typeof globalThis & {
-        document: {
-          documentElement: {
-            classList: {
-              contains: (token: string) => boolean;
-            };
-            dataset: {
-              colorThemeId?: string;
-            };
-          };
-        };
-      };
-
-      return {
-        isDark: browserGlobal.document.documentElement.classList.contains('dark'),
-        themeId: browserGlobal.document.documentElement.dataset.colorThemeId ?? null,
-      };
-    })),
-    stored: await readConfigValue(page, 'workbench.colorTheme'),
-  });
-
-  const expectBundledMonacoTheme = async (page: Awaited<ReturnType<typeof launchApp>>['window']) => {
-    await expect.poll(async () => {
-      const snapshot = await readMonacoAppearanceSnapshot(page, {
-        background: '#282c34',
-        lineNumber: '#abb2bf',
-      });
-
-      return snapshot
-        ? {
-            backgroundMatches: snapshot.backgroundColor === snapshot.expectedBackgroundColor,
-            lineNumberMatches: snapshot.lineNumberColor === snapshot.expectedLineNumberColor,
-          }
-        : null;
-    }).toEqual({
-      backgroundMatches: true,
-      lineNumberMatches: true,
-    });
-  };
-
-  const expectBundledTerminalTheme = async (page: Awaited<ReturnType<typeof launchApp>>['window']) => {
-    await expect.poll(async () => {
-      const themeState = await readTerminalThemeSnapshot(page);
-
-      return {
-        hasBackground: Boolean(themeState.terminalBackground),
-        hasExpectedBackground: Boolean(themeState.expectedBackground),
-        backgroundMatches: themeState.terminalBackground === themeState.expectedBackground,
-      };
-    }, {
-      timeout: 15000,
-    }).toEqual({
-      hasBackground: true,
-      hasExpectedBackground: true,
-      backgroundMatches: true,
-    });
-  };
-
-  const firstLaunch = await launchApp();
-  const { app: firstApp, window: firstWindow } = firstLaunch;
-
-  await firstWindow.getByTestId('menu-settings-button').click();
-  await expect(firstWindow.getByTestId('settings-dialog')).toBeVisible();
-  await firstWindow.getByTestId('settings-theme-advanced-button').click();
-  await expect(firstWindow.getByTestId('settings-theme-advanced-dialog')).toBeVisible();
-  await firstWindow.getByTestId('settings-theme-advanced-search-input').fill('one dark');
-  await firstWindow.getByTestId('settings-theme-preview-card-one-dark-pro').click();
-
-  await expect.poll(async () => readThemeSnapshot(firstWindow)).toEqual({
-    isDark: true,
+  await assertBundledThemeSelectionPersistsAcrossRelaunch({
+    searchText: 'one dark',
     themeId: 'one-dark-pro',
-    stored: 'one-dark-pro',
-  });
-
-  await firstWindow.getByTestId('settings-close-button').click();
-  await expect(firstWindow.getByTestId('settings-dialog')).toHaveCount(0);
-
-  await ensureExplorerVisible(firstWindow);
-  await openNestedWorkspaceFile(firstWindow, [
-    'file-tree-node-rtl',
-    'file-tree-node-rtl_core',
-    'file-tree-node-rtl_core_reg_file_v',
-  ]);
-  await expect(firstWindow.getByTestId('editor-tab-rtl/core/reg_file.v')).toBeVisible();
-  await waitForMonacoEditor(firstWindow);
-  await expect(firstWindow.locator('.monaco-editor .view-lines')).toContainText('module reg_file', {
-    timeout: MONACO_READY_TIMEOUT_MS,
-  });
-  await expectBundledMonacoTheme(firstWindow);
-
-  await openBottomTerminal(firstWindow);
-  await expect.poll(async () => readTerminalPid(firstWindow), {
-    timeout: 15000,
-  }).toBeGreaterThan(0);
-  await expectBundledTerminalTheme(firstWindow);
-
-  await firstApp.close();
-
-  const secondLaunch = await launchApp();
-  const { app: secondApp, window: secondWindow } = secondLaunch;
-
-  await expect.poll(async () => readThemeSnapshot(secondWindow)).toEqual({
+    themeLabel: 'One Dark Pro',
     isDark: true,
-    themeId: 'one-dark-pro',
-    stored: 'one-dark-pro',
+    expectedMonacoColors: {
+      background: '#282c34',
+      lineNumber: '#abb2bf',
+    },
   });
+});
 
-  await ensureExplorerVisible(secondWindow);
-  await openNestedWorkspaceFile(secondWindow, [
-    'file-tree-node-rtl',
-    'file-tree-node-rtl_core',
-    'file-tree-node-rtl_core_reg_file_v',
-  ]);
-  await expect(secondWindow.getByTestId('editor-tab-rtl/core/reg_file.v')).toBeVisible();
-  await waitForMonacoEditor(secondWindow);
-  await expect(secondWindow.locator('.monaco-editor .view-lines')).toContainText('module reg_file', {
-    timeout: MONACO_READY_TIMEOUT_MS,
+test('second-batch vendored upstream light bundled UI theme selection persists across app relaunch and updates Monaco and terminal styling', async () => {
+  test.slow();
+
+  await assertBundledThemeSelectionPersistsAcrossRelaunch({
+    searchText: 'github light default',
+    themeId: 'github-light-default',
+    themeLabel: 'GitHub Light Default',
+    isDark: false,
+    expectedMonacoColors: {
+      background: '#ffffff',
+      lineNumber: '#1f2328',
+    },
   });
-  await expectBundledMonacoTheme(secondWindow);
+});
 
-  await openBottomTerminal(secondWindow);
-  await expect.poll(async () => readTerminalPid(secondWindow), {
-    timeout: 15000,
-  }).toBeGreaterThan(0);
-  await expectBundledTerminalTheme(secondWindow);
+test('second-batch vendored upstream dark bundled UI theme selection persists across app relaunch and updates Monaco and terminal styling', async () => {
+  test.slow();
 
-  await secondWindow.getByTestId('menu-settings-button').click();
-  await expect(secondWindow.getByTestId('settings-dialog')).toBeVisible();
-  await expect(secondWindow.getByTestId('settings-theme-combobox')).toContainText('One Dark Pro');
-  await secondWindow.getByTestId('settings-close-button').click();
-  await expect(secondWindow.getByTestId('settings-dialog')).toHaveCount(0);
-
-  await secondApp.close();
+  await assertBundledThemeSelectionPersistsAcrossRelaunch({
+    searchText: 'tokyo night storm',
+    themeId: 'tokyo-night-storm',
+    themeLabel: 'Tokyo Night Storm',
+    isDark: true,
+    expectedMonacoColors: {
+      background: '#24283b',
+      lineNumber: '#8089b3',
+    },
+  });
 });
 
 test('code editor settings persist across app relaunch', async () => {

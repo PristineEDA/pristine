@@ -3,6 +3,7 @@ import { access, copyFile, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises
 import os from 'node:os'
 import path from 'node:path'
 import { pipeline } from 'node:stream/promises'
+import { pathToFileURL } from 'node:url'
 import extractZip from 'extract-zip'
 import { parse, printParseErrorCode } from 'jsonc-parser'
 
@@ -210,7 +211,7 @@ async function syncExtensionAssets(extensionEntries, tempRoot) {
   console.log(`Synced ${firstEntry.assetDirectory} (${collectedPaths.size} files)`)
 }
 
-async function main() {
+export async function syncBundledThemeAssets() {
   const manifest = await loadManifest()
   await ensureDirectory(outputRoot)
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'pristine-bundled-theme-'))
@@ -236,7 +237,9 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : String(error))
-  process.exitCode = 1
-})
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  syncBundledThemeAssets().catch((error) => {
+    console.error(error instanceof Error ? error.message : String(error))
+    process.exitCode = 1
+  })
+}

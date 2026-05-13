@@ -95,6 +95,24 @@ describe('ThemeContext', () => {
     expect(window.electronAPI?.config.set).toHaveBeenCalledWith('workbench.colorTheme', 'one-dark-pro');
   });
 
+  it('accepts second-batch vendored light bundled theme ids from config and keeps the DOM in light mode', () => {
+    vi.mocked(window.electronAPI!.config.get).mockImplementation((key: string) =>
+      key === 'workbench.colorTheme' ? 'github-light-default' : null,
+    );
+
+    render(
+      <ThemeProvider>
+        <ThemeProbe />
+      </ThemeProvider>,
+    );
+
+    expect(screen.getByTestId('current-theme')).toHaveTextContent('light');
+    expect(screen.getByTestId('current-theme-id')).toHaveTextContent('github-light-default');
+    expect(document.documentElement).not.toHaveClass('dark');
+    expect(document.documentElement).toHaveAttribute('data-color-theme-id', 'github-light-default');
+    expect(window.electronAPI?.config.set).toHaveBeenCalledWith('workbench.colorTheme', 'github-light-default');
+  });
+
   it('persists theme updates to the unified config keys and keeps the DOM class in sync', () => {
     render(
       <ThemeProvider>
