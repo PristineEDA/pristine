@@ -532,6 +532,40 @@ describe('MenuBar settings', () => {
     });
   }, SETTINGS_PICKER_TEST_TIMEOUT_MS);
 
+  it('shows ninth-batch vendored upstream dark bundled UI themes in the advanced picker and applies them through the shared theme setting', async () => {
+    const user = userEvent.setup();
+
+    mockPersistedSettingsConfig({
+      colorTheme: 'vscode-2026-dark',
+    });
+
+    renderMenuBar();
+
+    await applyBundledThemeFromAdvancedPicker(user, {
+      searchText: 'vue theme high contrast',
+      themeId: 'vue-theme-high-contrast',
+      label: 'Vue Theme High Contrast',
+      author: 'Mario Rodeghiero',
+    });
+  }, SETTINGS_PICKER_TEST_TIMEOUT_MS);
+
+  it('shows ninth-batch vendored upstream light bundled UI themes in the advanced picker and applies them through the shared theme setting', async () => {
+    const user = userEvent.setup();
+
+    mockPersistedSettingsConfig({
+      colorTheme: 'vscode-2026-dark',
+    });
+
+    renderMenuBar();
+
+    await applyBundledThemeFromAdvancedPicker(user, {
+      searchText: 'light owl',
+      themeId: 'light-owl',
+      label: 'Light Owl',
+      author: 'Sarah Drasner',
+    });
+  }, SETTINGS_PICKER_TEST_TIMEOUT_MS);
+
   it('imports a local UI theme from settings and selects it immediately', async () => {
     const user = userEvent.setup();
 

@@ -165,6 +165,18 @@ describe('ThemeContext', () => {
     expectConfiguredThemeState('visual-studio-light-cpp', 'light');
   });
 
+  it('accepts ninth-batch vendored dark bundled theme ids from config and keeps the DOM in dark mode', () => {
+    renderWithConfiguredThemeId('vue-theme-high-contrast');
+
+    expectConfiguredThemeState('vue-theme-high-contrast', 'dark');
+  });
+
+  it('accepts ninth-batch vendored light bundled theme ids from config and keeps the DOM in light mode', () => {
+    renderWithConfiguredThemeId('light-owl');
+
+    expectConfiguredThemeState('light-owl', 'light');
+  });
+
   it('persists theme updates to the unified config keys and keeps the DOM class in sync', () => {
     render(
       <ThemeProvider>

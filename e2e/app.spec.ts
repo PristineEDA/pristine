@@ -4332,6 +4332,36 @@ test('eighth-batch official vendored upstream Visual Studio light bundled UI the
   });
 });
 
+test('ninth-batch vendored upstream Palenight dark bundled UI theme selection persists across app relaunch and updates Monaco and terminal styling', async () => {
+  test.slow();
+
+  await assertBundledThemeSelectionPersistsAcrossRelaunch({
+    searchText: 'palenight theme',
+    themeId: 'palenight-theme',
+    themeLabel: 'Palenight Theme',
+    isDark: true,
+    expectedMonacoColors: {
+      background: '#292D3E',
+      lineNumber: ['#4c5374', '#eeffff', '#bfc7d5'],
+    },
+  });
+});
+
+test('ninth-batch vendored upstream Light Owl bundled UI theme selection persists across app relaunch and updates Monaco and terminal styling', async () => {
+  test.slow();
+
+  await assertBundledThemeSelectionPersistsAcrossRelaunch({
+    searchText: 'light owl',
+    themeId: 'light-owl',
+    themeLabel: 'Light Owl',
+    isDark: false,
+    expectedMonacoColors: {
+      background: '#FBFBFB',
+      lineNumber: ['#90A7B2', '#403F53'],
+    },
+  });
+});
+
 test('code editor settings persist across app relaunch', async () => {
   test.slow();
 

@@ -726,5 +726,101 @@
     "version": "1.1.0",
     "assetDirectory": "copilot-theme",
     "themePath": "themes/Copilot Theme-color-theme-higher-contrast.json"
+  },
+  {
+    "id": "theme",
+    "publisher": "tal7aouy",
+    "extensionName": "theme",
+    "version": "3.1.0",
+    "assetDirectory": "theme",
+    "themePath": "themes/Theme.json"
+  },
+  {
+    "id": "theme-flat",
+    "publisher": "tal7aouy",
+    "extensionName": "theme",
+    "version": "3.1.0",
+    "assetDirectory": "theme",
+    "themePath": "themes/ThemeFlat.json"
+  },
+  {
+    "id": "theme-mix",
+    "publisher": "tal7aouy",
+    "extensionName": "theme",
+    "version": "3.1.0",
+    "assetDirectory": "theme",
+    "themePath": "themes/ThemeMix.json"
+  },
+  {
+    "id": "theme-darker",
+    "publisher": "tal7aouy",
+    "extensionName": "theme",
+    "version": "3.1.0",
+    "assetDirectory": "theme",
+    "themePath": "themes/ThemeDarker.json"
+  },
+  {
+    "id": "light-owl",
+    "publisher": "sdras",
+    "extensionName": "night-owl",
+    "version": "2.1.1",
+    "assetDirectory": "night-owl",
+    "themePath": "themes/Night Owl-Light-color-theme.json"
+  },
+  {
+    "id": "palenight-theme",
+    "publisher": "whizkydee",
+    "extensionName": "material-palenight-theme",
+    "version": "2.0.4",
+    "assetDirectory": "material-palenight-theme",
+    "themePath": "themes/palenight.json"
+  },
+  {
+    "id": "palenight-operator",
+    "publisher": "whizkydee",
+    "extensionName": "material-palenight-theme",
+    "version": "2.0.4",
+    "assetDirectory": "material-palenight-theme",
+    "themePath": "themes/palenight-operator.json"
+  },
+  {
+    "id": "palenight-mild-contrast",
+    "publisher": "whizkydee",
+    "extensionName": "material-palenight-theme",
+    "version": "2.0.4",
+    "assetDirectory": "material-palenight-theme",
+    "themePath": "themes/palenight-mild-contrast.json"
+  },
+  {
+    "id": "vue-theme",
+    "publisher": "mariorodeghiero",
+    "extensionName": "vue-theme",
+    "version": "2.0.3",
+    "assetDirectory": "vue-theme",
+    "themePath": "themes/vue-theme-color-theme.json"
+  },
+  {
+    "id": "vue-theme-high-contrast",
+    "publisher": "mariorodeghiero",
+    "extensionName": "vue-theme",
+    "version": "2.0.3",
+    "assetDirectory": "vue-theme",
+    "themePath": "themes/vue-theme-color-theme-high-contrast.json"
+  },
+  {
+    "id": "spinel",
+    "publisher": "Shopify",
+    "extensionName": "ruby-extensions-pack",
+    "version": "0.1.14",
+    "assetDirectory": "ruby-extensions-pack",
+    "themePath": "themes/dark_spinel.json"
+  },
+  {
+    "id": "spinel-light",
+    "publisher": "Shopify",
+    "extensionName": "ruby-extensions-pack",
+    "version": "0.1.14",
+    "assetDirectory": "ruby-extensions-pack",
+    "themePath": "themes/light_spinel.json"
   }
 ]

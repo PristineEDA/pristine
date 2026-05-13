@@ -434,6 +434,120 @@ describe('colorThemeRegistry', () => {
     expect(lightPlusSyntaxHighContrastTheme?.colors['terminal.background']).toBe('#ffffff')
   })
 
+  it('resolves ninth-batch vendored upstream Theme, Palenight, Vue, Spinel, and Light Owl themes through the manifest', () => {
+    const firstThemeDarkerTheme = getBundledColorTheme('theme-darker')
+    const secondThemeDarkerTheme = getBundledColorTheme('theme-darker')
+    const themeTheme = getBundledColorTheme('theme')
+    const themeFlatTheme = getBundledColorTheme('theme-flat')
+    const themeMixTheme = getBundledColorTheme('theme-mix')
+    const palenightTheme = getBundledColorTheme('palenight-theme')
+    const palenightOperatorTheme = getBundledColorTheme('palenight-operator')
+    const palenightMildContrastTheme = getBundledColorTheme('palenight-mild-contrast')
+    const vueTheme = getBundledColorTheme('vue-theme')
+    const vueThemeHighContrast = getBundledColorTheme('vue-theme-high-contrast')
+    const spinelTheme = getBundledColorTheme('spinel')
+    const spinelLightTheme = getBundledColorTheme('spinel-light')
+    const lightOwlTheme = getBundledColorTheme('light-owl')
+
+    expect(firstThemeDarkerTheme).toBe(secondThemeDarkerTheme)
+
+    expect(themeTheme).toEqual(expect.objectContaining({
+      id: 'theme',
+      kind: 'dark',
+      source: 'bundled',
+    }))
+    expect(themeTheme?.colors['activityBar.background']).toBe('#282c34')
+    expect(themeTheme?.colors['sideBar.background']).toBe('#21252b')
+
+    expect(themeFlatTheme).toEqual(expect.objectContaining({
+      id: 'theme-flat',
+      kind: 'dark',
+      source: 'bundled',
+    }))
+    expect(themeFlatTheme?.colors['sideBar.background']).toBe('#282c34')
+
+    expect(themeMixTheme).toEqual(expect.objectContaining({
+      id: 'theme-mix',
+      kind: 'dark',
+      source: 'bundled',
+    }))
+    expect(themeMixTheme?.colors['activityBar.background']).toBe('#21252b')
+
+    expect(firstThemeDarkerTheme).toEqual(expect.objectContaining({
+      id: 'theme-darker',
+      kind: 'dark',
+      source: 'bundled',
+    }))
+    expect(firstThemeDarkerTheme?.colors['editor.background']).toBe('#23272e')
+    expect(firstThemeDarkerTheme?.colors['sideBar.background']).toBe('#1e2227')
+    expect(firstThemeDarkerTheme?.colors['terminal.background']).toBe('#23272e')
+
+    expect(palenightTheme).toEqual(expect.objectContaining({
+      id: 'palenight-theme',
+      kind: 'dark',
+      source: 'bundled',
+    }))
+    expect(palenightTheme?.colors['activityBar.background']).toBe('#282C3D')
+    expect(palenightTheme?.colors['editorLineNumber.foreground']).toBe('#4c5374')
+
+    expect(palenightOperatorTheme).toEqual(expect.objectContaining({
+      id: 'palenight-operator',
+      kind: 'dark',
+      source: 'bundled',
+    }))
+    expect(palenightOperatorTheme?.colors['editor.background']).toBe('#292D3E')
+    expect(palenightOperatorTheme?.tokenColors.length ?? 0).toBeGreaterThan(50)
+
+    expect(palenightMildContrastTheme).toEqual(expect.objectContaining({
+      id: 'palenight-mild-contrast',
+      kind: 'dark',
+      source: 'bundled',
+    }))
+    expect(palenightMildContrastTheme?.colors['activityBar.background']).toBe('#242839')
+    expect(palenightMildContrastTheme?.colors['sideBar.background']).toBe('#25293A')
+
+    expect(vueTheme).toEqual(expect.objectContaining({
+      id: 'vue-theme',
+      kind: 'dark',
+      source: 'bundled',
+    }))
+    expect(vueTheme?.colors['activityBar.background']).toBe('#002b36')
+    expect(vueTheme?.colors['editor.background']).toBe('#002b36')
+
+    expect(vueThemeHighContrast).toEqual(expect.objectContaining({
+      id: 'vue-theme-high-contrast',
+      kind: 'dark',
+      source: 'bundled',
+    }))
+    expect(vueThemeHighContrast?.colors['activityBar.background']).toBe('#002933')
+    expect(vueThemeHighContrast?.colors['editorLineNumber.activeForeground']).toBe('#d4d4d4dc')
+
+    expect(spinelTheme).toEqual(expect.objectContaining({
+      id: 'spinel',
+      kind: 'dark',
+      source: 'bundled',
+    }))
+    expect(spinelTheme?.colors['editor.background']).toBe('#2f2f2f')
+    expect(spinelTheme?.colors['terminal.background']).toBe('#2a2a2a')
+
+    expect(spinelLightTheme).toEqual(expect.objectContaining({
+      id: 'spinel-light',
+      kind: 'light',
+      source: 'bundled',
+    }))
+    expect(spinelLightTheme?.colors['editor.background']).toBe('#e3e2ec')
+    expect(spinelLightTheme?.colors['terminal.background']).toBe('#e3e2ec')
+
+    expect(lightOwlTheme).toEqual(expect.objectContaining({
+      id: 'light-owl',
+      kind: 'light',
+      source: 'bundled',
+    }))
+    expect(lightOwlTheme?.colors['editor.background']).toBe('#FBFBFB')
+    expect(lightOwlTheme?.colors['editorLineNumber.foreground']).toBe('#90A7B2')
+    expect(lightOwlTheme?.colors['editorLineNumber.activeForeground']).toBe('#403f53')
+  })
+
   it('prefers vendored upstream theme JSON for the first batch and caches resolved instances', () => {
     const firstTheme = getBundledColorTheme('one-dark-pro')
     const secondTheme = getBundledColorTheme('one-dark-pro')
