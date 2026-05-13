@@ -193,6 +193,41 @@ describe('colorThemeRegistry', () => {
     expect(rainglowPeacockTheme?.colors['terminal.background']).toBe('#1e1d1b')
   })
 
+  it('resolves fifth-batch vendored upstream macOS Modern themes across Ventura and classic path buckets', () => {
+    const firstVenturaDarkTheme = getBundledColorTheme('macos-modern-dark-ventura-xcode-default')
+    const secondVenturaDarkTheme = getBundledColorTheme('macos-modern-dark-ventura-xcode-default')
+    const classicDarkTheme = getBundledColorTheme('macos-modern-dark-xcode-modern')
+    const venturaLightTheme = getBundledColorTheme('macos-modern-light-ventura-xcode-low-key')
+
+    expect(firstVenturaDarkTheme).toBe(secondVenturaDarkTheme)
+    expect(firstVenturaDarkTheme).toEqual(expect.objectContaining({
+      id: 'macos-modern-dark-ventura-xcode-default',
+      kind: 'dark',
+      source: 'bundled',
+    }))
+    expect(firstVenturaDarkTheme?.colors['editor.background']).toBe('#232222')
+    expect(firstVenturaDarkTheme?.colors['editorLineNumber.activeForeground']).toBe('#ffffffd8')
+    expect(firstVenturaDarkTheme?.colors['input.background']).toBe('#403e3e')
+
+    expect(classicDarkTheme).toEqual(expect.objectContaining({
+      id: 'macos-modern-dark-xcode-modern',
+      kind: 'dark',
+      source: 'bundled',
+    }))
+    expect(classicDarkTheme?.colors['editor.background']).toBe('#242529')
+    expect(classicDarkTheme?.colors['panel.background']).toBe('#242529')
+    expect(classicDarkTheme?.colors['statusBar.background']).toBe('#414045')
+
+    expect(venturaLightTheme).toEqual(expect.objectContaining({
+      id: 'macos-modern-light-ventura-xcode-low-key',
+      kind: 'light',
+      source: 'bundled',
+    }))
+    expect(venturaLightTheme?.colors['editor.background']).toBe('#ffffff')
+    expect(venturaLightTheme?.colors['editorLineNumber.activeForeground']).toBe('#666666')
+    expect(venturaLightTheme?.colors['input.background']).toBe('#fcfcfc')
+  })
+
   it('prefers vendored upstream theme JSON for the first batch and caches resolved instances', () => {
     const firstTheme = getBundledColorTheme('one-dark-pro')
     const secondTheme = getBundledColorTheme('one-dark-pro')

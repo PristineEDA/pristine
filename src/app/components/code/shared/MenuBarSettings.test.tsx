@@ -25,6 +25,40 @@ import {
   setThemeMock,
 } from './MenuBar.testSupport';
 
+async function applyBundledThemeFromAdvancedPicker(
+  user: ReturnType<typeof userEvent.setup>,
+  theme: {
+    searchText: string;
+    themeId: string;
+    label: string;
+    author: string;
+  },
+) {
+  await user.click(screen.getByTestId('menu-settings-button'));
+  expect(await screen.findByTestId('settings-dialog')).toBeVisible();
+
+  await user.click(screen.getByTestId('settings-theme-advanced-button'));
+  expect(await screen.findByTestId('settings-theme-advanced-dialog')).toBeVisible();
+
+  const searchInput = screen.getByTestId('settings-theme-advanced-search-input');
+  await user.clear(searchInput);
+  await user.type(searchInput, theme.searchText);
+
+  expect(screen.getByTestId(`settings-theme-preview-card-${theme.themeId}`)).toHaveAttribute('data-state', 'unselected');
+  expect(screen.getByTestId(`settings-theme-preview-label-${theme.themeId}`)).toHaveTextContent(theme.label);
+  expect(screen.getByTestId(`settings-theme-preview-author-${theme.themeId}`)).toHaveTextContent(theme.author);
+  expect(screen.getByTestId(`settings-theme-preview-line-module-${theme.themeId}`)).toHaveTextContent('module alu(clk)');
+
+  await user.click(screen.getByTestId(`settings-theme-preview-card-${theme.themeId}`));
+
+  await waitFor(() => {
+    expect(screen.queryByTestId('settings-theme-advanced-dialog')).not.toBeInTheDocument();
+  });
+
+  expect(screen.getByTestId('settings-theme-combobox')).toHaveTextContent(theme.label);
+  expect(setThemeMock).toHaveBeenCalledWith(theme.themeId);
+}
+
 describe('MenuBar settings', () => {
   it('opens settings from native menu commands on macOS', async () => {
     window.electronAPI!.platform = 'darwin';
@@ -317,29 +351,12 @@ describe('MenuBar settings', () => {
 
     renderMenuBar();
 
-    await user.click(screen.getByTestId('menu-settings-button'));
-    expect(await screen.findByTestId('settings-dialog')).toBeVisible();
-
-    await user.click(screen.getByTestId('settings-theme-advanced-button'));
-    expect(await screen.findByTestId('settings-theme-advanced-dialog')).toBeVisible();
-
-    const searchInput = screen.getByTestId('settings-theme-advanced-search-input');
-    await user.clear(searchInput);
-    await user.type(searchInput, 'pink');
-
-    expect(screen.getByTestId('settings-theme-preview-card-pink-cat-boo')).toHaveAttribute('data-state', 'unselected');
-    expect(screen.getByTestId('settings-theme-preview-label-pink-cat-boo')).toHaveTextContent('Pink Cat Boo');
-    expect(screen.getByTestId('settings-theme-preview-author-pink-cat-boo')).toHaveTextContent('Fiona Fan');
-    expect(screen.getByTestId('settings-theme-preview-line-module-pink-cat-boo')).toHaveTextContent('module alu(clk)');
-
-    await user.click(screen.getByTestId('settings-theme-preview-card-pink-cat-boo'));
-
-    await waitFor(() => {
-      expect(screen.queryByTestId('settings-theme-advanced-dialog')).not.toBeInTheDocument();
+    await applyBundledThemeFromAdvancedPicker(user, {
+      searchText: 'pink',
+      themeId: 'pink-cat-boo',
+      label: 'Pink Cat Boo',
+      author: 'Fiona Fan',
     });
-
-    expect(screen.getByTestId('settings-theme-combobox')).toHaveTextContent('Pink Cat Boo');
-    expect(setThemeMock).toHaveBeenCalledWith('pink-cat-boo');
   });
 
   it('shows vendored upstream bundled UI themes in the advanced picker and applies them through the shared theme setting', async () => {
@@ -351,29 +368,12 @@ describe('MenuBar settings', () => {
 
     renderMenuBar();
 
-    await user.click(screen.getByTestId('menu-settings-button'));
-    expect(await screen.findByTestId('settings-dialog')).toBeVisible();
-
-    await user.click(screen.getByTestId('settings-theme-advanced-button'));
-    expect(await screen.findByTestId('settings-theme-advanced-dialog')).toBeVisible();
-
-    const searchInput = screen.getByTestId('settings-theme-advanced-search-input');
-    await user.clear(searchInput);
-    await user.type(searchInput, 'one dark');
-
-    expect(screen.getByTestId('settings-theme-preview-card-one-dark-pro')).toHaveAttribute('data-state', 'unselected');
-    expect(screen.getByTestId('settings-theme-preview-label-one-dark-pro')).toHaveTextContent('One Dark Pro');
-    expect(screen.getByTestId('settings-theme-preview-author-one-dark-pro')).toHaveTextContent('Binaryify');
-    expect(screen.getByTestId('settings-theme-preview-line-module-one-dark-pro')).toHaveTextContent('module alu(clk)');
-
-    await user.click(screen.getByTestId('settings-theme-preview-card-one-dark-pro'));
-
-    await waitFor(() => {
-      expect(screen.queryByTestId('settings-theme-advanced-dialog')).not.toBeInTheDocument();
+    await applyBundledThemeFromAdvancedPicker(user, {
+      searchText: 'one dark',
+      themeId: 'one-dark-pro',
+      label: 'One Dark Pro',
+      author: 'Binaryify',
     });
-
-    expect(screen.getByTestId('settings-theme-combobox')).toHaveTextContent('One Dark Pro');
-    expect(setThemeMock).toHaveBeenCalledWith('one-dark-pro');
   });
 
   it('shows second-batch vendored upstream light bundled UI themes in the advanced picker and applies them through the shared theme setting', async () => {
@@ -385,29 +385,12 @@ describe('MenuBar settings', () => {
 
     renderMenuBar();
 
-    await user.click(screen.getByTestId('menu-settings-button'));
-    expect(await screen.findByTestId('settings-dialog')).toBeVisible();
-
-    await user.click(screen.getByTestId('settings-theme-advanced-button'));
-    expect(await screen.findByTestId('settings-theme-advanced-dialog')).toBeVisible();
-
-    const searchInput = screen.getByTestId('settings-theme-advanced-search-input');
-    await user.clear(searchInput);
-    await user.type(searchInput, 'github light default');
-
-    expect(screen.getByTestId('settings-theme-preview-card-github-light-default')).toHaveAttribute('data-state', 'unselected');
-    expect(screen.getByTestId('settings-theme-preview-label-github-light-default')).toHaveTextContent('GitHub Light Default');
-    expect(screen.getByTestId('settings-theme-preview-author-github-light-default')).toHaveTextContent('GitHub');
-    expect(screen.getByTestId('settings-theme-preview-line-module-github-light-default')).toHaveTextContent('module alu(clk)');
-
-    await user.click(screen.getByTestId('settings-theme-preview-card-github-light-default'));
-
-    await waitFor(() => {
-      expect(screen.queryByTestId('settings-theme-advanced-dialog')).not.toBeInTheDocument();
+    await applyBundledThemeFromAdvancedPicker(user, {
+      searchText: 'github light default',
+      themeId: 'github-light-default',
+      label: 'GitHub Light Default',
+      author: 'GitHub',
     });
-
-    expect(screen.getByTestId('settings-theme-combobox')).toHaveTextContent('GitHub Light Default');
-    expect(setThemeMock).toHaveBeenCalledWith('github-light-default');
   });
 
   it('shows third-batch vendored upstream dark bundled UI themes in the advanced picker and applies them through the shared theme setting', async () => {
@@ -419,29 +402,12 @@ describe('MenuBar settings', () => {
 
     renderMenuBar();
 
-    await user.click(screen.getByTestId('menu-settings-button'));
-    expect(await screen.findByTestId('settings-dialog')).toBeVisible();
-
-    await user.click(screen.getByTestId('settings-theme-advanced-button'));
-    expect(await screen.findByTestId('settings-theme-advanced-dialog')).toBeVisible();
-
-    const searchInput = screen.getByTestId('settings-theme-advanced-search-input');
-    await user.clear(searchInput);
-    await user.type(searchInput, 'gruvbox dark medium');
-
-    expect(screen.getByTestId('settings-theme-preview-card-gruvbox-dark-medium')).toHaveAttribute('data-state', 'unselected');
-    expect(screen.getByTestId('settings-theme-preview-label-gruvbox-dark-medium')).toHaveTextContent('Gruvbox Dark Medium');
-    expect(screen.getByTestId('settings-theme-preview-author-gruvbox-dark-medium')).toHaveTextContent('jdinhify');
-    expect(screen.getByTestId('settings-theme-preview-line-module-gruvbox-dark-medium')).toHaveTextContent('module alu(clk)');
-
-    await user.click(screen.getByTestId('settings-theme-preview-card-gruvbox-dark-medium'));
-
-    await waitFor(() => {
-      expect(screen.queryByTestId('settings-theme-advanced-dialog')).not.toBeInTheDocument();
+    await applyBundledThemeFromAdvancedPicker(user, {
+      searchText: 'gruvbox dark medium',
+      themeId: 'gruvbox-dark-medium',
+      label: 'Gruvbox Dark Medium',
+      author: 'jdinhify',
     });
-
-    expect(screen.getByTestId('settings-theme-combobox')).toHaveTextContent('Gruvbox Dark Medium');
-    expect(setThemeMock).toHaveBeenCalledWith('gruvbox-dark-medium');
   });
 
   it('shows fourth-batch vendored upstream light bundled UI themes in the advanced picker and applies them through the shared theme setting', async () => {
@@ -453,29 +419,29 @@ describe('MenuBar settings', () => {
 
     renderMenuBar();
 
-    await user.click(screen.getByTestId('menu-settings-button'));
-    expect(await screen.findByTestId('settings-dialog')).toBeVisible();
+    await applyBundledThemeFromAdvancedPicker(user, {
+      searchText: 'noctis lux',
+      themeId: 'noctis-lux',
+      label: 'Noctis Lux',
+      author: 'Liviu Schera',
+    });
+  });
 
-    await user.click(screen.getByTestId('settings-theme-advanced-button'));
-    expect(await screen.findByTestId('settings-theme-advanced-dialog')).toBeVisible();
+  it('shows fifth-batch vendored upstream macOS Modern bundled UI themes in the advanced picker and applies them through the shared theme setting', async () => {
+    const user = userEvent.setup();
 
-    const searchInput = screen.getByTestId('settings-theme-advanced-search-input');
-    await user.clear(searchInput);
-    await user.type(searchInput, 'noctis lux');
-
-    expect(screen.getByTestId('settings-theme-preview-card-noctis-lux')).toHaveAttribute('data-state', 'unselected');
-    expect(screen.getByTestId('settings-theme-preview-label-noctis-lux')).toHaveTextContent('Noctis Lux');
-    expect(screen.getByTestId('settings-theme-preview-author-noctis-lux')).toHaveTextContent('Liviu Schera');
-    expect(screen.getByTestId('settings-theme-preview-line-module-noctis-lux')).toHaveTextContent('module alu(clk)');
-
-    await user.click(screen.getByTestId('settings-theme-preview-card-noctis-lux'));
-
-    await waitFor(() => {
-      expect(screen.queryByTestId('settings-theme-advanced-dialog')).not.toBeInTheDocument();
+    mockPersistedSettingsConfig({
+      colorTheme: 'vscode-2026-dark',
     });
 
-    expect(screen.getByTestId('settings-theme-combobox')).toHaveTextContent('Noctis Lux');
-    expect(setThemeMock).toHaveBeenCalledWith('noctis-lux');
+    renderMenuBar();
+
+    await applyBundledThemeFromAdvancedPicker(user, {
+      searchText: 'low key',
+      themeId: 'macos-modern-light-ventura-xcode-low-key',
+      label: 'MacOS Modern Light - Ventura Xcode Low Key',
+      author: 'David B. Waters',
+    });
   });
 
   it('imports a local UI theme from settings and selects it immediately', async () => {

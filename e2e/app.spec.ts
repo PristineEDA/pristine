@@ -4212,6 +4212,36 @@ test('fourth-batch vendored upstream light bundled UI theme selection persists a
   });
 });
 
+test('fifth-batch vendored upstream dark macOS Modern bundled UI theme selection persists across app relaunch and updates Monaco and terminal styling', async () => {
+  test.slow();
+
+  await assertBundledThemeSelectionPersistsAcrossRelaunch({
+    searchText: 'ventura xcode default',
+    themeId: 'macos-modern-dark-ventura-xcode-default',
+    themeLabel: 'MacOS Modern Dark - Ventura Xcode Default',
+    isDark: true,
+    expectedMonacoColors: {
+      background: '#232222',
+      lineNumber: ['#747478', 'rgba(255, 255, 255, 0.85)'],
+    },
+  });
+});
+
+test('fifth-batch vendored upstream light macOS Modern bundled UI theme selection persists across app relaunch and updates Monaco and terminal styling', async () => {
+  test.slow();
+
+  await assertBundledThemeSelectionPersistsAcrossRelaunch({
+    searchText: 'low key',
+    themeId: 'macos-modern-light-ventura-xcode-low-key',
+    themeLabel: 'MacOS Modern Light - Ventura Xcode Low Key',
+    isDark: false,
+    expectedMonacoColors: {
+      background: '#ffffff',
+      lineNumber: ['#bbbbbb', '#666666', '#000000'],
+    },
+  });
+});
+
 test('code editor settings persist across app relaunch', async () => {
   test.slow();
 

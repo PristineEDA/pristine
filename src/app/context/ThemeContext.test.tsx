@@ -167,6 +167,42 @@ describe('ThemeContext', () => {
     expect(window.electronAPI?.config.set).toHaveBeenCalledWith('workbench.colorTheme', 'noctis-lux');
   });
 
+  it('accepts fifth-batch vendored dark bundled theme ids from config and keeps the DOM in dark mode', () => {
+    vi.mocked(window.electronAPI!.config.get).mockImplementation((key: string) =>
+      key === 'workbench.colorTheme' ? 'macos-modern-dark-ventura-xcode-default' : null,
+    );
+
+    render(
+      <ThemeProvider>
+        <ThemeProbe />
+      </ThemeProvider>,
+    );
+
+    expect(screen.getByTestId('current-theme')).toHaveTextContent('dark');
+    expect(screen.getByTestId('current-theme-id')).toHaveTextContent('macos-modern-dark-ventura-xcode-default');
+    expect(document.documentElement).toHaveClass('dark');
+    expect(document.documentElement).toHaveAttribute('data-color-theme-id', 'macos-modern-dark-ventura-xcode-default');
+    expect(window.electronAPI?.config.set).toHaveBeenCalledWith('workbench.colorTheme', 'macos-modern-dark-ventura-xcode-default');
+  });
+
+  it('accepts fifth-batch vendored light bundled theme ids from config and keeps the DOM in light mode', () => {
+    vi.mocked(window.electronAPI!.config.get).mockImplementation((key: string) =>
+      key === 'workbench.colorTheme' ? 'macos-modern-light-ventura-xcode-low-key' : null,
+    );
+
+    render(
+      <ThemeProvider>
+        <ThemeProbe />
+      </ThemeProvider>,
+    );
+
+    expect(screen.getByTestId('current-theme')).toHaveTextContent('light');
+    expect(screen.getByTestId('current-theme-id')).toHaveTextContent('macos-modern-light-ventura-xcode-low-key');
+    expect(document.documentElement).not.toHaveClass('dark');
+    expect(document.documentElement).toHaveAttribute('data-color-theme-id', 'macos-modern-light-ventura-xcode-low-key');
+    expect(window.electronAPI?.config.set).toHaveBeenCalledWith('workbench.colorTheme', 'macos-modern-light-ventura-xcode-low-key');
+  });
+
   it('persists theme updates to the unified config keys and keeps the DOM class in sync', () => {
     render(
       <ThemeProvider>
