@@ -1,0 +1,74 @@
+[
+  {
+    "id": "dracula",
+    "publisher": "dracula-theme",
+    "extensionName": "theme-dracula",
+    "version": "2.25.1",
+    "assetDirectory": "theme-dracula",
+    "themePath": "theme/dracula.json"
+  },
+  {
+    "id": "github-light",
+    "publisher": "GitHub",
+    "extensionName": "github-vscode-theme",
+    "version": "6.3.5",
+    "assetDirectory": "github-vscode-theme",
+    "themePath": "themes/light.json"
+  },
+  {
+    "id": "github-dark",
+    "publisher": "GitHub",
+    "extensionName": "github-vscode-theme",
+    "version": "6.3.5",
+    "assetDirectory": "github-vscode-theme",
+    "themePath": "themes/dark.json"
+  },
+  {
+    "id": "one-dark-pro",
+    "publisher": "zhuangtongfa",
+    "extensionName": "Material-theme",
+    "version": "3.19.0",
+    "assetDirectory": "material-theme",
+    "themePath": "themes/OneDark-Pro.json"
+  },
+  {
+    "id": "tokyo-night",
+    "publisher": "enkia",
+    "extensionName": "tokyo-night",
+    "version": "1.1.2",
+    "assetDirectory": "tokyo-night",
+    "themePath": "themes/tokyo-night-color-theme.json"
+  },
+  {
+    "id": "catppuccin-mocha",
+    "publisher": "Catppuccin",
+    "extensionName": "catppuccin-vsc",
+    "version": "3.19.0",
+    "assetDirectory": "catppuccin-vsc",
+    "themePath": "themes/mocha.json"
+  },
+  {
+    "id": "nord",
+    "publisher": "arcticicestudio",
+    "extensionName": "nord-visual-studio-code",
+    "version": "0.19.0",
+    "assetDirectory": "nord-visual-studio-code",
+    "themePath": "themes/nord-color-theme.json"
+  },
+  {
+    "id": "rose-pine",
+    "publisher": "mvllow",
+    "extensionName": "rose-pine",
+    "version": "2.15.2",
+    "assetDirectory": "rose-pine",
+    "themePath": "themes/rose-pine-color-theme.json"
+  },
+  {
+    "id": "ayu-mirage",
+    "publisher": "teabyii",
+    "extensionName": "ayu",
+    "version": "1.1.12",
+    "assetDirectory": "ayu",
+    "themePath": "ayu-mirage-unbordered.json"
+  }
+]

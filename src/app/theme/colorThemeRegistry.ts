@@ -6,6 +6,7 @@ import darkPlusRaw from './vscode-defaults/dark_plus.json?raw'
 import lightPlusRaw from './vscode-defaults/light_plus.json?raw'
 import darkVsRaw from './vscode-defaults/dark_vs.json?raw'
 import lightVsRaw from './vscode-defaults/light_vs.json?raw'
+import bundledUpstreamThemeManifestRaw from './bundledUpstreamThemeManifest.json'
 import {
   editorThemeCatalog,
   isStaticEditorThemeCatalogEntry,
@@ -55,6 +56,16 @@ type BundledThemeDefinition = {
   kind: ThemeKind
   base: MonacoBaseTheme
   palette: DraculaPalette
+  entryPath?: string
+}
+
+type BundledUpstreamThemeManifestEntry = {
+  id: string
+  publisher: string
+  extensionName: string
+  version: string
+  assetDirectory: string
+  themePath: string
 }
 
 const builtInThemeDefinitions: readonly BuiltInThemeDefinition[] = [
@@ -87,6 +98,18 @@ const builtInThemeFiles = new Map<string, string>([
   ['light_vs.json', lightVsRaw],
 ])
 
+const bundledUpstreamThemeManifest = bundledUpstreamThemeManifestRaw as BundledUpstreamThemeManifestEntry[]
+
+const bundledUpstreamThemeEntryPathById = new Map<string, string>(
+  bundledUpstreamThemeManifest.map((entry) => [entry.id, `./bundled-upstream/${entry.assetDirectory}/${entry.themePath}`]),
+)
+
+const bundledUpstreamThemeFiles = import.meta.glob('./bundled-upstream/**/*.json', {
+  eager: true,
+  import: 'default',
+  query: '?raw',
+}) as Record<string, string>
+
 function hashString(value: string): string {
   let hash = 0
 
@@ -112,6 +135,16 @@ function loadBuiltInThemeFile(filePath: string): string {
 
   if (!fileContents) {
     throw new Error(`Missing built-in VS Code color theme asset '${filePath}'.`)
+  }
+
+  return fileContents
+}
+
+function loadBundledUpstreamThemeFile(filePath: string): string {
+  const fileContents = bundledUpstreamThemeFiles[filePath] ?? bundledUpstreamThemeFiles[`./${filePath}`]
+
+  if (!fileContents) {
+    throw new Error(`Missing bundled upstream color theme asset '${filePath}'.`)
   }
 
   return fileContents
@@ -313,9 +346,44 @@ const bundledThemeDefinitions: readonly BundledThemeDefinition[] = editorThemeCa
   kind: getThemeKindFromMonacoBase(theme.base),
   base: theme.base,
   palette: isStaticEditorThemeCatalogEntry(theme) ? theme.palette : resolveDraculaPalette(null),
+  entryPath: bundledUpstreamThemeEntryPathById.get(theme.value),
 }))
 
-const bundledResolvedThemes = bundledThemeDefinitions.map((theme) => {
+const bundledThemeDefinitionsById = new Map<string, BundledThemeDefinition>(
+  bundledThemeDefinitions.map((theme) => [theme.id, theme]),
+)
+
+const bundledResolvedThemeCache = new Map<string, ResolvedColorTheme>()
+
+const bundledThemeOptions = bundledThemeDefinitions.map<ColorThemeOption>((theme) => ({
+  value: theme.id,
+  label: theme.label,
+  description: theme.description,
+  author: theme.author,
+  kind: theme.kind,
+  source: 'bundled',
+}))
+
+function createResolvedBundledTheme(theme: BundledThemeDefinition): ResolvedColorTheme {
+  if (theme.entryPath) {
+    const resolvedData = resolveColorThemeDataSync(theme.entryPath, loadBundledUpstreamThemeFile, theme.kind)
+
+    return mergeResolvedThemeWithBuiltInBase(createResolvedTheme(
+      {
+        id: theme.id,
+        label: theme.label,
+        description: theme.description,
+        author: theme.author,
+        kind: resolvedData.kind,
+        source: 'bundled',
+      },
+      resolvedData.colors,
+      resolvedData.tokenColors,
+      resolvedData.semanticHighlighting,
+      resolvedData.semanticTokenColors,
+    ))
+  }
+
   return mergeResolvedThemeWithBuiltInBase(createResolvedTheme(
     {
       id: theme.id,
@@ -330,20 +398,7 @@ const bundledResolvedThemes = bundledThemeDefinitions.map((theme) => {
     false,
     {},
   ))
-})
-
-const bundledResolvedThemesById = new Map<string, ResolvedColorTheme>(
-  bundledResolvedThemes.map((theme) => [theme.id, theme]),
-)
-
-const bundledThemeOptions = bundledResolvedThemes.map<ColorThemeOption>((theme) => ({
-  value: theme.id,
-  label: theme.label,
-  description: theme.description,
-  author: theme.author,
-  kind: theme.kind,
-  source: 'bundled',
-}))
+}
 
 export function getBuiltInColorTheme(themeId: string): ResolvedColorTheme | null {
   return builtInResolvedThemesById.get(themeId) ?? null
@@ -354,11 +409,32 @@ export function getBuiltInColorThemes(): readonly ResolvedColorTheme[] {
 }
 
 export function getBundledColorTheme(themeId: string): ResolvedColorTheme | null {
-  return bundledResolvedThemesById.get(themeId) ?? null
+  const cachedTheme = bundledResolvedThemeCache.get(themeId)
+
+  if (cachedTheme) {
+    return cachedTheme
+  }
+
+  const definition = bundledThemeDefinitionsById.get(themeId)
+
+  if (!definition) {
+    return null
+  }
+
+  const resolvedTheme = createResolvedBundledTheme(definition)
+  bundledResolvedThemeCache.set(themeId, resolvedTheme)
+  return resolvedTheme
 }
 
 export function getBundledColorThemes(): readonly ResolvedColorTheme[] {
-  return bundledResolvedThemes
+  return bundledThemeDefinitions.flatMap((theme) => {
+    const resolvedTheme = getBundledColorTheme(theme.id)
+    return resolvedTheme ? [resolvedTheme] : []
+  })
+}
+
+export function resetBundledColorThemeCacheForTests(): void {
+  bundledResolvedThemeCache.clear()
 }
 
 export function getBundledColorThemeOptions(): readonly ColorThemeOption[] {
@@ -422,7 +498,7 @@ export function parseConfiguredColorThemeId(
     return value
   }
 
-  if (bundledResolvedThemesById.has(value)) {
+  if (bundledThemeDefinitionsById.has(value)) {
     return value
   }
 
@@ -522,8 +598,16 @@ export function buildResolvedThemeLookup(
   resolvedImportedThemes: Readonly<Record<string, ResolvedColorTheme>> = {},
 ): Record<string, ResolvedColorTheme> {
   const lookup: Record<string, ResolvedColorTheme> = Object.fromEntries(
-    [...builtInResolvedThemes, ...bundledResolvedThemes].map((theme) => [theme.id, theme]),
+    builtInResolvedThemes.map((theme) => [theme.id, theme]),
   )
+
+  for (const bundledTheme of bundledThemeDefinitions) {
+    const resolvedTheme = getBundledColorTheme(bundledTheme.id)
+
+    if (resolvedTheme) {
+      lookup[resolvedTheme.id] = resolvedTheme
+    }
+  }
 
   for (const theme of importedThemes) {
     lookup[theme.id] = resolvedImportedThemes[theme.id] ?? getFallbackThemeForImportedTheme(theme)

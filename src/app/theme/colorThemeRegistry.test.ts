@@ -1,13 +1,18 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 
 import {
   buildAvailableColorThemeOptions,
   buildResolvedThemeLookup,
   getBundledColorTheme,
   parseConfiguredColorThemeId,
+  resetBundledColorThemeCacheForTests,
 } from './colorThemeRegistry'
 
 describe('colorThemeRegistry', () => {
+  beforeEach(() => {
+    resetBundledColorThemeCacheForTests()
+  })
+
   it('includes bundled third-party themes in the unified theme options', () => {
     const options = buildAvailableColorThemeOptions([])
 
@@ -22,6 +27,12 @@ describe('colorThemeRegistry', () => {
         value: 'github-light',
         label: 'GitHub Light',
         author: 'GitHub',
+        source: 'bundled',
+      }),
+      expect.objectContaining({
+        value: 'one-dark-pro',
+        label: 'One Dark Pro',
+        author: 'Binaryify',
         source: 'bundled',
       }),
     ]))
@@ -58,5 +69,20 @@ describe('colorThemeRegistry', () => {
     }))
     expect(theme?.colors['editor.background']).toMatch(/^#.+/)
     expect(theme?.colors['terminal.foreground']).toMatch(/^#.+/)
+  })
+
+  it('prefers vendored upstream theme JSON for the first batch and caches resolved instances', () => {
+    const firstTheme = getBundledColorTheme('one-dark-pro')
+    const secondTheme = getBundledColorTheme('one-dark-pro')
+
+    expect(firstTheme).toBe(secondTheme)
+    expect(firstTheme).toEqual(expect.objectContaining({
+      id: 'one-dark-pro',
+      kind: 'dark',
+      source: 'bundled',
+    }))
+    expect(firstTheme?.colors['editor.background']).toBe('#282c34')
+    expect(firstTheme?.colors['button.background']).toBe('#404754')
+    expect(firstTheme?.tokenColors.length ?? 0).toBeGreaterThan(100)
   })
 })

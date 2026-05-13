@@ -61,6 +61,14 @@ const defaultColorThemeOptions: ColorThemeOption[] = [
     kind: 'dark',
     source: 'bundled',
   },
+  {
+    value: 'one-dark-pro',
+    label: 'One Dark Pro',
+    description: 'Balanced dark theme with familiar VS Code tones.',
+    author: 'Binaryify',
+    kind: 'dark',
+    source: 'bundled',
+  },
 ];
 
 const defaultThemePreviews: Record<string, ColorThemePreviewPalette> = {
@@ -111,6 +119,22 @@ const defaultThemePreviews: Record<string, ColorThemePreviewPalette> = {
     yellow: '#FAE8B6',
     red: '#FF62A5',
     orange: '#ffc85b',
+  },
+  'one-dark-pro': {
+    surface: '#21252b',
+    background: '#282c34',
+    input: '#1d1f23',
+    selection: '#67769660',
+    comment: '#5c6370',
+    foreground: '#abb2bf',
+    brightForeground: '#d7dae0',
+    pink: '#c678dd',
+    purple: '#c678dd',
+    cyan: '#56b6c2',
+    green: '#98c379',
+    yellow: '#e5c07b',
+    red: '#e06c75',
+    orange: '#d19a66',
   },
 };
 
