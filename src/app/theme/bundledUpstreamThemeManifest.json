@@ -1165,7 +1165,7 @@
     "extensionName": "hopscotch",
     "version": "0.8.2",
     "assetDirectory": "hopscotch",
-    "themePath": "themes/Hopscotch.json"
+    "themePath": "themes/hopscotch.json"
   },
   {
     "id": "hopscotch-mono",
