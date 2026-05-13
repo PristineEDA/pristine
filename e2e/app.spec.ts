@@ -4102,7 +4102,7 @@ test('bundled UI theme selection persists across app relaunch and updates Monaco
     isDark: true,
     expectedMonacoColors: {
       background: '#202330',
-      lineNumber: '#FFF0F5',
+      lineNumber: ['#FFF0F5', '#BBBEBF'],
     },
   });
 });
@@ -4433,6 +4433,51 @@ test('eleventh-batch vendored upstream Mayukai Midnight bundled UI theme selecti
     expectedMonacoColors: {
       background: '#141824',
       lineNumber: ['#707A8C66', '#707A8CCC', '#CBCCC6'],
+    },
+  });
+});
+
+test('final-batch vendored upstream Winter is Coming (Dark) bundled UI theme selection persists across app relaunch and updates Monaco and terminal styling', async () => {
+  test.slow();
+
+  await assertBundledThemeSelectionPersistsAcrossRelaunch({
+    searchText: 'winter is coming',
+    themeId: 'winter-is-coming-dark',
+    themeLabel: 'Winter is Coming (Dark)',
+    isDark: true,
+    expectedMonacoColors: {
+      background: '#282822',
+      lineNumber: ['#219FD5', '#A7DBF7', '#BBBEBF', '#D6DEEB'],
+    },
+  });
+});
+
+test('final-batch vendored upstream Alabaster bundled UI theme selection persists across app relaunch and updates Monaco and terminal styling', async () => {
+  test.slow();
+
+  await assertBundledThemeSelectionPersistsAcrossRelaunch({
+    searchText: 'alabaster',
+    themeId: 'alabaster',
+    themeLabel: 'Alabaster',
+    isDark: false,
+    expectedMonacoColors: {
+      background: '#F7F7F7',
+      lineNumber: ['#9DA39A', '#000000', '#202020', '#434343'],
+    },
+  });
+});
+
+test('final-batch vendored upstream Electron bundled UI theme selection persists across app relaunch and updates Monaco and terminal styling', async () => {
+  test.slow();
+
+  await assertBundledThemeSelectionPersistsAcrossRelaunch({
+    searchText: 'electron',
+    themeId: 'electron',
+    themeLabel: 'Electron',
+    isDark: true,
+    expectedMonacoColors: {
+      background: '#212836',
+      lineNumber: ['#3D4D67', '#818CA6', '#97A7C8'],
     },
   });
 });

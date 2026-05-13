@@ -201,6 +201,18 @@ describe('ThemeContext', () => {
     expectConfiguredThemeState('github-light-theme-gray', 'light');
   });
 
+  it('accepts final-batch vendored dark bundled theme ids from config and keeps the DOM in dark mode', () => {
+    renderWithConfiguredThemeId('winter-is-coming-dark');
+
+    expectConfiguredThemeState('winter-is-coming-dark', 'dark');
+  });
+
+  it('accepts final-batch vendored light bundled theme ids from config and keeps the DOM in light mode', () => {
+    renderWithConfiguredThemeId('alabaster');
+
+    expectConfiguredThemeState('alabaster', 'light');
+  });
+
   it('persists theme updates to the unified config keys and keeps the DOM class in sync', () => {
     render(
       <ThemeProvider>

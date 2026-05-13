@@ -67,7 +67,7 @@ describe('colorThemeRegistry', () => {
     }
 
     expect(theme.colors['editor.background']).toBe('#202330')
-    expect(theme.colors['button.background']).toBe('#A2C2EB')
+    expect(theme.colors['button.background']).toBe('#fe7c8ecc')
     expect(theme.colors['terminal.selectionBackground']).toMatch(/^#.+/)
   })
 
@@ -736,6 +736,73 @@ describe('colorThemeRegistry', () => {
     expect(mayukaiMidnightTheme?.colors['editor.background']).toBe('#141824')
     expect(mayukaiMidnightTheme?.colors['editorLineNumber.activeForeground']).toBe('#707a8ccc')
     expect(mayukaiMidnightTheme?.colors['terminal.background']).toBe('#1b1c24')
+  })
+
+  it('resolves the final-batch vendored upstream remaining bundled themes through the manifest', () => {
+    const firstElectronTheme = getBundledColorTheme('electron')
+    const secondElectronTheme = getBundledColorTheme('electron')
+
+    expect(firstElectronTheme).toBe(secondElectronTheme)
+
+    const batchThemeExpectations = [
+      { id: 'om-theme-default-dracula-italic', kind: 'dark' },
+      { id: 'pink-cat-boo', kind: 'dark' },
+      { id: 'naruto-dark', kind: 'dark' },
+      { id: 'alabaster', kind: 'light' },
+      { id: 'horizon', kind: 'dark' },
+      { id: 'horizon-bright', kind: 'light' },
+      { id: 'winter-is-coming-dark', kind: 'dark' },
+      { id: 'hackr-theme', kind: 'dark' },
+      { id: 'one-monokai', kind: 'dark' },
+      { id: 'snazzy-light', kind: 'light' },
+      { id: 'hack-the-box', kind: 'dark' },
+      { id: 'hack-the-box-lite', kind: 'dark' },
+      { id: 'jellyfish', kind: 'dark' },
+      { id: 'electron', kind: 'dark' },
+    ] as const
+
+    for (const { id, kind } of batchThemeExpectations) {
+      expect(getBundledColorTheme(id)).toEqual(expect.objectContaining({
+        id,
+        kind,
+        source: 'bundled',
+      }))
+    }
+
+    const omTheme = getBundledColorTheme('om-theme-default-dracula-italic')
+    expect(omTheme?.colors['activityBar.background']).toBe('#13141f')
+    expect(omTheme?.colors['editor.background']).toBe('#13141f')
+    expect(omTheme?.colors['editorLineNumber.foreground']).toBe('#6272A4')
+    expect(omTheme?.colors['terminal.background']).toBe('#13141f')
+
+    const alabasterTheme = getBundledColorTheme('alabaster')
+    expect(alabasterTheme?.colors['activityBar.background']).toBe('#F0F0F0')
+    expect(alabasterTheme?.colors['editor.background']).toBe('#F7F7F7')
+    expect(alabasterTheme?.colors['editorLineNumber.foreground']).toBe('#9DA39A')
+    expect(alabasterTheme?.colors['editor.findMatchBackground']).toBe('#FFBC5D')
+
+    const horizonBrightTheme = getBundledColorTheme('horizon-bright')
+    expect(horizonBrightTheme?.colors['activityBar.background']).toBe('#FDF0ED')
+    expect(horizonBrightTheme?.colors['editor.background']).toBe('#FDF0ED')
+    expect(horizonBrightTheme?.colors['editorLineNumber.foreground']).toBe('#06060C1A')
+    expect(horizonBrightTheme?.colors['editorLineNumber.activeForeground']).toBe('#06060C80')
+
+    const winterIsComingDarkTheme = getBundledColorTheme('winter-is-coming-dark')
+    expect(winterIsComingDarkTheme?.colors['activityBar.background']).toBe('#282822')
+    expect(winterIsComingDarkTheme?.colors['editor.background']).toBe('#282822')
+    expect(winterIsComingDarkTheme?.colors['editor.foreground']).toBe('#a7dbf7')
+    expect(winterIsComingDarkTheme?.colors['editorLineNumber.foreground']).toBe('#219fd5')
+
+    expect(firstElectronTheme).toEqual(expect.objectContaining({
+      id: 'electron',
+      kind: 'dark',
+      source: 'bundled',
+    }))
+    expect(firstElectronTheme?.colors['activityBar.background']).toBe('#141820')
+    expect(firstElectronTheme?.colors['editor.background']).toBe('#212836')
+    expect(firstElectronTheme?.colors['editorLineNumber.foreground']).toBe('#3D4D67')
+    expect(firstElectronTheme?.colors['editorLineNumber.activeForeground']).toBe('#818ca6')
+    expect(firstElectronTheme?.colors['terminal.background']).toBe('#1C212E')
   })
 
   it('prefers vendored upstream theme JSON for the first batch and caches resolved instances', () => {

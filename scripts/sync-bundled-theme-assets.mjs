@@ -1,5 +1,6 @@
+import { createHash } from 'node:crypto'
 import { createWriteStream } from 'node:fs'
-import { access, copyFile, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises'
+import { access, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { pipeline } from 'node:stream/promises'
@@ -11,6 +12,8 @@ const workspaceRoot = process.cwd()
 const manifestPath = path.join(workspaceRoot, 'src', 'app', 'theme', 'bundledUpstreamThemeManifest.json')
 const outputRoot = path.join(workspaceRoot, 'src', 'app', 'theme', 'bundled-upstream')
 const marketplaceQueryUrl = 'https://marketplace.visualstudio.com/_apis/public/gallery/extensionquery'
+const retryableStatusCodes = new Set([408, 429, 500, 502, 503, 504])
+const groupStampFileName = '.manifest-sha256'
 
 function normalizeRelativePath(filePath) {
   return path.posix.normalize(filePath.replace(/\\/g, '/')).replace(/^\.\//, '')
@@ -31,6 +34,14 @@ async function exists(filePath) {
   } catch {
     return false
   }
+}
+
+function wait(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds))
+}
+
+function hashText(text) {
+  return createHash('sha256').update(text).digest('hex')
 }
 
 function parseJsonc(filePath, text) {
@@ -58,12 +69,69 @@ async function loadManifest() {
   return parsed
 }
 
+async function fetchWithRetry(url, options, label) {
+  let lastError = null
+
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      const response = await fetch(url, options)
+
+      if (!retryableStatusCodes.has(response.status) || attempt === 3) {
+        return response
+      }
+
+      lastError = new Error(`${label} responded with ${response.status} ${response.statusText}`)
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error))
+
+      if (attempt === 3) {
+        throw lastError
+      }
+    }
+
+    await wait(attempt * 500)
+  }
+
+  throw lastError ?? new Error(`${label} fetch failed.`)
+}
+
+function getGroupStampPath(outputDirectory) {
+  return path.join(outputDirectory, groupStampFileName)
+}
+
+async function readGroupStamp(outputDirectory) {
+  const stampPath = getGroupStampPath(outputDirectory)
+
+  if (!(await exists(stampPath))) {
+    return null
+  }
+
+  return (await readFile(stampPath, 'utf8')).trim() || null
+}
+
+async function writeGroupStamp(outputDirectory, hash) {
+  await ensureDirectory(outputDirectory)
+  await writeFile(getGroupStampPath(outputDirectory), `${hash}\n`, 'utf8')
+}
+
+async function hasAllGroupThemeFiles(outputDirectory, extensionEntries) {
+  for (const entry of extensionEntries) {
+    const themeFilePath = path.join(outputDirectory, ...entry.themePath.split('/'))
+
+    if (!(await exists(themeFilePath))) {
+      return false
+    }
+  }
+
+  return true
+}
+
 async function downloadFile(url, targetPath, label) {
-  const response = await fetch(url, {
+  const response = await fetchWithRetry(url, {
     headers: {
       'User-Agent': 'Pristine bundled theme sync',
     },
-  })
+  }, label)
 
   if (!response.ok || !response.body) {
     throw new Error(`Failed to download ${label}: ${response.status} ${response.statusText}`)
@@ -74,7 +142,7 @@ async function downloadFile(url, targetPath, label) {
 }
 
 async function queryMarketplaceExtension({ publisher, extensionName }) {
-  const response = await fetch(marketplaceQueryUrl, {
+  const response = await fetchWithRetry(marketplaceQueryUrl, {
     method: 'POST',
     headers: {
       Accept: 'application/json;api-version=3.0-preview.1',
@@ -99,7 +167,7 @@ async function queryMarketplaceExtension({ publisher, extensionName }) {
       assetTypes: ['Microsoft.VisualStudio.Services.VSIXPackage'],
       flags: 103,
     }),
-  })
+  }, `${publisher}.${extensionName}`)
 
   if (!response.ok) {
     throw new Error(`Marketplace query failed for ${publisher}.${extensionName}: ${response.status} ${response.statusText}`)
@@ -191,8 +259,23 @@ async function syncExtensionAssets(extensionEntries, tempRoot) {
     return
   }
 
-  const extensionRoot = await extractVsixToTemp(firstEntry, tempRoot)
   const outputDirectory = path.join(outputRoot, firstEntry.assetDirectory)
+  const groupHash = hashText(JSON.stringify(extensionEntries))
+  const existingStamp = await readGroupStamp(outputDirectory)
+  const outputAlreadyPrepared = await hasAllGroupThemeFiles(outputDirectory, extensionEntries)
+
+  if (outputAlreadyPrepared && existingStamp === groupHash) {
+    console.log(`Reused ${firstEntry.assetDirectory}`)
+    return
+  }
+
+  if (outputAlreadyPrepared && existingStamp === null) {
+    await writeGroupStamp(outputDirectory, groupHash)
+    console.log(`Reused ${firstEntry.assetDirectory} (initialized stamp)`)
+    return
+  }
+
+  const extensionRoot = await extractVsixToTemp(firstEntry, tempRoot)
   const collectedPaths = new Set()
 
   for (const entry of extensionEntries) {
@@ -207,6 +290,8 @@ async function syncExtensionAssets(extensionEntries, tempRoot) {
     await ensureDirectory(path.dirname(targetPath))
     await copyFile(sourcePath, targetPath)
   }
+
+  await writeGroupStamp(outputDirectory, groupHash)
 
   console.log(`Synced ${firstEntry.assetDirectory} (${collectedPaths.size} files)`)
 }

@@ -64,6 +64,23 @@ describe('monacoColorTheme', () => {
     ])
   })
 
+  it('normalizes short hex UI colors before defining a Monaco theme', () => {
+    const theme = createTheme('imported-day')
+
+    theme.kind = 'light'
+    theme.colors = {
+      'editor.background': '#f7f7f7',
+      'editor.foreground': '#000',
+      'statusBar.foreground': '#fff',
+    }
+
+    expect(createMonacoThemeDefinition(theme).colors).toEqual({
+      'editor.background': '#f7f7f7',
+      'editor.foreground': '#000000',
+      'statusBar.foreground': '#ffffff',
+    })
+  })
+
   it('defines the same resolved theme only once for a Monaco instance', () => {
     const monaco = createMonacoMock()
     const theme = createTheme()

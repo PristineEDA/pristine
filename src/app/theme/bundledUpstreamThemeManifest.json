@@ -1222,5 +1222,117 @@
     "version": "3.2.5",
     "assetDirectory": "mayukaithemevsc",
     "themePath": "themes/Mayukai-midnight.json"
+  },
+  {
+    "id": "om-theme-default-dracula-italic",
+    "publisher": "omthemes",
+    "extensionName": "omthemes",
+    "version": "1.0.17",
+    "assetDirectory": "omthemes",
+    "themePath": "theme/omtheme.json"
+  },
+  {
+    "id": "pink-cat-boo",
+    "publisher": "ftsamoyed",
+    "extensionName": "theme-pink-cat-boo",
+    "version": "1.3.0",
+    "assetDirectory": "theme-pink-cat-boo",
+    "themePath": "themes/pink-cat-boo.json"
+  },
+  {
+    "id": "naruto-dark",
+    "publisher": "Thomaz",
+    "extensionName": "preparing",
+    "version": "1.7.0",
+    "assetDirectory": "preparing",
+    "themePath": "themes/Narutovisk-color-theme.json"
+  },
+  {
+    "id": "alabaster",
+    "publisher": "tonsky",
+    "extensionName": "theme-alabaster",
+    "version": "0.2.9",
+    "assetDirectory": "theme-alabaster",
+    "themePath": "theme/alabaster-color-theme.json"
+  },
+  {
+    "id": "horizon",
+    "publisher": "jolaleye",
+    "extensionName": "horizon-theme-vscode",
+    "version": "2.0.2",
+    "assetDirectory": "horizon-theme-vscode",
+    "themePath": "themes/horizon.json"
+  },
+  {
+    "id": "horizon-bright",
+    "publisher": "jolaleye",
+    "extensionName": "horizon-theme-vscode",
+    "version": "2.0.2",
+    "assetDirectory": "horizon-theme-vscode",
+    "themePath": "themes/horizon-bright.json"
+  },
+  {
+    "id": "winter-is-coming-dark",
+    "publisher": "johnpapa",
+    "extensionName": "winteriscoming",
+    "version": "1.4.4",
+    "assetDirectory": "winteriscoming",
+    "themePath": "themes/WinterIsComing-dark-color-theme.json"
+  },
+  {
+    "id": "hackr-theme",
+    "publisher": "Hackrio",
+    "extensionName": "hackr-theme",
+    "version": "1.0.3",
+    "assetDirectory": "hackr-theme",
+    "themePath": "themes/Hackr Theme-color-theme.json"
+  },
+  {
+    "id": "one-monokai",
+    "publisher": "azemoh",
+    "extensionName": "one-monokai",
+    "version": "0.5.2",
+    "assetDirectory": "one-monokai",
+    "themePath": "themes/OneMonokai-color-theme.json"
+  },
+  {
+    "id": "snazzy-light",
+    "publisher": "loilo",
+    "extensionName": "snazzy-light",
+    "version": "1.4.1",
+    "assetDirectory": "snazzy-light",
+    "themePath": "themes/Snazzy-Light-color-theme.json"
+  },
+  {
+    "id": "hack-the-box",
+    "publisher": "silofy",
+    "extensionName": "hackthebox",
+    "version": "0.2.9",
+    "assetDirectory": "hackthebox",
+    "themePath": "themes/HackTheBox.json"
+  },
+  {
+    "id": "hack-the-box-lite",
+    "publisher": "silofy",
+    "extensionName": "hackthebox",
+    "version": "0.2.9",
+    "assetDirectory": "hackthebox",
+    "themePath": "themes/HackTheBox-Lite.json"
+  },
+  {
+    "id": "jellyfish",
+    "publisher": "PawelBorkar",
+    "extensionName": "jellyfish",
+    "version": "0.0.4",
+    "assetDirectory": "jellyfish",
+    "themePath": "themes/JellyFish Theme-color-theme.json"
+  },
+  {
+    "id": "electron",
+    "publisher": "kuscamara",
+    "extensionName": "electron",
+    "version": "0.2.6",
+    "assetDirectory": "electron",
+    "themePath": "themes/electron-color-theme.json"
   }
 ]

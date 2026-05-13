@@ -634,6 +634,40 @@ describe('MenuBar settings', () => {
     });
   }, SETTINGS_PICKER_TEST_TIMEOUT_MS);
 
+  it('shows final-batch vendored upstream dark bundled UI themes in the advanced picker and applies them through the shared theme setting', async () => {
+    const user = userEvent.setup();
+
+    mockPersistedSettingsConfig({
+      colorTheme: 'vscode-2026-dark',
+    });
+
+    renderMenuBar();
+
+    await applyBundledThemeFromAdvancedPicker(user, {
+      searchText: 'winter is coming',
+      themeId: 'winter-is-coming-dark',
+      label: 'Winter is Coming (Dark)',
+      author: 'John Papa',
+    });
+  }, SETTINGS_PICKER_TEST_TIMEOUT_MS);
+
+  it('shows final-batch vendored upstream light bundled UI themes in the advanced picker and applies them through the shared theme setting', async () => {
+    const user = userEvent.setup();
+
+    mockPersistedSettingsConfig({
+      colorTheme: 'vscode-2026-dark',
+    });
+
+    renderMenuBar();
+
+    await applyBundledThemeFromAdvancedPicker(user, {
+      searchText: 'alabaster',
+      themeId: 'alabaster',
+      label: 'Alabaster',
+      author: 'Nikita Prokopov',
+    });
+  }, SETTINGS_PICKER_TEST_TIMEOUT_MS);
+
   it('imports a local UI theme from settings and selects it immediately', async () => {
     const user = userEvent.setup();
 
