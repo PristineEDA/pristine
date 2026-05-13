@@ -150,6 +150,49 @@ describe('colorThemeRegistry', () => {
     expect(ayuLightTheme?.colors['editor.background']).not.toBe(ayuLightBorderedTheme?.colors['editor.background'])
   })
 
+  it('resolves fourth-batch vendored upstream bundled themes across single-theme and family manifests', () => {
+    const firstNightOwlTheme = getBundledColorTheme('night-owl')
+    const secondNightOwlTheme = getBundledColorTheme('night-owl')
+    const draculaAtNightTheme = getBundledColorTheme('dracula-at-night')
+    const noctisLuxTheme = getBundledColorTheme('noctis-lux')
+    const rainglowPeacockTheme = getBundledColorTheme('rainglow-peacock')
+
+    expect(firstNightOwlTheme).toBe(secondNightOwlTheme)
+    expect(firstNightOwlTheme).toEqual(expect.objectContaining({
+      id: 'night-owl',
+      kind: 'dark',
+      source: 'bundled',
+    }))
+    expect(firstNightOwlTheme?.colors['editor.background']).toBe('#011627')
+    expect(firstNightOwlTheme?.colors['editorLineNumber.activeForeground']).toBe('#C5E4FD')
+
+    expect(draculaAtNightTheme).toEqual(expect.objectContaining({
+      id: 'dracula-at-night',
+      kind: 'dark',
+      source: 'bundled',
+    }))
+    expect(draculaAtNightTheme?.colors['editor.background']).toBe('#0E1419')
+    expect(draculaAtNightTheme?.colors['terminal.background']).toBe('#0E1419')
+
+    expect(noctisLuxTheme).toEqual(expect.objectContaining({
+      id: 'noctis-lux',
+      kind: 'light',
+      source: 'bundled',
+    }))
+    expect(noctisLuxTheme?.colors['editor.background']).toBe('#fef8ec')
+    expect(noctisLuxTheme?.colors['editorLineNumber.activeForeground']).toBe('#0099ad')
+    expect(noctisLuxTheme?.colors['terminal.background']).toBe('#f6edda')
+
+    expect(rainglowPeacockTheme).toEqual(expect.objectContaining({
+      id: 'rainglow-peacock',
+      kind: 'dark',
+      source: 'bundled',
+    }))
+    expect(rainglowPeacockTheme?.colors['editor.background']).toBe('#2b2a27')
+    expect(rainglowPeacockTheme?.colors['editorLineNumber.foreground']).toBe('#605e57')
+    expect(rainglowPeacockTheme?.colors['terminal.background']).toBe('#1e1d1b')
+  })
+
   it('prefers vendored upstream theme JSON for the first batch and caches resolved instances', () => {
     const firstTheme = getBundledColorTheme('one-dark-pro')
     const secondTheme = getBundledColorTheme('one-dark-pro')

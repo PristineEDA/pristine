@@ -681,7 +681,7 @@ async function readTerminalThemeSnapshot(window: Awaited<ReturnType<typeof launc
 
 async function readMonacoAppearanceSnapshot(
   window: Awaited<ReturnType<typeof launchApp>>['window'],
-  expectedColors?: { background?: string; lineNumber?: string },
+  expectedColors?: { background?: string; lineNumber?: string | string[] },
 ) {
   return window.evaluate(({ background, lineNumber }) => {
     type StyleLike = {
@@ -726,6 +726,11 @@ async function readMonacoAppearanceSnapshot(
 
       return normalizedColor;
     };
+    const lineNumberValues = Array.isArray(lineNumber)
+      ? lineNumber
+      : lineNumber
+        ? [lineNumber]
+        : [];
 
     const backgroundElement =
       editorRoot.querySelector('.monaco-editor-background') ??
@@ -744,7 +749,9 @@ async function readMonacoAppearanceSnapshot(
     return {
       backgroundColor: browserGlobal.getComputedStyle(backgroundElement).backgroundColor,
       expectedBackgroundColor: resolveCssColor('backgroundColor', background),
-      expectedLineNumberColor: resolveCssColor('color', lineNumber),
+      expectedLineNumberColors: lineNumberValues
+        .map((value) => resolveCssColor('color', value))
+        .filter((value): value is string => Boolean(value)),
       fontFamily: browserGlobal.getComputedStyle(textLayer).fontFamily,
       fontSize: browserGlobal.getComputedStyle(textLayer).fontSize,
       lineNumberColor: lineNumberElement ? browserGlobal.getComputedStyle(lineNumberElement).color : null,
@@ -3960,7 +3967,7 @@ async function readBundledThemeSnapshot(page: Awaited<ReturnType<typeof launchAp
 
 async function expectBundledMonacoTheme(
   page: Awaited<ReturnType<typeof launchApp>>['window'],
-  expectedColors: { background: string; lineNumber: string },
+  expectedColors: { background: string; lineNumber: string | string[] },
 ) {
   await expect.poll(async () => {
     const snapshot = await readMonacoAppearanceSnapshot(page, expectedColors);
@@ -3971,7 +3978,8 @@ async function expectBundledMonacoTheme(
 
     if (
       snapshot.backgroundColor === snapshot.expectedBackgroundColor
-      && snapshot.lineNumberColor === snapshot.expectedLineNumberColor
+      && snapshot.lineNumberColor !== null
+      && snapshot.expectedLineNumberColors.includes(snapshot.lineNumberColor)
     ) {
       return null;
     }
@@ -3980,7 +3988,7 @@ async function expectBundledMonacoTheme(
       backgroundColor: snapshot.backgroundColor,
       expectedBackgroundColor: snapshot.expectedBackgroundColor,
       lineNumberColor: snapshot.lineNumberColor,
-      expectedLineNumberColor: snapshot.expectedLineNumberColor,
+      expectedLineNumberColors: snapshot.expectedLineNumberColors,
     };
   }).toEqual(null);
 }
@@ -4005,7 +4013,7 @@ async function expectBundledTerminalTheme(page: Awaited<ReturnType<typeof launch
 
 async function openFileAndAssertBundledTheme(
   page: Awaited<ReturnType<typeof launchApp>>['window'],
-  expectedMonacoColors: { background: string; lineNumber: string },
+  expectedMonacoColors: { background: string; lineNumber: string | string[] },
 ) {
   await ensureExplorerVisible(page);
   await openNestedWorkspaceFile(page, [
@@ -4039,7 +4047,7 @@ async function assertBundledThemeSelectionPersistsAcrossRelaunch({
   themeId: string;
   themeLabel: string;
   isDark: boolean;
-  expectedMonacoColors: { background: string; lineNumber: string };
+  expectedMonacoColors: { background: string; lineNumber: string | string[] };
 }) {
   const firstLaunch = await launchApp();
   const { app: firstApp, window: firstWindow } = firstLaunch;
@@ -4170,6 +4178,36 @@ test('third-batch vendored upstream dark bundled UI theme selection persists acr
     expectedMonacoColors: {
       background: '#282828',
       lineNumber: '#BBBEBF',
+    },
+  });
+});
+
+test('fourth-batch vendored upstream dark bundled UI theme selection persists across app relaunch and updates Monaco and terminal styling', async () => {
+  test.slow();
+
+  await assertBundledThemeSelectionPersistsAcrossRelaunch({
+    searchText: 'night owl',
+    themeId: 'night-owl',
+    themeLabel: 'Night Owl',
+    isDark: true,
+    expectedMonacoColors: {
+      background: '#011627',
+      lineNumber: ['#d6deeb', '#C5E4FD'],
+    },
+  });
+});
+
+test('fourth-batch vendored upstream light bundled UI theme selection persists across app relaunch and updates Monaco and terminal styling', async () => {
+  test.slow();
+
+  await assertBundledThemeSelectionPersistsAcrossRelaunch({
+    searchText: 'noctis lux',
+    themeId: 'noctis-lux',
+    themeLabel: 'Noctis Lux',
+    isDark: false,
+    expectedMonacoColors: {
+      background: '#fef8ec',
+      lineNumber: ['#005661', '#0099ad'],
     },
   });
 });

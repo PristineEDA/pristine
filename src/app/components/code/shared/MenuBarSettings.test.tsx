@@ -444,6 +444,40 @@ describe('MenuBar settings', () => {
     expect(setThemeMock).toHaveBeenCalledWith('gruvbox-dark-medium');
   });
 
+  it('shows fourth-batch vendored upstream light bundled UI themes in the advanced picker and applies them through the shared theme setting', async () => {
+    const user = userEvent.setup();
+
+    mockPersistedSettingsConfig({
+      colorTheme: 'vscode-2026-dark',
+    });
+
+    renderMenuBar();
+
+    await user.click(screen.getByTestId('menu-settings-button'));
+    expect(await screen.findByTestId('settings-dialog')).toBeVisible();
+
+    await user.click(screen.getByTestId('settings-theme-advanced-button'));
+    expect(await screen.findByTestId('settings-theme-advanced-dialog')).toBeVisible();
+
+    const searchInput = screen.getByTestId('settings-theme-advanced-search-input');
+    await user.clear(searchInput);
+    await user.type(searchInput, 'noctis lux');
+
+    expect(screen.getByTestId('settings-theme-preview-card-noctis-lux')).toHaveAttribute('data-state', 'unselected');
+    expect(screen.getByTestId('settings-theme-preview-label-noctis-lux')).toHaveTextContent('Noctis Lux');
+    expect(screen.getByTestId('settings-theme-preview-author-noctis-lux')).toHaveTextContent('Liviu Schera');
+    expect(screen.getByTestId('settings-theme-preview-line-module-noctis-lux')).toHaveTextContent('module alu(clk)');
+
+    await user.click(screen.getByTestId('settings-theme-preview-card-noctis-lux'));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('settings-theme-advanced-dialog')).not.toBeInTheDocument();
+    });
+
+    expect(screen.getByTestId('settings-theme-combobox')).toHaveTextContent('Noctis Lux');
+    expect(setThemeMock).toHaveBeenCalledWith('noctis-lux');
+  });
+
   it('imports a local UI theme from settings and selects it immediately', async () => {
     const user = userEvent.setup();
 

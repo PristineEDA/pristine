@@ -254,5 +254,157 @@
     "version": "1.1.12",
     "assetDirectory": "ayu",
     "themePath": "ayu-dark.json"
-  }
+    },
+    {
+      "id": "night-owl",
+      "publisher": "sdras",
+      "extensionName": "night-owl",
+      "version": "2.1.1",
+      "assetDirectory": "night-owl",
+      "themePath": "themes/Night Owl-color-theme.json"
+    },
+    {
+      "id": "dracula-at-night",
+      "publisher": "bceskavich",
+      "extensionName": "theme-dracula-at-night",
+      "version": "2.7.1",
+      "assetDirectory": "theme-dracula-at-night",
+      "themePath": "theme/dracula-at-night.json"
+    },
+    {
+      "id": "noctis",
+      "publisher": "liviuschera",
+      "extensionName": "noctis",
+      "version": "10.43.3",
+      "assetDirectory": "noctis",
+      "themePath": "themes/noctis.json"
+    },
+    {
+      "id": "noctis-azureus",
+      "publisher": "liviuschera",
+      "extensionName": "noctis",
+      "version": "10.43.3",
+      "assetDirectory": "noctis",
+      "themePath": "themes/azureus.json"
+    },
+    {
+      "id": "noctis-bordo",
+      "publisher": "liviuschera",
+      "extensionName": "noctis",
+      "version": "10.43.3",
+      "assetDirectory": "noctis",
+      "themePath": "themes/bordo.json"
+    },
+    {
+      "id": "noctis-obscuro",
+      "publisher": "liviuschera",
+      "extensionName": "noctis",
+      "version": "10.43.3",
+      "assetDirectory": "noctis",
+      "themePath": "themes/obscuro.json"
+    },
+    {
+      "id": "noctis-sereno",
+      "publisher": "liviuschera",
+      "extensionName": "noctis",
+      "version": "10.43.3",
+      "assetDirectory": "noctis",
+      "themePath": "themes/sereno.json"
+    },
+    {
+      "id": "noctis-uva",
+      "publisher": "liviuschera",
+      "extensionName": "noctis",
+      "version": "10.43.3",
+      "assetDirectory": "noctis",
+      "themePath": "themes/uva.json"
+    },
+    {
+      "id": "noctis-minimus",
+      "publisher": "liviuschera",
+      "extensionName": "noctis",
+      "version": "10.43.3",
+      "assetDirectory": "noctis",
+      "themePath": "themes/minimus.json"
+    },
+    {
+      "id": "noctis-lux",
+      "publisher": "liviuschera",
+      "extensionName": "noctis",
+      "version": "10.43.3",
+      "assetDirectory": "noctis",
+      "themePath": "themes/lux.json"
+    },
+    {
+      "id": "noctis-hibernus",
+      "publisher": "liviuschera",
+      "extensionName": "noctis",
+      "version": "10.43.3",
+      "assetDirectory": "noctis",
+      "themePath": "themes/hibernus.json"
+    },
+    {
+      "id": "noctis-lilac",
+      "publisher": "liviuschera",
+      "extensionName": "noctis",
+      "version": "10.43.3",
+      "assetDirectory": "noctis",
+      "themePath": "themes/lilac.json"
+    },
+    {
+      "id": "rainglow-allure",
+      "publisher": "daylerees",
+      "extensionName": "rainglow",
+      "version": "1.5.2",
+      "assetDirectory": "rainglow",
+      "themePath": "themes/allure.json"
+    },
+    {
+      "id": "rainglow-allure-light",
+      "publisher": "daylerees",
+      "extensionName": "rainglow",
+      "version": "1.5.2",
+      "assetDirectory": "rainglow",
+      "themePath": "themes/allure-light.json"
+    },
+    {
+      "id": "rainglow-arstotzka",
+      "publisher": "daylerees",
+      "extensionName": "rainglow",
+      "version": "1.5.2",
+      "assetDirectory": "rainglow",
+      "themePath": "themes/arstotzka.json"
+    },
+    {
+      "id": "rainglow-arstotzka-contrast",
+      "publisher": "daylerees",
+      "extensionName": "rainglow",
+      "version": "1.5.2",
+      "assetDirectory": "rainglow",
+      "themePath": "themes/arstotzka-contrast.json"
+    },
+    {
+      "id": "rainglow-arstotzka-light",
+      "publisher": "daylerees",
+      "extensionName": "rainglow",
+      "version": "1.5.2",
+      "assetDirectory": "rainglow",
+      "themePath": "themes/arstotzka-light.json"
+    },
+    {
+      "id": "rainglow-peacock",
+      "publisher": "daylerees",
+      "extensionName": "rainglow",
+      "version": "1.5.2",
+      "assetDirectory": "rainglow",
+      "themePath": "themes/peacock.json"
+    },
+    {
+      "id": "rainglow-peacock-light",
+      "publisher": "daylerees",
+      "extensionName": "rainglow",
+      "version": "1.5.2",
+      "assetDirectory": "rainglow",
+      "themePath": "themes/peacock-light.json"
+    }
 ]
