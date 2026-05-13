@@ -498,6 +498,40 @@ describe('MenuBar settings', () => {
     });
   }, SETTINGS_PICKER_TEST_TIMEOUT_MS);
 
+  it('shows eighth-batch official vendored upstream dark bundled UI themes in the advanced picker and applies them through the shared theme setting', async () => {
+    const user = userEvent.setup();
+
+    mockPersistedSettingsConfig({
+      colorTheme: 'vscode-2026-dark',
+    });
+
+    renderMenuBar();
+
+    await applyBundledThemeFromAdvancedPicker(user, {
+      searchText: 'copilot theme - higher contrast',
+      themeId: 'copilot-theme-higher-contrast',
+      label: 'Copilot Theme - Higher Contrast',
+      author: 'Benjamin Benais',
+    });
+  }, SETTINGS_PICKER_TEST_TIMEOUT_MS);
+
+  it('shows eighth-batch official vendored upstream light bundled UI themes in the advanced picker and applies them through the shared theme setting', async () => {
+    const user = userEvent.setup();
+
+    mockPersistedSettingsConfig({
+      colorTheme: 'vscode-2026-dark',
+    });
+
+    renderMenuBar();
+
+    await applyBundledThemeFromAdvancedPicker(user, {
+      searchText: 'light (visual studio',
+      themeId: 'visual-studio-light-cpp',
+      label: 'Light (Visual Studio - C/C++)',
+      author: 'Microsoft',
+    });
+  }, SETTINGS_PICKER_TEST_TIMEOUT_MS);
+
   it('imports a local UI theme from settings and selects it immediately', async () => {
     const user = userEvent.setup();
 

@@ -153,6 +153,18 @@ describe('ThemeContext', () => {
     expectConfiguredThemeState('github-light-high-contrast', 'light');
   });
 
+  it('accepts eighth-batch official vendored dark bundled theme ids from config and keeps the DOM in dark mode', () => {
+    renderWithConfiguredThemeId('copilot-theme-higher-contrast');
+
+    expectConfiguredThemeState('copilot-theme-higher-contrast', 'dark');
+  });
+
+  it('accepts eighth-batch official vendored light bundled theme ids from config and keeps the DOM in light mode', () => {
+    renderWithConfiguredThemeId('visual-studio-light-cpp');
+
+    expectConfiguredThemeState('visual-studio-light-cpp', 'light');
+  });
+
   it('persists theme updates to the unified config keys and keeps the DOM class in sync', () => {
     render(
       <ThemeProvider>

@@ -4302,6 +4302,36 @@ test('seventh-batch vendored upstream GitHub light accessibility bundled UI them
   });
 });
 
+test('eighth-batch official vendored upstream Copilot dark bundled UI theme selection persists across app relaunch and updates Monaco and terminal styling', async () => {
+  test.slow();
+
+  await assertBundledThemeSelectionPersistsAcrossRelaunch({
+    searchText: 'copilot theme - higher contrast',
+    themeId: 'copilot-theme-higher-contrast',
+    themeLabel: 'Copilot Theme - Higher Contrast',
+    isDark: true,
+    expectedMonacoColors: {
+      background: '#232a2f',
+      lineNumber: ['#707a84', '#d4dce4', '#a8b2ba'],
+    },
+  });
+});
+
+test('eighth-batch official vendored upstream Visual Studio light bundled UI theme selection persists across app relaunch and updates Monaco and terminal styling', async () => {
+  test.slow();
+
+  await assertBundledThemeSelectionPersistsAcrossRelaunch({
+    searchText: 'light (visual studio',
+    themeId: 'visual-studio-light-cpp',
+    themeLabel: 'Light (Visual Studio - C/C++)',
+    isDark: false,
+    expectedMonacoColors: {
+      background: '#FFFFFF',
+      lineNumber: ['#2b91af', '#000000'],
+    },
+  });
+});
+
 test('code editor settings persist across app relaunch', async () => {
   test.slow();
 

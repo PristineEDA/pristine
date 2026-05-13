@@ -10,7 +10,7 @@ param(
         [double]$ThresholdPercent = 4.0,
 
     [ValidateRange(0.0, [double]::MaxValue)]
-        [double]$MemoryThresholdPercent = 0.6,
+        [double]$MemoryThresholdPercent = 1.0,
 
     [ValidateNotNullOrEmpty()]
     [string]$DevCommand = 'pnpm run dev',

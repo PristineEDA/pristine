@@ -646,5 +646,85 @@
     "version": "2.25.1",
     "assetDirectory": "theme-dracula",
     "themePath": "theme/dracula-soft.json"
+  },
+  {
+    "id": "copilot-theme",
+    "publisher": "benjaminbenais",
+    "extensionName": "copilot-theme",
+    "version": "1.1.0",
+    "assetDirectory": "copilot-theme",
+    "themePath": "themes/Copilot Theme-color-theme.json"
+  },
+  {
+    "id": "visual-studio-dark-cpp",
+    "publisher": "ms-vscode",
+    "extensionName": "cpptools-themes",
+    "version": "2.0.0",
+    "assetDirectory": "cpptools-themes",
+    "themePath": "themes/cpptools_dark_vs_new.json"
+  },
+  {
+    "id": "visual-studio-2017-light-cpp",
+    "publisher": "ms-vscode",
+    "extensionName": "cpptools-themes",
+    "version": "2.0.0",
+    "assetDirectory": "cpptools-themes",
+    "themePath": "themes/cpptools_light_vs.json"
+  },
+  {
+    "id": "powershell-ise",
+    "publisher": "ms-vscode",
+    "extensionName": "powershell",
+    "version": "2026.1.0",
+    "assetDirectory": "powershell",
+    "themePath": "themes/theme-psise/theme.json"
+  },
+  {
+    "id": "visual-studio-2017-dark-cpp",
+    "publisher": "ms-vscode",
+    "extensionName": "cpptools-themes",
+    "version": "2.0.0",
+    "assetDirectory": "cpptools-themes",
+    "themePath": "themes/cpptools_dark_vs.json"
+  },
+  {
+    "id": "dark-plus-syntax",
+    "publisher": "dunstontc",
+    "extensionName": "dark-plus-syntax",
+    "version": "0.2.11",
+    "assetDirectory": "dark-plus-syntax",
+    "themePath": "dist/theme/dark-plus-syntax-color-theme.json"
+  },
+  {
+    "id": "light-plus-syntax",
+    "publisher": "dunstontc",
+    "extensionName": "dark-plus-syntax",
+    "version": "0.2.11",
+    "assetDirectory": "dark-plus-syntax",
+    "themePath": "dist/theme/light-plus-syntax-color-theme.json"
+  },
+  {
+    "id": "light-plus-syntax-high-contrast",
+    "publisher": "dunstontc",
+    "extensionName": "dark-plus-syntax",
+    "version": "0.2.11",
+    "assetDirectory": "dark-plus-syntax",
+    "themePath": "dist/theme/light-plus-syntax-high-contrast-color-theme.json"
+  },
+  {
+    "id": "visual-studio-light-cpp",
+    "publisher": "ms-vscode",
+    "extensionName": "cpptools-themes",
+    "version": "2.0.0",
+    "assetDirectory": "cpptools-themes",
+    "themePath": "themes/cpptools_light_vs_new.json"
+  },
+  {
+    "id": "copilot-theme-higher-contrast",
+    "publisher": "benjaminbenais",
+    "extensionName": "copilot-theme",
+    "version": "1.1.0",
+    "assetDirectory": "copilot-theme",
+    "themePath": "themes/Copilot Theme-color-theme-higher-contrast.json"
   }
 ]

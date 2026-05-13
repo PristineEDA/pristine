@@ -319,6 +319,121 @@ describe('colorThemeRegistry', () => {
     expect(draculaSoftTheme?.colors['terminal.background']).toBe('#282A36')
   })
 
+  it('resolves eighth-batch official vendored upstream themes across Copilot, C/C++ Themes, PowerShell, and Dark+ Syntax families', () => {
+    const firstCopilotHigherContrastTheme = getBundledColorTheme('copilot-theme-higher-contrast')
+    const secondCopilotHigherContrastTheme = getBundledColorTheme('copilot-theme-higher-contrast')
+    const copilotTheme = getBundledColorTheme('copilot-theme')
+    const visualStudioDarkTheme = getBundledColorTheme('visual-studio-dark-cpp')
+    const visualStudio2017LightTheme = getBundledColorTheme('visual-studio-2017-light-cpp')
+    const visualStudio2017DarkTheme = getBundledColorTheme('visual-studio-2017-dark-cpp')
+    const visualStudioLightTheme = getBundledColorTheme('visual-studio-light-cpp')
+    const powershellIseTheme = getBundledColorTheme('powershell-ise')
+    const darkPlusSyntaxTheme = getBundledColorTheme('dark-plus-syntax')
+    const lightPlusSyntaxTheme = getBundledColorTheme('light-plus-syntax')
+    const lightPlusSyntaxHighContrastTheme = getBundledColorTheme('light-plus-syntax-high-contrast')
+
+    expect(firstCopilotHigherContrastTheme).toBe(secondCopilotHigherContrastTheme)
+
+    expect(copilotTheme).toEqual(expect.objectContaining({
+      id: 'copilot-theme',
+      kind: 'dark',
+      source: 'bundled',
+    }))
+    expect(copilotTheme?.colors['editor.background']).toBe('#232a2f')
+    expect(copilotTheme?.colors['editorLineNumber.foreground']).toBe('#707a84')
+    expect(copilotTheme?.tokenColors).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        settings: expect.objectContaining({
+          foreground: '#939da5',
+        }),
+      }),
+    ]))
+
+    expect(firstCopilotHigherContrastTheme).toEqual(expect.objectContaining({
+      id: 'copilot-theme-higher-contrast',
+      kind: 'dark',
+      source: 'bundled',
+    }))
+    expect(firstCopilotHigherContrastTheme?.colors['editor.background']).toBe('#232a2f')
+    expect(firstCopilotHigherContrastTheme?.colors['editorLineNumber.activeForeground']).toBe('#d4dce4')
+    expect(firstCopilotHigherContrastTheme?.tokenColors).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        settings: expect.objectContaining({
+          foreground: '#a8b2ba',
+        }),
+      }),
+    ]))
+
+    expect(visualStudioDarkTheme).toEqual(expect.objectContaining({
+      id: 'visual-studio-dark-cpp',
+      kind: 'dark',
+      source: 'bundled',
+    }))
+    expect(visualStudioDarkTheme?.colors['editor.background']).toBe('#1E1E1E')
+    expect(visualStudioDarkTheme?.colors['editor.foreground']).toBe('#DADADA')
+    expect(visualStudioDarkTheme?.colors['editorLineNumber.foreground']).toBe('#2b91af')
+
+    expect(visualStudio2017LightTheme).toEqual(expect.objectContaining({
+      id: 'visual-studio-2017-light-cpp',
+      kind: 'light',
+      source: 'bundled',
+    }))
+    expect(visualStudio2017LightTheme?.colors['editor.background']).toBe('#FFFFFF')
+    expect(visualStudio2017LightTheme?.colors['editorWhitespace.foreground']).toBe('#2B91AF')
+
+    expect(visualStudio2017DarkTheme).toEqual(expect.objectContaining({
+      id: 'visual-studio-2017-dark-cpp',
+      kind: 'dark',
+      source: 'bundled',
+    }))
+    expect(visualStudio2017DarkTheme?.colors['editor.foreground']).toBe('#D4D4D4')
+    expect(visualStudio2017DarkTheme?.colors['editorWhitespace.foreground']).toBe('#204852')
+
+    expect(visualStudioLightTheme).toEqual(expect.objectContaining({
+      id: 'visual-studio-light-cpp',
+      kind: 'light',
+      source: 'bundled',
+    }))
+    expect(visualStudioLightTheme?.colors['editor.background']).toBe('#FFFFFF')
+    expect(visualStudioLightTheme?.colors['editorLineNumber.foreground']).toBe('#2b91af')
+
+    expect(powershellIseTheme).toEqual(expect.objectContaining({
+      id: 'powershell-ise',
+      kind: 'light',
+      source: 'bundled',
+    }))
+    expect(powershellIseTheme?.colors['activityBar.background']).toBe('#E1ECF9')
+    expect(powershellIseTheme?.colors['terminal.background']).toBe('#012456')
+    expect(powershellIseTheme?.colors['terminal.foreground']).toBe('#F5F5F5')
+
+    expect(darkPlusSyntaxTheme).toEqual(expect.objectContaining({
+      id: 'dark-plus-syntax',
+      kind: 'dark',
+      source: 'bundled',
+    }))
+    expect(darkPlusSyntaxTheme?.colors['editor.background']).toBe('#1e1e1e')
+    expect(darkPlusSyntaxTheme?.colors['editorLineNumber.activeForeground']).toBe('#608b4e')
+    expect(darkPlusSyntaxTheme?.colors['terminal.background']).toBe('#1e1e1e')
+
+    expect(lightPlusSyntaxTheme).toEqual(expect.objectContaining({
+      id: 'light-plus-syntax',
+      kind: 'light',
+      source: 'bundled',
+    }))
+    expect(lightPlusSyntaxTheme?.colors['editor.background']).toBe('#d4d4d4')
+    expect(lightPlusSyntaxTheme?.colors['editorLineNumber.activeForeground']).toBe('#008000')
+    expect(lightPlusSyntaxTheme?.colors['terminal.background']).toBe('#d4d4d4')
+
+    expect(lightPlusSyntaxHighContrastTheme).toEqual(expect.objectContaining({
+      id: 'light-plus-syntax-high-contrast',
+      kind: 'light',
+      source: 'bundled',
+    }))
+    expect(lightPlusSyntaxHighContrastTheme?.colors['editor.background']).toBe('#ffffff')
+    expect(lightPlusSyntaxHighContrastTheme?.colors['editorLineNumber.activeForeground']).toBe('#008000')
+    expect(lightPlusSyntaxHighContrastTheme?.colors['terminal.background']).toBe('#ffffff')
+  })
+
   it('prefers vendored upstream theme JSON for the first batch and caches resolved instances', () => {
     const firstTheme = getBundledColorTheme('one-dark-pro')
     const secondTheme = getBundledColorTheme('one-dark-pro')

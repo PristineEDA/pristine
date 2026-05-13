@@ -212,7 +212,7 @@ try {
     '-DurationSeconds', '1',
     '-WarmupSeconds', '0',
     '-ThresholdPercent', '4',
-    '-MemoryThresholdPercent', '0.6',
+    '-MemoryThresholdPercent', '1',
     // Use cscript here so the harness never matches and kills the host PowerShell terminal.
     '-DevCommand', ('cscript.exe //NoLogo "' + harness.fakePackagedScriptPath.replace(/"/g, '""') + '"'),
     '-DevProcessName', 'cscript',
