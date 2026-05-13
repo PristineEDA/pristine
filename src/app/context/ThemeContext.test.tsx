@@ -177,6 +177,18 @@ describe('ThemeContext', () => {
     expectConfiguredThemeState('light-owl', 'light');
   });
 
+  it('accepts tenth-batch vendored dark bundled theme ids from config and keeps the DOM in dark mode', () => {
+    renderWithConfiguredThemeId('andromeda');
+
+    expectConfiguredThemeState('andromeda', 'dark');
+  });
+
+  it('accepts tenth-batch vendored light bundled theme ids from config and keeps the DOM in light mode', () => {
+    renderWithConfiguredThemeId('atom-one-light');
+
+    expectConfiguredThemeState('atom-one-light', 'light');
+  });
+
   it('persists theme updates to the unified config keys and keeps the DOM class in sync', () => {
     render(
       <ThemeProvider>

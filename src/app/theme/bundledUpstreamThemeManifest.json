@@ -822,5 +822,213 @@
     "version": "0.1.14",
     "assetDirectory": "ruby-extensions-pack",
     "themePath": "themes/light_spinel.json"
+  },
+  {
+    "id": "moonlight-ii",
+    "publisher": "atomiks",
+    "extensionName": "moonlight",
+    "version": "0.11.1",
+    "assetDirectory": "moonlight",
+    "themePath": "themes/moonlight-ii.json"
+  },
+  {
+    "id": "moonlight",
+    "publisher": "atomiks",
+    "extensionName": "moonlight",
+    "version": "0.11.1",
+    "assetDirectory": "moonlight",
+    "themePath": "themes/moonlight.json"
+  },
+  {
+    "id": "andromeda",
+    "publisher": "EliverLara",
+    "extensionName": "andromeda",
+    "version": "1.10.0",
+    "assetDirectory": "andromeda",
+    "themePath": "themes/Andromeda-color-theme.json"
+  },
+  {
+    "id": "andromeda-colorizer",
+    "publisher": "EliverLara",
+    "extensionName": "andromeda",
+    "version": "1.10.0",
+    "assetDirectory": "andromeda",
+    "themePath": "themes/Andromeda-colorizer.json"
+  },
+  {
+    "id": "andromeda-bordered",
+    "publisher": "EliverLara",
+    "extensionName": "andromeda",
+    "version": "1.10.0",
+    "assetDirectory": "andromeda",
+    "themePath": "themes/Andromeda-color-theme-bordered.json"
+  },
+  {
+    "id": "darcula-theme",
+    "publisher": "rokoroku",
+    "extensionName": "vscode-theme-darcula",
+    "version": "1.2.3",
+    "assetDirectory": "vscode-theme-darcula",
+    "themePath": "themes/darcula.json"
+  },
+  {
+    "id": "darcula-pycharm-dark-gui",
+    "publisher": "garytyler",
+    "extensionName": "darcula-pycharm",
+    "version": "1.0.0",
+    "assetDirectory": "darcula-pycharm",
+    "themePath": "themes/darcula-pycharm-dark-gui-color-theme.json"
+  },
+  {
+    "id": "darcula-pycharm-light-gui",
+    "publisher": "garytyler",
+    "extensionName": "darcula-pycharm",
+    "version": "1.0.0",
+    "assetDirectory": "darcula-pycharm",
+    "themePath": "themes/darcula-pycharm-light-gui-color-theme.json"
+  },
+  {
+    "id": "darcula-theme-from-intellij",
+    "publisher": "trinm1709",
+    "extensionName": "dracula-theme-from-intellij",
+    "version": "0.3.0",
+    "assetDirectory": "dracula-theme-from-intellij",
+    "themePath": "themes/dracula-color-theme.json"
+  },
+  {
+    "id": "monokai-night",
+    "publisher": "fabiospampinato",
+    "extensionName": "vscode-monokai-night",
+    "version": "1.7.1",
+    "assetDirectory": "vscode-monokai-night",
+    "themePath": "themes/default.json"
+  },
+  {
+    "id": "monokai-dark-soda",
+    "publisher": "AdamCaviness",
+    "extensionName": "theme-monokai-dark-soda",
+    "version": "1.2.0",
+    "assetDirectory": "theme-monokai-dark-soda",
+    "themePath": "themes/monokai-dark-soda-color-theme.json"
+  },
+  {
+    "id": "monokai-plusplus",
+    "publisher": "dcasella",
+    "extensionName": "monokai-plusplus",
+    "version": "2.0.4",
+    "assetDirectory": "monokai-plusplus",
+    "themePath": "themes/Monokai++-color-theme.json"
+  },
+  {
+    "id": "monokai-plusplus-unified",
+    "publisher": "dcasella",
+    "extensionName": "monokai-plusplus",
+    "version": "2.0.4",
+    "assetDirectory": "monokai-plusplus",
+    "themePath": "themes/Monokai++-Unified-color-theme.json"
+  },
+  {
+    "id": "atom-one-dark",
+    "publisher": "akamud",
+    "extensionName": "vscode-theme-onedark",
+    "version": "2.3.0",
+    "assetDirectory": "vscode-theme-onedark",
+    "themePath": "themes/OneDark.json"
+  },
+  {
+    "id": "atom-one-light",
+    "publisher": "akamud",
+    "extensionName": "vscode-theme-onelight",
+    "version": "2.3.0",
+    "assetDirectory": "vscode-theme-onelight",
+    "themePath": "themes/OneLight.json"
+  },
+  {
+    "id": "atom-material-theme",
+    "publisher": "tobiasalthoff",
+    "extensionName": "atom-material-theme",
+    "version": "1.10.9",
+    "assetDirectory": "atom-material-theme",
+    "themePath": "themes/Atom Material Theme-color-theme.json"
+  },
+  {
+    "id": "min-dark",
+    "publisher": "miguelsolorio",
+    "extensionName": "min-theme",
+    "version": "1.5.0",
+    "assetDirectory": "min-theme",
+    "themePath": "themes/min-dark.json"
+  },
+  {
+    "id": "min-light",
+    "publisher": "miguelsolorio",
+    "extensionName": "min-theme",
+    "version": "1.5.0",
+    "assetDirectory": "min-theme",
+    "themePath": "themes/min-light.json"
+  },
+  {
+    "id": "aura-dark",
+    "publisher": "DaltonMenezes",
+    "extensionName": "aura-theme",
+    "version": "2.1.2",
+    "assetDirectory": "aura-theme",
+    "themePath": "themes/aura-dark-color-theme.json"
+  },
+  {
+    "id": "aura-soft-dark",
+    "publisher": "DaltonMenezes",
+    "extensionName": "aura-theme",
+    "version": "2.1.2",
+    "assetDirectory": "aura-theme",
+    "themePath": "themes/aura-soft-dark-color-theme.json"
+  },
+  {
+    "id": "deepdark-material-theme",
+    "publisher": "Nimda",
+    "extensionName": "deepdark-material",
+    "version": "3.3.1",
+    "assetDirectory": "deepdark-material",
+    "themePath": "themes/default-deepdark-material.json"
+  },
+  {
+    "id": "deepdark-material-theme-full-black",
+    "publisher": "Nimda",
+    "extensionName": "deepdark-material",
+    "version": "3.3.1",
+    "assetDirectory": "deepdark-material",
+    "themePath": "themes/fullblack-deepdark-material.json"
+  },
+  {
+    "id": "synthwave-84",
+    "publisher": "RobbOwen",
+    "extensionName": "synthwave-vscode",
+    "version": "0.1.20",
+    "assetDirectory": "synthwave-vscode",
+    "themePath": "themes/synthwave-color-theme.json"
+  },
+  {
+    "id": "cobalt2",
+    "publisher": "wesbos",
+    "extensionName": "theme-cobalt2",
+    "version": "2.5.0",
+    "assetDirectory": "theme-cobalt2",
+    "themePath": "theme/cobalt2.json"
+  },
+  {
+    "id": "omni",
+    "publisher": "rocketseat",
+    "extensionName": "theme-omni",
+    "version": "1.0.12",
+    "assetDirectory": "theme-omni",
+    "themePath": "theme/omni.json"
+  },
+  {
+    "id": "kanagawa",
+    "publisher": "qufiwefefwoyn",
+    "extensionName": "kanagawa",
+    "version": "1.5.1",
+    "assetDirectory": "kanagawa",
+    "themePath": "themes/kanagawa-color-theme.json"
   }
 ]

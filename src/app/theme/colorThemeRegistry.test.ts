@@ -548,6 +548,109 @@ describe('colorThemeRegistry', () => {
     expect(lightOwlTheme?.colors['editorLineNumber.activeForeground']).toBe('#403f53')
   })
 
+  it('resolves tenth-batch vendored upstream Moonlight, Andromeda, Darcula, Monokai, Atom, Min, Aura, Deepdark, and selected standalone themes through the manifest', () => {
+    const firstAndromedaTheme = getBundledColorTheme('andromeda')
+    const secondAndromedaTheme = getBundledColorTheme('andromeda')
+
+    expect(firstAndromedaTheme).toBe(secondAndromedaTheme)
+
+    const batchThemeExpectations = [
+      { id: 'moonlight-ii', kind: 'dark' },
+      { id: 'moonlight', kind: 'dark' },
+      { id: 'andromeda', kind: 'dark' },
+      { id: 'andromeda-colorizer', kind: 'dark' },
+      { id: 'andromeda-bordered', kind: 'dark' },
+      { id: 'darcula-theme', kind: 'dark' },
+      { id: 'darcula-pycharm-dark-gui', kind: 'dark' },
+      { id: 'darcula-pycharm-light-gui', kind: 'dark' },
+      { id: 'darcula-theme-from-intellij', kind: 'dark' },
+      { id: 'monokai-night', kind: 'dark' },
+      { id: 'monokai-dark-soda', kind: 'dark' },
+      { id: 'monokai-plusplus', kind: 'dark' },
+      { id: 'monokai-plusplus-unified', kind: 'dark' },
+      { id: 'atom-one-dark', kind: 'dark' },
+      { id: 'atom-one-light', kind: 'light' },
+      { id: 'atom-material-theme', kind: 'dark' },
+      { id: 'min-dark', kind: 'dark' },
+      { id: 'min-light', kind: 'light' },
+      { id: 'aura-dark', kind: 'dark' },
+      { id: 'aura-soft-dark', kind: 'dark' },
+      { id: 'deepdark-material-theme', kind: 'dark' },
+      { id: 'deepdark-material-theme-full-black', kind: 'dark' },
+      { id: 'synthwave-84', kind: 'dark' },
+      { id: 'cobalt2', kind: 'dark' },
+      { id: 'omni', kind: 'dark' },
+      { id: 'kanagawa', kind: 'dark' },
+    ] as const
+
+    for (const { id, kind } of batchThemeExpectations) {
+      expect(getBundledColorTheme(id)).toEqual(expect.objectContaining({
+        id,
+        kind,
+        source: 'bundled',
+      }))
+    }
+
+    expect(firstAndromedaTheme).toEqual(expect.objectContaining({
+      id: 'andromeda',
+      kind: 'dark',
+      source: 'bundled',
+    }))
+    expect(firstAndromedaTheme?.colors['activityBar.background']).toBe('#23262E')
+    expect(firstAndromedaTheme?.colors['editor.background']).toBe('#23262E')
+    expect(firstAndromedaTheme?.colors['editor.foreground']).toBe('#D5CED9')
+
+    const andromedaColorizerTheme = getBundledColorTheme('andromeda-colorizer')
+    expect(andromedaColorizerTheme?.tokenColors.length ?? 0).toBeGreaterThan(50)
+    expect(andromedaColorizerTheme?.tokenColors).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        settings: expect.objectContaining({
+          foreground: '#00e8c6',
+        }),
+      }),
+    ]))
+
+    const darculaPycharmLightGuiTheme = getBundledColorTheme('darcula-pycharm-light-gui')
+    expect(darculaPycharmLightGuiTheme?.colors['editor.background']).toBe('#2B2B2B')
+    expect(darculaPycharmLightGuiTheme?.colors['editorLineNumber.activeForeground']).toBe('#A4A3A3')
+    expect(darculaPycharmLightGuiTheme?.colors['terminal.background']).toBe('#252526')
+
+    const monokaiPlusplusUnifiedTheme = getBundledColorTheme('monokai-plusplus-unified')
+    expect(monokaiPlusplusUnifiedTheme?.colors['activityBar.background']).toBe('#1c1c1c')
+    expect(monokaiPlusplusUnifiedTheme?.colors['terminal.background']).toBe('#1c1c1c')
+
+    const atomOneLightTheme = getBundledColorTheme('atom-one-light')
+    expect(atomOneLightTheme?.colors['activityBar.background']).toBe('#FAFAFA')
+    expect(atomOneLightTheme?.colors['editor.background']).toBe('#FAFAFA')
+    expect(atomOneLightTheme?.colors['editorLineNumber.activeForeground']).toBe('#383A42')
+
+    const minLightTheme = getBundledColorTheme('min-light')
+    expect(minLightTheme?.colors['editor.background']).toBe('#ffffff')
+    expect(minLightTheme?.colors['editorLineNumber.foreground']).toBe('#CCC')
+    expect(minLightTheme?.colors['terminal.background']).toBe('#fff')
+
+    const auraSoftDarkTheme = getBundledColorTheme('aura-soft-dark')
+    expect(auraSoftDarkTheme?.colors['activityBar.background']).toBe('#21202e')
+    expect(auraSoftDarkTheme?.colors['editor.background']).toBe('#21202e')
+    expect(auraSoftDarkTheme?.colors['terminal.background']).toBe('#21202e')
+
+    const deepdarkMaterialThemeFullBlack = getBundledColorTheme('deepdark-material-theme-full-black')
+    expect(deepdarkMaterialThemeFullBlack?.colors['activityBar.background']).toBe('#080808')
+    expect(deepdarkMaterialThemeFullBlack?.colors['editor.background']).toBe('#080808')
+    expect(deepdarkMaterialThemeFullBlack?.colors['editorLineNumber.foreground']).toBe('#50504F')
+
+    const cobalt2Theme = getBundledColorTheme('cobalt2')
+    expect(cobalt2Theme?.colors['editor.background']).toBe('#193549')
+    expect(cobalt2Theme?.colors['editorLineNumber.foreground']).toBe('#aaa')
+    expect(cobalt2Theme?.colors['terminal.background']).toBe('#122738')
+
+    const kanagawaTheme = getBundledColorTheme('kanagawa')
+    expect(kanagawaTheme?.colors['editor.background']).toBe('#1F1F28')
+    expect(kanagawaTheme?.colors['editorLineNumber.foreground']).toBe('#54546D')
+    expect(kanagawaTheme?.colors['editorLineNumber.activeForeground']).toBe('#957FB8')
+    expect(kanagawaTheme?.colors['terminal.background']).toBe('#1F1F28')
+  })
+
   it('prefers vendored upstream theme JSON for the first batch and caches resolved instances', () => {
     const firstTheme = getBundledColorTheme('one-dark-pro')
     const secondTheme = getBundledColorTheme('one-dark-pro')

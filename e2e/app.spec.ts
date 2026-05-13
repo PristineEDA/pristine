@@ -4362,6 +4362,36 @@ test('ninth-batch vendored upstream Light Owl bundled UI theme selection persist
   });
 });
 
+test('tenth-batch vendored upstream Andromeda dark bundled UI theme selection persists across app relaunch and updates Monaco and terminal styling', async () => {
+  test.slow();
+
+  await assertBundledThemeSelectionPersistsAcrossRelaunch({
+    searchText: 'andromeda',
+    themeId: 'andromeda',
+    themeLabel: 'Andromeda',
+    isDark: true,
+    expectedMonacoColors: {
+      background: '#23262E',
+      lineNumber: ['#746f77', '#BBBEBF', '#D5CED9'],
+    },
+  });
+});
+
+test('tenth-batch vendored upstream Atom One Light bundled UI theme selection persists across app relaunch and updates Monaco and terminal styling', async () => {
+  test.slow();
+
+  await assertBundledThemeSelectionPersistsAcrossRelaunch({
+    searchText: 'atom one light',
+    themeId: 'atom-one-light',
+    themeLabel: 'Atom One Light',
+    isDark: false,
+    expectedMonacoColors: {
+      background: '#FAFAFA',
+      lineNumber: ['#9D9D9F', '#383A42'],
+    },
+  });
+});
+
 test('code editor settings persist across app relaunch', async () => {
   test.slow();
 

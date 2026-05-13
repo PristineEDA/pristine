@@ -566,6 +566,40 @@ describe('MenuBar settings', () => {
     });
   }, SETTINGS_PICKER_TEST_TIMEOUT_MS);
 
+  it('shows tenth-batch vendored upstream dark bundled UI themes in the advanced picker and applies them through the shared theme setting', async () => {
+    const user = userEvent.setup();
+
+    mockPersistedSettingsConfig({
+      colorTheme: 'vscode-2026-dark',
+    });
+
+    renderMenuBar();
+
+    await applyBundledThemeFromAdvancedPicker(user, {
+      searchText: 'andromeda',
+      themeId: 'andromeda',
+      label: 'Andromeda',
+      author: 'Eliver Lara',
+    });
+  }, SETTINGS_PICKER_TEST_TIMEOUT_MS);
+
+  it('shows tenth-batch vendored upstream light bundled UI themes in the advanced picker and applies them through the shared theme setting', async () => {
+    const user = userEvent.setup();
+
+    mockPersistedSettingsConfig({
+      colorTheme: 'vscode-2026-dark',
+    });
+
+    renderMenuBar();
+
+    await applyBundledThemeFromAdvancedPicker(user, {
+      searchText: 'atom one light',
+      themeId: 'atom-one-light',
+      label: 'Atom One Light',
+      author: 'akamud',
+    });
+  }, SETTINGS_PICKER_TEST_TIMEOUT_MS);
+
   it('imports a local UI theme from settings and selects it immediately', async () => {
     const user = userEvent.setup();
 
