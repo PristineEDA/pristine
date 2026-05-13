@@ -61,6 +61,23 @@ describe('ThemeContext', () => {
     expect(document.documentElement).not.toHaveClass('dark');
   });
 
+  it('accepts bundled third-party theme ids from config and applies them through the unified provider', () => {
+    vi.mocked(window.electronAPI!.config.get).mockImplementation((key: string) =>
+      key === 'workbench.colorTheme' ? 'pink-cat-boo' : null,
+    );
+
+    render(
+      <ThemeProvider>
+        <ThemeProbe />
+      </ThemeProvider>,
+    );
+
+    expect(screen.getByTestId('current-theme')).toHaveTextContent('dark');
+    expect(screen.getByTestId('current-theme-id')).toHaveTextContent('pink-cat-boo');
+    expect(document.documentElement).toHaveAttribute('data-color-theme-id', 'pink-cat-boo');
+    expect(window.electronAPI?.config.set).toHaveBeenCalledWith('workbench.colorTheme', 'pink-cat-boo');
+  });
+
   it('persists theme updates to the unified config keys and keeps the DOM class in sync', () => {
     render(
       <ThemeProvider>

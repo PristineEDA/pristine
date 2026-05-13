@@ -53,6 +53,14 @@ const defaultColorThemeOptions: ColorThemeOption[] = [
     kind: 'light',
     source: 'builtin',
   },
+  {
+    value: 'pink-cat-boo',
+    label: 'Pink Cat Boo',
+    description: 'Playful dark theme with rose-pink chrome, powder-blue accents, and warm banana-yellow strings.',
+    author: 'Fiona Fan',
+    kind: 'dark',
+    source: 'bundled',
+  },
 ];
 
 const defaultThemePreviews: Record<string, ColorThemePreviewPalette> = {
@@ -87,6 +95,22 @@ const defaultThemePreviews: Record<string, ColorThemePreviewPalette> = {
     yellow: '#b45309',
     red: '#dc2626',
     orange: '#ea580c',
+  },
+  'pink-cat-boo': {
+    surface: '#2d2f42',
+    background: '#202330',
+    input: '#202330',
+    selection: '#472541',
+    comment: '#6D7A72',
+    foreground: '#FFF0F5',
+    brightForeground: '#ffffff',
+    pink: '#FF4791',
+    purple: '#DCBFF2',
+    cyan: '#A2C2EB',
+    green: '#58B896',
+    yellow: '#FAE8B6',
+    red: '#FF62A5',
+    orange: '#ffc85b',
   },
 };
 

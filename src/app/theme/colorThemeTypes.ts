@@ -1,4 +1,5 @@
 export type ThemeKind = 'light' | 'dark'
+export type ColorThemeSource = 'builtin' | 'bundled' | 'imported'
 
 export interface VSCodeTokenColorSettings {
   foreground?: string
@@ -30,7 +31,7 @@ export interface ColorThemeOption {
   description: string
   author: string
   kind: ThemeKind
-  source: 'builtin' | 'imported'
+  source: ColorThemeSource
 }
 
 export interface ImportedColorThemeRecord {
@@ -48,7 +49,7 @@ export interface ResolvedColorTheme {
   description: string
   author: string
   kind: ThemeKind
-  source: 'builtin' | 'imported'
+  source: ColorThemeSource
   path?: string
   colors: Record<string, string>
   tokenColors: VSCodeTokenColorRule[]
