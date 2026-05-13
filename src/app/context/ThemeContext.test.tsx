@@ -1,15 +1,20 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ThemeProvider, useTheme } from './ThemeContext';
+import type { ImportedColorThemeRecord } from '../theme/colorThemeTypes';
 
 function ThemeProbe() {
-  const { theme, setTheme, toggleTheme } = useTheme();
+  const { theme, themeId, setTheme, toggleTheme } = useTheme();
 
   return (
     <div>
       <span data-testid="current-theme">{theme}</span>
+      <span data-testid="current-theme-id">{themeId}</span>
       <button data-testid="set-dark" onClick={() => setTheme('dark')}>
         Set dark
+      </button>
+      <button data-testid="set-light" onClick={() => setTheme('light')}>
+        Set light
       </button>
       <button data-testid="toggle-theme" onClick={toggleTheme}>
         Toggle
@@ -21,12 +26,30 @@ function ThemeProbe() {
 describe('ThemeContext', () => {
   beforeEach(() => {
     document.documentElement.classList.remove('dark');
-    localStorage.removeItem('pristine-theme');
+    document.documentElement.removeAttribute('data-color-theme-id');
     vi.mocked(window.electronAPI!.config.get).mockReset();
     vi.mocked(window.electronAPI!.config.set).mockReset();
+    vi.mocked(window.electronAPI!.config.onDidChange).mockReset();
+    vi.mocked(window.electronAPI!.config.onDidChange).mockImplementation(() => vi.fn());
   });
 
-  it('defaults to the light theme when no persisted value exists', () => {
+  it('defaults to Dark 2026 when no persisted value exists', () => {
+    render(
+      <ThemeProvider>
+        <ThemeProbe />
+      </ThemeProvider>,
+    );
+
+    expect(screen.getByTestId('current-theme')).toHaveTextContent('dark');
+    expect(screen.getByTestId('current-theme-id')).toHaveTextContent('vscode-2026-dark');
+    expect(document.documentElement).toHaveClass('dark');
+  });
+
+  it('prefers the persisted unified color theme id from config', () => {
+    vi.mocked(window.electronAPI!.config.get).mockImplementation((key: string) =>
+      key === 'workbench.colorTheme' ? 'vscode-2026-light' : null,
+    );
+
     render(
       <ThemeProvider>
         <ThemeProbe />
@@ -34,44 +57,122 @@ describe('ThemeContext', () => {
     );
 
     expect(screen.getByTestId('current-theme')).toHaveTextContent('light');
+    expect(screen.getByTestId('current-theme-id')).toHaveTextContent('vscode-2026-light');
     expect(document.documentElement).not.toHaveClass('dark');
   });
 
-  it('prefers the persisted config theme over legacy localStorage', () => {
-    localStorage.setItem('pristine-theme', 'light');
-    vi.mocked(window.electronAPI!.config.get).mockImplementation((key: string) =>
-      key === 'ui.theme' ? 'dark' : null,
-    );
-
+  it('persists theme updates to the unified config keys and keeps the DOM class in sync', () => {
     render(
       <ThemeProvider>
         <ThemeProbe />
       </ThemeProvider>,
     );
 
-    expect(screen.getByTestId('current-theme')).toHaveTextContent('dark');
-    expect(document.documentElement).toHaveClass('dark');
-  });
+    fireEvent.click(screen.getByTestId('set-light'));
 
-  it('persists theme updates to config and keeps the DOM class in sync', () => {
-    render(
-      <ThemeProvider>
-        <ThemeProbe />
-      </ThemeProvider>,
-    );
-
-    fireEvent.click(screen.getByTestId('set-dark'));
-
-    expect(screen.getByTestId('current-theme')).toHaveTextContent('dark');
-    expect(document.documentElement).toHaveClass('dark');
-    expect(window.electronAPI?.config.set).toHaveBeenCalledWith('ui.theme', 'dark');
-    expect(localStorage.getItem('pristine-theme')).toBe('dark');
+    expect(screen.getByTestId('current-theme')).toHaveTextContent('light');
+    expect(screen.getByTestId('current-theme-id')).toHaveTextContent('vscode-2026-light');
+    expect(document.documentElement).not.toHaveClass('dark');
+    expect(window.electronAPI?.config.set).toHaveBeenCalledWith('workbench.colorTheme', 'vscode-2026-light');
+    expect(window.electronAPI?.config.set).toHaveBeenCalledWith('workbench.colorThemeKind', 'light');
 
     fireEvent.click(screen.getByTestId('toggle-theme'));
 
-    expect(screen.getByTestId('current-theme')).toHaveTextContent('light');
-    expect(document.documentElement).not.toHaveClass('dark');
-    expect(window.electronAPI?.config.set).toHaveBeenCalledWith('ui.theme', 'light');
-    expect(localStorage.getItem('pristine-theme')).toBe('light');
+    expect(screen.getByTestId('current-theme')).toHaveTextContent('dark');
+    expect(screen.getByTestId('current-theme-id')).toHaveTextContent('vscode-2026-dark');
+    expect(document.documentElement).toHaveClass('dark');
+    expect(window.electronAPI?.config.set).toHaveBeenCalledWith('workbench.colorTheme', 'vscode-2026-dark');
+    expect(window.electronAPI?.config.set).toHaveBeenCalledWith('workbench.colorThemeKind', 'dark');
+  });
+
+  it('does not persist imported themes during startup when no imported themes are configured', () => {
+    render(
+      <ThemeProvider>
+        <ThemeProbe />
+      </ThemeProvider>,
+    );
+
+    expect(window.electronAPI?.config.set).not.toHaveBeenCalledWith('workbench.importedColorThemes', expect.anything());
+  });
+
+  it('ignores equivalent config change events without rerendering theme consumers', () => {
+    let handleConfigChange: ((key: string, value: unknown) => void) | null = null;
+    let renderCount = 0;
+
+    vi.mocked(window.electronAPI!.config.onDidChange).mockImplementation((callback) => {
+      handleConfigChange = callback;
+      return vi.fn();
+    });
+
+    function RenderCountProbe() {
+      const { importedThemes, themeId } = useTheme();
+      renderCount += 1;
+
+      return (
+        <div>
+          <span data-testid="render-theme-id">{themeId}</span>
+          <span data-testid="imported-theme-count">{importedThemes.length}</span>
+        </div>
+      );
+    }
+
+    render(
+      <ThemeProvider>
+        <RenderCountProbe />
+      </ThemeProvider>,
+    );
+
+    const initialRenderCount = renderCount;
+
+    act(() => {
+      handleConfigChange?.('workbench.importedColorThemes', []);
+      handleConfigChange?.('workbench.colorTheme', 'vscode-2026-dark');
+    });
+
+    expect(screen.getByTestId('render-theme-id')).toHaveTextContent('vscode-2026-dark');
+    expect(screen.getByTestId('imported-theme-count')).toHaveTextContent('0');
+    expect(renderCount).toBe(initialRenderCount);
+    expect(window.electronAPI?.config.onDidChange).toHaveBeenCalledTimes(1);
+  });
+
+  it('accepts external imported theme config changes without echoing them back to config', () => {
+    const importedTheme: ImportedColorThemeRecord = {
+      id: 'imported-night-00000001',
+      label: 'Night',
+      path: 'themes/night.json',
+      description: 'Imported from night.json.',
+      author: 'Imported theme',
+      kind: 'dark',
+    };
+    let handleConfigChange: ((key: string, value: unknown) => void) | null = null;
+
+    vi.mocked(window.electronAPI!.config.onDidChange).mockImplementation((callback) => {
+      handleConfigChange = callback;
+      return vi.fn();
+    });
+
+    function ImportedThemeProbe() {
+      const { importedThemes } = useTheme();
+
+      return (
+        <span data-testid="imported-theme-id">
+          {importedThemes[0]?.id ?? 'none'}
+        </span>
+      );
+    }
+
+    render(
+      <ThemeProvider>
+        <ImportedThemeProbe />
+      </ThemeProvider>,
+    );
+    vi.mocked(window.electronAPI!.config.set).mockClear();
+
+    act(() => {
+      handleConfigChange?.('workbench.importedColorThemes', [importedTheme]);
+    });
+
+    expect(screen.getByTestId('imported-theme-id')).toHaveTextContent(importedTheme.id);
+    expect(window.electronAPI?.config.set).not.toHaveBeenCalledWith('workbench.importedColorThemes', expect.anything());
   });
 });

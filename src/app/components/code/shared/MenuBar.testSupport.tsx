@@ -4,10 +4,10 @@ import { beforeEach, vi } from 'vitest';
 import { MenuBar } from './MenuBar';
 import type { DesktopAuthSession } from '../../../auth/types';
 import { WorkspaceProvider, useWorkspace } from '../../../context/WorkspaceContext';
+import type { ColorThemeOption, ColorThemePreviewPalette, ResolvedColorTheme } from '../../../theme/colorThemeTypes';
 import { SidebarProvider, useSidebar } from '../../ui/sidebar';
 
 export const ensureEditorFontFamilyLoadedMock = vi.fn<(fontFamily: string) => Promise<void>>(() => Promise.resolve());
-export const setCodeLayoutMarginMock = vi.fn();
 export const setEditorFontSizeMock = vi.fn();
 export const setEditorFontFamilyMock = vi.fn();
 export const setEditorFontLigaturesMock = vi.fn();
@@ -27,6 +27,8 @@ export const setEditorIndentGuidesMock = vi.fn();
 export const setEditorThemeMock = vi.fn();
 export const setThemeMock = vi.fn();
 export const toggleThemeMock = vi.fn();
+export const importThemeMock = vi.fn<() => Promise<ColorThemeOption | null>>();
+export const getThemePreviewMock = vi.fn<(themeId: string) => ColorThemePreviewPalette>();
 export const clearUserErrorMock = vi.fn();
 export const openAccountPageMock = vi.fn(() => Promise.resolve(true));
 export const signOutMock = vi.fn(() => Promise.resolve(true));
@@ -34,9 +36,97 @@ export const syncCloudConfigMock = vi.fn(() => Promise.resolve(true));
 export const undoActionRun = vi.fn(() => Promise.resolve());
 export const redoActionRun = vi.fn(() => Promise.resolve());
 
+const defaultColorThemeOptions: ColorThemeOption[] = [
+  {
+    value: 'vscode-2026-dark',
+    label: 'Dark 2026',
+    description: 'Built-in VS Code 2026 dark color theme.',
+    author: 'Microsoft',
+    kind: 'dark',
+    source: 'builtin',
+  },
+  {
+    value: 'vscode-2026-light',
+    label: 'Light 2026',
+    description: 'Built-in VS Code 2026 light color theme.',
+    author: 'Microsoft',
+    kind: 'light',
+    source: 'builtin',
+  },
+];
+
+const defaultThemePreviews: Record<string, ColorThemePreviewPalette> = {
+  'vscode-2026-dark': {
+    surface: '#181818',
+    background: '#101010',
+    input: '#202020',
+    selection: '#264f78',
+    comment: '#8b949e',
+    foreground: '#f5f5f5',
+    brightForeground: '#ffffff',
+    pink: '#c586c0',
+    purple: '#d2a8ff',
+    cyan: '#79c0ff',
+    green: '#7ee787',
+    yellow: '#dcdcaa',
+    red: '#f48771',
+    orange: '#ffa657',
+  },
+  'vscode-2026-light': {
+    surface: '#f4f4f5',
+    background: '#ffffff',
+    input: '#f8fafc',
+    selection: '#dbeafe',
+    comment: '#6b7280',
+    foreground: '#111827',
+    brightForeground: '#0f172a',
+    pink: '#a21caf',
+    purple: '#7c3aed',
+    cyan: '#0284c7',
+    green: '#059669',
+    yellow: '#b45309',
+    red: '#dc2626',
+    orange: '#ea580c',
+  },
+};
+
+function resolveThemeOption(themeId: string, options: readonly ColorThemeOption[] = defaultColorThemeOptions): ColorThemeOption {
+  return options.find((option) => option.value === themeId)
+    ?? defaultColorThemeOptions.find((option) => option.value === themeId)
+    ?? defaultColorThemeOptions[0]!;
+}
+
+function createResolvedTheme(themeId: string, options: readonly ColorThemeOption[] = defaultColorThemeOptions): ResolvedColorTheme {
+  const option = resolveThemeOption(themeId, options);
+  const preview = defaultThemePreviews[option.value] ?? defaultThemePreviews['vscode-2026-dark']!;
+
+  return {
+    id: option.value,
+    label: option.label,
+    description: option.description,
+    author: option.author,
+    kind: option.kind,
+    source: option.source,
+    colors: {
+      'editor.background': preview.background,
+      foreground: preview.foreground,
+      'panel.background': preview.surface,
+    },
+    tokenColors: [],
+    semanticHighlighting: true,
+    semanticTokenColors: {},
+  };
+}
+
+function applyThemeSelection(themeId: string) {
+  const option = resolveThemeOption(themeId, themeMockState.availableThemes);
+  themeMockState.themeId = option.value;
+  themeMockState.theme = option.kind;
+  themeMockState.activeTheme = createResolvedTheme(option.value, themeMockState.availableThemes);
+}
+
 interface EditorSettingsMockState {
   bracketPairGuides: boolean;
-  codeLayoutMargin: number;
   cursorBlinking: string;
   fontFamily: string;
   fontLigatures: boolean;
@@ -64,7 +154,6 @@ interface UserMockState {
 
 const defaultEditorSettingsMockState: EditorSettingsMockState = {
   bracketPairGuides: true,
-  codeLayoutMargin: 6,
   cursorBlinking: 'smooth',
   fontFamily: 'jetbrains-mono',
   fontLigatures: true,
@@ -91,13 +180,26 @@ const defaultUserMockState: UserMockState = {
 };
 
 const editorSettingsMockState: EditorSettingsMockState = { ...defaultEditorSettingsMockState };
-const themeMockState: { theme: 'light' | 'dark' } = { theme: 'light' };
+const themeMockState: {
+  activeTheme: ResolvedColorTheme;
+  availableThemes: ColorThemeOption[];
+  importedThemes: Array<{ author: string; description: string; id: string; kind: 'light' | 'dark'; label: string; path: string }>;
+  isImportingTheme: boolean;
+  theme: 'light' | 'dark';
+  themeId: string;
+} = {
+  activeTheme: createResolvedTheme('vscode-2026-dark'),
+  availableThemes: [...defaultColorThemeOptions],
+  importedThemes: [],
+  isImportingTheme: false,
+  theme: 'dark',
+  themeId: 'vscode-2026-dark',
+};
 export const userMockState: UserMockState = { ...defaultUserMockState };
 
 vi.mock('../../../context/EditorSettingsContext', () => ({
   useEditorSettings: () => ({
     bracketPairGuides: editorSettingsMockState.bracketPairGuides,
-    codeLayoutMargin: editorSettingsMockState.codeLayoutMargin,
     cursorBlinking: editorSettingsMockState.cursorBlinking,
     fontFamilies: [],
     fontFamily: editorSettingsMockState.fontFamily,
@@ -113,7 +215,6 @@ vi.mock('../../../context/EditorSettingsContext', () => ({
     scrollBeyondLastLine: editorSettingsMockState.scrollBeyondLastLine,
     smoothScrolling: editorSettingsMockState.smoothScrolling,
     tabSize: editorSettingsMockState.tabSize,
-    setCodeLayoutMargin: setCodeLayoutMarginMock,
     setBracketPairGuides: setEditorBracketPairGuidesMock,
     setCursorBlinking: setEditorCursorBlinkingMock,
     setFontFamily: setEditorFontFamilyMock,
@@ -138,7 +239,18 @@ vi.mock('../../../context/EditorSettingsContext', () => ({
 }));
 
 vi.mock('../../../context/ThemeContext', () => ({
-  useTheme: () => ({ theme: themeMockState.theme, setTheme: setThemeMock, toggleTheme: toggleThemeMock }),
+  useTheme: () => ({
+    theme: themeMockState.theme,
+    themeId: themeMockState.themeId,
+    activeTheme: themeMockState.activeTheme,
+    availableThemes: themeMockState.availableThemes,
+    importedThemes: themeMockState.importedThemes,
+    isImportingTheme: themeMockState.isImportingTheme,
+    getThemePreview: getThemePreviewMock,
+    importTheme: importThemeMock,
+    setTheme: setThemeMock,
+    toggleTheme: toggleThemeMock,
+  }),
 }));
 
 vi.mock('../../../context/UserContext', () => ({
@@ -161,13 +273,15 @@ vi.mock('../../../editor/fontLoader', () => ({
 function resetContextMockState() {
   Object.assign(editorSettingsMockState, defaultEditorSettingsMockState);
   Object.assign(userMockState, defaultUserMockState);
-  themeMockState.theme = 'light';
+  themeMockState.availableThemes = [...defaultColorThemeOptions];
+  themeMockState.importedThemes = [];
+  themeMockState.isImportingTheme = false;
+  applyThemeSelection('vscode-2026-dark');
 }
 
 function resetEditorSettingsMocks() {
   ensureEditorFontFamilyLoadedMock.mockReset();
   ensureEditorFontFamilyLoadedMock.mockResolvedValue(undefined);
-  setCodeLayoutMarginMock.mockReset();
   setEditorBracketPairGuidesMock.mockReset();
   setEditorCursorBlinkingMock.mockReset();
   setEditorFontFamilyMock.mockReset();
@@ -188,8 +302,28 @@ function resetEditorSettingsMocks() {
 }
 
 function resetThemeMocks() {
+  importThemeMock.mockReset();
+  importThemeMock.mockResolvedValue(null);
+  getThemePreviewMock.mockReset();
+  getThemePreviewMock.mockImplementation((themeId: string) => defaultThemePreviews[themeId] ?? defaultThemePreviews['vscode-2026-dark']!);
   setThemeMock.mockReset();
+  setThemeMock.mockImplementation((theme: string) => {
+    if (theme === 'light') {
+      applyThemeSelection('vscode-2026-light');
+      return;
+    }
+
+    if (theme === 'dark') {
+      applyThemeSelection('vscode-2026-dark');
+      return;
+    }
+
+    applyThemeSelection(theme);
+  });
   toggleThemeMock.mockReset();
+  toggleThemeMock.mockImplementation(() => {
+    applyThemeSelection(themeMockState.theme === 'dark' ? 'vscode-2026-light' : 'vscode-2026-dark');
+  });
 }
 
 function resetUserMocks() {
@@ -238,10 +372,9 @@ beforeEach(() => {
 });
 
 export type PersistedSettingsOptions = {
-  appTheme?: 'light' | 'dark';
   bracketPairGuides?: boolean;
-  codeLayoutMargin?: number;
   closeAction?: 'quit' | 'tray';
+  colorTheme?: string;
   cursorBlinking?: string;
   floatingInfoWindowVisible?: boolean;
   fontFamily?: string;
@@ -263,10 +396,9 @@ export type PersistedSettingsOptions = {
 
 export function mockPersistedSettingsConfig(options: PersistedSettingsOptions = {}) {
   const persisted = {
-    appTheme: 'light' as const,
     bracketPairGuides: true,
-    codeLayoutMargin: 6,
     closeAction: 'quit' as const,
+    colorTheme: 'vscode-2026-dark',
     cursorBlinking: 'smooth',
     floatingInfoWindowVisible: false,
     fontFamily: 'jetbrains-mono',
@@ -287,14 +419,16 @@ export function mockPersistedSettingsConfig(options: PersistedSettingsOptions = 
     ...options,
   };
 
+  applyThemeSelection(persisted.colorTheme);
+
   vi.mocked(window.electronAPI!.config.get).mockImplementation((key: string) => {
     switch (key) {
-      case 'ui.theme':
-        return persisted.appTheme;
+      case 'workbench.colorTheme':
+        return persisted.colorTheme;
+      case 'workbench.importedColorThemes':
+        return themeMockState.importedThemes;
       case 'editor.guides.bracketPairs':
         return persisted.bracketPairGuides;
-      case 'code.layoutMargin':
-        return persisted.codeLayoutMargin;
       case 'window.closeActionPreference':
         return persisted.closeAction;
       case 'editor.cursorBlinking':

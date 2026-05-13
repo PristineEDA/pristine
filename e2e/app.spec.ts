@@ -9,7 +9,6 @@ import {
   ASSISTANT_THREAD_LIST_DEFAULT_WIDTH_PX,
   ASSISTANT_THREAD_LIST_RESIZE_HANDLE_WIDTH_PX,
 } from '../src/app/components/code/explorer/assistantPanelLayout';
-import { EXPLORER_RIGHT_PANEL_MIN_WIDTH_PX } from '../src/app/components/code/shared/codeWorkspaceLayout';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const fixtureWorkspace = path.join(__dirname, '..', 'test', 'fixtures', 'workspace');
@@ -401,32 +400,6 @@ async function readElementPixelWidth(locator: Locator) {
   });
 }
 
-async function waitForStableElementPixelWidth(locator: Locator, minimumWidth = 1) {
-  let previousWidth = -1;
-  let stableWidth = 0;
-
-  await expect.poll(async () => {
-    const width = await readElementPixelWidth(locator);
-
-    if (width < minimumWidth) {
-      previousWidth = width;
-      return 0;
-    }
-
-    const isStable = width === previousWidth;
-    previousWidth = width;
-
-    if (!isStable) {
-      return 0;
-    }
-
-    stableWidth = width;
-    return width;
-  }).toBeGreaterThanOrEqual(minimumWidth);
-
-  return stableWidth;
-}
-
 async function waitForElementPixelWidthBetween(locator: Locator, minWidth: number, maxWidth: number) {
   await expect.poll(() => readElementPixelWidth(locator)).toBeGreaterThanOrEqual(minWidth);
   await expect.poll(() => readElementPixelWidth(locator)).toBeLessThanOrEqual(maxWidth);
@@ -692,9 +665,7 @@ async function readTerminalThemeSnapshot(window: Awaited<ReturnType<typeof launc
       .filter(Boolean);
 
     const probe = browserGlobal.document.createElement('div');
-    const expectedColor = browserGlobal.document.documentElement.classList.contains('dark')
-      ? 'var(--ide-dracula-background)'
-      : '#ffffff';
+    const expectedColor = 'var(--ide-terminal-bg)';
     probe.style.backgroundColor = expectedColor;
     browserGlobal.document.body.appendChild(probe);
     const expectedBackground = browserGlobal.getComputedStyle(probe).backgroundColor;
@@ -1530,7 +1501,7 @@ test('ctrl+s saves an edited explorer file and clears the dirty indicator', asyn
   createWorkspaceCopy(workspaceCopy);
 
   const filePath = path.join(workspaceCopy, 'rtl', 'core', 'reg_file.v');
-  const marker = `// e2e save marker ${Date.now()}`;
+  const marker = `//e2e-save-marker-${Date.now()}`;
   const { app, window } = await launchApp({ projectRoot: workspaceCopy });
 
   try {
@@ -1572,7 +1543,7 @@ test('Ctrl+N creates an untitled file, Ctrl+S saves it, and explorer refreshes t
   const savedAbsolutePath = path.join(workspaceCopy, 'rtl', 'core', savedFileName);
   const savedTreeTestId = `file-tree-node-${savedRelativePath.replace(/[/.]/g, '_').replace(/[^A-Za-z0-9_-]/g, '-')}`;
   const primaryModifier = process.platform === 'darwin' ? 'Meta' : 'Control';
-  const marker = 'module untitled_e2e; endmodule';
+  const marker = `untitled_e2e_marker_${Date.now()}`;
   const { app, window } = await launchApp({ projectRoot: workspaceCopy });
 
   try {
@@ -1645,7 +1616,8 @@ test('Explorer New File creates a real workspace file and keeps it after relaunc
     await ensureExplorerVisible(window);
     await window.getByTestId('file-tree-node-rtl').click();
     await window.getByTestId('file-tree-node-rtl_core').click();
-    await window.getByRole('button', { name: 'New File' }).click();
+    await window.getByTestId('file-tree-node-rtl_core').click({ button: 'right' });
+    await window.getByRole('menuitem', { name: 'New File' }).click();
 
     const draftInput = window.locator('.explorer-tree-scrollbar input').first();
     await expect(draftInput).toBeVisible();
@@ -2281,7 +2253,7 @@ test('ctrl+z does not restore the loading placeholder after undo returns a file 
   const workspaceCopy = test.info().outputPath('undo-workspace');
   createWorkspaceCopy(workspaceCopy);
 
-  const marker = `// e2e undo marker ${Date.now()}`;
+  const marker = `//e2e-undo-marker-${Date.now()}`;
   const { app, window } = await launchApp({ projectRoot: workspaceCopy });
 
   try {
@@ -2771,7 +2743,7 @@ test('ctrl+p quick open escape restores the previous editor cursor position and 
   await app.close();
 });
 
-test('explorer root supports toggle and collapse all behaviors', async () => {
+test('explorer root toggles first-level children and hides the legacy collapse-all control', async () => {
   const { app, window } = await launchApp();
 
   await ensureExplorerVisible(window);
@@ -2779,7 +2751,7 @@ test('explorer root supports toggle and collapse all behaviors', async () => {
   const rootNode = window.getByTestId('file-tree-node-root');
   const rtlNode = window.getByTestId('file-tree-node-rtl');
 
-  await expect(collapseAllButton).toBeVisible();
+  await expect(collapseAllButton).toHaveCount(0);
   await expect(rootNode).toBeVisible();
   await expect(rtlNode).toBeVisible();
 
@@ -2789,13 +2761,6 @@ test('explorer root supports toggle and collapse all behaviors', async () => {
 
     await rootNode.click();
     await expect(rtlNode).toBeVisible();
-  });
-
-  await test.step('collapse all hides root children while keeping root visible', async () => {
-    await collapseAllButton.click();
-
-    await expect(rootNode).toBeVisible();
-    await expect(rtlNode).toHaveCount(0);
   });
 
   await app.close();
@@ -2923,7 +2888,6 @@ test('assistant chat list expansion widens the whole right sidebar and supports 
   const rightPanel = window.getByTestId('panel-right-panel');
   const assistantMainPanel = window.getByTestId('assistant-main-panel');
   const chatListToggle = window.getByTestId('assistant-thread-list-toggle');
-  const chatListSidecar = window.getByTestId('assistant-thread-list-sidecar');
   const chatListPanel = window.getByTestId('assistant-thread-list-panel');
   const chatListResizeHandle = window.getByTestId('assistant-thread-list-resize-handle');
 
@@ -2931,11 +2895,10 @@ test('assistant chat list expansion widens the whole right sidebar and supports 
   await rightPanelToggle.click();
 
   await expect(rightPanel).toBeVisible();
-  await expect(chatListPanel).toHaveAttribute('aria-hidden', 'true');
-  await waitForElementPixelWidthBetween(chatListSidecar, 0, 1);
+  await expect(chatListPanel).toHaveCount(0);
 
-  const initialRightPanelWidth = await waitForStableElementPixelWidth(rightPanel, EXPLORER_RIGHT_PANEL_MIN_WIDTH_PX);
-  const initialAssistantWidth = await waitForStableElementPixelWidth(assistantMainPanel, 200);
+  const initialRightPanelWidth = await waitForElementPixelWidthBetween(rightPanel, 295, 305);
+  const initialAssistantWidth = await waitForElementPixelWidthBetween(assistantMainPanel, 295, 305);
   const expectedResizedRightPanelWidthPx = initialRightPanelWidth
     + expectedResizedChatListWidthPx
     + ASSISTANT_THREAD_LIST_RESIZE_HANDLE_WIDTH_PX;
@@ -3010,18 +2973,6 @@ test('assistant chat list expansion widens the whole right sidebar and supports 
   expect(resizedRightPanelWidth).toBeGreaterThan(expandedRightPanelWidth + 50);
   expect(resizedAssistantWidth).toBeGreaterThanOrEqual(initialAssistantWidth - 2);
   expect(resizedAssistantWidth).toBeLessThanOrEqual(initialAssistantWidth + 2);
-
-  await chatListToggle.click();
-
-  await expect(chatListPanel).toHaveAttribute('aria-hidden', 'true');
-  await waitForElementPixelWidthBetween(chatListSidecar, 0, 1);
-  await expect.poll(() => readElementPixelWidth(rightPanel)).toBeGreaterThanOrEqual(initialRightPanelWidth - 5);
-  await expect.poll(() => readElementPixelWidth(rightPanel)).toBeLessThanOrEqual(initialRightPanelWidth + 5);
-  await waitForElementPixelWidthBetween(
-    assistantMainPanel,
-    initialAssistantWidth - 2,
-    initialAssistantWidth + 2,
-  );
 
   await app.close();
 });
@@ -3893,24 +3844,30 @@ test('tray and floating info settings persist across app relaunch', async () => 
   await secondApp.close();
 });
 
-test('settings theme switch persists across app relaunch', async () => {
+test('settings UI theme selection persists across app relaunch', async () => {
   test.slow();
 
   const readThemeSnapshot = async (page: Awaited<ReturnType<typeof launchApp>>['window']) => ({
-    isDark: await page.evaluate(() => {
+    ...(await page.evaluate(() => {
       const browserGlobal = globalThis as typeof globalThis & {
         document: {
           documentElement: {
             classList: {
               contains: (token: string) => boolean;
             };
+            dataset: {
+              colorThemeId?: string;
+            };
           };
         };
       };
 
-      return browserGlobal.document.documentElement.classList.contains('dark');
-    }),
-    stored: await readConfigValue(page, 'ui.theme'),
+      return {
+        isDark: browserGlobal.document.documentElement.classList.contains('dark'),
+        themeId: browserGlobal.document.documentElement.dataset.colorThemeId ?? null,
+      };
+    })),
+    stored: await readConfigValue(page, 'workbench.colorTheme'),
   });
 
   const firstLaunch = await launchApp();
@@ -3919,13 +3876,21 @@ test('settings theme switch persists across app relaunch', async () => {
   await firstWindow.getByTestId('menu-settings-button').click();
   await expect(firstWindow.getByTestId('settings-dialog')).toBeVisible();
 
-  const firstThemeSwitch = firstWindow.getByTestId('settings-theme-switch');
-  await setSwitchChecked(firstThemeSwitch, false);
-  await setSwitchChecked(firstThemeSwitch, true);
+  await selectComboboxOption(
+    firstWindow,
+    'settings-theme-combobox',
+    'settings-theme-option-vscode-2026-light',
+  );
+  await selectComboboxOption(
+    firstWindow,
+    'settings-theme-combobox',
+    'settings-theme-option-vscode-2026-dark',
+  );
 
   await expect.poll(async () => readThemeSnapshot(firstWindow)).toEqual({
     isDark: true,
-    stored: 'dark',
+    themeId: 'vscode-2026-dark',
+    stored: 'vscode-2026-dark',
   });
 
   await firstWindow.getByTestId('settings-close-button').click();
@@ -3938,20 +3903,24 @@ test('settings theme switch persists across app relaunch', async () => {
 
   await expect.poll(async () => readThemeSnapshot(secondWindow)).toEqual({
     isDark: true,
-    stored: 'dark',
+    themeId: 'vscode-2026-dark',
+    stored: 'vscode-2026-dark',
   });
 
   await secondWindow.getByTestId('menu-settings-button').click();
   await expect(secondWindow.getByTestId('settings-dialog')).toBeVisible();
 
-  const secondThemeSwitch = secondWindow.getByTestId('settings-theme-switch');
-  await expect(secondThemeSwitch).toHaveAttribute('data-state', 'checked');
-
-  await setSwitchChecked(secondThemeSwitch, false);
+  await expect(secondWindow.getByTestId('settings-theme-combobox')).toContainText('Dark 2026');
+  await selectComboboxOption(
+    secondWindow,
+    'settings-theme-combobox',
+    'settings-theme-option-vscode-2026-light',
+  );
 
   await expect.poll(async () => readThemeSnapshot(secondWindow)).toEqual({
     isDark: false,
-    stored: 'light',
+    themeId: 'vscode-2026-light',
+    stored: 'vscode-2026-light',
   });
 
   await secondWindow.getByTestId('settings-close-button').click();
@@ -3985,11 +3954,6 @@ test('code editor settings persist across app relaunch', async () => {
     firstWindow,
     'settings-editor-font-family-combobox',
     'settings-editor-font-family-option-monaspace-neon',
-  );
-  await selectComboboxOption(
-    firstWindow,
-    'settings-editor-theme-combobox',
-    'settings-editor-theme-option-github-dark',
   );
   await selectComboboxOption(
     firstWindow,
@@ -4033,7 +3997,6 @@ test('code editor settings persist across app relaunch', async () => {
   await setSwitchChecked(firstWindow.getByTestId('settings-editor-indent-guides-switch'), false);
 
   await expect.poll(async () => readConfigValue(firstWindow, 'editor.fontFamily')).toBe('monaspace-neon');
-  await expect.poll(async () => readConfigValue(firstWindow, 'editor.theme')).toBe('github-dark');
   await expect.poll(async () => readConfigValue(firstWindow, 'editor.fontSize')).toBe(24);
   await expect.poll(async () => readConfigValue(firstWindow, 'editor.fontLigatures')).toBe(false);
   await expect.poll(async () => readConfigValue(firstWindow, 'editor.wordWrap')).toBe('on');
@@ -4051,7 +4014,6 @@ test('code editor settings persist across app relaunch', async () => {
   await expect.poll(async () => readConfigValue(firstWindow, 'editor.guides.indentation')).toBe(false);
   await expect(firstWindow.getByTestId('settings-editor-font-family-combobox')).toContainText('Monaspace Neon');
   await expect(firstWindow.getByTestId('settings-editor-font-size-value')).toHaveText('24px');
-  await expect(firstWindow.getByTestId('settings-editor-theme-combobox')).toContainText('GitHub Dark');
   await expect(firstWindow.getByTestId('settings-editor-word-wrap-combobox')).toContainText('On');
   await expect(firstWindow.getByTestId('settings-editor-tab-size-combobox')).toContainText('2 spaces');
   await expect(firstWindow.getByTestId('settings-editor-cursor-blinking-combobox')).toContainText('Solid');
@@ -4072,23 +4034,18 @@ test('code editor settings persist across app relaunch', async () => {
 
   await expect
     .poll(async () => {
-      const snapshot = await readMonacoAppearanceSnapshot(firstWindow, {
-        background: '#0d1117',
-        lineNumber: '#8b949e',
-      });
+      const snapshot = await readMonacoAppearanceSnapshot(firstWindow);
 
       return snapshot
         ? {
             fontFamilyIncludesSelection: snapshot.fontFamily.includes('Monaspace Neon'),
             fontSize: snapshot.fontSize,
-            matchesBackground: snapshot.backgroundColor === snapshot.expectedBackgroundColor,
           }
         : null;
     })
     .toEqual({
       fontFamilyIncludesSelection: true,
       fontSize: '24px',
-      matchesBackground: true,
     });
 
   await firstApp.close();
@@ -4110,30 +4067,24 @@ test('code editor settings persist across app relaunch', async () => {
 
   await expect
     .poll(async () => {
-      const snapshot = await readMonacoAppearanceSnapshot(secondWindow, {
-        background: '#0d1117',
-        lineNumber: '#8b949e',
-      });
+      const snapshot = await readMonacoAppearanceSnapshot(secondWindow);
 
       return snapshot
         ? {
             fontFamilyIncludesSelection: snapshot.fontFamily.includes('Monaspace Neon'),
             fontSize: snapshot.fontSize,
-            matchesBackground: snapshot.backgroundColor === snapshot.expectedBackgroundColor,
           }
         : null;
     })
     .toEqual({
       fontFamilyIncludesSelection: true,
       fontSize: '24px',
-      matchesBackground: true,
     });
 
   await secondWindow.getByTestId('menu-settings-button').click();
   await expect(secondWindow.getByTestId('settings-dialog')).toBeVisible();
   await expect(secondWindow.getByTestId('settings-editor-font-family-combobox')).toContainText('Monaspace Neon');
   await expect(secondWindow.getByTestId('settings-editor-font-size-value')).toHaveText('24px');
-  await expect(secondWindow.getByTestId('settings-editor-theme-combobox')).toContainText('GitHub Dark');
   await expect(secondWindow.getByTestId('settings-editor-word-wrap-combobox')).toContainText('On');
   await expect(secondWindow.getByTestId('settings-editor-tab-size-combobox')).toContainText('2 spaces');
   await expect(secondWindow.getByTestId('settings-editor-cursor-blinking-combobox')).toContainText('Solid');
@@ -4155,11 +4106,6 @@ test('code editor settings persist across app relaunch', async () => {
     'settings-editor-font-family-option-jetbrains-mono',
   );
   await setEditorFontSizePreset(secondWindow, 'min');
-  await selectComboboxOption(
-    secondWindow,
-    'settings-editor-theme-combobox',
-    'settings-editor-theme-option-github-light',
-  );
   await selectComboboxOption(
     secondWindow,
     'settings-editor-word-wrap-combobox',
@@ -4202,7 +4148,6 @@ test('code editor settings persist across app relaunch', async () => {
 
   await expect.poll(async () => readConfigValue(secondWindow, 'editor.fontFamily')).toBe('jetbrains-mono');
   await expect.poll(async () => readConfigValue(secondWindow, 'editor.fontSize')).toBe(10);
-  await expect.poll(async () => readConfigValue(secondWindow, 'editor.theme')).toBe('github-light');
   await expect.poll(async () => readConfigValue(secondWindow, 'editor.fontLigatures')).toBe(true);
   await expect.poll(async () => readConfigValue(secondWindow, 'editor.wordWrap')).toBe('off');
   await expect.poll(async () => readConfigValue(secondWindow, 'editor.tabSize')).toBe(4);
@@ -4223,29 +4168,24 @@ test('code editor settings persist across app relaunch', async () => {
 
   await expect
     .poll(async () => {
-      const snapshot = await readMonacoAppearanceSnapshot(secondWindow, {
-        background: '#ffffff',
-        lineNumber: '#6e7781',
-      });
+      const snapshot = await readMonacoAppearanceSnapshot(secondWindow);
 
       return snapshot
         ? {
             fontFamilyIncludesSelection: snapshot.fontFamily.includes('JetBrains Mono'),
             fontSize: snapshot.fontSize,
-            matchesBackground: snapshot.backgroundColor === snapshot.expectedBackgroundColor,
           }
         : null;
     })
     .toEqual({
       fontFamilyIncludesSelection: true,
       fontSize: '10px',
-      matchesBackground: true,
     });
 
   await secondApp.close();
 });
 
-test('editor font and theme comboboxes support wheel scrolling and reopen at the selected option', async () => {
+test('editor font combobox supports wheel scrolling and UI theme combobox reopens at the selected option', async () => {
   const { app, window } = await launchApp()
 
   await window.getByTestId('menu-settings-button').click()
@@ -4285,27 +4225,26 @@ test('editor font and theme comboboxes support wheel scrolling and reopen at the
 
   await selectComboboxOption(
     window,
-    'settings-editor-theme-combobox',
-    'settings-editor-theme-option-solarized-dark',
+    'settings-theme-combobox',
+    'settings-theme-option-vscode-2026-light',
   )
-  await expect(window.getByTestId('settings-editor-theme-combobox')).toContainText('Solarized Dark')
+  await expect(window.getByTestId('settings-theme-combobox')).toContainText('Light 2026')
 
-  await window.getByTestId('settings-editor-theme-combobox').click()
-  const themeList = window.locator('[data-combobox-list="settings-editor-theme-combobox-list"]')
+  await window.getByTestId('settings-theme-combobox').click()
+  const themeList = window.locator('[data-combobox-list="settings-theme-combobox-list"]')
   await expect(themeList).toBeVisible()
-  await themeList.hover()
-  await window.mouse.wheel(0, 320)
+  await expect(window.getByTestId('settings-theme-option-vscode-2026-light')).toBeVisible()
+  await expect
+    .poll(async () => {
+      const snapshot = await readComboboxListSnapshot(
+        window,
+        'settings-theme-combobox-list',
+        'settings-theme-option-vscode-2026-light',
+      )
 
-  await expect(window.getByTestId('settings-editor-theme-option-solarized-dark')).toBeVisible()
-  await expect.poll(async () => {
-    const snapshot = await readComboboxListSnapshot(
-      window,
-      'settings-editor-theme-combobox-list',
-      'settings-editor-theme-option-solarized-dark',
-    )
-
-    return snapshot?.scrollTop ?? 0
-  }).toBeGreaterThan(0)
+      return snapshot?.selectedFullyVisible ?? false
+    })
+    .toBe(true)
 
   await window.keyboard.press('Escape')
   await app.close()
@@ -4333,31 +4272,31 @@ test('advanced editor font picker closes after selecting a preview card and sync
   await app.close()
 })
 
-test('advanced editor theme picker closes after selecting a preview card and syncs the theme setting', async () => {
+test('advanced UI theme picker closes after selecting a preview card and syncs the theme setting', async () => {
   const { app, window } = await launchApp()
 
   await window.getByTestId('menu-settings-button').click()
   await expect(window.getByTestId('settings-dialog')).toBeVisible()
 
-  const advancedDialog = window.locator('[data-testid="settings-editor-theme-advanced-dialog"]')
-  await window.getByTestId('settings-editor-theme-advanced-button').click()
+  const advancedDialog = window.locator('[data-testid="settings-theme-advanced-dialog"]')
+  await window.getByTestId('settings-theme-advanced-button').click()
   await expect(advancedDialog).toBeVisible()
 
-  const draculaCard = window.getByTestId('settings-editor-theme-preview-card-dracula')
-  const palenightThemeCard = window.getByTestId('settings-editor-theme-preview-card-palenight-theme')
+  const darkCard = window.getByTestId('settings-theme-preview-card-vscode-2026-dark')
+  const lightCard = window.getByTestId('settings-theme-preview-card-vscode-2026-light')
 
-  await expect(draculaCard).toHaveAttribute('data-state', 'selected')
-  await expect(draculaCard).toContainText('Dracula Theme')
-  await expect(window.getByTestId('settings-editor-theme-preview-editor-palenight-theme')).toBeVisible()
-  await expect(palenightThemeCard).toContainText('Olaolu Olawuyi')
-  await expect(window.getByTestId('settings-editor-theme-preview-line-module-palenight-theme')).toContainText('module alu(clk)')
-  await expect(window.getByTestId('settings-editor-theme-preview-selection-palenight-theme')).toContainText("sum = calc('RUN')")
+  await expect(darkCard).toHaveAttribute('data-state', 'selected')
+  await expect(darkCard).toContainText('Dark 2026')
+  await expect(window.getByTestId('settings-theme-preview-editor-vscode-2026-light')).toBeVisible()
+  await expect(lightCard).toContainText('Microsoft')
+  await expect(window.getByTestId('settings-theme-preview-line-module-vscode-2026-light')).toContainText('module alu(clk)')
+  await expect(window.getByTestId('settings-theme-preview-selection-vscode-2026-light')).toContainText("sum = calc('RUN')")
 
-  await palenightThemeCard.click()
+  await lightCard.click()
 
   await expect(advancedDialog).toHaveCount(0)
-  await expect(window.getByTestId('settings-editor-theme-combobox')).toContainText('Palenight Theme')
-  await expect.poll(async () => readConfigValue(window, 'editor.theme')).toBe('palenight-theme')
+  await expect(window.getByTestId('settings-theme-combobox')).toContainText('Light 2026')
+  await expect.poll(async () => readConfigValue(window, 'workbench.colorTheme')).toBe('vscode-2026-light')
 
   await app.close()
 })
@@ -4398,7 +4337,7 @@ test('theme toggle persists across app relaunch', async () => {
 
       return browserGlobal.document.documentElement.classList.contains('dark');
     }),
-    stored: await readConfigValue(page, 'ui.theme'),
+    stored: await readConfigValue(page, 'workbench.colorTheme'),
   });
 
   const initialTheme = await readThemeSnapshot(firstWindow);

@@ -1,4 +1,4 @@
-import { BrowserWindow, dialog, ipcMain } from 'electron';
+import { BrowserWindow, dialog, ipcMain, type OpenDialogOptions } from 'electron';
 import path from 'node:path';
 import { AsyncChannels } from './channels.js';
 import { assertOptionalString } from './validators.js';
@@ -9,6 +9,11 @@ export interface SaveDialogResult {
   canceled: boolean;
   filePath: string | null;
   workspaceRelativePath: string | null;
+}
+
+export interface OpenThemeDialogResult {
+  canceled: boolean;
+  filePath: string | null;
 }
 
 export function setDialogProjectRoot(root: string): void {
@@ -78,5 +83,27 @@ export function registerDialogHandlers(getMainWindow: () => BrowserWindow | null
     }
 
     return createE2ESaveDialogResult(result.filePath);
+  });
+
+  ipcMain.handle(AsyncChannels.DIALOG_SHOW_OPEN_THEME, async () => {
+    const mainWindow = getMainWindow();
+    const dialogOptions: OpenDialogOptions = {
+      defaultPath: projectRoot ?? undefined,
+      filters: [
+        {
+          name: 'VS Code Color Themes',
+          extensions: ['json', 'jsonc'],
+        },
+      ],
+      properties: ['openFile'],
+    };
+    const result = mainWindow
+      ? await dialog.showOpenDialog(mainWindow, dialogOptions)
+      : await dialog.showOpenDialog(dialogOptions);
+
+    return {
+      canceled: result.canceled,
+      filePath: result.canceled ? null : result.filePaths[0] ?? null,
+    } satisfies OpenThemeDialogResult;
   });
 }

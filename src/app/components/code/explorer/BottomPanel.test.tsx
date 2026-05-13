@@ -6,8 +6,40 @@ import { BottomPanel } from './BottomPanel';
 
 let mockedProblems: LspProblem[] = [];
 
+const mockThemeApi = vi.hoisted(() => {
+  const activeTheme = {
+    id: 'vscode-2026-dark',
+    label: 'Dark 2026',
+    description: 'Built-in VS Code 2026 dark color theme.',
+    author: 'Microsoft',
+    kind: 'dark' as const,
+    source: 'builtin' as const,
+    colors: {
+      'editor.background': '#101010',
+      foreground: '#f5f5f5',
+      'panel.background': '#181818',
+    },
+    tokenColors: [],
+    semanticHighlighting: true,
+    semanticTokenColors: {},
+  };
+
+  return {
+    theme: 'dark' as const,
+    themeId: activeTheme.id,
+    activeTheme,
+    availableThemes: [],
+    importedThemes: [],
+    isImportingTheme: false,
+    getThemePreview: vi.fn(),
+    importTheme: vi.fn(),
+    setTheme: vi.fn(),
+    toggleTheme: vi.fn(),
+  };
+});
+
 vi.mock('../../../context/ThemeContext', () => ({
-  useTheme: () => ({ theme: 'dark', setTheme: vi.fn(), toggleTheme: vi.fn() }),
+  useTheme: () => mockThemeApi,
 }));
 
 vi.mock('../../../lsp/lspProblems', async (importOriginal) => {

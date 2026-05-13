@@ -418,15 +418,21 @@ describe('electron main entry', () => {
       frame: false,
       resizable: false,
       skipTaskbar: true,
-      backgroundColor: '#0b1020',
+      backgroundColor: '#191A1B',
     });
-    expect(splashWindow.loadFile).toHaveBeenCalledWith(expect.stringMatching(/public[\\/]splash\.html$/));
+    expect(splashWindow.loadFile).toHaveBeenCalledWith(expect.stringMatching(/public[\\/]splash\.html$/), {
+      query: {
+        backgroundColor: '#191A1B',
+        themeKind: 'dark',
+      },
+    });
 
     expect(mainWindow.options).toMatchObject({
       width: 1440,
       height: 900,
       minWidth: 800,
       minHeight: 600,
+      backgroundColor: '#121314',
       frame: false,
       show: false,
       webPreferences: expect.objectContaining({
@@ -458,6 +464,33 @@ describe('electron main entry', () => {
     expect(mocks.mockDisposeAllTerminalSessions).not.toHaveBeenCalled();
   });
 
+  it('uses cached startup and splash background colors from the unified theme config', async () => {
+    const { browserWindowInstances } = await importMain({
+      platform: 'win32',
+      configValues: {
+        'workbench.colorThemeKind': 'light',
+        'workbench.startupBackgroundColor': '#112233',
+        'workbench.splashBackgroundColor': '#223344',
+      },
+    });
+
+    const splashWindow = browserWindowInstances[0];
+    const mainWindow = browserWindowInstances[1];
+
+    expect(mainWindow.options).toMatchObject({
+      backgroundColor: '#112233',
+    });
+    expect(splashWindow.options).toMatchObject({
+      backgroundColor: '#223344',
+    });
+    expect(splashWindow.loadFile).toHaveBeenCalledWith(expect.stringMatching(/splash\.html$/), {
+      query: {
+        backgroundColor: '#223344',
+        themeKind: 'light',
+      },
+    });
+  });
+
   it('uses macOS window chrome and loads the built index and splash files in production', async () => {
     const { browserWindowInstances } = await importMain({ platform: 'darwin' });
 
@@ -484,7 +517,12 @@ describe('electron main entry', () => {
     expect(applicationMenu.template.map((item) => item.label)).toEqual(['Pristine', 'File', 'Edit', 'Help']);
     expect(mainWindow.loadFile).toHaveBeenCalledWith(expect.stringMatching(/dist[\\/]index\.html$/));
     expect(mainWindow.loadURL).not.toHaveBeenCalled();
-    expect(splashWindow.loadFile).toHaveBeenCalledWith(expect.stringMatching(/dist[\\/]splash\.html$/));
+    expect(splashWindow.loadFile).toHaveBeenCalledWith(expect.stringMatching(/dist[\\/]splash\.html$/), {
+      query: {
+        backgroundColor: '#191A1B',
+        themeKind: 'dark',
+      },
+    });
   });
 
   it('installs a dedicated macOS application menu labeled Pristine with app commands', async () => {
@@ -596,6 +634,8 @@ describe('electron main entry', () => {
     const { browserWindowInstances } = await importMain({
       platform: 'win32',
       configValues: {
+        'workbench.colorThemeKind': 'light',
+        'workbench.floatingInfoBackgroundColor': '#334455',
         'ui.floatingInfoWindow.visible': true,
       },
     });
@@ -610,10 +650,16 @@ describe('electron main entry', () => {
       skipTaskbar: true,
       alwaysOnTop: true,
       title: 'Pristine Floating Info',
+      backgroundColor: '#334455',
     });
     expect(floatingInfoWindow.show).toHaveBeenCalledTimes(1);
     expect(floatingInfoWindow.setAlwaysOnTop).toHaveBeenCalledWith(true, 'screen-saver');
-    expect(floatingInfoWindow.loadFile).toHaveBeenCalledWith(expect.stringMatching(/dist[\\/]floating-info\.html$/));
+    expect(floatingInfoWindow.loadFile).toHaveBeenCalledWith(expect.stringMatching(/dist[\\/]floating-info\.html$/), {
+      query: {
+        backgroundColor: '#334455',
+        themeKind: 'light',
+      },
+    });
   });
 
   it('focuses the existing visible main window for auth callback deep links without replaying the show animation', async () => {

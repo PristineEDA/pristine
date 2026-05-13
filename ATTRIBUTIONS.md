@@ -203,6 +203,7 @@ Lit（https://github.com/lit/lit）Google LLC BSD-3-Clause
 node-pty（https://github.com/microsoft/node-pty）Microsoft MIT
 vscode-jsonrpc（https://github.com/microsoft/vscode-languageserver-node）Microsoft MIT
 ignore（https://github.com/kaelzhang/node-ignore）kaelzhang MIT
+jsonc-parser（https://github.com/microsoft/node-jsonc-parser）Microsoft MIT
 @preact/signals-core（https://github.com/preactjs/signals）Preact MIT
 RxJS（https://github.com/ReactiveX/rxjs）ReactiveX Apache-2.0
 

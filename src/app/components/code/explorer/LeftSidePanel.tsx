@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { refreshWorkspaceGitStatus, useWorkspaceGitStatus } from '../../../git/workspaceGitStatus';
+import { useWorkspaceGitStatus } from '../../../git/workspaceGitStatus';
 import { FileTreeNode, type ExplorerContextMenuRequest } from './FileTreeNode';
 import { ExplorerPanelTabs, ExplorerToolbar, type ExplorerPanelTab } from './LeftSidePanelChrome';
 import { FileOutlinePanel } from './FileOutlinePanel';
@@ -65,7 +65,6 @@ interface LeftSidePanelProps {
   currentOutlineId: string;
   refreshToken?: number;
   revealRequest?: WorkspaceRevealRequest | null;
-  onWorkspaceRefresh?: () => void;
   workspaceClipboard: WorkspaceClipboardState | null;
 }
 
@@ -85,7 +84,6 @@ export function LeftSidePanel({
   currentOutlineId,
   refreshToken = 0,
   revealRequest,
-  onWorkspaceRefresh,
   workspaceClipboard,
 }: LeftSidePanelProps) {
   const treeContainerRef = useRef<HTMLDivElement | null>(null);
@@ -104,8 +102,6 @@ export function LeftSidePanel({
     workspaceAvailable,
     expandedFolders,
     toggleFolder,
-    refreshTree,
-    collapseAll,
   } = useWorkspaceTree(revealRequest, refreshToken);
 
   latestSelectedNodeRef.current = selectedNode;
@@ -375,10 +371,9 @@ export function LeftSidePanel({
 
   const ensureFolderExpanded = useCallback((folderPath: string) => {
     if (!expandedFolders.has(folderPath)) {
-      onWorkspaceRefresh?.();
       toggleFolder(folderPath);
     }
-  }, [expandedFolders, onWorkspaceRefresh, toggleFolder]);
+  }, [expandedFolders, toggleFolder]);
 
   const selectedParentPath = useMemo(() => {
     if (!selectedNode || selectedNode.source !== 'real') {
@@ -480,20 +475,6 @@ export function LeftSidePanel({
     setSelectedNode(editState.selectedNode);
     setTreeEditSession(editState.treeEditSession);
   }, [ensureFolderExpanded, selectedParentPath]);
-
-  const handleCreateFile = useCallback(() => {
-    startCreateEntry('file');
-  }, [startCreateEntry]);
-
-  const handleCreateFolder = useCallback(() => {
-    startCreateEntry('folder');
-  }, [startCreateEntry]);
-
-  const handleRefreshExplorer = useCallback(() => {
-    onWorkspaceRefresh?.();
-    refreshTree();
-    refreshWorkspaceGitStatus();
-  }, [onWorkspaceRefresh, refreshTree]);
 
   const cancelTreeEdit = useCallback(() => {
     if (!treeEditSession || treeEditSession.isSubmitting) {
@@ -665,13 +646,7 @@ export function LeftSidePanel({
       {/* Explorer */}
       {tab === 'explorer' && (
         <div className="flex flex-col flex-1 overflow-hidden">
-          <ExplorerToolbar
-            projectName={DEFAULT_STARTUP_PROJECT_NAME}
-            onCreateFile={handleCreateFile}
-            onCreateFolder={handleCreateFolder}
-            onRefresh={handleRefreshExplorer}
-            onCollapseAll={collapseAll}
-          />
+          <ExplorerToolbar projectName={DEFAULT_STARTUP_PROJECT_NAME} />
           <div
             ref={treeContainerRef}
             tabIndex={0}

@@ -21,6 +21,7 @@ const directRuntimeDependencyAttributionIds = new Map([
   ['clsx', 'clsx'],
   ['cmdk', 'cmdk'],
   ['ignore', 'ignore'],
+  ['jsonc-parser', 'jsonc-parser'],
   ['lit', 'lit'],
   ['lucide-react', 'lucide-react'],
   ['material-icon-theme', 'material-icon-theme'],

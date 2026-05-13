@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
-import { createTerminalTheme, IDE_MONO_FONT_FAMILY } from '../../../editor/appearance';
+import { createTerminalThemeFromColorTheme, IDE_MONO_FONT_FAMILY } from '../../../editor/appearance';
 import { useTheme } from '../../../context/ThemeContext';
 import {
   ensureTerminalSession,
@@ -19,8 +19,8 @@ interface TerminalSurfaceProps {
 export function TerminalSurface({ layoutVersion }: TerminalSurfaceProps) {
   const [sessionState, setSessionState] = useState(() => getTerminalSessionSnapshot());
   const isE2E = window.electronAPI?.isE2E === true;
-  const { theme } = useTheme();
-  const terminalTheme = useMemo(() => createTerminalTheme(theme), [theme]);
+  const { activeTheme } = useTheme();
+  const terminalTheme = useMemo(() => createTerminalThemeFromColorTheme(activeTheme), [activeTheme]);
   const hostRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const renderedBufferRef = useRef(0);

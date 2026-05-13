@@ -1,6 +1,7 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Mock } from 'vitest';
 import { WhiteboardView } from './WhiteboardView';
 import { mountBlockSuiteWhiteboard } from '../../whiteboard/blocksuiteAdapter';
 import { createWhiteboardStore } from '../../whiteboard/createWhiteboardStore';
@@ -15,6 +16,7 @@ vi.mock('../../whiteboard/createWhiteboardStore', () => ({
 
 describe('WhiteboardView', () => {
   const getWhiteboardHost = () => screen.getByTestId('whiteboard-host') as HTMLDivElement;
+  let activateWhiteboard: Mock<() => void>;
 
   const getMountedEditor = () => {
     const editor = getWhiteboardHost().querySelector('[data-testid="whiteboard-edgeless-editor"]');
@@ -27,6 +29,7 @@ describe('WhiteboardView', () => {
   };
 
   beforeEach(() => {
+    activateWhiteboard = vi.fn<() => void>();
     vi.mocked(createWhiteboardStore).mockImplementation(() => ({
       store: {} as never,
       workspace: {} as never,
@@ -42,6 +45,7 @@ describe('WhiteboardView', () => {
       return {
         container,
         editor,
+        activate: activateWhiteboard,
         dispose: vi.fn(() => {
           (container as HTMLElement).remove();
         }),
@@ -69,6 +73,21 @@ describe('WhiteboardView', () => {
     expect(mountBlockSuiteWhiteboard).toHaveBeenCalledWith(expect.objectContaining({
       host: getWhiteboardHost(),
     }));
+  });
+
+  it('activates a mounted whiteboard when the view becomes active', async () => {
+    const { rerender } = render(<WhiteboardView isActive={false} />);
+
+    await waitFor(() => {
+      expect(getMountedEditor()).toBeInTheDocument();
+    });
+    expect(activateWhiteboard).not.toHaveBeenCalled();
+
+    rerender(<WhiteboardView isActive />);
+
+    await waitFor(() => {
+      expect(activateWhiteboard).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('shows mount errors and retries on request', async () => {

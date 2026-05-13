@@ -52,6 +52,49 @@ function broadcastConfigChange(key: string, value: unknown): void {
   });
 }
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function areJsonConfigValuesEqual(left: unknown, right: unknown): boolean {
+  if (Object.is(left, right)) {
+    return true;
+  }
+
+  if (Array.isArray(left) || Array.isArray(right)) {
+    if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) {
+      return false;
+    }
+
+    return left.every((entry, index) => areJsonConfigValuesEqual(entry, right[index]));
+  }
+
+  if (isPlainObject(left) || isPlainObject(right)) {
+    if (!isPlainObject(left) || !isPlainObject(right)) {
+      return false;
+    }
+
+    const leftKeys = Object.keys(left);
+    const rightKeys = Object.keys(right);
+
+    if (leftKeys.length !== rightKeys.length) {
+      return false;
+    }
+
+    return leftKeys.every((key) => (
+      Object.prototype.hasOwnProperty.call(right, key)
+      && areJsonConfigValuesEqual(left[key], right[key])
+    ));
+  }
+
+  return false;
+}
+
 export function flushPendingConfigSave(): void {
   ensureConfigLoaded();
 
@@ -111,7 +154,7 @@ export function setConfigValue(key: string, value: unknown): void {
   const normalizedCurrentValue = configData[key] ?? null;
   const normalizedNextValue = value ?? null;
 
-  if (Object.is(normalizedCurrentValue, normalizedNextValue)) {
+  if (areJsonConfigValuesEqual(normalizedCurrentValue, normalizedNextValue)) {
     return;
   }
 

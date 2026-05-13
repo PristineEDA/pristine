@@ -1,42 +1,35 @@
 import { type CSSProperties, useEffect, useMemo, useState } from 'react'
-import {
-  editorThemeOptions,
-  getEditorThemeAuthor,
-  getEditorThemeLabel,
-  type EditorThemeId,
-} from '../../../editor/editorSettings'
-import { getEditorThemePreview, type EditorThemePreview } from '../../../editor/monacoThemes'
-import { getRootThemeStyles } from '../../../editor/themeSource'
+import type { ColorThemeOption, ColorThemePreviewPalette } from '../../../theme/colorThemeTypes'
 import { cn } from '../../../../lib/utils'
 import { Card, CardContent, CardFooter } from '../../ui/card'
 import { AdvancedPickerLayout, filterOptionsByLabel } from './AdvancedPickerLayout'
 
 type EditorThemeAdvancedDialogProps = {
+  availableThemes: ColorThemeOption[]
   dialogStyle?: CSSProperties
+  getThemePreview: (themeId: string) => ColorThemePreviewPalette
   onOpenChange: (open: boolean) => void
-  onSelectTheme: (theme: EditorThemeId) => void
+  onSelectTheme: (themeId: string) => void
   open: boolean
-  selectedTheme: EditorThemeId
+  selectedTheme: string
 }
 
-const advancedThemeSearchPlaceholder = 'Search editor themes...'
-const advancedThemeSearchEmptyText = 'No editor theme found.'
+const advancedThemeSearchPlaceholder = 'Search UI themes...'
+const advancedThemeSearchEmptyText = 'No UI theme found.'
 
 function ThemePreviewCard({
   isSelected,
   onSelect,
+  option,
   preview,
   testIdPrefix,
-  theme,
 }: {
   isSelected: boolean
-  onSelect?: (theme: EditorThemeId) => void
-  preview: EditorThemePreview
-  testIdPrefix: 'settings-editor-theme-current' | 'settings-editor-theme-preview'
-  theme: EditorThemeId
+  onSelect?: (themeId: string) => void
+  option: ColorThemeOption
+  preview: ColorThemePreviewPalette
+  testIdPrefix: 'settings-theme-current' | 'settings-theme-preview'
 }) {
-  const label = getEditorThemeLabel(theme)
-  const author = getEditorThemeAuthor(theme)
   const isInteractive = Boolean(onSelect)
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
@@ -49,14 +42,14 @@ function ThemePreviewCard({
     }
 
     event.preventDefault()
-    onSelect(theme)
+    onSelect(option.value)
   }
 
-  const handleSelect = onSelect ? () => onSelect(theme) : undefined
+  const handleSelect = onSelect ? () => onSelect(option.value) : undefined
 
   return (
     <Card
-      aria-label={`Select ${label}`}
+      aria-label={`Select ${option.label}`}
       aria-pressed={isInteractive ? isSelected : undefined}
       className={cn(
         'gap-0 overflow-hidden py-0 transition-[border-color,background-color,box-shadow]',
@@ -64,7 +57,7 @@ function ThemePreviewCard({
         isSelected && 'border-black shadow-sm',
       )}
       data-state={isSelected ? 'selected' : 'unselected'}
-      data-testid={`${testIdPrefix}-card-${theme}`}
+      data-testid={`${testIdPrefix}-card-${option.value}`}
       onClick={handleSelect}
       onKeyDown={isInteractive ? handleKeyDown : undefined}
       role={isInteractive ? 'button' : undefined}
@@ -73,19 +66,19 @@ function ThemePreviewCard({
       <CardContent className="flex min-h-32 items-center justify-center px-3 py-6 sm:px-4">
         <div
           className="w-full max-w-[15rem] overflow-hidden rounded-md border shadow-sm"
-          data-testid={`${testIdPrefix}-editor-${theme}`}
+          data-testid={`${testIdPrefix}-editor-${option.value}`}
           style={{
-            backgroundColor: preview.palette.background,
-            borderColor: `${preview.palette.comment}44`,
+            backgroundColor: preview.background,
+            borderColor: `${preview.comment}44`,
           }}
         >
           <div className="grid grid-cols-[2rem_minmax(0,1fr)] text-left font-mono text-[9px] leading-[1.15rem] sm:text-[10px]">
             <div
               className="border-r px-1.5 py-2 text-right"
               style={{
-                backgroundColor: preview.palette.surface,
-                borderColor: `${preview.palette.comment}33`,
-                color: preview.palette.comment,
+                backgroundColor: preview.surface,
+                borderColor: `${preview.comment}33`,
+                color: preview.comment,
               }}
             >
               <div>1</div>
@@ -93,49 +86,49 @@ function ThemePreviewCard({
               <div>3</div>
               <div>4</div>
             </div>
-            <div className="space-y-0.5 px-2 py-2" style={{ color: preview.palette.foreground }}>
-              <div className="truncate" data-testid={`${testIdPrefix}-line-comment-${theme}`}>
-                <span style={{ color: preview.palette.comment }}>// timing path</span>
+            <div className="space-y-0.5 px-2 py-2" style={{ color: preview.foreground }}>
+              <div className="truncate" data-testid={`${testIdPrefix}-line-comment-${option.value}`}>
+                <span style={{ color: preview.comment }}>// timing path</span>
               </div>
-              <div className="truncate" data-testid={`${testIdPrefix}-line-module-${theme}`}>
-                <span style={{ color: preview.palette.pink }}>module</span>{' '}
-                <span style={{ color: preview.palette.cyan }}>alu</span>
-                <span style={{ color: preview.palette.foreground }}>(</span>
-                <span style={{ color: preview.palette.orange }}>clk</span>
-                <span style={{ color: preview.palette.foreground }}>)</span>
+              <div className="truncate" data-testid={`${testIdPrefix}-line-module-${option.value}`}>
+                <span style={{ color: preview.pink }}>module</span>{' '}
+                <span style={{ color: preview.cyan }}>alu</span>
+                <span style={{ color: preview.foreground }}>(</span>
+                <span style={{ color: preview.orange }}>clk</span>
+                <span style={{ color: preview.foreground }}>)</span>
               </div>
               <div
                 className="truncate rounded-sm px-1"
-                data-testid={`${testIdPrefix}-selection-${theme}`}
-                style={{ backgroundColor: preview.palette.selection }}
+                data-testid={`${testIdPrefix}-selection-${option.value}`}
+                style={{ backgroundColor: preview.selection }}
               >
-                <span style={{ color: preview.palette.orange }}>sum</span>{' '}
-                <span style={{ color: preview.palette.foreground }}>=</span>{' '}
-                <span style={{ color: preview.palette.green }}>calc</span>
-                <span style={{ color: preview.palette.foreground }}>(</span>
-                <span style={{ color: preview.palette.yellow }}>'RUN'</span>
-                <span style={{ color: preview.palette.foreground }}>)</span>
+                <span style={{ color: preview.orange }}>sum</span>{' '}
+                <span style={{ color: preview.foreground }}>=</span>{' '}
+                <span style={{ color: preview.green }}>calc</span>
+                <span style={{ color: preview.foreground }}>(</span>
+                <span style={{ color: preview.yellow }}>'RUN'</span>
+                <span style={{ color: preview.foreground }}>)</span>
               </div>
-              <div className="truncate" data-testid={`${testIdPrefix}-line-end-${theme}`}>
-                <span style={{ color: preview.palette.pink }}>endmodule</span>
+              <div className="truncate" data-testid={`${testIdPrefix}-line-end-${option.value}`}>
+                <span style={{ color: preview.pink }}>endmodule</span>
               </div>
             </div>
           </div>
         </div>
       </CardContent>
-      <CardFooter className="relative h-10 justify-center overflow-hidden border-t border-border/70 bg-muted/35 px-3 py-2.5 text-[13px] font-medium text-foreground">
+      <CardFooter className="relative h-11 justify-center overflow-hidden border-t border-border/70 bg-muted/35 px-3 py-2.5 text-[13px] font-medium text-foreground">
         <div className="absolute inset-x-0 top-1/2 flex min-w-0 -translate-y-1/2 flex-col items-center leading-none">
           <span
             className="block w-full truncate px-3 text-center"
-            data-testid={`${testIdPrefix}-label-${theme}`}
+            data-testid={`${testIdPrefix}-label-${option.value}`}
           >
-            {label}
+            {option.label}
           </span>
           <span
             className="mt-px text-[10px] font-normal text-muted-foreground"
-            data-testid={`${testIdPrefix}-author-${theme}`}
+            data-testid={`${testIdPrefix}-author-${option.value}`}
           >
-            {author}
+            {option.author}
           </span>
         </div>
       </CardFooter>
@@ -144,14 +137,15 @@ function ThemePreviewCard({
 }
 
 export function EditorThemeAdvancedDialog({
+  availableThemes,
   dialogStyle,
+  getThemePreview,
   onOpenChange,
   onSelectTheme,
   open,
   selectedTheme,
 }: EditorThemeAdvancedDialogProps) {
   const [searchQuery, setSearchQuery] = useState('')
-  const themeStyles = getRootThemeStyles()
 
   useEffect(() => {
     if (!open) {
@@ -159,46 +153,61 @@ export function EditorThemeAdvancedDialog({
     }
   }, [open])
 
-  const filteredAvailableThemeOptions = useMemo(() => filterOptionsByLabel(editorThemeOptions, searchQuery), [searchQuery])
+  const filteredAvailableThemeOptions = useMemo(
+    () => filterOptionsByLabel(availableThemes, searchQuery),
+    [availableThemes, searchQuery],
+  )
+  const selectedThemeOption = useMemo(() => {
+    return filteredAvailableThemeOptions.find((option) => option.value === selectedTheme)
+      ?? availableThemes.find((option) => option.value === selectedTheme)
+      ?? {
+        value: selectedTheme,
+        label: selectedTheme,
+        description: 'Currently selected theme.',
+        author: 'Unknown author',
+        kind: 'dark' as const,
+        source: 'builtin' as const,
+      }
+  }, [availableThemes, filteredAvailableThemeOptions, selectedTheme])
 
   return (
     <AdvancedPickerLayout
-      availableEmptyStateTestId="settings-editor-theme-advanced-empty-state"
+      availableEmptyStateTestId="settings-theme-advanced-empty-state"
       availableEmptyText={advancedThemeSearchEmptyText}
       availableGridContent={filteredAvailableThemeOptions.map((option) => (
         <ThemePreviewCard
           key={option.value}
           isSelected={option.value === selectedTheme}
           onSelect={onSelectTheme}
-          preview={getEditorThemePreview(option.value, themeStyles)}
-          testIdPrefix="settings-editor-theme-preview"
-          theme={option.value}
+          option={option}
+          preview={getThemePreview(option.value)}
+          testIdPrefix="settings-theme-preview"
         />
       ))}
-      availableGridTestId="settings-editor-theme-advanced-grid"
+      availableGridTestId="settings-theme-advanced-grid"
       availableHasItems={filteredAvailableThemeOptions.length > 0}
-      availableSectionDescription="Choose from the bundled Monaco themes available for the editor."
-      availableSectionTestId="settings-editor-theme-available-section"
+      availableSectionDescription="Choose the VS Code color theme used across the workbench, Monaco, and the integrated terminal."
+      availableSectionTestId="settings-theme-available-section"
       availableSectionTitle="Available themes"
-      closeButtonTestId="settings-editor-theme-advanced-close-button"
+      closeButtonTestId="settings-theme-advanced-close-button"
       currentGridContent={
         <ThemePreviewCard
           isSelected={false}
-          preview={getEditorThemePreview(selectedTheme, themeStyles)}
-          testIdPrefix="settings-editor-theme-current"
-          theme={selectedTheme}
+          option={selectedThemeOption}
+          preview={getThemePreview(selectedTheme)}
+          testIdPrefix="settings-theme-current"
         />
       }
-      currentSectionDescription="The theme currently used by Monaco editor tabs."
-      currentSectionTestId="settings-editor-theme-current-section"
+      currentSectionDescription="The theme currently used across Pristine UI, Monaco editor tabs, and terminal surfaces."
+      currentSectionTestId="settings-theme-current-section"
       currentSectionTitle="Current"
-      description="Preview Monaco color themes in a compact editor layout before applying them to code tabs."
+      description="Preview VS Code color themes in a compact editor layout before applying them across the workbench."
       dialogStyle={dialogStyle}
-      dialogTestId="settings-editor-theme-advanced-dialog"
+      dialogTestId="settings-theme-advanced-dialog"
       onOpenChange={onOpenChange}
       open={open}
-      scrollAreaTestId="settings-editor-theme-advanced-scroll-area"
-      searchInputTestId="settings-editor-theme-advanced-search-input"
+      scrollAreaTestId="settings-theme-advanced-scroll-area"
+      searchInputTestId="settings-theme-advanced-search-input"
       searchPlaceholder={advancedThemeSearchPlaceholder}
       searchValue={searchQuery}
       title="Advanced theme picker"

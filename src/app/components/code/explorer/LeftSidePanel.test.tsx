@@ -91,6 +91,16 @@ describe('LeftSidePanel', () => {
     expect(await screen.findByTestId('file-tree-node-rtl')).toBeInTheDocument();
   });
 
+  it('does not render the legacy explorer toolbar buttons', async () => {
+    renderLeftSidePanel();
+
+    expect(await screen.findByTestId('file-tree-node-rtl')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'New File' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'New Folder' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Refresh' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Collapse All' })).not.toBeInTheDocument();
+  });
+
   it('expands explorer items and opens a clicked file', async () => {
     const onFileOpen = vi.fn();
     const onFilePreview = vi.fn();
@@ -199,17 +209,6 @@ describe('LeftSidePanel', () => {
 
     await testUser.click(rootNode);
     expect(await screen.findByTestId('file-tree-node-rtl')).toBeInTheDocument();
-  });
-
-  it('collapses the workspace root when using collapse all', async () => {
-    renderLeftSidePanel();
-
-    expect(await screen.findByTestId('file-tree-node-rtl')).toBeInTheDocument();
-
-    await testUser.click(screen.getByRole('button', { name: 'Collapse All' }));
-
-    expect(screen.getByTestId('file-tree-node-root')).toBeInTheDocument();
-    expect(screen.queryByTestId('file-tree-node-rtl')).not.toBeInTheDocument();
   });
 
   it('starts inline rename with F2 for the selected explorer file and submits a real rename', async () => {
@@ -677,7 +676,7 @@ describe('LeftSidePanel', () => {
     });
   });
 
-  it('does not start delete while an explorer input is focused', async () => {
+  it('does not start delete while an explorer input opened from the context menu is focused', async () => {
     const onDeleteWorkspaceEntry = vi.fn().mockResolvedValue(false);
 
     renderLeftSidePanel({
@@ -687,7 +686,8 @@ describe('LeftSidePanel', () => {
     });
 
     await expandDefaultTree();
-    await testUser.click(screen.getByRole('button', { name: 'New File' }));
+  fireEvent.contextMenu(await screen.findByTestId('file-tree-node-rtl_peripherals'), { clientX: 50, clientY: 60 });
+  await testUser.click(screen.getByRole('menuitem', { name: 'New File' }));
 
     const draftInput = screen.getByRole('textbox');
     draftInput.focus();
@@ -782,7 +782,7 @@ describe('LeftSidePanel', () => {
     })).toBeNull();
   });
 
-  it('creates a real file from the selected folder through the draft row', async () => {
+  it('creates a real file from the selected folder through the context menu draft row', async () => {
     const onCreateWorkspaceFile = vi.fn().mockResolvedValue(undefined);
 
     renderLeftSidePanel({
@@ -792,7 +792,8 @@ describe('LeftSidePanel', () => {
     });
 
     await expandDefaultTree();
-    await testUser.click(screen.getByRole('button', { name: 'New File' }));
+  fireEvent.contextMenu(await screen.findByTestId('file-tree-node-rtl_peripherals'), { clientX: 50, clientY: 60 });
+  await testUser.click(screen.getByRole('menuitem', { name: 'New File' }));
 
     const draftInput = screen.getByRole('textbox');
     fireEvent.change(draftInput, { target: { value: 'uart_tx.sv' } });
@@ -813,7 +814,8 @@ describe('LeftSidePanel', () => {
     });
 
     await expandDefaultTree();
-    await testUser.click(screen.getByRole('button', { name: 'New Folder' }));
+  fireEvent.contextMenu(await screen.findByTestId('file-tree-node-rtl_peripherals'), { clientX: 50, clientY: 60 });
+  await testUser.click(screen.getByRole('menuitem', { name: 'New Folder' }));
 
     const draftInput = screen.getByRole('textbox');
     fireEvent.keyDown(draftInput, { key: 'Enter' });

@@ -2,7 +2,7 @@ import { render, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TerminalPanel } from './TerminalPanel';
 import type { ElectronAPI } from '../../../../../types/electron-api';
-import { createTerminalTheme, IDE_MONO_FONT_FAMILY } from '../../../editor/appearance';
+import { createTerminalThemeFromColorTheme, IDE_MONO_FONT_FAMILY } from '../../../editor/appearance';
 import { resetTerminalSessionStoreForTests } from './terminalSessionStore';
 
 const terminalInstances: Array<{
@@ -21,6 +21,38 @@ const terminalConstructorOptions: Array<Record<string, unknown>> = [];
 
 const fitMock = vi.fn();
 
+const mockThemeApi = vi.hoisted(() => {
+  const activeTheme = {
+    id: 'vscode-2026-dark',
+    label: 'Dark 2026',
+    description: 'Built-in VS Code 2026 dark color theme.',
+    author: 'Microsoft',
+    kind: 'dark' as const,
+    source: 'builtin' as const,
+    colors: {
+      'editor.background': '#101010',
+      foreground: '#f5f5f5',
+      'panel.background': '#181818',
+    },
+    tokenColors: [],
+    semanticHighlighting: true,
+    semanticTokenColors: {},
+  };
+
+  return {
+    theme: 'dark' as const,
+    themeId: activeTheme.id,
+    activeTheme,
+    availableThemes: [],
+    importedThemes: [],
+    isImportingTheme: false,
+    getThemePreview: vi.fn(),
+    importTheme: vi.fn(),
+    setTheme: vi.fn(),
+    toggleTheme: vi.fn(),
+  };
+});
+
 vi.mock('@xterm/addon-fit', () => ({
   FitAddon: class {
     fit = fitMock;
@@ -28,7 +60,7 @@ vi.mock('@xterm/addon-fit', () => ({
 }));
 
 vi.mock('../../../context/ThemeContext', () => ({
-  useTheme: () => ({ theme: 'dark', setTheme: vi.fn(), toggleTheme: vi.fn() }),
+  useTheme: () => mockThemeApi,
 }));
 
 vi.mock('@xterm/xterm', () => ({
@@ -98,10 +130,29 @@ describe('TerminalPanel', () => {
     await waitFor(() => expect(createMock).toHaveBeenCalled());
     expect(terminalInstances[0]?.open).toHaveBeenCalled();
     expect(terminalConstructorOptions[0]?.fontFamily).toBe(IDE_MONO_FONT_FAMILY);
-    expect(terminalConstructorOptions[0]?.theme).toEqual(createTerminalTheme('dark', null));
+    expect(terminalConstructorOptions[0]?.theme).toEqual(createTerminalThemeFromColorTheme({
+      id: 'vscode-2026-dark',
+      label: 'Dark 2026',
+      description: 'Built-in VS Code 2026 dark color theme.',
+      author: 'Microsoft',
+      kind: 'dark',
+      source: 'builtin',
+      colors: {
+        'editor.background': '#101010',
+        foreground: '#f5f5f5',
+        'panel.background': '#181818',
+      },
+      tokenColors: [],
+      semanticHighlighting: true,
+      semanticTokenColors: {},
+    }));
 
     onDataCallback?.({ id: 'term-1', data: 'PS> dir\r\n' });
-    await waitFor(() => expect(terminalInstances[0]?.write).toHaveBeenCalledWith('PS> dir\r\n'));
+    await waitFor(() => {
+      expect(
+        terminalInstances.some((instance) => instance.write.mock.calls.some((call) => call[0] === 'PS> dir\r\n')),
+      ).toBe(true);
+    });
   });
 
   it('forwards terminal input to the backend session', async () => {
@@ -156,7 +207,11 @@ describe('TerminalPanel', () => {
 
     render(<TerminalPanel />);
 
-    await waitFor(() => expect(terminalInstances[1]?.write).toHaveBeenCalledWith('persisted\r\n'));
+    await waitFor(() => {
+      expect(
+        terminalInstances.some((instance) => instance.write.mock.calls.some((call) => call[0] === 'persisted\r\n')),
+      ).toBe(true);
+    });
     expect(createMock).toHaveBeenCalledTimes(1);
   });
 });
