@@ -1820,7 +1820,6 @@ test('Explorer Copy creates a -copy file and keeps it after relaunch', async () 
 
   const workspaceCopy = test.info().outputPath('explorer-copy-file-workspace');
   createWorkspaceCopy(workspaceCopy);
-  const primaryModifier = process.platform === 'darwin' ? 'Meta' : 'Control';
 
   const copiedRelativePath = 'rtl/core/reg_file-copy.v';
   const copiedAbsolutePath = path.join(workspaceCopy, 'rtl', 'core', 'reg_file-copy.v');
