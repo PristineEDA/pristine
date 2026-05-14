@@ -1,0 +1,1338 @@
+[
+  {
+    "id": "dracula",
+    "publisher": "dracula-theme",
+    "extensionName": "theme-dracula",
+    "version": "2.25.1",
+    "assetDirectory": "theme-dracula",
+    "themePath": "theme/dracula.json"
+  },
+  {
+    "id": "github-light",
+    "publisher": "GitHub",
+    "extensionName": "github-vscode-theme",
+    "version": "6.3.5",
+    "assetDirectory": "github-vscode-theme",
+    "themePath": "themes/light.json"
+  },
+  {
+    "id": "github-dark",
+    "publisher": "GitHub",
+    "extensionName": "github-vscode-theme",
+    "version": "6.3.5",
+    "assetDirectory": "github-vscode-theme",
+    "themePath": "themes/dark.json"
+  },
+  {
+    "id": "github-dark-default",
+    "publisher": "GitHub",
+    "extensionName": "github-vscode-theme",
+    "version": "6.3.5",
+    "assetDirectory": "github-vscode-theme",
+    "themePath": "themes/dark-default.json"
+  },
+  {
+    "id": "github-light-default",
+    "publisher": "GitHub",
+    "extensionName": "github-vscode-theme",
+    "version": "6.3.5",
+    "assetDirectory": "github-vscode-theme",
+    "themePath": "themes/light-default.json"
+  },
+  {
+    "id": "github-dark-dimmed",
+    "publisher": "GitHub",
+    "extensionName": "github-vscode-theme",
+    "version": "6.3.5",
+    "assetDirectory": "github-vscode-theme",
+    "themePath": "themes/dark-dimmed.json"
+  },
+  {
+    "id": "one-dark-pro",
+    "publisher": "zhuangtongfa",
+    "extensionName": "Material-theme",
+    "version": "3.19.0",
+    "assetDirectory": "material-theme",
+    "themePath": "themes/OneDark-Pro.json"
+  },
+  {
+    "id": "tokyo-night",
+    "publisher": "enkia",
+    "extensionName": "tokyo-night",
+    "version": "1.1.2",
+    "assetDirectory": "tokyo-night",
+    "themePath": "themes/tokyo-night-color-theme.json"
+  },
+  {
+    "id": "tokyo-night-light",
+    "publisher": "enkia",
+    "extensionName": "tokyo-night",
+    "version": "1.1.2",
+    "assetDirectory": "tokyo-night",
+    "themePath": "themes/tokyo-night-light-color-theme.json"
+  },
+  {
+    "id": "tokyo-night-storm",
+    "publisher": "enkia",
+    "extensionName": "tokyo-night",
+    "version": "1.1.2",
+    "assetDirectory": "tokyo-night",
+    "themePath": "themes/tokyo-night-storm-color-theme.json"
+  },
+  {
+    "id": "catppuccin-mocha",
+    "publisher": "Catppuccin",
+    "extensionName": "catppuccin-vsc",
+    "version": "3.19.0",
+    "assetDirectory": "catppuccin-vsc",
+    "themePath": "themes/mocha.json"
+  },
+  {
+    "id": "catppuccin-latte",
+    "publisher": "Catppuccin",
+    "extensionName": "catppuccin-vsc",
+    "version": "3.19.0",
+    "assetDirectory": "catppuccin-vsc",
+    "themePath": "themes/latte.json"
+  },
+  {
+    "id": "catppuccin-frappe",
+    "publisher": "Catppuccin",
+    "extensionName": "catppuccin-vsc",
+    "version": "3.19.0",
+    "assetDirectory": "catppuccin-vsc",
+    "themePath": "themes/frappe.json"
+  },
+  {
+    "id": "catppuccin-macchiato",
+    "publisher": "Catppuccin",
+    "extensionName": "catppuccin-vsc",
+    "version": "3.19.0",
+    "assetDirectory": "catppuccin-vsc",
+    "themePath": "themes/macchiato.json"
+  },
+  {
+    "id": "nord",
+    "publisher": "arcticicestudio",
+    "extensionName": "nord-visual-studio-code",
+    "version": "0.19.0",
+    "assetDirectory": "nord-visual-studio-code",
+    "themePath": "themes/nord-color-theme.json"
+  },
+  {
+    "id": "rose-pine",
+    "publisher": "mvllow",
+    "extensionName": "rose-pine",
+    "version": "2.15.2",
+    "assetDirectory": "rose-pine",
+    "themePath": "themes/rose-pine-color-theme.json"
+  },
+  {
+    "id": "rose-pine-moon",
+    "publisher": "mvllow",
+    "extensionName": "rose-pine",
+    "version": "2.15.2",
+    "assetDirectory": "rose-pine",
+    "themePath": "themes/rose-pine-moon-color-theme.json"
+  },
+  {
+    "id": "rose-pine-dawn",
+    "publisher": "mvllow",
+    "extensionName": "rose-pine",
+    "version": "2.15.2",
+    "assetDirectory": "rose-pine",
+    "themePath": "themes/rose-pine-dawn-color-theme.json"
+  },
+  {
+    "id": "gruvbox-dark-medium",
+    "publisher": "jdinhlife",
+    "extensionName": "gruvbox",
+    "version": "1.29.1",
+    "assetDirectory": "gruvbox",
+    "themePath": "themes/gruvbox-dark-medium.json"
+  },
+  {
+    "id": "gruvbox-dark-hard",
+    "publisher": "jdinhlife",
+    "extensionName": "gruvbox",
+    "version": "1.29.1",
+    "assetDirectory": "gruvbox",
+    "themePath": "themes/gruvbox-dark-hard.json"
+  },
+  {
+    "id": "gruvbox-dark-soft",
+    "publisher": "jdinhlife",
+    "extensionName": "gruvbox",
+    "version": "1.29.1",
+    "assetDirectory": "gruvbox",
+    "themePath": "themes/gruvbox-dark-soft.json"
+  },
+  {
+    "id": "gruvbox-light-medium",
+    "publisher": "jdinhlife",
+    "extensionName": "gruvbox",
+    "version": "1.29.1",
+    "assetDirectory": "gruvbox",
+    "themePath": "themes/gruvbox-light-medium.json"
+  },
+  {
+    "id": "gruvbox-light-hard",
+    "publisher": "jdinhlife",
+    "extensionName": "gruvbox",
+    "version": "1.29.1",
+    "assetDirectory": "gruvbox",
+    "themePath": "themes/gruvbox-light-hard.json"
+  },
+  {
+    "id": "gruvbox-light-soft",
+    "publisher": "jdinhlife",
+    "extensionName": "gruvbox",
+    "version": "1.29.1",
+    "assetDirectory": "gruvbox",
+    "themePath": "themes/gruvbox-light-soft.json"
+  },
+  {
+    "id": "solarized-light",
+    "publisher": "ryanolsonx",
+    "extensionName": "solarized",
+    "version": "3.0.0",
+    "assetDirectory": "solarized",
+    "themePath": "themes/legacy-solarized-light-color-theme.json"
+  },
+  {
+    "id": "solarized-dark",
+    "publisher": "ryanolsonx",
+    "extensionName": "solarized",
+    "version": "3.0.0",
+    "assetDirectory": "solarized",
+    "themePath": "themes/legacy-solarized-dark-color-theme.json"
+  },
+  {
+    "id": "ayu-mirage",
+    "publisher": "teabyii",
+    "extensionName": "ayu",
+    "version": "1.1.12",
+    "assetDirectory": "ayu",
+    "themePath": "ayu-mirage-unbordered.json"
+  },
+  {
+    "id": "ayu-mirage-bordered",
+    "publisher": "teabyii",
+    "extensionName": "ayu",
+    "version": "1.1.12",
+    "assetDirectory": "ayu",
+    "themePath": "ayu-mirage.json"
+  },
+  {
+    "id": "ayu-light",
+    "publisher": "teabyii",
+    "extensionName": "ayu",
+    "version": "1.1.12",
+    "assetDirectory": "ayu",
+    "themePath": "ayu-light-unbordered.json"
+  },
+  {
+    "id": "ayu-light-bordered",
+    "publisher": "teabyii",
+    "extensionName": "ayu",
+    "version": "1.1.12",
+    "assetDirectory": "ayu",
+    "themePath": "ayu-light.json"
+  },
+  {
+    "id": "ayu-dark",
+    "publisher": "teabyii",
+    "extensionName": "ayu",
+    "version": "1.1.12",
+    "assetDirectory": "ayu",
+    "themePath": "ayu-dark-unbordered.json"
+  },
+  {
+    "id": "ayu-dark-bordered",
+    "publisher": "teabyii",
+    "extensionName": "ayu",
+    "version": "1.1.12",
+    "assetDirectory": "ayu",
+    "themePath": "ayu-dark.json"
+  },
+  {
+    "id": "night-owl",
+    "publisher": "sdras",
+    "extensionName": "night-owl",
+    "version": "2.1.1",
+    "assetDirectory": "night-owl",
+    "themePath": "themes/Night Owl-color-theme.json"
+  },
+  {
+    "id": "dracula-at-night",
+    "publisher": "bceskavich",
+    "extensionName": "theme-dracula-at-night",
+    "version": "2.7.1",
+    "assetDirectory": "theme-dracula-at-night",
+    "themePath": "theme/dracula-at-night.json"
+  },
+  {
+    "id": "noctis",
+    "publisher": "liviuschera",
+    "extensionName": "noctis",
+    "version": "10.43.3",
+    "assetDirectory": "noctis",
+    "themePath": "themes/noctis.json"
+  },
+  {
+    "id": "noctis-azureus",
+    "publisher": "liviuschera",
+    "extensionName": "noctis",
+    "version": "10.43.3",
+    "assetDirectory": "noctis",
+    "themePath": "themes/azureus.json"
+  },
+  {
+    "id": "noctis-bordo",
+    "publisher": "liviuschera",
+    "extensionName": "noctis",
+    "version": "10.43.3",
+    "assetDirectory": "noctis",
+    "themePath": "themes/bordo.json"
+  },
+  {
+    "id": "noctis-obscuro",
+    "publisher": "liviuschera",
+    "extensionName": "noctis",
+    "version": "10.43.3",
+    "assetDirectory": "noctis",
+    "themePath": "themes/obscuro.json"
+  },
+  {
+    "id": "noctis-sereno",
+    "publisher": "liviuschera",
+    "extensionName": "noctis",
+    "version": "10.43.3",
+    "assetDirectory": "noctis",
+    "themePath": "themes/sereno.json"
+  },
+  {
+    "id": "noctis-uva",
+    "publisher": "liviuschera",
+    "extensionName": "noctis",
+    "version": "10.43.3",
+    "assetDirectory": "noctis",
+    "themePath": "themes/uva.json"
+  },
+  {
+    "id": "noctis-minimus",
+    "publisher": "liviuschera",
+    "extensionName": "noctis",
+    "version": "10.43.3",
+    "assetDirectory": "noctis",
+    "themePath": "themes/minimus.json"
+  },
+  {
+    "id": "noctis-lux",
+    "publisher": "liviuschera",
+    "extensionName": "noctis",
+    "version": "10.43.3",
+    "assetDirectory": "noctis",
+    "themePath": "themes/lux.json"
+  },
+  {
+    "id": "noctis-hibernus",
+    "publisher": "liviuschera",
+    "extensionName": "noctis",
+    "version": "10.43.3",
+    "assetDirectory": "noctis",
+    "themePath": "themes/hibernus.json"
+  },
+  {
+    "id": "noctis-lilac",
+    "publisher": "liviuschera",
+    "extensionName": "noctis",
+    "version": "10.43.3",
+    "assetDirectory": "noctis",
+    "themePath": "themes/lilac.json"
+  },
+  {
+    "id": "rainglow-allure",
+    "publisher": "daylerees",
+    "extensionName": "rainglow",
+    "version": "1.5.2",
+    "assetDirectory": "rainglow",
+    "themePath": "themes/allure.json"
+  },
+  {
+    "id": "rainglow-allure-light",
+    "publisher": "daylerees",
+    "extensionName": "rainglow",
+    "version": "1.5.2",
+    "assetDirectory": "rainglow",
+    "themePath": "themes/allure-light.json"
+  },
+  {
+    "id": "rainglow-arstotzka",
+    "publisher": "daylerees",
+    "extensionName": "rainglow",
+    "version": "1.5.2",
+    "assetDirectory": "rainglow",
+    "themePath": "themes/arstotzka.json"
+  },
+  {
+    "id": "rainglow-arstotzka-contrast",
+    "publisher": "daylerees",
+    "extensionName": "rainglow",
+    "version": "1.5.2",
+    "assetDirectory": "rainglow",
+    "themePath": "themes/arstotzka-contrast.json"
+  },
+  {
+    "id": "rainglow-arstotzka-light",
+    "publisher": "daylerees",
+    "extensionName": "rainglow",
+    "version": "1.5.2",
+    "assetDirectory": "rainglow",
+    "themePath": "themes/arstotzka-light.json"
+  },
+  {
+    "id": "rainglow-peacock",
+    "publisher": "daylerees",
+    "extensionName": "rainglow",
+    "version": "1.5.2",
+    "assetDirectory": "rainglow",
+    "themePath": "themes/peacock.json"
+  },
+  {
+    "id": "rainglow-peacock-light",
+    "publisher": "daylerees",
+    "extensionName": "rainglow",
+    "version": "1.5.2",
+    "assetDirectory": "rainglow",
+    "themePath": "themes/peacock-light.json"
+  },
+  {
+    "id": "macos-modern-dark-ventura-xcode-default",
+    "publisher": "davidbwaters",
+    "extensionName": "macos-modern-theme",
+    "version": "2.3.19",
+    "assetDirectory": "macos-modern-theme",
+    "themePath": "themes/color/big-sur-dark/xcode-default-dark.json"
+  },
+  {
+    "id": "macos-modern-dark-ventura-xcode-civic",
+    "publisher": "davidbwaters",
+    "extensionName": "macos-modern-theme",
+    "version": "2.3.19",
+    "assetDirectory": "macos-modern-theme",
+    "themePath": "themes/color/big-sur-dark/xcode-civic.json"
+  },
+  {
+    "id": "macos-modern-dark-ventura-xcode",
+    "publisher": "davidbwaters",
+    "extensionName": "macos-modern-theme",
+    "version": "2.3.19",
+    "assetDirectory": "macos-modern-theme",
+    "themePath": "themes/color/big-sur-dark/xcode-ventura.json"
+  },
+  {
+    "id": "macos-modern-dark-xcode-civic",
+    "publisher": "davidbwaters",
+    "extensionName": "macos-modern-theme",
+    "version": "2.3.19",
+    "assetDirectory": "macos-modern-theme",
+    "themePath": "themes/color/dark/xcode-civic.json"
+  },
+  {
+    "id": "macos-modern-dark-xcode-modern",
+    "publisher": "davidbwaters",
+    "extensionName": "macos-modern-theme",
+    "version": "2.3.19",
+    "assetDirectory": "macos-modern-theme",
+    "themePath": "themes/color/dark/xcode-modern.json"
+  },
+  {
+    "id": "macos-modern-dark-xcode-default",
+    "publisher": "davidbwaters",
+    "extensionName": "macos-modern-theme",
+    "version": "2.3.19",
+    "assetDirectory": "macos-modern-theme",
+    "themePath": "themes/color/dark/xcode-default-dark.json"
+  },
+  {
+    "id": "macos-modern-light-ventura-xcode",
+    "publisher": "davidbwaters",
+    "extensionName": "macos-modern-theme",
+    "version": "2.3.19",
+    "assetDirectory": "macos-modern-theme",
+    "themePath": "themes/color/big-sur-light/xcode-big-sur.json"
+  },
+  {
+    "id": "macos-modern-light-ventura-xcode-default",
+    "publisher": "davidbwaters",
+    "extensionName": "macos-modern-theme",
+    "version": "2.3.19",
+    "assetDirectory": "macos-modern-theme",
+    "themePath": "themes/color/big-sur-light/xcode-default.json"
+  },
+  {
+    "id": "macos-modern-light-ventura-xcode-low-key",
+    "publisher": "davidbwaters",
+    "extensionName": "macos-modern-theme",
+    "version": "2.3.19",
+    "assetDirectory": "macos-modern-theme",
+    "themePath": "themes/color/big-sur-light/xcode-low-key.json"
+  },
+  {
+    "id": "dobri-next-a00-black",
+    "publisher": "sldobri",
+    "extensionName": "bunker",
+    "version": "1.1.6",
+    "assetDirectory": "bunker",
+    "themePath": "themes/Dobri-A00.json"
+  },
+  {
+    "id": "dobri-next-a01-dark",
+    "publisher": "sldobri",
+    "extensionName": "bunker",
+    "version": "1.1.6",
+    "assetDirectory": "bunker",
+    "themePath": "themes/Dobri-A01.json"
+  },
+  {
+    "id": "dobri-next-a03-mirage",
+    "publisher": "sldobri",
+    "extensionName": "bunker",
+    "version": "1.1.6",
+    "assetDirectory": "bunker",
+    "themePath": "themes/Dobri-A03.json"
+  },
+  {
+    "id": "dobri-next-a04-cobalt",
+    "publisher": "sldobri",
+    "extensionName": "bunker",
+    "version": "1.1.6",
+    "assetDirectory": "bunker",
+    "themePath": "themes/Dobri-A04.json"
+  },
+  {
+    "id": "dobri-next-a05-jaguar",
+    "publisher": "sldobri",
+    "extensionName": "bunker",
+    "version": "1.1.6",
+    "assetDirectory": "bunker",
+    "themePath": "themes/Dobri-A05.json"
+  },
+  {
+    "id": "dobri-next-a06-amethyst",
+    "publisher": "sldobri",
+    "extensionName": "bunker",
+    "version": "1.1.6",
+    "assetDirectory": "bunker",
+    "themePath": "themes/Dobri-A06.json"
+  },
+  {
+    "id": "dobri-next-a07-oxford",
+    "publisher": "sldobri",
+    "extensionName": "bunker",
+    "version": "1.1.6",
+    "assetDirectory": "bunker",
+    "themePath": "themes/Dobri-A07.json"
+  },
+  {
+    "id": "dobri-next-a09-arc-dark",
+    "publisher": "sldobri",
+    "extensionName": "bunker",
+    "version": "1.1.6",
+    "assetDirectory": "bunker",
+    "themePath": "themes/Dobri-A09.json"
+  },
+  {
+    "id": "dobri-next-a10-adapta-nokto",
+    "publisher": "sldobri",
+    "extensionName": "bunker",
+    "version": "1.1.6",
+    "assetDirectory": "bunker",
+    "themePath": "themes/Dobri-A10.json"
+  },
+  {
+    "id": "dobri-next-c02-indigo",
+    "publisher": "sldobri",
+    "extensionName": "bunker",
+    "version": "1.1.6",
+    "assetDirectory": "bunker",
+    "themePath": "themes/Dobri-C02.json"
+  },
+  {
+    "id": "dobri-next-c03-cupcake",
+    "publisher": "sldobri",
+    "extensionName": "bunker",
+    "version": "1.1.6",
+    "assetDirectory": "bunker",
+    "themePath": "themes/Dobri-C03.json"
+  },
+  {
+    "id": "dobri-next-c09-eve",
+    "publisher": "sldobri",
+    "extensionName": "bunker",
+    "version": "1.1.6",
+    "assetDirectory": "bunker",
+    "themePath": "themes/Dobri-C09.json"
+  },
+  {
+    "id": "one-dark-pro-flat",
+    "publisher": "zhuangtongfa",
+    "extensionName": "Material-theme",
+    "version": "3.19.0",
+    "assetDirectory": "material-theme",
+    "themePath": "themes/OneDark-Pro-flat.json"
+  },
+  {
+    "id": "one-dark-pro-darker",
+    "publisher": "zhuangtongfa",
+    "extensionName": "Material-theme",
+    "version": "3.19.0",
+    "assetDirectory": "material-theme",
+    "themePath": "themes/OneDark-Pro-darker.json"
+  },
+  {
+    "id": "one-dark-pro-mix",
+    "publisher": "zhuangtongfa",
+    "extensionName": "Material-theme",
+    "version": "3.19.0",
+    "assetDirectory": "material-theme",
+    "themePath": "themes/OneDark-Pro-mix.json"
+  },
+  {
+    "id": "one-dark-pro-night-flat",
+    "publisher": "zhuangtongfa",
+    "extensionName": "Material-theme",
+    "version": "3.19.0",
+    "assetDirectory": "material-theme",
+    "themePath": "themes/OneDark-Pro-night-flat.json"
+  },
+  {
+    "id": "github-light-high-contrast",
+    "publisher": "GitHub",
+    "extensionName": "github-vscode-theme",
+    "version": "6.3.5",
+    "assetDirectory": "github-vscode-theme",
+    "themePath": "themes/light-high-contrast.json"
+  },
+  {
+    "id": "github-dark-high-contrast",
+    "publisher": "GitHub",
+    "extensionName": "github-vscode-theme",
+    "version": "6.3.5",
+    "assetDirectory": "github-vscode-theme",
+    "themePath": "themes/dark-high-contrast.json"
+  },
+  {
+    "id": "github-light-colorblind",
+    "publisher": "GitHub",
+    "extensionName": "github-vscode-theme",
+    "version": "6.3.5",
+    "assetDirectory": "github-vscode-theme",
+    "themePath": "themes/light-colorblind.json"
+  },
+  {
+    "id": "github-dark-colorblind",
+    "publisher": "GitHub",
+    "extensionName": "github-vscode-theme",
+    "version": "6.3.5",
+    "assetDirectory": "github-vscode-theme",
+    "themePath": "themes/dark-colorblind.json"
+  },
+  {
+    "id": "dracula-soft",
+    "publisher": "dracula-theme",
+    "extensionName": "theme-dracula",
+    "version": "2.25.1",
+    "assetDirectory": "theme-dracula",
+    "themePath": "theme/dracula-soft.json"
+  },
+  {
+    "id": "copilot-theme",
+    "publisher": "benjaminbenais",
+    "extensionName": "copilot-theme",
+    "version": "1.1.0",
+    "assetDirectory": "copilot-theme",
+    "themePath": "themes/Copilot Theme-color-theme.json"
+  },
+  {
+    "id": "visual-studio-dark-cpp",
+    "publisher": "ms-vscode",
+    "extensionName": "cpptools-themes",
+    "version": "2.0.0",
+    "assetDirectory": "cpptools-themes",
+    "themePath": "themes/cpptools_dark_vs_new.json"
+  },
+  {
+    "id": "visual-studio-2017-light-cpp",
+    "publisher": "ms-vscode",
+    "extensionName": "cpptools-themes",
+    "version": "2.0.0",
+    "assetDirectory": "cpptools-themes",
+    "themePath": "themes/cpptools_light_vs.json"
+  },
+  {
+    "id": "powershell-ise",
+    "publisher": "ms-vscode",
+    "extensionName": "powershell",
+    "version": "2026.1.0",
+    "assetDirectory": "powershell",
+    "themePath": "themes/theme-psise/theme.json"
+  },
+  {
+    "id": "visual-studio-2017-dark-cpp",
+    "publisher": "ms-vscode",
+    "extensionName": "cpptools-themes",
+    "version": "2.0.0",
+    "assetDirectory": "cpptools-themes",
+    "themePath": "themes/cpptools_dark_vs.json"
+  },
+  {
+    "id": "dark-plus-syntax",
+    "publisher": "dunstontc",
+    "extensionName": "dark-plus-syntax",
+    "version": "0.2.11",
+    "assetDirectory": "dark-plus-syntax",
+    "themePath": "dist/theme/dark-plus-syntax-color-theme.json"
+  },
+  {
+    "id": "light-plus-syntax",
+    "publisher": "dunstontc",
+    "extensionName": "dark-plus-syntax",
+    "version": "0.2.11",
+    "assetDirectory": "dark-plus-syntax",
+    "themePath": "dist/theme/light-plus-syntax-color-theme.json"
+  },
+  {
+    "id": "light-plus-syntax-high-contrast",
+    "publisher": "dunstontc",
+    "extensionName": "dark-plus-syntax",
+    "version": "0.2.11",
+    "assetDirectory": "dark-plus-syntax",
+    "themePath": "dist/theme/light-plus-syntax-high-contrast-color-theme.json"
+  },
+  {
+    "id": "visual-studio-light-cpp",
+    "publisher": "ms-vscode",
+    "extensionName": "cpptools-themes",
+    "version": "2.0.0",
+    "assetDirectory": "cpptools-themes",
+    "themePath": "themes/cpptools_light_vs_new.json"
+  },
+  {
+    "id": "copilot-theme-higher-contrast",
+    "publisher": "benjaminbenais",
+    "extensionName": "copilot-theme",
+    "version": "1.1.0",
+    "assetDirectory": "copilot-theme",
+    "themePath": "themes/Copilot Theme-color-theme-higher-contrast.json"
+  },
+  {
+    "id": "theme",
+    "publisher": "tal7aouy",
+    "extensionName": "theme",
+    "version": "3.1.0",
+    "assetDirectory": "theme",
+    "themePath": "themes/Theme.json"
+  },
+  {
+    "id": "theme-flat",
+    "publisher": "tal7aouy",
+    "extensionName": "theme",
+    "version": "3.1.0",
+    "assetDirectory": "theme",
+    "themePath": "themes/ThemeFlat.json"
+  },
+  {
+    "id": "theme-mix",
+    "publisher": "tal7aouy",
+    "extensionName": "theme",
+    "version": "3.1.0",
+    "assetDirectory": "theme",
+    "themePath": "themes/ThemeMix.json"
+  },
+  {
+    "id": "theme-darker",
+    "publisher": "tal7aouy",
+    "extensionName": "theme",
+    "version": "3.1.0",
+    "assetDirectory": "theme",
+    "themePath": "themes/ThemeDarker.json"
+  },
+  {
+    "id": "light-owl",
+    "publisher": "sdras",
+    "extensionName": "night-owl",
+    "version": "2.1.1",
+    "assetDirectory": "night-owl",
+    "themePath": "themes/Night Owl-Light-color-theme.json"
+  },
+  {
+    "id": "palenight-theme",
+    "publisher": "whizkydee",
+    "extensionName": "material-palenight-theme",
+    "version": "2.0.4",
+    "assetDirectory": "material-palenight-theme",
+    "themePath": "themes/palenight.json"
+  },
+  {
+    "id": "palenight-operator",
+    "publisher": "whizkydee",
+    "extensionName": "material-palenight-theme",
+    "version": "2.0.4",
+    "assetDirectory": "material-palenight-theme",
+    "themePath": "themes/palenight-operator.json"
+  },
+  {
+    "id": "palenight-mild-contrast",
+    "publisher": "whizkydee",
+    "extensionName": "material-palenight-theme",
+    "version": "2.0.4",
+    "assetDirectory": "material-palenight-theme",
+    "themePath": "themes/palenight-mild-contrast.json"
+  },
+  {
+    "id": "vue-theme",
+    "publisher": "mariorodeghiero",
+    "extensionName": "vue-theme",
+    "version": "2.0.3",
+    "assetDirectory": "vue-theme",
+    "themePath": "themes/vue-theme-color-theme.json"
+  },
+  {
+    "id": "vue-theme-high-contrast",
+    "publisher": "mariorodeghiero",
+    "extensionName": "vue-theme",
+    "version": "2.0.3",
+    "assetDirectory": "vue-theme",
+    "themePath": "themes/vue-theme-color-theme-high-contrast.json"
+  },
+  {
+    "id": "spinel",
+    "publisher": "Shopify",
+    "extensionName": "ruby-extensions-pack",
+    "version": "0.1.14",
+    "assetDirectory": "ruby-extensions-pack",
+    "themePath": "themes/dark_spinel.json"
+  },
+  {
+    "id": "spinel-light",
+    "publisher": "Shopify",
+    "extensionName": "ruby-extensions-pack",
+    "version": "0.1.14",
+    "assetDirectory": "ruby-extensions-pack",
+    "themePath": "themes/light_spinel.json"
+  },
+  {
+    "id": "moonlight-ii",
+    "publisher": "atomiks",
+    "extensionName": "moonlight",
+    "version": "0.11.1",
+    "assetDirectory": "moonlight",
+    "themePath": "themes/moonlight-ii.json"
+  },
+  {
+    "id": "moonlight",
+    "publisher": "atomiks",
+    "extensionName": "moonlight",
+    "version": "0.11.1",
+    "assetDirectory": "moonlight",
+    "themePath": "themes/moonlight.json"
+  },
+  {
+    "id": "andromeda",
+    "publisher": "EliverLara",
+    "extensionName": "andromeda",
+    "version": "1.10.0",
+    "assetDirectory": "andromeda",
+    "themePath": "themes/Andromeda-color-theme.json"
+  },
+  {
+    "id": "andromeda-colorizer",
+    "publisher": "EliverLara",
+    "extensionName": "andromeda",
+    "version": "1.10.0",
+    "assetDirectory": "andromeda",
+    "themePath": "themes/Andromeda-colorizer.json"
+  },
+  {
+    "id": "andromeda-bordered",
+    "publisher": "EliverLara",
+    "extensionName": "andromeda",
+    "version": "1.10.0",
+    "assetDirectory": "andromeda",
+    "themePath": "themes/Andromeda-color-theme-bordered.json"
+  },
+  {
+    "id": "darcula-theme",
+    "publisher": "rokoroku",
+    "extensionName": "vscode-theme-darcula",
+    "version": "1.2.3",
+    "assetDirectory": "vscode-theme-darcula",
+    "themePath": "themes/darcula.json"
+  },
+  {
+    "id": "darcula-pycharm-dark-gui",
+    "publisher": "garytyler",
+    "extensionName": "darcula-pycharm",
+    "version": "1.0.0",
+    "assetDirectory": "darcula-pycharm",
+    "themePath": "themes/darcula-pycharm-dark-gui-color-theme.json"
+  },
+  {
+    "id": "darcula-pycharm-light-gui",
+    "publisher": "garytyler",
+    "extensionName": "darcula-pycharm",
+    "version": "1.0.0",
+    "assetDirectory": "darcula-pycharm",
+    "themePath": "themes/darcula-pycharm-light-gui-color-theme.json"
+  },
+  {
+    "id": "darcula-theme-from-intellij",
+    "publisher": "trinm1709",
+    "extensionName": "dracula-theme-from-intellij",
+    "version": "0.3.0",
+    "assetDirectory": "dracula-theme-from-intellij",
+    "themePath": "themes/dracula-color-theme.json"
+  },
+  {
+    "id": "monokai-night",
+    "publisher": "fabiospampinato",
+    "extensionName": "vscode-monokai-night",
+    "version": "1.7.1",
+    "assetDirectory": "vscode-monokai-night",
+    "themePath": "themes/default.json"
+  },
+  {
+    "id": "monokai-dark-soda",
+    "publisher": "AdamCaviness",
+    "extensionName": "theme-monokai-dark-soda",
+    "version": "1.2.0",
+    "assetDirectory": "theme-monokai-dark-soda",
+    "themePath": "themes/monokai-dark-soda-color-theme.json"
+  },
+  {
+    "id": "monokai-plusplus",
+    "publisher": "dcasella",
+    "extensionName": "monokai-plusplus",
+    "version": "2.0.4",
+    "assetDirectory": "monokai-plusplus",
+    "themePath": "themes/Monokai++-color-theme.json"
+  },
+  {
+    "id": "monokai-plusplus-unified",
+    "publisher": "dcasella",
+    "extensionName": "monokai-plusplus",
+    "version": "2.0.4",
+    "assetDirectory": "monokai-plusplus",
+    "themePath": "themes/Monokai++-Unified-color-theme.json"
+  },
+  {
+    "id": "atom-one-dark",
+    "publisher": "akamud",
+    "extensionName": "vscode-theme-onedark",
+    "version": "2.3.0",
+    "assetDirectory": "vscode-theme-onedark",
+    "themePath": "themes/OneDark.json"
+  },
+  {
+    "id": "atom-one-light",
+    "publisher": "akamud",
+    "extensionName": "vscode-theme-onelight",
+    "version": "2.3.0",
+    "assetDirectory": "vscode-theme-onelight",
+    "themePath": "themes/OneLight.json"
+  },
+  {
+    "id": "atom-material-theme",
+    "publisher": "tobiasalthoff",
+    "extensionName": "atom-material-theme",
+    "version": "1.10.9",
+    "assetDirectory": "atom-material-theme",
+    "themePath": "themes/Atom Material Theme-color-theme.json"
+  },
+  {
+    "id": "min-dark",
+    "publisher": "miguelsolorio",
+    "extensionName": "min-theme",
+    "version": "1.5.0",
+    "assetDirectory": "min-theme",
+    "themePath": "themes/min-dark.json"
+  },
+  {
+    "id": "min-light",
+    "publisher": "miguelsolorio",
+    "extensionName": "min-theme",
+    "version": "1.5.0",
+    "assetDirectory": "min-theme",
+    "themePath": "themes/min-light.json"
+  },
+  {
+    "id": "aura-dark",
+    "publisher": "DaltonMenezes",
+    "extensionName": "aura-theme",
+    "version": "2.1.2",
+    "assetDirectory": "aura-theme",
+    "themePath": "themes/aura-dark-color-theme.json"
+  },
+  {
+    "id": "aura-soft-dark",
+    "publisher": "DaltonMenezes",
+    "extensionName": "aura-theme",
+    "version": "2.1.2",
+    "assetDirectory": "aura-theme",
+    "themePath": "themes/aura-soft-dark-color-theme.json"
+  },
+  {
+    "id": "deepdark-material-theme",
+    "publisher": "Nimda",
+    "extensionName": "deepdark-material",
+    "version": "3.3.1",
+    "assetDirectory": "deepdark-material",
+    "themePath": "themes/default-deepdark-material.json"
+  },
+  {
+    "id": "deepdark-material-theme-full-black",
+    "publisher": "Nimda",
+    "extensionName": "deepdark-material",
+    "version": "3.3.1",
+    "assetDirectory": "deepdark-material",
+    "themePath": "themes/fullblack-deepdark-material.json"
+  },
+  {
+    "id": "synthwave-84",
+    "publisher": "RobbOwen",
+    "extensionName": "synthwave-vscode",
+    "version": "0.1.20",
+    "assetDirectory": "synthwave-vscode",
+    "themePath": "themes/synthwave-color-theme.json"
+  },
+  {
+    "id": "cobalt2",
+    "publisher": "wesbos",
+    "extensionName": "theme-cobalt2",
+    "version": "2.5.0",
+    "assetDirectory": "theme-cobalt2",
+    "themePath": "theme/cobalt2.json"
+  },
+  {
+    "id": "omni",
+    "publisher": "rocketseat",
+    "extensionName": "theme-omni",
+    "version": "1.0.12",
+    "assetDirectory": "theme-omni",
+    "themePath": "theme/omni.json"
+  },
+  {
+    "id": "kanagawa",
+    "publisher": "qufiwefefwoyn",
+    "extensionName": "kanagawa",
+    "version": "1.5.1",
+    "assetDirectory": "kanagawa",
+    "themePath": "themes/kanagawa-color-theme.json"
+  },
+  {
+    "id": "github-light-theme",
+    "publisher": "Hyzeta",
+    "extensionName": "vscode-theme-github-light",
+    "version": "7.14.2",
+    "assetDirectory": "vscode-theme-github-light",
+    "themePath": "themes/Github-Light-Theme-color-theme.json"
+  },
+  {
+    "id": "github-light-theme-gray",
+    "publisher": "Hyzeta",
+    "extensionName": "vscode-theme-github-light",
+    "version": "7.14.2",
+    "assetDirectory": "vscode-theme-github-light",
+    "themePath": "themes/Github-Light-Theme-Gray-color-theme.json"
+  },
+  {
+    "id": "winter-is-coming-dark-blue",
+    "publisher": "johnpapa",
+    "extensionName": "winteriscoming",
+    "version": "1.4.4",
+    "assetDirectory": "winteriscoming",
+    "themePath": "themes/WinterIsComing-dark-blue-color-theme.json"
+  },
+  {
+    "id": "winter-is-coming-light",
+    "publisher": "johnpapa",
+    "extensionName": "winteriscoming",
+    "version": "1.4.4",
+    "assetDirectory": "winteriscoming",
+    "themePath": "themes/WinterIsComing-light-color-theme.json"
+  },
+  {
+    "id": "winter-is-coming-dark-black",
+    "publisher": "johnpapa",
+    "extensionName": "winteriscoming",
+    "version": "1.4.4",
+    "assetDirectory": "winteriscoming",
+    "themePath": "themes/WinterIsComing-dark-color-theme.json"
+  },
+  {
+    "id": "slack-dark-mode",
+    "publisher": "felipe-mendes",
+    "extensionName": "slack-theme",
+    "version": "1.9.17",
+    "assetDirectory": "slack-theme",
+    "themePath": "themes/dark-mode.json"
+  },
+  {
+    "id": "slack-aubergine",
+    "publisher": "felipe-mendes",
+    "extensionName": "slack-theme",
+    "version": "1.9.17",
+    "assetDirectory": "slack-theme",
+    "themePath": "themes/aubergine-new.json"
+  },
+  {
+    "id": "slack-aubergine-dark",
+    "publisher": "felipe-mendes",
+    "extensionName": "slack-theme",
+    "version": "1.9.17",
+    "assetDirectory": "slack-theme",
+    "themePath": "themes/aubergine.json"
+  },
+  {
+    "id": "slack-aubergine-dark-editor",
+    "publisher": "felipe-mendes",
+    "extensionName": "slack-theme",
+    "version": "1.9.17",
+    "assetDirectory": "slack-theme",
+    "themePath": "themes/aubergine-dark.json"
+  },
+  {
+    "id": "slack-monument",
+    "publisher": "felipe-mendes",
+    "extensionName": "slack-theme",
+    "version": "1.9.17",
+    "assetDirectory": "slack-theme",
+    "themePath": "themes/monument.json"
+  },
+  {
+    "id": "slack-hoth",
+    "publisher": "felipe-mendes",
+    "extensionName": "slack-theme",
+    "version": "1.9.17",
+    "assetDirectory": "slack-theme",
+    "themePath": "themes/hoth.json"
+  },
+  {
+    "id": "slack-protanopia-deuteranopia",
+    "publisher": "felipe-mendes",
+    "extensionName": "slack-theme",
+    "version": "1.9.17",
+    "assetDirectory": "slack-theme",
+    "themePath": "themes/protanopia-deuteranopia.json"
+  },
+  {
+    "id": "slack-choco-mint",
+    "publisher": "felipe-mendes",
+    "extensionName": "slack-theme",
+    "version": "1.9.17",
+    "assetDirectory": "slack-theme",
+    "themePath": "themes/choco-mint.json"
+  },
+  {
+    "id": "slack-ochin",
+    "publisher": "felipe-mendes",
+    "extensionName": "slack-theme",
+    "version": "1.9.17",
+    "assetDirectory": "slack-theme",
+    "themePath": "themes/ochin.json"
+  },
+  {
+    "id": "slack-work-hard",
+    "publisher": "felipe-mendes",
+    "extensionName": "slack-theme",
+    "version": "1.9.17",
+    "assetDirectory": "slack-theme",
+    "themePath": "themes/work-hard.json"
+  },
+  {
+    "id": "slack-tritanopia",
+    "publisher": "felipe-mendes",
+    "extensionName": "slack-theme",
+    "version": "1.9.17",
+    "assetDirectory": "slack-theme",
+    "themePath": "themes/tritanopia.json"
+  },
+  {
+    "id": "hopscotch",
+    "publisher": "idleberg",
+    "extensionName": "hopscotch",
+    "version": "0.8.2",
+    "assetDirectory": "hopscotch",
+    "themePath": "themes/hopscotch.json"
+  },
+  {
+    "id": "hopscotch-mono",
+    "publisher": "idleberg",
+    "extensionName": "hopscotch",
+    "version": "0.8.2",
+    "assetDirectory": "hopscotch",
+    "themePath": "themes/Hopscotch Mono.json"
+  },
+  {
+    "id": "hopscotch-proofreader",
+    "publisher": "idleberg",
+    "extensionName": "hopscotch",
+    "version": "0.8.2",
+    "assetDirectory": "hopscotch",
+    "themePath": "themes/Hopscotch [proofreader].json"
+  },
+  {
+    "id": "gruvbox-material-dark",
+    "publisher": "sainnhe",
+    "extensionName": "gruvbox-material",
+    "version": "6.5.2",
+    "assetDirectory": "gruvbox-material",
+    "themePath": "themes/gruvbox-material-dark.json"
+  },
+  {
+    "id": "gruvbox-material-light",
+    "publisher": "sainnhe",
+    "extensionName": "gruvbox-material",
+    "version": "6.5.2",
+    "assetDirectory": "gruvbox-material",
+    "themePath": "themes/gruvbox-material-light.json"
+  },
+  {
+    "id": "mayukai-dark",
+    "publisher": "GulajavaMinistudio",
+    "extensionName": "mayukaithemevsc",
+    "version": "3.2.5",
+    "assetDirectory": "mayukaithemevsc",
+    "themePath": "themes/Mayukai-darker-color-theme.json"
+  },
+  {
+    "id": "mayukai-mirage-gruvbox-darktooth",
+    "publisher": "GulajavaMinistudio",
+    "extensionName": "mayukaithemevsc",
+    "version": "3.2.5",
+    "assetDirectory": "mayukaithemevsc",
+    "themePath": "themes/Mayukai-mirage-gruvbox-color-theme.json"
+  },
+  {
+    "id": "mayukai-midnight",
+    "publisher": "GulajavaMinistudio",
+    "extensionName": "mayukaithemevsc",
+    "version": "3.2.5",
+    "assetDirectory": "mayukaithemevsc",
+    "themePath": "themes/Mayukai-midnight.json"
+  },
+  {
+    "id": "om-theme-default-dracula-italic",
+    "publisher": "omthemes",
+    "extensionName": "omthemes",
+    "version": "1.0.17",
+    "assetDirectory": "omthemes",
+    "themePath": "theme/omtheme.json"
+  },
+  {
+    "id": "pink-cat-boo",
+    "publisher": "ftsamoyed",
+    "extensionName": "theme-pink-cat-boo",
+    "version": "1.3.0",
+    "assetDirectory": "theme-pink-cat-boo",
+    "themePath": "themes/pink-cat-boo.json"
+  },
+  {
+    "id": "naruto-dark",
+    "publisher": "Thomaz",
+    "extensionName": "preparing",
+    "version": "1.7.0",
+    "assetDirectory": "preparing",
+    "themePath": "themes/Narutovisk-color-theme.json"
+  },
+  {
+    "id": "alabaster",
+    "publisher": "tonsky",
+    "extensionName": "theme-alabaster",
+    "version": "0.2.9",
+    "assetDirectory": "theme-alabaster",
+    "themePath": "theme/alabaster-color-theme.json"
+  },
+  {
+    "id": "horizon",
+    "publisher": "jolaleye",
+    "extensionName": "horizon-theme-vscode",
+    "version": "2.0.2",
+    "assetDirectory": "horizon-theme-vscode",
+    "themePath": "themes/horizon.json"
+  },
+  {
+    "id": "horizon-bright",
+    "publisher": "jolaleye",
+    "extensionName": "horizon-theme-vscode",
+    "version": "2.0.2",
+    "assetDirectory": "horizon-theme-vscode",
+    "themePath": "themes/horizon-bright.json"
+  },
+  {
+    "id": "winter-is-coming-dark",
+    "publisher": "johnpapa",
+    "extensionName": "winteriscoming",
+    "version": "1.4.4",
+    "assetDirectory": "winteriscoming",
+    "themePath": "themes/WinterIsComing-dark-color-theme.json"
+  },
+  {
+    "id": "hackr-theme",
+    "publisher": "Hackrio",
+    "extensionName": "hackr-theme",
+    "version": "1.0.3",
+    "assetDirectory": "hackr-theme",
+    "themePath": "themes/Hackr Theme-color-theme.json"
+  },
+  {
+    "id": "one-monokai",
+    "publisher": "azemoh",
+    "extensionName": "one-monokai",
+    "version": "0.5.2",
+    "assetDirectory": "one-monokai",
+    "themePath": "themes/OneMonokai-color-theme.json"
+  },
+  {
+    "id": "snazzy-light",
+    "publisher": "loilo",
+    "extensionName": "snazzy-light",
+    "version": "1.4.1",
+    "assetDirectory": "snazzy-light",
+    "themePath": "themes/Snazzy-Light-color-theme.json"
+  },
+  {
+    "id": "hack-the-box",
+    "publisher": "silofy",
+    "extensionName": "hackthebox",
+    "version": "0.2.9",
+    "assetDirectory": "hackthebox",
+    "themePath": "themes/HackTheBox.json"
+  },
+  {
+    "id": "hack-the-box-lite",
+    "publisher": "silofy",
+    "extensionName": "hackthebox",
+    "version": "0.2.9",
+    "assetDirectory": "hackthebox",
+    "themePath": "themes/HackTheBox-Lite.json"
+  },
+  {
+    "id": "jellyfish",
+    "publisher": "PawelBorkar",
+    "extensionName": "jellyfish",
+    "version": "0.0.4",
+    "assetDirectory": "jellyfish",
+    "themePath": "themes/JellyFish Theme-color-theme.json"
+  },
+  {
+    "id": "electron",
+    "publisher": "kuscamara",
+    "extensionName": "electron",
+    "version": "0.2.6",
+    "assetDirectory": "electron",
+    "themePath": "themes/electron-color-theme.json"
+  }
+]

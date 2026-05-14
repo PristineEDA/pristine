@@ -23,7 +23,7 @@ let themeDefinitionCache = new WeakMap<ResolvedColorTheme, MonacoThemeDefinition
 let definedThemesByMonaco = new WeakMap<object, WeakSet<ResolvedColorTheme>>()
 let builtInThemesRegisteredByMonaco = new WeakSet<object>()
 
-function normalizeMonacoTokenColor(color: string | undefined): string | undefined {
+function normalizeMonacoHexColor(color: string | undefined): string | undefined {
   if (!color) {
     return undefined
   }
@@ -41,6 +41,29 @@ function normalizeMonacoTokenColor(color: string | undefined): string | undefine
   }
 
   return normalized
+}
+
+function normalizeMonacoTokenColor(color: string | undefined): string | undefined {
+  return normalizeMonacoHexColor(color)
+}
+
+function normalizeMonacoUiColor(color: string | undefined): string | undefined {
+  const normalized = normalizeMonacoHexColor(color)
+  return normalized ? `#${normalized}` : undefined
+}
+
+function normalizeMonacoThemeColors(colors: ResolvedColorTheme['colors']): ResolvedColorTheme['colors'] {
+  const normalizedColors: ResolvedColorTheme['colors'] = {}
+
+  for (const [colorId, colorValue] of Object.entries(colors)) {
+    const normalized = normalizeMonacoUiColor(colorValue)
+
+    if (normalized) {
+      normalizedColors[colorId] = normalized
+    }
+  }
+
+  return normalizedColors
 }
 
 function flattenScopes(scope: string | string[] | undefined): string[] {
@@ -84,7 +107,7 @@ export function createMonacoThemeDefinition(theme: ResolvedColorTheme) {
     base: (theme.kind === 'light' ? 'vs' : 'vs-dark') as MonacoBaseTheme,
     inherit: true,
     rules: theme.tokenColors.flatMap(tokenColorRuleToMonacoRules),
-    colors: theme.colors,
+    colors: normalizeMonacoThemeColors(theme.colors),
   }
 
   themeDefinitionCache.set(theme, definition)

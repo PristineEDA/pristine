@@ -6,6 +6,13 @@ import darkPlusRaw from './vscode-defaults/dark_plus.json?raw'
 import lightPlusRaw from './vscode-defaults/light_plus.json?raw'
 import darkVsRaw from './vscode-defaults/dark_vs.json?raw'
 import lightVsRaw from './vscode-defaults/light_vs.json?raw'
+import bundledUpstreamThemeManifestRaw from './bundledUpstreamThemeManifest.json'
+import {
+  editorThemeCatalog,
+  isStaticEditorThemeCatalogEntry,
+  type MonacoBaseTheme,
+} from '../editor/themeCatalog'
+import { resolveDraculaPalette, type DraculaPalette } from '../editor/themeSource'
 import {
   getThemeBaseName,
   getThemeBaseNameWithoutExtension,
@@ -18,6 +25,7 @@ import type {
   ImportedColorThemeRecord,
   ResolvedColorTheme,
   ThemeKind,
+  VSCodeTokenColorRule,
 } from './colorThemeTypes'
 
 export const WORKBENCH_COLOR_THEME_CONFIG_KEY = 'workbench.colorTheme'
@@ -38,6 +46,26 @@ type BuiltInThemeDefinition = {
   author: string
   entryPath: string
   kind: ThemeKind
+}
+
+type BundledThemeDefinition = {
+  id: string
+  label: string
+  description: string
+  author: string
+  kind: ThemeKind
+  base: MonacoBaseTheme
+  palette: DraculaPalette
+  entryPath?: string
+}
+
+type BundledUpstreamThemeManifestEntry = {
+  id: string
+  publisher: string
+  extensionName: string
+  version: string
+  assetDirectory: string
+  themePath: string
 }
 
 const builtInThemeDefinitions: readonly BuiltInThemeDefinition[] = [
@@ -70,6 +98,18 @@ const builtInThemeFiles = new Map<string, string>([
   ['light_vs.json', lightVsRaw],
 ])
 
+const bundledUpstreamThemeManifest = bundledUpstreamThemeManifestRaw as BundledUpstreamThemeManifestEntry[]
+
+const bundledUpstreamThemeEntryPathById = new Map<string, string>(
+  bundledUpstreamThemeManifest.map((entry) => [entry.id, `./bundled-upstream/${entry.assetDirectory}/${entry.themePath}`]),
+)
+
+const bundledUpstreamThemeFiles = import.meta.glob('./bundled-upstream/**/*.json', {
+  eager: true,
+  import: 'default',
+  query: '?raw',
+}) as Record<string, string>
+
 function hashString(value: string): string {
   let hash = 0
 
@@ -100,6 +140,16 @@ function loadBuiltInThemeFile(filePath: string): string {
   return fileContents
 }
 
+function loadBundledUpstreamThemeFile(filePath: string): string {
+  const fileContents = bundledUpstreamThemeFiles[filePath] ?? bundledUpstreamThemeFiles[`./${filePath}`]
+
+  if (!fileContents) {
+    throw new Error(`Missing bundled upstream color theme asset '${filePath}'.`)
+  }
+
+  return fileContents
+}
+
 function createResolvedTheme(
   metadata: Omit<ResolvedColorTheme, 'colors' | 'tokenColors' | 'semanticHighlighting' | 'semanticTokenColors'>,
   colors: ResolvedColorTheme['colors'],
@@ -113,6 +163,146 @@ function createResolvedTheme(
     tokenColors,
     semanticHighlighting,
     semanticTokenColors,
+  }
+}
+
+function getThemeKindFromMonacoBase(base: MonacoBaseTheme): ThemeKind {
+  return base === 'vs' ? 'light' : 'dark'
+}
+
+function createBundledThemeTokenColors(palette: DraculaPalette): VSCodeTokenColorRule[] {
+  return [
+    {
+      scope: 'comment, punctuation.definition.comment',
+      settings: {
+        foreground: palette.comment,
+        fontStyle: 'italic',
+      },
+    },
+    {
+      scope: 'keyword, keyword.control, storage, storage.type',
+      settings: {
+        foreground: palette.pink,
+        fontStyle: 'bold',
+      },
+    },
+    {
+      scope: 'entity.name.function, support.function, support.function.shell',
+      settings: {
+        foreground: palette.purple,
+      },
+    },
+    {
+      scope: 'support.class, support.type, entity.name.type, meta.property-name',
+      settings: {
+        foreground: palette.cyan,
+        fontStyle: 'italic',
+      },
+    },
+    {
+      scope: 'entity.name.tag, support.constant.property-value, support.constant.color',
+      settings: {
+        foreground: palette.green,
+      },
+    },
+    {
+      scope: 'string, markup.inline.raw',
+      settings: {
+        foreground: palette.yellow,
+      },
+    },
+    {
+      scope: 'constant.numeric, constant.language, constant.character, number',
+      settings: {
+        foreground: palette.purple,
+      },
+    },
+    {
+      scope: 'variable, meta.definition.variable.name, entity.name, markup.heading',
+      settings: {
+        foreground: palette.orange,
+      },
+    },
+    {
+      scope: 'invalid, string.invalid',
+      settings: {
+        foreground: palette.red,
+      },
+    },
+  ]
+}
+
+function createBundledThemeColors(palette: DraculaPalette, kind: ThemeKind): Record<string, string> {
+  const buttonForeground = kind === 'dark' ? '#111111' : '#ffffff'
+
+  return {
+    foreground: palette.foreground,
+    'editor.background': palette.background,
+    'editor.foreground': palette.foreground,
+    'editor.lineHighlightBackground': palette.surface,
+    'editor.selectionBackground': palette.selection,
+    'editorCursor.foreground': palette.brightForeground,
+    'editorLineNumber.foreground': palette.comment,
+    'editorLineNumber.activeForeground': palette.foreground,
+    'editorWidget.background': palette.input,
+    'editorWidget.border': palette.comment,
+    'panel.background': palette.surface,
+    'panel.border': palette.comment,
+    'sideBar.background': palette.surface,
+    'sideBar.foreground': palette.foreground,
+    'sideBar.border': palette.comment,
+    'sideBarTitle.foreground': palette.foreground,
+    'activityBar.background': palette.surface,
+    'activityBar.foreground': palette.brightForeground,
+    'activityBar.border': palette.comment,
+    'titleBar.activeBackground': palette.surface,
+    'titleBar.activeForeground': palette.foreground,
+    'menu.background': palette.surface,
+    'menu.foreground': palette.foreground,
+    'menu.border': palette.comment,
+    'input.background': palette.input,
+    'input.border': palette.comment,
+    'input.placeholderForeground': palette.comment,
+    'quickInput.background': palette.input,
+    'quickInput.foreground': palette.foreground,
+    'list.activeSelectionBackground': palette.selection,
+    'list.activeSelectionForeground': palette.foreground,
+    'list.inactiveSelectionBackground': palette.surface,
+    'list.highlightForeground': palette.cyan,
+    'list.hoverBackground': palette.selection,
+    'focusBorder': palette.cyan,
+    'button.background': palette.cyan,
+    'button.foreground': buttonForeground,
+    'button.hoverBackground': palette.purple,
+    'badge.foreground': buttonForeground,
+    'descriptionForeground': palette.comment,
+    'disabledForeground': palette.comment,
+    'errorForeground': palette.red,
+    'editorError.foreground': palette.red,
+    'editorWarning.foreground': palette.orange,
+    'tab.activeBackground': palette.background,
+    'tab.activeForeground': palette.foreground,
+    'tab.hoverBackground': palette.selection,
+    'tab.inactiveBackground': palette.surface,
+    'terminal.background': palette.background,
+    'terminal.foreground': palette.foreground,
+    'terminalCursor.foreground': palette.brightForeground,
+    'terminal.ansiBlack': palette.surface,
+    'terminal.ansiRed': palette.red,
+    'terminal.ansiGreen': palette.green,
+    'terminal.ansiYellow': palette.yellow,
+    'terminal.ansiBlue': palette.cyan,
+    'terminal.ansiMagenta': palette.purple,
+    'terminal.ansiCyan': palette.cyan,
+    'terminal.ansiWhite': palette.foreground,
+    'terminal.ansiBrightBlack': palette.comment,
+    'terminal.ansiBrightRed': palette.red,
+    'terminal.ansiBrightGreen': palette.green,
+    'terminal.ansiBrightYellow': palette.yellow,
+    'terminal.ansiBrightBlue': palette.cyan,
+    'terminal.ansiBrightMagenta': palette.purple,
+    'terminal.ansiBrightCyan': palette.cyan,
+    'terminal.ansiBrightWhite': palette.brightForeground,
   }
 }
 
@@ -148,12 +338,107 @@ const builtInThemeOptions = builtInResolvedThemes.map<ColorThemeOption>((theme) 
   source: 'builtin',
 }))
 
+const bundledThemeDefinitions: readonly BundledThemeDefinition[] = editorThemeCatalog.map((theme) => ({
+  id: theme.value,
+  label: theme.label,
+  description: theme.description,
+  author: theme.author,
+  kind: getThemeKindFromMonacoBase(theme.base),
+  base: theme.base,
+  palette: isStaticEditorThemeCatalogEntry(theme) ? theme.palette : resolveDraculaPalette(null),
+  entryPath: bundledUpstreamThemeEntryPathById.get(theme.value),
+}))
+
+const bundledThemeDefinitionsById = new Map<string, BundledThemeDefinition>(
+  bundledThemeDefinitions.map((theme) => [theme.id, theme]),
+)
+
+const bundledResolvedThemeCache = new Map<string, ResolvedColorTheme>()
+
+const bundledThemeOptions = bundledThemeDefinitions.map<ColorThemeOption>((theme) => ({
+  value: theme.id,
+  label: theme.label,
+  description: theme.description,
+  author: theme.author,
+  kind: theme.kind,
+  source: 'bundled',
+}))
+
+function createResolvedBundledTheme(theme: BundledThemeDefinition): ResolvedColorTheme {
+  if (theme.entryPath) {
+    const resolvedData = resolveColorThemeDataSync(theme.entryPath, loadBundledUpstreamThemeFile, theme.kind)
+
+    return mergeResolvedThemeWithBuiltInBase(createResolvedTheme(
+      {
+        id: theme.id,
+        label: theme.label,
+        description: theme.description,
+        author: theme.author,
+        kind: resolvedData.kind,
+        source: 'bundled',
+      },
+      resolvedData.colors,
+      resolvedData.tokenColors,
+      resolvedData.semanticHighlighting,
+      resolvedData.semanticTokenColors,
+    ))
+  }
+
+  return mergeResolvedThemeWithBuiltInBase(createResolvedTheme(
+    {
+      id: theme.id,
+      label: theme.label,
+      description: theme.description,
+      author: theme.author,
+      kind: theme.kind,
+      source: 'bundled',
+    },
+    createBundledThemeColors(theme.palette, theme.kind),
+    createBundledThemeTokenColors(theme.palette),
+    false,
+    {},
+  ))
+}
+
 export function getBuiltInColorTheme(themeId: string): ResolvedColorTheme | null {
   return builtInResolvedThemesById.get(themeId) ?? null
 }
 
 export function getBuiltInColorThemes(): readonly ResolvedColorTheme[] {
   return builtInResolvedThemes
+}
+
+export function getBundledColorTheme(themeId: string): ResolvedColorTheme | null {
+  const cachedTheme = bundledResolvedThemeCache.get(themeId)
+
+  if (cachedTheme) {
+    return cachedTheme
+  }
+
+  const definition = bundledThemeDefinitionsById.get(themeId)
+
+  if (!definition) {
+    return null
+  }
+
+  const resolvedTheme = createResolvedBundledTheme(definition)
+  bundledResolvedThemeCache.set(themeId, resolvedTheme)
+  return resolvedTheme
+}
+
+export function getBundledColorThemes(): readonly ResolvedColorTheme[] {
+  return bundledThemeDefinitions.flatMap((theme) => {
+    const resolvedTheme = getBundledColorTheme(theme.id)
+    return resolvedTheme ? [resolvedTheme] : []
+  })
+}
+
+export function resetBundledColorThemeCacheForTests(): void {
+  bundledResolvedThemeCache.clear()
+}
+
+export function getBundledColorThemeOptions(): readonly ColorThemeOption[] {
+  return bundledThemeOptions
 }
 
 export function getBuiltInColorThemeOptions(): readonly ColorThemeOption[] {
@@ -189,6 +474,7 @@ export function parseImportedColorThemeRecords(value: unknown): ImportedColorThe
 export function buildAvailableColorThemeOptions(importedThemes: readonly ImportedColorThemeRecord[]): ColorThemeOption[] {
   return [
     ...builtInThemeOptions,
+    ...bundledThemeOptions,
     ...importedThemes.map<ColorThemeOption>((theme) => ({
       value: theme.id,
       label: theme.label,
@@ -209,6 +495,10 @@ export function parseConfiguredColorThemeId(
   }
 
   if (builtInResolvedThemesById.has(value)) {
+    return value
+  }
+
+  if (bundledThemeDefinitionsById.has(value)) {
     return value
   }
 
@@ -310,6 +600,14 @@ export function buildResolvedThemeLookup(
   const lookup: Record<string, ResolvedColorTheme> = Object.fromEntries(
     builtInResolvedThemes.map((theme) => [theme.id, theme]),
   )
+
+  for (const bundledTheme of bundledThemeDefinitions) {
+    const resolvedTheme = getBundledColorTheme(bundledTheme.id)
+
+    if (resolvedTheme) {
+      lookup[resolvedTheme.id] = resolvedTheme
+    }
+  }
 
   for (const theme of importedThemes) {
     lookup[theme.id] = resolvedImportedThemes[theme.id] ?? getFallbackThemeForImportedTheme(theme)

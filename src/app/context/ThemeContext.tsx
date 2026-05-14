@@ -3,11 +3,11 @@ import { getAppliedColorThemeVariables } from '../theme/colorThemeCss'
 import { getColorThemePreview } from '../theme/colorThemePreview'
 import {
   buildAvailableColorThemeOptions,
-  buildResolvedThemeLookup,
   BUILT_IN_DARK_COLOR_THEME_ID,
   BUILT_IN_LIGHT_COLOR_THEME_ID,
   createImportedColorThemeRecord,
   DEFAULT_COLOR_THEME_ID,
+  getBundledColorTheme,
   getBuiltInColorTheme,
   getDefaultColorThemeId,
   parseConfiguredColorThemeId,
@@ -131,6 +131,17 @@ function getFallbackTheme(themeId: string, importedThemes: readonly ImportedColo
   return getBuiltInColorTheme(DEFAULT_COLOR_THEME_ID)!
 }
 
+function getResolvedThemeById(
+  themeId: string,
+  importedThemes: readonly ImportedColorThemeRecord[],
+  resolvedImportedThemes: Readonly<Record<string, ResolvedColorTheme>>,
+): ResolvedColorTheme {
+  return getBuiltInColorTheme(themeId)
+    ?? getBundledColorTheme(themeId)
+    ?? resolvedImportedThemes[themeId]
+    ?? getFallbackTheme(themeId, importedThemes)
+}
+
 async function readThemeFileAbsolute(filePath: string): Promise<string> {
   const contents = await window.electronAPI?.fs.readFileAbsolute(filePath, 'utf-8')
 
@@ -181,13 +192,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
-  const resolvedThemes = useMemo(
-    () => buildResolvedThemeLookup(importedThemes, resolvedImportedThemes),
-    [importedThemes, resolvedImportedThemes],
-  )
   const activeTheme = useMemo(
-    () => resolvedThemes[themeId] ?? getFallbackTheme(themeId, importedThemes),
-    [importedThemes, resolvedThemes, themeId],
+    () => getResolvedThemeById(themeId, importedThemes, resolvedImportedThemes),
+    [importedThemes, resolvedImportedThemes, themeId],
   )
   const activeThemeVariables = useMemo(() => getAppliedColorThemeVariables(activeTheme), [activeTheme])
   const availableThemes = useMemo(() => buildAvailableColorThemeOptions(importedThemes), [importedThemes])
@@ -288,9 +295,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, [importedThemes, persistImportedThemes, setImportedThemes, setThemeId])
 
   const getThemePreview = useCallback((requestedThemeId: string): ColorThemePreviewPalette => {
-    const requestedTheme = resolvedThemes[requestedThemeId] ?? getFallbackTheme(requestedThemeId, importedThemes)
+    const requestedTheme = getResolvedThemeById(requestedThemeId, importedThemes, resolvedImportedThemes)
     return getColorThemePreview(requestedTheme)
-  }, [importedThemes, resolvedThemes])
+  }, [importedThemes, resolvedImportedThemes])
 
   useEffect(() => {
     importedThemesRef.current = importedThemes

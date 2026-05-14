@@ -240,6 +240,7 @@ function resolveThemeFileSync(
   filePath: string,
   loadText: SyncTextLoader,
   seenPaths: Set<string>,
+  fallbackKind: ThemeKind,
 ): ResolvedColorThemeData {
   const normalizedPath = normalizeThemePath(filePath)
 
@@ -252,8 +253,8 @@ function resolveThemeFileSync(
   nextSeenPaths.add(normalizedPath)
 
   const inheritedTheme = typeof themeFile.include === 'string' && themeFile.include.trim().length > 0
-    ? resolveThemeFileSync(resolveThemeIncludePath(normalizedPath, themeFile.include), loadText, nextSeenPaths)
-    : getEmptyResolvedThemeData(normalizeThemeKind(themeFile))
+    ? resolveThemeFileSync(resolveThemeIncludePath(normalizedPath, themeFile.include), loadText, nextSeenPaths, fallbackKind)
+    : getEmptyResolvedThemeData(normalizeThemeKind(themeFile, fallbackKind))
 
   const tokenColors = Array.isArray(themeFile.tokenColors)
     ? normalizeTokenColorRules(themeFile.tokenColors)
@@ -276,6 +277,7 @@ async function resolveThemeFile(
   filePath: string,
   loadText: AsyncTextLoader,
   seenPaths: Set<string>,
+  fallbackKind: ThemeKind,
 ): Promise<ResolvedColorThemeData> {
   const normalizedPath = normalizeThemePath(filePath)
 
@@ -288,8 +290,8 @@ async function resolveThemeFile(
   nextSeenPaths.add(normalizedPath)
 
   const inheritedTheme = typeof themeFile.include === 'string' && themeFile.include.trim().length > 0
-    ? await resolveThemeFile(resolveThemeIncludePath(normalizedPath, themeFile.include), loadText, nextSeenPaths)
-    : getEmptyResolvedThemeData(normalizeThemeKind(themeFile))
+    ? await resolveThemeFile(resolveThemeIncludePath(normalizedPath, themeFile.include), loadText, nextSeenPaths, fallbackKind)
+    : getEmptyResolvedThemeData(normalizeThemeKind(themeFile, fallbackKind))
 
   const tokenColors = Array.isArray(themeFile.tokenColors)
     ? normalizeTokenColorRules(themeFile.tokenColors)
@@ -308,12 +310,20 @@ async function resolveThemeFile(
   })
 }
 
-export function resolveColorThemeDataSync(entryFilePath: string, loadText: SyncTextLoader): ResolvedColorThemeData {
-  return resolveThemeFileSync(entryFilePath, loadText, new Set())
+export function resolveColorThemeDataSync(
+  entryFilePath: string,
+  loadText: SyncTextLoader,
+  fallbackKind: ThemeKind = 'dark',
+): ResolvedColorThemeData {
+  return resolveThemeFileSync(entryFilePath, loadText, new Set(), fallbackKind)
 }
 
-export function resolveColorThemeData(entryFilePath: string, loadText: AsyncTextLoader): Promise<ResolvedColorThemeData> {
-  return resolveThemeFile(entryFilePath, loadText, new Set())
+export function resolveColorThemeData(
+  entryFilePath: string,
+  loadText: AsyncTextLoader,
+  fallbackKind: ThemeKind = 'dark',
+): Promise<ResolvedColorThemeData> {
+  return resolveThemeFile(entryFilePath, loadText, new Set(), fallbackKind)
 }
 
 export function mergeResolvedColorThemeData(

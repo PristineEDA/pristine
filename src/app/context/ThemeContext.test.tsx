@@ -23,6 +23,32 @@ function ThemeProbe() {
   );
 }
 
+function renderWithConfiguredThemeId(themeId: string | null) {
+  vi.mocked(window.electronAPI!.config.get).mockImplementation((key: string) =>
+    key === 'workbench.colorTheme' ? themeId : null,
+  );
+
+  render(
+    <ThemeProvider>
+      <ThemeProbe />
+    </ThemeProvider>,
+  );
+}
+
+function expectConfiguredThemeState(themeId: string, themeKind: 'dark' | 'light') {
+  expect(screen.getByTestId('current-theme')).toHaveTextContent(themeKind);
+  expect(screen.getByTestId('current-theme-id')).toHaveTextContent(themeId);
+
+  if (themeKind === 'dark') {
+    expect(document.documentElement).toHaveClass('dark');
+  } else {
+    expect(document.documentElement).not.toHaveClass('dark');
+  }
+
+  expect(document.documentElement).toHaveAttribute('data-color-theme-id', themeId);
+  expect(window.electronAPI?.config.set).toHaveBeenCalledWith('workbench.colorTheme', themeId);
+}
+
 describe('ThemeContext', () => {
   beforeEach(() => {
     document.documentElement.classList.remove('dark');
@@ -59,6 +85,132 @@ describe('ThemeContext', () => {
     expect(screen.getByTestId('current-theme')).toHaveTextContent('light');
     expect(screen.getByTestId('current-theme-id')).toHaveTextContent('vscode-2026-light');
     expect(document.documentElement).not.toHaveClass('dark');
+  });
+
+  it('accepts bundled third-party theme ids from config and applies them through the unified provider', () => {
+    renderWithConfiguredThemeId('pink-cat-boo');
+
+    expectConfiguredThemeState('pink-cat-boo', 'dark');
+  });
+
+  it('accepts vendored upstream bundled theme ids from config and applies them through the unified provider', () => {
+    renderWithConfiguredThemeId('one-dark-pro');
+
+    expectConfiguredThemeState('one-dark-pro', 'dark');
+  });
+
+  it('accepts second-batch vendored light bundled theme ids from config and keeps the DOM in light mode', () => {
+    renderWithConfiguredThemeId('github-light-default');
+
+    expectConfiguredThemeState('github-light-default', 'light');
+  });
+
+  it('accepts third-batch vendored light bundled theme ids from config and keeps the DOM in light mode', () => {
+    renderWithConfiguredThemeId('solarized-light');
+
+    expectConfiguredThemeState('solarized-light', 'light');
+  });
+
+  it('accepts fourth-batch vendored dark bundled theme ids from config and keeps the DOM in dark mode', () => {
+    renderWithConfiguredThemeId('night-owl');
+
+    expectConfiguredThemeState('night-owl', 'dark');
+  });
+
+  it('accepts fourth-batch vendored light bundled theme ids from config and keeps the DOM in light mode', () => {
+    renderWithConfiguredThemeId('noctis-lux');
+
+    expectConfiguredThemeState('noctis-lux', 'light');
+  });
+
+  it('accepts fifth-batch vendored dark bundled theme ids from config and keeps the DOM in dark mode', () => {
+    renderWithConfiguredThemeId('macos-modern-dark-ventura-xcode-default');
+
+    expectConfiguredThemeState('macos-modern-dark-ventura-xcode-default', 'dark');
+  });
+
+  it('accepts fifth-batch vendored light bundled theme ids from config and keeps the DOM in light mode', () => {
+    renderWithConfiguredThemeId('macos-modern-light-ventura-xcode-low-key');
+
+    expectConfiguredThemeState('macos-modern-light-ventura-xcode-low-key', 'light');
+  });
+
+  it('accepts sixth-batch vendored Dobri bundled theme ids from config and keeps the DOM in dark mode', () => {
+    renderWithConfiguredThemeId('dobri-next-a06-amethyst');
+
+    expectConfiguredThemeState('dobri-next-a06-amethyst', 'dark');
+  });
+
+  it('accepts seventh-batch vendored dark bundled theme ids from config and keeps the DOM in dark mode', () => {
+    renderWithConfiguredThemeId('github-dark-high-contrast');
+
+    expectConfiguredThemeState('github-dark-high-contrast', 'dark');
+  });
+
+  it('accepts seventh-batch vendored light bundled theme ids from config and keeps the DOM in light mode', () => {
+    renderWithConfiguredThemeId('github-light-high-contrast');
+
+    expectConfiguredThemeState('github-light-high-contrast', 'light');
+  });
+
+  it('accepts eighth-batch official vendored dark bundled theme ids from config and keeps the DOM in dark mode', () => {
+    renderWithConfiguredThemeId('copilot-theme-higher-contrast');
+
+    expectConfiguredThemeState('copilot-theme-higher-contrast', 'dark');
+  });
+
+  it('accepts eighth-batch official vendored light bundled theme ids from config and keeps the DOM in light mode', () => {
+    renderWithConfiguredThemeId('visual-studio-light-cpp');
+
+    expectConfiguredThemeState('visual-studio-light-cpp', 'light');
+  });
+
+  it('accepts ninth-batch vendored dark bundled theme ids from config and keeps the DOM in dark mode', () => {
+    renderWithConfiguredThemeId('vue-theme-high-contrast');
+
+    expectConfiguredThemeState('vue-theme-high-contrast', 'dark');
+  });
+
+  it('accepts ninth-batch vendored light bundled theme ids from config and keeps the DOM in light mode', () => {
+    renderWithConfiguredThemeId('light-owl');
+
+    expectConfiguredThemeState('light-owl', 'light');
+  });
+
+  it('accepts tenth-batch vendored dark bundled theme ids from config and keeps the DOM in dark mode', () => {
+    renderWithConfiguredThemeId('andromeda');
+
+    expectConfiguredThemeState('andromeda', 'dark');
+  });
+
+  it('accepts tenth-batch vendored light bundled theme ids from config and keeps the DOM in light mode', () => {
+    renderWithConfiguredThemeId('atom-one-light');
+
+    expectConfiguredThemeState('atom-one-light', 'light');
+  });
+
+  it('accepts eleventh-batch vendored dark bundled theme ids from config and keeps the DOM in dark mode', () => {
+    renderWithConfiguredThemeId('slack-aubergine-dark-editor');
+
+    expectConfiguredThemeState('slack-aubergine-dark-editor', 'dark');
+  });
+
+  it('accepts eleventh-batch vendored light bundled theme ids from config and keeps the DOM in light mode', () => {
+    renderWithConfiguredThemeId('github-light-theme-gray');
+
+    expectConfiguredThemeState('github-light-theme-gray', 'light');
+  });
+
+  it('accepts final-batch vendored dark bundled theme ids from config and keeps the DOM in dark mode', () => {
+    renderWithConfiguredThemeId('winter-is-coming-dark');
+
+    expectConfiguredThemeState('winter-is-coming-dark', 'dark');
+  });
+
+  it('accepts final-batch vendored light bundled theme ids from config and keeps the DOM in light mode', () => {
+    renderWithConfiguredThemeId('alabaster');
+
+    expectConfiguredThemeState('alabaster', 'light');
   });
 
   it('persists theme updates to the unified config keys and keeps the DOM class in sync', () => {

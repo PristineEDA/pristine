@@ -681,7 +681,7 @@ async function readTerminalThemeSnapshot(window: Awaited<ReturnType<typeof launc
 
 async function readMonacoAppearanceSnapshot(
   window: Awaited<ReturnType<typeof launchApp>>['window'],
-  expectedColors?: { background?: string; lineNumber?: string },
+  expectedColors?: { background?: string; lineNumber?: string | string[] },
 ) {
   return window.evaluate(({ background, lineNumber }) => {
     type StyleLike = {
@@ -726,12 +726,21 @@ async function readMonacoAppearanceSnapshot(
 
       return normalizedColor;
     };
+    const lineNumberValues = Array.isArray(lineNumber)
+      ? lineNumber
+      : lineNumber
+        ? [lineNumber]
+        : [];
 
     const backgroundElement =
       editorRoot.querySelector('.monaco-editor-background') ??
       editorRoot.querySelector('.margin') ??
       editorRoot;
-    const lineNumberElement = editorRoot.querySelector('.margin .line-numbers') ?? editorRoot.querySelector('.line-numbers');
+    const lineNumberElement =
+      editorRoot.querySelector('.margin .line-numbers.active-line-number') ??
+      editorRoot.querySelector('.line-numbers.active-line-number') ??
+      editorRoot.querySelector('.margin .line-numbers') ??
+      editorRoot.querySelector('.line-numbers');
     const textLayer =
       editorRoot.querySelector('.view-lines .view-line') ??
       editorRoot.querySelector('.view-lines') ??
@@ -740,7 +749,9 @@ async function readMonacoAppearanceSnapshot(
     return {
       backgroundColor: browserGlobal.getComputedStyle(backgroundElement).backgroundColor,
       expectedBackgroundColor: resolveCssColor('backgroundColor', background),
-      expectedLineNumberColor: resolveCssColor('color', lineNumber),
+      expectedLineNumberColors: lineNumberValues
+        .map((value) => resolveCssColor('color', value))
+        .filter((value): value is string => Boolean(value)),
       fontFamily: browserGlobal.getComputedStyle(textLayer).fontFamily,
       fontSize: browserGlobal.getComputedStyle(textLayer).fontSize,
       lineNumberColor: lineNumberElement ? browserGlobal.getComputedStyle(lineNumberElement).color : null,
@@ -3927,6 +3938,548 @@ test('settings UI theme selection persists across app relaunch', async () => {
   await expect(secondWindow.getByTestId('settings-dialog')).toHaveCount(0);
 
   await secondApp.close();
+});
+
+async function readBundledThemeSnapshot(page: Awaited<ReturnType<typeof launchApp>>['window']) {
+  return {
+    ...(await page.evaluate(() => {
+      const browserGlobal = globalThis as typeof globalThis & {
+        document: {
+          documentElement: {
+            classList: {
+              contains: (token: string) => boolean;
+            };
+            dataset: {
+              colorThemeId?: string;
+            };
+          };
+        };
+      };
+
+      return {
+        isDark: browserGlobal.document.documentElement.classList.contains('dark'),
+        themeId: browserGlobal.document.documentElement.dataset.colorThemeId ?? null,
+      };
+    })),
+    stored: await readConfigValue(page, 'workbench.colorTheme'),
+  };
+}
+
+async function expectBundledMonacoTheme(
+  page: Awaited<ReturnType<typeof launchApp>>['window'],
+  expectedColors: { background: string; lineNumber: string | string[] },
+) {
+  await expect.poll(async () => {
+    const snapshot = await readMonacoAppearanceSnapshot(page, expectedColors);
+
+    if (!snapshot) {
+      return null;
+    }
+
+    if (
+      snapshot.backgroundColor === snapshot.expectedBackgroundColor
+      && snapshot.lineNumberColor !== null
+      && snapshot.expectedLineNumberColors.includes(snapshot.lineNumberColor)
+    ) {
+      return null;
+    }
+
+    return {
+      backgroundColor: snapshot.backgroundColor,
+      expectedBackgroundColor: snapshot.expectedBackgroundColor,
+      lineNumberColor: snapshot.lineNumberColor,
+      expectedLineNumberColors: snapshot.expectedLineNumberColors,
+    };
+  }).toEqual(null);
+}
+
+async function expectBundledTerminalTheme(page: Awaited<ReturnType<typeof launchApp>>['window']) {
+  await expect.poll(async () => {
+    const themeState = await readTerminalThemeSnapshot(page);
+
+    return {
+      hasBackground: Boolean(themeState.terminalBackground),
+      hasExpectedBackground: Boolean(themeState.expectedBackground),
+      backgroundMatches: themeState.terminalBackground === themeState.expectedBackground,
+    };
+  }, {
+    timeout: 15000,
+  }).toEqual({
+    hasBackground: true,
+    hasExpectedBackground: true,
+    backgroundMatches: true,
+  });
+}
+
+async function openFileAndAssertBundledTheme(
+  page: Awaited<ReturnType<typeof launchApp>>['window'],
+  expectedMonacoColors: { background: string; lineNumber: string | string[] },
+) {
+  await ensureExplorerVisible(page);
+  await openNestedWorkspaceFile(page, [
+    'file-tree-node-rtl',
+    'file-tree-node-rtl_core',
+    'file-tree-node-rtl_core_reg_file_v',
+  ]);
+  await expect(page.getByTestId('editor-tab-rtl/core/reg_file.v')).toBeVisible();
+  await waitForMonacoEditor(page);
+  await expect(page.locator('.monaco-editor .view-lines')).toContainText('module reg_file', {
+    timeout: MONACO_READY_TIMEOUT_MS,
+  });
+  await focusMonacoEditor(page);
+  await expectBundledMonacoTheme(page, expectedMonacoColors);
+
+  await openBottomTerminal(page);
+  await expect.poll(async () => readTerminalPid(page), {
+    timeout: 15000,
+  }).toBeGreaterThan(0);
+  await expectBundledTerminalTheme(page);
+}
+
+async function assertBundledThemeSelectionPersistsAcrossRelaunch({
+  searchText,
+  themeId,
+  themeLabel,
+  isDark,
+  expectedMonacoColors,
+}: {
+  searchText: string;
+  themeId: string;
+  themeLabel: string;
+  isDark: boolean;
+  expectedMonacoColors: { background: string; lineNumber: string | string[] };
+}) {
+  const firstLaunch = await launchApp();
+  const { app: firstApp, window: firstWindow } = firstLaunch;
+
+  await firstWindow.getByTestId('menu-settings-button').click();
+  await expect(firstWindow.getByTestId('settings-dialog')).toBeVisible();
+  await firstWindow.getByTestId('settings-theme-advanced-button').click();
+  await expect(firstWindow.getByTestId('settings-theme-advanced-dialog')).toBeVisible();
+  await firstWindow.getByTestId('settings-theme-advanced-search-input').fill(searchText);
+  await firstWindow.getByTestId(`settings-theme-preview-card-${themeId}`).click();
+
+  await expect.poll(async () => readBundledThemeSnapshot(firstWindow)).toEqual({
+    isDark,
+    themeId,
+    stored: themeId,
+  });
+
+  await firstWindow.getByTestId('settings-close-button').click();
+  await expect(firstWindow.getByTestId('settings-dialog')).toHaveCount(0);
+
+  await openFileAndAssertBundledTheme(firstWindow, expectedMonacoColors);
+
+  await firstApp.close();
+
+  const secondLaunch = await launchApp();
+  const { app: secondApp, window: secondWindow } = secondLaunch;
+
+  await expect.poll(async () => readBundledThemeSnapshot(secondWindow)).toEqual({
+    isDark,
+    themeId,
+    stored: themeId,
+  });
+
+  await openFileAndAssertBundledTheme(secondWindow, expectedMonacoColors);
+
+  await secondWindow.getByTestId('menu-settings-button').click();
+  await expect(secondWindow.getByTestId('settings-dialog')).toBeVisible();
+  await expect(secondWindow.getByTestId('settings-theme-combobox')).toContainText(themeLabel);
+  await secondWindow.getByTestId('settings-close-button').click();
+  await expect(secondWindow.getByTestId('settings-dialog')).toHaveCount(0);
+
+  await secondApp.close();
+}
+
+test('bundled UI theme selection persists across app relaunch and updates Monaco and terminal styling', async () => {
+  test.slow();
+
+  await assertBundledThemeSelectionPersistsAcrossRelaunch({
+    searchText: 'pink',
+    themeId: 'pink-cat-boo',
+    themeLabel: 'Pink Cat Boo',
+    isDark: true,
+    expectedMonacoColors: {
+      background: '#202330',
+      lineNumber: ['#FFF0F5', '#BBBEBF'],
+    },
+  });
+});
+
+test('vendored upstream bundled UI theme selection persists across app relaunch and updates Monaco and terminal styling', async () => {
+  test.slow();
+
+  await assertBundledThemeSelectionPersistsAcrossRelaunch({
+    searchText: 'one dark',
+    themeId: 'one-dark-pro',
+    themeLabel: 'One Dark Pro',
+    isDark: true,
+    expectedMonacoColors: {
+      background: '#282c34',
+      lineNumber: '#abb2bf',
+    },
+  });
+});
+
+test('second-batch vendored upstream light bundled UI theme selection persists across app relaunch and updates Monaco and terminal styling', async () => {
+  test.slow();
+
+  await assertBundledThemeSelectionPersistsAcrossRelaunch({
+    searchText: 'github light default',
+    themeId: 'github-light-default',
+    themeLabel: 'GitHub Light Default',
+    isDark: false,
+    expectedMonacoColors: {
+      background: '#ffffff',
+      lineNumber: '#1f2328',
+    },
+  });
+});
+
+test('second-batch vendored upstream dark bundled UI theme selection persists across app relaunch and updates Monaco and terminal styling', async () => {
+  test.slow();
+
+  await assertBundledThemeSelectionPersistsAcrossRelaunch({
+    searchText: 'tokyo night storm',
+    themeId: 'tokyo-night-storm',
+    themeLabel: 'Tokyo Night Storm',
+    isDark: true,
+    expectedMonacoColors: {
+      background: '#24283b',
+      lineNumber: '#8089b3',
+    },
+  });
+});
+
+test('third-batch vendored upstream light bundled UI theme selection persists across app relaunch and updates Monaco and terminal styling', async () => {
+  test.slow();
+
+  await assertBundledThemeSelectionPersistsAcrossRelaunch({
+    searchText: 'solarized light',
+    themeId: 'solarized-light',
+    themeLabel: 'Solarized Light',
+    isDark: false,
+    expectedMonacoColors: {
+      background: '#fdf6e3',
+      lineNumber: '#6f7776',
+    },
+  });
+});
+
+test('third-batch vendored upstream dark bundled UI theme selection persists across app relaunch and updates Monaco and terminal styling', async () => {
+  test.slow();
+
+  await assertBundledThemeSelectionPersistsAcrossRelaunch({
+    searchText: 'gruvbox dark medium',
+    themeId: 'gruvbox-dark-medium',
+    themeLabel: 'Gruvbox Dark Medium',
+    isDark: true,
+    expectedMonacoColors: {
+      background: '#282828',
+      lineNumber: '#BBBEBF',
+    },
+  });
+});
+
+test('fourth-batch vendored upstream dark bundled UI theme selection persists across app relaunch and updates Monaco and terminal styling', async () => {
+  test.slow();
+
+  await assertBundledThemeSelectionPersistsAcrossRelaunch({
+    searchText: 'night owl',
+    themeId: 'night-owl',
+    themeLabel: 'Night Owl',
+    isDark: true,
+    expectedMonacoColors: {
+      background: '#011627',
+      lineNumber: ['#d6deeb', '#C5E4FD'],
+    },
+  });
+});
+
+test('fourth-batch vendored upstream light bundled UI theme selection persists across app relaunch and updates Monaco and terminal styling', async () => {
+  test.slow();
+
+  await assertBundledThemeSelectionPersistsAcrossRelaunch({
+    searchText: 'noctis lux',
+    themeId: 'noctis-lux',
+    themeLabel: 'Noctis Lux',
+    isDark: false,
+    expectedMonacoColors: {
+      background: '#fef8ec',
+      lineNumber: ['#005661', '#0099ad'],
+    },
+  });
+});
+
+test('fifth-batch vendored upstream dark macOS Modern bundled UI theme selection persists across app relaunch and updates Monaco and terminal styling', async () => {
+  test.slow();
+
+  await assertBundledThemeSelectionPersistsAcrossRelaunch({
+    searchText: 'ventura xcode default',
+    themeId: 'macos-modern-dark-ventura-xcode-default',
+    themeLabel: 'MacOS Modern Dark - Ventura Xcode Default',
+    isDark: true,
+    expectedMonacoColors: {
+      background: '#232222',
+      lineNumber: ['#747478', 'rgba(255, 255, 255, 0.85)'],
+    },
+  });
+});
+
+test('fifth-batch vendored upstream light macOS Modern bundled UI theme selection persists across app relaunch and updates Monaco and terminal styling', async () => {
+  test.slow();
+
+  await assertBundledThemeSelectionPersistsAcrossRelaunch({
+    searchText: 'low key',
+    themeId: 'macos-modern-light-ventura-xcode-low-key',
+    themeLabel: 'MacOS Modern Light - Ventura Xcode Low Key',
+    isDark: false,
+    expectedMonacoColors: {
+      background: '#ffffff',
+      lineNumber: ['#bbbbbb', '#666666', '#000000'],
+    },
+  });
+});
+
+test('sixth-batch vendored upstream Dobri A-series bundled UI theme selection persists across app relaunch and updates Monaco and terminal styling', async () => {
+  test.slow();
+
+  await assertBundledThemeSelectionPersistsAcrossRelaunch({
+    searchText: 'amethyst',
+    themeId: 'dobri-next-a06-amethyst',
+    themeLabel: 'Dobri Next -A06- Amethyst',
+    isDark: true,
+    expectedMonacoColors: {
+      background: '#150022',
+      lineNumber: ['#5C6370', '#BBBEBF', '#f5f5f5'],
+    },
+  });
+});
+
+test('sixth-batch vendored upstream Dobri C-series bundled UI theme selection persists across app relaunch and updates Monaco and terminal styling', async () => {
+  test.slow();
+
+  await assertBundledThemeSelectionPersistsAcrossRelaunch({
+    searchText: 'cupcake',
+    themeId: 'dobri-next-c03-cupcake',
+    themeLabel: 'Dobri Next -C03- Cupcake',
+    isDark: true,
+    expectedMonacoColors: {
+      background: '#0b1015',
+      lineNumber: ['#858889', '#BBBEBF', '#f5f5f5'],
+    },
+  });
+});
+
+test('seventh-batch vendored upstream One Dark Pro dark bundled UI theme selection persists across app relaunch and updates Monaco and terminal styling', async () => {
+  test.slow();
+
+  await assertBundledThemeSelectionPersistsAcrossRelaunch({
+    searchText: 'night flat',
+    themeId: 'one-dark-pro-night-flat',
+    themeLabel: 'One Dark Pro Night Flat',
+    isDark: true,
+    expectedMonacoColors: {
+      background: '#16191d',
+      lineNumber: ['#667187', '#abb2bf'],
+    },
+  });
+});
+
+test('seventh-batch vendored upstream GitHub light accessibility bundled UI theme selection persists across app relaunch and updates Monaco and terminal styling', async () => {
+  test.slow();
+
+  await assertBundledThemeSelectionPersistsAcrossRelaunch({
+    searchText: 'light high contrast',
+    themeId: 'github-light-high-contrast',
+    themeLabel: 'GitHub Light High Contrast',
+    isDark: false,
+    expectedMonacoColors: {
+      background: '#ffffff',
+      lineNumber: ['#88929d', '#0e1116'],
+    },
+  });
+});
+
+test('eighth-batch official vendored upstream Copilot dark bundled UI theme selection persists across app relaunch and updates Monaco and terminal styling', async () => {
+  test.slow();
+
+  await assertBundledThemeSelectionPersistsAcrossRelaunch({
+    searchText: 'copilot theme - higher contrast',
+    themeId: 'copilot-theme-higher-contrast',
+    themeLabel: 'Copilot Theme - Higher Contrast',
+    isDark: true,
+    expectedMonacoColors: {
+      background: '#232a2f',
+      lineNumber: ['#707a84', '#d4dce4', '#a8b2ba'],
+    },
+  });
+});
+
+test('eighth-batch official vendored upstream Visual Studio light bundled UI theme selection persists across app relaunch and updates Monaco and terminal styling', async () => {
+  test.slow();
+
+  await assertBundledThemeSelectionPersistsAcrossRelaunch({
+    searchText: 'light (visual studio',
+    themeId: 'visual-studio-light-cpp',
+    themeLabel: 'Light (Visual Studio - C/C++)',
+    isDark: false,
+    expectedMonacoColors: {
+      background: '#FFFFFF',
+      lineNumber: ['#2b91af', '#000000'],
+    },
+  });
+});
+
+test('ninth-batch vendored upstream Palenight dark bundled UI theme selection persists across app relaunch and updates Monaco and terminal styling', async () => {
+  test.slow();
+
+  await assertBundledThemeSelectionPersistsAcrossRelaunch({
+    searchText: 'palenight theme',
+    themeId: 'palenight-theme',
+    themeLabel: 'Palenight Theme',
+    isDark: true,
+    expectedMonacoColors: {
+      background: '#292D3E',
+      lineNumber: ['#4c5374', '#eeffff', '#bfc7d5'],
+    },
+  });
+});
+
+test('ninth-batch vendored upstream Light Owl bundled UI theme selection persists across app relaunch and updates Monaco and terminal styling', async () => {
+  test.slow();
+
+  await assertBundledThemeSelectionPersistsAcrossRelaunch({
+    searchText: 'light owl',
+    themeId: 'light-owl',
+    themeLabel: 'Light Owl',
+    isDark: false,
+    expectedMonacoColors: {
+      background: '#FBFBFB',
+      lineNumber: ['#90A7B2', '#403F53'],
+    },
+  });
+});
+
+test('tenth-batch vendored upstream Andromeda dark bundled UI theme selection persists across app relaunch and updates Monaco and terminal styling', async () => {
+  test.slow();
+
+  await assertBundledThemeSelectionPersistsAcrossRelaunch({
+    searchText: 'andromeda',
+    themeId: 'andromeda',
+    themeLabel: 'Andromeda',
+    isDark: true,
+    expectedMonacoColors: {
+      background: '#23262E',
+      lineNumber: ['#746f77', '#BBBEBF', '#D5CED9'],
+    },
+  });
+});
+
+test('tenth-batch vendored upstream Atom One Light bundled UI theme selection persists across app relaunch and updates Monaco and terminal styling', async () => {
+  test.slow();
+
+  await assertBundledThemeSelectionPersistsAcrossRelaunch({
+    searchText: 'atom one light',
+    themeId: 'atom-one-light',
+    themeLabel: 'Atom One Light',
+    isDark: false,
+    expectedMonacoColors: {
+      background: '#FAFAFA',
+      lineNumber: ['#9D9D9F', '#383A42'],
+    },
+  });
+});
+
+test('eleventh-batch vendored upstream Slack Aubergine Dark bundled UI theme selection persists across app relaunch and updates Monaco and terminal styling', async () => {
+  test.slow();
+
+  await assertBundledThemeSelectionPersistsAcrossRelaunch({
+    searchText: 'slack theme aubergine dark',
+    themeId: 'slack-aubergine-dark-editor',
+    themeLabel: 'Slack Theme Aubergine Dark',
+    isDark: true,
+    expectedMonacoColors: {
+      background: '#3E313C',
+      lineNumber: ['#B9B9B9', '#BBBEBF', '#F6F6F4'],
+    },
+  });
+});
+
+test('eleventh-batch vendored upstream Github Light Theme - Gray bundled UI theme selection persists across app relaunch and updates Monaco and terminal styling', async () => {
+  test.slow();
+
+  await assertBundledThemeSelectionPersistsAcrossRelaunch({
+    searchText: 'github light theme - gray',
+    themeId: 'github-light-theme-gray',
+    themeLabel: 'Github Light Theme - Gray',
+    isDark: false,
+    expectedMonacoColors: {
+      background: '#F0F0F0',
+      lineNumber: ['#BABBBC', '#000000'],
+    },
+  });
+});
+
+test('eleventh-batch vendored upstream Mayukai Midnight bundled UI theme selection persists across app relaunch and updates Monaco and terminal styling', async () => {
+  test.slow();
+
+  await assertBundledThemeSelectionPersistsAcrossRelaunch({
+    searchText: 'mayukai midnight',
+    themeId: 'mayukai-midnight',
+    themeLabel: 'Mayukai Midnight',
+    isDark: true,
+    expectedMonacoColors: {
+      background: '#141824',
+      lineNumber: ['#707A8C66', '#707A8CCC', '#CBCCC6'],
+    },
+  });
+});
+
+test('final-batch vendored upstream Winter is Coming (Dark) bundled UI theme selection persists across app relaunch and updates Monaco and terminal styling', async () => {
+  test.slow();
+
+  await assertBundledThemeSelectionPersistsAcrossRelaunch({
+    searchText: 'winter is coming',
+    themeId: 'winter-is-coming-dark',
+    themeLabel: 'Winter is Coming (Dark)',
+    isDark: true,
+    expectedMonacoColors: {
+      background: '#282822',
+      lineNumber: ['#219FD5', '#A7DBF7', '#BBBEBF', '#D6DEEB'],
+    },
+  });
+});
+
+test('final-batch vendored upstream Alabaster bundled UI theme selection persists across app relaunch and updates Monaco and terminal styling', async () => {
+  test.slow();
+
+  await assertBundledThemeSelectionPersistsAcrossRelaunch({
+    searchText: 'alabaster',
+    themeId: 'alabaster',
+    themeLabel: 'Alabaster',
+    isDark: false,
+    expectedMonacoColors: {
+      background: '#F7F7F7',
+      lineNumber: ['#9DA39A', '#000000', '#202020', '#434343'],
+    },
+  });
+});
+
+test('final-batch vendored upstream Electron bundled UI theme selection persists across app relaunch and updates Monaco and terminal styling', async () => {
+  test.slow();
+
+  await assertBundledThemeSelectionPersistsAcrossRelaunch({
+    searchText: 'electron',
+    themeId: 'electron',
+    themeLabel: 'Electron',
+    isDark: true,
+    expectedMonacoColors: {
+      background: '#212836',
+      lineNumber: ['#3D4D67', '#818CA6', '#97A7C8'],
+    },
+  });
 });
 
 test('code editor settings persist across app relaunch', async () => {

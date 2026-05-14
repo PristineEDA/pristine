@@ -25,3 +25,4 @@ perf-results/
 .pristine-agent/
 .pristine-vendor/
 .pristine-package/
+src/app/theme/bundled-upstream/

@@ -25,6 +25,43 @@ import {
   setThemeMock,
 } from './MenuBar.testSupport';
 
+const SETTINGS_DIALOG_TEST_TIMEOUT_MS = 30000;
+const SETTINGS_PICKER_TEST_TIMEOUT_MS = 15000;
+
+async function applyBundledThemeFromAdvancedPicker(
+  user: ReturnType<typeof userEvent.setup>,
+  theme: {
+    searchText: string;
+    themeId: string;
+    label: string;
+    author: string;
+  },
+) {
+  await user.click(screen.getByTestId('menu-settings-button'));
+  expect(await screen.findByTestId('settings-dialog')).toBeVisible();
+
+  await user.click(screen.getByTestId('settings-theme-advanced-button'));
+  expect(await screen.findByTestId('settings-theme-advanced-dialog')).toBeVisible();
+
+  const searchInput = screen.getByTestId('settings-theme-advanced-search-input');
+  await user.clear(searchInput);
+  await user.type(searchInput, theme.searchText);
+
+  expect(screen.getByTestId(`settings-theme-preview-card-${theme.themeId}`)).toHaveAttribute('data-state', 'unselected');
+  expect(screen.getByTestId(`settings-theme-preview-label-${theme.themeId}`)).toHaveTextContent(theme.label);
+  expect(screen.getByTestId(`settings-theme-preview-author-${theme.themeId}`)).toHaveTextContent(theme.author);
+  expect(screen.getByTestId(`settings-theme-preview-line-module-${theme.themeId}`)).toHaveTextContent('module alu(clk)');
+
+  await user.click(screen.getByTestId(`settings-theme-preview-card-${theme.themeId}`));
+
+  await waitFor(() => {
+    expect(screen.queryByTestId('settings-theme-advanced-dialog')).not.toBeInTheDocument();
+  });
+
+  expect(screen.getByTestId('settings-theme-combobox')).toHaveTextContent(theme.label);
+  expect(setThemeMock).toHaveBeenCalledWith(theme.themeId);
+}
+
 describe('MenuBar settings', () => {
   it('opens settings from native menu commands on macOS', async () => {
     window.electronAPI!.platform = 'darwin';
@@ -179,7 +216,7 @@ describe('MenuBar settings', () => {
     expect(window.electronAPI?.config.set).toHaveBeenCalledWith('window.closeActionPreference', 'quit');
     expect(window.electronAPI?.config.set).toHaveBeenCalledWith('ui.floatingInfoWindow.visible', false);
     expect(window.electronAPI?.setFloatingInfoWindowVisible).toHaveBeenCalledWith(false);
-  }, 15000);
+  }, SETTINGS_DIALOG_TEST_TIMEOUT_MS);
 
   it('opens the advanced editor font picker, filters preview cards, and applies the selected preview card', async () => {
     const user = userEvent.setup();
@@ -245,7 +282,7 @@ describe('MenuBar settings', () => {
 
     expect(screen.getByTestId('settings-editor-font-family-combobox')).toHaveTextContent('Victor Mono');
     expect(setEditorFontFamilyMock).toHaveBeenCalledWith('victor-mono');
-  });
+  }, SETTINGS_PICKER_TEST_TIMEOUT_MS);
 
   it('opens the advanced theme picker, filters preview cards, and applies the selected preview card', async () => {
     const user = userEvent.setup();
@@ -306,7 +343,330 @@ describe('MenuBar settings', () => {
 
     expect(screen.getByTestId('settings-theme-combobox')).toHaveTextContent('Light 2026');
     expect(setThemeMock).toHaveBeenCalledWith('vscode-2026-light');
-  });
+  }, SETTINGS_PICKER_TEST_TIMEOUT_MS);
+
+  it('shows bundled third-party UI themes in the advanced picker and applies them through the shared theme setting', async () => {
+    const user = userEvent.setup();
+
+    mockPersistedSettingsConfig({
+      colorTheme: 'vscode-2026-dark',
+    });
+
+    renderMenuBar();
+
+    await applyBundledThemeFromAdvancedPicker(user, {
+      searchText: 'pink',
+      themeId: 'pink-cat-boo',
+      label: 'Pink Cat Boo',
+      author: 'Fiona Fan',
+    });
+  }, SETTINGS_PICKER_TEST_TIMEOUT_MS);
+
+  it('shows vendored upstream bundled UI themes in the advanced picker and applies them through the shared theme setting', async () => {
+    const user = userEvent.setup();
+
+    mockPersistedSettingsConfig({
+      colorTheme: 'vscode-2026-dark',
+    });
+
+    renderMenuBar();
+
+    await applyBundledThemeFromAdvancedPicker(user, {
+      searchText: 'one dark',
+      themeId: 'one-dark-pro',
+      label: 'One Dark Pro',
+      author: 'Binaryify',
+    });
+  }, SETTINGS_PICKER_TEST_TIMEOUT_MS);
+
+  it('shows second-batch vendored upstream light bundled UI themes in the advanced picker and applies them through the shared theme setting', async () => {
+    const user = userEvent.setup();
+
+    mockPersistedSettingsConfig({
+      colorTheme: 'vscode-2026-dark',
+    });
+
+    renderMenuBar();
+
+    await applyBundledThemeFromAdvancedPicker(user, {
+      searchText: 'github light default',
+      themeId: 'github-light-default',
+      label: 'GitHub Light Default',
+      author: 'GitHub',
+    });
+  }, SETTINGS_PICKER_TEST_TIMEOUT_MS);
+
+  it('shows third-batch vendored upstream dark bundled UI themes in the advanced picker and applies them through the shared theme setting', async () => {
+    const user = userEvent.setup();
+
+    mockPersistedSettingsConfig({
+      colorTheme: 'vscode-2026-dark',
+    });
+
+    renderMenuBar();
+
+    await applyBundledThemeFromAdvancedPicker(user, {
+      searchText: 'gruvbox dark medium',
+      themeId: 'gruvbox-dark-medium',
+      label: 'Gruvbox Dark Medium',
+      author: 'jdinhify',
+    });
+  }, SETTINGS_PICKER_TEST_TIMEOUT_MS);
+
+  it('shows fourth-batch vendored upstream light bundled UI themes in the advanced picker and applies them through the shared theme setting', async () => {
+    const user = userEvent.setup();
+
+    mockPersistedSettingsConfig({
+      colorTheme: 'vscode-2026-dark',
+    });
+
+    renderMenuBar();
+
+    await applyBundledThemeFromAdvancedPicker(user, {
+      searchText: 'noctis lux',
+      themeId: 'noctis-lux',
+      label: 'Noctis Lux',
+      author: 'Liviu Schera',
+    });
+  }, SETTINGS_PICKER_TEST_TIMEOUT_MS);
+
+  it('shows fifth-batch vendored upstream macOS Modern bundled UI themes in the advanced picker and applies them through the shared theme setting', async () => {
+    const user = userEvent.setup();
+
+    mockPersistedSettingsConfig({
+      colorTheme: 'vscode-2026-dark',
+    });
+
+    renderMenuBar();
+
+    await applyBundledThemeFromAdvancedPicker(user, {
+      searchText: 'low key',
+      themeId: 'macos-modern-light-ventura-xcode-low-key',
+      label: 'MacOS Modern Light - Ventura Xcode Low Key',
+      author: 'David B. Waters',
+    });
+  }, SETTINGS_PICKER_TEST_TIMEOUT_MS);
+
+  it('shows sixth-batch vendored upstream Dobri bundled UI themes in the advanced picker and applies them through the shared theme setting', async () => {
+    const user = userEvent.setup();
+
+    mockPersistedSettingsConfig({
+      colorTheme: 'vscode-2026-dark',
+    });
+
+    renderMenuBar();
+
+    await applyBundledThemeFromAdvancedPicker(user, {
+      searchText: 'amethyst',
+      themeId: 'dobri-next-a06-amethyst',
+      label: 'Dobri Next -A06- Amethyst',
+      author: 'Sergio Dobri',
+    });
+  }, SETTINGS_PICKER_TEST_TIMEOUT_MS);
+
+  it('shows seventh-batch vendored upstream dark bundled UI themes in the advanced picker and applies them through the shared theme setting', async () => {
+    const user = userEvent.setup();
+
+    mockPersistedSettingsConfig({
+      colorTheme: 'vscode-2026-dark',
+    });
+
+    renderMenuBar();
+
+    await applyBundledThemeFromAdvancedPicker(user, {
+      searchText: 'night flat',
+      themeId: 'one-dark-pro-night-flat',
+      label: 'One Dark Pro Night Flat',
+      author: 'Binaryify',
+    });
+  }, SETTINGS_PICKER_TEST_TIMEOUT_MS);
+
+  it('shows seventh-batch vendored upstream light bundled UI themes in the advanced picker and applies them through the shared theme setting', async () => {
+    const user = userEvent.setup();
+
+    mockPersistedSettingsConfig({
+      colorTheme: 'vscode-2026-dark',
+    });
+
+    renderMenuBar();
+
+    await applyBundledThemeFromAdvancedPicker(user, {
+      searchText: 'light high contrast',
+      themeId: 'github-light-high-contrast',
+      label: 'GitHub Light High Contrast',
+      author: 'GitHub',
+    });
+  }, SETTINGS_PICKER_TEST_TIMEOUT_MS);
+
+  it('shows eighth-batch official vendored upstream dark bundled UI themes in the advanced picker and applies them through the shared theme setting', async () => {
+    const user = userEvent.setup();
+
+    mockPersistedSettingsConfig({
+      colorTheme: 'vscode-2026-dark',
+    });
+
+    renderMenuBar();
+
+    await applyBundledThemeFromAdvancedPicker(user, {
+      searchText: 'copilot theme - higher contrast',
+      themeId: 'copilot-theme-higher-contrast',
+      label: 'Copilot Theme - Higher Contrast',
+      author: 'Benjamin Benais',
+    });
+  }, SETTINGS_PICKER_TEST_TIMEOUT_MS);
+
+  it('shows eighth-batch official vendored upstream light bundled UI themes in the advanced picker and applies them through the shared theme setting', async () => {
+    const user = userEvent.setup();
+
+    mockPersistedSettingsConfig({
+      colorTheme: 'vscode-2026-dark',
+    });
+
+    renderMenuBar();
+
+    await applyBundledThemeFromAdvancedPicker(user, {
+      searchText: 'light (visual studio',
+      themeId: 'visual-studio-light-cpp',
+      label: 'Light (Visual Studio - C/C++)',
+      author: 'Microsoft',
+    });
+  }, SETTINGS_PICKER_TEST_TIMEOUT_MS);
+
+  it('shows ninth-batch vendored upstream dark bundled UI themes in the advanced picker and applies them through the shared theme setting', async () => {
+    const user = userEvent.setup();
+
+    mockPersistedSettingsConfig({
+      colorTheme: 'vscode-2026-dark',
+    });
+
+    renderMenuBar();
+
+    await applyBundledThemeFromAdvancedPicker(user, {
+      searchText: 'vue theme high contrast',
+      themeId: 'vue-theme-high-contrast',
+      label: 'Vue Theme High Contrast',
+      author: 'Mario Rodeghiero',
+    });
+  }, SETTINGS_PICKER_TEST_TIMEOUT_MS);
+
+  it('shows ninth-batch vendored upstream light bundled UI themes in the advanced picker and applies them through the shared theme setting', async () => {
+    const user = userEvent.setup();
+
+    mockPersistedSettingsConfig({
+      colorTheme: 'vscode-2026-dark',
+    });
+
+    renderMenuBar();
+
+    await applyBundledThemeFromAdvancedPicker(user, {
+      searchText: 'light owl',
+      themeId: 'light-owl',
+      label: 'Light Owl',
+      author: 'Sarah Drasner',
+    });
+  }, SETTINGS_PICKER_TEST_TIMEOUT_MS);
+
+  it('shows tenth-batch vendored upstream dark bundled UI themes in the advanced picker and applies them through the shared theme setting', async () => {
+    const user = userEvent.setup();
+
+    mockPersistedSettingsConfig({
+      colorTheme: 'vscode-2026-dark',
+    });
+
+    renderMenuBar();
+
+    await applyBundledThemeFromAdvancedPicker(user, {
+      searchText: 'andromeda',
+      themeId: 'andromeda',
+      label: 'Andromeda',
+      author: 'Eliver Lara',
+    });
+  }, SETTINGS_PICKER_TEST_TIMEOUT_MS);
+
+  it('shows tenth-batch vendored upstream light bundled UI themes in the advanced picker and applies them through the shared theme setting', async () => {
+    const user = userEvent.setup();
+
+    mockPersistedSettingsConfig({
+      colorTheme: 'vscode-2026-dark',
+    });
+
+    renderMenuBar();
+
+    await applyBundledThemeFromAdvancedPicker(user, {
+      searchText: 'atom one light',
+      themeId: 'atom-one-light',
+      label: 'Atom One Light',
+      author: 'akamud',
+    });
+  }, SETTINGS_PICKER_TEST_TIMEOUT_MS);
+
+  it('shows eleventh-batch vendored upstream dark bundled UI themes in the advanced picker and applies them through the shared theme setting', async () => {
+    const user = userEvent.setup();
+
+    mockPersistedSettingsConfig({
+      colorTheme: 'vscode-2026-dark',
+    });
+
+    renderMenuBar();
+
+    await applyBundledThemeFromAdvancedPicker(user, {
+      searchText: 'slack theme aubergine dark',
+      themeId: 'slack-aubergine-dark-editor',
+      label: 'Slack Theme Aubergine Dark',
+      author: 'Felipe Mendes',
+    });
+  }, SETTINGS_PICKER_TEST_TIMEOUT_MS);
+
+  it('shows eleventh-batch vendored upstream light bundled UI themes in the advanced picker and applies them through the shared theme setting', async () => {
+    const user = userEvent.setup();
+
+    mockPersistedSettingsConfig({
+      colorTheme: 'vscode-2026-dark',
+    });
+
+    renderMenuBar();
+
+    await applyBundledThemeFromAdvancedPicker(user, {
+      searchText: 'github light theme - gray',
+      themeId: 'github-light-theme-gray',
+      label: 'Github Light Theme - Gray',
+      author: 'Hyzeta',
+    });
+  }, SETTINGS_PICKER_TEST_TIMEOUT_MS);
+
+  it('shows final-batch vendored upstream dark bundled UI themes in the advanced picker and applies them through the shared theme setting', async () => {
+    const user = userEvent.setup();
+
+    mockPersistedSettingsConfig({
+      colorTheme: 'vscode-2026-dark',
+    });
+
+    renderMenuBar();
+
+    await applyBundledThemeFromAdvancedPicker(user, {
+      searchText: 'winter is coming',
+      themeId: 'winter-is-coming-dark',
+      label: 'Winter is Coming (Dark)',
+      author: 'John Papa',
+    });
+  }, SETTINGS_PICKER_TEST_TIMEOUT_MS);
+
+  it('shows final-batch vendored upstream light bundled UI themes in the advanced picker and applies them through the shared theme setting', async () => {
+    const user = userEvent.setup();
+
+    mockPersistedSettingsConfig({
+      colorTheme: 'vscode-2026-dark',
+    });
+
+    renderMenuBar();
+
+    await applyBundledThemeFromAdvancedPicker(user, {
+      searchText: 'alabaster',
+      themeId: 'alabaster',
+      label: 'Alabaster',
+      author: 'Nikita Prokopov',
+    });
+  }, SETTINGS_PICKER_TEST_TIMEOUT_MS);
 
   it('imports a local UI theme from settings and selects it immediately', async () => {
     const user = userEvent.setup();
