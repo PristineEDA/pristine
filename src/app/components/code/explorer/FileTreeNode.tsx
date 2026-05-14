@@ -308,6 +308,7 @@ export const FileTreeNode = memo(function FileTreeNode({
         isCutSource={isCutSource}
         isExpanded={isExpanded}
         isPersistentlyHighlighted={isPersistentlyHighlighted}
+        isSelected={isSelected}
         labelColorClassName={labelColorClassName}
         node={node}
         rowIndentStyle={rowIndentStyle}

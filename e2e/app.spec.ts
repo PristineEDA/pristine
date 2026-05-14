@@ -1827,35 +1827,51 @@ test('Explorer Copy creates a -copy file and keeps it after relaunch', async () 
   const copiedTreeTestId = toWorkspaceTreeTestId(copiedRelativePath);
   const sourceTreeTestId = toWorkspaceTreeTestId('rtl/core/reg_file.v');
   const { app, window } = await launchApp({ projectRoot: workspaceCopy });
-  const explorerTree = window.locator('.explorer-tree-scrollbar');
+  const copiedTreeNode = window.getByTestId(copiedTreeTestId);
+  const explorerContextMenu = window.getByTestId('explorer-context-menu');
+  const sourceTreeNode = window.getByTestId(sourceTreeTestId);
 
   try {
     await ensureExplorerVisible(window);
+    await expect(window.getByTestId('file-tree-node-rtl')).toBeVisible();
     await window.getByTestId('file-tree-node-rtl').click();
+    await expect(window.getByTestId('file-tree-node-rtl_core')).toBeVisible();
     await window.getByTestId('file-tree-node-rtl_core').click();
 
-    await window.getByTestId(sourceTreeTestId).click();
-    await explorerTree.focus();
-    await explorerTree.press(`${primaryModifier}+C`);
-    await explorerTree.press(`${primaryModifier}+V`);
+    await sourceTreeNode.click();
+    await expect(sourceTreeNode).toHaveAttribute('data-selected', 'true');
+
+  await sourceTreeNode.click({ button: 'right' });
+  await expect(explorerContextMenu).toBeVisible();
+  await window.getByTestId('explorer-context-menu-item-copy').click();
+
+  await sourceTreeNode.click({ button: 'right' });
+  await expect(explorerContextMenu).toBeVisible();
+  await expect(window.getByTestId('explorer-context-menu-item-paste')).not.toHaveAttribute('data-disabled', '');
+  await window.getByTestId('explorer-context-menu-item-paste').click();
 
     await expect.poll(() => fs.existsSync(copiedAbsolutePath), {
       timeout: 15000,
     }).toBe(true);
-    await expect(window.getByTestId(copiedTreeTestId)).toBeVisible();
+    await expect(copiedTreeNode).toBeVisible({ timeout: 15000 });
+    await expect(copiedTreeNode).toHaveAttribute('data-selected', 'true', { timeout: 15000 });
 
     await app.close();
 
     const relaunched = await launchApp({ projectRoot: workspaceCopy });
 
     try {
-      await ensureExplorerVisible(relaunched.window);
-      await relaunched.window.getByTestId('file-tree-node-rtl').click();
-      await relaunched.window.getByTestId('file-tree-node-rtl_core').click();
-      await expect(relaunched.window.getByTestId(copiedTreeTestId)).toBeVisible();
+      const relaunchedCopiedTreeNode = relaunched.window.getByTestId(copiedTreeTestId);
 
-      await relaunched.window.getByTestId(copiedTreeTestId).dblclick();
-      await expect(relaunched.window.getByTestId(`editor-tab-${copiedRelativePath}`)).toBeVisible();
+      await ensureExplorerVisible(relaunched.window);
+      await expect(relaunched.window.getByTestId('file-tree-node-rtl')).toBeVisible();
+      await relaunched.window.getByTestId('file-tree-node-rtl').click();
+      await expect(relaunched.window.getByTestId('file-tree-node-rtl_core')).toBeVisible();
+      await relaunched.window.getByTestId('file-tree-node-rtl_core').click();
+      await expect(relaunchedCopiedTreeNode).toBeVisible({ timeout: 15000 });
+
+      await relaunchedCopiedTreeNode.dblclick();
+      await expect(relaunched.window.getByTestId(`editor-tab-${copiedRelativePath}`)).toBeVisible({ timeout: 15000 });
     } finally {
       await relaunched.app.close();
     }
@@ -4803,6 +4819,74 @@ test('editor font combobox supports wheel scrolling and UI theme combobox reopen
   await app.close()
 })
 
+test('settings comboboxes show hover previews for theme and font options', async () => {
+  const { app, window } = await launchApp()
+
+  await window.getByTestId('menu-settings-button').click()
+  await expect(window.getByTestId('settings-dialog')).toBeVisible()
+
+  await window.getByTestId('settings-theme-combobox').click()
+  const themePreviewPane = window.getByTestId('settings-theme-combobox-preview-pane')
+  await expect(themePreviewPane).toHaveAttribute('data-state', 'hidden')
+
+  await window.getByTestId('settings-theme-option-vscode-2026-light').hover()
+
+  await expect(themePreviewPane).toHaveAttribute('data-state', 'visible')
+  await expect(window.getByTestId('settings-theme-combobox-preview-card-vscode-2026-light')).toBeVisible()
+  await expect(window.getByTestId('settings-theme-combobox-preview-line-module-vscode-2026-light')).toContainText('module alu(clk)')
+
+  await window.mouse.move(1, 1)
+  await expect(themePreviewPane).toHaveAttribute('data-state', 'hidden')
+  await window.keyboard.press('Escape')
+
+  await window.getByTestId('settings-editor-font-family-combobox').click()
+  const fontPreviewPane = window.getByTestId('settings-editor-font-family-combobox-preview-pane')
+  await expect(fontPreviewPane).toHaveAttribute('data-state', 'hidden')
+
+  await window.getByTestId('settings-editor-font-family-option-victor-mono').hover()
+
+  await expect(fontPreviewPane).toHaveAttribute('data-state', 'visible')
+  await expect(window.getByTestId('settings-editor-font-family-combobox-preview-card-victor-mono')).toBeVisible()
+  await expect(window.getByTestId('settings-editor-font-family-combobox-preview-author-victor-mono')).toContainText('Rubjo Vampjoen')
+
+  await window.mouse.move(1, 1)
+  await expect(fontPreviewPane).toHaveAttribute('data-state', 'hidden')
+  await window.keyboard.press('Escape')
+
+  await app.close()
+})
+
+test('settings UI theme combobox keeps a stable width when selecting a long theme name', async () => {
+  const { app, window } = await launchApp()
+
+  await window.getByTestId('menu-settings-button').click()
+  await expect(window.getByTestId('settings-dialog')).toBeVisible()
+
+  const themeCombobox = window.getByTestId('settings-theme-combobox')
+  const initialBox = await themeCombobox.boundingBox()
+
+  if (!initialBox) {
+    throw new Error('Expected settings theme combobox to have a bounding box before selection')
+  }
+
+  await selectComboboxOption(
+    window,
+    'settings-theme-combobox',
+    'settings-theme-option-macos-modern-light-ventura-xcode-low-key',
+  )
+
+  await expect(themeCombobox).toContainText('MacOS Modern Light - Ventura Xcode Low Key')
+  await expect
+    .poll(async () => {
+      const box = await themeCombobox.boundingBox()
+
+      return box ? Math.round(box.width) : null
+    })
+    .toBe(Math.round(initialBox.width))
+
+  await app.close()
+})
+
 test('advanced editor font picker closes after selecting a preview card and syncs the font setting', async () => {
   const { app, window } = await launchApp()
 
@@ -4852,6 +4936,52 @@ test('advanced UI theme picker closes after selecting a preview card and syncs t
   await expect.poll(async () => readConfigValue(window, 'workbench.colorTheme')).toBe('vscode-2026-light')
 
   await app.close()
+})
+
+test('advanced UI theme picker layout toggle persists across app relaunch', async () => {
+  const firstLaunch = await launchApp()
+  const { app: firstApp, window: firstWindow } = firstLaunch
+
+  await firstWindow.getByTestId('menu-settings-button').click()
+  await expect(firstWindow.getByTestId('settings-dialog')).toBeVisible()
+
+  await firstWindow.getByTestId('settings-theme-advanced-button').click()
+  await expect(firstWindow.getByTestId('settings-theme-advanced-dialog')).toBeVisible()
+  await expect(firstWindow.getByTestId('settings-theme-advanced-layout-list-button')).toHaveAttribute('aria-label', 'List layout')
+  await expect(firstWindow.getByTestId('settings-theme-advanced-layout-grouped-button')).toHaveAttribute('aria-label', 'Grouped layout')
+  await expect(firstWindow.getByTestId('settings-theme-advanced-layout-list-button')).toHaveAttribute('data-state', 'on')
+  await expect(firstWindow.locator('[data-testid="settings-theme-advanced-dark-section"]')).toHaveCount(0)
+  await expect(firstWindow.locator('[data-testid="settings-theme-advanced-light-section"]')).toHaveCount(0)
+
+  await firstWindow.getByTestId('settings-theme-advanced-layout-grouped-button').click()
+
+  await expect(firstWindow.getByTestId('settings-theme-advanced-layout-grouped-button')).toHaveAttribute('data-state', 'on')
+  await expect(firstWindow.getByTestId('settings-theme-advanced-dark-section')).toBeVisible()
+  await expect(firstWindow.getByTestId('settings-theme-advanced-light-section')).toBeVisible()
+  await expect.poll(async () => readConfigValue(firstWindow, 'workbench.themePickerLayoutMode')).toBe('grouped')
+
+  await firstApp.close()
+
+  const secondLaunch = await launchApp()
+  const { app: secondApp, window: secondWindow } = secondLaunch
+
+  await secondWindow.getByTestId('menu-settings-button').click()
+  await expect(secondWindow.getByTestId('settings-dialog')).toBeVisible()
+
+  await secondWindow.getByTestId('settings-theme-advanced-button').click()
+  await expect(secondWindow.getByTestId('settings-theme-advanced-dialog')).toBeVisible()
+  await expect(secondWindow.getByTestId('settings-theme-advanced-layout-grouped-button')).toHaveAttribute('data-state', 'on')
+  await expect(secondWindow.getByTestId('settings-theme-advanced-dark-section')).toBeVisible()
+  await expect(secondWindow.getByTestId('settings-theme-advanced-light-section')).toBeVisible()
+
+  await secondWindow.getByTestId('settings-theme-advanced-layout-list-button').click()
+
+  await expect(secondWindow.getByTestId('settings-theme-advanced-layout-list-button')).toHaveAttribute('data-state', 'on')
+  await expect(secondWindow.locator('[data-testid="settings-theme-advanced-dark-section"]')).toHaveCount(0)
+  await expect(secondWindow.locator('[data-testid="settings-theme-advanced-light-section"]')).toHaveCount(0)
+  await expect.poll(async () => readConfigValue(secondWindow, 'workbench.themePickerLayoutMode')).toBe('list')
+
+  await secondApp.close()
 })
 
 test('newly downloaded Monaco font options can be selected and persist to config', async () => {

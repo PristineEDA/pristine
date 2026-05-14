@@ -345,6 +345,155 @@ describe('MenuBar settings', () => {
     expect(setThemeMock).toHaveBeenCalledWith('vscode-2026-light');
   }, SETTINGS_PICKER_TEST_TIMEOUT_MS);
 
+  it('shows an animated preview card when hovering UI theme options in the settings combobox', async () => {
+    const user = userEvent.setup();
+
+    mockPersistedSettingsConfig({
+      colorTheme: 'vscode-2026-dark',
+    });
+
+    renderMenuBar();
+
+    await user.click(screen.getByTestId('menu-settings-button'));
+    expect(await screen.findByTestId('settings-dialog')).toBeVisible();
+
+    await user.click(screen.getByTestId('settings-theme-combobox'));
+
+    const previewPane = screen.getByTestId('settings-theme-combobox-preview-pane');
+    expect(previewPane).toHaveAttribute('data-state', 'hidden');
+
+    fireEvent.mouseEnter(await screen.findByTestId('settings-theme-option-vscode-2026-light'));
+
+    expect(previewPane).toHaveAttribute('data-state', 'visible');
+    expect(screen.getByTestId('settings-theme-combobox-preview-card-vscode-2026-light')).toBeVisible();
+    expect(screen.getByTestId('settings-theme-combobox-preview-line-module-vscode-2026-light')).toHaveTextContent('module alu(clk)');
+
+    fireEvent.mouseLeave(screen.getByTestId('settings-theme-combobox-popover-content'));
+
+    expect(previewPane).toHaveAttribute('data-state', 'hidden');
+  });
+
+  it('shows an animated preview card when hovering editor font options in the settings combobox', async () => {
+    const user = userEvent.setup();
+
+    mockPersistedSettingsConfig({
+      fontFamily: 'fira-code',
+    });
+
+    renderMenuBar();
+
+    await user.click(screen.getByTestId('menu-settings-button'));
+    expect(await screen.findByTestId('settings-dialog')).toBeVisible();
+
+    await user.click(screen.getByTestId('settings-editor-font-family-combobox'));
+
+    const previewPane = screen.getByTestId('settings-editor-font-family-combobox-preview-pane');
+    expect(previewPane).toHaveAttribute('data-state', 'hidden');
+
+    fireEvent.mouseEnter(await screen.findByTestId('settings-editor-font-family-option-victor-mono'));
+
+    expect(previewPane).toHaveAttribute('data-state', 'visible');
+    expect(screen.getByTestId('settings-editor-font-family-combobox-preview-card-victor-mono')).toBeVisible();
+    expect(screen.getByTestId('settings-editor-font-family-combobox-preview-author-victor-mono')).toHaveTextContent('Rubjo Vampjoen');
+
+    fireEvent.mouseLeave(screen.getByTestId('settings-editor-font-family-combobox-popover-content'));
+
+    expect(previewPane).toHaveAttribute('data-state', 'hidden');
+  });
+
+  it('shows the advanced theme picker in list mode by default', async () => {
+    const user = userEvent.setup();
+
+    mockPersistedSettingsConfig({
+      colorTheme: 'vscode-2026-dark',
+      themePickerLayoutMode: 'list',
+    });
+
+    renderMenuBar();
+
+    await user.click(screen.getByTestId('menu-settings-button'));
+    expect(await screen.findByTestId('settings-dialog')).toBeVisible();
+
+    await user.click(screen.getByTestId('settings-theme-advanced-button'));
+    expect(await screen.findByTestId('settings-theme-advanced-dialog')).toBeVisible();
+
+    expect(screen.getByTestId('settings-theme-advanced-layout-list-button')).toHaveAttribute('aria-label', 'List layout');
+    expect(screen.getByTestId('settings-theme-advanced-layout-list-button')).not.toHaveTextContent('List');
+    expect(screen.getByTestId('settings-theme-advanced-layout-grouped-button')).toHaveAttribute('aria-label', 'Grouped layout');
+    expect(screen.getByTestId('settings-theme-advanced-layout-grouped-button')).not.toHaveTextContent('Grouped');
+    expect(screen.getByTestId('settings-theme-advanced-layout-list-button')).toHaveAttribute('data-state', 'on');
+    expect(screen.getByTestId('settings-theme-advanced-layout-grouped-button')).toHaveAttribute('data-state', 'off');
+    expect(screen.getByTestId('settings-theme-advanced-grid')).toBeVisible();
+    expect(screen.queryByTestId('settings-theme-advanced-dark-section')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('settings-theme-advanced-light-section')).not.toBeInTheDocument();
+  });
+
+  it('persists the grouped layout selection for the advanced theme picker', async () => {
+    const user = userEvent.setup();
+
+    mockPersistedSettingsConfig({
+      colorTheme: 'vscode-2026-dark',
+      themePickerLayoutMode: 'list',
+    });
+
+    renderMenuBar();
+
+    await user.click(screen.getByTestId('menu-settings-button'));
+    expect(await screen.findByTestId('settings-dialog')).toBeVisible();
+
+    await user.click(screen.getByTestId('settings-theme-advanced-button'));
+    expect(await screen.findByTestId('settings-theme-advanced-dialog')).toBeVisible();
+
+    await user.click(screen.getByTestId('settings-theme-advanced-layout-grouped-button'));
+
+    expect(screen.getByTestId('settings-theme-advanced-layout-grouped-button')).toHaveAttribute('data-state', 'on');
+    expect(screen.getByTestId('settings-theme-advanced-layout-list-button')).toHaveAttribute('data-state', 'off');
+    expect(screen.getByTestId('settings-theme-advanced-dark-section')).toBeVisible();
+    expect(screen.getByTestId('settings-theme-advanced-dark-grid')).toBeVisible();
+    expect(screen.getByTestId('settings-theme-advanced-light-section')).toBeVisible();
+    expect(screen.getByTestId('settings-theme-advanced-light-grid')).toBeVisible();
+    expect(window.electronAPI?.config.set).toHaveBeenCalledWith('workbench.themePickerLayoutMode', 'grouped');
+
+    await user.click(screen.getByTestId('settings-theme-advanced-close-button'));
+    await user.click(screen.getByTestId('settings-close-button'));
+
+    mockPersistedSettingsConfig({
+      colorTheme: 'vscode-2026-dark',
+      themePickerLayoutMode: 'grouped',
+    });
+
+    await user.click(screen.getByTestId('menu-settings-button'));
+    expect(await screen.findByTestId('settings-dialog')).toBeVisible();
+
+    await user.click(screen.getByTestId('settings-theme-advanced-button'));
+    expect(await screen.findByTestId('settings-theme-advanced-dialog')).toBeVisible();
+
+    expect(screen.getByTestId('settings-theme-advanced-layout-grouped-button')).toHaveAttribute('data-state', 'on');
+    expect(screen.getByTestId('settings-theme-advanced-dark-section')).toBeVisible();
+    expect(screen.getByTestId('settings-theme-advanced-light-section')).toBeVisible();
+  });
+
+  it('keeps the advanced editor font picker as a flat list without grouping controls', async () => {
+    const user = userEvent.setup();
+
+    mockPersistedSettingsConfig({
+      fontFamily: 'fira-code',
+    });
+
+    renderMenuBar();
+
+    await user.click(screen.getByTestId('menu-settings-button'));
+    expect(await screen.findByTestId('settings-dialog')).toBeVisible();
+
+    await user.click(screen.getByTestId('settings-editor-font-family-advanced-button'));
+    expect(await screen.findByTestId('settings-editor-font-family-advanced-dialog')).toBeVisible();
+
+    expect(screen.getByTestId('settings-editor-font-family-advanced-grid')).toBeVisible();
+    expect(screen.queryByTestId('settings-theme-advanced-layout-toggle')).not.toBeInTheDocument();
+    expect(screen.queryByText('Dark themes')).not.toBeInTheDocument();
+    expect(screen.queryByText('Light themes')).not.toBeInTheDocument();
+  });
+
   it('shows bundled third-party UI themes in the advanced picker and applies them through the shared theme setting', async () => {
     const user = userEvent.setup();
 

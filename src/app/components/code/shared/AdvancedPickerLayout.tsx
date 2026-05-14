@@ -8,12 +8,15 @@ import { cn } from '../../../../lib/utils'
 export const advancedPickerDialogClassName = 'h-[85vh] max-h-[85vh] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden sm:max-w-6xl'
 export const advancedPickerScrollAreaClassName = 'h-full min-h-0'
 export const advancedPickerSearchInputClassName = 'border-foreground/20 bg-background text-sm hover:border-foreground/35'
-const advancedPickerGridClassName = 'grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
+export const advancedPickerGridClassName = 'grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
 const advancedPickerEmptyStateClassName = 'col-span-full flex min-h-32 items-center justify-center rounded-md border border-dashed border-border/70 px-4 text-center text-sm text-muted-foreground'
 
 type AdvancedPickerLayoutProps = {
+  availableContent?: ReactNode
+  availableContentClassName?: string
   availableEmptyStateTestId: string
   availableEmptyText: string
+  availableHeaderControls?: ReactNode
   availableGridContent: ReactNode
   availableGridTestId: string
   availableHasItems: boolean
@@ -50,8 +53,11 @@ export function filterOptionsByLabel<T extends { label: string }>(options: reado
 }
 
 export function AdvancedPickerLayout({
+  availableContent,
+  availableContentClassName,
   availableEmptyStateTestId,
   availableEmptyText,
+  availableHeaderControls,
   availableGridContent,
   availableGridTestId,
   availableHasItems,
@@ -106,20 +112,26 @@ export function AdvancedPickerLayout({
                   <h3 className="text-sm font-medium text-foreground">{availableSectionTitle}</h3>
                   <p className="text-xs leading-5 text-muted-foreground">{availableSectionDescription}</p>
                 </div>
-                <div className="w-full shrink-0 sm:w-72">
-                  <Input
-                    type="text"
-                    value={searchValue}
-                    onChange={(event) => onSearchValueChange(event.target.value)}
-                    placeholder={searchPlaceholder}
-                    data-testid={searchInputTestId}
-                    className={cn(advancedPickerSearchInputClassName, searchInputClassName)}
-                  />
+                <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end sm:gap-3">
+                  {availableHeaderControls ? <div className="shrink-0">{availableHeaderControls}</div> : null}
+                  <div className="w-full shrink-0 sm:w-72">
+                    <Input
+                      type="text"
+                      value={searchValue}
+                      onChange={(event) => onSearchValueChange(event.target.value)}
+                      placeholder={searchPlaceholder}
+                      data-testid={searchInputTestId}
+                      className={cn(advancedPickerSearchInputClassName, searchInputClassName)}
+                    />
+                  </div>
                 </div>
               </div>
-              <div data-testid={availableGridTestId} className={advancedPickerGridClassName}>
+              <div
+                data-testid={availableGridTestId}
+                className={cn(availableContent ? availableContentClassName : advancedPickerGridClassName)}
+              >
                 {availableHasItems ? (
-                  availableGridContent
+                  availableContent ?? availableGridContent
                 ) : (
                   <div className={advancedPickerEmptyStateClassName} data-testid={availableEmptyStateTestId}>
                     {availableEmptyText}

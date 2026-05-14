@@ -65,17 +65,22 @@ import { Slider } from '../../ui/slider';
 import { Switch } from '../../ui/switch';
 import { EditorFontAdvancedDialog } from './EditorFontAdvancedDialog';
 import { EditorThemeAdvancedDialog } from './EditorThemeAdvancedDialog';
+import { ColorThemePreviewCard, EditorFontPreviewCard } from './PickerPreviewCards';
 
 const CLOSE_ACTION_CONFIG_KEY = 'window.closeActionPreference';
 const FLOATING_INFO_VISIBLE_CONFIG_KEY = 'ui.floatingInfoWindow.visible';
+const THEME_PICKER_LAYOUT_MODE_CONFIG_KEY = 'workbench.themePickerLayoutMode';
 const settingsSectionClassName = 'rounded-md border border-border/85 bg-muted/55 px-3 py-2.5';
 const settingsSectionTitleClassName = 'text-[13px] font-medium';
 const settingsSectionDescriptionClassName = 'text-[12px] text-muted-foreground';
+
+type ThemePickerLayoutMode = 'grouped' | 'list';
 
 export interface MenuBarSettingsState {
   closeToTrayEnabled: boolean;
   floatingInfoWindowVisible: boolean;
   themeId: string;
+  themePickerLayoutMode: ThemePickerLayoutMode;
   editorCursorBlinking: ReturnType<typeof getConfiguredEditorCursorBlinking>;
   editorBracketPairGuides: ReturnType<typeof getConfiguredEditorBracketPairGuides>;
   editorFontFamily: ReturnType<typeof getConfiguredEditorFontFamily>;
@@ -108,6 +113,14 @@ function getConfiguredThemeId(): string {
     window.electronAPI?.config.get(WORKBENCH_COLOR_THEME_CONFIG_KEY),
     parseImportedColorThemeRecords(window.electronAPI?.config.get(WORKBENCH_IMPORTED_THEMES_CONFIG_KEY)),
   );
+}
+
+function parseThemePickerLayoutMode(value: unknown): ThemePickerLayoutMode {
+  return value === 'grouped' ? 'grouped' : 'list';
+}
+
+function getConfiguredThemePickerLayoutMode(): ThemePickerLayoutMode {
+  return parseThemePickerLayoutMode(window.electronAPI?.config.get(THEME_PICKER_LAYOUT_MODE_CONFIG_KEY));
 }
 
 function getConfiguredEditorFontSize(): number {
@@ -187,6 +200,7 @@ function getPersistedSettingsState(): MenuBarSettingsState {
     closeToTrayEnabled: getConfiguredCloseAction() === 'tray',
     floatingInfoWindowVisible: getFloatingInfoWindowVisible(),
     themeId: getConfiguredThemeId(),
+    themePickerLayoutMode: getConfiguredThemePickerLayoutMode(),
     editorCursorBlinking: getConfiguredEditorCursorBlinking(),
     editorBracketPairGuides: getConfiguredEditorBracketPairGuides(),
     editorFontFamily: getConfiguredEditorFontFamily(),
@@ -238,6 +252,8 @@ function SettingsComboboxSection({
   emptyText,
   onValueChange,
   options,
+  previewPaneTestId,
+  renderOptionPreview,
   searchPlaceholder,
   testId,
   title,
@@ -248,6 +264,8 @@ function SettingsComboboxSection({
   emptyText: string;
   onValueChange: (value: string) => void;
   options: ComboboxOption[];
+  previewPaneTestId?: string;
+  renderOptionPreview?: (option: ComboboxOption) => ReactNode;
   searchPlaceholder: string;
   testId: string;
   title: string;
@@ -262,13 +280,15 @@ function SettingsComboboxSection({
             {description}
           </p>
         </div>
-        <div className={action ? 'flex items-center gap-2' : undefined}>
+        <div className={action ? 'grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2' : undefined}>
           <div className={action ? 'min-w-0 flex-1' : undefined}>
             <Combobox
               value={value}
               onValueChange={onValueChange}
               options={options}
               placeholder={options.find((option) => option.value === value)?.label ?? options[0]?.label ?? ''}
+              previewPaneTestId={previewPaneTestId}
+              renderOptionPreview={renderOptionPreview}
               searchPlaceholder={searchPlaceholder}
               emptyText={emptyText}
               triggerTestId={testId}
@@ -349,6 +369,11 @@ export function useMenuBarSettingsController() {
   const handleThemeAdvancedDialogOpenChange = useCallback((nextOpen: boolean) => {
     setThemeAdvancedDialogOpen(nextOpen);
   }, []);
+
+  const handleThemePickerLayoutModeChange = useCallback((layoutMode: ThemePickerLayoutMode) => {
+    patchSettingsState({ themePickerLayoutMode: layoutMode });
+    void window.electronAPI?.config.set(THEME_PICKER_LAYOUT_MODE_CONFIG_KEY, layoutMode);
+  }, [patchSettingsState]);
 
   const handleCloseToTrayChange = (checked: boolean) => {
     patchSettingsState({ closeToTrayEnabled: checked });
@@ -508,6 +533,7 @@ export function useMenuBarSettingsController() {
     handleEditorSmoothScrollingChange,
     handleEditorTabSizeChange,
     handleThemeAdvancedDialogOpenChange,
+    handleThemePickerLayoutModeChange,
     handleThemeAdvancedSelect,
     handleThemeChange,
     handleThemeImport,
@@ -555,6 +581,7 @@ export function MenuBarSettingsDialogs({
     handleEditorSmoothScrollingChange,
     handleEditorTabSizeChange,
     handleThemeAdvancedDialogOpenChange,
+    handleThemePickerLayoutModeChange,
     handleThemeAdvancedSelect,
     handleThemeChange,
     handleThemeImport,
@@ -566,6 +593,11 @@ export function MenuBarSettingsDialogs({
     settingsState,
     themeAdvancedDialogOpen,
   } = controller;
+
+  const availableThemeOptionsById = useMemo(
+    () => new Map(availableThemeOptions.map((option) => [option.value, option])),
+    [availableThemeOptions],
+  );
 
   return (
     <>
@@ -595,6 +627,23 @@ export function MenuBarSettingsDialogs({
                 description="Choose the VS Code color theme used across Pristine UI, Monaco, and the terminal. Imported themes fall back to the matching built-in 2026 base theme for missing tokens."
                 searchPlaceholder="Search UI themes..."
                 emptyText="No UI theme found."
+                previewPaneTestId="settings-theme-combobox-preview-pane"
+                renderOptionPreview={(option) => {
+                  const themeOption = availableThemeOptionsById.get(option.value);
+
+                  if (!themeOption) {
+                    return null;
+                  }
+
+                  return (
+                    <ColorThemePreviewCard
+                      isSelected={themeOption.value === settingsState.themeId}
+                      option={themeOption}
+                      preview={getThemePreview(themeOption.value)}
+                      testIdPrefix="settings-theme-combobox-preview"
+                    />
+                  );
+                }}
                 testId="settings-theme-combobox"
                 action={(
                   <div className="flex shrink-0 items-center gap-2">
@@ -664,6 +713,18 @@ export function MenuBarSettingsDialogs({
                 description="Choose the bundled monospace font used in Monaco editor tabs."
                 searchPlaceholder="Search editor fonts..."
                 emptyText="No editor font found."
+                previewPaneTestId="settings-editor-font-family-combobox-preview-pane"
+                renderOptionPreview={(option) => {
+                  const fontFamily = parseEditorFontFamily(option.value);
+
+                  return (
+                    <EditorFontPreviewCard
+                      fontFamily={fontFamily}
+                      isSelected={fontFamily === settingsState.editorFontFamily}
+                      testIdPrefix="settings-editor-font-family-combobox-preview"
+                    />
+                  );
+                }}
                 testId="settings-editor-font-family-combobox"
                 action={(
                   <Button
@@ -894,8 +955,10 @@ export function MenuBarSettingsDialogs({
         availableThemes={availableThemeOptions}
         dialogStyle={dialogStyle}
         getThemePreview={getThemePreview}
+        layoutMode={settingsState.themePickerLayoutMode}
         open={themeAdvancedDialogOpen}
         onOpenChange={handleThemeAdvancedDialogOpenChange}
+        onLayoutModeChange={handleThemePickerLayoutModeChange}
         onSelectTheme={handleThemeAdvancedSelect}
         selectedTheme={settingsState.themeId}
       />

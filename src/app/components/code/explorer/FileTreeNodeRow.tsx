@@ -15,6 +15,7 @@ export const FileTreeNodeRow = memo(function FileTreeNodeRow({
   isCutSource,
   isExpanded,
   isPersistentlyHighlighted,
+  isSelected,
   labelColorClassName,
   node,
   rowIndentStyle,
@@ -28,6 +29,7 @@ export const FileTreeNodeRow = memo(function FileTreeNodeRow({
   isCutSource: boolean;
   isExpanded: boolean;
   isPersistentlyHighlighted: boolean;
+  isSelected: boolean;
   labelColorClassName: string;
   node: WorkspaceTreeNode;
   rowIndentStyle: CSSProperties;
@@ -40,6 +42,7 @@ export const FileTreeNodeRow = memo(function FileTreeNodeRow({
   return (
     <div
       ref={rowRef}
+      data-selected={isSelected ? 'true' : undefined}
       data-testid={`file-tree-node-${testId}`}
       className={`flex items-center gap-1 h-6 cursor-pointer group transition-colors ${
         isPersistentlyHighlighted

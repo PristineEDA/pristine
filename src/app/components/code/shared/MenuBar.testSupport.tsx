@@ -895,6 +895,7 @@ export type PersistedSettingsOptions = {
   smoothScrolling?: boolean;
   tabSize?: number;
   editorTheme?: string;
+  themePickerLayoutMode?: 'grouped' | 'list';
   wordWrap?: string;
 };
 
@@ -919,6 +920,7 @@ export function mockPersistedSettingsConfig(options: PersistedSettingsOptions = 
     smoothScrolling: true,
     tabSize: 4,
     editorTheme: 'dracula',
+    themePickerLayoutMode: 'list' as const,
     wordWrap: 'off',
     ...options,
   };
@@ -931,6 +933,8 @@ export function mockPersistedSettingsConfig(options: PersistedSettingsOptions = 
         return persisted.colorTheme;
       case 'workbench.importedColorThemes':
         return themeMockState.importedThemes;
+      case 'workbench.themePickerLayoutMode':
+        return persisted.themePickerLayoutMode;
       case 'editor.guides.bracketPairs':
         return persisted.bracketPairGuides;
       case 'window.closeActionPreference':

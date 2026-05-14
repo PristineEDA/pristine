@@ -79,4 +79,61 @@ describe('Combobox', () => {
 
     expect(scrollByMock).toHaveBeenCalledWith({ top: 120 })
   })
+
+  it('keeps the selected label inside a shrinkable truncated slot', () => {
+    render(
+      <Combobox
+        value="font-20"
+        onValueChange={vi.fn()}
+        options={options}
+        triggerTestId="long-label-combobox"
+      />,
+    )
+
+    const trigger = screen.getByTestId('long-label-combobox')
+    const label = screen.getByText('Font 20')
+
+    expect(trigger).toHaveClass('w-full')
+    expect(trigger).toHaveClass('min-w-0')
+    expect(trigger).toHaveClass('max-w-full')
+    expect(trigger).toHaveClass('overflow-hidden')
+    expect(label).toHaveClass('flex-1')
+    expect(label).toHaveClass('min-w-0')
+    expect(label).toHaveClass('truncate')
+    expect(label).toHaveClass('text-left')
+  })
+
+  it('renders an animated preview pane for hovered options when enabled', async () => {
+    const user = userEvent.setup()
+
+    render(
+      <Combobox
+        value="font-1"
+        onValueChange={vi.fn()}
+        options={options}
+        triggerTestId="preview-combobox"
+        previewPaneTestId="preview-combobox-pane"
+        renderOptionPreview={(option) => (
+          <div data-testid={`preview-content-${option.value}`}>{option.label}</div>
+        )}
+      />,
+    )
+
+    await user.click(screen.getByTestId('preview-combobox'))
+
+    const popoverContent = await screen.findByTestId('preview-combobox-popover-content')
+    const previewPane = screen.getByTestId('preview-combobox-pane')
+    const hoveredOption = screen.getByText('Font 4')
+
+    expect(previewPane).toHaveAttribute('data-state', 'hidden')
+
+    fireEvent.mouseEnter(hoveredOption)
+
+    expect(previewPane).toHaveAttribute('data-state', 'visible')
+    expect(screen.getByTestId('preview-content-font-4')).toHaveTextContent('Font 4')
+
+    fireEvent.mouseLeave(popoverContent)
+
+    expect(previewPane).toHaveAttribute('data-state', 'hidden')
+  })
 })

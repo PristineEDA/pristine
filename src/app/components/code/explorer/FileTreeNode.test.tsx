@@ -136,6 +136,7 @@ describe('FileTreeNode', () => {
     );
 
     const node = screen.getByTestId('file-tree-node-rtl_core_cpu_top_v');
+    expect(node).not.toHaveAttribute('data-selected');
     expect(node.className).toContain('bg-primary/20');
     expect(node.className).toContain('hover:bg-primary/20');
 
@@ -198,6 +199,39 @@ describe('FileTreeNode', () => {
     const node = screen.getByTestId('file-tree-node-rtl_core_cpu_top_v');
     expect(node.className).toContain('hover:bg-accent');
     expect(node.className).not.toContain('hover:bg-primary/20');
+    expect(node).not.toHaveAttribute('data-selected');
+  });
+
+  it('marks a real selected node with a stable selected attribute', () => {
+    render(
+      <FileTreeNode
+        node={{
+          id: 'rtl/core/cpu_top.v',
+          path: 'rtl/core/cpu_top.v',
+          name: 'cpu_top.v',
+          type: 'file',
+          hasLoadedChildren: true,
+          isLoading: false,
+        }}
+        depth={1}
+        activeFileId=""
+        onFileOpen={vi.fn()}
+        onFilePreview={vi.fn()}
+        expandedFolders={new Set()}
+        onToggleFolder={vi.fn()}
+        selectedNode={{
+          id: 'rtl/core/cpu_top.v',
+          path: 'rtl/core/cpu_top.v',
+          type: 'file',
+          source: 'real',
+        }}
+        gitPathStates={{}}
+      />,
+    );
+
+    const node = screen.getByTestId('file-tree-node-rtl_core_cpu_top_v');
+    expect(node).toHaveAttribute('data-selected', 'true');
+    expect(node.className).toContain('bg-primary/20');
   });
 
   it('shows the static folder context menu entries when right-clicking a folder', () => {
