@@ -126,6 +126,8 @@ export function WhiteboardView({ isActive = true }: WhiteboardViewProps) {
   return (
     <section
       data-testid="whiteboard-view"
+      data-active={isActive ? 'true' : 'false'}
+      data-ready={isReady ? 'true' : 'false'}
       data-theme={whiteboardThemeKind}
       className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-background text-foreground"
       style={getWhiteboardThemeStyle(whiteboardThemeKind)}

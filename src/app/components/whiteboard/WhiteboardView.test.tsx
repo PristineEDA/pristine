@@ -82,6 +82,8 @@ describe('WhiteboardView', () => {
     await waitFor(() => {
       expect(screen.queryByText('Loading whiteboard...')).not.toBeInTheDocument();
     });
+    expect(screen.getByTestId('whiteboard-view')).toHaveAttribute('data-active', 'true');
+    expect(screen.getByTestId('whiteboard-view')).toHaveAttribute('data-ready', 'true');
     expect(screen.getByTestId('whiteboard-view')).toHaveAttribute('data-theme', 'light');
     expect(screen.getByTestId('whiteboard-view')).toHaveStyle({ colorScheme: 'light' });
     expect(getWhiteboardHost().shadowRoot).toBeNull();
@@ -132,6 +134,8 @@ describe('WhiteboardView', () => {
     await waitFor(() => {
       expect(getMountedEditor()).toBeInTheDocument();
     });
+    expect(screen.getByTestId('whiteboard-view')).toHaveAttribute('data-active', 'false');
+    expect(screen.getByTestId('whiteboard-view')).toHaveAttribute('data-ready', 'true');
     expect(activateWhiteboard).not.toHaveBeenCalled();
 
     rerender(<WhiteboardView isActive />);

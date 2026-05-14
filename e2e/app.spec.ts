@@ -632,6 +632,16 @@ async function switchToWhiteboard(window: Awaited<ReturnType<typeof launchApp>>[
   await expect(window.getByTestId('whiteboard-view')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
 }
 
+async function waitForDeferredMainContentPrewarm(window: Awaited<ReturnType<typeof launchApp>>['window']) {
+  await expect(window.getByTestId('workflow-view')).toHaveAttribute('data-ready', 'true', { timeout: UI_READY_TIMEOUT_MS });
+  await expect(window.getByTestId('whiteboard-view')).toHaveAttribute('data-ready', 'true', { timeout: UI_READY_TIMEOUT_MS });
+}
+
+async function expectNoDeferredMainContentLoading(window: Awaited<ReturnType<typeof launchApp>>['window']) {
+  await expect(window.getByText('Loading view...')).toHaveCount(0);
+  await expect(window.getByText('Loading whiteboard...')).toHaveCount(0);
+}
+
 async function readTerminalText(window: Awaited<ReturnType<typeof launchApp>>['window']) {
   return window.getByTestId('terminal-host').getAttribute('data-terminal-text');
 }
@@ -1001,6 +1011,23 @@ test('app launches and shows main UI', async () => {
 
   const title = await window.title();
   expect(title).toContain('Pristine');
+
+  await waitForMainUi(window);
+  await window.getByTestId('toggle-left-panel').click();
+
+  const mainContentStack = window.getByTestId('main-content-stack');
+  const explorerPanel = window.getByTestId('panel-left-panel');
+  await expect(explorerPanel).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect.poll(async () => {
+    const stackBox = await mainContentStack.boundingBox();
+    const panelBox = await explorerPanel.boundingBox();
+
+    if (!stackBox || !panelBox || stackBox.height <= 0) {
+      return 0;
+    }
+
+    return panelBox.height / stackBox.height;
+  }, { timeout: UI_READY_TIMEOUT_MS }).toBeGreaterThan(0.98);
 
   await app.close();
 });
@@ -1538,6 +1565,34 @@ test('ctrl+s saves an edited explorer file and clears the dirty indicator', asyn
     await expect.poll(() => fs.readFileSync(filePath, 'utf-8'), {
       timeout: 15000,
     }).toContain(marker);
+  } finally {
+    await app.close();
+  }
+});
+
+test('workflow and whiteboard switch without a loading state after deferred prewarm completes', async () => {
+  const { app, window } = await launchApp();
+
+  try {
+    await waitForMainUi(window);
+    await waitForDeferredMainContentPrewarm(window);
+    await expect(window.getByTestId('workflow-view')).toHaveAttribute('data-active', 'false');
+    await expect(window.getByTestId('whiteboard-view')).toHaveAttribute('data-active', 'false');
+    await expectNoDeferredMainContentLoading(window);
+
+    await window.getByLabel('Workflow').click();
+    await expect(window.getByTestId('workflow-view')).toBeVisible({ timeout: 1000 });
+    await expect(window.getByTestId('workflow-view')).toHaveAttribute('data-active', 'true');
+    await expectNoDeferredMainContentLoading(window);
+
+    await window.getByTestId('center-view-whiteboard').click();
+    await expect(window.getByTestId('whiteboard-view')).toBeVisible({ timeout: 1000 });
+    await expect(window.getByTestId('whiteboard-view')).toHaveAttribute('data-active', 'true');
+    await expect(window.getByTestId('whiteboard-view')).toHaveAttribute('data-ready', 'true');
+    await expectNoDeferredMainContentLoading(window);
+
+    await window.getByLabel('Code').click();
+    await expect(window.getByTestId('panel-center-panel')).toBeVisible({ timeout: 1000 });
   } finally {
     await app.close();
   }
