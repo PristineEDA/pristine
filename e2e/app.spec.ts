@@ -2343,10 +2343,19 @@ test('menu bar switches to the BlockSuite whiteboard editor', async () => {
   const whiteboardView = window.getByTestId('whiteboard-view');
   const whiteboardHost = window.getByTestId('whiteboard-host');
   const whiteboardEditor = window.getByTestId('whiteboard-edgeless-editor');
+  const switchWorkbenchTheme = async (optionTestId: string) => {
+    await window.getByTestId('menu-settings-button').click();
+    await expect(window.getByTestId('settings-dialog')).toBeVisible();
+    await selectComboboxOption(window, 'settings-theme-combobox', optionTestId);
+    await window.getByTestId('settings-close-button').click();
+    await expect(window.getByTestId('settings-dialog')).toHaveCount(0);
+  };
+
   await expect(whiteboardView).toBeVisible();
   await expect(whiteboardView).toContainText('Whiteboard');
-  await expect(whiteboardView).toHaveAttribute('data-theme', 'light');
   await expect(whiteboardEditor).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await switchWorkbenchTheme('settings-theme-option-vscode-2026-light');
+  await expect(whiteboardView).toHaveAttribute('data-theme', 'light');
   await expect(whiteboardEditor).toHaveAttribute('data-theme', 'light');
   await expect(whiteboardEditor).toHaveCSS('background-color', 'rgb(255, 255, 255)');
   await expect(whiteboardView.locator('edgeless-editor')).toHaveCount(1);
@@ -2354,19 +2363,18 @@ test('menu bar switches to the BlockSuite whiteboard editor', async () => {
   await expect(whiteboardView.locator('editor-host')).toHaveCount(1, { timeout: UI_READY_TIMEOUT_MS });
   await expect(whiteboardView.locator('affine-edgeless-root')).toHaveCount(1, { timeout: UI_READY_TIMEOUT_MS });
   const toolbarWrapper = whiteboardView.locator('edgeless-toolbar-widget .edgeless-toolbar-wrapper');
+  const readToolbarOverlayPanelColor = () =>
+    toolbarWrapper.evaluate((element) => {
+      const browserGlobal = globalThis as unknown as {
+        getComputedStyle: (element: unknown) => { getPropertyValue: (name: string) => string };
+      };
+      return browserGlobal.getComputedStyle(element).getPropertyValue('--affine-background-overlay-panel-color').trim();
+    });
   await expect(toolbarWrapper).toHaveAttribute('data-app-theme', 'light', { timeout: UI_READY_TIMEOUT_MS });
   await expect
-    .poll(
-      () =>
-        toolbarWrapper.evaluate((element) => {
-          const browserGlobal = globalThis as unknown as {
-            getComputedStyle: (element: unknown) => { getPropertyValue: (name: string) => string };
-          };
-          return browserGlobal.getComputedStyle(element).getPropertyValue('--affine-background-overlay-panel-color').trim();
-        }),
-      { timeout: UI_READY_TIMEOUT_MS },
-    )
+    .poll(readToolbarOverlayPanelColor, { timeout: UI_READY_TIMEOUT_MS })
     .toBe('rgb(251, 251, 252)');
+  const lightToolbarOverlayPanelColor = await readToolbarOverlayPanelColor();
   await expect
     .poll(
       () => whiteboardHost.evaluate((host) => Boolean((host as HTMLElement & { shadowRoot?: unknown }).shadowRoot)),
@@ -2383,6 +2391,29 @@ test('menu bar switches to the BlockSuite whiteboard editor', async () => {
       { timeout: UI_READY_TIMEOUT_MS },
     )
     .toBe(true);
+
+  await switchWorkbenchTheme('settings-theme-option-vscode-2026-dark');
+
+  await expect(whiteboardView).toHaveAttribute('data-theme', 'dark', { timeout: UI_READY_TIMEOUT_MS });
+  await expect(whiteboardEditor).toHaveAttribute('data-theme', 'dark', { timeout: UI_READY_TIMEOUT_MS });
+  await expect(whiteboardEditor).toHaveCSS('color-scheme', 'dark');
+  await expect(whiteboardView.locator('edgeless-editor')).toHaveCount(1);
+  await expect(whiteboardView.locator('.affine-edgeless-viewport')).toHaveAttribute('data-theme', 'dark', {
+    timeout: UI_READY_TIMEOUT_MS,
+  });
+  await expect(toolbarWrapper).toHaveAttribute('data-app-theme', 'dark', { timeout: UI_READY_TIMEOUT_MS });
+  await expect
+    .poll(readToolbarOverlayPanelColor, { timeout: UI_READY_TIMEOUT_MS })
+    .not.toBe(lightToolbarOverlayPanelColor);
+
+  await switchWorkbenchTheme('settings-theme-option-vscode-2026-light');
+
+  await expect(whiteboardView).toHaveAttribute('data-theme', 'light', { timeout: UI_READY_TIMEOUT_MS });
+  await expect(whiteboardEditor).toHaveAttribute('data-theme', 'light', { timeout: UI_READY_TIMEOUT_MS });
+  await expect(whiteboardView.locator('.affine-edgeless-viewport')).toHaveAttribute('data-theme', 'light', {
+    timeout: UI_READY_TIMEOUT_MS,
+  });
+  await expect(toolbarWrapper).toHaveAttribute('data-app-theme', 'light', { timeout: UI_READY_TIMEOUT_MS });
 
   const noteEditor = whiteboardView.locator('.inline-editor[contenteditable="true"]').first();
   await noteEditor.click({ force: true });
