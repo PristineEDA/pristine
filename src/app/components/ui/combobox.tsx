@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { Check, ChevronsUpDown } from "lucide-react"
+import { createPortal } from "react-dom"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/app/components/ui/button"
@@ -24,6 +25,69 @@ export interface ComboboxOption {
   label: string
   description?: string
   keywords?: string[]
+}
+
+interface ComboboxPreviewPlacement {
+  left: number
+  side: "left" | "right"
+  top: number
+}
+
+interface ComboboxPreviewPlacementInput {
+  optionRect: DOMRect
+  previewRect: Pick<DOMRect, "height" | "width">
+  viewportHeight: number
+  viewportWidth: number
+}
+
+const COMBOBOX_PREVIEW_FALLBACK_WIDTH_PX = 288
+const COMBOBOX_PREVIEW_GAP_PX = 12
+const COMBOBOX_PREVIEW_VIEWPORT_PADDING_PX = 12
+
+function clampComboboxPreviewCoordinate(value: number, minimum: number, maximum: number) {
+  if (minimum > maximum) {
+    return minimum
+  }
+
+  return Math.min(Math.max(value, minimum), maximum)
+}
+
+export function calculateComboboxPreviewPlacement({
+  optionRect,
+  previewRect,
+  viewportHeight,
+  viewportWidth,
+}: ComboboxPreviewPlacementInput): ComboboxPreviewPlacement {
+  const previewWidth = Math.max(previewRect.width, COMBOBOX_PREVIEW_FALLBACK_WIDTH_PX)
+  const previewHeight = previewRect.height
+  const spaceRight = viewportWidth - optionRect.right - COMBOBOX_PREVIEW_VIEWPORT_PADDING_PX
+  const side = spaceRight >= previewWidth + COMBOBOX_PREVIEW_GAP_PX ? "right" : "left"
+  const unclampedLeft = side === "right"
+    ? optionRect.right + COMBOBOX_PREVIEW_GAP_PX
+    : optionRect.left - previewWidth - COMBOBOX_PREVIEW_GAP_PX
+  const unclampedTop = optionRect.top + optionRect.height / 2 - previewHeight / 2
+  const maxLeft = Math.max(
+    COMBOBOX_PREVIEW_VIEWPORT_PADDING_PX,
+    viewportWidth - previewWidth - COMBOBOX_PREVIEW_VIEWPORT_PADDING_PX,
+  )
+  const maxTop = Math.max(
+    COMBOBOX_PREVIEW_VIEWPORT_PADDING_PX,
+    viewportHeight - previewHeight - COMBOBOX_PREVIEW_VIEWPORT_PADDING_PX,
+  )
+
+  return {
+    left: clampComboboxPreviewCoordinate(
+      unclampedLeft,
+      COMBOBOX_PREVIEW_VIEWPORT_PADDING_PX,
+      maxLeft,
+    ),
+    side,
+    top: clampComboboxPreviewCoordinate(
+      unclampedTop,
+      COMBOBOX_PREVIEW_VIEWPORT_PADDING_PX,
+      maxTop,
+    ),
+  }
 }
 
 interface ComboboxProps {
@@ -58,13 +122,62 @@ function Combobox({
   getOptionTestId,
 }: ComboboxProps) {
   const [open, setOpen] = React.useState(false)
+  const [previewPlacement, setPreviewPlacement] = React.useState<ComboboxPreviewPlacement | null>(null)
   const [previewedOptionValue, setPreviewedOptionValue] = React.useState<string | null>(null)
   const [previewVisible, setPreviewVisible] = React.useState(false)
+  const listRef = React.useRef<HTMLDivElement | null>(null)
+  const optionRefs = React.useRef(new Map<string, HTMLElement>())
+  const previewPaneRef = React.useRef<HTMLDivElement | null>(null)
   const selectedOption = options.find((option) => option.value === value) ?? null
   const previewedOption = options.find((option) => option.value === previewedOptionValue) ?? null
   const listTestId = getComboboxListTestId(triggerTestId)
   const contentTestId = triggerTestId ? `${triggerTestId}-popover-content` : undefined
+  const popoverSurfaceTestId = triggerTestId ? `${triggerTestId}-popover-surface` : undefined
   const hasPreviewPane = Boolean(renderOptionPreview)
+  const previewPane = hasPreviewPane ? (
+    <div
+      aria-hidden={!previewVisible || !previewedOption}
+      data-anchor-option={previewedOptionValue ?? undefined}
+      data-side={previewPlacement?.side ?? "right"}
+      data-state={previewVisible && previewedOption ? "visible" : "hidden"}
+      data-testid={previewPaneTestId}
+      ref={previewPaneRef}
+      className={cn(
+        "pointer-events-none fixed z-[60] w-72 transition-[opacity,transform] duration-200 ease-out",
+        previewVisible && previewedOption
+          ? "opacity-100 scale-100 translate-x-0"
+          : previewPlacement?.side === "left"
+            ? "opacity-0 scale-[0.98] -translate-x-2"
+            : "opacity-0 scale-[0.98] translate-x-2",
+      )}
+      style={previewPlacement ? { left: `${previewPlacement.left}px`, top: `${previewPlacement.top}px` } : { left: "-9999px", top: "0px" }}
+    >
+      {previewedOption ? renderOptionPreview?.(previewedOption) : null}
+    </div>
+  ) : null
+
+  const updatePreviewPlacement = React.useCallback(() => {
+    if (!previewVisible || !previewedOptionValue) {
+      setPreviewPlacement(null)
+      return
+    }
+
+    const optionElement = optionRefs.current.get(previewedOptionValue)
+    const previewElement = previewPaneRef.current
+
+    if (!optionElement || !previewElement) {
+      return
+    }
+
+    setPreviewPlacement(
+      calculateComboboxPreviewPlacement({
+        optionRect: optionElement.getBoundingClientRect(),
+        previewRect: previewElement.getBoundingClientRect(),
+        viewportHeight: window.innerHeight,
+        viewportWidth: window.innerWidth,
+      }),
+    )
+  }, [previewVisible, previewedOptionValue])
 
   React.useEffect(() => {
     if (!open || !listTestId) {
@@ -108,6 +221,7 @@ function Combobox({
     }
 
     setPreviewVisible(false)
+    setPreviewPlacement(null)
     setPreviewedOptionValue(null)
   }, [open])
 
@@ -121,8 +235,36 @@ function Combobox({
     }
 
     setPreviewVisible(false)
+    setPreviewPlacement(null)
     setPreviewedOptionValue(null)
   }, [options, previewedOptionValue])
+
+  React.useLayoutEffect(() => {
+    updatePreviewPlacement()
+  }, [updatePreviewPlacement])
+
+  React.useEffect(() => {
+    if (!previewVisible || !previewedOptionValue) {
+      return
+    }
+
+    let animationFrameId = 0
+    const handlePositionChange = () => {
+      window.cancelAnimationFrame(animationFrameId)
+      animationFrameId = window.requestAnimationFrame(updatePreviewPlacement)
+    }
+
+    const currentListElement = listRef.current
+
+    window.addEventListener("resize", handlePositionChange)
+    currentListElement?.addEventListener("scroll", handlePositionChange, { passive: true })
+
+    return () => {
+      window.cancelAnimationFrame(animationFrameId)
+      window.removeEventListener("resize", handlePositionChange)
+      currentListElement?.removeEventListener("scroll", handlePositionChange)
+    }
+  }, [previewVisible, previewedOptionValue, updatePreviewPlacement])
 
   const handleListWheel = React.useCallback((event: React.WheelEvent<HTMLDivElement>) => {
     const listElement = event.currentTarget
@@ -145,6 +287,7 @@ function Combobox({
       return
     }
 
+    setPreviewPlacement(null)
     setPreviewedOptionValue(optionValue)
     setPreviewVisible(true)
   }, [renderOptionPreview])
@@ -173,10 +316,10 @@ function Combobox({
           <ChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className={cn("p-0", hasPreviewPane ? "w-[min(46rem,calc(100vw-2rem))]" : "w-(--radix-popover-trigger-width)") }>
+      <PopoverContent className="w-(--radix-popover-trigger-width) overflow-visible p-0" data-testid={popoverSurfaceTestId}>
         <div
           data-testid={contentTestId}
-          className={cn("min-w-0", hasPreviewPane && "grid min-h-[22rem] grid-cols-[minmax(0,1fr)_18rem]")}
+          className="relative min-w-0"
           onMouseLeave={hideOptionPreview}
         >
           <Command className="min-w-0">
@@ -186,6 +329,7 @@ function Combobox({
               data-testid={listTestId}
               className="max-h-[300px] overflow-y-auto overscroll-contain"
               onWheel={handleListWheel}
+              ref={listRef}
             >
               <CommandList className="max-h-none overflow-visible">
                 <CommandEmpty>{emptyText}</CommandEmpty>
@@ -193,6 +337,14 @@ function Combobox({
                   {options.map((option) => (
                     <CommandItem
                       key={option.value}
+                      ref={(element) => {
+                        if (element) {
+                          optionRefs.current.set(option.value, element)
+                          return
+                        }
+
+                        optionRefs.current.delete(option.value)
+                      }}
                       value={[option.label, option.value, ...(option.keywords ?? [])].join(" ")}
                       data-selected-option={value === option.value ? "true" : "false"}
                       data-testid={getOptionTestId?.(option.value)}
@@ -223,21 +375,9 @@ function Combobox({
               </CommandList>
             </div>
           </Command>
-          {hasPreviewPane ? (
-            <div
-              aria-hidden={!previewVisible || !previewedOption}
-              data-state={previewVisible && previewedOption ? "visible" : "hidden"}
-              data-testid={previewPaneTestId}
-              className={cn(
-                "border-l border-border/70 bg-muted/20 p-3 transition-[opacity,transform] duration-300 ease-out",
-                previewVisible && previewedOption ? "opacity-100 translate-x-0" : "pointer-events-none opacity-0 translate-x-2",
-              )}
-            >
-              {previewedOption ? renderOptionPreview?.(previewedOption) : null}
-            </div>
-          ) : null}
         </div>
       </PopoverContent>
+      {previewPane && typeof document !== "undefined" ? createPortal(previewPane, document.body) : null}
     </Popover>
   )
 }

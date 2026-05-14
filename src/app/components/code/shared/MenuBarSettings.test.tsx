@@ -359,12 +359,17 @@ describe('MenuBar settings', () => {
 
     await user.click(screen.getByTestId('settings-theme-combobox'));
 
+    expect(screen.getByTestId('settings-theme-combobox-popover-surface')).toHaveClass('w-(--radix-popover-trigger-width)');
+
     const previewPane = screen.getByTestId('settings-theme-combobox-preview-pane');
+    expect(previewPane.parentElement).toBe(document.body);
     expect(previewPane).toHaveAttribute('data-state', 'hidden');
 
     fireEvent.mouseEnter(await screen.findByTestId('settings-theme-option-vscode-2026-light'));
 
     expect(previewPane).toHaveAttribute('data-state', 'visible');
+    expect(previewPane).toHaveAttribute('data-side', 'right');
+    expect(previewPane).toHaveAttribute('data-anchor-option', 'vscode-2026-light');
     expect(screen.getByTestId('settings-theme-combobox-preview-card-vscode-2026-light')).toBeVisible();
     expect(screen.getByTestId('settings-theme-combobox-preview-line-module-vscode-2026-light')).toHaveTextContent('module alu(clk)');
 
@@ -387,12 +392,17 @@ describe('MenuBar settings', () => {
 
     await user.click(screen.getByTestId('settings-editor-font-family-combobox'));
 
+    expect(screen.getByTestId('settings-editor-font-family-combobox-popover-surface')).toHaveClass('w-(--radix-popover-trigger-width)');
+
     const previewPane = screen.getByTestId('settings-editor-font-family-combobox-preview-pane');
+    expect(previewPane.parentElement).toBe(document.body);
     expect(previewPane).toHaveAttribute('data-state', 'hidden');
 
     fireEvent.mouseEnter(await screen.findByTestId('settings-editor-font-family-option-victor-mono'));
 
     expect(previewPane).toHaveAttribute('data-state', 'visible');
+    expect(previewPane).toHaveAttribute('data-side', 'right');
+    expect(previewPane).toHaveAttribute('data-anchor-option', 'victor-mono');
     expect(screen.getByTestId('settings-editor-font-family-combobox-preview-card-victor-mono')).toBeVisible();
     expect(screen.getByTestId('settings-editor-font-family-combobox-preview-author-victor-mono')).toHaveTextContent('Rubjo Vampjoen');
 
@@ -471,7 +481,7 @@ describe('MenuBar settings', () => {
     expect(screen.getByTestId('settings-theme-advanced-layout-grouped-button')).toHaveAttribute('data-state', 'on');
     expect(screen.getByTestId('settings-theme-advanced-dark-section')).toBeVisible();
     expect(screen.getByTestId('settings-theme-advanced-light-section')).toBeVisible();
-  });
+  }, SETTINGS_PICKER_TEST_TIMEOUT_MS);
 
   it('keeps the advanced editor font picker as a flat list without grouping controls', async () => {
     const user = userEvent.setup();

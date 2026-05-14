@@ -4910,29 +4910,109 @@ test('settings comboboxes show hover previews for theme and font options', async
   await window.getByTestId('menu-settings-button').click()
   await expect(window.getByTestId('settings-dialog')).toBeVisible()
 
-  await window.getByTestId('settings-theme-combobox').click()
+  const themeCombobox = window.getByTestId('settings-theme-combobox')
+
+  await themeCombobox.click()
+
+  const themePopoverSurface = window.getByTestId('settings-theme-combobox-popover-surface')
   const themePreviewPane = window.getByTestId('settings-theme-combobox-preview-pane')
+
+  await expect(themePopoverSurface).toBeVisible()
   await expect(themePreviewPane).toHaveAttribute('data-state', 'hidden')
 
-  await window.getByTestId('settings-theme-option-vscode-2026-light').hover()
+  await expect
+    .poll(async () => {
+      const [comboboxBox, popoverBox] = await Promise.all([
+        themeCombobox.boundingBox(),
+        themePopoverSurface.boundingBox(),
+      ])
+
+      if (!comboboxBox || !popoverBox) {
+        return false
+      }
+
+      return Math.abs(Math.round(popoverBox.width) - Math.round(comboboxBox.width)) <= 1
+    })
+    .toBe(true)
+
+  const themeOption = window.getByTestId('settings-theme-option-vscode-2026-light')
+
+  await themeOption.hover()
 
   await expect(themePreviewPane).toHaveAttribute('data-state', 'visible')
+  await expect(themePreviewPane).toHaveAttribute('data-side', 'right')
   await expect(window.getByTestId('settings-theme-combobox-preview-card-vscode-2026-light')).toBeVisible()
   await expect(window.getByTestId('settings-theme-combobox-preview-line-module-vscode-2026-light')).toContainText('module alu(clk)')
+  await expect
+    .poll(async () => {
+      const [themeOptionBox, themePreviewBox] = await Promise.all([
+        themeOption.boundingBox(),
+        themePreviewPane.boundingBox(),
+      ])
+
+      if (!themeOptionBox || !themePreviewBox) {
+        return false
+      }
+
+      return themePreviewBox.x >= themeOptionBox.x + themeOptionBox.width
+        && themePreviewBox.y <= themeOptionBox.y + themeOptionBox.height
+        && themePreviewBox.y + themePreviewBox.height >= themeOptionBox.y
+    })
+    .toBe(true)
 
   await window.mouse.move(1, 1)
   await expect(themePreviewPane).toHaveAttribute('data-state', 'hidden')
   await window.keyboard.press('Escape')
 
-  await window.getByTestId('settings-editor-font-family-combobox').click()
+  const fontCombobox = window.getByTestId('settings-editor-font-family-combobox')
+
+  await fontCombobox.click()
+
+  const fontPopoverSurface = window.getByTestId('settings-editor-font-family-combobox-popover-surface')
   const fontPreviewPane = window.getByTestId('settings-editor-font-family-combobox-preview-pane')
+
+  await expect(fontPopoverSurface).toBeVisible()
   await expect(fontPreviewPane).toHaveAttribute('data-state', 'hidden')
 
-  await window.getByTestId('settings-editor-font-family-option-victor-mono').hover()
+  await expect
+    .poll(async () => {
+      const [comboboxBox, popoverBox] = await Promise.all([
+        fontCombobox.boundingBox(),
+        fontPopoverSurface.boundingBox(),
+      ])
+
+      if (!comboboxBox || !popoverBox) {
+        return false
+      }
+
+      return Math.abs(Math.round(popoverBox.width) - Math.round(comboboxBox.width)) <= 1
+    })
+    .toBe(true)
+
+  const fontOption = window.getByTestId('settings-editor-font-family-option-victor-mono')
+
+  await fontOption.hover()
 
   await expect(fontPreviewPane).toHaveAttribute('data-state', 'visible')
+  await expect(fontPreviewPane).toHaveAttribute('data-side', 'right')
   await expect(window.getByTestId('settings-editor-font-family-combobox-preview-card-victor-mono')).toBeVisible()
   await expect(window.getByTestId('settings-editor-font-family-combobox-preview-author-victor-mono')).toContainText('Rubjo Vampjoen')
+  await expect
+    .poll(async () => {
+      const [fontOptionBox, fontPreviewBox] = await Promise.all([
+        fontOption.boundingBox(),
+        fontPreviewPane.boundingBox(),
+      ])
+
+      if (!fontOptionBox || !fontPreviewBox) {
+        return false
+      }
+
+      return fontPreviewBox.x >= fontOptionBox.x + fontOptionBox.width
+        && fontPreviewBox.y <= fontOptionBox.y + fontOptionBox.height
+        && fontPreviewBox.y + fontPreviewBox.height >= fontOptionBox.y
+    })
+    .toBe(true)
 
   await window.mouse.move(1, 1)
   await expect(fontPreviewPane).toHaveAttribute('data-state', 'hidden')

@@ -2,7 +2,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { Combobox } from './combobox'
+import { calculateComboboxPreviewPlacement, Combobox } from './combobox'
 
 const options = Array.from({ length: 20 }, (_, index) => ({
   value: `font-${index + 1}`,
@@ -125,15 +125,50 @@ describe('Combobox', () => {
     const previewPane = screen.getByTestId('preview-combobox-pane')
     const hoveredOption = screen.getByText('Font 4')
 
+    expect(previewPane.parentElement).toBe(document.body)
     expect(previewPane).toHaveAttribute('data-state', 'hidden')
 
     fireEvent.mouseEnter(hoveredOption)
 
     expect(previewPane).toHaveAttribute('data-state', 'visible')
+    expect(previewPane).toHaveAttribute('data-side', 'right')
     expect(screen.getByTestId('preview-content-font-4')).toHaveTextContent('Font 4')
 
     fireEvent.mouseLeave(popoverContent)
 
     expect(previewPane).toHaveAttribute('data-state', 'hidden')
+  })
+
+  it('keeps the popover width aligned to the trigger when preview mode is enabled', async () => {
+    const user = userEvent.setup()
+
+    render(
+      <Combobox
+        value="font-1"
+        onValueChange={vi.fn()}
+        options={options}
+        triggerTestId="width-preview-combobox"
+        previewPaneTestId="width-preview-pane"
+        renderOptionPreview={(option) => (
+          <div data-testid={`width-preview-content-${option.value}`}>{option.label}</div>
+        )}
+      />,
+    )
+
+    await user.click(screen.getByTestId('width-preview-combobox'))
+
+    expect(screen.getByTestId('width-preview-combobox-popover-surface')).toHaveClass('w-(--radix-popover-trigger-width)')
+  })
+
+  it('flips the preview card to the left when the hovered option has no right-side space', () => {
+    const placement = calculateComboboxPreviewPlacement({
+      optionRect: new DOMRect(900, 200, 120, 32),
+      previewRect: { width: 288, height: 180 },
+      viewportHeight: 900,
+      viewportWidth: 1280,
+    })
+
+    expect(placement.side).toBe('left')
+    expect(placement.left).toBeLessThan(900)
   })
 })
