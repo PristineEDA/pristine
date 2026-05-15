@@ -4041,6 +4041,59 @@ test('settings UI theme selection persists across app relaunch', async () => {
   await secondApp.close();
 });
 
+test('code viewer layout setting persists across app relaunch', async () => {
+  test.slow();
+
+  const firstLaunch = await launchApp();
+  const { app: firstApp, window: firstWindow } = firstLaunch;
+
+  await ensureExplorerVisible(firstWindow);
+  await expect(firstWindow.getByTestId('code-view-explorer')).toHaveAttribute('data-code-viewer-layout-mode', 'compact');
+
+  await firstWindow.getByTestId('menu-settings-button').click();
+  await expect(firstWindow.getByTestId('settings-dialog')).toBeVisible();
+  await expect(firstWindow.getByTestId('settings-code-viewer-layout-combobox')).toContainText('Compact');
+
+  await selectComboboxOption(
+    firstWindow,
+    'settings-code-viewer-layout-combobox',
+    'settings-code-viewer-layout-option-minimal',
+  );
+
+  await expect.poll(async () => readConfigValue(firstWindow, 'workbench.codeViewerLayoutMode')).toBe('minimal');
+  await expect(firstWindow.getByTestId('settings-code-viewer-layout-combobox')).toContainText('Minimal');
+  await expect(firstWindow.getByTestId('code-view-explorer')).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
+
+  await firstWindow.getByTestId('settings-close-button').click();
+  await expect(firstWindow.getByTestId('settings-dialog')).toHaveCount(0);
+
+  await firstApp.close();
+
+  const secondLaunch = await launchApp();
+  const { app: secondApp, window: secondWindow } = secondLaunch;
+
+  await ensureExplorerVisible(secondWindow);
+  await expect(secondWindow.getByTestId('code-view-explorer')).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
+  await expect.poll(async () => readConfigValue(secondWindow, 'workbench.codeViewerLayoutMode')).toBe('minimal');
+
+  await secondWindow.getByTestId('menu-settings-button').click();
+  await expect(secondWindow.getByTestId('settings-dialog')).toBeVisible();
+  await expect(secondWindow.getByTestId('settings-code-viewer-layout-combobox')).toContainText('Minimal');
+
+  await selectComboboxOption(
+    secondWindow,
+    'settings-code-viewer-layout-combobox',
+    'settings-code-viewer-layout-option-compact',
+  );
+  await expect.poll(async () => readConfigValue(secondWindow, 'workbench.codeViewerLayoutMode')).toBe('compact');
+  await expect(secondWindow.getByTestId('code-view-explorer')).toHaveAttribute('data-code-viewer-layout-mode', 'compact');
+
+  await secondWindow.getByTestId('settings-close-button').click();
+  await expect(secondWindow.getByTestId('settings-dialog')).toHaveCount(0);
+
+  await secondApp.close();
+});
+
 async function readBundledThemeSnapshot(page: Awaited<ReturnType<typeof launchApp>>['window']) {
   return {
     ...(await page.evaluate(() => {

@@ -145,6 +145,7 @@ describe('MenuBar settings', () => {
     expect(screen.queryByTestId('settings-code-layout-margin-slider')).not.toBeInTheDocument();
     expect(screen.getByTestId('settings-editor-font-size-value')).toHaveTextContent('18px');
     expect(screen.getByTestId('settings-theme-combobox')).toHaveTextContent('Dark 2026');
+    expect(screen.getByTestId('settings-code-viewer-layout-combobox')).toHaveTextContent('Compact');
     expect(screen.getByTestId('settings-editor-word-wrap-combobox')).toHaveTextContent('Bounded');
     expect(screen.getByTestId('settings-editor-tab-size-combobox')).toHaveTextContent('8 spaces');
     expect(screen.getByTestId('settings-editor-cursor-blinking-combobox')).toHaveTextContent('Solid');
@@ -217,6 +218,38 @@ describe('MenuBar settings', () => {
     expect(window.electronAPI?.config.set).toHaveBeenCalledWith('ui.floatingInfoWindow.visible', false);
     expect(window.electronAPI?.setFloatingInfoWindowVisible).toHaveBeenCalledWith(false);
   }, SETTINGS_DIALOG_TEST_TIMEOUT_MS);
+
+  it('persists the code viewer layout mode from settings', async () => {
+    const user = userEvent.setup();
+
+    mockPersistedSettingsConfig({
+      codeViewerLayoutMode: 'compact',
+      colorTheme: 'vscode-2026-dark',
+    });
+
+    renderMenuBar();
+
+    await user.click(screen.getByTestId('menu-settings-button'));
+    expect(await screen.findByTestId('settings-dialog')).toBeVisible();
+    expect(screen.getByTestId('settings-code-viewer-layout-combobox')).toHaveTextContent('Compact');
+
+    await user.click(screen.getByTestId('settings-code-viewer-layout-combobox'));
+    await user.click(await screen.findByTestId('settings-code-viewer-layout-option-minimal'));
+
+    expect(screen.getByTestId('settings-code-viewer-layout-combobox')).toHaveTextContent('Minimal');
+    expect(window.electronAPI?.config.set).toHaveBeenCalledWith('workbench.codeViewerLayoutMode', 'minimal');
+
+    await user.click(screen.getByTestId('settings-close-button'));
+
+    mockPersistedSettingsConfig({
+      codeViewerLayoutMode: 'minimal',
+      colorTheme: 'vscode-2026-dark',
+    });
+
+    await user.click(screen.getByTestId('menu-settings-button'));
+    expect(await screen.findByTestId('settings-dialog')).toBeVisible();
+    expect(screen.getByTestId('settings-code-viewer-layout-combobox')).toHaveTextContent('Minimal');
+  });
 
   it('opens the advanced editor font picker, filters preview cards, and applies the selected preview card', async () => {
     const user = userEvent.setup();

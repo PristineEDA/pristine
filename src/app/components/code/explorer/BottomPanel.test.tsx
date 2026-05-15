@@ -1,6 +1,10 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  CodeViewerLayoutProvider,
+  WORKBENCH_CODE_VIEWER_LAYOUT_MODE_CONFIG_KEY,
+} from '../../../context/CodeViewerLayoutContext';
 import type { LspProblem } from '../../../lsp/lspProblems';
 import { BottomPanel } from './BottomPanel';
 
@@ -188,5 +192,22 @@ describe('BottomPanel', () => {
     await waitFor(() => {
       expect(screen.queryByText(/cpu_top\.v \[L56\]: Unconnected port alu_src_b/i)).not.toBeInTheDocument();
     });
+  });
+
+  it('uses minimal bottom-panel tab chrome when configured', () => {
+    vi.mocked(window.electronAPI!.config.get).mockImplementation((key: string) =>
+      key === WORKBENCH_CODE_VIEWER_LAYOUT_MODE_CONFIG_KEY ? 'minimal' : null,
+    );
+
+    const { container } = render(
+      <CodeViewerLayoutProvider>
+        <BottomPanel />
+      </CodeViewerLayoutProvider>,
+    );
+
+    expect(container.firstChild).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
+    expect(container.firstChild).toHaveClass('rounded-md', 'border', 'bg-background');
+    expect(screen.getByTestId('bottom-panel-tab-bar')).toHaveClass('h-9', 'gap-1.5', 'p-1.5');
+    expect(screen.getByRole('button', { name: /^terminal$/i })).toHaveClass('rounded', 'bg-background');
   });
 });

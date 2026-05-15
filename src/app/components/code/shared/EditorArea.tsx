@@ -13,6 +13,8 @@ import { focusEditorInstance } from '../../../editor/focusEditor';
 import type { CursorRestoreRequest } from '../../../context/useWorkspaceEditorState';
 import { EmptyProject } from './EmptyProject';
 import { TooltipIconButton } from '../../ui/tooltip-icon-button';
+import { useCodeViewerLayout, type CodeViewerLayoutMode } from '../../../context/CodeViewerLayoutContext';
+import { getEditorAreaRootClassName, getEditorTabBarClassName, getEditorTabClassName } from './codeViewerLayoutStyles';
 
 function clampEditorPosition(editor: any, line: number, col: number) {
   const model = editor?.getModel?.();
@@ -93,11 +95,12 @@ function EditorDocumentPlaceholder({ text }: { text: string }) {
 
 // ─── Tab Component ─────────────────────────────────────────────────────────────
 function EditorTab({
-  tab, isActive, gitState, onActivate, onClose, onPin, onDragStart, onDragEnd,
+  tab, isActive, gitState, layoutMode, onActivate, onClose, onPin, onDragStart, onDragEnd,
 }: {
   tab: Tab;
   isActive: boolean;
   gitState?: WorkspaceGitPathState;
+  layoutMode: CodeViewerLayoutMode;
   onActivate: () => void;
   onClose: () => void;
   onPin?: () => void;
@@ -122,11 +125,7 @@ function EditorTab({
       draggable={Boolean(onDragStart)}
       data-testid={`editor-tab-${tab.id}`}
       title={tooltipText}
-      className={`flex items-center gap-1 px-3 h-full cursor-pointer group border-r border-border transition-colors shrink-0 min-w-[100px] max-w-[200px] ${
-        isActive
-          ? 'bg-background text-foreground border-t-2 border-t-primary'
-          : 'bg-muted text-muted-foreground hover:bg-muted/80 border-t-2 border-t-transparent'
-      }`}
+      className={getEditorTabClassName(layoutMode, isActive)}
       onClick={onActivate}
       onDoubleClick={() => {
         onActivate();
@@ -244,6 +243,7 @@ export function EditorArea({
   showDragInteractionShield,
   dragInteractionShieldTestId,
 }: EditorAreaProps) {
+  const { layoutMode } = useCodeViewerLayout();
   const resolvedActiveDocumentId = documentTabId ?? activeTabId;
   const lastAppliedRestoreRef = useRef({ activeTabId: '', restoreToken: 0 });
   const [activeModelReadyId, setActiveModelReadyId] = useState('');
@@ -395,15 +395,16 @@ export function EditorArea({
   }
 
   return (
-    <div className="flex flex-col h-full bg-background overflow-hidden" onMouseDown={() => onFocus?.()}>
+    <div className={getEditorAreaRootClassName(layoutMode)} onMouseDown={() => onFocus?.()}>
       {/* Tab bar */}
-      <div data-testid="editor-tab-bar" className="flex items-stretch h-[27px] bg-muted overflow-x-auto shrink-0 border-b border-border">
+      <div data-testid="editor-tab-bar" data-code-viewer-layout-mode={layoutMode} className={getEditorTabBarClassName(layoutMode)}>
         {tabs.map((tab) => (
           <EditorTab
             key={tab.id}
             tab={tab}
             isActive={tab.id === activeTabId}
             gitState={getWorkspaceGitPathState(gitStatus, tab.id)}
+            layoutMode={layoutMode}
             onActivate={() => onTabChange(tab.id)}
             onClose={() => onTabClose(tab.id)}
             onPin={onTabPin ? () => onTabPin(tab.id) : undefined}

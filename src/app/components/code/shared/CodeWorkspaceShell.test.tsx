@@ -7,6 +7,10 @@ import {
   EXPLORER_RIGHT_PANEL_MAX_WIDTH_PX,
   EXPLORER_RIGHT_PANEL_MIN_WIDTH_PX,
 } from './CodeWorkspaceShell';
+import {
+  CodeViewerLayoutProvider,
+  WORKBENCH_CODE_VIEWER_LAYOUT_MODE_CONFIG_KEY,
+} from '../../../context/CodeViewerLayoutContext';
 
 const panelRecords: Array<{ id?: string; collapsed?: boolean }> = [];
 const handleRecords: Array<{ hidden?: boolean }> = [];
@@ -21,15 +25,16 @@ function latestHandleRecords(count: number) {
 
 vi.mock('../../ui/resizable', () => ({
   PANEL_TRANSITION_DURATION_MS: 300,
-  ResizablePanelGroup: ({ children, orientation }: { children: React.ReactNode; orientation: string }) => (
-    <div data-testid={`panel-group-${orientation}`}>{children}</div>
+  ResizablePanelGroup: ({ children, className, orientation }: { children: React.ReactNode; className?: string; orientation: string }) => (
+    <div data-testid={`panel-group-${orientation}`} className={className}>{children}</div>
   ),
-  ResizablePanel: ({ children, id, collapsed, minSizePx, maxSizePx }: { children: React.ReactNode; id?: string; collapsed?: boolean; minSizePx?: number; maxSizePx?: number }) => {
+  ResizablePanel: ({ children, className, id, collapsed, minSizePx, maxSizePx }: { children: React.ReactNode; className?: string; id?: string; collapsed?: boolean; minSizePx?: number; maxSizePx?: number }) => {
     panelRecords.push({ id, collapsed });
 
     return (
       <div
         data-testid={`panel-${id ?? 'unknown'}`}
+        className={className}
         data-collapsed={collapsed ? 'true' : 'false'}
         data-min-size-px={minSizePx ?? ''}
         data-max-size-px={maxSizePx ?? ''}
@@ -38,9 +43,9 @@ vi.mock('../../ui/resizable', () => ({
       </div>
     );
   },
-  ResizableHandle: ({ hidden }: { hidden?: boolean }) => {
+  ResizableHandle: ({ className, hidden }: { className?: string; hidden?: boolean }) => {
     handleRecords.push({ hidden });
-    return <div data-testid="panel-handle" data-hidden={hidden ? 'true' : 'false'} />;
+    return <div data-testid="panel-handle" className={className} data-hidden={hidden ? 'true' : 'false'} />;
   },
 }));
 
@@ -94,6 +99,42 @@ describe('CodeWorkspaceShell', () => {
       { hidden: false },
       { hidden: false },
     ]);
+  });
+
+  it('applies minimal layout chrome without changing the activity bar region', () => {
+    vi.mocked(window.electronAPI!.config.get).mockImplementation((key: string) =>
+      key === WORKBENCH_CODE_VIEWER_LAYOUT_MODE_CONFIG_KEY ? 'minimal' : null,
+    );
+
+    render(
+      <CodeViewerLayoutProvider>
+        <CodeWorkspaceShell
+          shellTestId="workspace-shell"
+          activityBar={<div data-testid="activity-region">Activity</div>}
+          showLeftPanel
+          showBottomPanel
+          showRightPanel
+          leftPanelId="left"
+          centerPanelId="center"
+          topPanelId="top"
+          bottomPanelId="bottom"
+          rightPanelId="right"
+          leftContent={<div>Explorer</div>}
+          topContent={<div>Editor</div>}
+          bottomContent={<div>Terminal</div>}
+          rightContent={<div>Inspector</div>}
+        />
+      </CodeViewerLayoutProvider>,
+    );
+
+    expect(screen.getByTestId('workspace-shell')).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
+    expect(screen.getByTestId('workspace-shell')).toHaveClass('min-h-0');
+    expect(screen.getByTestId('activity-region').parentElement).not.toHaveClass('rounded-md');
+    expect(screen.getByTestId('panel-left')).toHaveClass('rounded-md', 'border', 'bg-background');
+    expect(screen.getByTestId('panel-top')).toHaveClass('rounded-md', 'border', 'bg-background');
+    expect(screen.getByTestId('panel-right')).toHaveClass('rounded-md', 'border', 'bg-background');
+    expect(screen.getByTestId('panel-group-horizontal')).toHaveClass('gap-2');
+    expect(screen.getAllByTestId('panel-handle').every((handle) => handle.className.includes('bg-transparent'))).toBe(true);
   });
 
   it('renders a fixed-width left panel and clamps drag updates', () => {

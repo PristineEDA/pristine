@@ -2,7 +2,9 @@ import {
   FolderCodeIcon,
   ListTree,
 } from 'lucide-react';
+import { useCodeViewerLayout } from '../../../context/CodeViewerLayoutContext';
 import { IconTabToggleGroup } from '../shared/IconTabToggleGroup';
+import { getPanelHeaderClassName } from '../shared/codeViewerLayoutStyles';
 
 export type ExplorerPanelTab = 'explorer' | 'outline';
 
@@ -18,8 +20,10 @@ export function ExplorerPanelTabs({
   activeTab: ExplorerPanelTab;
   onTabChange: (tab: ExplorerPanelTab) => void;
 }) {
+  const { layoutMode } = useCodeViewerLayout();
+
   return (
-    <div className="flex shrink-0 items-center border-b border-border px-2 py-1.5">
+    <div data-code-viewer-layout-mode={layoutMode} className={getPanelHeaderClassName(layoutMode)}>
       <IconTabToggleGroup
         items={explorerPanelTabs}
         value={activeTab}
@@ -37,8 +41,10 @@ export function ExplorerToolbar({
 }: {
   projectName: string;
 }) {
+  const { layoutMode } = useCodeViewerLayout();
+
   return (
-    <div className="flex items-center px-3 py-1.5 shrink-0">
+    <div data-code-viewer-layout-mode={layoutMode} className="flex shrink-0 items-center px-3 py-1.5">
       <span className="flex-1 text-muted-foreground uppercase text-[11px] font-bold tracking-wide">
         {projectName}
       </span>

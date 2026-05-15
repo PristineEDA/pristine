@@ -28,6 +28,7 @@ import {
   useWorkspaceFiles,
   useWorkspaceView,
 } from './context/WorkspaceContext';
+import { CodeViewerLayoutProvider } from './context/CodeViewerLayoutContext';
 import { SidebarProvider } from './components/ui/sidebar';
 import { refreshWorkspaceGitStatus } from './git/workspaceGitStatus';
 import { useGlobalAppShortcuts } from './useGlobalAppShortcuts';
@@ -361,6 +362,7 @@ function AppLayout() {
 
   const renderExplorerWorkspace = () => (
     renderWorkspaceShell({
+      shellTestId: 'code-view-explorer',
       leftPanelId: 'left-panel',
       centerPanelId: 'center-panel',
       topPanelId: 'editor-panel',
@@ -613,7 +615,9 @@ function AppLayout() {
 export default function App() {
   return (
     <WorkspaceProvider>
-      <AppLayout />
+      <CodeViewerLayoutProvider>
+        <AppLayout />
+      </CodeViewerLayoutProvider>
     </WorkspaceProvider>
   );
 }

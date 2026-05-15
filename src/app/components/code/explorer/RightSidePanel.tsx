@@ -5,6 +5,8 @@ import { IconTabToggleGroup } from '../shared/IconTabToggleGroup';
 import { Skeleton } from "../../ui/skeleton";
 import { TooltipProvider } from '../../ui/tooltip';
 import { ASSISTANT_THREAD_LIST_DEFAULT_WIDTH_PX } from "./assistantPanelLayout";
+import { useCodeViewerLayout } from '../../../context/CodeViewerLayoutContext';
+import { getPanelHeaderClassName } from '../shared/codeViewerLayoutStyles';
 
 const AIAgentPanel = lazy(() => import('./AIAgentPanel').then((module) => ({ default: module.AIAgentPanel })));
 const FileOutlinePanel = lazy(() => import('./FileOutlinePanel').then((module) => ({ default: module.FileOutlinePanel })));
@@ -76,6 +78,7 @@ export function RightSidePanel({
   onThreadListExpandedChange,
   onThreadListWidthChange,
 }: RightSidePanelProps) {
+  const { layoutMode } = useCodeViewerLayout();
   const [tab, setTab] = useState<RightSidePanelTab>('ai');
   const [threadListExpanded, setThreadListExpanded] = useState(false);
   const [threadListWidth, setThreadListWidth] = useState(ASSISTANT_THREAD_LIST_DEFAULT_WIDTH_PX);
@@ -83,7 +86,7 @@ export function RightSidePanel({
   return (
     <TooltipProvider delayDuration={0}>
       <div className="flex flex-col h-full bg-muted/40 overflow-hidden">
-        <div className="flex shrink-0 items-center border-b border-border px-2 py-1.5">
+        <div data-code-viewer-layout-mode={layoutMode} className={getPanelHeaderClassName(layoutMode)}>
           <IconTabToggleGroup
             items={rightPanelTabs}
             value={tab}

@@ -1,5 +1,11 @@
 import { useCallback, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import { useEditorSettings } from '../../../context/EditorSettingsContext';
+import {
+  WORKBENCH_CODE_VIEWER_LAYOUT_MODE_CONFIG_KEY,
+  parseCodeViewerLayoutMode,
+  useCodeViewerLayout,
+  type CodeViewerLayoutMode,
+} from '../../../context/CodeViewerLayoutContext';
 import { useTheme } from '../../../context/ThemeContext';
 import {
   DEFAULT_EDITOR_BRACKET_PAIR_GUIDES,
@@ -76,7 +82,25 @@ const settingsSectionDescriptionClassName = 'text-[12px] text-muted-foreground';
 
 type ThemePickerLayoutMode = 'grouped' | 'list';
 
+const codeViewerLayoutModeOptions: Array<{
+  value: CodeViewerLayoutMode;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: 'compact',
+    label: 'Compact',
+    description: 'Use the current dense code viewer layout.',
+  },
+  {
+    value: 'minimal',
+    label: 'Minimal',
+    description: 'Use rounded, separated code viewer regions with lighter chrome.',
+  },
+];
+
 export interface MenuBarSettingsState {
+  codeViewerLayoutMode: CodeViewerLayoutMode;
   closeToTrayEnabled: boolean;
   floatingInfoWindowVisible: boolean;
   themeId: string;
@@ -121,6 +145,10 @@ function parseThemePickerLayoutMode(value: unknown): ThemePickerLayoutMode {
 
 function getConfiguredThemePickerLayoutMode(): ThemePickerLayoutMode {
   return parseThemePickerLayoutMode(window.electronAPI?.config.get(THEME_PICKER_LAYOUT_MODE_CONFIG_KEY));
+}
+
+function getConfiguredCodeViewerLayoutMode(): CodeViewerLayoutMode {
+  return parseCodeViewerLayoutMode(window.electronAPI?.config.get(WORKBENCH_CODE_VIEWER_LAYOUT_MODE_CONFIG_KEY));
 }
 
 function getConfiguredEditorFontSize(): number {
@@ -197,6 +225,7 @@ function getConfiguredEditorIndentGuides() {
 
 function getPersistedSettingsState(): MenuBarSettingsState {
   return {
+    codeViewerLayoutMode: getConfiguredCodeViewerLayoutMode(),
     closeToTrayEnabled: getConfiguredCloseAction() === 'tray',
     floatingInfoWindowVisible: getFloatingInfoWindowVisible(),
     themeId: getConfiguredThemeId(),
@@ -303,6 +332,7 @@ function SettingsComboboxSection({
 }
 
 export function useMenuBarSettingsController() {
+  const { setLayoutMode: setCodeViewerLayoutMode } = useCodeViewerLayout();
   const {
     setCursorBlinking: setEditorCursorBlinking,
     setBracketPairGuides: setEditorBracketPairGuides,
@@ -374,6 +404,13 @@ export function useMenuBarSettingsController() {
     patchSettingsState({ themePickerLayoutMode: layoutMode });
     void window.electronAPI?.config.set(THEME_PICKER_LAYOUT_MODE_CONFIG_KEY, layoutMode);
   }, [patchSettingsState]);
+
+  const handleCodeViewerLayoutModeChange = useCallback((value: string) => {
+    const nextLayoutMode = parseCodeViewerLayoutMode(value);
+
+    patchSettingsState({ codeViewerLayoutMode: nextLayoutMode });
+    setCodeViewerLayoutMode(nextLayoutMode);
+  }, [patchSettingsState, setCodeViewerLayoutMode]);
 
   const handleCloseToTrayChange = (checked: boolean) => {
     patchSettingsState({ closeToTrayEnabled: checked });
@@ -513,6 +550,7 @@ export function useMenuBarSettingsController() {
     editorFontAdvancedDialogOpen,
     availableThemeOptions,
     getThemePreview,
+    handleCodeViewerLayoutModeChange,
     handleCloseToTrayChange,
     handleEditorBracketPairGuidesChange,
     handleEditorCursorBlinkingChange,
@@ -561,6 +599,7 @@ export function MenuBarSettingsDialogs({
     editorFontAdvancedDialogOpen,
     availableThemeOptions,
     getThemePreview,
+    handleCodeViewerLayoutModeChange,
     handleCloseToTrayChange,
     handleEditorBracketPairGuidesChange,
     handleEditorCursorBlinkingChange,
@@ -672,6 +711,20 @@ export function MenuBarSettingsDialogs({
                     </Button>
                   </div>
                 )}
+              />
+              <SettingsComboboxSection
+                value={settingsState.codeViewerLayoutMode}
+                onValueChange={handleCodeViewerLayoutModeChange}
+                options={codeViewerLayoutModeOptions.map((option) => ({
+                  value: option.value,
+                  label: option.label,
+                  description: option.description,
+                }))}
+                title="Code viewer layout"
+                description="Choose how the code viewer arranges side panels, editor regions, bottom panels, and tabs."
+                searchPlaceholder="Search code viewer layouts..."
+                emptyText="No code viewer layout found."
+                testId="settings-code-viewer-layout-combobox"
               />
               <div className={settingsSectionClassName}>
                 <div className="space-y-2.5">

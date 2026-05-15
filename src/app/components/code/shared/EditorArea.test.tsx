@@ -2,6 +2,10 @@ import { createRef, useLayoutEffect } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { EditorArea } from './EditorArea';
+import {
+  CodeViewerLayoutProvider,
+  WORKBENCH_CODE_VIEWER_LAYOUT_MODE_CONFIG_KEY,
+} from '../../../context/CodeViewerLayoutContext';
 import { draculaThemeDefinition } from '../../../editor/draculaTheme';
 import { resetEditorLanguageRegistrationForTests } from '../../../editor/registerLanguages';
 import { resetEditorThemeRegistrationForTests } from '../../../editor/monacoThemes';
@@ -244,6 +248,32 @@ describe('EditorArea', () => {
 
     expect(onTabChange).toHaveBeenCalledWith('rtl/core/alu.v');
     expect(onTabClose).toHaveBeenCalledWith('rtl/core/cpu_top.v');
+  });
+
+  it('uses rounded minimal tab chrome when the code viewer layout is minimal', () => {
+    vi.mocked(window.electronAPI!.config.get).mockImplementation((key: string) =>
+      key === WORKBENCH_CODE_VIEWER_LAYOUT_MODE_CONFIG_KEY ? 'minimal' : null,
+    );
+
+    render(
+      <CodeViewerLayoutProvider>
+        <EditorArea
+          tabs={[
+            { id: 'rtl/core/cpu_top.v', name: 'cpu_top.v', modified: true, isPinned: true },
+            { id: 'rtl/core/alu.v', name: 'alu.v', isPinned: true },
+          ]}
+          activeTabId="rtl/core/cpu_top.v"
+          onTabChange={vi.fn()}
+          onTabClose={vi.fn()}
+          editorRef={createRef()}
+        />
+      </CodeViewerLayoutProvider>,
+    );
+
+    expect(screen.getByTestId('editor-tab-bar')).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
+    expect(screen.getByTestId('editor-tab-bar')).toHaveClass('h-10', 'gap-1.5', 'p-1.5');
+    expect(screen.getByTestId('editor-tab-rtl/core/cpu_top.v')).toHaveClass('rounded-md', 'bg-background');
+    expect(screen.getByTestId('editor-tab-rtl/core/alu.v')).toHaveClass('rounded-md');
   });
 
   it('renders preview tabs with italic titles and a visible temporary-state marker', () => {
