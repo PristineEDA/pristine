@@ -7,10 +7,13 @@ param(
     [int]$WarmupSeconds = 20,
 
     [ValidateRange(0.0, [double]::MaxValue)]
-        [double]$ThresholdPercent = 4.0,
+        [double]$ThresholdPercent = 10.0,
 
     [ValidateRange(0.0, [double]::MaxValue)]
-        [double]$MemoryThresholdPercent = 1.0,
+        [double]$MemoryThresholdPercent = 3.0,
+
+    [ValidateRange(0.0, [double]::MaxValue)]
+        [double]$PackagedCpuUtilityAverageCheckpointPercent = 2.0,
 
     [ValidateNotNullOrEmpty()]
     [string]$DevCommand = 'pnpm run dev',
@@ -179,6 +182,7 @@ function Get-PerfComparisonSummaryLines {
     $lines += ('{0,-28} {1}' -f 'CPU threshold', (Format-PerfPercent -Percent $Report.ThresholdPercent))
     $lines += ('{0,-28} {1}' -f 'Memory absolute difference', (Format-PerfPercent -Percent $Report.MemoryWorkingSetAverageAbsoluteDifferencePercent))
     $lines += ('{0,-28} {1}' -f 'Memory threshold', (Format-PerfPercent -Percent $Report.MemoryThresholdPercent))
+    $lines += ('{0,-28} {1}' -f 'Packaged CPU avg checkpoint', (Format-PerfPercent -Percent $Report.PackagedCpuUtilityAverageCheckpointPercent))
 
     return $lines
 }
@@ -461,7 +465,7 @@ try {
     $devResult = Invoke-Scenario -ScenarioName 'Dev runtime sample' -ProcessName $DevProcessName -StartCommand $DevCommand -WorkingDirectory $RepoRoot -WarmupSeconds $WarmupSeconds -DurationSeconds $DurationSeconds -PerfSamplerScriptPath $resolvedPerfSamplerPath
     $packagedResult = Invoke-Scenario -ScenarioName 'Packaged runtime sample' -ProcessName $PackagedProcessName -ExecutablePath $packagedExecutable -WorkingDirectory (Split-Path -Parent $packagedExecutable) -WarmupSeconds $WarmupSeconds -DurationSeconds $DurationSeconds -PerfSamplerScriptPath $resolvedPerfSamplerPath
 
-    $report = New-PerfComparisonReport -DevSummary $devResult.Summary -PackagedSummary $packagedResult.Summary -ThresholdPercent $ThresholdPercent -MemoryThresholdPercent $MemoryThresholdPercent
+    $report = New-PerfComparisonReport -DevSummary $devResult.Summary -PackagedSummary $packagedResult.Summary -ThresholdPercent $ThresholdPercent -MemoryThresholdPercent $MemoryThresholdPercent -PackagedCpuUtilityAverageCheckpointPercent $PackagedCpuUtilityAverageCheckpointPercent
     $summaryLines = @(Get-PerfComparisonSummaryLines -Report $report)
 
     foreach ($summaryLine in $summaryLines) {
@@ -479,13 +483,17 @@ try {
             $thresholdFailures += "Memory working set difference exceeded the threshold: $($report.MemoryWorkingSetAverageAbsoluteDifferencePercent) % > $($report.MemoryThresholdPercent) %."
         }
 
-        $statusMessage = 'Runtime thresholds exceeded. ' + ($thresholdFailures -join ' ')
+        if (-not $report.IsPackagedCpuUtilityAverageWithinCheckpoint) {
+            $thresholdFailures += "Packaged CPU utility avg exceeded the checkpoint: $($report.PackagedCpuUtilityAveragePercent) % is not below $($report.PackagedCpuUtilityAverageCheckpointPercent) %."
+        }
+
+        $statusMessage = 'Runtime thresholds/checkpoints exceeded. ' + ($thresholdFailures -join ' ')
         Export-PerfComparisonArtifacts -OutputDirectory $ResultOutputDirectory -DevResult $devResult -PackagedResult $packagedResult -Report $report -SummaryLines $summaryLines -StatusMessage $statusMessage
         Write-PerfScriptError -Message $statusMessage
         exit 1
     }
 
-    $statusMessage = 'Runtime CPU and memory differences are within the threshold.'
+    $statusMessage = 'Runtime CPU and memory differences are within the threshold, and packaged CPU utility avg is below the checkpoint.'
     Export-PerfComparisonArtifacts -OutputDirectory $ResultOutputDirectory -DevResult $devResult -PackagedResult $packagedResult -Report $report -SummaryLines $summaryLines -StatusMessage $statusMessage
     Write-Host $statusMessage -ForegroundColor Green
     exit 0

@@ -17,10 +17,13 @@ type ComparisonReport = {
   PackagedNetworkAccessSummary: string
   CpuAbsoluteDifferencePercent: number
   MemoryWorkingSetAverageAbsoluteDifferencePercent: number
+  PackagedCpuUtilityAveragePercent: number
   ThresholdPercent: number
   MemoryThresholdPercent: number
+  PackagedCpuUtilityAverageCheckpointPercent: number
   IsCpuWithinThreshold: boolean
   IsMemoryWithinThreshold: boolean
+  IsPackagedCpuUtilityAverageWithinCheckpoint: boolean
   IsWithinThreshold: boolean
 }
 
@@ -109,14 +112,16 @@ describeOnWindows('perf task manager helper', () => {
     const report = runPowerShellJson<ComparisonReport>([
       `$dev = ([System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${encodeJson(devSummary)}')) | ConvertFrom-Json)`,
       `$packaged = ([System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${encodeJson(packagedSummary)}')) | ConvertFrom-Json)`,
-      'New-PerfComparisonReport -DevSummary $dev -PackagedSummary $packaged -ThresholdPercent 4 -MemoryThresholdPercent 1',
+      'New-PerfComparisonReport -DevSummary $dev -PackagedSummary $packaged -ThresholdPercent 10 -MemoryThresholdPercent 3 -PackagedCpuUtilityAverageCheckpointPercent 2',
     ].join('; '))
 
     expect(report.IsWithinThreshold).toBe(true)
     expect(report.IsCpuWithinThreshold).toBe(true)
     expect(report.IsMemoryWithinThreshold).toBe(true)
+    expect(report.IsPackagedCpuUtilityAverageWithinCheckpoint).toBe(true)
     expect(report.CpuAbsoluteDifferencePercent).toBe(0.31)
     expect(report.MemoryWorkingSetAverageAbsoluteDifferencePercent).toBe(0)
+    expect(report.PackagedCpuUtilityAveragePercent).toBe(0.73)
     expect(report.Rows.map((row) => row.Label)).toEqual(expect.arrayContaining([
       'CPU utility avg',
       'Memory working set avg',
@@ -129,25 +134,31 @@ describeOnWindows('perf task manager helper', () => {
   })
 
   it('marks the report as failed when CPU difference exceeds the configured threshold', () => {
-    const devSummary = createSummary()
+    const devSummary = createSummary({
+      cpu: {
+        systemUtilityAveragePercent: 12.8,
+        processUtilityAveragePercent: 11.42,
+      },
+    })
     const packagedSummary = createSummary({
       processName: 'Pristine',
       cpu: {
         systemUtilityAveragePercent: 8.1,
-        processUtilityAveragePercent: 4.75,
+        processUtilityAveragePercent: 1.05,
       },
     })
 
     const report = runPowerShellJson<ComparisonReport>([
       `$dev = ([System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${encodeJson(devSummary)}')) | ConvertFrom-Json)`,
       `$packaged = ([System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${encodeJson(packagedSummary)}')) | ConvertFrom-Json)`,
-      'New-PerfComparisonReport -DevSummary $dev -PackagedSummary $packaged -ThresholdPercent 4 -MemoryThresholdPercent 1',
+      'New-PerfComparisonReport -DevSummary $dev -PackagedSummary $packaged -ThresholdPercent 10 -MemoryThresholdPercent 3 -PackagedCpuUtilityAverageCheckpointPercent 2',
     ].join('; '))
 
     expect(report.IsWithinThreshold).toBe(false)
     expect(report.IsCpuWithinThreshold).toBe(false)
-    expect(report.CpuAbsoluteDifferencePercent).toBe(4.33)
-    expect(report.ThresholdPercent).toBe(4)
+    expect(report.IsPackagedCpuUtilityAverageWithinCheckpoint).toBe(true)
+    expect(report.CpuAbsoluteDifferencePercent).toBe(10.37)
+    expect(report.ThresholdPercent).toBe(10)
   })
 
   it('marks the report as failed when memory difference exceeds the configured threshold', () => {
@@ -156,25 +167,50 @@ describeOnWindows('perf task manager helper', () => {
       processName: 'Pristine',
       memory: {
         totalPhysicalBytes: 32 * 1024 * 1024 * 1024,
-        workingSetAverageBytes: 900 * 1024 * 1024,
-        workingSetPeakBytes: 980 * 1024 * 1024,
-        workingSetAveragePercentOfSystemMemory: 2.75,
-        workingSetPeakPercentOfSystemMemory: 2.99,
-        privateBytesAverageBytes: 620 * 1024 * 1024,
-        privateBytesPeakBytes: 700 * 1024 * 1024,
+        workingSetAverageBytes: 1550 * 1024 * 1024,
+        workingSetPeakBytes: 1660 * 1024 * 1024,
+        workingSetAveragePercentOfSystemMemory: 4.75,
+        workingSetPeakPercentOfSystemMemory: 5.08,
+        privateBytesAverageBytes: 1100 * 1024 * 1024,
+        privateBytesPeakBytes: 1180 * 1024 * 1024,
       },
     })
 
     const report = runPowerShellJson<ComparisonReport>([
       `$dev = ([System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${encodeJson(devSummary)}')) | ConvertFrom-Json)`,
       `$packaged = ([System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${encodeJson(packagedSummary)}')) | ConvertFrom-Json)`,
-      'New-PerfComparisonReport -DevSummary $dev -PackagedSummary $packaged -ThresholdPercent 4 -MemoryThresholdPercent 1',
+      'New-PerfComparisonReport -DevSummary $dev -PackagedSummary $packaged -ThresholdPercent 10 -MemoryThresholdPercent 3 -PackagedCpuUtilityAverageCheckpointPercent 2',
     ].join('; '))
 
     expect(report.IsWithinThreshold).toBe(false)
     expect(report.IsCpuWithinThreshold).toBe(true)
     expect(report.IsMemoryWithinThreshold).toBe(false)
-    expect(report.MemoryWorkingSetAverageAbsoluteDifferencePercent).toBe(1.47)
-    expect(report.MemoryThresholdPercent).toBe(1)
+    expect(report.IsPackagedCpuUtilityAverageWithinCheckpoint).toBe(true)
+    expect(report.MemoryWorkingSetAverageAbsoluteDifferencePercent).toBe(3.47)
+    expect(report.MemoryThresholdPercent).toBe(3)
+  })
+
+  it('marks the report as failed when packaged CPU utility avg is not below the checkpoint', () => {
+    const devSummary = createSummary()
+    const packagedSummary = createSummary({
+      processName: 'Pristine',
+      cpu: {
+        systemUtilityAveragePercent: 4.8,
+        processUtilityAveragePercent: 2.0,
+      },
+    })
+
+    const report = runPowerShellJson<ComparisonReport>([
+      `$dev = ([System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${encodeJson(devSummary)}')) | ConvertFrom-Json)`,
+      `$packaged = ([System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${encodeJson(packagedSummary)}')) | ConvertFrom-Json)`,
+      'New-PerfComparisonReport -DevSummary $dev -PackagedSummary $packaged -ThresholdPercent 10 -MemoryThresholdPercent 3 -PackagedCpuUtilityAverageCheckpointPercent 2',
+    ].join('; '))
+
+    expect(report.IsWithinThreshold).toBe(false)
+    expect(report.IsCpuWithinThreshold).toBe(true)
+    expect(report.IsMemoryWithinThreshold).toBe(true)
+    expect(report.IsPackagedCpuUtilityAverageWithinCheckpoint).toBe(false)
+    expect(report.PackagedCpuUtilityAveragePercent).toBe(2)
+    expect(report.PackagedCpuUtilityAverageCheckpointPercent).toBe(2)
   })
 })

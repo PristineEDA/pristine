@@ -137,13 +137,21 @@ function New-PerfComparisonReport {
         [double]$ThresholdPercent,
 
         [ValidateRange(0.0, [double]::MaxValue)]
-        [double]$MemoryThresholdPercent
+        [double]$MemoryThresholdPercent,
+
+        [ValidateRange(0.0, [double]::MaxValue)]
+        [double]$PackagedCpuUtilityAverageCheckpointPercent = 2.0
+    )
+
+    $packagedCpuUtilityAveragePercent = [Math]::Round(
+        [double]$PackagedSummary.cpu.processUtilityAveragePercent,
+        2
     )
 
     $cpuAbsoluteDifference = [Math]::Round(
         [Math]::Abs(
             ([double]$DevSummary.cpu.processUtilityAveragePercent) -
-            ([double]$PackagedSummary.cpu.processUtilityAveragePercent)
+            $packagedCpuUtilityAveragePercent
         ),
         2
     )
@@ -158,6 +166,7 @@ function New-PerfComparisonReport {
 
     $isCpuWithinThreshold = ($cpuAbsoluteDifference -le $ThresholdPercent)
     $isMemoryWithinThreshold = ($memoryWorkingSetAverageAbsoluteDifference -le $MemoryThresholdPercent)
+    $isPackagedCpuUtilityAverageWithinCheckpoint = ($packagedCpuUtilityAveragePercent -lt $PackagedCpuUtilityAverageCheckpointPercent)
 
     $rows = @(
         (New-PerfComparisonRow -Label 'CPU utility avg' -DevValue (Format-PerfPercent -Percent $DevSummary.cpu.processUtilityAveragePercent) -PackagedValue (Format-PerfPercent -Percent $PackagedSummary.cpu.processUtilityAveragePercent)),
@@ -181,10 +190,13 @@ function New-PerfComparisonReport {
         PackagedNetworkAccessSummary = (Format-PerfNetworkAccessSummary -NetworkSummary $PackagedSummary.network)
         CpuAbsoluteDifferencePercent = $cpuAbsoluteDifference
         MemoryWorkingSetAverageAbsoluteDifferencePercent = $memoryWorkingSetAverageAbsoluteDifference
+        PackagedCpuUtilityAveragePercent = $packagedCpuUtilityAveragePercent
         ThresholdPercent = [Math]::Round($ThresholdPercent, 2)
         MemoryThresholdPercent = [Math]::Round($MemoryThresholdPercent, 2)
+        PackagedCpuUtilityAverageCheckpointPercent = [Math]::Round($PackagedCpuUtilityAverageCheckpointPercent, 2)
         IsCpuWithinThreshold = $isCpuWithinThreshold
         IsMemoryWithinThreshold = $isMemoryWithinThreshold
-        IsWithinThreshold = ($isCpuWithinThreshold -and $isMemoryWithinThreshold)
+        IsPackagedCpuUtilityAverageWithinCheckpoint = $isPackagedCpuUtilityAverageWithinCheckpoint
+        IsWithinThreshold = ($isCpuWithinThreshold -and $isMemoryWithinThreshold -and $isPackagedCpuUtilityAverageWithinCheckpoint)
     }
 }

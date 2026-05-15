@@ -50,7 +50,7 @@ function createHarnessEnvironment(): NodeJS.ProcessEnv {
   return environment
 }
 
-function runHarness(scenario: 'pass' | 'memory-fail'): HarnessResult {
+function runHarness(scenario: 'pass' | 'memory-fail' | 'packaged-cpu-fail'): HarnessResult {
   const result = spawnSync(
     process.execPath,
     [harnessPath, scenario],
@@ -80,7 +80,8 @@ describeOnWindows('compare perf task manager script', () => {
     expect(result.status).toBe(0)
     expect(result.stdout).toContain('Memory absolute difference')
     expect(result.stdout).toContain('Memory threshold')
-    expect(result.stdout).toContain('Runtime CPU and memory differences are within the threshold.')
+    expect(result.stdout).toContain('Packaged CPU avg checkpoint')
+    expect(result.stdout).toContain('Runtime CPU and memory differences are within the threshold, and packaged CPU utility avg is below the checkpoint.')
     expect(result.stderr).toBe('')
   }, harnessTimeoutMs)
 
@@ -92,9 +93,10 @@ describeOnWindows('compare perf task manager script', () => {
     expect(result.artifacts.comparisonReportJson?.dev.processName).toBe('cscript')
     expect(result.artifacts.comparisonReportJson?.packaged.processName).toBe('wscript')
     expect(result.artifacts.comparisonReportJson?.comparison.IsWithinThreshold).toBe(true)
-    expect(result.artifacts.comparisonReportJson?.statusMessage).toContain('within the threshold')
+    expect(result.artifacts.comparisonReportJson?.statusMessage).toContain('below the checkpoint')
     expect(result.artifacts.comparisonReportText).toContain('CPU absolute difference')
     expect(result.artifacts.comparisonReportText).toContain('Memory threshold')
+    expect(result.artifacts.comparisonReportText).toContain('Packaged CPU avg checkpoint')
     expect(result.artifacts.comparisonErrorText).toBeNull()
   }, harnessTimeoutMs)
 
@@ -103,10 +105,22 @@ describeOnWindows('compare perf task manager script', () => {
 
     expect(result.status).toBe(1)
     expect(result.stdout).toContain('Memory absolute difference')
-    expect(result.stderr).toContain('Runtime thresholds exceeded.')
+    expect(result.stderr).toContain('Runtime thresholds/checkpoints exceeded.')
     expect(result.stderr).toContain('Memory working set')
     expect(result.stderr).toContain('exceeded the threshold')
     expect(result.artifacts.comparisonReportJson?.comparison.IsWithinThreshold).toBe(false)
-    expect(result.artifacts.comparisonReportJson?.statusMessage).toContain('Runtime thresholds exceeded.')
+    expect(result.artifacts.comparisonReportJson?.statusMessage).toContain('Runtime thresholds/checkpoints exceeded.')
+  }, harnessTimeoutMs)
+
+  it('fails when packaged CPU utility avg is not below the checkpoint even if diff thresholds pass', () => {
+    const result = runHarness('packaged-cpu-fail')
+
+    expect(result.status).toBe(1)
+    expect(result.stdout).toContain('Packaged CPU avg checkpoint')
+    expect(result.stderr).toContain('Runtime thresholds/checkpoints exceeded.')
+    expect(result.stderr).toContain('Packaged CPU utility avg exceeded the checkpoint')
+    expect(result.stderr).toContain('is not below 2')
+    expect(result.artifacts.comparisonReportJson?.comparison.IsWithinThreshold).toBe(false)
+    expect(result.artifacts.comparisonReportJson?.statusMessage).toContain('Packaged CPU utility avg exceeded the checkpoint')
   }, harnessTimeoutMs)
 })
