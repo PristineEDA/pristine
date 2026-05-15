@@ -206,7 +206,9 @@ describe('BottomPanel', () => {
     );
 
     expect(container.firstChild).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
-    expect(container.firstChild).toHaveClass('rounded-md', 'border', 'bg-background');
+    expect(container.firstChild).toHaveClass('rounded-md', 'bg-background');
+    expect(container.firstChild).not.toHaveClass('border');
+    expect(container.firstChild).not.toHaveClass('border-t');
     expect(screen.getByTestId('bottom-panel-tab-bar')).toHaveClass('h-9', 'gap-1.5', 'p-1.5');
     expect(screen.getByRole('button', { name: /^terminal$/i })).toHaveClass('rounded', 'bg-background');
   });

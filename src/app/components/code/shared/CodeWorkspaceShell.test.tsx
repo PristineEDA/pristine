@@ -25,8 +25,18 @@ function latestHandleRecords(count: number) {
 
 vi.mock('../../ui/resizable', () => ({
   PANEL_TRANSITION_DURATION_MS: 300,
-  ResizablePanelGroup: ({ children, className, orientation }: { children: React.ReactNode; className?: string; orientation: string }) => (
-    <div data-testid={`panel-group-${orientation}`} className={className}>{children}</div>
+  ResizablePanelGroup: ({
+    children,
+    className,
+    layoutGapPx,
+    orientation,
+  }: {
+    children: React.ReactNode;
+    className?: string;
+    layoutGapPx?: number;
+    orientation: string;
+  }) => (
+    <div data-testid={`panel-group-${orientation}`} className={className} data-layout-gap-px={layoutGapPx ?? ''}>{children}</div>
   ),
   ResizablePanel: ({ children, className, id, collapsed, minSizePx, maxSizePx }: { children: React.ReactNode; className?: string; id?: string; collapsed?: boolean; minSizePx?: number; maxSizePx?: number }) => {
     panelRecords.push({ id, collapsed });
@@ -132,13 +142,17 @@ describe('CodeWorkspaceShell', () => {
     expect(screen.getByTestId('activity-region').parentElement).not.toHaveClass('rounded-md');
     expect(screen.getByTestId('panel-left')).toHaveClass('rounded-md', 'border', 'bg-background');
     expect(screen.getByTestId('panel-top')).toHaveClass('rounded-md', 'border', 'bg-background');
+    expect(screen.getByTestId('panel-bottom')).toHaveClass('rounded-md', 'border', 'bg-background');
     expect(screen.getByTestId('panel-right')).toHaveClass('rounded-md', 'border', 'bg-background');
-    expect(screen.getByTestId('panel-group-horizontal')).toHaveClass('gap-2.5');
+    expect(screen.getByTestId('panel-group-horizontal')).not.toHaveClass('gap-2.5');
+    expect(screen.getByTestId('panel-group-vertical')).not.toHaveClass('gap-2.5');
+    expect(screen.getByTestId('panel-group-horizontal')).toHaveAttribute('data-layout-gap-px', '10');
+    expect(screen.getByTestId('panel-group-vertical')).toHaveAttribute('data-layout-gap-px', '10');
     expect(screen.getAllByTestId('panel-handle').every((handle) => handle.className.includes('bg-transparent'))).toBe(true);
     expect(screen.getAllByTestId('panel-handle').every((handle) => handle.className.includes('overlay-handle'))).toBe(true);
   });
 
-  it('collapses fixed minimal handles so they do not double-count the surrounding gap', () => {
+  it('collapses fixed minimal handles so resize targets do not consume layout space', () => {
     vi.mocked(window.electronAPI!.config.get).mockImplementation((key: string) =>
       key === WORKBENCH_CODE_VIEWER_LAYOUT_MODE_CONFIG_KEY ? 'minimal' : null,
     );

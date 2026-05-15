@@ -1,6 +1,8 @@
 import { cn } from '@/lib/utils';
 import type { CodeViewerLayoutMode } from '../../../context/CodeViewerLayoutContext';
 
+export const MINIMAL_CODE_VIEWER_PANEL_GAP_PX = 10;
+
 export function isMinimalCodeViewerLayout(layoutMode: CodeViewerLayoutMode) {
   return layoutMode === 'minimal';
 }
@@ -34,11 +36,12 @@ export function getCodeWorkspacePanelFrameClassName(layoutMode: CodeViewerLayout
   );
 }
 
-export function getCodeWorkspacePanelGroupClassName(layoutMode: CodeViewerLayoutMode, className?: string) {
-  return cn(
-    isMinimalCodeViewerLayout(layoutMode) && 'gap-2.5',
-    className,
-  );
+export function getCodeWorkspacePanelGroupClassName(_layoutMode: CodeViewerLayoutMode, className?: string) {
+  return cn(className);
+}
+
+export function getCodeWorkspacePanelGroupLayoutGapPx(layoutMode: CodeViewerLayoutMode) {
+  return isMinimalCodeViewerLayout(layoutMode) ? MINIMAL_CODE_VIEWER_PANEL_GAP_PX : 0;
 }
 
 export function getCodeWorkspaceResizeHandleClassName(layoutMode: CodeViewerLayoutMode) {
@@ -91,8 +94,8 @@ export function getPanelHeaderClassName(layoutMode: CodeViewerLayoutMode, classN
 
 export function getBottomPanelClassName(layoutMode: CodeViewerLayoutMode) {
   return cn(
-    'flex h-full min-h-0 flex-col overflow-hidden border-t border-border bg-background',
-    isMinimalCodeViewerLayout(layoutMode) && 'rounded-md border border-border',
+    'flex h-full min-h-0 flex-col overflow-hidden bg-background',
+    isMinimalCodeViewerLayout(layoutMode) ? 'rounded-md' : 'border-t border-border',
   );
 }
 

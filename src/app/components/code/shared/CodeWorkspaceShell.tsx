@@ -12,6 +12,7 @@ import {
   getCodeWorkspaceCenterColumnClassName,
   getCodeWorkspacePanelFrameClassName,
   getCodeWorkspacePanelGroupClassName,
+  getCodeWorkspacePanelGroupLayoutGapPx,
   getCodeWorkspaceResizeHandleClassName,
   getCodeWorkspaceShellClassName,
 } from './codeViewerLayoutStyles';
@@ -292,6 +293,7 @@ export function CodeWorkspaceShell({
   const clampedRightFixedWidth = hasFixedRightPanel
     ? clampFixedPanelWidth(rightFixedWidthPx, fixedRightMinWidth, fixedRightMaxWidth)
     : null;
+  const panelGroupLayoutGapPx = getCodeWorkspacePanelGroupLayoutGapPx(layoutMode);
 
   if (hasFixedRightPanel && showRightPanel) {
     fixedRightPanelWasOpenedRef.current = true;
@@ -305,13 +307,13 @@ export function CodeWorkspaceShell({
     <div className="relative h-full">
       {overlay}
 
-      <ResizablePanelGroup orientation="vertical" className={getCodeWorkspacePanelGroupClassName(layoutMode)}>
+      <ResizablePanelGroup orientation="vertical" layoutGapPx={panelGroupLayoutGapPx} className={getCodeWorkspacePanelGroupClassName(layoutMode)}>
         <ResizablePanel defaultSize={60} minSize={25} id={topPanelId} className={getCodeWorkspacePanelFrameClassName(layoutMode)}>
           {topContent}
         </ResizablePanel>
 
         <ResizableHandle hidden={!showBottomPanel} className={getCodeWorkspaceResizeHandleClassName(layoutMode)} />
-        <ResizablePanel defaultSize={40} minSize={15} maxSize={60} id={bottomPanelId} collapsed={!showBottomPanel}>
+        <ResizablePanel defaultSize={40} minSize={15} maxSize={60} id={bottomPanelId} collapsed={!showBottomPanel} className={getCodeWorkspacePanelFrameClassName(layoutMode)}>
           {bottomPanelPresence.shouldRender ? bottomContent : <div className="h-full" />}
         </ResizablePanel>
       </ResizablePanelGroup>
@@ -385,7 +387,7 @@ export function CodeWorkspaceShell({
           {hasFixedRightPanel ? (
             <>
               <div className={getCodeWorkspaceCenterColumnClassName(layoutMode)}>
-                <ResizablePanelGroup orientation="horizontal" className={getCodeWorkspacePanelGroupClassName(layoutMode)}>
+                <ResizablePanelGroup orientation="horizontal" layoutGapPx={panelGroupLayoutGapPx} className={getCodeWorkspacePanelGroupClassName(layoutMode)}>
                   <ResizablePanel defaultSize={100} minSize={30} id={centerPanelId}>
                     {centerPanelContent}
                   </ResizablePanel>
@@ -431,7 +433,7 @@ export function CodeWorkspaceShell({
             </>
           ) : (
             <div className={getCodeWorkspaceCenterColumnClassName(layoutMode)}>
-              <ResizablePanelGroup orientation="horizontal" className={getCodeWorkspacePanelGroupClassName(layoutMode)}>
+              <ResizablePanelGroup orientation="horizontal" layoutGapPx={panelGroupLayoutGapPx} className={getCodeWorkspacePanelGroupClassName(layoutMode)}>
                 {centerAndRightPanels}
               </ResizablePanelGroup>
             </div>
@@ -439,7 +441,7 @@ export function CodeWorkspaceShell({
         </div>
       ) : (
         <div className={getCodeWorkspaceCenterColumnClassName(layoutMode)}>
-          <ResizablePanelGroup orientation="horizontal" className={getCodeWorkspacePanelGroupClassName(layoutMode)}>
+          <ResizablePanelGroup orientation="horizontal" layoutGapPx={panelGroupLayoutGapPx} className={getCodeWorkspacePanelGroupClassName(layoutMode)}>
             <ResizablePanel defaultSize={18} minSize={12} maxSize={35} id={leftPanelId} collapsed={!showLeftPanel} className={getCodeWorkspacePanelFrameClassName(layoutMode)}>
               {leftPanelPresence.shouldRender ? leftContent : <div className="h-full" />}
             </ResizablePanel>
