@@ -243,6 +243,12 @@ describe('EditorArea', () => {
     expect(screen.getByTestId('editor-tab-bar')).toHaveClass('h-[27px]');
     expect(screen.getByTestId('editor-split-right')).toHaveClass('px-1', 'cursor-pointer');
     expect(screen.getByTestId('editor-split-down')).toHaveClass('px-1', 'cursor-pointer');
+    expect(screen.getByTestId('editor-tab-primary-rtl/core/cpu_top.v')).toHaveClass('flex', 'min-w-0', 'flex-1', 'items-center');
+    expect(screen.getByTestId('editor-tab-primary-rtl/core/cpu_top.v')).not.toHaveClass('items-end');
+    expect(screen.getByTestId('editor-tab-primary-rtl/core/cpu_top.v')).not.toHaveClass('h-full');
+    expect(screen.getByTestId('editor-tab-title-rtl/core/cpu_top.v')).toHaveClass('leading-4');
+    expect(screen.getByTestId('editor-tab-title-rtl/core/cpu_top.v')).not.toHaveClass('leading-none');
+    expect(screen.getByTestId('editor-tab-badge-rtl/core/cpu_top.v')).not.toHaveClass('self-end');
     expect(screen.getByTestId('editor-tab-badge-rtl/core/cpu_top.v')).toHaveAttribute('data-icon-key', 'verilog');
     expect(screen.getByTestId('editor-tab-badge-rtl/core/alu.v')).toHaveAttribute('data-icon-key', 'verilog');
 

@@ -102,24 +102,6 @@ export function getBottomPanelClassName(layoutMode: CodeViewerLayoutMode) {
 export function getBottomPanelTabBarClassName(layoutMode: CodeViewerLayoutMode) {
   return cn(
     'flex items-center bg-muted/40 border-b border-border shrink-0',
-    isMinimalCodeViewerLayout(layoutMode) ? 'h-9 gap-1.5 p-1.5 rounded-t-md' : 'h-8',
-  );
-}
-
-export function getBottomPanelTabClassName(layoutMode: CodeViewerLayoutMode, isActive: boolean) {
-  return cn(
-    'flex items-center gap-1.5 h-full transition-colors',
-    isMinimalCodeViewerLayout(layoutMode)
-      ? 'rounded px-2.5 border border-transparent text-[12px]'
-      : 'px-3 border-b-2 text-[12px]',
-    isActive
-      ? cn(
-        'font-semibold text-foreground',
-        isMinimalCodeViewerLayout(layoutMode) ? 'border-border bg-background shadow-sm' : 'border-primary',
-      )
-      : cn(
-        'text-muted-foreground hover:text-foreground',
-        isMinimalCodeViewerLayout(layoutMode) ? 'hover:border-border/80' : 'border-transparent',
-      ),
+    isMinimalCodeViewerLayout(layoutMode) ? 'h-9 gap-1.5 px-1.5 rounded-t-md' : 'h-8 gap-1 px-1',
   );
 }

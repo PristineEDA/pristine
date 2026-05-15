@@ -25,6 +25,8 @@ interface IconTabToggleGroupProps {
   orientation?: 'horizontal' | 'vertical';
   tooltipSide?: 'top' | 'right' | 'bottom' | 'left';
   className?: string;
+  itemClassName?: string;
+  iconSize?: number;
 }
 
 export function IconTabToggleGroup({
@@ -36,6 +38,8 @@ export function IconTabToggleGroup({
   orientation = 'horizontal',
   tooltipSide = 'bottom',
   className,
+  itemClassName,
+  iconSize = 13,
 }: IconTabToggleGroupProps) {
   return (
     <TooltipProvider delayDuration={0}>
@@ -67,9 +71,9 @@ export function IconTabToggleGroup({
                     aria-label={item.label}
                     data-testid={item.testId}
                     value={item.value}
-                    className={iconTabToggleItemClassName}
+                    className={cn(iconTabToggleItemClassName, itemClassName)}
                   >
-                    <Icon size={13} />
+                    <Icon size={iconSize} />
                   </ToggleGroupItem>
                 </span>
               </TooltipTrigger>

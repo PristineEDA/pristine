@@ -142,18 +142,23 @@ function EditorTab({
       }}
       onDragEnd={() => onDragEnd?.()}
     >
-      <FileTypeBadge
-        name={tab.name}
-        path={tab.id}
-        testId={`editor-tab-badge-${tab.id}`}
-        className="h-4 w-4"
-      />
-      <span
-        data-testid={`editor-tab-title-${tab.id}`}
-        className={`flex-1 truncate text-[12px] ${isPreview ? 'italic' : ''} ${tabTitleToneClassName}`}
+      <div
+        data-testid={`editor-tab-primary-${tab.id}`}
+        className="flex min-w-0 flex-1 items-center gap-1"
       >
-        {tab.name}
-      </span>
+        <FileTypeBadge
+          name={tab.name}
+          path={tab.id}
+          testId={`editor-tab-badge-${tab.id}`}
+          className="h-4 w-4"
+        />
+        <span
+          data-testid={`editor-tab-title-${tab.id}`}
+          className={`min-w-0 flex-1 truncate text-[12px] leading-4 ${isPreview ? 'italic' : ''} ${tabTitleToneClassName}`}
+        >
+          {tab.name}
+        </span>
+      </div>
       {tab.modified && (
         <div className="relative flex h-3 w-3 shrink-0 items-center justify-center">
           <Circle

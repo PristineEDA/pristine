@@ -617,11 +617,27 @@ async function openBottomTerminal(window: Awaited<ReturnType<typeof launchApp>>[
     await toggleBottomPanel.click();
   }
 
+  const bottomPanel = window.getByTestId('panel-bottom-panel');
+  await expect(bottomPanel).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+
+  const terminalTab = bottomPanel.getByTestId('bottom-panel-tab-terminal');
+  await expect(terminalTab).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  if ((await terminalTab.getAttribute('data-state')) !== 'on') {
+    await terminalTab.click();
+  }
+
   const terminalHost = window.getByTestId('terminal-host');
   await expect(terminalHost).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
   await expect(window.locator('[data-testid="terminal-host"] .xterm')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
 
   return terminalHost;
+}
+
+function getBottomPanelTab(
+  window: Awaited<ReturnType<typeof launchApp>>['window'],
+  tabId: 'terminal' | 'output' | 'problems' | 'debug' | 'lsp',
+) {
+  return window.getByTestId(`bottom-panel-tab-${tabId}`);
 }
 
 async function switchToWhiteboard(window: Awaited<ReturnType<typeof launchApp>>['window']) {
@@ -1401,8 +1417,7 @@ test('lsp bottom panel filters diagnostics and shows paired request responses', 
   });
 
   await window.getByTestId('toggle-bottom-panel').click();
-  const bottomPanel = window.getByTestId('panel-bottom-panel');
-  await bottomPanel.getByRole('button', { name: /^lsp$/i }).click();
+  await getBottomPanelTab(window, 'lsp').click();
 
   await expect(window.getByTestId('lsp-panel')).toBeVisible();
 
@@ -1437,12 +1452,12 @@ test('lsp bottom panel filters diagnostics and shows paired request responses', 
     timeout: 15000,
   }).toBeGreaterThan(0);
 
-  const problemsTab = bottomPanel.getByRole('button', { name: /Problems \([1-9]\d*\)/i });
+  const problemsTab = getBottomPanelTab(window, 'problems');
   await expect(problemsTab).toBeVisible();
   await problemsTab.click();
   await expect(window.locator('text=/Errors|Warnings|Infos|Hints/').first()).toBeVisible();
 
-  await bottomPanel.getByRole('button', { name: /^lsp$/i }).click();
+  await getBottomPanelTab(window, 'lsp').click();
   await expect(window.getByTestId('lsp-panel')).toContainText(/initialize|textDocument\/definition|textDocument\/didOpen/);
 
   await window.getByTestId('lsp-filter-diagnostic').click();
@@ -3556,7 +3571,6 @@ test('terminal uses the shared theme and mono font at runtime', async () => {
 
 test('terminal session survives tab switches and bottom panel hide/show', async () => {
   const { app, window } = await launchApp();
-  const bottomPanel = window.getByTestId('panel-bottom-panel');
 
   await openBottomTerminal(window);
 
@@ -3567,11 +3581,11 @@ test('terminal session survives tab switches and bottom panel hide/show', async 
   const originalPid = await readTerminalPid(window);
   expect(isProcessRunning(originalPid)).toBe(true);
 
-  await bottomPanel.getByRole('button', { name: /^output$/i }).click();
+  await getBottomPanelTab(window, 'output').click();
   await expect(window.getByTestId('terminal-host')).toHaveCount(0);
   expect(isProcessRunning(originalPid)).toBe(true);
 
-  await bottomPanel.getByRole('button', { name: /^terminal$/i, exact: true }).click();
+  await getBottomPanelTab(window, 'terminal').click();
   await expect.poll(async () => readTerminalPid(window), {
     timeout: 15000,
   }).toBe(originalPid);
@@ -3591,7 +3605,6 @@ test('terminal session survives tab switches and bottom panel hide/show', async 
 
 test('terminal preserves output history across tab switches and bottom panel hide/show', async () => {
   const { app, window } = await launchApp();
-  const bottomPanel = window.getByTestId('panel-bottom-panel');
   const marker = '__PRISTINE_TERMINAL_HISTORY__';
 
   await openBottomTerminal(window);
@@ -3606,14 +3619,14 @@ test('terminal preserves output history across tab switches and bottom panel hid
     timeout: 15000,
   }).toContain(marker);
 
-  await bottomPanel.getByRole('button', { name: /^output$/i }).click();
+  await getBottomPanelTab(window, 'output').click();
   await expect(window.getByTestId('terminal-host')).toHaveCount(0);
 
   await window.getByTestId('toggle-bottom-panel').click();
   await expect(window.getByTestId('terminal-host')).toHaveCount(0);
 
   await window.getByTestId('toggle-bottom-panel').click();
-  await bottomPanel.getByRole('button', { name: /^terminal$/i, exact: true }).click();
+  await getBottomPanelTab(window, 'terminal').click();
   await openBottomTerminal(window);
 
   await expect.poll(async () => readTerminalText(window), {
