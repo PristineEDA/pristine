@@ -38,6 +38,16 @@ function renderLeftSidePanel(props: Partial<ComponentProps<typeof LeftSidePanel>
 
 type TestUser = ReturnType<typeof userEvent.setup>;
 
+function expectCompactTabButton(testId: string) {
+  const tabButton = screen.getByTestId(testId);
+  const icon = tabButton.querySelector('svg');
+
+  expect(tabButton).toHaveClass('h-7', 'w-7');
+  expect(icon).not.toBeNull();
+  expect(icon!).toHaveAttribute('width', '12');
+  expect(icon!).toHaveAttribute('height', '12');
+}
+
 let testUser: TestUser;
 
 async function clickExplorerNode(testId: string) {
@@ -85,6 +95,8 @@ describe('LeftSidePanel', () => {
     expect(screen.getByTestId('left-panel-tabs')).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: 'Explorer' })).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: 'Outline' })).toBeInTheDocument();
+    expectCompactTabButton('left-panel-tab-explorer');
+    expectCompactTabButton('left-panel-tab-outline');
     expect(screen.queryByRole('button', { name: 'Explorer' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Outline' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /problems/i })).not.toBeInTheDocument();

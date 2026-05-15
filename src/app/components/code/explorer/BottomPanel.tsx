@@ -10,7 +10,12 @@ import { DebugConsole } from './DebugConsole';
 import { terminateTerminalSession } from './terminalSessionStore';
 import { Button } from '../../ui/button';
 import { TooltipIconButton } from '../../ui/tooltip-icon-button';
-import { IconTabToggleGroup, type IconTabToggleGroupItem } from '../shared/IconTabToggleGroup';
+import {
+  compactIconTabToggleIconSize,
+  compactIconTabToggleItemClassName,
+  IconTabToggleGroup,
+  type IconTabToggleGroupItem,
+} from '../shared/IconTabToggleGroup';
 import { useCodeViewerLayout } from '../../../context/CodeViewerLayoutContext';
 import { getBottomPanelClassName, getBottomPanelTabBarClassName } from '../shared/codeViewerLayoutStyles';
 
@@ -103,8 +108,8 @@ export function BottomPanel({ layoutVersion, onClose }: BottomPanelProps) {
           groupTestId="bottom-panel-tab-group"
           tooltipSide="top"
           className="shrink-0"
-          itemClassName="h-7 w-7 rounded-md"
-          iconSize={12}
+          itemClassName={compactIconTabToggleItemClassName}
+          iconSize={compactIconTabToggleIconSize}
         />
 
         <div className="ml-auto flex items-center gap-1">

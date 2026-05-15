@@ -10,6 +10,16 @@ import { BottomPanel } from './BottomPanel';
 
 let mockedProblems: LspProblem[] = [];
 
+function expectCompactTabButton(testId: string) {
+  const tabButton = screen.getByTestId(testId);
+  const icon = tabButton.querySelector('svg');
+
+  expect(tabButton).toHaveClass('h-7', 'w-7');
+  expect(icon).not.toBeNull();
+  expect(icon!).toHaveAttribute('width', '12');
+  expect(icon!).toHaveAttribute('height', '12');
+}
+
 const mockThemeApi = vi.hoisted(() => {
   const activeTheme = {
     id: 'vscode-2026-dark',
@@ -221,6 +231,11 @@ describe('BottomPanel', () => {
     expect(screen.getByTestId('bottom-panel-tab-bar')).toHaveClass('h-9', 'gap-1.5', 'px-1.5');
     expect(screen.getByTestId('bottom-panel-tab-bar')).not.toHaveClass('bg-muted/40', 'border-b', 'border-border');
     expect(screen.getByTestId('bottom-panel-tab-group')).toHaveAttribute('aria-label', 'Bottom panel tabs');
+    expectCompactTabButton('bottom-panel-tab-terminal');
+    expectCompactTabButton('bottom-panel-tab-output');
+    expectCompactTabButton('bottom-panel-tab-problems');
+    expectCompactTabButton('bottom-panel-tab-debug');
+    expectCompactTabButton('bottom-panel-tab-lsp');
     expect(screen.getByTestId('bottom-panel-tab-terminal')).toHaveAccessibleName('Terminal');
     expect(screen.getByTestId('bottom-panel-tab-terminal')).toHaveAttribute('data-state', 'on');
   });

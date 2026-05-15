@@ -640,6 +640,16 @@ function getBottomPanelTab(
   return window.getByTestId(`bottom-panel-tab-${tabId}`);
 }
 
+async function expectCompactPanelTabButton(tabButton: Locator) {
+  await expect(tabButton).toHaveClass(/(?:^|\s)h-7(?:\s|$)/);
+  await expect(tabButton).toHaveClass(/(?:^|\s)w-7(?:\s|$)/);
+
+  const icon = tabButton.locator('svg').first();
+
+  await expect(icon).toHaveAttribute('width', '12');
+  await expect(icon).toHaveAttribute('height', '12');
+}
+
 async function switchToWhiteboard(window: Awaited<ReturnType<typeof launchApp>>['window']) {
   const whiteboardTrigger = window.getByTestId('center-view-whiteboard');
 
@@ -1034,6 +1044,8 @@ test('app launches and shows main UI', async () => {
   const mainContentStack = window.getByTestId('main-content-stack');
   const explorerPanel = window.getByTestId('panel-left-panel');
   await expect(explorerPanel).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expectCompactPanelTabButton(window.getByTestId('left-panel-tab-explorer'));
+  await expectCompactPanelTabButton(window.getByTestId('left-panel-tab-outline'));
   await expect.poll(async () => {
     const stackBox = await mainContentStack.boundingBox();
     const panelBox = await explorerPanel.boundingBox();
@@ -3023,6 +3035,8 @@ test('assistant chat list expansion widens the whole right sidebar and supports 
 
   await expect(rightPanel).toBeVisible();
   await expect(chatListPanel).toHaveCount(0);
+  await expectCompactPanelTabButton(window.getByTestId('right-panel-tab-ai'));
+  await expectCompactPanelTabButton(window.getByTestId('right-panel-tab-outline'));
   await expect(assistantMainPanel).not.toHaveClass(/(?:^|\s)bg-background(?:\s|$)/);
 
   const initialRightPanelWidth = await waitForElementPixelWidthBetween(rightPanel, 295, 305);
@@ -3527,6 +3541,8 @@ test('terminal tab creates a real shell session and shows command output', async
   const bottomPanelTabBar = window.getByTestId('bottom-panel-tab-bar');
   await expect(bottomPanelTabBar).not.toHaveClass(/(?:^|\s)bg-muted\/40(?:\s|$)/);
   await expect(bottomPanelTabBar).not.toHaveClass(/(?:^|\s)border-b(?:\s|$)/);
+  await expectCompactPanelTabButton(getBottomPanelTab(window, 'terminal'));
+  await expectCompactPanelTabButton(getBottomPanelTab(window, 'output'));
 
   const terminalInput = window.locator('[data-testid="terminal-host"] .xterm-helper-textarea');
   await expect(terminalInput).toHaveCount(1);

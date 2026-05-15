@@ -9,6 +9,9 @@ import { centerViewSwitchItemClassName } from './viewSwitcherStyles';
 const iconTabToggleGroupClassName = 'rounded bg-muted p-0.5 gap-0.5';
 const iconTabToggleItemClassName = `${centerViewSwitchItemClassName} h-8 w-8 rounded-md`;
 
+export const compactIconTabToggleItemClassName = 'h-7 w-7 rounded-md';
+export const compactIconTabToggleIconSize = 12;
+
 export interface IconTabToggleGroupItem {
   icon: LucideIcon;
   label: string;

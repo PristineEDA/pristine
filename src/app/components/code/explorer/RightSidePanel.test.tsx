@@ -8,6 +8,16 @@ const PANEL_TEST_TIMEOUT_MS = 10000;
 
 type TestUser = ReturnType<typeof userEvent.setup>;
 
+function expectCompactTabButton(testId: string) {
+  const tabButton = screen.getByTestId(testId);
+  const icon = tabButton.querySelector('svg');
+
+  expect(tabButton).toHaveClass('h-7', 'w-7');
+  expect(icon).not.toBeNull();
+  expect(icon!).toHaveAttribute('width', '12');
+  expect(icon!).toHaveAttribute('height', '12');
+}
+
 async function clickButton(user: TestUser, name: RegExp) {
   await user.click(screen.getByRole('radio', { name }));
 }
@@ -23,6 +33,10 @@ describe('RightSidePanel', () => {
     expect(screen.getByRole('radio', { name: /static check/i })).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: /references/i })).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: /outline/i })).toBeInTheDocument();
+    expectCompactTabButton('right-panel-tab-ai');
+    expectCompactTabButton('right-panel-tab-static');
+    expectCompactTabButton('right-panel-tab-references');
+    expectCompactTabButton('right-panel-tab-outline');
     expect(screen.queryByText('AI Assistant')).not.toBeInTheDocument();
     expect(screen.getByTestId('assistant-panel-suspense-skeleton')).toBeInTheDocument();
     expect(screen.queryByText(/Loading assistant/i)).not.toBeInTheDocument();

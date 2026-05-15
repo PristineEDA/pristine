@@ -3,7 +3,11 @@ import {
   ListTree,
 } from 'lucide-react';
 import { useCodeViewerLayout } from '../../../context/CodeViewerLayoutContext';
-import { IconTabToggleGroup } from '../shared/IconTabToggleGroup';
+import {
+  compactIconTabToggleIconSize,
+  compactIconTabToggleItemClassName,
+  IconTabToggleGroup,
+} from '../shared/IconTabToggleGroup';
 import { getPanelHeaderClassName } from '../shared/codeViewerLayoutStyles';
 
 export type ExplorerPanelTab = 'explorer' | 'outline';
@@ -31,6 +35,8 @@ export function ExplorerPanelTabs({
         groupLabel="Left panel tabs"
         groupTestId="left-panel-tabs"
         tooltipSide="bottom"
+        itemClassName={compactIconTabToggleItemClassName}
+        iconSize={compactIconTabToggleIconSize}
       />
     </div>
   );
