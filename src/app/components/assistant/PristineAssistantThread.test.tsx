@@ -382,7 +382,11 @@ describe('PristineAssistantThread', () => {
   });
 
   it('wires assistant instructions, tool UIs, and composer trigger adapters', () => {
-    render(<PristineAssistantThread className="custom-thread" />);
+    const { container } = render(<PristineAssistantThread className="custom-thread" />);
+
+    expect(container.firstChild).toHaveClass('relative', 'flex', 'min-h-0', 'flex-1', 'flex-col', 'custom-thread');
+    expect(container.firstChild).not.toHaveClass('bg-background');
+    expect(container.querySelector('div.relative.shrink-0.p-2')).not.toHaveClass('bg-background');
 
     expect(mocks.useAssistantInstructions).toHaveBeenCalledWith(
       expect.stringContaining('Pristine IDE right sidebar'),

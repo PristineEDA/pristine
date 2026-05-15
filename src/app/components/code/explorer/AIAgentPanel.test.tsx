@@ -72,6 +72,9 @@ describe('AIAgentPanel', () => {
     render(<AIAgentPanel baseUrl="http://localhost:4111/" initialThreadListExpanded={false} />);
 
     expect(screen.getByText('Pristine Agent')).toBeInTheDocument();
+    expect(screen.getByTestId('assistant-panel-root')).not.toHaveClass('bg-background');
+    expect(screen.getByTestId('assistant-main-panel')).not.toHaveClass('bg-background');
+    expect(screen.getByTestId('assistant-thread-list-panel')).not.toHaveClass('bg-muted/20');
     expect(screen.getByTestId('assistant-thread-list-toggle')).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getByTestId('assistant-thread')).toBeInTheDocument();
     expect(screen.getByTestId('assistant-thread')).toHaveAttribute('data-agent-base-url', 'http://localhost:4111');

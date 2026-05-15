@@ -3023,6 +3023,7 @@ test('assistant chat list expansion widens the whole right sidebar and supports 
 
   await expect(rightPanel).toBeVisible();
   await expect(chatListPanel).toHaveCount(0);
+  await expect(assistantMainPanel).not.toHaveClass(/(?:^|\s)bg-background(?:\s|$)/);
 
   const initialRightPanelWidth = await waitForElementPixelWidthBetween(rightPanel, 295, 305);
   const initialAssistantWidth = await waitForElementPixelWidthBetween(assistantMainPanel, 295, 305);
@@ -3033,6 +3034,7 @@ test('assistant chat list expansion widens the whole right sidebar and supports 
   await chatListToggle.click();
 
   await expect(chatListPanel).toBeVisible();
+  await expect(chatListPanel).not.toHaveClass(/(?:^|\s)bg-muted\/20(?:\s|$)/);
 
   await waitForElementPixelWidthBetween(
     chatListPanel,
@@ -3521,6 +3523,10 @@ test('terminal tab creates a real shell session and shows command output', async
   const marker = '__PRISTINE_TERMINAL_E2E__';
 
   await openBottomTerminal(window);
+
+  const bottomPanelTabBar = window.getByTestId('bottom-panel-tab-bar');
+  await expect(bottomPanelTabBar).not.toHaveClass(/(?:^|\s)bg-muted\/40(?:\s|$)/);
+  await expect(bottomPanelTabBar).not.toHaveClass(/(?:^|\s)border-b(?:\s|$)/);
 
   const terminalInput = window.locator('[data-testid="terminal-host"] .xterm-helper-textarea');
   await expect(terminalInput).toHaveCount(1);
