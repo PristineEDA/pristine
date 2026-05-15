@@ -4,7 +4,7 @@ param(
     [int]$DurationSeconds = 30,
 
     [ValidateRange(0, [int]::MaxValue)]
-    [int]$WarmupSeconds = 5,
+    [int]$WarmupSeconds = 20,
 
     [ValidateRange(0.0, [double]::MaxValue)]
         [double]$ThresholdPercent = 4.0,
