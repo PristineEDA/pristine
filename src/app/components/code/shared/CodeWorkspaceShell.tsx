@@ -199,6 +199,7 @@ function FixedPanelResizeHandle({
   testId: string;
 }) {
   const startPositionRef = useRef<number | null>(null);
+  const isOverlayHandle = className?.includes('overlay-handle') ?? false;
 
   const endDrag = useCallback((pointerId?: number, target?: EventTarget | null) => {
     startPositionRef.current = null;
@@ -222,8 +223,10 @@ function FixedPanelResizeHandle({
       data-slot="resizable-handle"
       data-testid={testId}
       className={cn(
-        'relative flex h-full w-px shrink-0 cursor-ew-resize items-center justify-center bg-border focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-1',
-        'after:absolute after:inset-y-0 after:left-1/2 after:w-1 after:-translate-x-1/2',
+        'relative flex h-full shrink-0 cursor-ew-resize items-center justify-center bg-border focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-1',
+        isOverlayHandle
+          ? 'w-0 overflow-visible -mx-[5px] z-10 after:absolute after:inset-y-0 after:left-1/2 after:w-3 after:-translate-x-1/2'
+          : 'w-px after:absolute after:inset-y-0 after:left-1/2 after:w-1 after:-translate-x-1/2',
         className,
       )}
       onPointerDown={(event) => {

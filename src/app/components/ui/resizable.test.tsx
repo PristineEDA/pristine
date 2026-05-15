@@ -92,6 +92,38 @@ describe('resizable', () => {
     expect(document.body.style.cursor).toBe('');
   });
 
+  it('supports overlay handles that keep drag semantics without consuming horizontal layout width', () => {
+    render(
+      <div className="h-[400px] w-[1000px]">
+        <ResizablePanelGroup orientation="horizontal">
+          <ResizablePanel id="left" defaultSize={20} minSize={10}>
+            <div>Left</div>
+          </ResizablePanel>
+          <ResizableHandle data-testid="horizontal-overlay-handle" className="overlay-handle bg-transparent" />
+          <ResizablePanel id="right" defaultSize={80} minSize={20}>
+            <div>Right</div>
+          </ResizablePanel>
+        </ResizablePanelGroup>
+      </div>
+    );
+
+    const group = screen.getByText('Left').closest('[data-slot="resizable-panel-group"]') as HTMLElement;
+    mockGroupRect(group, 1000, 400);
+
+    const leftPanel = screen.getByTestId('panel-left');
+    const rightPanel = screen.getByTestId('panel-right');
+    const handle = screen.getByTestId('horizontal-overlay-handle');
+
+    expect(handle).toHaveClass('w-0', '-mx-[5px]', 'bg-transparent');
+
+    fireEvent.pointerDown(handle, { clientX: 200, clientY: 0, pointerId: 11 });
+    fireEvent.pointerMove(handle, { clientX: 300, clientY: 0, pointerId: 11 });
+    fireEvent.pointerUp(handle, { clientX: 300, clientY: 0, pointerId: 11 });
+
+    expect(leftPanel.style.flexBasis).toBe('30%');
+    expect(rightPanel.style.flexBasis).toBe('70%');
+  });
+
   it('resizes adjacent vertical panels when the handle is dragged and uses ns-resize cursor semantics', () => {
     renderVerticalGroup();
 

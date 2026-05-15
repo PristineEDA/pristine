@@ -277,8 +277,9 @@ export function MenuBar({
     <TooltipProvider delayDuration={0}>
       <>
         <div
+          data-testid="menu-bar-root"
           ref={ref}
-          className="flex items-center h-8 bg-muted/50 border-b border-border select-none shrink-0 z-50"
+          className="flex items-center h-8 bg-muted/50 select-none shrink-0 z-50"
           style={{ userSelect: 'none', WebkitAppRegion: 'drag' } as React.CSSProperties}
         >
           {/* macOS traffic light clearance */}

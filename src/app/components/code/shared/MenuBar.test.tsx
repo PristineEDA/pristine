@@ -19,6 +19,12 @@ import {
 } from './MenuBar.testSupport';
 
 describe('MenuBar', () => {
+  it('renders the menu chrome without a bottom border separator', () => {
+    renderMenuBar();
+
+    expect(screen.getByTestId('menu-bar-root')).not.toHaveClass('border-b');
+  });
+
   it('calls electron window controls directly', async () => {
     const user = userEvent.setup();
 

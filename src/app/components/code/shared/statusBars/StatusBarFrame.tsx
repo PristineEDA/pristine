@@ -9,7 +9,7 @@ interface StatusBarFrameProps {
 export function StatusBarFrame({ left, right, statusBarId }: StatusBarFrameProps) {
   return (
     <div
-      className="flex h-6 shrink-0 select-none items-center overflow-hidden bg-primary text-primary-foreground"
+      className="flex h-6 shrink-0 select-none items-center overflow-hidden bg-sidebar text-sidebar-foreground"
       data-status-bar-id={statusBarId}
       data-testid="status-bar"
     >

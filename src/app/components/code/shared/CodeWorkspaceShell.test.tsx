@@ -133,8 +133,46 @@ describe('CodeWorkspaceShell', () => {
     expect(screen.getByTestId('panel-left')).toHaveClass('rounded-md', 'border', 'bg-background');
     expect(screen.getByTestId('panel-top')).toHaveClass('rounded-md', 'border', 'bg-background');
     expect(screen.getByTestId('panel-right')).toHaveClass('rounded-md', 'border', 'bg-background');
-    expect(screen.getByTestId('panel-group-horizontal')).toHaveClass('gap-2');
+    expect(screen.getByTestId('panel-group-horizontal')).toHaveClass('gap-2.5');
     expect(screen.getAllByTestId('panel-handle').every((handle) => handle.className.includes('bg-transparent'))).toBe(true);
+    expect(screen.getAllByTestId('panel-handle').every((handle) => handle.className.includes('overlay-handle'))).toBe(true);
+  });
+
+  it('collapses fixed minimal handles so they do not double-count the surrounding gap', () => {
+    vi.mocked(window.electronAPI!.config.get).mockImplementation((key: string) =>
+      key === WORKBENCH_CODE_VIEWER_LAYOUT_MODE_CONFIG_KEY ? 'minimal' : null,
+    );
+
+    function FixedWidthMinimalHarness() {
+      const [leftWidth, setLeftWidth] = useState(240);
+
+      return (
+        <CodeViewerLayoutProvider>
+          <CodeWorkspaceShell
+            shellTestId="workspace-shell"
+            activityBar={<div>Activity</div>}
+            showLeftPanel
+            showBottomPanel
+            showRightPanel={false}
+            leftPanelId="left"
+            centerPanelId="center"
+            topPanelId="top"
+            bottomPanelId="bottom"
+            rightPanelId="right"
+            leftFixedWidthPx={leftWidth}
+            onLeftFixedWidthChange={setLeftWidth}
+            leftContent={<div>Explorer</div>}
+            topContent={<div>Editor</div>}
+            bottomContent={<div>Terminal</div>}
+            rightContent={<div>Inspector</div>}
+          />
+        </CodeViewerLayoutProvider>
+      );
+    }
+
+    render(<FixedWidthMinimalHarness />);
+
+    expect(screen.getByTestId('panel-handle-left')).toHaveClass('w-0', '-mx-[5px]', 'overlay-handle');
   });
 
   it('renders a fixed-width left panel and clamps drag updates', () => {

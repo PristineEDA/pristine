@@ -99,6 +99,7 @@ describe('ActivityBar', () => {
   it('adds a pointer cursor on hover for navigation and action buttons', () => {
     renderActivityBar();
 
+    expect(screen.getByTestId('activity-bar')).not.toHaveClass('group-data-[side=left]:border-r');
     expect(screen.getByTestId('activity-item-explorer')).toHaveClass('cursor-pointer');
     expect(screen.getByTestId('activity-item-simulation')).toHaveClass('hover:bg-sidebar-accent');
     expect(screen.getByTestId('activity-action-compile')).toHaveClass('hover:cursor-pointer', 'hover:bg-muted');

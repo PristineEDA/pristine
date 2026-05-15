@@ -492,6 +492,7 @@ function ResizableHandleView({
 }) {
   const { className, withHandle, children, ...props } = handleProps;
   const startPositionRef = React.useRef<number | null>(null);
+  const isOverlayHandle = className?.includes('overlay-handle') ?? false;
 
   const endDrag = React.useCallback((pointerId?: number, target?: EventTarget | null) => {
     startPositionRef.current = null;
@@ -512,8 +513,12 @@ function ResizableHandleView({
       className={cn(
         'relative flex shrink-0 items-center justify-center bg-border focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-1',
         orientation === 'horizontal'
-          ? 'h-full w-px cursor-ew-resize after:absolute after:inset-y-0 after:left-1/2 after:w-1 after:-translate-x-1/2'
-          : 'h-px w-full cursor-ns-resize after:absolute after:left-0 after:top-1/2 after:h-1 after:w-full after:-translate-y-1/2',
+          ? isOverlayHandle
+            ? 'h-full w-0 overflow-visible cursor-ew-resize -mx-[5px] z-10 after:absolute after:inset-y-0 after:left-1/2 after:w-3 after:-translate-x-1/2'
+            : 'h-full w-px cursor-ew-resize after:absolute after:inset-y-0 after:left-1/2 after:w-1 after:-translate-x-1/2'
+          : isOverlayHandle
+            ? 'h-0 w-full overflow-visible cursor-ns-resize -my-[5px] z-10 after:absolute after:left-0 after:top-1/2 after:h-3 after:w-full after:-translate-y-1/2'
+            : 'h-px w-full cursor-ns-resize after:absolute after:left-0 after:top-1/2 after:h-1 after:w-full after:-translate-y-1/2',
         className,
       )}
       onPointerDown={(event) => {

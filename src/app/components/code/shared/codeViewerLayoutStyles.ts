@@ -36,14 +36,14 @@ export function getCodeWorkspacePanelFrameClassName(layoutMode: CodeViewerLayout
 
 export function getCodeWorkspacePanelGroupClassName(layoutMode: CodeViewerLayoutMode, className?: string) {
   return cn(
-    isMinimalCodeViewerLayout(layoutMode) && 'gap-2',
+    isMinimalCodeViewerLayout(layoutMode) && 'gap-2.5',
     className,
   );
 }
 
 export function getCodeWorkspaceResizeHandleClassName(layoutMode: CodeViewerLayoutMode) {
   return cn(
-    isMinimalCodeViewerLayout(layoutMode) && 'rounded-full bg-transparent',
+    isMinimalCodeViewerLayout(layoutMode) && 'rounded-full bg-transparent overlay-handle',
   );
 }
 

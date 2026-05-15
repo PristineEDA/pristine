@@ -168,11 +168,9 @@ describe('StatusBar', () => {
     const savingTrigger = screen.getByTestId('status-bar-saving-summary').closest('[data-slot="hover-card-trigger"]');
 
     expect(branchTrigger).not.toBeNull();
-    expect(branchTrigger).toHaveClass('hover:bg-primary-foreground/30');
-    expect(branchTrigger).toHaveClass('dark:hover:bg-primary-foreground/10');
+    expect(branchTrigger).toHaveClass('hover:bg-sidebar-accent');
     expect(savingTrigger).not.toBeNull();
-    expect(savingTrigger).toHaveClass('hover:bg-primary-foreground/30');
-    expect(savingTrigger).toHaveClass('dark:hover:bg-primary-foreground/10');
+    expect(savingTrigger).toHaveClass('hover:bg-sidebar-accent');
 
     await user.hover(branchTrigger as HTMLElement);
 
