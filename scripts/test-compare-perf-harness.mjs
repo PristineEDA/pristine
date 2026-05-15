@@ -61,12 +61,40 @@ function createSequentialSummaries(scenario) {
         },
         memory: {
           totalPhysicalBytes: 32 * 1024 * 1024 * 1024,
-          workingSetAverageBytes: 900 * 1024 * 1024,
-          workingSetPeakBytes: 980 * 1024 * 1024,
-          workingSetAveragePercentOfSystemMemory: 2.75,
-          workingSetPeakPercentOfSystemMemory: 2.99,
-          privateBytesAverageBytes: 620 * 1024 * 1024,
-          privateBytesPeakBytes: 700 * 1024 * 1024,
+          workingSetAverageBytes: 1550 * 1024 * 1024,
+          workingSetPeakBytes: 1660 * 1024 * 1024,
+          workingSetAveragePercentOfSystemMemory: 4.75,
+          workingSetPeakPercentOfSystemMemory: 5.08,
+          privateBytesAverageBytes: 1100 * 1024 * 1024,
+          privateBytesPeakBytes: 1180 * 1024 * 1024,
+        },
+      }),
+    ]
+  }
+
+  if (scenario === 'packaged-cpu-fail') {
+    return [
+      createSummary({
+        processName: 'dev-cscript',
+        cpu: {
+          systemUtilityAveragePercent: 4.2,
+          processUtilityAveragePercent: 0.4,
+        },
+      }),
+      createSummary({
+        processName: 'packaged-wscript',
+        cpu: {
+          systemUtilityAveragePercent: 4.0,
+          processUtilityAveragePercent: 2.0,
+        },
+        memory: {
+          totalPhysicalBytes: 32 * 1024 * 1024 * 1024,
+          workingSetAverageBytes: 510 * 1024 * 1024,
+          workingSetPeakBytes: 540 * 1024 * 1024,
+          workingSetAveragePercentOfSystemMemory: 1.56,
+          workingSetPeakPercentOfSystemMemory: 1.65,
+          privateBytesAverageBytes: 360 * 1024 * 1024,
+          privateBytesPeakBytes: 380 * 1024 * 1024,
         },
       }),
     ]
@@ -200,7 +228,7 @@ function runCompareScript(args) {
 
 const scenario = process.argv[2]
 
-if (scenario !== 'pass' && scenario !== 'memory-fail') {
+if (scenario !== 'pass' && scenario !== 'memory-fail' && scenario !== 'packaged-cpu-fail') {
   console.error(`Unsupported scenario: ${scenario ?? '<missing>'}`)
   process.exit(2)
 }
@@ -211,8 +239,9 @@ try {
   const result = runCompareScript([
     '-DurationSeconds', '1',
     '-WarmupSeconds', '0',
-    '-ThresholdPercent', '4',
-    '-MemoryThresholdPercent', '1',
+    '-ThresholdPercent', '10',
+    '-MemoryThresholdPercent', '3',
+    '-PackagedCpuUtilityAverageCheckpointPercent', '2',
     // Use cscript here so the harness never matches and kills the host PowerShell terminal.
     '-DevCommand', ('cscript.exe //NoLogo "' + harness.fakePackagedScriptPath.replace(/"/g, '""') + '"'),
     '-DevProcessName', 'cscript',

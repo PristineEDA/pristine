@@ -139,6 +139,7 @@ export function ActivityBar({ activeView, onItemSelect }: ActivityBarProps) {
       collapsible="icon"
       className="top-8 h-[calc(100svh-3.5rem)]"
       data-testid="activity-bar"
+      showSideBorder={false}
       side="left"
     >
       <SidebarHeader>

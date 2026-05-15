@@ -632,6 +632,16 @@ async function switchToWhiteboard(window: Awaited<ReturnType<typeof launchApp>>[
   await expect(window.getByTestId('whiteboard-view')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
 }
 
+async function waitForDeferredMainContentPrewarm(window: Awaited<ReturnType<typeof launchApp>>['window']) {
+  await expect(window.getByTestId('workflow-view')).toHaveAttribute('data-ready', 'true', { timeout: UI_READY_TIMEOUT_MS });
+  await expect(window.getByTestId('whiteboard-view')).toHaveAttribute('data-ready', 'true', { timeout: UI_READY_TIMEOUT_MS });
+}
+
+async function expectNoDeferredMainContentLoading(window: Awaited<ReturnType<typeof launchApp>>['window']) {
+  await expect(window.getByText('Loading view...')).toHaveCount(0);
+  await expect(window.getByText('Loading whiteboard...')).toHaveCount(0);
+}
+
 async function readTerminalText(window: Awaited<ReturnType<typeof launchApp>>['window']) {
   return window.getByTestId('terminal-host').getAttribute('data-terminal-text');
 }
@@ -1001,6 +1011,23 @@ test('app launches and shows main UI', async () => {
 
   const title = await window.title();
   expect(title).toContain('Pristine');
+
+  await waitForMainUi(window);
+  await window.getByTestId('toggle-left-panel').click();
+
+  const mainContentStack = window.getByTestId('main-content-stack');
+  const explorerPanel = window.getByTestId('panel-left-panel');
+  await expect(explorerPanel).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect.poll(async () => {
+    const stackBox = await mainContentStack.boundingBox();
+    const panelBox = await explorerPanel.boundingBox();
+
+    if (!stackBox || !panelBox || stackBox.height <= 0) {
+      return 0;
+    }
+
+    return panelBox.height / stackBox.height;
+  }, { timeout: UI_READY_TIMEOUT_MS }).toBeGreaterThan(0.98);
 
   await app.close();
 });
@@ -1543,6 +1570,34 @@ test('ctrl+s saves an edited explorer file and clears the dirty indicator', asyn
   }
 });
 
+test('workflow and whiteboard switch without a loading state after deferred prewarm completes', async () => {
+  const { app, window } = await launchApp();
+
+  try {
+    await waitForMainUi(window);
+    await waitForDeferredMainContentPrewarm(window);
+    await expect(window.getByTestId('workflow-view')).toHaveAttribute('data-active', 'false');
+    await expect(window.getByTestId('whiteboard-view')).toHaveAttribute('data-active', 'false');
+    await expectNoDeferredMainContentLoading(window);
+
+    await window.getByLabel('Workflow').click();
+    await expect(window.getByTestId('workflow-view')).toBeVisible({ timeout: 1000 });
+    await expect(window.getByTestId('workflow-view')).toHaveAttribute('data-active', 'true');
+    await expectNoDeferredMainContentLoading(window);
+
+    await window.getByTestId('center-view-whiteboard').click();
+    await expect(window.getByTestId('whiteboard-view')).toBeVisible({ timeout: 1000 });
+    await expect(window.getByTestId('whiteboard-view')).toHaveAttribute('data-active', 'true');
+    await expect(window.getByTestId('whiteboard-view')).toHaveAttribute('data-ready', 'true');
+    await expectNoDeferredMainContentLoading(window);
+
+    await window.getByLabel('Code').click();
+    await expect(window.getByTestId('panel-center-panel')).toBeVisible({ timeout: 1000 });
+  } finally {
+    await app.close();
+  }
+});
+
 test('Ctrl+N creates an untitled file, Ctrl+S saves it, and explorer refreshes to show the saved file', async () => {
   test.slow();
 
@@ -1820,42 +1875,57 @@ test('Explorer Copy creates a -copy file and keeps it after relaunch', async () 
 
   const workspaceCopy = test.info().outputPath('explorer-copy-file-workspace');
   createWorkspaceCopy(workspaceCopy);
-  const primaryModifier = process.platform === 'darwin' ? 'Meta' : 'Control';
 
   const copiedRelativePath = 'rtl/core/reg_file-copy.v';
   const copiedAbsolutePath = path.join(workspaceCopy, 'rtl', 'core', 'reg_file-copy.v');
   const copiedTreeTestId = toWorkspaceTreeTestId(copiedRelativePath);
   const sourceTreeTestId = toWorkspaceTreeTestId('rtl/core/reg_file.v');
   const { app, window } = await launchApp({ projectRoot: workspaceCopy });
-  const explorerTree = window.locator('.explorer-tree-scrollbar');
+  const copiedTreeNode = window.getByTestId(copiedTreeTestId);
+  const explorerContextMenu = window.getByTestId('explorer-context-menu');
+  const sourceTreeNode = window.getByTestId(sourceTreeTestId);
 
   try {
     await ensureExplorerVisible(window);
+    await expect(window.getByTestId('file-tree-node-rtl')).toBeVisible();
     await window.getByTestId('file-tree-node-rtl').click();
+    await expect(window.getByTestId('file-tree-node-rtl_core')).toBeVisible();
     await window.getByTestId('file-tree-node-rtl_core').click();
 
-    await window.getByTestId(sourceTreeTestId).click();
-    await explorerTree.focus();
-    await explorerTree.press(`${primaryModifier}+C`);
-    await explorerTree.press(`${primaryModifier}+V`);
+    await sourceTreeNode.click();
+    await expect(sourceTreeNode).toHaveAttribute('data-selected', 'true');
+
+  await sourceTreeNode.click({ button: 'right' });
+  await expect(explorerContextMenu).toBeVisible();
+  await window.getByTestId('explorer-context-menu-item-copy').click();
+
+  await sourceTreeNode.click({ button: 'right' });
+  await expect(explorerContextMenu).toBeVisible();
+  await expect(window.getByTestId('explorer-context-menu-item-paste')).not.toHaveAttribute('data-disabled', '');
+  await window.getByTestId('explorer-context-menu-item-paste').click();
 
     await expect.poll(() => fs.existsSync(copiedAbsolutePath), {
       timeout: 15000,
     }).toBe(true);
-    await expect(window.getByTestId(copiedTreeTestId)).toBeVisible();
+    await expect(copiedTreeNode).toBeVisible({ timeout: 15000 });
+    await expect(copiedTreeNode).toHaveAttribute('data-selected', 'true', { timeout: 15000 });
 
     await app.close();
 
     const relaunched = await launchApp({ projectRoot: workspaceCopy });
 
     try {
-      await ensureExplorerVisible(relaunched.window);
-      await relaunched.window.getByTestId('file-tree-node-rtl').click();
-      await relaunched.window.getByTestId('file-tree-node-rtl_core').click();
-      await expect(relaunched.window.getByTestId(copiedTreeTestId)).toBeVisible();
+      const relaunchedCopiedTreeNode = relaunched.window.getByTestId(copiedTreeTestId);
 
-      await relaunched.window.getByTestId(copiedTreeTestId).dblclick();
-      await expect(relaunched.window.getByTestId(`editor-tab-${copiedRelativePath}`)).toBeVisible();
+      await ensureExplorerVisible(relaunched.window);
+      await expect(relaunched.window.getByTestId('file-tree-node-rtl')).toBeVisible();
+      await relaunched.window.getByTestId('file-tree-node-rtl').click();
+      await expect(relaunched.window.getByTestId('file-tree-node-rtl_core')).toBeVisible();
+      await relaunched.window.getByTestId('file-tree-node-rtl_core').click();
+      await expect(relaunchedCopiedTreeNode).toBeVisible({ timeout: 15000 });
+
+      await relaunchedCopiedTreeNode.dblclick();
+      await expect(relaunched.window.getByTestId(`editor-tab-${copiedRelativePath}`)).toBeVisible({ timeout: 15000 });
     } finally {
       await relaunched.app.close();
     }
@@ -2328,10 +2398,19 @@ test('menu bar switches to the BlockSuite whiteboard editor', async () => {
   const whiteboardView = window.getByTestId('whiteboard-view');
   const whiteboardHost = window.getByTestId('whiteboard-host');
   const whiteboardEditor = window.getByTestId('whiteboard-edgeless-editor');
+  const switchWorkbenchTheme = async (optionTestId: string) => {
+    await window.getByTestId('menu-settings-button').click();
+    await expect(window.getByTestId('settings-dialog')).toBeVisible();
+    await selectComboboxOption(window, 'settings-theme-combobox', optionTestId);
+    await window.getByTestId('settings-close-button').click();
+    await expect(window.getByTestId('settings-dialog')).toHaveCount(0);
+  };
+
   await expect(whiteboardView).toBeVisible();
   await expect(whiteboardView).toContainText('Whiteboard');
-  await expect(whiteboardView).toHaveAttribute('data-theme', 'light');
   await expect(whiteboardEditor).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await switchWorkbenchTheme('settings-theme-option-vscode-2026-light');
+  await expect(whiteboardView).toHaveAttribute('data-theme', 'light');
   await expect(whiteboardEditor).toHaveAttribute('data-theme', 'light');
   await expect(whiteboardEditor).toHaveCSS('background-color', 'rgb(255, 255, 255)');
   await expect(whiteboardView.locator('edgeless-editor')).toHaveCount(1);
@@ -2339,19 +2418,18 @@ test('menu bar switches to the BlockSuite whiteboard editor', async () => {
   await expect(whiteboardView.locator('editor-host')).toHaveCount(1, { timeout: UI_READY_TIMEOUT_MS });
   await expect(whiteboardView.locator('affine-edgeless-root')).toHaveCount(1, { timeout: UI_READY_TIMEOUT_MS });
   const toolbarWrapper = whiteboardView.locator('edgeless-toolbar-widget .edgeless-toolbar-wrapper');
+  const readToolbarOverlayPanelColor = () =>
+    toolbarWrapper.evaluate((element) => {
+      const browserGlobal = globalThis as unknown as {
+        getComputedStyle: (element: unknown) => { getPropertyValue: (name: string) => string };
+      };
+      return browserGlobal.getComputedStyle(element).getPropertyValue('--affine-background-overlay-panel-color').trim();
+    });
   await expect(toolbarWrapper).toHaveAttribute('data-app-theme', 'light', { timeout: UI_READY_TIMEOUT_MS });
   await expect
-    .poll(
-      () =>
-        toolbarWrapper.evaluate((element) => {
-          const browserGlobal = globalThis as unknown as {
-            getComputedStyle: (element: unknown) => { getPropertyValue: (name: string) => string };
-          };
-          return browserGlobal.getComputedStyle(element).getPropertyValue('--affine-background-overlay-panel-color').trim();
-        }),
-      { timeout: UI_READY_TIMEOUT_MS },
-    )
+    .poll(readToolbarOverlayPanelColor, { timeout: UI_READY_TIMEOUT_MS })
     .toBe('rgb(251, 251, 252)');
+  const lightToolbarOverlayPanelColor = await readToolbarOverlayPanelColor();
   await expect
     .poll(
       () => whiteboardHost.evaluate((host) => Boolean((host as HTMLElement & { shadowRoot?: unknown }).shadowRoot)),
@@ -2368,6 +2446,29 @@ test('menu bar switches to the BlockSuite whiteboard editor', async () => {
       { timeout: UI_READY_TIMEOUT_MS },
     )
     .toBe(true);
+
+  await switchWorkbenchTheme('settings-theme-option-vscode-2026-dark');
+
+  await expect(whiteboardView).toHaveAttribute('data-theme', 'dark', { timeout: UI_READY_TIMEOUT_MS });
+  await expect(whiteboardEditor).toHaveAttribute('data-theme', 'dark', { timeout: UI_READY_TIMEOUT_MS });
+  await expect(whiteboardEditor).toHaveCSS('color-scheme', 'dark');
+  await expect(whiteboardView.locator('edgeless-editor')).toHaveCount(1);
+  await expect(whiteboardView.locator('.affine-edgeless-viewport')).toHaveAttribute('data-theme', 'dark', {
+    timeout: UI_READY_TIMEOUT_MS,
+  });
+  await expect(toolbarWrapper).toHaveAttribute('data-app-theme', 'dark', { timeout: UI_READY_TIMEOUT_MS });
+  await expect
+    .poll(readToolbarOverlayPanelColor, { timeout: UI_READY_TIMEOUT_MS })
+    .not.toBe(lightToolbarOverlayPanelColor);
+
+  await switchWorkbenchTheme('settings-theme-option-vscode-2026-light');
+
+  await expect(whiteboardView).toHaveAttribute('data-theme', 'light', { timeout: UI_READY_TIMEOUT_MS });
+  await expect(whiteboardEditor).toHaveAttribute('data-theme', 'light', { timeout: UI_READY_TIMEOUT_MS });
+  await expect(whiteboardView.locator('.affine-edgeless-viewport')).toHaveAttribute('data-theme', 'light', {
+    timeout: UI_READY_TIMEOUT_MS,
+  });
+  await expect(toolbarWrapper).toHaveAttribute('data-app-theme', 'light', { timeout: UI_READY_TIMEOUT_MS });
 
   const noteEditor = whiteboardView.locator('.inline-editor[contenteditable="true"]').first();
   await noteEditor.click({ force: true });
@@ -3940,6 +4041,59 @@ test('settings UI theme selection persists across app relaunch', async () => {
   await secondApp.close();
 });
 
+test('code viewer layout setting persists across app relaunch', async () => {
+  test.slow();
+
+  const firstLaunch = await launchApp();
+  const { app: firstApp, window: firstWindow } = firstLaunch;
+
+  await ensureExplorerVisible(firstWindow);
+  await expect(firstWindow.getByTestId('code-view-explorer')).toHaveAttribute('data-code-viewer-layout-mode', 'compact');
+
+  await firstWindow.getByTestId('menu-settings-button').click();
+  await expect(firstWindow.getByTestId('settings-dialog')).toBeVisible();
+  await expect(firstWindow.getByTestId('settings-code-viewer-layout-combobox')).toContainText('Compact');
+
+  await selectComboboxOption(
+    firstWindow,
+    'settings-code-viewer-layout-combobox',
+    'settings-code-viewer-layout-option-minimal',
+  );
+
+  await expect.poll(async () => readConfigValue(firstWindow, 'workbench.codeViewerLayoutMode')).toBe('minimal');
+  await expect(firstWindow.getByTestId('settings-code-viewer-layout-combobox')).toContainText('Minimal');
+  await expect(firstWindow.getByTestId('code-view-explorer')).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
+
+  await firstWindow.getByTestId('settings-close-button').click();
+  await expect(firstWindow.getByTestId('settings-dialog')).toHaveCount(0);
+
+  await firstApp.close();
+
+  const secondLaunch = await launchApp();
+  const { app: secondApp, window: secondWindow } = secondLaunch;
+
+  await ensureExplorerVisible(secondWindow);
+  await expect(secondWindow.getByTestId('code-view-explorer')).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
+  await expect.poll(async () => readConfigValue(secondWindow, 'workbench.codeViewerLayoutMode')).toBe('minimal');
+
+  await secondWindow.getByTestId('menu-settings-button').click();
+  await expect(secondWindow.getByTestId('settings-dialog')).toBeVisible();
+  await expect(secondWindow.getByTestId('settings-code-viewer-layout-combobox')).toContainText('Minimal');
+
+  await selectComboboxOption(
+    secondWindow,
+    'settings-code-viewer-layout-combobox',
+    'settings-code-viewer-layout-option-compact',
+  );
+  await expect.poll(async () => readConfigValue(secondWindow, 'workbench.codeViewerLayoutMode')).toBe('compact');
+  await expect(secondWindow.getByTestId('code-view-explorer')).toHaveAttribute('data-code-viewer-layout-mode', 'compact');
+
+  await secondWindow.getByTestId('settings-close-button').click();
+  await expect(secondWindow.getByTestId('settings-dialog')).toHaveCount(0);
+
+  await secondApp.close();
+});
+
 async function readBundledThemeSnapshot(page: Awaited<ReturnType<typeof launchApp>>['window']) {
   return {
     ...(await page.evaluate(() => {
@@ -4803,6 +4957,154 @@ test('editor font combobox supports wheel scrolling and UI theme combobox reopen
   await app.close()
 })
 
+test('settings comboboxes show hover previews for theme and font options', async () => {
+  const { app, window } = await launchApp()
+
+  await window.getByTestId('menu-settings-button').click()
+  await expect(window.getByTestId('settings-dialog')).toBeVisible()
+
+  const themeCombobox = window.getByTestId('settings-theme-combobox')
+
+  await themeCombobox.click()
+
+  const themePopoverSurface = window.getByTestId('settings-theme-combobox-popover-surface')
+  const themePreviewPane = window.getByTestId('settings-theme-combobox-preview-pane')
+
+  await expect(themePopoverSurface).toBeVisible()
+  await expect(themePreviewPane).toHaveAttribute('data-state', 'hidden')
+
+  await expect
+    .poll(async () => {
+      const [comboboxBox, popoverBox] = await Promise.all([
+        themeCombobox.boundingBox(),
+        themePopoverSurface.boundingBox(),
+      ])
+
+      if (!comboboxBox || !popoverBox) {
+        return false
+      }
+
+      return Math.abs(Math.round(popoverBox.width) - Math.round(comboboxBox.width)) <= 1
+    })
+    .toBe(true)
+
+  const themeOption = window.getByTestId('settings-theme-option-vscode-2026-light')
+
+  await themeOption.hover()
+
+  await expect(themePreviewPane).toHaveAttribute('data-state', 'visible')
+  await expect(themePreviewPane).toHaveAttribute('data-side', 'right')
+  await expect(window.getByTestId('settings-theme-combobox-preview-card-vscode-2026-light')).toBeVisible()
+  await expect(window.getByTestId('settings-theme-combobox-preview-line-module-vscode-2026-light')).toContainText('module alu(clk)')
+  await expect
+    .poll(async () => {
+      const [themeOptionBox, themePreviewBox] = await Promise.all([
+        themeOption.boundingBox(),
+        themePreviewPane.boundingBox(),
+      ])
+
+      if (!themeOptionBox || !themePreviewBox) {
+        return false
+      }
+
+      return themePreviewBox.x >= themeOptionBox.x + themeOptionBox.width
+        && themePreviewBox.y <= themeOptionBox.y + themeOptionBox.height
+        && themePreviewBox.y + themePreviewBox.height >= themeOptionBox.y
+    })
+    .toBe(true)
+
+  await window.mouse.move(1, 1)
+  await expect(themePreviewPane).toHaveAttribute('data-state', 'hidden')
+  await window.keyboard.press('Escape')
+
+  const fontCombobox = window.getByTestId('settings-editor-font-family-combobox')
+
+  await fontCombobox.click()
+
+  const fontPopoverSurface = window.getByTestId('settings-editor-font-family-combobox-popover-surface')
+  const fontPreviewPane = window.getByTestId('settings-editor-font-family-combobox-preview-pane')
+
+  await expect(fontPopoverSurface).toBeVisible()
+  await expect(fontPreviewPane).toHaveAttribute('data-state', 'hidden')
+
+  await expect
+    .poll(async () => {
+      const [comboboxBox, popoverBox] = await Promise.all([
+        fontCombobox.boundingBox(),
+        fontPopoverSurface.boundingBox(),
+      ])
+
+      if (!comboboxBox || !popoverBox) {
+        return false
+      }
+
+      return Math.abs(Math.round(popoverBox.width) - Math.round(comboboxBox.width)) <= 1
+    })
+    .toBe(true)
+
+  const fontOption = window.getByTestId('settings-editor-font-family-option-victor-mono')
+
+  await fontOption.hover()
+
+  await expect(fontPreviewPane).toHaveAttribute('data-state', 'visible')
+  await expect(fontPreviewPane).toHaveAttribute('data-side', 'right')
+  await expect(window.getByTestId('settings-editor-font-family-combobox-preview-card-victor-mono')).toBeVisible()
+  await expect(window.getByTestId('settings-editor-font-family-combobox-preview-author-victor-mono')).toContainText('Rubjo Vampjoen')
+  await expect
+    .poll(async () => {
+      const [fontOptionBox, fontPreviewBox] = await Promise.all([
+        fontOption.boundingBox(),
+        fontPreviewPane.boundingBox(),
+      ])
+
+      if (!fontOptionBox || !fontPreviewBox) {
+        return false
+      }
+
+      return fontPreviewBox.x >= fontOptionBox.x + fontOptionBox.width
+        && fontPreviewBox.y <= fontOptionBox.y + fontOptionBox.height
+        && fontPreviewBox.y + fontPreviewBox.height >= fontOptionBox.y
+    })
+    .toBe(true)
+
+  await window.mouse.move(1, 1)
+  await expect(fontPreviewPane).toHaveAttribute('data-state', 'hidden')
+  await window.keyboard.press('Escape')
+
+  await app.close()
+})
+
+test('settings UI theme combobox keeps a stable width when selecting a long theme name', async () => {
+  const { app, window } = await launchApp()
+
+  await window.getByTestId('menu-settings-button').click()
+  await expect(window.getByTestId('settings-dialog')).toBeVisible()
+
+  const themeCombobox = window.getByTestId('settings-theme-combobox')
+  const initialBox = await themeCombobox.boundingBox()
+
+  if (!initialBox) {
+    throw new Error('Expected settings theme combobox to have a bounding box before selection')
+  }
+
+  await selectComboboxOption(
+    window,
+    'settings-theme-combobox',
+    'settings-theme-option-macos-modern-light-ventura-xcode-low-key',
+  )
+
+  await expect(themeCombobox).toContainText('MacOS Modern Light - Ventura Xcode Low Key')
+  await expect
+    .poll(async () => {
+      const box = await themeCombobox.boundingBox()
+
+      return box ? Math.round(box.width) : null
+    })
+    .toBe(Math.round(initialBox.width))
+
+  await app.close()
+})
+
 test('advanced editor font picker closes after selecting a preview card and syncs the font setting', async () => {
   const { app, window } = await launchApp()
 
@@ -4852,6 +5154,52 @@ test('advanced UI theme picker closes after selecting a preview card and syncs t
   await expect.poll(async () => readConfigValue(window, 'workbench.colorTheme')).toBe('vscode-2026-light')
 
   await app.close()
+})
+
+test('advanced UI theme picker layout toggle persists across app relaunch', async () => {
+  const firstLaunch = await launchApp()
+  const { app: firstApp, window: firstWindow } = firstLaunch
+
+  await firstWindow.getByTestId('menu-settings-button').click()
+  await expect(firstWindow.getByTestId('settings-dialog')).toBeVisible()
+
+  await firstWindow.getByTestId('settings-theme-advanced-button').click()
+  await expect(firstWindow.getByTestId('settings-theme-advanced-dialog')).toBeVisible()
+  await expect(firstWindow.getByTestId('settings-theme-advanced-layout-list-button')).toHaveAttribute('aria-label', 'List layout')
+  await expect(firstWindow.getByTestId('settings-theme-advanced-layout-grouped-button')).toHaveAttribute('aria-label', 'Grouped layout')
+  await expect(firstWindow.getByTestId('settings-theme-advanced-layout-list-button')).toHaveAttribute('data-state', 'on')
+  await expect(firstWindow.locator('[data-testid="settings-theme-advanced-dark-section"]')).toHaveCount(0)
+  await expect(firstWindow.locator('[data-testid="settings-theme-advanced-light-section"]')).toHaveCount(0)
+
+  await firstWindow.getByTestId('settings-theme-advanced-layout-grouped-button').click()
+
+  await expect(firstWindow.getByTestId('settings-theme-advanced-layout-grouped-button')).toHaveAttribute('data-state', 'on')
+  await expect(firstWindow.getByTestId('settings-theme-advanced-dark-section')).toBeVisible()
+  await expect(firstWindow.getByTestId('settings-theme-advanced-light-section')).toBeVisible()
+  await expect.poll(async () => readConfigValue(firstWindow, 'workbench.themePickerLayoutMode')).toBe('grouped')
+
+  await firstApp.close()
+
+  const secondLaunch = await launchApp()
+  const { app: secondApp, window: secondWindow } = secondLaunch
+
+  await secondWindow.getByTestId('menu-settings-button').click()
+  await expect(secondWindow.getByTestId('settings-dialog')).toBeVisible()
+
+  await secondWindow.getByTestId('settings-theme-advanced-button').click()
+  await expect(secondWindow.getByTestId('settings-theme-advanced-dialog')).toBeVisible()
+  await expect(secondWindow.getByTestId('settings-theme-advanced-layout-grouped-button')).toHaveAttribute('data-state', 'on')
+  await expect(secondWindow.getByTestId('settings-theme-advanced-dark-section')).toBeVisible()
+  await expect(secondWindow.getByTestId('settings-theme-advanced-light-section')).toBeVisible()
+
+  await secondWindow.getByTestId('settings-theme-advanced-layout-list-button').click()
+
+  await expect(secondWindow.getByTestId('settings-theme-advanced-layout-list-button')).toHaveAttribute('data-state', 'on')
+  await expect(secondWindow.locator('[data-testid="settings-theme-advanced-dark-section"]')).toHaveCount(0)
+  await expect(secondWindow.locator('[data-testid="settings-theme-advanced-light-section"]')).toHaveCount(0)
+  await expect.poll(async () => readConfigValue(secondWindow, 'workbench.themePickerLayoutMode')).toBe('list')
+
+  await secondApp.close()
 })
 
 test('newly downloaded Monaco font options can be selected and persist to config', async () => {

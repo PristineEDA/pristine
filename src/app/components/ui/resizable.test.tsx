@@ -92,6 +92,38 @@ describe('resizable', () => {
     expect(document.body.style.cursor).toBe('');
   });
 
+  it('supports overlay handles that keep drag semantics without consuming horizontal layout width', () => {
+    render(
+      <div className="h-[400px] w-[1000px]">
+        <ResizablePanelGroup orientation="horizontal">
+          <ResizablePanel id="left" defaultSize={20} minSize={10}>
+            <div>Left</div>
+          </ResizablePanel>
+          <ResizableHandle data-testid="horizontal-overlay-handle" className="overlay-handle bg-transparent" />
+          <ResizablePanel id="right" defaultSize={80} minSize={20}>
+            <div>Right</div>
+          </ResizablePanel>
+        </ResizablePanelGroup>
+      </div>
+    );
+
+    const group = screen.getByText('Left').closest('[data-slot="resizable-panel-group"]') as HTMLElement;
+    mockGroupRect(group, 1000, 400);
+
+    const leftPanel = screen.getByTestId('panel-left');
+    const rightPanel = screen.getByTestId('panel-right');
+    const handle = screen.getByTestId('horizontal-overlay-handle');
+
+    expect(handle).toHaveClass('w-0', '-mx-[5px]', 'bg-transparent');
+
+    fireEvent.pointerDown(handle, { clientX: 200, clientY: 0, pointerId: 11 });
+    fireEvent.pointerMove(handle, { clientX: 300, clientY: 0, pointerId: 11 });
+    fireEvent.pointerUp(handle, { clientX: 300, clientY: 0, pointerId: 11 });
+
+    expect(leftPanel.style.flexBasis).toBe('30%');
+    expect(rightPanel.style.flexBasis).toBe('70%');
+  });
+
   it('resizes adjacent vertical panels when the handle is dragged and uses ns-resize cursor semantics', () => {
     renderVerticalGroup();
 
@@ -114,6 +146,43 @@ describe('resizable', () => {
     expect(topPanel.style.flexBasis).toBe('40%');
     expect(bottomPanel.style.flexBasis).toBe('60%');
     expect(document.body.style.cursor).toBe('');
+  });
+
+  it('reserves layout gap space without letting vertical panel bases overflow', () => {
+    render(
+      <div className="h-[400px] w-[1000px]">
+        <ResizablePanelGroup orientation="vertical" layoutGapPx={10}>
+          <ResizablePanel id="top" defaultSize={60} minSize={10}>
+            <div>Top</div>
+          </ResizablePanel>
+          <ResizableHandle data-testid="vertical-gap-handle" className="overlay-handle bg-transparent" />
+          <ResizablePanel id="bottom" defaultSize={40} minSize={10}>
+            <div>Bottom</div>
+          </ResizablePanel>
+        </ResizablePanelGroup>
+      </div>,
+    );
+
+    const group = screen.getByText('Top').closest('[data-slot="resizable-panel-group"]') as HTMLElement;
+    mockGroupRect(group, 1000, 400);
+
+    const topPanel = screen.getByTestId('panel-top');
+    const bottomPanel = screen.getByTestId('panel-bottom');
+    const handle = screen.getByTestId('vertical-gap-handle');
+
+    expect(topPanel.style.flexBasis).toBe('calc(60% - 6px)');
+    expect(bottomPanel.style.flexBasis).toBe('calc(40% - 4px)');
+    expect(handle.style.flexBasis).toBe('10px');
+    expect(handle.style.height).toBe('10px');
+    expect(handle).not.toHaveClass('h-0');
+    expect(handle).not.toHaveClass('-my-[5px]');
+
+    fireEvent.pointerDown(handle, { clientX: 0, clientY: 240, pointerId: 12 });
+    fireEvent.pointerMove(handle, { clientX: 0, clientY: 279, pointerId: 12 });
+    fireEvent.pointerUp(handle, { clientX: 0, clientY: 279, pointerId: 12 });
+
+    expect(topPanel.style.flexBasis).toBe('calc(70% - 7px)');
+    expect(bottomPanel.style.flexBasis).toBe('calc(30% - 3px)');
   });
 
   it('respects collapsed panels and keeps only visible panels in the layout flow', () => {

@@ -1,5 +1,5 @@
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
@@ -7,6 +7,26 @@ import { EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX } from './components/code/shared/
 import { resetWorkspaceGitStatusStoreForTests } from './git/workspaceGitStatus';
 
 let renderRealActivityBar = false;
+
+const mainContentViewPreloadMock = vi.hoisted(() => {
+  const state = {
+    cleanup: vi.fn(),
+    preload: vi.fn((options: { requestWhiteboardMount?: () => void; requestWorkflowMount?: () => void } = {}) => {
+      state.requestWorkflowMount = options.requestWorkflowMount;
+      state.requestWhiteboardMount = options.requestWhiteboardMount;
+
+      return state.cleanup;
+    }),
+    requestWhiteboardMount: undefined as undefined | (() => void),
+    requestWorkflowMount: undefined as undefined | (() => void),
+  };
+
+  return state;
+});
+
+vi.mock('./mainContentViewPreload', () => ({
+  preloadDeferredMainContentViews: mainContentViewPreloadMock.preload,
+}));
 
 vi.mock('./components/ui/resizable', () => ({
   PANEL_TRANSITION_DURATION_MS: 300,
@@ -86,14 +106,14 @@ vi.mock('./components/code/shared/ActivityBar', async () => {
 });
 
 vi.mock('./components/workflow/WorkflowView', () => ({
-  WorkflowView: ({ title = 'Workflow', testId = 'workflow-view' }: { title?: string; testId?: string }) => (
-    <div data-testid={testId}>{title}</div>
+  WorkflowView: ({ isActive = true, title = 'Workflow', testId = 'workflow-view' }: { isActive?: boolean; title?: string; testId?: string }) => (
+    <div data-testid={testId} data-active={isActive ? 'true' : 'false'} data-ready="true">{title}</div>
   ),
 }));
 
 vi.mock('./components/whiteboard/WhiteboardView', () => ({
-  WhiteboardView: () => (
-    <div data-testid="whiteboard-view">
+  WhiteboardView: ({ isActive = true }: { isActive?: boolean }) => (
+    <div data-testid="whiteboard-view" data-active={isActive ? 'true' : 'false'} data-ready="true">
       <div data-testid="whiteboard-edgeless-editor">Whiteboard editor</div>
     </div>
   ),
@@ -202,12 +222,24 @@ async function waitForPanelWidth(testId: string, width: string) {
   });
 }
 
+function triggerDeferredWorkflowMount() {
+  mainContentViewPreloadMock.requestWorkflowMount?.();
+}
+
+function triggerDeferredWhiteboardMount() {
+  mainContentViewPreloadMock.requestWhiteboardMount?.();
+}
+
 describe('App', () => {
   beforeEach(() => {
     testUser = userEvent.setup();
     renderRealActivityBar = false;
     resetWorkspaceGitStatusStoreForTests();
     vi.clearAllMocks();
+    mainContentViewPreloadMock.requestWorkflowMount = undefined;
+    mainContentViewPreloadMock.requestWhiteboardMount = undefined;
+    mainContentViewPreloadMock.preload.mockClear();
+    mainContentViewPreloadMock.cleanup.mockClear();
   });
 
   it('opens the left panel at 240px and remembers dragged width across code view switches', async () => {
@@ -244,6 +276,7 @@ describe('App', () => {
     expect(screen.getByTestId('menu-bottom-state')).toHaveTextContent('false');
     expect(screen.getByTestId('menu-right-state')).toHaveTextContent('false');
     expect(screen.getByTestId('main-content-view')).toHaveTextContent('code');
+    expect(screen.getByTestId('main-content-stack')).toHaveClass('relative', 'flex', 'flex-1', 'min-h-0', 'flex-col', 'overflow-hidden');
     expect(screen.getByTestId('menu-layout-enabled')).toHaveTextContent('true');
     expect(screen.getByTestId('activity-view')).toHaveTextContent('explorer');
     expect(screen.getByTestId('activity-bar')).toBeInTheDocument();
@@ -348,6 +381,72 @@ describe('App', () => {
     expect(screen.getByTestId('status-bar-code-view')).toHaveTextContent('synthesis');
     expect(await screen.findByTestId('code-view-synthesis')).toHaveTextContent('Synthesis');
     expect(screen.getByTestId('code-view-synthesis')).toHaveTextContent('Coming soon');
+  });
+
+  it('mounts deferred workflow and whiteboard views into hidden layers when prewarm requests fire', async () => {
+    render(<App />);
+
+    await waitFor(() => {
+      expect(mainContentViewPreloadMock.preload).toHaveBeenCalledTimes(1);
+    });
+    expect(screen.queryByTestId('main-content-workflow-layer')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('main-content-whiteboard-layer')).not.toBeInTheDocument();
+
+    act(() => {
+      triggerDeferredWorkflowMount();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('main-content-workflow-layer')).toHaveAttribute('data-mounted', 'true');
+    });
+    expect(screen.getByTestId('main-content-workflow-layer')).toHaveAttribute('data-active', 'false');
+    expect(screen.getByTestId('main-content-workflow-layer')).toHaveAttribute('aria-hidden', 'true');
+    expect(screen.getByTestId('workflow-view')).toHaveAttribute('data-active', 'false');
+    expect(screen.getByTestId('workflow-view')).toHaveAttribute('data-ready', 'true');
+
+    act(() => {
+      triggerDeferredWhiteboardMount();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('main-content-whiteboard-layer')).toHaveAttribute('data-mounted', 'true');
+    });
+    expect(screen.getByTestId('main-content-whiteboard-layer')).toHaveAttribute('data-active', 'false');
+    expect(screen.getByTestId('main-content-whiteboard-layer')).toHaveAttribute('aria-hidden', 'true');
+    expect(screen.getByTestId('whiteboard-view')).toHaveAttribute('data-active', 'false');
+    expect(screen.getByTestId('whiteboard-view')).toHaveAttribute('data-ready', 'true');
+  });
+
+  it('switches to pre-mounted workflow and whiteboard views without showing the suspense fallback', async () => {
+    render(<App />);
+
+    await waitFor(() => {
+      expect(mainContentViewPreloadMock.preload).toHaveBeenCalledTimes(1);
+    });
+
+    act(() => {
+      triggerDeferredWorkflowMount();
+      triggerDeferredWhiteboardMount();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('workflow-view')).toHaveAttribute('data-ready', 'true');
+    });
+    expect(screen.getByTestId('whiteboard-view')).toHaveAttribute('data-ready', 'true');
+    expect(screen.queryByText('Loading view...')).not.toBeInTheDocument();
+
+    await clickText('switch-workflow');
+    expect(screen.getByTestId('main-content-view')).toHaveTextContent('workflow');
+    expect(screen.getByTestId('main-content-workflow-layer')).toHaveAttribute('data-active', 'true');
+    expect(screen.getByTestId('workflow-view')).toHaveAttribute('data-active', 'true');
+    expect(screen.queryByText('Loading view...')).not.toBeInTheDocument();
+
+    await clickText('switch-whiteboard');
+    expect(screen.getByTestId('main-content-view')).toHaveTextContent('whiteboard');
+    expect(screen.getByTestId('main-content-whiteboard-layer')).toHaveAttribute('data-active', 'true');
+    expect(screen.getByTestId('whiteboard-view')).toHaveAttribute('data-active', 'true');
+    expect(screen.getByTestId('whiteboard-view')).toHaveAttribute('data-ready', 'true');
+    expect(screen.queryByText('Loading view...')).not.toBeInTheDocument();
   });
 
   it('keeps the activity bar collapse state when switching away from and back to code', async () => {

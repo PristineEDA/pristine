@@ -15,24 +15,26 @@ import { workflowEdges, workflowMetadata, workflowNodes } from './workflowMockDa
 import { workflowNodeTypes } from './workflowNodes';
 
 interface WorkflowViewProps {
+  isActive?: boolean;
   title?: string;
   description?: string;
   testId?: string;
 }
 
 export function WorkflowView({
+  isActive = true,
   title = 'Workflow',
   description = 'Mock Mastra workflow graph',
   testId = 'workflow-view',
 }: WorkflowViewProps) {
   return (
     <ReactFlowProvider>
-      <WorkflowCanvas title={title} description={description} testId={testId} />
+      <WorkflowCanvas isActive={isActive} title={title} description={description} testId={testId} />
     </ReactFlowProvider>
   );
 }
 
-function WorkflowCanvas({ title, description, testId }: Required<WorkflowViewProps>) {
+function WorkflowCanvas({ isActive, title, description, testId }: Required<WorkflowViewProps>) {
   const [showDataFlowAnimation, setShowDataFlowAnimation] = useState(false);
   const [nodes, , onNodesChange] = useNodesState(workflowNodes);
   const [baseEdges, , onEdgesChange] = useEdgesState(workflowEdges);
@@ -46,7 +48,7 @@ function WorkflowCanvas({ title, description, testId }: Required<WorkflowViewPro
   const proOptions = useMemo(() => ({ hideAttribution: true }), []);
 
   return (
-    <div data-testid={testId} className="h-full min-h-0 w-full overflow-hidden bg-background">
+    <div data-testid={testId} data-active={isActive ? 'true' : 'false'} data-ready="true" className="h-full min-h-0 w-full overflow-hidden bg-background">
       <ReactFlow
         nodes={nodes}
         edges={edges}

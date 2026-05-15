@@ -1,8 +1,13 @@
 import '@toeverything/theme/style.css';
 import { AlertCircle, RefreshCw } from 'lucide-react';
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useTheme } from '../../context/ThemeContext';
 import { Button } from '../ui/button';
-import { mountBlockSuiteWhiteboard } from '../../whiteboard/blocksuiteAdapter';
+import {
+  mountBlockSuiteWhiteboard,
+  type BlockSuiteWhiteboardTheme,
+  type MountedBlockSuiteWhiteboard,
+} from '../../whiteboard/blocksuiteAdapter';
 import { createWhiteboardStore } from '../../whiteboard/createWhiteboardStore';
 
 function getErrorMessage(error: unknown) {
@@ -13,19 +18,29 @@ function getErrorMessage(error: unknown) {
   return String(error);
 }
 
-const whiteboardThemeStyle = {
-  colorScheme: 'light',
-  backgroundColor: 'var(--affine-background-primary-color, #ffffff)',
-  color: 'var(--affine-text-primary-color, #121212)',
-} as CSSProperties;
+function getWhiteboardThemeStyle(themeKind: BlockSuiteWhiteboardTheme): CSSProperties {
+  return {
+    colorScheme: themeKind,
+    backgroundColor: themeKind === 'dark'
+      ? 'var(--affine-background-primary-color, #1e1e1e)'
+      : 'var(--affine-background-primary-color, #ffffff)',
+    color: themeKind === 'dark'
+      ? 'var(--affine-text-primary-color, #f5f5f5)'
+      : 'var(--affine-text-primary-color, #121212)',
+  };
+}
 
 interface WhiteboardViewProps {
   isActive?: boolean;
 }
 
 export function WhiteboardView({ isActive = true }: WhiteboardViewProps) {
+  const { theme } = useTheme();
+  const whiteboardThemeKind: BlockSuiteWhiteboardTheme = theme === 'dark' ? 'dark' : 'light';
   const hostRef = useRef<HTMLDivElement | null>(null);
   const activateWhiteboardRef = useRef<(() => void) | null>(null);
+  const mountedWhiteboardRef = useRef<MountedBlockSuiteWhiteboard | null>(null);
+  const mountedThemeKindRef = useRef<BlockSuiteWhiteboardTheme | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isReady, setIsReady] = useState(false);
   const [mountVersion, setMountVersion] = useState(0);
@@ -50,6 +65,7 @@ export function WhiteboardView({ isActive = true }: WhiteboardViewProps) {
       const mountedWhiteboard = mountBlockSuiteWhiteboard({
         host,
         store: whiteboardStore.store,
+        themeKind: whiteboardThemeKind,
         workspace: whiteboardStore.workspace,
       });
 
@@ -57,6 +73,8 @@ export function WhiteboardView({ isActive = true }: WhiteboardViewProps) {
         mountedWhiteboard.dispose();
         whiteboardStore.dispose();
       };
+      mountedWhiteboardRef.current = mountedWhiteboard;
+      mountedThemeKindRef.current = whiteboardThemeKind;
       activateWhiteboardRef.current = mountedWhiteboard.activate;
 
       if (!disposed) {
@@ -74,9 +92,22 @@ export function WhiteboardView({ isActive = true }: WhiteboardViewProps) {
     return () => {
       disposed = true;
       activateWhiteboardRef.current = null;
+      mountedWhiteboardRef.current = null;
+      mountedThemeKindRef.current = null;
       cleanup?.();
     };
   }, [mountVersion]);
+
+  useEffect(() => {
+    const mountedWhiteboard = mountedWhiteboardRef.current;
+
+    if (!mountedWhiteboard || mountedThemeKindRef.current === whiteboardThemeKind) {
+      return;
+    }
+
+    mountedWhiteboard.updateTheme(whiteboardThemeKind);
+    mountedThemeKindRef.current = whiteboardThemeKind;
+  }, [whiteboardThemeKind]);
 
   useEffect(() => {
     if (!isActive || !isReady || errorMessage) {
@@ -95,9 +126,11 @@ export function WhiteboardView({ isActive = true }: WhiteboardViewProps) {
   return (
     <section
       data-testid="whiteboard-view"
-      data-theme="light"
+      data-active={isActive ? 'true' : 'false'}
+      data-ready={isReady ? 'true' : 'false'}
+      data-theme={whiteboardThemeKind}
       className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-background text-foreground"
-      style={whiteboardThemeStyle}
+      style={getWhiteboardThemeStyle(whiteboardThemeKind)}
     >
       <div className="flex h-10 shrink-0 items-center justify-between border-b border-border px-3">
         <div className="min-w-0 truncate text-sm font-medium">Whiteboard</div>

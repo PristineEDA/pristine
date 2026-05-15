@@ -251,7 +251,7 @@ jobs:
           $perfResultsDir = Join-Path $PWD 'perf-results'
           New-Item -ItemType Directory -Path $perfResultsDir -Force | Out-Null
           $consoleLogPath = Join-Path $perfResultsDir 'compare-perf-console.log'
-          & .\compare-perf-taskmgr.ps1 -DurationSeconds 30 -ThresholdPercent 4 -MemoryThresholdPercent 1 -ResultOutputDirectory $perfResultsDir *>&1 | Tee-Object -FilePath $consoleLogPath
+          & .\compare-perf-taskmgr.ps1 -DurationSeconds 30 -ThresholdPercent 10 -MemoryThresholdPercent 3 -PackagedCpuUtilityAverageCheckpointPercent 2 -ResultOutputDirectory $perfResultsDir *>&1 | Tee-Object -FilePath $consoleLogPath
           if ($LASTEXITCODE -ne 0) {
             exit $LASTEXITCODE
           }

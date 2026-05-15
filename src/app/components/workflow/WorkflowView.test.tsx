@@ -76,6 +76,8 @@ describe('WorkflowView', () => {
     render(<WorkflowView />);
 
     expect(screen.getByTestId('workflow-view')).toHaveClass('h-full', 'w-full');
+    expect(screen.getByTestId('workflow-view')).toHaveAttribute('data-active', 'true');
+    expect(screen.getByTestId('workflow-view')).toHaveAttribute('data-ready', 'true');
     expect(screen.getByTestId('react-flow-provider')).toBeInTheDocument();
     expect(screen.getByTestId('react-flow')).toHaveAttribute('data-node-count', String(workflowNodes.length));
     expect(screen.getByTestId('react-flow-background')).toHaveAttribute('data-variant', 'dots');
@@ -85,6 +87,13 @@ describe('WorkflowView', () => {
     expect(screen.getByText('mock-run-2026-05-03')).toBeInTheDocument();
     expect(screen.getByTestId('workflow-animation-toggle')).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getByTestId('workflow-animation-toggle')).toHaveTextContent('Off');
+  });
+
+  it('exposes inactive state when mounted in the hidden prewarmed stack', () => {
+    render(<WorkflowView isActive={false} />);
+
+    expect(screen.getByTestId('workflow-view')).toHaveAttribute('data-active', 'false');
+    expect(screen.getByTestId('workflow-view')).toHaveAttribute('data-ready', 'true');
   });
 
   it('toggles data flow edge animation without changing the graph structure', async () => {

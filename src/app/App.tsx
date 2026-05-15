@@ -28,11 +28,13 @@ import {
   useWorkspaceFiles,
   useWorkspaceView,
 } from './context/WorkspaceContext';
+import { CodeViewerLayoutProvider } from './context/CodeViewerLayoutContext';
 import { SidebarProvider } from './components/ui/sidebar';
 import { refreshWorkspaceGitStatus } from './git/workspaceGitStatus';
 import { useGlobalAppShortcuts } from './useGlobalAppShortcuts';
 import { getPathBaseName } from './workspace/workspaceFiles';
 import { useQuickOpenController } from './useQuickOpenController';
+import { preloadDeferredMainContentViews } from './mainContentViewPreload';
 
 const WorkflowView = lazy(() => import('./components/workflow/WorkflowView').then((module) => ({ default: module.WorkflowView })));
 const WhiteboardView = lazy(() => import('./components/whiteboard/WhiteboardView').then((module) => ({ default: module.WhiteboardView })));
@@ -125,6 +127,8 @@ function AppLayout() {
   const [explorerAssistantPanelWidthPx, setExplorerAssistantPanelWidthPx] = useState(EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX);
   const [assistantThreadListExpanded, setAssistantThreadListExpanded] = useState(false);
   const [assistantThreadListWidthPx, setAssistantThreadListWidthPx] = useState(ASSISTANT_THREAD_LIST_DEFAULT_WIDTH_PX);
+  const [shouldMountWorkflowView, setShouldMountWorkflowView] = useState(mainContentView === 'workflow');
+  const [shouldMountWhiteboardView, setShouldMountWhiteboardView] = useState(mainContentView === 'whiteboard');
   const explorerBottomPanelLayoutVersion = `${showLeftPanel}:${showRightPanel}:${showBottomPanel}:${explorerLeftPanelWidthPx}`;
   const assistantThreadListExtraWidthPx = assistantThreadListExpanded
     ? assistantThreadListWidthPx + ASSISTANT_THREAD_LIST_RESIZE_HANDLE_WIDTH_PX
@@ -261,6 +265,28 @@ function AppLayout() {
     };
   }, []);
 
+  useEffect(() => {
+    if (mainContentView === 'workflow') {
+      setShouldMountWorkflowView(true);
+      return;
+    }
+
+    if (mainContentView === 'whiteboard') {
+      setShouldMountWhiteboardView(true);
+    }
+  }, [mainContentView]);
+
+  useEffect(() => {
+    return preloadDeferredMainContentViews({
+      requestWorkflowMount: () => {
+        setShouldMountWorkflowView(true);
+      },
+      requestWhiteboardMount: () => {
+        setShouldMountWhiteboardView(true);
+      },
+    });
+  }, []);
+
   const renderPanelPlaceholder = (title: string, testId: string) => (
     <PlaceholderView title={title} testId={testId} />
   );
@@ -336,6 +362,7 @@ function AppLayout() {
 
   const renderExplorerWorkspace = () => (
     renderWorkspaceShell({
+      shellTestId: 'code-view-explorer',
       leftPanelId: 'left-panel',
       centerPanelId: 'center-panel',
       topPanelId: 'editor-panel',
@@ -443,6 +470,74 @@ function AppLayout() {
     );
   };
 
+  const renderDeferredMainContentLayer = ({
+    active,
+    children,
+    mounted,
+    testId,
+  }: {
+    active: boolean;
+    children: React.ReactNode;
+    mounted: boolean;
+    testId: string;
+  }) => {
+    if (!mounted) {
+      return null;
+    }
+
+    return (
+      <div
+        data-testid={testId}
+        data-active={active ? 'true' : 'false'}
+        data-mounted="true"
+        aria-hidden={!active}
+        className={`absolute inset-0 min-h-0 ${active ? 'z-10' : '-z-10 opacity-0 pointer-events-none'}`}
+      >
+        {children}
+      </div>
+    );
+  };
+
+  const renderMainContentStack = () => {
+    const isCodeViewActive = mainContentView === 'code';
+    const isWhiteboardViewActive = mainContentView === 'whiteboard';
+    const isWorkflowViewActive = mainContentView === 'workflow';
+
+    return (
+      <div data-testid="main-content-stack" className="relative flex flex-1 min-h-0 flex-col overflow-hidden">
+        {isCodeViewActive
+          ? (activeView === 'explorer'
+            ? renderExplorerWorkspace()
+            : activeView === 'simulation'
+              ? renderSimulationWorkspace()
+              : renderCodePlaceholder())
+          : null}
+
+        {renderDeferredMainContentLayer({
+          active: isWhiteboardViewActive,
+          mounted: shouldMountWhiteboardView || isWhiteboardViewActive,
+          testId: 'main-content-whiteboard-layer',
+          children: (
+            <Suspense fallback={<MainContentFallback />}>
+              <WhiteboardView isActive={isWhiteboardViewActive} />
+            </Suspense>
+          ),
+        })}
+
+        {renderDeferredMainContentLayer({
+          active: isWorkflowViewActive,
+          mounted: shouldMountWorkflowView || isWorkflowViewActive,
+          testId: 'main-content-workflow-layer',
+          children: (
+            <Suspense fallback={<MainContentFallback />}>
+              <WorkflowView isActive={isWorkflowViewActive} />
+            </Suspense>
+          ),
+        })}
+      </div>
+    );
+  };
+
   const { failedSaveFileCount, savingFileCount } = useMemo(() => {
     let nextSavingFileCount = 0;
     let nextFailedSaveFileCount = 0;
@@ -497,23 +592,7 @@ function AppLayout() {
       <UnsavedChangesDialog />
       <DeleteConfirmationDialog />
 
-      {mainContentView === 'code'
-        ? (activeView === 'explorer'
-          ? renderExplorerWorkspace()
-          : activeView === 'simulation'
-            ? renderSimulationWorkspace()
-            : renderCodePlaceholder())
-        : mainContentView === 'whiteboard' ? (
-          <Suspense fallback={<MainContentFallback />}>
-            <WhiteboardView />
-          </Suspense>
-        ) : (
-          <div className="flex-1 min-h-0">
-            <Suspense fallback={<MainContentFallback />}>
-              <WorkflowView />
-            </Suspense>
-          </div>
-        )}
+      {renderMainContentStack()}
 
       <AppStatusBar
         mainContentView={mainContentView}
@@ -536,7 +615,9 @@ function AppLayout() {
 export default function App() {
   return (
     <WorkspaceProvider>
-      <AppLayout />
+      <CodeViewerLayoutProvider>
+        <AppLayout />
+      </CodeViewerLayoutProvider>
     </WorkspaceProvider>
   );
 }

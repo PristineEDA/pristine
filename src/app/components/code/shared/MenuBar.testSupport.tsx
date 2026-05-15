@@ -4,6 +4,7 @@ import { beforeEach, vi } from 'vitest';
 import { MenuBar } from './MenuBar';
 import type { DesktopAuthSession } from '../../../auth/types';
 import { WorkspaceProvider, useWorkspace } from '../../../context/WorkspaceContext';
+import { CodeViewerLayoutProvider, type CodeViewerLayoutMode } from '../../../context/CodeViewerLayoutContext';
 import type { ColorThemeOption, ColorThemePreviewPalette, ResolvedColorTheme } from '../../../theme/colorThemeTypes';
 import { SidebarProvider, useSidebar } from '../../ui/sidebar';
 
@@ -895,6 +896,8 @@ export type PersistedSettingsOptions = {
   smoothScrolling?: boolean;
   tabSize?: number;
   editorTheme?: string;
+  codeViewerLayoutMode?: CodeViewerLayoutMode;
+  themePickerLayoutMode?: 'grouped' | 'list';
   wordWrap?: string;
 };
 
@@ -919,6 +922,8 @@ export function mockPersistedSettingsConfig(options: PersistedSettingsOptions = 
     smoothScrolling: true,
     tabSize: 4,
     editorTheme: 'dracula',
+    codeViewerLayoutMode: 'compact' as const,
+    themePickerLayoutMode: 'list' as const,
     wordWrap: 'off',
     ...options,
   };
@@ -931,6 +936,10 @@ export function mockPersistedSettingsConfig(options: PersistedSettingsOptions = 
         return persisted.colorTheme;
       case 'workbench.importedColorThemes':
         return themeMockState.importedThemes;
+      case 'workbench.themePickerLayoutMode':
+        return persisted.themePickerLayoutMode;
+      case 'workbench.codeViewerLayoutMode':
+        return persisted.codeViewerLayoutMode;
       case 'editor.guides.bracketPairs':
         return persisted.bracketPairGuides;
       case 'window.closeActionPreference':
@@ -989,9 +998,11 @@ export function MenuBarTestHarness({
   return (
     <SidebarProvider defaultOpen={false} keyboardShortcut={false}>
       <WorkspaceProvider>
-        <SidebarStateProbe />
-        {withWorkspaceControls && <WorkspaceControls />}
-        <MenuBar {...menuBarProps} />
+        <CodeViewerLayoutProvider>
+          <SidebarStateProbe />
+          {withWorkspaceControls && <WorkspaceControls />}
+          <MenuBar {...menuBarProps} />
+        </CodeViewerLayoutProvider>
       </WorkspaceProvider>
     </SidebarProvider>
   );

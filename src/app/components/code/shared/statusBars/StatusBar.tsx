@@ -107,7 +107,7 @@ const STATUS_BAR_HOVER_COPY: Record<StatusBarHoverKey, StatusBarHoverCopy> = {
 };
 
 const STATUS_BAR_HOVER_OPEN_DELAY_MS = 160;
-const STATUS_BAR_HOVER_TRIGGER_CLASS_NAME = 'h-full transition-colors hover:bg-primary-foreground/30 dark:hover:bg-primary-foreground/10';
+const STATUS_BAR_HOVER_TRIGGER_CLASS_NAME = 'h-full transition-colors hover:bg-sidebar-accent';
 const STATUS_BAR_HOVER_CONTENT_CLASS_NAME = 'data-[state=closed]:animate-none';
 
 function StatusBarHoverDetails({ copy }: { copy: StatusBarHoverCopy }) {

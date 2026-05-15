@@ -10,6 +10,8 @@ import { DebugConsole } from './DebugConsole';
 import { terminateTerminalSession } from './terminalSessionStore';
 import { Button } from '../../ui/button';
 import { TooltipIconButton } from '../../ui/tooltip-icon-button';
+import { useCodeViewerLayout } from '../../../context/CodeViewerLayoutContext';
+import { getBottomPanelClassName, getBottomPanelTabBarClassName, getBottomPanelTabClassName } from '../shared/codeViewerLayoutStyles';
 
 const OutputPanel = lazy(() => import('./OutputPanel').then((module) => ({ default: module.OutputPanel })));
 const ProblemsTabPanel = lazy(() => import('./ProblemsTabPanel').then((module) => ({ default: module.ProblemsTabPanel })));
@@ -23,6 +25,7 @@ interface BottomPanelProps {
 }
 
 export function BottomPanel({ layoutVersion, onClose }: BottomPanelProps) {
+  const { layoutMode } = useCodeViewerLayout();
   const [tab, setTab] = useState<BottomPanelTabId>('terminal');
   const problemsList = useLspProblems();
   const problemCounts = useMemo(() => summarizeLspProblems(problemsList), [problemsList]);
@@ -88,18 +91,14 @@ export function BottomPanel({ layoutVersion, onClose }: BottomPanelProps) {
   }), [layoutVersion, problemCounts.errorCount, problemCounts.hintCount, problemCounts.infoCount, problemCounts.warningCount, problemsList]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden border-t border-border bg-background">
+    <div data-code-viewer-layout-mode={layoutMode} className={getBottomPanelClassName(layoutMode)}>
       {/* Tab bar */}
-      <div className="flex items-center h-8 bg-muted/40 border-b border-border shrink-0">
+      <div data-testid="bottom-panel-tab-bar" className={getBottomPanelTabBarClassName(layoutMode)}>
         {tabs.map((t) => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className={`flex items-center gap-1.5 px-3 h-full transition-colors border-b-2 ${
-              tab === t.id
-                ? 'text-[12px] font-semibold text-foreground border-primary'
-                : 'text-[12px] text-muted-foreground border-transparent hover:text-foreground'
-            }`}
+            className={getBottomPanelTabClassName(layoutMode, tab === t.id)}
           >
             {t.id === 'problems' && problemCounts.errorCount > 0 && (
               <AlertCircle size={11} className="text-destructive" />

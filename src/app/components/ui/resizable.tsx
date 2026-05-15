@@ -17,6 +17,7 @@ export interface PanelImperativeHandle {
 
 interface ResizablePanelGroupProps extends React.HTMLAttributes<HTMLDivElement> {
   children: React.ReactNode;
+  layoutGapPx?: number;
   orientation: Orientation;
 }
 
@@ -41,6 +42,16 @@ interface PanelItem {
   key: string;
   props: ResizablePanelProps;
 }
+
+type PanelSequenceItem = PanelItem & { kind: 'panel' };
+
+interface HandleSequenceItem {
+  key: string;
+  kind: 'handle';
+  props: ResizableHandleProps;
+}
+
+type SequenceItem = PanelSequenceItem | HandleSequenceItem;
 
 function flattenChildren(children: React.ReactNode): React.ReactElement[] {
   const result: React.ReactElement[] = [];
@@ -72,6 +83,30 @@ function getPixelSizeAsPercentage(sizePx: number | undefined, containerSize: num
   }
 
   return clamp((sizePx / containerSize) * 100, 0, 100);
+}
+
+function getSafeLayoutGapPx(layoutGapPx: number | undefined) {
+  if (typeof layoutGapPx !== 'number' || !Number.isFinite(layoutGapPx)) {
+    return 0;
+  }
+
+  return Math.max(0, layoutGapPx);
+}
+
+function getPanelAreaSize(containerSize: number, visibleHandleCount: number, layoutGapPx: number) {
+  if (containerSize <= 0) {
+    return 0;
+  }
+
+  return Math.max(containerSize - visibleHandleCount * layoutGapPx, 0);
+}
+
+function getPanelFlexBasis(panelSize: number, totalLayoutGapPx: number) {
+  if (totalLayoutGapPx <= 0 || panelSize <= 0) {
+    return `${panelSize}%`;
+  }
+
+  return `calc(${panelSize}% - ${(totalLayoutGapPx * panelSize) / 100}px)`;
 }
 
 function getPanel(panels: PanelItem[], index: number) {
@@ -291,15 +326,40 @@ function setPanelRefValue(panelRef: ResizablePanelProps['panelRef'], value: Pane
   panelRef.current = value;
 }
 
+function getPreviousVisiblePanel(sequence: SequenceItem[], index: number) {
+  return [...sequence.slice(0, index)].reverse().find(
+    (candidate): candidate is PanelSequenceItem => candidate.kind === 'panel' && !candidate.props.collapsed,
+  );
+}
+
+function getNextVisiblePanel(sequence: SequenceItem[], index: number) {
+  return sequence.slice(index + 1).find(
+    (candidate): candidate is PanelSequenceItem => candidate.kind === 'panel' && !candidate.props.collapsed,
+  );
+}
+
+function countVisibleHandles(sequence: SequenceItem[]) {
+  return sequence.reduce((count, item, index) => {
+    if (item.kind !== 'handle' || item.props.hidden) {
+      return count;
+    }
+
+    return getPreviousVisiblePanel(sequence, index) && getNextVisiblePanel(sequence, index)
+      ? count + 1
+      : count;
+  }, 0);
+}
+
 function ResizablePanelGroup({
   children,
   className,
+  layoutGapPx,
   orientation,
   ...props
 }: ResizablePanelGroupProps) {
   const containerRef = React.useRef<HTMLDivElement | null>(null);
   const flattenedChildren = React.useMemo(() => flattenChildren(children), [children]);
-  const sequence = React.useMemo(() => flattenedChildren.map((child, index) => {
+  const sequence = React.useMemo<SequenceItem[]>(() => flattenedChildren.map((child, index) => {
     if (child.type === ResizablePanel) {
       return {
         kind: 'panel' as const,
@@ -314,6 +374,9 @@ function ResizablePanelGroup({
       props: child.props as ResizableHandleProps,
     };
   }), [flattenedChildren]);
+  const safeLayoutGapPx = getSafeLayoutGapPx(layoutGapPx);
+  const visibleHandleCount = React.useMemo(() => countVisibleHandles(sequence), [sequence]);
+  const totalLayoutGapPx = visibleHandleCount * safeLayoutGapPx;
   const visiblePanels = React.useMemo(
     () => sequence.filter((item): item is PanelItem & { kind: 'panel' } => item.kind === 'panel' && !item.props.collapsed),
     [sequence],
@@ -366,8 +429,9 @@ function ResizablePanelGroup({
 
           const containerRect = containerRef.current?.getBoundingClientRect();
           const containerSize = orientation === 'horizontal' ? containerRect?.width ?? 0 : containerRect?.height ?? 0;
+          const panelAreaSize = getPanelAreaSize(containerSize, visibleHandleCount, safeLayoutGapPx);
 
-          updateVisibleSizes((currentSizes) => resizePanelByIndex(visiblePanels, currentSizes, index, nextRequestedSize, containerSize));
+          updateVisibleSizes((currentSizes) => resizePanelByIndex(visiblePanels, currentSizes, index, nextRequestedSize, panelAreaSize));
         },
       });
     });
@@ -379,7 +443,7 @@ function ResizablePanelGroup({
         }
       });
     };
-  }, [sequence, visiblePanels]);
+  }, [orientation, safeLayoutGapPx, sequence, updateVisibleSizes, visibleHandleCount, visiblePanels]);
 
   const panelIndexByKey = React.useMemo(() => {
     const next = new Map<string, number>();
@@ -410,7 +474,7 @@ function ResizablePanelGroup({
             item.props.className,
           )}
           style={{
-            flexBasis: `${panelSize}%`,
+            flexBasis: item.props.collapsed ? '0%' : getPanelFlexBasis(panelSize, totalLayoutGapPx),
             flexGrow: 0,
             flexShrink: 0,
             ...RESIZABLE_PANEL_TRANSITION_STYLE,
@@ -427,12 +491,8 @@ function ResizablePanelGroup({
       return;
     }
 
-    const previousVisiblePanel = [...sequence.slice(0, index)].reverse().find(
-      (candidate): candidate is PanelItem & { kind: 'panel' } => candidate.kind === 'panel' && !candidate.props.collapsed,
-    );
-    const nextVisiblePanel = sequence.slice(index + 1).find(
-      (candidate): candidate is PanelItem & { kind: 'panel' } => candidate.kind === 'panel' && !candidate.props.collapsed,
-    );
+    const previousVisiblePanel = getPreviousVisiblePanel(sequence, index);
+    const nextVisiblePanel = getNextVisiblePanel(sequence, index);
 
     if (!previousVisiblePanel || !nextVisiblePanel) {
       return;
@@ -448,17 +508,19 @@ function ResizablePanelGroup({
     renderItems.push(
       <ResizableHandleView
         key={item.key}
+        layoutGapPx={safeLayoutGapPx}
         orientation={orientation}
         handleProps={item.props}
         onDelta={(deltaPixels) => {
           const containerRect = containerRef.current?.getBoundingClientRect();
           const containerSize = orientation === 'horizontal' ? containerRect?.width ?? 0 : containerRect?.height ?? 0;
-          if (containerSize <= 0) {
+          const panelAreaSize = getPanelAreaSize(containerSize, visibleHandleCount, safeLayoutGapPx);
+          if (panelAreaSize <= 0) {
             return;
           }
 
-          const deltaSize = (deltaPixels / containerSize) * 100;
-          updateVisibleSizes((currentSizes) => adjustAdjacentSizes(visiblePanels, currentSizes, leftIndex, rightIndex, deltaSize, containerSize));
+          const deltaSize = (deltaPixels / panelAreaSize) * 100;
+          updateVisibleSizes((currentSizes) => adjustAdjacentSizes(visiblePanels, currentSizes, leftIndex, rightIndex, deltaSize, panelAreaSize));
         }}
       />,
     );
@@ -482,16 +544,25 @@ function ResizablePanelGroup({
 }
 
 function ResizableHandleView({
+  layoutGapPx,
   orientation,
   handleProps,
   onDelta,
 }: {
+  layoutGapPx: number;
   orientation: Orientation;
   handleProps: ResizableHandleProps;
   onDelta: (deltaPixels: number) => void;
 }) {
-  const { className, withHandle, children, ...props } = handleProps;
+  const { className, withHandle, children, style, ...props } = handleProps;
   const startPositionRef = React.useRef<number | null>(null);
+  const isOverlayHandle = className?.includes('overlay-handle') ?? false;
+  const usesLayoutGap = layoutGapPx > 0;
+  const layoutGapStyle = usesLayoutGap
+    ? orientation === 'horizontal'
+      ? { flexBasis: `${layoutGapPx}px`, width: `${layoutGapPx}px` }
+      : { flexBasis: `${layoutGapPx}px`, height: `${layoutGapPx}px` }
+    : undefined;
 
   const endDrag = React.useCallback((pointerId?: number, target?: EventTarget | null) => {
     startPositionRef.current = null;
@@ -512,10 +583,24 @@ function ResizableHandleView({
       className={cn(
         'relative flex shrink-0 items-center justify-center bg-border focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-1',
         orientation === 'horizontal'
-          ? 'h-full w-px cursor-ew-resize after:absolute after:inset-y-0 after:left-1/2 after:w-1 after:-translate-x-1/2'
-          : 'h-px w-full cursor-ns-resize after:absolute after:left-0 after:top-1/2 after:h-1 after:w-full after:-translate-y-1/2',
+          ? isOverlayHandle
+            ? cn(
+              'h-full overflow-visible cursor-ew-resize z-10 after:absolute after:inset-y-0 after:left-1/2 after:w-3 after:-translate-x-1/2',
+              !usesLayoutGap && 'w-0 -mx-[5px]',
+            )
+            : 'h-full w-px cursor-ew-resize after:absolute after:inset-y-0 after:left-1/2 after:w-1 after:-translate-x-1/2'
+          : isOverlayHandle
+            ? cn(
+              'w-full overflow-visible cursor-ns-resize z-10 after:absolute after:left-0 after:top-1/2 after:h-3 after:w-full after:-translate-y-1/2',
+              !usesLayoutGap && 'h-0 -my-[5px]',
+            )
+            : 'h-px w-full cursor-ns-resize after:absolute after:left-0 after:top-1/2 after:h-1 after:w-full after:-translate-y-1/2',
         className,
       )}
+      style={{
+        ...layoutGapStyle,
+        ...style,
+      }}
       onPointerDown={(event) => {
         startPositionRef.current = orientation === 'horizontal' ? event.clientX : event.clientY;
         document.body.style.cursor = orientation === 'horizontal' ? 'ew-resize' : 'ns-resize';

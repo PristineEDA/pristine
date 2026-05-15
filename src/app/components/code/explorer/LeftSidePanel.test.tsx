@@ -582,8 +582,28 @@ describe('LeftSidePanel', () => {
   });
 
   it('starts paste into the selected file parent when Ctrl+V is pressed and clipboard is armed', async () => {
+    const electronApi = window.electronAPI!;
+    vi.mocked(electronApi.fs.readDir).mockImplementation(async (dirPath: string) => {
+      if (dirPath === '.') {
+        return [{ name: 'rtl', isDirectory: true, isFile: false }];
+      }
+
+      if (dirPath === 'rtl') {
+        return [{ name: 'peripherals', isDirectory: true, isFile: false }];
+      }
+
+      if (dirPath === 'rtl/peripherals') {
+        return [
+          { name: 'uart_rx.v', isDirectory: false, isFile: true },
+          { name: 'uart_aux.v', isDirectory: false, isFile: true },
+        ];
+      }
+
+      return [];
+    });
+
     const onPasteWorkspaceEntry = vi.fn().mockResolvedValue({
-      path: 'rtl/peripherals/uart_rx-copy.v',
+      path: 'rtl/peripherals/uart_aux.v',
       entryType: 'file',
     });
 
@@ -599,12 +619,20 @@ describe('LeftSidePanel', () => {
     });
 
     await selectDefaultFile();
+    await screen.findByTestId('file-tree-node-rtl_peripherals_uart_aux_v');
+
+    expect(screen.getByTestId('file-tree-node-rtl_peripherals_uart_rx_v')).toHaveAttribute('data-selected', 'true');
 
     fireEvent.keyDown(document, { key: 'v', ctrlKey: true });
 
     await waitFor(() => {
       expect(onPasteWorkspaceEntry).toHaveBeenCalledWith('rtl/peripherals');
     });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('file-tree-node-rtl_peripherals_uart_aux_v')).toHaveAttribute('data-selected', 'true');
+    });
+    expect(screen.getByTestId('file-tree-node-rtl_peripherals_uart_rx_v')).not.toHaveAttribute('data-selected');
   });
 
   it('clears the clipboard when Escape is pressed while the explorer owns the interaction scope', async () => {

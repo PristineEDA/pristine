@@ -23,6 +23,7 @@ import {
 export interface MountBlockSuiteWhiteboardOptions {
   host: HTMLElement;
   store: Store;
+  themeKind: BlockSuiteWhiteboardTheme;
   workspace: Workspace;
 }
 
@@ -30,8 +31,13 @@ export interface MountedBlockSuiteWhiteboard {
   container: PristineAffineEditorContainer;
   editor: PristineEdgelessEditorElement;
   activate: () => void;
+  updateTheme: (themeKind: BlockSuiteWhiteboardTheme) => void;
   dispose: () => void;
 }
+
+export type BlockSuiteWhiteboardTheme = 'light' | 'dark';
+
+type BlockSuiteThemeSignal = ReturnType<typeof signal<ColorScheme>>;
 
 export interface PristineAffineEditorContainer extends HTMLDivElement {
   page: Store;
@@ -80,11 +86,40 @@ function createDocModeProvider(initialMode: DocMode): DocModeProvider {
   };
 }
 
-function createPristineWhiteboardExtensions(store: Store, workspace: Workspace): ExtensionType[] {
+function toBlockSuiteColorScheme(themeKind: BlockSuiteWhiteboardTheme): ColorScheme {
+  return themeKind === 'dark' ? ColorScheme.Dark : ColorScheme.Light;
+}
+
+function applyBlockSuiteWhiteboardTheme(
+  editor: PristineEdgelessEditorElement,
+  themeSignal: BlockSuiteThemeSignal,
+  themeKind: BlockSuiteWhiteboardTheme,
+): void {
+  const nextTheme = toBlockSuiteColorScheme(themeKind);
+
+  if (themeSignal.value !== nextTheme) {
+    themeSignal.value = nextTheme;
+  }
+  if (editor.dataset.theme !== themeKind) {
+    editor.dataset.theme = themeKind;
+  }
+  if (editor.style.colorScheme !== themeKind) {
+    editor.style.colorScheme = themeKind;
+  }
+
+  editor.requestUpdate();
+  (editor.host as (HTMLElement & { requestUpdate?: () => void }) | null)?.requestUpdate?.();
+  editor.querySelector<HTMLElement & { requestUpdate?: () => void }>('affine-edgeless-root')?.requestUpdate?.();
+}
+
+function createPristineWhiteboardExtensions(
+  store: Store,
+  workspace: Workspace,
+  themeSignal: BlockSuiteThemeSignal,
+): ExtensionType[] {
   const viewManager = new ViewExtensionManager(getInternalViewExtensions());
   const viewExtensions = runWithCustomElementDefinitionGuard(() => viewManager.get('edgeless'));
   const editorSettings = signal(GeneralSettingSchema.parse({}));
-  const lightTheme = signal(ColorScheme.Light);
   const docModeProvider = createDocModeProvider('edgeless');
   docModeProvider.setPrimaryMode('edgeless', store.id);
 
@@ -107,8 +142,8 @@ function createPristineWhiteboardExtensions(store: Store, workspace: Workspace):
     {
       setup: (di) => {
         di.addImpl(ThemeExtensionIdentifier, () => ({
-          getAppTheme: () => lightTheme,
-          getEdgelessTheme: () => lightTheme,
+          getAppTheme: () => themeSignal,
+          getEdgelessTheme: () => themeSignal,
         }));
       },
     },
@@ -176,19 +211,22 @@ function activateBlockSuiteWhiteboard(editor: PristineEdgelessEditorElement): vo
 export function mountBlockSuiteWhiteboard({
   host,
   store,
+  themeKind,
   workspace,
 }: MountBlockSuiteWhiteboardOptions): MountedBlockSuiteWhiteboard {
+  const themeSignal = signal(toBlockSuiteColorScheme(themeKind));
   const editor = createPristineEdgelessEditorElement();
   const container = createEditorContainer(store, editor);
 
   editor.dataset.testid = 'whiteboard-edgeless-editor';
-  editor.dataset.theme = 'light';
+  editor.dataset.theme = themeKind;
   Object.assign(editor.style, {
+    colorScheme: themeKind,
     flex: '1 1 0',
     minHeight: '0',
     minWidth: '0',
   });
-  editor.specs = createPristineWhiteboardExtensions(store, workspace);
+  editor.specs = createPristineWhiteboardExtensions(store, workspace, themeSignal);
   editor.doc = store;
   container.replaceChildren(editor);
   host.replaceChildren(container);
@@ -197,6 +235,7 @@ export function mountBlockSuiteWhiteboard({
     container,
     editor,
     activate: () => activateBlockSuiteWhiteboard(editor),
+    updateTheme: (nextThemeKind) => applyBlockSuiteWhiteboardTheme(editor, themeSignal, nextThemeKind),
     dispose: () => {
       editor.doc = null;
       editor.specs = [];

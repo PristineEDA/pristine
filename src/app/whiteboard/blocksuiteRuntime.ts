@@ -69,7 +69,14 @@ class PristineEdgelessEditor extends SignalWatcher(WithDisposable(ShadowlessElem
       height: 100%;
       min-width: 0;
       min-height: 0;
+    }
+
+    edgeless-editor[data-theme='light'] {
       color-scheme: light;
+    }
+
+    edgeless-editor[data-theme='dark'] {
+      color-scheme: dark;
     }
 
     edgeless-editor * {
