@@ -241,6 +241,7 @@ describe('EditorArea', () => {
     fireEvent.click(screen.getByTestId('editor-tab-close-rtl/core/cpu_top.v'));
 
     expect(screen.getByTestId('editor-tab-bar')).toHaveClass('h-[27px]');
+    expect(screen.getByTestId('editor-tab-rtl/core/cpu_top.v')).toHaveClass('min-w-[100px]', 'max-w-[200px]');
     expect(screen.getByTestId('editor-split-right')).toHaveClass('px-1', 'cursor-pointer');
     expect(screen.getByTestId('editor-split-down')).toHaveClass('px-1', 'cursor-pointer');
     expect(screen.getByTestId('editor-tab-primary-rtl/core/cpu_top.v')).toHaveClass('flex', 'min-w-0', 'flex-1', 'items-center');
@@ -277,9 +278,12 @@ describe('EditorArea', () => {
     );
 
     expect(screen.getByTestId('editor-tab-bar')).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
-    expect(screen.getByTestId('editor-tab-bar')).toHaveClass('h-10', 'gap-1.5', 'p-1.5');
-    expect(screen.getByTestId('editor-tab-rtl/core/cpu_top.v')).toHaveClass('rounded-md', 'bg-background');
-    expect(screen.getByTestId('editor-tab-rtl/core/alu.v')).toHaveClass('rounded-md');
+    expect(screen.getByTestId('editor-tab-bar')).toHaveClass('h-[30px]', 'items-center', 'gap-0', 'px-1');
+    expect(screen.getByTestId('editor-tab-bar')).not.toHaveClass('gap-1.5', 'p-1.5');
+    expect(screen.getByTestId('editor-tab-rtl/core/cpu_top.v')).toHaveClass('h-[27px]', 'min-w-[90px]', 'max-w-[180px]', 'rounded-md', 'bg-background', 'px-2');
+    expect(screen.getByTestId('editor-tab-rtl/core/cpu_top.v')).not.toHaveClass('min-w-[100px]', 'max-w-[200px]');
+    expect(screen.getByTestId('editor-tab-rtl/core/cpu_top.v')).not.toHaveClass('h-full');
+    expect(screen.getByTestId('editor-tab-rtl/core/alu.v')).toHaveClass('h-[27px]', 'min-w-[90px]', 'max-w-[180px]', 'rounded-md', 'px-2');
   });
 
   it('renders preview tabs with italic titles and a visible temporary-state marker', () => {

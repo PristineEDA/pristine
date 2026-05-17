@@ -417,6 +417,61 @@ async function readElementPixelWidth(locator: Locator) {
   });
 }
 
+async function readEditorTabBarSpacingSnapshot(tabBar: Locator, firstTab: Locator, secondTab: Locator) {
+  const [tabBarStyles, tabBarBox, firstTabBox, secondTabBox] = await Promise.all([
+    tabBar.evaluate((element) => {
+      const browserGlobal = globalThis as typeof globalThis & {
+        getComputedStyle: (node: unknown) => {
+          columnGap: string;
+          paddingBottom: string;
+          paddingTop: string;
+        };
+      };
+      const style = browserGlobal.getComputedStyle(element);
+
+      return {
+        columnGap: style.columnGap,
+        paddingBottom: style.paddingBottom,
+        paddingTop: style.paddingTop,
+      };
+    }),
+    tabBar.boundingBox(),
+    firstTab.boundingBox(),
+    secondTab.boundingBox(),
+  ]);
+
+  if (!tabBarBox || !firstTabBox || !secondTabBox) {
+    return null;
+  }
+
+  return {
+    ...tabBarStyles,
+    heightDeltaPx: Math.round(tabBarBox.height - firstTabBox.height),
+    horizontalGapPx: Math.round(secondTabBox.x - (firstTabBox.x + firstTabBox.width)),
+  };
+}
+
+async function readEditorTabPaddingSnapshot(tab: Locator) {
+  return tab.evaluate((element) => {
+    const browserGlobal = globalThis as typeof globalThis & {
+      getComputedStyle: (node: unknown) => {
+        maxWidth: string;
+        minWidth: string;
+        paddingLeft: string;
+        paddingRight: string;
+      };
+    };
+    const style = browserGlobal.getComputedStyle(element);
+
+    return {
+      maxWidth: style.maxWidth,
+      minWidth: style.minWidth,
+      paddingLeft: style.paddingLeft,
+      paddingRight: style.paddingRight,
+    };
+  });
+}
+
 async function waitForElementPixelWidthBetween(locator: Locator, minWidth: number, maxWidth: number) {
   await expect.poll(() => readElementPixelWidth(locator)).toBeGreaterThanOrEqual(minWidth);
   await expect.poll(() => readElementPixelWidth(locator)).toBeLessThanOrEqual(maxWidth);
@@ -4150,6 +4205,60 @@ test('code viewer layout setting persists across app relaunch', async () => {
   await expect(secondWindow.getByTestId('settings-dialog')).toHaveCount(0);
 
   await secondApp.close();
+});
+
+test('minimal editor tabs keep their rounded height while the tab bar spacing stays tight', async () => {
+  test.slow();
+
+  const { app, window } = await launchApp();
+
+  await ensureExplorerVisible(window);
+  await window.getByTestId('menu-settings-button').click();
+  await expect(window.getByTestId('settings-dialog')).toBeVisible();
+
+  await selectComboboxOption(
+    window,
+    'settings-code-viewer-layout-combobox',
+    'settings-code-viewer-layout-option-minimal',
+  );
+
+  await expect.poll(async () => readConfigValue(window, 'workbench.codeViewerLayoutMode')).toBe('minimal');
+  await expect(window.getByTestId('code-view-explorer')).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
+
+  await window.getByTestId('settings-close-button').click();
+  await expect(window.getByTestId('settings-dialog')).toHaveCount(0);
+
+  await openNestedWorkspaceFile(window, ['file-tree-node-README_md'], { finalAction: 'dblclick' });
+  await openNestedWorkspaceFile(window, [
+    'file-tree-node-rtl',
+    'file-tree-node-rtl_core',
+    'file-tree-node-rtl_core_cpu_top_sv',
+  ], { finalAction: 'dblclick' });
+
+  const tabBar = window.getByTestId('editor-tab-bar');
+  const readmeTab = window.getByTestId('editor-tab-README.md');
+  const cpuTopTab = window.getByTestId('editor-tab-rtl/core/cpu_top.sv');
+
+  await expect(readmeTab).toBeVisible();
+  await expect(cpuTopTab).toBeVisible();
+  await expect(tabBar).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
+
+  await expect.poll(async () => readEditorTabBarSpacingSnapshot(tabBar, readmeTab, cpuTopTab)).toEqual({
+    columnGap: '0px',
+    paddingBottom: '0px',
+    paddingTop: '0px',
+    heightDeltaPx: 3,
+    horizontalGapPx: 0,
+  });
+
+  await expect.poll(async () => readEditorTabPaddingSnapshot(readmeTab)).toEqual({
+    maxWidth: '180px',
+    minWidth: '90px',
+    paddingLeft: '8px',
+    paddingRight: '8px',
+  });
+
+  await app.close();
 });
 
 async function readBundledThemeSnapshot(page: Awaited<ReturnType<typeof launchApp>>['window']) {

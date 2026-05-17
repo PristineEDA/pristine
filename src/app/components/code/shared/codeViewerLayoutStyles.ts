@@ -2,6 +2,10 @@ import { cn } from '@/lib/utils';
 import type { CodeViewerLayoutMode } from '../../../context/CodeViewerLayoutContext';
 
 export const MINIMAL_CODE_VIEWER_PANEL_GAP_PX = 10;
+const MINIMAL_EDITOR_TAB_BAR_CLASS_NAME = 'h-[30px] items-center gap-0 px-1 rounded-t-md';
+const MINIMAL_EDITOR_TAB_HEIGHT_CLASS_NAME = 'h-[27px]';
+const DEFAULT_EDITOR_TAB_WIDTH_CLASS_NAME = 'min-w-[100px] max-w-[200px]';
+const MINIMAL_EDITOR_TAB_WIDTH_CLASS_NAME = 'min-w-[90px] max-w-[180px]';
 
 export function isMinimalCodeViewerLayout(layoutMode: CodeViewerLayoutMode) {
   return layoutMode === 'minimal';
@@ -61,17 +65,17 @@ export function getEditorTabBarClassName(layoutMode: CodeViewerLayoutMode) {
   return cn(
     'flex items-stretch bg-muted overflow-x-auto shrink-0 border-b border-border',
     isMinimalCodeViewerLayout(layoutMode)
-      ? 'h-10 gap-1.5 p-1.5 rounded-t-md'
+      ? MINIMAL_EDITOR_TAB_BAR_CLASS_NAME
       : 'h-[27px]',
   );
 }
 
 export function getEditorTabClassName(layoutMode: CodeViewerLayoutMode, isActive: boolean) {
   return cn(
-    'flex items-center gap-1 h-full cursor-pointer group border-r border-border transition-colors shrink-0 min-w-[100px] max-w-[200px]',
+    'flex items-center gap-1 cursor-pointer group border-r border-border transition-colors shrink-0',
     isMinimalCodeViewerLayout(layoutMode)
-      ? 'rounded-md px-3 border border-transparent'
-      : 'px-3 border-t-2',
+      ? `${MINIMAL_EDITOR_TAB_WIDTH_CLASS_NAME} ${MINIMAL_EDITOR_TAB_HEIGHT_CLASS_NAME} rounded-md px-2 border border-transparent`
+      : `${DEFAULT_EDITOR_TAB_WIDTH_CLASS_NAME} h-full px-3 border-t-2`,
     isActive
       ? cn(
         'bg-background text-foreground',
