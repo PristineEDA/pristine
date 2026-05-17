@@ -86,8 +86,8 @@ export function getEditorTabClassName(layoutMode: CodeViewerLayoutMode, isActive
 
 export function getPanelHeaderClassName(layoutMode: CodeViewerLayoutMode, className?: string) {
   return cn(
-    'flex shrink-0 items-center border-b border-border',
-    isMinimalCodeViewerLayout(layoutMode) ? 'm-1.5 mb-0 rounded border px-2 py-1.5' : 'px-2 py-1.5',
+    'flex shrink-0 items-center',
+    isMinimalCodeViewerLayout(layoutMode) ? 'm-1.5 mb-0 rounded px-2 py-1.5' : 'border-b border-border px-2 py-1.5',
     className,
   );
 }

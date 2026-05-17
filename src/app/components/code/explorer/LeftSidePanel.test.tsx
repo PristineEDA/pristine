@@ -2,6 +2,11 @@ import type { ComponentProps } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  CodeViewerLayoutProvider,
+  WORKBENCH_CODE_VIEWER_LAYOUT_MODE_CONFIG_KEY,
+  type CodeViewerLayoutMode,
+} from '../../../context/CodeViewerLayoutContext';
 import { resetWorkspaceGitStatusStoreForTests } from '../../../git/workspaceGitStatus';
 import {
   getExplorerClipboardTarget,
@@ -11,7 +16,16 @@ import {
   LeftSidePanel,
 } from './LeftSidePanel';
 
-function renderLeftSidePanel(props: Partial<ComponentProps<typeof LeftSidePanel>> = {}) {
+function mockCodeViewerLayoutMode(layoutMode: CodeViewerLayoutMode) {
+  vi.mocked(window.electronAPI!.config.get).mockImplementation((key: string) =>
+    key === WORKBENCH_CODE_VIEWER_LAYOUT_MODE_CONFIG_KEY ? layoutMode : null,
+  );
+}
+
+function renderLeftSidePanel(
+  props: Partial<ComponentProps<typeof LeftSidePanel>> = {},
+  options: { layoutMode?: CodeViewerLayoutMode } = {},
+) {
   const componentProps: ComponentProps<typeof LeftSidePanel> = {
     activeFileId: 'cpu_top',
     onClearWorkspaceClipboard: vi.fn(),
@@ -29,9 +43,19 @@ function renderLeftSidePanel(props: Partial<ComponentProps<typeof LeftSidePanel>
     workspaceClipboard: null,
     ...props,
   };
+  const panel = <LeftSidePanel {...componentProps} />;
+
+  if (options.layoutMode) {
+    mockCodeViewerLayoutMode(options.layoutMode);
+
+    return {
+      ...render(<CodeViewerLayoutProvider>{panel}</CodeViewerLayoutProvider>),
+      props: componentProps,
+    };
+  }
 
   return {
-    ...render(<LeftSidePanel {...componentProps} />),
+    ...render(panel),
     props: componentProps,
   };
 }
@@ -94,6 +118,7 @@ describe('LeftSidePanel', () => {
 
     expect(screen.getByTestId('left-panel-tabs')).toBeInTheDocument();
     expect(screen.getByTestId('left-panel-header').className).not.toMatch(/\bbg-/);
+    expect(screen.getByTestId('left-panel-header')).toHaveClass('border-b', 'border-border');
     expect(screen.getByRole('radio', { name: 'Explorer' })).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: 'Outline' })).toBeInTheDocument();
     expectCompactTabButton('left-panel-tab-explorer');
@@ -104,6 +129,20 @@ describe('LeftSidePanel', () => {
     expect(await screen.findByTestId('file-tree-node-rtl')).toBeInTheDocument();
     expect(screen.getByTestId('left-panel-header')).not.toHaveTextContent('retroSoC');
     expect(screen.getByTestId('file-tree-node-root')).toHaveTextContent('retroSoC');
+  });
+
+  it('removes the minimal layout outline around the panel tab header', () => {
+    renderLeftSidePanel({}, { layoutMode: 'minimal' });
+
+    const header = screen.getByTestId('left-panel-header');
+
+    expect(header).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
+    expect(header).toHaveClass('m-1.5', 'mb-0', 'rounded', 'px-2', 'py-1.5');
+    expect(header).not.toHaveClass('border');
+    expect(header).not.toHaveClass('border-border');
+    expect(header).not.toHaveClass('border-b');
+    expectCompactTabButton('left-panel-tab-explorer');
+    expectCompactTabButton('left-panel-tab-outline');
   });
 
   it('does not render the legacy explorer toolbar buttons', async () => {

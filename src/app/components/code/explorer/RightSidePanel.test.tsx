@@ -1,6 +1,11 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
+import {
+  CodeViewerLayoutProvider,
+  WORKBENCH_CODE_VIEWER_LAYOUT_MODE_CONFIG_KEY,
+  type CodeViewerLayoutMode,
+} from '../../../context/CodeViewerLayoutContext';
 import { RightSidePanel } from './RightSidePanel';
 
 const PANEL_ITEM_TIMEOUT_MS = 10000;
@@ -22,6 +27,22 @@ async function clickButton(user: TestUser, name: RegExp) {
   await user.click(screen.getByRole('radio', { name }));
 }
 
+function mockCodeViewerLayoutMode(layoutMode: CodeViewerLayoutMode) {
+  vi.mocked(window.electronAPI!.config.get).mockImplementation((key: string) =>
+    key === WORKBENCH_CODE_VIEWER_LAYOUT_MODE_CONFIG_KEY ? layoutMode : null,
+  );
+}
+
+function renderRightSidePanelInLayout(layoutMode: CodeViewerLayoutMode) {
+  mockCodeViewerLayoutMode(layoutMode);
+
+  render(
+    <CodeViewerLayoutProvider>
+      <RightSidePanel currentOutlineId="rtl/core/alu.v" onFileOpen={vi.fn()} onLineJump={vi.fn()} />
+    </CodeViewerLayoutProvider>,
+  );
+}
+
 describe('RightSidePanel', () => {
   it('shows an assistant skeleton while the AI panel chunk is still loading', () => {
     render(
@@ -30,6 +51,7 @@ describe('RightSidePanel', () => {
 
     expect(screen.getByTestId('right-panel-tabs')).toBeInTheDocument();
     expect(screen.getByTestId('right-panel-header').className).not.toMatch(/\bbg-/);
+    expect(screen.getByTestId('right-panel-header')).toHaveClass('border-b', 'border-border');
     expect(screen.getByRole('radio', { name: /ai assistant/i })).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: /static check/i })).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: /references/i })).toBeInTheDocument();
@@ -41,6 +63,20 @@ describe('RightSidePanel', () => {
     expect(screen.queryByText('AI Assistant')).not.toBeInTheDocument();
     expect(screen.getByTestId('assistant-panel-suspense-skeleton')).toBeInTheDocument();
     expect(screen.queryByText(/Loading assistant/i)).not.toBeInTheDocument();
+  });
+
+  it('removes the minimal layout outline around the panel tab header', () => {
+    renderRightSidePanelInLayout('minimal');
+
+    const header = screen.getByTestId('right-panel-header');
+
+    expect(header).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
+    expect(header).toHaveClass('m-1.5', 'mb-0', 'rounded', 'px-2', 'py-1.5');
+    expect(header).not.toHaveClass('border');
+    expect(header).not.toHaveClass('border-border');
+    expect(header).not.toHaveClass('border-b');
+    expectCompactTabButton('right-panel-tab-ai');
+    expectCompactTabButton('right-panel-tab-outline');
   });
 
   it('navigates static check items to their source file and line', async () => {

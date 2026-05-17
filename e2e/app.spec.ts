@@ -388,6 +388,23 @@ async function ensureExplorerHidden(window: Awaited<ReturnType<typeof launchApp>
   await expect(readmeNode).toHaveCount(0);
 }
 
+async function ensureRightPanelVisible(window: Awaited<ReturnType<typeof launchApp>>['window']) {
+  const rightPanel = window.getByTestId('panel-right-panel');
+
+  if (await rightPanel.count() === 0 || !(await rightPanel.isVisible())) {
+    await window.getByTestId('toggle-right-panel').click();
+  }
+
+  await expect(rightPanel).toBeVisible();
+}
+
+async function expectMinimalPanelHeaderWithoutOutline(header: Locator) {
+  await expect(header).toBeVisible();
+  await expect(header).not.toHaveClass(/(?:^|\s)border(?:\s|$)/);
+  await expect(header).not.toHaveClass(/(?:^|\s)border-b(?:\s|$)/);
+  await expect(header).not.toHaveClass(/(?:^|\s)border-border(?:\s|$)/);
+}
+
 async function expectCollapsedPanel(panel: Locator) {
   await expect(panel).toHaveAttribute('aria-hidden', 'true');
   await expect(panel).not.toBeVisible();
@@ -4103,6 +4120,9 @@ test('code viewer layout setting persists across app relaunch', async () => {
 
   await firstWindow.getByTestId('settings-close-button').click();
   await expect(firstWindow.getByTestId('settings-dialog')).toHaveCount(0);
+  await expectMinimalPanelHeaderWithoutOutline(firstWindow.getByTestId('left-panel-header'));
+  await ensureRightPanelVisible(firstWindow);
+  await expectMinimalPanelHeaderWithoutOutline(firstWindow.getByTestId('right-panel-header'));
 
   await firstApp.close();
 
@@ -4112,6 +4132,7 @@ test('code viewer layout setting persists across app relaunch', async () => {
   await ensureExplorerVisible(secondWindow);
   await expect(secondWindow.getByTestId('code-view-explorer')).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
   await expect.poll(async () => readConfigValue(secondWindow, 'workbench.codeViewerLayoutMode')).toBe('minimal');
+  await expectMinimalPanelHeaderWithoutOutline(secondWindow.getByTestId('left-panel-header'));
 
   await secondWindow.getByTestId('menu-settings-button').click();
   await expect(secondWindow.getByTestId('settings-dialog')).toBeVisible();
