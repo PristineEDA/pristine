@@ -303,6 +303,8 @@ describe('EditorArea', () => {
 
     expect(screen.getByTestId('editor-tab-title-rtl/core/reg_file.v')).toHaveClass('italic');
     expect(screen.getByTestId('editor-tab-preview-indicator-rtl/core/reg_file.v')).toBeInTheDocument();
+    expect(screen.getByTestId('editor-tab-preview-indicator-ring-rtl/core/reg_file.v')).toBeInTheDocument();
+    expect(screen.getByTestId('editor-tab-preview-indicator-dot-rtl/core/reg_file.v')).toBeInTheDocument();
     expect(screen.getByTestId('editor-tab-rtl/core/reg_file.v')).toHaveAttribute('title', 'rtl/core/reg_file.v (Preview tab)');
     expect(screen.getByTestId('editor-tab-close-rtl/core/reg_file.v')).toHaveClass('opacity-50');
     expect(screen.getByTestId('editor-tab-rtl/core/alu.v')).toHaveAttribute('title', 'rtl/core/alu.v');

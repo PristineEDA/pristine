@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
@@ -71,7 +71,8 @@ describe('AIAgentPanel', () => {
   it('renders the assistant shell and restores the saved thread selection and width', () => {
     render(<AIAgentPanel baseUrl="http://localhost:4111/" initialThreadListExpanded={false} />);
 
-    expect(screen.getByText('Pristine Agent')).toBeInTheDocument();
+    expect(screen.getByTestId('assistant-panel-header')).toBeInTheDocument();
+    expect(within(screen.getByTestId('assistant-panel-header')).queryByText('Pristine Agent')).not.toBeInTheDocument();
     expect(screen.getByTestId('assistant-panel-root')).not.toHaveClass('bg-background');
     expect(screen.getByTestId('assistant-main-panel')).not.toHaveClass('bg-background');
     expect(screen.getByTestId('assistant-thread-list-panel')).not.toHaveClass('bg-muted/20');

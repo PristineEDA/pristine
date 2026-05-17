@@ -190,12 +190,14 @@ export function AIAgentPanel({
           'flex min-w-0 flex-1 flex-col',
           isThreadListExpanded ? 'border-r border-border' : '',
         ].join(' ')} data-testid="assistant-main-panel">
-          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-2">
+          <div
+            data-testid="assistant-panel-header"
+            className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-2"
+          >
             <div className="flex min-w-0 items-center gap-2">
               <div className="flex size-6 items-center justify-center rounded-md bg-primary/10 text-primary">
                 <Server className="size-3.5" />
               </div>
-              <span className="truncate text-xs font-semibold">Pristine Agent</span>
             </div>
             <TooltipProvider>
               <Tooltip>

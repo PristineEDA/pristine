@@ -1634,6 +1634,8 @@ test('single-clicked explorer files stay in preview style until double-clicked t
   const previewTitle = window.getByTestId('editor-tab-title-README.md');
   await expect(previewTitle).toHaveClass(/italic/);
   await expect(window.getByTestId('editor-tab-preview-indicator-README.md')).toBeVisible();
+  await expect(window.getByTestId('editor-tab-preview-indicator-ring-README.md')).toHaveCount(1);
+  await expect(window.getByTestId('editor-tab-preview-indicator-dot-README.md')).toHaveCount(1);
 
   await openNestedWorkspaceFile(window, [
     'file-tree-node-rtl',
@@ -3173,6 +3175,8 @@ test('assistant chat list expansion widens the whole right sidebar and supports 
   await expectCompactPanelTabButton(window.getByTestId('right-panel-tab-ai'));
   await expectCompactPanelTabButton(window.getByTestId('right-panel-tab-outline'));
   await expect(assistantMainPanel).not.toHaveClass(/(?:^|\s)bg-background(?:\s|$)/);
+  await expect(window.getByTestId('assistant-panel-header')).toBeVisible();
+  await expect(window.getByTestId('assistant-panel-header').getByText('Pristine Agent')).toHaveCount(0);
 
   const initialRightPanelWidth = await waitForElementPixelWidthBetween(rightPanel, 295, 305);
   const initialAssistantWidth = await waitForElementPixelWidthBetween(assistantMainPanel, 295, 305);
