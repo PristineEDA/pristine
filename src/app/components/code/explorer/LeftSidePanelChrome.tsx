@@ -3,7 +3,11 @@ import {
   ListTree,
 } from 'lucide-react';
 import { useCodeViewerLayout } from '../../../context/CodeViewerLayoutContext';
-import { IconTabToggleGroup } from '../shared/IconTabToggleGroup';
+import {
+  compactIconTabToggleIconSize,
+  compactIconTabToggleItemClassName,
+  IconTabToggleGroup,
+} from '../shared/IconTabToggleGroup';
 import { getPanelHeaderClassName } from '../shared/codeViewerLayoutStyles';
 
 export type ExplorerPanelTab = 'explorer' | 'outline';
@@ -23,7 +27,11 @@ export function ExplorerPanelTabs({
   const { layoutMode } = useCodeViewerLayout();
 
   return (
-    <div data-code-viewer-layout-mode={layoutMode} className={getPanelHeaderClassName(layoutMode)}>
+    <div
+      data-testid="left-panel-header"
+      data-code-viewer-layout-mode={layoutMode}
+      className={getPanelHeaderClassName(layoutMode)}
+    >
       <IconTabToggleGroup
         items={explorerPanelTabs}
         value={activeTab}
@@ -31,23 +39,9 @@ export function ExplorerPanelTabs({
         groupLabel="Left panel tabs"
         groupTestId="left-panel-tabs"
         tooltipSide="bottom"
+        itemClassName={compactIconTabToggleItemClassName}
+        iconSize={compactIconTabToggleIconSize}
       />
-    </div>
-  );
-}
-
-export function ExplorerToolbar({
-  projectName,
-}: {
-  projectName: string;
-}) {
-  const { layoutMode } = useCodeViewerLayout();
-
-  return (
-    <div data-code-viewer-layout-mode={layoutMode} className="flex shrink-0 items-center px-3 py-1.5">
-      <span className="flex-1 text-muted-foreground uppercase text-[11px] font-bold tracking-wide">
-        {projectName}
-      </span>
     </div>
   );
 }

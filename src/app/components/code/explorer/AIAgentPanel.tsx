@@ -184,18 +184,20 @@ export function AIAgentPanel({
     <AssistantRuntimeProvider runtime={runtime}>
       <div
         data-testid="assistant-panel-root"
-        className="flex h-full min-h-0 min-w-0 bg-background text-foreground"
+        className="flex h-full min-h-0 min-w-0 text-foreground"
       >
         <div className={[
-          'flex min-w-0 flex-1 flex-col bg-background',
+          'flex min-w-0 flex-1 flex-col',
           isThreadListExpanded ? 'border-r border-border' : '',
         ].join(' ')} data-testid="assistant-main-panel">
-          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-2">
+          <div
+            data-testid="assistant-panel-header"
+            className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-2"
+          >
             <div className="flex min-w-0 items-center gap-2">
               <div className="flex size-6 items-center justify-center rounded-md bg-primary/10 text-primary">
                 <Server className="size-3.5" />
               </div>
-              <span className="truncate text-xs font-semibold">Pristine Agent</span>
             </div>
             <TooltipProvider>
               <Tooltip>
@@ -257,7 +259,7 @@ export function AIAgentPanel({
           <aside
             data-testid="assistant-thread-list-panel"
             aria-hidden={isThreadListExpanded ? 'false' : 'true'}
-            className="flex h-full min-w-0 flex-1 flex-col bg-muted/20"
+            className="flex h-full min-w-0 flex-1 flex-col"
           >
             <div className="flex shrink-0 items-center border-b border-border px-3 py-2">
               <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">

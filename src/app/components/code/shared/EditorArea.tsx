@@ -93,6 +93,27 @@ function EditorDocumentPlaceholder({ text }: { text: string }) {
   );
 }
 
+function PreviewTabIndicator({ tabId }: { tabId: string }) {
+  return (
+    <span
+      data-testid={`editor-tab-preview-indicator-${tabId}`}
+      className="relative flex h-2.5 w-2.5 shrink-0 items-center justify-center rounded-full text-primary"
+      title="Preview tab"
+    >
+      <span
+        aria-hidden="true"
+        data-testid={`editor-tab-preview-indicator-ring-${tabId}`}
+        className="absolute inset-0 rounded-full border border-current/80"
+      />
+      <span
+        aria-hidden="true"
+        data-testid={`editor-tab-preview-indicator-dot-${tabId}`}
+        className="h-1.5 w-1.5 rounded-full bg-current"
+      />
+    </span>
+  );
+}
+
 // ─── Tab Component ─────────────────────────────────────────────────────────────
 function EditorTab({
   tab, isActive, gitState, layoutMode, onActivate, onClose, onPin, onDragStart, onDragEnd,
@@ -142,18 +163,23 @@ function EditorTab({
       }}
       onDragEnd={() => onDragEnd?.()}
     >
-      <FileTypeBadge
-        name={tab.name}
-        path={tab.id}
-        testId={`editor-tab-badge-${tab.id}`}
-        className="h-4 w-4"
-      />
-      <span
-        data-testid={`editor-tab-title-${tab.id}`}
-        className={`flex-1 truncate text-[12px] ${isPreview ? 'italic' : ''} ${tabTitleToneClassName}`}
+      <div
+        data-testid={`editor-tab-primary-${tab.id}`}
+        className="flex min-w-0 flex-1 items-center gap-1"
       >
-        {tab.name}
-      </span>
+        <FileTypeBadge
+          name={tab.name}
+          path={tab.id}
+          testId={`editor-tab-badge-${tab.id}`}
+          className="h-4 w-4"
+        />
+        <span
+          data-testid={`editor-tab-title-${tab.id}`}
+          className={`min-w-0 flex-1 truncate text-[12px] leading-4 ${isPreview ? 'italic' : ''} ${tabTitleToneClassName}`}
+        >
+          {tab.name}
+        </span>
+      </div>
       {tab.modified && (
         <div className="relative flex h-3 w-3 shrink-0 items-center justify-center">
           <Circle
@@ -171,11 +197,7 @@ function EditorTab({
         </div>
       )}
       {!tab.modified && isPreview && (
-        <span
-          data-testid={`editor-tab-preview-indicator-${tab.id}`}
-          className="h-2 w-2 shrink-0 rounded-full border border-primary/80 bg-transparent"
-          title="Preview tab"
-        />
+        <PreviewTabIndicator tabId={tab.id} />
       )}
       {!tab.modified && (
         <button

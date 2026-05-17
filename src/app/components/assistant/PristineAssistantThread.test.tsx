@@ -382,7 +382,11 @@ describe('PristineAssistantThread', () => {
   });
 
   it('wires assistant instructions, tool UIs, and composer trigger adapters', () => {
-    render(<PristineAssistantThread className="custom-thread" />);
+    const { container } = render(<PristineAssistantThread className="custom-thread" />);
+
+    expect(container.firstChild).toHaveClass('relative', 'flex', 'min-h-0', 'flex-1', 'flex-col', 'custom-thread');
+    expect(container.firstChild).not.toHaveClass('bg-background');
+    expect(container.querySelector('div.relative.shrink-0.p-2')).not.toHaveClass('bg-background');
 
     expect(mocks.useAssistantInstructions).toHaveBeenCalledWith(
       expect.stringContaining('Pristine IDE right sidebar'),
@@ -447,7 +451,8 @@ describe('PristineAssistantThread', () => {
     expect(assistantContainer).toHaveClass('w-full');
     expect(assistantContainer).not.toHaveClass('max-w-[92%]');
     const assistantSurface = screen.getByTestId('assistant-message-surface');
-    expect(assistantSurface).toHaveClass('rounded-md', 'bg-background');
+    expect(assistantSurface).toHaveClass('rounded-md');
+    expect(assistantSurface.className).not.toMatch(/\bbg-/);
     expect(assistantSurface).not.toHaveClass('border', 'border-border', 'shadow-xs');
     expect(assistantSurface).toContainElement(screen.getByTestId('message-error-slot'));
     expect(screen.getByRole('alert')).toHaveTextContent('Assistant failed to complete the request');

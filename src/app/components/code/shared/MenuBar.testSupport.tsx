@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, vi } from 'vitest';
+import { beforeEach, expect, vi } from 'vitest';
 import { MenuBar } from './MenuBar';
 import type { DesktopAuthSession } from '../../../auth/types';
 import { WorkspaceProvider, useWorkspace } from '../../../context/WorkspaceContext';
@@ -1065,4 +1065,17 @@ export async function clickByText(user: ReturnType<typeof userEvent.setup>, text
 
 export async function clickByTestId(user: ReturnType<typeof userEvent.setup>, testId: string) {
   await user.click(screen.getByTestId(testId));
+}
+
+export async function lockApplicationMenuBar(user: ReturnType<typeof userEvent.setup>) {
+  const toggle = screen.getByTestId('menu-menubar-toggle');
+  const shell = screen.getByTestId('menu-menubar-shell');
+
+  if (shell.getAttribute('data-locked') !== 'true') {
+    await user.click(toggle);
+  }
+
+  expect(shell).toHaveAttribute('data-locked', 'true');
+  expect(shell).toHaveAttribute('data-expanded', 'true');
+  expect(await screen.findByText('File')).toBeVisible();
 }

@@ -137,7 +137,7 @@ async function resolveStartupWindows(app: Awaited<ReturnType<typeof electron.lau
 
     return Boolean(window);
   }, {
-    timeout: 10000,
+    timeout: UI_READY_TIMEOUT_MS,
   }).toBe(true);
 
   const window = resolvedStartupWindows.window;
@@ -388,6 +388,23 @@ async function ensureExplorerHidden(window: Awaited<ReturnType<typeof launchApp>
   await expect(readmeNode).toHaveCount(0);
 }
 
+async function ensureRightPanelVisible(window: Awaited<ReturnType<typeof launchApp>>['window']) {
+  const rightPanel = window.getByTestId('panel-right-panel');
+
+  if (await rightPanel.count() === 0 || !(await rightPanel.isVisible())) {
+    await window.getByTestId('toggle-right-panel').click();
+  }
+
+  await expect(rightPanel).toBeVisible();
+}
+
+async function expectMinimalPanelHeaderWithoutOutline(header: Locator) {
+  await expect(header).toBeVisible();
+  await expect(header).not.toHaveClass(/(?:^|\s)border(?:\s|$)/);
+  await expect(header).not.toHaveClass(/(?:^|\s)border-b(?:\s|$)/);
+  await expect(header).not.toHaveClass(/(?:^|\s)border-border(?:\s|$)/);
+}
+
 async function expectCollapsedPanel(panel: Locator) {
   await expect(panel).toHaveAttribute('aria-hidden', 'true');
   await expect(panel).not.toBeVisible();
@@ -397,6 +414,61 @@ async function readElementPixelWidth(locator: Locator) {
   return locator.evaluate((element) => {
     const node = element as { getBoundingClientRect?: () => { width: number } };
     return Math.round(node.getBoundingClientRect?.().width ?? 0);
+  });
+}
+
+async function readEditorTabBarSpacingSnapshot(tabBar: Locator, firstTab: Locator, secondTab: Locator) {
+  const [tabBarStyles, tabBarBox, firstTabBox, secondTabBox] = await Promise.all([
+    tabBar.evaluate((element) => {
+      const browserGlobal = globalThis as typeof globalThis & {
+        getComputedStyle: (node: unknown) => {
+          columnGap: string;
+          paddingBottom: string;
+          paddingTop: string;
+        };
+      };
+      const style = browserGlobal.getComputedStyle(element);
+
+      return {
+        columnGap: style.columnGap,
+        paddingBottom: style.paddingBottom,
+        paddingTop: style.paddingTop,
+      };
+    }),
+    tabBar.boundingBox(),
+    firstTab.boundingBox(),
+    secondTab.boundingBox(),
+  ]);
+
+  if (!tabBarBox || !firstTabBox || !secondTabBox) {
+    return null;
+  }
+
+  return {
+    ...tabBarStyles,
+    heightDeltaPx: Math.round(tabBarBox.height - firstTabBox.height),
+    horizontalGapPx: Math.round(secondTabBox.x - (firstTabBox.x + firstTabBox.width)),
+  };
+}
+
+async function readEditorTabPaddingSnapshot(tab: Locator) {
+  return tab.evaluate((element) => {
+    const browserGlobal = globalThis as typeof globalThis & {
+      getComputedStyle: (node: unknown) => {
+        maxWidth: string;
+        minWidth: string;
+        paddingLeft: string;
+        paddingRight: string;
+      };
+    };
+    const style = browserGlobal.getComputedStyle(element);
+
+    return {
+      maxWidth: style.maxWidth,
+      minWidth: style.minWidth,
+      paddingLeft: style.paddingLeft,
+      paddingRight: style.paddingRight,
+    };
   });
 }
 
@@ -617,11 +689,37 @@ async function openBottomTerminal(window: Awaited<ReturnType<typeof launchApp>>[
     await toggleBottomPanel.click();
   }
 
+  const bottomPanel = window.getByTestId('panel-bottom-panel');
+  await expect(bottomPanel).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+
+  const terminalTab = bottomPanel.getByTestId('bottom-panel-tab-terminal');
+  await expect(terminalTab).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  if ((await terminalTab.getAttribute('data-state')) !== 'on') {
+    await terminalTab.click();
+  }
+
   const terminalHost = window.getByTestId('terminal-host');
   await expect(terminalHost).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
   await expect(window.locator('[data-testid="terminal-host"] .xterm')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
 
   return terminalHost;
+}
+
+function getBottomPanelTab(
+  window: Awaited<ReturnType<typeof launchApp>>['window'],
+  tabId: 'terminal' | 'output' | 'problems' | 'debug' | 'lsp',
+) {
+  return window.getByTestId(`bottom-panel-tab-${tabId}`);
+}
+
+async function expectCompactPanelTabButton(tabButton: Locator) {
+  await expect(tabButton).toHaveClass(/(?:^|\s)h-7(?:\s|$)/);
+  await expect(tabButton).toHaveClass(/(?:^|\s)w-7(?:\s|$)/);
+
+  const icon = tabButton.locator('svg').first();
+
+  await expect(icon).toHaveAttribute('width', '12');
+  await expect(icon).toHaveAttribute('height', '12');
 }
 
 async function switchToWhiteboard(window: Awaited<ReturnType<typeof launchApp>>['window']) {
@@ -974,11 +1072,42 @@ async function requestWindowClose(window: Awaited<ReturnType<typeof launchApp>>[
   await window.getByTestId('window-control-close').click();
 }
 
+async function expectMenuShellAttribute(
+  menuShell: Locator,
+  attribute: 'data-expanded' | 'data-locked',
+  value: boolean,
+) {
+  await expect(menuShell).toHaveAttribute(attribute, value ? 'true' : 'false', {
+    timeout: UI_READY_TIMEOUT_MS,
+  });
+}
+
+async function ensureApplicationMenuVisible(window: Awaited<ReturnType<typeof launchApp>>['window']) {
+  const menuShell = window.getByTestId('menu-menubar-shell');
+  const menuToggle = window.getByTestId('menu-menubar-toggle');
+  const fileTrigger = window.locator('[data-slot="menubar-trigger"]').filter({ hasText: 'File' }).first();
+
+  if (await fileTrigger.count() > 0 && await fileTrigger.isVisible().catch(() => false)) {
+    return;
+  }
+
+  await expect(menuToggle).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+
+  if ((await menuShell.getAttribute('data-locked')) !== 'true') {
+    await menuToggle.click();
+  }
+
+  await expectMenuShellAttribute(menuShell, 'data-expanded', true);
+  await expect(fileTrigger).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+}
+
 async function selectMenuBarItem(
   window: Awaited<ReturnType<typeof launchApp>>['window'],
   menuLabel: string,
   itemLabel: string,
 ) {
+  await ensureApplicationMenuVisible(window);
+
   const menuTrigger = window.locator('[data-slot="menubar-trigger"]').filter({ hasText: menuLabel }).first();
   await expect(menuTrigger).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
   await menuTrigger.click();
@@ -1018,6 +1147,8 @@ test('app launches and shows main UI', async () => {
   const mainContentStack = window.getByTestId('main-content-stack');
   const explorerPanel = window.getByTestId('panel-left-panel');
   await expect(explorerPanel).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expectCompactPanelTabButton(window.getByTestId('left-panel-tab-explorer'));
+  await expectCompactPanelTabButton(window.getByTestId('left-panel-tab-outline'));
   await expect.poll(async () => {
     const stackBox = await mainContentStack.boundingBox();
     const panelBox = await explorerPanel.boundingBox();
@@ -1101,6 +1232,50 @@ test('window controls toggle minimize and maximize state', async () => {
 
   await browserWindow.evaluate((win) => win.restore());
   await expect.poll(async () => browserWindow.evaluate((win) => win.isMinimized())).toBe(false);
+
+  await app.close();
+});
+
+test('application menu expands on hover and stays visible when locked', async () => {
+  const { app, window } = await launchApp();
+
+  const menuToggle = window.getByTestId('menu-menubar-toggle');
+  const menuShell = window.getByTestId('menu-menubar-shell');
+  const themeToggle = window.getByTestId('toggle-theme');
+  const fileTrigger = () => window.locator('[data-slot="menubar-trigger"]').filter({ hasText: 'File' }).first();
+
+  await expect(menuToggle).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect(themeToggle).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await themeToggle.hover();
+  await expectMenuShellAttribute(menuShell, 'data-expanded', false);
+  await expect(fileTrigger()).toHaveCount(0, { timeout: UI_READY_TIMEOUT_MS });
+
+  await menuToggle.hover();
+  await expectMenuShellAttribute(menuShell, 'data-expanded', true);
+  await expect(fileTrigger()).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+
+  await fileTrigger().hover();
+  await expectMenuShellAttribute(menuShell, 'data-expanded', true);
+
+  await themeToggle.hover();
+  await expectMenuShellAttribute(menuShell, 'data-expanded', false);
+  await expect(window.locator('[data-slot="menubar-trigger"]').filter({ hasText: 'File' })).toHaveCount(0, {
+    timeout: UI_READY_TIMEOUT_MS,
+  });
+
+  await menuToggle.click();
+  await expectMenuShellAttribute(menuShell, 'data-locked', true);
+  await expectMenuShellAttribute(menuShell, 'data-expanded', true);
+  await expect(fileTrigger()).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+
+  await themeToggle.hover();
+  await expectMenuShellAttribute(menuShell, 'data-expanded', true);
+
+  await menuToggle.click();
+  await expectMenuShellAttribute(menuShell, 'data-locked', false);
+
+  await themeToggle.hover();
+  await expectMenuShellAttribute(menuShell, 'data-expanded', false);
 
   await app.close();
 });
@@ -1401,8 +1576,7 @@ test('lsp bottom panel filters diagnostics and shows paired request responses', 
   });
 
   await window.getByTestId('toggle-bottom-panel').click();
-  const bottomPanel = window.getByTestId('panel-bottom-panel');
-  await bottomPanel.getByRole('button', { name: /^lsp$/i }).click();
+  await getBottomPanelTab(window, 'lsp').click();
 
   await expect(window.getByTestId('lsp-panel')).toBeVisible();
 
@@ -1437,12 +1611,12 @@ test('lsp bottom panel filters diagnostics and shows paired request responses', 
     timeout: 15000,
   }).toBeGreaterThan(0);
 
-  const problemsTab = bottomPanel.getByRole('button', { name: /Problems \([1-9]\d*\)/i });
+  const problemsTab = getBottomPanelTab(window, 'problems');
   await expect(problemsTab).toBeVisible();
   await problemsTab.click();
   await expect(window.locator('text=/Errors|Warnings|Infos|Hints/').first()).toBeVisible();
 
-  await bottomPanel.getByRole('button', { name: /^lsp$/i }).click();
+  await getBottomPanelTab(window, 'lsp').click();
   await expect(window.getByTestId('lsp-panel')).toContainText(/initialize|textDocument\/definition|textDocument\/didOpen/);
 
   await window.getByTestId('lsp-filter-diagnostic').click();
@@ -1474,6 +1648,8 @@ test('single-clicked explorer files stay in preview style until double-clicked t
   const previewTitle = window.getByTestId('editor-tab-title-README.md');
   await expect(previewTitle).toHaveClass(/italic/);
   await expect(window.getByTestId('editor-tab-preview-indicator-README.md')).toBeVisible();
+  await expect(window.getByTestId('editor-tab-preview-indicator-ring-README.md')).toHaveCount(1);
+  await expect(window.getByTestId('editor-tab-preview-indicator-dot-README.md')).toHaveCount(1);
 
   await openNestedWorkspaceFile(window, [
     'file-tree-node-rtl',
@@ -2865,6 +3041,8 @@ test('explorer root toggles first-level children and hides the legacy collapse-a
 
   await expect(collapseAllButton).toHaveCount(0);
   await expect(rootNode).toBeVisible();
+  await expect(window.getByTestId('left-panel-header')).not.toContainText('retroSoC');
+  await expect(rootNode).toContainText('retroSoC');
   await expect(rtlNode).toBeVisible();
 
   await test.step('root row collapses and expands first-level children', async () => {
@@ -3008,6 +3186,11 @@ test('assistant chat list expansion widens the whole right sidebar and supports 
 
   await expect(rightPanel).toBeVisible();
   await expect(chatListPanel).toHaveCount(0);
+  await expectCompactPanelTabButton(window.getByTestId('right-panel-tab-ai'));
+  await expectCompactPanelTabButton(window.getByTestId('right-panel-tab-outline'));
+  await expect(assistantMainPanel).not.toHaveClass(/(?:^|\s)bg-background(?:\s|$)/);
+  await expect(window.getByTestId('assistant-panel-header')).toBeVisible();
+  await expect(window.getByTestId('assistant-panel-header').getByText('Pristine Agent')).toHaveCount(0);
 
   const initialRightPanelWidth = await waitForElementPixelWidthBetween(rightPanel, 295, 305);
   const initialAssistantWidth = await waitForElementPixelWidthBetween(assistantMainPanel, 295, 305);
@@ -3018,6 +3201,7 @@ test('assistant chat list expansion widens the whole right sidebar and supports 
   await chatListToggle.click();
 
   await expect(chatListPanel).toBeVisible();
+  await expect(chatListPanel).not.toHaveClass(/(?:^|\s)bg-muted\/20(?:\s|$)/);
 
   await waitForElementPixelWidthBetween(
     chatListPanel,
@@ -3507,6 +3691,12 @@ test('terminal tab creates a real shell session and shows command output', async
 
   await openBottomTerminal(window);
 
+  const bottomPanelTabBar = window.getByTestId('bottom-panel-tab-bar');
+  await expect(bottomPanelTabBar).not.toHaveClass(/(?:^|\s)bg-muted\/40(?:\s|$)/);
+  await expect(bottomPanelTabBar).not.toHaveClass(/(?:^|\s)border-b(?:\s|$)/);
+  await expectCompactPanelTabButton(getBottomPanelTab(window, 'terminal'));
+  await expectCompactPanelTabButton(getBottomPanelTab(window, 'output'));
+
   const terminalInput = window.locator('[data-testid="terminal-host"] .xterm-helper-textarea');
   await expect(terminalInput).toHaveCount(1);
   await terminalInput.click();
@@ -3556,7 +3746,6 @@ test('terminal uses the shared theme and mono font at runtime', async () => {
 
 test('terminal session survives tab switches and bottom panel hide/show', async () => {
   const { app, window } = await launchApp();
-  const bottomPanel = window.getByTestId('panel-bottom-panel');
 
   await openBottomTerminal(window);
 
@@ -3567,11 +3756,11 @@ test('terminal session survives tab switches and bottom panel hide/show', async 
   const originalPid = await readTerminalPid(window);
   expect(isProcessRunning(originalPid)).toBe(true);
 
-  await bottomPanel.getByRole('button', { name: /^output$/i }).click();
+  await getBottomPanelTab(window, 'output').click();
   await expect(window.getByTestId('terminal-host')).toHaveCount(0);
   expect(isProcessRunning(originalPid)).toBe(true);
 
-  await bottomPanel.getByRole('button', { name: /^terminal$/i, exact: true }).click();
+  await getBottomPanelTab(window, 'terminal').click();
   await expect.poll(async () => readTerminalPid(window), {
     timeout: 15000,
   }).toBe(originalPid);
@@ -3591,7 +3780,6 @@ test('terminal session survives tab switches and bottom panel hide/show', async 
 
 test('terminal preserves output history across tab switches and bottom panel hide/show', async () => {
   const { app, window } = await launchApp();
-  const bottomPanel = window.getByTestId('panel-bottom-panel');
   const marker = '__PRISTINE_TERMINAL_HISTORY__';
 
   await openBottomTerminal(window);
@@ -3606,14 +3794,14 @@ test('terminal preserves output history across tab switches and bottom panel hid
     timeout: 15000,
   }).toContain(marker);
 
-  await bottomPanel.getByRole('button', { name: /^output$/i }).click();
+  await getBottomPanelTab(window, 'output').click();
   await expect(window.getByTestId('terminal-host')).toHaveCount(0);
 
   await window.getByTestId('toggle-bottom-panel').click();
   await expect(window.getByTestId('terminal-host')).toHaveCount(0);
 
   await window.getByTestId('toggle-bottom-panel').click();
-  await bottomPanel.getByRole('button', { name: /^terminal$/i, exact: true }).click();
+  await getBottomPanelTab(window, 'terminal').click();
   await openBottomTerminal(window);
 
   await expect.poll(async () => readTerminalText(window), {
@@ -4066,6 +4254,9 @@ test('code viewer layout setting persists across app relaunch', async () => {
 
   await firstWindow.getByTestId('settings-close-button').click();
   await expect(firstWindow.getByTestId('settings-dialog')).toHaveCount(0);
+  await expectMinimalPanelHeaderWithoutOutline(firstWindow.getByTestId('left-panel-header'));
+  await ensureRightPanelVisible(firstWindow);
+  await expectMinimalPanelHeaderWithoutOutline(firstWindow.getByTestId('right-panel-header'));
 
   await firstApp.close();
 
@@ -4075,6 +4266,7 @@ test('code viewer layout setting persists across app relaunch', async () => {
   await ensureExplorerVisible(secondWindow);
   await expect(secondWindow.getByTestId('code-view-explorer')).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
   await expect.poll(async () => readConfigValue(secondWindow, 'workbench.codeViewerLayoutMode')).toBe('minimal');
+  await expectMinimalPanelHeaderWithoutOutline(secondWindow.getByTestId('left-panel-header'));
 
   await secondWindow.getByTestId('menu-settings-button').click();
   await expect(secondWindow.getByTestId('settings-dialog')).toBeVisible();
@@ -4092,6 +4284,60 @@ test('code viewer layout setting persists across app relaunch', async () => {
   await expect(secondWindow.getByTestId('settings-dialog')).toHaveCount(0);
 
   await secondApp.close();
+});
+
+test('minimal editor tabs keep their rounded height while the tab bar spacing stays tight', async () => {
+  test.slow();
+
+  const { app, window } = await launchApp();
+
+  await ensureExplorerVisible(window);
+  await window.getByTestId('menu-settings-button').click();
+  await expect(window.getByTestId('settings-dialog')).toBeVisible();
+
+  await selectComboboxOption(
+    window,
+    'settings-code-viewer-layout-combobox',
+    'settings-code-viewer-layout-option-minimal',
+  );
+
+  await expect.poll(async () => readConfigValue(window, 'workbench.codeViewerLayoutMode')).toBe('minimal');
+  await expect(window.getByTestId('code-view-explorer')).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
+
+  await window.getByTestId('settings-close-button').click();
+  await expect(window.getByTestId('settings-dialog')).toHaveCount(0);
+
+  await openNestedWorkspaceFile(window, ['file-tree-node-README_md'], { finalAction: 'dblclick' });
+  await openNestedWorkspaceFile(window, [
+    'file-tree-node-rtl',
+    'file-tree-node-rtl_core',
+    'file-tree-node-rtl_core_cpu_top_sv',
+  ], { finalAction: 'dblclick' });
+
+  const tabBar = window.getByTestId('editor-tab-bar');
+  const readmeTab = window.getByTestId('editor-tab-README.md');
+  const cpuTopTab = window.getByTestId('editor-tab-rtl/core/cpu_top.sv');
+
+  await expect(readmeTab).toBeVisible();
+  await expect(cpuTopTab).toBeVisible();
+  await expect(tabBar).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
+
+  await expect.poll(async () => readEditorTabBarSpacingSnapshot(tabBar, readmeTab, cpuTopTab)).toEqual({
+    columnGap: '0px',
+    paddingBottom: '0px',
+    paddingTop: '0px',
+    heightDeltaPx: 3,
+    horizontalGapPx: 0,
+  });
+
+  await expect.poll(async () => readEditorTabPaddingSnapshot(readmeTab)).toEqual({
+    maxWidth: '180px',
+    minWidth: '90px',
+    paddingLeft: '8px',
+    paddingRight: '8px',
+  });
+
+  await app.close();
 });
 
 async function readBundledThemeSnapshot(page: Awaited<ReturnType<typeof launchApp>>['window']) {

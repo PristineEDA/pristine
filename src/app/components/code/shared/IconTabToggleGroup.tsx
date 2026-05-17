@@ -9,6 +9,9 @@ import { centerViewSwitchItemClassName } from './viewSwitcherStyles';
 const iconTabToggleGroupClassName = 'rounded bg-muted p-0.5 gap-0.5';
 const iconTabToggleItemClassName = `${centerViewSwitchItemClassName} h-8 w-8 rounded-md`;
 
+export const compactIconTabToggleItemClassName = 'h-7 w-7 rounded-md';
+export const compactIconTabToggleIconSize = 12;
+
 export interface IconTabToggleGroupItem {
   icon: LucideIcon;
   label: string;
@@ -25,6 +28,8 @@ interface IconTabToggleGroupProps {
   orientation?: 'horizontal' | 'vertical';
   tooltipSide?: 'top' | 'right' | 'bottom' | 'left';
   className?: string;
+  itemClassName?: string;
+  iconSize?: number;
 }
 
 export function IconTabToggleGroup({
@@ -36,6 +41,8 @@ export function IconTabToggleGroup({
   orientation = 'horizontal',
   tooltipSide = 'bottom',
   className,
+  itemClassName,
+  iconSize = 13,
 }: IconTabToggleGroupProps) {
   return (
     <TooltipProvider delayDuration={0}>
@@ -67,9 +74,9 @@ export function IconTabToggleGroup({
                     aria-label={item.label}
                     data-testid={item.testId}
                     value={item.value}
-                    className={iconTabToggleItemClassName}
+                    className={cn(iconTabToggleItemClassName, itemClassName)}
                   >
-                    <Icon size={13} />
+                    <Icon size={iconSize} />
                   </ToggleGroupItem>
                 </span>
               </TooltipTrigger>

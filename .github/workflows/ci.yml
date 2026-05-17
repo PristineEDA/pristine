@@ -8,9 +8,6 @@ on:
     tags:
       - '*'
   pull_request:
-  release:
-    types:
-      - published
 
 env:
   PRISTINE_EMPTY_WALLPAPER_URL: https://raw.githubusercontent.com/PristineEDA/pristine-res/main/images/empty-wallpaper.png
@@ -18,7 +15,7 @@ env:
 jobs:
   package-gate:
     name: Package Gate
-    if: github.event_name == 'push' || github.event_name == 'release'
+    if: github.event_name == 'push'
     runs-on: ubuntu-24.04
     outputs:
       enabled: ${{ steps.check.outputs.enabled }}
@@ -35,11 +32,7 @@ jobs:
         run: |
           enabled=false
 
-          if [[ "${GITHUB_EVENT_NAME}" == "release" ]]; then
-            if [[ "${{ github.event.release.target_commitish }}" == "main" ]]; then
-              enabled=true
-            fi
-          elif [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
             git fetch origin main --depth=1
             if git merge-base --is-ancestor "${GITHUB_SHA}" "origin/main"; then
               enabled=true
@@ -240,6 +233,10 @@ jobs:
         if: runner.os == 'Windows'
         run: pnpm run verify:node-pty-binary -- --platform win32 --arch x64
 
+      - name: Verify release version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: node scripts/release-version.mjs check --ref "${GITHUB_REF}"
+
       - name: Package application
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
@@ -385,5 +382,80 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: pristine-${{ matrix.id }}
-          path: release/**
+          path: |
+            release/**/*.AppImage
+            release/**/*.blockmap
+            release/**/*.deb
+            release/**/*.dmg
+            release/**/*.exe
+            release/**/*.yml
+            !release/**/builder-debug.yml
+            !release/**/*-unpacked/**
+            !release/**/linux-unpacked/**
+            !release/**/mac*/**
+            !release/**/win-unpacked/**
           if-no-files-found: error
+
+  github-release:
+    name: GitHub Release
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && needs.package-gate.outputs.enabled == 'true'
+    needs:
+      - package
+      - package-gate
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Verify release version
+        run: node scripts/release-version.mjs check --ref "${GITHUB_REF}"
+
+      - name: Download package artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: pristine-*
+          path: release-artifacts
+
+      - name: Stage release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mkdir -p release-assets
+
+          while IFS= read -r -d '' file; do
+            relative_path="${file#release-artifacts/}"
+            artifact_name="${relative_path%%/*}"
+            file_name="$(basename "$file")"
+            target="release-assets/${file_name}"
+
+            if [[ -e "$target" ]]; then
+              target="release-assets/${artifact_name}-${file_name}"
+            fi
+
+            cp "$file" "$target"
+          done < <(find release-artifacts -type f \( -name '*.AppImage' -o -name '*.blockmap' -o -name '*.deb' -o -name '*.dmg' -o -name '*.exe' -o -name '*.yml' \) ! -name 'builder-debug.yml' -print0 | sort -z)
+
+          asset_count=$(find release-assets -type f | wc -l | tr -d ' ')
+          if [[ "$asset_count" == "0" ]]; then
+            echo "::error::No release assets were staged."
+            exit 1
+          fi
+
+          find release-assets -maxdepth 1 -type f -printf '%f\n' | sort
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-assets/*
+          draft: false
+          prerelease: false
+          generate_release_notes: true

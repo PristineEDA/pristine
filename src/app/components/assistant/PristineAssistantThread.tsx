@@ -142,7 +142,7 @@ type ShellCommandToolResult = {
 };
 
 const userMessageSurfaceClassName = 'rounded-md border border-border bg-background px-3 py-2 shadow-xs';
-const assistantMessageSurfaceClassName = 'rounded-md bg-background px-3 py-2';
+const assistantMessageSurfaceClassName = 'rounded-md px-3 py-2';
 const actionButtonClassName = 'inline-flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-50';
 const composerSelectorTriggerClassName = '!h-7 !gap-1 !px-1.5 !text-[10px] [&>span]:!gap-1 [&>svg]:!size-3';
 
@@ -1005,7 +1005,7 @@ function Composer() {
 export function PristineAssistantThread({ agentBaseUrl, className, isThreadLoading = false }: PristineAssistantThreadProps) {
   return (
     <AgentApprovalProvider agentBaseUrl={agentBaseUrl}>
-      <ThreadPrimitive.Root className={cn('relative flex min-h-0 flex-1 flex-col bg-background', className)}>
+      <ThreadPrimitive.Root className={cn('relative flex min-h-0 flex-1 flex-col', className)}>
         <PristineAssistantInstructions />
         <PristineAssistantToolUIs />
         <ThreadPrimitive.Viewport className="pristine-assistant-scrollbar flex-1 overflow-y-auto px-2 py-1" autoScroll turnAnchor="bottom">
@@ -1026,7 +1026,7 @@ export function PristineAssistantThread({ agentBaseUrl, className, isThreadLoadi
           )}
         </ThreadPrimitive.Viewport>
         <SelectionToolbar />
-        <div className="relative shrink-0 bg-background p-2">
+        <div className="relative shrink-0 p-2">
           <ThreadScrollToBottom />
           <Composer />
         </div>

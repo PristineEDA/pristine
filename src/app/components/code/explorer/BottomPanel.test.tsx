@@ -10,6 +10,16 @@ import { BottomPanel } from './BottomPanel';
 
 let mockedProblems: LspProblem[] = [];
 
+function expectCompactTabButton(testId: string) {
+  const tabButton = screen.getByTestId(testId);
+  const icon = tabButton.querySelector('svg');
+
+  expect(tabButton).toHaveClass('h-7', 'w-7');
+  expect(icon).not.toBeNull();
+  expect(icon!).toHaveAttribute('width', '12');
+  expect(icon!).toHaveAttribute('height', '12');
+}
+
 const mockThemeApi = vi.hoisted(() => {
   const activeTheme = {
     id: 'vscode-2026-dark',
@@ -66,8 +76,14 @@ vi.mock('./terminalSessionStore', async (importOriginal) => {
 
 type TestUser = ReturnType<typeof userEvent.setup>;
 
+type BottomPanelTabId = 'terminal' | 'output' | 'problems' | 'debug' | 'lsp';
+
 async function clickButton(user: TestUser, name: string | RegExp) {
   await user.click(screen.getByRole('button', { name }));
+}
+
+async function clickBottomTab(user: TestUser, tabId: BottomPanelTabId) {
+  await user.click(screen.getByTestId(`bottom-panel-tab-${tabId}`));
 }
 
 describe('BottomPanel', () => {
@@ -149,18 +165,21 @@ describe('BottomPanel', () => {
 
     render(<BottomPanel onClose={onClose} />);
 
-    await clickButton(user, /problems \(6\)/i);
+    expect(screen.getByTestId('bottom-panel-tab-bar')).not.toHaveClass('bg-muted/40', 'border-b', 'border-border');
+    expect(screen.getByTestId('bottom-panel-tab-problems')).toHaveAccessibleName('Problems');
+
+    await clickBottomTab(user, 'problems');
     expect(await screen.findByText(/2 errors/i)).toBeInTheDocument();
     expect(await screen.findByText(/2 warnings/i)).toBeInTheDocument();
     expect(await screen.findByText(/1 infos/i)).toBeInTheDocument();
     expect(await screen.findByText(/1 hints/i)).toBeInTheDocument();
     expect(await screen.findByText(/Undriven signal/i)).toBeInTheDocument();
 
-    await clickButton(user, /debug console/i);
+    await clickBottomTab(user, 'debug');
     expect(screen.getByRole('button', { name: /start debugging/i })).toBeInTheDocument();
     expect(screen.getByText(/Debug session not started/i)).toBeInTheDocument();
 
-    await clickButton(user, /^lsp$/i);
+    await clickBottomTab(user, 'lsp');
     expect(await screen.findByTestId('lsp-panel')).toBeInTheDocument();
     expect(screen.getByText(/No LSP debug events yet\./i)).toBeInTheDocument();
 
@@ -174,7 +193,7 @@ describe('BottomPanel', () => {
 
     expect(container.firstChild).toHaveClass('min-h-0');
 
-    await clickButton(user, /^output$/i);
+    await clickBottomTab(user, 'output');
 
     const initialEntry = await screen.findByText(/RTL Analyzer v2\.4\.1 started/i);
     expect(initialEntry.closest('.bottom-panel-scrollbar')).not.toBeNull();
@@ -209,7 +228,15 @@ describe('BottomPanel', () => {
     expect(container.firstChild).toHaveClass('rounded-md', 'bg-background');
     expect(container.firstChild).not.toHaveClass('border');
     expect(container.firstChild).not.toHaveClass('border-t');
-    expect(screen.getByTestId('bottom-panel-tab-bar')).toHaveClass('h-9', 'gap-1.5', 'p-1.5');
-    expect(screen.getByRole('button', { name: /^terminal$/i })).toHaveClass('rounded', 'bg-background');
+    expect(screen.getByTestId('bottom-panel-tab-bar')).toHaveClass('h-9', 'gap-1.5', 'px-1.5');
+    expect(screen.getByTestId('bottom-panel-tab-bar')).not.toHaveClass('bg-muted/40', 'border-b', 'border-border');
+    expect(screen.getByTestId('bottom-panel-tab-group')).toHaveAttribute('aria-label', 'Bottom panel tabs');
+    expectCompactTabButton('bottom-panel-tab-terminal');
+    expectCompactTabButton('bottom-panel-tab-output');
+    expectCompactTabButton('bottom-panel-tab-problems');
+    expectCompactTabButton('bottom-panel-tab-debug');
+    expectCompactTabButton('bottom-panel-tab-lsp');
+    expect(screen.getByTestId('bottom-panel-tab-terminal')).toHaveAccessibleName('Terminal');
+    expect(screen.getByTestId('bottom-panel-tab-terminal')).toHaveAttribute('data-state', 'on');
   });
 });

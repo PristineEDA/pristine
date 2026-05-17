@@ -1,7 +1,11 @@
 import { BetweenHorizontalStart, ListTree, ShieldCheck, Sparkles } from 'lucide-react';
 import { Suspense, lazy, useState } from "react";
 
-import { IconTabToggleGroup } from '../shared/IconTabToggleGroup';
+import {
+  compactIconTabToggleIconSize,
+  compactIconTabToggleItemClassName,
+  IconTabToggleGroup,
+} from '../shared/IconTabToggleGroup';
 import { Skeleton } from "../../ui/skeleton";
 import { TooltipProvider } from '../../ui/tooltip';
 import { ASSISTANT_THREAD_LIST_DEFAULT_WIDTH_PX } from "./assistantPanelLayout";
@@ -86,7 +90,11 @@ export function RightSidePanel({
   return (
     <TooltipProvider delayDuration={0}>
       <div className="flex flex-col h-full bg-muted/40 overflow-hidden">
-        <div data-code-viewer-layout-mode={layoutMode} className={getPanelHeaderClassName(layoutMode)}>
+        <div
+          data-testid="right-panel-header"
+          data-code-viewer-layout-mode={layoutMode}
+          className={getPanelHeaderClassName(layoutMode)}
+        >
           <IconTabToggleGroup
             items={rightPanelTabs}
             value={tab}
@@ -96,6 +104,8 @@ export function RightSidePanel({
             groupLabel="Right panel tabs"
             groupTestId="right-panel-tabs"
             tooltipSide="bottom"
+            itemClassName={compactIconTabToggleItemClassName}
+            iconSize={compactIconTabToggleIconSize}
           />
         </div>
 

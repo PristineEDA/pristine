@@ -2,7 +2,7 @@ import { Suspense, lazy, useMemo, useState, type ReactNode } from 'react';
 import {
   Terminal, X, Plus,
   AlertCircle, AlertTriangle, Info, Lightbulb,
-  Bug, Square,
+  Bug, Square, Logs, Workflow,
 } from 'lucide-react';
 import { summarizeLspProblems, useLspProblems } from '../../../lsp/lspProblems';
 import { TerminalPanel } from './TerminalPanel';
@@ -10,14 +10,28 @@ import { DebugConsole } from './DebugConsole';
 import { terminateTerminalSession } from './terminalSessionStore';
 import { Button } from '../../ui/button';
 import { TooltipIconButton } from '../../ui/tooltip-icon-button';
+import {
+  compactIconTabToggleIconSize,
+  compactIconTabToggleItemClassName,
+  IconTabToggleGroup,
+  type IconTabToggleGroupItem,
+} from '../shared/IconTabToggleGroup';
 import { useCodeViewerLayout } from '../../../context/CodeViewerLayoutContext';
-import { getBottomPanelClassName, getBottomPanelTabBarClassName, getBottomPanelTabClassName } from '../shared/codeViewerLayoutStyles';
+import { getBottomPanelClassName, getBottomPanelTabBarClassName } from '../shared/codeViewerLayoutStyles';
 
 const OutputPanel = lazy(() => import('./OutputPanel').then((module) => ({ default: module.OutputPanel })));
 const ProblemsTabPanel = lazy(() => import('./ProblemsTabPanel').then((module) => ({ default: module.ProblemsTabPanel })));
 const LspPanel = lazy(() => import('./LspPanel').then((module) => ({ default: module.LspPanel })));
 
 type BottomPanelTabId = 'terminal' | 'output' | 'problems' | 'debug' | 'lsp';
+
+const BOTTOM_PANEL_TAB_ITEMS = [
+  { value: 'terminal', label: 'Terminal', icon: Terminal, testId: 'bottom-panel-tab-terminal' },
+  { value: 'output', label: 'Output', icon: Logs, testId: 'bottom-panel-tab-output' },
+  { value: 'problems', label: 'Problems', icon: AlertCircle, testId: 'bottom-panel-tab-problems' },
+  { value: 'debug', label: 'Debug Console', icon: Bug, testId: 'bottom-panel-tab-debug' },
+  { value: 'lsp', label: 'LSP', icon: Workflow, testId: 'bottom-panel-tab-lsp' },
+] as const satisfies readonly IconTabToggleGroupItem[];
 
 interface BottomPanelProps {
   layoutVersion?: string;
@@ -35,14 +49,6 @@ export function BottomPanel({ layoutVersion, onClose }: BottomPanelProps) {
       onClose?.();
     });
   };
-
-  const tabs = [
-    { id: 'terminal', label: 'Terminal', icon: Terminal },
-    { id: 'output', label: 'Output', icon: null },
-    { id: 'problems', label: `Problems (${problemCounts.totalCount})`, icon: null },
-    { id: 'debug', label: 'Debug Console', icon: Bug },
-    { id: 'lsp', label: 'LSP', icon: null },
-  ] as const;
 
   const panelContent = useMemo<Record<BottomPanelTabId, ReactNode>>(() => ({
     terminal: <TerminalPanel layoutVersion={layoutVersion} />,
@@ -94,24 +100,23 @@ export function BottomPanel({ layoutVersion, onClose }: BottomPanelProps) {
     <div data-code-viewer-layout-mode={layoutMode} className={getBottomPanelClassName(layoutMode)}>
       {/* Tab bar */}
       <div data-testid="bottom-panel-tab-bar" className={getBottomPanelTabBarClassName(layoutMode)}>
-        {tabs.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className={getBottomPanelTabClassName(layoutMode, tab === t.id)}
-          >
-            {t.id === 'problems' && problemCounts.errorCount > 0 && (
-              <AlertCircle size={11} className="text-destructive" />
-            )}
-            {t.label}
-          </button>
-        ))}
+        <IconTabToggleGroup
+          items={BOTTOM_PANEL_TAB_ITEMS}
+          value={tab}
+          onValueChange={(nextValue) => setTab(nextValue as BottomPanelTabId)}
+          groupLabel="Bottom panel tabs"
+          groupTestId="bottom-panel-tab-group"
+          tooltipSide="top"
+          className="shrink-0"
+          itemClassName={compactIconTabToggleItemClassName}
+          iconSize={compactIconTabToggleIconSize}
+        />
 
-        <div className="flex items-center gap-1 ml-auto pr-2">
+        <div className="ml-auto flex items-center gap-1">
           <TooltipIconButton content="New Terminal">
             <Button
               variant="ghost"
-              size="icon"
+              size="icon-xs"
               aria-label="New Terminal"
               className="text-muted-foreground hover:text-foreground"
               onClick={() => setTab('terminal')}
@@ -122,7 +127,7 @@ export function BottomPanel({ layoutVersion, onClose }: BottomPanelProps) {
           <TooltipIconButton content="Close Panel">
             <Button
               variant="ghost"
-              size="icon"
+              size="icon-xs"
               aria-label="Close Panel"
               className="text-muted-foreground hover:text-foreground"
               onClick={handleClose}

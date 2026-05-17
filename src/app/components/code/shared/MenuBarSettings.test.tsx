@@ -5,6 +5,7 @@ import { getEditorFontFamilyLabel } from '../../../editor/editorSettings';
 import {
   ensureEditorFontFamilyLoadedMock,
   importThemeMock,
+  lockApplicationMenuBar,
   mockPersistedSettingsConfig,
   renderMenuBar,
   setEditorBracketPairGuidesMock,
@@ -98,6 +99,7 @@ describe('MenuBar settings', () => {
 
     renderMenuBar();
 
+  await lockApplicationMenuBar(user);
     await user.click(screen.getByText('File'));
     expect(await screen.findByText('Ctrl+Q')).toBeInTheDocument();
     await user.click(await screen.findByText('Setting...'));

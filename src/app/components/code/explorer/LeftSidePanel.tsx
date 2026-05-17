@@ -2,10 +2,9 @@ import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } fro
 import { flushSync } from 'react-dom';
 import { useWorkspaceGitStatus } from '../../../git/workspaceGitStatus';
 import { FileTreeNode, type ExplorerContextMenuRequest } from './FileTreeNode';
-import { ExplorerPanelTabs, ExplorerToolbar, type ExplorerPanelTab } from './LeftSidePanelChrome';
+import { ExplorerPanelTabs, type ExplorerPanelTab } from './LeftSidePanelChrome';
 import { FileOutlinePanel } from './FileOutlinePanel';
 import {
-  DEFAULT_STARTUP_PROJECT_NAME,
   WORKSPACE_ROOT_PATH,
   getWorkspaceParentPath,
   isWorkspaceRelativeFilePath,
@@ -646,7 +645,6 @@ export function LeftSidePanel({
       {/* Explorer */}
       {tab === 'explorer' && (
         <div className="flex flex-col flex-1 overflow-hidden">
-          <ExplorerToolbar projectName={DEFAULT_STARTUP_PROJECT_NAME} />
           <div
             ref={treeContainerRef}
             tabIndex={0}

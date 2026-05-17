@@ -1,0 +1,20 @@
+#!/bin/sh
+#
+# Pre-commit hook: read a release version from the branch name
+# (for example v0.5.0 or release/v0.5.0) and sync Pristine package versions.
+#
+
+BRANCH=$(git rev-parse --abbrev-ref HEAD)
+VERSION=$(printf '%s\n' "$BRANCH" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)
+
+if [ -z "$VERSION" ]; then
+  exit 0
+fi
+
+if ! node scripts/release-version.mjs sync --ref "$BRANCH"; then
+  echo "[version-sync] failed to sync package versions from branch $BRANCH"
+  exit 1
+fi
+
+git add package.json agent-server/package.json
+echo "[version-sync] branch $BRANCH -> $VERSION"
