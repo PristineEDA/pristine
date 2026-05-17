@@ -142,7 +142,7 @@ type ShellCommandToolResult = {
 };
 
 const userMessageSurfaceClassName = 'rounded-md border border-border bg-background px-3 py-2 shadow-xs';
-const assistantMessageSurfaceClassName = 'rounded-md bg-background px-3 py-2';
+const assistantMessageSurfaceClassName = 'rounded-md px-3 py-2';
 const actionButtonClassName = 'inline-flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-50';
 const composerSelectorTriggerClassName = '!h-7 !gap-1 !px-1.5 !text-[10px] [&>span]:!gap-1 [&>svg]:!size-3';
 

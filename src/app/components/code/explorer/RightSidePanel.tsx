@@ -90,7 +90,11 @@ export function RightSidePanel({
   return (
     <TooltipProvider delayDuration={0}>
       <div className="flex flex-col h-full bg-muted/40 overflow-hidden">
-        <div data-code-viewer-layout-mode={layoutMode} className={getPanelHeaderClassName(layoutMode)}>
+        <div
+          data-testid="right-panel-header"
+          data-code-viewer-layout-mode={layoutMode}
+          className={getPanelHeaderClassName(layoutMode)}
+        >
           <IconTabToggleGroup
             items={rightPanelTabs}
             value={tab}

@@ -2892,6 +2892,8 @@ test('explorer root toggles first-level children and hides the legacy collapse-a
 
   await expect(collapseAllButton).toHaveCount(0);
   await expect(rootNode).toBeVisible();
+  await expect(window.getByTestId('left-panel-header')).not.toContainText('retroSoC');
+  await expect(rootNode).toContainText('retroSoC');
   await expect(rtlNode).toBeVisible();
 
   await test.step('root row collapses and expands first-level children', async () => {

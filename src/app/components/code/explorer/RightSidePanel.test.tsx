@@ -29,6 +29,7 @@ describe('RightSidePanel', () => {
     );
 
     expect(screen.getByTestId('right-panel-tabs')).toBeInTheDocument();
+    expect(screen.getByTestId('right-panel-header').className).not.toMatch(/\bbg-/);
     expect(screen.getByRole('radio', { name: /ai assistant/i })).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: /static check/i })).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: /references/i })).toBeInTheDocument();

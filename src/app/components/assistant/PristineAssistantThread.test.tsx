@@ -451,7 +451,8 @@ describe('PristineAssistantThread', () => {
     expect(assistantContainer).toHaveClass('w-full');
     expect(assistantContainer).not.toHaveClass('max-w-[92%]');
     const assistantSurface = screen.getByTestId('assistant-message-surface');
-    expect(assistantSurface).toHaveClass('rounded-md', 'bg-background');
+    expect(assistantSurface).toHaveClass('rounded-md');
+    expect(assistantSurface.className).not.toMatch(/\bbg-/);
     expect(assistantSurface).not.toHaveClass('border', 'border-border', 'shadow-xs');
     expect(assistantSurface).toContainElement(screen.getByTestId('message-error-slot'));
     expect(screen.getByRole('alert')).toHaveTextContent('Assistant failed to complete the request');

@@ -93,6 +93,7 @@ describe('LeftSidePanel', () => {
     renderLeftSidePanel();
 
     expect(screen.getByTestId('left-panel-tabs')).toBeInTheDocument();
+    expect(screen.getByTestId('left-panel-header').className).not.toMatch(/\bbg-/);
     expect(screen.getByRole('radio', { name: 'Explorer' })).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: 'Outline' })).toBeInTheDocument();
     expectCompactTabButton('left-panel-tab-explorer');
@@ -101,6 +102,8 @@ describe('LeftSidePanel', () => {
     expect(screen.queryByRole('button', { name: 'Outline' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /problems/i })).not.toBeInTheDocument();
     expect(await screen.findByTestId('file-tree-node-rtl')).toBeInTheDocument();
+    expect(screen.getByTestId('left-panel-header')).not.toHaveTextContent('retroSoC');
+    expect(screen.getByTestId('file-tree-node-root')).toHaveTextContent('retroSoC');
   });
 
   it('does not render the legacy explorer toolbar buttons', async () => {
@@ -214,6 +217,7 @@ describe('LeftSidePanel', () => {
     renderLeftSidePanel();
 
     const rootNode = await screen.findByTestId('file-tree-node-root');
+    expect(rootNode).toHaveTextContent('retroSoC');
     expect(await screen.findByTestId('file-tree-node-rtl')).toBeInTheDocument();
 
     await testUser.click(rootNode);
