@@ -7,6 +7,7 @@ import {
   clickByTestId,
   clickByText,
   hasNormalizedTextContent,
+  lockApplicationMenuBar,
   openAccountPageMock,
   redoActionRun,
   renderMenuBar,
@@ -39,11 +40,62 @@ describe('MenuBar', () => {
     expect(window.electronAPI?.close).toHaveBeenCalledTimes(1);
   });
 
+  it('expands the application menu on hover and collapses after leaving when unlocked', async () => {
+    const user = userEvent.setup();
+
+    renderMenuBar();
+
+    const toggle = screen.getByTestId('menu-menubar-toggle');
+    const shell = screen.getByTestId('menu-menubar-shell');
+
+    expect(shell).toHaveAttribute('data-expanded', 'false');
+    expect(shell).toHaveAttribute('data-locked', 'false');
+    expect(screen.queryByText('File')).not.toBeInTheDocument();
+
+    await user.hover(toggle);
+
+    expect(shell).toHaveAttribute('data-expanded', 'true');
+    expect(await screen.findByText('File')).toBeVisible();
+
+    await user.unhover(toggle);
+
+    expect(shell).toHaveAttribute('data-expanded', 'false');
+    expect(screen.queryByText('File')).not.toBeInTheDocument();
+  });
+
+  it('locks the application menu open when toggled and collapses again after unlocking', async () => {
+    const user = userEvent.setup();
+
+    renderMenuBar();
+
+    const toggle = screen.getByTestId('menu-menubar-toggle');
+    const shell = screen.getByTestId('menu-menubar-shell');
+    const themeToggle = screen.getByTestId('toggle-theme');
+
+    await user.click(toggle);
+
+    expect(shell).toHaveAttribute('data-locked', 'true');
+    expect(shell).toHaveAttribute('data-expanded', 'true');
+    expect(await screen.findByText('Help')).toBeVisible();
+
+    await user.hover(themeToggle);
+    expect(shell).toHaveAttribute('data-expanded', 'true');
+
+    await user.click(toggle);
+    expect(shell).toHaveAttribute('data-locked', 'false');
+
+    await user.hover(themeToggle);
+
+    expect(shell).toHaveAttribute('data-expanded', 'false');
+    expect(screen.queryByText('Help')).not.toBeInTheDocument();
+  });
+
   it('renders Ctrl-based menu shortcuts on non-macOS platforms', async () => {
     const user = userEvent.setup();
 
     renderMenuBar();
 
+    await lockApplicationMenuBar(user);
     await user.click(screen.getByText('File'));
 
     expect(await screen.findByText(hasNormalizedTextContent('New ProjectCtrl+N'))).toBeInTheDocument();
@@ -182,6 +234,7 @@ describe('MenuBar', () => {
 
     renderMenuBar();
 
+  await lockApplicationMenuBar(user);
     await user.click(screen.getByText('Help'));
     await user.click(await screen.findByText('About'));
 
@@ -219,6 +272,7 @@ describe('MenuBar', () => {
 
     renderMenuBar();
 
+  await lockApplicationMenuBar(user);
     await user.click(screen.getByText('Help'));
     await user.click(await screen.findByText('Open Notice Files'));
 
@@ -253,6 +307,7 @@ describe('MenuBar', () => {
     await clickByText(user, 'edit-reg');
     await clickByText(user, 'register-editor');
 
+  await lockApplicationMenuBar(user);
     await user.click(screen.getByText('File'));
     await user.click(await screen.findByText('Save'));
     await user.click(screen.getByText('Edit'));
@@ -275,6 +330,7 @@ describe('MenuBar', () => {
     await clickByText(user, 'open-alu');
     await clickByText(user, 'edit-alu');
 
+    await lockApplicationMenuBar(user);
     await user.click(screen.getByText('File'));
     await user.click(await screen.findByText('Save All'));
 
@@ -314,6 +370,7 @@ describe('MenuBar', () => {
 
     renderMenuBar();
 
+  await lockApplicationMenuBar(user);
     await user.click(screen.getByText('File'));
     await user.click(await screen.findByText('Close'));
 

@@ -14,7 +14,7 @@ import { Button } from '../../ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../../ui/tooltip';
 import { useSidebar } from '../../ui/sidebar';
 import { AboutDialog } from './AboutDialog';
-import { MenuBarApplicationMenu } from './MenuBarApplicationMenu';
+import { MenuBarApplicationMenuCollapsible } from './MenuBarApplicationMenuCollapsible';
 import { MenuBarSettingsDialogs, useMenuBarSettingsController } from './MenuBarSettingsDialog';
 import { UserAccountPopover } from './MenuBarUserAccountPopover';
 import { MenuBarViewSwitcher } from './MenuBarViewSwitcher';
@@ -296,7 +296,8 @@ export function MenuBar({
 
           {/* Menu items — shadcn Menubar */}
           {showWindowMenu && (
-            <MenuBarApplicationMenu
+            <MenuBarApplicationMenuCollapsible
+              interactiveStyle={noDragInteractive as React.CSSProperties}
               menuStyle={noDrag as React.CSSProperties}
               onSelectAction={handleMenuItemSelect}
             />

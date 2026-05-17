@@ -19,6 +19,7 @@ import {
 
 interface MenuBarApplicationMenuProps {
   menuStyle: CSSProperties;
+  onMenuValueChange?: (value: string) => void;
   onSelectAction: (action: AppMenuAction | null) => void;
 }
 
@@ -28,16 +29,18 @@ function getMenuItemShortcut(menuLabel: string, itemName: string): string {
 
 export function MenuBarApplicationMenu({
   menuStyle,
+  onMenuValueChange,
   onSelectAction,
 }: MenuBarApplicationMenuProps) {
   return (
     <Menubar
       className="h-8 border-0 rounded-none bg-transparent p-0 shadow-none"
       data-testid="menu-menubar"
+      onValueChange={onMenuValueChange}
       style={menuStyle}
     >
       {applicationMenus.map((menu) => (
-        <MenubarMenu key={menu.label}>
+        <MenubarMenu key={menu.label} value={menu.label}>
           <MenubarTrigger className="px-2.5 h-6 text-[12px] font-normal rounded-sm">
             {menu.label}
           </MenubarTrigger>

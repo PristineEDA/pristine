@@ -1072,11 +1072,32 @@ async function requestWindowClose(window: Awaited<ReturnType<typeof launchApp>>[
   await window.getByTestId('window-control-close').click();
 }
 
+async function ensureApplicationMenuVisible(window: Awaited<ReturnType<typeof launchApp>>['window']) {
+  const menuShell = window.getByTestId('menu-menubar-shell');
+  const menuToggle = window.getByTestId('menu-menubar-toggle');
+  const fileTrigger = window.locator('[data-slot="menubar-trigger"]').filter({ hasText: 'File' }).first();
+
+  if (await fileTrigger.count() > 0 && await fileTrigger.isVisible().catch(() => false)) {
+    return;
+  }
+
+  await expect(menuToggle).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+
+  if ((await menuShell.getAttribute('data-locked')) !== 'true') {
+    await menuToggle.click();
+  }
+
+  await expect(menuShell).toHaveAttribute('data-expanded', 'true');
+  await expect(fileTrigger).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+}
+
 async function selectMenuBarItem(
   window: Awaited<ReturnType<typeof launchApp>>['window'],
   menuLabel: string,
   itemLabel: string,
 ) {
+  await ensureApplicationMenuVisible(window);
+
   const menuTrigger = window.locator('[data-slot="menubar-trigger"]').filter({ hasText: menuLabel }).first();
   await expect(menuTrigger).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
   await menuTrigger.click();
@@ -1201,6 +1222,46 @@ test('window controls toggle minimize and maximize state', async () => {
 
   await browserWindow.evaluate((win) => win.restore());
   await expect.poll(async () => browserWindow.evaluate((win) => win.isMinimized())).toBe(false);
+
+  await app.close();
+});
+
+test('application menu expands on hover and stays visible when locked', async () => {
+  const { app, window } = await launchApp();
+
+  const menuToggle = window.getByTestId('menu-menubar-toggle');
+  const menuShell = window.getByTestId('menu-menubar-shell');
+  const themeToggle = window.getByTestId('toggle-theme');
+  const fileTrigger = () => window.locator('[data-slot="menubar-trigger"]').filter({ hasText: 'File' }).first();
+
+  await expect(menuToggle).toBeVisible();
+  await expect(menuShell).toHaveAttribute('data-expanded', 'false');
+  await expect(fileTrigger()).toHaveCount(0);
+
+  await menuToggle.hover();
+  await expect(menuShell).toHaveAttribute('data-expanded', 'true');
+  await expect(fileTrigger()).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+
+  await fileTrigger().hover();
+  await expect(menuShell).toHaveAttribute('data-expanded', 'true');
+
+  await themeToggle.hover();
+  await expect(menuShell).toHaveAttribute('data-expanded', 'false');
+  await expect(window.locator('[data-slot="menubar-trigger"]').filter({ hasText: 'File' })).toHaveCount(0);
+
+  await menuToggle.click();
+  await expect(menuShell).toHaveAttribute('data-locked', 'true');
+  await expect(menuShell).toHaveAttribute('data-expanded', 'true');
+  await expect(fileTrigger()).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+
+  await themeToggle.hover();
+  await expect(menuShell).toHaveAttribute('data-expanded', 'true');
+
+  await menuToggle.click();
+  await expect(menuShell).toHaveAttribute('data-locked', 'false');
+
+  await themeToggle.hover();
+  await expect(menuShell).toHaveAttribute('data-expanded', 'false');
 
   await app.close();
 });
