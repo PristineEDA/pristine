@@ -63,6 +63,27 @@ describe('MenuBar', () => {
     expect(screen.queryByText('File')).not.toBeInTheDocument();
   });
 
+  it('expands the application menu when the pointer enters the toggle directly', async () => {
+    renderMenuBar();
+
+    const collapsible = screen.getByTestId('menu-menubar-collapsible');
+    const toggle = screen.getByTestId('menu-menubar-toggle');
+    const shell = screen.getByTestId('menu-menubar-shell');
+
+    expect(shell).toHaveAttribute('data-expanded', 'false');
+    expect(screen.queryByText('File')).not.toBeInTheDocument();
+
+    fireEvent.pointerEnter(toggle);
+
+    expect(shell).toHaveAttribute('data-expanded', 'true');
+    expect(await screen.findByText('File')).toBeVisible();
+
+    fireEvent.pointerLeave(collapsible);
+
+    expect(shell).toHaveAttribute('data-expanded', 'false');
+    expect(screen.queryByText('File')).not.toBeInTheDocument();
+  });
+
   it('locks the application menu open when toggled and collapses again after unlocking', async () => {
     const user = userEvent.setup();
 

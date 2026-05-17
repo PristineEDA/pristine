@@ -20,6 +20,8 @@ export function MenuBarApplicationMenuCollapsible({
   const [hoverExpanded, setHoverExpanded] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const expanded = locked || hoverExpanded || menuOpen;
+  const handleHoverEnter = () => setHoverExpanded(true);
+  const handleHoverLeave = () => setHoverExpanded(false);
 
   return (
     <div
@@ -27,8 +29,10 @@ export function MenuBarApplicationMenuCollapsible({
       data-expanded={expanded ? 'true' : 'false'}
       data-locked={locked ? 'true' : 'false'}
       className="flex h-full shrink-0 items-center"
-      onMouseEnter={() => setHoverExpanded(true)}
-      onMouseLeave={() => setHoverExpanded(false)}
+      onMouseEnter={handleHoverEnter}
+      onMouseLeave={handleHoverLeave}
+      onPointerEnter={handleHoverEnter}
+      onPointerLeave={handleHoverLeave}
       style={menuStyle}
     >
       <Toggle
@@ -36,6 +40,8 @@ export function MenuBarApplicationMenuCollapsible({
         data-testid="menu-menubar-toggle"
         pressed={locked}
         className="h-full w-8 rounded-none border-0 text-muted-foreground data-[state=on]:bg-accent data-[state=on]:text-foreground hover:cursor-pointer hover:bg-accent hover:text-foreground"
+        onMouseEnter={handleHoverEnter}
+        onPointerEnter={handleHoverEnter}
         onPressedChange={setLocked}
         style={interactiveStyle}
       >
