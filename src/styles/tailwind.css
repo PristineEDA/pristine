@@ -4,12 +4,17 @@
 @custom-variant dark (&:is(.dark *));
 @source '../**/*.{js,ts,jsx,tsx}';
 
+:root {
+  --ide-scrollbar-size: 6px;
+  --ide-scrollbar-radius: 3px;
+}
+
 /* Scrollbar styling */
 .overflow-y-auto::-webkit-scrollbar,
 .overflow-x-auto::-webkit-scrollbar,
 .overflow-auto::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: var(--ide-scrollbar-size);
+  height: var(--ide-scrollbar-size);
 }
 
 .overflow-y-auto::-webkit-scrollbar-track,
@@ -22,7 +27,7 @@
 .overflow-x-auto::-webkit-scrollbar-thumb,
 .overflow-auto::-webkit-scrollbar-thumb {
   background: var(--ide-text-dim);
-  border-radius: 3px;
+  border-radius: var(--ide-scrollbar-radius);
 }
 
 .overflow-y-auto::-webkit-scrollbar-thumb:hover,
@@ -51,17 +56,17 @@
 }
 
 .bottom-panel-scrollbar .xterm-viewport::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: var(--ide-scrollbar-size);
+  height: var(--ide-scrollbar-size);
 }
 
 .bottom-panel-scrollbar .xterm-viewport::-webkit-scrollbar-track {
-  background: transparent;
+  background: var(--ide-terminal-bg, transparent);
 }
 
 .bottom-panel-scrollbar .xterm-viewport::-webkit-scrollbar-thumb {
   background: transparent;
-  border-radius: 3px;
+  border-radius: var(--ide-scrollbar-radius);
 }
 
 .bottom-panel-scrollbar:hover .xterm-viewport::-webkit-scrollbar-thumb {
@@ -69,6 +74,38 @@
 }
 
 .bottom-panel-scrollbar:hover .xterm-viewport::-webkit-scrollbar-thumb:hover {
+  background: var(--ide-text-muted);
+}
+
+.bottom-panel-scrollbar .xterm .xterm-viewport {
+  background-color: var(--ide-terminal-bg, transparent);
+}
+
+.bottom-panel-scrollbar .xterm .xterm-scrollable-element > .scrollbar {
+  background: var(--ide-terminal-bg, transparent) !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  outline: none !important;
+  width: var(--ide-scrollbar-size) !important;
+}
+
+.bottom-panel-scrollbar .xterm .xterm-scrollable-element > .scrollbar > .slider {
+  background: transparent;
+  border: 0 !important;
+  border-radius: var(--ide-scrollbar-radius);
+  box-shadow: none !important;
+  left: auto !important;
+  outline: none !important;
+  right: 0 !important;
+  width: var(--ide-scrollbar-size) !important;
+}
+
+.bottom-panel-scrollbar:hover .xterm .xterm-scrollable-element > .scrollbar > .slider {
+  background: var(--ide-text-dim);
+}
+
+.bottom-panel-scrollbar:hover .xterm .xterm-scrollable-element > .scrollbar > .slider:hover,
+.bottom-panel-scrollbar:hover .xterm .xterm-scrollable-element > .scrollbar > .slider.active {
   background: var(--ide-text-muted);
 }
 

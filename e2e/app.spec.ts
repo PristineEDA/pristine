@@ -749,6 +749,43 @@ async function readTerminalPid(window: Awaited<ReturnType<typeof launchApp>>['wi
   return value ? Number(value) : NaN;
 }
 
+async function readScrollbarWidthSnapshot(window: Awaited<ReturnType<typeof launchApp>>['window']) {
+  return window.getByTestId('terminal-host').evaluate((host) => {
+    const browserGlobal = globalThis as unknown as {
+      document: {
+        querySelector: (selectors: string) => unknown | null;
+      };
+      getComputedStyle: (element: unknown, pseudoElt?: string) => {
+        backgroundColor: string;
+        width: string;
+      };
+    };
+    const terminalHost = host as {
+      parentElement: unknown | null;
+      querySelector: (selectors: string) => unknown | null;
+    };
+    const explorerTree = browserGlobal.document.querySelector('.explorer-tree-scrollbar');
+    const terminalViewport = terminalHost.querySelector('.xterm-viewport');
+    const terminalCustomScrollbar = terminalHost.querySelector('.xterm-scrollable-element > .scrollbar');
+    const terminalCustomSlider = terminalHost.querySelector('.xterm-scrollable-element > .scrollbar > .slider');
+
+    if (!explorerTree || !terminalViewport || !terminalCustomScrollbar || !terminalCustomSlider || !terminalHost.parentElement) {
+      throw new Error('Expected explorer and terminal scrollbar elements to be available.');
+    }
+
+    const terminalSurfaceStyle = browserGlobal.getComputedStyle(terminalHost.parentElement);
+    const terminalCustomScrollbarStyle = browserGlobal.getComputedStyle(terminalCustomScrollbar);
+
+    return {
+      explorerWidth: browserGlobal.getComputedStyle(explorerTree, '::-webkit-scrollbar').width,
+      terminalCustomScrollbarMatchesSurface: terminalCustomScrollbarStyle.backgroundColor === terminalSurfaceStyle.backgroundColor,
+      terminalCustomScrollbarWidth: terminalCustomScrollbarStyle.width,
+      terminalCustomSliderWidth: browserGlobal.getComputedStyle(terminalCustomSlider).width,
+      terminalViewportWidth: browserGlobal.getComputedStyle(terminalViewport, '::-webkit-scrollbar').width,
+    };
+  });
+}
+
 async function readTerminalThemeSnapshot(window: Awaited<ReturnType<typeof launchApp>>['window']) {
   return window.getByTestId('terminal-host').evaluate((host) => {
     const browserGlobal = globalThis as unknown as {
@@ -3989,6 +4026,16 @@ test('terminal remains writable after left sidebar toggles while vertically scro
   }, {
     timeout: 10000,
   }).toBeGreaterThan(40);
+
+  await expect.poll(async () => readScrollbarWidthSnapshot(window), {
+    timeout: 10000,
+  }).toEqual({
+    explorerWidth: '6px',
+    terminalCustomScrollbarMatchesSurface: true,
+    terminalCustomScrollbarWidth: '6px',
+    terminalCustomSliderWidth: '6px',
+    terminalViewportWidth: '6px',
+  });
 
   await window.getByTestId('toggle-left-panel').click();
   await expectCollapsedPanel(window.getByTestId('panel-left-panel'));

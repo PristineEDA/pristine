@@ -6,6 +6,7 @@ import type { ElectronAPI } from '../../../../../types/electron-api';
 
 const terminalInstances: Array<{
   cols: number;
+  options: unknown;
   rows: number;
   open: ReturnType<typeof vi.fn>;
   focus: ReturnType<typeof vi.fn>;
@@ -96,9 +97,10 @@ vi.mock('@xterm/xterm', () => ({
     loadAddon = vi.fn();
     onData = vi.fn(() => ({ dispose: vi.fn() }));
 
-    constructor() {
+    constructor(options: unknown) {
       terminalInstances.push({
         cols: this.cols,
+        options,
         rows: this.rows,
         open: this.open,
         focus: this.focus,
@@ -166,6 +168,7 @@ describe('TerminalSurface', () => {
 
     const host = screen.getByTestId('terminal-host');
     expect(host.parentElement).toHaveClass('bottom-panel-scrollbar', 'min-h-0', 'flex-1');
+    expect(terminalInstances[0]?.options).not.toHaveProperty('overviewRuler');
     await waitFor(() => expect(host).toHaveAttribute('data-terminal-text', 'PS> dir\r\n'));
     expect(host).toHaveAttribute('data-terminal-pid', '404');
 
