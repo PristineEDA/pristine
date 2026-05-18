@@ -8,6 +8,7 @@ import {
   clickByText,
   hasNormalizedTextContent,
   lockApplicationMenuBar,
+  mockPersistedSettingsConfig,
   openAccountPageMock,
   redoActionRun,
   renderMenuBar,
@@ -38,6 +39,26 @@ describe('MenuBar', () => {
     expect(window.electronAPI?.minimize).toHaveBeenCalledTimes(1);
     expect(window.electronAPI?.maximize).toHaveBeenCalledTimes(1);
     expect(window.electronAPI?.close).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the close window icon neutral until hover', () => {
+    renderMenuBar();
+
+    const closeControl = screen.getByTestId('window-control-close');
+
+    expect(closeControl).toHaveClass('text-ide-text-muted', 'hover:bg-ide-close', 'hover:text-primary-foreground');
+    expect(closeControl).not.toHaveClass('text-ide-close');
+  });
+
+  it('keeps the close window icon neutral in minimal layout until hover', () => {
+    mockPersistedSettingsConfig({ codeViewerLayoutMode: 'minimal' });
+
+    renderMenuBar();
+
+    const closeControl = screen.getByTestId('window-control-close');
+
+    expect(closeControl).toHaveClass('text-ide-unified-chrome-fg/80', 'hover:bg-ide-close', 'hover:text-primary-foreground');
+    expect(closeControl).not.toHaveClass('text-ide-close');
   });
 
   it('expands the application menu on hover and collapses after leaving when unlocked', async () => {

@@ -13,9 +13,13 @@ export function MenuBarWindowControls({
 }: MenuBarWindowControlsProps) {
   const { layoutMode } = useCodeViewerLayout();
   const isMinimalLayout = layoutMode === 'minimal';
+  const controlBaseClassName = 'w-9 h-full flex items-center justify-center transition-colors';
   const controlClassName = isMinimalLayout
-    ? 'w-9 h-full flex items-center justify-center text-ide-unified-chrome-fg/80 hover:text-ide-unified-chrome-fg hover:bg-ide-unified-chrome-hover transition-colors'
-    : 'w-9 h-full flex items-center justify-center text-ide-text-muted hover:text-ide-text hover:bg-ide-hover transition-colors';
+    ? `${controlBaseClassName} text-ide-unified-chrome-fg/80 hover:text-ide-unified-chrome-fg hover:bg-ide-unified-chrome-hover`
+    : `${controlBaseClassName} text-ide-text-muted hover:text-ide-text hover:bg-ide-hover`;
+  const closeControlClassName = isMinimalLayout
+    ? `${controlBaseClassName} text-ide-unified-chrome-fg/80 hover:text-primary-foreground hover:bg-ide-close`
+    : `${controlBaseClassName} text-ide-text-muted hover:text-primary-foreground hover:bg-ide-close`;
 
   return (
     <>
@@ -37,7 +41,7 @@ export function MenuBarWindowControls({
       </button>
       <button
         data-testid="window-control-close"
-        className="w-9 h-full flex items-center justify-center text-ide-close hover:text-primary-foreground hover:bg-ide-close transition-colors"
+        className={closeControlClassName}
         style={interactiveStyle}
         onClick={onRequestClose}
       >
