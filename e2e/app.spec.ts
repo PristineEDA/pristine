@@ -398,11 +398,11 @@ async function ensureRightPanelVisible(window: Awaited<ReturnType<typeof launchA
   await expect(rightPanel).toBeVisible();
 }
 
-async function expectMinimalPanelHeaderWithoutOutline(header: Locator) {
+async function expectPanelHeaderWithoutDivider(header: Locator) {
   await expect(header).toBeVisible();
   await expect(header).not.toHaveClass(/(?:^|\s)border(?:\s|$)/);
   await expect(header).not.toHaveClass(/(?:^|\s)border-b(?:\s|$)/);
-  await expect(header).not.toHaveClass(/(?:^|\s)border-border(?:\s|$)/);
+  await expect(header).not.toHaveClass(/(?:^|\s)border-ide-border(?:\s|$)/);
 }
 
 async function expectCollapsedPanel(panel: Locator) {
@@ -642,7 +642,7 @@ async function openExplorerRenameInput(
   const renameInput = window.getByTestId(renameInputTestId);
 
   await targetNode.click();
-  await expect(targetNode).toHaveClass(/bg-primary\/20/);
+  await expect(targetNode).toHaveAttribute('data-selected', 'true');
   await explorerTree.focus();
   await expect(explorerTree).toBeFocused();
   await explorerTree.press('F2');
@@ -1917,7 +1917,7 @@ test('Ctrl+N creates an untitled file, Ctrl+S saves it, and explorer refreshes t
     await window.keyboard.press(`${primaryModifier}+N`);
 
     await expect(window.getByTestId('editor-tab-untitled-1')).toBeVisible();
-    await expect(window.getByTestId('editor-tab-untitled-1')).toHaveClass(/bg-background/);
+    await expect(window.getByTestId('editor-tab-untitled-1')).toHaveAttribute('data-active', 'true');
 
     await window.keyboard.type(marker);
     await expect(window.getByTestId('editor-tab-dirty-indicator-untitled-1')).toBeVisible();
@@ -1926,7 +1926,7 @@ test('Ctrl+N creates an untitled file, Ctrl+S saves it, and explorer refreshes t
     await window.keyboard.press(`${primaryModifier}+S`);
 
     await expect(window.getByTestId(`editor-tab-${savedRelativePath}`)).toBeVisible();
-    await expect(window.getByTestId(`editor-tab-${savedRelativePath}`)).toHaveClass(/bg-background/);
+    await expect(window.getByTestId(`editor-tab-${savedRelativePath}`)).toHaveAttribute('data-active', 'true');
     await expect(window.getByTestId(`editor-tab-dirty-indicator-${savedRelativePath}`)).toHaveCount(0);
     await expect(window.getByTestId('editor-breadcrumb')).toContainText('retroSoC');
     await expect(window.getByTestId('editor-breadcrumb')).toContainText('rtl');
@@ -2447,7 +2447,7 @@ test('Explorer rename and delete keep the tree scroll position near the bottom a
     const deleteNode = window.getByTestId(deleteTreeTestId);
     await expect(deleteNode).toBeVisible();
     await deleteNode.click();
-    await expect(deleteNode).toHaveClass(/bg-primary\/20/);
+    await expect(deleteNode).toHaveAttribute('data-selected', 'true');
 
     const beforeDeleteScrollTop = await readExplorerTreeScrollTop(window);
   const beforeDeleteAnchorTop = await readExplorerNodeTop(window, renameTargetTreeTestId);
@@ -2980,7 +2980,7 @@ test('ctrl+p quick open keyboard navigation opens the selected recent file', asy
   await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toBeVisible();
 
   await readmeNode.click();
-  await expect(window.getByTestId('editor-tab-README.md')).toHaveClass(/bg-background/);
+  await expect(window.getByTestId('editor-tab-README.md')).toHaveAttribute('data-active', 'true');
 
   await window.keyboard.press('Control+P');
   const quickOpenInput = window.getByTestId('quick-open-input');
@@ -2990,8 +2990,8 @@ test('ctrl+p quick open keyboard navigation opens the selected recent file', asy
   await quickOpenInput.press('Enter');
 
   await expect(window.getByTestId('quick-open-overlay')).toHaveCount(0);
-  await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toHaveClass(/bg-background/);
-  await expect(window.getByTestId('editor-tab-README.md')).not.toHaveClass(/bg-background/);
+  await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toHaveAttribute('data-active', 'true');
+  await expect(window.getByTestId('editor-tab-README.md')).toHaveAttribute('data-active', 'false');
 
   await app.close();
 });
@@ -3141,7 +3141,7 @@ test('ctrl+p quick open escape restores the previous editor cursor position and 
   await quickOpenInput.press('Escape');
 
   await expect(window.getByTestId('quick-open-overlay')).toHaveCount(0);
-  await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toHaveClass(/bg-background/);
+  await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toHaveAttribute('data-active', 'true');
   await expect(getCursorStatus(window)).toHaveText('Ln 3, Col 7');
 
   await window.keyboard.press('ArrowDown');
@@ -3723,13 +3723,13 @@ test('ctrl+w closes the active tab when monaco focus is inside the current edito
     'file-tree-node-rtl_core_reg_file_v',
   ], { finalAction: 'dblclick' });
 
-  await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toHaveClass(/bg-background/);
+  await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toHaveAttribute('data-active', 'true');
 
   await focusMonacoEditor(window);
   await window.keyboard.press('Control+W');
 
   await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toHaveCount(0);
-  await expect(window.getByTestId('editor-tab-README.md')).toHaveClass(/bg-background/);
+  await expect(window.getByTestId('editor-tab-README.md')).toHaveAttribute('data-active', 'true');
 
   await app.close();
 });
@@ -3754,16 +3754,16 @@ test('ctrl+tab cycles tabs to the right within the focused editor group', async 
 
   await expect(window.getByTestId('editor-tab-.gitignore')).toBeVisible();
   await window.getByTestId('editor-tab-rtl/core/reg_file.v').click();
-  await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toHaveClass(/bg-background/);
+  await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toHaveAttribute('data-active', 'true');
 
   await focusMonacoEditor(window);
   await window.keyboard.press('Control+Tab');
-  await expect(window.getByTestId('editor-tab-.gitignore')).toHaveClass(/bg-background/);
-  await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).not.toHaveClass(/bg-background/);
+  await expect(window.getByTestId('editor-tab-.gitignore')).toHaveAttribute('data-active', 'true');
+  await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toHaveAttribute('data-active', 'false');
 
   await window.keyboard.press('Control+Tab');
-  await expect(window.getByTestId('editor-tab-rtl/core/cpu_top.sv')).toHaveClass(/bg-background/);
-  await expect(window.getByTestId('editor-tab-.gitignore')).not.toHaveClass(/bg-background/);
+  await expect(window.getByTestId('editor-tab-rtl/core/cpu_top.sv')).toHaveAttribute('data-active', 'true');
+  await expect(window.getByTestId('editor-tab-.gitignore')).toHaveAttribute('data-active', 'false');
 
   await app.close();
 });
@@ -3786,20 +3786,20 @@ test('ctrl+shift+tab cycles tabs to the left within the focused editor group', a
   await expect(window.getByTestId('quick-open-result-_gitignore')).toBeVisible();
   await quickOpenInput.press('Enter');
 
-  await expect(window.getByTestId('editor-tab-.gitignore')).toHaveClass(/bg-background/);
+  await expect(window.getByTestId('editor-tab-.gitignore')).toHaveAttribute('data-active', 'true');
 
   await focusMonacoEditor(window);
   await window.keyboard.press('Control+Shift+Tab');
-  await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toHaveClass(/bg-background/);
-  await expect(window.getByTestId('editor-tab-.gitignore')).not.toHaveClass(/bg-background/);
+  await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toHaveAttribute('data-active', 'true');
+  await expect(window.getByTestId('editor-tab-.gitignore')).toHaveAttribute('data-active', 'false');
 
   await window.getByTestId('editor-tab-rtl/core/cpu_top.sv').click();
-  await expect(window.getByTestId('editor-tab-rtl/core/cpu_top.sv')).toHaveClass(/bg-background/);
+  await expect(window.getByTestId('editor-tab-rtl/core/cpu_top.sv')).toHaveAttribute('data-active', 'true');
 
   await focusMonacoEditor(window);
   await window.keyboard.press('Control+Shift+Tab');
-  await expect(window.getByTestId('editor-tab-.gitignore')).toHaveClass(/bg-background/);
-  await expect(window.getByTestId('editor-tab-rtl/core/cpu_top.sv')).not.toHaveClass(/bg-background/);
+  await expect(window.getByTestId('editor-tab-.gitignore')).toHaveAttribute('data-active', 'true');
+  await expect(window.getByTestId('editor-tab-rtl/core/cpu_top.sv')).toHaveAttribute('data-active', 'false');
 
   await app.close();
 });
@@ -3812,7 +3812,9 @@ test('terminal tab creates a real shell session and shows command output', async
 
   const bottomPanelTabBar = window.getByTestId('bottom-panel-tab-bar');
   await expect(bottomPanelTabBar).not.toHaveClass(/(?:^|\s)bg-muted\/40(?:\s|$)/);
-  await expect(bottomPanelTabBar).not.toHaveClass(/(?:^|\s)border-b(?:\s|$)/);
+  await expect(bottomPanelTabBar).toHaveClass(/(?:^|\s)bg-ide-tab-bg(?:\s|$)/);
+  await expect(bottomPanelTabBar).toHaveClass(/(?:^|\s)border-b(?:\s|$)/);
+  await expect(bottomPanelTabBar).toHaveClass(/(?:^|\s)border-ide-border(?:\s|$)/);
   await expectCompactPanelTabButton(getBottomPanelTab(window, 'terminal'));
   await expectCompactPanelTabButton(getBottomPanelTab(window, 'output'));
 
@@ -4433,6 +4435,9 @@ test('code viewer layout setting persists across app relaunch', async () => {
 
   await ensureExplorerVisible(firstWindow);
   await expect(firstWindow.getByTestId('code-view-explorer')).toHaveAttribute('data-code-viewer-layout-mode', 'compact');
+  await expectPanelHeaderWithoutDivider(firstWindow.getByTestId('left-panel-header'));
+  await ensureRightPanelVisible(firstWindow);
+  await expectPanelHeaderWithoutDivider(firstWindow.getByTestId('right-panel-header'));
 
   await firstWindow.getByTestId('menu-settings-button').click();
   await expect(firstWindow.getByTestId('settings-dialog')).toBeVisible();
@@ -4450,9 +4455,9 @@ test('code viewer layout setting persists across app relaunch', async () => {
 
   await firstWindow.getByTestId('settings-close-button').click();
   await expect(firstWindow.getByTestId('settings-dialog')).toHaveCount(0);
-  await expectMinimalPanelHeaderWithoutOutline(firstWindow.getByTestId('left-panel-header'));
+  await expectPanelHeaderWithoutDivider(firstWindow.getByTestId('left-panel-header'));
   await ensureRightPanelVisible(firstWindow);
-  await expectMinimalPanelHeaderWithoutOutline(firstWindow.getByTestId('right-panel-header'));
+  await expectPanelHeaderWithoutDivider(firstWindow.getByTestId('right-panel-header'));
 
   await firstApp.close();
 
@@ -4462,7 +4467,9 @@ test('code viewer layout setting persists across app relaunch', async () => {
   await ensureExplorerVisible(secondWindow);
   await expect(secondWindow.getByTestId('code-view-explorer')).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
   await expect.poll(async () => readConfigValue(secondWindow, 'workbench.codeViewerLayoutMode')).toBe('minimal');
-  await expectMinimalPanelHeaderWithoutOutline(secondWindow.getByTestId('left-panel-header'));
+  await expectPanelHeaderWithoutDivider(secondWindow.getByTestId('left-panel-header'));
+  await ensureRightPanelVisible(secondWindow);
+  await expectPanelHeaderWithoutDivider(secondWindow.getByTestId('right-panel-header'));
 
   await secondWindow.getByTestId('menu-settings-button').click();
   await expect(secondWindow.getByTestId('settings-dialog')).toBeVisible();
@@ -4478,6 +4485,9 @@ test('code viewer layout setting persists across app relaunch', async () => {
 
   await secondWindow.getByTestId('settings-close-button').click();
   await expect(secondWindow.getByTestId('settings-dialog')).toHaveCount(0);
+  await expectPanelHeaderWithoutDivider(secondWindow.getByTestId('left-panel-header'));
+  await ensureRightPanelVisible(secondWindow);
+  await expectPanelHeaderWithoutDivider(secondWindow.getByTestId('right-panel-header'));
 
   await secondApp.close();
 });

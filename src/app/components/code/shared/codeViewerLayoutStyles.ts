@@ -6,6 +6,7 @@ const MINIMAL_EDITOR_TAB_BAR_CLASS_NAME = 'h-[30px] items-center gap-0 px-1 roun
 const MINIMAL_EDITOR_TAB_HEIGHT_CLASS_NAME = 'h-[27px]';
 const DEFAULT_EDITOR_TAB_WIDTH_CLASS_NAME = 'min-w-[100px] max-w-[200px]';
 const MINIMAL_EDITOR_TAB_WIDTH_CLASS_NAME = 'min-w-[90px] max-w-[180px]';
+const PANEL_HEADER_PADDING_CLASS_NAME = 'px-2 py-1.5';
 
 export function isMinimalCodeViewerLayout(layoutMode: CodeViewerLayoutMode) {
   return layoutMode === 'minimal';
@@ -91,7 +92,7 @@ export function getEditorTabClassName(layoutMode: CodeViewerLayoutMode, isActive
 export function getPanelHeaderClassName(layoutMode: CodeViewerLayoutMode, className?: string) {
   return cn(
     'flex shrink-0 items-center text-ide-text',
-    isMinimalCodeViewerLayout(layoutMode) ? 'm-1.5 mb-0 rounded px-2 py-1.5' : 'border-b border-ide-border px-2 py-1.5',
+    isMinimalCodeViewerLayout(layoutMode) ? `m-1.5 mb-0 rounded ${PANEL_HEADER_PADDING_CLASS_NAME}` : PANEL_HEADER_PADDING_CLASS_NAME,
     className,
   );
 }

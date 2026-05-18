@@ -49,9 +49,13 @@ describe('RightSidePanel', () => {
       <RightSidePanel currentOutlineId="rtl/core/alu.v" onFileOpen={vi.fn()} onLineJump={vi.fn()} />,
     );
 
+    const header = screen.getByTestId('right-panel-header');
+
     expect(screen.getByTestId('right-panel-tabs')).toBeInTheDocument();
-    expect(screen.getByTestId('right-panel-header').className).not.toMatch(/\bbg-/);
-    expect(screen.getByTestId('right-panel-header')).toHaveClass('border-b', 'border-ide-border');
+    expect(header.className).not.toMatch(/\bbg-/);
+    expect(header).not.toHaveClass('border');
+    expect(header).not.toHaveClass('border-ide-border');
+    expect(header).not.toHaveClass('border-b');
     expect(screen.getByRole('radio', { name: /ai assistant/i })).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: /static check/i })).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: /references/i })).toBeInTheDocument();
