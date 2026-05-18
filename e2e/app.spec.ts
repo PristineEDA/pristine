@@ -876,7 +876,7 @@ async function focusMonacoEditor(window: Awaited<ReturnType<typeof launchApp>>['
 
 async function waitForMonacoEditor(window: Awaited<ReturnType<typeof launchApp>>['window']) {
   const editor = window.locator('.monaco-editor');
-  const activeEditorTab = window.locator('[data-testid^="editor-tab-"].bg-background').first();
+  const activeEditorTab = window.locator('[data-testid^="editor-tab-"][data-active="true"]').first();
 
   if (await activeEditorTab.count() > 0) {
     await activeEditorTab.click();
@@ -898,15 +898,20 @@ async function waitForMonacoEditor(window: Awaited<ReturnType<typeof launchApp>>
 
 async function waitForMonacoEditorTextFocus(window: Awaited<ReturnType<typeof launchApp>>['window']) {
   await expect.poll(() => window.evaluate(() => {
+    type ElementWithClosest = Element & {
+      closest: (selectors: string) => Element | null;
+    };
+
     const browserGlobal = globalThis as typeof globalThis & {
       document: {
-        activeElement: Element | null;
-        querySelector: (selectors: string) => Element | null;
+        activeElement: ElementWithClosest | null;
       };
     };
     const activeElement = browserGlobal.document.activeElement;
-    const textInput = browserGlobal.document.querySelector('.monaco-editor textarea.inputarea, .monaco-editor .inputarea, .monaco-editor .native-edit-context');
-    return activeElement === textInput;
+    return Boolean(
+      activeElement?.closest('.monaco-editor')
+      && activeElement.closest('textarea.inputarea, .inputarea, .native-edit-context, textarea, [contenteditable="true"]'),
+    );
   }), {
     timeout: 15000,
   }).toBe(true);
@@ -1781,6 +1786,45 @@ test('editing a preview tab pins it so the next preview open does not replace it
   await app.evaluate(({ app: electronApp }) => {
     electronApp.quit();
   });
+});
+
+test('Monaco editor accepts literal spaces', async () => {
+  test.slow();
+
+  const workspaceCopy = test.info().outputPath('monaco-space-workspace');
+  createWorkspaceCopy(workspaceCopy);
+
+  const filePath = path.join(workspaceCopy, 'rtl', 'core', 'reg_file.v');
+  const markerLeft = `pristine_space_left_${Date.now()}`;
+  const markerRight = `pristine_space_right_${Date.now()}`;
+  const markerWithSpace = `${markerLeft} ${markerRight}`;
+  const { app, window } = await launchApp({ projectRoot: workspaceCopy });
+
+  try {
+    await ensureExplorerVisible(window);
+    await openNestedWorkspaceFile(window, [
+      'file-tree-node-rtl',
+      'file-tree-node-rtl_core',
+      'file-tree-node-rtl_core_reg_file_v',
+    ]);
+
+    await waitForMonacoEditor(window);
+    await focusMonacoEditor(window);
+    await waitForMonacoEditorTextFocus(window);
+    await window.keyboard.press('Control+End');
+    await window.keyboard.type(`\n${markerLeft}`);
+    await window.keyboard.press('Space');
+    await window.keyboard.type(markerRight);
+
+    await expect(window.getByTestId('editor-tab-dirty-indicator-rtl/core/reg_file.v')).toBeVisible();
+    await window.keyboard.press('Control+S');
+
+    await expect.poll(() => fs.readFileSync(filePath, 'utf-8'), {
+      timeout: 15000,
+    }).toContain(markerWithSpace);
+  } finally {
+    await app.close();
+  }
 });
 
 test('ctrl+s saves an edited explorer file and clears the dirty indicator', async () => {

@@ -371,6 +371,34 @@ describe('EditorSplitLayout', () => {
     expect(within(secondGroup).getByTestId('mock-active-tab')).toHaveTextContent('rtl/core/reg_file.v');
   });
 
+  it('does not prevent plain Space key events in the focused editor group', async () => {
+    render(
+      <WorkspaceProvider>
+        <LayoutHarness />
+      </WorkspaceProvider>,
+    );
+
+    await clickText('open-reg');
+
+    const group = screen.getByTestId('editor-group-group-1');
+    fireEvent.mouseDown(group);
+
+    const event = new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      code: 'Space',
+      key: ' ',
+    });
+    const preventDefault = vi.spyOn(event, 'preventDefault');
+    const stopPropagation = vi.spyOn(event, 'stopPropagation');
+
+    group.dispatchEvent(event);
+
+    expect(preventDefault).not.toHaveBeenCalled();
+    expect(stopPropagation).not.toHaveBeenCalled();
+    expect(event.defaultPrevented).toBe(false);
+  });
+
   it('renders half-pane edge hot zones with animated neutral styling', async () => {
     render(
       <WorkspaceProvider>

@@ -1,7 +1,8 @@
 import Editor, { useMonaco } from '@monaco-editor/react';
-import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import '../../../editor/configureMonacoLoader';
 import { getEditorFontFamilyStack } from '../../../editor/editorSettings';
+import { isMonacoTextInputElement } from '../../../editor/focusEditor';
 import { useRegisterEditorLanguages } from '../../../editor/registerLanguages';
 import { systemVerilogLspBridge } from '../../../lsp/systemVerilogLspBridge';
 import { getEditorLanguage } from '../../../workspace/workspaceFiles';
@@ -127,6 +128,41 @@ export function MonacoEditorPane({
   });
   const handleCloseShortcut = useEffectEvent(() => {
     onCloseShortcut?.();
+  });
+  const handlePlainSpaceKeyDownCapture = useEffectEvent((event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const nativeEvent = event.nativeEvent as KeyboardEvent & { isComposing?: boolean };
+
+    if (
+      event.defaultPrevented
+      || event.altKey
+      || event.ctrlKey
+      || event.metaKey
+      || nativeEvent.isComposing
+      || (event.key !== ' ' && event.code !== 'Space')
+      || !isMonacoTextInputElement(event.target)
+    ) {
+      return;
+    }
+
+    const editor = editorRef.current;
+
+    if (!editor || !hasFocusedEditorText(editor)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (typeof editor.trigger === 'function') {
+      editor.trigger('keyboard', 'type', { text: ' ' });
+      return;
+    }
+
+    const selection = editor.getSelection?.();
+
+    if (selection && typeof editor.executeEdits === 'function') {
+      editor.executeEdits('keyboard', [{ range: selection, text: ' ', forceMoveMarkers: true }]);
+    }
   });
   const editorBehaviorOptions = useMemo(() => ({
     cursorBlinking,
@@ -307,7 +343,11 @@ export function MonacoEditorPane({
   }, [activeTabId, mountedEditor]);
 
   return (
-    <div ref={hostRef} className="relative flex-1 overflow-hidden bg-background">
+    <div
+      ref={hostRef}
+      className="relative flex-1 overflow-hidden bg-background"
+      onKeyDownCapture={handlePlainSpaceKeyDownCapture}
+    >
       {showDragInteractionShield && (
         <div
           data-testid={dragInteractionShieldTestId}

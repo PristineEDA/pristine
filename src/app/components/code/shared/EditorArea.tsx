@@ -145,6 +145,7 @@ function EditorTab({
     <div
       draggable={Boolean(onDragStart)}
       data-testid={`editor-tab-${tab.id}`}
+      data-active={isActive ? 'true' : 'false'}
       title={tooltipText}
       className={getEditorTabClassName(layoutMode, isActive)}
       onClick={onActivate}
