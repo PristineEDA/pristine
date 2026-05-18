@@ -53,35 +53,35 @@ export function BottomPanel({ layoutVersion, onClose }: BottomPanelProps) {
   const panelContent = useMemo<Record<BottomPanelTabId, ReactNode>>(() => ({
     terminal: <TerminalPanel layoutVersion={layoutVersion} />,
     output: (
-      <Suspense fallback={<div className="flex h-full items-center justify-center text-muted-foreground text-[12px]">Loading output...</div>}>
+      <Suspense fallback={<div className="flex h-full items-center justify-center text-ide-text-muted text-[12px]">Loading output...</div>}>
         <OutputPanel />
       </Suspense>
     ),
     problems: (
       <div className="flex h-full min-h-0 flex-col">
-        <div className="flex flex-wrap items-center gap-2 px-3 py-1 border-b border-border shrink-0">
-          <AlertCircle size={11} className="text-destructive" />
-          <span className="text-destructive text-[11px]">{problemCounts.errorCount} errors</span>
-          <AlertTriangle size={11} className="text-amber-500" />
-          <span className="text-amber-500 text-[11px]">{problemCounts.warningCount} warnings</span>
-          <Info size={11} className="text-sky-500" />
-          <span className="text-sky-500 text-[11px]">{problemCounts.infoCount} infos</span>
-          <Lightbulb size={11} className="text-emerald-500" />
-          <span className="text-emerald-500 text-[11px]">{problemCounts.hintCount} hints</span>
+        <div className="flex flex-wrap items-center gap-2 px-3 py-1 border-b border-ide-border shrink-0">
+          <AlertCircle size={11} className="text-ide-error" />
+          <span className="text-ide-error text-[11px]">{problemCounts.errorCount} errors</span>
+          <AlertTriangle size={11} className="text-ide-warning" />
+          <span className="text-ide-warning text-[11px]">{problemCounts.warningCount} warnings</span>
+          <Info size={11} className="text-ide-info" />
+          <span className="text-ide-info text-[11px]">{problemCounts.infoCount} infos</span>
+          <Lightbulb size={11} className="text-ide-success" />
+          <span className="text-ide-success text-[11px]">{problemCounts.hintCount} hints</span>
         </div>
-        <Suspense fallback={<div className="flex h-full items-center justify-center text-muted-foreground text-[12px]">Loading problems...</div>}>
+        <Suspense fallback={<div className="flex h-full items-center justify-center text-ide-text-muted text-[12px]">Loading problems...</div>}>
           <ProblemsTabPanel problems={problemsList} />
         </Suspense>
       </div>
     ),
     debug: (
       <div className="flex h-full min-h-0 flex-col">
-        <div className="flex items-center gap-2 px-3 py-1 border-b border-border shrink-0">
+        <div className="flex items-center gap-2 px-3 py-1 border-b border-ide-border shrink-0">
           <Button size="xs" className="text-[11px]">
             <Bug size={11} />
             Start Debugging
           </Button>
-          <Button variant="ghost" size="xs" className="text-muted-foreground hover:text-foreground text-[11px]">
+          <Button variant="ghost" size="xs" className="text-ide-text-muted hover:text-ide-text text-[11px]">
             <Square size={11} />
             Stop
           </Button>
@@ -90,7 +90,7 @@ export function BottomPanel({ layoutVersion, onClose }: BottomPanelProps) {
       </div>
     ),
     lsp: (
-      <Suspense fallback={<div className="flex h-full items-center justify-center text-muted-foreground text-[12px]">Loading LSP events...</div>}>
+      <Suspense fallback={<div className="flex h-full items-center justify-center text-ide-text-muted text-[12px]">Loading LSP events...</div>}>
         <LspPanel />
       </Suspense>
     ),
@@ -118,7 +118,7 @@ export function BottomPanel({ layoutVersion, onClose }: BottomPanelProps) {
               variant="ghost"
               size="icon-xs"
               aria-label="New Terminal"
-              className="text-muted-foreground hover:text-foreground"
+              className="text-ide-text-muted hover:text-ide-text"
               onClick={() => setTab('terminal')}
             >
               <Plus size={13} />
@@ -129,7 +129,7 @@ export function BottomPanel({ layoutVersion, onClose }: BottomPanelProps) {
               variant="ghost"
               size="icon-xs"
               aria-label="Close Panel"
-              className="text-muted-foreground hover:text-foreground"
+              className="text-ide-text-muted hover:text-ide-text"
               onClick={handleClose}
             >
               <X size={13} />

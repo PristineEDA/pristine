@@ -582,7 +582,7 @@ describe('MenuBar', () => {
       'center-view-workflow',
     ]);
     expect(codeButton).toHaveAttribute('data-state', 'on');
-    expect(codeButton).toHaveClass('data-[state=on]:bg-background', 'data-[state=on]:shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_1px_2px_rgba(15,23,42,0.08)]', 'data-[state=on]:border-border/80');
+    expect(codeButton).toHaveClass('data-[state=on]:bg-ide-bg', 'data-[state=on]:shadow-[inset_0_1px_0_var(--ide-border)]', 'data-[state=on]:border-ide-border/80');
     expect(whiteboardButton).toHaveAttribute('data-state', 'off');
 
     await user.click(whiteboardButton);

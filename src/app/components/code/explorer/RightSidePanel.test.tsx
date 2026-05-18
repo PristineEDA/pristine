@@ -51,7 +51,7 @@ describe('RightSidePanel', () => {
 
     expect(screen.getByTestId('right-panel-tabs')).toBeInTheDocument();
     expect(screen.getByTestId('right-panel-header').className).not.toMatch(/\bbg-/);
-    expect(screen.getByTestId('right-panel-header')).toHaveClass('border-b', 'border-border');
+    expect(screen.getByTestId('right-panel-header')).toHaveClass('border-b', 'border-ide-border');
     expect(screen.getByRole('radio', { name: /ai assistant/i })).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: /static check/i })).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: /references/i })).toBeInTheDocument();
@@ -73,7 +73,7 @@ describe('RightSidePanel', () => {
     expect(header).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
     expect(header).toHaveClass('m-1.5', 'mb-0', 'rounded', 'px-2', 'py-1.5');
     expect(header).not.toHaveClass('border');
-    expect(header).not.toHaveClass('border-border');
+    expect(header).not.toHaveClass('border-ide-border');
     expect(header).not.toHaveClass('border-b');
     expectCompactTabButton('right-panel-tab-ai');
     expectCompactTabButton('right-panel-tab-outline');

@@ -118,7 +118,7 @@ describe('LeftSidePanel', () => {
 
     expect(screen.getByTestId('left-panel-tabs')).toBeInTheDocument();
     expect(screen.getByTestId('left-panel-header').className).not.toMatch(/\bbg-/);
-    expect(screen.getByTestId('left-panel-header')).toHaveClass('border-b', 'border-border');
+    expect(screen.getByTestId('left-panel-header')).toHaveClass('border-b', 'border-ide-border');
     expect(screen.getByRole('radio', { name: 'Explorer' })).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: 'Outline' })).toBeInTheDocument();
     expectCompactTabButton('left-panel-tab-explorer');
@@ -139,7 +139,7 @@ describe('LeftSidePanel', () => {
     expect(header).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
     expect(header).toHaveClass('m-1.5', 'mb-0', 'rounded', 'px-2', 'py-1.5');
     expect(header).not.toHaveClass('border');
-    expect(header).not.toHaveClass('border-border');
+    expect(header).not.toHaveClass('border-ide-border');
     expect(header).not.toHaveClass('border-b');
     expectCompactTabButton('left-panel-tab-explorer');
     expectCompactTabButton('left-panel-tab-outline');
@@ -190,12 +190,12 @@ describe('LeftSidePanel', () => {
 
     await testUser.click(folderNode);
 
-    expect(screen.getByTestId('file-tree-node-rtl').className).toContain('bg-primary/20');
-    expect(screen.getByTestId('file-tree-node-rtl').className).toContain('hover:bg-primary/20');
+    expect(screen.getByTestId('file-tree-node-rtl').className).toContain('bg-ide-selection');
+    expect(screen.getByTestId('file-tree-node-rtl').className).toContain('hover:bg-ide-selection');
 
     fireEvent.mouseLeave(screen.getByTestId('file-tree-node-rtl'));
 
-    expect(screen.getByTestId('file-tree-node-rtl').className).toContain('bg-primary/20');
+    expect(screen.getByTestId('file-tree-node-rtl').className).toContain('bg-ide-selection');
   });
 
   it('moves the persistent highlight from folders to files so only one explorer row stays highlighted', async () => {
@@ -209,14 +209,14 @@ describe('LeftSidePanel', () => {
     const folderNode = screen.getByTestId('file-tree-node-rtl_peripherals');
     const fileNode = await screen.findByTestId('file-tree-node-rtl_peripherals_uart_rx_v');
 
-    expect(folderNode.className).toContain('bg-primary/20');
-    expect(fileNode.className).not.toContain('hover:bg-primary/20');
+    expect(folderNode.className).toContain('bg-ide-selection');
+    expect(fileNode.className).not.toContain('hover:bg-ide-selection');
 
     await testUser.click(fileNode);
 
-    expect(screen.getByTestId('file-tree-node-rtl_peripherals').className).not.toContain('hover:bg-primary/20');
-    expect(screen.getByTestId('file-tree-node-rtl_peripherals_uart_rx_v').className).toContain('bg-primary/20');
-    expect(screen.getByTestId('file-tree-node-rtl_peripherals_uart_rx_v').className).toContain('hover:bg-primary/20');
+    expect(screen.getByTestId('file-tree-node-rtl_peripherals').className).not.toContain('hover:bg-ide-selection');
+    expect(screen.getByTestId('file-tree-node-rtl_peripherals_uart_rx_v').className).toContain('bg-ide-selection');
+    expect(screen.getByTestId('file-tree-node-rtl_peripherals_uart_rx_v').className).toContain('hover:bg-ide-selection');
   });
 
   it('clears the selected folder highlight when another entry activates a file', async () => {
@@ -227,8 +227,8 @@ describe('LeftSidePanel', () => {
 
     await expandDefaultTree();
 
-    expect(screen.getByTestId('file-tree-node-rtl_peripherals').className).toContain('bg-primary/20');
-    expect((await screen.findByTestId('file-tree-node-rtl_peripherals_uart_rx_v')).className).not.toContain('hover:bg-primary/20');
+    expect(screen.getByTestId('file-tree-node-rtl_peripherals').className).toContain('bg-ide-selection');
+    expect((await screen.findByTestId('file-tree-node-rtl_peripherals_uart_rx_v')).className).not.toContain('hover:bg-ide-selection');
 
     rerender(
       <LeftSidePanel
@@ -249,7 +249,7 @@ describe('LeftSidePanel', () => {
       />,
     );
 
-    expect(screen.getByTestId('file-tree-node-rtl_peripherals').className).not.toContain('hover:bg-primary/20');
+    expect(screen.getByTestId('file-tree-node-rtl_peripherals').className).not.toContain('hover:bg-ide-selection');
   });
 
   it('allows the workspace root row to collapse and expand', async () => {

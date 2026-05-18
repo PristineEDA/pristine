@@ -39,7 +39,7 @@ function InfoContent() {
       <Button
         variant="link"
         asChild
-        className="text-muted-foreground"
+        className="text-ide-text-muted"
         size="sm"
       >
         <a href="#">
@@ -55,7 +55,7 @@ function ImageContent() {
 
   return (
     <div className="absolute inset-0" data-testid="empty-project-image-panel">
-      <div className="relative h-full w-full overflow-hidden bg-background">
+      <div className="relative h-full w-full overflow-hidden bg-ide-editor-bg">
         <div
           className={`absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(96,165,250,0.3),_transparent_45%),linear-gradient(135deg,_rgba(15,23,42,0.96),_rgba(30,41,59,0.88)_48%,_rgba(51,65,85,0.92))] transition-opacity ${imageUnavailable ? 'opacity-100' : 'opacity-30'}`}
           data-testid="empty-project-image-fallback"
@@ -78,7 +78,7 @@ function SummaryContent() {
   return (
     <div
       data-testid="empty-project-summary-panel"
-      className="flex w-full items-center justify-center text-muted-foreground"
+      className="flex w-full items-center justify-center text-ide-text-muted"
     >
       <div className="text-center">
         <p className="text-lg font-medium">Summary</p>

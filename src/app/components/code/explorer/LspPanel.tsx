@@ -188,13 +188,13 @@ function getDiagnosticSeverityLabel(severity: number | undefined) {
 function getDiagnosticSeverityClass(severity: number | undefined) {
   switch (severity) {
     case 1:
-      return 'text-destructive';
+      return 'text-ide-error';
     case 2:
-      return 'text-amber-500';
+      return 'text-ide-warning';
     case 4:
-      return 'text-emerald-500';
+      return 'text-ide-success';
     default:
-      return 'text-sky-500';
+      return 'text-ide-info';
   }
 }
 
@@ -271,7 +271,7 @@ function matchesFilter(entry: LspPanelEntry, filter: LspPanelFilter) {
 
 function renderMetaRow(event: LspDebugEvent, fallbackFilePath?: string) {
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] uppercase tracking-[0.08em] text-ide-text-muted">
       <span>{formatTimestamp(event.timestamp)}</span>
       <span>{event.direction}</span>
       <span>{event.kind}</span>
@@ -284,8 +284,8 @@ function renderMetaRow(event: LspDebugEvent, fallbackFilePath?: string) {
 function renderPayloadBlock(title: string, payloadText: string) {
   return (
     <div className="grid gap-1">
-      <div className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground">{title}</div>
-      <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded bg-background/80 px-2 py-2 text-[11px] text-foreground">
+      <div className="text-[10px] uppercase tracking-[0.08em] text-ide-text-muted">{title}</div>
+      <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded bg-ide-editor-bg px-2 py-2 text-[11px] text-ide-text">
         {payloadText}
       </pre>
     </div>
@@ -313,8 +313,8 @@ export function LspPanel() {
   );
 
   return (
-    <div data-testid="lsp-panel" className="flex h-full min-h-0 flex-col bg-background">
-      <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-1 text-[11px] text-muted-foreground shrink-0">
+    <div data-testid="lsp-panel" className="flex h-full min-h-0 flex-col bg-ide-bg text-ide-text">
+      <div className="flex flex-wrap items-center gap-2 border-b border-ide-border px-3 py-1 text-[11px] text-ide-text-muted shrink-0">
         <span>{events.length} events</span>
         <span>Mode: paired request/response</span>
         <span>Status: {latestLifecycle?.status ?? 'idle'}</span>
@@ -327,8 +327,8 @@ export function LspPanel() {
               onClick={() => setFilter(option.id)}
               className={`rounded px-2 py-0.5 text-[10px] transition-colors ${
                 filter === option.id
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-muted-foreground hover:text-foreground'
+                  ? 'bg-ide-accent text-primary-foreground'
+                  : 'text-ide-text-muted hover:text-ide-text'
               }`}
             >
               {option.label}
@@ -339,11 +339,11 @@ export function LspPanel() {
 
       <div className="bottom-panel-scrollbar min-h-0 flex-1 overflow-y-auto px-2 py-2 font-mono text-[11px]">
         {events.length === 0 ? (
-          <div className="flex h-full items-center justify-center text-muted-foreground">
+          <div className="flex h-full items-center justify-center text-ide-text-muted">
             No LSP debug events yet.
           </div>
         ) : filteredEntries.length === 0 ? (
-          <div className="flex h-full items-center justify-center text-muted-foreground">
+          <div className="flex h-full items-center justify-center text-ide-text-muted">
             No matching LSP events for the current filter.
           </div>
         ) : (
@@ -360,10 +360,10 @@ export function LspPanel() {
                   : 'Completed';
               const responseStateClass =
                 responseState === 'pending'
-                  ? 'text-amber-500'
+                  ? 'text-ide-warning'
                   : responseState === 'error'
-                  ? 'text-destructive'
-                  : 'text-emerald-500';
+                  ? 'text-ide-error'
+                  : 'text-ide-success';
               const summaryText =
                 responseState === 'pending'
                   ? 'Waiting for a server response.'
@@ -376,7 +376,7 @@ export function LspPanel() {
                   key={entry.id}
                   data-testid="lsp-event-item"
                   defaultOpen={false}
-                  className="group/lsp-entry mb-2 rounded border border-border/60 bg-muted/20"
+                  className="group/lsp-entry mb-2 rounded border border-ide-border/60 bg-ide-tab-bg"
                 >
                   <CollapsibleTrigger asChild>
                     <button
@@ -386,12 +386,12 @@ export function LspPanel() {
                     >
                       {renderMetaRow(entry.response ?? entry.request, entry.response?.filePath ?? entry.request.filePath)}
                       <div className="mt-1 flex items-start gap-2">
-                        <ChevronRight className="mt-0.5 size-3 shrink-0 text-muted-foreground transition-transform duration-200 group-data-[state=open]/lsp-entry:rotate-90" />
+                        <ChevronRight className="mt-0.5 size-3 shrink-0 text-ide-text-muted transition-transform duration-200 group-data-[state=open]/lsp-entry:rotate-90" />
                         <div className="min-w-0 flex-1">
-                          <div className="text-[12px] text-foreground">
+                          <div className="text-[12px] text-ide-text">
                             {entry.request.method ?? `request ${entry.request.requestId ?? entry.request.sequence}`}
                           </div>
-                          <div className="mt-1 whitespace-pre-wrap break-all text-[11px] text-muted-foreground">
+                          <div className="mt-1 whitespace-pre-wrap break-all text-[11px] text-ide-text-muted">
                             {summaryText}
                           </div>
                         </div>
@@ -401,17 +401,17 @@ export function LspPanel() {
                       </div>
                     </button>
                   </CollapsibleTrigger>
-                  <CollapsibleContent className="border-t border-border/60 px-3 py-3">
+                  <CollapsibleContent className="border-t border-ide-border/60 px-3 py-3">
                     <div className="grid gap-3">
                       {requestPayloadText && renderPayloadBlock('Request payload', requestPayloadText)}
                       {entry.response ? (
                         responsePayloadText ? (
                           renderPayloadBlock('Response payload', responsePayloadText)
                         ) : (
-                          <div className="text-[11px] text-muted-foreground">Response payload is empty.</div>
+                          <div className="text-[11px] text-ide-text-muted">Response payload is empty.</div>
                         )
                       ) : (
-                        <div className="text-[11px] text-muted-foreground">No response has been received yet.</div>
+                        <div className="text-[11px] text-ide-text-muted">No response has been received yet.</div>
                       )}
                     </div>
                   </CollapsibleContent>
@@ -431,7 +431,7 @@ export function LspPanel() {
                 key={entry.id}
                 data-testid="lsp-event-item"
                 defaultOpen={false}
-                className="group/lsp-entry mb-2 rounded border border-border/60 bg-muted/20"
+                className="group/lsp-entry mb-2 rounded border border-ide-border/60 bg-ide-tab-bg"
               >
                 <CollapsibleTrigger asChild>
                   <button
@@ -441,29 +441,29 @@ export function LspPanel() {
                   >
                     {renderMetaRow(entry.event)}
                     <div className="mt-1 flex items-start gap-2">
-                      <ChevronRight className="mt-0.5 size-3 shrink-0 text-muted-foreground transition-transform duration-200 group-data-[state=open]/lsp-entry:rotate-90" />
+                      <ChevronRight className="mt-0.5 size-3 shrink-0 text-ide-text-muted transition-transform duration-200 group-data-[state=open]/lsp-entry:rotate-90" />
                       <div className="min-w-0 flex-1">
-                        <div className="text-[12px] text-foreground">{title}</div>
-                        <div className="mt-1 whitespace-pre-wrap break-all text-[11px] text-muted-foreground">
+                        <div className="text-[12px] text-ide-text">{title}</div>
+                        <div className="mt-1 whitespace-pre-wrap break-all text-[11px] text-ide-text-muted">
                           {summaryText}
                         </div>
                       </div>
                     </div>
                   </button>
                 </CollapsibleTrigger>
-                <CollapsibleContent className="border-t border-border/60 px-3 py-3">
+                <CollapsibleContent className="border-t border-ide-border/60 px-3 py-3">
                   <div className="grid gap-3">
                     {diagnostics.length > 0 && (
                       <div className="grid gap-2">
-                        <div className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
+                        <div className="text-[10px] uppercase tracking-[0.08em] text-ide-text-muted">
                           Diagnostics
                         </div>
                         {diagnostics.map((diagnostic, index) => (
                           <div
                             key={`${entry.id}-${index}`}
-                            className="rounded border border-border/60 bg-background/60 px-2 py-2"
+                            className="rounded border border-ide-border/60 bg-ide-editor-bg px-2 py-2"
                           >
-                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] uppercase tracking-[0.08em] text-ide-text-muted">
                               <span className={getDiagnosticSeverityClass(diagnostic.severity)}>
                                 {getDiagnosticSeverityLabel(diagnostic.severity)}
                               </span>
@@ -471,13 +471,13 @@ export function LspPanel() {
                               {diagnostic.source && <span>{diagnostic.source}</span>}
                               {diagnostic.code !== undefined && <span>code {diagnostic.code}</span>}
                             </div>
-                            <div className="mt-1 text-[11px] text-foreground">{diagnostic.message}</div>
+                            <div className="mt-1 text-[11px] text-ide-text">{diagnostic.message}</div>
                           </div>
                         ))}
                       </div>
                     )}
                     {entry.event.text && !isDiagnosticsEvent(entry.event) && (
-                      <div className="whitespace-pre-wrap break-all text-[11px] text-muted-foreground">
+                      <div className="whitespace-pre-wrap break-all text-[11px] text-ide-text-muted">
                         {entry.event.text}
                       </div>
                     )}

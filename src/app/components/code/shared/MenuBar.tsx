@@ -8,6 +8,7 @@ import { isMacOSPlatform } from '../../../menu/shortcutLabels';
 import { canToggleLayoutPanels as canUseLayoutPanels } from '../../../codeViewPanels';
 import { useWorkspaceEditor, useWorkspaceFiles, useWorkspaceView } from '../../../context/WorkspaceContext';
 import { useTheme } from '../../../context/ThemeContext';
+import { useCodeViewerLayout } from '../../../context/CodeViewerLayoutContext';
 import { Toggle } from '../../ui/toggle';
 import { Separator } from '../../ui/separator';
 import { Button } from '../../ui/button';
@@ -121,24 +122,37 @@ export function MenuBar({
     saveAllFiles,
   } = useWorkspaceFiles();
   const { theme, toggleTheme } = useTheme();
+  const { layoutMode } = useCodeViewerLayout();
   const settingsController = useMenuBarSettingsController();
   const { state: activityBarState, toggleSidebar } = useSidebar();
   const ref = useRef<HTMLDivElement>(null);
   const [aboutDialogOpen, setAboutDialogOpen] = useState(false);
   const layoutIconsEnabled = canUseLayoutPanels(mainContentView, activeView);
   const activityBarToggleEnabled = mainContentView === 'code';
+  const isMinimalLayout = layoutMode === 'minimal';
+  const chromeRootClassName = isMinimalLayout
+    ? 'bg-ide-unified-chrome-bg text-ide-unified-chrome-fg'
+    : 'bg-ide-menubar-bg text-ide-text';
+  const chromeControlTextClassName = isMinimalLayout
+    ? 'text-ide-unified-chrome-fg/80 data-[state=on]:text-ide-unified-chrome-fg'
+    : 'text-ide-text-muted data-[state=on]:text-ide-text';
+  const chromeControlHoverClassName = isMinimalLayout
+    ? 'hover:bg-ide-unified-chrome-hover hover:text-ide-unified-chrome-fg'
+    : 'hover:bg-ide-hover hover:text-ide-text';
+  const chromeIconButtonClassName = `w-8 h-full rounded-none ${chromeControlTextClassName} hover:cursor-pointer ${chromeControlHoverClassName}`;
+  const chromeSeparatorClassName = isMinimalLayout ? 'h-4 mx-1 bg-transparent' : 'h-4 mx-1 bg-ide-border';
   const layoutIconClassName = [
-    'w-8 h-full rounded-none border-0 text-muted-foreground',
-    'data-[state=on]:text-foreground',
+    'w-8 h-full rounded-none border-0',
+    chromeControlTextClassName,
     layoutIconsEnabled
-      ? 'hover:cursor-pointer hover:text-foreground hover:bg-accent'
+      ? `hover:cursor-pointer ${chromeControlHoverClassName}`
       : 'cursor-not-allowed opacity-40',
   ].join(' ');
   const activityBarTriggerClassName = [
-    `${isMacOS ? (windowFullScreen ? 'ml-2 ' : 'ml-1 ') : 'ml-1 '}w-8 h-full rounded-none border-0 text-muted-foreground`,
-    'data-[state=on]:text-foreground',
+    `${isMacOS ? (windowFullScreen ? 'ml-2 ' : 'ml-1 ') : 'ml-1 '}w-8 h-full rounded-none border-0`,
+    chromeControlTextClassName,
     activityBarToggleEnabled
-      ? 'hover:cursor-pointer hover:text-foreground hover:bg-accent'
+      ? `hover:cursor-pointer ${chromeControlHoverClassName}`
       : 'opacity-40',
   ].join(' ');
   const openAboutDialog = () => {
@@ -279,7 +293,8 @@ export function MenuBar({
         <div
           data-testid="menu-bar-root"
           ref={ref}
-          className="flex items-center h-8 bg-muted/50 select-none shrink-0 z-50"
+          data-code-viewer-layout-mode={layoutMode}
+          className={`flex items-center h-8 select-none shrink-0 z-50 ${chromeRootClassName}`}
           style={{ userSelect: 'none', WebkitAppRegion: 'drag' } as React.CSSProperties}
         >
           {/* macOS traffic light clearance */}
@@ -288,7 +303,7 @@ export function MenuBar({
           {/* App icon / title */}
           {showWindowMenu && (
             <div className="flex items-center gap-1.5 px-3 pr-2" data-testid="menu-app-icon" style={noDrag as React.CSSProperties}>
-              <div className="w-4 h-4 rounded-sm bg-primary flex items-center justify-center">
+              <div className="w-4 h-4 rounded-sm bg-ide-accent flex items-center justify-center">
                 <span className="text-primary-foreground text-[9px] font-bold">P</span>
               </div>
             </div>
@@ -398,7 +413,7 @@ export function MenuBar({
             </Toggle>
           </TooltipIconButton>
 
-          <Separator orientation="vertical" className="h-4 mx-1" />
+          <Separator orientation="vertical" className={chromeSeparatorClassName} />
 
           {/* Theme toggle */}
           <TooltipIconButton content="Toggle theme" wrapTrigger={false}>
@@ -407,7 +422,7 @@ export function MenuBar({
               size="icon"
               aria-label="Toggle theme"
               data-testid="toggle-theme"
-              className="w-8 h-full rounded-none text-muted-foreground hover:cursor-pointer hover:text-foreground"
+              className={chromeIconButtonClassName}
               onClick={toggleTheme}
             >
               {theme === 'light' ? <Moon size={15} /> : <Sun size={15} />}
@@ -421,7 +436,7 @@ export function MenuBar({
               size="icon"
               aria-label="Settings"
               data-testid="menu-settings-button"
-              className="w-8 h-full rounded-none text-muted-foreground hover:cursor-pointer hover:text-foreground"
+              className={chromeIconButtonClassName}
               onClick={settingsController.openSettingsDialog}
             >
               <Settings size={15} />
@@ -430,7 +445,7 @@ export function MenuBar({
 
           <UserAccountPopover interactiveStyle={noDragInteractive as React.CSSProperties} />
 
-          {showWindowMenu && <Separator data-testid="menu-avatar-separator" orientation="vertical" className="h-4 mx-1" />}
+          {showWindowMenu && <Separator data-testid="menu-avatar-separator" orientation="vertical" className={chromeSeparatorClassName} />}
 
           {/* Window controls (hidden on macOS — native traffic lights used instead) */}
           {!isMacOS && (

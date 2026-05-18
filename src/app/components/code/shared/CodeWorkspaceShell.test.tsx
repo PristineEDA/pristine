@@ -140,10 +140,10 @@ describe('CodeWorkspaceShell', () => {
     expect(screen.getByTestId('workspace-shell')).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
     expect(screen.getByTestId('workspace-shell')).toHaveClass('min-h-0');
     expect(screen.getByTestId('activity-region').parentElement).not.toHaveClass('rounded-md');
-    expect(screen.getByTestId('panel-left')).toHaveClass('rounded-md', 'border', 'bg-background');
-    expect(screen.getByTestId('panel-top')).toHaveClass('rounded-md', 'border', 'bg-background');
-    expect(screen.getByTestId('panel-bottom')).toHaveClass('rounded-md', 'border', 'bg-background');
-    expect(screen.getByTestId('panel-right')).toHaveClass('rounded-md', 'border', 'bg-background');
+    expect(screen.getByTestId('panel-left')).toHaveClass('rounded-md', 'border', 'bg-ide-bg');
+    expect(screen.getByTestId('panel-top')).toHaveClass('rounded-md', 'border', 'bg-ide-bg');
+    expect(screen.getByTestId('panel-bottom')).toHaveClass('rounded-md', 'border', 'bg-ide-bg');
+    expect(screen.getByTestId('panel-right')).toHaveClass('rounded-md', 'border', 'bg-ide-bg');
     expect(screen.getByTestId('panel-group-horizontal')).not.toHaveClass('gap-2.5');
     expect(screen.getByTestId('panel-group-vertical')).not.toHaveClass('gap-2.5');
     expect(screen.getByTestId('panel-group-horizontal')).toHaveAttribute('data-layout-gap-px', '10');

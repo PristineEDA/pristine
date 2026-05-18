@@ -280,7 +280,7 @@ describe('EditorArea', () => {
     expect(screen.getByTestId('editor-tab-bar')).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
     expect(screen.getByTestId('editor-tab-bar')).toHaveClass('h-[30px]', 'items-center', 'gap-0', 'px-1');
     expect(screen.getByTestId('editor-tab-bar')).not.toHaveClass('gap-1.5', 'p-1.5');
-    expect(screen.getByTestId('editor-tab-rtl/core/cpu_top.v')).toHaveClass('h-[27px]', 'min-w-[90px]', 'max-w-[180px]', 'rounded-md', 'bg-background', 'px-2');
+    expect(screen.getByTestId('editor-tab-rtl/core/cpu_top.v')).toHaveClass('h-[27px]', 'min-w-[90px]', 'max-w-[180px]', 'rounded-md', 'bg-ide-editor-bg', 'px-2');
     expect(screen.getByTestId('editor-tab-rtl/core/cpu_top.v')).not.toHaveClass('min-w-[100px]', 'max-w-[200px]');
     expect(screen.getByTestId('editor-tab-rtl/core/cpu_top.v')).not.toHaveClass('h-full');
     expect(screen.getByTestId('editor-tab-rtl/core/alu.v')).toHaveClass('h-[27px]', 'min-w-[90px]', 'max-w-[180px]', 'rounded-md', 'px-2');

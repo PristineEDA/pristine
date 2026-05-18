@@ -181,12 +181,12 @@ export function TerminalSurface({ layoutVersion }: TerminalSurfaceProps) {
         >
           <div>
             <div className="text-sm font-medium text-destructive">Terminal failed to start</div>
-            <div className="mt-2 text-xs text-muted-foreground">{sessionState.error}</div>
+            <div className="mt-2 text-xs text-ide-text-muted">{sessionState.error}</div>
           </div>
         </div>
       )}
       {!sessionState.error && sessionState.isStarting && (
-        <div className="pointer-events-none absolute right-3 top-2 text-[11px] text-muted-foreground">
+        <div className="pointer-events-none absolute right-3 top-2 text-[11px] text-ide-text-muted">
           Starting {sessionState.shellLabel}...
         </div>
       )}

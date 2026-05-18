@@ -8,6 +8,7 @@ import {
   // Settings2,
   Map,
 } from 'lucide-react';
+import type { CSSProperties } from 'react';
 import {
   Sidebar,
   SidebarContent,
@@ -22,6 +23,7 @@ import { NavDesignSwitcher } from './NavDesignSwitcher';
 import { NavMain } from './NavMain';
 import { NavProjects } from './NavProjects';
 import type { CodeView } from '../../../codeViewPanels';
+import { useCodeViewerLayout } from '../../../context/CodeViewerLayoutContext';
 
 
 interface ActivityBarProps {
@@ -130,17 +132,31 @@ const activityBarButtonBaseClass = 'relative min-h-10 rounded-md transition-colo
 
 export function ActivityBar({ activeView, onItemSelect }: ActivityBarProps) {
   const { state } = useSidebar();
+  const { layoutMode } = useCodeViewerLayout();
   const isExpanded = state === 'expanded';
-  const actionButtonClassName = `${activityBarButtonBaseClass} text-emerald-500 hover:bg-muted hover:text-emerald-400 ${isExpanded ? 'h-10 w-full justify-start' : 'h-10 w-full justify-center px-0'
+  const isMinimalLayout = layoutMode === 'minimal';
+  const activityBarThemeStyle = {
+    '--sidebar': isMinimalLayout ? 'var(--ide-unified-chrome-bg)' : 'var(--ide-activitybar-bg)',
+    '--sidebar-foreground': isMinimalLayout ? 'var(--ide-unified-chrome-fg)' : 'var(--ide-text-muted)',
+    '--sidebar-accent': isMinimalLayout ? 'var(--ide-unified-chrome-hover)' : 'var(--ide-hover)',
+    '--sidebar-accent-foreground': isMinimalLayout ? 'var(--ide-unified-chrome-fg)' : 'var(--ide-text)',
+    '--sidebar-primary': 'var(--ide-accent)',
+    '--sidebar-primary-foreground': 'var(--primary-foreground)',
+    '--sidebar-border': isMinimalLayout ? 'transparent' : 'var(--ide-border)',
+    '--sidebar-ring': 'var(--ide-accent)',
+  } as CSSProperties;
+  const actionButtonClassName = `${activityBarButtonBaseClass} text-ide-success hover:bg-sidebar-accent hover:text-ide-success ${isExpanded ? 'h-10 w-full justify-start' : 'h-10 w-full justify-center px-0'
     }`;
 
   return (
     <Sidebar
       collapsible="icon"
       className="top-8 h-[calc(100svh-3.5rem)]"
+      data-code-viewer-layout-mode={layoutMode}
       data-testid="activity-bar"
       showSideBorder={false}
       side="left"
+      style={activityBarThemeStyle}
     >
       <SidebarHeader>
         <NavDesignSwitcher designs={data.designs} />

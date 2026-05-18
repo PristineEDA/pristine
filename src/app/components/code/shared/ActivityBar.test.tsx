@@ -89,10 +89,8 @@ describe('ActivityBar', () => {
     expect(explorerButton).toHaveAttribute('data-active', 'true');
     expect(explorerButton).toHaveClass(
       'rounded-md',
-      'data-[active=true]:bg-sidebar-primary/12',
-      'data-[active=true]:text-sidebar-primary',
-      'dark:data-[active=true]:bg-sidebar-primary-foreground/20',
-      'dark:data-[active=true]:text-sidebar-primary-foreground',
+      'data-[active=true]:bg-sidebar-accent',
+      'data-[active=true]:text-sidebar-accent-foreground',
     );
   });
 
@@ -102,7 +100,7 @@ describe('ActivityBar', () => {
     expect(screen.getByTestId('activity-bar')).not.toHaveClass('group-data-[side=left]:border-r');
     expect(screen.getByTestId('activity-item-explorer')).toHaveClass('cursor-pointer');
     expect(screen.getByTestId('activity-item-simulation')).toHaveClass('hover:bg-sidebar-accent');
-    expect(screen.getByTestId('activity-action-compile')).toHaveClass('hover:cursor-pointer', 'hover:bg-muted');
+    expect(screen.getByTestId('activity-action-compile')).toHaveClass('hover:cursor-pointer', 'hover:bg-sidebar-accent');
   });
 
   it('renders shadcn tooltip content for navigation and action buttons on hover', async () => {

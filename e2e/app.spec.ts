@@ -1016,6 +1016,81 @@ async function selectComboboxOption(
   await window.getByTestId(optionTestId).click();
 }
 
+async function readWorkbenchChromeThemeSnapshot(window: Awaited<ReturnType<typeof launchApp>>['window']) {
+  return window.evaluate(() => {
+    type StyleLike = {
+      backgroundColor: string;
+      borderBottomWidth: string;
+      borderRightWidth: string;
+      borderTopWidth: string;
+      color: string;
+      getPropertyValue: (name: string) => string;
+    };
+    type ElementLike = {
+      remove: () => void;
+      style: { color: string };
+    };
+    const browserGlobal = globalThis as typeof globalThis & {
+      document: {
+        body: { appendChild: (node: ElementLike) => void };
+        createElement: (tagName: string) => ElementLike;
+        documentElement: ElementLike;
+        querySelector: (selectors: string) => ElementLike | null;
+      };
+      getComputedStyle: (element: ElementLike) => StyleLike;
+    };
+
+    const root = browserGlobal.document.documentElement;
+    const menuBar = browserGlobal.document.querySelector('[data-testid="menu-bar-root"]');
+    const activityBar = browserGlobal.document.querySelector('[data-testid="activity-bar"] [data-slot="sidebar-inner"]')
+      ?? browserGlobal.document.querySelector('[data-testid="activity-bar"]');
+    const statusBar = browserGlobal.document.querySelector('[data-testid="status-bar"]');
+
+    if (!menuBar || !activityBar || !statusBar) {
+      throw new Error('Workbench chrome elements were not found.');
+    }
+
+    const normalizeColor = (value: string) => {
+      const probe = browserGlobal.document.createElement('span');
+      probe.style.color = value;
+      browserGlobal.document.body.appendChild(probe);
+      const normalizedColor = browserGlobal.getComputedStyle(probe).color;
+      probe.remove();
+      return normalizedColor;
+    };
+
+    const rootStyle = browserGlobal.getComputedStyle(root);
+    const readColorVariable = (name: string) => normalizeColor(rootStyle.getPropertyValue(name).trim());
+    const menuStyle = browserGlobal.getComputedStyle(menuBar);
+    const activityStyle = browserGlobal.getComputedStyle(activityBar);
+    const statusStyle = browserGlobal.getComputedStyle(statusBar);
+
+    return {
+      activity: {
+        backgroundColor: activityStyle.backgroundColor,
+        borderRightWidth: activityStyle.borderRightWidth,
+      },
+      menu: {
+        backgroundColor: menuStyle.backgroundColor,
+        borderBottomWidth: menuStyle.borderBottomWidth,
+      },
+      status: {
+        backgroundColor: statusStyle.backgroundColor,
+        borderTopWidth: statusStyle.borderTopWidth,
+        color: statusStyle.color,
+      },
+      variables: {
+        activitybarBackground: readColorVariable('--ide-activitybar-bg'),
+        menubarBackground: readColorVariable('--ide-menubar-bg'),
+        statusbarBackground: readColorVariable('--ide-statusbar-bg'),
+        statusbarForeground: readColorVariable('--ide-statusbar-fg'),
+        unifiedChromeBackground: readColorVariable('--ide-unified-chrome-bg'),
+        unifiedChromeForeground: readColorVariable('--ide-unified-chrome-fg'),
+      },
+    };
+  });
+}
+
 async function readComboboxListSnapshot(
   window: Awaited<ReturnType<typeof launchApp>>['window'],
   listTestId: string,
@@ -4227,6 +4302,83 @@ test('settings UI theme selection persists across app relaunch', async () => {
   await expect(secondWindow.getByTestId('settings-dialog')).toHaveCount(0);
 
   await secondApp.close();
+});
+
+test('global workbench chrome follows selected VS Code theme variables', async () => {
+  const { app, window } = await launchApp();
+
+  await ensureExplorerVisible(window);
+  await window.getByTestId('menu-settings-button').click();
+  await expect(window.getByTestId('settings-dialog')).toBeVisible();
+
+  await selectComboboxOption(
+    window,
+    'settings-theme-combobox',
+    'settings-theme-option-vscode-2026-light',
+  );
+
+  await expect.poll(async () => readConfigValue(window, 'workbench.colorTheme')).toBe('vscode-2026-light');
+
+  await window.getByTestId('settings-close-button').click();
+  await expect(window.getByTestId('settings-dialog')).toHaveCount(0);
+
+  await expect.poll(async () => readWorkbenchChromeThemeSnapshot(window)).toEqual(
+    expect.objectContaining({
+      activity: expect.objectContaining({
+        backgroundColor: expect.any(String),
+      }),
+      menu: expect.objectContaining({
+        backgroundColor: expect.any(String),
+      }),
+      status: expect.objectContaining({
+        backgroundColor: expect.any(String),
+        color: expect.any(String),
+      }),
+    }),
+  );
+
+  const snapshot = await readWorkbenchChromeThemeSnapshot(window);
+
+  expect(snapshot.menu.backgroundColor).toBe(snapshot.variables.menubarBackground);
+  expect(snapshot.activity.backgroundColor).toBe(snapshot.variables.activitybarBackground);
+  expect(snapshot.status.backgroundColor).toBe(snapshot.variables.statusbarBackground);
+  expect(snapshot.status.color).toBe(snapshot.variables.statusbarForeground);
+
+  await app.close();
+});
+
+test('minimal layout unifies menu activity and status chrome', async () => {
+  const { app, window } = await launchApp();
+
+  await ensureExplorerVisible(window);
+  await window.getByTestId('menu-settings-button').click();
+  await expect(window.getByTestId('settings-dialog')).toBeVisible();
+
+  await selectComboboxOption(
+    window,
+    'settings-code-viewer-layout-combobox',
+    'settings-code-viewer-layout-option-minimal',
+  );
+
+  await expect.poll(async () => readConfigValue(window, 'workbench.codeViewerLayoutMode')).toBe('minimal');
+  await expect(window.getByTestId('menu-bar-root')).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
+  await expect(window.getByTestId('activity-bar')).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
+  await expect(window.getByTestId('status-bar')).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
+
+  await window.getByTestId('settings-close-button').click();
+  await expect(window.getByTestId('settings-dialog')).toHaveCount(0);
+
+  const snapshot = await readWorkbenchChromeThemeSnapshot(window);
+
+  expect(snapshot.menu.backgroundColor).toBe(snapshot.variables.unifiedChromeBackground);
+  expect(snapshot.activity.backgroundColor).toBe(snapshot.variables.unifiedChromeBackground);
+  expect(snapshot.status.backgroundColor).toBe(snapshot.variables.unifiedChromeBackground);
+  expect(snapshot.status.color).toBe(snapshot.variables.unifiedChromeForeground);
+  expect(snapshot.menu.borderBottomWidth).toBe('0px');
+  expect(snapshot.activity.borderRightWidth).toBe('0px');
+  expect(snapshot.status.borderTopWidth).toBe('0px');
+
+  await app.close();
 });
 
 test('code viewer layout setting persists across app relaunch', async () => {

@@ -44,7 +44,7 @@ export function NavDesignSwitcher({
               size="lg"
               className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground cursor-pointer"
             >
-              <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground dark:bg-sidebar-primary-foreground dark:text-sidebar">
+              <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-ide-accent text-primary-foreground">
                 <activeDesign.logo className="size-4" />
               </div>
               <div className="grid flex-1 text-left text-sm leading-tight">
@@ -60,7 +60,7 @@ export function NavDesignSwitcher({
             side={isMobile ? "bottom" : "right"}
             sideOffset={4}
           >
-            <DropdownMenuLabel className="text-xs text-muted-foreground">
+            <DropdownMenuLabel className="text-xs text-ide-text-muted">
               Designs
             </DropdownMenuLabel>
             {designs.map((design, index) => (
@@ -81,7 +81,7 @@ export function NavDesignSwitcher({
               <div className="flex size-5 items-center justify-center rounded-md border bg-transparent">
                 <Plus className="size-4" />
               </div>
-              <div className="font-normal text-muted-foreground">create more ...</div>
+              <div className="font-normal text-ide-text-muted">create more ...</div>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

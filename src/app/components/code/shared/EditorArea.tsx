@@ -86,7 +86,7 @@ function EditorDocumentPlaceholder({ text }: { text: string }) {
   return (
     <div
       data-testid="editor-document-placeholder"
-      className="flex-1 overflow-auto bg-background px-4 py-3 font-mono text-[12px] text-muted-foreground whitespace-pre"
+      className="flex-1 overflow-auto bg-ide-editor-bg px-4 py-3 font-mono text-[12px] text-ide-text-muted whitespace-pre"
     >
       {text}
     </div>
@@ -97,7 +97,7 @@ function PreviewTabIndicator({ tabId }: { tabId: string }) {
   return (
     <span
       data-testid={`editor-tab-preview-indicator-${tabId}`}
-      className="relative flex h-2.5 w-2.5 shrink-0 items-center justify-center rounded-full text-primary"
+      className="relative flex h-2.5 w-2.5 shrink-0 items-center justify-center rounded-full text-ide-accent"
       title="Preview tab"
     >
       <span
@@ -138,7 +138,7 @@ function EditorTab({
     : gitState === 'ignored'
     ? 'text-ide-text-muted'
     : isPreview
-    ? 'text-foreground'
+    ? 'text-ide-text'
     : '';
 
   return (
@@ -185,11 +185,11 @@ function EditorTab({
           <Circle
             size={7}
             data-testid={`editor-tab-dirty-indicator-${tab.id}`}
-            className="fill-foreground text-foreground shrink-0 transition-opacity group-hover:opacity-0"
+            className="fill-ide-text text-ide-text shrink-0 transition-opacity group-hover:opacity-0"
           />
           <button
             data-testid={`editor-tab-close-${tab.id}`}
-            className="absolute inset-0 flex items-center justify-center rounded opacity-0 transition-opacity group-hover:opacity-100 hover:bg-border"
+            className="absolute inset-0 flex items-center justify-center rounded opacity-0 transition-opacity group-hover:opacity-100 hover:bg-ide-border"
             onClick={(e) => { e.stopPropagation(); onClose(); }}
           >
             <X size={12} />
@@ -202,7 +202,7 @@ function EditorTab({
       {!tab.modified && (
         <button
           data-testid={`editor-tab-close-${tab.id}`}
-          className={`shrink-0 p-0.5 rounded hover:bg-border transition-opacity ${trailingControlClassName}`}
+          className={`shrink-0 p-0.5 rounded hover:bg-ide-border transition-opacity ${trailingControlClassName}`}
           onClick={(e) => { e.stopPropagation(); onClose(); }}
         >
           <X size={12} />
@@ -215,14 +215,14 @@ function EditorTab({
 // ─── Breadcrumb ───────────────────────────────────────────────────────────────
 function Breadcrumb({ segments }: { segments: string[] }) {
   return (
-    <div data-testid="editor-breadcrumb" className="flex items-center gap-0.5 px-3 h-6 bg-background border-b border-border shrink-0">
+    <div data-testid="editor-breadcrumb" className="flex items-center gap-0.5 px-3 h-6 bg-ide-editor-bg border-b border-ide-border shrink-0">
       {segments.map((seg, i) => (
         <span key={i} className="flex items-center gap-0.5">
-          {i > 0 && <ChevronRight size={11} className="text-muted-foreground/50" />}
+          {i > 0 && <ChevronRight size={11} className="text-ide-text-muted/50" />}
           <span
             data-testid={`editor-breadcrumb-segment-${i}`}
-            className={`cursor-pointer hover:text-foreground transition-colors ${
-              i === segments.length - 1 ? 'text-foreground' : 'text-muted-foreground'
+            className={`cursor-pointer hover:text-ide-text transition-colors ${
+              i === segments.length - 1 ? 'text-ide-text' : 'text-ide-text-muted'
             } text-[12px]`}
           >
             {seg}
@@ -440,7 +440,7 @@ export function EditorArea({
             data-testid="editor-split-right"
             aria-label="Split Editor Right"
             onClick={() => onSplitEditor?.('horizontal')}
-            className="px-1 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors shrink-0 cursor-pointer"
+            className="px-1 text-ide-text-muted hover:bg-ide-hover hover:text-ide-text transition-colors shrink-0 cursor-pointer"
           >
             <Split size={14} />
           </button>
@@ -450,12 +450,12 @@ export function EditorArea({
             data-testid="editor-split-down"
             aria-label="Split Editor Down"
             onClick={() => onSplitEditor?.('vertical')}
-            className="px-1 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors shrink-0 cursor-pointer"
+            className="px-1 text-ide-text-muted hover:bg-ide-hover hover:text-ide-text transition-colors shrink-0 cursor-pointer"
           >
             <Split size={14} className="rotate-90" />
           </button>
         </TooltipIconButton>
-        <button className="px-2 text-muted-foreground hover:text-foreground transition-colors shrink-0 cursor-pointer">
+        <button className="px-2 text-ide-text-muted hover:text-ide-text transition-colors shrink-0 cursor-pointer">
           <MoreHorizontal size={14} />
         </button>
       </div>
@@ -468,7 +468,7 @@ export function EditorArea({
       ) : (
         <Suspense
           fallback={(
-            <div className="flex flex-1 items-center justify-center bg-background text-muted-foreground text-[12px]">
+            <div className="flex flex-1 items-center justify-center bg-ide-editor-bg text-ide-text-muted text-[12px]">
               Loading editor...
             </div>
           )}

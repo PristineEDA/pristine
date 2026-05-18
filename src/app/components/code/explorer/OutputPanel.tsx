@@ -4,9 +4,9 @@ import { useOutputLog } from '../../../../data/mockDataLoader';
 import { TooltipIconButton } from '../../ui/tooltip-icon-button';
 
 const levelConfig = {
-  info: { color: '#9cdcfe', label: 'INFO' },
-  warn: { color: '#cca700', label: 'WARN' },
-  error: { color: '#f48771', label: 'ERROR' },
+  info: { className: 'text-ide-info', label: 'INFO' },
+  warn: { className: 'text-ide-warning', label: 'WARN' },
+  error: { className: 'text-ide-error', label: 'ERROR' },
 };
 
 export function OutputPanel() {
@@ -22,14 +22,14 @@ export function OutputPanel() {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex items-center gap-2 px-3 py-1 border-b border-border shrink-0">
-        <div className="flex items-center gap-1 bg-muted/50 rounded px-2 py-0.5 flex-1 max-w-48">
-          <Search size={11} className="text-muted-foreground" />
+      <div className="flex items-center gap-2 px-3 py-1 border-b border-ide-border shrink-0">
+        <div className="flex items-center gap-1 bg-input-background rounded px-2 py-0.5 flex-1 max-w-48">
+          <Search size={11} className="text-ide-text-muted" />
           <input
             value={filterText}
             onChange={(e) => setFilterText(e.target.value)}
             placeholder="Filter output..."
-            className="bg-transparent outline-none text-foreground flex-1 text-[11px]"
+            className="bg-transparent outline-none text-ide-text flex-1 text-[11px] placeholder:text-ide-text-dimmer"
           />
         </div>
         {(['all', 'info', 'warn', 'error'] as const).map((l) => (
@@ -37,14 +37,14 @@ export function OutputPanel() {
             key={l}
             onClick={() => setLevelFilter(l)}
             className={`px-2 py-0.5 rounded transition-colors ${
-              levelFilter === l ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
+              levelFilter === l ? 'bg-ide-accent text-primary-foreground' : 'text-ide-text-muted hover:text-ide-text'
             } text-[10px]`}
           >
             {l === 'all' ? 'All' : l.toUpperCase()}
           </button>
         ))}
         <TooltipIconButton content="Clear">
-          <button aria-label="Clear" className="ml-auto p-1 text-muted-foreground hover:text-foreground transition-colors">
+          <button aria-label="Clear" className="ml-auto p-1 text-ide-text-muted hover:text-ide-text transition-colors">
             <Trash2 size={12} />
           </button>
         </TooltipIconButton>
@@ -53,15 +53,14 @@ export function OutputPanel() {
         {filtered.map((entry, i) => {
           const cfg = levelConfig[entry.level as keyof typeof levelConfig];
           return (
-            <div key={i} className="flex items-start gap-2 hover:bg-accent px-1 py-0.5 rounded">
-              <span className="text-muted-foreground/70 shrink-0 text-[11px]">{entry.time}</span>
+            <div key={i} className="flex items-start gap-2 hover:bg-ide-hover px-1 py-0.5 rounded">
+              <span className="text-ide-text-muted/70 shrink-0 text-[11px]">{entry.time}</span>
               <span
-                className="px-1 rounded shrink-0 text-[9px] font-bold bg-[#2d2d2d] leading-[16px]"
-                style={{ color: cfg?.color || '#cccccc' }}
+                className={`px-1 rounded shrink-0 text-[9px] font-bold bg-ide-tab-bg leading-[16px] ${cfg?.className ?? 'text-ide-text'}`}
               >
                 {cfg?.label || entry.level.toUpperCase()}
               </span>
-              <span style={{ color: cfg?.color || '#cccccc' }}>{entry.text}</span>
+              <span className={cfg?.className ?? 'text-ide-text'}>{entry.text}</span>
             </div>
           );
         })}

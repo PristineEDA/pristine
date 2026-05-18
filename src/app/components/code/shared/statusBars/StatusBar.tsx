@@ -107,7 +107,7 @@ const STATUS_BAR_HOVER_COPY: Record<StatusBarHoverKey, StatusBarHoverCopy> = {
 };
 
 const STATUS_BAR_HOVER_OPEN_DELAY_MS = 160;
-const STATUS_BAR_HOVER_TRIGGER_CLASS_NAME = 'h-full transition-colors hover:bg-sidebar-accent';
+const STATUS_BAR_HOVER_TRIGGER_CLASS_NAME = 'h-full transition-colors hover:bg-[var(--status-bar-item-hover)]';
 const STATUS_BAR_HOVER_CONTENT_CLASS_NAME = 'data-[state=closed]:animate-none';
 
 function StatusBarHoverDetails({ copy }: { copy: StatusBarHoverCopy }) {
@@ -115,9 +115,9 @@ function StatusBarHoverDetails({ copy }: { copy: StatusBarHoverCopy }) {
     <div className="space-y-1.5">
       <div className="space-y-1">
         <p className="text-sm font-semibold leading-none">{copy.title}</p>
-        <p className="text-sm text-muted-foreground">{copy.description}</p>
+        <p className="text-sm text-ide-text-muted">{copy.description}</p>
       </div>
-      <p className="text-xs text-muted-foreground">{copy.meta ?? 'Preview content only'}</p>
+      <p className="text-xs text-ide-text-muted">{copy.meta ?? 'Preview content only'}</p>
     </div>
   );
 }
@@ -189,7 +189,7 @@ export function StatusBar({
           </StatusBarHoverItem>
           <StatusBarHoverItem copy={STATUS_BAR_HOVER_COPY.sync}>
             <div className={compactItemClassName}>
-              <CheckCircle2 size={11} />
+              <CheckCircle2 size={11} className="text-ide-success" />
               <span>Sync</span>
             </div>
           </StatusBarHoverItem>
@@ -201,7 +201,7 @@ export function StatusBar({
                 className={buttonItemClassName}
                 onClick={onOpenUnsavedFiles}
               >
-                {savingFileCount > 0 ? <LoaderCircle size={11} className="animate-spin" /> : <Save size={11} />}
+                {savingFileCount > 0 ? <LoaderCircle size={11} className="animate-spin text-ide-info" /> : <Save size={11} className="text-ide-warning" />}
                 <span>{dirtyFileCount === 1 ? '1 Unsaved' : `${dirtyFileCount} Unsaved`}</span>
               </button>
             </StatusBarHoverItem>
@@ -219,7 +219,7 @@ export function StatusBar({
               <button
                 type="button"
                 data-testid="status-bar-save-error-summary"
-                className={buttonItemClassName}
+                className={`${buttonItemClassName} text-ide-error`}
                 onClick={onOpenUnsavedFiles}
               >
                 <AlertCircle size={11} />
@@ -236,7 +236,7 @@ export function StatusBar({
                 disabled={savingFileCount > 0}
                 onClick={onSaveAll}
               >
-                <Save size={11} />
+                <Save size={11} className="text-ide-warning" />
                 <span>Save All</span>
               </button>
             </StatusBarHoverItem>
@@ -244,18 +244,18 @@ export function StatusBar({
           <StatusBarHoverItem copy={STATUS_BAR_HOVER_COPY.problems}>
             <div className={groupedItemClassName}>
               <div className="flex items-center gap-1">
-                <AlertCircle size={11} />
+                <AlertCircle size={11} className="text-ide-error" />
                 <span data-testid="status-bar-error-count">{errorCount}</span>
               </div>
               <div className="flex items-center gap-1">
-                <AlertTriangle size={11} />
+                <AlertTriangle size={11} className="text-ide-warning" />
                 <span data-testid="status-bar-warning-count">{warningCount}</span>
               </div>
             </div>
           </StatusBarHoverItem>
           <StatusBarHoverItem copy={STATUS_BAR_HOVER_COPY.verilator}>
             <div className={compactItemClassName}>
-              <Zap size={11} />
+              <Zap size={11} className="text-ide-info" />
               <span>Verilator 5.024</span>
             </div>
           </StatusBarHoverItem>

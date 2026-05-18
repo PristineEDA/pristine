@@ -137,8 +137,8 @@ describe('FileTreeNode', () => {
 
     const node = screen.getByTestId('file-tree-node-rtl_core_cpu_top_v');
     expect(node).not.toHaveAttribute('data-selected');
-    expect(node.className).toContain('bg-primary/20');
-    expect(node.className).toContain('hover:bg-primary/20');
+    expect(node.className).toContain('bg-ide-selection');
+    expect(node.className).toContain('hover:bg-ide-selection');
 
     await user.click(node);
     expect(onFilePreview).toHaveBeenCalledWith('rtl/core/cpu_top.v', 'cpu_top.v');
@@ -197,8 +197,8 @@ describe('FileTreeNode', () => {
     );
 
     const node = screen.getByTestId('file-tree-node-rtl_core_cpu_top_v');
-    expect(node.className).toContain('hover:bg-accent');
-    expect(node.className).not.toContain('hover:bg-primary/20');
+    expect(node.className).toContain('hover:bg-ide-hover');
+    expect(node.className).not.toContain('hover:bg-ide-selection');
     expect(node).not.toHaveAttribute('data-selected');
   });
 
@@ -231,7 +231,7 @@ describe('FileTreeNode', () => {
 
     const node = screen.getByTestId('file-tree-node-rtl_core_cpu_top_v');
     expect(node).toHaveAttribute('data-selected', 'true');
-    expect(node.className).toContain('bg-primary/20');
+    expect(node.className).toContain('bg-ide-selection');
   });
 
   it('shows the static folder context menu entries when right-clicking a folder', () => {
@@ -665,8 +665,8 @@ describe('FileTreeNode', () => {
       />,
     );
 
-    expect(screen.getByTestId('file-tree-node-rtl').className).toContain('bg-primary/20');
-    expect(screen.getByTestId('file-tree-node-rtl').className).toContain('hover:bg-primary/20');
+    expect(screen.getByTestId('file-tree-node-rtl').className).toContain('bg-ide-selection');
+    expect(screen.getByTestId('file-tree-node-rtl').className).toContain('hover:bg-ide-selection');
   });
 
   it('scrolls a revealed file node into view when requested', () => {

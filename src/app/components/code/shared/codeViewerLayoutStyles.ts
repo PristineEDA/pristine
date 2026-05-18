@@ -35,7 +35,7 @@ export function getCodeWorkspaceCenterColumnClassName(layoutMode: CodeViewerLayo
 export function getCodeWorkspacePanelFrameClassName(layoutMode: CodeViewerLayoutMode, className?: string) {
   return cn(
     'min-h-0 overflow-hidden',
-    isMinimalCodeViewerLayout(layoutMode) && 'rounded-md border border-border bg-background',
+    isMinimalCodeViewerLayout(layoutMode) && 'rounded-md border border-ide-border bg-ide-bg',
     className,
   );
 }
@@ -56,14 +56,14 @@ export function getCodeWorkspaceResizeHandleClassName(layoutMode: CodeViewerLayo
 
 export function getEditorAreaRootClassName(layoutMode: CodeViewerLayoutMode) {
   return cn(
-    'flex flex-col h-full bg-background overflow-hidden',
+    'flex flex-col h-full bg-ide-editor-bg text-ide-text overflow-hidden',
     isMinimalCodeViewerLayout(layoutMode) && 'rounded-md',
   );
 }
 
 export function getEditorTabBarClassName(layoutMode: CodeViewerLayoutMode) {
   return cn(
-    'flex items-stretch bg-muted overflow-x-auto shrink-0 border-b border-border',
+    'flex items-stretch bg-ide-tab-bg text-ide-text overflow-x-auto shrink-0 border-b border-ide-border',
     isMinimalCodeViewerLayout(layoutMode)
       ? MINIMAL_EDITOR_TAB_BAR_CLASS_NAME
       : 'h-[27px]',
@@ -72,40 +72,40 @@ export function getEditorTabBarClassName(layoutMode: CodeViewerLayoutMode) {
 
 export function getEditorTabClassName(layoutMode: CodeViewerLayoutMode, isActive: boolean) {
   return cn(
-    'flex items-center gap-1 cursor-pointer group border-r border-border transition-colors shrink-0',
+    'flex items-center gap-1 cursor-pointer group border-r border-ide-border transition-colors shrink-0',
     isMinimalCodeViewerLayout(layoutMode)
       ? `${MINIMAL_EDITOR_TAB_WIDTH_CLASS_NAME} ${MINIMAL_EDITOR_TAB_HEIGHT_CLASS_NAME} rounded-md px-2 border border-transparent`
       : `${DEFAULT_EDITOR_TAB_WIDTH_CLASS_NAME} h-full px-3 border-t-2`,
     isActive
       ? cn(
-        'bg-background text-foreground',
-        isMinimalCodeViewerLayout(layoutMode) ? 'border-border shadow-sm' : 'border-t-primary',
+        'bg-ide-editor-bg text-ide-text',
+        isMinimalCodeViewerLayout(layoutMode) ? 'border-ide-border shadow-sm' : 'border-t-ide-accent',
       )
       : cn(
-        'bg-muted text-muted-foreground hover:bg-muted/80',
-        isMinimalCodeViewerLayout(layoutMode) ? 'hover:border-border/80' : 'border-t-transparent',
+        'bg-ide-tab-bg text-ide-text-muted hover:bg-ide-tab-hover hover:text-ide-text',
+        isMinimalCodeViewerLayout(layoutMode) ? 'hover:border-ide-border/80' : 'border-t-transparent',
       ),
   );
 }
 
 export function getPanelHeaderClassName(layoutMode: CodeViewerLayoutMode, className?: string) {
   return cn(
-    'flex shrink-0 items-center',
-    isMinimalCodeViewerLayout(layoutMode) ? 'm-1.5 mb-0 rounded px-2 py-1.5' : 'border-b border-border px-2 py-1.5',
+    'flex shrink-0 items-center text-ide-text',
+    isMinimalCodeViewerLayout(layoutMode) ? 'm-1.5 mb-0 rounded px-2 py-1.5' : 'border-b border-ide-border px-2 py-1.5',
     className,
   );
 }
 
 export function getBottomPanelClassName(layoutMode: CodeViewerLayoutMode) {
   return cn(
-    'flex h-full min-h-0 flex-col overflow-hidden bg-background',
-    isMinimalCodeViewerLayout(layoutMode) ? 'rounded-md' : 'border-t border-border',
+    'flex h-full min-h-0 flex-col overflow-hidden bg-ide-bg text-ide-text',
+    isMinimalCodeViewerLayout(layoutMode) ? 'rounded-md' : 'border-t border-ide-border',
   );
 }
 
 export function getBottomPanelTabBarClassName(layoutMode: CodeViewerLayoutMode) {
   return cn(
-    'flex items-center shrink-0',
+    'flex items-center shrink-0 bg-ide-tab-bg text-ide-text border-b border-ide-border',
     isMinimalCodeViewerLayout(layoutMode) ? 'h-9 gap-1.5 px-1.5 rounded-t-md' : 'h-8 gap-1 px-1',
   );
 }

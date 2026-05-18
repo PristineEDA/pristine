@@ -31,6 +31,6 @@ describe('OutputPanel', () => {
     expect(screen.getByText('Simulation failed')).toBeInTheDocument();
     expect(screen.queryByText('Compilation started')).not.toBeInTheDocument();
     expect(screen.queryByText('Unused signal detected')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'ERROR' })).toHaveClass('bg-primary');
+    expect(screen.getByRole('button', { name: 'ERROR' })).toHaveClass('bg-ide-accent');
   });
 });

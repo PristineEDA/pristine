@@ -46,8 +46,8 @@ export const FileTreeNodeRow = memo(function FileTreeNodeRow({
       data-testid={`file-tree-node-${testId}`}
       className={`flex items-center gap-1 h-6 cursor-pointer group transition-colors ${
         isPersistentlyHighlighted
-          ? 'bg-primary/20 text-foreground hover:bg-primary/20'
-          : 'text-foreground hover:bg-accent'
+          ? 'bg-ide-selection text-ide-text hover:bg-ide-selection'
+          : 'text-ide-text hover:bg-ide-hover'
       } ${isCutSource ? 'opacity-50' : ''}`}
       style={rowIndentStyle}
       onClick={onClick}
@@ -56,7 +56,7 @@ export const FileTreeNodeRow = memo(function FileTreeNodeRow({
     >
       {node.type === 'folder' ? (
         <>
-          <span className="text-muted-foreground">
+          <span className="text-ide-text-muted">
             {isExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
           </span>
           <WorkspaceFolderIcon

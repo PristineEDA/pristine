@@ -639,7 +639,7 @@ export function LeftSidePanel({
   ]);
 
   return (
-    <div className="flex flex-col h-full bg-muted/40 overflow-hidden">
+    <div className="flex flex-col h-full bg-ide-bg text-ide-text overflow-hidden">
       <ExplorerPanelTabs activeTab={tab} onTabChange={setTab} />
 
       {/* Explorer */}
@@ -652,10 +652,10 @@ export function LeftSidePanel({
             onKeyDown={handleTreeKeyDown}
           >
             {workspaceAvailable === null && (
-              <div className="px-4 py-3 text-muted-foreground text-[12px]">Loading workspace...</div>
+              <div className="px-4 py-3 text-ide-text-muted text-[12px]">Loading workspace...</div>
             )}
             {workspaceAvailable === false && (
-              <div className="px-4 py-3 text-muted-foreground text-[12px]">No workspace files available</div>
+              <div className="px-4 py-3 text-ide-text-muted text-[12px]">No workspace files available</div>
             )}
             {workspaceAvailable && treeNodes.map((node) => (
               <FileTreeNode
