@@ -21,10 +21,19 @@ import {
 } from './MenuBar.testSupport';
 
 describe('MenuBar', () => {
-  it('renders the menu chrome without a bottom border separator', () => {
+  it('renders the compact menu chrome with a bottom border separator', () => {
+    renderMenuBar();
+
+    expect(screen.getByTestId('menu-bar-root')).toHaveClass('border-b', 'border-ide-border');
+  });
+
+  it('keeps the minimal menu chrome borderless', () => {
+    mockPersistedSettingsConfig({ codeViewerLayoutMode: 'minimal' });
+
     renderMenuBar();
 
     expect(screen.getByTestId('menu-bar-root')).not.toHaveClass('border-b');
+    expect(screen.getByTestId('menu-bar-root')).not.toHaveClass('border-ide-border');
   });
 
   it('calls electron window controls directly', async () => {

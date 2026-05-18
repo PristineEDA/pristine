@@ -1047,11 +1047,11 @@ async function readWorkbenchChromeThemeSnapshot(window: Awaited<ReturnType<typeo
 
     const root = browserGlobal.document.documentElement;
     const menuBar = browserGlobal.document.querySelector('[data-testid="menu-bar-root"]');
-    const activityBar = browserGlobal.document.querySelector('[data-testid="activity-bar"] [data-slot="sidebar-inner"]')
-      ?? browserGlobal.document.querySelector('[data-testid="activity-bar"]');
+    const activityBarContainer = browserGlobal.document.querySelector('[data-testid="activity-bar"]');
+    const activityBarSurface = browserGlobal.document.querySelector('[data-testid="activity-bar"] [data-slot="sidebar-inner"]');
     const statusBar = browserGlobal.document.querySelector('[data-testid="status-bar"]');
 
-    if (!menuBar || !activityBar || !statusBar) {
+    if (!menuBar || !activityBarContainer || !activityBarSurface || !statusBar) {
       throw new Error('Workbench chrome elements were not found.');
     }
 
@@ -1067,13 +1067,14 @@ async function readWorkbenchChromeThemeSnapshot(window: Awaited<ReturnType<typeo
     const rootStyle = browserGlobal.getComputedStyle(root);
     const readColorVariable = (name: string) => normalizeColor(rootStyle.getPropertyValue(name).trim());
     const menuStyle = browserGlobal.getComputedStyle(menuBar);
-    const activityStyle = browserGlobal.getComputedStyle(activityBar);
+    const activityContainerStyle = browserGlobal.getComputedStyle(activityBarContainer);
+    const activitySurfaceStyle = browserGlobal.getComputedStyle(activityBarSurface);
     const statusStyle = browserGlobal.getComputedStyle(statusBar);
 
     return {
       activity: {
-        backgroundColor: activityStyle.backgroundColor,
-        borderRightWidth: activityStyle.borderRightWidth,
+        backgroundColor: activitySurfaceStyle.backgroundColor,
+        borderRightWidth: activityContainerStyle.borderRightWidth,
       },
       menu: {
         backgroundColor: menuStyle.backgroundColor,
@@ -4354,6 +4355,9 @@ test('global workbench chrome follows selected VS Code theme variables', async (
   const { app, window } = await launchApp();
 
   await ensureExplorerVisible(window);
+  await expect(window.getByTestId('menu-bar-root')).toHaveAttribute('data-code-viewer-layout-mode', 'compact');
+  await expect(window.getByTestId('activity-bar')).toHaveAttribute('data-code-viewer-layout-mode', 'compact');
+  await expect(window.getByTestId('status-bar')).toHaveAttribute('data-code-viewer-layout-mode', 'compact');
   await window.getByTestId('menu-settings-button').click();
   await expect(window.getByTestId('settings-dialog')).toBeVisible();
 
@@ -4389,6 +4393,9 @@ test('global workbench chrome follows selected VS Code theme variables', async (
   expect(snapshot.activity.backgroundColor).toBe(snapshot.variables.activitybarBackground);
   expect(snapshot.status.backgroundColor).toBe(snapshot.variables.statusbarBackground);
   expect(snapshot.status.color).toBe(snapshot.variables.statusbarForeground);
+  expect(snapshot.menu.borderBottomWidth).toBe('1px');
+  expect(snapshot.activity.borderRightWidth).toBe('1px');
+  expect(snapshot.status.borderTopWidth).toBe('1px');
 
   await app.close();
 });

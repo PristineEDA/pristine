@@ -132,7 +132,7 @@ export function MenuBar({
   const isMinimalLayout = layoutMode === 'minimal';
   const chromeRootClassName = isMinimalLayout
     ? 'bg-ide-unified-chrome-bg text-ide-unified-chrome-fg'
-    : 'bg-ide-menubar-bg text-ide-text';
+    : 'border-b border-ide-border bg-ide-menubar-bg text-ide-text';
   const chromeControlTextClassName = isMinimalLayout
     ? 'text-ide-unified-chrome-fg/80 data-[state=on]:text-ide-unified-chrome-fg'
     : 'text-ide-text-muted data-[state=on]:text-ide-text';

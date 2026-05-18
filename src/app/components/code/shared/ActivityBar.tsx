@@ -154,7 +154,7 @@ export function ActivityBar({ activeView, onItemSelect }: ActivityBarProps) {
       className="top-8 h-[calc(100svh-3.5rem)]"
       data-code-viewer-layout-mode={layoutMode}
       data-testid="activity-bar"
-      showSideBorder={false}
+      showSideBorder={!isMinimalLayout}
       side="left"
       style={activityBarThemeStyle}
     >

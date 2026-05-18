@@ -1,6 +1,11 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
+import {
+  CodeViewerLayoutProvider,
+  WORKBENCH_CODE_VIEWER_LAYOUT_MODE_CONFIG_KEY,
+  type CodeViewerLayoutMode,
+} from '../../../context/CodeViewerLayoutContext';
 import { ActivityBar } from './ActivityBar';
 import { SidebarProvider } from '../../ui/sidebar';
 
@@ -8,16 +13,28 @@ function renderActivityBar({
   activeView = 'explorer',
   onItemSelect = vi.fn(),
   defaultOpen = false,
+  layoutMode = 'compact',
 }: {
   activeView?: string;
   onItemSelect?: (view: string) => void;
   defaultOpen?: boolean;
+  layoutMode?: CodeViewerLayoutMode;
 } = {}) {
-  return render(
-    <SidebarProvider defaultOpen={defaultOpen} keyboardShortcut={false}>
-      <ActivityBar activeView={activeView} onItemSelect={onItemSelect} />
-    </SidebarProvider>,
+  vi.mocked(window.electronAPI!.config.get).mockImplementation((key: string) =>
+    key === WORKBENCH_CODE_VIEWER_LAYOUT_MODE_CONFIG_KEY ? layoutMode : null,
   );
+
+  return render(
+    <CodeViewerLayoutProvider>
+      <SidebarProvider defaultOpen={defaultOpen} keyboardShortcut={false}>
+        <ActivityBar activeView={activeView} onItemSelect={onItemSelect} />
+      </SidebarProvider>
+    </CodeViewerLayoutProvider>,
+  );
+}
+
+function getActivityBarContainer() {
+  return screen.getByTestId('activity-bar');
 }
 
 describe('ActivityBar', () => {
@@ -94,13 +111,20 @@ describe('ActivityBar', () => {
     );
   });
 
-  it('adds a pointer cursor on hover for navigation and action buttons', () => {
+  it('keeps the compact activity bar right border and pointer cursor affordances', () => {
     renderActivityBar();
 
-    expect(screen.getByTestId('activity-bar')).not.toHaveClass('group-data-[side=left]:border-r');
+    expect(getActivityBarContainer()).toHaveClass('group-data-[side=left]:border-r');
     expect(screen.getByTestId('activity-item-explorer')).toHaveClass('cursor-pointer');
     expect(screen.getByTestId('activity-item-simulation')).toHaveClass('hover:bg-sidebar-accent');
     expect(screen.getByTestId('activity-action-compile')).toHaveClass('hover:cursor-pointer', 'hover:bg-sidebar-accent');
+  });
+
+  it('removes the activity bar side border in minimal layout', () => {
+    renderActivityBar({ layoutMode: 'minimal' });
+
+    expect(screen.getByTestId('activity-bar')).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
+    expect(getActivityBarContainer()).not.toHaveClass('group-data-[side=left]:border-r');
   });
 
   it('renders shadcn tooltip content for navigation and action buttons on hover', async () => {
