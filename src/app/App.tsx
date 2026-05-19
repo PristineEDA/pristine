@@ -125,6 +125,7 @@ function AppLayout() {
   const { openUnsavedChangesDialog } = useWorkspaceDialogs();
   const [explorerLeftPanelWidthPx, setExplorerLeftPanelWidthPx] = useState(EXPLORER_LEFT_PANEL_DEFAULT_WIDTH_PX);
   const [explorerAssistantPanelWidthPx, setExplorerAssistantPanelWidthPx] = useState(EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX);
+  const [isExplorerLeftPanelSplitVisible, setIsExplorerLeftPanelSplitVisible] = useState(false);
   const [assistantThreadListExpanded, setAssistantThreadListExpanded] = useState(false);
   const [assistantThreadListWidthPx, setAssistantThreadListWidthPx] = useState(ASSISTANT_THREAD_LIST_DEFAULT_WIDTH_PX);
   const [shouldMountWorkflowView, setShouldMountWorkflowView] = useState(mainContentView === 'workflow');
@@ -310,6 +311,7 @@ function AppLayout() {
     bottomContent,
     rightContent,
     overlay,
+    useLeftPanelFrame,
     leftFixedWidthPx,
     onLeftFixedWidthChange,
     rightFixedWidthPx,
@@ -328,6 +330,7 @@ function AppLayout() {
     bottomContent: React.ReactNode;
     rightContent: React.ReactNode;
     overlay?: React.ReactNode;
+    useLeftPanelFrame?: boolean;
     leftFixedWidthPx?: number;
     onLeftFixedWidthChange?: React.Dispatch<React.SetStateAction<number>>;
     rightFixedWidthPx?: number;
@@ -339,6 +342,7 @@ function AppLayout() {
       shellTestId={shellTestId}
       activityBar={activityBar}
       overlay={overlay}
+      useLeftPanelFrame={useLeftPanelFrame}
       showLeftPanel={showLeftPanel}
       showBottomPanel={showBottomPanel}
       showRightPanel={showRightPanel}
@@ -368,6 +372,7 @@ function AppLayout() {
       topPanelId: 'editor-panel',
       bottomPanelId: 'bottom-panel',
       rightPanelId: 'right-panel',
+      useLeftPanelFrame: !isExplorerLeftPanelSplitVisible,
       leftFixedWidthPx: explorerLeftPanelWidthPx,
       onLeftFixedWidthChange: setExplorerLeftPanelWidthPx,
       rightFixedWidthPx: explorerRightPanelWidthPx,
@@ -388,6 +393,7 @@ function AppLayout() {
           activeFileId={activeTabId}
           onClearWorkspaceClipboard={clearWorkspaceClipboard}
           onCopyWorkspaceEntry={handleCopyWorkspaceEntry}
+          onSplitPanelVisibleChange={setIsExplorerLeftPanelSplitVisible}
           onCreateWorkspaceFile={handleCreateWorkspaceFile}
           onCreateWorkspaceFolder={handleCreateWorkspaceFolder}
           onCutWorkspaceEntry={handleCutWorkspaceEntry}

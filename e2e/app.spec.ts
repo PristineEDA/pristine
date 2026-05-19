@@ -417,6 +417,26 @@ async function readElementPixelWidth(locator: Locator) {
   });
 }
 
+async function readElementPixelHeight(locator: Locator) {
+  return locator.evaluate((element) => {
+    const node = element as { getBoundingClientRect?: () => { height: number } };
+    return Math.round(node.getBoundingClientRect?.().height ?? 0);
+  });
+}
+
+async function readVerticalPixelGap(upperLocator: Locator, lowerLocator: Locator) {
+  const [upperBox, lowerBox] = await Promise.all([
+    upperLocator.boundingBox(),
+    lowerLocator.boundingBox(),
+  ]);
+
+  if (!upperBox || !lowerBox) {
+    return NaN;
+  }
+
+  return Math.round(lowerBox.y - (upperBox.y + upperBox.height));
+}
+
 async function readEditorTabBarSpacingSnapshot(tabBar: Locator, firstTab: Locator, secondTab: Locator) {
   const [tabBarStyles, tabBarBox, firstTabBox, secondTabBox] = await Promise.all([
     tabBar.evaluate((element) => {
@@ -526,6 +546,27 @@ async function readExplorerTreeScrollTop(window: Awaited<ReturnType<typeof launc
     };
 
     return Math.round((element as unknown as ScrollContainerLike).scrollTop);
+  });
+}
+
+async function scrollExplorerTreeToBottom(window: Awaited<ReturnType<typeof launchApp>>['window']) {
+  const explorerTree = window.locator('.explorer-tree-scrollbar');
+
+  return explorerTree.evaluate((element) => {
+    type ScrollContainerLike = {
+      clientHeight: number;
+      scrollHeight: number;
+      scrollTop: number;
+    };
+
+    const scrollContainer = element as unknown as ScrollContainerLike;
+    scrollContainer.scrollTop = scrollContainer.scrollHeight;
+
+    return {
+      clientHeight: Math.round(scrollContainer.clientHeight),
+      scrollHeight: Math.round(scrollContainer.scrollHeight),
+      scrollTop: Math.round(scrollContainer.scrollTop),
+    };
   });
 }
 
@@ -3580,6 +3621,128 @@ test('left sidebar keeps a fixed pixel width across window changes and manual re
   await expect.poll(readPanelWidth).toBeLessThanOrEqual(322);
 
   await app.close();
+});
+
+test('left panel split shows two stacked panels and keeps the explorer tree scrollable', async () => {
+  test.slow();
+
+  const workspaceCopy = test.info().outputPath('left-panel-split-workspace');
+  createWorkspaceCopy(workspaceCopy);
+
+  const generatedFileCount = 72;
+  const generatedDir = path.join(workspaceCopy, 'rtl', 'core');
+  fs.mkdirSync(generatedDir, { recursive: true });
+
+  for (let index = 0; index < generatedFileCount; index += 1) {
+    const generatedFileName = `zz_split_scroll_${String(index).padStart(2, '0')}.sv`;
+    fs.writeFileSync(
+      path.join(generatedDir, generatedFileName),
+      `module ${generatedFileName.replace(/\.sv$/, '')};\nendmodule\n`,
+      'utf-8',
+    );
+  }
+
+  const { app, window } = await launchApp({ projectRoot: workspaceCopy });
+
+  try {
+    await ensureExplorerVisible(window);
+    await window.getByTestId('file-tree-node-rtl').click();
+    await window.getByTestId('file-tree-node-rtl_core').click();
+    await expect(window.getByTestId(toWorkspaceTreeTestId('rtl/core/zz_split_scroll_71.sv'))).toBeAttached();
+
+    const splitToggle = window.getByTestId('left-panel-split-toggle');
+    const leftPanelRoot = window.getByTestId('left-panel-root');
+    const leftPanelShell = window.getByTestId('panel-left-panel');
+    const primaryPanel = window.getByTestId('left-panel-primary-panel');
+    const secondaryPanel = window.getByTestId('left-panel-secondary-panel');
+    const primaryResizablePanel = window.getByTestId('panel-left-panel-primary');
+    const secondaryResizablePanel = window.getByTestId('panel-left-panel-secondary');
+    const splitHandle = window.getByTestId('left-panel-split-resize-handle');
+
+    await expect(splitToggle).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+    await expect(splitToggle).toHaveAttribute('aria-pressed', 'false');
+    await expect(primaryPanel).not.toHaveClass(/(?:^|\s)rounded-md(?:\s|$)/);
+    await expect(primaryResizablePanel).toHaveCount(0);
+    await expect(secondaryResizablePanel).toHaveCount(0);
+    await expect(secondaryPanel).toHaveCount(0);
+    await expect(splitHandle).toHaveCount(0);
+    await expect.poll(async () => (await scrollExplorerTreeToBottom(window)).scrollTop, { timeout: UI_READY_TIMEOUT_MS }).toBeGreaterThan(0);
+
+    await splitToggle.click();
+
+    await expect(splitToggle).toHaveAttribute('aria-pressed', 'true');
+    await expect(primaryResizablePanel).toHaveAttribute('aria-hidden', 'false');
+    await expect(secondaryResizablePanel).toHaveAttribute('aria-hidden', 'false');
+    await expect(leftPanelRoot).toHaveClass(/(?:^|\s)bg-ide-bg(?:\s|$)/);
+    await expect(primaryPanel).not.toHaveClass(/(?:^|\s)rounded-md(?:\s|$)/);
+    await expect(primaryPanel).not.toHaveClass(/(?:^|\s)border(?:\s|$)/);
+    await expect(secondaryPanel).toBeVisible();
+    await expect(secondaryPanel).not.toHaveClass(/(?:^|\s)rounded-md(?:\s|$)/);
+    await expect(secondaryPanel).not.toHaveClass(/(?:^|\s)border(?:\s|$)/);
+    await expect(window.getByTestId('left-panel-secondary-placeholder')).toContainText('Structure is empty');
+    await expect(splitHandle).toBeVisible();
+    await expect(splitHandle).toHaveAttribute('aria-orientation', 'horizontal');
+
+    await expect.poll(async () => {
+      const [primaryHeight, secondaryHeight] = await Promise.all([
+        readElementPixelHeight(primaryResizablePanel),
+        readElementPixelHeight(secondaryResizablePanel),
+      ]);
+
+      return Math.abs(primaryHeight - secondaryHeight);
+    }, { timeout: UI_READY_TIMEOUT_MS }).toBeLessThanOrEqual(10);
+    await expect.poll(async () => (await scrollExplorerTreeToBottom(window)).scrollTop, { timeout: UI_READY_TIMEOUT_MS }).toBeGreaterThan(0);
+
+    const initialPrimaryHeight = await readElementPixelHeight(primaryResizablePanel);
+    const initialSecondaryHeight = await readElementPixelHeight(secondaryResizablePanel);
+    const splitHandleBox = await splitHandle.boundingBox();
+
+    if (!splitHandleBox) {
+      throw new Error('Expected left panel split handle geometry to be measurable');
+    }
+
+    await window.mouse.move(
+      splitHandleBox.x + splitHandleBox.width / 2,
+      splitHandleBox.y + splitHandleBox.height / 2,
+    );
+    await window.mouse.down();
+    await window.mouse.move(
+      splitHandleBox.x + splitHandleBox.width / 2,
+      splitHandleBox.y + splitHandleBox.height / 2 + 80,
+    );
+    await window.mouse.up();
+
+    await expect.poll(() => readElementPixelHeight(primaryResizablePanel), { timeout: UI_READY_TIMEOUT_MS }).toBeGreaterThan(initialPrimaryHeight + 55);
+    await expect.poll(() => readElementPixelHeight(secondaryResizablePanel), { timeout: UI_READY_TIMEOUT_MS }).toBeLessThan(initialSecondaryHeight - 55);
+
+    await window.getByTestId('menu-settings-button').click();
+    await expect(window.getByTestId('settings-dialog')).toBeVisible();
+    await selectComboboxOption(
+      window,
+      'settings-code-viewer-layout-combobox',
+      'settings-code-viewer-layout-option-minimal',
+    );
+    await expect.poll(async () => readConfigValue(window, 'workbench.codeViewerLayoutMode')).toBe('minimal');
+    await window.getByTestId('settings-close-button').click();
+    await expect(window.getByTestId('settings-dialog')).toHaveCount(0);
+
+    await expectPanelHeaderWithoutDivider(window.getByTestId('left-panel-header'));
+    await expectPanelHeaderWithoutDivider(window.getByTestId('left-panel-secondary-header'));
+  await expect(leftPanelShell).not.toHaveClass(/(?:^|\s)rounded-md(?:\s|$)/);
+  await expect(leftPanelShell).not.toHaveClass(/(?:^|\s)border(?:\s|$)/);
+  await expect(leftPanelShell).not.toHaveClass(/(?:^|\s)bg-ide-bg(?:\s|$)/);
+  await expect(leftPanelRoot).not.toHaveClass(/(?:^|\s)bg-ide-bg(?:\s|$)/);
+  await expect(primaryPanel).toHaveClass(/(?:^|\s)rounded-md(?:\s|$)/);
+  await expect(primaryPanel).toHaveClass(/(?:^|\s)border(?:\s|$)/);
+  await expect(secondaryPanel).toHaveClass(/(?:^|\s)rounded-md(?:\s|$)/);
+  await expect(secondaryPanel).toHaveClass(/(?:^|\s)border(?:\s|$)/);
+    await expect(splitHandle).toHaveClass(/(?:^|\s)overlay-handle(?:\s|$)/);
+    await expect.poll(() => readVerticalPixelGap(primaryResizablePanel, secondaryResizablePanel), { timeout: UI_READY_TIMEOUT_MS }).toBeGreaterThanOrEqual(9);
+    await expect.poll(() => readVerticalPixelGap(primaryResizablePanel, secondaryResizablePanel), { timeout: UI_READY_TIMEOUT_MS }).toBeLessThanOrEqual(11);
+    await expect.poll(async () => (await scrollExplorerTreeToBottom(window)).scrollTop, { timeout: UI_READY_TIMEOUT_MS }).toBeGreaterThan(0);
+  } finally {
+    await app.close().catch(() => undefined);
+  }
 });
 
 test('activity bar shows compile and run action buttons with local selection only', async () => {

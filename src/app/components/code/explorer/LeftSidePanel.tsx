@@ -1,9 +1,18 @@
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
+import { cn } from '@/lib/utils';
 import { useWorkspaceGitStatus } from '../../../git/workspaceGitStatus';
 import { FileTreeNode, type ExplorerContextMenuRequest } from './FileTreeNode';
 import { ExplorerPanelTabs, type ExplorerPanelTab } from './LeftSidePanelChrome';
 import { FileOutlinePanel } from './FileOutlinePanel';
+import { useCodeViewerLayout } from '../../../context/CodeViewerLayoutContext';
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '../../ui/resizable';
+import {
+  getCodeWorkspacePanelFrameClassName,
+  getCodeWorkspacePanelGroupLayoutGapPx,
+  getCodeWorkspaceResizeHandleClassName,
+  getPanelHeaderClassName,
+} from '../shared/codeViewerLayoutStyles';
 import {
   WORKSPACE_ROOT_PATH,
   getWorkspaceParentPath,
@@ -62,6 +71,7 @@ interface LeftSidePanelProps {
   } | null>;
   onRenameWorkspaceEntry: (currentPath: string, nextPath: string, entryType: 'file' | 'folder') => Promise<void>;
   currentOutlineId: string;
+  onSplitPanelVisibleChange?: (isVisible: boolean) => void;
   refreshToken?: number;
   revealRequest?: WorkspaceRevealRequest | null;
   workspaceClipboard: WorkspaceClipboardState | null;
@@ -81,10 +91,12 @@ export function LeftSidePanel({
   onPasteWorkspaceEntry,
   onRenameWorkspaceEntry,
   currentOutlineId,
+  onSplitPanelVisibleChange,
   refreshToken = 0,
   revealRequest,
   workspaceClipboard,
 }: LeftSidePanelProps) {
+  const { layoutMode } = useCodeViewerLayout();
   const treeContainerRef = useRef<HTMLDivElement | null>(null);
   const treeInteractionActiveRef = useRef(false);
   const monacoDeleteSelectionArmedRef = useRef(false);
@@ -95,6 +107,7 @@ export function LeftSidePanel({
   const [contextMenuRequest, setContextMenuRequest] = useState<ExplorerContextMenuRequest | null>(null);
   const [handledRevealRequestToken, setHandledRevealRequestToken] = useState<number | null>(null);
   const [tab, setTab] = useState<ExplorerPanelTab>('explorer');
+  const [isSplitPanelVisible, setIsSplitPanelVisible] = useState(false);
   const gitStatus = useWorkspaceGitStatus();
   const {
     treeNodes,
@@ -104,6 +117,10 @@ export function LeftSidePanel({
   } = useWorkspaceTree(revealRequest, refreshToken);
 
   latestSelectedNodeRef.current = selectedNode;
+
+  useEffect(() => {
+    onSplitPanelVisibleChange?.(isSplitPanelVisible);
+  }, [isSplitPanelVisible, onSplitPanelVisibleChange]);
 
   const effectiveRevealRequest = revealRequest && revealRequest.token !== handledRevealRequestToken
     ? revealRequest
@@ -638,13 +655,15 @@ export function LeftSidePanel({
     workspaceClipboard,
   ]);
 
-  return (
-    <div className="flex flex-col h-full bg-ide-bg text-ide-text overflow-hidden">
-      <ExplorerPanelTabs activeTab={tab} onTabChange={setTab} />
+  const handleToggleSplitPanel = useCallback(() => {
+    setIsSplitPanelVisible((current) => !current);
+  }, []);
+  const splitPanelFrameClassName = getCodeWorkspacePanelFrameClassName(layoutMode, 'flex h-full flex-col bg-ide-bg text-ide-text');
 
-      {/* Explorer */}
+  const primaryPanelContent = (
+    <>
       {tab === 'explorer' && (
-        <div className="flex flex-col flex-1 overflow-hidden">
+        <div data-testid="left-panel-explorer-content" className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <div
             ref={treeContainerRef}
             tabIndex={0}
@@ -694,13 +713,96 @@ export function LeftSidePanel({
         </div>
       )}
 
-      {/* Outline */}
       {tab === 'outline' && (
         <FileOutlinePanel
           currentOutlineId={currentOutlineId}
           onLineJump={onLineJump}
         />
       )}
+    </>
+  );
+
+  return (
+    <div
+      data-testid="left-panel-root"
+      className={cn(
+        'flex h-full min-h-0 flex-col text-ide-text overflow-hidden',
+        !(layoutMode === 'minimal' && isSplitPanelVisible) && 'bg-ide-bg',
+      )}
+    >
+      {!isSplitPanelVisible && (
+        <>
+          <ExplorerPanelTabs
+            activeTab={tab}
+            isSplitPanelVisible={isSplitPanelVisible}
+            onTabChange={setTab}
+            onToggleSplitPanel={handleToggleSplitPanel}
+          />
+
+          <div data-testid="left-panel-primary-panel" className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            {primaryPanelContent}
+          </div>
+        </>
+      )}
+
+      {isSplitPanelVisible && (
+        <ResizablePanelGroup
+          data-testid="left-panel-split-group"
+          className="flex-1"
+          orientation="vertical"
+          layoutGapPx={getCodeWorkspacePanelGroupLayoutGapPx(layoutMode)}
+        >
+          <ResizablePanel id="left-panel-primary" defaultSize={50} minSize={25} minSizePx={120}>
+            <section data-testid="left-panel-primary-panel" className={splitPanelFrameClassName}>
+              <ExplorerPanelTabs
+                activeTab={tab}
+                isSplitPanelVisible={isSplitPanelVisible}
+                onTabChange={setTab}
+                onToggleSplitPanel={handleToggleSplitPanel}
+              />
+
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                {primaryPanelContent}
+              </div>
+            </section>
+          </ResizablePanel>
+
+          <ResizableHandle
+            data-testid="left-panel-split-resize-handle"
+            className={getCodeWorkspaceResizeHandleClassName(layoutMode)}
+          />
+
+          <ResizablePanel id="left-panel-secondary" defaultSize={50} minSize={25} minSizePx={120}>
+            <ExplorerSecondaryPanel />
+          </ResizablePanel>
+        </ResizablePanelGroup>
+      )}
     </div>
+  );
+}
+
+function ExplorerSecondaryPanel() {
+  const { layoutMode } = useCodeViewerLayout();
+  const splitPanelFrameClassName = getCodeWorkspacePanelFrameClassName(layoutMode, 'flex h-full flex-col bg-ide-bg text-ide-text');
+
+  return (
+    <section data-testid="left-panel-secondary-panel" className={splitPanelFrameClassName}>
+      <div
+        data-testid="left-panel-secondary-header"
+        data-code-viewer-layout-mode={layoutMode}
+        className={getPanelHeaderClassName(layoutMode)}
+      >
+        <div className="flex h-7 items-center text-[11px] font-semibold text-ide-text">
+          Structure
+        </div>
+      </div>
+
+      <div
+        data-testid="left-panel-secondary-placeholder"
+        className="flex min-h-0 flex-1 items-center justify-center px-3 py-2 text-center text-[12px] text-ide-text-muted"
+      >
+        Structure is empty
+      </div>
+    </section>
   );
 }

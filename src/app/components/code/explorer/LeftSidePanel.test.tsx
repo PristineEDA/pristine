@@ -127,6 +127,12 @@ describe('LeftSidePanel', () => {
     expect(screen.getByRole('radio', { name: 'Outline' })).toBeInTheDocument();
     expectCompactTabButton('left-panel-tab-explorer');
     expectCompactTabButton('left-panel-tab-outline');
+    expect(screen.getByTestId('left-panel-split-toggle')).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByTestId('left-panel-split-toggle')).toHaveClass('size-6', 'text-ide-text-muted');
+    expect(screen.getByTestId('left-panel-split-toggle').parentElement).toHaveClass('ml-auto');
+    expect(screen.getByTestId('left-panel-primary-panel')).not.toHaveClass('rounded-md', 'border', 'border-ide-border');
+    expect(screen.getByTestId('left-panel-explorer-content')).toHaveClass('min-h-0', 'flex-1', 'overflow-hidden');
+    expect(screen.queryByTestId('left-panel-secondary-panel')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Explorer' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Outline' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /problems/i })).not.toBeInTheDocument();
@@ -147,6 +153,73 @@ describe('LeftSidePanel', () => {
     expect(header).not.toHaveClass('border-b');
     expectCompactTabButton('left-panel-tab-explorer');
     expectCompactTabButton('left-panel-tab-outline');
+  });
+
+  it('defaults the lower stacked panel hidden and toggles two independent panel frames', async () => {
+    renderLeftSidePanel();
+
+    const splitToggle = screen.getByTestId('left-panel-split-toggle');
+
+    expect(splitToggle).toHaveAttribute('aria-label', 'Show lower explorer panel');
+    expect(splitToggle).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.queryByTestId('left-panel-split-group')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('panel-left-panel-primary')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('panel-left-panel-secondary')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('left-panel-secondary-panel')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('left-panel-split-resize-handle')).not.toBeInTheDocument();
+
+    await testUser.click(splitToggle);
+
+    const expandedSplitToggle = screen.getByTestId('left-panel-split-toggle');
+    expect(expandedSplitToggle).toHaveAttribute('aria-label', 'Hide lower explorer panel');
+    expect(expandedSplitToggle).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('left-panel-split-group')).toHaveAttribute('aria-orientation', 'vertical');
+    expect(screen.getByTestId('left-panel-split-group')).toHaveClass('flex-1', 'min-h-0');
+    expect(screen.getByTestId('panel-left-panel-primary')).toHaveAttribute('aria-hidden', 'false');
+    expect(screen.getByTestId('left-panel-explorer-content').parentElement).toHaveClass('flex', 'min-h-0', 'flex-1', 'flex-col', 'overflow-hidden');
+    expect(screen.getByTestId('panel-left-panel-secondary')).toHaveAttribute('aria-hidden', 'false');
+    expect(screen.getByTestId('left-panel-root')).toHaveClass('bg-ide-bg');
+    expect(screen.getByTestId('left-panel-primary-panel')).not.toHaveClass('rounded-md', 'border', 'border-ide-border');
+    expect(screen.getByTestId('left-panel-secondary-panel')).not.toHaveClass('rounded-md', 'border', 'border-ide-border');
+    expect(screen.getByTestId('left-panel-primary-panel')).toHaveClass('bg-ide-bg');
+    expect(screen.getByTestId('left-panel-secondary-panel')).toHaveClass('bg-ide-bg');
+    expect(screen.getByTestId('left-panel-secondary-header')).toHaveAttribute('data-code-viewer-layout-mode', 'compact');
+    expect(screen.getByTestId('left-panel-secondary-header')).toHaveTextContent('Structure');
+    expect(screen.getByTestId('left-panel-secondary-placeholder')).toHaveTextContent('Structure is empty');
+    expect(screen.getByTestId('left-panel-split-resize-handle')).toHaveAttribute('aria-orientation', 'horizontal');
+
+    await testUser.click(expandedSplitToggle);
+
+    const collapsedSplitToggle = screen.getByTestId('left-panel-split-toggle');
+    expect(collapsedSplitToggle).toHaveAttribute('aria-label', 'Show lower explorer panel');
+    expect(collapsedSplitToggle).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.queryByTestId('left-panel-split-group')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('panel-left-panel-primary')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('panel-left-panel-secondary')).not.toBeInTheDocument();
+    expect(screen.getByTestId('left-panel-primary-panel')).not.toHaveClass('rounded-md', 'border', 'border-ide-border');
+    expect(screen.queryByTestId('left-panel-secondary-panel')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('left-panel-split-resize-handle')).not.toBeInTheDocument();
+  });
+
+  it('keeps stacked explorer panels layout-aware in minimal mode', async () => {
+    renderLeftSidePanel({}, { layoutMode: 'minimal' });
+
+    await testUser.click(screen.getByTestId('left-panel-split-toggle'));
+
+    const primaryPanel = screen.getByTestId('left-panel-primary-panel');
+    const secondaryPanel = screen.getByTestId('left-panel-secondary-panel');
+    const secondaryHeader = screen.getByTestId('left-panel-secondary-header');
+    const resizeHandle = screen.getByTestId('left-panel-split-resize-handle');
+
+    expect(screen.getByTestId('left-panel-root')).not.toHaveClass('bg-ide-bg');
+    expect(primaryPanel).toHaveClass('rounded-md', 'border', 'border-ide-border', 'bg-ide-bg');
+    expect(secondaryPanel).toHaveClass('rounded-md', 'border', 'border-ide-border', 'bg-ide-bg');
+    expect(secondaryHeader).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
+    expect(secondaryHeader).toHaveClass('m-1.5', 'mb-0', 'rounded', 'px-2', 'py-1.5');
+    expect(secondaryHeader).not.toHaveClass('border');
+    expect(secondaryHeader).not.toHaveClass('border-ide-border');
+    expect(secondaryHeader).not.toHaveClass('border-b');
+    expect(resizeHandle).toHaveClass('overlay-handle', 'rounded-full', 'bg-transparent');
   });
 
   it('does not render the legacy explorer toolbar buttons', async () => {
