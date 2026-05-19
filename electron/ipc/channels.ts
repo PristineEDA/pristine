@@ -26,6 +26,7 @@ export const AsyncChannels = {
   WINDOW_CLOSE: 'async:window:close',
   WINDOW_RESOLVE_CLOSE_REQUEST: 'async:window:resolve-close-request',
   WINDOW_SET_FLOATING_INFO_VISIBILITY: 'async:window:set-floating-info-visibility',
+  WINDOW_SET_FLOATING_INFO_EXPANDED: 'async:window:set-floating-info-expanded',
   FS_READ_FILE: 'async:fs:read-file',
   FS_READ_FILE_ABSOLUTE: 'async:fs:read-file-absolute',
   FS_LIST_FILES: 'async:fs:list-files',

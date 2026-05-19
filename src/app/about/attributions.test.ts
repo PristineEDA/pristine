@@ -23,6 +23,7 @@ const directRuntimeDependencyAttributionIds = new Map([
   ['ignore', 'ignore'],
   ['jsonc-parser', 'jsonc-parser'],
   ['lit', 'lit'],
+  ['liveline', 'liveline'],
   ['lucide-react', 'lucide-react'],
   ['material-icon-theme', 'material-icon-theme'],
   ['mermaid', 'mermaid'],

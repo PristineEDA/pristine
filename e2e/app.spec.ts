@@ -1103,6 +1103,14 @@ async function setFloatingInfoWindowVisibility(
   }, { nextVisible: visible });
 }
 
+async function readBrowserWindowBounds(
+  app: Awaited<ReturnType<typeof electron.launch>>,
+  window: Page,
+) {
+  const browserWindow = await app.browserWindow(window);
+  return browserWindow.evaluate((targetWindow) => targetWindow.getBounds());
+}
+
 async function readConfigValue(window: Awaited<ReturnType<typeof launchApp>>['window'], key: string) {
   return window.evaluate((configKey) => {
     const browserGlobal = globalThis as typeof globalThis & {
@@ -4638,6 +4646,46 @@ test('floating info window stays visible after hiding the main window to tray', 
 
     await browserGlobal.electronAPI?.config.set('window.closeActionPreference', null);
   });
+
+  await app.close();
+});
+
+test('floating info window expands on hover and updates live chart data', async () => {
+  const { app, window } = await launchApp();
+
+  await setFloatingInfoWindowVisibility(window, true);
+
+  await expect.poll(async () => (await getWindowByTitle(app, 'Pristine Floating Info')) !== null).toBe(true);
+  const floatingInfoWindow = await getWindowByTitle(app, 'Pristine Floating Info');
+
+  if (!floatingInfoWindow) {
+    throw new Error('Expected floating info window to be available');
+  }
+
+  const floatingInfoShell = floatingInfoWindow.getByTestId('floating-info-window');
+  const collapsedBounds = await readBrowserWindowBounds(app, floatingInfoWindow);
+
+  await expect(floatingInfoShell).toHaveAttribute('data-expanded', 'false');
+  expect(collapsedBounds.width).toBe(60);
+  expect(collapsedBounds.height).toBeGreaterThan(0);
+
+  const initialLatestTime = await floatingInfoShell.getAttribute('data-latest-time');
+
+  await floatingInfoShell.hover();
+
+  await expect(floatingInfoShell).toHaveAttribute('data-expanded', 'true');
+  await expect(floatingInfoWindow.getByTestId('floating-info-chart')).toBeVisible();
+  await expect.poll(async () => (await readBrowserWindowBounds(app, floatingInfoWindow)).width).toBeGreaterThan(collapsedBounds.width);
+  await expect.poll(async () => (await readBrowserWindowBounds(app, floatingInfoWindow)).height).toBeGreaterThan(collapsedBounds.height);
+  await expect.poll(async () => floatingInfoShell.getAttribute('data-latest-time'), {
+    timeout: 4000,
+  }).not.toBe(initialLatestTime);
+
+  await floatingInfoWindow.mouse.move(collapsedBounds.width + 320, collapsedBounds.height + 240);
+
+  await expect.poll(async () => floatingInfoShell.getAttribute('data-expanded')).toBe('false');
+  await expect.poll(async () => (await readBrowserWindowBounds(app, floatingInfoWindow)).width).toBe(collapsedBounds.width);
+  await expect.poll(async () => (await readBrowserWindowBounds(app, floatingInfoWindow)).height).toBe(collapsedBounds.height);
 
   await app.close();
 });

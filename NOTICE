@@ -410,6 +410,7 @@ Covered components:
 - @assistant-ui/react-streamdown (AI Agent Frameworks; declared as MIT)
 - Zod (AI Agent Frameworks; declared as MIT)
 - Mermaid (Content Rendering, Diagrams & State; declared as MIT)
+- Liveline (Content Rendering, Diagrams & State; declared as MIT)
 - react-shiki (Content Rendering, Diagrams & State; declared as MIT)
 - remark-gfm (Content Rendering, Diagrams & State; declared as MIT)
 - tw-shimmer (Content Rendering, Diagrams & State; declared as MIT)

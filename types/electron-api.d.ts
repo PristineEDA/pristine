@@ -30,6 +30,7 @@ export interface ElectronAPI {
   close: () => Promise<void>;
   resolveCloseRequest: (requestId: number, decision: WindowCloseDecision) => Promise<boolean>;
   setFloatingInfoWindowVisible: (visible: boolean) => Promise<boolean>;
+  setFloatingInfoWindowExpanded: (expanded: boolean) => Promise<boolean>;
   isMaximized: () => boolean;
   isFullScreen: () => boolean;
   onMaximizedChange: (callback: (maximized: boolean) => void) => () => void;

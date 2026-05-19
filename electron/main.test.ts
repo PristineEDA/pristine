@@ -5,6 +5,7 @@ type BrowserWindowInstance = {
   options: Record<string, unknown>;
   loadURL: Mock<(url: string) => void>;
   loadFile: Mock<(filePath: string) => void>;
+  setBounds: Mock<(bounds: { x: number; y: number; width: number; height: number }, animate?: boolean) => void>;
   webContents: {
     send: Mock<(channel: string, ...args: unknown[]) => void>;
     isDestroyed: Mock<() => boolean>;
@@ -49,6 +50,7 @@ const mocks = vi.hoisted(() => {
     options: Record<string, unknown>;
     loadURL = vi.fn();
     loadFile = vi.fn();
+    setBounds = vi.fn();
     webContents = {
       send: vi.fn(),
       isDestroyed: vi.fn(() => false),
@@ -319,7 +321,8 @@ async function importMain(options?: {
     browserWindowInstances: mocks.browserWindowInstances,
     trayInstances: mocks.trayInstances,
     getMainWindow: mocks.mockRegisterAllHandlers.mock.calls[0]?.[0] as (() => BrowserWindowInstance | null) | undefined,
-    resolveCloseRequest: mocks.mockRegisterAllHandlers.mock.calls[0]?.[2] as ((requestId: number, decision: 'proceed' | 'cancel') => boolean) | undefined,
+    setFloatingInfoExpanded: mocks.mockRegisterAllHandlers.mock.calls[0]?.[2] as ((expanded: boolean) => boolean) | undefined,
+    resolveCloseRequest: mocks.mockRegisterAllHandlers.mock.calls[0]?.[3] as ((requestId: number, decision: 'proceed' | 'cancel') => boolean) | undefined,
   };
 }
 
@@ -660,6 +663,35 @@ describe('electron main entry', () => {
         themeKind: 'light',
       },
     });
+  });
+
+  it('expands the floating info window using the registered handler while keeping the top-right anchor', async () => {
+    const { browserWindowInstances, setFloatingInfoExpanded } = await importMain({
+      platform: 'win32',
+      configValues: {
+        'workbench.colorThemeKind': 'dark',
+        'ui.floatingInfoWindow.visible': true,
+      },
+    });
+
+    const floatingInfoWindow = browserWindowInstances[2];
+    expect(setFloatingInfoExpanded).toBeTypeOf('function');
+
+    expect(setFloatingInfoExpanded?.(true)).toBe(true);
+    expect(floatingInfoWindow.setBounds).toHaveBeenCalledWith({
+      width: 220,
+      height: 96,
+      x: 1920 - 220 - 24,
+      y: 24,
+    }, false);
+
+    expect(setFloatingInfoExpanded?.(false)).toBe(true);
+    expect(floatingInfoWindow.setBounds).toHaveBeenLastCalledWith({
+      width: 60,
+      height: 24,
+      x: 1920 - 60 - 24,
+      y: 24,
+    }, false);
   });
 
   it('focuses the existing visible main window for auth callback deep links without replaying the show animation', async () => {

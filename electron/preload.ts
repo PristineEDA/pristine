@@ -44,6 +44,8 @@ const electronAPI = {
     ipcRenderer.invoke(AsyncChannels.WINDOW_RESOLVE_CLOSE_REQUEST, requestId, decision) as Promise<boolean>,
   setFloatingInfoWindowVisible: (visible: boolean) =>
     ipcRenderer.invoke(AsyncChannels.WINDOW_SET_FLOATING_INFO_VISIBILITY, visible),
+  setFloatingInfoWindowExpanded: (expanded: boolean) =>
+    ipcRenderer.invoke(AsyncChannels.WINDOW_SET_FLOATING_INFO_EXPANDED, expanded),
   isMaximized: (): boolean => syncSend(SyncChannels.WINDOW_IS_MAXIMIZED),
   isFullScreen: (): boolean => syncSend(SyncChannels.WINDOW_IS_FULLSCREEN),
   onMaximizedChange: (callback: (maximized: boolean) => void) => {

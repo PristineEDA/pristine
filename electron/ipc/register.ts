@@ -26,11 +26,12 @@ export function setProjectRoot(root: string): void {
 export function registerAllHandlers(
   getMainWindow: () => BrowserWindow | null,
   setFloatingInfoWindowVisible: (visible: boolean) => boolean = () => false,
+  setFloatingInfoWindowExpanded: (expanded: boolean) => boolean = () => false,
   resolveCloseRequest: (requestId: number, decision: WindowCloseDecision) => boolean = () => false,
 ): void {
   registerPlatformHandler();
   registerDialogHandlers(getMainWindow);
-  registerWindowHandlers(getMainWindow, setFloatingInfoWindowVisible, resolveCloseRequest);
+  registerWindowHandlers(getMainWindow, setFloatingInfoWindowVisible, setFloatingInfoWindowExpanded, resolveCloseRequest);
   registerFilesystemHandlers();
   registerGitHandlers(getMainWindow);
   registerLspHandlers(getMainWindow);
