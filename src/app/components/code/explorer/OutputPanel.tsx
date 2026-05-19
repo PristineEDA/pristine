@@ -9,6 +9,11 @@ const levelConfig = {
   error: { className: 'text-ide-error', label: 'ERROR' },
 };
 
+const outputFilterInputStyle = {
+  color: 'var(--input-foreground)',
+  WebkitTextFillColor: 'var(--input-foreground)',
+};
+
 export function OutputPanel() {
   const outputLog = useOutputLog();
   const [filterText, setFilterText] = useState('');
@@ -29,7 +34,8 @@ export function OutputPanel() {
             value={filterText}
             onChange={(e) => setFilterText(e.target.value)}
             placeholder="Filter output..."
-            className="bg-transparent outline-none text-ide-text flex-1 text-[11px] placeholder:text-ide-text-dimmer"
+            className="bg-transparent outline-none text-input-foreground flex-1 text-[11px] placeholder:text-ide-text-dimmer"
+            style={outputFilterInputStyle}
           />
         </div>
         {(['all', 'info', 'warn', 'error'] as const).map((l) => (

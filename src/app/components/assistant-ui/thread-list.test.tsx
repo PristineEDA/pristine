@@ -80,6 +80,7 @@ describe('ThreadList', () => {
 
     const input = screen.getByTestId('thread-list-rename-input');
     expect(input).toHaveValue('Alpha Chat');
+    expect(input).toHaveClass('text-input-foreground');
 
     await user.clear(input);
     await user.type(input, 'Renamed Chat');

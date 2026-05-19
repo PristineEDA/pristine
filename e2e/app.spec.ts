@@ -424,6 +424,44 @@ async function readElementPixelHeight(locator: Locator) {
   });
 }
 
+async function readComputedTextColor(locator: Locator) {
+  return locator.evaluate((element) => {
+    const browserGlobal = globalThis as typeof globalThis & {
+      getComputedStyle: (node: unknown) => { color: string };
+    };
+
+    return browserGlobal.getComputedStyle(element).color;
+  });
+}
+
+async function readNormalizedCssColorVariable(
+  window: Awaited<ReturnType<typeof launchApp>>['window'],
+  variableName: string,
+) {
+  return window.evaluate((name) => {
+    type ElementLike = {
+      remove: () => void;
+      style: { color: string };
+    };
+    const browserGlobal = globalThis as typeof globalThis & {
+      document: {
+        body: { appendChild: (node: ElementLike) => void };
+        createElement: (tagName: string) => ElementLike;
+        documentElement: ElementLike;
+      };
+      getComputedStyle: (element: ElementLike) => { color: string; getPropertyValue: (name: string) => string };
+    };
+
+    const rootStyle = browserGlobal.getComputedStyle(browserGlobal.document.documentElement);
+    const probe = browserGlobal.document.createElement('span');
+    probe.style.color = rootStyle.getPropertyValue(name).trim();
+    browserGlobal.document.body.appendChild(probe);
+    const normalizedColor = browserGlobal.getComputedStyle(probe).color;
+    probe.remove();
+    return normalizedColor;
+  }, variableName);
+}
+
 async function readVerticalPixelGap(upperLocator: Locator, lowerLocator: Locator) {
   const [upperBox, lowerBox] = await Promise.all([
     upperLocator.boundingBox(),
@@ -3122,6 +3160,51 @@ test('ctrl+p quick open escape closes the palette and reopening resets the query
   const reopenedInput = window.getByTestId('quick-open-input');
   await expect(reopenedInput).toHaveValue('');
   await expect(window.getByTestId('quick-open-result-README_md')).toBeVisible();
+
+  await app.close();
+});
+
+test('dark theme keeps quick open and explorer rename input text legible', async () => {
+  const { app, window } = await launchApp();
+
+  await ensureExplorerVisible(window);
+  await window.getByTestId('menu-settings-button').click();
+  await expect(window.getByTestId('settings-dialog')).toBeVisible();
+
+  await selectComboboxOption(
+    window,
+    'settings-theme-combobox',
+    'settings-theme-option-vscode-2026-dark',
+  );
+
+  await expect.poll(async () => readConfigValue(window, 'workbench.colorTheme')).toBe('vscode-2026-dark');
+  await window.getByTestId('settings-close-button').click();
+  await expect(window.getByTestId('settings-dialog')).toHaveCount(0);
+
+  const expectedQuickInputColor = await readNormalizedCssColorVariable(window, '--quick-input-foreground');
+  const expectedInputColor = await readNormalizedCssColorVariable(window, '--input-foreground');
+
+  expect(expectedQuickInputColor).not.toBe('rgb(0, 0, 0)');
+  expect(expectedInputColor).not.toBe('rgb(0, 0, 0)');
+
+  await window.keyboard.press('Control+P');
+  const quickOpenInput = window.getByTestId('quick-open-input');
+  await expect(quickOpenInput).toBeFocused();
+  await expect.poll(() => readComputedTextColor(quickOpenInput)).toBe(expectedQuickInputColor);
+  await quickOpenInput.press('Escape');
+  await expect(window.getByTestId('quick-open-overlay')).toHaveCount(0);
+
+  const explorerTree = window.locator('.explorer-tree-scrollbar');
+  await expect(explorerTree).toBeVisible();
+  const renameInput = await openExplorerRenameInput(
+    window,
+    explorerTree,
+    window.getByTestId('file-tree-node-README_md'),
+    'file-tree-input-README_md',
+  );
+  await expect.poll(() => readComputedTextColor(renameInput)).toBe(expectedInputColor);
+  await renameInput.press('Escape');
+  await expect(renameInput).toHaveCount(0);
 
   await app.close();
 });

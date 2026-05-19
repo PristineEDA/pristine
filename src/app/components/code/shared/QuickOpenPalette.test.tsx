@@ -68,6 +68,7 @@ describe('QuickOpenPalette', () => {
     );
 
     expect(screen.getByTestId('quick-open-input')).toHaveAttribute('spellcheck', 'false');
+    expect(screen.getByTestId('quick-open-input')).toHaveClass('text-quick-input-foreground');
     expect(scrollIntoView).toHaveBeenCalled();
 
     scrollIntoView.mockClear();

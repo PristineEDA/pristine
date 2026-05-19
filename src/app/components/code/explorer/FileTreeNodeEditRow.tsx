@@ -6,6 +6,11 @@ import {
 import { WorkspaceFileIcon, WorkspaceFolderIcon } from '../shared/WorkspaceEntryIcon';
 
 const treeRowIndentStyleCache = new Map<number, CSSProperties>();
+const treeEditInputStyle = {
+  backgroundColor: 'var(--input-background)',
+  color: 'var(--input-foreground)',
+  WebkitTextFillColor: 'var(--input-foreground)',
+} satisfies CSSProperties;
 
 export function getTreeRowIndentStyle(depth: number): CSSProperties {
   const cachedStyle = treeRowIndentStyleCache.get(depth);
@@ -92,11 +97,12 @@ export function TreeEditInputRow({
           disabled={isSubmitting}
           spellCheck={false}
           aria-invalid={errorMessage ? 'true' : 'false'}
-          className={`ml-1 h-5 flex-1 rounded border bg-input-background px-2 text-[12px] outline-none transition-colors ${
+          className={`ml-1 h-5 flex-1 rounded border bg-input-background px-2 text-[12px] text-input-foreground outline-none transition-colors ${
             errorMessage
-              ? 'border-ide-error text-ide-text focus:border-ide-error'
-              : 'border-ide-border text-ide-text focus:border-ide-accent'
+              ? 'border-ide-error focus:border-ide-error'
+              : 'border-ide-border focus:border-ide-accent'
           } ${isSubmitting ? 'opacity-80' : ''}`}
+          style={treeEditInputStyle}
           onBlur={onBlur}
           onChange={(event) => onChange(event.target.value)}
           onKeyDown={(event) => {

@@ -15,6 +15,8 @@ function pickThemeColor(theme: ResolvedColorTheme, ids: readonly string[], fallb
 export function getAppliedColorThemeVariables(theme: ResolvedColorTheme): Record<string, string> {
   const preview = getColorThemePreview(theme)
   const foreground = pickThemeColor(theme, ['foreground', 'editor.foreground'], preview.foreground)
+  const inputForeground = pickThemeColor(theme, ['input.foreground', 'editorWidget.foreground', 'foreground'], foreground)
+  const quickInputForeground = pickThemeColor(theme, ['quickInput.foreground', 'input.foreground', 'foreground'], inputForeground)
   const border = pickThemeColor(theme, ['panel.border', 'sideBar.border', 'input.border'], `${preview.comment}55`)
   const accent = pickThemeColor(theme, ['button.background', 'focusBorder', 'list.highlightForeground'], preview.cyan)
   const statusBarBackground = pickThemeColor(theme, ['statusBar.background', 'statusBar.noFolderBackground'], preview.surface)
@@ -57,6 +59,8 @@ export function getAppliedColorThemeVariables(theme: ResolvedColorTheme): Record
     '--border': border,
     '--input': border,
     '--input-background': pickThemeColor(theme, ['input.background', 'quickInput.background'], preview.input),
+    '--input-foreground': inputForeground,
+    '--quick-input-foreground': quickInputForeground,
     '--switch-background': pickThemeColor(theme, ['checkbox.background', 'input.background'], preview.surface),
     '--ring': pickThemeColor(theme, ['focusBorder', 'button.background'], accent),
     '--sidebar': pickThemeColor(theme, ['sideBar.background'], preview.surface),

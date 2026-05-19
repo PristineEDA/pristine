@@ -19,6 +19,19 @@ function createTheme(colors: Record<string, string>): ResolvedColorTheme {
 }
 
 describe('colorThemeCss', () => {
+  it('maps input and quick input foreground colors from VS Code input slots', () => {
+    const variables = getAppliedColorThemeVariables(createTheme({
+      foreground: '#cccccc',
+      'editor.background': '#101010',
+      'panel.background': '#181818',
+      'input.foreground': '#d0d0d0',
+      'quickInput.foreground': '#efefef',
+    }))
+
+    expect(variables['--input-foreground']).toBe('#d0d0d0')
+    expect(variables['--quick-input-foreground']).toBe('#efefef')
+  })
+
   it('maps StatusBar and unified chrome colors from VS Code workbench slots', () => {
     const variables = getAppliedColorThemeVariables(createTheme({
       foreground: '#cccccc',
