@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
+import { type CSSProperties, useCallback, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { cn } from '@/lib/utils';
 import { useWorkspaceGitStatus } from '../../../git/workspaceGitStatus';
@@ -6,7 +6,7 @@ import { FileTreeNode, type ExplorerContextMenuRequest } from './FileTreeNode';
 import { ExplorerPanelTabs, type ExplorerPanelTab } from './LeftSidePanelChrome';
 import { FileOutlinePanel } from './FileOutlinePanel';
 import { useCodeViewerLayout } from '../../../context/CodeViewerLayoutContext';
-import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '../../ui/resizable';
+import { PANEL_TRANSITION_DURATION_MS, ResizableHandle, ResizablePanel, ResizablePanelGroup } from '../../ui/resizable';
 import {
   getCodeWorkspacePanelFrameClassName,
   getCodeWorkspacePanelGroupLayoutGapPx,
@@ -53,6 +53,83 @@ export {
   getExplorerPasteTargetPath,
   getExplorerRenameTarget,
 } from './LeftSidePanelKeyboard';
+
+type AnimatedPresencePhase = 'hidden' | 'entering' | 'visible' | 'exiting';
+
+const SPLIT_PANEL_CONTENT_TRANSITION_STYLE = {
+  transitionDuration: `${PANEL_TRANSITION_DURATION_MS}ms`,
+  transitionProperty: 'opacity',
+} satisfies CSSProperties;
+
+function useAnimatedSplitPanelPresence(isVisible: boolean) {
+  const [phase, setPhase] = useState<AnimatedPresencePhase>(() => (isVisible ? 'visible' : 'hidden'));
+  const enterTimeoutRef = useRef<number | null>(null);
+  const exitTimeoutRef = useRef<number | null>(null);
+
+  useLayoutEffect(() => {
+    if (enterTimeoutRef.current !== null) {
+      window.clearTimeout(enterTimeoutRef.current);
+      enterTimeoutRef.current = null;
+    }
+
+    if (exitTimeoutRef.current !== null) {
+      window.clearTimeout(exitTimeoutRef.current);
+      exitTimeoutRef.current = null;
+    }
+
+    if (isVisible) {
+      setPhase((currentPhase) => {
+        if (currentPhase === 'hidden') {
+          enterTimeoutRef.current = window.setTimeout(() => {
+            setPhase('visible');
+            enterTimeoutRef.current = null;
+          }, 0);
+
+          return 'entering';
+        }
+
+        return 'visible';
+      });
+
+      return () => {
+        if (enterTimeoutRef.current !== null) {
+          window.clearTimeout(enterTimeoutRef.current);
+          enterTimeoutRef.current = null;
+        }
+      };
+    }
+
+    setPhase((currentPhase) => {
+      if (currentPhase === 'hidden') {
+        return currentPhase;
+      }
+
+      exitTimeoutRef.current = window.setTimeout(() => {
+        setPhase('hidden');
+        exitTimeoutRef.current = null;
+      }, PANEL_TRANSITION_DURATION_MS);
+
+      return 'exiting';
+    });
+
+    return () => {
+      if (enterTimeoutRef.current !== null) {
+        window.clearTimeout(enterTimeoutRef.current);
+        enterTimeoutRef.current = null;
+      }
+
+      if (exitTimeoutRef.current !== null) {
+        window.clearTimeout(exitTimeoutRef.current);
+        exitTimeoutRef.current = null;
+      }
+    };
+  }, [isVisible]);
+
+  return {
+    isExpanded: phase === 'visible',
+    shouldRender: phase !== 'hidden',
+  };
+}
 
 interface LeftSidePanelProps {
   activeFileId: string;
@@ -108,6 +185,7 @@ export function LeftSidePanel({
   const [handledRevealRequestToken, setHandledRevealRequestToken] = useState<number | null>(null);
   const [tab, setTab] = useState<ExplorerPanelTab>('explorer');
   const [isSplitPanelVisible, setIsSplitPanelVisible] = useState(false);
+  const splitPanelPresence = useAnimatedSplitPanelPresence(isSplitPanelVisible);
   const gitStatus = useWorkspaceGitStatus();
   const {
     treeNodes,
@@ -119,8 +197,8 @@ export function LeftSidePanel({
   latestSelectedNodeRef.current = selectedNode;
 
   useEffect(() => {
-    onSplitPanelVisibleChange?.(isSplitPanelVisible);
-  }, [isSplitPanelVisible, onSplitPanelVisibleChange]);
+    onSplitPanelVisibleChange?.(splitPanelPresence.shouldRender);
+  }, [onSplitPanelVisibleChange, splitPanelPresence.shouldRender]);
 
   const effectiveRevealRequest = revealRequest && revealRequest.token !== handledRevealRequestToken
     ? revealRequest
@@ -727,10 +805,10 @@ export function LeftSidePanel({
       data-testid="left-panel-root"
       className={cn(
         'flex h-full min-h-0 flex-col text-ide-text overflow-hidden',
-        !(layoutMode === 'minimal' && isSplitPanelVisible) && 'bg-ide-bg',
+        !(layoutMode === 'minimal' && splitPanelPresence.shouldRender) && 'bg-ide-bg',
       )}
     >
-      {!isSplitPanelVisible && (
+      {!splitPanelPresence.shouldRender && (
         <>
           <ExplorerPanelTabs
             activeTab={tab}
@@ -745,7 +823,7 @@ export function LeftSidePanel({
         </>
       )}
 
-      {isSplitPanelVisible && (
+      {splitPanelPresence.shouldRender && (
         <ResizablePanelGroup
           data-testid="left-panel-split-group"
           className="flex-1"
@@ -769,11 +847,12 @@ export function LeftSidePanel({
 
           <ResizableHandle
             data-testid="left-panel-split-resize-handle"
+            hidden={!splitPanelPresence.isExpanded}
             className={getCodeWorkspaceResizeHandleClassName(layoutMode)}
           />
 
-          <ResizablePanel id="left-panel-secondary" defaultSize={50} minSize={25} minSizePx={120}>
-            <ExplorerSecondaryPanel />
+          <ResizablePanel id="left-panel-secondary" defaultSize={50} minSize={25} minSizePx={120} collapsed={!splitPanelPresence.isExpanded}>
+            <ExplorerSecondaryPanel isExpanded={splitPanelPresence.isExpanded} />
           </ResizablePanel>
         </ResizablePanelGroup>
       )}
@@ -781,12 +860,19 @@ export function LeftSidePanel({
   );
 }
 
-function ExplorerSecondaryPanel() {
+function ExplorerSecondaryPanel({ isExpanded }: { isExpanded: boolean }) {
   const { layoutMode } = useCodeViewerLayout();
   const splitPanelFrameClassName = getCodeWorkspacePanelFrameClassName(layoutMode, 'flex h-full flex-col bg-ide-bg text-ide-text');
 
   return (
-    <section data-testid="left-panel-secondary-panel" className={splitPanelFrameClassName}>
+    <section
+      data-testid="left-panel-secondary-panel"
+      className={splitPanelFrameClassName}
+      style={{
+        ...SPLIT_PANEL_CONTENT_TRANSITION_STYLE,
+        opacity: isExpanded ? 1 : 0,
+      }}
+    >
       <div
         data-testid="left-panel-secondary-header"
         data-code-viewer-layout-mode={layoutMode}

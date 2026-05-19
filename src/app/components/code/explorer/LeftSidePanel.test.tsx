@@ -176,8 +176,15 @@ describe('LeftSidePanel', () => {
     expect(screen.getByTestId('left-panel-split-group')).toHaveAttribute('aria-orientation', 'vertical');
     expect(screen.getByTestId('left-panel-split-group')).toHaveClass('flex-1', 'min-h-0');
     expect(screen.getByTestId('panel-left-panel-primary')).toHaveAttribute('aria-hidden', 'false');
+    expect(screen.getByTestId('panel-left-panel-primary').style.transitionDuration).toBe('300ms');
+    expect(screen.getByTestId('panel-left-panel-primary').style.transitionProperty).toBe('flex-basis');
+
+    await waitFor(() => expect(screen.getByTestId('panel-left-panel-secondary')).toHaveAttribute('aria-hidden', 'false'));
+
     expect(screen.getByTestId('left-panel-explorer-content').parentElement).toHaveClass('flex', 'min-h-0', 'flex-1', 'flex-col', 'overflow-hidden');
-    expect(screen.getByTestId('panel-left-panel-secondary')).toHaveAttribute('aria-hidden', 'false');
+    expect(screen.getByTestId('panel-left-panel-secondary').style.transitionDuration).toBe('300ms');
+    expect(screen.getByTestId('panel-left-panel-secondary').style.transitionProperty).toBe('flex-basis');
+    expect(screen.getByTestId('left-panel-secondary-panel')).toHaveStyle({ opacity: '1' });
     expect(screen.getByTestId('left-panel-root')).toHaveClass('bg-ide-bg');
     expect(screen.getByTestId('left-panel-primary-panel')).not.toHaveClass('rounded-md', 'border', 'border-ide-border');
     expect(screen.getByTestId('left-panel-secondary-panel')).not.toHaveClass('rounded-md', 'border', 'border-ide-border');
@@ -193,7 +200,16 @@ describe('LeftSidePanel', () => {
     const collapsedSplitToggle = screen.getByTestId('left-panel-split-toggle');
     expect(collapsedSplitToggle).toHaveAttribute('aria-label', 'Show lower explorer panel');
     expect(collapsedSplitToggle).toHaveAttribute('aria-pressed', 'false');
-    expect(screen.queryByTestId('left-panel-split-group')).not.toBeInTheDocument();
+    expect(screen.getByTestId('left-panel-split-group')).toBeInTheDocument();
+    expect(screen.getByTestId('panel-left-panel-primary')).toHaveAttribute('aria-hidden', 'false');
+    expect(screen.getByTestId('panel-left-panel-secondary')).toHaveAttribute('aria-hidden', 'true');
+    expect(screen.getByTestId('left-panel-secondary-panel')).toHaveStyle({ opacity: '0' });
+    expect(screen.queryByTestId('left-panel-split-resize-handle')).not.toBeInTheDocument();
+
+    await waitFor(() => expect(screen.queryByTestId('left-panel-split-group')).not.toBeInTheDocument(), {
+      timeout: 1000,
+    });
+
     expect(screen.queryByTestId('panel-left-panel-primary')).not.toBeInTheDocument();
     expect(screen.queryByTestId('panel-left-panel-secondary')).not.toBeInTheDocument();
     expect(screen.getByTestId('left-panel-primary-panel')).not.toHaveClass('rounded-md', 'border', 'border-ide-border');
@@ -205,6 +221,7 @@ describe('LeftSidePanel', () => {
     renderLeftSidePanel({}, { layoutMode: 'minimal' });
 
     await testUser.click(screen.getByTestId('left-panel-split-toggle'));
+    await waitFor(() => expect(screen.getByTestId('panel-left-panel-secondary')).toHaveAttribute('aria-hidden', 'false'));
 
     const primaryPanel = screen.getByTestId('left-panel-primary-panel');
     const secondaryPanel = screen.getByTestId('left-panel-secondary-panel');

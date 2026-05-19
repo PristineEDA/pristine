@@ -3235,10 +3235,13 @@ test('explorer root toggles first-level children and hides the legacy collapse-a
   await ensureExplorerVisible(window);
   const collapseAllButton = window.getByRole('button', { name: 'Collapse All' });
   const rootNode = window.getByTestId('file-tree-node-root');
+  const rootIcon = window.getByTestId('file-tree-icon-root');
   const rtlNode = window.getByTestId('file-tree-node-rtl');
 
   await expect(collapseAllButton).toHaveCount(0);
   await expect(rootNode).toBeVisible();
+  await expect(rootIcon).toHaveClass(/(?:^|\s)h-2\.5(?:\s|$)/);
+  await expect(rootIcon).toHaveClass(/(?:^|\s)w-2\.5(?:\s|$)/);
   await expect(window.getByTestId('left-panel-header')).not.toContainText('retroSoC');
   await expect(rootNode).toContainText('retroSoC');
   await expect(rtlNode).toBeVisible();
@@ -3671,6 +3674,8 @@ test('left panel split shows two stacked panels and keeps the explorer tree scro
     await splitToggle.click();
 
     await expect(splitToggle).toHaveAttribute('aria-pressed', 'true');
+    await expect(primaryResizablePanel).toHaveAttribute('style', /transition-duration: 300ms/);
+    await expect(secondaryResizablePanel).toHaveAttribute('style', /transition-duration: 300ms/);
     await expect(primaryResizablePanel).toHaveAttribute('aria-hidden', 'false');
     await expect(secondaryResizablePanel).toHaveAttribute('aria-hidden', 'false');
     await expect(leftPanelRoot).toHaveClass(/(?:^|\s)bg-ide-bg(?:\s|$)/);
@@ -3740,6 +3745,13 @@ test('left panel split shows two stacked panels and keeps the explorer tree scro
     await expect.poll(() => readVerticalPixelGap(primaryResizablePanel, secondaryResizablePanel), { timeout: UI_READY_TIMEOUT_MS }).toBeGreaterThanOrEqual(9);
     await expect.poll(() => readVerticalPixelGap(primaryResizablePanel, secondaryResizablePanel), { timeout: UI_READY_TIMEOUT_MS }).toBeLessThanOrEqual(11);
     await expect.poll(async () => (await scrollExplorerTreeToBottom(window)).scrollTop, { timeout: UI_READY_TIMEOUT_MS }).toBeGreaterThan(0);
+
+    await splitToggle.click();
+    await expect(splitToggle).toHaveAttribute('aria-pressed', 'false');
+    await expect(secondaryResizablePanel).toHaveAttribute('aria-hidden', 'true');
+    await expect(window.getByTestId('left-panel-secondary-panel')).toHaveAttribute('style', /opacity: 0/);
+    await expect(splitHandle).toHaveCount(0);
+    await expect(secondaryPanel).toHaveCount(0, { timeout: UI_READY_TIMEOUT_MS });
   } finally {
     await app.close().catch(() => undefined);
   }

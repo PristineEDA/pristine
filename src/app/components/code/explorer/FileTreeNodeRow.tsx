@@ -64,7 +64,7 @@ export const FileTreeNodeRow = memo(function FileTreeNodeRow({
             path={node.path}
             isOpen={isExpanded}
             isRoot={node.path === WORKSPACE_ROOT_PATH}
-            className="h-4 w-4"
+            className={node.path === WORKSPACE_ROOT_PATH ? 'h-2.5 w-2.5' : 'h-4 w-4'}
             testId={`file-tree-icon-${testId}`}
           />
           <span className="ml-1 flex min-w-0 flex-1 items-center">
