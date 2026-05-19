@@ -3377,21 +3377,28 @@ test('assistant chat list expansion widens the whole right sidebar and supports 
 
   const rightPanelToggle = window.getByTestId('toggle-right-panel');
   const rightPanel = window.getByTestId('panel-right-panel');
+  const splitToggle = window.getByTestId('right-panel-split-toggle');
   const assistantMainPanel = window.getByTestId('assistant-main-panel');
   const chatListToggle = window.getByTestId('assistant-thread-list-toggle');
   const chatListPanel = window.getByTestId('assistant-thread-list-panel');
   const chatListResizeHandle = window.getByTestId('assistant-thread-list-resize-handle');
+  const secondaryResizablePanel = window.getByTestId('panel-right-panel-secondary');
 
   await expect(rightPanelToggle).toBeEnabled();
   await rightPanelToggle.click();
 
   await expect(rightPanel).toBeVisible();
-  await expect(chatListPanel).toHaveCount(0);
+  await expect(splitToggle).toBeVisible();
+  await splitToggle.click();
+  await expect(splitToggle).toHaveAttribute('aria-pressed', 'true');
+  await expect(secondaryResizablePanel).toHaveAttribute('aria-hidden', 'false');
+  await expect(chatListPanel).toHaveAttribute('aria-hidden', 'true');
   await expectCompactPanelTabButton(window.getByTestId('right-panel-tab-ai'));
   await expectCompactPanelTabButton(window.getByTestId('right-panel-tab-outline'));
   await expect(assistantMainPanel).not.toHaveClass(/(?:^|\s)bg-background(?:\s|$)/);
   await expect(window.getByTestId('assistant-panel-header')).toBeVisible();
   await expect(window.getByTestId('assistant-panel-header').getByText('Pristine Agent')).toHaveCount(0);
+  await expect(window.getByTestId('right-panel-secondary-placeholder')).toContainText('Details is empty');
 
   const initialRightPanelWidth = await waitForElementPixelWidthBetween(rightPanel, 295, 305);
   const initialAssistantWidth = await waitForElementPixelWidthBetween(assistantMainPanel, 295, 305);
@@ -3463,6 +3470,7 @@ test('assistant chat list expansion widens the whole right sidebar and supports 
   await expect.poll(() => readElementPixelWidth(rightPanel)).toBeLessThanOrEqual(expectedResizedRightPanelWidthPx + 5);
   await expect.poll(() => readElementPixelWidth(assistantMainPanel)).toBeGreaterThanOrEqual(initialAssistantWidth - 2);
   await expect.poll(() => readElementPixelWidth(assistantMainPanel)).toBeLessThanOrEqual(initialAssistantWidth + 2);
+  await expect(secondaryResizablePanel).toHaveAttribute('aria-hidden', 'false');
 
   const resizedRightPanelWidth = await readElementPixelWidth(rightPanel);
   const resizedAssistantWidth = await readElementPixelWidth(assistantMainPanel);
@@ -3472,6 +3480,120 @@ test('assistant chat list expansion widens the whole right sidebar and supports 
   expect(resizedAssistantWidth).toBeLessThanOrEqual(initialAssistantWidth + 2);
 
   await app.close();
+});
+
+test('right panel split shows two stacked panels and keeps the panel layout-aware', async () => {
+  test.slow();
+
+  const { app, window } = await launchApp();
+
+  try {
+    await ensureExplorerVisible(window);
+
+    const rightPanelToggle = window.getByTestId('toggle-right-panel');
+    const rightPanelShell = window.getByTestId('panel-right-panel');
+    const splitToggle = window.getByTestId('right-panel-split-toggle');
+    const rightPanelRoot = window.getByTestId('right-panel-root');
+    const primaryPanel = window.getByTestId('right-panel-primary-panel');
+    const secondaryPanel = window.getByTestId('right-panel-secondary-panel');
+    const primaryResizablePanel = window.getByTestId('panel-right-panel-primary');
+    const secondaryResizablePanel = window.getByTestId('panel-right-panel-secondary');
+    const splitHandle = window.getByTestId('right-panel-split-resize-handle');
+
+    await expect(rightPanelToggle).toBeEnabled();
+    await rightPanelToggle.click();
+
+    await expect(rightPanelShell).toBeVisible();
+    await expect(splitToggle).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+    await expect(splitToggle).toHaveAttribute('aria-pressed', 'false');
+    await expect(primaryPanel).not.toHaveClass(/(?:^|\s)rounded-md(?:\s|$)/);
+    await expect(primaryResizablePanel).toHaveCount(0);
+    await expect(secondaryResizablePanel).toHaveCount(0);
+    await expect(secondaryPanel).toHaveCount(0);
+    await expect(splitHandle).toHaveCount(0);
+
+    await splitToggle.click();
+
+    await expect(splitToggle).toHaveAttribute('aria-pressed', 'true');
+    await expect(primaryResizablePanel).toHaveAttribute('style', /transition-duration: 300ms/);
+    await expect(secondaryResizablePanel).toHaveAttribute('style', /transition-duration: 300ms/);
+    await expect(primaryResizablePanel).toHaveAttribute('aria-hidden', 'false');
+    await expect(secondaryResizablePanel).toHaveAttribute('aria-hidden', 'false');
+    await expect(rightPanelRoot).toHaveClass(/(?:^|\s)bg-ide-bg(?:\s|$)/);
+    await expect(primaryPanel).not.toHaveClass(/(?:^|\s)rounded-md(?:\s|$)/);
+    await expect(primaryPanel).not.toHaveClass(/(?:^|\s)border(?:\s|$)/);
+    await expect(secondaryPanel).toBeVisible();
+    await expect(secondaryPanel).not.toHaveClass(/(?:^|\s)rounded-md(?:\s|$)/);
+    await expect(secondaryPanel).not.toHaveClass(/(?:^|\s)border(?:\s|$)/);
+    await expect(window.getByTestId('right-panel-secondary-placeholder')).toContainText('Details is empty');
+    await expect(splitHandle).toBeVisible();
+    await expect(splitHandle).toHaveAttribute('aria-orientation', 'horizontal');
+
+    await expect.poll(async () => {
+      const [primaryHeight, secondaryHeight] = await Promise.all([
+        readElementPixelHeight(primaryResizablePanel),
+        readElementPixelHeight(secondaryResizablePanel),
+      ]);
+
+      return Math.abs(primaryHeight - secondaryHeight);
+    }, { timeout: UI_READY_TIMEOUT_MS }).toBeLessThanOrEqual(10);
+
+    const initialPrimaryHeight = await readElementPixelHeight(primaryResizablePanel);
+    const initialSecondaryHeight = await readElementPixelHeight(secondaryResizablePanel);
+    const splitHandleBox = await splitHandle.boundingBox();
+
+    if (!splitHandleBox) {
+      throw new Error('Expected right panel split handle geometry to be measurable');
+    }
+
+    await window.mouse.move(
+      splitHandleBox.x + splitHandleBox.width / 2,
+      splitHandleBox.y + splitHandleBox.height / 2,
+    );
+    await window.mouse.down();
+    await window.mouse.move(
+      splitHandleBox.x + splitHandleBox.width / 2,
+      splitHandleBox.y + splitHandleBox.height / 2 + 80,
+    );
+    await window.mouse.up();
+
+    await expect.poll(() => readElementPixelHeight(primaryResizablePanel), { timeout: UI_READY_TIMEOUT_MS }).toBeGreaterThan(initialPrimaryHeight + 55);
+    await expect.poll(() => readElementPixelHeight(secondaryResizablePanel), { timeout: UI_READY_TIMEOUT_MS }).toBeLessThan(initialSecondaryHeight - 55);
+
+    await window.getByTestId('menu-settings-button').click();
+    await expect(window.getByTestId('settings-dialog')).toBeVisible();
+    await selectComboboxOption(
+      window,
+      'settings-code-viewer-layout-combobox',
+      'settings-code-viewer-layout-option-minimal',
+    );
+    await expect.poll(async () => readConfigValue(window, 'workbench.codeViewerLayoutMode')).toBe('minimal');
+    await window.getByTestId('settings-close-button').click();
+    await expect(window.getByTestId('settings-dialog')).toHaveCount(0);
+
+    await expectPanelHeaderWithoutDivider(window.getByTestId('right-panel-header'));
+    await expectPanelHeaderWithoutDivider(window.getByTestId('right-panel-secondary-header'));
+    await expect(rightPanelShell).not.toHaveClass(/(?:^|\s)rounded-md(?:\s|$)/);
+    await expect(rightPanelShell).not.toHaveClass(/(?:^|\s)border(?:\s|$)/);
+    await expect(rightPanelShell).not.toHaveClass(/(?:^|\s)bg-ide-bg(?:\s|$)/);
+    await expect(rightPanelRoot).not.toHaveClass(/(?:^|\s)bg-ide-bg(?:\s|$)/);
+    await expect(primaryPanel).toHaveClass(/(?:^|\s)rounded-md(?:\s|$)/);
+    await expect(primaryPanel).toHaveClass(/(?:^|\s)border(?:\s|$)/);
+    await expect(secondaryPanel).toHaveClass(/(?:^|\s)rounded-md(?:\s|$)/);
+    await expect(secondaryPanel).toHaveClass(/(?:^|\s)border(?:\s|$)/);
+    await expect(splitHandle).toHaveClass(/(?:^|\s)overlay-handle(?:\s|$)/);
+    await expect.poll(() => readVerticalPixelGap(primaryResizablePanel, secondaryResizablePanel), { timeout: UI_READY_TIMEOUT_MS }).toBeGreaterThanOrEqual(9);
+    await expect.poll(() => readVerticalPixelGap(primaryResizablePanel, secondaryResizablePanel), { timeout: UI_READY_TIMEOUT_MS }).toBeLessThanOrEqual(11);
+
+    await splitToggle.click();
+    await expect(splitToggle).toHaveAttribute('aria-pressed', 'false');
+    await expect(secondaryResizablePanel).toHaveAttribute('aria-hidden', 'true');
+    await expect(window.getByTestId('right-panel-secondary-panel')).toHaveAttribute('style', /opacity: 0/);
+    await expect(splitHandle).toHaveCount(0);
+    await expect(secondaryPanel).toHaveCount(0, { timeout: UI_READY_TIMEOUT_MS });
+  } finally {
+    await app.close().catch(() => undefined);
+  }
 });
 
 test('status bar switches across primary and secondary navigation views', async () => {

@@ -1,30 +1,26 @@
-import { BetweenHorizontalStart, ListTree, ShieldCheck, Sparkles } from 'lucide-react';
-import { Suspense, lazy, useState } from "react";
-
-import {
-  compactIconTabToggleIconSize,
-  compactIconTabToggleItemClassName,
-  IconTabToggleGroup,
-} from '../shared/IconTabToggleGroup';
-import { Skeleton } from "../../ui/skeleton";
+import { Suspense, lazy, useEffect, useState } from 'react';
+import { cn } from '@/lib/utils';
+import { Skeleton } from '../../ui/skeleton';
 import { TooltipProvider } from '../../ui/tooltip';
-import { ASSISTANT_THREAD_LIST_DEFAULT_WIDTH_PX } from "./assistantPanelLayout";
+import { ASSISTANT_THREAD_LIST_DEFAULT_WIDTH_PX } from './assistantPanelLayout';
+import { RightPanelTabs, type RightSidePanelTab } from './RightSidePanelChrome';
+import { SPLIT_PANEL_CONTENT_TRANSITION_STYLE, useAnimatedSplitPanelPresence } from './useAnimatedSplitPanelPresence';
 import { useCodeViewerLayout } from '../../../context/CodeViewerLayoutContext';
-import { getPanelHeaderClassName } from '../shared/codeViewerLayoutStyles';
+import {
+  getCodeWorkspacePanelFrameClassName,
+  getCodeWorkspacePanelGroupLayoutGapPx,
+  getCodeWorkspaceResizeHandleClassName,
+  getPanelHeaderClassName,
+} from '../shared/codeViewerLayoutStyles';
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '../../ui/resizable';
 
 const AIAgentPanel = lazy(() => import('./AIAgentPanel').then((module) => ({ default: module.AIAgentPanel })));
 const FileOutlinePanel = lazy(() => import('./FileOutlinePanel').then((module) => ({ default: module.FileOutlinePanel })));
 const StaticCheckPanel = lazy(() => import('./StaticCheckPanel').then((module) => ({ default: module.StaticCheckPanel })));
 const ReferencesPanel = lazy(() => import('./ReferencesPanel').then((module) => ({ default: module.ReferencesPanel })));
 
-type RightSidePanelTab = 'ai' | 'static' | 'references' | 'outline';
-
-const rightPanelTabs = [
-  { value: 'ai', label: 'AI Assistant', icon: Sparkles, testId: 'right-panel-tab-ai' },
-  { value: 'static', label: 'Static Check', icon: ShieldCheck, testId: 'right-panel-tab-static' },
-  { value: 'references', label: 'References', icon: BetweenHorizontalStart, testId: 'right-panel-tab-references' },
-  { value: 'outline', label: 'Outline', icon: ListTree, testId: 'right-panel-tab-outline' },
-] as const;
+const RIGHT_PANEL_SECONDARY_TITLE = 'Details';
+const RIGHT_PANEL_SECONDARY_PLACEHOLDER = 'Details is empty';
 
 function AssistantPanelSkeleton() {
   return (
@@ -71,6 +67,7 @@ interface RightSidePanelProps {
   currentOutlineId: string;
   onFileOpen: (fileId: string, fileName: string) => void;
   onLineJump: (line: number) => void;
+  onSplitPanelVisibleChange?: (isVisible: boolean) => void;
   onThreadListExpandedChange?: (expanded: boolean) => void;
   onThreadListWidthChange?: (width: number) => void;
 }
@@ -79,79 +76,157 @@ export function RightSidePanel({
   currentOutlineId,
   onFileOpen,
   onLineJump,
+  onSplitPanelVisibleChange,
   onThreadListExpandedChange,
   onThreadListWidthChange,
 }: RightSidePanelProps) {
   const { layoutMode } = useCodeViewerLayout();
   const [tab, setTab] = useState<RightSidePanelTab>('ai');
+  const [isSplitPanelVisible, setIsSplitPanelVisible] = useState(false);
+  const splitPanelPresence = useAnimatedSplitPanelPresence(isSplitPanelVisible);
   const [threadListExpanded, setThreadListExpanded] = useState(false);
   const [threadListWidth, setThreadListWidth] = useState(ASSISTANT_THREAD_LIST_DEFAULT_WIDTH_PX);
+  const splitPanelFrameClassName = getCodeWorkspacePanelFrameClassName(layoutMode, 'flex h-full flex-col bg-ide-bg text-ide-text');
+
+  useEffect(() => {
+    onSplitPanelVisibleChange?.(splitPanelPresence.shouldRender);
+  }, [onSplitPanelVisibleChange, splitPanelPresence.shouldRender]);
+
+  const primaryPanelContent = (
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      {tab === 'ai' && (
+        <Suspense fallback={<AssistantPanelSkeleton />}>
+          <AIAgentPanel
+            initialThreadListExpanded={threadListExpanded}
+            initialThreadListWidth={threadListWidth}
+            onThreadListExpandedChange={(nextExpanded) => {
+              setThreadListExpanded(nextExpanded);
+              onThreadListExpandedChange?.(nextExpanded);
+            }}
+            onThreadListWidthChange={(nextWidth) => {
+              setThreadListWidth(nextWidth);
+              onThreadListWidthChange?.(nextWidth);
+            }}
+          />
+        </Suspense>
+      )}
+      {tab === 'static' && (
+        <Suspense fallback={<div className="flex h-full items-center justify-center text-ide-text-muted text-[12px]">Loading checks...</div>}>
+          <StaticCheckPanel
+            onFileOpen={onFileOpen}
+            onLineJump={onLineJump}
+          />
+        </Suspense>
+      )}
+      {tab === 'references' && (
+        <Suspense fallback={<div className="flex h-full items-center justify-center text-ide-text-muted text-[12px]">Loading references...</div>}>
+          <ReferencesPanel
+            onFileOpen={onFileOpen}
+            onLineJump={onLineJump}
+          />
+        </Suspense>
+      )}
+      {tab === 'outline' && (
+        <Suspense fallback={<div className="flex h-full items-center justify-center text-ide-text-muted text-[12px]">Loading outline...</div>}>
+          <FileOutlinePanel
+            currentOutlineId={currentOutlineId}
+            onLineJump={onLineJump}
+          />
+        </Suspense>
+      )}
+    </div>
+  );
 
   return (
     <TooltipProvider delayDuration={0}>
-      <div className="flex flex-col h-full bg-ide-bg text-ide-text overflow-hidden">
-        <div
-          data-testid="right-panel-header"
-          data-code-viewer-layout-mode={layoutMode}
-          className={getPanelHeaderClassName(layoutMode)}
-        >
-          <IconTabToggleGroup
-            items={rightPanelTabs}
-            value={tab}
-            onValueChange={(nextValue) => {
-              setTab(nextValue as RightSidePanelTab);
-            }}
-            groupLabel="Right panel tabs"
-            groupTestId="right-panel-tabs"
-            tooltipSide="bottom"
-            itemClassName={compactIconTabToggleItemClassName}
-            iconSize={compactIconTabToggleIconSize}
-          />
-        </div>
+      <div
+        data-testid="right-panel-root"
+        className={cn(
+          'flex h-full min-h-0 flex-col text-ide-text overflow-hidden',
+          !(layoutMode === 'minimal' && splitPanelPresence.shouldRender) && 'bg-ide-bg',
+        )}
+      >
+        {!splitPanelPresence.shouldRender && (
+          <>
+            <RightPanelTabs
+              activeTab={tab}
+              isSplitPanelVisible={isSplitPanelVisible}
+              onTabChange={setTab}
+              onToggleSplitPanel={() => {
+                setIsSplitPanelVisible((current) => !current);
+              }}
+            />
 
-        <div className="flex-1 overflow-hidden">
-          {tab === "ai" && (
-            <Suspense fallback={<AssistantPanelSkeleton />}>
-              <AIAgentPanel
-                initialThreadListExpanded={threadListExpanded}
-                initialThreadListWidth={threadListWidth}
-                onThreadListExpandedChange={(nextExpanded) => {
-                  setThreadListExpanded(nextExpanded);
-                  onThreadListExpandedChange?.(nextExpanded);
-                }}
-                onThreadListWidthChange={(nextWidth) => {
-                  setThreadListWidth(nextWidth);
-                  onThreadListWidthChange?.(nextWidth);
-                }}
-              />
-            </Suspense>
-          )}
-          {tab === "static" && (
-            <Suspense fallback={<div className="flex h-full items-center justify-center text-ide-text-muted text-[12px]">Loading checks...</div>}>
-              <StaticCheckPanel
-                onFileOpen={onFileOpen}
-                onLineJump={onLineJump}
-              />
-            </Suspense>
-          )}
-          {tab === "references" && (
-            <Suspense fallback={<div className="flex h-full items-center justify-center text-ide-text-muted text-[12px]">Loading references...</div>}>
-              <ReferencesPanel
-                onFileOpen={onFileOpen}
-                onLineJump={onLineJump}
-              />
-            </Suspense>
-          )}
-          {tab === 'outline' && (
-            <Suspense fallback={<div className="flex h-full items-center justify-center text-ide-text-muted text-[12px]">Loading outline...</div>}>
-              <FileOutlinePanel
-                currentOutlineId={currentOutlineId}
-                onLineJump={onLineJump}
-              />
-            </Suspense>
-          )}
-        </div>
+            <div data-testid="right-panel-primary-panel" className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              {primaryPanelContent}
+            </div>
+          </>
+        )}
+
+        {splitPanelPresence.shouldRender && (
+          <ResizablePanelGroup
+            data-testid="right-panel-split-group"
+            className="flex-1"
+            orientation="vertical"
+            layoutGapPx={getCodeWorkspacePanelGroupLayoutGapPx(layoutMode)}
+          >
+            <ResizablePanel id="right-panel-primary" defaultSize={50} minSize={25} minSizePx={120}>
+              <section data-testid="right-panel-primary-panel" className={splitPanelFrameClassName}>
+                <RightPanelTabs
+                  activeTab={tab}
+                  isSplitPanelVisible={isSplitPanelVisible}
+                  onTabChange={setTab}
+                  onToggleSplitPanel={() => {
+                    setIsSplitPanelVisible((current) => !current);
+                  }}
+                />
+
+                {primaryPanelContent}
+              </section>
+            </ResizablePanel>
+
+            <ResizableHandle
+              data-testid="right-panel-split-resize-handle"
+              hidden={!splitPanelPresence.isExpanded}
+              className={getCodeWorkspaceResizeHandleClassName(layoutMode)}
+            />
+
+            <ResizablePanel id="right-panel-secondary" defaultSize={50} minSize={25} minSizePx={120} collapsed={!splitPanelPresence.isExpanded}>
+              <RightPanelSecondaryPanel isExpanded={splitPanelPresence.isExpanded} />
+            </ResizablePanel>
+          </ResizablePanelGroup>
+        )}
       </div>
     </TooltipProvider>
+  );
+}
+
+function RightPanelSecondaryPanel({ isExpanded }: { isExpanded: boolean }) {
+  const { layoutMode } = useCodeViewerLayout();
+  const splitPanelFrameClassName = getCodeWorkspacePanelFrameClassName(layoutMode, 'flex h-full flex-col bg-ide-bg text-ide-text');
+
+  return (
+    <section
+      data-testid="right-panel-secondary-panel"
+      className={splitPanelFrameClassName}
+      style={{
+        ...SPLIT_PANEL_CONTENT_TRANSITION_STYLE,
+        opacity: isExpanded ? 1 : 0,
+      }}
+    >
+      <div
+        data-testid="right-panel-secondary-header"
+        data-code-viewer-layout-mode={layoutMode}
+        className={getPanelHeaderClassName(layoutMode)}
+      >
+        {RIGHT_PANEL_SECONDARY_TITLE}
+      </div>
+
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div data-testid="right-panel-secondary-placeholder" className="px-4 py-3 text-ide-text-muted text-[12px]">
+          {RIGHT_PANEL_SECONDARY_PLACEHOLDER}
+        </div>
+      </div>
+    </section>
   );
 }

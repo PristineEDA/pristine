@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import {
@@ -81,6 +81,93 @@ describe('RightSidePanel', () => {
     expect(header).not.toHaveClass('border-b');
     expectCompactTabButton('right-panel-tab-ai');
     expectCompactTabButton('right-panel-tab-outline');
+  });
+
+  it('defaults the lower stacked panel hidden and toggles two independent panel frames', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <RightSidePanel currentOutlineId="rtl/core/alu.v" onFileOpen={vi.fn()} onLineJump={vi.fn()} />,
+    );
+
+    const splitToggle = screen.getByTestId('right-panel-split-toggle');
+
+    expect(splitToggle).toHaveAttribute('aria-label', 'Show lower right panel');
+    expect(splitToggle).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.queryByTestId('right-panel-split-group')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('panel-right-panel-primary')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('panel-right-panel-secondary')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('right-panel-secondary-panel')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('right-panel-split-resize-handle')).not.toBeInTheDocument();
+
+    await user.click(splitToggle);
+
+    const expandedSplitToggle = screen.getByTestId('right-panel-split-toggle');
+    expect(expandedSplitToggle).toHaveAttribute('aria-label', 'Hide lower right panel');
+    expect(expandedSplitToggle).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('right-panel-split-group')).toHaveAttribute('aria-orientation', 'vertical');
+    expect(screen.getByTestId('right-panel-split-group')).toHaveClass('flex-1', 'min-h-0');
+    expect(screen.getByTestId('panel-right-panel-primary')).toHaveAttribute('aria-hidden', 'false');
+    expect(screen.getByTestId('panel-right-panel-primary').style.transitionDuration).toBe('300ms');
+    expect(screen.getByTestId('panel-right-panel-primary').style.transitionProperty).toBe('flex-basis');
+
+    await waitFor(() => expect(screen.getByTestId('panel-right-panel-secondary')).toHaveAttribute('aria-hidden', 'false'));
+
+    expect(screen.getByTestId('right-panel-secondary-panel')).toHaveStyle({ opacity: '1' });
+    expect(screen.getByTestId('right-panel-root')).toHaveClass('bg-ide-bg');
+    expect(screen.getByTestId('right-panel-primary-panel')).not.toHaveClass('rounded-md', 'border', 'border-ide-border');
+    expect(screen.getByTestId('right-panel-secondary-panel')).not.toHaveClass('rounded-md', 'border', 'border-ide-border');
+    expect(screen.getByTestId('right-panel-primary-panel')).toHaveClass('bg-ide-bg');
+    expect(screen.getByTestId('right-panel-secondary-panel')).toHaveClass('bg-ide-bg');
+    expect(screen.getByTestId('right-panel-secondary-header')).toHaveAttribute('data-code-viewer-layout-mode', 'compact');
+    expect(screen.getByTestId('right-panel-secondary-header')).toHaveTextContent('Details');
+    expect(screen.getByTestId('right-panel-secondary-placeholder')).toHaveTextContent('Details is empty');
+    expect(screen.getByTestId('right-panel-split-resize-handle')).toHaveAttribute('aria-orientation', 'horizontal');
+
+    await user.click(expandedSplitToggle);
+
+    const collapsedSplitToggle = screen.getByTestId('right-panel-split-toggle');
+    expect(collapsedSplitToggle).toHaveAttribute('aria-label', 'Show lower right panel');
+    expect(collapsedSplitToggle).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByTestId('right-panel-split-group')).toBeInTheDocument();
+    expect(screen.getByTestId('panel-right-panel-primary')).toHaveAttribute('aria-hidden', 'false');
+    expect(screen.getByTestId('panel-right-panel-secondary')).toHaveAttribute('aria-hidden', 'true');
+    expect(screen.getByTestId('right-panel-secondary-panel')).toHaveStyle({ opacity: '0' });
+    expect(screen.queryByTestId('right-panel-split-resize-handle')).not.toBeInTheDocument();
+
+    await waitFor(() => expect(screen.queryByTestId('right-panel-split-group')).not.toBeInTheDocument(), {
+      timeout: 1000,
+    });
+
+    expect(screen.queryByTestId('panel-right-panel-primary')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('panel-right-panel-secondary')).not.toBeInTheDocument();
+    expect(screen.getByTestId('right-panel-primary-panel')).not.toHaveClass('rounded-md', 'border', 'border-ide-border');
+    expect(screen.queryByTestId('right-panel-secondary-panel')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('right-panel-split-resize-handle')).not.toBeInTheDocument();
+  });
+
+  it('keeps stacked right panels layout-aware in minimal mode', async () => {
+    const user = userEvent.setup();
+
+    renderRightSidePanelInLayout('minimal');
+
+    await user.click(screen.getByTestId('right-panel-split-toggle'));
+    await waitFor(() => expect(screen.getByTestId('panel-right-panel-secondary')).toHaveAttribute('aria-hidden', 'false'));
+
+    const primaryPanel = screen.getByTestId('right-panel-primary-panel');
+    const secondaryPanel = screen.getByTestId('right-panel-secondary-panel');
+    const secondaryHeader = screen.getByTestId('right-panel-secondary-header');
+    const resizeHandle = screen.getByTestId('right-panel-split-resize-handle');
+
+    expect(screen.getByTestId('right-panel-root')).not.toHaveClass('bg-ide-bg');
+    expect(primaryPanel).toHaveClass('rounded-md', 'border', 'border-ide-border', 'bg-ide-bg');
+    expect(secondaryPanel).toHaveClass('rounded-md', 'border', 'border-ide-border', 'bg-ide-bg');
+    expect(secondaryHeader).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
+    expect(secondaryHeader).toHaveClass('m-1.5', 'mb-0', 'rounded', 'px-2', 'py-1.5');
+    expect(secondaryHeader).not.toHaveClass('border');
+    expect(secondaryHeader).not.toHaveClass('border-ide-border');
+    expect(secondaryHeader).not.toHaveClass('border-b');
+    expect(resizeHandle).toHaveClass('overlay-handle', 'rounded-full', 'bg-transparent');
   });
 
   it('navigates static check items to their source file and line', async () => {

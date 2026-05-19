@@ -167,6 +167,7 @@ interface CodeWorkspaceShellProps {
   activityBar: React.ReactNode;
   overlay?: React.ReactNode;
   useLeftPanelFrame?: boolean;
+  useRightPanelFrame?: boolean;
   showLeftPanel: boolean;
   showBottomPanel: boolean;
   showRightPanel: boolean;
@@ -257,6 +258,7 @@ export function CodeWorkspaceShell({
   activityBar,
   overlay,
   useLeftPanelFrame = true,
+  useRightPanelFrame = true,
   showLeftPanel,
   showBottomPanel,
   showRightPanel,
@@ -310,6 +312,12 @@ export function CodeWorkspaceShell({
   const fixedLeftPanelClassName = useLeftPanelFrame
     ? getCodeWorkspacePanelFrameClassName(layoutMode, 'shrink-0')
     : 'min-h-0 overflow-hidden shrink-0';
+  const rightPanelClassName = useRightPanelFrame
+    ? getCodeWorkspacePanelFrameClassName(layoutMode)
+    : 'min-h-0 overflow-hidden';
+  const fixedRightPanelClassName = useRightPanelFrame
+    ? getCodeWorkspacePanelFrameClassName(layoutMode, 'shrink-0')
+    : 'min-h-0 overflow-hidden shrink-0';
 
   const centerPanelContent = (
     <div className="relative h-full">
@@ -342,7 +350,7 @@ export function CodeWorkspaceShell({
         maxSizePx={EXPLORER_RIGHT_PANEL_MAX_WIDTH_PX}
         id={rightPanelId}
         collapsed={!showRightPanel}
-        className={getCodeWorkspacePanelFrameClassName(layoutMode)}
+        className={rightPanelClassName}
       >
         {rightPanelPresence.shouldRender ? rightContent : <div className="h-full" />}
       </ResizablePanel>
@@ -422,7 +430,7 @@ export function CodeWorkspaceShell({
                   data-panel-id={rightPanelId}
                   aria-hidden={showRightPanel ? 'false' : 'true'}
                   className={cn(
-                    getCodeWorkspacePanelFrameClassName(layoutMode, 'shrink-0'),
+                    fixedRightPanelClassName,
                     !showRightPanel && 'pointer-events-none select-none',
                   )}
                   style={{

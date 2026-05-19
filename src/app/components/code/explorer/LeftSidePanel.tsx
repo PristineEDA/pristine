@@ -1,12 +1,13 @@
-import { type CSSProperties, useCallback, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { cn } from '@/lib/utils';
 import { useWorkspaceGitStatus } from '../../../git/workspaceGitStatus';
 import { FileTreeNode, type ExplorerContextMenuRequest } from './FileTreeNode';
 import { ExplorerPanelTabs, type ExplorerPanelTab } from './LeftSidePanelChrome';
 import { FileOutlinePanel } from './FileOutlinePanel';
+import { SPLIT_PANEL_CONTENT_TRANSITION_STYLE, useAnimatedSplitPanelPresence } from './useAnimatedSplitPanelPresence';
 import { useCodeViewerLayout } from '../../../context/CodeViewerLayoutContext';
-import { PANEL_TRANSITION_DURATION_MS, ResizableHandle, ResizablePanel, ResizablePanelGroup } from '../../ui/resizable';
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '../../ui/resizable';
 import {
   getCodeWorkspacePanelFrameClassName,
   getCodeWorkspacePanelGroupLayoutGapPx,
@@ -53,83 +54,6 @@ export {
   getExplorerPasteTargetPath,
   getExplorerRenameTarget,
 } from './LeftSidePanelKeyboard';
-
-type AnimatedPresencePhase = 'hidden' | 'entering' | 'visible' | 'exiting';
-
-const SPLIT_PANEL_CONTENT_TRANSITION_STYLE = {
-  transitionDuration: `${PANEL_TRANSITION_DURATION_MS}ms`,
-  transitionProperty: 'opacity',
-} satisfies CSSProperties;
-
-function useAnimatedSplitPanelPresence(isVisible: boolean) {
-  const [phase, setPhase] = useState<AnimatedPresencePhase>(() => (isVisible ? 'visible' : 'hidden'));
-  const enterTimeoutRef = useRef<number | null>(null);
-  const exitTimeoutRef = useRef<number | null>(null);
-
-  useLayoutEffect(() => {
-    if (enterTimeoutRef.current !== null) {
-      window.clearTimeout(enterTimeoutRef.current);
-      enterTimeoutRef.current = null;
-    }
-
-    if (exitTimeoutRef.current !== null) {
-      window.clearTimeout(exitTimeoutRef.current);
-      exitTimeoutRef.current = null;
-    }
-
-    if (isVisible) {
-      setPhase((currentPhase) => {
-        if (currentPhase === 'hidden') {
-          enterTimeoutRef.current = window.setTimeout(() => {
-            setPhase('visible');
-            enterTimeoutRef.current = null;
-          }, 0);
-
-          return 'entering';
-        }
-
-        return 'visible';
-      });
-
-      return () => {
-        if (enterTimeoutRef.current !== null) {
-          window.clearTimeout(enterTimeoutRef.current);
-          enterTimeoutRef.current = null;
-        }
-      };
-    }
-
-    setPhase((currentPhase) => {
-      if (currentPhase === 'hidden') {
-        return currentPhase;
-      }
-
-      exitTimeoutRef.current = window.setTimeout(() => {
-        setPhase('hidden');
-        exitTimeoutRef.current = null;
-      }, PANEL_TRANSITION_DURATION_MS);
-
-      return 'exiting';
-    });
-
-    return () => {
-      if (enterTimeoutRef.current !== null) {
-        window.clearTimeout(enterTimeoutRef.current);
-        enterTimeoutRef.current = null;
-      }
-
-      if (exitTimeoutRef.current !== null) {
-        window.clearTimeout(exitTimeoutRef.current);
-        exitTimeoutRef.current = null;
-      }
-    };
-  }, [isVisible]);
-
-  return {
-    isExpanded: phase === 'visible',
-    shouldRender: phase !== 'hidden',
-  };
-}
 
 interface LeftSidePanelProps {
   activeFileId: string;
