@@ -63,10 +63,8 @@ describe('NavMain', () => {
 
     expect(simulationButton).toHaveAttribute('data-active', 'true');
     expect(simulationButton).toHaveClass(
-      'data-[active=true]:bg-sidebar-primary/12',
-      'data-[active=true]:text-sidebar-primary',
-      'dark:data-[active=true]:bg-sidebar-primary-foreground/20',
-      'dark:data-[active=true]:text-sidebar-primary-foreground',
+      'data-[active=true]:bg-sidebar-accent',
+      'data-[active=true]:text-sidebar-accent-foreground',
     );
 
     fireEvent.click(simulationButton);

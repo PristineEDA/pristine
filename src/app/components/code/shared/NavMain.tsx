@@ -34,7 +34,7 @@ interface NavMainProps {
   onItemSelect: (view: string) => void;
 }
 
-const activityBarActiveButtonClassName = 'cursor-pointer data-[active=true]:bg-sidebar-primary/12 data-[active=true]:text-sidebar-primary dark:data-[active=true]:bg-sidebar-primary-foreground/20 dark:data-[active=true]:text-sidebar-primary-foreground';
+const activityBarActiveButtonClassName = 'cursor-pointer data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground';
 
 export function NavMain({ items, activeView, onItemSelect }: NavMainProps) {
   return (

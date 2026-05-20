@@ -6,6 +6,11 @@ import {
 import { WorkspaceFileIcon, WorkspaceFolderIcon } from '../shared/WorkspaceEntryIcon';
 
 const treeRowIndentStyleCache = new Map<number, CSSProperties>();
+const treeEditInputStyle = {
+  backgroundColor: 'var(--input-background)',
+  color: 'var(--input-foreground)',
+  WebkitTextFillColor: 'var(--input-foreground)',
+} satisfies CSSProperties;
 
 export function getTreeRowIndentStyle(depth: number): CSSProperties {
   const cachedStyle = treeRowIndentStyleCache.get(depth);
@@ -65,14 +70,14 @@ export function TreeEditInputRow({
         data-testid={`file-tree-node-${testId}`}
         className={`flex items-center gap-1 h-6 transition-colors ${
           isSelected
-            ? 'bg-primary/20 text-foreground hover:bg-primary/20'
-            : 'text-foreground hover:bg-accent'
+            ? 'bg-ide-selection text-ide-text hover:bg-ide-selection'
+            : 'text-ide-text hover:bg-ide-hover'
         } ${isDraft ? 'opacity-65' : ''}`}
         style={getTreeRowIndentStyle(depth)}
       >
         {isFolder ? (
           <>
-            <span className="text-muted-foreground">
+            <span className="text-ide-text-muted">
               {isExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
             </span>
             <WorkspaceFolderIcon name={value || 'new_folder'} isOpen={Boolean(isExpanded)} className="h-4 w-4" />
@@ -92,11 +97,12 @@ export function TreeEditInputRow({
           disabled={isSubmitting}
           spellCheck={false}
           aria-invalid={errorMessage ? 'true' : 'false'}
-          className={`ml-1 h-5 flex-1 rounded border bg-background/80 px-2 text-[12px] outline-none transition-colors ${
+          className={`ml-1 h-5 flex-1 rounded border bg-input-background px-2 text-[12px] text-input-foreground outline-none transition-colors ${
             errorMessage
-              ? 'border-destructive text-foreground focus:border-destructive'
-              : 'border-border text-foreground focus:border-primary'
+              ? 'border-ide-error focus:border-ide-error'
+              : 'border-ide-border focus:border-ide-accent'
           } ${isSubmitting ? 'opacity-80' : ''}`}
+          style={treeEditInputStyle}
           onBlur={onBlur}
           onChange={(event) => onChange(event.target.value)}
           onKeyDown={(event) => {
@@ -113,7 +119,7 @@ export function TreeEditInputRow({
         />
       </div>
       {errorMessage && (
-        <div className="px-3 py-1 text-[11px] text-destructive" style={{ paddingLeft: depth * 12 + 28 }}>
+        <div className="px-3 py-1 text-[11px] text-ide-error" style={{ paddingLeft: depth * 12 + 28 }}>
           {errorMessage}
         </div>
       )}

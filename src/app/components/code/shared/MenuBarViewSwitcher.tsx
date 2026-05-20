@@ -1,6 +1,7 @@
 import { Code2, Presentation, Workflow } from 'lucide-react';
 import type { CSSProperties } from 'react';
 import type { MainContentView } from '../../../codeViewPanels';
+import { useCodeViewerLayout } from '../../../context/CodeViewerLayoutContext';
 import { ToggleGroup, ToggleGroupItem } from '../../ui/toggle-group';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../ui/tooltip';
 import { centerViewSwitchItemClassName } from './viewSwitcherStyles';
@@ -16,6 +17,8 @@ export function MenuBarViewSwitcher({
   onValueChange,
   interactiveStyle,
 }: MenuBarViewSwitcherProps) {
+  const { layoutMode } = useCodeViewerLayout();
+
   return (
     <div
       data-testid="center-view-switcher"
@@ -30,7 +33,7 @@ export function MenuBarViewSwitcher({
             onValueChange(nextValue as MainContentView);
           }
         }}
-        className="bg-muted rounded p-0.5 gap-0.5"
+        className={layoutMode === 'minimal' ? 'bg-ide-unified-chrome-hover rounded p-0.5 gap-0.5' : 'bg-ide-hover rounded p-0.5 gap-0.5'}
       >
         <Tooltip>
           <TooltipTrigger asChild>

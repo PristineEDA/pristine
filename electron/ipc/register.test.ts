@@ -112,13 +112,14 @@ describe('register helpers', () => {
   it('registers all handler groups with the expected dependencies', () => {
     const getMainWindow = vi.fn(() => null);
     const setFloatingInfoWindowVisible = vi.fn(() => false);
+    const setFloatingInfoWindowExpanded = vi.fn(() => false);
     const resolveCloseRequest = vi.fn(() => false);
 
-    registerAllHandlers(getMainWindow, setFloatingInfoWindowVisible, resolveCloseRequest);
+    registerAllHandlers(getMainWindow, setFloatingInfoWindowVisible, setFloatingInfoWindowExpanded, resolveCloseRequest);
 
     expect(mockRegisterPlatformHandler).toHaveBeenCalledTimes(1);
     expect(mockRegisterDialogHandlers).toHaveBeenCalledWith(getMainWindow);
-    expect(mockRegisterWindowHandlers).toHaveBeenCalledWith(getMainWindow, setFloatingInfoWindowVisible, resolveCloseRequest);
+    expect(mockRegisterWindowHandlers).toHaveBeenCalledWith(getMainWindow, setFloatingInfoWindowVisible, setFloatingInfoWindowExpanded, resolveCloseRequest);
     expect(mockRegisterFilesystemHandlers).toHaveBeenCalledTimes(1);
     expect(mockRegisterGitHandlers).toHaveBeenCalledTimes(1);
     expect(mockRegisterLspHandlers).toHaveBeenCalledWith(getMainWindow);

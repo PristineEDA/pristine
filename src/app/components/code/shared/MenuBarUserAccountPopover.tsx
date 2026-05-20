@@ -3,6 +3,7 @@ import { CircleUser, LogIn, LogOut, RefreshCw, UserPlus } from 'lucide-react';
 import { getDesktopAvatarCandidates } from '../../../auth/avatar';
 import type { DesktopAuthSession } from '../../../auth/types';
 import { useUser } from '../../../context/UserContext';
+import { useCodeViewerLayout } from '../../../context/CodeViewerLayoutContext';
 import { Avatar, AvatarFallback, AvatarImage } from '../../ui/avatar';
 import { Button } from '../../ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '../../ui/popover';
@@ -104,6 +105,15 @@ export function UserAccountPopover({
   const userSyncLabel = formatSyncTimestamp(session?.syncedAt ?? null);
   const isSignedIn = status === 'signed-in' && session !== null;
   const isUserActionsDisabled = status === 'loading';
+  const { layoutMode } = useCodeViewerLayout();
+  const isMinimalLayout = layoutMode === 'minimal';
+  const triggerButtonClassName = isMinimalLayout
+    ? 'relative h-full w-8 rounded-none px-0 text-ide-unified-chrome-fg hover:cursor-pointer hover:bg-ide-unified-chrome-hover'
+    : 'relative h-full w-8 rounded-none px-0 text-ide-text-muted hover:cursor-pointer hover:bg-ide-hover hover:text-ide-text';
+  const triggerAvatarClassName = isMinimalLayout
+    ? 'size-6 border border-transparent bg-ide-unified-chrome-hover'
+    : 'size-6 border border-ide-border/70 bg-ide-bg/70';
+  const triggerStatusBorderClassName = isMinimalLayout ? 'border-ide-unified-chrome-bg' : 'border-ide-menubar-bg';
 
   return (
     <Popover onOpenChange={(open) => {
@@ -120,20 +130,21 @@ export function UserAccountPopover({
                 size="icon"
                 aria-label="User profile"
                 data-testid="user-avatar-button"
-                className="relative h-full w-8 rounded-none px-0 hover:cursor-pointer"
+                className={triggerButtonClassName}
               >
-                <Avatar key={userAvatarStateKey} className="size-6 border border-border/70 bg-muted/70">
+                <Avatar key={userAvatarStateKey} className={triggerAvatarClassName}>
                   {isSignedIn ? <SessionAvatarImage alt={session.username} session={session} /> : null}
-                  <AvatarFallback className="bg-transparent text-[10px] font-semibold text-foreground">
-                    {isSignedIn ? userAvatarFallback : <CircleUser size={14} className="text-muted-foreground" />}
+                  <AvatarFallback className="bg-transparent text-[10px] font-semibold text-inherit">
+                    {isSignedIn ? userAvatarFallback : <CircleUser size={14} className="text-inherit" />}
                   </AvatarFallback>
                 </Avatar>
                 <span
                   className={[
-                    'absolute bottom-1.5 right-1 rounded-full border border-background',
-                    status === 'loading' ? 'h-1.5 w-1.5 bg-muted-foreground/80' : '',
-                    isSignedIn ? 'h-2 w-2 bg-emerald-500' : '',
-                    status === 'signed-out' ? 'h-2 w-2 bg-amber-400' : '',
+                    'absolute bottom-1.5 right-1 rounded-full border',
+                    triggerStatusBorderClassName,
+                    status === 'loading' ? 'h-1.5 w-1.5 bg-ide-text-muted/80' : '',
+                    isSignedIn ? 'h-2 w-2 bg-ide-success' : '',
+                    status === 'signed-out' ? 'h-2 w-2 bg-ide-warning' : '',
                   ].join(' ')}
                 />
               </Button>

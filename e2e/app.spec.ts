@@ -398,11 +398,11 @@ async function ensureRightPanelVisible(window: Awaited<ReturnType<typeof launchA
   await expect(rightPanel).toBeVisible();
 }
 
-async function expectMinimalPanelHeaderWithoutOutline(header: Locator) {
+async function expectPanelHeaderWithoutDivider(header: Locator) {
   await expect(header).toBeVisible();
   await expect(header).not.toHaveClass(/(?:^|\s)border(?:\s|$)/);
   await expect(header).not.toHaveClass(/(?:^|\s)border-b(?:\s|$)/);
-  await expect(header).not.toHaveClass(/(?:^|\s)border-border(?:\s|$)/);
+  await expect(header).not.toHaveClass(/(?:^|\s)border-ide-border(?:\s|$)/);
 }
 
 async function expectCollapsedPanel(panel: Locator) {
@@ -415,6 +415,64 @@ async function readElementPixelWidth(locator: Locator) {
     const node = element as { getBoundingClientRect?: () => { width: number } };
     return Math.round(node.getBoundingClientRect?.().width ?? 0);
   });
+}
+
+async function readElementPixelHeight(locator: Locator) {
+  return locator.evaluate((element) => {
+    const node = element as { getBoundingClientRect?: () => { height: number } };
+    return Math.round(node.getBoundingClientRect?.().height ?? 0);
+  });
+}
+
+async function readComputedTextColor(locator: Locator) {
+  return locator.evaluate((element) => {
+    const browserGlobal = globalThis as typeof globalThis & {
+      getComputedStyle: (node: unknown) => { color: string };
+    };
+
+    return browserGlobal.getComputedStyle(element).color;
+  });
+}
+
+async function readNormalizedCssColorVariable(
+  window: Awaited<ReturnType<typeof launchApp>>['window'],
+  variableName: string,
+) {
+  return window.evaluate((name) => {
+    type ElementLike = {
+      remove: () => void;
+      style: { color: string };
+    };
+    const browserGlobal = globalThis as typeof globalThis & {
+      document: {
+        body: { appendChild: (node: ElementLike) => void };
+        createElement: (tagName: string) => ElementLike;
+        documentElement: ElementLike;
+      };
+      getComputedStyle: (element: ElementLike) => { color: string; getPropertyValue: (name: string) => string };
+    };
+
+    const rootStyle = browserGlobal.getComputedStyle(browserGlobal.document.documentElement);
+    const probe = browserGlobal.document.createElement('span');
+    probe.style.color = rootStyle.getPropertyValue(name).trim();
+    browserGlobal.document.body.appendChild(probe);
+    const normalizedColor = browserGlobal.getComputedStyle(probe).color;
+    probe.remove();
+    return normalizedColor;
+  }, variableName);
+}
+
+async function readVerticalPixelGap(upperLocator: Locator, lowerLocator: Locator) {
+  const [upperBox, lowerBox] = await Promise.all([
+    upperLocator.boundingBox(),
+    lowerLocator.boundingBox(),
+  ]);
+
+  if (!upperBox || !lowerBox) {
+    return NaN;
+  }
+
+  return Math.round(lowerBox.y - (upperBox.y + upperBox.height));
 }
 
 async function readEditorTabBarSpacingSnapshot(tabBar: Locator, firstTab: Locator, secondTab: Locator) {
@@ -526,6 +584,27 @@ async function readExplorerTreeScrollTop(window: Awaited<ReturnType<typeof launc
     };
 
     return Math.round((element as unknown as ScrollContainerLike).scrollTop);
+  });
+}
+
+async function scrollExplorerTreeToBottom(window: Awaited<ReturnType<typeof launchApp>>['window']) {
+  const explorerTree = window.locator('.explorer-tree-scrollbar');
+
+  return explorerTree.evaluate((element) => {
+    type ScrollContainerLike = {
+      clientHeight: number;
+      scrollHeight: number;
+      scrollTop: number;
+    };
+
+    const scrollContainer = element as unknown as ScrollContainerLike;
+    scrollContainer.scrollTop = scrollContainer.scrollHeight;
+
+    return {
+      clientHeight: Math.round(scrollContainer.clientHeight),
+      scrollHeight: Math.round(scrollContainer.scrollHeight),
+      scrollTop: Math.round(scrollContainer.scrollTop),
+    };
   });
 }
 
@@ -642,7 +721,7 @@ async function openExplorerRenameInput(
   const renameInput = window.getByTestId(renameInputTestId);
 
   await targetNode.click();
-  await expect(targetNode).toHaveClass(/bg-primary\/20/);
+  await expect(targetNode).toHaveAttribute('data-selected', 'true');
   await explorerTree.focus();
   await expect(explorerTree).toBeFocused();
   await explorerTree.press('F2');
@@ -747,6 +826,43 @@ async function readTerminalText(window: Awaited<ReturnType<typeof launchApp>>['w
 async function readTerminalPid(window: Awaited<ReturnType<typeof launchApp>>['window']) {
   const value = await window.getByTestId('terminal-host').getAttribute('data-terminal-pid');
   return value ? Number(value) : NaN;
+}
+
+async function readScrollbarWidthSnapshot(window: Awaited<ReturnType<typeof launchApp>>['window']) {
+  return window.getByTestId('terminal-host').evaluate((host) => {
+    const browserGlobal = globalThis as unknown as {
+      document: {
+        querySelector: (selectors: string) => unknown | null;
+      };
+      getComputedStyle: (element: unknown, pseudoElt?: string) => {
+        backgroundColor: string;
+        width: string;
+      };
+    };
+    const terminalHost = host as {
+      parentElement: unknown | null;
+      querySelector: (selectors: string) => unknown | null;
+    };
+    const explorerTree = browserGlobal.document.querySelector('.explorer-tree-scrollbar');
+    const terminalViewport = terminalHost.querySelector('.xterm-viewport');
+    const terminalCustomScrollbar = terminalHost.querySelector('.xterm-scrollable-element > .scrollbar');
+    const terminalCustomSlider = terminalHost.querySelector('.xterm-scrollable-element > .scrollbar > .slider');
+
+    if (!explorerTree || !terminalViewport || !terminalCustomScrollbar || !terminalCustomSlider || !terminalHost.parentElement) {
+      throw new Error('Expected explorer and terminal scrollbar elements to be available.');
+    }
+
+    const terminalSurfaceStyle = browserGlobal.getComputedStyle(terminalHost.parentElement);
+    const terminalCustomScrollbarStyle = browserGlobal.getComputedStyle(terminalCustomScrollbar);
+
+    return {
+      explorerWidth: browserGlobal.getComputedStyle(explorerTree, '::-webkit-scrollbar').width,
+      terminalCustomScrollbarMatchesSurface: terminalCustomScrollbarStyle.backgroundColor === terminalSurfaceStyle.backgroundColor,
+      terminalCustomScrollbarWidth: terminalCustomScrollbarStyle.width,
+      terminalCustomSliderWidth: browserGlobal.getComputedStyle(terminalCustomSlider).width,
+      terminalViewportWidth: browserGlobal.getComputedStyle(terminalViewport, '::-webkit-scrollbar').width,
+    };
+  });
 }
 
 async function readTerminalThemeSnapshot(window: Awaited<ReturnType<typeof launchApp>>['window']) {
@@ -876,7 +992,7 @@ async function focusMonacoEditor(window: Awaited<ReturnType<typeof launchApp>>['
 
 async function waitForMonacoEditor(window: Awaited<ReturnType<typeof launchApp>>['window']) {
   const editor = window.locator('.monaco-editor');
-  const activeEditorTab = window.locator('[data-testid^="editor-tab-"].bg-background').first();
+  const activeEditorTab = window.locator('[data-testid^="editor-tab-"][data-active="true"]').first();
 
   if (await activeEditorTab.count() > 0) {
     await activeEditorTab.click();
@@ -898,15 +1014,20 @@ async function waitForMonacoEditor(window: Awaited<ReturnType<typeof launchApp>>
 
 async function waitForMonacoEditorTextFocus(window: Awaited<ReturnType<typeof launchApp>>['window']) {
   await expect.poll(() => window.evaluate(() => {
+    type ElementWithClosest = Element & {
+      closest: (selectors: string) => Element | null;
+    };
+
     const browserGlobal = globalThis as typeof globalThis & {
       document: {
-        activeElement: Element | null;
-        querySelector: (selectors: string) => Element | null;
+        activeElement: ElementWithClosest | null;
       };
     };
     const activeElement = browserGlobal.document.activeElement;
-    const textInput = browserGlobal.document.querySelector('.monaco-editor textarea.inputarea, .monaco-editor .inputarea, .monaco-editor .native-edit-context');
-    return activeElement === textInput;
+    return Boolean(
+      activeElement?.closest('.monaco-editor')
+      && activeElement.closest('textarea.inputarea, .inputarea, .native-edit-context, textarea, [contenteditable="true"]'),
+    );
   }), {
     timeout: 15000,
   }).toBe(true);
@@ -982,6 +1103,14 @@ async function setFloatingInfoWindowVisibility(
   }, { nextVisible: visible });
 }
 
+async function readBrowserWindowBounds(
+  app: Awaited<ReturnType<typeof electron.launch>>,
+  window: Page,
+) {
+  const browserWindow = await app.browserWindow(window);
+  return browserWindow.evaluate((targetWindow) => targetWindow.getBounds());
+}
+
 async function readConfigValue(window: Awaited<ReturnType<typeof launchApp>>['window'], key: string) {
   return window.evaluate((configKey) => {
     const browserGlobal = globalThis as typeof globalThis & {
@@ -1014,6 +1143,82 @@ async function selectComboboxOption(
   await window.getByTestId(triggerTestId).click();
   await expect(window.getByTestId(optionTestId)).toBeVisible();
   await window.getByTestId(optionTestId).click();
+}
+
+async function readWorkbenchChromeThemeSnapshot(window: Awaited<ReturnType<typeof launchApp>>['window']) {
+  return window.evaluate(() => {
+    type StyleLike = {
+      backgroundColor: string;
+      borderBottomWidth: string;
+      borderRightWidth: string;
+      borderTopWidth: string;
+      color: string;
+      getPropertyValue: (name: string) => string;
+    };
+    type ElementLike = {
+      remove: () => void;
+      style: { color: string };
+    };
+    const browserGlobal = globalThis as typeof globalThis & {
+      document: {
+        body: { appendChild: (node: ElementLike) => void };
+        createElement: (tagName: string) => ElementLike;
+        documentElement: ElementLike;
+        querySelector: (selectors: string) => ElementLike | null;
+      };
+      getComputedStyle: (element: ElementLike) => StyleLike;
+    };
+
+    const root = browserGlobal.document.documentElement;
+    const menuBar = browserGlobal.document.querySelector('[data-testid="menu-bar-root"]');
+    const activityBarContainer = browserGlobal.document.querySelector('[data-testid="activity-bar"]');
+    const activityBarSurface = browserGlobal.document.querySelector('[data-testid="activity-bar"] [data-slot="sidebar-inner"]');
+    const statusBar = browserGlobal.document.querySelector('[data-testid="status-bar"]');
+
+    if (!menuBar || !activityBarContainer || !activityBarSurface || !statusBar) {
+      throw new Error('Workbench chrome elements were not found.');
+    }
+
+    const normalizeColor = (value: string) => {
+      const probe = browserGlobal.document.createElement('span');
+      probe.style.color = value;
+      browserGlobal.document.body.appendChild(probe);
+      const normalizedColor = browserGlobal.getComputedStyle(probe).color;
+      probe.remove();
+      return normalizedColor;
+    };
+
+    const rootStyle = browserGlobal.getComputedStyle(root);
+    const readColorVariable = (name: string) => normalizeColor(rootStyle.getPropertyValue(name).trim());
+    const menuStyle = browserGlobal.getComputedStyle(menuBar);
+    const activityContainerStyle = browserGlobal.getComputedStyle(activityBarContainer);
+    const activitySurfaceStyle = browserGlobal.getComputedStyle(activityBarSurface);
+    const statusStyle = browserGlobal.getComputedStyle(statusBar);
+
+    return {
+      activity: {
+        backgroundColor: activitySurfaceStyle.backgroundColor,
+        borderRightWidth: activityContainerStyle.borderRightWidth,
+      },
+      menu: {
+        backgroundColor: menuStyle.backgroundColor,
+        borderBottomWidth: menuStyle.borderBottomWidth,
+      },
+      status: {
+        backgroundColor: statusStyle.backgroundColor,
+        borderTopWidth: statusStyle.borderTopWidth,
+        color: statusStyle.color,
+      },
+      variables: {
+        activitybarBackground: readColorVariable('--ide-activitybar-bg'),
+        menubarBackground: readColorVariable('--ide-menubar-bg'),
+        statusbarBackground: readColorVariable('--ide-statusbar-bg'),
+        statusbarForeground: readColorVariable('--ide-statusbar-fg'),
+        unifiedChromeBackground: readColorVariable('--ide-unified-chrome-bg'),
+        unifiedChromeForeground: readColorVariable('--ide-unified-chrome-fg'),
+      },
+    };
+  });
 }
 
 async function readComboboxListSnapshot(
@@ -1708,6 +1913,45 @@ test('editing a preview tab pins it so the next preview open does not replace it
   });
 });
 
+test('Monaco editor accepts literal spaces', async () => {
+  test.slow();
+
+  const workspaceCopy = test.info().outputPath('monaco-space-workspace');
+  createWorkspaceCopy(workspaceCopy);
+
+  const filePath = path.join(workspaceCopy, 'rtl', 'core', 'reg_file.v');
+  const markerLeft = `pristine_space_left_${Date.now()}`;
+  const markerRight = `pristine_space_right_${Date.now()}`;
+  const markerWithSpace = `${markerLeft} ${markerRight}`;
+  const { app, window } = await launchApp({ projectRoot: workspaceCopy });
+
+  try {
+    await ensureExplorerVisible(window);
+    await openNestedWorkspaceFile(window, [
+      'file-tree-node-rtl',
+      'file-tree-node-rtl_core',
+      'file-tree-node-rtl_core_reg_file_v',
+    ]);
+
+    await waitForMonacoEditor(window);
+    await focusMonacoEditor(window);
+    await waitForMonacoEditorTextFocus(window);
+    await window.keyboard.press('Control+End');
+    await window.keyboard.type(`\n${markerLeft}`);
+    await window.keyboard.press('Space');
+    await window.keyboard.type(markerRight);
+
+    await expect(window.getByTestId('editor-tab-dirty-indicator-rtl/core/reg_file.v')).toBeVisible();
+    await window.keyboard.press('Control+S');
+
+    await expect.poll(() => fs.readFileSync(filePath, 'utf-8'), {
+      timeout: 15000,
+    }).toContain(markerWithSpace);
+  } finally {
+    await app.close();
+  }
+});
+
 test('ctrl+s saves an edited explorer file and clears the dirty indicator', async () => {
   test.slow();
 
@@ -1798,7 +2042,7 @@ test('Ctrl+N creates an untitled file, Ctrl+S saves it, and explorer refreshes t
     await window.keyboard.press(`${primaryModifier}+N`);
 
     await expect(window.getByTestId('editor-tab-untitled-1')).toBeVisible();
-    await expect(window.getByTestId('editor-tab-untitled-1')).toHaveClass(/bg-background/);
+    await expect(window.getByTestId('editor-tab-untitled-1')).toHaveAttribute('data-active', 'true');
 
     await window.keyboard.type(marker);
     await expect(window.getByTestId('editor-tab-dirty-indicator-untitled-1')).toBeVisible();
@@ -1807,7 +2051,7 @@ test('Ctrl+N creates an untitled file, Ctrl+S saves it, and explorer refreshes t
     await window.keyboard.press(`${primaryModifier}+S`);
 
     await expect(window.getByTestId(`editor-tab-${savedRelativePath}`)).toBeVisible();
-    await expect(window.getByTestId(`editor-tab-${savedRelativePath}`)).toHaveClass(/bg-background/);
+    await expect(window.getByTestId(`editor-tab-${savedRelativePath}`)).toHaveAttribute('data-active', 'true');
     await expect(window.getByTestId(`editor-tab-dirty-indicator-${savedRelativePath}`)).toHaveCount(0);
     await expect(window.getByTestId('editor-breadcrumb')).toContainText('retroSoC');
     await expect(window.getByTestId('editor-breadcrumb')).toContainText('rtl');
@@ -2328,7 +2572,7 @@ test('Explorer rename and delete keep the tree scroll position near the bottom a
     const deleteNode = window.getByTestId(deleteTreeTestId);
     await expect(deleteNode).toBeVisible();
     await deleteNode.click();
-    await expect(deleteNode).toHaveClass(/bg-primary\/20/);
+    await expect(deleteNode).toHaveAttribute('data-selected', 'true');
 
     const beforeDeleteScrollTop = await readExplorerTreeScrollTop(window);
   const beforeDeleteAnchorTop = await readExplorerNodeTop(window, renameTargetTreeTestId);
@@ -2861,7 +3105,7 @@ test('ctrl+p quick open keyboard navigation opens the selected recent file', asy
   await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toBeVisible();
 
   await readmeNode.click();
-  await expect(window.getByTestId('editor-tab-README.md')).toHaveClass(/bg-background/);
+  await expect(window.getByTestId('editor-tab-README.md')).toHaveAttribute('data-active', 'true');
 
   await window.keyboard.press('Control+P');
   const quickOpenInput = window.getByTestId('quick-open-input');
@@ -2871,8 +3115,8 @@ test('ctrl+p quick open keyboard navigation opens the selected recent file', asy
   await quickOpenInput.press('Enter');
 
   await expect(window.getByTestId('quick-open-overlay')).toHaveCount(0);
-  await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toHaveClass(/bg-background/);
-  await expect(window.getByTestId('editor-tab-README.md')).not.toHaveClass(/bg-background/);
+  await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toHaveAttribute('data-active', 'true');
+  await expect(window.getByTestId('editor-tab-README.md')).toHaveAttribute('data-active', 'false');
 
   await app.close();
 });
@@ -2924,6 +3168,51 @@ test('ctrl+p quick open escape closes the palette and reopening resets the query
   const reopenedInput = window.getByTestId('quick-open-input');
   await expect(reopenedInput).toHaveValue('');
   await expect(window.getByTestId('quick-open-result-README_md')).toBeVisible();
+
+  await app.close();
+});
+
+test('dark theme keeps quick open and explorer rename input text legible', async () => {
+  const { app, window } = await launchApp();
+
+  await ensureExplorerVisible(window);
+  await window.getByTestId('menu-settings-button').click();
+  await expect(window.getByTestId('settings-dialog')).toBeVisible();
+
+  await selectComboboxOption(
+    window,
+    'settings-theme-combobox',
+    'settings-theme-option-vscode-2026-dark',
+  );
+
+  await expect.poll(async () => readConfigValue(window, 'workbench.colorTheme')).toBe('vscode-2026-dark');
+  await window.getByTestId('settings-close-button').click();
+  await expect(window.getByTestId('settings-dialog')).toHaveCount(0);
+
+  const expectedQuickInputColor = await readNormalizedCssColorVariable(window, '--quick-input-foreground');
+  const expectedInputColor = await readNormalizedCssColorVariable(window, '--input-foreground');
+
+  expect(expectedQuickInputColor).not.toBe('rgb(0, 0, 0)');
+  expect(expectedInputColor).not.toBe('rgb(0, 0, 0)');
+
+  await window.keyboard.press('Control+P');
+  const quickOpenInput = window.getByTestId('quick-open-input');
+  await expect(quickOpenInput).toBeFocused();
+  await expect.poll(() => readComputedTextColor(quickOpenInput)).toBe(expectedQuickInputColor);
+  await quickOpenInput.press('Escape');
+  await expect(window.getByTestId('quick-open-overlay')).toHaveCount(0);
+
+  const explorerTree = window.locator('.explorer-tree-scrollbar');
+  await expect(explorerTree).toBeVisible();
+  const renameInput = await openExplorerRenameInput(
+    window,
+    explorerTree,
+    window.getByTestId('file-tree-node-README_md'),
+    'file-tree-input-README_md',
+  );
+  await expect.poll(() => readComputedTextColor(renameInput)).toBe(expectedInputColor);
+  await renameInput.press('Escape');
+  await expect(renameInput).toHaveCount(0);
 
   await app.close();
 });
@@ -3022,7 +3311,7 @@ test('ctrl+p quick open escape restores the previous editor cursor position and 
   await quickOpenInput.press('Escape');
 
   await expect(window.getByTestId('quick-open-overlay')).toHaveCount(0);
-  await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toHaveClass(/bg-background/);
+  await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toHaveAttribute('data-active', 'true');
   await expect(getCursorStatus(window)).toHaveText('Ln 3, Col 7');
 
   await window.keyboard.press('ArrowDown');
@@ -3037,10 +3326,13 @@ test('explorer root toggles first-level children and hides the legacy collapse-a
   await ensureExplorerVisible(window);
   const collapseAllButton = window.getByRole('button', { name: 'Collapse All' });
   const rootNode = window.getByTestId('file-tree-node-root');
+  const rootIcon = window.getByTestId('file-tree-icon-root');
   const rtlNode = window.getByTestId('file-tree-node-rtl');
 
   await expect(collapseAllButton).toHaveCount(0);
   await expect(rootNode).toBeVisible();
+  await expect(rootIcon).toHaveClass(/(?:^|\s)h-2\.5(?:\s|$)/);
+  await expect(rootIcon).toHaveClass(/(?:^|\s)w-2\.5(?:\s|$)/);
   await expect(window.getByTestId('left-panel-header')).not.toContainText('retroSoC');
   await expect(rootNode).toContainText('retroSoC');
   await expect(rtlNode).toBeVisible();
@@ -3162,6 +3454,34 @@ test('activity bar switches code subpages and menu bar keeps higher-priority pag
   await app.close();
 });
 
+test('assistant panel mounts only while the right panel AI tab is active', async () => {
+  const { app, window } = await launchApp();
+
+  try {
+    await ensureExplorerVisible(window);
+
+    const rightPanelToggle = window.getByTestId('toggle-right-panel');
+    const rightPanel = window.getByTestId('panel-right-panel');
+    const assistantPanel = window.getByTestId('assistant-panel-root');
+
+    await expect(rightPanel).toHaveCount(0);
+    await expect(assistantPanel).toHaveCount(0);
+
+    await rightPanelToggle.click();
+
+    await expect(rightPanel).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+    await expect(assistantPanel).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+
+    await window.getByTestId('right-panel-tab-outline').click();
+    await expect(assistantPanel).toHaveCount(0);
+
+    await window.getByTestId('right-panel-tab-ai').click();
+    await expect(assistantPanel).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  } finally {
+    await app.close();
+  }
+});
+
 test('assistant chat list expansion widens the whole right sidebar and supports internal drag resize', async () => {
   test.slow();
 
@@ -3176,21 +3496,28 @@ test('assistant chat list expansion widens the whole right sidebar and supports 
 
   const rightPanelToggle = window.getByTestId('toggle-right-panel');
   const rightPanel = window.getByTestId('panel-right-panel');
+  const splitToggle = window.getByTestId('right-panel-split-toggle');
   const assistantMainPanel = window.getByTestId('assistant-main-panel');
   const chatListToggle = window.getByTestId('assistant-thread-list-toggle');
   const chatListPanel = window.getByTestId('assistant-thread-list-panel');
   const chatListResizeHandle = window.getByTestId('assistant-thread-list-resize-handle');
+  const secondaryResizablePanel = window.getByTestId('panel-right-panel-secondary');
 
   await expect(rightPanelToggle).toBeEnabled();
   await rightPanelToggle.click();
 
   await expect(rightPanel).toBeVisible();
-  await expect(chatListPanel).toHaveCount(0);
+  await expect(splitToggle).toBeVisible();
+  await splitToggle.click();
+  await expect(splitToggle).toHaveAttribute('aria-pressed', 'true');
+  await expect(secondaryResizablePanel).toHaveAttribute('aria-hidden', 'false');
+  await expect(chatListPanel).toHaveAttribute('aria-hidden', 'true');
   await expectCompactPanelTabButton(window.getByTestId('right-panel-tab-ai'));
   await expectCompactPanelTabButton(window.getByTestId('right-panel-tab-outline'));
   await expect(assistantMainPanel).not.toHaveClass(/(?:^|\s)bg-background(?:\s|$)/);
   await expect(window.getByTestId('assistant-panel-header')).toBeVisible();
   await expect(window.getByTestId('assistant-panel-header').getByText('Pristine Agent')).toHaveCount(0);
+  await expect(window.getByTestId('right-panel-secondary-placeholder')).toContainText('Details is empty');
 
   const initialRightPanelWidth = await waitForElementPixelWidthBetween(rightPanel, 295, 305);
   const initialAssistantWidth = await waitForElementPixelWidthBetween(assistantMainPanel, 295, 305);
@@ -3262,6 +3589,7 @@ test('assistant chat list expansion widens the whole right sidebar and supports 
   await expect.poll(() => readElementPixelWidth(rightPanel)).toBeLessThanOrEqual(expectedResizedRightPanelWidthPx + 5);
   await expect.poll(() => readElementPixelWidth(assistantMainPanel)).toBeGreaterThanOrEqual(initialAssistantWidth - 2);
   await expect.poll(() => readElementPixelWidth(assistantMainPanel)).toBeLessThanOrEqual(initialAssistantWidth + 2);
+  await expect(secondaryResizablePanel).toHaveAttribute('aria-hidden', 'false');
 
   const resizedRightPanelWidth = await readElementPixelWidth(rightPanel);
   const resizedAssistantWidth = await readElementPixelWidth(assistantMainPanel);
@@ -3271,6 +3599,120 @@ test('assistant chat list expansion widens the whole right sidebar and supports 
   expect(resizedAssistantWidth).toBeLessThanOrEqual(initialAssistantWidth + 2);
 
   await app.close();
+});
+
+test('right panel split shows two stacked panels and keeps the panel layout-aware', async () => {
+  test.slow();
+
+  const { app, window } = await launchApp();
+
+  try {
+    await ensureExplorerVisible(window);
+
+    const rightPanelToggle = window.getByTestId('toggle-right-panel');
+    const rightPanelShell = window.getByTestId('panel-right-panel');
+    const splitToggle = window.getByTestId('right-panel-split-toggle');
+    const rightPanelRoot = window.getByTestId('right-panel-root');
+    const primaryPanel = window.getByTestId('right-panel-primary-panel');
+    const secondaryPanel = window.getByTestId('right-panel-secondary-panel');
+    const primaryResizablePanel = window.getByTestId('panel-right-panel-primary');
+    const secondaryResizablePanel = window.getByTestId('panel-right-panel-secondary');
+    const splitHandle = window.getByTestId('right-panel-split-resize-handle');
+
+    await expect(rightPanelToggle).toBeEnabled();
+    await rightPanelToggle.click();
+
+    await expect(rightPanelShell).toBeVisible();
+    await expect(splitToggle).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+    await expect(splitToggle).toHaveAttribute('aria-pressed', 'false');
+    await expect(primaryPanel).not.toHaveClass(/(?:^|\s)rounded-md(?:\s|$)/);
+    await expect(primaryResizablePanel).toHaveCount(0);
+    await expect(secondaryResizablePanel).toHaveCount(0);
+    await expect(secondaryPanel).toHaveCount(0);
+    await expect(splitHandle).toHaveCount(0);
+
+    await splitToggle.click();
+
+    await expect(splitToggle).toHaveAttribute('aria-pressed', 'true');
+    await expect(primaryResizablePanel).toHaveAttribute('style', /transition-duration: 300ms/);
+    await expect(secondaryResizablePanel).toHaveAttribute('style', /transition-duration: 300ms/);
+    await expect(primaryResizablePanel).toHaveAttribute('aria-hidden', 'false');
+    await expect(secondaryResizablePanel).toHaveAttribute('aria-hidden', 'false');
+    await expect(rightPanelRoot).toHaveClass(/(?:^|\s)bg-ide-bg(?:\s|$)/);
+    await expect(primaryPanel).not.toHaveClass(/(?:^|\s)rounded-md(?:\s|$)/);
+    await expect(primaryPanel).not.toHaveClass(/(?:^|\s)border(?:\s|$)/);
+    await expect(secondaryPanel).toBeVisible();
+    await expect(secondaryPanel).not.toHaveClass(/(?:^|\s)rounded-md(?:\s|$)/);
+    await expect(secondaryPanel).not.toHaveClass(/(?:^|\s)border(?:\s|$)/);
+    await expect(window.getByTestId('right-panel-secondary-placeholder')).toContainText('Details is empty');
+    await expect(splitHandle).toBeVisible();
+    await expect(splitHandle).toHaveAttribute('aria-orientation', 'horizontal');
+
+    await expect.poll(async () => {
+      const [primaryHeight, secondaryHeight] = await Promise.all([
+        readElementPixelHeight(primaryResizablePanel),
+        readElementPixelHeight(secondaryResizablePanel),
+      ]);
+
+      return Math.abs(primaryHeight - secondaryHeight);
+    }, { timeout: UI_READY_TIMEOUT_MS }).toBeLessThanOrEqual(10);
+
+    const initialPrimaryHeight = await readElementPixelHeight(primaryResizablePanel);
+    const initialSecondaryHeight = await readElementPixelHeight(secondaryResizablePanel);
+    const splitHandleBox = await splitHandle.boundingBox();
+
+    if (!splitHandleBox) {
+      throw new Error('Expected right panel split handle geometry to be measurable');
+    }
+
+    await window.mouse.move(
+      splitHandleBox.x + splitHandleBox.width / 2,
+      splitHandleBox.y + splitHandleBox.height / 2,
+    );
+    await window.mouse.down();
+    await window.mouse.move(
+      splitHandleBox.x + splitHandleBox.width / 2,
+      splitHandleBox.y + splitHandleBox.height / 2 + 80,
+    );
+    await window.mouse.up();
+
+    await expect.poll(() => readElementPixelHeight(primaryResizablePanel), { timeout: UI_READY_TIMEOUT_MS }).toBeGreaterThan(initialPrimaryHeight + 55);
+    await expect.poll(() => readElementPixelHeight(secondaryResizablePanel), { timeout: UI_READY_TIMEOUT_MS }).toBeLessThan(initialSecondaryHeight - 55);
+
+    await window.getByTestId('menu-settings-button').click();
+    await expect(window.getByTestId('settings-dialog')).toBeVisible();
+    await selectComboboxOption(
+      window,
+      'settings-code-viewer-layout-combobox',
+      'settings-code-viewer-layout-option-minimal',
+    );
+    await expect.poll(async () => readConfigValue(window, 'workbench.codeViewerLayoutMode')).toBe('minimal');
+    await window.getByTestId('settings-close-button').click();
+    await expect(window.getByTestId('settings-dialog')).toHaveCount(0);
+
+    await expectPanelHeaderWithoutDivider(window.getByTestId('right-panel-header'));
+    await expectPanelHeaderWithoutDivider(window.getByTestId('right-panel-secondary-header'));
+    await expect(rightPanelShell).not.toHaveClass(/(?:^|\s)rounded-md(?:\s|$)/);
+    await expect(rightPanelShell).not.toHaveClass(/(?:^|\s)border(?:\s|$)/);
+    await expect(rightPanelShell).not.toHaveClass(/(?:^|\s)bg-ide-bg(?:\s|$)/);
+    await expect(rightPanelRoot).not.toHaveClass(/(?:^|\s)bg-ide-bg(?:\s|$)/);
+    await expect(primaryPanel).toHaveClass(/(?:^|\s)rounded-md(?:\s|$)/);
+    await expect(primaryPanel).toHaveClass(/(?:^|\s)border(?:\s|$)/);
+    await expect(secondaryPanel).toHaveClass(/(?:^|\s)rounded-md(?:\s|$)/);
+    await expect(secondaryPanel).toHaveClass(/(?:^|\s)border(?:\s|$)/);
+    await expect(splitHandle).toHaveClass(/(?:^|\s)overlay-handle(?:\s|$)/);
+    await expect.poll(() => readVerticalPixelGap(primaryResizablePanel, secondaryResizablePanel), { timeout: UI_READY_TIMEOUT_MS }).toBeGreaterThanOrEqual(9);
+    await expect.poll(() => readVerticalPixelGap(primaryResizablePanel, secondaryResizablePanel), { timeout: UI_READY_TIMEOUT_MS }).toBeLessThanOrEqual(11);
+
+    await splitToggle.click();
+    await expect(splitToggle).toHaveAttribute('aria-pressed', 'false');
+    await expect(secondaryResizablePanel).toHaveAttribute('aria-hidden', 'true');
+    await expect(window.getByTestId('right-panel-secondary-panel')).toHaveAttribute('style', /opacity: 0/);
+    await expect(splitHandle).toHaveCount(0);
+    await expect(secondaryPanel).toHaveCount(0, { timeout: UI_READY_TIMEOUT_MS });
+  } finally {
+    await app.close().catch(() => undefined);
+  }
 });
 
 test('status bar switches across primary and secondary navigation views', async () => {
@@ -3423,6 +3865,137 @@ test('left sidebar keeps a fixed pixel width across window changes and manual re
   await expect.poll(readPanelWidth).toBeLessThanOrEqual(322);
 
   await app.close();
+});
+
+test('left panel split shows two stacked panels and keeps the explorer tree scrollable', async () => {
+  test.slow();
+
+  const workspaceCopy = test.info().outputPath('left-panel-split-workspace');
+  createWorkspaceCopy(workspaceCopy);
+
+  const generatedFileCount = 72;
+  const generatedDir = path.join(workspaceCopy, 'rtl', 'core');
+  fs.mkdirSync(generatedDir, { recursive: true });
+
+  for (let index = 0; index < generatedFileCount; index += 1) {
+    const generatedFileName = `zz_split_scroll_${String(index).padStart(2, '0')}.sv`;
+    fs.writeFileSync(
+      path.join(generatedDir, generatedFileName),
+      `module ${generatedFileName.replace(/\.sv$/, '')};\nendmodule\n`,
+      'utf-8',
+    );
+  }
+
+  const { app, window } = await launchApp({ projectRoot: workspaceCopy });
+
+  try {
+    await ensureExplorerVisible(window);
+    await window.getByTestId('file-tree-node-rtl').click();
+    await window.getByTestId('file-tree-node-rtl_core').click();
+    await expect(window.getByTestId(toWorkspaceTreeTestId('rtl/core/zz_split_scroll_71.sv'))).toBeAttached();
+
+    const splitToggle = window.getByTestId('left-panel-split-toggle');
+    const leftPanelRoot = window.getByTestId('left-panel-root');
+    const leftPanelShell = window.getByTestId('panel-left-panel');
+    const primaryPanel = window.getByTestId('left-panel-primary-panel');
+    const secondaryPanel = window.getByTestId('left-panel-secondary-panel');
+    const primaryResizablePanel = window.getByTestId('panel-left-panel-primary');
+    const secondaryResizablePanel = window.getByTestId('panel-left-panel-secondary');
+    const splitHandle = window.getByTestId('left-panel-split-resize-handle');
+
+    await expect(splitToggle).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+    await expect(splitToggle).toHaveAttribute('aria-pressed', 'false');
+    await expect(primaryPanel).not.toHaveClass(/(?:^|\s)rounded-md(?:\s|$)/);
+    await expect(primaryResizablePanel).toHaveCount(0);
+    await expect(secondaryResizablePanel).toHaveCount(0);
+    await expect(secondaryPanel).toHaveCount(0);
+    await expect(splitHandle).toHaveCount(0);
+    await expect.poll(async () => (await scrollExplorerTreeToBottom(window)).scrollTop, { timeout: UI_READY_TIMEOUT_MS }).toBeGreaterThan(0);
+
+    await splitToggle.click();
+
+    await expect(splitToggle).toHaveAttribute('aria-pressed', 'true');
+    await expect(primaryResizablePanel).toHaveAttribute('style', /transition-duration: 300ms/);
+    await expect(secondaryResizablePanel).toHaveAttribute('style', /transition-duration: 300ms/);
+    await expect(primaryResizablePanel).toHaveAttribute('aria-hidden', 'false');
+    await expect(secondaryResizablePanel).toHaveAttribute('aria-hidden', 'false');
+    await expect(leftPanelRoot).toHaveClass(/(?:^|\s)bg-ide-bg(?:\s|$)/);
+    await expect(primaryPanel).not.toHaveClass(/(?:^|\s)rounded-md(?:\s|$)/);
+    await expect(primaryPanel).not.toHaveClass(/(?:^|\s)border(?:\s|$)/);
+    await expect(secondaryPanel).toBeVisible();
+    await expect(secondaryPanel).not.toHaveClass(/(?:^|\s)rounded-md(?:\s|$)/);
+    await expect(secondaryPanel).not.toHaveClass(/(?:^|\s)border(?:\s|$)/);
+    await expect(window.getByTestId('left-panel-secondary-placeholder')).toContainText('Structure is empty');
+    await expect(splitHandle).toBeVisible();
+    await expect(splitHandle).toHaveAttribute('aria-orientation', 'horizontal');
+
+    await expect.poll(async () => {
+      const [primaryHeight, secondaryHeight] = await Promise.all([
+        readElementPixelHeight(primaryResizablePanel),
+        readElementPixelHeight(secondaryResizablePanel),
+      ]);
+
+      return Math.abs(primaryHeight - secondaryHeight);
+    }, { timeout: UI_READY_TIMEOUT_MS }).toBeLessThanOrEqual(10);
+    await expect.poll(async () => (await scrollExplorerTreeToBottom(window)).scrollTop, { timeout: UI_READY_TIMEOUT_MS }).toBeGreaterThan(0);
+
+    const initialPrimaryHeight = await readElementPixelHeight(primaryResizablePanel);
+    const initialSecondaryHeight = await readElementPixelHeight(secondaryResizablePanel);
+    const splitHandleBox = await splitHandle.boundingBox();
+
+    if (!splitHandleBox) {
+      throw new Error('Expected left panel split handle geometry to be measurable');
+    }
+
+    await window.mouse.move(
+      splitHandleBox.x + splitHandleBox.width / 2,
+      splitHandleBox.y + splitHandleBox.height / 2,
+    );
+    await window.mouse.down();
+    await window.mouse.move(
+      splitHandleBox.x + splitHandleBox.width / 2,
+      splitHandleBox.y + splitHandleBox.height / 2 + 80,
+    );
+    await window.mouse.up();
+
+    await expect.poll(() => readElementPixelHeight(primaryResizablePanel), { timeout: UI_READY_TIMEOUT_MS }).toBeGreaterThan(initialPrimaryHeight + 55);
+    await expect.poll(() => readElementPixelHeight(secondaryResizablePanel), { timeout: UI_READY_TIMEOUT_MS }).toBeLessThan(initialSecondaryHeight - 55);
+
+    await window.getByTestId('menu-settings-button').click();
+    await expect(window.getByTestId('settings-dialog')).toBeVisible();
+    await selectComboboxOption(
+      window,
+      'settings-code-viewer-layout-combobox',
+      'settings-code-viewer-layout-option-minimal',
+    );
+    await expect.poll(async () => readConfigValue(window, 'workbench.codeViewerLayoutMode')).toBe('minimal');
+    await window.getByTestId('settings-close-button').click();
+    await expect(window.getByTestId('settings-dialog')).toHaveCount(0);
+
+    await expectPanelHeaderWithoutDivider(window.getByTestId('left-panel-header'));
+    await expectPanelHeaderWithoutDivider(window.getByTestId('left-panel-secondary-header'));
+  await expect(leftPanelShell).not.toHaveClass(/(?:^|\s)rounded-md(?:\s|$)/);
+  await expect(leftPanelShell).not.toHaveClass(/(?:^|\s)border(?:\s|$)/);
+  await expect(leftPanelShell).not.toHaveClass(/(?:^|\s)bg-ide-bg(?:\s|$)/);
+  await expect(leftPanelRoot).not.toHaveClass(/(?:^|\s)bg-ide-bg(?:\s|$)/);
+  await expect(primaryPanel).toHaveClass(/(?:^|\s)rounded-md(?:\s|$)/);
+  await expect(primaryPanel).toHaveClass(/(?:^|\s)border(?:\s|$)/);
+  await expect(secondaryPanel).toHaveClass(/(?:^|\s)rounded-md(?:\s|$)/);
+  await expect(secondaryPanel).toHaveClass(/(?:^|\s)border(?:\s|$)/);
+    await expect(splitHandle).toHaveClass(/(?:^|\s)overlay-handle(?:\s|$)/);
+    await expect.poll(() => readVerticalPixelGap(primaryResizablePanel, secondaryResizablePanel), { timeout: UI_READY_TIMEOUT_MS }).toBeGreaterThanOrEqual(9);
+    await expect.poll(() => readVerticalPixelGap(primaryResizablePanel, secondaryResizablePanel), { timeout: UI_READY_TIMEOUT_MS }).toBeLessThanOrEqual(11);
+    await expect.poll(async () => (await scrollExplorerTreeToBottom(window)).scrollTop, { timeout: UI_READY_TIMEOUT_MS }).toBeGreaterThan(0);
+
+    await splitToggle.click();
+    await expect(splitToggle).toHaveAttribute('aria-pressed', 'false');
+    await expect(secondaryResizablePanel).toHaveAttribute('aria-hidden', 'true');
+    await expect(window.getByTestId('left-panel-secondary-panel')).toHaveAttribute('style', /opacity: 0/);
+    await expect(splitHandle).toHaveCount(0);
+    await expect(secondaryPanel).toHaveCount(0, { timeout: UI_READY_TIMEOUT_MS });
+  } finally {
+    await app.close().catch(() => undefined);
+  }
 });
 
 test('activity bar shows compile and run action buttons with local selection only', async () => {
@@ -3604,13 +4177,13 @@ test('ctrl+w closes the active tab when monaco focus is inside the current edito
     'file-tree-node-rtl_core_reg_file_v',
   ], { finalAction: 'dblclick' });
 
-  await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toHaveClass(/bg-background/);
+  await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toHaveAttribute('data-active', 'true');
 
   await focusMonacoEditor(window);
   await window.keyboard.press('Control+W');
 
   await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toHaveCount(0);
-  await expect(window.getByTestId('editor-tab-README.md')).toHaveClass(/bg-background/);
+  await expect(window.getByTestId('editor-tab-README.md')).toHaveAttribute('data-active', 'true');
 
   await app.close();
 });
@@ -3635,16 +4208,16 @@ test('ctrl+tab cycles tabs to the right within the focused editor group', async 
 
   await expect(window.getByTestId('editor-tab-.gitignore')).toBeVisible();
   await window.getByTestId('editor-tab-rtl/core/reg_file.v').click();
-  await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toHaveClass(/bg-background/);
+  await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toHaveAttribute('data-active', 'true');
 
   await focusMonacoEditor(window);
   await window.keyboard.press('Control+Tab');
-  await expect(window.getByTestId('editor-tab-.gitignore')).toHaveClass(/bg-background/);
-  await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).not.toHaveClass(/bg-background/);
+  await expect(window.getByTestId('editor-tab-.gitignore')).toHaveAttribute('data-active', 'true');
+  await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toHaveAttribute('data-active', 'false');
 
   await window.keyboard.press('Control+Tab');
-  await expect(window.getByTestId('editor-tab-rtl/core/cpu_top.sv')).toHaveClass(/bg-background/);
-  await expect(window.getByTestId('editor-tab-.gitignore')).not.toHaveClass(/bg-background/);
+  await expect(window.getByTestId('editor-tab-rtl/core/cpu_top.sv')).toHaveAttribute('data-active', 'true');
+  await expect(window.getByTestId('editor-tab-.gitignore')).toHaveAttribute('data-active', 'false');
 
   await app.close();
 });
@@ -3667,20 +4240,20 @@ test('ctrl+shift+tab cycles tabs to the left within the focused editor group', a
   await expect(window.getByTestId('quick-open-result-_gitignore')).toBeVisible();
   await quickOpenInput.press('Enter');
 
-  await expect(window.getByTestId('editor-tab-.gitignore')).toHaveClass(/bg-background/);
+  await expect(window.getByTestId('editor-tab-.gitignore')).toHaveAttribute('data-active', 'true');
 
   await focusMonacoEditor(window);
   await window.keyboard.press('Control+Shift+Tab');
-  await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toHaveClass(/bg-background/);
-  await expect(window.getByTestId('editor-tab-.gitignore')).not.toHaveClass(/bg-background/);
+  await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toHaveAttribute('data-active', 'true');
+  await expect(window.getByTestId('editor-tab-.gitignore')).toHaveAttribute('data-active', 'false');
 
   await window.getByTestId('editor-tab-rtl/core/cpu_top.sv').click();
-  await expect(window.getByTestId('editor-tab-rtl/core/cpu_top.sv')).toHaveClass(/bg-background/);
+  await expect(window.getByTestId('editor-tab-rtl/core/cpu_top.sv')).toHaveAttribute('data-active', 'true');
 
   await focusMonacoEditor(window);
   await window.keyboard.press('Control+Shift+Tab');
-  await expect(window.getByTestId('editor-tab-.gitignore')).toHaveClass(/bg-background/);
-  await expect(window.getByTestId('editor-tab-rtl/core/cpu_top.sv')).not.toHaveClass(/bg-background/);
+  await expect(window.getByTestId('editor-tab-.gitignore')).toHaveAttribute('data-active', 'true');
+  await expect(window.getByTestId('editor-tab-rtl/core/cpu_top.sv')).toHaveAttribute('data-active', 'false');
 
   await app.close();
 });
@@ -3693,7 +4266,9 @@ test('terminal tab creates a real shell session and shows command output', async
 
   const bottomPanelTabBar = window.getByTestId('bottom-panel-tab-bar');
   await expect(bottomPanelTabBar).not.toHaveClass(/(?:^|\s)bg-muted\/40(?:\s|$)/);
-  await expect(bottomPanelTabBar).not.toHaveClass(/(?:^|\s)border-b(?:\s|$)/);
+  await expect(bottomPanelTabBar).toHaveClass(/(?:^|\s)bg-ide-tab-bg(?:\s|$)/);
+  await expect(bottomPanelTabBar).toHaveClass(/(?:^|\s)border-b(?:\s|$)/);
+  await expect(bottomPanelTabBar).toHaveClass(/(?:^|\s)border-ide-border(?:\s|$)/);
   await expectCompactPanelTabButton(getBottomPanelTab(window, 'terminal'));
   await expectCompactPanelTabButton(getBottomPanelTab(window, 'output'));
 
@@ -3867,6 +4442,16 @@ test('terminal remains writable after left sidebar toggles while vertically scro
   }, {
     timeout: 10000,
   }).toBeGreaterThan(40);
+
+  await expect.poll(async () => readScrollbarWidthSnapshot(window), {
+    timeout: 10000,
+  }).toEqual({
+    explorerWidth: '6px',
+    terminalCustomScrollbarMatchesSurface: true,
+    terminalCustomScrollbarWidth: '6px',
+    terminalCustomSliderWidth: '6px',
+    terminalViewportWidth: '6px',
+  });
 
   await window.getByTestId('toggle-left-panel').click();
   await expectCollapsedPanel(window.getByTestId('panel-left-panel'));
@@ -4093,6 +4678,46 @@ test('floating info window stays visible after hiding the main window to tray', 
   await app.close();
 });
 
+test('floating info window expands on hover and updates live chart data', async () => {
+  const { app, window } = await launchApp();
+
+  await setFloatingInfoWindowVisibility(window, true);
+
+  await expect.poll(async () => (await getWindowByTitle(app, 'Pristine Floating Info')) !== null).toBe(true);
+  const floatingInfoWindow = await getWindowByTitle(app, 'Pristine Floating Info');
+
+  if (!floatingInfoWindow) {
+    throw new Error('Expected floating info window to be available');
+  }
+
+  const floatingInfoShell = floatingInfoWindow.getByTestId('floating-info-window');
+  const collapsedBounds = await readBrowserWindowBounds(app, floatingInfoWindow);
+
+  await expect(floatingInfoShell).toHaveAttribute('data-expanded', 'false');
+  expect(collapsedBounds.width).toBe(60);
+  expect(collapsedBounds.height).toBeGreaterThan(0);
+
+  const initialLatestTime = await floatingInfoShell.getAttribute('data-latest-time');
+
+  await floatingInfoShell.hover();
+
+  await expect(floatingInfoShell).toHaveAttribute('data-expanded', 'true');
+  await expect(floatingInfoWindow.getByTestId('floating-info-chart')).toBeVisible();
+  await expect.poll(async () => (await readBrowserWindowBounds(app, floatingInfoWindow)).width).toBeGreaterThan(collapsedBounds.width);
+  await expect.poll(async () => (await readBrowserWindowBounds(app, floatingInfoWindow)).height).toBeGreaterThan(collapsedBounds.height);
+  await expect.poll(async () => floatingInfoShell.getAttribute('data-latest-time'), {
+    timeout: 4000,
+  }).not.toBe(initialLatestTime);
+
+  await floatingInfoWindow.mouse.move(collapsedBounds.width + 320, collapsedBounds.height + 240);
+
+  await expect.poll(async () => floatingInfoShell.getAttribute('data-expanded')).toBe('false');
+  await expect.poll(async () => (await readBrowserWindowBounds(app, floatingInfoWindow)).width).toBe(collapsedBounds.width);
+  await expect.poll(async () => (await readBrowserWindowBounds(app, floatingInfoWindow)).height).toBe(collapsedBounds.height);
+
+  await app.close();
+});
+
 test('tray and floating info settings persist across app relaunch', async () => {
   const firstLaunch = await launchApp();
   const { app: firstApp, window: firstWindow } = firstLaunch;
@@ -4229,6 +4854,89 @@ test('settings UI theme selection persists across app relaunch', async () => {
   await secondApp.close();
 });
 
+test('global workbench chrome follows selected VS Code theme variables', async () => {
+  const { app, window } = await launchApp();
+
+  await ensureExplorerVisible(window);
+  await expect(window.getByTestId('menu-bar-root')).toHaveAttribute('data-code-viewer-layout-mode', 'compact');
+  await expect(window.getByTestId('activity-bar')).toHaveAttribute('data-code-viewer-layout-mode', 'compact');
+  await expect(window.getByTestId('status-bar')).toHaveAttribute('data-code-viewer-layout-mode', 'compact');
+  await window.getByTestId('menu-settings-button').click();
+  await expect(window.getByTestId('settings-dialog')).toBeVisible();
+
+  await selectComboboxOption(
+    window,
+    'settings-theme-combobox',
+    'settings-theme-option-vscode-2026-light',
+  );
+
+  await expect.poll(async () => readConfigValue(window, 'workbench.colorTheme')).toBe('vscode-2026-light');
+
+  await window.getByTestId('settings-close-button').click();
+  await expect(window.getByTestId('settings-dialog')).toHaveCount(0);
+
+  await expect.poll(async () => readWorkbenchChromeThemeSnapshot(window)).toEqual(
+    expect.objectContaining({
+      activity: expect.objectContaining({
+        backgroundColor: expect.any(String),
+      }),
+      menu: expect.objectContaining({
+        backgroundColor: expect.any(String),
+      }),
+      status: expect.objectContaining({
+        backgroundColor: expect.any(String),
+        color: expect.any(String),
+      }),
+    }),
+  );
+
+  const snapshot = await readWorkbenchChromeThemeSnapshot(window);
+
+  expect(snapshot.menu.backgroundColor).toBe(snapshot.variables.menubarBackground);
+  expect(snapshot.activity.backgroundColor).toBe(snapshot.variables.activitybarBackground);
+  expect(snapshot.status.backgroundColor).toBe(snapshot.variables.statusbarBackground);
+  expect(snapshot.status.color).toBe(snapshot.variables.statusbarForeground);
+  expect(snapshot.menu.borderBottomWidth).toBe('1px');
+  expect(snapshot.activity.borderRightWidth).toBe('1px');
+  expect(snapshot.status.borderTopWidth).toBe('1px');
+
+  await app.close();
+});
+
+test('minimal layout unifies menu activity and status chrome', async () => {
+  const { app, window } = await launchApp();
+
+  await ensureExplorerVisible(window);
+  await window.getByTestId('menu-settings-button').click();
+  await expect(window.getByTestId('settings-dialog')).toBeVisible();
+
+  await selectComboboxOption(
+    window,
+    'settings-code-viewer-layout-combobox',
+    'settings-code-viewer-layout-option-minimal',
+  );
+
+  await expect.poll(async () => readConfigValue(window, 'workbench.codeViewerLayoutMode')).toBe('minimal');
+  await expect(window.getByTestId('menu-bar-root')).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
+  await expect(window.getByTestId('activity-bar')).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
+  await expect(window.getByTestId('status-bar')).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
+
+  await window.getByTestId('settings-close-button').click();
+  await expect(window.getByTestId('settings-dialog')).toHaveCount(0);
+
+  const snapshot = await readWorkbenchChromeThemeSnapshot(window);
+
+  expect(snapshot.menu.backgroundColor).toBe(snapshot.variables.unifiedChromeBackground);
+  expect(snapshot.activity.backgroundColor).toBe(snapshot.variables.unifiedChromeBackground);
+  expect(snapshot.status.backgroundColor).toBe(snapshot.variables.unifiedChromeBackground);
+  expect(snapshot.status.color).toBe(snapshot.variables.unifiedChromeForeground);
+  expect(snapshot.menu.borderBottomWidth).toBe('0px');
+  expect(snapshot.activity.borderRightWidth).toBe('0px');
+  expect(snapshot.status.borderTopWidth).toBe('0px');
+
+  await app.close();
+});
+
 test('code viewer layout setting persists across app relaunch', async () => {
   test.slow();
 
@@ -4237,6 +4945,9 @@ test('code viewer layout setting persists across app relaunch', async () => {
 
   await ensureExplorerVisible(firstWindow);
   await expect(firstWindow.getByTestId('code-view-explorer')).toHaveAttribute('data-code-viewer-layout-mode', 'compact');
+  await expectPanelHeaderWithoutDivider(firstWindow.getByTestId('left-panel-header'));
+  await ensureRightPanelVisible(firstWindow);
+  await expectPanelHeaderWithoutDivider(firstWindow.getByTestId('right-panel-header'));
 
   await firstWindow.getByTestId('menu-settings-button').click();
   await expect(firstWindow.getByTestId('settings-dialog')).toBeVisible();
@@ -4254,9 +4965,9 @@ test('code viewer layout setting persists across app relaunch', async () => {
 
   await firstWindow.getByTestId('settings-close-button').click();
   await expect(firstWindow.getByTestId('settings-dialog')).toHaveCount(0);
-  await expectMinimalPanelHeaderWithoutOutline(firstWindow.getByTestId('left-panel-header'));
+  await expectPanelHeaderWithoutDivider(firstWindow.getByTestId('left-panel-header'));
   await ensureRightPanelVisible(firstWindow);
-  await expectMinimalPanelHeaderWithoutOutline(firstWindow.getByTestId('right-panel-header'));
+  await expectPanelHeaderWithoutDivider(firstWindow.getByTestId('right-panel-header'));
 
   await firstApp.close();
 
@@ -4266,7 +4977,9 @@ test('code viewer layout setting persists across app relaunch', async () => {
   await ensureExplorerVisible(secondWindow);
   await expect(secondWindow.getByTestId('code-view-explorer')).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
   await expect.poll(async () => readConfigValue(secondWindow, 'workbench.codeViewerLayoutMode')).toBe('minimal');
-  await expectMinimalPanelHeaderWithoutOutline(secondWindow.getByTestId('left-panel-header'));
+  await expectPanelHeaderWithoutDivider(secondWindow.getByTestId('left-panel-header'));
+  await ensureRightPanelVisible(secondWindow);
+  await expectPanelHeaderWithoutDivider(secondWindow.getByTestId('right-panel-header'));
 
   await secondWindow.getByTestId('menu-settings-button').click();
   await expect(secondWindow.getByTestId('settings-dialog')).toBeVisible();
@@ -4282,6 +4995,9 @@ test('code viewer layout setting persists across app relaunch', async () => {
 
   await secondWindow.getByTestId('settings-close-button').click();
   await expect(secondWindow.getByTestId('settings-dialog')).toHaveCount(0);
+  await expectPanelHeaderWithoutDivider(secondWindow.getByTestId('left-panel-header'));
+  await ensureRightPanelVisible(secondWindow);
+  await expectPanelHeaderWithoutDivider(secondWindow.getByTestId('right-panel-header'));
 
   await secondApp.close();
 });

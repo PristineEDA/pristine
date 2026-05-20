@@ -21,6 +21,8 @@
   --border: rgba(0, 0, 0, 0.1);
   --input: transparent;
   --input-background: #f3f3f5;
+  --input-foreground: var(--foreground);
+  --quick-input-foreground: var(--input-foreground);
   --switch-background: #cbced4;
   --font-weight-medium: 500;
   --font-weight-normal: 400;
@@ -60,6 +62,8 @@
   --destructive-foreground: oklch(0.637 0.237 25.331);
   --border: oklch(0.269 0 0);
   --input: oklch(0.269 0 0);
+  --input-foreground: var(--foreground);
+  --quick-input-foreground: var(--input-foreground);
   --ring: oklch(0.439 0 0);
   --font-weight-medium: 500;
   --font-weight-normal: 400;
@@ -112,6 +116,13 @@
   --ide-accent-vivid: #3b82f6;
   --ide-accent-hover: #1d4ed8;
   --ide-status-hover: #1e40af;
+  --ide-statusbar-bg: #f9fafb;
+  --ide-statusbar-fg: #4b5563;
+  --ide-statusbar-border: #e5e7eb;
+  --ide-statusbar-hover: #e5e7eb;
+  --ide-unified-chrome-bg: #f9fafb;
+  --ide-unified-chrome-fg: #4b5563;
+  --ide-unified-chrome-hover: #e5e7eb;
 
   /* Diagnostics */
   --ide-error: #dc2626;
@@ -216,6 +227,13 @@
   --ide-accent-vivid: oklch(0.567 0.155 248.5);  /* #007acc */
   --ide-accent-hover: oklch(0.551 0.135 245.7);  /* #1177bb */
   --ide-status-hover: oklch(0.611 0.142 244.7);  /* #1f8ad2 */
+  --ide-statusbar-bg: oklch(0.235 0.000 89.9);   /* #1e1e1e */
+  --ide-statusbar-fg: oklch(0.617 0.000 89.9);   /* #858585 */
+  --ide-statusbar-border: oklch(0.360 0.000 89.9); /* #3d3d3d */
+  --ide-statusbar-hover: oklch(0.295 0.005 219.6); /* #2a2d2e */
+  --ide-unified-chrome-bg: oklch(0.235 0.000 89.9); /* #1e1e1e */
+  --ide-unified-chrome-fg: oklch(0.617 0.000 89.9); /* #858585 */
+  --ide-unified-chrome-hover: oklch(0.295 0.005 219.6); /* #2a2d2e */
 
   /* Diagnostics */
   --ide-error: oklch(0.738 0.138 32.5);          /* #f48771 */
@@ -297,6 +315,13 @@
   --color-ide-accent-vivid: var(--ide-accent-vivid);
   --color-ide-accent-hover: var(--ide-accent-hover);
   --color-ide-status-hover: var(--ide-status-hover);
+  --color-ide-statusbar-bg: var(--ide-statusbar-bg);
+  --color-ide-statusbar-fg: var(--ide-statusbar-fg);
+  --color-ide-statusbar-border: var(--ide-statusbar-border);
+  --color-ide-statusbar-hover: var(--ide-statusbar-hover);
+  --color-ide-unified-chrome-bg: var(--ide-unified-chrome-bg);
+  --color-ide-unified-chrome-fg: var(--ide-unified-chrome-fg);
+  --color-ide-unified-chrome-hover: var(--ide-unified-chrome-hover);
   --color-ide-error: var(--ide-error);
   --color-ide-warning: var(--ide-warning);
   --color-ide-info: var(--ide-info);
@@ -360,6 +385,8 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-input-background: var(--input-background);
+  --color-input-foreground: var(--input-foreground);
+  --color-quick-input-foreground: var(--quick-input-foreground);
   --color-switch-background: var(--switch-background);
   --color-ring: var(--ring);
   --color-chart-1: var(--chart-1);

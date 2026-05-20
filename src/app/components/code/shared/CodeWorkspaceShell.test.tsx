@@ -140,16 +140,90 @@ describe('CodeWorkspaceShell', () => {
     expect(screen.getByTestId('workspace-shell')).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
     expect(screen.getByTestId('workspace-shell')).toHaveClass('min-h-0');
     expect(screen.getByTestId('activity-region').parentElement).not.toHaveClass('rounded-md');
-    expect(screen.getByTestId('panel-left')).toHaveClass('rounded-md', 'border', 'bg-background');
-    expect(screen.getByTestId('panel-top')).toHaveClass('rounded-md', 'border', 'bg-background');
-    expect(screen.getByTestId('panel-bottom')).toHaveClass('rounded-md', 'border', 'bg-background');
-    expect(screen.getByTestId('panel-right')).toHaveClass('rounded-md', 'border', 'bg-background');
+    expect(screen.getByTestId('panel-left')).toHaveClass('rounded-md', 'border', 'bg-ide-bg');
+    expect(screen.getByTestId('panel-top')).toHaveClass('rounded-md', 'border', 'bg-ide-bg');
+    expect(screen.getByTestId('panel-bottom')).toHaveClass('rounded-md', 'border', 'bg-ide-bg');
+    expect(screen.getByTestId('panel-right')).toHaveClass('rounded-md', 'border', 'bg-ide-bg');
     expect(screen.getByTestId('panel-group-horizontal')).not.toHaveClass('gap-2.5');
     expect(screen.getByTestId('panel-group-vertical')).not.toHaveClass('gap-2.5');
     expect(screen.getByTestId('panel-group-horizontal')).toHaveAttribute('data-layout-gap-px', '10');
     expect(screen.getByTestId('panel-group-vertical')).toHaveAttribute('data-layout-gap-px', '10');
     expect(screen.getAllByTestId('panel-handle').every((handle) => handle.className.includes('bg-transparent'))).toBe(true);
     expect(screen.getAllByTestId('panel-handle').every((handle) => handle.className.includes('overlay-handle'))).toBe(true);
+  });
+
+  it('lets the fixed minimal left panel opt out of the outer frame while other panels keep theirs', () => {
+    vi.mocked(window.electronAPI!.config.get).mockImplementation((key: string) =>
+      key === WORKBENCH_CODE_VIEWER_LAYOUT_MODE_CONFIG_KEY ? 'minimal' : null,
+    );
+
+    render(
+      <CodeViewerLayoutProvider>
+        <CodeWorkspaceShell
+          shellTestId="workspace-shell"
+          activityBar={<div data-testid="activity-region">Activity</div>}
+          useLeftPanelFrame={false}
+          showLeftPanel
+          showBottomPanel
+          showRightPanel
+          leftPanelId="left"
+          centerPanelId="center"
+          topPanelId="top"
+          bottomPanelId="bottom"
+          rightPanelId="right"
+          leftFixedWidthPx={240}
+          onLeftFixedWidthChange={() => undefined}
+          leftContent={<div>Explorer</div>}
+          topContent={<div>Editor</div>}
+          bottomContent={<div>Terminal</div>}
+          rightContent={<div>Inspector</div>}
+        />
+      </CodeViewerLayoutProvider>,
+    );
+
+    expect(screen.getByTestId('panel-left')).not.toHaveClass('rounded-md');
+    expect(screen.getByTestId('panel-left')).not.toHaveClass('border');
+    expect(screen.getByTestId('panel-left')).not.toHaveClass('bg-ide-bg');
+    expect(screen.getByTestId('panel-top')).toHaveClass('rounded-md', 'border', 'bg-ide-bg');
+    expect(screen.getByTestId('panel-bottom')).toHaveClass('rounded-md', 'border', 'bg-ide-bg');
+    expect(screen.getByTestId('panel-right')).toHaveClass('rounded-md', 'border', 'bg-ide-bg');
+  });
+
+  it('lets the fixed minimal right panel opt out of the outer frame while other panels keep theirs', () => {
+    vi.mocked(window.electronAPI!.config.get).mockImplementation((key: string) =>
+      key === WORKBENCH_CODE_VIEWER_LAYOUT_MODE_CONFIG_KEY ? 'minimal' : null,
+    );
+
+    render(
+      <CodeViewerLayoutProvider>
+        <CodeWorkspaceShell
+          shellTestId="workspace-shell"
+          activityBar={<div data-testid="activity-region">Activity</div>}
+          useRightPanelFrame={false}
+          showLeftPanel
+          showBottomPanel
+          showRightPanel
+          leftPanelId="left"
+          centerPanelId="center"
+          topPanelId="top"
+          bottomPanelId="bottom"
+          rightPanelId="right"
+          rightFixedWidthPx={300}
+          onRightFixedWidthChange={() => undefined}
+          leftContent={<div>Explorer</div>}
+          topContent={<div>Editor</div>}
+          bottomContent={<div>Terminal</div>}
+          rightContent={<div>Inspector</div>}
+        />
+      </CodeViewerLayoutProvider>,
+    );
+
+    expect(screen.getByTestId('panel-right')).not.toHaveClass('rounded-md');
+    expect(screen.getByTestId('panel-right')).not.toHaveClass('border');
+    expect(screen.getByTestId('panel-right')).not.toHaveClass('bg-ide-bg');
+    expect(screen.getByTestId('panel-left')).toHaveClass('rounded-md', 'border', 'bg-ide-bg');
+    expect(screen.getByTestId('panel-top')).toHaveClass('rounded-md', 'border', 'bg-ide-bg');
+    expect(screen.getByTestId('panel-bottom')).toHaveClass('rounded-md', 'border', 'bg-ide-bg');
   });
 
   it('collapses fixed minimal handles so resize targets do not consume layout space', () => {

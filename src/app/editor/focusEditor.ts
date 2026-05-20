@@ -1,4 +1,21 @@
-const MONACO_TEXT_INPUT_SELECTOR = 'textarea.inputarea, .inputarea, .native-edit-context';
+export const MONACO_TEXT_INPUT_SELECTOR = [
+  'textarea.inputarea',
+  '.inputarea',
+  '.native-edit-context',
+  'textarea',
+  '[contenteditable="true"]',
+].join(', ');
+
+export function isMonacoTextInputElement(target: EventTarget | null): target is HTMLElement {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  return Boolean(
+    target.closest('.monaco-editor')
+    && target.closest(MONACO_TEXT_INPUT_SELECTOR),
+  );
+}
 
 export function focusEditorInstance(editor: any) {
   const editorDomNode = editor?.getDomNode?.();
@@ -14,6 +31,5 @@ export function isMonacoTextInputFocused() {
     return false;
   }
 
-  const textInput = document.querySelector(`.monaco-editor ${MONACO_TEXT_INPUT_SELECTOR}`);
-  return Boolean(textInput && document.activeElement === textInput);
+  return isMonacoTextInputElement(document.activeElement);
 }

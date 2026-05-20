@@ -1,5 +1,6 @@
 import { Minus, Square, X } from 'lucide-react';
 import type { CSSProperties } from 'react';
+import { useCodeViewerLayout } from '../../../context/CodeViewerLayoutContext';
 
 interface MenuBarWindowControlsProps {
   interactiveStyle: CSSProperties;
@@ -10,11 +11,21 @@ export function MenuBarWindowControls({
   interactiveStyle,
   onRequestClose,
 }: MenuBarWindowControlsProps) {
+  const { layoutMode } = useCodeViewerLayout();
+  const isMinimalLayout = layoutMode === 'minimal';
+  const controlBaseClassName = 'w-9 h-full flex items-center justify-center transition-colors';
+  const controlClassName = isMinimalLayout
+    ? `${controlBaseClassName} text-ide-unified-chrome-fg/80 hover:text-ide-unified-chrome-fg hover:bg-ide-unified-chrome-hover`
+    : `${controlBaseClassName} text-ide-text-muted hover:text-ide-text hover:bg-ide-hover`;
+  const closeControlClassName = isMinimalLayout
+    ? `${controlBaseClassName} text-ide-unified-chrome-fg/80 hover:text-primary-foreground hover:bg-ide-close`
+    : `${controlBaseClassName} text-ide-text-muted hover:text-primary-foreground hover:bg-ide-close`;
+
   return (
     <>
       <button
         data-testid="window-control-minimize"
-        className="w-9 h-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+        className={controlClassName}
         style={interactiveStyle}
         onClick={() => window.electronAPI?.minimize()}
       >
@@ -22,7 +33,7 @@ export function MenuBarWindowControls({
       </button>
       <button
         data-testid="window-control-maximize"
-        className="w-9 h-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+        className={controlClassName}
         style={interactiveStyle}
         onClick={() => window.electronAPI?.maximize()}
       >
@@ -30,7 +41,7 @@ export function MenuBarWindowControls({
       </button>
       <button
         data-testid="window-control-close"
-        className="w-9 h-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-destructive/80 transition-colors"
+        className={closeControlClassName}
         style={interactiveStyle}
         onClick={onRequestClose}
       >

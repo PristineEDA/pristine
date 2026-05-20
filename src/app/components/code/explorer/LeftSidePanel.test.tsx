@@ -116,18 +116,28 @@ describe('LeftSidePanel', () => {
   it('renders only explorer and outline tabs', async () => {
     renderLeftSidePanel();
 
+    const header = screen.getByTestId('left-panel-header');
+
     expect(screen.getByTestId('left-panel-tabs')).toBeInTheDocument();
-    expect(screen.getByTestId('left-panel-header').className).not.toMatch(/\bbg-/);
-    expect(screen.getByTestId('left-panel-header')).toHaveClass('border-b', 'border-border');
+    expect(header.className).not.toMatch(/\bbg-/);
+    expect(header).not.toHaveClass('border');
+    expect(header).not.toHaveClass('border-ide-border');
+    expect(header).not.toHaveClass('border-b');
     expect(screen.getByRole('radio', { name: 'Explorer' })).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: 'Outline' })).toBeInTheDocument();
     expectCompactTabButton('left-panel-tab-explorer');
     expectCompactTabButton('left-panel-tab-outline');
+    expect(screen.getByTestId('left-panel-split-toggle')).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByTestId('left-panel-split-toggle')).toHaveClass('size-6', 'text-ide-text-muted');
+    expect(screen.getByTestId('left-panel-split-toggle').parentElement).toHaveClass('ml-auto');
+    expect(screen.getByTestId('left-panel-primary-panel')).not.toHaveClass('rounded-md', 'border', 'border-ide-border');
+    expect(screen.getByTestId('left-panel-explorer-content')).toHaveClass('min-h-0', 'flex-1', 'overflow-hidden');
+    expect(screen.queryByTestId('left-panel-secondary-panel')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Explorer' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Outline' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /problems/i })).not.toBeInTheDocument();
     expect(await screen.findByTestId('file-tree-node-rtl')).toBeInTheDocument();
-    expect(screen.getByTestId('left-panel-header')).not.toHaveTextContent('retroSoC');
+    expect(header).not.toHaveTextContent('retroSoC');
     expect(screen.getByTestId('file-tree-node-root')).toHaveTextContent('retroSoC');
   });
 
@@ -139,10 +149,94 @@ describe('LeftSidePanel', () => {
     expect(header).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
     expect(header).toHaveClass('m-1.5', 'mb-0', 'rounded', 'px-2', 'py-1.5');
     expect(header).not.toHaveClass('border');
-    expect(header).not.toHaveClass('border-border');
+    expect(header).not.toHaveClass('border-ide-border');
     expect(header).not.toHaveClass('border-b');
     expectCompactTabButton('left-panel-tab-explorer');
     expectCompactTabButton('left-panel-tab-outline');
+  });
+
+  it('defaults the lower stacked panel hidden and toggles two independent panel frames', async () => {
+    renderLeftSidePanel();
+
+    const splitToggle = screen.getByTestId('left-panel-split-toggle');
+
+    expect(splitToggle).toHaveAttribute('aria-label', 'Show lower explorer panel');
+    expect(splitToggle).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.queryByTestId('left-panel-split-group')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('panel-left-panel-primary')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('panel-left-panel-secondary')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('left-panel-secondary-panel')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('left-panel-split-resize-handle')).not.toBeInTheDocument();
+
+    await testUser.click(splitToggle);
+
+    const expandedSplitToggle = screen.getByTestId('left-panel-split-toggle');
+    expect(expandedSplitToggle).toHaveAttribute('aria-label', 'Hide lower explorer panel');
+    expect(expandedSplitToggle).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('left-panel-split-group')).toHaveAttribute('aria-orientation', 'vertical');
+    expect(screen.getByTestId('left-panel-split-group')).toHaveClass('flex-1', 'min-h-0');
+    expect(screen.getByTestId('panel-left-panel-primary')).toHaveAttribute('aria-hidden', 'false');
+    expect(screen.getByTestId('panel-left-panel-primary').style.transitionDuration).toBe('300ms');
+    expect(screen.getByTestId('panel-left-panel-primary').style.transitionProperty).toBe('flex-basis');
+
+    await waitFor(() => expect(screen.getByTestId('panel-left-panel-secondary')).toHaveAttribute('aria-hidden', 'false'));
+
+    expect(screen.getByTestId('left-panel-explorer-content').parentElement).toHaveClass('flex', 'min-h-0', 'flex-1', 'flex-col', 'overflow-hidden');
+    expect(screen.getByTestId('panel-left-panel-secondary').style.transitionDuration).toBe('300ms');
+    expect(screen.getByTestId('panel-left-panel-secondary').style.transitionProperty).toBe('flex-basis');
+    expect(screen.getByTestId('left-panel-secondary-panel')).toHaveStyle({ opacity: '1' });
+    expect(screen.getByTestId('left-panel-root')).toHaveClass('bg-ide-bg');
+    expect(screen.getByTestId('left-panel-primary-panel')).not.toHaveClass('rounded-md', 'border', 'border-ide-border');
+    expect(screen.getByTestId('left-panel-secondary-panel')).not.toHaveClass('rounded-md', 'border', 'border-ide-border');
+    expect(screen.getByTestId('left-panel-primary-panel')).toHaveClass('bg-ide-bg');
+    expect(screen.getByTestId('left-panel-secondary-panel')).toHaveClass('bg-ide-bg');
+    expect(screen.getByTestId('left-panel-secondary-header')).toHaveAttribute('data-code-viewer-layout-mode', 'compact');
+    expect(screen.getByTestId('left-panel-secondary-header')).toHaveTextContent('Structure');
+    expect(screen.getByTestId('left-panel-secondary-placeholder')).toHaveTextContent('Structure is empty');
+    expect(screen.getByTestId('left-panel-split-resize-handle')).toHaveAttribute('aria-orientation', 'horizontal');
+
+    await testUser.click(expandedSplitToggle);
+
+    const collapsedSplitToggle = screen.getByTestId('left-panel-split-toggle');
+    expect(collapsedSplitToggle).toHaveAttribute('aria-label', 'Show lower explorer panel');
+    expect(collapsedSplitToggle).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByTestId('left-panel-split-group')).toBeInTheDocument();
+    expect(screen.getByTestId('panel-left-panel-primary')).toHaveAttribute('aria-hidden', 'false');
+    expect(screen.getByTestId('panel-left-panel-secondary')).toHaveAttribute('aria-hidden', 'true');
+    expect(screen.getByTestId('left-panel-secondary-panel')).toHaveStyle({ opacity: '0' });
+    expect(screen.queryByTestId('left-panel-split-resize-handle')).not.toBeInTheDocument();
+
+    await waitFor(() => expect(screen.queryByTestId('left-panel-split-group')).not.toBeInTheDocument(), {
+      timeout: 1000,
+    });
+
+    expect(screen.queryByTestId('panel-left-panel-primary')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('panel-left-panel-secondary')).not.toBeInTheDocument();
+    expect(screen.getByTestId('left-panel-primary-panel')).not.toHaveClass('rounded-md', 'border', 'border-ide-border');
+    expect(screen.queryByTestId('left-panel-secondary-panel')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('left-panel-split-resize-handle')).not.toBeInTheDocument();
+  });
+
+  it('keeps stacked explorer panels layout-aware in minimal mode', async () => {
+    renderLeftSidePanel({}, { layoutMode: 'minimal' });
+
+    await testUser.click(screen.getByTestId('left-panel-split-toggle'));
+    await waitFor(() => expect(screen.getByTestId('panel-left-panel-secondary')).toHaveAttribute('aria-hidden', 'false'));
+
+    const primaryPanel = screen.getByTestId('left-panel-primary-panel');
+    const secondaryPanel = screen.getByTestId('left-panel-secondary-panel');
+    const secondaryHeader = screen.getByTestId('left-panel-secondary-header');
+    const resizeHandle = screen.getByTestId('left-panel-split-resize-handle');
+
+    expect(screen.getByTestId('left-panel-root')).not.toHaveClass('bg-ide-bg');
+    expect(primaryPanel).toHaveClass('rounded-md', 'border', 'border-ide-border', 'bg-ide-bg');
+    expect(secondaryPanel).toHaveClass('rounded-md', 'border', 'border-ide-border', 'bg-ide-bg');
+    expect(secondaryHeader).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
+    expect(secondaryHeader).toHaveClass('m-1.5', 'mb-0', 'rounded', 'px-2', 'py-1.5');
+    expect(secondaryHeader).not.toHaveClass('border');
+    expect(secondaryHeader).not.toHaveClass('border-ide-border');
+    expect(secondaryHeader).not.toHaveClass('border-b');
+    expect(resizeHandle).toHaveClass('overlay-handle', 'rounded-full', 'bg-transparent');
   });
 
   it('does not render the legacy explorer toolbar buttons', async () => {
@@ -190,12 +284,12 @@ describe('LeftSidePanel', () => {
 
     await testUser.click(folderNode);
 
-    expect(screen.getByTestId('file-tree-node-rtl').className).toContain('bg-primary/20');
-    expect(screen.getByTestId('file-tree-node-rtl').className).toContain('hover:bg-primary/20');
+    expect(screen.getByTestId('file-tree-node-rtl').className).toContain('bg-ide-selection');
+    expect(screen.getByTestId('file-tree-node-rtl').className).toContain('hover:bg-ide-selection');
 
     fireEvent.mouseLeave(screen.getByTestId('file-tree-node-rtl'));
 
-    expect(screen.getByTestId('file-tree-node-rtl').className).toContain('bg-primary/20');
+    expect(screen.getByTestId('file-tree-node-rtl').className).toContain('bg-ide-selection');
   });
 
   it('moves the persistent highlight from folders to files so only one explorer row stays highlighted', async () => {
@@ -209,14 +303,14 @@ describe('LeftSidePanel', () => {
     const folderNode = screen.getByTestId('file-tree-node-rtl_peripherals');
     const fileNode = await screen.findByTestId('file-tree-node-rtl_peripherals_uart_rx_v');
 
-    expect(folderNode.className).toContain('bg-primary/20');
-    expect(fileNode.className).not.toContain('hover:bg-primary/20');
+    expect(folderNode.className).toContain('bg-ide-selection');
+    expect(fileNode.className).not.toContain('hover:bg-ide-selection');
 
     await testUser.click(fileNode);
 
-    expect(screen.getByTestId('file-tree-node-rtl_peripherals').className).not.toContain('hover:bg-primary/20');
-    expect(screen.getByTestId('file-tree-node-rtl_peripherals_uart_rx_v').className).toContain('bg-primary/20');
-    expect(screen.getByTestId('file-tree-node-rtl_peripherals_uart_rx_v').className).toContain('hover:bg-primary/20');
+    expect(screen.getByTestId('file-tree-node-rtl_peripherals').className).not.toContain('hover:bg-ide-selection');
+    expect(screen.getByTestId('file-tree-node-rtl_peripherals_uart_rx_v').className).toContain('bg-ide-selection');
+    expect(screen.getByTestId('file-tree-node-rtl_peripherals_uart_rx_v').className).toContain('hover:bg-ide-selection');
   });
 
   it('clears the selected folder highlight when another entry activates a file', async () => {
@@ -227,8 +321,8 @@ describe('LeftSidePanel', () => {
 
     await expandDefaultTree();
 
-    expect(screen.getByTestId('file-tree-node-rtl_peripherals').className).toContain('bg-primary/20');
-    expect((await screen.findByTestId('file-tree-node-rtl_peripherals_uart_rx_v')).className).not.toContain('hover:bg-primary/20');
+    expect(screen.getByTestId('file-tree-node-rtl_peripherals').className).toContain('bg-ide-selection');
+    expect((await screen.findByTestId('file-tree-node-rtl_peripherals_uart_rx_v')).className).not.toContain('hover:bg-ide-selection');
 
     rerender(
       <LeftSidePanel
@@ -249,7 +343,7 @@ describe('LeftSidePanel', () => {
       />,
     );
 
-    expect(screen.getByTestId('file-tree-node-rtl_peripherals').className).not.toContain('hover:bg-primary/20');
+    expect(screen.getByTestId('file-tree-node-rtl_peripherals').className).not.toContain('hover:bg-ide-selection');
   });
 
   it('allows the workspace root row to collapse and expand', async () => {
@@ -282,6 +376,7 @@ describe('LeftSidePanel', () => {
 
     const renameInput = await screen.findByTestId('file-tree-input-rtl_peripherals_uart_rx_v');
     expect(renameInput).toHaveAttribute('spellcheck', 'false');
+    expect(renameInput).toHaveClass('text-input-foreground');
     fireEvent.change(renameInput, { target: { value: 'uart_tx.v' } });
     fireEvent.keyDown(renameInput, { key: 'Enter' });
 

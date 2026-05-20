@@ -64,11 +64,11 @@ const DROP_ZONE_CLASS_NAMES: Record<EditorDropPosition, string> = {
 };
 
 const DROP_PREVIEW_CLASS_NAMES: Record<EditorDropPosition, string> = {
-  center: 'left-[20%] right-[20%] top-[20%] bottom-[20%] rounded-sm border border-muted-foreground/70 bg-primary/20',
-  left: 'left-1/2 top-3 bottom-3 w-px -translate-x-1/2 bg-muted-foreground/75',
-  right: 'right-1/2 top-3 bottom-3 w-px translate-x-1/2 bg-muted-foreground/75',
-  top: 'left-3 right-3 top-1/2 h-px -translate-y-1/2 bg-muted-foreground/75',
-  bottom: 'left-3 right-3 bottom-1/2 h-px translate-y-1/2 bg-muted-foreground/75',
+  center: 'left-[20%] right-[20%] top-[20%] bottom-[20%] rounded-sm border border-ide-text-muted/70 bg-ide-selection',
+  left: 'left-1/2 top-3 bottom-3 w-px -translate-x-1/2 bg-ide-text-muted/75',
+  right: 'right-1/2 top-3 bottom-3 w-px translate-x-1/2 bg-ide-text-muted/75',
+  top: 'left-3 right-3 top-1/2 h-px -translate-y-1/2 bg-ide-text-muted/75',
+  bottom: 'left-3 right-3 bottom-1/2 h-px translate-y-1/2 bg-ide-text-muted/75',
 };
 
 const FOCUSABLE_TARGET_SELECTOR = [
@@ -99,12 +99,12 @@ function ResizeHandle({ direction }: { direction: SplitDirection }) {
     <ResizableHandle
       className={`group relative flex items-center justify-center ${
         direction === 'horizontal' ? 'w-1 cursor-ew-resize' : 'h-1 cursor-ns-resize'
-      } bg-border hover:bg-primary transition-colors z-10`}
+      } bg-ide-border hover:bg-ide-accent transition-colors z-10`}
     >
       <div
         className={`${
           direction === 'horizontal' ? 'w-0.5 h-8' : 'h-0.5 w-8'
-        } bg-border group-hover:bg-primary rounded transition-colors`}
+        } bg-ide-border group-hover:bg-ide-accent rounded transition-colors`}
       />
     </ResizableHandle>
   );
@@ -139,7 +139,7 @@ function DropIndicator({ position }: { position: EditorDropPosition }) {
 
   return (
     <div className="pointer-events-none absolute inset-0 z-20">
-      <div className="absolute inset-2 rounded-sm border border-border/55 bg-primary/12 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.02)]" />
+      <div className="absolute inset-2 rounded-sm border border-ide-border/55 bg-ide-selection shadow-[inset_0_0_0_1px_var(--ide-border)]" />
       {orderedPositions.map((candidatePosition) => {
         const isActive = candidatePosition === position;
 
@@ -148,8 +148,8 @@ function DropIndicator({ position }: { position: EditorDropPosition }) {
             key={candidatePosition}
             className={`absolute rounded-sm border transition-all duration-150 ease-out ${DROP_ZONE_CLASS_NAMES[candidatePosition]} ${
               isActive
-                ? 'border-muted-foreground/65 bg-primary/30 opacity-100 scale-100'
-                : 'border-border/18 bg-border/8 opacity-0 scale-[0.985]'
+                ? 'border-ide-text-muted/65 bg-ide-selection opacity-100 scale-100'
+                : 'border-ide-border/20 bg-ide-border/10 opacity-0 scale-[0.985]'
             }`}
           />
         );
@@ -160,7 +160,7 @@ function DropIndicator({ position }: { position: EditorDropPosition }) {
           position === 'center' ? 'shadow-[0_0_0_1px_rgba(0,0,0,0.18)]' : 'shadow-[0_0_6px_rgba(204,204,204,0.16)]'
         }`}
       />
-      <div className="absolute bottom-3 right-3 rounded-sm border border-border/70 bg-popover/95 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground transition-all duration-150 ease-out">
+      <div className="absolute bottom-3 right-3 rounded-sm border border-ide-border/70 bg-popover/95 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-ide-text-muted transition-all duration-150 ease-out">
         {DROP_POSITION_LABELS[position]}
       </div>
     </div>

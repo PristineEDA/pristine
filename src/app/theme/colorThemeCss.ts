@@ -15,8 +15,29 @@ function pickThemeColor(theme: ResolvedColorTheme, ids: readonly string[], fallb
 export function getAppliedColorThemeVariables(theme: ResolvedColorTheme): Record<string, string> {
   const preview = getColorThemePreview(theme)
   const foreground = pickThemeColor(theme, ['foreground', 'editor.foreground'], preview.foreground)
+  const inputForeground = pickThemeColor(theme, ['input.foreground', 'editorWidget.foreground', 'foreground'], foreground)
+  const quickInputForeground = pickThemeColor(theme, ['quickInput.foreground', 'input.foreground', 'foreground'], inputForeground)
   const border = pickThemeColor(theme, ['panel.border', 'sideBar.border', 'input.border'], `${preview.comment}55`)
   const accent = pickThemeColor(theme, ['button.background', 'focusBorder', 'list.highlightForeground'], preview.cyan)
+  const statusBarBackground = pickThemeColor(theme, ['statusBar.background', 'statusBar.noFolderBackground'], preview.surface)
+  const statusBarForeground = pickThemeColor(theme, ['statusBar.foreground', 'statusBar.noFolderForeground', 'foreground'], foreground)
+  const statusBarBorder = pickThemeColor(theme, ['statusBar.border', 'panel.border', 'sideBar.border'], border)
+  const statusBarHover = pickThemeColor(theme, ['statusBarItem.hoverBackground', 'toolbar.hoverBackground'], preview.selection)
+  const unifiedChromeBackground = pickThemeColor(theme, [
+    'statusBar.background',
+    'statusBar.noFolderBackground',
+    'titleBar.activeBackground',
+    'activityBar.background',
+    'panel.background',
+  ], statusBarBackground)
+  const unifiedChromeForeground = pickThemeColor(theme, [
+    'statusBar.foreground',
+    'statusBar.noFolderForeground',
+    'titleBar.activeForeground',
+    'activityBar.foreground',
+    'foreground',
+  ], statusBarForeground)
+  const unifiedChromeHover = pickThemeColor(theme, ['statusBarItem.hoverBackground', 'toolbar.hoverBackground', 'list.hoverBackground'], statusBarHover)
 
   return {
     '--background': pickThemeColor(theme, ['editor.background', 'panel.background'], preview.background),
@@ -38,6 +59,8 @@ export function getAppliedColorThemeVariables(theme: ResolvedColorTheme): Record
     '--border': border,
     '--input': border,
     '--input-background': pickThemeColor(theme, ['input.background', 'quickInput.background'], preview.input),
+    '--input-foreground': inputForeground,
+    '--quick-input-foreground': quickInputForeground,
     '--switch-background': pickThemeColor(theme, ['checkbox.background', 'input.background'], preview.surface),
     '--ring': pickThemeColor(theme, ['focusBorder', 'button.background'], accent),
     '--sidebar': pickThemeColor(theme, ['sideBar.background'], preview.surface),
@@ -73,7 +96,14 @@ export function getAppliedColorThemeVariables(theme: ResolvedColorTheme): Record
     '--ide-accent-dark': pickThemeColor(theme, ['button.hoverBackground', 'statusBar.debuggingBackground'], accent),
     '--ide-accent-vivid': pickThemeColor(theme, ['focusBorder', 'button.background'], accent),
     '--ide-accent-hover': pickThemeColor(theme, ['button.hoverBackground', 'statusBarItem.hoverBackground'], accent),
-    '--ide-status-hover': pickThemeColor(theme, ['statusBarItem.hoverBackground', 'toolbar.hoverBackground'], preview.selection),
+    '--ide-status-hover': statusBarHover,
+    '--ide-statusbar-bg': statusBarBackground,
+    '--ide-statusbar-fg': statusBarForeground,
+    '--ide-statusbar-border': statusBarBorder,
+    '--ide-statusbar-hover': statusBarHover,
+    '--ide-unified-chrome-bg': unifiedChromeBackground,
+    '--ide-unified-chrome-fg': unifiedChromeForeground,
+    '--ide-unified-chrome-hover': unifiedChromeHover,
     '--ide-error': pickThemeColor(theme, ['errorForeground', 'editorError.foreground'], preview.red),
     '--ide-warning': pickThemeColor(theme, ['list.warningForeground', 'notificationsWarningIcon.foreground', 'editorWarning.foreground'], preview.orange),
     '--ide-info': pickThemeColor(theme, ['textLink.foreground', 'list.highlightForeground', 'editorLink.activeForeground'], preview.cyan),

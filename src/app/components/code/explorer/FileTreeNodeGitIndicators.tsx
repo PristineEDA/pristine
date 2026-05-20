@@ -64,7 +64,7 @@ export function getExplorerGitLabelClassName(
     return getExplorerGitToneClassName(dominantState);
   }
 
-  return 'text-foreground';
+  return 'text-ide-text';
 }
 
 export function ExplorerGitIndicators({

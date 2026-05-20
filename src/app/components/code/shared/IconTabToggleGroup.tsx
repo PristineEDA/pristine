@@ -6,7 +6,7 @@ import { ToggleGroup, ToggleGroupItem } from '../../ui/toggle-group';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../../ui/tooltip';
 import { centerViewSwitchItemClassName } from './viewSwitcherStyles';
 
-const iconTabToggleGroupClassName = 'rounded bg-muted p-0.5 gap-0.5';
+const iconTabToggleGroupClassName = 'rounded bg-ide-hover p-0.5 gap-0.5';
 const iconTabToggleItemClassName = `${centerViewSwitchItemClassName} h-8 w-8 rounded-md`;
 
 export const compactIconTabToggleItemClassName = 'h-7 w-7 rounded-md';

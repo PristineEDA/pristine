@@ -53,7 +53,7 @@ export function FileTreeNodeEditBranch({
         onSubmit={() => onSubmitEdit?.()}
       />
       {node.type === 'folder' && isExpanded && node.isLoading && (
-        <div className="text-[12px] text-muted-foreground pl-8 py-1">
+        <div className="text-[12px] text-ide-text-muted pl-8 py-1">
           Loading...
         </div>
       )}

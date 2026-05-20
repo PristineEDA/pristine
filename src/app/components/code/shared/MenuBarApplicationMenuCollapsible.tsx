@@ -2,6 +2,7 @@ import { useState, type CSSProperties } from 'react';
 import { Menu } from 'lucide-react';
 import type { AppMenuAction } from '../../../menu/applicationMenu';
 import { cn } from '@/lib/utils';
+import { useCodeViewerLayout } from '../../../context/CodeViewerLayoutContext';
 import { Toggle } from '../../ui/toggle';
 import { MenuBarApplicationMenu } from './MenuBarApplicationMenu';
 
@@ -19,9 +20,14 @@ export function MenuBarApplicationMenuCollapsible({
   const [locked, setLocked] = useState(false);
   const [hoverExpanded, setHoverExpanded] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const { layoutMode } = useCodeViewerLayout();
   const expanded = locked || hoverExpanded || menuOpen;
   const handleHoverEnter = () => setHoverExpanded(true);
   const handleHoverLeave = () => setHoverExpanded(false);
+  const isMinimalLayout = layoutMode === 'minimal';
+  const toggleClassName = isMinimalLayout
+    ? 'h-full w-8 rounded-none border-0 text-ide-unified-chrome-fg/80 data-[state=on]:bg-ide-unified-chrome-hover data-[state=on]:text-ide-unified-chrome-fg hover:cursor-pointer hover:bg-ide-unified-chrome-hover hover:text-ide-unified-chrome-fg'
+    : 'h-full w-8 rounded-none border-0 text-ide-text-muted data-[state=on]:bg-ide-hover data-[state=on]:text-ide-text hover:cursor-pointer hover:bg-ide-hover hover:text-ide-text';
 
   return (
     <div
@@ -39,7 +45,7 @@ export function MenuBarApplicationMenuCollapsible({
         aria-label={locked ? 'Unlock application menu' : 'Lock application menu'}
         data-testid="menu-menubar-toggle"
         pressed={locked}
-        className="h-full w-8 rounded-none border-0 text-muted-foreground data-[state=on]:bg-accent data-[state=on]:text-foreground hover:cursor-pointer hover:bg-accent hover:text-foreground"
+        className={toggleClassName}
         onMouseEnter={handleHoverEnter}
         onPointerEnter={handleHoverEnter}
         onPressedChange={setLocked}

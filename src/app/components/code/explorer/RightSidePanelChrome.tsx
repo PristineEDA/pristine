@@ -1,8 +1,10 @@
 import {
-  FolderCodeIcon,
+  BetweenHorizontalStart,
   ListTree,
   PanelBottomClose,
   PanelBottomOpen,
+  ShieldCheck,
+  Sparkles,
 } from 'lucide-react';
 import { useCodeViewerLayout } from '../../../context/CodeViewerLayoutContext';
 import { Button } from '../../ui/button';
@@ -14,22 +16,24 @@ import {
 } from '../shared/IconTabToggleGroup';
 import { getPanelHeaderClassName } from '../shared/codeViewerLayoutStyles';
 
-export type ExplorerPanelTab = 'explorer' | 'outline';
+export type RightSidePanelTab = 'ai' | 'static' | 'references' | 'outline';
 
-const explorerPanelTabs = [
-  { value: 'explorer', label: 'Explorer', icon: FolderCodeIcon, testId: 'left-panel-tab-explorer' },
-  { value: 'outline', label: 'Outline', icon: ListTree, testId: 'left-panel-tab-outline' },
+const rightPanelTabs = [
+  { value: 'ai', label: 'AI Assistant', icon: Sparkles, testId: 'right-panel-tab-ai' },
+  { value: 'static', label: 'Static Check', icon: ShieldCheck, testId: 'right-panel-tab-static' },
+  { value: 'references', label: 'References', icon: BetweenHorizontalStart, testId: 'right-panel-tab-references' },
+  { value: 'outline', label: 'Outline', icon: ListTree, testId: 'right-panel-tab-outline' },
 ] as const;
 
-export function ExplorerPanelTabs({
+export function RightPanelTabs({
   activeTab,
   isSplitPanelVisible,
   onTabChange,
   onToggleSplitPanel,
 }: {
-  activeTab: ExplorerPanelTab;
+  activeTab: RightSidePanelTab;
   isSplitPanelVisible: boolean;
-  onTabChange: (tab: ExplorerPanelTab) => void;
+  onTabChange: (tab: RightSidePanelTab) => void;
   onToggleSplitPanel: () => void;
 }) {
   const { layoutMode } = useCodeViewerLayout();
@@ -37,16 +41,16 @@ export function ExplorerPanelTabs({
 
   return (
     <div
-      data-testid="left-panel-header"
+      data-testid="right-panel-header"
       data-code-viewer-layout-mode={layoutMode}
       className={getPanelHeaderClassName(layoutMode)}
     >
       <IconTabToggleGroup
-        items={explorerPanelTabs}
+        items={rightPanelTabs}
         value={activeTab}
-        onValueChange={(tab) => onTabChange(tab as ExplorerPanelTab)}
-        groupLabel="Left panel tabs"
-        groupTestId="left-panel-tabs"
+        onValueChange={(nextValue) => onTabChange(nextValue as RightSidePanelTab)}
+        groupLabel="Right panel tabs"
+        groupTestId="right-panel-tabs"
         tooltipSide="bottom"
         itemClassName={compactIconTabToggleItemClassName}
         iconSize={compactIconTabToggleIconSize}
@@ -58,9 +62,9 @@ export function ExplorerPanelTabs({
             type="button"
             variant="ghost"
             size="icon-xs"
-            aria-label={isSplitPanelVisible ? 'Hide lower explorer panel' : 'Show lower explorer panel'}
+            aria-label={isSplitPanelVisible ? 'Hide lower right panel' : 'Show lower right panel'}
             aria-pressed={isSplitPanelVisible}
-            data-testid="left-panel-split-toggle"
+            data-testid="right-panel-split-toggle"
             className="text-ide-text-muted hover:text-ide-text"
             onClick={onToggleSplitPanel}
           >

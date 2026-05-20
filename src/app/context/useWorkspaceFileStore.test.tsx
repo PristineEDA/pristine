@@ -242,4 +242,111 @@ describe('useWorkspaceFileStore', () => {
     expect(result.current.saveErrors['rtl/fail.v']).toBe('Disk full');
     expect(result.current.savingFiles['rtl/fail.v']).toBe(false);
   });
+
+  it('renames cached file state for individual files and workspace folder prefixes', async () => {
+    vi.mocked(window.electronAPI!.fs.writeFile).mockRejectedValueOnce(new Error('Save failed'));
+
+    const { result } = renderHook(() => useWorkspaceFileStore());
+
+    act(() => {
+      result.current.initializeFile('rtl/core/alu.v', 'module alu; endmodule');
+      result.current.updateFileContent('rtl/core/alu.v', 'module alu; logic dirty; endmodule');
+      result.current.initializeFile('rtl/peripherals/uart.v', 'module uart; endmodule');
+    });
+
+    await act(async () => {
+      await result.current.saveFileContent('rtl/core/alu.v');
+    });
+
+    expect(result.current.saveErrors['rtl/core/alu.v']).toBe('Save failed');
+
+    act(() => {
+      result.current.renameFileState('rtl/core/alu.v', 'rtl/core/alu_renamed.v');
+    });
+
+    expect(result.current.fileContents['rtl/core/alu.v']).toBeUndefined();
+    expect(result.current.fileContents['rtl/core/alu_renamed.v']).toBe('module alu; logic dirty; endmodule');
+    expect(result.current.saveErrors['rtl/core/alu.v']).toBeUndefined();
+    expect(result.current.saveErrors['rtl/core/alu_renamed.v']).toBe('Save failed');
+    expect(result.current.dirtyFiles['rtl/core/alu_renamed.v']).toBe(true);
+
+    act(() => {
+      result.current.renameWorkspacePaths('rtl/core', 'rtl/lib');
+    });
+
+    expect(result.current.fileContents['rtl/core/alu_renamed.v']).toBeUndefined();
+    expect(result.current.fileContents['rtl/lib/alu_renamed.v']).toBe('module alu; logic dirty; endmodule');
+    expect(result.current.fileContents['rtl/peripherals/uart.v']).toBe('module uart; endmodule');
+    expect(result.current.saveErrors['rtl/lib/alu_renamed.v']).toBe('Save failed');
+  });
+
+  it('adopts state into a new file and removes the source when requested', () => {
+    const { result } = renderHook(() => useWorkspaceFileStore());
+
+    act(() => {
+      result.current.initializeFile('untitled:1', 'draft saved');
+      result.current.updateFileContent('untitled:1', 'draft dirty');
+      result.current.adoptFileState('untitled:1', 'rtl/new_file.v', {
+        content: 'module new_file; endmodule',
+        removeSource: true,
+        savedContent: '',
+      });
+    });
+
+    expect(result.current.fileContents['untitled:1']).toBeUndefined();
+    expect(result.current.fileContents['rtl/new_file.v']).toBe('module new_file; endmodule');
+    expect(result.current.loadingFiles['rtl/new_file.v']).toBe(false);
+    expect(result.current.savingFiles['rtl/new_file.v']).toBe(false);
+    expect(result.current.dirtyFiles['rtl/new_file.v']).toBe(true);
+  });
+
+  it('removes all cached state for a file', async () => {
+    vi.mocked(window.electronAPI!.fs.writeFile).mockRejectedValueOnce(new Error('Disk full'));
+
+    const { result } = renderHook(() => useWorkspaceFileStore());
+
+    act(() => {
+      result.current.initializeFile('rtl/remove_me.v', 'module remove_me; endmodule');
+      result.current.updateFileContent('rtl/remove_me.v', 'module remove_me; logic dirty; endmodule');
+    });
+
+    await act(async () => {
+      await result.current.saveFileContent('rtl/remove_me.v');
+    });
+
+    expect(result.current.saveErrors['rtl/remove_me.v']).toBe('Disk full');
+
+    act(() => {
+      result.current.removeFile('rtl/remove_me.v');
+    });
+
+    expect(result.current.fileContents['rtl/remove_me.v']).toBeUndefined();
+    expect(result.current.saveErrors['rtl/remove_me.v']).toBeUndefined();
+    expect(result.current.savingFiles['rtl/remove_me.v']).toBeUndefined();
+    expect(result.current.dirtyFiles['rtl/remove_me.v']).toBeUndefined();
+  });
+
+  it('uses the absolute filesystem writer when saving to an absolute target path', async () => {
+    vi.mocked(window.electronAPI!.fs.writeFileAbsolute).mockResolvedValueOnce(undefined);
+
+    const { result } = renderHook(() => useWorkspaceFileStore());
+    const targetPath = 'C:\\Users\\maksy\\Desktop\\generated.v';
+
+    act(() => {
+      result.current.initializeFile('rtl/generated.v', 'module generated; endmodule', '');
+    });
+
+    await act(async () => {
+      await result.current.saveFileContent('rtl/generated.v', {
+        absolute: true,
+        targetPath,
+      });
+    });
+
+    expect(window.electronAPI?.fs.writeFileAbsolute).toHaveBeenCalledWith(targetPath, 'module generated; endmodule');
+    expect(window.electronAPI?.fs.writeFile).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(window.electronAPI?.git.getStatus).toHaveBeenCalledTimes(1);
+    });
+  });
 });

@@ -14,13 +14,13 @@ export function OutlinePanel({
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
       <div className="px-3 py-1.5 shrink-0">
-        <span className="text-muted-foreground uppercase text-[11px] font-bold tracking-wide">
+        <span className="text-ide-text-muted uppercase text-[11px] font-bold tracking-wide">
           OUTLINE - {currentOutlineId || 'No file open'}
         </span>
       </div>
       <ScrollArea className="flex-1">
         {outline.length === 0 ? (
-          <div className="px-4 py-3 text-muted-foreground text-[12px]">
+          <div className="px-4 py-3 text-ide-text-muted text-[12px]">
             No outline information available
           </div>
         ) : (

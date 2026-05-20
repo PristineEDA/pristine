@@ -39,7 +39,7 @@ describe('NavDesignSwitcher', () => {
 
     expect(screen.getByRole('button')).toHaveTextContent('retroSoC');
     expect(screen.getByRole('button')).toHaveTextContent('SoC');
-    expect(logoBadge).toHaveClass('bg-sidebar-primary', 'dark:bg-sidebar-primary-foreground', 'dark:text-sidebar');
+    expect(logoBadge).toHaveClass('bg-ide-accent', 'text-primary-foreground');
   });
 
   it('opens the designs menu and updates the active design after selection', async () => {

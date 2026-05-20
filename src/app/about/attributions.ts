@@ -306,6 +306,13 @@ export const openSourceAttributionSections: AttributionSection[] = [
         license: 'MIT',
       },
       {
+        id: 'liveline',
+        name: 'Liveline',
+        url: 'https://github.com/benjitaylor/liveline',
+        author: 'Benji Taylor',
+        license: 'MIT',
+      },
+      {
         id: 'react-shiki',
         name: 'react-shiki',
         url: 'https://github.com/AVGVSTVS96/react-shiki',

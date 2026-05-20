@@ -29,8 +29,10 @@ const WORKBENCH_SPLASH_BACKGROUND_COLOR_CONFIG_KEY = 'workbench.splashBackground
 const WORKBENCH_STARTUP_BACKGROUND_COLOR_CONFIG_KEY = 'workbench.startupBackgroundColor';
 const AUTH_CALLBACK_PROTOCOL = 'pristine';
 const FLOATING_INFO_WINDOW_TITLE = 'Pristine Floating Info';
-const FLOATING_INFO_WINDOW_WIDTH = 60;
-const FLOATING_INFO_WINDOW_HEIGHT = 24;
+const FLOATING_INFO_COLLAPSED_WIDTH = 60;
+const FLOATING_INFO_COLLAPSED_HEIGHT = 24;
+const FLOATING_INFO_EXPANDED_WIDTH = 220;
+const FLOATING_INFO_EXPANDED_HEIGHT = 96;
 const DEFAULT_STARTUP_BACKGROUND_COLOR = '#121314';
 const DEFAULT_SPLASH_BACKGROUND_COLOR = '#191A1B';
 const DEFAULT_FLOATING_INFO_BACKGROUND_COLOR = '#121314';
@@ -40,6 +42,7 @@ type ThemeKind = 'light' | 'dark';
 let mainWindow: BrowserWindow | null = null;
 let splashWindow: BrowserWindow | null = null;
 let floatingInfoWindow: BrowserWindow | null = null;
+let floatingInfoWindowExpanded = false;
 let tray: Tray | null = null;
 let isQuitting = false;
 let nextWindowCloseRequestId = 1;
@@ -312,13 +315,22 @@ function shouldShowFloatingInfoWindow(): boolean {
   return getConfigValue(FLOATING_INFO_VISIBLE_CONFIG_KEY) === true;
 }
 
-function getFloatingInfoWindowPosition() {
+function getFloatingInfoWindowBounds(expanded: boolean) {
   const { workArea } = screen.getPrimaryDisplay();
+  const width = expanded ? FLOATING_INFO_EXPANDED_WIDTH : FLOATING_INFO_COLLAPSED_WIDTH;
+  const height = expanded ? FLOATING_INFO_EXPANDED_HEIGHT : FLOATING_INFO_COLLAPSED_HEIGHT;
 
   return {
-    x: workArea.x + workArea.width - FLOATING_INFO_WINDOW_WIDTH - 24,
+    width,
+    height,
+    x: workArea.x + workArea.width - width - 24,
     y: workArea.y + 24,
   };
+}
+
+function applyFloatingInfoWindowBounds(window: BrowserWindow, expanded: boolean): void {
+  const bounds = getFloatingInfoWindowBounds(expanded);
+  window.setBounds(bounds, false);
 }
 
 function createFloatingInfoWindow(): BrowserWindow {
@@ -326,20 +338,21 @@ function createFloatingInfoWindow(): BrowserWindow {
     return floatingInfoWindow;
   }
 
-  const { x, y } = getFloatingInfoWindowPosition();
+  const bounds = getFloatingInfoWindowBounds(floatingInfoWindowExpanded);
+  const preloadFile = getPreloadPath();
   const backgroundColor = getConfiguredWindowBackgroundColor(
     WORKBENCH_FLOATING_INFO_BACKGROUND_COLOR_CONFIG_KEY,
     DEFAULT_FLOATING_INFO_BACKGROUND_COLOR,
   );
   const window = new BrowserWindow({
-    width: FLOATING_INFO_WINDOW_WIDTH,
-    height: FLOATING_INFO_WINDOW_HEIGHT,
-    minWidth: FLOATING_INFO_WINDOW_WIDTH,
-    maxWidth: FLOATING_INFO_WINDOW_WIDTH,
-    minHeight: FLOATING_INFO_WINDOW_HEIGHT,
-    maxHeight: FLOATING_INFO_WINDOW_HEIGHT,
-    x,
-    y,
+    width: bounds.width,
+    height: bounds.height,
+    minWidth: FLOATING_INFO_COLLAPSED_WIDTH,
+    minHeight: FLOATING_INFO_COLLAPSED_HEIGHT,
+    maxWidth: FLOATING_INFO_EXPANDED_WIDTH,
+    maxHeight: FLOATING_INFO_EXPANDED_HEIGHT,
+    x: bounds.x,
+    y: bounds.y,
     frame: false,
     resizable: false,
     minimizable: false,
@@ -355,6 +368,7 @@ function createFloatingInfoWindow(): BrowserWindow {
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: true,
+      preload: preloadFile,
       webSecurity: true,
     },
   });
@@ -381,6 +395,7 @@ function createFloatingInfoWindow(): BrowserWindow {
 function setFloatingInfoWindowVisible(visible: boolean): boolean {
   if (visible) {
     const window = createFloatingInfoWindow();
+    applyFloatingInfoWindowBounds(window, floatingInfoWindowExpanded);
     window.show();
     return true;
   }
@@ -390,6 +405,17 @@ function setFloatingInfoWindowVisible(visible: boolean): boolean {
   }
 
   floatingInfoWindow.hide();
+  return true;
+}
+
+function setFloatingInfoWindowExpanded(expanded: boolean): boolean {
+  floatingInfoWindowExpanded = expanded;
+
+  if (!floatingInfoWindow || floatingInfoWindow.isDestroyed()) {
+    return false;
+  }
+
+  applyFloatingInfoWindowBounds(floatingInfoWindow, expanded);
   return true;
 }
 
@@ -626,7 +652,7 @@ if (!singleInstanceLock) {
   });
 
   // Register all IPC handlers before window creation
-  registerAllHandlers(getMainWindow, setFloatingInfoWindowVisible, resolveWindowCloseRequest);
+  registerAllHandlers(getMainWindow, setFloatingInfoWindowVisible, setFloatingInfoWindowExpanded, resolveWindowCloseRequest);
 
   app.whenReady().then(() => {
     installApplicationMenu();

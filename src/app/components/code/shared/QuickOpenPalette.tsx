@@ -38,6 +38,10 @@ interface QuickOpenResultRowProps {
 }
 
 const EMPTY_MATCHED_CHARACTER_INDEXES = new Set<number>();
+const quickOpenInputStyle = {
+  color: 'var(--quick-input-foreground)',
+  WebkitTextFillColor: 'var(--quick-input-foreground)',
+};
 
 function getDirectoryPath(filePath: string): string {
   const segments = filePath.split('/');
@@ -219,7 +223,8 @@ export function QuickOpenPalette({
             data-testid="quick-open-input"
             value={query}
             placeholder="Type the name of a file to open"
-            className="w-full bg-transparent text-[12px] text-foreground outline-none placeholder:text-muted-foreground"
+            className="w-full bg-transparent text-[12px] text-quick-input-foreground outline-none placeholder:text-muted-foreground"
+            style={quickOpenInputStyle}
             spellCheck={false}
             autoCorrect="off"
             autoCapitalize="off"

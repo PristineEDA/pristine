@@ -5,6 +5,7 @@ import type { WindowCloseDecision } from '../../src/app/window/windowClose.js';
 export function registerWindowHandlers(
   getMainWindow: () => BrowserWindow | null,
   setFloatingInfoWindowVisible: (visible: boolean) => boolean = () => false,
+  setFloatingInfoWindowExpanded: (expanded: boolean) => boolean = () => false,
   resolveCloseRequest: (requestId: number, decision: WindowCloseDecision) => boolean = () => false,
 ): void {
   ipcMain.on(SyncChannels.WINDOW_IS_MAXIMIZED, (event) => {
@@ -78,6 +79,14 @@ export function registerWindowHandlers(
     }
 
     return setFloatingInfoWindowVisible(visible);
+  });
+
+  ipcMain.handle(AsyncChannels.WINDOW_SET_FLOATING_INFO_EXPANDED, async (_event, expanded: unknown) => {
+    if (typeof expanded !== 'boolean') {
+      throw new Error('Expected floating info expanded state to be boolean');
+    }
+
+    return setFloatingInfoWindowExpanded(expanded);
   });
 }
 

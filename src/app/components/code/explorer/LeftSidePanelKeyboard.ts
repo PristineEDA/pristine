@@ -5,6 +5,7 @@ import {
   type WorkspaceClipboardState,
   type WorkspaceEntryType,
 } from '../../../workspace/workspaceFiles';
+import { isMonacoTextInputElement } from '../../../editor/focusEditor';
 
 export type ExplorerKeyboardAction =
   | 'rename'
@@ -274,14 +275,7 @@ export function isEditableKeyboardTarget(target: EventTarget | null): boolean {
 }
 
 export function isMonacoTextInputKeyboardTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) {
-    return false;
-  }
-
-  return Boolean(
-    target.closest('.monaco-editor')
-    && target.closest('textarea.inputarea, .inputarea, .native-edit-context'),
-  );
+  return isMonacoTextInputElement(target);
 }
 
 export function isExplorerContextMenuTarget(target: EventTarget | null): boolean {

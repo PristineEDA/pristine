@@ -22,9 +22,9 @@ import { usePristineAgentRuntime } from './pristineThreadRuntime';
 const ACTIVE_THREAD_CONFIG_KEY = 'explorer.aiAssistant.activeThreadId';
 const THREAD_LIST_WIDTH_CONFIG_KEY = 'explorer.aiAssistant.threadListWidth';
 const THREAD_LIST_TOGGLE_CLASS_NAME = [
-  'h-7 w-8 rounded-none border-0 px-0 text-muted-foreground',
-  'data-[state=on]:text-foreground',
-  'hover:cursor-pointer hover:text-foreground hover:bg-accent',
+  'h-7 w-8 rounded-none border-0 px-0 text-ide-text-muted',
+  'data-[state=on]:text-ide-text',
+  'hover:cursor-pointer hover:text-ide-text hover:bg-ide-hover',
 ].join(' ');
 const THREAD_LIST_SIDECAR_TRANSITION_STYLE = {
   transitionDuration: `${PANEL_TRANSITION_DURATION_MS}ms`,
@@ -184,18 +184,18 @@ export function AIAgentPanel({
     <AssistantRuntimeProvider runtime={runtime}>
       <div
         data-testid="assistant-panel-root"
-        className="flex h-full min-h-0 min-w-0 text-foreground"
+        className="flex h-full min-h-0 min-w-0 bg-ide-bg text-ide-text"
       >
         <div className={[
           'flex min-w-0 flex-1 flex-col',
-          isThreadListExpanded ? 'border-r border-border' : '',
+          isThreadListExpanded ? 'border-r border-ide-border' : '',
         ].join(' ')} data-testid="assistant-main-panel">
           <div
             data-testid="assistant-panel-header"
-            className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-2"
+            className="flex shrink-0 items-center justify-between gap-2 border-b border-ide-border px-3 py-2"
           >
             <div className="flex min-w-0 items-center gap-2">
-              <div className="flex size-6 items-center justify-center rounded-md bg-primary/10 text-primary">
+              <div className="flex size-6 items-center justify-center rounded-md bg-ide-selection text-ide-accent">
                 <Server className="size-3.5" />
               </div>
             </div>
@@ -252,17 +252,17 @@ export function AIAgentPanel({
             }}
             onPointerUp={(event) => endResize(event.pointerId, event.currentTarget)}
             onPointerCancel={(event) => endResize(event.pointerId, event.currentTarget)}
-            className="group relative flex w-2 shrink-0 cursor-ew-resize items-center justify-center bg-border/40 transition-colors hover:bg-primary/20 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:pointer-events-none"
+            className="group relative flex w-2 shrink-0 cursor-ew-resize items-center justify-center bg-ide-border/40 transition-colors hover:bg-ide-selection focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ide-accent focus-visible:ring-offset-1 disabled:pointer-events-none"
           >
-            <GripVertical className="size-3 text-muted-foreground transition-colors group-hover:text-foreground" />
+            <GripVertical className="size-3 text-ide-text-muted transition-colors group-hover:text-ide-text" />
           </button>
           <aside
             data-testid="assistant-thread-list-panel"
             aria-hidden={isThreadListExpanded ? 'false' : 'true'}
             className="flex h-full min-w-0 flex-1 flex-col"
           >
-            <div className="flex shrink-0 items-center border-b border-border px-3 py-2">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+            <div className="flex shrink-0 items-center border-b border-ide-border px-3 py-2">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ide-text-muted">
                 Chats
               </span>
             </div>

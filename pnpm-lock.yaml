@@ -62,6 +62,9 @@ importers:
       lit:
         specifier: ^3.2.0
         version: 3.3.2
+      liveline:
+        specifier: ^0.0.7
+        version: 0.0.7(react@19.2.4)
       lucide-react:
         specifier: 0.487.0
         version: 0.487.0(react@19.2.4)
@@ -9591,6 +9594,12 @@ packages:
   lit@3.3.2:
     resolution: {integrity: sha512-NF9zbsP79l4ao2SNrH3NkfmFgN/hBYSQo90saIVI1o5GpjAdCPVstVzO1MrLOakHoEhYkrtRjPK6Ob521aoYWQ==}
 
+  liveline@0.0.7:
+    resolution: {integrity: sha512-S1Weo1kmefiOCNaW/WFXErqJXlV8A/ldIkIthaOeT57I2ZhqhKLKQDJ1wfabtMSK9vJeU8PeMNHd8Sr8TLByWQ==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      react: '>=18'
+
   local-pkg@1.1.2:
     resolution: {integrity: sha512-arhlxbFRmoQHl33a0Zkle/YWlmNwoyt6QNZEIJcqNbdrsix5Lvc4HyyI3EnwxTYlZYc32EbYrQ8SzEZ7dqgg9A==}
     engines: {node: '>=14'}
@@ -16922,6 +16931,10 @@ snapshots:
       '@lit/reactive-element': 2.1.2
       lit-element: 4.2.2
       lit-html: 3.3.2
+
+  liveline@0.0.7(react@19.2.4):
+    dependencies:
+      react: 19.2.4
 
   local-pkg@1.1.2:
     dependencies:

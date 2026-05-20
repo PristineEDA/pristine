@@ -2,6 +2,7 @@ import { fireEvent, render, screen, userEvent } from '@/test/render';
 import { describe, expect, it, vi } from 'vitest';
 import { FileIcon, FileTreeNode } from './FileTreeNode';
 import { createExplorerTreeContextMenuItems } from './FileTreeNodeContextMenu';
+import { WORKSPACE_ROOT_PATH } from '../../../workspace/workspaceFiles';
 
 function getContextMenuItem(label: string): HTMLElement {
   return screen.getByRole('menuitem', { name: label });
@@ -103,6 +104,32 @@ describe('FileTreeNode', () => {
     expect(screen.getByTestId('file-tree-node-rtl_uart_tx_v')).toBeInTheDocument();
   });
 
+  it('uses the smaller root ring icon size while keeping regular folders unchanged', () => {
+    render(
+      <FileTreeNode
+        node={{
+          id: WORKSPACE_ROOT_PATH,
+          path: WORKSPACE_ROOT_PATH,
+          name: 'retroSoC',
+          type: 'folder',
+          children: [{ id: 'rtl', path: 'rtl', name: 'rtl', type: 'folder', children: [], hasLoadedChildren: true, isLoading: false }],
+          hasLoadedChildren: true,
+          isLoading: false,
+        }}
+        depth={0}
+        activeFileId=""
+        onFileOpen={vi.fn()}
+        onFilePreview={vi.fn()}
+        expandedFolders={new Set([WORKSPACE_ROOT_PATH])}
+        onToggleFolder={vi.fn()}
+        gitPathStates={{}}
+      />,
+    );
+
+    expect(screen.getByTestId('file-tree-icon-root')).toHaveClass('h-2.5', 'w-2.5');
+    expect(screen.getByTestId('file-tree-icon-rtl')).toHaveClass('h-4', 'w-4');
+  });
+
   it('previews on single click, pins on double click, and opens from the context menu', async () => {
     const user = userEvent.setup();
     const onToggleFolder = vi.fn();
@@ -137,8 +164,8 @@ describe('FileTreeNode', () => {
 
     const node = screen.getByTestId('file-tree-node-rtl_core_cpu_top_v');
     expect(node).not.toHaveAttribute('data-selected');
-    expect(node.className).toContain('bg-primary/20');
-    expect(node.className).toContain('hover:bg-primary/20');
+    expect(node.className).toContain('bg-ide-selection');
+    expect(node.className).toContain('hover:bg-ide-selection');
 
     await user.click(node);
     expect(onFilePreview).toHaveBeenCalledWith('rtl/core/cpu_top.v', 'cpu_top.v');
@@ -197,8 +224,8 @@ describe('FileTreeNode', () => {
     );
 
     const node = screen.getByTestId('file-tree-node-rtl_core_cpu_top_v');
-    expect(node.className).toContain('hover:bg-accent');
-    expect(node.className).not.toContain('hover:bg-primary/20');
+    expect(node.className).toContain('hover:bg-ide-hover');
+    expect(node.className).not.toContain('hover:bg-ide-selection');
     expect(node).not.toHaveAttribute('data-selected');
   });
 
@@ -231,7 +258,7 @@ describe('FileTreeNode', () => {
 
     const node = screen.getByTestId('file-tree-node-rtl_core_cpu_top_v');
     expect(node).toHaveAttribute('data-selected', 'true');
-    expect(node.className).toContain('bg-primary/20');
+    expect(node.className).toContain('bg-ide-selection');
   });
 
   it('shows the static folder context menu entries when right-clicking a folder', () => {
@@ -665,8 +692,8 @@ describe('FileTreeNode', () => {
       />,
     );
 
-    expect(screen.getByTestId('file-tree-node-rtl').className).toContain('bg-primary/20');
-    expect(screen.getByTestId('file-tree-node-rtl').className).toContain('hover:bg-primary/20');
+    expect(screen.getByTestId('file-tree-node-rtl').className).toContain('bg-ide-selection');
+    expect(screen.getByTestId('file-tree-node-rtl').className).toContain('hover:bg-ide-selection');
   });
 
   it('scrolls a revealed file node into view when requested', () => {

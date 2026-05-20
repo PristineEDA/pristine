@@ -61,6 +61,7 @@
     "ignore": "^7.0.5",
     "jsonc-parser": "^3.3.1",
     "lit": "^3.2.0",
+    "liveline": "^0.0.7",
     "lucide-react": "0.487.0",
     "material-icon-theme": "^5.33.1",
     "mermaid": "^11.14.0",

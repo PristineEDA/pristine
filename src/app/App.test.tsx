@@ -158,9 +158,11 @@ vi.mock('./components/code/shared/EditorSplitLayout', async () => {
 });
 
 vi.mock('./components/code/explorer/RightSidePanel', () => ({
-  RightSidePanel: ({ onFileOpen, onLineJump, onThreadListExpandedChange, onThreadListWidthChange }: any) => (
+  RightSidePanel: ({ onFileOpen, onLineJump, onSplitPanelVisibleChange, onThreadListExpandedChange, onThreadListWidthChange }: any) => (
     <div data-testid="right-panel">
       <button onClick={() => { onFileOpen('rtl/core/alu.v', 'alu.v'); onLineJump(33); }}>right-open</button>
+      <button onClick={() => onSplitPanelVisibleChange?.(true)}>right-split-visible</button>
+      <button onClick={() => onSplitPanelVisibleChange?.(false)}>right-split-hidden</button>
       <button onClick={() => onThreadListExpandedChange?.(true)}>assistant-expand-thread-list</button>
       <button onClick={() => onThreadListExpandedChange?.(false)}>assistant-collapse-thread-list</button>
       <button onClick={() => onThreadListWidthChange?.(280)}>assistant-thread-list-width-280</button>
@@ -750,6 +752,10 @@ describe('App', () => {
 
     await waitForPanelWidth('panel-right-panel', `${EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX}px`);
 
+    await clickText('right-split-visible');
+
+    expect(screen.getByTestId('panel-right-panel')).toHaveStyle({ width: `${EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX}px` });
+
     await clickText('assistant-expand-thread-list');
 
     expect(screen.getByTestId('panel-right-panel')).toHaveStyle({ width: '448px' });
@@ -759,6 +765,10 @@ describe('App', () => {
     expect(screen.getByTestId('panel-right-panel')).toHaveStyle({ width: '648px' });
 
     await clickText('assistant-collapse-thread-list');
+
+    expect(screen.getByTestId('panel-right-panel')).toHaveStyle({ width: `${EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX}px` });
+
+    await clickText('right-split-hidden');
 
     expect(screen.getByTestId('panel-right-panel')).toHaveStyle({ width: `${EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX}px` });
   });

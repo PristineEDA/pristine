@@ -63,6 +63,7 @@ const {
       editorCommands.push({ keybinding, handler });
       return editorCommands.length;
     }),
+    trigger: vi.fn(),
     updateOptions: vi.fn(),
     layout: vi.fn(),
   };
@@ -109,14 +110,17 @@ vi.mock('@monaco-editor/react', () => ({
     }, []);
 
     return (
-      <button
-        type="button"
-        data-testid="monaco-editor"
-        data-language={props.language}
-        onClick={() => props.onChange?.('updated code')}
-      >
-        {props.value}
-      </button>
+      <div className="monaco-editor">
+        <button
+          type="button"
+          data-testid="monaco-editor"
+          data-language={props.language}
+          className="inputarea"
+          onClick={() => props.onChange?.('updated code')}
+        >
+          {props.value}
+        </button>
+      </div>
     );
   },
   useMonaco: () => mockMonaco,
@@ -247,6 +251,7 @@ describe('MonacoEditorPane', () => {
     mockEditorDomNode.contains.mockReturnValue(true);
     mockMonaco.editor.getModels.mockReturnValue(mockModels);
     mockEditorInstance.hasTextFocus.mockReturnValue(true);
+    mockEditorInstance.trigger.mockReset();
   });
 
   it('configures the editor and exposes mount callbacks', () => {
@@ -490,6 +495,24 @@ describe('MonacoEditorPane', () => {
 
     fireEvent.click(screen.getByTestId('monaco-editor'));
     expect(onContentChange).toHaveBeenCalledWith('updated code');
+  });
+
+  it('routes plain Space key presses through Monaco typing when the text input is focused', () => {
+    render(
+      <MonacoEditorPane
+        activeTabId="rtl/core/alu.v"
+        code="assign y = a + b;"
+        editorRef={createRef<any>()}
+      />,
+    );
+
+    const spaceEventHandled = fireEvent.keyDown(screen.getByTestId('monaco-editor'), {
+      code: 'Space',
+      key: ' ',
+    });
+
+    expect(spaceEventHandled).toBe(false);
+    expect(mockEditorInstance.trigger).toHaveBeenCalledWith('keyboard', 'type', { text: ' ' });
   });
 
   it('keeps the LSP document attached while the navigate callback updates', () => {
