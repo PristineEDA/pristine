@@ -210,8 +210,6 @@ const EditorGroupLeaf = memo(function EditorGroupLeaf({
 }) {
   const editorRef = useRef<any>(null);
 
-  const showFocusRing = focused && group.tabs.length > 0;
-
   const handleGroupMouseDown = (event: ReactMouseEvent<HTMLDivElement>) => {
     onFocus(group.id);
 
@@ -254,7 +252,7 @@ const EditorGroupLeaf = memo(function EditorGroupLeaf({
       data-editor-group-root="true"
       data-focused={focused ? 'true' : 'false'}
       tabIndex={-1}
-      className={`relative h-full min-w-0 ${showFocusRing ? 'ring-1 ring-inset ring-primary/50' : ''} ${dropPosition ? 'ring-1 ring-inset ring-border/80' : ''}`}
+      className={`relative h-full min-w-0 ${dropPosition ? 'ring-1 ring-inset ring-border/80' : ''}`}
       onFocusCapture={() => onFocus(group.id)}
       onKeyDownCapture={handleGroupKeyDownCapture}
       onMouseDown={handleGroupMouseDown}

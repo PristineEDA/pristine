@@ -122,14 +122,20 @@ describe('EditorSplitLayout', () => {
     clearEditorAreaRenderCounts();
   });
 
-  it('does not show the focused editor ring when the initial group is empty', () => {
+  it('keeps focused editor groups free of the blue focus ring', async () => {
     render(
       <WorkspaceProvider>
         <LayoutHarness />
       </WorkspaceProvider>,
     );
 
-    expect(screen.getByTestId('editor-group-group-1')).not.toHaveClass('ring-1', 'ring-inset', 'ring-primary/50');
+    await clickText('open-reg');
+
+    const group = screen.getByTestId('editor-group-group-1');
+    fireEvent.focus(group);
+
+    expect(group).toHaveAttribute('data-focused', 'true');
+    expect(group).not.toHaveClass('ring-1', 'ring-inset', 'ring-primary/50');
   });
 
   it('creates a second editor group from the split action', async () => {
@@ -209,6 +215,9 @@ describe('EditorSplitLayout', () => {
     expect(screen.getByTestId('editor-drag-shield-group-1')).toBeInTheDocument();
 
     fireDragEvent(group, 'dragover', 95, 50);
+
+    expect(group).toHaveClass('ring-1', 'ring-inset', 'ring-border/80');
+    expect(group).not.toHaveClass('ring-primary/50');
 
     const indicator = screen.getByTestId('editor-drop-indicator-right');
     expect(indicator).toBeInTheDocument();

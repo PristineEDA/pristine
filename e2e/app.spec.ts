@@ -4130,6 +4130,7 @@ test('focused split receives file tree opens and tabs can be dragged into anothe
 
   await firstGroup.click();
   await expect(firstGroup).toHaveAttribute('data-focused', 'true');
+  await expect(firstGroup).not.toHaveClass(/(?:^|\s)ring-primary\/50(?:\s|$)/);
 
   await openNestedWorkspaceFile(window, [
     'file-tree-node-rtl',
