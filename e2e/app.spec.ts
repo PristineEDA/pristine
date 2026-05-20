@@ -3454,6 +3454,34 @@ test('activity bar switches code subpages and menu bar keeps higher-priority pag
   await app.close();
 });
 
+test('assistant panel mounts only while the right panel AI tab is active', async () => {
+  const { app, window } = await launchApp();
+
+  try {
+    await ensureExplorerVisible(window);
+
+    const rightPanelToggle = window.getByTestId('toggle-right-panel');
+    const rightPanel = window.getByTestId('panel-right-panel');
+    const assistantPanel = window.getByTestId('assistant-panel-root');
+
+    await expect(rightPanel).toHaveCount(0);
+    await expect(assistantPanel).toHaveCount(0);
+
+    await rightPanelToggle.click();
+
+    await expect(rightPanel).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+    await expect(assistantPanel).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+
+    await window.getByTestId('right-panel-tab-outline').click();
+    await expect(assistantPanel).toHaveCount(0);
+
+    await window.getByTestId('right-panel-tab-ai').click();
+    await expect(assistantPanel).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  } finally {
+    await app.close();
+  }
+});
+
 test('assistant chat list expansion widens the whole right sidebar and supports internal drag resize', async () => {
   test.slow();
 
