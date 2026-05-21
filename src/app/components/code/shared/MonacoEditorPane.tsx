@@ -4,8 +4,12 @@ import '../../../editor/configureMonacoLoader';
 import { isMonacoTextInputElement } from '../../../editor/focusEditor';
 import { useRegisterEditorLanguages } from '../../../editor/registerLanguages';
 import { systemVerilogLspBridge } from '../../../lsp/systemVerilogLspBridge';
+import { computeInlineGitDiff } from '../../../editor/gitInlineDiff';
 import { getEditorLanguage } from '../../../workspace/workspaceFiles';
 import { useTheme } from '../../../context/ThemeContext';
+import { useEditorSettings } from '../../../context/EditorSettingsContext';
+import { getWorkspaceGitPathState, useWorkspaceGitStatus } from '../../../git/workspaceGitStatus';
+import { createMonacoInlineGitDiffController, type MonacoInlineGitDiffController } from '../../../editor/monacoInlineGitDiff';
 import { defineMonacoTheme, registerBuiltInMonacoThemes } from '../../../theme/monacoColorTheme';
 import { useMonacoEditorOptions } from './useMonacoEditorOptions';
 
@@ -40,6 +44,10 @@ function getRenderableEditorViewport(element: HTMLDivElement | null): EditorView
   return { width, height };
 }
 
+function normalizeEditorContentForInlineDiff(content: string) {
+  return content.replace(/\r\n?/g, '\n');
+}
+
 interface MonacoEditorPaneProps {
   activeTabId: string;
   code: string;
@@ -54,6 +62,7 @@ interface MonacoEditorPaneProps {
   onNewShortcut?: () => void;
   isDocumentReady?: boolean;
   hasLoadError?: boolean;
+  isWorkspaceDirty?: boolean;
   showDragInteractionShield?: boolean;
   dragInteractionShieldTestId?: string;
 }
@@ -72,16 +81,24 @@ export function MonacoEditorPane({
   onNewShortcut,
   isDocumentReady = true,
   hasLoadError = false,
+  isWorkspaceDirty = false,
   showDragInteractionShield,
   dragInteractionShieldTestId,
 }: MonacoEditorPaneProps) {
   const monaco = useMonaco();
   const { activeTheme, themeId } = useTheme();
+  const { inlineGitDiffEnabled } = useEditorSettings();
+  const gitStatus = useWorkspaceGitStatus();
   const { editorBehaviorOptions, editorFontFamily, editorOptions } = useMonacoEditorOptions();
   const editorLanguage = getEditorLanguage(activeTabId);
+  const gitPathState = getWorkspaceGitPathState(gitStatus, activeTabId);
   const monacoInstanceRef = useRef(monaco);
   const canPropagateCursorChangesRef = useRef(true);
+  const codeRef = useRef(code);
   const hostRef = useRef<HTMLDivElement | null>(null);
+  const inlineGitDiffAppliedContentRef = useRef<string | null>(null);
+  const inlineGitDiffControllerRef = useRef<MonacoInlineGitDiffController | null>(null);
+  const inlineGitDiffRequestRef = useRef(0);
   const lastLayoutViewportRef = useRef<EditorViewport | null>(null);
   const [mountedEditor, setMountedEditor] = useState<any>(null);
   const applyEditorLayoutRef = useRef<(options?: { force?: boolean }) => void>(() => undefined);
@@ -165,6 +182,100 @@ export function MonacoEditorPane({
   useEffect(() => {
     monacoInstanceRef.current = monaco;
   }, [monaco]);
+
+  useEffect(() => {
+    codeRef.current = code;
+  }, [code]);
+
+  const clearInlineGitDiff = () => {
+    inlineGitDiffRequestRef.current += 1;
+    inlineGitDiffAppliedContentRef.current = null;
+    inlineGitDiffControllerRef.current?.clear();
+  };
+
+  useEffect(() => {
+    if (!mountedEditor) {
+      return;
+    }
+
+    const controller = createMonacoInlineGitDiffController(mountedEditor, monacoInstanceRef.current);
+    inlineGitDiffControllerRef.current = controller;
+
+    return () => {
+      controller.dispose();
+      if (inlineGitDiffControllerRef.current === controller) {
+        inlineGitDiffControllerRef.current = null;
+      }
+    };
+  }, [mountedEditor, monaco]);
+
+  useEffect(() => {
+    const appliedContent = inlineGitDiffAppliedContentRef.current;
+    if (appliedContent !== null && appliedContent !== code) {
+      clearInlineGitDiff();
+    }
+  }, [code]);
+
+  useEffect(() => {
+    const editor = mountedEditor;
+    const gitApi = window.electronAPI?.git;
+    const getFileDiff = gitApi?.getFileDiff;
+    const shouldShowInlineGitDiff = Boolean(
+      editor
+      && getFileDiff
+      && inlineGitDiffEnabled
+      && activeTabId
+      && !activeTabId.startsWith('untitled')
+      && isDocumentReady
+      && !hasLoadError
+      && !isWorkspaceDirty
+      && gitPathState === 'modified'
+    );
+
+    if (!shouldShowInlineGitDiff || !getFileDiff) {
+      clearInlineGitDiff();
+      return;
+    }
+
+    if (gitStatus.isLoading) {
+      return;
+    }
+
+    const requestId = inlineGitDiffRequestRef.current + 1;
+    inlineGitDiffRequestRef.current = requestId;
+    inlineGitDiffAppliedContentRef.current = null;
+    inlineGitDiffControllerRef.current?.clear();
+
+    let cancelled = false;
+
+    void getFileDiff(activeTabId)
+      .then((payload) => {
+        if (cancelled || inlineGitDiffRequestRef.current !== requestId) {
+          return;
+        }
+
+        const editorContent = editor?.getModel?.()?.getValue?.() ?? codeRef.current;
+        if (normalizeEditorContentForInlineDiff(editorContent) !== normalizeEditorContentForInlineDiff(payload.currentContent)) {
+          inlineGitDiffControllerRef.current?.clear();
+          inlineGitDiffAppliedContentRef.current = null;
+          return;
+        }
+
+        const diff = computeInlineGitDiff(payload.originalContent, payload.currentContent);
+        inlineGitDiffControllerRef.current?.apply(diff);
+        inlineGitDiffAppliedContentRef.current = payload.currentContent;
+      })
+      .catch(() => {
+        if (!cancelled && inlineGitDiffRequestRef.current === requestId) {
+          inlineGitDiffControllerRef.current?.clear();
+          inlineGitDiffAppliedContentRef.current = null;
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTabId, gitPathState, gitStatus.isLoading, hasLoadError, inlineGitDiffEnabled, isDocumentReady, isWorkspaceDirty, mountedEditor]);
 
   useEffect(() => {
     canPropagateCursorChangesRef.current = false;

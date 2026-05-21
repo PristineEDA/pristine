@@ -11,6 +11,7 @@ import {
   DEFAULT_EDITOR_BRACKET_PAIR_GUIDES,
   DEFAULT_EDITOR_FONT_LIGATURES,
   DEFAULT_EDITOR_GLYPH_MARGIN,
+  DEFAULT_EDITOR_INLINE_GIT_DIFF_ENABLED,
   DEFAULT_EDITOR_INDENT_GUIDES,
   DEFAULT_EDITOR_MINIMAP_ENABLED,
   DEFAULT_EDITOR_SCROLL_BEYOND_LAST_LINE,
@@ -22,6 +23,7 @@ import {
   EDITOR_FONT_LIGATURES_CONFIG_KEY,
   EDITOR_FONT_SIZE_CONFIG_KEY,
   EDITOR_GLYPH_MARGIN_CONFIG_KEY,
+  EDITOR_INLINE_GIT_DIFF_ENABLED_CONFIG_KEY,
   EDITOR_INDENT_GUIDES_CONFIG_KEY,
   EDITOR_LINE_NUMBERS_CONFIG_KEY,
   EDITOR_MINIMAP_ENABLED_CONFIG_KEY,
@@ -112,6 +114,7 @@ export interface MenuBarSettingsState {
   editorFontSize: ReturnType<typeof getConfiguredEditorFontSize>;
   editorFoldingStrategy: ReturnType<typeof getConfiguredEditorFoldingStrategy>;
   editorGlyphMargin: ReturnType<typeof getConfiguredEditorGlyphMargin>;
+  editorInlineGitDiffEnabled: ReturnType<typeof getConfiguredEditorInlineGitDiffEnabled>;
   editorIndentGuides: ReturnType<typeof getConfiguredEditorIndentGuides>;
   editorLineNumbers: ReturnType<typeof getConfiguredEditorLineNumbers>;
   editorMinimapEnabled: ReturnType<typeof getConfiguredEditorMinimapEnabled>;
@@ -215,6 +218,13 @@ function getConfiguredEditorGlyphMargin() {
   return getConfiguredEditorBooleanSetting(EDITOR_GLYPH_MARGIN_CONFIG_KEY, DEFAULT_EDITOR_GLYPH_MARGIN);
 }
 
+function getConfiguredEditorInlineGitDiffEnabled() {
+  return getConfiguredEditorBooleanSetting(
+    EDITOR_INLINE_GIT_DIFF_ENABLED_CONFIG_KEY,
+    DEFAULT_EDITOR_INLINE_GIT_DIFF_ENABLED,
+  );
+}
+
 function getConfiguredEditorBracketPairGuides() {
   return getConfiguredEditorBooleanSetting(EDITOR_BRACKET_PAIR_GUIDES_CONFIG_KEY, DEFAULT_EDITOR_BRACKET_PAIR_GUIDES);
 }
@@ -237,6 +247,7 @@ function getPersistedSettingsState(): MenuBarSettingsState {
     editorFontSize: getConfiguredEditorFontSize(),
     editorFoldingStrategy: getConfiguredEditorFoldingStrategy(),
     editorGlyphMargin: getConfiguredEditorGlyphMargin(),
+    editorInlineGitDiffEnabled: getConfiguredEditorInlineGitDiffEnabled(),
     editorIndentGuides: getConfiguredEditorIndentGuides(),
     editorLineNumbers: getConfiguredEditorLineNumbers(),
     editorMinimapEnabled: getConfiguredEditorMinimapEnabled(),
@@ -341,6 +352,7 @@ export function useMenuBarSettingsController() {
     setFontSize: setEditorFontSize,
     setFoldingStrategy: setEditorFoldingStrategy,
     setGlyphMargin: setEditorGlyphMargin,
+    setInlineGitDiffEnabled: setEditorInlineGitDiffEnabled,
     setIndentGuides: setEditorIndentGuides,
     setLineNumbers: setEditorLineNumbers,
     setMinimapEnabled: setEditorMinimapEnabled,
@@ -532,6 +544,11 @@ export function useMenuBarSettingsController() {
     setEditorGlyphMargin(checked);
   };
 
+  const handleEditorInlineGitDiffEnabledChange = (checked: boolean) => {
+    patchSettingsState({ editorInlineGitDiffEnabled: checked });
+    setEditorInlineGitDiffEnabled(checked);
+  };
+
   const handleEditorBracketPairGuidesChange = (checked: boolean) => {
     patchSettingsState({ editorBracketPairGuides: checked });
     setEditorBracketPairGuides(checked);
@@ -562,6 +579,7 @@ export function useMenuBarSettingsController() {
     handleEditorFontSizeChange,
     handleEditorFontSizeCommit,
     handleEditorGlyphMarginChange,
+    handleEditorInlineGitDiffEnabledChange,
     handleEditorIndentGuidesChange,
     handleEditorLineNumbersChange,
     handleEditorMinimapEnabledChange,
@@ -611,6 +629,7 @@ export function MenuBarSettingsDialogs({
     handleEditorFontSizeChange,
     handleEditorFontSizeCommit,
     handleEditorGlyphMarginChange,
+    handleEditorInlineGitDiffEnabledChange,
     handleEditorIndentGuidesChange,
     handleEditorLineNumbersChange,
     handleEditorMinimapEnabledChange,
@@ -932,6 +951,14 @@ export function MenuBarSettingsDialogs({
                     onCheckedChange={handleEditorGlyphMarginChange}
                     testId="settings-editor-glyph-margin-switch"
                     title="Show glyph margin"
+                  />
+                  <Separator />
+                  <SettingsSwitchRow
+                    checked={settingsState.editorInlineGitDiffEnabled}
+                    description="Show HEAD versus workspace changes inline inside opened modified files."
+                    onCheckedChange={handleEditorInlineGitDiffEnabledChange}
+                    testId="settings-editor-inline-git-diff-switch"
+                    title="Inline Git Diff"
                   />
                   <Separator />
                   <SettingsSwitchRow

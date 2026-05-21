@@ -27,6 +27,9 @@ let mockedEditorScrollBeyondLastLine = false;
 let mockedEditorSmoothScrolling = true;
 let mockedEditorTabSize = 4;
 let mockedEditorWordWrap = 'off';
+let mockedEditorInlineGitDiffEnabled = true;
+let mockedWorkspaceGitIsLoading = false;
+let mockedWorkspaceGitPathStates: Record<string, string> = {};
 
 const {
   mockCursorPositionListeners,
@@ -34,7 +37,10 @@ const {
   mockEditorComponent,
   mockEditorDomNode,
   mockEditorInstance,
+  mockEditorModelState,
   mockFocusEditorTextListeners,
+  mockInlineGitDiffAddedZones,
+  mockInlineGitDiffRemovedZones,
   mockModels,
   mockMonaco,
 } = vi.hoisted(() => {
@@ -42,6 +48,12 @@ const {
   const cursorPositionListeners: Array<(event: { position: { lineNumber: number; column: number } }) => void> = [];
   const editorCommands: Array<{ keybinding: number; handler: () => void }> = [];
   const focusEditorTextListeners: Array<() => void> = [];
+  const inlineGitDiffAddedZones: any[] = [];
+  const inlineGitDiffRemovedZones: string[] = [];
+  const editorModelState = {
+    path: '',
+    value: '',
+  };
   const editorDomNode = {
     contains: vi.fn((element: unknown) => element === activeElement),
     ownerDocument: {
@@ -63,6 +75,32 @@ const {
       editorCommands.push({ keybinding, handler });
       return editorCommands.length;
     }),
+    changeViewZones: vi.fn((callback: (accessor: { addZone: (zone: any) => string; removeZone: (zoneId: string) => void }) => void) => {
+      callback({
+        addZone: (zone: any) => {
+          inlineGitDiffAddedZones.push(zone);
+          return `zone-${inlineGitDiffAddedZones.length}`;
+        },
+        removeZone: (zoneId: string) => {
+          inlineGitDiffRemovedZones.push(zoneId);
+        },
+      });
+    }),
+    deltaDecorations: vi.fn((_oldDecorations: string[], nextDecorations: any[]) => (
+      nextDecorations.map((_, index) => `decoration-${index + 1}`)
+    )),
+    getModel: vi.fn(() => ({
+      getLineCount: vi.fn(() => Math.max(editorModelState.value.split('\n').length, 1)),
+      getLineMaxColumn: vi.fn((lineNumber: number) => {
+        const line = editorModelState.value.split('\n')[lineNumber - 1] ?? '';
+        return line.length + 1;
+      }),
+      getValue: vi.fn(() => editorModelState.value),
+      uri: {
+        fsPath: editorModelState.path,
+        path: editorModelState.path,
+      },
+    })),
     trigger: vi.fn(),
     updateOptions: vi.fn(),
     layout: vi.fn(),
@@ -93,7 +131,10 @@ const {
     mockEditorCommands: editorCommands,
     mockEditorInstance: editorInstance,
     mockEditorDomNode: editorDomNode,
+    mockEditorModelState: editorModelState,
     mockFocusEditorTextListeners: focusEditorTextListeners,
+    mockInlineGitDiffAddedZones: inlineGitDiffAddedZones,
+    mockInlineGitDiffRemovedZones: inlineGitDiffRemovedZones,
     mockModels: models,
     mockMonaco: monaco,
     mockEditorComponent: vi.fn(),
@@ -103,6 +144,8 @@ const {
 vi.mock('@monaco-editor/react', () => ({
   default: (props: any) => {
     mockEditorComponent(props);
+    mockEditorModelState.path = props.path;
+    mockEditorModelState.value = props.value;
 
     useLayoutEffect(() => {
       props.beforeMount?.(mockMonaco);
@@ -201,8 +244,21 @@ vi.mock('../../../context/EditorSettingsContext', () => ({
     setTabSize: vi.fn(),
     setTheme: vi.fn(),
     setWordWrap: vi.fn(),
+    setInlineGitDiffEnabled: vi.fn(),
     themes: [],
+    inlineGitDiffEnabled: mockedEditorInlineGitDiffEnabled,
     wordWrap: mockedEditorWordWrap,
+  }),
+}));
+
+vi.mock('../../../git/workspaceGitStatus', () => ({
+  getWorkspaceGitPathState: (snapshot: { pathStates: Record<string, string> }, path: string) => snapshot.pathStates[path.replace(/\\/g, '/')],
+  useWorkspaceGitStatus: () => ({
+    branchName: 'dev',
+    hasProjectFiles: true,
+    isGitRepo: true,
+    isLoading: mockedWorkspaceGitIsLoading,
+    pathStates: mockedWorkspaceGitPathStates,
   }),
 }));
 
@@ -240,6 +296,9 @@ describe('MonacoEditorPane', () => {
     mockedEditorSmoothScrolling = true;
     mockedEditorTabSize = 4;
     mockedEditorWordWrap = 'off';
+    mockedEditorInlineGitDiffEnabled = true;
+    mockedWorkspaceGitIsLoading = false;
+    mockedWorkspaceGitPathStates = {};
     mockedEnsureLspRegistered.mockReset();
     mockedAttachLspDocument.mockReset();
     mockedAttachLspDocument.mockImplementation(() => vi.fn());
@@ -248,10 +307,23 @@ describe('MonacoEditorPane', () => {
     mockCursorPositionListeners.length = 0;
     mockEditorCommands.length = 0;
     mockFocusEditorTextListeners.length = 0;
+    mockInlineGitDiffAddedZones.length = 0;
+    mockInlineGitDiffRemovedZones.length = 0;
+    mockEditorModelState.path = '';
+    mockEditorModelState.value = '';
     mockEditorDomNode.contains.mockReturnValue(true);
     mockMonaco.editor.getModels.mockReturnValue(mockModels);
     mockEditorInstance.hasTextFocus.mockReturnValue(true);
+    mockEditorInstance.changeViewZones.mockClear();
+    mockEditorInstance.deltaDecorations.mockClear();
+    mockEditorInstance.getModel.mockClear();
     mockEditorInstance.trigger.mockReset();
+    vi.mocked(window.electronAPI!.git.getFileDiff).mockReset();
+    vi.mocked(window.electronAPI!.git.getFileDiff).mockResolvedValue({
+      filePath: '',
+      originalContent: '',
+      currentContent: '',
+    });
   });
 
   it('configures the editor and exposes mount callbacks', () => {
@@ -495,6 +567,172 @@ describe('MonacoEditorPane', () => {
 
     fireEvent.click(screen.getByTestId('monaco-editor'));
     expect(onContentChange).toHaveBeenCalledWith('updated code');
+  });
+
+  it('renders inline git diff decorations and removed-line zones for modified files', async () => {
+    const filePath = 'rtl/core/reg_file.v';
+    const currentContent = 'module reg_file;\nassign ready = valid;\nassign changed = 1\'b1;\nendmodule';
+    mockedWorkspaceGitPathStates = { [filePath]: 'modified' };
+    vi.mocked(window.electronAPI!.git.getFileDiff).mockResolvedValue({
+      filePath,
+      originalContent: 'module reg_file;\nassign ready = done;\nendmodule',
+      currentContent,
+    });
+
+    render(
+      <MonacoEditorPane
+        activeTabId={filePath}
+        code={currentContent}
+        editorRef={createRef<any>()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(window.electronAPI?.git.getFileDiff).toHaveBeenCalledWith(filePath);
+    });
+    await waitFor(() => {
+      expect(mockInlineGitDiffAddedZones).toHaveLength(1);
+    });
+
+    expect(mockInlineGitDiffAddedZones[0].domNode.dataset.inlineGitDiff).toBe('removed');
+    expect(mockInlineGitDiffAddedZones[0].domNode.textContent).toContain('assign ready = done;');
+
+    const decorationCalls = mockEditorInstance.deltaDecorations.mock.calls
+      .filter((call) => Array.isArray(call[1]) && call[1].length > 0);
+    const decorations = decorationCalls[decorationCalls.length - 1]?.[1] ?? [];
+
+    expect(decorations).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        options: expect.objectContaining({
+          className: expect.stringContaining('pristine-inline-git-diff-line-modified'),
+          linesDecorationsClassName: expect.stringContaining('pristine-inline-git-diff-gutter-modified'),
+        }),
+      }),
+    ]));
+  });
+
+  it('keeps inline git diff when Monaco normalizes CRLF content to LF', async () => {
+    const filePath = 'rtl/core/reg_file.v';
+    const editorContent = 'module reg_file;\nassign ready = valid;\nendmodule';
+    mockedWorkspaceGitPathStates = { [filePath]: 'modified' };
+    vi.mocked(window.electronAPI!.git.getFileDiff).mockResolvedValue({
+      filePath,
+      originalContent: 'module reg_file;\r\nassign ready = done;\r\nendmodule',
+      currentContent: 'module reg_file;\r\nassign ready = valid;\r\nendmodule',
+    });
+
+    render(
+      <MonacoEditorPane
+        activeTabId={filePath}
+        code={editorContent}
+        editorRef={createRef<any>()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(mockInlineGitDiffAddedZones).toHaveLength(1);
+    });
+
+    const decorationCalls = mockEditorInstance.deltaDecorations.mock.calls
+      .filter((call) => Array.isArray(call[1]) && call[1].length > 0);
+    const decorations = decorationCalls[decorationCalls.length - 1]?.[1] ?? [];
+
+    expect(decorations).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        options: expect.objectContaining({
+          className: expect.stringContaining('pristine-inline-git-diff-line-modified'),
+        }),
+      }),
+    ]));
+  });
+
+  it('does not fetch inline git diff when disabled or while the workspace file is dirty', () => {
+    const filePath = 'rtl/core/reg_file.v';
+    mockedWorkspaceGitPathStates = { [filePath]: 'modified' };
+    mockedEditorInlineGitDiffEnabled = false;
+
+    const { rerender } = render(
+      <MonacoEditorPane
+        activeTabId={filePath}
+        code="module reg_file; endmodule"
+        editorRef={createRef<any>()}
+      />,
+    );
+
+    expect(window.electronAPI?.git.getFileDiff).not.toHaveBeenCalled();
+
+    mockedEditorInlineGitDiffEnabled = true;
+    rerender(
+      <MonacoEditorPane
+        activeTabId={filePath}
+        code="module reg_file; logic dirty; endmodule"
+        editorRef={createRef<any>()}
+        isWorkspaceDirty
+      />,
+    );
+
+    expect(window.electronAPI?.git.getFileDiff).not.toHaveBeenCalled();
+  });
+
+  it('clears stale inline git diff while editing and redraws after the dirty file is saved', async () => {
+    const filePath = 'rtl/core/reg_file.v';
+    const savedContent = 'module reg_file;\nassign ready = valid;\nendmodule';
+    const editedContent = 'module reg_file;\nassign ready = valid;\nassign changed = 1\'b1;\nendmodule';
+    mockedWorkspaceGitPathStates = { [filePath]: 'modified' };
+    vi.mocked(window.electronAPI!.git.getFileDiff).mockResolvedValueOnce({
+      filePath,
+      originalContent: 'module reg_file;\nassign ready = done;\nendmodule',
+      currentContent: savedContent,
+    });
+
+    const { rerender } = render(
+      <MonacoEditorPane
+        activeTabId={filePath}
+        code={savedContent}
+        editorRef={createRef<any>()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(mockInlineGitDiffAddedZones).toHaveLength(1);
+    });
+
+    vi.mocked(window.electronAPI!.git.getFileDiff).mockResolvedValueOnce({
+      filePath,
+      originalContent: 'module reg_file;\nassign ready = done;\nendmodule',
+      currentContent: editedContent,
+    });
+    mockEditorInstance.deltaDecorations.mockClear();
+
+    rerender(
+      <MonacoEditorPane
+        activeTabId={filePath}
+        code={editedContent}
+        editorRef={createRef<any>()}
+        isWorkspaceDirty
+      />,
+    );
+
+    await waitFor(() => {
+      expect(mockInlineGitDiffRemovedZones).toContain('zone-1');
+    });
+    expect(mockEditorInstance.deltaDecorations).toHaveBeenCalledWith(expect.any(Array), []);
+    expect(window.electronAPI?.git.getFileDiff).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <MonacoEditorPane
+        activeTabId={filePath}
+        code={editedContent}
+        editorRef={createRef<any>()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(window.electronAPI?.git.getFileDiff).toHaveBeenCalledTimes(2);
+    });
+    await waitFor(() => {
+      expect(mockInlineGitDiffAddedZones.length).toBeGreaterThan(1);
+    });
   });
 
   it('routes plain Space key presses through Monaco typing when the text input is focused', () => {

@@ -2713,6 +2713,57 @@ test('Explorer opens a Monaco git diff tab for a modified file from the context 
   }
 });
 
+test('Monaco editor shows inline git diff for opened modified files and hides it when disabled', async () => {
+  test.slow();
+
+  const workspaceCopy = test.info().outputPath('inline-git-diff-workspace');
+  createWorkspaceCopy(workspaceCopy);
+  initializeGitWorkspaceCopy(workspaceCopy, 'e2e-inline-git-diff');
+
+  const regFilePath = path.join(workspaceCopy, 'rtl', 'core', 'reg_file.v');
+  const regFileContent = fs.readFileSync(regFilePath, 'utf-8');
+  fs.writeFileSync(
+    regFilePath,
+    regFileContent.replace(
+      "    assign rs2_data = (rs2 == 5'd0) ? 32'd0 : regs[rs2];",
+      "    assign rs2_data = (rs2 == 5'd0) ? 32'h0000_0000 : regs[rs2];",
+    ),
+    'utf-8',
+  );
+
+  const { app, window } = await launchApp({ projectRoot: workspaceCopy });
+
+  try {
+    await ensureExplorerVisible(window);
+    await window.getByTestId('file-tree-node-rtl').click();
+    await window.getByTestId('file-tree-node-rtl_core').click();
+    await window.getByTestId('file-tree-node-rtl_core_reg_file_v').dblclick();
+    await waitForMonacoEditor(window);
+    await focusMonacoEditor(window);
+    await window.keyboard.press('Control+f');
+    await window.keyboard.type("32'h0000_0000");
+    await window.keyboard.press('Enter');
+    await window.keyboard.press('Escape');
+    await expect(window.locator('.monaco-editor .view-lines')).toContainText("32'h0000_0000", { timeout: MONACO_READY_TIMEOUT_MS });
+
+    await expect(window.getByTestId('editor-tab-title-rtl/core/reg_file.v')).toHaveClass(/text-ide-warning/);
+    await expect(window.locator('.pristine-inline-git-diff-line-added, .pristine-inline-git-diff-line-modified').first()).toBeVisible({ timeout: MONACO_READY_TIMEOUT_MS });
+    await expect(window.getByTestId('monaco-inline-git-diff-removed-block').first()).toContainText("assign rs2_data = (rs2 == 5'd0) ? 32'd0 : regs[rs2];");
+
+    await window.getByTestId('menu-settings-button').click();
+    await expect(window.getByTestId('settings-dialog')).toBeVisible();
+    const inlineGitDiffSwitch = window.getByTestId('settings-editor-inline-git-diff-switch');
+    await inlineGitDiffSwitch.scrollIntoViewIfNeeded();
+    await setSwitchChecked(inlineGitDiffSwitch, false);
+    await window.getByTestId('settings-close-button').click();
+
+    await expect(window.getByTestId('monaco-inline-git-diff-removed-block')).toHaveCount(0);
+    await expect(window.locator('.pristine-inline-git-diff-line-added, .pristine-inline-git-diff-line-modified')).toHaveCount(0);
+  } finally {
+    await app.close();
+  }
+});
+
 test('explorer status bar updates the git branch label after refocusing the app window', async () => {
   test.slow();
 

@@ -20,6 +20,7 @@ export const EDITOR_FOLDING_STRATEGY_CONFIG_KEY = 'editor.foldingStrategy'
 export const EDITOR_LINE_NUMBERS_CONFIG_KEY = 'editor.lineNumbers'
 export const EDITOR_MINIMAP_ENABLED_CONFIG_KEY = 'editor.minimap.enabled'
 export const EDITOR_GLYPH_MARGIN_CONFIG_KEY = 'editor.glyphMargin'
+export const EDITOR_INLINE_GIT_DIFF_ENABLED_CONFIG_KEY = 'editor.inlineGitDiff.enabled'
 export const EDITOR_BRACKET_PAIR_GUIDES_CONFIG_KEY = 'editor.guides.bracketPairs'
 export const EDITOR_INDENT_GUIDES_CONFIG_KEY = 'editor.guides.indentation'
 
@@ -351,6 +352,7 @@ export const DEFAULT_EDITOR_FOLDING_STRATEGY = 'indentation' as const satisfies 
 export const DEFAULT_EDITOR_RENDER_CONTROL_CHARACTERS = false
 export const DEFAULT_EDITOR_MINIMAP_ENABLED = true
 export const DEFAULT_EDITOR_GLYPH_MARGIN = true
+export const DEFAULT_EDITOR_INLINE_GIT_DIFF_ENABLED = true
 export const DEFAULT_EDITOR_BRACKET_PAIR_GUIDES = true
 export const DEFAULT_EDITOR_INDENT_GUIDES = true
 
@@ -542,6 +544,10 @@ export function parseEditorMinimapEnabled(value: unknown): boolean {
 
 export function parseEditorGlyphMargin(value: unknown): boolean {
   return parseEditorBooleanSetting(value, DEFAULT_EDITOR_GLYPH_MARGIN)
+}
+
+export function parseEditorInlineGitDiffEnabled(value: unknown): boolean {
+  return parseEditorBooleanSetting(value, DEFAULT_EDITOR_INLINE_GIT_DIFF_ENABLED)
 }
 
 export function parseEditorBracketPairGuides(value: unknown): boolean {

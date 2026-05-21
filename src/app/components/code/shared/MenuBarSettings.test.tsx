@@ -14,6 +14,7 @@ import {
   setEditorFontFamilyMock,
   setEditorFontLigaturesMock,
   setEditorGlyphMarginMock,
+  setEditorInlineGitDiffEnabledMock,
   setEditorIndentGuidesMock,
   setEditorLineNumbersMock,
   setEditorMinimapEnabledMock,
@@ -127,6 +128,7 @@ describe('MenuBar settings', () => {
       fontSize: 18,
       foldingStrategy: 'auto',
       glyphMargin: false,
+      inlineGitDiffEnabled: false,
       indentGuides: false,
       lineNumbers: 'relative',
       minimapEnabled: false,
@@ -160,6 +162,7 @@ describe('MenuBar settings', () => {
     expect(screen.getByTestId('settings-editor-scroll-beyond-last-line-switch')).toHaveAttribute('data-state', 'checked');
     expect(screen.getByTestId('settings-editor-minimap-switch')).toHaveAttribute('data-state', 'unchecked');
     expect(screen.getByTestId('settings-editor-glyph-margin-switch')).toHaveAttribute('data-state', 'unchecked');
+    expect(screen.getByTestId('settings-editor-inline-git-diff-switch')).toHaveAttribute('data-state', 'unchecked');
     expect(screen.getByTestId('settings-editor-bracket-pair-guides-switch')).toHaveAttribute('data-state', 'unchecked');
     expect(screen.getByTestId('settings-editor-indent-guides-switch')).toHaveAttribute('data-state', 'unchecked');
     expect(screen.getByTestId('settings-close-to-tray-switch')).toHaveAttribute('data-state', 'checked');
@@ -187,6 +190,7 @@ describe('MenuBar settings', () => {
     await user.click(screen.getByTestId('settings-editor-scroll-beyond-last-line-switch'));
     await user.click(screen.getByTestId('settings-editor-minimap-switch'));
     await user.click(screen.getByTestId('settings-editor-glyph-margin-switch'));
+    await user.click(screen.getByTestId('settings-editor-inline-git-diff-switch'));
     await user.click(screen.getByTestId('settings-editor-bracket-pair-guides-switch'));
     await user.click(screen.getByTestId('settings-editor-indent-guides-switch'));
     await user.click(screen.getByTestId('settings-close-to-tray-switch'));
@@ -213,6 +217,7 @@ describe('MenuBar settings', () => {
     expect(setEditorScrollBeyondLastLineMock).toHaveBeenCalledWith(false);
     expect(setEditorMinimapEnabledMock).toHaveBeenCalledWith(true);
     expect(setEditorGlyphMarginMock).toHaveBeenCalledWith(true);
+    expect(setEditorInlineGitDiffEnabledMock).toHaveBeenCalledWith(true);
     expect(setEditorBracketPairGuidesMock).toHaveBeenCalledWith(true);
     expect(setEditorIndentGuidesMock).toHaveBeenCalledWith(true);
     expect(setThemeMock).toHaveBeenCalledWith('vscode-2026-light');

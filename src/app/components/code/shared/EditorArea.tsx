@@ -531,6 +531,7 @@ export function EditorArea({
             onNavigateToLocation={onNavigateToLocation}
             isDocumentReady={isActiveTabReady}
             hasLoadError={Boolean(activeLoadError)}
+            isWorkspaceDirty={Boolean(activeEditorTab?.modified)}
             showDragInteractionShield={showDragInteractionShield}
             dragInteractionShieldTestId={dragInteractionShieldTestId}
           />
