@@ -1160,6 +1160,7 @@ async function readWorkbenchChromeThemeSnapshot(window: Awaited<ReturnType<typeo
       style: { color: string };
     };
     const browserGlobal = globalThis as typeof globalThis & {
+      devicePixelRatio: number;
       document: {
         body: { appendChild: (node: ElementLike) => void };
         createElement: (tagName: string) => ElementLike;
@@ -1196,6 +1197,7 @@ async function readWorkbenchChromeThemeSnapshot(window: Awaited<ReturnType<typeo
     const statusStyle = browserGlobal.getComputedStyle(statusBar);
 
     return {
+      devicePixelRatio: browserGlobal.devicePixelRatio,
       activity: {
         backgroundColor: activitySurfaceStyle.backgroundColor,
         borderRightWidth: activityContainerStyle.borderRightWidth,
@@ -1219,6 +1221,13 @@ async function readWorkbenchChromeThemeSnapshot(window: Awaited<ReturnType<typeo
       },
     };
   });
+}
+
+function expectSingleDevicePixelBorder(borderWidth: string, devicePixelRatio: number) {
+  const cssPixelWidth = Number.parseFloat(borderWidth);
+
+  expect(cssPixelWidth).toBeGreaterThan(0);
+  expect(cssPixelWidth * devicePixelRatio).toBeCloseTo(1, 2);
 }
 
 async function readComboboxListSnapshot(
@@ -2747,8 +2756,107 @@ test('Monaco editor shows inline git diff for opened modified files and hides it
     await expect(window.locator('.monaco-editor .view-lines')).toContainText("32'h0000_0000", { timeout: MONACO_READY_TIMEOUT_MS });
 
     await expect(window.getByTestId('editor-tab-title-rtl/core/reg_file.v')).toHaveClass(/text-ide-warning/);
-    await expect(window.locator('.pristine-inline-git-diff-line-added, .pristine-inline-git-diff-line-modified').first()).toBeVisible({ timeout: MONACO_READY_TIMEOUT_MS });
-    await expect(window.getByTestId('monaco-inline-git-diff-removed-block').first()).toContainText("assign rs2_data = (rs2 == 5'd0) ? 32'd0 : regs[rs2];");
+    const inlineDiffDecoration = window.locator('.pristine-inline-git-diff-line-added, .pristine-inline-git-diff-line-modified').first();
+    const inlineDiffGutterDecoration = window.locator('.pristine-inline-git-diff-gutter-added, .pristine-inline-git-diff-gutter-modified').first();
+    await expect(inlineDiffDecoration).toBeVisible({ timeout: MONACO_READY_TIMEOUT_MS });
+    await expect(inlineDiffGutterDecoration).toBeVisible({ timeout: MONACO_READY_TIMEOUT_MS });
+    await expect(window.getByTestId('monaco-inline-git-diff-detail')).toHaveCount(0);
+
+    await inlineDiffGutterDecoration.click();
+    const inlineDiffDetail = window.getByTestId('monaco-inline-git-diff-detail').first();
+    const inlineDiffDetailTitle = window.getByTestId('monaco-inline-git-diff-detail-title').first();
+    const inlineDiffDetailBody = window.getByTestId('monaco-inline-git-diff-detail-body').first();
+    const inlineDiffDetailClose = window.getByTestId('monaco-inline-git-diff-detail-close').first();
+    await expect(inlineDiffDetailTitle).toHaveText('Git Local Changes - modified change');
+    await expect(inlineDiffDetailBody).toContainText("assign rs2_data = (rs2 == 5'd0) ? 32'd0 : regs[rs2];");
+    await expect(inlineDiffDetailBody).toContainText("assign rs2_data = (rs2 == 5'd0) ? 32'h0000_0000 : regs[rs2];");
+    await expect(inlineDiffDetailClose).toBeVisible();
+
+    const inlineDiffDetailMetrics = await inlineDiffDetail.evaluate((node) => {
+      type BoxLike = { height: number };
+      type StyleLike = { backgroundColor: string; color: string };
+      type ElementLike = {
+        clientHeight: number;
+        getBoundingClientRect: () => BoxLike;
+        querySelector: (selectors: string) => ElementLike | null;
+        scrollHeight: number;
+      };
+      const browserGlobal = globalThis as typeof globalThis & {
+        document: { querySelector: (selectors: string) => ElementLike | null };
+        getComputedStyle: (element: ElementLike) => StyleLike;
+      };
+      const detail = node as unknown as ElementLike;
+      const header = detail.querySelector('.pristine-inline-git-diff-detail-header');
+      const title = detail.querySelector('[data-testid="monaco-inline-git-diff-detail-title"]');
+      const body = detail.querySelector('[data-testid="monaco-inline-git-diff-detail-body"]');
+      const editor = browserGlobal.document.querySelector('.monaco-editor');
+      const readColor = (element: ElementLike | null, property: 'backgroundColor' | 'color') => (
+        element ? browserGlobal.getComputedStyle(element)[property] : 'rgb(0, 0, 0)'
+      );
+      const toRgbTuple = (red = '0', green = '0', blue = '0'): [number, number, number] => [
+        Number(red),
+        Number(green),
+        Number(blue),
+      ];
+      const parseRgbColor = (value: string) => {
+        const rgbMatch = value.match(/rgba?\((\d+(?:\.\d+)?),\s*(\d+(?:\.\d+)?),\s*(\d+(?:\.\d+)?)/);
+        if (rgbMatch) {
+          return toRgbTuple(rgbMatch[1], rgbMatch[2], rgbMatch[3]);
+        }
+
+        const srgbMatch = value.match(/color\(srgb\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)/);
+        if (!srgbMatch) {
+          return toRgbTuple();
+        }
+
+        return toRgbTuple(
+          String(Number(srgbMatch[1] ?? 0) * 255),
+          String(Number(srgbMatch[2] ?? 0) * 255),
+          String(Number(srgbMatch[3] ?? 0) * 255),
+        );
+      };
+      const relativeLuminance = (color: [number, number, number]) => {
+        const channels = color.map((component) => {
+          const channel = component / 255;
+          return channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+        });
+        const r = channels[0] ?? 0;
+        const g = channels[1] ?? 0;
+        const b = channels[2] ?? 0;
+
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      };
+      const contrastRatio = (foreground: string, background: string) => {
+        const foregroundLuminance = relativeLuminance(parseRgbColor(foreground));
+        const backgroundLuminance = relativeLuminance(parseRgbColor(background));
+        const lighter = Math.max(foregroundLuminance, backgroundLuminance);
+        const darker = Math.min(foregroundLuminance, backgroundLuminance);
+
+        return (lighter + 0.05) / (darker + 0.05);
+      };
+      const detailBox = detail.getBoundingClientRect();
+      const headerBox = header?.getBoundingClientRect();
+      const titleColor = readColor(title, 'color');
+      const editorBackground = readColor(editor, 'backgroundColor');
+
+      return {
+        bodyClientHeight: body?.clientHeight ?? 0,
+        bodyScrollHeight: body?.scrollHeight ?? 0,
+        detailHeight: detailBox.height,
+        headerHeight: headerBox?.height ?? 0,
+        titleToEditorContrast: contrastRatio(titleColor, editorBackground),
+      };
+    });
+    expect(inlineDiffDetailMetrics.bodyClientHeight + 1).toBeGreaterThanOrEqual(inlineDiffDetailMetrics.bodyScrollHeight);
+    expect(inlineDiffDetailMetrics.detailHeight + 1).toBeGreaterThanOrEqual(
+      inlineDiffDetailMetrics.headerHeight + inlineDiffDetailMetrics.bodyScrollHeight,
+    );
+    expect(inlineDiffDetailMetrics.titleToEditorContrast).toBeGreaterThan(3);
+
+    await inlineDiffDetailClose.click();
+    await expect(window.getByTestId('monaco-inline-git-diff-detail')).toHaveCount(0);
+    await inlineDiffGutterDecoration.click();
+    await expect(window.getByTestId('monaco-inline-git-diff-detail')).toBeVisible();
 
     await window.getByTestId('menu-settings-button').click();
     await expect(window.getByTestId('settings-dialog')).toBeVisible();
@@ -2757,7 +2865,7 @@ test('Monaco editor shows inline git diff for opened modified files and hides it
     await setSwitchChecked(inlineGitDiffSwitch, false);
     await window.getByTestId('settings-close-button').click();
 
-    await expect(window.getByTestId('monaco-inline-git-diff-removed-block')).toHaveCount(0);
+    await expect(window.getByTestId('monaco-inline-git-diff-detail')).toHaveCount(0);
     await expect(window.locator('.pristine-inline-git-diff-line-added, .pristine-inline-git-diff-line-modified')).toHaveCount(0);
   } finally {
     await app.close();
@@ -4980,9 +5088,9 @@ test('global workbench chrome follows selected VS Code theme variables', async (
   expect(snapshot.activity.backgroundColor).toBe(snapshot.variables.activitybarBackground);
   expect(snapshot.status.backgroundColor).toBe(snapshot.variables.statusbarBackground);
   expect(snapshot.status.color).toBe(snapshot.variables.statusbarForeground);
-  expect(snapshot.menu.borderBottomWidth).toBe('1px');
-  expect(snapshot.activity.borderRightWidth).toBe('1px');
-  expect(snapshot.status.borderTopWidth).toBe('1px');
+  expectSingleDevicePixelBorder(snapshot.menu.borderBottomWidth, snapshot.devicePixelRatio);
+  expectSingleDevicePixelBorder(snapshot.activity.borderRightWidth, snapshot.devicePixelRatio);
+  expectSingleDevicePixelBorder(snapshot.status.borderTopWidth, snapshot.devicePixelRatio);
 
   await app.close();
 });
