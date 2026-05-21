@@ -6,6 +6,7 @@ import {
   getNextActiveTabIdAfterClose,
   moveEditorTab,
   openFileInEditorGroup,
+  openGitDiffInEditorGroup,
   pinTabInEditorGroup,
   setActiveTabInEditorGroup,
   closeFileInEditorGroup,
@@ -457,6 +458,25 @@ export function useWorkspaceEditorState() {
     queueStoredCursorRestore(targetGroupId, fileId);
   }, [getPreferredEmptyWorkspaceGroupId, queueStoredCursorRestore, syncEditorRefForGroup]);
 
+  const openGitDiffInGroup = useCallback((fileId: string, fileName: string, groupId: string) => {
+    setEditorState((current) => openGitDiffInEditorGroup(current, groupId, fileId, fileName));
+    syncEditorRefForGroup(groupId);
+  }, [syncEditorRefForGroup]);
+
+  const openGitDiff = useCallback((fileId: string, fileName: string) => {
+    const targetGroupId = editorStateRef.current.focusedGroupId ?? getPreferredEmptyWorkspaceGroupId(fileId);
+
+    setEditorState((current) => {
+      const baseState = current.groups[targetGroupId]
+        ? current
+        : createInitialEditorWorkspace(targetGroupId);
+
+      return openGitDiffInEditorGroup(baseState, targetGroupId, fileId, fileName);
+    });
+
+    syncEditorRefForGroup(targetGroupId);
+  }, [getPreferredEmptyWorkspaceGroupId, syncEditorRefForGroup]);
+
   const openUntitledFile = useCallback((groupId?: string) => {
     const untitledId = nextUntitledId();
     const targetGroupId = groupId ?? editorStateRef.current.focusedGroupId ?? 'group-1';
@@ -748,6 +768,8 @@ export function useWorkspaceEditorState() {
     moveTab,
     openFile,
     openFileInGroup,
+    openGitDiff,
+    openGitDiffInGroup,
     openUntitledFile,
     openPreviewFile,
     openPreviewFileInGroup,

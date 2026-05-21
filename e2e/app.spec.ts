@@ -2681,6 +2681,38 @@ test('explorer shows the real git branch and git file decorations for tracked an
   }
 });
 
+test('Explorer opens a Monaco git diff tab for a modified file from the context menu', async () => {
+  test.slow();
+
+  const workspaceCopy = test.info().outputPath('git-diff-workspace');
+  createWorkspaceCopy(workspaceCopy);
+  initializeGitWorkspaceCopy(workspaceCopy, 'e2e-git-diff');
+
+  const { app, window } = await launchApp({ projectRoot: workspaceCopy });
+
+  try {
+    await ensureExplorerVisible(window);
+    await window.getByTestId('file-tree-node-rtl').click();
+    await window.getByTestId('file-tree-node-rtl_core').click();
+
+    await window.getByTestId('file-tree-node-rtl_core_alu_sv').click({ button: 'right' });
+    await expect(window.getByTestId('explorer-context-menu')).toBeVisible();
+    await expect(window.getByTestId('explorer-context-menu-item-open-git-diff')).toHaveCount(0);
+    await window.keyboard.press('Escape');
+
+    await window.getByTestId('file-tree-node-rtl_core_reg_file_v').click({ button: 'right' });
+    await expect(window.getByTestId('explorer-context-menu-item-open-git-diff')).toBeVisible();
+    await window.getByTestId('explorer-context-menu-item-open-git-diff').click();
+
+    await expect(window.getByTestId('editor-tab-title-git-diff:rtl/core/reg_file.v')).toHaveText('reg_file.v Changes');
+    await expect(window.getByTestId('monaco-git-diff-pane')).toHaveAttribute('data-file-path', 'rtl/core/reg_file.v');
+    await expect(window.locator('.monaco-diff-editor')).toBeVisible();
+    await expect(window.getByText('// git modified fixture')).toBeVisible();
+  } finally {
+    await app.close();
+  }
+});
+
 test('explorer status bar updates the git branch label after refocusing the app window', async () => {
   test.slow();
 

@@ -63,6 +63,7 @@ interface LeftSidePanelProps {
   onCreateWorkspaceFolder: (targetPath: string) => Promise<void>;
   onCutWorkspaceEntry: (targetPath: string, entryType: WorkspaceEntryType) => Promise<boolean>;
   onDeleteWorkspaceEntry: (targetPath: string, entryType: 'file' | 'folder') => Promise<boolean>;
+  onGitDiffOpen?: (fileId: string, fileName: string) => void;
   onFileOpen: (fileId: string, fileName: string) => void;
   onFilePreview: (fileId: string, fileName: string) => void;
   onLineJump: (line: number) => void;
@@ -86,6 +87,7 @@ export function LeftSidePanel({
   onCopyWorkspaceEntry,
   onCutWorkspaceEntry,
   onDeleteWorkspaceEntry,
+  onGitDiffOpen,
   onFileOpen,
   onFilePreview,
   onLineJump,
@@ -433,6 +435,15 @@ export function LeftSidePanel({
     focusTree();
   }, [focusTree, onFileOpen]);
 
+  const handleGitDiffOpen = useCallback((fileId: string, fileName: string) => {
+    flushSync(() => {
+      setSelectedNode(createRealExplorerSelection(fileId, 'file'));
+    });
+    monacoDeleteSelectionArmedRef.current = false;
+    onGitDiffOpen?.(fileId, fileName);
+    focusTree();
+  }, [focusTree, onGitDiffOpen]);
+
   const startRenameForNode = useCallback((path: string, entryType: 'file' | 'folder') => {
     const editState = createExplorerRenameEditState({ entryType, path });
 
@@ -684,6 +695,7 @@ export function LeftSidePanel({
                 node={node}
                 depth={0}
                 activeFileId={activeFileId}
+                onGitDiffOpen={onGitDiffOpen ? handleGitDiffOpen : undefined}
                 onFileOpen={handleFileOpen}
                 onFilePreview={handleFilePreview}
                 expandedFolders={expandedFolders}

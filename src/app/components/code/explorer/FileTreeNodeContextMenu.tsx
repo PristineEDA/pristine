@@ -12,6 +12,7 @@ import {
   type WorkspaceClipboardState,
   type WorkspaceTreeNode,
 } from '../../../workspace/workspaceFiles';
+import type { WorkspaceGitPathState } from '../../../../../types/workspace-git';
 
 interface ContextMenuItem {
   kind: 'item';
@@ -156,6 +157,7 @@ export function createContextMenuItem({
 export function createExplorerTreeContextMenuItems({
   node,
   onOpenFile,
+  onOpenGitDiff,
   onStartCopy,
   onStartCreateFile,
   onStartCreateFolder,
@@ -164,9 +166,11 @@ export function createExplorerTreeContextMenuItems({
   onStartPaste,
   onStartRename,
   workspaceClipboard,
+  gitPathState,
 }: {
   node: WorkspaceTreeNode;
   onOpenFile: () => void;
+  onOpenGitDiff?: () => void;
   onStartCopy?: (path: string, entryType: 'file' | 'folder') => void;
   onStartCreateFile?: (entryType: 'file', parentPath?: string) => void;
   onStartCreateFolder?: (entryType: 'folder', parentPath?: string) => void;
@@ -175,6 +179,7 @@ export function createExplorerTreeContextMenuItems({
   onStartPaste?: (path: string, entryType: ExplorerSelectedNode['type']) => void;
   onStartRename?: (path: string, entryType: 'file' | 'folder') => void;
   workspaceClipboard?: WorkspaceClipboardState | null;
+  gitPathState?: WorkspaceGitPathState;
 }): ExplorerContextMenuEntry[] {
   const pasteTargetType = node.path === WORKSPACE_ROOT_PATH ? 'root' : node.type;
   const pasteItem = createContextMenuItem({
@@ -234,8 +239,16 @@ export function createExplorerTreeContextMenuItems({
     ];
   }
 
-  return [
+  const openItems: ExplorerContextMenuEntry[] = [
     createContextMenuItem({ label: 'Open in Editor', action: onOpenFile }),
+  ];
+
+  if (gitPathState === 'modified' && onOpenGitDiff) {
+    openItems.push(createContextMenuItem({ label: 'Open Git Diff', action: onOpenGitDiff }));
+  }
+
+  return [
+    ...openItems,
     createContextMenuSeparator('open-separator'),
     createContextMenuItem({
       label: 'Copy',

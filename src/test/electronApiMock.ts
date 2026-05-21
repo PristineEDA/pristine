@@ -60,6 +60,11 @@ export function createElectronApiMock(): ElectronAPI {
         isGitRepo: false,
         pathStates: {},
       }),
+      getFileDiff: vi.fn().mockResolvedValue({
+        filePath: '',
+        originalContent: '',
+        currentContent: '',
+      }),
     },
     shell: {
       exec: vi.fn(),

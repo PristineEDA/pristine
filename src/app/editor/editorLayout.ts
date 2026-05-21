@@ -1,12 +1,17 @@
 export type SplitDirection = 'horizontal' | 'vertical';
 export type EditorDropPosition = 'center' | 'left' | 'right' | 'top' | 'bottom';
 export type EditorTabCycleDirection = 'forward' | 'backward';
+export type EditorTabKind = 'file' | 'git-diff';
+
+const GIT_DIFF_TAB_ID_PREFIX = 'git-diff:';
 
 export interface EditorTab {
   id: string;
   name: string;
   modified?: boolean;
   isPinned: boolean;
+  kind?: EditorTabKind;
+  sourceFileId?: string;
 }
 
 export interface EditorGroup {
@@ -38,6 +43,22 @@ export interface EditorWorkspaceModel {
 
 function createGroupNode(groupId: string): EditorLayoutGroupNode {
   return { type: 'group', groupId };
+}
+
+export function createGitDiffTabId(fileId: string): string {
+  return `${GIT_DIFF_TAB_ID_PREFIX}${fileId}`;
+}
+
+export function isGitDiffEditorTab(tab: EditorTab | undefined): boolean {
+  return tab?.kind === 'git-diff';
+}
+
+export function getEditorTabDocumentId(tab: EditorTab | undefined): string {
+  return tab?.sourceFileId ?? tab?.id ?? '';
+}
+
+export function getEditorTabSourceFileId(tab: EditorTab | undefined): string {
+  return tab?.kind === 'git-diff' ? tab.sourceFileId ?? '' : tab?.id ?? '';
 }
 
 export function createEditorGroup(id: string, tabs: EditorTab[] = [], activeTabId?: string): EditorGroup {
@@ -510,4 +531,50 @@ export function moveEditorTab(
   };
 
   return nextModel;
+}
+
+export function openGitDiffInEditorGroup(
+  model: EditorWorkspaceModel,
+  groupId: string,
+  fileId: string,
+  fileName: string,
+): EditorWorkspaceModel {
+  const group = model.groups[groupId];
+  if (!group || !fileId) {
+    return model;
+  }
+
+  const tabId = createGitDiffTabId(fileId);
+  const existingTab = group.tabs.find((tab) => tab.id === tabId);
+
+  const nextGroup: EditorGroup = existingTab
+    ? {
+        ...group,
+        activeTabId: tabId,
+        previewTabId: group.previewTabId === tabId ? null : group.previewTabId,
+      }
+    : {
+        ...group,
+        tabs: [
+          ...group.tabs,
+          {
+            id: tabId,
+            name: `${fileName} Changes`,
+            isPinned: true,
+            kind: 'git-diff',
+            sourceFileId: fileId,
+          },
+        ],
+        activeTabId: tabId,
+        previewTabId: group.previewTabId,
+      };
+
+  return {
+    ...model,
+    groups: {
+      ...model.groups,
+      [groupId]: nextGroup,
+    },
+    focusedGroupId: groupId,
+  };
 }

@@ -15,6 +15,7 @@ import {
   type EditorGroup,
   type EditorLayoutNode,
   type EditorTab,
+  isGitDiffEditorTab,
 } from '../editor/editorLayout';
 import {
   canToggleLayoutPanels,
@@ -103,6 +104,8 @@ interface WorkspaceState {
   openFile: (fileId: string, fileName: string) => void;
   resolveFileId: (fileId: string) => string;
   openFileInGroup: (fileId: string, fileName: string, groupId: string) => void;
+  openGitDiff: (fileId: string, fileName: string) => void;
+  openGitDiffInGroup: (fileId: string, fileName: string, groupId: string) => void;
   openUntitledFile: (groupId?: string) => string;
   openPreviewFile: (fileId: string, fileName: string) => void;
   openPreviewFileInGroup: (fileId: string, fileName: string, groupId: string) => void;
@@ -204,6 +207,8 @@ type WorkspaceEditorState = Pick<
   | 'openFile'
   | 'resolveFileId'
   | 'openFileInGroup'
+  | 'openGitDiff'
+  | 'openGitDiffInGroup'
   | 'openUntitledFile'
   | 'openPreviewFile'
   | 'openPreviewFileInGroup'
@@ -920,6 +925,12 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   const saveActiveFile = useCallback(async () => {
     const { activeTabId } = editorWorkspaceRef.current;
+    const activeGroup = editorWorkspaceRef.current.editorGroups.find((group) => group.activeTabId === activeTabId);
+    const activeTab = activeGroup?.tabs.find((tab) => tab.id === activeTabId);
+    if (isGitDiffEditorTab(activeTab)) {
+      return false;
+    }
+
     const resolvedFileId = resolveCurrentFileId(activeTabId);
     const { loadingFiles, loadErrors } = fileStoreRef.current;
 
@@ -1491,6 +1502,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     openFile: editorWorkspace.openFile,
     resolveFileId: resolveCurrentFileId,
     openFileInGroup: editorWorkspace.openFileInGroup,
+    openGitDiff: editorWorkspace.openGitDiff,
+    openGitDiffInGroup: editorWorkspace.openGitDiffInGroup,
     openUntitledFile,
     openPreviewFile: editorWorkspace.openPreviewFile,
     openPreviewFileInGroup: editorWorkspace.openPreviewFileInGroup,
@@ -1587,6 +1600,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     editorWorkspace.moveTab,
     editorWorkspace.openFile,
     editorWorkspace.openFileInGroup,
+    editorWorkspace.openGitDiff,
+    editorWorkspace.openGitDiffInGroup,
     editorWorkspace.openPreviewFile,
     editorWorkspace.openPreviewFileInGroup,
     editorWorkspace.pinTab,
@@ -1674,6 +1689,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     openFile: workspaceValue.openFile,
     resolveFileId: workspaceValue.resolveFileId,
     openFileInGroup: workspaceValue.openFileInGroup,
+    openGitDiff: workspaceValue.openGitDiff,
+    openGitDiffInGroup: workspaceValue.openGitDiffInGroup,
     openUntitledFile: workspaceValue.openUntitledFile,
     openPreviewFile: workspaceValue.openPreviewFile,
     openPreviewFileInGroup: workspaceValue.openPreviewFileInGroup,
@@ -1720,6 +1737,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     workspaceValue.moveTab,
     workspaceValue.openFile,
     workspaceValue.openFileInGroup,
+    workspaceValue.openGitDiff,
+    workspaceValue.openGitDiffInGroup,
     workspaceValue.openPreviewFile,
     workspaceValue.openPreviewFileInGroup,
     workspaceValue.openUntitledFile,

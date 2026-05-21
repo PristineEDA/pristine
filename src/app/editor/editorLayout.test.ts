@@ -4,8 +4,10 @@ import {
   createEditorGroup,
   createInitialEditorWorkspace,
   getCycledTabIdInEditorGroup,
+  getEditorTabDocumentId,
   getNextActiveTabIdAfterClose,
   moveEditorTab,
+  openGitDiffInEditorGroup,
   openFileInEditorGroup,
   pinTabInEditorGroup,
   splitEditorGroup,
@@ -59,6 +61,38 @@ describe('editorLayout', () => {
     ]);
     expect(state.groups['group-1']?.previewTabId).toBeNull();
     expect(state.groups['group-1']?.activeTabId).toBe('rtl/core/reg_file.v');
+  });
+
+  it('opens a pinned git diff tab that keeps the source file id separately', () => {
+    let state = createInitialEditorWorkspace('group-1');
+
+    state = openGitDiffInEditorGroup(state, 'group-1', 'rtl/core/reg_file.v', 'reg_file.v');
+
+    expect(state.groups['group-1']?.tabs).toEqual([
+      {
+        id: 'git-diff:rtl/core/reg_file.v',
+        name: 'reg_file.v Changes',
+        isPinned: true,
+        kind: 'git-diff',
+        sourceFileId: 'rtl/core/reg_file.v',
+      },
+    ]);
+    expect(getEditorTabDocumentId(state.groups['group-1']?.tabs[0])).toBe('rtl/core/reg_file.v');
+    expect(state.groups['group-1']?.activeTabId).toBe('git-diff:rtl/core/reg_file.v');
+  });
+
+  it('activates an existing git diff tab instead of duplicating it', () => {
+    let state = createInitialEditorWorkspace('group-1');
+
+    state = openGitDiffInEditorGroup(state, 'group-1', 'rtl/core/reg_file.v', 'reg_file.v');
+    state = openFileInEditorGroup(state, 'group-1', 'rtl/core/alu.v', 'alu.v');
+    state = openGitDiffInEditorGroup(state, 'group-1', 'rtl/core/reg_file.v', 'reg_file.v');
+
+    expect(state.groups['group-1']?.tabs.map((tab) => tab.id)).toEqual([
+      'git-diff:rtl/core/reg_file.v',
+      'rtl/core/alu.v',
+    ]);
+    expect(state.groups['group-1']?.activeTabId).toBe('git-diff:rtl/core/reg_file.v');
   });
 
   it('creates a second group when splitting the active tab', () => {

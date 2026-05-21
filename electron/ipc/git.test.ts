@@ -7,9 +7,11 @@ vi.mock('electron', () => ({
 }));
 
 const mockReadDir = vi.fn();
+const mockReadFile = vi.fn();
 vi.mock('node:fs/promises', () => ({
   default: {
     readdir: (...args: unknown[]) => mockReadDir(...args),
+    readFile: (...args: unknown[]) => mockReadFile(...args),
   },
 }));
 
@@ -151,5 +153,59 @@ describe('git IPC handlers', () => {
       isGitRepo: true,
       pathStates: {},
     });
+  });
+
+  it('returns HEAD and current file content for a workspace git diff', async () => {
+    mockReadFile.mockResolvedValue('module reg_file;\n// working tree\nendmodule\n');
+    mockExecFile.mockImplementation((
+      _command: string,
+      _args: string[],
+      _options: Record<string, unknown>,
+      callback: (error: Error | null, stdout: string, stderr: string) => void,
+    ) => {
+      callback(null, 'module reg_file;\nendmodule\n', '');
+    });
+
+    const handler = getHandler('async:git:get-file-diff');
+    await expect(handler({}, 'rtl/core/reg_file.v')).resolves.toEqual({
+      filePath: 'rtl/core/reg_file.v',
+      originalContent: 'module reg_file;\nendmodule\n',
+      currentContent: 'module reg_file;\n// working tree\nendmodule\n',
+    });
+
+    expect(mockExecFile).toHaveBeenCalledWith(
+      'git',
+      ['--no-optional-locks', 'show', 'HEAD:rtl/core/reg_file.v'],
+      expect.objectContaining({
+        cwd: expect.stringMatching(/project-root$/),
+        maxBuffer: 8 * 1024 * 1024,
+        windowsHide: true,
+      }),
+      expect.any(Function),
+    );
+    expect(mockReadFile).toHaveBeenCalledWith(expect.stringMatching(/project-root[\\/]rtl[\\/]core[\\/]reg_file\.v$/), 'utf8');
+  });
+
+  it('rejects git diff paths outside the project root', async () => {
+    const handler = getHandler('async:git:get-file-diff');
+
+    await expect(handler({}, '../secrets.txt')).rejects.toThrow('Path traversal denied');
+    expect(mockExecFile).not.toHaveBeenCalled();
+    expect(mockReadFile).not.toHaveBeenCalled();
+  });
+
+  it('rejects git diff requests when HEAD content cannot be read', async () => {
+    mockReadFile.mockResolvedValue('current content');
+    mockExecFile.mockImplementation((
+      _command: string,
+      _args: string[],
+      _options: Record<string, unknown>,
+      callback: (error: Error | null, stdout: string, stderr: string) => void,
+    ) => {
+      callback(new Error('fatal: path does not exist in HEAD'), '', 'fatal: path does not exist in HEAD');
+    });
+
+    const handler = getHandler('async:git:get-file-diff');
+    await expect(handler({}, 'rtl/core/reg_file.v')).rejects.toThrow('fatal: path does not exist in HEAD');
   });
 });

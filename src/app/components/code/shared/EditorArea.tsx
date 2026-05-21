@@ -8,7 +8,13 @@ import { getWorkspaceGitPathState, useWorkspaceGitStatus } from '../../../git/wo
 import { getDisplayPathSegments } from '../../../workspace/workspaceFiles';
 import { FileTypeBadge } from './FileTypeBadge';
 import { useEditorDocumentState } from './useEditorDocumentState';
-import type { SplitDirection } from '../../../editor/editorLayout';
+import {
+  getEditorTabDocumentId,
+  getEditorTabSourceFileId,
+  isGitDiffEditorTab,
+  type EditorTab as WorkspaceEditorTab,
+  type SplitDirection,
+} from '../../../editor/editorLayout';
 import { focusEditorInstance } from '../../../editor/focusEditor';
 import type { CursorRestoreRequest } from '../../../context/useWorkspaceEditorState';
 import { EmptyProject } from './EmptyProject';
@@ -41,17 +47,23 @@ function loadMonacoEditorPane() {
   return import('./MonacoEditorPane');
 }
 
-const MonacoEditorPane = lazy(() => loadMonacoEditorPane().then((module) => ({ default: module.MonacoEditorPane })));
+function loadMonacoGitDiffPane() {
+  return import('./MonacoGitDiffPane');
+}
 
-interface Tab {
-  id: string;
-  name: string;
-  modified?: boolean;
+const MonacoEditorPane = lazy(() => loadMonacoEditorPane().then((module) => ({ default: module.MonacoEditorPane })));
+const MonacoGitDiffPane = lazy(() => loadMonacoGitDiffPane().then((module) => ({ default: module.MonacoGitDiffPane })));
+
+interface EditorAreaTab extends Omit<WorkspaceEditorTab, 'isPinned'> {
   isPinned?: boolean;
 }
 
+function toWorkspaceEditorTab(tab: EditorAreaTab | undefined): WorkspaceEditorTab | undefined {
+  return tab ? { ...tab, isPinned: tab.isPinned ?? true } : undefined;
+}
+
 interface EditorAreaProps {
-  tabs: Tab[];
+  tabs: EditorAreaTab[];
   activeTabId: string;
   documentTabId?: string;
   onTabChange: (id: string) => void;
@@ -118,7 +130,7 @@ function PreviewTabIndicator({ tabId }: { tabId: string }) {
 function EditorTab({
   tab, isActive, gitState, layoutMode, onActivate, onClose, onPin, onDragStart, onDragEnd,
 }: {
-  tab: Tab;
+  tab: EditorAreaTab;
   isActive: boolean;
   gitState?: WorkspaceGitPathState;
   layoutMode: CodeViewerLayoutMode;
@@ -129,7 +141,14 @@ function EditorTab({
   onDragEnd?: () => void;
 }) {
   const isPreview = tab.isPinned === false;
-  const tooltipText = isPreview ? `${tab.id} (Preview tab)` : tab.id;
+  const workspaceTab = toWorkspaceEditorTab(tab);
+  const tabDocumentId = getEditorTabDocumentId(workspaceTab);
+  const isGitDiff = isGitDiffEditorTab(workspaceTab);
+  const tooltipText = isGitDiff
+    ? `${tabDocumentId} (Git diff)`
+    : isPreview
+    ? `${tab.id} (Preview tab)`
+    : tab.id;
   const trailingControlClassName = isPreview && !tab.modified
     ? 'opacity-50 hover:opacity-100'
     : 'opacity-0 group-hover:opacity-100';
@@ -170,7 +189,7 @@ function EditorTab({
       >
         <FileTypeBadge
           name={tab.name}
-          path={tab.id}
+          path={tabDocumentId}
           testId={`editor-tab-badge-${tab.id}`}
           className="h-4 w-4"
         />
@@ -267,13 +286,17 @@ export function EditorArea({
   dragInteractionShieldTestId,
 }: EditorAreaProps) {
   const { layoutMode } = useCodeViewerLayout();
-  const resolvedActiveDocumentId = documentTabId ?? activeTabId;
+  const activeEditorTab = tabs.find((tab) => tab.id === activeTabId);
+  const activeWorkspaceTab = toWorkspaceEditorTab(activeEditorTab);
+  const isActiveGitDiffTab = isGitDiffEditorTab(activeWorkspaceTab);
+  const resolvedActiveDocumentId = isActiveGitDiffTab
+    ? getEditorTabDocumentId(activeWorkspaceTab)
+    : documentTabId ?? activeTabId;
   const lastAppliedRestoreRef = useRef({ activeTabId: '', restoreToken: 0 });
   const [activeModelReadyId, setActiveModelReadyId] = useState('');
   const gitStatus = useWorkspaceGitStatus();
   const {
     activeLoadError,
-    activeTab,
     code,
     isActiveTabReady,
     placeholderText,
@@ -281,18 +304,18 @@ export function EditorArea({
   } = useEditorDocumentState({
     tabs,
     activeTabId,
-    documentTabId: resolvedActiveDocumentId,
+    documentTabId: isActiveGitDiffTab ? '' : resolvedActiveDocumentId,
     contentCache,
     loadingFiles,
     loadErrors,
     onLoadFile,
     onContentChange,
   });
-  const breadcrumbSegments = activeTab ? getDisplayPathSegments(resolvedActiveDocumentId, activeTab.name) : [];
+  const breadcrumbSegments = activeEditorTab ? getDisplayPathSegments(resolvedActiveDocumentId || activeTabId, activeEditorTab.name) : [];
 
   // Jump to line
   useEffect(() => {
-    if (!jumpToLine || !editorRef.current || !isActiveTabReady || activeModelReadyId !== resolvedActiveDocumentId) {
+    if (isActiveGitDiffTab || !jumpToLine || !editorRef.current || !isActiveTabReady || activeModelReadyId !== resolvedActiveDocumentId) {
       return;
     }
 
@@ -317,9 +340,13 @@ export function EditorArea({
     focusEditorInstance(editor);
     onCursorChange?.(jumpToLine, 1);
     lastAppliedRestoreRef.current = { activeTabId: resolvedActiveDocumentId, restoreToken: 0 };
-  }, [activeModelReadyId, resolvedActiveDocumentId, isActiveTabReady, jumpToLine, editorRef, onCursorChange]);
+  }, [activeModelReadyId, resolvedActiveDocumentId, isActiveGitDiffTab, isActiveTabReady, jumpToLine, editorRef, onCursorChange]);
 
   useEffect(() => {
+    if (isActiveGitDiffTab) {
+      return;
+    }
+
     const editor = editorRef.current;
     const activeRestoreRequest = cursorRestoreRequest && (
       cursorRestoreRequest.fileId === activeTabId || cursorRestoreRequest.fileId === resolvedActiveDocumentId
@@ -381,6 +408,7 @@ export function EditorArea({
     focused,
     activeModelReadyId,
     isActiveTabReady,
+    isActiveGitDiffTab,
     jumpToLine,
     onCursorChange,
     onCursorRestoreRequestConsumed,
@@ -426,7 +454,7 @@ export function EditorArea({
             key={tab.id}
             tab={tab}
             isActive={tab.id === activeTabId}
-            gitState={getWorkspaceGitPathState(gitStatus, tab.id)}
+            gitState={getWorkspaceGitPathState(gitStatus, getEditorTabSourceFileId(toWorkspaceEditorTab(tab)))}
             layoutMode={layoutMode}
             onActivate={() => onTabChange(tab.id)}
             onClose={() => onTabClose(tab.id)}
@@ -462,9 +490,24 @@ export function EditorArea({
       </div>
 
       {/* Breadcrumb */}
-      {activeTab && <Breadcrumb segments={breadcrumbSegments} />}
+      {activeEditorTab && <Breadcrumb segments={breadcrumbSegments} />}
 
-      {!isActiveTabReady ? (
+      {isActiveGitDiffTab && resolvedActiveDocumentId ? (
+        <Suspense
+          fallback={(
+            <div className="flex flex-1 items-center justify-center bg-ide-editor-bg text-ide-text-muted text-[12px]">
+              Loading editor...
+            </div>
+          )}
+        >
+          <MonacoGitDiffPane
+            filePath={resolvedActiveDocumentId}
+            onEditorMount={onEditorMount}
+            showDragInteractionShield={showDragInteractionShield}
+            dragInteractionShieldTestId={dragInteractionShieldTestId}
+          />
+        </Suspense>
+      ) : !isActiveTabReady ? (
         <EditorDocumentPlaceholder text={placeholderText} />
       ) : (
         <Suspense

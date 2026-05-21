@@ -6,7 +6,7 @@ import type {
   LspStateEvent,
   WorkspaceLocation,
 } from './systemverilog-lsp';
-import type { WorkspaceGitChangeEvent, WorkspaceGitStatusPayload } from './workspace-git';
+import type { WorkspaceGitChangeEvent, WorkspaceGitFileDiffPayload, WorkspaceGitStatusPayload } from './workspace-git';
 import type { OpenThemeDialogResult, SaveDialogResult } from '../electron/ipc/dialog';
 import type { MenuCommandEvent } from '../src/app/menu/applicationMenu';
 import type { WindowCloseDecision, WindowCloseRequest } from '../src/app/window/windowClose';
@@ -74,6 +74,7 @@ export interface ElectronAPI {
 
   git: {
     getStatus: () => Promise<WorkspaceGitStatusPayload>;
+    getFileDiff: (filePath: string) => Promise<WorkspaceGitFileDiffPayload>;
   };
 
   // Shell (isolated subprocess)

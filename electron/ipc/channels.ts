@@ -42,6 +42,7 @@ export const AsyncChannels = {
   FS_STAT: 'async:fs:stat',
   FS_EXISTS: 'async:fs:exists',
   GIT_GET_STATUS: 'async:git:get-status',
+  GIT_GET_FILE_DIFF: 'async:git:get-file-diff',
   SHELL_EXEC: 'async:shell:exec',
   SHELL_KILL: 'async:shell:kill',
   TERMINAL_CREATE: 'async:terminal:create',
