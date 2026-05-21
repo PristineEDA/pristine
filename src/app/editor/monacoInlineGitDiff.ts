@@ -4,21 +4,30 @@ export interface MonacoInlineGitDiffController {
   apply: (diff: InlineGitDiffResult) => void
   clear: () => void
   dispose: () => void
+  syncEditorFont: () => void
 }
 
 const ADDED_LINE_CLASS = 'pristine-inline-git-diff-line pristine-inline-git-diff-line-added'
 const MODIFIED_LINE_CLASS = 'pristine-inline-git-diff-line pristine-inline-git-diff-line-modified'
 const REMOVED_ANCHOR_LINE_CLASS = 'pristine-inline-git-diff-line pristine-inline-git-diff-line-removed-anchor'
-const ADDED_GUTTER_CLASS = 'pristine-inline-git-diff-gutter pristine-inline-git-diff-gutter-added'
-const MODIFIED_GUTTER_CLASS = 'pristine-inline-git-diff-gutter pristine-inline-git-diff-gutter-modified'
-const REMOVED_GUTTER_CLASS = 'pristine-inline-git-diff-gutter pristine-inline-git-diff-gutter-removed'
+const ADDED_MARGIN_CLASS = 'pristine-inline-git-diff-margin pristine-inline-git-diff-margin-added'
+const MODIFIED_MARGIN_CLASS = 'pristine-inline-git-diff-margin pristine-inline-git-diff-margin-modified'
+const REMOVED_MARGIN_CLASS = 'pristine-inline-git-diff-margin pristine-inline-git-diff-margin-removed'
+const ADDED_LINE_NUMBER_CLASS = 'pristine-inline-git-diff-line-number pristine-inline-git-diff-line-number-added'
+const MODIFIED_LINE_NUMBER_CLASS = 'pristine-inline-git-diff-line-number pristine-inline-git-diff-line-number-modified'
+const REMOVED_LINE_NUMBER_CLASS = 'pristine-inline-git-diff-line-number pristine-inline-git-diff-line-number-removed'
 const INLINE_DIFF_DETAIL_TEST_ID = 'monaco-inline-git-diff-detail'
 const INLINE_DIFF_DETAIL_TITLE_TEST_ID = 'monaco-inline-git-diff-detail-title'
 const INLINE_DIFF_DETAIL_BODY_TEST_ID = 'monaco-inline-git-diff-detail-body'
 const INLINE_DIFF_DETAIL_CLOSE_TEST_ID = 'monaco-inline-git-diff-detail-close'
-const INLINE_DIFF_DECORATION_SELECTOR = '.pristine-inline-git-diff-gutter, .pristine-inline-git-diff-line'
+const INLINE_DIFF_DECORATION_SELECTOR = '.pristine-inline-git-diff-margin, .pristine-inline-git-diff-line-number, .pristine-inline-git-diff-line'
 const INLINE_DIFF_DETAIL_HEADER_HEIGHT_IN_LINES = 2
 const INLINE_DIFF_DETAIL_MAX_HEIGHT_IN_LINES = 18
+const EDITOR_OPTION_FALLBACKS = {
+  fontFamily: 58,
+  fontSize: 61,
+  lineHeight: 75,
+} as const
 
 function getLineCount(editor: any) {
   return Math.max(editor?.getModel?.()?.getLineCount?.() ?? 1, 1)
@@ -43,6 +52,43 @@ function createOverviewRulerOptions(monaco: any, color: string) {
   return {
     color,
     position: monaco?.editor?.OverviewRulerLane?.Left ?? 1,
+  }
+}
+
+function getEditorOption(editor: any, monaco: any, optionName: keyof typeof EDITOR_OPTION_FALLBACKS) {
+  const editorOption = monaco?.editor?.EditorOption?.[optionName] ?? EDITOR_OPTION_FALLBACKS[optionName]
+
+  try {
+    return editor?.getOption?.(editorOption)
+  } catch {
+    return undefined
+  }
+}
+
+function applyEditorFontInfo(editor: any, monaco: any, domNode: HTMLElement | null) {
+  if (!domNode) {
+    return
+  }
+
+  if (typeof editor?.applyFontInfo === 'function') {
+    editor.applyFontInfo(domNode)
+    return
+  }
+
+  const fontFamily = getEditorOption(editor, monaco, 'fontFamily')
+  const fontSize = getEditorOption(editor, monaco, 'fontSize')
+  const lineHeight = getEditorOption(editor, monaco, 'lineHeight')
+
+  if (typeof fontFamily === 'string' && fontFamily.length > 0) {
+    domNode.style.fontFamily = fontFamily
+  }
+
+  if (typeof fontSize === 'number' && Number.isFinite(fontSize)) {
+    domNode.style.fontSize = `${fontSize}px`
+  }
+
+  if (typeof lineHeight === 'number' && Number.isFinite(lineHeight)) {
+    domNode.style.lineHeight = `${lineHeight}px`
   }
 }
 
@@ -166,6 +212,23 @@ function getEventLineNumber(event: any) {
   return typeof lineNumber === 'number' ? lineNumber : undefined
 }
 
+function createLineDecorationOptions(
+  monaco: any,
+  className: string,
+  marginClassName: string,
+  lineNumberClassName: string,
+  overviewColor: string,
+) {
+  return {
+    className,
+    hoverMessage: { value: 'Click to show Git change' },
+    isWholeLine: true,
+    lineNumberClassName,
+    marginClassName,
+    overviewRuler: createOverviewRulerOptions(monaco, overviewColor),
+  }
+}
+
 function createCurrentLineDecorations(editor: any, monaco: any, diff: InlineGitDiffResult) {
   const decorations: any[] = []
 
@@ -173,19 +236,14 @@ function createCurrentLineDecorations(editor: any, monaco: any, diff: InlineGitD
     if (hunk.addedLines.length > 0) {
       const isAddedOnly = hunk.type === 'added'
       const className = isAddedOnly ? ADDED_LINE_CLASS : MODIFIED_LINE_CLASS
-      const gutterClassName = isAddedOnly ? ADDED_GUTTER_CLASS : MODIFIED_GUTTER_CLASS
+      const marginClassName = isAddedOnly ? ADDED_MARGIN_CLASS : MODIFIED_MARGIN_CLASS
+      const lineNumberClassName = isAddedOnly ? ADDED_LINE_NUMBER_CLASS : MODIFIED_LINE_NUMBER_CLASS
       const overviewColor = isAddedOnly ? 'var(--ide-success)' : 'var(--ide-warning)'
 
       hunk.addedLines.forEach((line) => {
         decorations.push({
           range: createLineRange(editor, line.currentLineNumber ?? hunk.currentStartLine),
-          options: {
-            className,
-            hoverMessage: { value: 'Click to show Git change' },
-            isWholeLine: true,
-            linesDecorationsClassName: gutterClassName,
-            overviewRuler: createOverviewRulerOptions(monaco, overviewColor),
-          },
+          options: createLineDecorationOptions(monaco, className, marginClassName, lineNumberClassName, overviewColor),
         })
       })
     }
@@ -194,13 +252,7 @@ function createCurrentLineDecorations(editor: any, monaco: any, diff: InlineGitD
       const anchorLine = Math.min(Math.max(hunk.anchorLine || 1, 1), getLineCount(editor))
       decorations.push({
         range: createLineRange(editor, anchorLine),
-        options: {
-          className: REMOVED_ANCHOR_LINE_CLASS,
-          hoverMessage: { value: 'Click to show Git change' },
-          isWholeLine: true,
-          linesDecorationsClassName: REMOVED_GUTTER_CLASS,
-          overviewRuler: createOverviewRulerOptions(monaco, 'var(--ide-error)'),
-        },
+        options: createLineDecorationOptions(monaco, REMOVED_ANCHOR_LINE_CLASS, REMOVED_MARGIN_CLASS, REMOVED_LINE_NUMBER_CLASS, 'var(--ide-error)'),
       })
     }
   })
@@ -212,7 +264,12 @@ export function createMonacoInlineGitDiffController(editor: any, monaco: any): M
   let decorationIds: string[] = []
   let currentHunks: InlineGitDiffHunk[] = []
   let detailZoneId: string | null = null
+  let detailDomNode: HTMLElement | null = null
   let activeDetailHunkKey: string | null = null
+
+  const syncEditorFont = () => {
+    applyEditorFontInfo(editor, monaco, detailDomNode)
+  }
 
   const closeDetail = () => {
     if (detailZoneId && typeof editor?.changeViewZones === 'function') {
@@ -223,6 +280,7 @@ export function createMonacoInlineGitDiffController(editor: any, monaco: any): M
     }
 
     detailZoneId = null
+    detailDomNode = null
     activeDetailHunkKey = null
   }
 
@@ -240,9 +298,11 @@ export function createMonacoInlineGitDiffController(editor: any, monaco: any): M
     closeDetail()
 
     editor.changeViewZones((accessor: any) => {
+      const domNode = createHunkDetailNode(hunk, closeDetail)
+      applyEditorFontInfo(editor, monaco, domNode)
       const zoneId = accessor.addZone({
         afterLineNumber: Math.max(hunk.anchorLine, 0),
-        domNode: createHunkDetailNode(hunk, closeDetail),
+        domNode,
         heightInLines: getHunkDetailHeightInLines(hunk),
         ordinal: 10_000 + hunk.originalStartLine,
         suppressMouseDown: true,
@@ -250,6 +310,7 @@ export function createMonacoInlineGitDiffController(editor: any, monaco: any): M
 
       if (zoneId !== undefined && zoneId !== null) {
         detailZoneId = String(zoneId)
+        detailDomNode = domNode
         activeDetailHunkKey = hunkKey
       }
     })
@@ -322,5 +383,6 @@ export function createMonacoInlineGitDiffController(editor: any, monaco: any): M
       mouseDownDisposable?.dispose?.()
       document.removeEventListener('keydown', handleDocumentKeyDown)
     },
+    syncEditorFont,
   }
 }

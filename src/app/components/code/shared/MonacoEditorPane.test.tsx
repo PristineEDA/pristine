@@ -63,7 +63,27 @@ const {
     },
   };
   const editorInstance = {
+    applyFontInfo: vi.fn((target: any) => {
+      target.style.fontFamily = '"Mock Editor Mono", monospace';
+      target.style.fontSize = '17px';
+      target.style.lineHeight = '24px';
+    }),
     getDomNode: vi.fn(() => editorDomNode),
+    getOption: vi.fn((option: number) => {
+      if (option === 58) {
+        return '"Mock Editor Mono", monospace';
+      }
+
+      if (option === 61) {
+        return 17;
+      }
+
+      if (option === 75) {
+        return 24;
+      }
+
+      return undefined;
+    }),
     hasTextFocus: vi.fn(() => true),
     onDidChangeCursorPosition: vi.fn((callback: (event: { position: { lineNumber: number; column: number } }) => void) => {
       cursorPositionListeners.push(callback);
@@ -115,6 +135,12 @@ const {
   const models = [{ id: 'model-a' }, { id: 'model-b' }];
   const monaco = {
     editor: {
+      EditorOption: {
+        fontFamily: 58,
+        fontInfo: 59,
+        fontSize: 61,
+        lineHeight: 75,
+      },
       getModels: vi.fn(() => models),
       remeasureFonts: vi.fn(),
       setModelMarkers: vi.fn(),
@@ -325,7 +351,9 @@ describe('MonacoEditorPane', () => {
     mockEditorInstance.changeViewZones.mockClear();
     mockEditorInstance.deltaDecorations.mockClear();
     mockEditorInstance.getModel.mockClear();
+    mockEditorInstance.getOption.mockClear();
     mockEditorInstance.onMouseDown.mockClear();
+    mockEditorInstance.applyFontInfo.mockClear();
     mockEditorInstance.trigger.mockReset();
     vi.mocked(window.electronAPI!.git.getFileDiff).mockReset();
     vi.mocked(window.electronAPI!.git.getFileDiff).mockResolvedValue({
@@ -613,10 +641,46 @@ describe('MonacoEditorPane', () => {
       expect.objectContaining({
         options: expect.objectContaining({
           className: expect.stringContaining('pristine-inline-git-diff-line-modified'),
-          linesDecorationsClassName: expect.stringContaining('pristine-inline-git-diff-gutter-modified'),
+          lineNumberClassName: expect.stringContaining('pristine-inline-git-diff-line-number-modified'),
+          marginClassName: expect.stringContaining('pristine-inline-git-diff-margin-modified'),
         }),
       }),
     ]));
+    expect(decorations[0]?.options.linesDecorationsClassName).toBeUndefined();
+  });
+
+  it('renders removed-only inline git diff decorations in the margin and line number', async () => {
+    const filePath = 'rtl/core/reg_file.v';
+    const currentContent = 'module reg_file;\nendmodule';
+    mockedWorkspaceGitPathStates = { [filePath]: 'modified' };
+    vi.mocked(window.electronAPI!.git.getFileDiff).mockResolvedValue({
+      filePath,
+      originalContent: 'module reg_file;\nassign removed = 1\'b1;\nendmodule',
+      currentContent,
+    });
+
+    render(
+      <MonacoEditorPane
+        activeTabId={filePath}
+        code={currentContent}
+        editorRef={createRef<any>()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(mockEditorInstance.deltaDecorations.mock.calls.some((call) => Array.isArray(call[1]) && call[1].length > 0)).toBe(true);
+    });
+
+    const decorationCalls = mockEditorInstance.deltaDecorations.mock.calls
+      .filter((call) => Array.isArray(call[1]) && call[1].length > 0);
+    const decorations = decorationCalls[decorationCalls.length - 1]?.[1] ?? [];
+    const removedDecoration = decorations.find((decoration: any) => decoration.options.className.includes('pristine-inline-git-diff-line-removed-anchor'));
+
+    expect(removedDecoration?.options).toEqual(expect.objectContaining({
+      lineNumberClassName: expect.stringContaining('pristine-inline-git-diff-line-number-removed'),
+      marginClassName: expect.stringContaining('pristine-inline-git-diff-margin-removed'),
+    }));
+    expect(removedDecoration?.options.linesDecorationsClassName).toBeUndefined();
   });
 
   it('opens inline git diff details when a diff decoration is clicked and closes it from the peek controls', async () => {
@@ -663,6 +727,10 @@ describe('MonacoEditorPane', () => {
     expect(detailZone.domNode.dataset.inlineGitDiff).toBe('detail');
     expect(detailZone.heightInLines).toBe(4);
     expect(detailZone.suppressMouseDown).toBe(true);
+    expect(mockEditorInstance.applyFontInfo).toHaveBeenCalledWith(detailZone.domNode);
+    expect(detailZone.domNode.style.fontFamily).toBe('"Mock Editor Mono", monospace');
+    expect(detailZone.domNode.style.fontSize).toBe('17px');
+    expect(detailZone.domNode.style.lineHeight).toBe('24px');
     expect(detailZone.domNode.querySelector('[data-testid="monaco-inline-git-diff-detail-title"]')?.textContent).toBe('Git Local Changes - modified change');
     expect(detailZone.domNode.querySelector('[data-testid="monaco-inline-git-diff-detail-body"]')?.textContent).toContain('assign ready = done;');
     expect(detailZone.domNode.querySelector('[data-testid="monaco-inline-git-diff-detail-body"]')?.textContent).toContain('assign ready = valid;');
@@ -714,7 +782,7 @@ describe('MonacoEditorPane', () => {
     });
 
     const decorationElement = document.createElement('div');
-    decorationElement.className = 'pristine-inline-git-diff-gutter pristine-inline-git-diff-gutter-added';
+    decorationElement.className = 'pristine-inline-git-diff-margin pristine-inline-git-diff-margin-added';
     act(() => {
       mockEditorMouseDownListeners[mockEditorMouseDownListeners.length - 1]?.({
         event: {
@@ -733,6 +801,62 @@ describe('MonacoEditorPane', () => {
     expect(mockInlineGitDiffAddedZones[0].domNode).toHaveClass('pristine-inline-git-diff-detail-added');
     expect(mockInlineGitDiffAddedZones[0].domNode.querySelector('[data-testid="monaco-inline-git-diff-detail-title"]')?.textContent).toBe('Git Local Changes - added change');
     expect(mockInlineGitDiffAddedZones[0].domNode.querySelector('[data-testid="monaco-inline-git-diff-detail-body"]')?.textContent).toContain('assign inserted = 1\'b1;');
+  });
+
+  it('resyncs an open inline git diff detail when editor font settings change', async () => {
+    const filePath = 'rtl/core/reg_file.v';
+    const currentContent = 'module reg_file;\nassign ready = valid;\nendmodule';
+    mockedWorkspaceGitPathStates = { [filePath]: 'modified' };
+    vi.mocked(window.electronAPI!.git.getFileDiff).mockResolvedValue({
+      filePath,
+      originalContent: 'module reg_file;\nassign ready = done;\nendmodule',
+      currentContent,
+    });
+    const editorRef = createRef<any>();
+
+    const { rerender } = render(
+      <MonacoEditorPane
+        activeTabId={filePath}
+        code={currentContent}
+        editorRef={editorRef}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(mockEditorInstance.deltaDecorations.mock.calls.some((call) => Array.isArray(call[1]) && call[1].length > 0)).toBe(true);
+    });
+
+    const decorationElement = document.createElement('div');
+    decorationElement.className = 'pristine-inline-git-diff-margin pristine-inline-git-diff-margin-modified';
+    act(() => {
+      mockEditorMouseDownListeners[mockEditorMouseDownListeners.length - 1]?.({
+        event: {
+          preventDefault: vi.fn(),
+          stopPropagation: vi.fn(),
+        },
+        target: {
+          element: decorationElement,
+          position: { lineNumber: 2 },
+        },
+      });
+    });
+
+    const detailZone = mockInlineGitDiffAddedZones[0];
+    mockEditorInstance.applyFontInfo.mockClear();
+    mockedEditorFontSize = 18;
+
+    rerender(
+      <MonacoEditorPane
+        activeTabId={filePath}
+        code={currentContent}
+        editorRef={editorRef}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(mockEditorInstance.updateOptions).toHaveBeenCalledWith(expect.objectContaining({ fontSize: 18 }));
+    });
+    expect(mockEditorInstance.applyFontInfo).toHaveBeenCalledWith(detailZone.domNode);
   });
 
   it('keeps inline git diff when Monaco normalizes CRLF content to LF', async () => {

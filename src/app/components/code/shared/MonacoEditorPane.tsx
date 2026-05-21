@@ -355,6 +355,7 @@ export function MonacoEditorPane({
     }
 
     editor.updateOptions(editorBehaviorOptions);
+    inlineGitDiffControllerRef.current?.syncEditorFont();
     applyEditorLayoutRef.current({ force: true });
   }, [editorBehaviorOptions, editorRef]);
 

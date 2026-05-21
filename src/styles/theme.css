@@ -424,21 +424,52 @@
   cursor: pointer;
 }
 
-.monaco-editor .pristine-inline-git-diff-gutter {
-  border-left: 2px solid currentColor;
+.monaco-editor .pristine-inline-git-diff-margin {
   cursor: pointer;
-  width: 4px !important;
+  box-shadow: inset 2px 0 0 currentColor;
 }
 
-.monaco-editor .pristine-inline-git-diff-gutter-added {
+.monaco-editor .pristine-inline-git-diff-margin-added {
   color: var(--ide-success);
 }
 
-.monaco-editor .pristine-inline-git-diff-gutter-modified {
+.monaco-editor .pristine-inline-git-diff-margin-modified {
   color: var(--ide-warning);
 }
 
-.monaco-editor .pristine-inline-git-diff-gutter-removed {
+.monaco-editor .pristine-inline-git-diff-margin-removed {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    currentColor 0,
+    currentColor 2px,
+    transparent 2px,
+    transparent 5px
+  );
+  background-position: left top;
+  background-repeat: repeat-y;
+  background-size: 2px 5px;
+  box-shadow: none;
+  color: var(--ide-error);
+}
+
+.monaco-editor .line-numbers.pristine-inline-git-diff-line-number {
+  border-radius: 0.125rem;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.monaco-editor .line-numbers.pristine-inline-git-diff-line-number-added {
+  background: color-mix(in srgb, var(--ide-success) 23%, transparent);
+  color: var(--ide-success);
+}
+
+.monaco-editor .line-numbers.pristine-inline-git-diff-line-number-modified {
+  background: color-mix(in srgb, var(--ide-warning) 23%, transparent);
+  color: var(--ide-warning);
+}
+
+.monaco-editor .line-numbers.pristine-inline-git-diff-line-number-removed {
+  background: color-mix(in srgb, var(--ide-error) 23%, transparent);
   color: var(--ide-error);
 }
 
@@ -480,7 +511,6 @@
   border-bottom: 1px solid var(--ide-border);
   background: color-mix(in srgb, var(--ide-bg) 88%, var(--ide-editor-bg));
   color: var(--ide-text);
-  font-size: 0.75rem;
   font-weight: 500;
   padding: 0 0.5rem;
 }
