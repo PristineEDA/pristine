@@ -2820,9 +2820,9 @@ test('Monaco editor shows inline git diff for opened modified files and hides it
     await expect(inlineDiffLineNumber).toBeVisible({ timeout: MONACO_READY_TIMEOUT_MS });
     await expect(inlineDiffDecoration).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
     await expect(inlineDiffMarginDecoration).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
-    await expect(inlineDiffMarginDecoration).toHaveCSS('background-image', /linear-gradient/);
+    await expect(inlineDiffMarginDecoration).toHaveCSS('background-image', /repeating-linear-gradient/);
     await expect(inlineDiffMarginDecoration).toHaveCSS('background-repeat', 'repeat-y');
-    await expect(inlineDiffMarginDecoration).toHaveCSS('background-size', '4px 6px');
+    await expect(inlineDiffMarginDecoration).toHaveCSS('background-size', '2px 3px');
     await expect(inlineDiffLineNumber).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
     const inlineDiffMarginBox = await inlineDiffMarginDecoration.boundingBox();
     const inlineDiffLineNumberBox = await inlineDiffLineNumber.boundingBox();
@@ -3071,6 +3071,18 @@ test('Monaco editor shows inline git diff for opened modified files and hides it
     await closeInlineGitDiffDetail(window);
     await inlineDiffMarginDecoration.click();
     await expect(window.getByTestId('monaco-inline-git-diff-detail')).toBeVisible();
+
+    await window.getByTestId(toWorkspaceTreeTestId(createdFileRelativePath)).dblclick();
+    await waitForMonacoEditor(window);
+    await expect(window.locator('.monaco-editor .view-lines')).toContainText('module created_auto', { timeout: MONACO_READY_TIMEOUT_MS });
+    await expect(window.locator('.pristine-inline-git-diff-margin-added').first()).toBeVisible({ timeout: MONACO_READY_TIMEOUT_MS });
+    await expect(window.getByTestId('editor-breadcrumb-git-indicator-created')).toBeVisible({ timeout: MONACO_READY_TIMEOUT_MS });
+    await expect(window.getByTestId('editor-breadcrumb-git-diff-added')).toHaveText('+3');
+    await expect(window.getByTestId('editor-breadcrumb-git-diff-removed')).toHaveCount(0);
+
+    await window.getByTestId('file-tree-node-rtl_core_reg_file_v').dblclick();
+    await waitForMonacoEditor(window);
+    await expect(window.locator('.monaco-editor .view-lines')).toContainText("32'h0000_0000", { timeout: MONACO_READY_TIMEOUT_MS });
 
     await window.getByTestId(toWorkspaceTreeTestId(createdFileRelativePath)).dblclick();
     await waitForMonacoEditor(window);

@@ -365,8 +365,10 @@ export function EditorArea({
   };
 
   useEffect(() => {
-    setActiveInlineGitDiffSummary(null);
-  }, [activeGitPathState, isActiveGitDiffTab, resolvedActiveDocumentId]);
+    setActiveInlineGitDiffSummary((summary) => (
+      summary?.filePath === resolvedActiveDocumentId && !isActiveGitDiffTab ? summary : null
+    ));
+  }, [isActiveGitDiffTab, resolvedActiveDocumentId]);
 
   const handleInlineGitDiffSummaryChange = (summary: InlineGitDiffSummary | null) => {
     if (

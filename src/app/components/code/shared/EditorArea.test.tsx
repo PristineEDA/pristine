@@ -987,6 +987,68 @@ describe('EditorArea', () => {
     expect(summary.style.fontSize).toBe('13px');
   });
 
+  it('restores the active created file git diff summary after switching away and back', async () => {
+    const filePath = 'rtl/core/created_auto.v';
+    const otherFilePath = 'rtl/core/reg_file.v';
+    const currentContent = 'module created_auto;\nassign ready = 1\'b1;\nendmodule';
+    const otherContent = 'module reg_file; endmodule';
+    const tabs = [
+      { id: filePath, name: 'created_auto.v', isPinned: true },
+      { id: otherFilePath, name: 'reg_file.v', isPinned: true },
+    ];
+    const editorRef = createRef<any>();
+    mockWorkspaceGitStatus.pathStates = { [filePath]: 'created' };
+
+    const { rerender } = render(
+      <EditorArea
+        tabs={tabs}
+        activeTabId={filePath}
+        onTabChange={vi.fn()}
+        onTabClose={vi.fn()}
+        editorRef={editorRef}
+        contentCache={{ [filePath]: currentContent, [otherFilePath]: otherContent }}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('editor-breadcrumb-git-indicator-created')).toBeInTheDocument();
+    });
+    expect(screen.getByTestId('editor-breadcrumb-git-diff-added')).toHaveTextContent('+3');
+
+    rerender(
+      <EditorArea
+        tabs={tabs}
+        activeTabId={otherFilePath}
+        onTabChange={vi.fn()}
+        onTabClose={vi.fn()}
+        editorRef={editorRef}
+        contentCache={{ [filePath]: currentContent, [otherFilePath]: otherContent }}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('editor-breadcrumb-git-diff-summary')).not.toBeInTheDocument();
+    });
+
+    rerender(
+      <EditorArea
+        tabs={tabs}
+        activeTabId={filePath}
+        onTabChange={vi.fn()}
+        onTabClose={vi.fn()}
+        editorRef={editorRef}
+        contentCache={{ [filePath]: currentContent, [otherFilePath]: otherContent }}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('editor-breadcrumb-git-indicator-created')).toBeInTheDocument();
+    });
+    expect(screen.getByTestId('editor-breadcrumb-git-diff-added')).toHaveTextContent('+3');
+    expect(screen.queryByTestId('editor-breadcrumb-git-diff-removed')).not.toBeInTheDocument();
+    expect(window.electronAPI?.git.getFileDiff).not.toHaveBeenCalled();
+  });
+
   it('does not render breadcrumb git diff summary for unmodified files', async () => {
     const filePath = 'rtl/core/reg_file.v';
 

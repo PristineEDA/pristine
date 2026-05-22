@@ -705,6 +705,73 @@ describe('MonacoEditorPane', () => {
     });
   });
 
+  it('retries created file inline git diff after Monaco switches to the created model content', async () => {
+    const filePath = 'rtl/core/created_auto.v';
+    const staleContent = 'module reg_file;\nassign ready = done;\nendmodule';
+    const currentContent = 'module created_auto;\nassign inserted = 1\'b1;\nendmodule';
+    const onInlineGitDiffSummaryChange = vi.fn();
+    const originalRequestAnimationFrame = window.requestAnimationFrame;
+    const originalCancelAnimationFrame = window.cancelAnimationFrame;
+    const originalGetModelImplementation = mockEditorInstance.getModel.getMockImplementation();
+    let modelValueReadCount = 0;
+    mockedWorkspaceGitPathStates = { [filePath]: 'created' };
+    window.requestAnimationFrame = ((callback: FrameRequestCallback) => {
+      callback(0);
+      return 1;
+    }) as typeof window.requestAnimationFrame;
+    window.cancelAnimationFrame = vi.fn() as unknown as typeof window.cancelAnimationFrame;
+    mockEditorInstance.getModel.mockImplementation(() => {
+      const getModelContent = () => (modelValueReadCount === 0 ? staleContent : currentContent);
+
+      return {
+        getLineCount: vi.fn(() => Math.max(getModelContent().split('\n').length, 1)),
+        getLineMaxColumn: vi.fn((lineNumber: number) => {
+          const line = getModelContent().split('\n')[lineNumber - 1] ?? '';
+          return line.length + 1;
+        }),
+        getValue: vi.fn(() => {
+          modelValueReadCount += 1;
+          return modelValueReadCount === 1 ? staleContent : currentContent;
+        }),
+        uri: {
+          fsPath: filePath,
+          path: filePath,
+        },
+      };
+    });
+
+    try {
+      render(
+        <MonacoEditorPane
+          activeTabId={filePath}
+          code={currentContent}
+          editorRef={createRef<any>()}
+          onInlineGitDiffSummaryChange={onInlineGitDiffSummaryChange}
+        />,
+      );
+
+      await waitFor(() => {
+        expect(mockEditorInstance.deltaDecorations.mock.calls.some((call) => Array.isArray(call[1]) && call[1].length > 0)).toBe(true);
+      });
+
+      expect(modelValueReadCount).toBeGreaterThan(1);
+      expect(window.electronAPI?.git.getFileDiff).not.toHaveBeenCalled();
+      await waitFor(() => {
+        expect(onInlineGitDiffSummaryChange).toHaveBeenLastCalledWith({
+          addedLineCount: 3,
+          filePath,
+          removedLineCount: 0,
+        });
+      });
+    } finally {
+      window.requestAnimationFrame = originalRequestAnimationFrame;
+      window.cancelAnimationFrame = originalCancelAnimationFrame;
+      if (originalGetModelImplementation) {
+        mockEditorInstance.getModel.mockImplementation(originalGetModelImplementation);
+      }
+    }
+  });
+
   it('redraws inline git diff decorations without line backgrounds when state backgrounds are disabled', async () => {
     const filePath = 'rtl/core/reg_file.v';
     const currentContent = 'module reg_file;\nassign ready = valid;\nendmodule';

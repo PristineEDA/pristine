@@ -52,6 +52,18 @@ function isInlineGitDiffPathState(state: string | undefined) {
   return state === 'modified' || state === 'created';
 }
 
+function scheduleInlineGitDiffRetry(callback: () => void) {
+  if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+    const frameId = window.requestAnimationFrame(callback);
+
+    return () => window.cancelAnimationFrame(frameId);
+  }
+
+  const timeoutId = setTimeout(callback, 0);
+
+  return () => clearTimeout(timeoutId);
+}
+
 interface MonacoEditorPaneProps {
   activeTabId: string;
   code: string;
@@ -98,6 +110,7 @@ export function MonacoEditorPane({
   const { editorBehaviorOptions, editorFontFamily, editorOptions } = useMonacoEditorOptions();
   const editorLanguage = getEditorLanguage(activeTabId);
   const gitPathState = getWorkspaceGitPathState(gitStatus, activeTabId);
+  const createdInlineGitDiffContent = gitPathState === 'created' ? code : '';
   const monacoInstanceRef = useRef(monaco);
   const canPropagateCursorChangesRef = useRef(true);
   const codeRef = useRef(code);
@@ -263,18 +276,25 @@ export function MonacoEditorPane({
     handleInlineGitDiffSummaryChange(null);
 
     let cancelled = false;
+    let cancelCreatedRetry: (() => void) | null = null;
 
-    const applyInlineGitDiffPayload = (payload: { filePath: string; originalContent: string; currentContent: string }) => {
+    const applyInlineGitDiffPayload = (
+      payload: { filePath: string; originalContent: string; currentContent: string },
+      options: { clearOnContentMismatch?: boolean } = {},
+    ) => {
       if (cancelled || inlineGitDiffRequestRef.current !== requestId) {
-        return;
+        return 'stale';
       }
 
       const editorContent = editor?.getModel?.()?.getValue?.() ?? codeRef.current;
       if (normalizeEditorContentForInlineDiff(editorContent) !== normalizeEditorContentForInlineDiff(payload.currentContent)) {
-        inlineGitDiffControllerRef.current?.clear();
-        inlineGitDiffAppliedContentRef.current = null;
-        handleInlineGitDiffSummaryChange(null);
-        return;
+        if (options.clearOnContentMismatch ?? true) {
+          inlineGitDiffControllerRef.current?.clear();
+          inlineGitDiffAppliedContentRef.current = null;
+          handleInlineGitDiffSummaryChange(null);
+        }
+
+        return 'content-mismatch';
       }
 
       const diff = computeInlineGitDiff(payload.originalContent, payload.currentContent);
@@ -286,18 +306,34 @@ export function MonacoEditorPane({
           ...getInlineGitDiffLineCounts(diff),
         }
         : null);
+
+      return 'applied';
     };
 
     if (gitPathState === 'created') {
-      const currentContent = editor?.getModel?.()?.getValue?.() ?? codeRef.current;
-      applyInlineGitDiffPayload({
+      const payload = {
         filePath: activeTabId,
         originalContent: '',
-        currentContent,
-      });
+        currentContent: codeRef.current,
+      };
+      const applyCreatedInlineGitDiff = (remainingRetries: number) => {
+        cancelCreatedRetry = null;
+        const result = applyInlineGitDiffPayload(payload, { clearOnContentMismatch: remainingRetries <= 0 });
+
+        if (result !== 'content-mismatch' || remainingRetries <= 0 || cancelled || inlineGitDiffRequestRef.current !== requestId) {
+          return;
+        }
+
+        cancelCreatedRetry = scheduleInlineGitDiffRetry(() => {
+          applyCreatedInlineGitDiff(remainingRetries - 1);
+        });
+      };
+
+      applyCreatedInlineGitDiff(5);
 
       return () => {
         cancelled = true;
+        cancelCreatedRetry?.();
       };
     }
 
@@ -313,8 +349,9 @@ export function MonacoEditorPane({
 
     return () => {
       cancelled = true;
+      cancelCreatedRetry?.();
     };
-  }, [activeTabId, gitPathState, gitStatus.isLoading, hasLoadError, inlineGitDiffEnabled, isDocumentReady, isWorkspaceDirty, mountedEditor]);
+  }, [activeTabId, createdInlineGitDiffContent, gitPathState, gitStatus.isLoading, hasLoadError, inlineGitDiffEnabled, isDocumentReady, isWorkspaceDirty, mountedEditor]);
 
   useEffect(() => {
     canPropagateCursorChangesRef.current = false;
