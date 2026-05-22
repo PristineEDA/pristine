@@ -815,7 +815,7 @@ function ExplorerSecondaryPanel({ isExpanded }: { isExpanded: boolean }) {
         className={getPanelHeaderClassName(layoutMode)}
       >
         <div className="flex h-7 items-center text-[11px] font-semibold text-ide-text">
-          Structure
+          Hierarchy
         </div>
       </div>
 
@@ -823,7 +823,7 @@ function ExplorerSecondaryPanel({ isExpanded }: { isExpanded: boolean }) {
         data-testid="left-panel-secondary-placeholder"
         className="flex min-h-0 flex-1 items-center justify-center px-3 py-2 text-center text-[12px] text-ide-text-muted"
       >
-        Structure is empty
+        Hierarchy is empty
       </div>
     </section>
   );

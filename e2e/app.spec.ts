@@ -407,6 +407,14 @@ async function expectPanelHeaderWithoutDivider(header: Locator) {
 
 async function expectCollapsedPanel(panel: Locator) {
   await expect(panel).toHaveAttribute('aria-hidden', 'true');
+  const collapsedState = await panel.getAttribute('data-collapsed');
+
+  if (collapsedState !== null) {
+    expect(collapsedState).toBe('true');
+    await expect(panel).toHaveClass(/(?:^|\s)pointer-events-none(?:\s|$)/);
+    return;
+  }
+
   await expect(panel).not.toBeVisible();
 }
 
@@ -1361,18 +1369,13 @@ test('app launches and shows main UI', async () => {
   const mainContentStack = window.getByTestId('main-content-stack');
   const explorerPanel = window.getByTestId('panel-left-panel');
   await expect(explorerPanel).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect(window.getByTestId('code-view-explorer')).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
+  await expect(window.getByTestId('left-panel-header')).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
+  await expect(explorerPanel).toHaveClass(/(?:^|\s)rounded-md(?:\s|$)/);
+  await expect(explorerPanel).toHaveClass(/(?:^|\s)border(?:\s|$)/);
   await expectCompactPanelTabButton(window.getByTestId('left-panel-tab-explorer'));
   await expectCompactPanelTabButton(window.getByTestId('left-panel-tab-outline'));
-  await expect.poll(async () => {
-    const stackBox = await mainContentStack.boundingBox();
-    const panelBox = await explorerPanel.boundingBox();
-
-    if (!stackBox || !panelBox || stackBox.height <= 0) {
-      return 0;
-    }
-
-    return panelBox.height / stackBox.height;
-  }, { timeout: UI_READY_TIMEOUT_MS }).toBeGreaterThan(0.98);
+  await expect(mainContentStack).toBeVisible();
 
   await app.close();
 });
@@ -2769,10 +2772,95 @@ test('Monaco editor shows inline git diff for opened modified files and hides it
     await expect(inlineDiffDecoration).toBeVisible({ timeout: MONACO_READY_TIMEOUT_MS });
     await expect(inlineDiffMarginDecoration).toBeVisible({ timeout: MONACO_READY_TIMEOUT_MS });
     await expect(inlineDiffLineNumber).toBeVisible({ timeout: MONACO_READY_TIMEOUT_MS });
-    await expect(inlineDiffLineNumber).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+    await expect(inlineDiffDecoration).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+    await expect(inlineDiffMarginDecoration).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+    await expect(inlineDiffLineNumber).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
     const inlineDiffMarginBox = await inlineDiffMarginDecoration.boundingBox();
     const inlineDiffLineNumberBox = await inlineDiffLineNumber.boundingBox();
     expect(inlineDiffMarginBox?.x).toBeLessThan(inlineDiffLineNumberBox?.x ?? Number.POSITIVE_INFINITY);
+    const inlineDiffBackgroundMetrics = await inlineDiffMarginDecoration.evaluate((node) => {
+      type BoxLike = { right: number; x: number };
+      type StyleLike = { backgroundColor: string; color: string };
+      type ElementLike = {
+        getBoundingClientRect: () => BoxLike;
+      };
+      const browserGlobal = globalThis as typeof globalThis & {
+        document: { querySelector: (selectors: string) => ElementLike | null };
+        getComputedStyle: (element: ElementLike) => StyleLike;
+      };
+      const margin = node as unknown as ElementLike;
+      const lineNumber = browserGlobal.document.querySelector('.line-numbers.pristine-inline-git-diff-line-number-added, .line-numbers.pristine-inline-git-diff-line-number-modified');
+      const line = browserGlobal.document.querySelector('.pristine-inline-git-diff-line-added, .pristine-inline-git-diff-line-modified');
+      const readBackground = (element: ElementLike | null) => (
+        element ? browserGlobal.getComputedStyle(element).backgroundColor : ''
+      );
+      const readColor = (element: ElementLike | null) => (
+        element ? browserGlobal.getComputedStyle(element).color : ''
+      );
+      const marginBox = margin.getBoundingClientRect();
+      const lineNumberBox = lineNumber?.getBoundingClientRect();
+
+      return {
+        lineBackground: readBackground(line),
+        lineNumberBackground: readBackground(lineNumber),
+        lineNumberColor: readColor(lineNumber),
+        lineNumberLeft: lineNumberBox?.x ?? 0,
+        marginBackground: readBackground(margin),
+        marginColor: readColor(margin),
+        marginRight: marginBox.right,
+      };
+    });
+    expect(inlineDiffBackgroundMetrics.marginBackground).toBe(inlineDiffBackgroundMetrics.lineBackground);
+    expect(inlineDiffBackgroundMetrics.lineNumberBackground).toBe('rgba(0, 0, 0, 0)');
+    expect(inlineDiffBackgroundMetrics.lineNumberColor).toBe(inlineDiffBackgroundMetrics.marginColor);
+    expect(inlineDiffBackgroundMetrics.marginRight + 1).toBeGreaterThanOrEqual(inlineDiffBackgroundMetrics.lineNumberLeft);
+    await expect(window.getByTestId('editor-breadcrumb-git-indicator-modified')).toBeVisible({ timeout: MONACO_READY_TIMEOUT_MS });
+    await expect(window.getByTestId('editor-breadcrumb-git-diff-removed')).toHaveText(/^-\d+$/);
+    await expect(window.getByTestId('editor-breadcrumb-git-diff-added')).toHaveText(/^\+\d+$/);
+    const breadcrumbDiffMetrics = await window.getByTestId('editor-breadcrumb-git-diff-summary').evaluate((node) => {
+      type StyleLike = { color: string; fontFamily: string };
+      type ProbeLike = {
+        remove: () => void;
+        style: { color: string };
+      };
+      type DocumentLike = {
+        body: { appendChild: (node: ProbeLike) => void };
+        createElement: (tagName: string) => ProbeLike;
+        querySelector: (selectors: string) => ElementLike | null;
+      };
+      type ElementLike = {
+        ownerDocument: DocumentLike;
+        querySelector: (selectors: string) => ElementLike | null;
+      };
+      const browserGlobal = globalThis as typeof globalThis & {
+        getComputedStyle: (element: ElementLike | ProbeLike) => StyleLike;
+      };
+      const summary = node as unknown as ElementLike;
+      const ownerDocument = summary.ownerDocument;
+      const readResolvedColor = (value: string) => {
+        const probe = ownerDocument.createElement('span');
+        probe.style.color = value;
+        ownerDocument.body.appendChild(probe);
+        const color = browserGlobal.getComputedStyle(probe).color;
+        probe.remove();
+        return color;
+      };
+      const added = summary.querySelector('[data-testid="editor-breadcrumb-git-diff-added"]');
+      const removed = summary.querySelector('[data-testid="editor-breadcrumb-git-diff-removed"]');
+      const viewLine = ownerDocument.querySelector('.monaco-editor .view-line');
+
+      return {
+        addedColor: added ? browserGlobal.getComputedStyle(added).color : '',
+        editorFontFamily: viewLine ? browserGlobal.getComputedStyle(viewLine).fontFamily : '',
+        removedColor: removed ? browserGlobal.getComputedStyle(removed).color : '',
+        successColor: readResolvedColor('var(--ide-success)'),
+        summaryFontFamily: browserGlobal.getComputedStyle(summary).fontFamily,
+        errorColor: readResolvedColor('var(--ide-error)'),
+      };
+    });
+    expect(breadcrumbDiffMetrics.removedColor).toBe(breadcrumbDiffMetrics.errorColor);
+    expect(breadcrumbDiffMetrics.addedColor).toBe(breadcrumbDiffMetrics.successColor);
+    expect(breadcrumbDiffMetrics.summaryFontFamily).toBe(breadcrumbDiffMetrics.editorFontFamily);
     await expect(window.getByTestId('monaco-inline-git-diff-detail')).toHaveCount(0);
 
     await inlineDiffMarginDecoration.click();
@@ -2854,6 +2942,7 @@ test('Monaco editor shows inline git diff for opened modified files and hides it
       const titleColor = readColor(title, 'color');
       const editorBackground = readColor(editor, 'backgroundColor');
       const contentStyle = content ? browserGlobal.getComputedStyle(content) : null;
+      const titleStyle = title ? browserGlobal.getComputedStyle(title) : null;
       const viewLineStyle = viewLine ? browserGlobal.getComputedStyle(viewLine) : null;
 
       return {
@@ -2867,6 +2956,7 @@ test('Monaco editor shows inline git diff for opened modified files and hides it
         editorFontSize: viewLineStyle?.fontSize ?? '',
         editorLineHeight: viewLineStyle?.lineHeight ?? '',
         headerHeight: headerBox?.height ?? 0,
+        titleFontSize: titleStyle?.fontSize ?? '',
         titleToEditorContrast: contrastRatio(titleColor, editorBackground),
       };
     });
@@ -2877,6 +2967,7 @@ test('Monaco editor shows inline git diff for opened modified files and hides it
     expect(inlineDiffDetailMetrics.contentFontFamily).toBe(inlineDiffDetailMetrics.editorFontFamily);
     expect(inlineDiffDetailMetrics.contentFontSize).toBe(inlineDiffDetailMetrics.editorFontSize);
     expect(inlineDiffDetailMetrics.contentLineHeight).toBe(inlineDiffDetailMetrics.editorLineHeight);
+    expect(Number.parseFloat(inlineDiffDetailMetrics.titleFontSize)).toBeLessThan(Number.parseFloat(inlineDiffDetailMetrics.contentFontSize));
     expect(inlineDiffDetailMetrics.titleToEditorContrast).toBeGreaterThan(3);
 
     await inlineDiffDetailClose.click();
@@ -2890,11 +2981,31 @@ test('Monaco editor shows inline git diff for opened modified files and hides it
     const removedInlineDiffMarginDecoration = window.locator('.pristine-inline-git-diff-margin-removed').first();
     const removedInlineDiffLineNumber = window.locator('.line-numbers.pristine-inline-git-diff-line-number-removed').first();
     await expect(removedInlineDiffMarginDecoration).toBeVisible({ timeout: MONACO_READY_TIMEOUT_MS });
+    await expect(removedInlineDiffMarginDecoration).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
     await expect(removedInlineDiffMarginDecoration).toHaveCSS('background-repeat', 'repeat-y');
     await expect(removedInlineDiffMarginDecoration).toHaveCSS('background-image', /repeating-linear-gradient/);
+    await expect(removedInlineDiffMarginDecoration).toHaveCSS('background-size', '2px 3px');
     await expect(removedInlineDiffLineNumber).toBeVisible({ timeout: MONACO_READY_TIMEOUT_MS });
-    await expect(removedInlineDiffLineNumber).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+    await expect(removedInlineDiffLineNumber).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
     await removedInlineDiffMarginDecoration.click();
+    await expect(window.getByTestId('monaco-inline-git-diff-detail-body')).toContainText('logic data_ready;');
+
+    await window.getByTestId('monaco-inline-git-diff-detail-close').click();
+    await expect(window.getByTestId('monaco-inline-git-diff-detail')).toHaveCount(0);
+
+    await window.getByTestId('menu-settings-button').click();
+    await expect(window.getByTestId('settings-dialog')).toBeVisible();
+    const inlineGitDiffBackgroundsSwitch = window.getByTestId('settings-editor-inline-git-diff-backgrounds-switch');
+    await inlineGitDiffBackgroundsSwitch.scrollIntoViewIfNeeded();
+    await setSwitchChecked(inlineGitDiffBackgroundsSwitch, false);
+    await window.getByTestId('settings-close-button').click();
+
+    const backgroundlessInlineDiffMarginDecoration = window.locator('.pristine-inline-git-diff-margin').first();
+    await expect(backgroundlessInlineDiffMarginDecoration).toBeVisible({ timeout: MONACO_READY_TIMEOUT_MS });
+    await expect(window.locator('.line-numbers.pristine-inline-git-diff-line-number')).toHaveCount(0);
+    await expect(window.locator('.pristine-inline-git-diff-line-added, .pristine-inline-git-diff-line-modified, .pristine-inline-git-diff-line-removed-anchor')).toHaveCount(0);
+    await expect(window.getByTestId('editor-breadcrumb-git-diff-summary')).toBeVisible();
+    await backgroundlessInlineDiffMarginDecoration.click();
     await expect(window.getByTestId('monaco-inline-git-diff-detail-body')).toContainText('logic data_ready;');
 
     await window.getByTestId('menu-settings-button').click();
@@ -2905,8 +3016,9 @@ test('Monaco editor shows inline git diff for opened modified files and hides it
     await window.getByTestId('settings-close-button').click();
 
     await expect(window.getByTestId('monaco-inline-git-diff-detail')).toHaveCount(0);
-    await expect(window.locator('.pristine-inline-git-diff-line-added, .pristine-inline-git-diff-line-modified')).toHaveCount(0);
+    await expect(window.locator('.pristine-inline-git-diff-line-added, .pristine-inline-git-diff-line-modified, .pristine-inline-git-diff-line-removed-anchor')).toHaveCount(0);
     await expect(window.locator('.pristine-inline-git-diff-margin')).toHaveCount(0);
+    await expect(window.getByTestId('editor-breadcrumb-git-diff-summary')).toHaveCount(0);
   } finally {
     await app.close();
   }
@@ -3869,15 +3981,19 @@ test('right panel split shows two stacked panels and keeps the panel layout-awar
     await expect(secondaryResizablePanel).toHaveAttribute('style', /transition-duration: 300ms/);
     await expect(primaryResizablePanel).toHaveAttribute('aria-hidden', 'false');
     await expect(secondaryResizablePanel).toHaveAttribute('aria-hidden', 'false');
-    await expect(rightPanelRoot).toHaveClass(/(?:^|\s)bg-ide-bg(?:\s|$)/);
-    await expect(primaryPanel).not.toHaveClass(/(?:^|\s)rounded-md(?:\s|$)/);
-    await expect(primaryPanel).not.toHaveClass(/(?:^|\s)border(?:\s|$)/);
+    await expect(rightPanelRoot).not.toHaveClass(/(?:^|\s)bg-ide-bg(?:\s|$)/);
+    await expect(primaryPanel).toHaveClass(/(?:^|\s)rounded-md(?:\s|$)/);
+    await expect(primaryPanel).toHaveClass(/(?:^|\s)border(?:\s|$)/);
+    await expect(primaryPanel).toHaveClass(/(?:^|\s)bg-ide-bg(?:\s|$)/);
     await expect(secondaryPanel).toBeVisible();
-    await expect(secondaryPanel).not.toHaveClass(/(?:^|\s)rounded-md(?:\s|$)/);
-    await expect(secondaryPanel).not.toHaveClass(/(?:^|\s)border(?:\s|$)/);
+    await expect(secondaryPanel).toHaveClass(/(?:^|\s)rounded-md(?:\s|$)/);
+    await expect(secondaryPanel).toHaveClass(/(?:^|\s)border(?:\s|$)/);
+    await expect(secondaryPanel).toHaveClass(/(?:^|\s)bg-ide-bg(?:\s|$)/);
+    await expect(window.getByTestId('right-panel-secondary-header')).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
     await expect(window.getByTestId('right-panel-secondary-placeholder')).toContainText('Details is empty');
     await expect(splitHandle).toBeVisible();
     await expect(splitHandle).toHaveAttribute('aria-orientation', 'horizontal');
+    await expect(splitHandle).toHaveClass(/(?:^|\s)overlay-handle(?:\s|$)/);
 
     await expect.poll(async () => {
       const [primaryHeight, secondaryHeight] = await Promise.all([
@@ -3909,17 +4025,6 @@ test('right panel split shows two stacked panels and keeps the panel layout-awar
 
     await expect.poll(() => readElementPixelHeight(primaryResizablePanel), { timeout: UI_READY_TIMEOUT_MS }).toBeGreaterThan(initialPrimaryHeight + 55);
     await expect.poll(() => readElementPixelHeight(secondaryResizablePanel), { timeout: UI_READY_TIMEOUT_MS }).toBeLessThan(initialSecondaryHeight - 55);
-
-    await window.getByTestId('menu-settings-button').click();
-    await expect(window.getByTestId('settings-dialog')).toBeVisible();
-    await selectComboboxOption(
-      window,
-      'settings-code-viewer-layout-combobox',
-      'settings-code-viewer-layout-option-minimal',
-    );
-    await expect.poll(async () => readConfigValue(window, 'workbench.codeViewerLayoutMode')).toBe('minimal');
-    await window.getByTestId('settings-close-button').click();
-    await expect(window.getByTestId('settings-dialog')).toHaveCount(0);
 
     await expectPanelHeaderWithoutDivider(window.getByTestId('right-panel-header'));
     await expectPanelHeaderWithoutDivider(window.getByTestId('right-panel-secondary-header'));
@@ -4045,7 +4150,8 @@ test('left sidebar keeps a fixed pixel width across window changes and manual re
   });
 
   await expect(leftPanel).toBeVisible();
-  await expect(leftHandle).toBeVisible();
+  await expect(leftHandle).toBeAttached();
+  await expect(leftHandle).toHaveClass(/(?:^|\s)overlay-handle(?:\s|$)/);
 
   await expect.poll(readPanelWidth).toBeGreaterThanOrEqual(238);
   await expect.poll(readPanelWidth).toBeLessThanOrEqual(242);
@@ -4150,15 +4256,19 @@ test('left panel split shows two stacked panels and keeps the explorer tree scro
     await expect(secondaryResizablePanel).toHaveAttribute('style', /transition-duration: 300ms/);
     await expect(primaryResizablePanel).toHaveAttribute('aria-hidden', 'false');
     await expect(secondaryResizablePanel).toHaveAttribute('aria-hidden', 'false');
-    await expect(leftPanelRoot).toHaveClass(/(?:^|\s)bg-ide-bg(?:\s|$)/);
-    await expect(primaryPanel).not.toHaveClass(/(?:^|\s)rounded-md(?:\s|$)/);
-    await expect(primaryPanel).not.toHaveClass(/(?:^|\s)border(?:\s|$)/);
+    await expect(leftPanelRoot).not.toHaveClass(/(?:^|\s)bg-ide-bg(?:\s|$)/);
+    await expect(primaryPanel).toHaveClass(/(?:^|\s)rounded-md(?:\s|$)/);
+    await expect(primaryPanel).toHaveClass(/(?:^|\s)border(?:\s|$)/);
+    await expect(primaryPanel).toHaveClass(/(?:^|\s)bg-ide-bg(?:\s|$)/);
     await expect(secondaryPanel).toBeVisible();
-    await expect(secondaryPanel).not.toHaveClass(/(?:^|\s)rounded-md(?:\s|$)/);
-    await expect(secondaryPanel).not.toHaveClass(/(?:^|\s)border(?:\s|$)/);
-    await expect(window.getByTestId('left-panel-secondary-placeholder')).toContainText('Structure is empty');
+    await expect(secondaryPanel).toHaveClass(/(?:^|\s)rounded-md(?:\s|$)/);
+    await expect(secondaryPanel).toHaveClass(/(?:^|\s)border(?:\s|$)/);
+    await expect(secondaryPanel).toHaveClass(/(?:^|\s)bg-ide-bg(?:\s|$)/);
+    await expect(window.getByTestId('left-panel-secondary-header')).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
+    await expect(window.getByTestId('left-panel-secondary-placeholder')).toContainText('Hierarchy is empty');
     await expect(splitHandle).toBeVisible();
     await expect(splitHandle).toHaveAttribute('aria-orientation', 'horizontal');
+    await expect(splitHandle).toHaveClass(/(?:^|\s)overlay-handle(?:\s|$)/);
 
     await expect.poll(async () => {
       const [primaryHeight, secondaryHeight] = await Promise.all([
@@ -5090,11 +5200,21 @@ test('global workbench chrome follows selected VS Code theme variables', async (
   const { app, window } = await launchApp();
 
   await ensureExplorerVisible(window);
+  await expect(window.getByTestId('menu-bar-root')).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
+  await expect(window.getByTestId('activity-bar')).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
+  await expect(window.getByTestId('status-bar')).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
+  await window.getByTestId('menu-settings-button').click();
+  await expect(window.getByTestId('settings-dialog')).toBeVisible();
+
+  await selectComboboxOption(
+    window,
+    'settings-code-viewer-layout-combobox',
+    'settings-code-viewer-layout-option-compact',
+  );
+  await expect.poll(async () => readConfigValue(window, 'workbench.codeViewerLayoutMode')).toBe('compact');
   await expect(window.getByTestId('menu-bar-root')).toHaveAttribute('data-code-viewer-layout-mode', 'compact');
   await expect(window.getByTestId('activity-bar')).toHaveAttribute('data-code-viewer-layout-mode', 'compact');
   await expect(window.getByTestId('status-bar')).toHaveAttribute('data-code-viewer-layout-mode', 'compact');
-  await window.getByTestId('menu-settings-button').click();
-  await expect(window.getByTestId('settings-dialog')).toBeVisible();
 
   await selectComboboxOption(
     window,
@@ -5176,24 +5296,24 @@ test('code viewer layout setting persists across app relaunch', async () => {
   const { app: firstApp, window: firstWindow } = firstLaunch;
 
   await ensureExplorerVisible(firstWindow);
-  await expect(firstWindow.getByTestId('code-view-explorer')).toHaveAttribute('data-code-viewer-layout-mode', 'compact');
+  await expect(firstWindow.getByTestId('code-view-explorer')).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
   await expectPanelHeaderWithoutDivider(firstWindow.getByTestId('left-panel-header'));
   await ensureRightPanelVisible(firstWindow);
   await expectPanelHeaderWithoutDivider(firstWindow.getByTestId('right-panel-header'));
 
   await firstWindow.getByTestId('menu-settings-button').click();
   await expect(firstWindow.getByTestId('settings-dialog')).toBeVisible();
-  await expect(firstWindow.getByTestId('settings-code-viewer-layout-combobox')).toContainText('Compact');
+  await expect(firstWindow.getByTestId('settings-code-viewer-layout-combobox')).toContainText('Minimal');
 
   await selectComboboxOption(
     firstWindow,
     'settings-code-viewer-layout-combobox',
-    'settings-code-viewer-layout-option-minimal',
+    'settings-code-viewer-layout-option-compact',
   );
 
-  await expect.poll(async () => readConfigValue(firstWindow, 'workbench.codeViewerLayoutMode')).toBe('minimal');
-  await expect(firstWindow.getByTestId('settings-code-viewer-layout-combobox')).toContainText('Minimal');
-  await expect(firstWindow.getByTestId('code-view-explorer')).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
+  await expect.poll(async () => readConfigValue(firstWindow, 'workbench.codeViewerLayoutMode')).toBe('compact');
+  await expect(firstWindow.getByTestId('settings-code-viewer-layout-combobox')).toContainText('Compact');
+  await expect(firstWindow.getByTestId('code-view-explorer')).toHaveAttribute('data-code-viewer-layout-mode', 'compact');
 
   await firstWindow.getByTestId('settings-close-button').click();
   await expect(firstWindow.getByTestId('settings-dialog')).toHaveCount(0);
@@ -5207,23 +5327,23 @@ test('code viewer layout setting persists across app relaunch', async () => {
   const { app: secondApp, window: secondWindow } = secondLaunch;
 
   await ensureExplorerVisible(secondWindow);
-  await expect(secondWindow.getByTestId('code-view-explorer')).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
-  await expect.poll(async () => readConfigValue(secondWindow, 'workbench.codeViewerLayoutMode')).toBe('minimal');
+  await expect(secondWindow.getByTestId('code-view-explorer')).toHaveAttribute('data-code-viewer-layout-mode', 'compact');
+  await expect.poll(async () => readConfigValue(secondWindow, 'workbench.codeViewerLayoutMode')).toBe('compact');
   await expectPanelHeaderWithoutDivider(secondWindow.getByTestId('left-panel-header'));
   await ensureRightPanelVisible(secondWindow);
   await expectPanelHeaderWithoutDivider(secondWindow.getByTestId('right-panel-header'));
 
   await secondWindow.getByTestId('menu-settings-button').click();
   await expect(secondWindow.getByTestId('settings-dialog')).toBeVisible();
-  await expect(secondWindow.getByTestId('settings-code-viewer-layout-combobox')).toContainText('Minimal');
+  await expect(secondWindow.getByTestId('settings-code-viewer-layout-combobox')).toContainText('Compact');
 
   await selectComboboxOption(
     secondWindow,
     'settings-code-viewer-layout-combobox',
-    'settings-code-viewer-layout-option-compact',
+    'settings-code-viewer-layout-option-minimal',
   );
-  await expect.poll(async () => readConfigValue(secondWindow, 'workbench.codeViewerLayoutMode')).toBe('compact');
-  await expect(secondWindow.getByTestId('code-view-explorer')).toHaveAttribute('data-code-viewer-layout-mode', 'compact');
+  await expect.poll(async () => readConfigValue(secondWindow, 'workbench.codeViewerLayoutMode')).toBe('minimal');
+  await expect(secondWindow.getByTestId('code-view-explorer')).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
 
   await secondWindow.getByTestId('settings-close-button').click();
   await expect(secondWindow.getByTestId('settings-dialog')).toHaveCount(0);

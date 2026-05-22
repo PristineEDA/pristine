@@ -15,6 +15,7 @@ import {
   setEditorFontLigaturesMock,
   setEditorGlyphMarginMock,
   setEditorInlineGitDiffEnabledMock,
+  setEditorInlineGitDiffStateBackgroundsEnabledMock,
   setEditorIndentGuidesMock,
   setEditorLineNumbersMock,
   setEditorMinimapEnabledMock,
@@ -129,6 +130,7 @@ describe('MenuBar settings', () => {
       foldingStrategy: 'auto',
       glyphMargin: false,
       inlineGitDiffEnabled: false,
+      inlineGitDiffStateBackgroundsEnabled: false,
       indentGuides: false,
       lineNumbers: 'relative',
       minimapEnabled: false,
@@ -149,7 +151,7 @@ describe('MenuBar settings', () => {
     expect(screen.queryByTestId('settings-code-layout-margin-slider')).not.toBeInTheDocument();
     expect(screen.getByTestId('settings-editor-font-size-value')).toHaveTextContent('18px');
     expect(screen.getByTestId('settings-theme-combobox')).toHaveTextContent('Dark 2026');
-    expect(screen.getByTestId('settings-code-viewer-layout-combobox')).toHaveTextContent('Compact');
+    expect(screen.getByTestId('settings-code-viewer-layout-combobox')).toHaveTextContent('Minimal');
     expect(screen.getByTestId('settings-editor-word-wrap-combobox')).toHaveTextContent('Bounded');
     expect(screen.getByTestId('settings-editor-tab-size-combobox')).toHaveTextContent('8 spaces');
     expect(screen.getByTestId('settings-editor-cursor-blinking-combobox')).toHaveTextContent('Solid');
@@ -163,6 +165,7 @@ describe('MenuBar settings', () => {
     expect(screen.getByTestId('settings-editor-minimap-switch')).toHaveAttribute('data-state', 'unchecked');
     expect(screen.getByTestId('settings-editor-glyph-margin-switch')).toHaveAttribute('data-state', 'unchecked');
     expect(screen.getByTestId('settings-editor-inline-git-diff-switch')).toHaveAttribute('data-state', 'unchecked');
+    expect(screen.getByTestId('settings-editor-inline-git-diff-backgrounds-switch')).toHaveAttribute('data-state', 'unchecked');
     expect(screen.getByTestId('settings-editor-bracket-pair-guides-switch')).toHaveAttribute('data-state', 'unchecked');
     expect(screen.getByTestId('settings-editor-indent-guides-switch')).toHaveAttribute('data-state', 'unchecked');
     expect(screen.getByTestId('settings-close-to-tray-switch')).toHaveAttribute('data-state', 'checked');
@@ -191,6 +194,7 @@ describe('MenuBar settings', () => {
     await user.click(screen.getByTestId('settings-editor-minimap-switch'));
     await user.click(screen.getByTestId('settings-editor-glyph-margin-switch'));
     await user.click(screen.getByTestId('settings-editor-inline-git-diff-switch'));
+    await user.click(screen.getByTestId('settings-editor-inline-git-diff-backgrounds-switch'));
     await user.click(screen.getByTestId('settings-editor-bracket-pair-guides-switch'));
     await user.click(screen.getByTestId('settings-editor-indent-guides-switch'));
     await user.click(screen.getByTestId('settings-close-to-tray-switch'));
@@ -218,6 +222,7 @@ describe('MenuBar settings', () => {
     expect(setEditorMinimapEnabledMock).toHaveBeenCalledWith(true);
     expect(setEditorGlyphMarginMock).toHaveBeenCalledWith(true);
     expect(setEditorInlineGitDiffEnabledMock).toHaveBeenCalledWith(true);
+    expect(setEditorInlineGitDiffStateBackgroundsEnabledMock).toHaveBeenCalledWith(true);
     expect(setEditorBracketPairGuidesMock).toHaveBeenCalledWith(true);
     expect(setEditorIndentGuidesMock).toHaveBeenCalledWith(true);
     expect(setThemeMock).toHaveBeenCalledWith('vscode-2026-light');

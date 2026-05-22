@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { computeInlineGitDiff } from './gitInlineDiff'
+import { computeInlineGitDiff, getInlineGitDiffLineCounts } from './gitInlineDiff'
 
 describe('computeInlineGitDiff', () => {
   it('returns no hunks for identical content', () => {
@@ -59,6 +59,22 @@ describe('computeInlineGitDiff', () => {
     })
     expect(diff.hunks[0]?.removedLines.map((line) => line.content)).toEqual(['assign ready = done;'])
     expect(diff.hunks[0]?.addedLines.map((line) => line.content)).toEqual(['assign ready = valid;'])
+    expect(getInlineGitDiffLineCounts(diff)).toEqual({
+      addedLineCount: 1,
+      removedLineCount: 1,
+    })
+  })
+
+  it('summarizes added and removed line counts across hunks', () => {
+    const diff = computeInlineGitDiff(
+      'a\nold\nc\nremove me\ne',
+      'a\nnew\nextra\nc\ne\nadded tail',
+    )
+
+    expect(getInlineGitDiffLineCounts(diff)).toEqual({
+      addedLineCount: 3,
+      removedLineCount: 2,
+    })
   })
 
   it('handles multiple independent hunks', () => {

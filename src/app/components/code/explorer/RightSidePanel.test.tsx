@@ -86,9 +86,7 @@ describe('RightSidePanel', () => {
   it('defaults the lower stacked panel hidden and toggles two independent panel frames', async () => {
     const user = userEvent.setup();
 
-    render(
-      <RightSidePanel currentOutlineId="rtl/core/alu.v" onFileOpen={vi.fn()} onLineJump={vi.fn()} />,
-    );
+    renderRightSidePanelInLayout('compact');
 
     const splitToggle = screen.getByTestId('right-panel-split-toggle');
 

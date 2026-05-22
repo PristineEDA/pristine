@@ -22,6 +22,8 @@ import {
 
 describe('MenuBar', () => {
   it('renders the compact menu chrome with a bottom border separator', () => {
+    mockPersistedSettingsConfig({ codeViewerLayoutMode: 'compact' });
+
     renderMenuBar();
 
     expect(screen.getByTestId('menu-bar-root')).toHaveClass('border-b', 'border-ide-border');
@@ -51,6 +53,8 @@ describe('MenuBar', () => {
   });
 
   it('keeps the close window icon neutral until hover', () => {
+    mockPersistedSettingsConfig({ codeViewerLayoutMode: 'compact' });
+
     renderMenuBar();
 
     const closeControl = screen.getByTestId('window-control-close');

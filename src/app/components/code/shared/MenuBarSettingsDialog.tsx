@@ -12,6 +12,7 @@ import {
   DEFAULT_EDITOR_FONT_LIGATURES,
   DEFAULT_EDITOR_GLYPH_MARGIN,
   DEFAULT_EDITOR_INLINE_GIT_DIFF_ENABLED,
+  DEFAULT_EDITOR_INLINE_GIT_DIFF_STATE_BACKGROUNDS_ENABLED,
   DEFAULT_EDITOR_INDENT_GUIDES,
   DEFAULT_EDITOR_MINIMAP_ENABLED,
   DEFAULT_EDITOR_SCROLL_BEYOND_LAST_LINE,
@@ -24,6 +25,7 @@ import {
   EDITOR_FONT_SIZE_CONFIG_KEY,
   EDITOR_GLYPH_MARGIN_CONFIG_KEY,
   EDITOR_INLINE_GIT_DIFF_ENABLED_CONFIG_KEY,
+  EDITOR_INLINE_GIT_DIFF_STATE_BACKGROUNDS_ENABLED_CONFIG_KEY,
   EDITOR_INDENT_GUIDES_CONFIG_KEY,
   EDITOR_LINE_NUMBERS_CONFIG_KEY,
   EDITOR_MINIMAP_ENABLED_CONFIG_KEY,
@@ -115,6 +117,7 @@ export interface MenuBarSettingsState {
   editorFoldingStrategy: ReturnType<typeof getConfiguredEditorFoldingStrategy>;
   editorGlyphMargin: ReturnType<typeof getConfiguredEditorGlyphMargin>;
   editorInlineGitDiffEnabled: ReturnType<typeof getConfiguredEditorInlineGitDiffEnabled>;
+  editorInlineGitDiffStateBackgroundsEnabled: ReturnType<typeof getConfiguredEditorInlineGitDiffStateBackgroundsEnabled>;
   editorIndentGuides: ReturnType<typeof getConfiguredEditorIndentGuides>;
   editorLineNumbers: ReturnType<typeof getConfiguredEditorLineNumbers>;
   editorMinimapEnabled: ReturnType<typeof getConfiguredEditorMinimapEnabled>;
@@ -225,6 +228,13 @@ function getConfiguredEditorInlineGitDiffEnabled() {
   );
 }
 
+function getConfiguredEditorInlineGitDiffStateBackgroundsEnabled() {
+  return getConfiguredEditorBooleanSetting(
+    EDITOR_INLINE_GIT_DIFF_STATE_BACKGROUNDS_ENABLED_CONFIG_KEY,
+    DEFAULT_EDITOR_INLINE_GIT_DIFF_STATE_BACKGROUNDS_ENABLED,
+  );
+}
+
 function getConfiguredEditorBracketPairGuides() {
   return getConfiguredEditorBooleanSetting(EDITOR_BRACKET_PAIR_GUIDES_CONFIG_KEY, DEFAULT_EDITOR_BRACKET_PAIR_GUIDES);
 }
@@ -248,6 +258,7 @@ function getPersistedSettingsState(): MenuBarSettingsState {
     editorFoldingStrategy: getConfiguredEditorFoldingStrategy(),
     editorGlyphMargin: getConfiguredEditorGlyphMargin(),
     editorInlineGitDiffEnabled: getConfiguredEditorInlineGitDiffEnabled(),
+    editorInlineGitDiffStateBackgroundsEnabled: getConfiguredEditorInlineGitDiffStateBackgroundsEnabled(),
     editorIndentGuides: getConfiguredEditorIndentGuides(),
     editorLineNumbers: getConfiguredEditorLineNumbers(),
     editorMinimapEnabled: getConfiguredEditorMinimapEnabled(),
@@ -353,6 +364,7 @@ export function useMenuBarSettingsController() {
     setFoldingStrategy: setEditorFoldingStrategy,
     setGlyphMargin: setEditorGlyphMargin,
     setInlineGitDiffEnabled: setEditorInlineGitDiffEnabled,
+    setInlineGitDiffStateBackgroundsEnabled: setEditorInlineGitDiffStateBackgroundsEnabled,
     setIndentGuides: setEditorIndentGuides,
     setLineNumbers: setEditorLineNumbers,
     setMinimapEnabled: setEditorMinimapEnabled,
@@ -549,6 +561,11 @@ export function useMenuBarSettingsController() {
     setEditorInlineGitDiffEnabled(checked);
   };
 
+  const handleEditorInlineGitDiffStateBackgroundsEnabledChange = (checked: boolean) => {
+    patchSettingsState({ editorInlineGitDiffStateBackgroundsEnabled: checked });
+    setEditorInlineGitDiffStateBackgroundsEnabled(checked);
+  };
+
   const handleEditorBracketPairGuidesChange = (checked: boolean) => {
     patchSettingsState({ editorBracketPairGuides: checked });
     setEditorBracketPairGuides(checked);
@@ -580,6 +597,7 @@ export function useMenuBarSettingsController() {
     handleEditorFontSizeCommit,
     handleEditorGlyphMarginChange,
     handleEditorInlineGitDiffEnabledChange,
+    handleEditorInlineGitDiffStateBackgroundsEnabledChange,
     handleEditorIndentGuidesChange,
     handleEditorLineNumbersChange,
     handleEditorMinimapEnabledChange,
@@ -630,6 +648,7 @@ export function MenuBarSettingsDialogs({
     handleEditorFontSizeCommit,
     handleEditorGlyphMarginChange,
     handleEditorInlineGitDiffEnabledChange,
+    handleEditorInlineGitDiffStateBackgroundsEnabledChange,
     handleEditorIndentGuidesChange,
     handleEditorLineNumbersChange,
     handleEditorMinimapEnabledChange,
@@ -959,6 +978,14 @@ export function MenuBarSettingsDialogs({
                     onCheckedChange={handleEditorInlineGitDiffEnabledChange}
                     testId="settings-editor-inline-git-diff-switch"
                     title="Inline Git Diff"
+                  />
+                  <Separator />
+                  <SettingsSwitchRow
+                    checked={settingsState.editorInlineGitDiffStateBackgroundsEnabled}
+                    description="Fill changed line numbers and editor rows with the inline Git diff state background."
+                    onCheckedChange={handleEditorInlineGitDiffStateBackgroundsEnabledChange}
+                    testId="settings-editor-inline-git-diff-backgrounds-switch"
+                    title="Inline Git Diff Backgrounds"
                   />
                   <Separator />
                   <SettingsSwitchRow

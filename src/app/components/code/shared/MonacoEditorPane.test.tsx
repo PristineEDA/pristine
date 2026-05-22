@@ -28,6 +28,7 @@ let mockedEditorSmoothScrolling = true;
 let mockedEditorTabSize = 4;
 let mockedEditorWordWrap = 'off';
 let mockedEditorInlineGitDiffEnabled = true;
+let mockedEditorInlineGitDiffStateBackgroundsEnabled = true;
 let mockedWorkspaceGitIsLoading = false;
 let mockedWorkspaceGitPathStates: Record<string, string> = {};
 
@@ -278,8 +279,10 @@ vi.mock('../../../context/EditorSettingsContext', () => ({
     setTheme: vi.fn(),
     setWordWrap: vi.fn(),
     setInlineGitDiffEnabled: vi.fn(),
+    setInlineGitDiffStateBackgroundsEnabled: vi.fn(),
     themes: [],
     inlineGitDiffEnabled: mockedEditorInlineGitDiffEnabled,
+    inlineGitDiffStateBackgroundsEnabled: mockedEditorInlineGitDiffStateBackgroundsEnabled,
     wordWrap: mockedEditorWordWrap,
   }),
 }));
@@ -330,6 +333,7 @@ describe('MonacoEditorPane', () => {
     mockedEditorTabSize = 4;
     mockedEditorWordWrap = 'off';
     mockedEditorInlineGitDiffEnabled = true;
+    mockedEditorInlineGitDiffStateBackgroundsEnabled = true;
     mockedWorkspaceGitIsLoading = false;
     mockedWorkspaceGitPathStates = {};
     mockedEnsureLspRegistered.mockReset();
@@ -609,6 +613,7 @@ describe('MonacoEditorPane', () => {
   it('renders inline git diff decorations without showing detail zones by default', async () => {
     const filePath = 'rtl/core/reg_file.v';
     const currentContent = 'module reg_file;\nassign ready = valid;\nassign changed = 1\'b1;\nendmodule';
+    const onInlineGitDiffSummaryChange = vi.fn();
     mockedWorkspaceGitPathStates = { [filePath]: 'modified' };
     vi.mocked(window.electronAPI!.git.getFileDiff).mockResolvedValue({
       filePath,
@@ -621,6 +626,7 @@ describe('MonacoEditorPane', () => {
         activeTabId={filePath}
         code={currentContent}
         editorRef={createRef<any>()}
+        onInlineGitDiffSummaryChange={onInlineGitDiffSummaryChange}
       />,
     );
 
@@ -647,6 +653,64 @@ describe('MonacoEditorPane', () => {
       }),
     ]));
     expect(decorations[0]?.options.linesDecorationsClassName).toBeUndefined();
+    await waitFor(() => {
+      expect(onInlineGitDiffSummaryChange).toHaveBeenLastCalledWith({
+        addedLineCount: 2,
+        filePath,
+        removedLineCount: 1,
+      });
+    });
+  });
+
+  it('redraws inline git diff decorations without line backgrounds when state backgrounds are disabled', async () => {
+    const filePath = 'rtl/core/reg_file.v';
+    const currentContent = 'module reg_file;\nassign ready = valid;\nendmodule';
+    mockedWorkspaceGitPathStates = { [filePath]: 'modified' };
+    vi.mocked(window.electronAPI!.git.getFileDiff).mockResolvedValue({
+      filePath,
+      originalContent: 'module reg_file;\nassign ready = done;\nendmodule',
+      currentContent,
+    });
+    const editorRef = createRef<any>();
+
+    const { rerender } = render(
+      <MonacoEditorPane
+        activeTabId={filePath}
+        code={currentContent}
+        editorRef={editorRef}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(mockEditorInstance.deltaDecorations.mock.calls.some((call) => Array.isArray(call[1]) && call[1].length > 0)).toBe(true);
+    });
+    expect(window.electronAPI?.git.getFileDiff).toHaveBeenCalledTimes(1);
+
+    mockEditorInstance.deltaDecorations.mockClear();
+    mockedEditorInlineGitDiffStateBackgroundsEnabled = false;
+
+    rerender(
+      <MonacoEditorPane
+        activeTabId={filePath}
+        code={currentContent}
+        editorRef={editorRef}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(mockEditorInstance.deltaDecorations).toHaveBeenCalled();
+    });
+
+    expect(window.electronAPI?.git.getFileDiff).toHaveBeenCalledTimes(1);
+
+    const decorationCalls = mockEditorInstance.deltaDecorations.mock.calls
+      .filter((call) => Array.isArray(call[1]) && call[1].length > 0);
+    const decorations = decorationCalls[decorationCalls.length - 1]?.[1] ?? [];
+    const modifiedDecoration = decorations.find((decoration: any) => decoration.options.marginClassName?.includes('pristine-inline-git-diff-margin-modified'));
+
+    expect(modifiedDecoration?.options.marginClassName).toContain('pristine-inline-git-diff-margin-modified');
+    expect(modifiedDecoration?.options.className).toBeUndefined();
+    expect(modifiedDecoration?.options.lineNumberClassName).toBe('pristine-inline-git-diff-line-number-hit-target');
   });
 
   it('renders removed-only inline git diff decorations in the margin and line number', async () => {
@@ -896,8 +960,9 @@ describe('MonacoEditorPane', () => {
     ]));
   });
 
-  it('does not fetch inline git diff when disabled or while the workspace file is dirty', () => {
+  it('does not fetch inline git diff when disabled or while the workspace file is dirty', async () => {
     const filePath = 'rtl/core/reg_file.v';
+    const onInlineGitDiffSummaryChange = vi.fn();
     mockedWorkspaceGitPathStates = { [filePath]: 'modified' };
     mockedEditorInlineGitDiffEnabled = false;
 
@@ -906,10 +971,14 @@ describe('MonacoEditorPane', () => {
         activeTabId={filePath}
         code="module reg_file; endmodule"
         editorRef={createRef<any>()}
+        onInlineGitDiffSummaryChange={onInlineGitDiffSummaryChange}
       />,
     );
 
     expect(window.electronAPI?.git.getFileDiff).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(onInlineGitDiffSummaryChange).toHaveBeenLastCalledWith(null);
+    });
 
     mockedEditorInlineGitDiffEnabled = true;
     rerender(
@@ -918,10 +987,14 @@ describe('MonacoEditorPane', () => {
         code="module reg_file; logic dirty; endmodule"
         editorRef={createRef<any>()}
         isWorkspaceDirty
+        onInlineGitDiffSummaryChange={onInlineGitDiffSummaryChange}
       />,
     );
 
     expect(window.electronAPI?.git.getFileDiff).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(onInlineGitDiffSummaryChange).toHaveBeenLastCalledWith(null);
+    });
   });
 
   it('clears stale inline git diff while editing and redraws after the dirty file is saved', async () => {

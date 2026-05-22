@@ -24,6 +24,7 @@ export const setEditorLineNumbersMock = vi.fn();
 export const setEditorMinimapEnabledMock = vi.fn();
 export const setEditorGlyphMarginMock = vi.fn();
 export const setEditorInlineGitDiffEnabledMock = vi.fn();
+export const setEditorInlineGitDiffStateBackgroundsEnabledMock = vi.fn();
 export const setEditorBracketPairGuidesMock = vi.fn();
 export const setEditorIndentGuidesMock = vi.fn();
 export const setEditorThemeMock = vi.fn();
@@ -640,6 +641,7 @@ interface EditorSettingsMockState {
   foldingStrategy: string;
   glyphMargin: boolean;
   inlineGitDiffEnabled: boolean;
+  inlineGitDiffStateBackgroundsEnabled: boolean;
   indentGuides: boolean;
   lineNumbers: string;
   minimapEnabled: boolean;
@@ -668,6 +670,7 @@ const defaultEditorSettingsMockState: EditorSettingsMockState = {
   foldingStrategy: 'indentation',
   glyphMargin: true,
   inlineGitDiffEnabled: true,
+  inlineGitDiffStateBackgroundsEnabled: true,
   indentGuides: true,
   lineNumbers: 'on',
   minimapEnabled: true,
@@ -716,6 +719,7 @@ vi.mock('../../../context/EditorSettingsContext', () => ({
     foldingStrategy: editorSettingsMockState.foldingStrategy,
     glyphMargin: editorSettingsMockState.glyphMargin,
     inlineGitDiffEnabled: editorSettingsMockState.inlineGitDiffEnabled,
+    inlineGitDiffStateBackgroundsEnabled: editorSettingsMockState.inlineGitDiffStateBackgroundsEnabled,
     indentGuides: editorSettingsMockState.indentGuides,
     lineNumbers: editorSettingsMockState.lineNumbers,
     minimapEnabled: editorSettingsMockState.minimapEnabled,
@@ -732,6 +736,7 @@ vi.mock('../../../context/EditorSettingsContext', () => ({
     setFoldingStrategy: setEditorFoldingStrategyMock,
     setGlyphMargin: setEditorGlyphMarginMock,
     setInlineGitDiffEnabled: setEditorInlineGitDiffEnabledMock,
+    setInlineGitDiffStateBackgroundsEnabled: setEditorInlineGitDiffStateBackgroundsEnabledMock,
     setIndentGuides: setEditorIndentGuidesMock,
     setLineNumbers: setEditorLineNumbersMock,
     setMinimapEnabled: setEditorMinimapEnabledMock,
@@ -800,6 +805,7 @@ function resetEditorSettingsMocks() {
   setEditorFoldingStrategyMock.mockReset();
   setEditorGlyphMarginMock.mockReset();
   setEditorInlineGitDiffEnabledMock.mockReset();
+  setEditorInlineGitDiffStateBackgroundsEnabledMock.mockReset();
   setEditorIndentGuidesMock.mockReset();
   setEditorLineNumbersMock.mockReset();
   setEditorMinimapEnabledMock.mockReset();
@@ -894,6 +900,7 @@ export type PersistedSettingsOptions = {
   foldingStrategy?: string;
   glyphMargin?: boolean;
   inlineGitDiffEnabled?: boolean;
+  inlineGitDiffStateBackgroundsEnabled?: boolean;
   indentGuides?: boolean;
   lineNumbers?: string;
   minimapEnabled?: boolean;
@@ -921,6 +928,7 @@ export function mockPersistedSettingsConfig(options: PersistedSettingsOptions = 
     foldingStrategy: 'indentation',
     glyphMargin: true,
     inlineGitDiffEnabled: true,
+    inlineGitDiffStateBackgroundsEnabled: true,
     indentGuides: true,
     lineNumbers: 'on',
     minimapEnabled: true,
@@ -930,7 +938,7 @@ export function mockPersistedSettingsConfig(options: PersistedSettingsOptions = 
     smoothScrolling: true,
     tabSize: 4,
     editorTheme: 'dracula',
-    codeViewerLayoutMode: 'compact' as const,
+    codeViewerLayoutMode: 'minimal' as const,
     themePickerLayoutMode: 'list' as const,
     wordWrap: 'off',
     ...options,
@@ -968,6 +976,8 @@ export function mockPersistedSettingsConfig(options: PersistedSettingsOptions = 
         return persisted.glyphMargin;
       case 'editor.inlineGitDiff.enabled':
         return persisted.inlineGitDiffEnabled;
+      case 'editor.inlineGitDiff.stateBackgrounds.enabled':
+        return persisted.inlineGitDiffStateBackgroundsEnabled;
       case 'editor.guides.indentation':
         return persisted.indentGuides;
       case 'editor.lineNumbers':

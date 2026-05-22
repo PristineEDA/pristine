@@ -114,7 +114,7 @@ describe('LeftSidePanel', () => {
   });
 
   it('renders only explorer and outline tabs', async () => {
-    renderLeftSidePanel();
+    renderLeftSidePanel({}, { layoutMode: 'compact' });
 
     const header = screen.getByTestId('left-panel-header');
 
@@ -156,7 +156,7 @@ describe('LeftSidePanel', () => {
   });
 
   it('defaults the lower stacked panel hidden and toggles two independent panel frames', async () => {
-    renderLeftSidePanel();
+    renderLeftSidePanel({}, { layoutMode: 'compact' });
 
     const splitToggle = screen.getByTestId('left-panel-split-toggle');
 
@@ -191,8 +191,8 @@ describe('LeftSidePanel', () => {
     expect(screen.getByTestId('left-panel-primary-panel')).toHaveClass('bg-ide-bg');
     expect(screen.getByTestId('left-panel-secondary-panel')).toHaveClass('bg-ide-bg');
     expect(screen.getByTestId('left-panel-secondary-header')).toHaveAttribute('data-code-viewer-layout-mode', 'compact');
-    expect(screen.getByTestId('left-panel-secondary-header')).toHaveTextContent('Structure');
-    expect(screen.getByTestId('left-panel-secondary-placeholder')).toHaveTextContent('Structure is empty');
+    expect(screen.getByTestId('left-panel-secondary-header')).toHaveTextContent('Hierarchy');
+    expect(screen.getByTestId('left-panel-secondary-placeholder')).toHaveTextContent('Hierarchy is empty');
     expect(screen.getByTestId('left-panel-split-resize-handle')).toHaveAttribute('aria-orientation', 'horizontal');
 
     await testUser.click(expandedSplitToggle);

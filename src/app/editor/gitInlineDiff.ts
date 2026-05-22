@@ -25,6 +25,15 @@ export interface InlineGitDiffResult {
   usedFallback: boolean
 }
 
+export interface InlineGitDiffLineCounts {
+  addedLineCount: number
+  removedLineCount: number
+}
+
+export interface InlineGitDiffSummary extends InlineGitDiffLineCounts {
+  filePath: string
+}
+
 type DiffOperationKind = 'equal' | 'added' | 'removed'
 
 interface DiffOperation extends InlineGitDiffLine {
@@ -295,4 +304,14 @@ export function computeInlineGitDiff(originalContent: string, currentContent: st
     originalLineCount: originalLines.length,
     usedFallback,
   }
+}
+
+export function getInlineGitDiffLineCounts(diff: InlineGitDiffResult): InlineGitDiffLineCounts {
+  return diff.hunks.reduce<InlineGitDiffLineCounts>((counts, hunk) => ({
+    addedLineCount: counts.addedLineCount + hunk.addedLines.length,
+    removedLineCount: counts.removedLineCount + hunk.removedLines.length,
+  }), {
+    addedLineCount: 0,
+    removedLineCount: 0,
+  })
 }

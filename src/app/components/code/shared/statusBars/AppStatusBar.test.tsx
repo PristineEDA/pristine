@@ -27,7 +27,9 @@ describe('AppStatusBar', () => {
     );
 
     expect(screen.getByTestId('status-bar')).toHaveAttribute('data-status-bar-id', 'code-explorer');
-    expect(screen.getByTestId('status-bar')).toHaveClass('bg-ide-statusbar-bg', 'text-ide-statusbar-fg', 'border-ide-statusbar-border');
+    expect(screen.getByTestId('status-bar')).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
+    expect(screen.getByTestId('status-bar')).toHaveClass('bg-ide-unified-chrome-bg', 'text-ide-unified-chrome-fg');
+    expect(screen.getByTestId('status-bar')).not.toHaveClass('border-ide-statusbar-border');
     expect(screen.getByText('feature/git-ui')).toBeInTheDocument();
     expect(screen.getByText('Ln 18, Col 4')).toBeInTheDocument();
     expect(screen.getByText('SystemVerilog')).toBeInTheDocument();

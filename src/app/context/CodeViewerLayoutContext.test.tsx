@@ -15,8 +15,8 @@ function CodeViewerLayoutProbe() {
   return (
     <div>
       <span data-testid="code-viewer-layout-mode">{layoutMode}</span>
-      <button data-testid="set-minimal-layout" onClick={() => setLayoutMode('minimal')}>
-        Set minimal
+      <button data-testid="set-compact-layout" onClick={() => setLayoutMode('compact')}>
+        Set compact
       </button>
     </div>
   );
@@ -30,9 +30,23 @@ describe('CodeViewerLayoutContext', () => {
     vi.mocked(window.electronAPI!.config.onDidChange).mockImplementation(() => vi.fn());
   });
 
-  it('defaults to compact when persisted config is missing or invalid', () => {
-    expect(parseCodeViewerLayoutMode(null)).toBe('compact');
-    expect(parseCodeViewerLayoutMode('unknown')).toBe('compact');
+  it('defaults to minimal when persisted config is missing or invalid', () => {
+    expect(parseCodeViewerLayoutMode(null)).toBe('minimal');
+    expect(parseCodeViewerLayoutMode('unknown')).toBe('minimal');
+
+    render(
+      <CodeViewerLayoutProvider>
+        <CodeViewerLayoutProbe />
+      </CodeViewerLayoutProvider>,
+    );
+
+    expect(screen.getByTestId('code-viewer-layout-mode')).toHaveTextContent('minimal');
+  });
+
+  it('reads the persisted compact layout mode', () => {
+    vi.mocked(window.electronAPI!.config.get).mockImplementation((key: string) =>
+      key === WORKBENCH_CODE_VIEWER_LAYOUT_MODE_CONFIG_KEY ? 'compact' : null,
+    );
 
     render(
       <CodeViewerLayoutProvider>
@@ -66,10 +80,10 @@ describe('CodeViewerLayoutContext', () => {
       </CodeViewerLayoutProvider>,
     );
 
-    await user.click(screen.getByTestId('set-minimal-layout'));
+    await user.click(screen.getByTestId('set-compact-layout'));
 
-    expect(screen.getByTestId('code-viewer-layout-mode')).toHaveTextContent('minimal');
-    expect(window.electronAPI?.config.set).toHaveBeenCalledWith(WORKBENCH_CODE_VIEWER_LAYOUT_MODE_CONFIG_KEY, 'minimal');
+    expect(screen.getByTestId('code-viewer-layout-mode')).toHaveTextContent('compact');
+    expect(window.electronAPI?.config.set).toHaveBeenCalledWith(WORKBENCH_CODE_VIEWER_LAYOUT_MODE_CONFIG_KEY, 'compact');
   });
 
   it('syncs external config changes for the layout mode key only', () => {
@@ -90,21 +104,21 @@ describe('CodeViewerLayoutContext', () => {
       configChangeListener?.('workbench.colorTheme', 'minimal');
     });
 
-    expect(screen.getByTestId('code-viewer-layout-mode')).toHaveTextContent('compact');
+    expect(screen.getByTestId('code-viewer-layout-mode')).toHaveTextContent('minimal');
 
     act(() => {
-      configChangeListener?.(WORKBENCH_CODE_VIEWER_LAYOUT_MODE_CONFIG_KEY, 'minimal' satisfies CodeViewerLayoutMode);
+      configChangeListener?.(WORKBENCH_CODE_VIEWER_LAYOUT_MODE_CONFIG_KEY, 'compact' satisfies CodeViewerLayoutMode);
     });
 
-    expect(screen.getByTestId('code-viewer-layout-mode')).toHaveTextContent('minimal');
+    expect(screen.getByTestId('code-viewer-layout-mode')).toHaveTextContent('compact');
 
     unmount();
     expect(unsubscribe).toHaveBeenCalledTimes(1);
   });
 
-  it('falls back to compact for isolated component renders without a provider', () => {
+  it('falls back to minimal for isolated component renders without a provider', () => {
     render(<CodeViewerLayoutProbe />);
 
-    expect(screen.getByTestId('code-viewer-layout-mode')).toHaveTextContent('compact');
+    expect(screen.getByTestId('code-viewer-layout-mode')).toHaveTextContent('minimal');
   });
 });

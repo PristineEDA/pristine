@@ -19,6 +19,7 @@ function EditorSettingsProbe() {
     foldingStrategy,
     glyphMargin,
     inlineGitDiffEnabled,
+    inlineGitDiffStateBackgroundsEnabled,
     indentGuides,
     lineNumbers,
     minimapEnabled,
@@ -35,6 +36,7 @@ function EditorSettingsProbe() {
     setFoldingStrategy,
     setGlyphMargin,
     setInlineGitDiffEnabled,
+    setInlineGitDiffStateBackgroundsEnabled,
     setIndentGuides,
     setLineNumbers,
     setMinimapEnabled,
@@ -59,6 +61,7 @@ function EditorSettingsProbe() {
       <span data-testid="editor-folding-strategy">{foldingStrategy}</span>
       <span data-testid="editor-glyph-margin">{String(glyphMargin)}</span>
       <span data-testid="editor-inline-git-diff-enabled">{String(inlineGitDiffEnabled)}</span>
+      <span data-testid="editor-inline-git-diff-backgrounds-enabled">{String(inlineGitDiffStateBackgroundsEnabled)}</span>
       <span data-testid="editor-indent-guides">{String(indentGuides)}</span>
       <span data-testid="editor-line-numbers">{lineNumbers}</span>
       <span data-testid="editor-minimap-enabled">{String(minimapEnabled)}</span>
@@ -92,6 +95,9 @@ function EditorSettingsProbe() {
       </button>
       <button data-testid="set-inline-git-diff-enabled" onClick={() => setInlineGitDiffEnabled(false)}>
         Set inline git diff enabled
+      </button>
+      <button data-testid="set-inline-git-diff-backgrounds-enabled" onClick={() => setInlineGitDiffStateBackgroundsEnabled(false)}>
+        Set inline git diff backgrounds enabled
       </button>
       <button data-testid="set-indent-guides" onClick={() => setIndentGuides(false)}>
         Set indent guides
@@ -167,6 +173,7 @@ describe('EditorSettingsContext', () => {
     expect(screen.getByTestId('editor-minimap-enabled')).toHaveTextContent('true')
     expect(screen.getByTestId('editor-glyph-margin')).toHaveTextContent('true')
     expect(screen.getByTestId('editor-inline-git-diff-enabled')).toHaveTextContent('true')
+    expect(screen.getByTestId('editor-inline-git-diff-backgrounds-enabled')).toHaveTextContent('true')
     expect(screen.getByTestId('editor-bracket-pair-guides')).toHaveTextContent('true')
     expect(screen.getByTestId('editor-indent-guides')).toHaveTextContent('true')
     expect(screen.getByTestId('editor-theme')).toHaveTextContent('dracula')
@@ -207,11 +214,13 @@ describe('EditorSettingsContext', () => {
                         ? false
                         : key === 'editor.inlineGitDiff.enabled'
                           ? false
-                          : key === 'editor.guides.bracketPairs'
+                          : key === 'editor.inlineGitDiff.stateBackgrounds.enabled'
                             ? false
-                            : key === 'editor.guides.indentation'
+                            : key === 'editor.guides.bracketPairs'
                               ? false
-                              : null,
+                              : key === 'editor.guides.indentation'
+                                ? false
+                                : null,
     )
 
     render(
@@ -235,6 +244,7 @@ describe('EditorSettingsContext', () => {
     expect(screen.getByTestId('editor-minimap-enabled')).toHaveTextContent('false')
     expect(screen.getByTestId('editor-glyph-margin')).toHaveTextContent('false')
     expect(screen.getByTestId('editor-inline-git-diff-enabled')).toHaveTextContent('false')
+    expect(screen.getByTestId('editor-inline-git-diff-backgrounds-enabled')).toHaveTextContent('false')
     expect(screen.getByTestId('editor-bracket-pair-guides')).toHaveTextContent('false')
     expect(screen.getByTestId('editor-indent-guides')).toHaveTextContent('false')
     expect(screen.getByTestId('editor-theme')).toHaveTextContent('night-owl')
@@ -319,6 +329,10 @@ describe('EditorSettingsContext', () => {
     await clickSetting('set-inline-git-diff-enabled')
     expect(screen.getByTestId('editor-inline-git-diff-enabled')).toHaveTextContent('false')
     expect(window.electronAPI?.config.set).toHaveBeenCalledWith('editor.inlineGitDiff.enabled', false)
+
+    await clickSetting('set-inline-git-diff-backgrounds-enabled')
+    expect(screen.getByTestId('editor-inline-git-diff-backgrounds-enabled')).toHaveTextContent('false')
+    expect(window.electronAPI?.config.set).toHaveBeenCalledWith('editor.inlineGitDiff.stateBackgrounds.enabled', false)
 
     await clickSetting('set-bracket-pair-guides')
     expect(screen.getByTestId('editor-bracket-pair-guides')).toHaveTextContent('false')

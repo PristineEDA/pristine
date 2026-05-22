@@ -4,7 +4,12 @@ export interface MonacoInlineGitDiffController {
   apply: (diff: InlineGitDiffResult) => void
   clear: () => void
   dispose: () => void
+  setStateBackgroundsVisible: (visible: boolean) => void
   syncEditorFont: () => void
+}
+
+interface MonacoInlineGitDiffControllerOptions {
+  stateBackgroundsVisible?: boolean
 }
 
 const ADDED_LINE_CLASS = 'pristine-inline-git-diff-line pristine-inline-git-diff-line-added'
@@ -16,6 +21,7 @@ const REMOVED_MARGIN_CLASS = 'pristine-inline-git-diff-margin pristine-inline-gi
 const ADDED_LINE_NUMBER_CLASS = 'pristine-inline-git-diff-line-number pristine-inline-git-diff-line-number-added'
 const MODIFIED_LINE_NUMBER_CLASS = 'pristine-inline-git-diff-line-number pristine-inline-git-diff-line-number-modified'
 const REMOVED_LINE_NUMBER_CLASS = 'pristine-inline-git-diff-line-number pristine-inline-git-diff-line-number-removed'
+const BACKGROUNDLESS_LINE_NUMBER_CLASS = 'pristine-inline-git-diff-line-number-hit-target'
 const INLINE_DIFF_DETAIL_TEST_ID = 'monaco-inline-git-diff-detail'
 const INLINE_DIFF_DETAIL_TITLE_TEST_ID = 'monaco-inline-git-diff-detail-title'
 const INLINE_DIFF_DETAIL_BODY_TEST_ID = 'monaco-inline-git-diff-detail-body'
@@ -218,18 +224,27 @@ function createLineDecorationOptions(
   marginClassName: string,
   lineNumberClassName: string,
   overviewColor: string,
+  stateBackgroundsVisible: boolean,
 ) {
-  return {
+  const options: any = {
     className,
     hoverMessage: { value: 'Click to show Git change' },
     isWholeLine: true,
-    lineNumberClassName,
     marginClassName,
     overviewRuler: createOverviewRulerOptions(monaco, overviewColor),
   }
+
+  if (stateBackgroundsVisible) {
+    options.lineNumberClassName = lineNumberClassName
+    return options
+  }
+
+  delete options.className
+  options.lineNumberClassName = BACKGROUNDLESS_LINE_NUMBER_CLASS
+  return options
 }
 
-function createCurrentLineDecorations(editor: any, monaco: any, diff: InlineGitDiffResult) {
+function createCurrentLineDecorations(editor: any, monaco: any, diff: InlineGitDiffResult, stateBackgroundsVisible: boolean) {
   const decorations: any[] = []
 
   diff.hunks.forEach((hunk) => {
@@ -243,7 +258,7 @@ function createCurrentLineDecorations(editor: any, monaco: any, diff: InlineGitD
       hunk.addedLines.forEach((line) => {
         decorations.push({
           range: createLineRange(editor, line.currentLineNumber ?? hunk.currentStartLine),
-          options: createLineDecorationOptions(monaco, className, marginClassName, lineNumberClassName, overviewColor),
+          options: createLineDecorationOptions(monaco, className, marginClassName, lineNumberClassName, overviewColor, stateBackgroundsVisible),
         })
       })
     }
@@ -252,7 +267,7 @@ function createCurrentLineDecorations(editor: any, monaco: any, diff: InlineGitD
       const anchorLine = Math.min(Math.max(hunk.anchorLine || 1, 1), getLineCount(editor))
       decorations.push({
         range: createLineRange(editor, anchorLine),
-        options: createLineDecorationOptions(monaco, REMOVED_ANCHOR_LINE_CLASS, REMOVED_MARGIN_CLASS, REMOVED_LINE_NUMBER_CLASS, 'var(--ide-error)'),
+        options: createLineDecorationOptions(monaco, REMOVED_ANCHOR_LINE_CLASS, REMOVED_MARGIN_CLASS, REMOVED_LINE_NUMBER_CLASS, 'var(--ide-error)', stateBackgroundsVisible),
       })
     }
   })
@@ -260,15 +275,45 @@ function createCurrentLineDecorations(editor: any, monaco: any, diff: InlineGitD
   return decorations
 }
 
-export function createMonacoInlineGitDiffController(editor: any, monaco: any): MonacoInlineGitDiffController {
+export function createMonacoInlineGitDiffController(
+  editor: any,
+  monaco: any,
+  options: MonacoInlineGitDiffControllerOptions = {},
+): MonacoInlineGitDiffController {
   let decorationIds: string[] = []
+  let currentDiff: InlineGitDiffResult | null = null
   let currentHunks: InlineGitDiffHunk[] = []
   let detailZoneId: string | null = null
   let detailDomNode: HTMLElement | null = null
   let activeDetailHunkKey: string | null = null
+  let stateBackgroundsVisible = options.stateBackgroundsVisible ?? true
 
   const syncEditorFont = () => {
     applyEditorFontInfo(editor, monaco, detailDomNode)
+  }
+
+  const renderDecorations = () => {
+    if (typeof editor?.deltaDecorations !== 'function') {
+      decorationIds = []
+      return
+    }
+
+    if (!currentDiff || currentDiff.hunks.length === 0) {
+      decorationIds = editor.deltaDecorations(decorationIds, []) ?? []
+      return
+    }
+
+    const decorations = createCurrentLineDecorations(editor, monaco, currentDiff, stateBackgroundsVisible)
+    decorationIds = editor.deltaDecorations(decorationIds, decorations) ?? []
+  }
+
+  const setStateBackgroundsVisible = (visible: boolean) => {
+    if (stateBackgroundsVisible === visible) {
+      return
+    }
+
+    stateBackgroundsVisible = visible
+    renderDecorations()
   }
 
   const closeDetail = () => {
@@ -350,29 +395,17 @@ export function createMonacoInlineGitDiffController(editor: any, monaco: any): M
 
   const clear = () => {
     closeDetail()
+    currentDiff = null
     currentHunks = []
 
-    if (typeof editor?.deltaDecorations === 'function') {
-      decorationIds = editor.deltaDecorations(decorationIds, []) ?? []
-      return
-    }
-
-    decorationIds = []
+    renderDecorations()
   }
 
   const apply = (diff: InlineGitDiffResult) => {
-    clear()
-
-    if (diff.hunks.length === 0) {
-      return
-    }
-
+    closeDetail()
+    currentDiff = diff
     currentHunks = diff.hunks
-    const decorations = createCurrentLineDecorations(editor, monaco, diff)
-
-    if (decorations.length > 0 && typeof editor?.deltaDecorations === 'function') {
-      decorationIds = editor.deltaDecorations([], decorations) ?? []
-    }
+    renderDecorations()
   }
 
   return {
@@ -383,6 +416,7 @@ export function createMonacoInlineGitDiffController(editor: any, monaco: any): M
       mouseDownDisposable?.dispose?.()
       document.removeEventListener('keydown', handleDocumentKeyDown)
     },
+    setStateBackgroundsVisible,
     syncEditorFont,
   }
 }

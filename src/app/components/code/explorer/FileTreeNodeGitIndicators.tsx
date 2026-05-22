@@ -4,7 +4,7 @@ import {
   type WorkspaceTreeNode,
 } from '../../../workspace/workspaceFiles';
 
-type ExplorerGitIndicatorState = Exclude<WorkspaceGitPathState, 'ignored'>;
+export type ExplorerGitIndicatorState = Exclude<WorkspaceGitPathState, 'ignored'>;
 
 const EXPLORER_GIT_INDICATOR_ORDER: ExplorerGitIndicatorState[] = ['created', 'modified', 'deleted'];
 
@@ -14,7 +14,7 @@ function isExplorerGitIndicatorState(
   return state === 'created' || state === 'modified' || state === 'deleted';
 }
 
-function getExplorerGitToneClassName(state: ExplorerGitIndicatorState): string {
+export function getExplorerGitToneClassName(state: ExplorerGitIndicatorState): string {
   if (state === 'created') {
     return 'text-ide-success';
   }
@@ -24,6 +24,24 @@ function getExplorerGitToneClassName(state: ExplorerGitIndicatorState): string {
   }
 
   return 'text-ide-warning';
+}
+
+export function GitStateIndicator({
+  state,
+  testId,
+}: {
+  state: ExplorerGitIndicatorState;
+  testId: string;
+}) {
+  return (
+    <span
+      data-testid={testId}
+      className={`relative flex h-2.5 w-2.5 shrink-0 items-center justify-center rounded-full ${getExplorerGitToneClassName(state)}`}
+    >
+      <span className="absolute inset-0 rounded-full border border-current/80" />
+      <span className="h-1.5 w-1.5 rounded-full bg-current" />
+    </span>
+  );
 }
 
 export function getExplorerGitIndicatorStates(
@@ -84,14 +102,11 @@ export function ExplorerGitIndicators({
       className="ml-auto flex shrink-0 items-center gap-1.5 pr-2"
     >
       {indicatorStates.map((state) => (
-        <span
+        <GitStateIndicator
           key={state}
-          data-testid={`file-tree-git-indicator-${state}-${testId}`}
-          className={`relative flex h-2.5 w-2.5 items-center justify-center rounded-full ${getExplorerGitToneClassName(state)}`}
-        >
-          <span className="absolute inset-0 rounded-full border border-current/80" />
-          <span className="h-1.5 w-1.5 rounded-full bg-current" />
-        </span>
+          state={state}
+          testId={`file-tree-git-indicator-${state}-${testId}`}
+        />
       ))}
     </span>
   );

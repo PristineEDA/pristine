@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useRef, useState } from 'react';
+import { Suspense, lazy, useEffect, useRef, useState, type CSSProperties } from 'react';
 import {
   X, ChevronRight, Split,
   MoreHorizontal, Circle,
@@ -21,6 +21,10 @@ import { EmptyProject } from './EmptyProject';
 import { TooltipIconButton } from '../../ui/tooltip-icon-button';
 import { useCodeViewerLayout, type CodeViewerLayoutMode } from '../../../context/CodeViewerLayoutContext';
 import { getEditorAreaRootClassName, getEditorTabBarClassName, getEditorTabClassName } from './codeViewerLayoutStyles';
+import { useEditorSettings } from '../../../context/EditorSettingsContext';
+import { getMonacoEditorFontFamilyStack } from '../../../editor/editorSettings';
+import type { InlineGitDiffSummary } from '../../../editor/gitInlineDiff';
+import { GitStateIndicator } from '../explorer/FileTreeNodeGitIndicators';
 
 function clampEditorPosition(editor: any, line: number, col: number) {
   const model = editor?.getModel?.();
@@ -233,22 +237,54 @@ function EditorTab({
 }
 
 // ─── Breadcrumb ───────────────────────────────────────────────────────────────
-function Breadcrumb({ segments }: { segments: string[] }) {
+function Breadcrumb({
+  diffSummary,
+  editorFontStyle,
+  gitState,
+  segments,
+}: {
+  diffSummary: InlineGitDiffSummary | null;
+  editorFontStyle: CSSProperties;
+  gitState?: WorkspaceGitPathState;
+  segments: string[];
+}) {
+  const showDiffSummary = gitState === 'modified'
+    && diffSummary
+    && (diffSummary.addedLineCount > 0 || diffSummary.removedLineCount > 0);
+
   return (
-    <div data-testid="editor-breadcrumb" className="flex items-center gap-0.5 px-3 h-6 bg-ide-editor-bg border-b border-ide-border shrink-0">
-      {segments.map((seg, i) => (
-        <span key={i} className="flex items-center gap-0.5">
-          {i > 0 && <ChevronRight size={11} className="text-ide-text-muted/50" />}
-          <span
-            data-testid={`editor-breadcrumb-segment-${i}`}
-            className={`cursor-pointer hover:text-ide-text transition-colors ${
-              i === segments.length - 1 ? 'text-ide-text' : 'text-ide-text-muted'
-            } text-[12px]`}
-          >
-            {seg}
+    <div data-testid="editor-breadcrumb" className="flex h-6 shrink-0 items-center gap-0.5 border-b border-ide-border bg-ide-editor-bg px-3">
+      <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-hidden">
+        {segments.map((seg, i) => (
+          <span key={i} className="flex min-w-0 items-center gap-0.5">
+            {i > 0 && <ChevronRight size={11} className="shrink-0 text-ide-text-muted/50" />}
+            <span
+              data-testid={`editor-breadcrumb-segment-${i}`}
+              className={`cursor-pointer truncate hover:text-ide-text transition-colors ${
+                i === segments.length - 1 ? 'text-ide-text' : 'text-ide-text-muted'
+              } text-[12px]`}
+            >
+              {seg}
+            </span>
+          </span>
+        ))}
+      </div>
+
+      {showDiffSummary && (
+        <span
+          data-testid="editor-breadcrumb-git-diff-summary"
+          className="ml-auto flex shrink-0 items-center gap-1.5 pl-3 leading-none"
+          style={editorFontStyle}
+        >
+          <GitStateIndicator state="modified" testId="editor-breadcrumb-git-indicator-modified" />
+          <span data-testid="editor-breadcrumb-git-diff-removed" className="text-ide-error">
+            -{diffSummary.removedLineCount}
+          </span>
+          <span data-testid="editor-breadcrumb-git-diff-added" className="text-ide-success">
+            +{diffSummary.addedLineCount}
           </span>
         </span>
-      ))}
+      )}
     </div>
   );
 }
@@ -286,15 +322,19 @@ export function EditorArea({
   dragInteractionShieldTestId,
 }: EditorAreaProps) {
   const { layoutMode } = useCodeViewerLayout();
+  const { fontFamily, fontSize } = useEditorSettings();
   const activeEditorTab = tabs.find((tab) => tab.id === activeTabId);
   const activeWorkspaceTab = toWorkspaceEditorTab(activeEditorTab);
   const isActiveGitDiffTab = isGitDiffEditorTab(activeWorkspaceTab);
   const resolvedActiveDocumentId = isActiveGitDiffTab
     ? getEditorTabDocumentId(activeWorkspaceTab)
     : documentTabId ?? activeTabId;
+  const activeSourceFileId = activeWorkspaceTab ? getEditorTabSourceFileId(activeWorkspaceTab) : resolvedActiveDocumentId;
   const lastAppliedRestoreRef = useRef({ activeTabId: '', restoreToken: 0 });
+  const [activeInlineGitDiffSummary, setActiveInlineGitDiffSummary] = useState<InlineGitDiffSummary | null>(null);
   const [activeModelReadyId, setActiveModelReadyId] = useState('');
   const gitStatus = useWorkspaceGitStatus();
+  const activeGitPathState = activeSourceFileId ? getWorkspaceGitPathState(gitStatus, activeSourceFileId) : undefined;
   const {
     activeLoadError,
     code,
@@ -312,6 +352,23 @@ export function EditorArea({
     onContentChange,
   });
   const breadcrumbSegments = activeEditorTab ? getDisplayPathSegments(resolvedActiveDocumentId || activeTabId, activeEditorTab.name) : [];
+  const breadcrumbDiffFontStyle = {
+    fontFamily: getMonacoEditorFontFamilyStack(fontFamily),
+    fontSize,
+  };
+
+  useEffect(() => {
+    setActiveInlineGitDiffSummary(null);
+  }, [activeGitPathState, isActiveGitDiffTab, resolvedActiveDocumentId]);
+
+  const handleInlineGitDiffSummaryChange = (summary: InlineGitDiffSummary | null) => {
+    if (!summary || summary.filePath !== resolvedActiveDocumentId || activeGitPathState !== 'modified' || isActiveGitDiffTab) {
+      setActiveInlineGitDiffSummary(null);
+      return;
+    }
+
+    setActiveInlineGitDiffSummary(summary);
+  };
 
   // Jump to line
   useEffect(() => {
@@ -490,7 +547,14 @@ export function EditorArea({
       </div>
 
       {/* Breadcrumb */}
-      {activeEditorTab && <Breadcrumb segments={breadcrumbSegments} />}
+      {activeEditorTab && (
+        <Breadcrumb
+          diffSummary={activeInlineGitDiffSummary}
+          editorFontStyle={breadcrumbDiffFontStyle}
+          gitState={activeGitPathState}
+          segments={breadcrumbSegments}
+        />
+      )}
 
       {isActiveGitDiffTab && resolvedActiveDocumentId ? (
         <Suspense
@@ -528,6 +592,7 @@ export function EditorArea({
             onNewShortcut={onNewShortcut}
             onContentChange={updateContent}
             onEditorMount={onEditorMount}
+            onInlineGitDiffSummaryChange={handleInlineGitDiffSummaryChange}
             onNavigateToLocation={onNavigateToLocation}
             isDocumentReady={isActiveTabReady}
             hasLoadError={Boolean(activeLoadError)}

@@ -4,7 +4,7 @@ import '../../../editor/configureMonacoLoader';
 import { isMonacoTextInputElement } from '../../../editor/focusEditor';
 import { useRegisterEditorLanguages } from '../../../editor/registerLanguages';
 import { systemVerilogLspBridge } from '../../../lsp/systemVerilogLspBridge';
-import { computeInlineGitDiff } from '../../../editor/gitInlineDiff';
+import { computeInlineGitDiff, getInlineGitDiffLineCounts, type InlineGitDiffSummary } from '../../../editor/gitInlineDiff';
 import { getEditorLanguage } from '../../../workspace/workspaceFiles';
 import { useTheme } from '../../../context/ThemeContext';
 import { useEditorSettings } from '../../../context/EditorSettingsContext';
@@ -58,6 +58,7 @@ interface MonacoEditorPaneProps {
   onSaveShortcut?: () => void;
   onContentChange?: (value: string) => void;
   onEditorMount?: (editor: any) => void;
+  onInlineGitDiffSummaryChange?: (summary: InlineGitDiffSummary | null) => void;
   onNavigateToLocation?: (fileId: string, line: number, col: number) => void;
   onNewShortcut?: () => void;
   isDocumentReady?: boolean;
@@ -77,6 +78,7 @@ export function MonacoEditorPane({
   onSaveShortcut,
   onContentChange,
   onEditorMount,
+  onInlineGitDiffSummaryChange,
   onNavigateToLocation,
   onNewShortcut,
   isDocumentReady = true,
@@ -87,7 +89,7 @@ export function MonacoEditorPane({
 }: MonacoEditorPaneProps) {
   const monaco = useMonaco();
   const { activeTheme, themeId } = useTheme();
-  const { inlineGitDiffEnabled } = useEditorSettings();
+  const { inlineGitDiffEnabled, inlineGitDiffStateBackgroundsEnabled } = useEditorSettings();
   const gitStatus = useWorkspaceGitStatus();
   const { editorBehaviorOptions, editorFontFamily, editorOptions } = useMonacoEditorOptions();
   const editorLanguage = getEditorLanguage(activeTabId);
@@ -114,6 +116,9 @@ export function MonacoEditorPane({
   });
   const handleEditorMount = useEffectEvent((editor: any) => {
     onEditorMount?.(editor);
+  });
+  const handleInlineGitDiffSummaryChange = useEffectEvent((summary: InlineGitDiffSummary | null) => {
+    onInlineGitDiffSummaryChange?.(summary);
   });
   const handleNavigateToLocation = useEffectEvent((fileId: string, line: number, col: number) => {
     onNavigateToLocation?.(fileId, line, col);
@@ -191,6 +196,7 @@ export function MonacoEditorPane({
     inlineGitDiffRequestRef.current += 1;
     inlineGitDiffAppliedContentRef.current = null;
     inlineGitDiffControllerRef.current?.clear();
+    handleInlineGitDiffSummaryChange(null);
   };
 
   useEffect(() => {
@@ -198,7 +204,9 @@ export function MonacoEditorPane({
       return;
     }
 
-    const controller = createMonacoInlineGitDiffController(mountedEditor, monacoInstanceRef.current);
+    const controller = createMonacoInlineGitDiffController(mountedEditor, monacoInstanceRef.current, {
+      stateBackgroundsVisible: inlineGitDiffStateBackgroundsEnabled,
+    });
     inlineGitDiffControllerRef.current = controller;
 
     return () => {
@@ -208,6 +216,10 @@ export function MonacoEditorPane({
       }
     };
   }, [mountedEditor, monaco]);
+
+  useEffect(() => {
+    inlineGitDiffControllerRef.current?.setStateBackgroundsVisible(inlineGitDiffStateBackgroundsEnabled);
+  }, [inlineGitDiffStateBackgroundsEnabled]);
 
   useEffect(() => {
     const appliedContent = inlineGitDiffAppliedContentRef.current;
@@ -245,6 +257,7 @@ export function MonacoEditorPane({
     inlineGitDiffRequestRef.current = requestId;
     inlineGitDiffAppliedContentRef.current = null;
     inlineGitDiffControllerRef.current?.clear();
+    handleInlineGitDiffSummaryChange(null);
 
     let cancelled = false;
 
@@ -258,17 +271,25 @@ export function MonacoEditorPane({
         if (normalizeEditorContentForInlineDiff(editorContent) !== normalizeEditorContentForInlineDiff(payload.currentContent)) {
           inlineGitDiffControllerRef.current?.clear();
           inlineGitDiffAppliedContentRef.current = null;
+          handleInlineGitDiffSummaryChange(null);
           return;
         }
 
         const diff = computeInlineGitDiff(payload.originalContent, payload.currentContent);
         inlineGitDiffControllerRef.current?.apply(diff);
         inlineGitDiffAppliedContentRef.current = payload.currentContent;
+        handleInlineGitDiffSummaryChange(diff.changedLineCount > 0
+          ? {
+            filePath: activeTabId,
+            ...getInlineGitDiffLineCounts(diff),
+          }
+          : null);
       })
       .catch(() => {
         if (!cancelled && inlineGitDiffRequestRef.current === requestId) {
           inlineGitDiffControllerRef.current?.clear();
           inlineGitDiffAppliedContentRef.current = null;
+          handleInlineGitDiffSummaryChange(null);
         }
       });
 
