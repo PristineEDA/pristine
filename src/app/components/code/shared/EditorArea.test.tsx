@@ -143,7 +143,7 @@ const {
       hasProjectFiles: true,
       isGitRepo: true,
       isLoading: false,
-      pathStates: {} as Record<string, 'modified' | 'ignored'>,
+      pathStates: {} as Record<string, 'created' | 'modified' | 'deleted' | 'ignored'>,
     },
   };
 });
@@ -952,6 +952,36 @@ describe('EditorArea', () => {
     expect(screen.getByTestId('editor-breadcrumb-git-diff-removed')).toHaveTextContent('-1');
     expect(screen.getByTestId('editor-breadcrumb-git-diff-removed')).toHaveClass('text-ide-error');
     expect(screen.getByTestId('editor-breadcrumb-git-diff-added')).toHaveTextContent('+2');
+    expect(screen.getByTestId('editor-breadcrumb-git-diff-added')).toHaveClass('text-ide-success');
+    expect(summary.style.fontFamily).toBe(getMonacoEditorFontFamilyStack('jetbrains-mono'));
+    expect(summary.style.fontSize).toBe('13px');
+  });
+
+  it('renders the active created file git diff summary at the end of the breadcrumb', async () => {
+    const filePath = 'rtl/core/created_auto.v';
+    const currentContent = 'module created_auto;\nassign ready = 1\'b1;\nendmodule';
+    mockWorkspaceGitStatus.pathStates = { [filePath]: 'created' };
+
+    render(
+      <EditorArea
+        tabs={[{ id: filePath, name: 'created_auto.v', isPinned: true }]}
+        activeTabId={filePath}
+        onTabChange={vi.fn()}
+        onTabClose={vi.fn()}
+        editorRef={createRef()}
+        contentCache={{ [filePath]: currentContent }}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('editor-breadcrumb-git-diff-summary')).toBeInTheDocument();
+    });
+
+    const summary = screen.getByTestId('editor-breadcrumb-git-diff-summary');
+    expect(window.electronAPI?.git.getFileDiff).not.toHaveBeenCalled();
+    expect(screen.getByTestId('editor-breadcrumb-git-indicator-created')).toHaveClass('text-ide-success');
+    expect(screen.queryByTestId('editor-breadcrumb-git-diff-removed')).not.toBeInTheDocument();
+    expect(screen.getByTestId('editor-breadcrumb-git-diff-added')).toHaveTextContent('+3');
     expect(screen.getByTestId('editor-breadcrumb-git-diff-added')).toHaveClass('text-ide-success');
     expect(summary.style.fontFamily).toBe(getMonacoEditorFontFamilyStack('jetbrains-mono'));
     expect(summary.style.fontSize).toBe('13px');

@@ -218,6 +218,14 @@ function getEventLineNumber(event: any) {
   return typeof lineNumber === 'number' ? lineNumber : undefined
 }
 
+function getDetailAfterLineNumber(hunk: InlineGitDiffHunk, clickedLineNumber: number) {
+  if (hunk.addedLines.length > 0) {
+    return hunk.currentEndLine
+  }
+
+  return clickedLineNumber || hunk.anchorLine
+}
+
 function createLineDecorationOptions(
   monaco: any,
   className: string,
@@ -329,7 +337,7 @@ export function createMonacoInlineGitDiffController(
     activeDetailHunkKey = null
   }
 
-  const openDetail = (hunk: InlineGitDiffHunk) => {
+  const openDetail = (hunk: InlineGitDiffHunk, clickedLineNumber: number) => {
     if (typeof editor?.changeViewZones !== 'function') {
       return
     }
@@ -346,7 +354,7 @@ export function createMonacoInlineGitDiffController(
       const domNode = createHunkDetailNode(hunk, closeDetail)
       applyEditorFontInfo(editor, monaco, domNode)
       const zoneId = accessor.addZone({
-        afterLineNumber: Math.max(hunk.anchorLine, 0),
+        afterLineNumber: Math.max(getDetailAfterLineNumber(hunk, clickedLineNumber), 0),
         domNode,
         heightInLines: getHunkDetailHeightInLines(hunk),
         ordinal: 10_000 + hunk.originalStartLine,
@@ -378,7 +386,7 @@ export function createMonacoInlineGitDiffController(
 
     event?.event?.preventDefault?.()
     event?.event?.stopPropagation?.()
-    openDetail(hunk)
+    openDetail(hunk, lineNumber)
   }
 
   const mouseDownDisposable = typeof editor?.onMouseDown === 'function'

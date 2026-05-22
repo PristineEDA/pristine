@@ -48,6 +48,10 @@ function normalizeEditorContentForInlineDiff(content: string) {
   return content.replace(/\r\n?/g, '\n');
 }
 
+function isInlineGitDiffPathState(state: string | undefined) {
+  return state === 'modified' || state === 'created';
+}
+
 interface MonacoEditorPaneProps {
   activeTabId: string;
   code: string;
@@ -234,17 +238,16 @@ export function MonacoEditorPane({
     const getFileDiff = gitApi?.getFileDiff;
     const shouldShowInlineGitDiff = Boolean(
       editor
-      && getFileDiff
       && inlineGitDiffEnabled
       && activeTabId
       && !activeTabId.startsWith('untitled')
       && isDocumentReady
       && !hasLoadError
       && !isWorkspaceDirty
-      && gitPathState === 'modified'
+      && isInlineGitDiffPathState(gitPathState)
     );
 
-    if (!shouldShowInlineGitDiff || !getFileDiff) {
+    if (!shouldShowInlineGitDiff || (gitPathState === 'modified' && !getFileDiff)) {
       clearInlineGitDiff();
       return;
     }
@@ -261,30 +264,45 @@ export function MonacoEditorPane({
 
     let cancelled = false;
 
-    void getFileDiff(activeTabId)
-      .then((payload) => {
-        if (cancelled || inlineGitDiffRequestRef.current !== requestId) {
-          return;
-        }
+    const applyInlineGitDiffPayload = (payload: { filePath: string; originalContent: string; currentContent: string }) => {
+      if (cancelled || inlineGitDiffRequestRef.current !== requestId) {
+        return;
+      }
 
-        const editorContent = editor?.getModel?.()?.getValue?.() ?? codeRef.current;
-        if (normalizeEditorContentForInlineDiff(editorContent) !== normalizeEditorContentForInlineDiff(payload.currentContent)) {
-          inlineGitDiffControllerRef.current?.clear();
-          inlineGitDiffAppliedContentRef.current = null;
-          handleInlineGitDiffSummaryChange(null);
-          return;
-        }
+      const editorContent = editor?.getModel?.()?.getValue?.() ?? codeRef.current;
+      if (normalizeEditorContentForInlineDiff(editorContent) !== normalizeEditorContentForInlineDiff(payload.currentContent)) {
+        inlineGitDiffControllerRef.current?.clear();
+        inlineGitDiffAppliedContentRef.current = null;
+        handleInlineGitDiffSummaryChange(null);
+        return;
+      }
 
-        const diff = computeInlineGitDiff(payload.originalContent, payload.currentContent);
-        inlineGitDiffControllerRef.current?.apply(diff);
-        inlineGitDiffAppliedContentRef.current = payload.currentContent;
-        handleInlineGitDiffSummaryChange(diff.changedLineCount > 0
-          ? {
-            filePath: activeTabId,
-            ...getInlineGitDiffLineCounts(diff),
-          }
-          : null);
-      })
+      const diff = computeInlineGitDiff(payload.originalContent, payload.currentContent);
+      inlineGitDiffControllerRef.current?.apply(diff);
+      inlineGitDiffAppliedContentRef.current = payload.currentContent;
+      handleInlineGitDiffSummaryChange(diff.changedLineCount > 0
+        ? {
+          filePath: payload.filePath,
+          ...getInlineGitDiffLineCounts(diff),
+        }
+        : null);
+    };
+
+    if (gitPathState === 'created') {
+      const currentContent = editor?.getModel?.()?.getValue?.() ?? codeRef.current;
+      applyInlineGitDiffPayload({
+        filePath: activeTabId,
+        originalContent: '',
+        currentContent,
+      });
+
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    void getFileDiff?.(activeTabId)
+      .then(applyInlineGitDiffPayload)
       .catch(() => {
         if (!cancelled && inlineGitDiffRequestRef.current === requestId) {
           inlineGitDiffControllerRef.current?.clear();

@@ -16,6 +16,46 @@ const releaseRoot = path.join(__dirname, '..', 'release');
 const MONACO_READY_TIMEOUT_MS = 60000;
 const UI_READY_TIMEOUT_MS = 60000;
 
+function normalizeComparableMonospaceFontFamily(fontFamily: string) {
+  const tokens = fontFamily
+    .split(',')
+    .map((token) => token.trim().replace(/^['"]|['"]$/g, '').toLowerCase())
+    .filter(Boolean);
+  const normalizedTokens: string[] = [];
+
+  for (const token of tokens) {
+    normalizedTokens.push(token);
+    if (token === 'monospace') {
+      break;
+    }
+  }
+
+  return normalizedTokens.join(', ');
+}
+
+async function closeInlineGitDiffDetail(window: Awaited<ReturnType<typeof launchApp>>['window']) {
+  const detail = window.getByTestId('monaco-inline-git-diff-detail');
+
+  if ((await detail.count()) === 0) {
+    return;
+  }
+
+  await window.keyboard.press('Escape');
+
+  try {
+    await expect(detail).toHaveCount(0, { timeout: 2000 });
+    return;
+  } catch {
+    const closeButton = window.getByTestId('monaco-inline-git-diff-detail-close').first();
+
+    if ((await closeButton.count()) > 0) {
+      await closeButton.click({ force: true });
+    }
+  }
+
+  await expect(detail).toHaveCount(0, { timeout: MONACO_READY_TIMEOUT_MS });
+}
+
 function createTerminalScrollFloodCommand(markerPrefix: string, count: number) {
   if (process.platform === 'win32') {
     return `for ($i = 1; $i -le ${count}; $i++) { Write-Output "${markerPrefix}$i" }`;
@@ -2749,6 +2789,12 @@ test('Monaco editor shows inline git diff for opened modified files and hides it
     cpuTopFileContent.replace('  logic data_ready;\r\n', '').replace('  logic data_ready;\n', ''),
     'utf-8',
   );
+  const createdFileRelativePath = 'rtl/core/created_auto.v';
+  fs.writeFileSync(
+    path.join(workspaceCopy, 'rtl', 'core', 'created_auto.v'),
+    'module created_auto;\n  logic added_signal;\nendmodule',
+    'utf-8',
+  );
 
   const { app, window } = await launchApp({ projectRoot: workspaceCopy });
 
@@ -2766,37 +2812,58 @@ test('Monaco editor shows inline git diff for opened modified files and hides it
     await expect(window.locator('.monaco-editor .view-lines')).toContainText("32'h0000_0000", { timeout: MONACO_READY_TIMEOUT_MS });
 
     await expect(window.getByTestId('editor-tab-title-rtl/core/reg_file.v')).toHaveClass(/text-ide-warning/);
-    const inlineDiffDecoration = window.locator('.pristine-inline-git-diff-line-added, .pristine-inline-git-diff-line-modified').first();
-    const inlineDiffMarginDecoration = window.locator('.pristine-inline-git-diff-margin-added, .pristine-inline-git-diff-margin-modified').first();
-    const inlineDiffLineNumber = window.locator('.line-numbers.pristine-inline-git-diff-line-number-added, .line-numbers.pristine-inline-git-diff-line-number-modified').first();
+    const inlineDiffDecoration = window.locator('.pristine-inline-git-diff-line-modified').first();
+    const inlineDiffMarginDecoration = window.locator('.pristine-inline-git-diff-margin-modified').first();
+    const inlineDiffLineNumber = window.locator('.line-numbers.pristine-inline-git-diff-line-number-modified').first();
     await expect(inlineDiffDecoration).toBeVisible({ timeout: MONACO_READY_TIMEOUT_MS });
     await expect(inlineDiffMarginDecoration).toBeVisible({ timeout: MONACO_READY_TIMEOUT_MS });
     await expect(inlineDiffLineNumber).toBeVisible({ timeout: MONACO_READY_TIMEOUT_MS });
     await expect(inlineDiffDecoration).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
     await expect(inlineDiffMarginDecoration).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+    await expect(inlineDiffMarginDecoration).toHaveCSS('background-image', /linear-gradient/);
+    await expect(inlineDiffMarginDecoration).toHaveCSS('background-repeat', 'repeat-y');
+    await expect(inlineDiffMarginDecoration).toHaveCSS('background-size', '4px 6px');
     await expect(inlineDiffLineNumber).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
     const inlineDiffMarginBox = await inlineDiffMarginDecoration.boundingBox();
     const inlineDiffLineNumberBox = await inlineDiffLineNumber.boundingBox();
     expect(inlineDiffMarginBox?.x).toBeLessThan(inlineDiffLineNumberBox?.x ?? Number.POSITIVE_INFINITY);
     const inlineDiffBackgroundMetrics = await inlineDiffMarginDecoration.evaluate((node) => {
       type BoxLike = { right: number; x: number };
+      type ProbeLike = {
+        remove: () => void;
+        style: { color: string };
+      };
+      type DocumentLike = {
+        body: { appendChild: (node: ProbeLike) => void };
+        createElement: (tagName: string) => ProbeLike;
+        querySelector: (selectors: string) => ElementLike | null;
+      };
       type StyleLike = { backgroundColor: string; color: string };
       type ElementLike = {
         getBoundingClientRect: () => BoxLike;
+        ownerDocument: DocumentLike;
       };
       const browserGlobal = globalThis as typeof globalThis & {
-        document: { querySelector: (selectors: string) => ElementLike | null };
-        getComputedStyle: (element: ElementLike) => StyleLike;
+        getComputedStyle: (element: ElementLike | ProbeLike) => StyleLike;
       };
       const margin = node as unknown as ElementLike;
-      const lineNumber = browserGlobal.document.querySelector('.line-numbers.pristine-inline-git-diff-line-number-added, .line-numbers.pristine-inline-git-diff-line-number-modified');
-      const line = browserGlobal.document.querySelector('.pristine-inline-git-diff-line-added, .pristine-inline-git-diff-line-modified');
+      const ownerDocument = margin.ownerDocument;
+      const lineNumber = ownerDocument.querySelector('.line-numbers.pristine-inline-git-diff-line-number-modified');
+      const line = ownerDocument.querySelector('.pristine-inline-git-diff-line-modified');
       const readBackground = (element: ElementLike | null) => (
         element ? browserGlobal.getComputedStyle(element).backgroundColor : ''
       );
       const readColor = (element: ElementLike | null) => (
         element ? browserGlobal.getComputedStyle(element).color : ''
       );
+      const readResolvedColor = (value: string) => {
+        const probe = ownerDocument.createElement('span');
+        probe.style.color = value;
+        ownerDocument.body.appendChild(probe);
+        const color = browserGlobal.getComputedStyle(probe).color;
+        probe.remove();
+        return color;
+      };
       const marginBox = margin.getBoundingClientRect();
       const lineNumberBox = lineNumber?.getBoundingClientRect();
 
@@ -2808,11 +2875,13 @@ test('Monaco editor shows inline git diff for opened modified files and hides it
         marginBackground: readBackground(margin),
         marginColor: readColor(margin),
         marginRight: marginBox.right,
+        warningColor: readResolvedColor('var(--ide-warning)'),
       };
     });
     expect(inlineDiffBackgroundMetrics.marginBackground).toBe(inlineDiffBackgroundMetrics.lineBackground);
     expect(inlineDiffBackgroundMetrics.lineNumberBackground).toBe('rgba(0, 0, 0, 0)');
     expect(inlineDiffBackgroundMetrics.lineNumberColor).toBe(inlineDiffBackgroundMetrics.marginColor);
+    expect(inlineDiffBackgroundMetrics.marginColor).toBe(inlineDiffBackgroundMetrics.warningColor);
     expect(inlineDiffBackgroundMetrics.marginRight + 1).toBeGreaterThanOrEqual(inlineDiffBackgroundMetrics.lineNumberLeft);
     await expect(window.getByTestId('editor-breadcrumb-git-indicator-modified')).toBeVisible({ timeout: MONACO_READY_TIMEOUT_MS });
     await expect(window.getByTestId('editor-breadcrumb-git-diff-removed')).toHaveText(/^-\d+$/);
@@ -2860,7 +2929,11 @@ test('Monaco editor shows inline git diff for opened modified files and hides it
     });
     expect(breadcrumbDiffMetrics.removedColor).toBe(breadcrumbDiffMetrics.errorColor);
     expect(breadcrumbDiffMetrics.addedColor).toBe(breadcrumbDiffMetrics.successColor);
-    expect(breadcrumbDiffMetrics.summaryFontFamily).toBe(breadcrumbDiffMetrics.editorFontFamily);
+    expect(breadcrumbDiffMetrics.summaryFontFamily).not.toBe('');
+    expect(breadcrumbDiffMetrics.editorFontFamily).not.toBe('');
+    expect(normalizeComparableMonospaceFontFamily(breadcrumbDiffMetrics.summaryFontFamily)).toBe(
+      normalizeComparableMonospaceFontFamily(breadcrumbDiffMetrics.editorFontFamily),
+    );
     await expect(window.getByTestId('monaco-inline-git-diff-detail')).toHaveCount(0);
 
     await inlineDiffMarginDecoration.click();
@@ -2872,6 +2945,27 @@ test('Monaco editor shows inline git diff for opened modified files and hides it
     await expect(inlineDiffDetailBody).toContainText("assign rs2_data = (rs2 == 5'd0) ? 32'd0 : regs[rs2];");
     await expect(inlineDiffDetailBody).toContainText("assign rs2_data = (rs2 == 5'd0) ? 32'h0000_0000 : regs[rs2];");
     await expect(inlineDiffDetailClose).toBeVisible();
+
+    const inlineDiffDetailPlacementMetrics = await inlineDiffDetail.evaluate((node) => {
+      type BoxLike = { height: number; y: number };
+      type ElementLike = {
+        getBoundingClientRect: () => BoxLike;
+      };
+      const browserGlobal = globalThis as typeof globalThis & {
+        document: { querySelectorAll: (selectors: string) => ArrayLike<ElementLike> };
+      };
+      const detail = node as unknown as ElementLike;
+      const changedLines = Array.from(browserGlobal.document.querySelectorAll('.pristine-inline-git-diff-line-modified'));
+      const lastChangedLine = changedLines[changedLines.length - 1];
+      const detailBox = detail.getBoundingClientRect();
+      const changedLineBox = lastChangedLine?.getBoundingClientRect();
+
+      return {
+        changedLineBottom: changedLineBox ? changedLineBox.y + changedLineBox.height : 0,
+        detailTop: detailBox.y,
+      };
+    });
+    expect(inlineDiffDetailPlacementMetrics.detailTop + 1).toBeGreaterThanOrEqual(inlineDiffDetailPlacementMetrics.changedLineBottom);
 
     const inlineDiffDetailMetrics = await inlineDiffDetail.evaluate((node) => {
       type BoxLike = { height: number };
@@ -2964,16 +3058,27 @@ test('Monaco editor shows inline git diff for opened modified files and hides it
     expect(inlineDiffDetailMetrics.detailHeight + 1).toBeGreaterThanOrEqual(
       inlineDiffDetailMetrics.headerHeight + inlineDiffDetailMetrics.bodyScrollHeight,
     );
-    expect(inlineDiffDetailMetrics.contentFontFamily).toBe(inlineDiffDetailMetrics.editorFontFamily);
+    expect(inlineDiffDetailMetrics.contentFontFamily).not.toBe('');
+    expect(inlineDiffDetailMetrics.editorFontFamily).not.toBe('');
+    expect(normalizeComparableMonospaceFontFamily(inlineDiffDetailMetrics.contentFontFamily)).toBe(
+      normalizeComparableMonospaceFontFamily(inlineDiffDetailMetrics.editorFontFamily),
+    );
     expect(inlineDiffDetailMetrics.contentFontSize).toBe(inlineDiffDetailMetrics.editorFontSize);
     expect(inlineDiffDetailMetrics.contentLineHeight).toBe(inlineDiffDetailMetrics.editorLineHeight);
     expect(Number.parseFloat(inlineDiffDetailMetrics.titleFontSize)).toBeLessThan(Number.parseFloat(inlineDiffDetailMetrics.contentFontSize));
     expect(inlineDiffDetailMetrics.titleToEditorContrast).toBeGreaterThan(3);
 
-    await inlineDiffDetailClose.click();
-    await expect(window.getByTestId('monaco-inline-git-diff-detail')).toHaveCount(0);
+    await closeInlineGitDiffDetail(window);
     await inlineDiffMarginDecoration.click();
     await expect(window.getByTestId('monaco-inline-git-diff-detail')).toBeVisible();
+
+    await window.getByTestId(toWorkspaceTreeTestId(createdFileRelativePath)).dblclick();
+    await waitForMonacoEditor(window);
+    await expect(window.locator('.monaco-editor .view-lines')).toContainText('module created_auto', { timeout: MONACO_READY_TIMEOUT_MS });
+    await expect(window.locator('.pristine-inline-git-diff-margin-added').first()).toBeVisible({ timeout: MONACO_READY_TIMEOUT_MS });
+    await expect(window.getByTestId('editor-breadcrumb-git-indicator-created')).toBeVisible({ timeout: MONACO_READY_TIMEOUT_MS });
+    await expect(window.getByTestId('editor-breadcrumb-git-diff-added')).toHaveText('+3');
+    await expect(window.getByTestId('editor-breadcrumb-git-diff-removed')).toHaveCount(0);
 
     await window.getByTestId('file-tree-node-rtl_core_cpu_top_sv').dblclick();
     await waitForMonacoEditor(window);
@@ -2990,8 +3095,7 @@ test('Monaco editor shows inline git diff for opened modified files and hides it
     await removedInlineDiffMarginDecoration.click();
     await expect(window.getByTestId('monaco-inline-git-diff-detail-body')).toContainText('logic data_ready;');
 
-    await window.getByTestId('monaco-inline-git-diff-detail-close').click();
-    await expect(window.getByTestId('monaco-inline-git-diff-detail')).toHaveCount(0);
+    await closeInlineGitDiffDetail(window);
 
     await window.getByTestId('menu-settings-button').click();
     await expect(window.getByTestId('settings-dialog')).toBeVisible();

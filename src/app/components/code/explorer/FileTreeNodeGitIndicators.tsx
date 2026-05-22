@@ -8,7 +8,7 @@ export type ExplorerGitIndicatorState = Exclude<WorkspaceGitPathState, 'ignored'
 
 const EXPLORER_GIT_INDICATOR_ORDER: ExplorerGitIndicatorState[] = ['created', 'modified', 'deleted'];
 
-function isExplorerGitIndicatorState(
+export function isExplorerGitIndicatorState(
   state: WorkspaceGitPathState | undefined,
 ): state is ExplorerGitIndicatorState {
   return state === 'created' || state === 'modified' || state === 'deleted';

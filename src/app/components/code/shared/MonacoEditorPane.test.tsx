@@ -662,6 +662,49 @@ describe('MonacoEditorPane', () => {
     });
   });
 
+  it('renders created file inline git diff decorations without fetching HEAD content', async () => {
+    const filePath = 'rtl/core/created_auto.v';
+    const currentContent = 'module created_auto;\nassign inserted = 1\'b1;\nendmodule';
+    const onInlineGitDiffSummaryChange = vi.fn();
+    mockedWorkspaceGitPathStates = { [filePath]: 'created' };
+
+    render(
+      <MonacoEditorPane
+        activeTabId={filePath}
+        code={currentContent}
+        editorRef={createRef<any>()}
+        onInlineGitDiffSummaryChange={onInlineGitDiffSummaryChange}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(mockEditorInstance.deltaDecorations.mock.calls.some((call) => Array.isArray(call[1]) && call[1].length > 0)).toBe(true);
+    });
+
+    expect(window.electronAPI?.git.getFileDiff).not.toHaveBeenCalled();
+
+    const decorationCalls = mockEditorInstance.deltaDecorations.mock.calls
+      .filter((call) => Array.isArray(call[1]) && call[1].length > 0);
+    const decorations = decorationCalls[decorationCalls.length - 1]?.[1] ?? [];
+
+    expect(decorations).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        options: expect.objectContaining({
+          className: expect.stringContaining('pristine-inline-git-diff-line-added'),
+          lineNumberClassName: expect.stringContaining('pristine-inline-git-diff-line-number-added'),
+          marginClassName: expect.stringContaining('pristine-inline-git-diff-margin-added'),
+        }),
+      }),
+    ]));
+    await waitFor(() => {
+      expect(onInlineGitDiffSummaryChange).toHaveBeenLastCalledWith({
+        addedLineCount: 3,
+        filePath,
+        removedLineCount: 0,
+      });
+    });
+  });
+
   it('redraws inline git diff decorations without line backgrounds when state backgrounds are disabled', async () => {
     const filePath = 'rtl/core/reg_file.v';
     const currentContent = 'module reg_file;\nassign ready = valid;\nendmodule';
@@ -788,6 +831,7 @@ describe('MonacoEditorPane', () => {
 
     expect(mockInlineGitDiffAddedZones).toHaveLength(1);
     const detailZone = mockInlineGitDiffAddedZones[0];
+    expect(detailZone.afterLineNumber).toBe(2);
     expect(detailZone.domNode.dataset.inlineGitDiff).toBe('detail');
     expect(detailZone.heightInLines).toBe(4);
     expect(detailZone.suppressMouseDown).toBe(true);
@@ -861,6 +905,7 @@ describe('MonacoEditorPane', () => {
     });
 
     expect(mockInlineGitDiffAddedZones).toHaveLength(1);
+    expect(mockInlineGitDiffAddedZones[0].afterLineNumber).toBe(2);
     expect(mockInlineGitDiffAddedZones[0].heightInLines).toBe(3);
     expect(mockInlineGitDiffAddedZones[0].domNode).toHaveClass('pristine-inline-git-diff-detail-added');
     expect(mockInlineGitDiffAddedZones[0].domNode.querySelector('[data-testid="monaco-inline-git-diff-detail-title"]')?.textContent).toBe('Git Local Changes - added change');

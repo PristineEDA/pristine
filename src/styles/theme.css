@@ -442,6 +442,19 @@
 
 .monaco-editor .pristine-inline-git-diff-margin-modified {
   background-color: var(--pristine-inline-git-diff-modified-bg);
+  background-image: linear-gradient(
+    135deg,
+    transparent 0,
+    transparent 35%,
+    currentColor 35%,
+    currentColor 55%,
+    transparent 55%,
+    transparent 100%
+  );
+  background-position: left top;
+  background-repeat: repeat-y;
+  background-size: 4px 6px;
+  box-shadow: none;
   color: var(--ide-warning);
 }
 
