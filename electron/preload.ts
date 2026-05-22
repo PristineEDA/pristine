@@ -2,7 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 import { SyncChannels, AsyncChannels, StreamChannels } from './ipc/channels.js';
 import type { OpenThemeDialogResult, SaveDialogResult } from './ipc/dialog.js';
 import type { LspCompletionResponse, LspDebugEvent, LspDiagnosticsEvent, LspHover, LspStateEvent, WorkspaceLocation } from '../types/systemverilog-lsp.js';
-import type { WorkspaceGitChangeEvent, WorkspaceGitStatusPayload } from '../types/workspace-git.js';
+import type { WorkspaceGitChangeEvent, WorkspaceGitFileDiffPayload, WorkspaceGitStatusPayload } from '../types/workspace-git.js';
 import type { MenuCommandEvent } from '../src/app/menu/applicationMenu.js';
 import type { WindowCloseDecision, WindowCloseRequest } from '../src/app/window/windowClose.js';
 import type { AuthView, DesktopAuthSession } from '../src/app/auth/types.js';
@@ -124,6 +124,8 @@ const electronAPI = {
   git: {
     getStatus: () =>
       ipcRenderer.invoke(AsyncChannels.GIT_GET_STATUS) as Promise<WorkspaceGitStatusPayload>,
+    getFileDiff: (filePath: string) =>
+      ipcRenderer.invoke(AsyncChannels.GIT_GET_FILE_DIFF, filePath) as Promise<WorkspaceGitFileDiffPayload>,
   },
 
   // ── Shell (async + stream) ──

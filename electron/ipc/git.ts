@@ -4,13 +4,16 @@ import { watch, type FSWatcher } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { AsyncChannels, StreamChannels } from './channels.js';
+import { assertString, validatePathWithinRoot } from './validators.js';
 import type {
   WorkspaceGitChangeEvent,
+  WorkspaceGitFileDiffPayload,
   WorkspaceGitPathState,
   WorkspaceGitStatusPayload,
 } from '../../types/workspace-git.js';
 
 const GIT_STATUS_MAX_BUFFER_BYTES = 1024 * 1024;
+const GIT_FILE_DIFF_MAX_BUFFER_BYTES = 8 * 1024 * 1024;
 const WORKSPACE_CHANGE_DEBOUNCE_MS = 160;
 
 type WorkspaceChangeStreamTarget = {
@@ -167,6 +170,28 @@ function execGitStatus(root: string): Promise<string> {
       {
         cwd: root,
         maxBuffer: GIT_STATUS_MAX_BUFFER_BYTES,
+        windowsHide: true,
+      },
+      (error, stdout) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+
+        resolve(stdout);
+      },
+    );
+  });
+}
+
+function execGitShowHead(root: string, gitPath: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    execFile(
+      'git',
+      ['--no-optional-locks', 'show', `HEAD:${gitPath}`],
+      {
+        cwd: root,
+        maxBuffer: GIT_FILE_DIFF_MAX_BUFFER_BYTES,
         windowsHide: true,
       },
       (error, stdout) => {
@@ -365,5 +390,27 @@ export function registerGitHandlers(
         pathStates: {},
       };
     }
+  });
+
+  ipcMain.handle(AsyncChannels.GIT_GET_FILE_DIFF, async (_event, filePath: unknown): Promise<WorkspaceGitFileDiffPayload> => {
+    assertString(filePath, 'filePath');
+
+    const root = getProjectRoot();
+    const normalizedFilePath = normalizeGitPath(filePath);
+    if (!normalizedFilePath) {
+      throw new Error('Expected a workspace-relative git file path');
+    }
+
+    const absoluteFilePath = validatePathWithinRoot(root, normalizedFilePath);
+    const [originalContent, currentContent] = await Promise.all([
+      execGitShowHead(root, normalizedFilePath),
+      fs.readFile(absoluteFilePath, 'utf8'),
+    ]);
+
+    return {
+      filePath: normalizedFilePath,
+      originalContent,
+      currentContent,
+    };
   });
 }

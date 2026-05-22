@@ -408,6 +408,212 @@
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
+/* ─── Monaco Inline Git Diff ──────────────────────────────────────────────── */
+.monaco-editor {
+  --pristine-inline-git-diff-added-bg: color-mix(in srgb, var(--ide-success) 17%, transparent);
+  --pristine-inline-git-diff-modified-bg: color-mix(in srgb, var(--ide-warning) 17%, transparent);
+  --pristine-inline-git-diff-removed-bg: color-mix(in srgb, var(--ide-error) 17%, transparent);
+}
+
+.monaco-editor .pristine-inline-git-diff-line-added {
+  background: var(--pristine-inline-git-diff-added-bg);
+  cursor: pointer;
+}
+
+.monaco-editor .pristine-inline-git-diff-line-modified {
+  background: var(--pristine-inline-git-diff-modified-bg);
+  cursor: pointer;
+}
+
+.monaco-editor .pristine-inline-git-diff-line-removed-anchor {
+  background: var(--pristine-inline-git-diff-removed-bg);
+  cursor: pointer;
+}
+
+.monaco-editor .pristine-inline-git-diff-margin {
+  cursor: pointer;
+  box-shadow: inset 2px 0 0 currentColor;
+}
+
+.monaco-editor .pristine-inline-git-diff-margin-added {
+  background-color: var(--pristine-inline-git-diff-added-bg);
+  color: var(--ide-success);
+}
+
+.monaco-editor .pristine-inline-git-diff-margin-modified {
+  background-color: var(--pristine-inline-git-diff-modified-bg);
+  background-image: repeating-linear-gradient(
+    135deg,
+    transparent 0,
+    transparent 1px,
+    currentColor 1px,
+    currentColor 2px,
+    transparent 2px,
+    transparent 3px
+  );
+  background-position: left top;
+  background-repeat: repeat-y;
+  background-size: 2px 3px;
+  box-shadow: none;
+  color: var(--ide-warning);
+}
+
+.monaco-editor .pristine-inline-git-diff-margin-removed {
+  background-color: var(--pristine-inline-git-diff-removed-bg);
+  background-image: repeating-linear-gradient(
+    to bottom,
+    currentColor 0,
+    currentColor 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  background-position: left top;
+  background-repeat: repeat-y;
+  background-size: 2px 3px;
+  box-shadow: none;
+  color: var(--ide-error);
+}
+
+.monaco-editor .line-numbers.pristine-inline-git-diff-line-number {
+  background: transparent !important;
+  background-color: transparent !important;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.monaco-editor .line-numbers.pristine-inline-git-diff-line-number-hit-target {
+  pointer-events: none;
+}
+
+.monaco-editor .line-numbers.pristine-inline-git-diff-line-number-added {
+  color: var(--ide-success) !important;
+}
+
+.monaco-editor .line-numbers.pristine-inline-git-diff-line-number-modified {
+  color: var(--ide-warning) !important;
+}
+
+.monaco-editor .line-numbers.pristine-inline-git-diff-line-number-removed {
+  color: var(--ide-error) !important;
+}
+
+.pristine-inline-git-diff-detail {
+  box-sizing: border-box;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+  overflow: hidden;
+  border: 1px solid var(--ide-border);
+  border-left: 2px solid var(--ide-warning);
+  background: var(--ide-editor-bg);
+  box-shadow: 0 8px 24px color-mix(in srgb, #000 34%, transparent);
+  color: var(--ide-text);
+  font: inherit;
+}
+
+.pristine-inline-git-diff-detail-added {
+  border-left-color: var(--ide-success);
+}
+
+.pristine-inline-git-diff-detail-modified {
+  border-left-color: var(--ide-warning);
+}
+
+.pristine-inline-git-diff-detail-removed {
+  border-left-color: var(--ide-error);
+}
+
+.pristine-inline-git-diff-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: 0 0 auto;
+  min-height: 1.5rem;
+  border-bottom: 1px solid var(--ide-border);
+  background: color-mix(in srgb, var(--ide-bg) 88%, var(--ide-editor-bg));
+  color: var(--ide-text);
+  font-weight: 500;
+  padding: 0 0.5rem;
+}
+
+.pristine-inline-git-diff-detail-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ide-text);
+  font-size: 0.85em;
+}
+
+.pristine-inline-git-diff-detail-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
+  width: 1.3rem;
+  height: 1.3rem;
+  border-radius: 0.25rem;
+  border: 0;
+  background: transparent;
+  color: var(--ide-text);
+  cursor: pointer;
+  font: inherit;
+  pointer-events: auto;
+}
+
+.pristine-inline-git-diff-detail-close:hover {
+  background: var(--ide-hover);
+  color: var(--ide-text);
+}
+
+.pristine-inline-git-diff-detail-close:focus-visible {
+  outline: 1px solid var(--ide-accent);
+  outline-offset: -1px;
+}
+
+.pristine-inline-git-diff-detail-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.pristine-inline-git-diff-detail-row {
+  display: flex;
+  min-height: 1lh;
+  white-space: pre;
+}
+
+.pristine-inline-git-diff-detail-row-added {
+  background: color-mix(in srgb, var(--ide-success) 13%, transparent);
+}
+
+.pristine-inline-git-diff-detail-row-removed {
+  background: color-mix(in srgb, var(--ide-error) 13%, transparent);
+}
+
+.pristine-inline-git-diff-detail-marker {
+  flex: 0 0 2.25rem;
+  text-align: center;
+  user-select: none;
+}
+
+.pristine-inline-git-diff-detail-row-added .pristine-inline-git-diff-detail-marker {
+  color: var(--ide-success);
+}
+
+.pristine-inline-git-diff-detail-row-removed .pristine-inline-git-diff-detail-marker {
+  color: var(--ide-error);
+}
+
+.pristine-inline-git-diff-detail-content {
+  min-width: 0;
+  color: var(--ide-text);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

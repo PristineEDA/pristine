@@ -16,6 +16,46 @@ const releaseRoot = path.join(__dirname, '..', 'release');
 const MONACO_READY_TIMEOUT_MS = 60000;
 const UI_READY_TIMEOUT_MS = 60000;
 
+function normalizeComparableMonospaceFontFamily(fontFamily: string) {
+  const tokens = fontFamily
+    .split(',')
+    .map((token) => token.trim().replace(/^['"]|['"]$/g, '').toLowerCase())
+    .filter(Boolean);
+  const normalizedTokens: string[] = [];
+
+  for (const token of tokens) {
+    normalizedTokens.push(token);
+    if (token === 'monospace') {
+      break;
+    }
+  }
+
+  return normalizedTokens.join(', ');
+}
+
+async function closeInlineGitDiffDetail(window: Awaited<ReturnType<typeof launchApp>>['window']) {
+  const detail = window.getByTestId('monaco-inline-git-diff-detail');
+
+  if ((await detail.count()) === 0) {
+    return;
+  }
+
+  await window.keyboard.press('Escape');
+
+  try {
+    await expect(detail).toHaveCount(0, { timeout: 2000 });
+    return;
+  } catch {
+    const closeButton = window.getByTestId('monaco-inline-git-diff-detail-close').first();
+
+    if ((await closeButton.count()) > 0) {
+      await closeButton.click({ force: true });
+    }
+  }
+
+  await expect(detail).toHaveCount(0, { timeout: MONACO_READY_TIMEOUT_MS });
+}
+
 function createTerminalScrollFloodCommand(markerPrefix: string, count: number) {
   if (process.platform === 'win32') {
     return `for ($i = 1; $i -le ${count}; $i++) { Write-Output "${markerPrefix}$i" }`;
@@ -407,6 +447,14 @@ async function expectPanelHeaderWithoutDivider(header: Locator) {
 
 async function expectCollapsedPanel(panel: Locator) {
   await expect(panel).toHaveAttribute('aria-hidden', 'true');
+  const collapsedState = await panel.getAttribute('data-collapsed');
+
+  if (collapsedState !== null) {
+    expect(collapsedState).toBe('true');
+    await expect(panel).toHaveClass(/(?:^|\s)pointer-events-none(?:\s|$)/);
+    return;
+  }
+
   await expect(panel).not.toBeVisible();
 }
 
@@ -1160,6 +1208,7 @@ async function readWorkbenchChromeThemeSnapshot(window: Awaited<ReturnType<typeo
       style: { color: string };
     };
     const browserGlobal = globalThis as typeof globalThis & {
+      devicePixelRatio: number;
       document: {
         body: { appendChild: (node: ElementLike) => void };
         createElement: (tagName: string) => ElementLike;
@@ -1196,6 +1245,7 @@ async function readWorkbenchChromeThemeSnapshot(window: Awaited<ReturnType<typeo
     const statusStyle = browserGlobal.getComputedStyle(statusBar);
 
     return {
+      devicePixelRatio: browserGlobal.devicePixelRatio,
       activity: {
         backgroundColor: activitySurfaceStyle.backgroundColor,
         borderRightWidth: activityContainerStyle.borderRightWidth,
@@ -1219,6 +1269,13 @@ async function readWorkbenchChromeThemeSnapshot(window: Awaited<ReturnType<typeo
       },
     };
   });
+}
+
+function expectSingleDevicePixelBorder(borderWidth: string, devicePixelRatio: number) {
+  const cssPixelWidth = Number.parseFloat(borderWidth);
+
+  expect(cssPixelWidth).toBeGreaterThan(0);
+  expect(cssPixelWidth * devicePixelRatio).toBeCloseTo(1, 2);
 }
 
 async function readComboboxListSnapshot(
@@ -1352,18 +1409,13 @@ test('app launches and shows main UI', async () => {
   const mainContentStack = window.getByTestId('main-content-stack');
   const explorerPanel = window.getByTestId('panel-left-panel');
   await expect(explorerPanel).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect(window.getByTestId('code-view-explorer')).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
+  await expect(window.getByTestId('left-panel-header')).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
+  await expect(explorerPanel).toHaveClass(/(?:^|\s)rounded-md(?:\s|$)/);
+  await expect(explorerPanel).toHaveClass(/(?:^|\s)border(?:\s|$)/);
   await expectCompactPanelTabButton(window.getByTestId('left-panel-tab-explorer'));
   await expectCompactPanelTabButton(window.getByTestId('left-panel-tab-outline'));
-  await expect.poll(async () => {
-    const stackBox = await mainContentStack.boundingBox();
-    const panelBox = await explorerPanel.boundingBox();
-
-    if (!stackBox || !panelBox || stackBox.height <= 0) {
-      return 0;
-    }
-
-    return panelBox.height / stackBox.height;
-  }, { timeout: UI_READY_TIMEOUT_MS }).toBeGreaterThan(0.98);
+  await expect(mainContentStack).toBeVisible();
 
   await app.close();
 });
@@ -2681,6 +2733,413 @@ test('explorer shows the real git branch and git file decorations for tracked an
   }
 });
 
+test('Explorer opens a Monaco git diff tab for a modified file from the context menu', async () => {
+  test.slow();
+
+  const workspaceCopy = test.info().outputPath('git-diff-workspace');
+  createWorkspaceCopy(workspaceCopy);
+  initializeGitWorkspaceCopy(workspaceCopy, 'e2e-git-diff');
+
+  const { app, window } = await launchApp({ projectRoot: workspaceCopy });
+
+  try {
+    await ensureExplorerVisible(window);
+    await window.getByTestId('file-tree-node-rtl').click();
+    await window.getByTestId('file-tree-node-rtl_core').click();
+
+    await window.getByTestId('file-tree-node-rtl_core_alu_sv').click({ button: 'right' });
+    await expect(window.getByTestId('explorer-context-menu')).toBeVisible();
+    await expect(window.getByTestId('explorer-context-menu-item-open-git-diff')).toHaveCount(0);
+    await window.keyboard.press('Escape');
+
+    await window.getByTestId('file-tree-node-rtl_core_reg_file_v').click({ button: 'right' });
+    await expect(window.getByTestId('explorer-context-menu-item-open-git-diff')).toBeVisible();
+    await window.getByTestId('explorer-context-menu-item-open-git-diff').click();
+
+    await expect(window.getByTestId('editor-tab-title-git-diff:rtl/core/reg_file.v')).toHaveText('reg_file.v Changes');
+    await expect(window.getByTestId('monaco-git-diff-pane')).toHaveAttribute('data-file-path', 'rtl/core/reg_file.v');
+    await expect(window.locator('.monaco-diff-editor')).toBeVisible();
+    await expect(window.getByText('// git modified fixture')).toBeVisible();
+  } finally {
+    await app.close();
+  }
+});
+
+test('Monaco editor shows inline git diff for opened modified files and hides it when disabled', async () => {
+  test.slow();
+
+  const workspaceCopy = test.info().outputPath('inline-git-diff-workspace');
+  createWorkspaceCopy(workspaceCopy);
+  initializeGitWorkspaceCopy(workspaceCopy, 'e2e-inline-git-diff');
+
+  const regFilePath = path.join(workspaceCopy, 'rtl', 'core', 'reg_file.v');
+  const regFileContent = fs.readFileSync(regFilePath, 'utf-8');
+  fs.writeFileSync(
+    regFilePath,
+    regFileContent.replace(
+      "    assign rs2_data = (rs2 == 5'd0) ? 32'd0 : regs[rs2];",
+      "    assign rs2_data = (rs2 == 5'd0) ? 32'h0000_0000 : regs[rs2];",
+    ),
+    'utf-8',
+  );
+  const cpuTopFilePath = path.join(workspaceCopy, 'rtl', 'core', 'cpu_top.sv');
+  const cpuTopFileContent = fs.readFileSync(cpuTopFilePath, 'utf-8');
+  fs.writeFileSync(
+    cpuTopFilePath,
+    cpuTopFileContent.replace('  logic data_ready;\r\n', '').replace('  logic data_ready;\n', ''),
+    'utf-8',
+  );
+  const createdFileRelativePath = 'rtl/core/created_auto.v';
+  fs.writeFileSync(
+    path.join(workspaceCopy, 'rtl', 'core', 'created_auto.v'),
+    'module created_auto;\n  logic added_signal;\nendmodule',
+    'utf-8',
+  );
+
+  const { app, window } = await launchApp({ projectRoot: workspaceCopy });
+
+  try {
+    await ensureExplorerVisible(window);
+    await window.getByTestId('file-tree-node-rtl').click();
+    await window.getByTestId('file-tree-node-rtl_core').click();
+    await window.getByTestId('file-tree-node-rtl_core_reg_file_v').dblclick();
+    await waitForMonacoEditor(window);
+    await focusMonacoEditor(window);
+    await window.keyboard.press('Control+f');
+    await window.keyboard.type("32'h0000_0000");
+    await window.keyboard.press('Enter');
+    await window.keyboard.press('Escape');
+    await expect(window.locator('.monaco-editor .view-lines')).toContainText("32'h0000_0000", { timeout: MONACO_READY_TIMEOUT_MS });
+
+    await expect(window.getByTestId('editor-tab-title-rtl/core/reg_file.v')).toHaveClass(/text-ide-warning/);
+    const inlineDiffDecoration = window.locator('.pristine-inline-git-diff-line-modified').first();
+    const inlineDiffMarginDecoration = window.locator('.pristine-inline-git-diff-margin-modified').first();
+    const inlineDiffLineNumber = window.locator('.line-numbers.pristine-inline-git-diff-line-number-modified').first();
+    await expect(inlineDiffDecoration).toBeVisible({ timeout: MONACO_READY_TIMEOUT_MS });
+    await expect(inlineDiffMarginDecoration).toBeVisible({ timeout: MONACO_READY_TIMEOUT_MS });
+    await expect(inlineDiffLineNumber).toBeVisible({ timeout: MONACO_READY_TIMEOUT_MS });
+    await expect(inlineDiffDecoration).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+    await expect(inlineDiffMarginDecoration).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+    await expect(inlineDiffMarginDecoration).toHaveCSS('background-image', /repeating-linear-gradient/);
+    await expect(inlineDiffMarginDecoration).toHaveCSS('background-repeat', 'repeat-y');
+    await expect(inlineDiffMarginDecoration).toHaveCSS('background-size', '2px 3px');
+    await expect(inlineDiffLineNumber).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+    const inlineDiffMarginBox = await inlineDiffMarginDecoration.boundingBox();
+    const inlineDiffLineNumberBox = await inlineDiffLineNumber.boundingBox();
+    expect(inlineDiffMarginBox?.x).toBeLessThan(inlineDiffLineNumberBox?.x ?? Number.POSITIVE_INFINITY);
+    const inlineDiffBackgroundMetrics = await inlineDiffMarginDecoration.evaluate((node) => {
+      type BoxLike = { right: number; x: number };
+      type ProbeLike = {
+        remove: () => void;
+        style: { color: string };
+      };
+      type DocumentLike = {
+        body: { appendChild: (node: ProbeLike) => void };
+        createElement: (tagName: string) => ProbeLike;
+        querySelector: (selectors: string) => ElementLike | null;
+      };
+      type StyleLike = { backgroundColor: string; color: string };
+      type ElementLike = {
+        getBoundingClientRect: () => BoxLike;
+        ownerDocument: DocumentLike;
+      };
+      const browserGlobal = globalThis as typeof globalThis & {
+        getComputedStyle: (element: ElementLike | ProbeLike) => StyleLike;
+      };
+      const margin = node as unknown as ElementLike;
+      const ownerDocument = margin.ownerDocument;
+      const lineNumber = ownerDocument.querySelector('.line-numbers.pristine-inline-git-diff-line-number-modified');
+      const line = ownerDocument.querySelector('.pristine-inline-git-diff-line-modified');
+      const readBackground = (element: ElementLike | null) => (
+        element ? browserGlobal.getComputedStyle(element).backgroundColor : ''
+      );
+      const readColor = (element: ElementLike | null) => (
+        element ? browserGlobal.getComputedStyle(element).color : ''
+      );
+      const readResolvedColor = (value: string) => {
+        const probe = ownerDocument.createElement('span');
+        probe.style.color = value;
+        ownerDocument.body.appendChild(probe);
+        const color = browserGlobal.getComputedStyle(probe).color;
+        probe.remove();
+        return color;
+      };
+      const marginBox = margin.getBoundingClientRect();
+      const lineNumberBox = lineNumber?.getBoundingClientRect();
+
+      return {
+        lineBackground: readBackground(line),
+        lineNumberBackground: readBackground(lineNumber),
+        lineNumberColor: readColor(lineNumber),
+        lineNumberLeft: lineNumberBox?.x ?? 0,
+        marginBackground: readBackground(margin),
+        marginColor: readColor(margin),
+        marginRight: marginBox.right,
+        warningColor: readResolvedColor('var(--ide-warning)'),
+      };
+    });
+    expect(inlineDiffBackgroundMetrics.marginBackground).toBe(inlineDiffBackgroundMetrics.lineBackground);
+    expect(inlineDiffBackgroundMetrics.lineNumberBackground).toBe('rgba(0, 0, 0, 0)');
+    expect(inlineDiffBackgroundMetrics.lineNumberColor).toBe(inlineDiffBackgroundMetrics.marginColor);
+    expect(inlineDiffBackgroundMetrics.marginColor).toBe(inlineDiffBackgroundMetrics.warningColor);
+    expect(inlineDiffBackgroundMetrics.marginRight + 1).toBeGreaterThanOrEqual(inlineDiffBackgroundMetrics.lineNumberLeft);
+    await expect(window.getByTestId('editor-breadcrumb-git-indicator-modified')).toBeVisible({ timeout: MONACO_READY_TIMEOUT_MS });
+    await expect(window.getByTestId('editor-breadcrumb-git-diff-removed')).toHaveText(/^-\d+$/);
+    await expect(window.getByTestId('editor-breadcrumb-git-diff-added')).toHaveText(/^\+\d+$/);
+    const breadcrumbDiffMetrics = await window.getByTestId('editor-breadcrumb-git-diff-summary').evaluate((node) => {
+      type StyleLike = { color: string; fontFamily: string };
+      type ProbeLike = {
+        remove: () => void;
+        style: { color: string };
+      };
+      type DocumentLike = {
+        body: { appendChild: (node: ProbeLike) => void };
+        createElement: (tagName: string) => ProbeLike;
+        querySelector: (selectors: string) => ElementLike | null;
+      };
+      type ElementLike = {
+        ownerDocument: DocumentLike;
+        querySelector: (selectors: string) => ElementLike | null;
+      };
+      const browserGlobal = globalThis as typeof globalThis & {
+        getComputedStyle: (element: ElementLike | ProbeLike) => StyleLike;
+      };
+      const summary = node as unknown as ElementLike;
+      const ownerDocument = summary.ownerDocument;
+      const readResolvedColor = (value: string) => {
+        const probe = ownerDocument.createElement('span');
+        probe.style.color = value;
+        ownerDocument.body.appendChild(probe);
+        const color = browserGlobal.getComputedStyle(probe).color;
+        probe.remove();
+        return color;
+      };
+      const added = summary.querySelector('[data-testid="editor-breadcrumb-git-diff-added"]');
+      const removed = summary.querySelector('[data-testid="editor-breadcrumb-git-diff-removed"]');
+      const viewLine = ownerDocument.querySelector('.monaco-editor .view-line');
+
+      return {
+        addedColor: added ? browserGlobal.getComputedStyle(added).color : '',
+        editorFontFamily: viewLine ? browserGlobal.getComputedStyle(viewLine).fontFamily : '',
+        removedColor: removed ? browserGlobal.getComputedStyle(removed).color : '',
+        successColor: readResolvedColor('var(--ide-success)'),
+        summaryFontFamily: browserGlobal.getComputedStyle(summary).fontFamily,
+        errorColor: readResolvedColor('var(--ide-error)'),
+      };
+    });
+    expect(breadcrumbDiffMetrics.removedColor).toBe(breadcrumbDiffMetrics.errorColor);
+    expect(breadcrumbDiffMetrics.addedColor).toBe(breadcrumbDiffMetrics.successColor);
+    expect(breadcrumbDiffMetrics.summaryFontFamily).not.toBe('');
+    expect(breadcrumbDiffMetrics.editorFontFamily).not.toBe('');
+    expect(normalizeComparableMonospaceFontFamily(breadcrumbDiffMetrics.summaryFontFamily)).toBe(
+      normalizeComparableMonospaceFontFamily(breadcrumbDiffMetrics.editorFontFamily),
+    );
+    await expect(window.getByTestId('monaco-inline-git-diff-detail')).toHaveCount(0);
+
+    await inlineDiffMarginDecoration.click();
+    const inlineDiffDetail = window.getByTestId('monaco-inline-git-diff-detail').first();
+    const inlineDiffDetailTitle = window.getByTestId('monaco-inline-git-diff-detail-title').first();
+    const inlineDiffDetailBody = window.getByTestId('monaco-inline-git-diff-detail-body').first();
+    const inlineDiffDetailClose = window.getByTestId('monaco-inline-git-diff-detail-close').first();
+    await expect(inlineDiffDetailTitle).toHaveText('Git Local Changes - modified change');
+    await expect(inlineDiffDetailBody).toContainText("assign rs2_data = (rs2 == 5'd0) ? 32'd0 : regs[rs2];");
+    await expect(inlineDiffDetailBody).toContainText("assign rs2_data = (rs2 == 5'd0) ? 32'h0000_0000 : regs[rs2];");
+    await expect(inlineDiffDetailClose).toBeVisible();
+
+    const inlineDiffDetailPlacementMetrics = await inlineDiffDetail.evaluate((node) => {
+      type BoxLike = { height: number; y: number };
+      type ElementLike = {
+        getBoundingClientRect: () => BoxLike;
+      };
+      const browserGlobal = globalThis as typeof globalThis & {
+        document: { querySelectorAll: (selectors: string) => ArrayLike<ElementLike> };
+      };
+      const detail = node as unknown as ElementLike;
+      const changedLines = Array.from(browserGlobal.document.querySelectorAll('.pristine-inline-git-diff-line-modified'));
+      const lastChangedLine = changedLines[changedLines.length - 1];
+      const detailBox = detail.getBoundingClientRect();
+      const changedLineBox = lastChangedLine?.getBoundingClientRect();
+
+      return {
+        changedLineBottom: changedLineBox ? changedLineBox.y + changedLineBox.height : 0,
+        detailTop: detailBox.y,
+      };
+    });
+    expect(inlineDiffDetailPlacementMetrics.detailTop + 1).toBeGreaterThanOrEqual(inlineDiffDetailPlacementMetrics.changedLineBottom);
+
+    const inlineDiffDetailMetrics = await inlineDiffDetail.evaluate((node) => {
+      type BoxLike = { height: number };
+      type StyleLike = { backgroundColor: string; color: string; fontFamily: string; fontSize: string; lineHeight: string };
+      type ElementLike = {
+        clientHeight: number;
+        getBoundingClientRect: () => BoxLike;
+        querySelector: (selectors: string) => ElementLike | null;
+        scrollHeight: number;
+      };
+      const browserGlobal = globalThis as typeof globalThis & {
+        document: { querySelector: (selectors: string) => ElementLike | null };
+        getComputedStyle: (element: ElementLike) => StyleLike;
+      };
+      const detail = node as unknown as ElementLike;
+      const header = detail.querySelector('.pristine-inline-git-diff-detail-header');
+      const title = detail.querySelector('[data-testid="monaco-inline-git-diff-detail-title"]');
+      const body = detail.querySelector('[data-testid="monaco-inline-git-diff-detail-body"]');
+      const content = detail.querySelector('.pristine-inline-git-diff-detail-content');
+      const editor = browserGlobal.document.querySelector('.monaco-editor');
+      const viewLine = browserGlobal.document.querySelector('.monaco-editor .view-line');
+      const readColor = (element: ElementLike | null, property: 'backgroundColor' | 'color') => (
+        element ? browserGlobal.getComputedStyle(element)[property] : 'rgb(0, 0, 0)'
+      );
+      const toRgbTuple = (red = '0', green = '0', blue = '0'): [number, number, number] => [
+        Number(red),
+        Number(green),
+        Number(blue),
+      ];
+      const parseRgbColor = (value: string) => {
+        const rgbMatch = value.match(/rgba?\((\d+(?:\.\d+)?),\s*(\d+(?:\.\d+)?),\s*(\d+(?:\.\d+)?)/);
+        if (rgbMatch) {
+          return toRgbTuple(rgbMatch[1], rgbMatch[2], rgbMatch[3]);
+        }
+
+        const srgbMatch = value.match(/color\(srgb\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)/);
+        if (!srgbMatch) {
+          return toRgbTuple();
+        }
+
+        return toRgbTuple(
+          String(Number(srgbMatch[1] ?? 0) * 255),
+          String(Number(srgbMatch[2] ?? 0) * 255),
+          String(Number(srgbMatch[3] ?? 0) * 255),
+        );
+      };
+      const relativeLuminance = (color: [number, number, number]) => {
+        const channels = color.map((component) => {
+          const channel = component / 255;
+          return channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+        });
+        const r = channels[0] ?? 0;
+        const g = channels[1] ?? 0;
+        const b = channels[2] ?? 0;
+
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      };
+      const contrastRatio = (foreground: string, background: string) => {
+        const foregroundLuminance = relativeLuminance(parseRgbColor(foreground));
+        const backgroundLuminance = relativeLuminance(parseRgbColor(background));
+        const lighter = Math.max(foregroundLuminance, backgroundLuminance);
+        const darker = Math.min(foregroundLuminance, backgroundLuminance);
+
+        return (lighter + 0.05) / (darker + 0.05);
+      };
+      const detailBox = detail.getBoundingClientRect();
+      const headerBox = header?.getBoundingClientRect();
+      const titleColor = readColor(title, 'color');
+      const editorBackground = readColor(editor, 'backgroundColor');
+      const contentStyle = content ? browserGlobal.getComputedStyle(content) : null;
+      const titleStyle = title ? browserGlobal.getComputedStyle(title) : null;
+      const viewLineStyle = viewLine ? browserGlobal.getComputedStyle(viewLine) : null;
+
+      return {
+        bodyClientHeight: body?.clientHeight ?? 0,
+        bodyScrollHeight: body?.scrollHeight ?? 0,
+        contentFontFamily: contentStyle?.fontFamily ?? '',
+        contentFontSize: contentStyle?.fontSize ?? '',
+        contentLineHeight: contentStyle?.lineHeight ?? '',
+        detailHeight: detailBox.height,
+        editorFontFamily: viewLineStyle?.fontFamily ?? '',
+        editorFontSize: viewLineStyle?.fontSize ?? '',
+        editorLineHeight: viewLineStyle?.lineHeight ?? '',
+        headerHeight: headerBox?.height ?? 0,
+        titleFontSize: titleStyle?.fontSize ?? '',
+        titleToEditorContrast: contrastRatio(titleColor, editorBackground),
+      };
+    });
+    expect(inlineDiffDetailMetrics.bodyClientHeight + 1).toBeGreaterThanOrEqual(inlineDiffDetailMetrics.bodyScrollHeight);
+    expect(inlineDiffDetailMetrics.detailHeight + 1).toBeGreaterThanOrEqual(
+      inlineDiffDetailMetrics.headerHeight + inlineDiffDetailMetrics.bodyScrollHeight,
+    );
+    expect(inlineDiffDetailMetrics.contentFontFamily).not.toBe('');
+    expect(inlineDiffDetailMetrics.editorFontFamily).not.toBe('');
+    expect(normalizeComparableMonospaceFontFamily(inlineDiffDetailMetrics.contentFontFamily)).toBe(
+      normalizeComparableMonospaceFontFamily(inlineDiffDetailMetrics.editorFontFamily),
+    );
+    expect(inlineDiffDetailMetrics.contentFontSize).toBe(inlineDiffDetailMetrics.editorFontSize);
+    expect(inlineDiffDetailMetrics.contentLineHeight).toBe(inlineDiffDetailMetrics.editorLineHeight);
+    expect(Number.parseFloat(inlineDiffDetailMetrics.titleFontSize)).toBeLessThan(Number.parseFloat(inlineDiffDetailMetrics.contentFontSize));
+    expect(inlineDiffDetailMetrics.titleToEditorContrast).toBeGreaterThan(3);
+
+    await closeInlineGitDiffDetail(window);
+    await inlineDiffMarginDecoration.click();
+    await expect(window.getByTestId('monaco-inline-git-diff-detail')).toBeVisible();
+
+    await window.getByTestId(toWorkspaceTreeTestId(createdFileRelativePath)).dblclick();
+    await waitForMonacoEditor(window);
+    await expect(window.locator('.monaco-editor .view-lines')).toContainText('module created_auto', { timeout: MONACO_READY_TIMEOUT_MS });
+    await expect(window.locator('.pristine-inline-git-diff-margin-added').first()).toBeVisible({ timeout: MONACO_READY_TIMEOUT_MS });
+    await expect(window.getByTestId('editor-breadcrumb-git-indicator-created')).toBeVisible({ timeout: MONACO_READY_TIMEOUT_MS });
+    await expect(window.getByTestId('editor-breadcrumb-git-diff-added')).toHaveText('+3');
+    await expect(window.getByTestId('editor-breadcrumb-git-diff-removed')).toHaveCount(0);
+
+    await window.getByTestId('file-tree-node-rtl_core_reg_file_v').dblclick();
+    await waitForMonacoEditor(window);
+    await expect(window.locator('.monaco-editor .view-lines')).toContainText("32'h0000_0000", { timeout: MONACO_READY_TIMEOUT_MS });
+
+    await window.getByTestId(toWorkspaceTreeTestId(createdFileRelativePath)).dblclick();
+    await waitForMonacoEditor(window);
+    await expect(window.locator('.monaco-editor .view-lines')).toContainText('module created_auto', { timeout: MONACO_READY_TIMEOUT_MS });
+    await expect(window.locator('.pristine-inline-git-diff-margin-added').first()).toBeVisible({ timeout: MONACO_READY_TIMEOUT_MS });
+    await expect(window.getByTestId('editor-breadcrumb-git-indicator-created')).toBeVisible({ timeout: MONACO_READY_TIMEOUT_MS });
+    await expect(window.getByTestId('editor-breadcrumb-git-diff-added')).toHaveText('+3');
+    await expect(window.getByTestId('editor-breadcrumb-git-diff-removed')).toHaveCount(0);
+
+    await window.getByTestId('file-tree-node-rtl_core_cpu_top_sv').dblclick();
+    await waitForMonacoEditor(window);
+    await expect(window.locator('.monaco-editor .view-lines')).toContainText('assign data_ready', { timeout: MONACO_READY_TIMEOUT_MS });
+    const removedInlineDiffMarginDecoration = window.locator('.pristine-inline-git-diff-margin-removed').first();
+    const removedInlineDiffLineNumber = window.locator('.line-numbers.pristine-inline-git-diff-line-number-removed').first();
+    await expect(removedInlineDiffMarginDecoration).toBeVisible({ timeout: MONACO_READY_TIMEOUT_MS });
+    await expect(removedInlineDiffMarginDecoration).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+    await expect(removedInlineDiffMarginDecoration).toHaveCSS('background-repeat', 'repeat-y');
+    await expect(removedInlineDiffMarginDecoration).toHaveCSS('background-image', /repeating-linear-gradient/);
+    await expect(removedInlineDiffMarginDecoration).toHaveCSS('background-size', '2px 3px');
+    await expect(removedInlineDiffLineNumber).toBeVisible({ timeout: MONACO_READY_TIMEOUT_MS });
+    await expect(removedInlineDiffLineNumber).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+    await removedInlineDiffMarginDecoration.click();
+    await expect(window.getByTestId('monaco-inline-git-diff-detail-body')).toContainText('logic data_ready;');
+
+    await closeInlineGitDiffDetail(window);
+
+    await window.getByTestId('menu-settings-button').click();
+    await expect(window.getByTestId('settings-dialog')).toBeVisible();
+    const inlineGitDiffBackgroundsSwitch = window.getByTestId('settings-editor-inline-git-diff-backgrounds-switch');
+    await inlineGitDiffBackgroundsSwitch.scrollIntoViewIfNeeded();
+    await setSwitchChecked(inlineGitDiffBackgroundsSwitch, false);
+    await window.getByTestId('settings-close-button').click();
+
+    const backgroundlessInlineDiffMarginDecoration = window.locator('.pristine-inline-git-diff-margin').first();
+    await expect(backgroundlessInlineDiffMarginDecoration).toBeVisible({ timeout: MONACO_READY_TIMEOUT_MS });
+    await expect(window.locator('.line-numbers.pristine-inline-git-diff-line-number')).toHaveCount(0);
+    await expect(window.locator('.pristine-inline-git-diff-line-added, .pristine-inline-git-diff-line-modified, .pristine-inline-git-diff-line-removed-anchor')).toHaveCount(0);
+    await expect(window.getByTestId('editor-breadcrumb-git-diff-summary')).toBeVisible();
+    await backgroundlessInlineDiffMarginDecoration.click();
+    await expect(window.getByTestId('monaco-inline-git-diff-detail-body')).toContainText('logic data_ready;');
+
+    await window.getByTestId('menu-settings-button').click();
+    await expect(window.getByTestId('settings-dialog')).toBeVisible();
+    const inlineGitDiffSwitch = window.getByTestId('settings-editor-inline-git-diff-switch');
+    await inlineGitDiffSwitch.scrollIntoViewIfNeeded();
+    await setSwitchChecked(inlineGitDiffSwitch, false);
+    await window.getByTestId('settings-close-button').click();
+
+    await expect(window.getByTestId('monaco-inline-git-diff-detail')).toHaveCount(0);
+    await expect(window.locator('.pristine-inline-git-diff-line-added, .pristine-inline-git-diff-line-modified, .pristine-inline-git-diff-line-removed-anchor')).toHaveCount(0);
+    await expect(window.locator('.pristine-inline-git-diff-margin')).toHaveCount(0);
+    await expect(window.getByTestId('editor-breadcrumb-git-diff-summary')).toHaveCount(0);
+  } finally {
+    await app.close();
+  }
+});
+
 test('explorer status bar updates the git branch label after refocusing the app window', async () => {
   test.slow();
 
@@ -3638,15 +4097,19 @@ test('right panel split shows two stacked panels and keeps the panel layout-awar
     await expect(secondaryResizablePanel).toHaveAttribute('style', /transition-duration: 300ms/);
     await expect(primaryResizablePanel).toHaveAttribute('aria-hidden', 'false');
     await expect(secondaryResizablePanel).toHaveAttribute('aria-hidden', 'false');
-    await expect(rightPanelRoot).toHaveClass(/(?:^|\s)bg-ide-bg(?:\s|$)/);
-    await expect(primaryPanel).not.toHaveClass(/(?:^|\s)rounded-md(?:\s|$)/);
-    await expect(primaryPanel).not.toHaveClass(/(?:^|\s)border(?:\s|$)/);
+    await expect(rightPanelRoot).not.toHaveClass(/(?:^|\s)bg-ide-bg(?:\s|$)/);
+    await expect(primaryPanel).toHaveClass(/(?:^|\s)rounded-md(?:\s|$)/);
+    await expect(primaryPanel).toHaveClass(/(?:^|\s)border(?:\s|$)/);
+    await expect(primaryPanel).toHaveClass(/(?:^|\s)bg-ide-bg(?:\s|$)/);
     await expect(secondaryPanel).toBeVisible();
-    await expect(secondaryPanel).not.toHaveClass(/(?:^|\s)rounded-md(?:\s|$)/);
-    await expect(secondaryPanel).not.toHaveClass(/(?:^|\s)border(?:\s|$)/);
+    await expect(secondaryPanel).toHaveClass(/(?:^|\s)rounded-md(?:\s|$)/);
+    await expect(secondaryPanel).toHaveClass(/(?:^|\s)border(?:\s|$)/);
+    await expect(secondaryPanel).toHaveClass(/(?:^|\s)bg-ide-bg(?:\s|$)/);
+    await expect(window.getByTestId('right-panel-secondary-header')).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
     await expect(window.getByTestId('right-panel-secondary-placeholder')).toContainText('Details is empty');
     await expect(splitHandle).toBeVisible();
     await expect(splitHandle).toHaveAttribute('aria-orientation', 'horizontal');
+    await expect(splitHandle).toHaveClass(/(?:^|\s)overlay-handle(?:\s|$)/);
 
     await expect.poll(async () => {
       const [primaryHeight, secondaryHeight] = await Promise.all([
@@ -3678,17 +4141,6 @@ test('right panel split shows two stacked panels and keeps the panel layout-awar
 
     await expect.poll(() => readElementPixelHeight(primaryResizablePanel), { timeout: UI_READY_TIMEOUT_MS }).toBeGreaterThan(initialPrimaryHeight + 55);
     await expect.poll(() => readElementPixelHeight(secondaryResizablePanel), { timeout: UI_READY_TIMEOUT_MS }).toBeLessThan(initialSecondaryHeight - 55);
-
-    await window.getByTestId('menu-settings-button').click();
-    await expect(window.getByTestId('settings-dialog')).toBeVisible();
-    await selectComboboxOption(
-      window,
-      'settings-code-viewer-layout-combobox',
-      'settings-code-viewer-layout-option-minimal',
-    );
-    await expect.poll(async () => readConfigValue(window, 'workbench.codeViewerLayoutMode')).toBe('minimal');
-    await window.getByTestId('settings-close-button').click();
-    await expect(window.getByTestId('settings-dialog')).toHaveCount(0);
 
     await expectPanelHeaderWithoutDivider(window.getByTestId('right-panel-header'));
     await expectPanelHeaderWithoutDivider(window.getByTestId('right-panel-secondary-header'));
@@ -3814,7 +4266,8 @@ test('left sidebar keeps a fixed pixel width across window changes and manual re
   });
 
   await expect(leftPanel).toBeVisible();
-  await expect(leftHandle).toBeVisible();
+  await expect(leftHandle).toBeAttached();
+  await expect(leftHandle).toHaveClass(/(?:^|\s)overlay-handle(?:\s|$)/);
 
   await expect.poll(readPanelWidth).toBeGreaterThanOrEqual(238);
   await expect.poll(readPanelWidth).toBeLessThanOrEqual(242);
@@ -3919,15 +4372,19 @@ test('left panel split shows two stacked panels and keeps the explorer tree scro
     await expect(secondaryResizablePanel).toHaveAttribute('style', /transition-duration: 300ms/);
     await expect(primaryResizablePanel).toHaveAttribute('aria-hidden', 'false');
     await expect(secondaryResizablePanel).toHaveAttribute('aria-hidden', 'false');
-    await expect(leftPanelRoot).toHaveClass(/(?:^|\s)bg-ide-bg(?:\s|$)/);
-    await expect(primaryPanel).not.toHaveClass(/(?:^|\s)rounded-md(?:\s|$)/);
-    await expect(primaryPanel).not.toHaveClass(/(?:^|\s)border(?:\s|$)/);
+    await expect(leftPanelRoot).not.toHaveClass(/(?:^|\s)bg-ide-bg(?:\s|$)/);
+    await expect(primaryPanel).toHaveClass(/(?:^|\s)rounded-md(?:\s|$)/);
+    await expect(primaryPanel).toHaveClass(/(?:^|\s)border(?:\s|$)/);
+    await expect(primaryPanel).toHaveClass(/(?:^|\s)bg-ide-bg(?:\s|$)/);
     await expect(secondaryPanel).toBeVisible();
-    await expect(secondaryPanel).not.toHaveClass(/(?:^|\s)rounded-md(?:\s|$)/);
-    await expect(secondaryPanel).not.toHaveClass(/(?:^|\s)border(?:\s|$)/);
-    await expect(window.getByTestId('left-panel-secondary-placeholder')).toContainText('Structure is empty');
+    await expect(secondaryPanel).toHaveClass(/(?:^|\s)rounded-md(?:\s|$)/);
+    await expect(secondaryPanel).toHaveClass(/(?:^|\s)border(?:\s|$)/);
+    await expect(secondaryPanel).toHaveClass(/(?:^|\s)bg-ide-bg(?:\s|$)/);
+    await expect(window.getByTestId('left-panel-secondary-header')).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
+    await expect(window.getByTestId('left-panel-secondary-placeholder')).toContainText('Hierarchy is empty');
     await expect(splitHandle).toBeVisible();
     await expect(splitHandle).toHaveAttribute('aria-orientation', 'horizontal');
+    await expect(splitHandle).toHaveClass(/(?:^|\s)overlay-handle(?:\s|$)/);
 
     await expect.poll(async () => {
       const [primaryHeight, secondaryHeight] = await Promise.all([
@@ -4130,6 +4587,7 @@ test('focused split receives file tree opens and tabs can be dragged into anothe
 
   await firstGroup.click();
   await expect(firstGroup).toHaveAttribute('data-focused', 'true');
+  await expect(firstGroup).not.toHaveClass(/(?:^|\s)ring-primary\/50(?:\s|$)/);
 
   await openNestedWorkspaceFile(window, [
     'file-tree-node-rtl',
@@ -4858,11 +5316,21 @@ test('global workbench chrome follows selected VS Code theme variables', async (
   const { app, window } = await launchApp();
 
   await ensureExplorerVisible(window);
+  await expect(window.getByTestId('menu-bar-root')).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
+  await expect(window.getByTestId('activity-bar')).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
+  await expect(window.getByTestId('status-bar')).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
+  await window.getByTestId('menu-settings-button').click();
+  await expect(window.getByTestId('settings-dialog')).toBeVisible();
+
+  await selectComboboxOption(
+    window,
+    'settings-code-viewer-layout-combobox',
+    'settings-code-viewer-layout-option-compact',
+  );
+  await expect.poll(async () => readConfigValue(window, 'workbench.codeViewerLayoutMode')).toBe('compact');
   await expect(window.getByTestId('menu-bar-root')).toHaveAttribute('data-code-viewer-layout-mode', 'compact');
   await expect(window.getByTestId('activity-bar')).toHaveAttribute('data-code-viewer-layout-mode', 'compact');
   await expect(window.getByTestId('status-bar')).toHaveAttribute('data-code-viewer-layout-mode', 'compact');
-  await window.getByTestId('menu-settings-button').click();
-  await expect(window.getByTestId('settings-dialog')).toBeVisible();
 
   await selectComboboxOption(
     window,
@@ -4896,9 +5364,9 @@ test('global workbench chrome follows selected VS Code theme variables', async (
   expect(snapshot.activity.backgroundColor).toBe(snapshot.variables.activitybarBackground);
   expect(snapshot.status.backgroundColor).toBe(snapshot.variables.statusbarBackground);
   expect(snapshot.status.color).toBe(snapshot.variables.statusbarForeground);
-  expect(snapshot.menu.borderBottomWidth).toBe('1px');
-  expect(snapshot.activity.borderRightWidth).toBe('1px');
-  expect(snapshot.status.borderTopWidth).toBe('1px');
+  expectSingleDevicePixelBorder(snapshot.menu.borderBottomWidth, snapshot.devicePixelRatio);
+  expectSingleDevicePixelBorder(snapshot.activity.borderRightWidth, snapshot.devicePixelRatio);
+  expectSingleDevicePixelBorder(snapshot.status.borderTopWidth, snapshot.devicePixelRatio);
 
   await app.close();
 });
@@ -4944,24 +5412,24 @@ test('code viewer layout setting persists across app relaunch', async () => {
   const { app: firstApp, window: firstWindow } = firstLaunch;
 
   await ensureExplorerVisible(firstWindow);
-  await expect(firstWindow.getByTestId('code-view-explorer')).toHaveAttribute('data-code-viewer-layout-mode', 'compact');
+  await expect(firstWindow.getByTestId('code-view-explorer')).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
   await expectPanelHeaderWithoutDivider(firstWindow.getByTestId('left-panel-header'));
   await ensureRightPanelVisible(firstWindow);
   await expectPanelHeaderWithoutDivider(firstWindow.getByTestId('right-panel-header'));
 
   await firstWindow.getByTestId('menu-settings-button').click();
   await expect(firstWindow.getByTestId('settings-dialog')).toBeVisible();
-  await expect(firstWindow.getByTestId('settings-code-viewer-layout-combobox')).toContainText('Compact');
+  await expect(firstWindow.getByTestId('settings-code-viewer-layout-combobox')).toContainText('Minimal');
 
   await selectComboboxOption(
     firstWindow,
     'settings-code-viewer-layout-combobox',
-    'settings-code-viewer-layout-option-minimal',
+    'settings-code-viewer-layout-option-compact',
   );
 
-  await expect.poll(async () => readConfigValue(firstWindow, 'workbench.codeViewerLayoutMode')).toBe('minimal');
-  await expect(firstWindow.getByTestId('settings-code-viewer-layout-combobox')).toContainText('Minimal');
-  await expect(firstWindow.getByTestId('code-view-explorer')).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
+  await expect.poll(async () => readConfigValue(firstWindow, 'workbench.codeViewerLayoutMode')).toBe('compact');
+  await expect(firstWindow.getByTestId('settings-code-viewer-layout-combobox')).toContainText('Compact');
+  await expect(firstWindow.getByTestId('code-view-explorer')).toHaveAttribute('data-code-viewer-layout-mode', 'compact');
 
   await firstWindow.getByTestId('settings-close-button').click();
   await expect(firstWindow.getByTestId('settings-dialog')).toHaveCount(0);
@@ -4975,23 +5443,23 @@ test('code viewer layout setting persists across app relaunch', async () => {
   const { app: secondApp, window: secondWindow } = secondLaunch;
 
   await ensureExplorerVisible(secondWindow);
-  await expect(secondWindow.getByTestId('code-view-explorer')).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
-  await expect.poll(async () => readConfigValue(secondWindow, 'workbench.codeViewerLayoutMode')).toBe('minimal');
+  await expect(secondWindow.getByTestId('code-view-explorer')).toHaveAttribute('data-code-viewer-layout-mode', 'compact');
+  await expect.poll(async () => readConfigValue(secondWindow, 'workbench.codeViewerLayoutMode')).toBe('compact');
   await expectPanelHeaderWithoutDivider(secondWindow.getByTestId('left-panel-header'));
   await ensureRightPanelVisible(secondWindow);
   await expectPanelHeaderWithoutDivider(secondWindow.getByTestId('right-panel-header'));
 
   await secondWindow.getByTestId('menu-settings-button').click();
   await expect(secondWindow.getByTestId('settings-dialog')).toBeVisible();
-  await expect(secondWindow.getByTestId('settings-code-viewer-layout-combobox')).toContainText('Minimal');
+  await expect(secondWindow.getByTestId('settings-code-viewer-layout-combobox')).toContainText('Compact');
 
   await selectComboboxOption(
     secondWindow,
     'settings-code-viewer-layout-combobox',
-    'settings-code-viewer-layout-option-compact',
+    'settings-code-viewer-layout-option-minimal',
   );
-  await expect.poll(async () => readConfigValue(secondWindow, 'workbench.codeViewerLayoutMode')).toBe('compact');
-  await expect(secondWindow.getByTestId('code-view-explorer')).toHaveAttribute('data-code-viewer-layout-mode', 'compact');
+  await expect.poll(async () => readConfigValue(secondWindow, 'workbench.codeViewerLayoutMode')).toBe('minimal');
+  await expect(secondWindow.getByTestId('code-view-explorer')).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
 
   await secondWindow.getByTestId('settings-close-button').click();
   await expect(secondWindow.getByTestId('settings-dialog')).toHaveCount(0);

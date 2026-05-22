@@ -36,6 +36,7 @@ export const FileTreeNode = memo(function FileTreeNode({
   node,
   depth,
   activeFileId,
+  onGitDiffOpen,
   onFileOpen,
   onFilePreview,
   onCancelEdit,
@@ -65,6 +66,7 @@ export const FileTreeNode = memo(function FileTreeNode({
   node: WorkspaceTreeNode;
   depth: number;
   activeFileId: string;
+  onGitDiffOpen?: (id: string, name: string) => void;
   onFileOpen: (id: string, name: string) => void;
   onFilePreview: (id: string, name: string) => void;
   onCancelEdit?: () => void;
@@ -129,6 +131,10 @@ export const FileTreeNode = memo(function FileTreeNode({
   const openFileFromContextMenu = useCallback(() => {
     onFileOpen(node.path, node.name);
   }, [node.name, node.path, onFileOpen]);
+
+  const openGitDiffFromContextMenu = useCallback(() => {
+    onGitDiffOpen?.(node.path, node.name);
+  }, [node.name, node.path, onGitDiffOpen]);
 
   const selectCurrentNode = useCallback(() => {
     onSelectNode?.({
@@ -198,7 +204,9 @@ export const FileTreeNode = memo(function FileTreeNode({
   const contextItems = useMemo<ExplorerContextMenuEntry[]>(() => {
     return createExplorerTreeContextMenuItems({
       node,
+      gitPathState,
       onOpenFile: openFileFromContextMenu,
+      onOpenGitDiff: onGitDiffOpen ? openGitDiffFromContextMenu : undefined,
       onStartCopy,
       onStartCreateFile,
       onStartCreateFolder,
@@ -210,6 +218,8 @@ export const FileTreeNode = memo(function FileTreeNode({
     });
   }, [
     node,
+    gitPathState,
+    onGitDiffOpen,
     onStartCopy,
     onStartCreateFile,
     onStartCreateFolder,
@@ -218,6 +228,7 @@ export const FileTreeNode = memo(function FileTreeNode({
     onStartPaste,
     onStartRename,
     openFileFromContextMenu,
+    openGitDiffFromContextMenu,
     workspaceClipboard,
   ]);
 
@@ -226,6 +237,7 @@ export const FileTreeNode = memo(function FileTreeNode({
       node={child}
       depth={depth + 1}
       activeFileId={activeFileId}
+      onGitDiffOpen={onGitDiffOpen}
       onFileOpen={onFileOpen}
       onFilePreview={onFilePreview}
       onCancelEdit={onCancelEdit}
@@ -258,6 +270,7 @@ export const FileTreeNode = memo(function FileTreeNode({
     depth,
     expandedFolders,
     gitPathStates,
+    onGitDiffOpen,
     onCancelEdit,
     onEditValueChange,
     onFileOpen,

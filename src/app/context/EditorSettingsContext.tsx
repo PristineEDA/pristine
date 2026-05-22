@@ -7,6 +7,8 @@ import {
   DEFAULT_EDITOR_FONT_SIZE,
   DEFAULT_EDITOR_FOLDING_STRATEGY,
   DEFAULT_EDITOR_GLYPH_MARGIN,
+  DEFAULT_EDITOR_INLINE_GIT_DIFF_ENABLED,
+  DEFAULT_EDITOR_INLINE_GIT_DIFF_STATE_BACKGROUNDS_ENABLED,
   DEFAULT_EDITOR_INDENT_GUIDES,
   DEFAULT_EDITOR_LINE_NUMBERS,
   DEFAULT_EDITOR_MINIMAP_ENABLED,
@@ -24,6 +26,8 @@ import {
   EDITOR_FONT_SIZE_CONFIG_KEY,
   EDITOR_FOLDING_STRATEGY_CONFIG_KEY,
   EDITOR_GLYPH_MARGIN_CONFIG_KEY,
+  EDITOR_INLINE_GIT_DIFF_ENABLED_CONFIG_KEY,
+  EDITOR_INLINE_GIT_DIFF_STATE_BACKGROUNDS_ENABLED_CONFIG_KEY,
   EDITOR_INDENT_GUIDES_CONFIG_KEY,
   EDITOR_LINE_NUMBERS_CONFIG_KEY,
   EDITOR_MINIMAP_ENABLED_CONFIG_KEY,
@@ -49,6 +53,8 @@ import {
   parseEditorFontSize,
   parseEditorFoldingStrategy,
   parseEditorGlyphMargin,
+  parseEditorInlineGitDiffEnabled,
+  parseEditorInlineGitDiffStateBackgroundsEnabled,
   parseEditorIndentGuides,
   parseEditorLineNumbers,
   parseEditorMinimapEnabled,
@@ -70,6 +76,8 @@ interface EditorSettingsState {
   fontSize: number
   foldingStrategy: EditorFoldingStrategy
   glyphMargin: boolean
+  inlineGitDiffEnabled: boolean
+  inlineGitDiffStateBackgroundsEnabled: boolean
   indentGuides: boolean
   lineNumbers: EditorLineNumbersMode
   minimapEnabled: boolean
@@ -90,6 +98,8 @@ interface EditorSettingsContextValue extends EditorSettingsState {
   setFontSize: (fontSize: number) => void
   setFoldingStrategy: (foldingStrategy: EditorFoldingStrategy) => void
   setGlyphMargin: (enabled: boolean) => void
+  setInlineGitDiffEnabled: (enabled: boolean) => void
+  setInlineGitDiffStateBackgroundsEnabled: (enabled: boolean) => void
   setIndentGuides: (enabled: boolean) => void
   setLineNumbers: (lineNumbers: EditorLineNumbersMode) => void
   setMinimapEnabled: (enabled: boolean) => void
@@ -149,6 +159,16 @@ const EDITOR_SETTING_DEFINITIONS: EditorSettingDefinitions = {
     configKey: EDITOR_GLYPH_MARGIN_CONFIG_KEY,
     fallback: DEFAULT_EDITOR_GLYPH_MARGIN,
     parseValue: parseEditorGlyphMargin,
+  },
+  inlineGitDiffEnabled: {
+    configKey: EDITOR_INLINE_GIT_DIFF_ENABLED_CONFIG_KEY,
+    fallback: DEFAULT_EDITOR_INLINE_GIT_DIFF_ENABLED,
+    parseValue: parseEditorInlineGitDiffEnabled,
+  },
+  inlineGitDiffStateBackgroundsEnabled: {
+    configKey: EDITOR_INLINE_GIT_DIFF_STATE_BACKGROUNDS_ENABLED_CONFIG_KEY,
+    fallback: DEFAULT_EDITOR_INLINE_GIT_DIFF_STATE_BACKGROUNDS_ENABLED,
+    parseValue: parseEditorInlineGitDiffStateBackgroundsEnabled,
   },
   indentGuides: {
     configKey: EDITOR_INDENT_GUIDES_CONFIG_KEY,
@@ -232,6 +252,8 @@ function getInitialEditorSettingsState(): EditorSettingsState {
     fontSize: readConfiguredEditorSetting(EDITOR_SETTING_DEFINITIONS.fontSize),
     foldingStrategy: readConfiguredEditorSetting(EDITOR_SETTING_DEFINITIONS.foldingStrategy),
     glyphMargin: readConfiguredEditorSetting(EDITOR_SETTING_DEFINITIONS.glyphMargin),
+    inlineGitDiffEnabled: readConfiguredEditorSetting(EDITOR_SETTING_DEFINITIONS.inlineGitDiffEnabled),
+    inlineGitDiffStateBackgroundsEnabled: readConfiguredEditorSetting(EDITOR_SETTING_DEFINITIONS.inlineGitDiffStateBackgroundsEnabled),
     indentGuides: readConfiguredEditorSetting(EDITOR_SETTING_DEFINITIONS.indentGuides),
     lineNumbers: readConfiguredEditorSetting(EDITOR_SETTING_DEFINITIONS.lineNumbers),
     minimapEnabled: readConfiguredEditorSetting(EDITOR_SETTING_DEFINITIONS.minimapEnabled),
@@ -277,6 +299,8 @@ export function EditorSettingsProvider({ children }: { children: ReactNode }) {
     setFontSize: (value: number) => updateSetting('fontSize', value),
     setFoldingStrategy: (value: EditorFoldingStrategy) => updateSetting('foldingStrategy', value),
     setGlyphMargin: (value: boolean) => updateSetting('glyphMargin', value),
+    setInlineGitDiffEnabled: (value: boolean) => updateSetting('inlineGitDiffEnabled', value),
+    setInlineGitDiffStateBackgroundsEnabled: (value: boolean) => updateSetting('inlineGitDiffStateBackgroundsEnabled', value),
     setIndentGuides: (value: boolean) => updateSetting('indentGuides', value),
     setLineNumbers: (value: EditorLineNumbersMode) => updateSetting('lineNumbers', value),
     setMinimapEnabled: (value: boolean) => updateSetting('minimapEnabled', value),

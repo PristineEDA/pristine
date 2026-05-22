@@ -1,14 +1,17 @@
 import Editor, { useMonaco } from '@monaco-editor/react';
-import { useEffect, useEffectEvent, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { useEffect, useEffectEvent, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import '../../../editor/configureMonacoLoader';
-import { getEditorFontFamilyStack } from '../../../editor/editorSettings';
 import { isMonacoTextInputElement } from '../../../editor/focusEditor';
 import { useRegisterEditorLanguages } from '../../../editor/registerLanguages';
 import { systemVerilogLspBridge } from '../../../lsp/systemVerilogLspBridge';
+import { computeInlineGitDiff, getInlineGitDiffLineCounts, type InlineGitDiffSummary } from '../../../editor/gitInlineDiff';
 import { getEditorLanguage } from '../../../workspace/workspaceFiles';
-import { useEditorSettings } from '../../../context/EditorSettingsContext';
 import { useTheme } from '../../../context/ThemeContext';
+import { useEditorSettings } from '../../../context/EditorSettingsContext';
+import { getWorkspaceGitPathState, useWorkspaceGitStatus } from '../../../git/workspaceGitStatus';
+import { createMonacoInlineGitDiffController, type MonacoInlineGitDiffController } from '../../../editor/monacoInlineGitDiff';
 import { defineMonacoTheme, registerBuiltInMonacoThemes } from '../../../theme/monacoColorTheme';
+import { useMonacoEditorOptions } from './useMonacoEditorOptions';
 
 interface EditorViewport {
   width: number;
@@ -41,6 +44,26 @@ function getRenderableEditorViewport(element: HTMLDivElement | null): EditorView
   return { width, height };
 }
 
+function normalizeEditorContentForInlineDiff(content: string) {
+  return content.replace(/\r\n?/g, '\n');
+}
+
+function isInlineGitDiffPathState(state: string | undefined) {
+  return state === 'modified' || state === 'created';
+}
+
+function scheduleInlineGitDiffRetry(callback: () => void) {
+  if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+    const frameId = window.requestAnimationFrame(callback);
+
+    return () => window.cancelAnimationFrame(frameId);
+  }
+
+  const timeoutId = setTimeout(callback, 0);
+
+  return () => clearTimeout(timeoutId);
+}
+
 interface MonacoEditorPaneProps {
   activeTabId: string;
   code: string;
@@ -51,10 +74,12 @@ interface MonacoEditorPaneProps {
   onSaveShortcut?: () => void;
   onContentChange?: (value: string) => void;
   onEditorMount?: (editor: any) => void;
+  onInlineGitDiffSummaryChange?: (summary: InlineGitDiffSummary | null) => void;
   onNavigateToLocation?: (fileId: string, line: number, col: number) => void;
   onNewShortcut?: () => void;
   isDocumentReady?: boolean;
   hasLoadError?: boolean;
+  isWorkspaceDirty?: boolean;
   showDragInteractionShield?: boolean;
   dragInteractionShieldTestId?: string;
 }
@@ -69,38 +94,30 @@ export function MonacoEditorPane({
   onSaveShortcut,
   onContentChange,
   onEditorMount,
+  onInlineGitDiffSummaryChange,
   onNavigateToLocation,
   onNewShortcut,
   isDocumentReady = true,
   hasLoadError = false,
+  isWorkspaceDirty = false,
   showDragInteractionShield,
   dragInteractionShieldTestId,
 }: MonacoEditorPaneProps) {
   const monaco = useMonaco();
-  const {
-    cursorBlinking,
-    bracketPairGuides,
-    fontFamily,
-    fontLigatures,
-    fontSize,
-    foldingStrategy,
-    glyphMargin,
-    indentGuides,
-    lineNumbers,
-    minimapEnabled,
-    renderControlCharacters,
-    renderWhitespace,
-    scrollBeyondLastLine,
-    smoothScrolling,
-    tabSize,
-    wordWrap,
-  } = useEditorSettings();
   const { activeTheme, themeId } = useTheme();
-  const editorFontFamily = getEditorFontFamilyStack(fontFamily);
+  const { inlineGitDiffEnabled, inlineGitDiffStateBackgroundsEnabled } = useEditorSettings();
+  const gitStatus = useWorkspaceGitStatus();
+  const { editorBehaviorOptions, editorFontFamily, editorOptions } = useMonacoEditorOptions();
   const editorLanguage = getEditorLanguage(activeTabId);
+  const gitPathState = getWorkspaceGitPathState(gitStatus, activeTabId);
+  const createdInlineGitDiffContent = gitPathState === 'created' ? code : '';
   const monacoInstanceRef = useRef(monaco);
   const canPropagateCursorChangesRef = useRef(true);
+  const codeRef = useRef(code);
   const hostRef = useRef<HTMLDivElement | null>(null);
+  const inlineGitDiffAppliedContentRef = useRef<string | null>(null);
+  const inlineGitDiffControllerRef = useRef<MonacoInlineGitDiffController | null>(null);
+  const inlineGitDiffRequestRef = useRef(0);
   const lastLayoutViewportRef = useRef<EditorViewport | null>(null);
   const [mountedEditor, setMountedEditor] = useState<any>(null);
   const applyEditorLayoutRef = useRef<(options?: { force?: boolean }) => void>(() => undefined);
@@ -116,6 +133,9 @@ export function MonacoEditorPane({
   });
   const handleEditorMount = useEffectEvent((editor: any) => {
     onEditorMount?.(editor);
+  });
+  const handleInlineGitDiffSummaryChange = useEffectEvent((summary: InlineGitDiffSummary | null) => {
+    onInlineGitDiffSummaryChange?.(summary);
   });
   const handleNavigateToLocation = useEffectEvent((fileId: string, line: number, col: number) => {
     onNavigateToLocation?.(fileId, line, col);
@@ -164,61 +184,6 @@ export function MonacoEditorPane({
       editor.executeEdits('keyboard', [{ range: selection, text: ' ', forceMoveMarkers: true }]);
     }
   });
-  const editorBehaviorOptions = useMemo(() => ({
-    cursorBlinking,
-    fontFamily: editorFontFamily,
-    fontLigatures,
-    fontSize,
-    foldingStrategy,
-    glyphMargin,
-    guides: {
-      bracketPairs: bracketPairGuides,
-      indentation: indentGuides,
-    },
-    lineNumbers,
-    minimap: { enabled: minimapEnabled, scale: 1, showSlider: 'mouseover' as const },
-    renderControlCharacters,
-    renderWhitespace,
-    scrollBeyondLastLine,
-    smoothScrolling,
-    tabSize,
-    wordWrap,
-  }), [
-    bracketPairGuides,
-    cursorBlinking,
-    editorFontFamily,
-    foldingStrategy,
-    fontLigatures,
-    fontSize,
-    glyphMargin,
-    indentGuides,
-    lineNumbers,
-    minimapEnabled,
-    renderControlCharacters,
-    renderWhitespace,
-    scrollBeyondLastLine,
-    smoothScrolling,
-    tabSize,
-    wordWrap,
-  ]);
-  const editorOptions = useMemo(() => ({
-    ...editorBehaviorOptions,
-    lineNumbersMinChars: 4,
-    folding: true,
-    automaticLayout: false,
-    insertSpaces: true,
-    rulers: [80, 120],
-    bracketPairColorization: { enabled: true },
-    suggest: { showKeywords: true, showSnippets: true },
-    quickSuggestions: { other: true, comments: false, strings: false },
-    parameterHints: { enabled: true },
-    scrollbar: {
-      verticalScrollbarSize: 8,
-      horizontalScrollbarSize: 8,
-    },
-    padding: { top: 8 },
-  }), [editorBehaviorOptions]);
-
   applyEditorLayoutRef.current = ({ force = false }: { force?: boolean } = {}) => {
     const editor = editorRef.current;
     const viewport = getRenderableEditorViewport(hostRef.current);
@@ -239,6 +204,154 @@ export function MonacoEditorPane({
   useEffect(() => {
     monacoInstanceRef.current = monaco;
   }, [monaco]);
+
+  useEffect(() => {
+    codeRef.current = code;
+  }, [code]);
+
+  const clearInlineGitDiff = () => {
+    inlineGitDiffRequestRef.current += 1;
+    inlineGitDiffAppliedContentRef.current = null;
+    inlineGitDiffControllerRef.current?.clear();
+    handleInlineGitDiffSummaryChange(null);
+  };
+
+  useEffect(() => {
+    if (!mountedEditor) {
+      return;
+    }
+
+    const controller = createMonacoInlineGitDiffController(mountedEditor, monacoInstanceRef.current, {
+      stateBackgroundsVisible: inlineGitDiffStateBackgroundsEnabled,
+    });
+    inlineGitDiffControllerRef.current = controller;
+
+    return () => {
+      controller.dispose();
+      if (inlineGitDiffControllerRef.current === controller) {
+        inlineGitDiffControllerRef.current = null;
+      }
+    };
+  }, [mountedEditor, monaco]);
+
+  useEffect(() => {
+    inlineGitDiffControllerRef.current?.setStateBackgroundsVisible(inlineGitDiffStateBackgroundsEnabled);
+  }, [inlineGitDiffStateBackgroundsEnabled]);
+
+  useEffect(() => {
+    const appliedContent = inlineGitDiffAppliedContentRef.current;
+    if (appliedContent !== null && appliedContent !== code) {
+      clearInlineGitDiff();
+    }
+  }, [code]);
+
+  useEffect(() => {
+    const editor = mountedEditor;
+    const gitApi = window.electronAPI?.git;
+    const getFileDiff = gitApi?.getFileDiff;
+    const shouldShowInlineGitDiff = Boolean(
+      editor
+      && inlineGitDiffEnabled
+      && activeTabId
+      && !activeTabId.startsWith('untitled')
+      && isDocumentReady
+      && !hasLoadError
+      && !isWorkspaceDirty
+      && isInlineGitDiffPathState(gitPathState)
+    );
+
+    if (!shouldShowInlineGitDiff || (gitPathState === 'modified' && !getFileDiff)) {
+      clearInlineGitDiff();
+      return;
+    }
+
+    if (gitStatus.isLoading) {
+      return;
+    }
+
+    const requestId = inlineGitDiffRequestRef.current + 1;
+    inlineGitDiffRequestRef.current = requestId;
+    inlineGitDiffAppliedContentRef.current = null;
+    inlineGitDiffControllerRef.current?.clear();
+    handleInlineGitDiffSummaryChange(null);
+
+    let cancelled = false;
+    let cancelCreatedRetry: (() => void) | null = null;
+
+    const applyInlineGitDiffPayload = (
+      payload: { filePath: string; originalContent: string; currentContent: string },
+      options: { clearOnContentMismatch?: boolean } = {},
+    ) => {
+      if (cancelled || inlineGitDiffRequestRef.current !== requestId) {
+        return 'stale';
+      }
+
+      const editorContent = editor?.getModel?.()?.getValue?.() ?? codeRef.current;
+      if (normalizeEditorContentForInlineDiff(editorContent) !== normalizeEditorContentForInlineDiff(payload.currentContent)) {
+        if (options.clearOnContentMismatch ?? true) {
+          inlineGitDiffControllerRef.current?.clear();
+          inlineGitDiffAppliedContentRef.current = null;
+          handleInlineGitDiffSummaryChange(null);
+        }
+
+        return 'content-mismatch';
+      }
+
+      const diff = computeInlineGitDiff(payload.originalContent, payload.currentContent);
+      inlineGitDiffControllerRef.current?.apply(diff);
+      inlineGitDiffAppliedContentRef.current = payload.currentContent;
+      handleInlineGitDiffSummaryChange(diff.changedLineCount > 0
+        ? {
+          filePath: payload.filePath,
+          ...getInlineGitDiffLineCounts(diff),
+        }
+        : null);
+
+      return 'applied';
+    };
+
+    if (gitPathState === 'created') {
+      const payload = {
+        filePath: activeTabId,
+        originalContent: '',
+        currentContent: codeRef.current,
+      };
+      const applyCreatedInlineGitDiff = (remainingRetries: number) => {
+        cancelCreatedRetry = null;
+        const result = applyInlineGitDiffPayload(payload, { clearOnContentMismatch: remainingRetries <= 0 });
+
+        if (result !== 'content-mismatch' || remainingRetries <= 0 || cancelled || inlineGitDiffRequestRef.current !== requestId) {
+          return;
+        }
+
+        cancelCreatedRetry = scheduleInlineGitDiffRetry(() => {
+          applyCreatedInlineGitDiff(remainingRetries - 1);
+        });
+      };
+
+      applyCreatedInlineGitDiff(5);
+
+      return () => {
+        cancelled = true;
+        cancelCreatedRetry?.();
+      };
+    }
+
+    void getFileDiff?.(activeTabId)
+      .then(applyInlineGitDiffPayload)
+      .catch(() => {
+        if (!cancelled && inlineGitDiffRequestRef.current === requestId) {
+          inlineGitDiffControllerRef.current?.clear();
+          inlineGitDiffAppliedContentRef.current = null;
+          handleInlineGitDiffSummaryChange(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+      cancelCreatedRetry?.();
+    };
+  }, [activeTabId, createdInlineGitDiffContent, gitPathState, gitStatus.isLoading, hasLoadError, inlineGitDiffEnabled, isDocumentReady, isWorkspaceDirty, mountedEditor]);
 
   useEffect(() => {
     canPropagateCursorChangesRef.current = false;
@@ -318,12 +431,13 @@ export function MonacoEditorPane({
     }
 
     editor.updateOptions(editorBehaviorOptions);
+    inlineGitDiffControllerRef.current?.syncEditorFont();
     applyEditorLayoutRef.current({ force: true });
   }, [editorBehaviorOptions, editorRef]);
 
   useEffect(() => {
     monaco?.editor.remeasureFonts?.();
-  }, [editorFontFamily, fontLigatures, fontSize, monaco]);
+  }, [editorFontFamily, editorOptions, monaco]);
 
   useEffect(() => {
     if (!monaco) {

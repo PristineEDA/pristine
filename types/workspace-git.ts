@@ -11,3 +11,9 @@ export interface WorkspaceGitStatusPayload {
   isGitRepo: boolean;
   pathStates: Record<string, WorkspaceGitPathState>;
 }
+
+export interface WorkspaceGitFileDiffPayload {
+  filePath: string;
+  originalContent: string;
+  currentContent: string;
+}

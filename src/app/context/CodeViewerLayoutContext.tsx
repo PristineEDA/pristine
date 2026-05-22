@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 
 export type CodeViewerLayoutMode = 'compact' | 'minimal';
 
-export const DEFAULT_CODE_VIEWER_LAYOUT_MODE: CodeViewerLayoutMode = 'compact';
+export const DEFAULT_CODE_VIEWER_LAYOUT_MODE: CodeViewerLayoutMode = 'minimal';
 export const WORKBENCH_CODE_VIEWER_LAYOUT_MODE_CONFIG_KEY = 'workbench.codeViewerLayoutMode';
 
 interface CodeViewerLayoutContextValue {
@@ -18,7 +18,7 @@ const fallbackCodeViewerLayoutContextValue: CodeViewerLayoutContextValue = {
 };
 
 export function parseCodeViewerLayoutMode(value: unknown): CodeViewerLayoutMode {
-  return value === 'minimal' ? 'minimal' : DEFAULT_CODE_VIEWER_LAYOUT_MODE;
+  return value === 'compact' || value === 'minimal' ? value : DEFAULT_CODE_VIEWER_LAYOUT_MODE;
 }
 
 function readConfiguredCodeViewerLayoutMode(): CodeViewerLayoutMode {

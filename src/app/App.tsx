@@ -102,6 +102,7 @@ function AppLayout() {
     focusActiveEditor,
     jumpToLine, jumpTo,
     openFile,
+    openGitDiff,
     openPreviewFile,
     openUntitledFile,
     restoreEditorSelection,
@@ -403,6 +404,7 @@ function AppLayout() {
           onCreateWorkspaceFolder={handleCreateWorkspaceFolder}
           onCutWorkspaceEntry={handleCutWorkspaceEntry}
           onDeleteWorkspaceEntry={handleDeleteWorkspaceEntry}
+          onGitDiffOpen={openGitDiff}
           onFileOpen={openWorkspaceFile}
           onFilePreview={openWorkspacePreviewFile}
           onLineJump={jumpTo}

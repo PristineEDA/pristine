@@ -10,7 +10,14 @@ import {
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '../../ui/resizable';
 import { EditorArea } from './EditorArea';
 import { useWorkspaceEditor, useWorkspaceFiles } from '../../../context/WorkspaceContext';
-import type { EditorDropPosition, EditorGroup, EditorLayoutNode, SplitDirection } from '../../../editor/editorLayout';
+import {
+  getEditorTabDocumentId,
+  getEditorTabSourceFileId,
+  type EditorDropPosition,
+  type EditorGroup,
+  type EditorLayoutNode,
+  type SplitDirection,
+} from '../../../editor/editorLayout';
 import type { CursorRestoreRequest } from '../../../context/useWorkspaceEditorState';
 
 interface DragState {
@@ -209,8 +216,8 @@ const EditorGroupLeaf = memo(function EditorGroupLeaf({
   workspaceActionsRef: React.MutableRefObject<EditorGroupWorkspaceActions>;
 }) {
   const editorRef = useRef<any>(null);
-
-  const showFocusRing = focused && group.tabs.length > 0;
+  const activeTab = group.tabs.find((tab) => tab.id === group.activeTabId);
+  const activeDocumentId = getEditorTabDocumentId(activeTab) || resolveFileId(group.activeTabId);
 
   const handleGroupMouseDown = (event: ReactMouseEvent<HTMLDivElement>) => {
     onFocus(group.id);
@@ -254,7 +261,7 @@ const EditorGroupLeaf = memo(function EditorGroupLeaf({
       data-editor-group-root="true"
       data-focused={focused ? 'true' : 'false'}
       tabIndex={-1}
-      className={`relative h-full min-w-0 ${showFocusRing ? 'ring-1 ring-inset ring-primary/50' : ''} ${dropPosition ? 'ring-1 ring-inset ring-border/80' : ''}`}
+      className={`relative h-full min-w-0 ${dropPosition ? 'ring-1 ring-inset ring-border/80' : ''}`}
       onFocusCapture={() => onFocus(group.id)}
       onKeyDownCapture={handleGroupKeyDownCapture}
       onMouseDown={handleGroupMouseDown}
@@ -286,9 +293,10 @@ const EditorGroupLeaf = memo(function EditorGroupLeaf({
       <EditorArea
         tabs={group.tabs}
         activeTabId={group.activeTabId}
-        documentTabId={resolveFileId(group.activeTabId)}
+        documentTabId={activeDocumentId}
         onTabChange={(tabId) => {
-          onActiveFileReveal?.(tabId);
+          const nextTab = group.tabs.find((tab) => tab.id === tabId);
+          onActiveFileReveal?.(getEditorTabSourceFileId(nextTab) || tabId);
           workspaceActionsRef.current.setActiveTabIdInGroup(group.id, tabId);
         }}
         onTabClose={(tabId) => workspaceActionsRef.current.closeFileInGroup(group.id, tabId)}
@@ -303,7 +311,7 @@ const EditorGroupLeaf = memo(function EditorGroupLeaf({
             return;
           }
 
-          workspaceActionsRef.current.setCursorPos(line, col, group.id, resolveFileId(group.activeTabId));
+          workspaceActionsRef.current.setCursorPos(line, col, group.id, activeDocumentId);
         }}
         onSplitEditor={(direction) => workspaceActionsRef.current.splitGroup(group.id, direction)}
         onFocus={() => onFocus(group.id)}

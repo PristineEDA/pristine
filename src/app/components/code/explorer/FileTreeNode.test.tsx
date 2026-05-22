@@ -196,6 +196,64 @@ describe('FileTreeNode', () => {
     expect(onStartDelete).toHaveBeenCalledWith('rtl/core/cpu_top.v', 'file');
   });
 
+  it('opens git diff from a modified file context menu', async () => {
+    const user = userEvent.setup();
+    const onGitDiffOpen = vi.fn();
+
+    render(
+      <FileTreeNode
+        node={{
+          id: 'rtl/core/cpu_top.v',
+          path: 'rtl/core/cpu_top.v',
+          name: 'cpu_top.v',
+          type: 'file',
+          hasLoadedChildren: true,
+          isLoading: false,
+        }}
+        depth={1}
+        activeFileId=""
+        onFileOpen={vi.fn()}
+        onFilePreview={vi.fn()}
+        onGitDiffOpen={onGitDiffOpen}
+        expandedFolders={new Set()}
+        onToggleFolder={vi.fn()}
+        gitPathStates={{ 'rtl/core/cpu_top.v': 'modified' }}
+      />,
+    );
+
+    openContextMenuForNode('file-tree-node-rtl_core_cpu_top_v');
+    await user.click(getContextMenuItem('Open Git Diff'));
+
+    expect(onGitDiffOpen).toHaveBeenCalledWith('rtl/core/cpu_top.v', 'cpu_top.v');
+  });
+
+  it('omits git diff from context menus for non-modified files', () => {
+    render(
+      <FileTreeNode
+        node={{
+          id: 'rtl/core/cpu_top.v',
+          path: 'rtl/core/cpu_top.v',
+          name: 'cpu_top.v',
+          type: 'file',
+          hasLoadedChildren: true,
+          isLoading: false,
+        }}
+        depth={1}
+        activeFileId=""
+        onFileOpen={vi.fn()}
+        onFilePreview={vi.fn()}
+        onGitDiffOpen={vi.fn()}
+        expandedFolders={new Set()}
+        onToggleFolder={vi.fn()}
+        gitPathStates={{ 'rtl/core/cpu_top.v': 'created' }}
+      />,
+    );
+
+    openContextMenuForNode('file-tree-node-rtl_core_cpu_top_v');
+
+    expect(screen.queryByRole('menuitem', { name: 'Open Git Diff' })).not.toBeInTheDocument();
+  });
+
   it('does not keep a file highlighted while another folder is selected', () => {
     render(
       <FileTreeNode
