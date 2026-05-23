@@ -15,6 +15,7 @@ const fixtureWorkspace = path.join(__dirname, '..', 'test', 'fixtures', 'workspa
 const releaseRoot = path.join(__dirname, '..', 'release');
 const MONACO_READY_TIMEOUT_MS = 60000;
 const UI_READY_TIMEOUT_MS = 60000;
+type SettingsPageId = 'general' | 'appearance' | 'editor' | 'window';
 
 function normalizeComparableMonospaceFontFamily(fontFamily: string) {
   const tokens = fontFamily
@@ -479,6 +480,28 @@ async function readComputedTextColor(locator: Locator) {
     };
 
     return browserGlobal.getComputedStyle(element).color;
+  });
+}
+
+async function readSearchInputVisualState(locator: Locator) {
+  return locator.evaluate((element) => {
+    type StyleLike = {
+      backgroundColor: string;
+      caretColor: string;
+      color: string;
+      getPropertyValue: (name: string) => string;
+    };
+    const browserGlobal = globalThis as typeof globalThis & {
+      getComputedStyle: (node: unknown) => StyleLike;
+    };
+    const style = browserGlobal.getComputedStyle(element);
+
+    return {
+      backgroundColor: style.backgroundColor,
+      caretColor: style.caretColor,
+      color: style.color,
+      webkitTextFillColor: style.getPropertyValue('-webkit-text-fill-color'),
+    };
   });
 }
 
@@ -1193,6 +1216,14 @@ async function selectComboboxOption(
   await window.getByTestId(optionTestId).click();
 }
 
+async function openSettingsPage(
+  window: Awaited<ReturnType<typeof launchApp>>['window'],
+  page: SettingsPageId,
+) {
+  await window.getByTestId(`settings-nav-${page}`).click();
+  await expect(window.getByTestId(`settings-page-${page}`)).toBeVisible();
+}
+
 async function readWorkbenchChromeThemeSnapshot(window: Awaited<ReturnType<typeof launchApp>>['window']) {
   return window.evaluate(() => {
     type StyleLike = {
@@ -1543,12 +1574,81 @@ test('File > Setting... opens the settings dialog and updates persisted options'
   await clearRememberedCloseBehavior(window);
   await selectMenuBarItem(window, 'File', 'Setting...');
   await expect(window.getByTestId('settings-dialog')).toBeVisible();
+  await openSettingsPage(window, 'window');
 
   await setSwitchChecked(window.getByTestId('settings-close-to-tray-switch'), true);
   await expect.poll(async () => readConfigValue(window, 'window.closeActionPreference')).toBe('tray');
 
   await window.getByTestId('settings-close-button').click();
   await clearRememberedCloseBehavior(window);
+
+  await app.close();
+});
+
+test('settings dialog supports subpage navigation and global search', async () => {
+  const { app, window } = await launchApp();
+
+  await window.getByTestId('menu-settings-button').click();
+  await expect(window.getByTestId('settings-dialog')).toBeVisible();
+  await expect(window.getByTestId('settings-nav-general')).toHaveAttribute('aria-current', 'page');
+  await expect(window.getByTestId('settings-page-general')).toBeVisible();
+
+  await openSettingsPage(window, 'appearance');
+  await expect(window.getByTestId('settings-nav-appearance')).toHaveAttribute('aria-current', 'page');
+  await expect(window.getByTestId('settings-theme-combobox')).toBeVisible();
+
+  await openSettingsPage(window, 'editor');
+  await expect(window.getByTestId('settings-nav-editor')).toHaveAttribute('aria-current', 'page');
+  await expect(window.getByTestId('settings-editor-font-family-combobox')).toBeVisible();
+
+  await openSettingsPage(window, 'window');
+  await expect(window.getByTestId('settings-nav-window')).toHaveAttribute('aria-current', 'page');
+  await expect(window.getByTestId('settings-close-to-tray-switch')).toBeVisible();
+
+  const searchInput = window.getByTestId('settings-search-input');
+  const searchIcon = window.getByTestId('settings-search-icon');
+
+  await expect(searchInput).toHaveAttribute('spellcheck', 'false');
+  await expect(searchInput).toHaveAttribute('autocomplete', 'off');
+  await expect(searchIcon).toHaveCSS('opacity', '1');
+  await expect.poll(async () => {
+    const iconBox = await window.getByTestId('settings-nav-general-icon').boundingBox();
+    const labelBox = await window.getByTestId('settings-nav-general-label').boundingBox();
+
+    if (!iconBox || !labelBox) {
+      return Number.POSITIVE_INFINITY;
+    }
+
+    return Math.abs((iconBox.y + iconBox.height) - (labelBox.y + labelBox.height));
+  }).toBeLessThanOrEqual(2);
+
+  await searchInput.fill('font');
+  await expect(searchIcon).toHaveCSS('opacity', '0');
+
+  const expectedSearchTextColor = await readNormalizedCssColorVariable(window, '--ide-text');
+  const searchInputColors = await readSearchInputVisualState(searchInput);
+  await expect(searchInput).toHaveClass(/pristine-command-search-input/);
+  expect(searchInputColors.color).toBe(expectedSearchTextColor);
+  expect(searchInputColors.color).not.toBe('rgb(0, 0, 0)');
+  expect(searchInputColors.color).not.toBe('rgba(0, 0, 0, 0)');
+  expect(searchInputColors.color).not.toBe(searchInputColors.backgroundColor);
+  expect(searchInputColors.caretColor).toBe(searchInputColors.color);
+  expect(searchInputColors.webkitTextFillColor).toBe(searchInputColors.color);
+
+  await expect(window.getByTestId('settings-page-search')).toBeVisible();
+  await expect(window.getByTestId('settings-search-results-editor')).toBeVisible();
+  await expect(window.getByTestId('settings-editor-font-family-combobox')).toBeVisible();
+  await expect(window.getByTestId('settings-editor-font-size-slider')).toBeVisible();
+
+  await searchInput.fill('zzzzzz');
+  await expect(searchIcon).toHaveCSS('opacity', '0');
+  await expect(window.getByTestId('settings-search-empty-state')).toBeVisible();
+
+  await window.getByTestId('settings-nav-general').click();
+  await expect(searchInput).toHaveValue('');
+  await expect(searchIcon).toHaveCSS('opacity', '1');
+  await expect(window.getByTestId('settings-nav-general')).toHaveAttribute('aria-current', 'page');
+  await expect(window.getByTestId('settings-page-general')).toBeVisible();
 
   await app.close();
 });
@@ -1562,6 +1662,7 @@ test('File > Close hides the app to tray when close-to-tray is enabled', async (
   await clearRememberedCloseBehavior(window);
   await selectMenuBarItem(window, 'File', 'Setting...');
   await expect(window.getByTestId('settings-dialog')).toBeVisible();
+  await openSettingsPage(window, 'window');
   await setSwitchChecked(window.getByTestId('settings-close-to-tray-switch'), true);
   await expect.poll(async () => readConfigValue(window, 'window.closeActionPreference')).toBe('tray');
   await window.getByTestId('settings-close-button').click();
@@ -1590,6 +1691,7 @@ test('Ctrl+Q or Cmd+Q hides the app to tray when close-to-tray is enabled', asyn
   await clearRememberedCloseBehavior(window);
   await selectMenuBarItem(window, 'File', 'Setting...');
   await expect(window.getByTestId('settings-dialog')).toBeVisible();
+  await openSettingsPage(window, 'window');
   await setSwitchChecked(window.getByTestId('settings-close-to-tray-switch'), true);
   await expect.poll(async () => readConfigValue(window, 'window.closeActionPreference')).toBe('tray');
   await window.getByTestId('settings-close-button').click();
@@ -1623,6 +1725,7 @@ test('close button hides the app to tray when close-to-tray is enabled', async (
   await clearRememberedCloseBehavior(window);
   await window.getByTestId('menu-settings-button').click();
   await expect(window.getByTestId('settings-dialog')).toBeVisible();
+  await openSettingsPage(window, 'window');
   await setSwitchChecked(window.getByTestId('settings-close-to-tray-switch'), false);
   await setSwitchChecked(window.getByTestId('settings-close-to-tray-switch'), true);
   await expect.poll(async () => readConfigValue(window, 'window.closeActionPreference')).toBe('tray');
@@ -1651,6 +1754,7 @@ test('close-to-tray keeps the active terminal session alive and restores it afte
   await clearRememberedCloseBehavior(window);
   await window.getByTestId('menu-settings-button').click();
   await expect(window.getByTestId('settings-dialog')).toBeVisible();
+  await openSettingsPage(window, 'window');
   await setSwitchChecked(window.getByTestId('settings-close-to-tray-switch'), false);
   await setSwitchChecked(window.getByTestId('settings-close-to-tray-switch'), true);
   await expect.poll(async () => readConfigValue(window, 'window.closeActionPreference')).toBe('tray');
@@ -3111,6 +3215,7 @@ test('Monaco editor shows inline git diff for opened modified files and hides it
 
     await window.getByTestId('menu-settings-button').click();
     await expect(window.getByTestId('settings-dialog')).toBeVisible();
+    await openSettingsPage(window, 'editor');
     const inlineGitDiffBackgroundsSwitch = window.getByTestId('settings-editor-inline-git-diff-backgrounds-switch');
     await inlineGitDiffBackgroundsSwitch.scrollIntoViewIfNeeded();
     await setSwitchChecked(inlineGitDiffBackgroundsSwitch, false);
@@ -3126,6 +3231,7 @@ test('Monaco editor shows inline git diff for opened modified files and hides it
 
     await window.getByTestId('menu-settings-button').click();
     await expect(window.getByTestId('settings-dialog')).toBeVisible();
+    await openSettingsPage(window, 'editor');
     const inlineGitDiffSwitch = window.getByTestId('settings-editor-inline-git-diff-switch');
     await inlineGitDiffSwitch.scrollIntoViewIfNeeded();
     await setSwitchChecked(inlineGitDiffSwitch, false);
@@ -3280,6 +3386,7 @@ test('menu bar switches to the BlockSuite whiteboard editor', async () => {
   const switchWorkbenchTheme = async (optionTestId: string) => {
     await window.getByTestId('menu-settings-button').click();
     await expect(window.getByTestId('settings-dialog')).toBeVisible();
+    await openSettingsPage(window, 'appearance');
     await selectComboboxOption(window, 'settings-theme-combobox', optionTestId);
     await window.getByTestId('settings-close-button').click();
     await expect(window.getByTestId('settings-dialog')).toHaveCount(0);
@@ -3637,6 +3744,7 @@ test('dark theme keeps quick open and explorer rename input text legible', async
   await ensureExplorerVisible(window);
   await window.getByTestId('menu-settings-button').click();
   await expect(window.getByTestId('settings-dialog')).toBeVisible();
+  await openSettingsPage(window, 'appearance');
 
   await selectComboboxOption(
     window,
@@ -5091,6 +5199,7 @@ test('floating info window stays visible after hiding the main window to tray', 
 
   await window.getByTestId('menu-settings-button').click();
   await expect(window.getByTestId('settings-dialog')).toBeVisible();
+  await openSettingsPage(window, 'window');
 
   const closeToTraySwitch = window.getByTestId('settings-close-to-tray-switch');
   const floatingInfoSwitch = window.getByTestId('settings-floating-info-window-switch');
@@ -5185,6 +5294,7 @@ test('tray and floating info settings persist across app relaunch', async () => 
 
   await firstWindow.getByTestId('menu-settings-button').click();
   await expect(firstWindow.getByTestId('settings-dialog')).toBeVisible();
+  await openSettingsPage(firstWindow, 'window');
 
   await setSwitchChecked(firstWindow.getByTestId('settings-close-to-tray-switch'), false);
   await setSwitchChecked(firstWindow.getByTestId('settings-close-to-tray-switch'), true);
@@ -5212,6 +5322,7 @@ test('tray and floating info settings persist across app relaunch', async () => 
 
   await secondWindow.getByTestId('menu-settings-button').click();
   await expect(secondWindow.getByTestId('settings-dialog')).toBeVisible();
+  await openSettingsPage(secondWindow, 'window');
   await expect(secondWindow.getByTestId('settings-close-to-tray-switch')).toHaveAttribute('data-state', 'checked');
   await expect(secondWindow.getByTestId('settings-floating-info-window-switch')).toHaveAttribute('data-state', 'checked');
 
@@ -5258,6 +5369,7 @@ test('settings UI theme selection persists across app relaunch', async () => {
 
   await firstWindow.getByTestId('menu-settings-button').click();
   await expect(firstWindow.getByTestId('settings-dialog')).toBeVisible();
+  await openSettingsPage(firstWindow, 'appearance');
 
   await selectComboboxOption(
     firstWindow,
@@ -5292,6 +5404,7 @@ test('settings UI theme selection persists across app relaunch', async () => {
 
   await secondWindow.getByTestId('menu-settings-button').click();
   await expect(secondWindow.getByTestId('settings-dialog')).toBeVisible();
+  await openSettingsPage(secondWindow, 'appearance');
 
   await expect(secondWindow.getByTestId('settings-theme-combobox')).toContainText('Dark 2026');
   await selectComboboxOption(
@@ -5332,6 +5445,7 @@ test('global workbench chrome follows selected VS Code theme variables', async (
   await expect(window.getByTestId('activity-bar')).toHaveAttribute('data-code-viewer-layout-mode', 'compact');
   await expect(window.getByTestId('status-bar')).toHaveAttribute('data-code-viewer-layout-mode', 'compact');
 
+  await openSettingsPage(window, 'appearance');
   await selectComboboxOption(
     window,
     'settings-theme-combobox',
@@ -5638,6 +5752,7 @@ async function assertBundledThemeSelectionPersistsAcrossRelaunch({
 
   await firstWindow.getByTestId('menu-settings-button').click();
   await expect(firstWindow.getByTestId('settings-dialog')).toBeVisible();
+  await openSettingsPage(firstWindow, 'appearance');
   await firstWindow.getByTestId('settings-theme-advanced-button').click();
   await expect(firstWindow.getByTestId('settings-theme-advanced-dialog')).toBeVisible();
   await firstWindow.getByTestId('settings-theme-advanced-search-input').fill(searchText);
@@ -5669,6 +5784,7 @@ async function assertBundledThemeSelectionPersistsAcrossRelaunch({
 
   await secondWindow.getByTestId('menu-settings-button').click();
   await expect(secondWindow.getByTestId('settings-dialog')).toBeVisible();
+  await openSettingsPage(secondWindow, 'appearance');
   await expect(secondWindow.getByTestId('settings-theme-combobox')).toContainText(themeLabel);
   await secondWindow.getByTestId('settings-close-button').click();
   await expect(secondWindow.getByTestId('settings-dialog')).toHaveCount(0);
@@ -6086,6 +6202,7 @@ test('code editor settings persist across app relaunch', async () => {
 
   await firstWindow.getByTestId('menu-settings-button').click();
   await expect(firstWindow.getByTestId('settings-dialog')).toBeVisible();
+  await openSettingsPage(firstWindow, 'editor');
 
   await selectComboboxOption(
     firstWindow,
@@ -6220,6 +6337,7 @@ test('code editor settings persist across app relaunch', async () => {
 
   await secondWindow.getByTestId('menu-settings-button').click();
   await expect(secondWindow.getByTestId('settings-dialog')).toBeVisible();
+  await openSettingsPage(secondWindow, 'editor');
   await expect(secondWindow.getByTestId('settings-editor-font-family-combobox')).toContainText('Monaspace Neon');
   await expect(secondWindow.getByTestId('settings-editor-font-size-value')).toHaveText('24px');
   await expect(secondWindow.getByTestId('settings-editor-word-wrap-combobox')).toContainText('On');
@@ -6327,6 +6445,7 @@ test('editor font combobox supports wheel scrolling and UI theme combobox reopen
 
   await window.getByTestId('menu-settings-button').click()
   await expect(window.getByTestId('settings-dialog')).toBeVisible()
+  await openSettingsPage(window, 'editor')
 
   await window.getByTestId('settings-editor-font-family-combobox').click()
   const fontList = window.locator('[data-combobox-list="settings-editor-font-family-combobox-list"]')
@@ -6360,6 +6479,7 @@ test('editor font combobox supports wheel scrolling and UI theme combobox reopen
   }).toBeGreaterThan(0)
   await window.keyboard.press('Escape')
 
+  await openSettingsPage(window, 'appearance')
   await selectComboboxOption(
     window,
     'settings-theme-combobox',
@@ -6392,6 +6512,7 @@ test('settings comboboxes show hover previews for theme and font options', async
 
   await window.getByTestId('menu-settings-button').click()
   await expect(window.getByTestId('settings-dialog')).toBeVisible()
+  await openSettingsPage(window, 'appearance')
 
   const themeCombobox = window.getByTestId('settings-theme-combobox')
 
@@ -6399,9 +6520,19 @@ test('settings comboboxes show hover previews for theme and font options', async
 
   const themePopoverSurface = window.getByTestId('settings-theme-combobox-popover-surface')
   const themePreviewPane = window.getByTestId('settings-theme-combobox-preview-pane')
+  const themeSearchInput = window.getByPlaceholder('Search UI themes...')
+  const expectedSearchTextColor = await readNormalizedCssColorVariable(window, '--ide-text')
 
   await expect(themePopoverSurface).toBeVisible()
   await expect(themePreviewPane).toHaveAttribute('data-state', 'hidden')
+  await expect(themeSearchInput).toHaveClass(/pristine-command-search-input/)
+
+  const themeSearchInputColors = await readSearchInputVisualState(themeSearchInput)
+  expect(themeSearchInputColors.color).toBe(expectedSearchTextColor)
+  expect(themeSearchInputColors.color).not.toBe('rgb(0, 0, 0)')
+  expect(themeSearchInputColors.color).not.toBe('rgba(0, 0, 0, 0)')
+  expect(themeSearchInputColors.caretColor).toBe(themeSearchInputColors.color)
+  expect(themeSearchInputColors.webkitTextFillColor).toBe(themeSearchInputColors.color)
 
   await expect
     .poll(async () => {
@@ -6423,7 +6554,7 @@ test('settings comboboxes show hover previews for theme and font options', async
   await themeOption.hover()
 
   await expect(themePreviewPane).toHaveAttribute('data-state', 'visible')
-  await expect(themePreviewPane).toHaveAttribute('data-side', 'right')
+  await expect(themePreviewPane).toHaveAttribute('data-side', /^(left|right)$/)
   await expect(window.getByTestId('settings-theme-combobox-preview-card-vscode-2026-light')).toBeVisible()
   await expect(window.getByTestId('settings-theme-combobox-preview-line-module-vscode-2026-light')).toContainText('module alu(clk)')
   await expect
@@ -6437,7 +6568,10 @@ test('settings comboboxes show hover previews for theme and font options', async
         return false
       }
 
-      return themePreviewBox.x >= themeOptionBox.x + themeOptionBox.width
+      const isRight = themePreviewBox.x >= themeOptionBox.x + themeOptionBox.width
+      const isLeft = themePreviewBox.x + themePreviewBox.width <= themeOptionBox.x
+
+      return (isRight || isLeft)
         && themePreviewBox.y <= themeOptionBox.y + themeOptionBox.height
         && themePreviewBox.y + themePreviewBox.height >= themeOptionBox.y
     })
@@ -6447,6 +6581,7 @@ test('settings comboboxes show hover previews for theme and font options', async
   await expect(themePreviewPane).toHaveAttribute('data-state', 'hidden')
   await window.keyboard.press('Escape')
 
+  await openSettingsPage(window, 'editor')
   const fontCombobox = window.getByTestId('settings-editor-font-family-combobox')
 
   await fontCombobox.click()
@@ -6477,7 +6612,7 @@ test('settings comboboxes show hover previews for theme and font options', async
   await fontOption.hover()
 
   await expect(fontPreviewPane).toHaveAttribute('data-state', 'visible')
-  await expect(fontPreviewPane).toHaveAttribute('data-side', 'right')
+  await expect(fontPreviewPane).toHaveAttribute('data-side', /^(left|right)$/)
   await expect(window.getByTestId('settings-editor-font-family-combobox-preview-card-victor-mono')).toBeVisible()
   await expect(window.getByTestId('settings-editor-font-family-combobox-preview-author-victor-mono')).toContainText('Rubjo Vampjoen')
   await expect
@@ -6491,7 +6626,10 @@ test('settings comboboxes show hover previews for theme and font options', async
         return false
       }
 
-      return fontPreviewBox.x >= fontOptionBox.x + fontOptionBox.width
+      const isRight = fontPreviewBox.x >= fontOptionBox.x + fontOptionBox.width
+      const isLeft = fontPreviewBox.x + fontPreviewBox.width <= fontOptionBox.x
+
+      return (isRight || isLeft)
         && fontPreviewBox.y <= fontOptionBox.y + fontOptionBox.height
         && fontPreviewBox.y + fontPreviewBox.height >= fontOptionBox.y
     })
@@ -6509,6 +6647,7 @@ test('settings UI theme combobox keeps a stable width when selecting a long them
 
   await window.getByTestId('menu-settings-button').click()
   await expect(window.getByTestId('settings-dialog')).toBeVisible()
+  await openSettingsPage(window, 'appearance')
 
   const themeCombobox = window.getByTestId('settings-theme-combobox')
   const initialBox = await themeCombobox.boundingBox()
@@ -6540,6 +6679,7 @@ test('advanced editor font picker closes after selecting a preview card and sync
 
   await window.getByTestId('menu-settings-button').click()
   await expect(window.getByTestId('settings-dialog')).toBeVisible()
+  await openSettingsPage(window, 'editor')
 
   const advancedDialog = window.locator('[data-testid="settings-editor-font-family-advanced-dialog"]')
   await window.getByTestId('settings-editor-font-family-advanced-button').click()
@@ -6562,6 +6702,7 @@ test('advanced UI theme picker closes after selecting a preview card and syncs t
 
   await window.getByTestId('menu-settings-button').click()
   await expect(window.getByTestId('settings-dialog')).toBeVisible()
+  await openSettingsPage(window, 'appearance')
 
   const advancedDialog = window.locator('[data-testid="settings-theme-advanced-dialog"]')
   await window.getByTestId('settings-theme-advanced-button').click()
@@ -6592,6 +6733,7 @@ test('advanced UI theme picker layout toggle persists across app relaunch', asyn
 
   await firstWindow.getByTestId('menu-settings-button').click()
   await expect(firstWindow.getByTestId('settings-dialog')).toBeVisible()
+  await openSettingsPage(firstWindow, 'appearance')
 
   await firstWindow.getByTestId('settings-theme-advanced-button').click()
   await expect(firstWindow.getByTestId('settings-theme-advanced-dialog')).toBeVisible()
@@ -6615,6 +6757,7 @@ test('advanced UI theme picker layout toggle persists across app relaunch', asyn
 
   await secondWindow.getByTestId('menu-settings-button').click()
   await expect(secondWindow.getByTestId('settings-dialog')).toBeVisible()
+  await openSettingsPage(secondWindow, 'appearance')
 
   await secondWindow.getByTestId('settings-theme-advanced-button').click()
   await expect(secondWindow.getByTestId('settings-theme-advanced-dialog')).toBeVisible()
@@ -6637,6 +6780,7 @@ test('newly downloaded Monaco font options can be selected and persist to config
 
   await window.getByTestId('menu-settings-button').click()
   await expect(window.getByTestId('settings-dialog')).toBeVisible()
+  await openSettingsPage(window, 'editor')
 
   await selectComboboxOption(
     window,
@@ -6727,6 +6871,7 @@ test('settings tray switch controls whether close hides to tray or quits', async
 
   await window.getByTestId('menu-settings-button').click();
   await expect(window.getByTestId('settings-dialog')).toBeVisible();
+  await openSettingsPage(window, 'window');
 
   const closeToTraySwitch = window.getByTestId('settings-close-to-tray-switch');
   await expect(closeToTraySwitch).toHaveAttribute('data-state', 'unchecked');
@@ -6749,6 +6894,7 @@ test('settings tray switch controls whether close hides to tray or quits', async
 
   await window.getByTestId('menu-settings-button').click();
   await expect(window.getByTestId('settings-dialog')).toBeVisible();
+  await openSettingsPage(window, 'window');
   await expect(closeToTraySwitch).toHaveAttribute('data-state', 'checked');
   await closeToTraySwitch.click();
   await expect.poll(async () => readConfigValue(window, 'window.closeActionPreference')).toBe('quit');

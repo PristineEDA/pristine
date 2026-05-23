@@ -11,6 +11,16 @@ import {
   DialogTitle,
 } from "@/app/components/ui/dialog"
 
+const commandSearchInputForegroundStyle = {
+  caretColor: "var(--ide-text)",
+  color: "var(--ide-text)",
+  WebkitTextFillColor: "var(--ide-text)",
+} satisfies React.CSSProperties
+
+const commandSearchInputWrapperClassName = "flex h-9 items-center gap-2 px-3"
+const commandSearchInputIconClassName = "size-4 shrink-0 text-ide-text-muted"
+const commandSearchInputClassName = "pristine-command-search-input flex h-10 w-full rounded-md bg-transparent py-3 text-sm outline-hidden placeholder:text-ide-text-muted disabled:cursor-not-allowed disabled:opacity-50"
+
 function Command({
   className,
   ...props
@@ -60,20 +70,22 @@ function CommandDialog({
 
 function CommandInput({
   className,
+  style,
   ...props
 }: React.ComponentProps<typeof CommandPrimitive.Input>) {
   return (
     <div
       data-slot="command-input-wrapper"
-      className="flex h-9 items-center gap-2 border-b px-3"
+      className={cn(commandSearchInputWrapperClassName, "border-b")}
     >
-      <SearchIcon className="size-4 shrink-0 opacity-50" />
+      <SearchIcon className={commandSearchInputIconClassName} />
       <CommandPrimitive.Input
         data-slot="command-input"
         className={cn(
-          "flex h-10 w-full rounded-md bg-transparent py-3 text-sm outline-hidden placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50",
+          commandSearchInputClassName,
           className
         )}
+        style={{ ...commandSearchInputForegroundStyle, ...style }}
         {...props}
       />
     </div>
@@ -179,4 +191,8 @@ export {
   CommandItem,
   CommandShortcut,
   CommandSeparator,
+  commandSearchInputClassName,
+  commandSearchInputForegroundStyle,
+  commandSearchInputIconClassName,
+  commandSearchInputWrapperClassName,
 }

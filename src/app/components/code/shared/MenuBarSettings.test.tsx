@@ -31,6 +31,11 @@ import {
 const SETTINGS_DIALOG_TEST_TIMEOUT_MS = 30000;
 const SETTINGS_PICKER_TEST_TIMEOUT_MS = 15000;
 
+async function openSettingsPage(user: ReturnType<typeof userEvent.setup>, page: 'general' | 'appearance' | 'editor' | 'window') {
+  await user.click(screen.getByTestId(`settings-nav-${page}`));
+  expect(screen.getByTestId(`settings-page-${page}`)).toBeVisible();
+}
+
 async function applyBundledThemeFromAdvancedPicker(
   user: ReturnType<typeof userEvent.setup>,
   theme: {
@@ -43,6 +48,7 @@ async function applyBundledThemeFromAdvancedPicker(
   await user.click(screen.getByTestId('menu-settings-button'));
   expect(await screen.findByTestId('settings-dialog')).toBeVisible();
 
+  await openSettingsPage(user, 'appearance');
   await user.click(screen.getByTestId('settings-theme-advanced-button'));
   expect(await screen.findByTestId('settings-theme-advanced-dialog')).toBeVisible();
 
@@ -67,6 +73,7 @@ async function applyBundledThemeFromAdvancedPicker(
 
 describe('MenuBar settings', () => {
   it('opens settings from native menu commands on macOS', async () => {
+    const user = userEvent.setup();
     window.electronAPI!.platform = 'darwin';
     mockPersistedSettingsConfig({
       colorTheme: 'vscode-2026-dark',
@@ -84,6 +91,7 @@ describe('MenuBar settings', () => {
     });
 
     expect(await screen.findByTestId('settings-dialog')).toBeVisible();
+    await openSettingsPage(user, 'editor');
     expect(screen.getByTestId('settings-editor-font-family-combobox')).toHaveTextContent(getEditorFontFamilyLabel('fira-code'));
     expect(screen.queryByTestId('settings-code-layout-margin-slider')).not.toBeInTheDocument();
   });
@@ -101,19 +109,94 @@ describe('MenuBar settings', () => {
 
     renderMenuBar();
 
-  await lockApplicationMenuBar(user);
+    await lockApplicationMenuBar(user);
     await user.click(screen.getByText('File'));
     expect(await screen.findByText('Ctrl+Q')).toBeInTheDocument();
     await user.click(await screen.findByText('Setting...'));
 
     expect(await screen.findByTestId('settings-dialog')).toBeVisible();
+    expect(screen.getByTestId('settings-nav-general')).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByTestId('settings-page-general')).toBeVisible();
+    expect(screen.getByTestId('settings-code-viewer-layout-combobox')).toHaveTextContent('Minimal');
+
+    await openSettingsPage(user, 'editor');
     expect(screen.getByTestId('settings-editor-font-family-combobox')).toHaveTextContent(getEditorFontFamilyLabel('fira-code'));
     expect(screen.getByTestId('settings-editor-font-family-advanced-button')).toBeVisible();
-    expect(screen.getByTestId('settings-theme-advanced-button')).toBeVisible();
-    expect(screen.getByTestId('settings-theme-import-button')).toBeVisible();
     expect(screen.getByTestId('settings-editor-font-size-value')).toHaveTextContent('18px');
     expect(screen.queryByTestId('settings-code-layout-margin-slider')).not.toBeInTheDocument();
+
+    await openSettingsPage(user, 'appearance');
+    expect(screen.getByTestId('settings-theme-advanced-button')).toBeVisible();
+    expect(screen.getByTestId('settings-theme-import-button')).toBeVisible();
     expect(screen.getByTestId('settings-theme-combobox')).toHaveTextContent('Dark 2026');
+  });
+
+  it('navigates settings subpages and searches across pages', async () => {
+    const user = userEvent.setup();
+
+    renderMenuBar();
+
+    await user.click(screen.getByTestId('menu-settings-button'));
+    expect(await screen.findByTestId('settings-dialog')).toBeVisible();
+    expect(screen.getByTestId('settings-nav-general')).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByTestId('settings-page-general')).toBeVisible();
+    expect(screen.getByTestId('settings-nav-general')).toHaveClass('leading-4');
+    expect(screen.getByTestId('settings-nav-general-icon')).toHaveClass('size-4');
+    expect(screen.getByTestId('settings-nav-general-label')).toHaveClass('leading-4');
+
+    await user.click(screen.getByTestId('settings-code-viewer-layout-combobox'));
+    const codeViewerLayoutSearchInput = screen.getByPlaceholderText('Search code viewer layouts...');
+    expect(codeViewerLayoutSearchInput).toHaveAttribute('data-slot', 'command-input');
+    expect(codeViewerLayoutSearchInput).toHaveClass('pristine-command-search-input');
+    expect(codeViewerLayoutSearchInput).toHaveStyle('color: var(--ide-text)');
+    expect(codeViewerLayoutSearchInput.parentElement).toHaveAttribute('data-slot', 'command-input-wrapper');
+    expect(codeViewerLayoutSearchInput.parentElement).toHaveClass('flex h-9 items-center gap-2 border-b px-3');
+    await user.keyboard('{Escape}');
+
+    await openSettingsPage(user, 'appearance');
+    expect(screen.getByTestId('settings-nav-appearance')).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByTestId('settings-theme-combobox')).toBeVisible();
+
+    await openSettingsPage(user, 'editor');
+    expect(screen.getByTestId('settings-nav-editor')).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByTestId('settings-editor-font-family-combobox')).toBeVisible();
+
+    await openSettingsPage(user, 'window');
+    expect(screen.getByTestId('settings-nav-window')).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByTestId('settings-close-to-tray-switch')).toBeVisible();
+
+    const searchInput = screen.getByTestId('settings-search-input');
+    expect(searchInput).toHaveAttribute('autocomplete', 'off');
+    expect(searchInput).toHaveAttribute('autocapitalize', 'none');
+    expect(searchInput).toHaveAttribute('spellcheck', 'false');
+    expect(searchInput).toHaveClass('pristine-command-search-input');
+    expect(searchInput).toHaveStyle('color: var(--ide-text)');
+    expect(searchInput.parentElement).toHaveAttribute('data-slot', 'settings-search-input-wrapper');
+    expect(searchInput.parentElement).toHaveClass('flex h-9 items-center gap-2 px-3');
+    expect(screen.getByTestId('settings-search-icon')).toHaveClass('opacity-100');
+
+    await user.type(searchInput, 'font');
+
+    expect(screen.getByTestId('settings-page-search')).toBeVisible();
+    expect(screen.getByTestId('settings-search-results-editor')).toBeVisible();
+    expect(screen.getByTestId('settings-editor-font-family-combobox')).toBeVisible();
+    expect(screen.getByTestId('settings-editor-font-size-slider')).toBeVisible();
+    expect(screen.queryByTestId('settings-search-empty-state')).not.toBeInTheDocument();
+    expect(screen.getByTestId('settings-search-icon')).toHaveClass('opacity-0');
+
+    await user.clear(searchInput);
+    expect(screen.getByTestId('settings-search-icon')).toHaveClass('opacity-100');
+    await user.type(searchInput, 'zzzzzz');
+
+    expect(screen.getByTestId('settings-search-empty-state')).toBeVisible();
+    expect(screen.getByTestId('settings-search-icon')).toHaveClass('opacity-0');
+
+    await user.click(screen.getByTestId('settings-nav-general'));
+
+    expect(screen.getByTestId('settings-search-input')).toHaveValue('');
+    expect(screen.getByTestId('settings-search-icon')).toHaveClass('opacity-100');
+    expect(screen.getByTestId('settings-nav-general')).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByTestId('settings-page-general')).toBeVisible();
   });
 
   it('shows editor settings plus the unified theme, close-to-tray and floating info window visibility', async () => {
@@ -147,11 +230,15 @@ describe('MenuBar settings', () => {
     await user.click(screen.getByTestId('menu-settings-button'));
 
     expect(await screen.findByTestId('settings-dialog')).toBeVisible();
+    expect(screen.getByTestId('settings-code-viewer-layout-combobox')).toHaveTextContent('Minimal');
+
+    await openSettingsPage(user, 'appearance');
+    expect(screen.getByTestId('settings-theme-combobox')).toHaveTextContent('Dark 2026');
+
+    await openSettingsPage(user, 'editor');
     expect(screen.getByTestId('settings-editor-font-family-combobox')).toHaveTextContent(getEditorFontFamilyLabel('fira-code'));
     expect(screen.queryByTestId('settings-code-layout-margin-slider')).not.toBeInTheDocument();
     expect(screen.getByTestId('settings-editor-font-size-value')).toHaveTextContent('18px');
-    expect(screen.getByTestId('settings-theme-combobox')).toHaveTextContent('Dark 2026');
-    expect(screen.getByTestId('settings-code-viewer-layout-combobox')).toHaveTextContent('Minimal');
     expect(screen.getByTestId('settings-editor-word-wrap-combobox')).toHaveTextContent('Bounded');
     expect(screen.getByTestId('settings-editor-tab-size-combobox')).toHaveTextContent('8 spaces');
     expect(screen.getByTestId('settings-editor-cursor-blinking-combobox')).toHaveTextContent('Solid');
@@ -168,9 +255,12 @@ describe('MenuBar settings', () => {
     expect(screen.getByTestId('settings-editor-inline-git-diff-backgrounds-switch')).toHaveAttribute('data-state', 'unchecked');
     expect(screen.getByTestId('settings-editor-bracket-pair-guides-switch')).toHaveAttribute('data-state', 'unchecked');
     expect(screen.getByTestId('settings-editor-indent-guides-switch')).toHaveAttribute('data-state', 'unchecked');
+
+    await openSettingsPage(user, 'window');
     expect(screen.getByTestId('settings-close-to-tray-switch')).toHaveAttribute('data-state', 'checked');
     expect(screen.getByTestId('settings-floating-info-window-switch')).toHaveAttribute('data-state', 'checked');
 
+    await openSettingsPage(user, 'editor');
     await user.click(screen.getByTestId('settings-editor-font-family-combobox'));
     await user.click(await screen.findByTestId('settings-editor-font-family-option-victor-mono'));
     await user.click(screen.getByTestId('settings-editor-word-wrap-combobox'));
@@ -185,8 +275,6 @@ describe('MenuBar settings', () => {
     await user.click(await screen.findByTestId('settings-editor-line-numbers-option-interval'));
     await user.click(screen.getByTestId('settings-editor-folding-strategy-combobox'));
     await user.click(await screen.findByTestId('settings-editor-folding-strategy-option-indentation'));
-    await user.click(screen.getByTestId('settings-theme-combobox'));
-    await user.click(await screen.findByTestId('settings-theme-option-vscode-2026-light'));
     await user.click(screen.getByTestId('settings-editor-font-ligatures-switch'));
     await user.click(screen.getByTestId('settings-editor-render-control-characters-switch'));
     await user.click(screen.getByTestId('settings-editor-smooth-scrolling-switch'));
@@ -197,14 +285,20 @@ describe('MenuBar settings', () => {
     await user.click(screen.getByTestId('settings-editor-inline-git-diff-backgrounds-switch'));
     await user.click(screen.getByTestId('settings-editor-bracket-pair-guides-switch'));
     await user.click(screen.getByTestId('settings-editor-indent-guides-switch'));
-    await user.click(screen.getByTestId('settings-close-to-tray-switch'));
-    await user.click(screen.getByTestId('settings-floating-info-window-switch'));
 
     expect(screen.getByTestId('settings-editor-font-family-combobox')).toHaveTextContent('Victor Mono');
     expect(screen.getByTestId('settings-editor-word-wrap-combobox')).toHaveTextContent('On');
     expect(screen.getByTestId('settings-editor-tab-size-combobox')).toHaveTextContent('2 spaces');
-    expect(screen.getByTestId('settings-theme-combobox')).toHaveTextContent('Light 2026');
     expect(screen.getByTestId('settings-editor-font-ligatures-switch')).toHaveAttribute('data-state', 'checked');
+
+    await openSettingsPage(user, 'appearance');
+    await user.click(screen.getByTestId('settings-theme-combobox'));
+    await user.click(await screen.findByTestId('settings-theme-option-vscode-2026-light'));
+    expect(screen.getByTestId('settings-theme-combobox')).toHaveTextContent('Light 2026');
+
+    await openSettingsPage(user, 'window');
+    await user.click(screen.getByTestId('settings-close-to-tray-switch'));
+    await user.click(screen.getByTestId('settings-floating-info-window-switch'));
     expect(screen.getByTestId('settings-close-to-tray-switch')).toHaveAttribute('data-state', 'unchecked');
     expect(screen.getByTestId('settings-floating-info-window-switch')).toHaveAttribute('data-state', 'unchecked');
 
@@ -274,6 +368,7 @@ describe('MenuBar settings', () => {
 
     await user.click(screen.getByTestId('menu-settings-button'));
     expect(await screen.findByTestId('settings-dialog')).toBeVisible();
+    await openSettingsPage(user, 'editor');
 
     await user.click(screen.getByTestId('settings-editor-font-family-advanced-button'));
 
@@ -340,6 +435,7 @@ describe('MenuBar settings', () => {
 
     await user.click(screen.getByTestId('menu-settings-button'));
     expect(await screen.findByTestId('settings-dialog')).toBeVisible();
+    await openSettingsPage(user, 'appearance');
 
     await user.click(screen.getByTestId('settings-theme-advanced-button'));
 
@@ -401,8 +497,15 @@ describe('MenuBar settings', () => {
 
     await user.click(screen.getByTestId('menu-settings-button'));
     expect(await screen.findByTestId('settings-dialog')).toBeVisible();
+    await openSettingsPage(user, 'appearance');
 
     await user.click(screen.getByTestId('settings-theme-combobox'));
+
+    const themeSearchInput = screen.getByPlaceholderText('Search UI themes...');
+    expect(themeSearchInput).toHaveAttribute('data-slot', 'command-input');
+    expect(themeSearchInput).toHaveClass('pristine-command-search-input');
+    expect(themeSearchInput).toHaveStyle('color: var(--ide-text)');
+    expect(themeSearchInput.parentElement).toHaveClass('flex h-9 items-center gap-2 border-b px-3');
 
     expect(screen.getByTestId('settings-theme-combobox-popover-surface')).toHaveClass('w-(--radix-popover-trigger-width)');
 
@@ -434,6 +537,7 @@ describe('MenuBar settings', () => {
 
     await user.click(screen.getByTestId('menu-settings-button'));
     expect(await screen.findByTestId('settings-dialog')).toBeVisible();
+    await openSettingsPage(user, 'editor');
 
     await user.click(screen.getByTestId('settings-editor-font-family-combobox'));
 
@@ -468,6 +572,7 @@ describe('MenuBar settings', () => {
 
     await user.click(screen.getByTestId('menu-settings-button'));
     expect(await screen.findByTestId('settings-dialog')).toBeVisible();
+    await openSettingsPage(user, 'appearance');
 
     await user.click(screen.getByTestId('settings-theme-advanced-button'));
     expect(await screen.findByTestId('settings-theme-advanced-dialog')).toBeVisible();
@@ -495,6 +600,7 @@ describe('MenuBar settings', () => {
 
     await user.click(screen.getByTestId('menu-settings-button'));
     expect(await screen.findByTestId('settings-dialog')).toBeVisible();
+    await openSettingsPage(user, 'appearance');
 
     await user.click(screen.getByTestId('settings-theme-advanced-button'));
     expect(await screen.findByTestId('settings-theme-advanced-dialog')).toBeVisible();
@@ -519,6 +625,7 @@ describe('MenuBar settings', () => {
 
     await user.click(screen.getByTestId('menu-settings-button'));
     expect(await screen.findByTestId('settings-dialog')).toBeVisible();
+    await openSettingsPage(user, 'appearance');
 
     await user.click(screen.getByTestId('settings-theme-advanced-button'));
     expect(await screen.findByTestId('settings-theme-advanced-dialog')).toBeVisible();
@@ -539,6 +646,7 @@ describe('MenuBar settings', () => {
 
     await user.click(screen.getByTestId('menu-settings-button'));
     expect(await screen.findByTestId('settings-dialog')).toBeVisible();
+    await openSettingsPage(user, 'editor');
 
     await user.click(screen.getByTestId('settings-editor-font-family-advanced-button'));
     expect(await screen.findByTestId('settings-editor-font-family-advanced-dialog')).toBeVisible();
@@ -892,6 +1000,7 @@ describe('MenuBar settings', () => {
 
     await user.click(screen.getByTestId('menu-settings-button'));
     expect(await screen.findByTestId('settings-dialog')).toBeVisible();
+    await openSettingsPage(user, 'appearance');
 
     await user.click(screen.getByTestId('settings-theme-import-button'));
 
@@ -930,10 +1039,10 @@ describe('MenuBar settings', () => {
     await user.click(screen.getByTestId('menu-settings-button'));
 
     expect(await screen.findByTestId('settings-dialog')).toBeVisible();
+    await openSettingsPage(user, 'editor');
     expect(screen.getByTestId('settings-editor-font-family-combobox')).toHaveTextContent(getEditorFontFamilyLabel('fira-code'));
     expect(screen.queryByTestId('settings-code-layout-margin-slider')).not.toBeInTheDocument();
     expect(screen.getByTestId('settings-editor-font-size-value')).toHaveTextContent('18px');
-    expect(screen.getByTestId('settings-theme-combobox')).toHaveTextContent('Dark 2026');
     expect(screen.getByTestId('settings-editor-word-wrap-combobox')).toHaveTextContent('Bounded');
     expect(screen.getByTestId('settings-editor-tab-size-combobox')).toHaveTextContent('8 spaces');
     expect(screen.getByTestId('settings-editor-cursor-blinking-combobox')).toHaveTextContent('Solid');
@@ -945,6 +1054,11 @@ describe('MenuBar settings', () => {
     expect(screen.getByTestId('settings-editor-smooth-scrolling-switch')).toHaveAttribute('data-state', 'unchecked');
     expect(screen.getByTestId('settings-editor-scroll-beyond-last-line-switch')).toHaveAttribute('data-state', 'checked');
     expect(screen.getByTestId('settings-editor-minimap-switch')).toHaveAttribute('data-state', 'unchecked');
+
+    await openSettingsPage(user, 'appearance');
+    expect(screen.getByTestId('settings-theme-combobox')).toHaveTextContent('Dark 2026');
+
+    await openSettingsPage(user, 'window');
     expect(screen.getByTestId('settings-close-to-tray-switch')).toHaveAttribute('data-state', 'checked');
     expect(screen.getByTestId('settings-floating-info-window-switch')).toHaveAttribute('data-state', 'checked');
 
@@ -975,10 +1089,10 @@ describe('MenuBar settings', () => {
     await user.click(screen.getByTestId('menu-settings-button'));
 
     expect(await screen.findByTestId('settings-dialog')).toBeVisible();
+    await openSettingsPage(user, 'editor');
     expect(screen.getByTestId('settings-editor-font-family-combobox')).toHaveTextContent('JetBrains Mono');
     expect(screen.queryByTestId('settings-code-layout-margin-slider')).not.toBeInTheDocument();
     expect(screen.getByTestId('settings-editor-font-size-value')).toHaveTextContent('12px');
-    expect(screen.getByTestId('settings-theme-combobox')).toHaveTextContent('Light 2026');
     expect(screen.getByTestId('settings-editor-word-wrap-combobox')).toHaveTextContent('Off');
     expect(screen.getByTestId('settings-editor-tab-size-combobox')).toHaveTextContent('4 spaces');
     expect(screen.getByTestId('settings-editor-cursor-blinking-combobox')).toHaveTextContent('Smooth');
@@ -990,6 +1104,11 @@ describe('MenuBar settings', () => {
     expect(screen.getByTestId('settings-editor-smooth-scrolling-switch')).toHaveAttribute('data-state', 'checked');
     expect(screen.getByTestId('settings-editor-scroll-beyond-last-line-switch')).toHaveAttribute('data-state', 'unchecked');
     expect(screen.getByTestId('settings-editor-minimap-switch')).toHaveAttribute('data-state', 'checked');
+
+    await openSettingsPage(user, 'appearance');
+    expect(screen.getByTestId('settings-theme-combobox')).toHaveTextContent('Light 2026');
+
+    await openSettingsPage(user, 'window');
     expect(screen.getByTestId('settings-close-to-tray-switch')).toHaveAttribute('data-state', 'unchecked');
     expect(screen.getByTestId('settings-floating-info-window-switch')).toHaveAttribute('data-state', 'unchecked');
   });
@@ -1000,6 +1119,8 @@ describe('MenuBar settings', () => {
     renderMenuBar();
 
     await user.click(screen.getByTestId('menu-settings-button'));
+    expect(await screen.findByTestId('settings-dialog')).toBeVisible();
+    await openSettingsPage(user, 'editor');
     await user.click(screen.getByTestId('settings-editor-font-family-combobox'));
 
     expect(await screen.findByTestId('settings-editor-font-family-option-liberation-mono')).toHaveTextContent('Liberation Mono');

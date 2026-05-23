@@ -678,3 +678,24 @@
     line-height: 1.5;
   }
 }
+
+.pristine-command-search-input,
+.pristine-settings-search-input {
+  caret-color: var(--ide-text);
+  color: var(--ide-text);
+  -webkit-text-fill-color: var(--ide-text);
+}
+
+.pristine-command-search-input::placeholder,
+.pristine-settings-search-input::placeholder {
+  color: var(--ide-text-muted);
+  -webkit-text-fill-color: var(--ide-text-muted);
+  opacity: 1;
+}
+
+.pristine-command-search-input::-webkit-search-cancel-button,
+.pristine-command-search-input::-webkit-search-decoration,
+.pristine-settings-search-input::-webkit-search-cancel-button,
+.pristine-settings-search-input::-webkit-search-decoration {
+  appearance: none;
+}
