@@ -1,6 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { applySchematicNodePositions, findModulePath, layoutAsicSchematic } from './asicSchematicLayout';
+import {
+  applySchematicNodePositions,
+  findModulePath,
+  getSchematicNodeRect,
+  layoutAsicSchematic,
+  resolveSchematicNodeOverlaps,
+  schematicRectsIntersect,
+} from './asicSchematicLayout';
 import { mockAsicSchematicGraph } from './asicSchematicMockData';
 import type { AsicNetEndpoint, SchematicLayoutResult } from './asicSchematicTypes';
 
@@ -106,6 +113,89 @@ describe('applySchematicNodePositions', () => {
     });
 
     expect(moved.bounds.width).toBeGreaterThan(layout.bounds.width);
+  });
+
+  it('keeps a selected group together while avoiding unselected modules', async () => {
+    const layout = await layoutAsicSchematic(mockAsicSchematicGraph);
+    const selectedNodes = layout.nodes.filter((node) => node.kind === 'module').slice(0, 2);
+    const obstacleNode = layout.nodes.find((node) => node.kind === 'module' && !selectedNodes.some((selectedNode) => selectedNode.id === node.id));
+
+    expect(selectedNodes).toHaveLength(2);
+    expect(obstacleNode).toBeDefined();
+    if (selectedNodes.length < 2 || !obstacleNode) {
+      return;
+    }
+
+    const relativeX = selectedNodes[1]!.x - selectedNodes[0]!.x;
+    const relativeY = selectedNodes[1]!.y - selectedNodes[0]!.y;
+    const resolvedPositions = resolveSchematicNodeOverlaps(layout, {
+      [selectedNodes[0]!.id]: { x: obstacleNode.x, y: obstacleNode.y },
+      [selectedNodes[1]!.id]: { x: obstacleNode.x + relativeX, y: obstacleNode.y + relativeY },
+    }, {
+      selectedNodeIds: selectedNodes.map((node) => node.id),
+    });
+
+    expect(resolvedPositions[selectedNodes[1]!.id]!.x - resolvedPositions[selectedNodes[0]!.id]!.x).toBe(relativeX);
+    expect(resolvedPositions[selectedNodes[1]!.id]!.y - resolvedPositions[selectedNodes[0]!.id]!.y).toBe(relativeY);
+
+    const moved = applySchematicNodePositions(layout, resolvedPositions, {
+      selectedNodeIds: selectedNodes.map((node) => node.id),
+    });
+    const movedSelectedNodes = selectedNodes.map((node) => moved.nodes.find((candidate) => candidate.id === node.id)!);
+    const movedObstacleNode = moved.nodes.find((node) => node.id === obstacleNode.id)!;
+
+    movedSelectedNodes.forEach((node) => {
+      expect(schematicRectsIntersect(getSchematicNodeRect(node), getSchematicNodeRect(movedObstacleNode), 24)).toBe(false);
+    });
+  });
+
+  it('can resolve overlaps while applying positions and rerouting edges', async () => {
+    const layout = await layoutAsicSchematic(mockAsicSchematicGraph);
+    const selectedNode = layout.nodes.find((node) => node.id === 'u_cpu');
+    const obstacleNode = layout.nodes.find((node) => node.kind === 'module' && node.id !== 'u_cpu');
+
+    expect(selectedNode).toBeDefined();
+    expect(obstacleNode).toBeDefined();
+    if (!selectedNode || !obstacleNode) {
+      return;
+    }
+
+    const moved = applySchematicNodePositions(layout, {
+      [selectedNode.id]: { x: obstacleNode.x, y: obstacleNode.y },
+    }, {
+      avoidOverlaps: true,
+      selectedNodeIds: [selectedNode.id],
+    });
+    const movedSelectedNode = moved.nodes.find((node) => node.id === selectedNode.id)!;
+    const movedObstacleNode = moved.nodes.find((node) => node.id === obstacleNode.id)!;
+
+    expect(schematicRectsIntersect(getSchematicNodeRect(movedSelectedNode), getSchematicNodeRect(movedObstacleNode), 24)).toBe(false);
+
+    const connectedEdge = moved.edges.find((edge) => edge.from.instanceId === selectedNode.id || edge.to.instanceId === selectedNode.id);
+    expect(connectedEdge).toBeDefined();
+    if (!connectedEdge) {
+      return;
+    }
+
+    expect(connectedEdge.points[0]).toEqual(getEndpointPoint(moved, connectedEdge.from));
+    expect(connectedEdge.points[connectedEdge.points.length - 1]).toEqual(getEndpointPoint(moved, connectedEdge.to));
+  });
+});
+
+describe('schematicRectsIntersect', () => {
+  it('treats touching edges as non-overlapping without a gap', () => {
+    expect(schematicRectsIntersect(
+      { x: 0, y: 0, width: 100, height: 100 },
+      { x: 100, y: 0, width: 100, height: 100 },
+    )).toBe(false);
+  });
+
+  it('treats touching edges as overlapping when a gap is required', () => {
+    expect(schematicRectsIntersect(
+      { x: 0, y: 0, width: 100, height: 100 },
+      { x: 100, y: 0, width: 100, height: 100 },
+      24,
+    )).toBe(true);
   });
 });
 

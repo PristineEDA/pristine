@@ -41,6 +41,22 @@ export interface LayoutAsicSchematicOptions {
 
 export type SchematicNodePositionOverrides = Record<string, SchematicPoint | undefined>;
 
+export interface SchematicRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface ApplySchematicNodePositionsOptions {
+  avoidOverlaps?: boolean;
+  nodeGap?: number;
+  selectedNodeIds?: readonly string[];
+}
+
+const defaultNodeGap = 24;
+const overlapResolveIterationLimit = 80;
+
 export async function layoutAsicSchematic(
   graph: AsicSchematicGraph,
   moduleId = graph.rootModuleId,
@@ -75,14 +91,22 @@ export function findModulePath(graph: AsicSchematicGraph, targetModuleId: string
 export function applySchematicNodePositions(
   layout: SchematicLayoutResult,
   positions: SchematicNodePositionOverrides,
+  options?: ApplySchematicNodePositionsOptions,
 ): SchematicLayoutResult {
   if (!Object.values(positions).some(Boolean)) {
     return layout;
   }
 
+  const resolvedPositions = options?.avoidOverlaps
+    ? resolveSchematicNodeOverlaps(layout, positions, {
+      nodeGap: options.nodeGap,
+      selectedNodeIds: options.selectedNodeIds,
+    })
+    : positions;
+
   let changed = false;
   const nodes = layout.nodes.map((node) => {
-    const position = positions[node.id];
+    const position = resolvedPositions[node.id];
 
     if (!position || node.kind !== 'module') {
       return node;
@@ -127,6 +151,87 @@ export function applySchematicNodePositions(
     edges,
     bounds: calculateBounds(nodes, edges),
   };
+}
+
+export interface ResolveSchematicNodeOverlapsOptions {
+  nodeGap?: number;
+  selectedNodeIds?: readonly string[];
+}
+
+export function resolveSchematicNodeOverlaps(
+  layout: SchematicLayoutResult,
+  positions: SchematicNodePositionOverrides,
+  options?: ResolveSchematicNodeOverlapsOptions,
+): SchematicNodePositionOverrides {
+  const moduleById = new Map(layout.nodes
+    .filter((node) => node.kind === 'module')
+    .map((node) => [node.id, node]));
+  const selectedNodeIds = new Set(options?.selectedNodeIds?.length
+    ? options.selectedNodeIds.filter((nodeId) => moduleById.has(nodeId))
+    : Object.keys(positions).filter((nodeId) => moduleById.has(nodeId) && positions[nodeId]));
+
+  if (selectedNodeIds.size === 0) {
+    return positions;
+  }
+
+  const nodeGap = options?.nodeGap ?? defaultNodeGap;
+  const resolvedPositions: SchematicNodePositionOverrides = { ...positions };
+
+  selectedNodeIds.forEach((nodeId) => {
+    const node = moduleById.get(nodeId);
+
+    if (node && !resolvedPositions[nodeId]) {
+      resolvedPositions[nodeId] = { x: node.x, y: node.y };
+    }
+  });
+
+  const obstacleRects = layout.nodes
+    .filter((node) => node.kind === 'module' && !selectedNodeIds.has(node.id))
+    .map((node) => getSchematicNodeRectWithPosition(node, resolvedPositions[node.id]));
+
+  if (obstacleRects.length === 0) {
+    return resolvedPositions;
+  }
+
+  const groupNodes = [...selectedNodeIds]
+    .map((nodeId) => moduleById.get(nodeId))
+    .filter((node): node is SchematicNodeLayout => Boolean(node));
+  const groupRects = groupNodes.map((node) => getSchematicNodeRectWithPosition(node, resolvedPositions[node.id]));
+  const shift = getNonOverlappingGroupShift(groupRects, obstacleRects, nodeGap);
+
+  if (shift.x === 0 && shift.y === 0) {
+    return resolvedPositions;
+  }
+
+  selectedNodeIds.forEach((nodeId) => {
+    const node = moduleById.get(nodeId);
+    const position = resolvedPositions[nodeId] ?? (node ? { x: node.x, y: node.y } : { x: 0, y: 0 });
+
+    resolvedPositions[nodeId] = {
+      x: roundLayoutCoordinate(position.x + shift.x),
+      y: roundLayoutCoordinate(position.y + shift.y),
+    };
+  });
+
+  return resolvedPositions;
+}
+
+export function getSchematicNodeRect(node: SchematicNodeLayout): SchematicRect {
+  return {
+    x: node.x,
+    y: node.y,
+    width: node.width,
+    height: node.height,
+  };
+}
+
+export function schematicRectsIntersect(first: SchematicRect, second: SchematicRect, gap = 0) {
+  return !(
+    first.x + first.width + gap <= second.x
+    || second.x + second.width + gap <= first.x
+    || first.y + first.height + gap <= second.y
+    || second.y + second.height + gap <= first.y
+  );
 }
 
 function findModulePathFrom(
@@ -451,6 +556,94 @@ function calculateBounds(
     width: maxX - minX + 96,
     height: maxY - minY + 96,
   };
+}
+
+function getSchematicNodeRectWithPosition(node: SchematicNodeLayout, position?: SchematicPoint): SchematicRect {
+  return {
+    x: position?.x ?? node.x,
+    y: position?.y ?? node.y,
+    width: node.width,
+    height: node.height,
+  };
+}
+
+function getBoundingRect(rects: readonly SchematicRect[]): SchematicRect {
+  if (rects.length === 0) {
+    return { x: 0, y: 0, width: 0, height: 0 };
+  }
+
+  const minX = Math.min(...rects.map((rect) => rect.x));
+  const minY = Math.min(...rects.map((rect) => rect.y));
+  const maxX = Math.max(...rects.map((rect) => rect.x + rect.width));
+  const maxY = Math.max(...rects.map((rect) => rect.y + rect.height));
+
+  return {
+    x: minX,
+    y: minY,
+    width: maxX - minX,
+    height: maxY - minY,
+  };
+}
+
+function getNonOverlappingGroupShift(groupRects: readonly SchematicRect[], obstacleRects: readonly SchematicRect[], nodeGap: number): SchematicPoint {
+  if (!hasAnyOverlap(groupRects, obstacleRects, nodeGap)) {
+    return { x: 0, y: 0 };
+  }
+
+  const groupRect = getBoundingRect(groupRects);
+  const candidates: SchematicPoint[] = [];
+
+  obstacleRects.forEach((obstacleRect) => {
+    candidates.push(
+      { x: obstacleRect.x + obstacleRect.width + nodeGap - groupRect.x, y: 0 },
+      { x: obstacleRect.x - nodeGap - (groupRect.x + groupRect.width), y: 0 },
+      { x: 0, y: obstacleRect.y + obstacleRect.height + nodeGap - groupRect.y },
+      { x: 0, y: obstacleRect.y - nodeGap - (groupRect.y + groupRect.height) },
+    );
+  });
+
+  const searchStep = Math.max(72, nodeGap * 3);
+  for (let radius = 1; radius <= overlapResolveIterationLimit; radius += 1) {
+    candidates.push(
+      { x: searchStep * radius, y: 0 },
+      { x: -searchStep * radius, y: 0 },
+      { x: 0, y: searchStep * radius },
+      { x: 0, y: -searchStep * radius },
+      { x: searchStep * radius, y: searchStep * radius },
+      { x: -searchStep * radius, y: searchStep * radius },
+      { x: searchStep * radius, y: -searchStep * radius },
+      { x: -searchStep * radius, y: -searchStep * radius },
+    );
+  }
+
+  const validCandidates = candidates
+    .map((candidate) => ({ x: roundLayoutCoordinate(candidate.x), y: roundLayoutCoordinate(candidate.y) }))
+    .filter((candidate, index, allCandidates) => allCandidates.findIndex((other) => other.x === candidate.x && other.y === candidate.y) === index)
+    .filter((candidate) => !hasAnyOverlap(shiftRects(groupRects, candidate), obstacleRects, nodeGap));
+
+  validCandidates.sort((first, second) => {
+    const distanceDelta = Math.hypot(first.x, first.y) - Math.hypot(second.x, second.y);
+
+    if (distanceDelta !== 0) {
+      return distanceDelta;
+    }
+
+    return Math.abs(first.y) - Math.abs(second.y) || Math.abs(first.x) - Math.abs(second.x);
+  });
+
+  return validCandidates[0] ?? { x: 0, y: 0 };
+}
+
+function hasAnyOverlap(groupRects: readonly SchematicRect[], obstacleRects: readonly SchematicRect[], nodeGap: number) {
+  return groupRects.some((groupRect) => obstacleRects.some((obstacleRect) => schematicRectsIntersect(groupRect, obstacleRect, nodeGap)));
+}
+
+function shiftRects(rects: readonly SchematicRect[], shift: SchematicPoint) {
+  return rects.map((rect) => ({
+    ...rect,
+    x: rect.x + shift.x,
+    y: rect.y + shift.y,
+  }));
 }
 
 function roundLayoutCoordinate(value: number) {

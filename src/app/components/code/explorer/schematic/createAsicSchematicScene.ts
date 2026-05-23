@@ -3,36 +3,129 @@ import { Container, Graphics, Text } from 'pixi.js';
 import type { AsicSchematicPalette } from './asicSchematicPalette';
 import type { SchematicEdgeLayout, SchematicLayoutResult, SchematicNodeLayout } from './asicSchematicTypes';
 
+export type SchematicLayerName = 'background' | 'wire' | 'component' | 'interaction';
+
+export interface SchematicWorldRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface AsicSchematicScene {
+  world: Container;
+  layers: Record<SchematicLayerName, Container>;
+  nodeContainers: Map<string, Container>;
+  updateSelection: (selectedNodeIds: readonly string[], positions?: Record<string, { x: number; y: number } | undefined>) => void;
+  updateMarquee: (rect: SchematicWorldRect | null) => void;
+  updateWires: (edges: readonly SchematicEdgeLayout[]) => void;
+}
+
 export interface AsicSchematicSceneOptions {
   layout: SchematicLayoutResult;
   palette: AsicSchematicPalette;
-  selectedNodeId?: string | null;
+  selectedNodeIds?: readonly string[];
   onNodeContainerCreated?: (node: SchematicNodeLayout, container: Container) => void;
-  onNodeSelect?: (nodeId: string | null) => void;
   onModuleOpen?: (moduleId: string) => void;
 }
 
 export function createAsicSchematicScene({
   layout,
   palette,
-  selectedNodeId,
+  selectedNodeIds = [],
   onNodeContainerCreated,
-  onNodeSelect,
   onModuleOpen,
-}: AsicSchematicSceneOptions) {
-  const world = new Container({ label: `schematic-world:${layout.module.id}`, sortableChildren: true });
-  const edgeLayer = new Container({ label: 'schematic-edges' });
-  const nodeLayer = new Container({ label: 'schematic-nodes', sortableChildren: true });
+}: AsicSchematicSceneOptions): AsicSchematicScene {
+  const world = new Container({ label: `schematic-world:${layout.module.id}`, sortableChildren: true, isRenderGroup: true });
+  const backgroundLayer = new Container({ label: 'schematic-layer-background', zIndex: 0 });
+  const wireLayer = new Container({ label: 'schematic-layer-wire', zIndex: 10 });
+  const componentLayer = new Container({ label: 'schematic-layer-component', zIndex: 20, sortableChildren: true });
+  const interactionLayer = new Container({ label: 'schematic-layer-interaction', zIndex: 30 });
+  const selectionOverlay = new Graphics({ label: 'schematic-selection-overlay' });
+  const marqueeOverlay = new Graphics({ label: 'schematic-marquee-overlay' });
+  const nodeContainers = new Map<string, Container>();
+  const nodeMap = new Map(layout.nodes.map((node) => [node.id, node]));
 
-  world.addChild(drawGrid(layout, palette), edgeLayer, nodeLayer);
-  layout.edges.forEach((edge) => edgeLayer.addChild(drawEdge(edge, palette)));
+  world.addChild(backgroundLayer, wireLayer, componentLayer, interactionLayer);
+  backgroundLayer.addChild(drawGrid(layout, palette));
+  interactionLayer.addChild(selectionOverlay, marqueeOverlay);
   layout.nodes.forEach((node) => {
-    const container = drawNode({ node, palette, selected: node.id === selectedNodeId, onNodeSelect, onModuleOpen });
+    const container = drawNode({ node, palette, onModuleOpen });
+    nodeContainers.set(node.id, container);
     onNodeContainerCreated?.(node, container);
-    nodeLayer.addChild(container);
+    componentLayer.addChild(container);
   });
+  drawWireLayer(wireLayer, layout.edges, palette);
 
-  return world;
+  const updateSelection = (nextSelectedNodeIds: readonly string[], positions?: Record<string, { x: number; y: number } | undefined>) => {
+    drawSelectionOverlay(selectionOverlay, nextSelectedNodeIds, nodeMap, palette, positions);
+  };
+  const updateMarquee = (rect: SchematicWorldRect | null) => {
+    drawMarqueeOverlay(marqueeOverlay, rect, palette);
+  };
+  const updateWires = (edges: readonly SchematicEdgeLayout[]) => {
+    drawWireLayer(wireLayer, edges, palette);
+  };
+
+  updateSelection(selectedNodeIds);
+
+  return {
+    world,
+    layers: {
+      background: backgroundLayer,
+      wire: wireLayer,
+      component: componentLayer,
+      interaction: interactionLayer,
+    },
+    nodeContainers,
+    updateSelection,
+    updateMarquee,
+    updateWires,
+  };
+}
+
+function drawWireLayer(layer: Container, edges: readonly SchematicEdgeLayout[], palette: AsicSchematicPalette) {
+  layer.removeChildren().forEach((child) => child.destroy({ children: true }));
+  edges.forEach((edge) => layer.addChild(drawEdge(edge, palette)));
+}
+
+function drawSelectionOverlay(
+  graphics: Graphics,
+  selectedNodeIds: readonly string[],
+  nodeMap: Map<string, SchematicNodeLayout>,
+  palette: AsicSchematicPalette,
+  positions?: Record<string, { x: number; y: number } | undefined>,
+) {
+  graphics.clear();
+
+  selectedNodeIds.forEach((nodeId) => {
+    const node = nodeMap.get(nodeId);
+
+    if (!node || node.kind !== 'module') {
+      return;
+    }
+
+    const position = positions?.[nodeId];
+    const x = position?.x ?? node.x;
+    const y = position?.y ?? node.y;
+
+    graphics
+      .roundRect(x - 5, y - 5, node.width + 10, node.height + 10, 10)
+      .stroke({ color: palette.selected, alpha: 0.96, width: 2.2 });
+  });
+}
+
+function drawMarqueeOverlay(graphics: Graphics, rect: SchematicWorldRect | null, palette: AsicSchematicPalette) {
+  graphics.clear();
+
+  if (!rect || rect.width < 1 || rect.height < 1) {
+    return;
+  }
+
+  graphics
+    .rect(rect.x, rect.y, rect.width, rect.height)
+    .fill({ color: palette.selected, alpha: 0.08 })
+    .stroke({ color: palette.selected, alpha: 0.8, width: 1.4, pixelLine: true });
 }
 
 function drawGrid(layout: SchematicLayoutResult, palette: AsicSchematicPalette) {
@@ -78,24 +171,20 @@ function drawEdge(edge: SchematicEdgeLayout, palette: AsicSchematicPalette) {
 function drawNode({
   node,
   palette,
-  selected,
-  onNodeSelect,
   onModuleOpen,
 }: {
   node: SchematicNodeLayout;
   palette: AsicSchematicPalette;
-  selected: boolean;
-  onNodeSelect?: (nodeId: string | null) => void;
   onModuleOpen?: (moduleId: string) => void;
 }) {
   const container = new Container({ label: `schematic-node:${node.id}`, x: node.x, y: node.y });
   const fill = node.kind === 'port' ? palette.panelMuted : palette.panel;
-  const border = selected ? palette.selected : node.kind === 'port' ? palette.textMuted : palette.border;
+  const border = node.kind === 'port' ? palette.textMuted : palette.border;
 
   container.addChild(new Graphics({ label: `schematic-node-body:${node.id}` })
     .roundRect(0, 0, node.width, node.height, node.kind === 'port' ? 7 : 8)
     .fill({ color: fill, alpha: node.kind === 'port' ? 0.88 : 0.96 })
-    .stroke({ color: border, alpha: selected ? 0.96 : 0.72, width: selected ? 2.4 : 1.2 }));
+    .stroke({ color: border, alpha: 0.72, width: 1.2 }));
   container.addChild(createText(node.label, palette.text, node.kind === 'port' ? 11 : 12, '600', node.kind === 'port' ? 10 : 12, node.kind === 'port' ? 8 : 10));
   container.addChild(createText(node.subtitle, palette.textMuted, 10, '400', node.kind === 'port' ? 10 : 12, node.kind === 'port' ? 21 : 28));
 
@@ -111,8 +200,6 @@ function drawNode({
 
   container.eventMode = 'static';
   container.cursor = node.kind === 'module' ? 'grab' : 'default';
-  container.on('pointertap', () => onNodeSelect?.(node.id));
-  container.on('rightclick', () => onNodeSelect?.(null));
   container.on('dblclick', () => {
     if (node.canDrillDown && node.moduleId) {
       onModuleOpen?.(node.moduleId);

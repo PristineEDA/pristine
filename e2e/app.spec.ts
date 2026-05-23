@@ -4932,7 +4932,7 @@ test('terminal tab creates a real shell session and shows command output', async
   await app.close();
 });
 
-test('asic schematic bottom panel renders a Pixi canvas with zoom and pan', async () => {
+test('asic schematic bottom panel renders Pixi layers with selection and hierarchy navigation', async () => {
   const { app, window } = await launchApp();
 
   await openBottomTerminal(window);
@@ -4952,6 +4952,8 @@ test('asic schematic bottom panel renders a Pixi canvas with zoom and pan', asyn
 
   const canvasHost = window.getByTestId('asic-schematic-canvas');
   await expect(canvasHost).toHaveAttribute('data-ticker-active', 'false');
+  await expect(canvasHost).toHaveAttribute('data-layer-count', '4');
+  await expect(canvasHost).toHaveAttribute('data-layer-names', 'background,wire,component,interaction');
   await expect.poll(async () => Number(await canvasHost.getAttribute('data-render-count') ?? '0'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(0);
@@ -4972,6 +4974,73 @@ test('asic schematic bottom panel renders a Pixi canvas with zoom and pan', asyn
     x: Number(await canvasHost.getAttribute('data-first-module-center-x') ?? '0'),
     y: Number(await canvasHost.getAttribute('data-first-module-center-y') ?? '0'),
   });
+  const readSecondModule = async () => ({
+    id: await canvasHost.getAttribute('data-second-module-id'),
+    x: Number(await canvasHost.getAttribute('data-second-module-center-x') ?? '0'),
+    y: Number(await canvasHost.getAttribute('data-second-module-center-y') ?? '0'),
+  });
+  const readDrillableModule = async () => ({
+    id: await canvasHost.getAttribute('data-drillable-module-id'),
+    targetId: await canvasHost.getAttribute('data-drillable-module-target-id'),
+    x: Number(await canvasHost.getAttribute('data-drillable-module-center-x') ?? '0'),
+    y: Number(await canvasHost.getAttribute('data-drillable-module-center-y') ?? '0'),
+  });
+  const readModuleSnapshot = async () => JSON.parse(await canvasHost.getAttribute('data-module-node-snapshot') ?? '[]') as Array<{
+    id: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    centerX: number;
+    centerY: number;
+    canDrillDown: boolean;
+  }>;
+  const worldToScreen = async (point: { x: number; y: number }) => {
+    const box = await canvas.boundingBox();
+    const currentCamera = await readCamera();
+
+    expect(box).not.toBeNull();
+    if (!box) {
+      return { x: 0, y: 0 };
+    }
+
+    return {
+      x: box.x + currentCamera.x + point.x * currentCamera.zoom,
+      y: box.y + currentCamera.y + point.y * currentCamera.zoom,
+    };
+  };
+  const clickModule = async (module: { x: number; y: number }, ctrlKey = false) => {
+    const point = await worldToScreen(module);
+
+    if (ctrlKey) {
+      await window.keyboard.down('Control');
+    }
+    await window.mouse.click(point.x, point.y);
+    if (ctrlKey) {
+      await window.keyboard.up('Control');
+    }
+  };
+  const dragWorldRect = async (from: { x: number; y: number }, to: { x: number; y: number }, ctrlKey = false) => {
+    const fromPoint = await worldToScreen(from);
+    const toPoint = await worldToScreen(to);
+
+    if (ctrlKey) {
+      await window.keyboard.down('Control');
+    }
+    await window.mouse.move(fromPoint.x, fromPoint.y);
+    await window.mouse.down();
+    await window.mouse.move(toPoint.x, toPoint.y, { steps: 5 });
+    await window.mouse.up();
+    if (ctrlKey) {
+      await window.keyboard.up('Control');
+    }
+  };
+  const modulesOverlap = (first: { x: number; y: number; width: number; height: number }, second: { x: number; y: number; width: number; height: number }, gap = 24) => !(
+    first.x + first.width + gap <= second.x
+    || second.x + second.width + gap <= first.x
+    || first.y + first.height + gap <= second.y
+    || second.y + second.height + gap <= first.y
+  );
 
   const idleRenderCount = Number(await canvasHost.getAttribute('data-render-count') ?? '0');
   await window.waitForTimeout(400);
@@ -5013,35 +5082,111 @@ test('asic schematic bottom panel renders a Pixi canvas with zoom and pan', asyn
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(renderCountBeforeFit);
 
-  const moduleBeforeDrag = await readFirstModule();
-  expect(moduleBeforeDrag.id).not.toBeNull();
-  const dragCamera = await readCamera();
-  const dragBox = await canvas.boundingBox();
-  expect(dragBox).not.toBeNull();
+  const firstModule = await readFirstModule();
+  const secondModule = await readSecondModule();
+  expect(firstModule.id).not.toBeNull();
+  expect(secondModule.id).not.toBeNull();
+
+  await clickModule(firstModule);
+  await expect(panel).toHaveAttribute('data-selected-node-count', '1');
+  await expect(panel).toHaveAttribute('data-selected-node-ids', firstModule.id ?? '');
+
+  await clickModule(secondModule, true);
+  await expect.poll(async () => (await panel.getAttribute('data-selected-node-ids') ?? '').split(',').filter(Boolean).sort(), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toEqual([firstModule.id, secondModule.id].filter(Boolean).sort());
+  await expect(panel).toHaveAttribute('data-selected-node-count', '2');
+
+  await clickModule(firstModule, true);
+  await expect(panel).toHaveAttribute('data-selected-node-count', '1');
+  await expect(panel).toHaveAttribute('data-selected-node-ids', secondModule.id ?? '');
+
+  const snapshotBeforeMarquee = await readModuleSnapshot();
+  const firstRect = snapshotBeforeMarquee.find((node) => node.id === firstModule.id);
+  const secondRect = snapshotBeforeMarquee.find((node) => node.id === secondModule.id);
+  expect(firstRect).toBeDefined();
+  expect(secondRect).toBeDefined();
+  if (!firstRect || !secondRect) {
+    throw new Error('Expected two schematic modules for marquee selection.');
+  }
+  const marqueeRect = {
+    x: firstRect.x - 8,
+    y: firstRect.y - 8,
+    width: firstRect.width + 16,
+    height: firstRect.height + 16,
+  };
+
+  await dragWorldRect({ x: marqueeRect.x, y: marqueeRect.y }, { x: marqueeRect.x + marqueeRect.width, y: marqueeRect.y + marqueeRect.height });
+  await expect(panel).toHaveAttribute('data-selected-node-count', '1');
+  await expect(panel).toHaveAttribute('data-selected-node-ids', firstModule.id ?? '');
+  await expect(canvasHost).toHaveAttribute('data-marquee-active', 'false');
+
+  await dragWorldRect({ x: marqueeRect.x, y: marqueeRect.y }, { x: marqueeRect.x + marqueeRect.width, y: marqueeRect.y + marqueeRect.height }, true);
+  await expect(panel).toHaveAttribute('data-selected-node-count', '0');
+
+  await clickModule(firstModule);
+  await clickModule(secondModule, true);
+  await expect(panel).toHaveAttribute('data-selected-node-count', '2');
+
+  const selectedNodeIds = [firstModule.id, secondModule.id].filter((nodeId): nodeId is string => Boolean(nodeId)).sort();
+  const snapshotBeforeDrag = await readModuleSnapshot();
+  const dragSource = snapshotBeforeDrag.find((node) => node.id === firstModule.id);
+  const dragObstacle = snapshotBeforeDrag.find((node) => !selectedNodeIds.includes(node.id));
+  expect(dragSource).toBeDefined();
+  expect(dragObstacle).toBeDefined();
+  if (!dragSource || !dragObstacle) {
+    throw new Error('Expected selected and unselected modules for group drag.');
+  }
   const edgeCountBeforeDrag = await panel.getAttribute('data-edge-count');
   const renderCountBeforeDrag = Number(await canvasHost.getAttribute('data-render-count') ?? '0');
 
-  if (dragBox) {
-    const centerX = dragBox.x + dragCamera.x + moduleBeforeDrag.x * dragCamera.zoom;
-    const centerY = dragBox.y + dragCamera.y + moduleBeforeDrag.y * dragCamera.zoom;
-    await window.mouse.move(centerX, centerY);
-    await window.mouse.down();
-    await window.mouse.move(centerX + 96, centerY + 40, { steps: 4 });
-    await window.mouse.up();
-  }
+  await dragWorldRect(
+    { x: dragSource.centerX, y: dragSource.centerY },
+    { x: dragObstacle.centerX, y: dragObstacle.centerY },
+  );
 
-  await expect(canvasHost).toHaveAttribute('data-last-drag-node-id', moduleBeforeDrag.id ?? '');
-  await expect.poll(async () => Number(await canvasHost.getAttribute('data-last-drag-node-x') ?? '0'), {
+  await expect(canvasHost).toHaveAttribute('data-last-drag-node-id', selectedNodeIds[0] ?? '');
+  await expect.poll(async () => (await canvasHost.getAttribute('data-last-drag-node-ids') ?? '').split(',').filter(Boolean).sort(), {
     timeout: UI_READY_TIMEOUT_MS,
-  }).toBeGreaterThan(moduleBeforeDrag.x);
+  }).toEqual(selectedNodeIds);
+  await expect.poll(async () => {
+    const lastX = Number(await canvasHost.getAttribute('data-last-drag-node-x') ?? '0');
+    const lastY = Number(await canvasHost.getAttribute('data-last-drag-node-y') ?? '0');
+
+    return lastX !== dragSource.x || lastY !== dragSource.y;
+  }, {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBe(true);
   await expect.poll(async () => Number(await canvasHost.getAttribute('data-render-count') ?? '0'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(renderCountBeforeDrag);
   await expect(panel).toHaveAttribute('data-edge-count', edgeCountBeforeDrag ?? '');
-  await expect.poll(async () => Number(await canvasHost.getAttribute('data-first-module-center-x') ?? '0'), {
-    timeout: UI_READY_TIMEOUT_MS,
-  }).toBeGreaterThan(moduleBeforeDrag.x);
+  await expect.poll(async () => {
+    const snapshot = await readModuleSnapshot();
+    const movedSelectedNodes = snapshot.filter((node) => selectedNodeIds.includes(node.id));
+    const obstacleNodes = snapshot.filter((node) => !selectedNodeIds.includes(node.id));
 
+    return movedSelectedNodes.every((selectedNode) => obstacleNodes.every((obstacleNode) => !modulesOverlap(selectedNode, obstacleNode))) ? 'clear' : 'overlap';
+  }, {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBe('clear');
+
+  const drillableModule = await readDrillableModule();
+  expect(drillableModule.id).not.toBeNull();
+  expect(drillableModule.targetId).not.toBeNull();
+  const drillPoint = await worldToScreen(drillableModule);
+  await window.mouse.dblclick(drillPoint.x, drillPoint.y);
+  await expect(panel).toHaveAttribute('data-module-id', drillableModule.targetId ?? '');
+
+  await window.getByLabel('Parent module').click();
+  await expect(panel).toHaveAttribute('data-module-id', 'soc_top');
+  await window.getByLabel('Next child module').click();
+  await expect(panel).toHaveAttribute('data-module-id', drillableModule.targetId ?? '');
+
+  await expect(panel).toHaveAttribute('data-ready', 'true');
+  await expect.poll(async () => Number(await canvasHost.getAttribute('data-render-count') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
   const postDragIdleRenderCount = Number(await canvasHost.getAttribute('data-render-count') ?? '0');
   await window.waitForTimeout(400);
   expect(Number(await canvasHost.getAttribute('data-render-count') ?? '0')).toBe(postDragIdleRenderCount);

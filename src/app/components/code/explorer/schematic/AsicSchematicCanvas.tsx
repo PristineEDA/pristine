@@ -1,9 +1,10 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import { Application, Container } from 'pixi.js';
+import { Application } from 'pixi.js';
 
 import { readAsicSchematicPalette } from './asicSchematicPalette';
-import { createAsicSchematicScene } from './createAsicSchematicScene';
-import type { SchematicLayoutBounds, SchematicLayoutResult, SchematicNodeLayout, SchematicPoint } from './asicSchematicTypes';
+import { createAsicSchematicScene, type AsicSchematicScene, type SchematicWorldRect } from './createAsicSchematicScene';
+import { resolveSchematicNodeOverlaps, type SchematicNodePositionOverrides } from './asicSchematicLayout';
+import type { SchematicLayoutBounds, SchematicLayoutResult, SchematicNodeLayout } from './asicSchematicTypes';
 
 type PixiRendererPreference = 'webgpu' | 'webgl';
 type PixiRendererStatus = PixiRendererPreference | 'error' | 'initializing';
@@ -21,18 +22,21 @@ interface ScreenPoint {
 
 type DragState =
   | {
-    mode: 'pan';
+    mode: 'marquee';
     pointerId: number;
     startClient: ScreenPoint;
-    cameraStart: Pick<CameraState, 'x' | 'y'>;
+    additive: boolean;
+    moved: boolean;
+    currentRect: SchematicWorldRect | null;
   }
   | {
     mode: 'node';
     pointerId: number;
-    nodeId: string;
+    nodeIds: string[];
     startClient: ScreenPoint;
-    nodeStart: ScreenPoint;
-    currentPosition: ScreenPoint;
+    nodeStarts: SchematicNodePositionOverrides;
+    currentPositions: SchematicNodePositionOverrides;
+    additive: boolean;
     moved: boolean;
   };
 
@@ -43,12 +47,12 @@ export interface AsicSchematicCanvasHandle {
 
 interface AsicSchematicCanvasProps {
   layout: SchematicLayoutResult;
-  selectedNodeId: string | null;
+  selectedNodeIds: readonly string[];
   themeKey: string;
   onCameraChange?: (camera: CameraState) => void;
   onModuleOpen?: (moduleId: string) => void;
-  onNodeSelect?: (nodeId: string | null) => void;
-  onNodePositionChange?: (nodeId: string, position: SchematicPoint) => void;
+  onNodeSelectionChange?: (nodeIds: string[]) => void;
+  onNodePositionsChange?: (positions: SchematicNodePositionOverrides, selectedNodeIds: readonly string[]) => void;
   onRendererChange?: (renderer: PixiRendererStatus) => void;
 }
 
@@ -60,35 +64,55 @@ const defaultCamera: CameraState = { x: 24, y: 24, zoom: 1 };
 
 export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSchematicCanvasProps>(function AsicSchematicCanvas({
   layout,
-  selectedNodeId,
+  selectedNodeIds,
   themeKey,
   onCameraChange,
   onModuleOpen,
-  onNodeSelect,
-  onNodePositionChange,
+  onNodeSelectionChange,
+  onNodePositionsChange,
   onRendererChange,
 }, ref) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const appRef = useRef<Application | null>(null);
-  const worldRef = useRef<Container | null>(null);
-  const nodeContainersRef = useRef<Map<string, Container>>(new Map());
+  const sceneRef = useRef<AsicSchematicScene | null>(null);
   const interactionCleanupRef = useRef<(() => void) | null>(null);
   const renderFrameRef = useRef<number | null>(null);
   const renderCountRef = useRef(0);
   const initializedRef = useRef(false);
   const layoutRef = useRef(layout);
-  const onNodePositionChangeRef = useRef(onNodePositionChange);
+  const selectedNodeIdsRef = useRef(selectedNodeIds);
+  const onModuleOpenRef = useRef(onModuleOpen);
+  const onNodeSelectionChangeRef = useRef(onNodeSelectionChange);
+  const onNodePositionsChangeRef = useRef(onNodePositionsChange);
   const cameraRef = useRef<CameraState>(defaultCamera);
   const [renderer, setRenderer] = useState<PixiRendererStatus>('initializing');
   const [error, setError] = useState<string | null>(null);
   const [camera, setCamera] = useState(defaultCamera);
   const [tickerActive, setTickerActive] = useState(false);
+  const [layerNames, setLayerNames] = useState<string[]>([]);
 
   layoutRef.current = layout;
-  onNodePositionChangeRef.current = onNodePositionChange;
+  selectedNodeIdsRef.current = selectedNodeIds;
+  onModuleOpenRef.current = onModuleOpen;
+  onNodeSelectionChangeRef.current = onNodeSelectionChange;
+  onNodePositionsChangeRef.current = onNodePositionsChange;
 
   const moduleId = layout.module.id;
-  const firstDraggableNode = useMemo(() => layout.nodes.find((node) => node.kind === 'module') ?? null, [layout]);
+  const moduleNodes = useMemo(() => layout.nodes.filter((node) => node.kind === 'module'), [layout]);
+  const firstDraggableNode = moduleNodes[0] ?? null;
+  const secondDraggableNode = moduleNodes[1] ?? null;
+  const firstDrillableNode = useMemo(() => moduleNodes.find((node) => node.canDrillDown && node.moduleId) ?? null, [moduleNodes]);
+  const moduleNodeSnapshot = useMemo(() => JSON.stringify(moduleNodes.map((node) => ({
+    id: node.id,
+    x: roundLayoutCoordinate(node.x),
+    y: roundLayoutCoordinate(node.y),
+    width: roundLayoutCoordinate(node.width),
+    height: roundLayoutCoordinate(node.height),
+    centerX: roundLayoutCoordinate(node.x + node.width / 2),
+    centerY: roundLayoutCoordinate(node.y + node.height / 2),
+    canDrillDown: node.canDrillDown,
+  }))), [moduleNodes]);
+  const selectedNodeIdsKey = selectedNodeIds.join(',');
 
   useImperativeHandle(ref, () => ({
     fitToView,
@@ -148,7 +172,7 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
       cancelQueuedRender();
       appRef.current?.destroy({ removeView: true, releaseGlobalResources: true }, { children: true });
       appRef.current = null;
-      worldRef.current = null;
+      sceneRef.current = null;
     };
   }, []);
 
@@ -159,7 +183,12 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
   useEffect(() => {
     drawCurrentScene();
     applyCamera();
-  }, [layout, selectedNodeId, themeKey]);
+  }, [layout, themeKey]);
+
+  useEffect(() => {
+    sceneRef.current?.updateSelection(selectedNodeIds);
+    requestRender();
+  }, [selectedNodeIdsKey]);
 
   useEffect(() => {
     fitToView();
@@ -172,27 +201,21 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
       return;
     }
 
-    const previousWorld = worldRef.current;
-    if (previousWorld) {
-      app.stage.removeChild(previousWorld);
-      previousWorld.destroy({ children: true });
+    const previousScene = sceneRef.current;
+    if (previousScene) {
+      app.stage.removeChild(previousScene.world);
+      previousScene.world.destroy({ children: true });
     }
 
-    nodeContainersRef.current.clear();
-    const world = createAsicSchematicScene({
+    const scene = createAsicSchematicScene({
       layout,
       palette: readAsicSchematicPalette(),
-      selectedNodeId,
-      onNodeContainerCreated: (node, container) => {
-        if (node.kind === 'module') {
-          nodeContainersRef.current.set(node.id, container);
-        }
-      },
+      selectedNodeIds,
       onModuleOpen,
-      onNodeSelect,
     });
-    worldRef.current = world;
-    app.stage.addChild(world);
+    sceneRef.current = scene;
+    setLayerNames(Object.keys(scene.layers));
+    app.stage.addChild(scene.world);
     requestRender();
   }
 
@@ -243,23 +266,38 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
       const node = findDraggableNodeAt(clientPoint, canvas);
 
       if (node) {
+        const selectedSet = new Set(selectedNodeIdsRef.current);
+        const additive = event.ctrlKey || event.metaKey;
+        const isSelectedNode = selectedSet.has(node.id);
+        const nodeIds = selectedSet.has(node.id)
+          ? selectedNodeIdsRef.current.filter((nodeId) => getModuleNodeById(nodeId))
+          : [node.id];
+
+        if (!isSelectedNode && !additive) {
+          commitSelection([node.id]);
+        }
+
         dragState = {
           mode: 'node',
           pointerId: event.pointerId,
-          nodeId: node.id,
+          nodeIds,
           startClient: clientPoint,
-          nodeStart: { x: node.x, y: node.y },
-          currentPosition: { x: node.x, y: node.y },
+          nodeStarts: getNodeStartPositions(nodeIds),
+          currentPositions: getNodeStartPositions(nodeIds),
+          additive,
           moved: false,
         };
         canvas.style.cursor = 'grabbing';
       } else {
         dragState = {
-          mode: 'pan',
+          mode: 'marquee',
           pointerId: event.pointerId,
           startClient: clientPoint,
-          cameraStart: { x: cameraRef.current.x, y: cameraRef.current.y },
+          additive: event.ctrlKey || event.metaKey,
+          moved: false,
+          currentRect: null,
         };
+        hostRef.current?.setAttribute('data-marquee-active', 'true');
       }
 
       canvas.setPointerCapture(event.pointerId);
@@ -282,38 +320,69 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
           return;
         }
 
-        const nextPosition = {
-          x: roundLayoutCoordinate(dragState.nodeStart.x + delta.x / cameraRef.current.zoom),
-          y: roundLayoutCoordinate(dragState.nodeStart.y + delta.y / cameraRef.current.zoom),
-        };
-        const container = nodeContainersRef.current.get(dragState.nodeId);
+        const nextPositions = resolveSchematicNodeOverlaps(
+          layoutRef.current,
+          getDraggedNodePositions(dragState.nodeStarts, delta),
+          { selectedNodeIds: dragState.nodeIds },
+        );
 
         dragState = {
           ...dragState,
           moved: true,
-          currentPosition: nextPosition,
+          currentPositions: nextPositions,
         };
-        container?.position.set(nextPosition.x, nextPosition.y);
-        setActiveDragDataAttributes(dragState.nodeId, nextPosition);
+
+        Object.entries(nextPositions).forEach(([nodeId, position]) => {
+          if (!position) {
+            return;
+          }
+
+          sceneRef.current?.nodeContainers.get(nodeId)?.position.set(position.x, position.y);
+        });
+        sceneRef.current?.updateSelection(dragState.nodeIds, nextPositions);
+        setActiveDragDataAttributes(dragState.nodeIds, nextPositions);
         requestRender();
         return;
       }
 
-      setCameraState({
-        ...cameraRef.current,
-        x: dragState.cameraStart.x + delta.x,
-        y: dragState.cameraStart.y + delta.y,
-      });
+      const moved = dragState.moved || Math.hypot(delta.x, delta.y) >= dragThreshold;
+
+      if (!moved) {
+        return;
+      }
+
+      const rect = getWorldRectFromClientPoints(dragState.startClient, { x: event.clientX, y: event.clientY }, canvas);
+
+      dragState = {
+        ...dragState,
+        moved: true,
+        currentRect: rect,
+      };
+      sceneRef.current?.updateMarquee(rect);
+      requestRender();
     };
 
     const stopDragging = (event: PointerEvent) => {
       if (dragState?.mode === 'node') {
         if (dragState.moved) {
-          onNodePositionChangeRef.current?.(dragState.nodeId, dragState.currentPosition);
-          setLastDragDataAttributes(dragState.nodeId, dragState.currentPosition);
+          onNodePositionsChangeRef.current?.(dragState.currentPositions, dragState.nodeIds);
+          setLastDragDataAttributes(dragState.nodeIds, dragState.currentPositions);
+        } else {
+          applyClickSelection(dragState.nodeIds[0] ?? null, dragState.additive);
         }
         clearActiveDragDataAttributes();
         canvas.style.cursor = '';
+      }
+
+      if (dragState?.mode === 'marquee') {
+        if (dragState.moved && dragState.currentRect) {
+          applyMarqueeSelection(dragState.currentRect, dragState.additive);
+        } else if (!dragState.additive) {
+          commitSelection([]);
+        }
+
+        sceneRef.current?.updateMarquee(null);
+        hostRef.current?.setAttribute('data-marquee-active', 'false');
       }
 
       dragState = null;
@@ -322,11 +391,23 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
       }
     };
 
+    const handleDoubleClick = (event: MouseEvent) => {
+      const node = findDraggableNodeAt({ x: event.clientX, y: event.clientY }, canvas);
+
+      if (!node?.canDrillDown || !node.moduleId) {
+        return;
+      }
+
+      event.preventDefault();
+      onModuleOpenRef.current?.(node.moduleId);
+    };
+
     canvas.addEventListener('wheel', handleWheel, { passive: false });
     canvas.addEventListener('pointerdown', handlePointerDown);
     canvas.addEventListener('pointermove', handlePointerMove);
     canvas.addEventListener('pointerup', stopDragging);
     canvas.addEventListener('pointercancel', stopDragging);
+    canvas.addEventListener('dblclick', handleDoubleClick);
     canvas.dataset.schematicCanvas = 'true';
     canvas.style.width = '100%';
     canvas.style.height = '100%';
@@ -338,6 +419,7 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
       canvas.removeEventListener('pointermove', handlePointerMove);
       canvas.removeEventListener('pointerup', stopDragging);
       canvas.removeEventListener('pointercancel', stopDragging);
+      canvas.removeEventListener('dblclick', handleDoubleClick);
     };
   }
 
@@ -394,28 +476,157 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
     return null;
   }
 
-  function setActiveDragDataAttributes(nodeId: string, position: ScreenPoint) {
-    const host = hostRef.current;
-
-    if (!host) {
-      return;
-    }
-
-    host.setAttribute('data-active-drag-node-id', nodeId);
-    host.setAttribute('data-active-drag-node-x', position.x.toFixed(1));
-    host.setAttribute('data-active-drag-node-y', position.y.toFixed(1));
+  function getModuleNodeById(nodeId: string) {
+    return layoutRef.current.nodes.find((node) => node.kind === 'module' && node.id === nodeId) ?? null;
   }
 
-  function setLastDragDataAttributes(nodeId: string, position: ScreenPoint) {
+  function getNodeStartPositions(nodeIds: readonly string[]): SchematicNodePositionOverrides {
+    return Object.fromEntries(nodeIds.flatMap((nodeId) => {
+      const node = getModuleNodeById(nodeId);
+
+      return node ? [[nodeId, { x: node.x, y: node.y }]] : [];
+    }));
+  }
+
+  function getDraggedNodePositions(nodeStarts: SchematicNodePositionOverrides, delta: ScreenPoint): SchematicNodePositionOverrides {
+    return Object.fromEntries(Object.entries(nodeStarts).flatMap(([nodeId, startPosition]) => {
+      if (!startPosition) {
+        return [];
+      }
+
+      return [[nodeId, {
+        x: roundLayoutCoordinate(startPosition.x + delta.x / cameraRef.current.zoom),
+        y: roundLayoutCoordinate(startPosition.y + delta.y / cameraRef.current.zoom),
+      }]];
+    }));
+  }
+
+  function getWorldRectFromClientPoints(startClient: ScreenPoint, endClient: ScreenPoint, canvas: HTMLCanvasElement): SchematicWorldRect {
+    const canvasRect = canvas.getBoundingClientRect();
+    const startWorld = screenToWorld({ x: startClient.x - canvasRect.left, y: startClient.y - canvasRect.top }, cameraRef.current);
+    const endWorld = screenToWorld({ x: endClient.x - canvasRect.left, y: endClient.y - canvasRect.top }, cameraRef.current);
+    const x = Math.min(startWorld.x, endWorld.x);
+    const y = Math.min(startWorld.y, endWorld.y);
+
+    return {
+      x,
+      y,
+      width: Math.abs(endWorld.x - startWorld.x),
+      height: Math.abs(endWorld.y - startWorld.y),
+    };
+  }
+
+  function getModuleNodesInRect(rect: SchematicWorldRect) {
+    return layoutRef.current.nodes.filter((node) => {
+      if (node.kind !== 'module') {
+        return false;
+      }
+
+      return node.x < rect.x + rect.width
+        && node.x + node.width > rect.x
+        && node.y < rect.y + rect.height
+        && node.y + node.height > rect.y;
+    });
+  }
+
+  function applyClickSelection(nodeId: string | null, additive: boolean) {
+    if (!nodeId) {
+      if (!additive) {
+        commitSelection([]);
+      }
+      return;
+    }
+
+    const currentSelection = selectedNodeIdsRef.current;
+
+    if (!additive) {
+      commitSelection([nodeId]);
+      return;
+    }
+
+    commitSelection(currentSelection.includes(nodeId)
+      ? currentSelection.filter((selectedNodeId) => selectedNodeId !== nodeId)
+      : [...currentSelection, nodeId]);
+  }
+
+  function applyMarqueeSelection(rect: SchematicWorldRect, additive: boolean) {
+    const hitNodeIds = getModuleNodesInRect(rect).map((node) => node.id);
+
+    if (!additive) {
+      commitSelection(hitNodeIds);
+      return;
+    }
+
+    const nextSelection = new Set(selectedNodeIdsRef.current);
+    hitNodeIds.forEach((nodeId) => {
+      if (nextSelection.has(nodeId)) {
+        nextSelection.delete(nodeId);
+      } else {
+        nextSelection.add(nodeId);
+      }
+    });
+    commitSelection([...nextSelection]);
+  }
+
+  function commitSelection(nodeIds: readonly string[]) {
+    const nextNodeIds = normalizeSelectedNodeIds(nodeIds);
+    selectedNodeIdsRef.current = nextNodeIds;
+    sceneRef.current?.updateSelection(nextNodeIds);
+    onNodeSelectionChangeRef.current?.(nextNodeIds);
+    requestRender();
+  }
+
+  function normalizeSelectedNodeIds(nodeIds: readonly string[]) {
+    const moduleNodeIds = new Set(layoutRef.current.nodes.filter((node) => node.kind === 'module').map((node) => node.id));
+    const uniqueNodeIds = new Set<string>();
+
+    nodeIds.forEach((nodeId) => {
+      if (moduleNodeIds.has(nodeId)) {
+        uniqueNodeIds.add(nodeId);
+      }
+    });
+
+    return [...uniqueNodeIds].sort((first, second) => first.localeCompare(second));
+  }
+
+  function setActiveDragDataAttributes(nodeIds: readonly string[], positions: SchematicNodePositionOverrides) {
     const host = hostRef.current;
 
     if (!host) {
       return;
     }
 
-    host.setAttribute('data-last-drag-node-id', nodeId);
-    host.setAttribute('data-last-drag-node-x', position.x.toFixed(1));
-    host.setAttribute('data-last-drag-node-y', position.y.toFixed(1));
+    const firstNodeId = nodeIds[0];
+    const firstPosition = firstNodeId ? positions[firstNodeId] : undefined;
+
+    if (!firstNodeId || !firstPosition) {
+      return;
+    }
+
+    host.setAttribute('data-active-drag-node-id', firstNodeId);
+    host.setAttribute('data-active-drag-node-ids', nodeIds.join(','));
+    host.setAttribute('data-active-drag-node-x', firstPosition.x.toFixed(1));
+    host.setAttribute('data-active-drag-node-y', firstPosition.y.toFixed(1));
+  }
+
+  function setLastDragDataAttributes(nodeIds: readonly string[], positions: SchematicNodePositionOverrides) {
+    const host = hostRef.current;
+
+    if (!host) {
+      return;
+    }
+
+    const firstNodeId = nodeIds[0];
+    const firstPosition = firstNodeId ? positions[firstNodeId] : undefined;
+
+    if (!firstNodeId || !firstPosition) {
+      return;
+    }
+
+    host.setAttribute('data-last-drag-node-id', firstNodeId);
+    host.setAttribute('data-last-drag-node-ids', nodeIds.join(','));
+    host.setAttribute('data-last-drag-node-x', firstPosition.x.toFixed(1));
+    host.setAttribute('data-last-drag-node-y', firstPosition.y.toFixed(1));
   }
 
   function clearActiveDragDataAttributes() {
@@ -426,6 +637,7 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
     }
 
     host.removeAttribute('data-active-drag-node-id');
+    host.removeAttribute('data-active-drag-node-ids');
     host.removeAttribute('data-active-drag-node-x');
     host.removeAttribute('data-active-drag-node-y');
   }
@@ -444,14 +656,14 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
   }
 
   function applyCamera() {
-    const world = worldRef.current;
-    if (!world) {
+    const scene = sceneRef.current;
+    if (!scene) {
       return;
     }
 
     const nextCamera = cameraRef.current;
-    world.position.set(nextCamera.x, nextCamera.y);
-    world.scale.set(nextCamera.zoom);
+    scene.world.position.set(nextCamera.x, nextCamera.y);
+    scene.world.scale.set(nextCamera.zoom);
     requestRender();
   }
 
@@ -493,9 +705,22 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
       data-pan-y={camera.y.toFixed(1)}
       data-ticker-active={tickerActive ? 'true' : 'false'}
       data-render-count={renderCountRef.current}
+      data-layer-count={layerNames.length}
+      data-layer-names={layerNames.join(',')}
+      data-selected-node-count={selectedNodeIds.length}
+      data-selected-node-ids={selectedNodeIds.join(',')}
+      data-marquee-active="false"
+      data-module-node-snapshot={moduleNodeSnapshot}
       data-first-module-id={firstDraggableNode?.id}
       data-first-module-center-x={firstDraggableNode ? (firstDraggableNode.x + firstDraggableNode.width / 2).toFixed(1) : undefined}
       data-first-module-center-y={firstDraggableNode ? (firstDraggableNode.y + firstDraggableNode.height / 2).toFixed(1) : undefined}
+      data-second-module-id={secondDraggableNode?.id}
+      data-second-module-center-x={secondDraggableNode ? (secondDraggableNode.x + secondDraggableNode.width / 2).toFixed(1) : undefined}
+      data-second-module-center-y={secondDraggableNode ? (secondDraggableNode.y + secondDraggableNode.height / 2).toFixed(1) : undefined}
+      data-drillable-module-id={firstDrillableNode?.id}
+      data-drillable-module-target-id={firstDrillableNode?.moduleId}
+      data-drillable-module-center-x={firstDrillableNode ? (firstDrillableNode.x + firstDrillableNode.width / 2).toFixed(1) : undefined}
+      data-drillable-module-center-y={firstDrillableNode ? (firstDrillableNode.y + firstDrillableNode.height / 2).toFixed(1) : undefined}
       className="relative min-h-0 flex-1 overflow-hidden bg-ide-bg"
     >
       {error ? (
