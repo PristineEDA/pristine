@@ -105,9 +105,19 @@ describe('ModelSelector', () => {
 
     await user.click(trigger);
 
-    expect(
-      screen.getByRole('textbox', { name: 'Search providers' }),
-    ).toHaveAttribute('placeholder', 'Search providers...');
+    const searchInput = screen.getByRole('textbox', { name: 'Search providers' });
+    expect(searchInput).toHaveAttribute('placeholder', 'Search providers...');
+    expect(searchInput).toHaveAttribute('data-slot', 'command-input');
+    expect(searchInput).toHaveAttribute('spellcheck', 'false');
+    expect(searchInput).toHaveClass('pristine-command-search-input');
+    expect(searchInput).toHaveStyle('color: var(--ide-text)');
+
+    const searchFrame = getClosestSlot(searchInput, 'command-input-wrapper');
+    expect(searchFrame).toHaveClass('flex', 'h-8', 'items-center', 'gap-2', 'px-2.5', 'bg-muted/60');
+    expect(searchFrame.querySelector('[data-slot="command-input-icon"]')).toHaveClass(
+      'size-3.5',
+      'text-ide-text-muted',
+    );
 
     const providerTrigger = getClosestSlot(
       screen.getByRole('menuitem', { name: /OpenRouter\s*2/ }),

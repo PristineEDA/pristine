@@ -12,631 +12,631 @@ export const modelProviderLogoManifest = [
   {
     "providerId": "302ai",
     "logoId": "302ai",
-    "path": "/model-provider-logos/302ai.svg",
+    "path": "model-provider-logos/302ai.svg",
     "hasLogo": true
   },
   {
     "providerId": "abacus",
     "logoId": "abacus",
-    "path": "/model-provider-logos/abacus.svg",
+    "path": "model-provider-logos/abacus.svg",
     "hasLogo": true
   },
   {
     "providerId": "abliteration-ai",
     "logoId": "abliteration-ai",
-    "path": "/model-provider-logos/abliteration-ai.svg",
+    "path": "model-provider-logos/abliteration-ai.svg",
     "hasLogo": true
   },
   {
     "providerId": "alibaba",
     "logoId": "alibaba",
-    "path": "/model-provider-logos/alibaba.svg",
+    "path": "model-provider-logos/alibaba.svg",
     "hasLogo": true
   },
   {
     "providerId": "alibaba-cn",
     "logoId": "alibaba-cn",
-    "path": "/model-provider-logos/alibaba-cn.svg",
+    "path": "model-provider-logos/alibaba-cn.svg",
     "hasLogo": true
   },
   {
     "providerId": "alibaba-coding-plan",
     "logoId": "alibaba-coding-plan",
-    "path": "/model-provider-logos/alibaba-coding-plan.svg",
+    "path": "model-provider-logos/alibaba-coding-plan.svg",
     "hasLogo": true
   },
   {
     "providerId": "alibaba-coding-plan-cn",
     "logoId": "alibaba-coding-plan-cn",
-    "path": "/model-provider-logos/alibaba-coding-plan-cn.svg",
+    "path": "model-provider-logos/alibaba-coding-plan-cn.svg",
     "hasLogo": true
   },
   {
     "providerId": "anthropic",
     "logoId": "anthropic",
-    "path": "/model-provider-logos/anthropic.svg",
+    "path": "model-provider-logos/anthropic.svg",
     "hasLogo": true
   },
   {
     "providerId": "bailing",
     "logoId": "bailing",
-    "path": "/model-provider-logos/bailing.svg",
+    "path": "model-provider-logos/bailing.svg",
     "hasLogo": true
   },
   {
     "providerId": "baseten",
     "logoId": "baseten",
-    "path": "/model-provider-logos/baseten.svg",
+    "path": "model-provider-logos/baseten.svg",
     "hasLogo": true
   },
   {
     "providerId": "berget",
     "logoId": "berget",
-    "path": "/model-provider-logos/berget.svg",
+    "path": "model-provider-logos/berget.svg",
     "hasLogo": true
   },
   {
     "providerId": "cerebras",
     "logoId": "cerebras",
-    "path": "/model-provider-logos/cerebras.svg",
+    "path": "model-provider-logos/cerebras.svg",
     "hasLogo": true
   },
   {
     "providerId": "chutes",
     "logoId": "chutes",
-    "path": "/model-provider-logos/chutes.svg",
+    "path": "model-provider-logos/chutes.svg",
     "hasLogo": true
   },
   {
     "providerId": "clarifai",
     "logoId": "clarifai",
-    "path": "/model-provider-logos/clarifai.svg",
+    "path": "model-provider-logos/clarifai.svg",
     "hasLogo": true
   },
   {
     "providerId": "cloudferro-sherlock",
     "logoId": "cloudferro-sherlock",
-    "path": "/model-provider-logos/cloudferro-sherlock.svg",
+    "path": "model-provider-logos/cloudferro-sherlock.svg",
     "hasLogo": true
   },
   {
     "providerId": "cloudflare-workers-ai",
     "logoId": "cloudflare-workers-ai",
-    "path": "/model-provider-logos/cloudflare-workers-ai.svg",
+    "path": "model-provider-logos/cloudflare-workers-ai.svg",
     "hasLogo": true
   },
   {
     "providerId": "cortecs",
     "logoId": "cortecs",
-    "path": "/model-provider-logos/cortecs.svg",
+    "path": "model-provider-logos/cortecs.svg",
     "hasLogo": true
   },
   {
     "providerId": "deepinfra",
     "logoId": "deepinfra",
-    "path": "/model-provider-logos/deepinfra.svg",
+    "path": "model-provider-logos/deepinfra.svg",
     "hasLogo": true
   },
   {
     "providerId": "deepseek",
     "logoId": "deepseek",
-    "path": "/model-provider-logos/deepseek.svg",
+    "path": "model-provider-logos/deepseek.svg",
     "hasLogo": true
   },
   {
     "providerId": "digitalocean",
     "logoId": "digitalocean",
-    "path": "/model-provider-logos/digitalocean.svg",
+    "path": "model-provider-logos/digitalocean.svg",
     "hasLogo": true
   },
   {
     "providerId": "dinference",
     "logoId": "dinference",
-    "path": "/model-provider-logos/dinference.svg",
+    "path": "model-provider-logos/dinference.svg",
     "hasLogo": true
   },
   {
     "providerId": "drun",
     "logoId": "drun",
-    "path": "/model-provider-logos/drun.svg",
+    "path": "model-provider-logos/drun.svg",
     "hasLogo": true
   },
   {
     "providerId": "evroc",
     "logoId": "evroc",
-    "path": "/model-provider-logos/evroc.svg",
+    "path": "model-provider-logos/evroc.svg",
     "hasLogo": true
   },
   {
     "providerId": "fastrouter",
     "logoId": "fastrouter",
-    "path": "/model-provider-logos/fastrouter.svg",
+    "path": "model-provider-logos/fastrouter.svg",
     "hasLogo": true
   },
   {
     "providerId": "fireworks-ai",
     "logoId": "fireworks",
-    "path": "/model-provider-logos/fireworks.svg",
+    "path": "model-provider-logos/fireworks.svg",
     "hasLogo": true
   },
   {
     "providerId": "firmware",
     "logoId": "firmware",
-    "path": "/model-provider-logos/firmware.svg",
+    "path": "model-provider-logos/firmware.svg",
     "hasLogo": true
   },
   {
     "providerId": "friendli",
     "logoId": "friendli",
-    "path": "/model-provider-logos/friendli.svg",
+    "path": "model-provider-logos/friendli.svg",
     "hasLogo": true
   },
   {
     "providerId": "github-models",
     "logoId": "github-models",
-    "path": "/model-provider-logos/github-models.svg",
+    "path": "model-provider-logos/github-models.svg",
     "hasLogo": true
   },
   {
     "providerId": "google",
     "logoId": "google",
-    "path": "/model-provider-logos/google.svg",
+    "path": "model-provider-logos/google.svg",
     "hasLogo": true
   },
   {
     "providerId": "groq",
     "logoId": "groq",
-    "path": "/model-provider-logos/groq.svg",
+    "path": "model-provider-logos/groq.svg",
     "hasLogo": true
   },
   {
     "providerId": "helicone",
     "logoId": "helicone",
-    "path": "/model-provider-logos/helicone.svg",
+    "path": "model-provider-logos/helicone.svg",
     "hasLogo": true
   },
   {
     "providerId": "hpc-ai",
     "logoId": "hpc-ai",
-    "path": "/model-provider-logos/hpc-ai.svg",
+    "path": "model-provider-logos/hpc-ai.svg",
     "hasLogo": true
   },
   {
     "providerId": "huggingface",
     "logoId": "huggingface",
-    "path": "/model-provider-logos/huggingface.svg",
+    "path": "model-provider-logos/huggingface.svg",
     "hasLogo": true
   },
   {
     "providerId": "iflowcn",
     "logoId": "iflowcn",
-    "path": "/model-provider-logos/iflowcn.svg",
+    "path": "model-provider-logos/iflowcn.svg",
     "hasLogo": true
   },
   {
     "providerId": "inception",
     "logoId": "inception",
-    "path": "/model-provider-logos/inception.svg",
+    "path": "model-provider-logos/inception.svg",
     "hasLogo": true
   },
   {
     "providerId": "inference",
     "logoId": "inference",
-    "path": "/model-provider-logos/inference.svg",
+    "path": "model-provider-logos/inference.svg",
     "hasLogo": true
   },
   {
     "providerId": "io-net",
     "logoId": "io-net",
-    "path": "/model-provider-logos/io-net.svg",
+    "path": "model-provider-logos/io-net.svg",
     "hasLogo": true
   },
   {
     "providerId": "jiekou",
     "logoId": "jiekou",
-    "path": "/model-provider-logos/jiekou.svg",
+    "path": "model-provider-logos/jiekou.svg",
     "hasLogo": true
   },
   {
     "providerId": "kilo",
     "logoId": "kilo",
-    "path": "/model-provider-logos/kilo.svg",
+    "path": "model-provider-logos/kilo.svg",
     "hasLogo": true
   },
   {
     "providerId": "kimi-for-coding",
     "logoId": "kimi-for-coding",
-    "path": "/model-provider-logos/kimi-for-coding.svg",
+    "path": "model-provider-logos/kimi-for-coding.svg",
     "hasLogo": true
   },
   {
     "providerId": "kuae-cloud-coding-plan",
     "logoId": "kuae-cloud-coding-plan",
-    "path": "/model-provider-logos/kuae-cloud-coding-plan.svg",
+    "path": "model-provider-logos/kuae-cloud-coding-plan.svg",
     "hasLogo": true
   },
   {
     "providerId": "llama",
     "logoId": "llama",
-    "path": "/model-provider-logos/llama.svg",
+    "path": "model-provider-logos/llama.svg",
     "hasLogo": true
   },
   {
     "providerId": "llmgateway",
     "logoId": "llmgateway",
-    "path": "/model-provider-logos/llmgateway.svg",
+    "path": "model-provider-logos/llmgateway.svg",
     "hasLogo": true
   },
   {
     "providerId": "lmstudio",
     "logoId": "lmstudio",
-    "path": "/model-provider-logos/lmstudio.svg",
+    "path": "model-provider-logos/lmstudio.svg",
     "hasLogo": true
   },
   {
     "providerId": "lucidquery",
     "logoId": "lucidquery",
-    "path": "/model-provider-logos/lucidquery.svg",
+    "path": "model-provider-logos/lucidquery.svg",
     "hasLogo": true
   },
   {
     "providerId": "mastra",
     "logoId": "mastra",
-    "path": "/model-provider-logos/mastra.svg",
+    "path": "model-provider-logos/mastra.svg",
     "hasLogo": true
   },
   {
     "providerId": "meganova",
     "logoId": "meganova",
-    "path": "/model-provider-logos/meganova.svg",
+    "path": "model-provider-logos/meganova.svg",
     "hasLogo": true
   },
   {
     "providerId": "minimax",
     "logoId": "minimax",
-    "path": "/model-provider-logos/minimax.svg",
+    "path": "model-provider-logos/minimax.svg",
     "hasLogo": true
   },
   {
     "providerId": "minimax-cn",
     "logoId": "minimax-cn",
-    "path": "/model-provider-logos/minimax-cn.svg",
+    "path": "model-provider-logos/minimax-cn.svg",
     "hasLogo": true
   },
   {
     "providerId": "minimax-cn-coding-plan",
     "logoId": "minimax-cn-coding-plan",
-    "path": "/model-provider-logos/minimax-cn-coding-plan.svg",
+    "path": "model-provider-logos/minimax-cn-coding-plan.svg",
     "hasLogo": true
   },
   {
     "providerId": "minimax-coding-plan",
     "logoId": "minimax-coding-plan",
-    "path": "/model-provider-logos/minimax-coding-plan.svg",
+    "path": "model-provider-logos/minimax-coding-plan.svg",
     "hasLogo": true
   },
   {
     "providerId": "mistral",
     "logoId": "mistral",
-    "path": "/model-provider-logos/mistral.svg",
+    "path": "model-provider-logos/mistral.svg",
     "hasLogo": true
   },
   {
     "providerId": "mixlayer",
     "logoId": "mixlayer",
-    "path": "/model-provider-logos/mixlayer.svg",
+    "path": "model-provider-logos/mixlayer.svg",
     "hasLogo": true
   },
   {
     "providerId": "moark",
     "logoId": "moark",
-    "path": "/model-provider-logos/moark.svg",
+    "path": "model-provider-logos/moark.svg",
     "hasLogo": true
   },
   {
     "providerId": "modelscope",
     "logoId": "modelscope",
-    "path": "/model-provider-logos/modelscope.svg",
+    "path": "model-provider-logos/modelscope.svg",
     "hasLogo": true
   },
   {
     "providerId": "moonshotai",
     "logoId": "moonshotai",
-    "path": "/model-provider-logos/moonshotai.svg",
+    "path": "model-provider-logos/moonshotai.svg",
     "hasLogo": true
   },
   {
     "providerId": "moonshotai-cn",
     "logoId": "moonshotai-cn",
-    "path": "/model-provider-logos/moonshotai-cn.svg",
+    "path": "model-provider-logos/moonshotai-cn.svg",
     "hasLogo": true
   },
   {
     "providerId": "morph",
     "logoId": "morph",
-    "path": "/model-provider-logos/morph.svg",
+    "path": "model-provider-logos/morph.svg",
     "hasLogo": true
   },
   {
     "providerId": "nano-gpt",
     "logoId": "nano-gpt",
-    "path": "/model-provider-logos/nano-gpt.svg",
+    "path": "model-provider-logos/nano-gpt.svg",
     "hasLogo": true
   },
   {
     "providerId": "nebius",
     "logoId": "nebius",
-    "path": "/model-provider-logos/nebius.svg",
+    "path": "model-provider-logos/nebius.svg",
     "hasLogo": true
   },
   {
     "providerId": "netlify",
     "logoId": "netlify",
-    "path": "/model-provider-logos/netlify.svg",
+    "path": "model-provider-logos/netlify.svg",
     "hasLogo": true
   },
   {
     "providerId": "nova",
     "logoId": "nova",
-    "path": "/model-provider-logos/nova.svg",
+    "path": "model-provider-logos/nova.svg",
     "hasLogo": true
   },
   {
     "providerId": "novita-ai",
     "logoId": "novita-ai",
-    "path": "/model-provider-logos/novita-ai.svg",
+    "path": "model-provider-logos/novita-ai.svg",
     "hasLogo": true
   },
   {
     "providerId": "nvidia",
     "logoId": "nvidia",
-    "path": "/model-provider-logos/nvidia.svg",
+    "path": "model-provider-logos/nvidia.svg",
     "hasLogo": true
   },
   {
     "providerId": "ollama-cloud",
     "logoId": "ollama-cloud",
-    "path": "/model-provider-logos/ollama-cloud.svg",
+    "path": "model-provider-logos/ollama-cloud.svg",
     "hasLogo": true
   },
   {
     "providerId": "openai",
     "logoId": "openai",
-    "path": "/model-provider-logos/openai.svg",
+    "path": "model-provider-logos/openai.svg",
     "hasLogo": true
   },
   {
     "providerId": "opencode",
     "logoId": "opencode",
-    "path": "/model-provider-logos/opencode.svg",
+    "path": "model-provider-logos/opencode.svg",
     "hasLogo": true
   },
   {
     "providerId": "opencode-go",
     "logoId": "opencode-go",
-    "path": "/model-provider-logos/opencode-go.svg",
+    "path": "model-provider-logos/opencode-go.svg",
     "hasLogo": true
   },
   {
     "providerId": "openrouter",
     "logoId": "openrouter",
-    "path": "/model-provider-logos/openrouter.svg",
+    "path": "model-provider-logos/openrouter.svg",
     "hasLogo": true
   },
   {
     "providerId": "ovhcloud",
     "logoId": "ovhcloud",
-    "path": "/model-provider-logos/ovhcloud.svg",
+    "path": "model-provider-logos/ovhcloud.svg",
     "hasLogo": true
   },
   {
     "providerId": "perplexity",
     "logoId": "perplexity",
-    "path": "/model-provider-logos/perplexity.svg",
+    "path": "model-provider-logos/perplexity.svg",
     "hasLogo": true
   },
   {
     "providerId": "perplexity-agent",
     "logoId": "perplexity-agent",
-    "path": "/model-provider-logos/perplexity-agent.svg",
+    "path": "model-provider-logos/perplexity-agent.svg",
     "hasLogo": true
   },
   {
     "providerId": "poe",
     "logoId": "poe",
-    "path": "/model-provider-logos/poe.svg",
+    "path": "model-provider-logos/poe.svg",
     "hasLogo": true
   },
   {
     "providerId": "privatemode-ai",
     "logoId": "privatemode-ai",
-    "path": "/model-provider-logos/privatemode-ai.svg",
+    "path": "model-provider-logos/privatemode-ai.svg",
     "hasLogo": true
   },
   {
     "providerId": "qihang-ai",
     "logoId": "qihang-ai",
-    "path": "/model-provider-logos/qihang-ai.svg",
+    "path": "model-provider-logos/qihang-ai.svg",
     "hasLogo": true
   },
   {
     "providerId": "qiniu-ai",
     "logoId": "qiniu-ai",
-    "path": "/model-provider-logos/qiniu-ai.svg",
+    "path": "model-provider-logos/qiniu-ai.svg",
     "hasLogo": true
   },
   {
     "providerId": "regolo-ai",
     "logoId": "regolo-ai",
-    "path": "/model-provider-logos/regolo-ai.svg",
+    "path": "model-provider-logos/regolo-ai.svg",
     "hasLogo": true
   },
   {
     "providerId": "requesty",
     "logoId": "requesty",
-    "path": "/model-provider-logos/requesty.svg",
+    "path": "model-provider-logos/requesty.svg",
     "hasLogo": true
   },
   {
     "providerId": "scaleway",
     "logoId": "scaleway",
-    "path": "/model-provider-logos/scaleway.svg",
+    "path": "model-provider-logos/scaleway.svg",
     "hasLogo": true
   },
   {
     "providerId": "siliconflow",
     "logoId": "siliconflow",
-    "path": "/model-provider-logos/siliconflow.svg",
+    "path": "model-provider-logos/siliconflow.svg",
     "hasLogo": true
   },
   {
     "providerId": "siliconflow-cn",
     "logoId": "siliconflow-cn",
-    "path": "/model-provider-logos/siliconflow-cn.svg",
+    "path": "model-provider-logos/siliconflow-cn.svg",
     "hasLogo": true
   },
   {
     "providerId": "stackit",
     "logoId": "stackit",
-    "path": "/model-provider-logos/stackit.svg",
+    "path": "model-provider-logos/stackit.svg",
     "hasLogo": true
   },
   {
     "providerId": "stepfun",
     "logoId": "stepfun",
-    "path": "/model-provider-logos/stepfun.svg",
+    "path": "model-provider-logos/stepfun.svg",
     "hasLogo": true
   },
   {
     "providerId": "submodel",
     "logoId": "submodel",
-    "path": "/model-provider-logos/submodel.svg",
+    "path": "model-provider-logos/submodel.svg",
     "hasLogo": true
   },
   {
     "providerId": "synthetic",
     "logoId": "synthetic",
-    "path": "/model-provider-logos/synthetic.svg",
+    "path": "model-provider-logos/synthetic.svg",
     "hasLogo": true
   },
   {
     "providerId": "tencent-coding-plan",
     "logoId": "tencent-coding-plan",
-    "path": "/model-provider-logos/tencent-coding-plan.svg",
+    "path": "model-provider-logos/tencent-coding-plan.svg",
     "hasLogo": true
   },
   {
     "providerId": "tencent-tokenhub",
     "logoId": "tencent-tokenhub",
-    "path": "/model-provider-logos/tencent-tokenhub.svg",
+    "path": "model-provider-logos/tencent-tokenhub.svg",
     "hasLogo": true
   },
   {
     "providerId": "the-grid-ai",
     "logoId": "the-grid-ai",
-    "path": "/model-provider-logos/the-grid-ai.svg",
+    "path": "model-provider-logos/the-grid-ai.svg",
     "hasLogo": true
   },
   {
     "providerId": "togetherai",
     "logoId": "togetherai",
-    "path": "/model-provider-logos/togetherai.svg",
+    "path": "model-provider-logos/togetherai.svg",
     "hasLogo": true
   },
   {
     "providerId": "upstage",
     "logoId": "upstage",
-    "path": "/model-provider-logos/upstage.svg",
+    "path": "model-provider-logos/upstage.svg",
     "hasLogo": true
   },
   {
     "providerId": "vercel",
     "logoId": "vercel",
-    "path": "/model-provider-logos/vercel.svg",
+    "path": "model-provider-logos/vercel.svg",
     "hasLogo": true
   },
   {
     "providerId": "vivgrid",
     "logoId": "vivgrid",
-    "path": "/model-provider-logos/vivgrid.svg",
+    "path": "model-provider-logos/vivgrid.svg",
     "hasLogo": true
   },
   {
     "providerId": "vultr",
     "logoId": "vultr",
-    "path": "/model-provider-logos/vultr.svg",
+    "path": "model-provider-logos/vultr.svg",
     "hasLogo": true
   },
   {
     "providerId": "wafer.ai",
     "logoId": "wafer",
-    "path": "/model-provider-logos/wafer.svg",
+    "path": "model-provider-logos/wafer.svg",
     "hasLogo": true
   },
   {
     "providerId": "wandb",
     "logoId": "wandb",
-    "path": "/model-provider-logos/wandb.svg",
+    "path": "model-provider-logos/wandb.svg",
     "hasLogo": true
   },
   {
     "providerId": "xai",
     "logoId": "xai",
-    "path": "/model-provider-logos/xai.svg",
+    "path": "model-provider-logos/xai.svg",
     "hasLogo": true
   },
   {
     "providerId": "xiaomi",
     "logoId": "xiaomi",
-    "path": "/model-provider-logos/xiaomi.svg",
+    "path": "model-provider-logos/xiaomi.svg",
     "hasLogo": true
   },
   {
     "providerId": "xiaomi-token-plan-ams",
     "logoId": "xiaomi-token-plan-ams",
-    "path": "/model-provider-logos/xiaomi-token-plan-ams.svg",
+    "path": "model-provider-logos/xiaomi-token-plan-ams.svg",
     "hasLogo": true
   },
   {
     "providerId": "xiaomi-token-plan-cn",
     "logoId": "xiaomi-token-plan-cn",
-    "path": "/model-provider-logos/xiaomi-token-plan-cn.svg",
+    "path": "model-provider-logos/xiaomi-token-plan-cn.svg",
     "hasLogo": true
   },
   {
     "providerId": "xiaomi-token-plan-sgp",
     "logoId": "xiaomi-token-plan-sgp",
-    "path": "/model-provider-logos/xiaomi-token-plan-sgp.svg",
+    "path": "model-provider-logos/xiaomi-token-plan-sgp.svg",
     "hasLogo": true
   },
   {
     "providerId": "zai",
     "logoId": "zai",
-    "path": "/model-provider-logos/zai.svg",
+    "path": "model-provider-logos/zai.svg",
     "hasLogo": true
   },
   {
     "providerId": "zai-coding-plan",
     "logoId": "zai-coding-plan",
-    "path": "/model-provider-logos/zai-coding-plan.svg",
+    "path": "model-provider-logos/zai-coding-plan.svg",
     "hasLogo": true
   },
   {
     "providerId": "zenmux",
     "logoId": "zenmux",
-    "path": "/model-provider-logos/zenmux.svg",
+    "path": "model-provider-logos/zenmux.svg",
     "hasLogo": true
   },
   {
     "providerId": "zhipuai",
     "logoId": "zhipuai",
-    "path": "/model-provider-logos/zhipuai.svg",
+    "path": "model-provider-logos/zhipuai.svg",
     "hasLogo": true
   },
   {
     "providerId": "zhipuai-coding-plan",
     "logoId": "zhipuai-coding-plan",
-    "path": "/model-provider-logos/zhipuai-coding-plan.svg",
+    "path": "model-provider-logos/zhipuai-coding-plan.svg",
     "hasLogo": true
   }
 ] as const satisfies readonly ModelProviderLogoManifestEntry[];

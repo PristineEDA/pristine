@@ -21,6 +21,31 @@ const commandSearchInputWrapperClassName = "flex h-9 items-center gap-2 px-3"
 const commandSearchInputIconClassName = "size-4 shrink-0 text-ide-text-muted"
 const commandSearchInputClassName = "pristine-command-search-input flex h-10 w-full rounded-md bg-transparent py-3 text-sm outline-hidden placeholder:text-ide-text-muted disabled:cursor-not-allowed disabled:opacity-50"
 
+type CommandSearchInputFrameProps = React.ComponentProps<"div"> & {
+  iconClassName?: string
+}
+
+function CommandSearchInputFrame({
+  children,
+  className,
+  iconClassName,
+  ...props
+}: CommandSearchInputFrameProps) {
+  return (
+    <div
+      data-slot="command-input-wrapper"
+      className={cn(commandSearchInputWrapperClassName, className)}
+      {...props}
+    >
+      <SearchIcon
+        data-slot="command-input-icon"
+        className={cn(commandSearchInputIconClassName, iconClassName)}
+      />
+      {children}
+    </div>
+  )
+}
+
 function Command({
   className,
   ...props
@@ -74,11 +99,7 @@ function CommandInput({
   ...props
 }: React.ComponentProps<typeof CommandPrimitive.Input>) {
   return (
-    <div
-      data-slot="command-input-wrapper"
-      className={cn(commandSearchInputWrapperClassName, "border-b")}
-    >
-      <SearchIcon className={commandSearchInputIconClassName} />
+    <CommandSearchInputFrame className="border-b">
       <CommandPrimitive.Input
         data-slot="command-input"
         className={cn(
@@ -88,7 +109,7 @@ function CommandInput({
         style={{ ...commandSearchInputForegroundStyle, ...style }}
         {...props}
       />
-    </div>
+    </CommandSearchInputFrame>
   )
 }
 
@@ -191,6 +212,7 @@ export {
   CommandItem,
   CommandShortcut,
   CommandSeparator,
+  CommandSearchInputFrame,
   commandSearchInputClassName,
   commandSearchInputForegroundStyle,
   commandSearchInputIconClassName,

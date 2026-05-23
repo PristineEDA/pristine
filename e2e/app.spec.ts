@@ -1224,6 +1224,46 @@ async function openSettingsPage(
   await expect(window.getByTestId(`settings-page-${page}`)).toBeVisible();
 }
 
+async function openAssistantModelSelector(window: Awaited<ReturnType<typeof launchApp>>['window']) {
+  await ensureExplorerVisible(window);
+  await ensureRightPanelVisible(window);
+
+  const aiTab = window.getByTestId('right-panel-tab-ai');
+  if (await aiTab.count() > 0) {
+    await aiTab.click();
+  }
+
+  const assistantPanel = window.getByTestId('assistant-panel-root');
+  await expect(assistantPanel).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+
+  const modelSelectorTrigger = assistantPanel.locator('[data-slot="model-selector-trigger"]').first();
+  await expect(modelSelectorTrigger).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await modelSelectorTrigger.click();
+
+  const searchInput = window.getByRole('textbox', { name: 'Search providers' });
+  await expect(searchInput).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+
+  return searchInput;
+}
+
+async function expectModelProviderLogoLoaded(
+  window: Awaited<ReturnType<typeof launchApp>>['window'],
+  providerName: string,
+  expectedPath: string,
+) {
+  const logo = window.getByAltText(`${providerName} logo`).first();
+  await expect(logo).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect(logo).toHaveAttribute('src', expectedPath);
+
+  await expect.poll(
+    async () => logo.evaluate((element) => {
+      const image = element as { complete?: boolean; naturalWidth?: number };
+      return Boolean(image.complete && (image.naturalWidth ?? 0) > 0);
+    }),
+    { timeout: UI_READY_TIMEOUT_MS },
+  ).toBe(true);
+}
+
 async function readWorkbenchChromeThemeSnapshot(window: Awaited<ReturnType<typeof launchApp>>['window']) {
   return window.evaluate(() => {
     type StyleLike = {
@@ -1499,6 +1539,22 @@ test('packaged Windows app keeps the splash handoff working during startup', asy
   await expect(window.getByTestId('activity-item-explorer')).toBeVisible();
 
   await app.close();
+});
+
+test('packaged Windows app loads model provider logos from relative app assets', async () => {
+  test.skip(process.platform !== 'win32', 'Packaged provider logo E2E runs on Windows only');
+  test.skip(!packagedWindowsExecutablePath, 'Run pnpm run package:win before executing packaged provider logo E2E');
+
+  const { app, window } = await launchPackagedWindowsApp();
+
+  try {
+    const searchInput = await openAssistantModelSelector(window);
+    await searchInput.fill('openrouter');
+
+    await expectModelProviderLogoLoaded(window, 'OpenRouter', 'model-provider-logos/openrouter.svg');
+  } finally {
+    await app.close();
+  }
 });
 
 test('window controls toggle minimize and maximize state', async () => {
@@ -4044,6 +4100,30 @@ test('assistant panel mounts only while the right panel AI tab is active', async
 
     await window.getByTestId('right-panel-tab-ai').click();
     await expect(assistantPanel).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  } finally {
+    await app.close();
+  }
+});
+
+test('assistant model selector uses shared command search styling and local provider logos', async () => {
+  const { app, window } = await launchApp();
+
+  try {
+    const searchInput = await openAssistantModelSelector(window);
+    const expectedTextColor = await readNormalizedCssColorVariable(window, '--ide-text');
+    const visualState = await readSearchInputVisualState(searchInput);
+
+    await expect(searchInput).toHaveClass(/(?:^|\s)pristine-command-search-input(?:\s|$)/);
+    expect(visualState.color).toBe(expectedTextColor);
+    expect(visualState.caretColor).toBe(expectedTextColor);
+    expect(visualState.webkitTextFillColor).toBe(expectedTextColor);
+
+    await searchInput.fill('openrouter');
+    await expect(window.locator('[data-slot="model-selector-provider"]').filter({ hasText: 'OpenRouter' })).toBeVisible({
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+
+    await expectModelProviderLogoLoaded(window, 'OpenRouter', 'model-provider-logos/openrouter.svg');
   } finally {
     await app.close();
   }

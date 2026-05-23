@@ -14,9 +14,14 @@ import {
   type ReactNode,
 } from "react";
 import type { VariantProps } from "class-variance-authority";
-import { CheckIcon, ChevronDownIcon, SearchIcon } from "lucide-react";
+import { CheckIcon, ChevronDownIcon } from "lucide-react";
 import { useAssistantApi } from "@assistant-ui/react";
 import { cn } from "@/lib/utils";
+import {
+  CommandSearchInputFrame,
+  commandSearchInputClassName,
+  commandSearchInputForegroundStyle,
+} from "@/app/components/ui/command";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,7 +31,6 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/app/components/ui/dropdown-menu";
-import { Input } from "@/app/components/ui/input";
 import { selectTriggerVariants } from "@/app/components/assistant-ui/select";
 
 export type ModelOption = {
@@ -354,21 +358,30 @@ function ModelSelectorContent({
             onClick={(event) => event.stopPropagation()}
             onPointerDown={(event) => event.stopPropagation()}
           >
-            <div className="relative">
-              <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
+            <CommandSearchInputFrame
+              className="h-8 rounded-md bg-muted/60 px-2.5"
+              iconClassName="size-3.5"
+            >
+              <input
                 ref={searchInputRef}
+                type="text"
                 aria-label="Search providers"
                 aria-activedescendant={activeSearchProviderId
                   ? `model-selector-provider-${activeSearchProviderId}`
                   : undefined}
+                autoCapitalize="none"
+                autoComplete="off"
+                autoCorrect="off"
+                data-slot="command-input"
                 placeholder="Search providers..."
+                spellCheck={false}
                 value={searchQuery}
                 onChange={(event) => updateSearchQuery(event.target.value)}
                 onKeyDown={handleSearchKeyDown}
-                className="h-8 border-0 bg-muted/60 pl-8 pr-2 text-[12px] shadow-none focus-visible:ring-1"
+                className={cn(commandSearchInputClassName, "h-8 py-0 text-[12px]")}
+                style={commandSearchInputForegroundStyle}
               />
-            </div>
+            </CommandSearchInputFrame>
           </div>
           <div data-slot="model-selector-provider-list" className="p-1">
             {filteredProviders.length > 0 ? (
