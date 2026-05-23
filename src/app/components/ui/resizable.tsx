@@ -15,6 +15,15 @@ export interface PanelImperativeHandle {
   resize: (size: number | `${number}%`) => void;
 }
 
+interface ResizablePanelSnapOptions {
+  minThreshold?: number;
+  maxThreshold?: number;
+  minSize?: number;
+  maxSize?: number;
+  onMinSnap?: () => void;
+  onMaxSnap?: () => void;
+}
+
 interface ResizablePanelGroupProps extends React.HTMLAttributes<HTMLDivElement> {
   children: React.ReactNode;
   layoutGapPx?: number;
@@ -29,7 +38,9 @@ interface ResizablePanelProps extends React.HTMLAttributes<HTMLDivElement> {
   minSizePx?: number;
   maxSizePx?: number;
   id?: string;
+  onSizeChange?: (size: number) => void;
   panelRef?: React.Ref<PanelImperativeHandle | null>;
+  snap?: ResizablePanelSnapOptions;
   collapsed?: boolean;
 }
 
@@ -393,6 +404,14 @@ function ResizablePanelGroup({
     () => (sizeState.signature === visibleSignature ? sizeState.values : buildInitialSizes(visiblePanels)),
     [sizeState.signature, sizeState.values, visiblePanels, visibleSignature],
   );
+  const latestVisibleSizesRef = React.useRef(effectiveSizes);
+
+  React.useEffect(() => {
+    latestVisibleSizesRef.current = effectiveSizes;
+    visiblePanels.forEach((panel, index) => {
+      panel.props.onSizeChange?.(getSize(effectiveSizes, index));
+    });
+  }, [effectiveSizes, visiblePanels]);
 
   React.useEffect(() => {
     if (sizeState.signature === visibleSignature) {
@@ -408,9 +427,53 @@ function ResizablePanelGroup({
   const updateVisibleSizes = React.useCallback((updater: (currentSizes: number[]) => number[]) => {
     setSizeState((currentState) => ({
       signature: visibleSignature,
-      values: updater(currentState.signature === visibleSignature ? currentState.values : buildInitialSizes(visiblePanels)),
+      values: (() => {
+        const currentValues = currentState.signature === visibleSignature
+          ? currentState.values
+          : buildInitialSizes(visiblePanels);
+        const nextValues = updater(currentValues);
+        latestVisibleSizesRef.current = nextValues;
+
+        return nextValues;
+      })(),
     }));
   }, [visiblePanels, visibleSignature]);
+
+  const applyResizeEndSnaps = React.useCallback((panelIndices: number[]) => {
+    const containerRect = containerRef.current?.getBoundingClientRect();
+    const containerSize = orientation === 'horizontal' ? containerRect?.width ?? 0 : containerRect?.height ?? 0;
+    const panelAreaSize = getPanelAreaSize(containerSize, visibleHandleCount, safeLayoutGapPx);
+
+    for (const panelIndex of panelIndices) {
+      const panel = visiblePanels[panelIndex];
+      const snap = panel?.props.snap;
+
+      if (!panel || !snap) {
+        continue;
+      }
+
+      const panelSize = getSize(latestVisibleSizesRef.current, panelIndex);
+
+      if (typeof snap.minThreshold === 'number' && panelSize <= snap.minThreshold) {
+        if (typeof snap.minSize === 'number') {
+          updateVisibleSizes((currentSizes) => resizePanelByIndex(visiblePanels, currentSizes, panelIndex, snap.minSize!, panelAreaSize));
+        }
+
+        snap.onMinSnap?.();
+        return;
+      }
+
+      if (typeof snap.maxThreshold === 'number' && panelSize >= snap.maxThreshold) {
+        const targetSize = typeof snap.maxSize === 'number'
+          ? snap.maxSize
+          : getPanelMaxSize(panel, panelAreaSize);
+
+        updateVisibleSizes((currentSizes) => resizePanelByIndex(visiblePanels, currentSizes, panelIndex, targetSize, panelAreaSize));
+        snap.onMaxSnap?.();
+        return;
+      }
+    }
+  }, [orientation, safeLayoutGapPx, updateVisibleSizes, visibleHandleCount, visiblePanels]);
 
   React.useEffect(() => {
     sequence.forEach((item) => {
@@ -459,28 +522,48 @@ function ResizablePanelGroup({
     if (item.kind === 'panel') {
       const panelIndex = panelIndexByKey.get(item.key);
       const panelSize = item.props.collapsed ? 0 : effectiveSizes[panelIndex ?? -1] ?? 0;
+      const {
+        children: panelChildren,
+        className: panelClassName,
+        collapsed,
+        defaultSize,
+        id,
+        maxSize,
+        maxSizePx,
+        minSize,
+        minSizePx,
+        onSizeChange,
+        panelRef,
+        snap,
+        style,
+        ...panelDomProps
+      } = item.props;
 
       renderItems.push(
         <div
           key={item.key}
+          {...panelDomProps}
           data-slot="resizable-panel"
-          data-testid={item.props.id ? `panel-${item.props.id}` : undefined}
-          data-panel-id={item.props.id}
-          data-collapsed={item.props.collapsed ? 'true' : 'false'}
-          aria-hidden={item.props.collapsed ? 'true' : 'false'}
+          data-testid={id ? `panel-${id}` : undefined}
+          data-panel-id={id}
+          data-default-size={defaultSize}
+          data-panel-size={Number.isFinite(panelSize) ? panelSize.toFixed(3) : undefined}
+          data-collapsed={collapsed ? 'true' : 'false'}
+          aria-hidden={collapsed ? 'true' : 'false'}
           className={cn(
             'min-h-0 min-w-0 overflow-hidden',
-            item.props.collapsed && 'pointer-events-none select-none',
-            item.props.className,
+            collapsed && 'pointer-events-none select-none',
+            panelClassName,
           )}
           style={{
-            flexBasis: item.props.collapsed ? '0%' : getPanelFlexBasis(panelSize, totalLayoutGapPx),
+            flexBasis: collapsed ? '0%' : getPanelFlexBasis(panelSize, totalLayoutGapPx),
             flexGrow: 0,
             flexShrink: 0,
             ...RESIZABLE_PANEL_TRANSITION_STYLE,
+            ...style,
           }}
         >
-          {item.props.children}
+          {panelChildren}
         </div>,
       );
 
@@ -522,6 +605,7 @@ function ResizablePanelGroup({
           const deltaSize = (deltaPixels / panelAreaSize) * 100;
           updateVisibleSizes((currentSizes) => adjustAdjacentSizes(visiblePanels, currentSizes, leftIndex, rightIndex, deltaSize, panelAreaSize));
         }}
+        onDragEnd={() => applyResizeEndSnaps([leftIndex, rightIndex])}
       />,
     );
   });
@@ -548,11 +632,13 @@ function ResizableHandleView({
   orientation,
   handleProps,
   onDelta,
+  onDragEnd,
 }: {
   layoutGapPx: number;
   orientation: Orientation;
   handleProps: ResizableHandleProps;
   onDelta: (deltaPixels: number) => void;
+  onDragEnd: () => void;
 }) {
   const { className, withHandle, children, style, ...props } = handleProps;
   const startPositionRef = React.useRef<number | null>(null);
@@ -565,6 +651,7 @@ function ResizableHandleView({
     : undefined;
 
   const endDrag = React.useCallback((pointerId?: number, target?: EventTarget | null) => {
+    const wasDragging = startPositionRef.current !== null;
     startPositionRef.current = null;
     document.body.style.removeProperty('cursor');
     document.body.style.removeProperty('user-select');
@@ -572,7 +659,11 @@ function ResizableHandleView({
     if (target instanceof HTMLElement && pointerId !== undefined) {
       target.releasePointerCapture?.(pointerId);
     }
-  }, []);
+
+    if (wasDragging) {
+      onDragEnd();
+    }
+  }, [onDragEnd]);
 
   return (
     <div

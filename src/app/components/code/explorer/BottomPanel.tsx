@@ -2,7 +2,7 @@ import { Suspense, lazy, useMemo, useState, type ReactNode } from 'react';
 import {
   Terminal, X, Plus,
   AlertCircle, AlertTriangle, Info, Lightbulb,
-  Bug, Square, Logs, Workflow, CircuitBoard,
+  Bug, Square, Logs, Workflow, CircuitBoard, Maximize2, Minimize2,
 } from 'lucide-react';
 import { summarizeLspProblems, useLspProblems } from '../../../lsp/lspProblems';
 import { TerminalPanel } from './TerminalPanel';
@@ -36,15 +36,19 @@ const BOTTOM_PANEL_TAB_ITEMS = [
 ] as const satisfies readonly IconTabToggleGroupItem[];
 
 interface BottomPanelProps {
+  isMaximized?: boolean;
   layoutVersion?: string;
   onClose?: () => void;
+  onMaximizeToggle?: () => void;
 }
 
-export function BottomPanel({ layoutVersion, onClose }: BottomPanelProps) {
+export function BottomPanel({ isMaximized = false, layoutVersion, onClose, onMaximizeToggle }: BottomPanelProps) {
   const { layoutMode } = useCodeViewerLayout();
   const [tab, setTab] = useState<BottomPanelTabId>('terminal');
   const problemsList = useLspProblems();
   const problemCounts = useMemo(() => summarizeLspProblems(problemsList), [problemsList]);
+  const maximizeLabel = isMaximized ? 'Restore Panel' : 'Maximize Panel';
+  const MaximizeIcon = isMaximized ? Minimize2 : Maximize2;
 
   const handleClose = () => {
     void terminateTerminalSession().finally(() => {
@@ -131,6 +135,20 @@ export function BottomPanel({ layoutVersion, onClose }: BottomPanelProps) {
               <Plus size={13} />
             </Button>
           </TooltipIconButton>
+          {onMaximizeToggle && (
+            <TooltipIconButton content={maximizeLabel}>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                aria-label={maximizeLabel}
+                data-testid="bottom-panel-maximize"
+                className="text-ide-text-muted hover:text-ide-text"
+                onClick={onMaximizeToggle}
+              >
+                <MaximizeIcon size={13} />
+              </Button>
+            </TooltipIconButton>
+          )}
           <TooltipIconButton content="Close Panel">
             <Button
               variant="ghost"

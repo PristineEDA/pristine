@@ -14,6 +14,8 @@ import {
 
 const panelRecords: Array<{ id?: string; collapsed?: boolean }> = [];
 const handleRecords: Array<{ hidden?: boolean }> = [];
+const panelResizeCalls: Array<{ id?: string; size: number | `${number}%` }> = [];
+const panelSnapHandlers = new Map<string, { onMinSnap?: () => void; onMaxSnap?: () => void }>();
 
 function latestPanelRecords(count: number) {
   return panelRecords.slice(-count);
@@ -38,16 +40,70 @@ vi.mock('../../ui/resizable', () => ({
   }) => (
     <div data-testid={`panel-group-${orientation}`} className={className} data-layout-gap-px={layoutGapPx ?? ''}>{children}</div>
   ),
-  ResizablePanel: ({ children, className, id, collapsed, minSizePx, maxSizePx }: { children: React.ReactNode; className?: string; id?: string; collapsed?: boolean; minSizePx?: number; maxSizePx?: number }) => {
+  ResizablePanel: ({
+    children,
+    className,
+    id,
+    collapsed,
+    defaultSize,
+    minSize,
+    maxSize,
+    minSizePx,
+    maxSizePx,
+    onSizeChange,
+    panelRef,
+    snap,
+    ...props
+  }: {
+    children: React.ReactNode;
+    className?: string;
+    id?: string;
+    collapsed?: boolean;
+    defaultSize?: number;
+    minSize?: number;
+    maxSize?: number;
+    minSizePx?: number;
+    maxSizePx?: number;
+    onSizeChange?: (size: number) => void;
+    panelRef?: React.Ref<{ resize: (size: number | `${number}%`) => void } | null>;
+    snap?: { minThreshold?: number; maxThreshold?: number; onMinSnap?: () => void; onMaxSnap?: () => void };
+    [key: string]: unknown;
+  }) => {
     panelRecords.push({ id, collapsed });
+
+    const resizeHandle = {
+      resize: (size: number | `${number}%`) => {
+        panelResizeCalls.push({ id, size });
+        onSizeChange?.(typeof size === 'string' ? Number.parseFloat(size) : size);
+      },
+    };
+
+    if (panelRef) {
+      if (typeof panelRef === 'function') {
+        panelRef(resizeHandle);
+      } else {
+        panelRef.current = resizeHandle;
+      }
+    }
+
+    if (id && snap) {
+      panelSnapHandlers.set(id, snap);
+    }
 
     return (
       <div
         data-testid={`panel-${id ?? 'unknown'}`}
         className={className}
+        data-default-size={defaultSize ?? ''}
+        data-min-size={minSize ?? ''}
+        data-max-size={maxSize ?? ''}
         data-collapsed={collapsed ? 'true' : 'false'}
         data-min-size-px={minSizePx ?? ''}
         data-max-size-px={maxSizePx ?? ''}
+        data-has-panel-ref={panelRef ? 'true' : 'false'}
+        data-snap-min-threshold={snap?.minThreshold ?? ''}
+        data-snap-max-threshold={snap?.maxThreshold ?? ''}
+        data-bottom-panel-maximized={String(props['data-bottom-panel-maximized'] ?? '')}
       >
         {children}
       </div>
@@ -109,6 +165,88 @@ describe('CodeWorkspaceShell', () => {
       { hidden: false },
       { hidden: false },
     ]);
+  });
+
+  it('wires Explorer bottom panel maximize controls to the bottom panel resize handle', () => {
+    panelRecords.length = 0;
+    handleRecords.length = 0;
+    panelResizeCalls.length = 0;
+    panelSnapHandlers.clear();
+
+    render(
+      <CodeWorkspaceShell
+        activityBar={<div>Activity</div>}
+        showLeftPanel={false}
+        showBottomPanel
+        showRightPanel={false}
+        leftPanelId="left"
+        centerPanelId="center"
+        topPanelId="top"
+        bottomPanelId="bottom"
+        rightPanelId="right"
+        leftContent={<div>Explorer</div>}
+        topContent={<div>Editor</div>}
+        bottomContent={({ isMaximized, onMaximizeToggle }) => (
+          <button type="button" onClick={onMaximizeToggle}>{isMaximized ? 'restore-bottom' : 'maximize-bottom'}</button>
+        )}
+        rightContent={<div>Inspector</div>}
+        enableBottomPanelMaximize
+      />,
+    );
+
+    expect(screen.getByTestId('panel-top')).toHaveAttribute('data-min-size', '0');
+    expect(screen.getByTestId('panel-bottom')).toHaveAttribute('data-max-size', '100');
+    expect(screen.getByTestId('panel-bottom')).toHaveAttribute('data-has-panel-ref', 'true');
+    expect(screen.getByTestId('panel-bottom')).toHaveAttribute('data-snap-max-threshold', '92');
+    expect(screen.getByTestId('panel-bottom')).toHaveAttribute('data-bottom-panel-maximized', 'false');
+
+    fireEvent.click(screen.getByText('maximize-bottom'));
+
+    expect(panelResizeCalls).toEqual([{ id: 'bottom', size: 100 }]);
+    expect(screen.getByText('restore-bottom')).toBeInTheDocument();
+    expect(screen.getByTestId('panel-bottom')).toHaveAttribute('data-bottom-panel-maximized', 'true');
+
+    fireEvent.click(screen.getByText('restore-bottom'));
+
+    expect(panelResizeCalls).toEqual([
+      { id: 'bottom', size: 100 },
+      { id: 'bottom', size: 40 },
+    ]);
+  });
+
+  it('uses the bottom panel minimum snap callback to auto-hide without closing the content', () => {
+    panelRecords.length = 0;
+    handleRecords.length = 0;
+    panelSnapHandlers.clear();
+    const onBottomPanelAutoHide = vi.fn();
+
+    render(
+      <CodeWorkspaceShell
+        activityBar={<div>Activity</div>}
+        showLeftPanel={false}
+        showBottomPanel
+        showRightPanel={false}
+        leftPanelId="left"
+        centerPanelId="center"
+        topPanelId="top"
+        bottomPanelId="bottom"
+        rightPanelId="right"
+        leftContent={<div>Explorer</div>}
+        topContent={<div>Editor</div>}
+        bottomContent={<div>Terminal</div>}
+        rightContent={<div>Inspector</div>}
+        enableBottomPanelMaximize
+        onBottomPanelAutoHide={onBottomPanelAutoHide}
+      />,
+    );
+
+    expect(screen.getByText('Terminal')).toBeInTheDocument();
+    expect(screen.getByTestId('panel-bottom')).toHaveAttribute('data-snap-min-threshold', '16');
+
+    panelSnapHandlers.get('bottom')?.onMinSnap?.();
+
+    expect(onBottomPanelAutoHide).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('Terminal')).toBeInTheDocument();
   });
 
   it('applies minimal layout chrome without changing the activity bar region', () => {

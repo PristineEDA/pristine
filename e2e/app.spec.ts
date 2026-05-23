@@ -5262,6 +5262,91 @@ test('terminal session survives tab switches and bottom panel hide/show', async 
   await app.close();
 });
 
+test('terminal bottom panel maximizes, snaps, and auto-hides without closing the session', async () => {
+  const { app, window } = await launchApp();
+
+  await ensureExplorerVisible(window);
+  await openBottomTerminal(window);
+
+  await expect.poll(async () => readTerminalPid(window), {
+    timeout: 15000,
+  }).toBeGreaterThan(0);
+
+  const originalPid = await readTerminalPid(window);
+  const bottomPanel = window.getByTestId('panel-bottom-panel');
+  const centerPanel = window.getByTestId('panel-center-panel');
+  const bottomResizeHandle = window.locator('[data-slot="resizable-handle"]').last();
+
+  async function dragBottomPanelHandleTo(targetY: number) {
+    const handleBox = await bottomResizeHandle.boundingBox();
+
+    if (!handleBox) {
+      throw new Error('Expected bottom panel resize handle geometry to be measurable');
+    }
+
+    await window.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2);
+    await window.mouse.down();
+    await window.mouse.move(handleBox.x + handleBox.width / 2, targetY, { steps: 12 });
+    await window.mouse.up();
+  }
+
+  const initialBottomHeight = await readElementPixelHeight(bottomPanel);
+  const maximizeButton = window.getByTestId('bottom-panel-maximize');
+
+  await expect(maximizeButton).toHaveAccessibleName('Maximize Panel');
+  await maximizeButton.click();
+  await expect(maximizeButton).toHaveAccessibleName('Restore Panel');
+  await expect(bottomPanel).toHaveAttribute('data-bottom-panel-maximized', 'true');
+  await expect.poll(async () => {
+    const [bottomHeight, centerHeight] = await Promise.all([
+      readElementPixelHeight(bottomPanel),
+      readElementPixelHeight(centerPanel),
+    ]);
+
+    return bottomHeight >= centerHeight - 40;
+  }, { timeout: UI_READY_TIMEOUT_MS }).toBe(true);
+
+  await maximizeButton.click();
+  await expect(maximizeButton).toHaveAccessibleName('Maximize Panel');
+  await expect(bottomPanel).toHaveAttribute('data-bottom-panel-maximized', 'false');
+  await expect.poll(async () => readElementPixelHeight(bottomPanel), { timeout: UI_READY_TIMEOUT_MS }).toBeLessThan(initialBottomHeight + 80);
+
+  const centerBoxBeforeMaxSnap = await centerPanel.boundingBox();
+  if (!centerBoxBeforeMaxSnap) {
+    throw new Error('Expected center panel geometry to be measurable');
+  }
+
+  await dragBottomPanelHandleTo(centerBoxBeforeMaxSnap.y + 4);
+  await expect(maximizeButton).toHaveAccessibleName('Restore Panel');
+  await expect(bottomPanel).toHaveAttribute('data-bottom-panel-maximized', 'true');
+  await expect.poll(async () => {
+    const [bottomHeight, centerHeight] = await Promise.all([
+      readElementPixelHeight(bottomPanel),
+      readElementPixelHeight(centerPanel),
+    ]);
+
+    return bottomHeight >= centerHeight - 40;
+  }, { timeout: UI_READY_TIMEOUT_MS }).toBe(true);
+
+  const centerBoxBeforeHideSnap = await centerPanel.boundingBox();
+  if (!centerBoxBeforeHideSnap) {
+    throw new Error('Expected center panel geometry to be measurable before hiding');
+  }
+
+  await dragBottomPanelHandleTo(centerBoxBeforeHideSnap.y + centerBoxBeforeHideSnap.height - 4);
+  await expectCollapsedPanel(bottomPanel);
+  await expect(window.getByTestId('terminal-host')).toHaveCount(0);
+  expect(isProcessRunning(originalPid)).toBe(true);
+
+  await window.getByTestId('toggle-bottom-panel').click();
+  await openBottomTerminal(window);
+  await expect.poll(async () => readTerminalPid(window), {
+    timeout: 15000,
+  }).toBe(originalPid);
+
+  await app.close();
+});
+
 test('terminal preserves output history across tab switches and bottom panel hide/show', async () => {
   const { app, window } = await launchApp();
   const marker = '__PRISTINE_TERMINAL_HISTORY__';

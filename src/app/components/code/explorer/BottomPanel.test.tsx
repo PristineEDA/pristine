@@ -163,6 +163,34 @@ describe('BottomPanel', () => {
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
   });
 
+  it('renders the maximize panel button immediately before the close panel button', async () => {
+    const user = userEvent.setup();
+    const onMaximizeToggle = vi.fn();
+
+    render(<BottomPanel onMaximizeToggle={onMaximizeToggle} />);
+
+    const toolbarButtonLabels = screen
+      .getAllByRole('button')
+      .map((button) => button.getAttribute('aria-label'))
+      .filter((label): label is string => label === 'New Terminal' || label === 'Maximize Panel' || label === 'Close Panel');
+
+    expect(toolbarButtonLabels).toEqual(['New Terminal', 'Maximize Panel', 'Close Panel']);
+
+    await clickButton(user, /maximize panel/i);
+
+    expect(onMaximizeToggle).toHaveBeenCalledTimes(1);
+    expect(terminateTerminalSessionMock).not.toHaveBeenCalled();
+  });
+
+  it('labels the maximize button as restore when the panel is maximized', () => {
+    const onMaximizeToggle = vi.fn();
+
+    render(<BottomPanel isMaximized onMaximizeToggle={onMaximizeToggle} />);
+
+    expect(screen.getByTestId('bottom-panel-maximize')).toHaveAccessibleName('Restore Panel');
+    expect(screen.queryByRole('button', { name: /maximize panel/i })).not.toBeInTheDocument();
+  });
+
   it('switches between tabs and closes the panel', async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();

@@ -1,5 +1,6 @@
+import * as React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from './resizable';
 
 function mockGroupRect(element: HTMLElement, width: number, height: number) {
@@ -263,5 +264,96 @@ describe('resizable', () => {
     fireEvent.pointerUp(handle, { clientX: 900, clientY: 0, pointerId: 4 });
 
     expect(rightPanel.style.flexBasis).toBe('30%');
+  });
+
+  it('resizes a panel to the full available area through the imperative handle', () => {
+    function ImperativeResizeHarness() {
+      const bottomPanelRef = React.useRef<{ resize: (size: number | `${number}%`) => void } | null>(null);
+
+      return (
+        <div className="h-[400px] w-[1000px]">
+          <button type="button" onClick={() => bottomPanelRef.current?.resize(100)}>maximize-bottom</button>
+          <ResizablePanelGroup orientation="vertical">
+            <ResizablePanel id="top" defaultSize={60} minSize={0}>
+              <div>Top</div>
+            </ResizablePanel>
+            <ResizableHandle data-testid="imperative-vertical-handle" />
+            <ResizablePanel id="bottom" defaultSize={40} minSize={15} panelRef={bottomPanelRef}>
+              <div>Bottom</div>
+            </ResizablePanel>
+          </ResizablePanelGroup>
+        </div>
+      );
+    }
+
+    render(<ImperativeResizeHarness />);
+
+    const group = screen.getByText('Top').closest('[data-slot="resizable-panel-group"]') as HTMLElement;
+    mockGroupRect(group, 1000, 400);
+
+    fireEvent.click(screen.getByText('maximize-bottom'));
+
+    expect(screen.getByTestId('panel-top').style.flexBasis).toBe('0%');
+    expect(screen.getByTestId('panel-bottom').style.flexBasis).toBe('100%');
+    expect(screen.getByTestId('panel-bottom')).toHaveAttribute('data-panel-size', '100.000');
+  });
+
+  it('snaps a panel to its configured maximum when drag release lands near the maximum', () => {
+    const onMaxSnap = vi.fn();
+
+    render(
+      <div className="h-[400px] w-[1000px]">
+        <ResizablePanelGroup orientation="vertical">
+          <ResizablePanel id="top" defaultSize={25} minSize={0}>
+            <div>Top</div>
+          </ResizablePanel>
+          <ResizableHandle data-testid="vertical-max-snap-handle" />
+          <ResizablePanel id="bottom" defaultSize={75} minSize={10} snap={{ maxThreshold: 92, maxSize: 100, onMaxSnap }}>
+            <div>Bottom</div>
+          </ResizablePanel>
+        </ResizablePanelGroup>
+      </div>,
+    );
+
+    const group = screen.getByText('Top').closest('[data-slot="resizable-panel-group"]') as HTMLElement;
+    mockGroupRect(group, 1000, 400);
+    const handle = screen.getByTestId('vertical-max-snap-handle');
+
+    fireEvent.pointerDown(handle, { clientX: 0, clientY: 100, pointerId: 21 });
+    fireEvent.pointerMove(handle, { clientX: 0, clientY: 20, pointerId: 21 });
+    fireEvent.pointerUp(handle, { clientX: 0, clientY: 20, pointerId: 21 });
+
+    expect(screen.getByTestId('panel-top').style.flexBasis).toBe('0%');
+    expect(screen.getByTestId('panel-bottom').style.flexBasis).toBe('100%');
+    expect(onMaxSnap).toHaveBeenCalledTimes(1);
+  });
+
+  it('calls the configured minimum snap handler when drag release lands at the minimum', () => {
+    const onMinSnap = vi.fn();
+
+    render(
+      <div className="h-[400px] w-[1000px]">
+        <ResizablePanelGroup orientation="vertical">
+          <ResizablePanel id="top" defaultSize={25} minSize={10}>
+            <div>Top</div>
+          </ResizablePanel>
+          <ResizableHandle data-testid="vertical-min-snap-handle" />
+          <ResizablePanel id="bottom" defaultSize={75} minSize={20} snap={{ minThreshold: 20, onMinSnap }}>
+            <div>Bottom</div>
+          </ResizablePanel>
+        </ResizablePanelGroup>
+      </div>,
+    );
+
+    const group = screen.getByText('Top').closest('[data-slot="resizable-panel-group"]') as HTMLElement;
+    mockGroupRect(group, 1000, 400);
+    const handle = screen.getByTestId('vertical-min-snap-handle');
+
+    fireEvent.pointerDown(handle, { clientX: 0, clientY: 100, pointerId: 22 });
+    fireEvent.pointerMove(handle, { clientX: 0, clientY: 320, pointerId: 22 });
+    fireEvent.pointerUp(handle, { clientX: 0, clientY: 320, pointerId: 22 });
+
+    expect(screen.getByTestId('panel-bottom').style.flexBasis).toBe('20%');
+    expect(onMinSnap).toHaveBeenCalledTimes(1);
   });
 });

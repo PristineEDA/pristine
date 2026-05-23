@@ -18,6 +18,7 @@ import {
 } from './codeViewerLayoutStyles';
 import {
   PANEL_TRANSITION_DURATION_MS,
+  type PanelImperativeHandle,
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
@@ -36,6 +37,22 @@ const FIXED_PANEL_TRANSITION_STYLE = {
   transitionDuration: `${PANEL_TRANSITION_DURATION_MS}ms`,
   transitionProperty: 'width, min-width, max-width, flex-basis',
 } satisfies React.CSSProperties;
+
+const BOTTOM_PANEL_DEFAULT_SIZE = 40;
+const BOTTOM_PANEL_TOP_DEFAULT_SIZE = 60;
+const BOTTOM_PANEL_MIN_SIZE = 15;
+const BOTTOM_PANEL_MAX_SIZE = 100;
+const BOTTOM_PANEL_LEGACY_MAX_SIZE = 60;
+const BOTTOM_PANEL_MAX_SNAP_THRESHOLD = 92;
+const BOTTOM_PANEL_HIDE_SNAP_THRESHOLD = 16;
+const BOTTOM_PANEL_MAXIMIZED_THRESHOLD = 99;
+
+export interface CodeWorkspaceBottomPanelControls {
+  isMaximized: boolean;
+  onMaximizeToggle: () => void;
+}
+
+type CodeWorkspaceBottomContent = React.ReactNode | ((controls: CodeWorkspaceBottomPanelControls) => React.ReactNode);
 
 function clampFixedPanelWidth(width: number, minWidth: number, maxWidth: number) {
   return Math.min(Math.max(width, minWidth), maxWidth);
@@ -178,8 +195,10 @@ interface CodeWorkspaceShellProps {
   rightPanelId: string;
   leftContent: React.ReactNode;
   topContent: React.ReactNode;
-  bottomContent: React.ReactNode;
+  bottomContent: CodeWorkspaceBottomContent;
   rightContent: React.ReactNode;
+  enableBottomPanelMaximize?: boolean;
+  onBottomPanelAutoHide?: () => void;
   leftFixedWidthPx?: number;
   onLeftFixedWidthChange?: React.Dispatch<React.SetStateAction<number>>;
   leftFixedMinWidthPx?: number;
@@ -271,6 +290,8 @@ export function CodeWorkspaceShell({
   topContent,
   bottomContent,
   rightContent,
+  enableBottomPanelMaximize = false,
+  onBottomPanelAutoHide,
   leftFixedWidthPx,
   onLeftFixedWidthChange,
   leftFixedMinWidthPx,
@@ -286,6 +307,10 @@ export function CodeWorkspaceShell({
   const leftPanelPresence = useAnimatedPanelPresence(showLeftPanel);
   const bottomPanelPresence = useAnimatedPanelPresence(showBottomPanel);
   const rightPanelPresence = useAnimatedPanelPresence(showRightPanel);
+  const bottomPanelRef = useRef<PanelImperativeHandle | null>(null);
+  const bottomPanelSizeRef = useRef(BOTTOM_PANEL_DEFAULT_SIZE);
+  const lastNonMaximizedBottomPanelSizeRef = useRef(BOTTOM_PANEL_DEFAULT_SIZE);
+  const [isBottomPanelMaximized, setIsBottomPanelMaximized] = useState(false);
   const fixedRightPanelWasOpenedRef = useRef(hasFixedRightPanel && showRightPanel);
   const fixedLeftMinWidth = leftFixedMinWidthPx ?? EXPLORER_LEFT_PANEL_MIN_WIDTH_PX;
   const fixedLeftMaxWidth = leftFixedMaxWidthPx ?? EXPLORER_LEFT_PANEL_MAX_WIDTH_PX;
@@ -319,18 +344,103 @@ export function CodeWorkspaceShell({
     ? getCodeWorkspacePanelFrameClassName(layoutMode, 'shrink-0')
     : 'min-h-0 overflow-hidden shrink-0';
 
+  useLayoutEffect(() => {
+    if (!showBottomPanel) {
+      setIsBottomPanelMaximized(false);
+    }
+  }, [showBottomPanel]);
+
+  const handleBottomPanelSizeChange = useCallback((size: number) => {
+    bottomPanelSizeRef.current = size;
+
+    const nextIsMaximized = size >= BOTTOM_PANEL_MAXIMIZED_THRESHOLD;
+    setIsBottomPanelMaximized((currentValue) => (currentValue === nextIsMaximized ? currentValue : nextIsMaximized));
+
+    if (!nextIsMaximized && size > BOTTOM_PANEL_HIDE_SNAP_THRESHOLD) {
+      lastNonMaximizedBottomPanelSizeRef.current = Math.min(Math.max(size, BOTTOM_PANEL_MIN_SIZE), BOTTOM_PANEL_MAX_SNAP_THRESHOLD - 1);
+    }
+  }, []);
+
+  const handleBottomPanelAutoHide = useCallback(() => {
+    setIsBottomPanelMaximized(false);
+    onBottomPanelAutoHide?.();
+  }, [onBottomPanelAutoHide]);
+
+  const handleBottomPanelMaxSnap = useCallback(() => {
+    setIsBottomPanelMaximized(true);
+  }, []);
+
+  const handleBottomPanelMaximizeToggle = useCallback(() => {
+    if (!enableBottomPanelMaximize) {
+      return;
+    }
+
+    const bottomPanel = bottomPanelRef.current;
+
+    if (!bottomPanel) {
+      return;
+    }
+
+    if (isBottomPanelMaximized) {
+      setIsBottomPanelMaximized(false);
+      bottomPanel.resize(lastNonMaximizedBottomPanelSizeRef.current);
+      return;
+    }
+
+    const currentSize = bottomPanelSizeRef.current;
+    if (currentSize > BOTTOM_PANEL_HIDE_SNAP_THRESHOLD && currentSize < BOTTOM_PANEL_MAXIMIZED_THRESHOLD) {
+      lastNonMaximizedBottomPanelSizeRef.current = currentSize;
+    }
+
+    setIsBottomPanelMaximized(true);
+    bottomPanel.resize(BOTTOM_PANEL_MAX_SIZE);
+  }, [enableBottomPanelMaximize, isBottomPanelMaximized]);
+
+  const bottomPanelControls = {
+    isMaximized: isBottomPanelMaximized,
+    onMaximizeToggle: handleBottomPanelMaximizeToggle,
+  } satisfies CodeWorkspaceBottomPanelControls;
+  const renderedBottomContent = typeof bottomContent === 'function'
+    ? bottomContent(bottomPanelControls)
+    : bottomContent;
+  const bottomPanelSnap = enableBottomPanelMaximize
+    ? {
+      minThreshold: BOTTOM_PANEL_HIDE_SNAP_THRESHOLD,
+      maxThreshold: BOTTOM_PANEL_MAX_SNAP_THRESHOLD,
+      maxSize: BOTTOM_PANEL_MAX_SIZE,
+      onMinSnap: handleBottomPanelAutoHide,
+      onMaxSnap: handleBottomPanelMaxSnap,
+    }
+    : undefined;
+
   const centerPanelContent = (
     <div className="relative h-full">
       {overlay}
 
       <ResizablePanelGroup orientation="vertical" layoutGapPx={panelGroupLayoutGapPx} className={getCodeWorkspacePanelGroupClassName(layoutMode)}>
-        <ResizablePanel defaultSize={60} minSize={25} id={topPanelId} className={getCodeWorkspacePanelFrameClassName(layoutMode)}>
+        <ResizablePanel
+          defaultSize={BOTTOM_PANEL_TOP_DEFAULT_SIZE}
+          minSize={enableBottomPanelMaximize ? 0 : 25}
+          id={topPanelId}
+          className={getCodeWorkspacePanelFrameClassName(layoutMode)}
+        >
           {topContent}
         </ResizablePanel>
 
         <ResizableHandle hidden={!showBottomPanel} className={getCodeWorkspaceResizeHandleClassName(layoutMode)} />
-        <ResizablePanel defaultSize={40} minSize={15} maxSize={60} id={bottomPanelId} collapsed={!showBottomPanel} className={getCodeWorkspacePanelFrameClassName(layoutMode)}>
-          {bottomPanelPresence.shouldRender ? bottomContent : <div className="h-full" />}
+        <ResizablePanel
+          defaultSize={BOTTOM_PANEL_DEFAULT_SIZE}
+          minSize={BOTTOM_PANEL_MIN_SIZE}
+          maxSize={enableBottomPanelMaximize ? BOTTOM_PANEL_MAX_SIZE : BOTTOM_PANEL_LEGACY_MAX_SIZE}
+          id={bottomPanelId}
+          collapsed={!showBottomPanel}
+          panelRef={enableBottomPanelMaximize ? bottomPanelRef : undefined}
+          onSizeChange={enableBottomPanelMaximize ? handleBottomPanelSizeChange : undefined}
+          snap={bottomPanelSnap}
+          data-bottom-panel-maximized={enableBottomPanelMaximize ? String(isBottomPanelMaximized) : undefined}
+          className={getCodeWorkspacePanelFrameClassName(layoutMode)}
+        >
+          {bottomPanelPresence.shouldRender ? renderedBottomContent : <div className="h-full" />}
         </ResizablePanel>
       </ResizablePanelGroup>
     </div>
