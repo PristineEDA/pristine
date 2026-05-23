@@ -3,7 +3,7 @@ import { Application, Container } from 'pixi.js';
 
 import { readAsicSchematicPalette } from './asicSchematicPalette';
 import { createAsicSchematicScene } from './createAsicSchematicScene';
-import type { SchematicLayoutBounds, SchematicLayoutResult } from './asicSchematicTypes';
+import type { SchematicLayoutBounds, SchematicLayoutResult, SchematicNodeLayout, SchematicPoint } from './asicSchematicTypes';
 
 type PixiRendererPreference = 'webgpu' | 'webgl';
 type PixiRendererStatus = PixiRendererPreference | 'error' | 'initializing';
@@ -13,6 +13,28 @@ interface CameraState {
   y: number;
   zoom: number;
 }
+
+interface ScreenPoint {
+  x: number;
+  y: number;
+}
+
+type DragState =
+  | {
+    mode: 'pan';
+    pointerId: number;
+    startClient: ScreenPoint;
+    cameraStart: Pick<CameraState, 'x' | 'y'>;
+  }
+  | {
+    mode: 'node';
+    pointerId: number;
+    nodeId: string;
+    startClient: ScreenPoint;
+    nodeStart: ScreenPoint;
+    currentPosition: ScreenPoint;
+    moved: boolean;
+  };
 
 export interface AsicSchematicCanvasHandle {
   fitToView: () => void;
@@ -26,11 +48,14 @@ interface AsicSchematicCanvasProps {
   onCameraChange?: (camera: CameraState) => void;
   onModuleOpen?: (moduleId: string) => void;
   onNodeSelect?: (nodeId: string | null) => void;
+  onNodePositionChange?: (nodeId: string, position: SchematicPoint) => void;
   onRendererChange?: (renderer: PixiRendererStatus) => void;
 }
 
 const minZoom = 0.28;
 const maxZoom = 2.4;
+const dragThreshold = 4;
+const wheelLinePixels = 40;
 const defaultCamera: CameraState = { x: 24, y: 24, zoom: 1 };
 
 export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSchematicCanvasProps>(function AsicSchematicCanvas({
@@ -40,22 +65,30 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
   onCameraChange,
   onModuleOpen,
   onNodeSelect,
+  onNodePositionChange,
   onRendererChange,
 }, ref) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const appRef = useRef<Application | null>(null);
   const worldRef = useRef<Container | null>(null);
+  const nodeContainersRef = useRef<Map<string, Container>>(new Map());
   const interactionCleanupRef = useRef<(() => void) | null>(null);
   const renderFrameRef = useRef<number | null>(null);
   const renderCountRef = useRef(0);
   const initializedRef = useRef(false);
+  const layoutRef = useRef(layout);
+  const onNodePositionChangeRef = useRef(onNodePositionChange);
   const cameraRef = useRef<CameraState>(defaultCamera);
   const [renderer, setRenderer] = useState<PixiRendererStatus>('initializing');
   const [error, setError] = useState<string | null>(null);
   const [camera, setCamera] = useState(defaultCamera);
   const [tickerActive, setTickerActive] = useState(false);
 
-  const moduleKey = useMemo(() => `${layout.module.id}:${layout.nodes.length}:${layout.edges.length}`, [layout]);
+  layoutRef.current = layout;
+  onNodePositionChangeRef.current = onNodePositionChange;
+
+  const moduleId = layout.module.id;
+  const firstDraggableNode = useMemo(() => layout.nodes.find((node) => node.kind === 'module') ?? null, [layout]);
 
   useImperativeHandle(ref, () => ({
     fitToView,
@@ -126,11 +159,11 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
   useEffect(() => {
     drawCurrentScene();
     applyCamera();
-  }, [moduleKey, selectedNodeId, themeKey]);
+  }, [layout, selectedNodeId, themeKey]);
 
   useEffect(() => {
     fitToView();
-  }, [moduleKey]);
+  }, [moduleId]);
 
   function drawCurrentScene() {
     const app = appRef.current;
@@ -145,10 +178,16 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
       previousWorld.destroy({ children: true });
     }
 
+    nodeContainersRef.current.clear();
     const world = createAsicSchematicScene({
       layout,
       palette: readAsicSchematicPalette(),
       selectedNodeId,
+      onNodeContainerCreated: (node, container) => {
+        if (node.kind === 'module') {
+          nodeContainersRef.current.set(node.id, container);
+        }
+      },
       onModuleOpen,
       onNodeSelect,
     });
@@ -159,24 +198,39 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
 
   function installCanvasInteractions(app: Application) {
     const canvas = app.canvas;
-    let dragging = false;
-    let dragStart = { x: 0, y: 0 };
-    let cameraStart = { x: 0, y: 0 };
+    let dragState: DragState | null = null;
 
     const handleWheel = (event: WheelEvent) => {
       event.preventDefault();
-      const rect = canvas.getBoundingClientRect();
-      const pointerX = event.clientX - rect.left;
-      const pointerY = event.clientY - rect.top;
+      const delta = getNormalizedWheelDelta(event, canvas);
       const current = cameraRef.current;
-      const nextZoom = clamp(current.zoom * (event.deltaY > 0 ? 0.9 : 1.1), minZoom, maxZoom);
-      const worldX = (pointerX - current.x) / current.zoom;
-      const worldY = (pointerY - current.y) / current.zoom;
+
+      if (event.ctrlKey || event.metaKey) {
+        const pointer = getCanvasPoint(event, canvas);
+        const nextZoom = clamp(current.zoom * (delta.y > 0 ? 0.9 : 1.1), minZoom, maxZoom);
+        const worldX = (pointer.x - current.x) / current.zoom;
+        const worldY = (pointer.y - current.y) / current.zoom;
+
+        setCameraState({
+          zoom: nextZoom,
+          x: pointer.x - worldX * nextZoom,
+          y: pointer.y - worldY * nextZoom,
+        });
+        return;
+      }
+
+      if (event.shiftKey) {
+        const horizontalDelta = delta.x !== 0 ? delta.x : delta.y;
+        setCameraState({
+          ...current,
+          x: current.x - horizontalDelta,
+        });
+        return;
+      }
 
       setCameraState({
-        zoom: nextZoom,
-        x: pointerX - worldX * nextZoom,
-        y: pointerY - worldY * nextZoom,
+        ...current,
+        y: current.y - delta.y,
       });
     };
 
@@ -185,26 +239,84 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
         return;
       }
 
-      dragging = true;
-      dragStart = { x: event.clientX, y: event.clientY };
-      cameraStart = { x: cameraRef.current.x, y: cameraRef.current.y };
+      const clientPoint = { x: event.clientX, y: event.clientY };
+      const node = findDraggableNodeAt(clientPoint, canvas);
+
+      if (node) {
+        dragState = {
+          mode: 'node',
+          pointerId: event.pointerId,
+          nodeId: node.id,
+          startClient: clientPoint,
+          nodeStart: { x: node.x, y: node.y },
+          currentPosition: { x: node.x, y: node.y },
+          moved: false,
+        };
+        canvas.style.cursor = 'grabbing';
+      } else {
+        dragState = {
+          mode: 'pan',
+          pointerId: event.pointerId,
+          startClient: clientPoint,
+          cameraStart: { x: cameraRef.current.x, y: cameraRef.current.y },
+        };
+      }
+
       canvas.setPointerCapture(event.pointerId);
     };
 
     const handlePointerMove = (event: PointerEvent) => {
-      if (!dragging) {
+      if (!dragState || dragState.pointerId !== event.pointerId) {
+        return;
+      }
+
+      const delta = {
+        x: event.clientX - dragState.startClient.x,
+        y: event.clientY - dragState.startClient.y,
+      };
+
+      if (dragState.mode === 'node') {
+        const moved = dragState.moved || Math.hypot(delta.x, delta.y) >= dragThreshold;
+
+        if (!moved) {
+          return;
+        }
+
+        const nextPosition = {
+          x: roundLayoutCoordinate(dragState.nodeStart.x + delta.x / cameraRef.current.zoom),
+          y: roundLayoutCoordinate(dragState.nodeStart.y + delta.y / cameraRef.current.zoom),
+        };
+        const container = nodeContainersRef.current.get(dragState.nodeId);
+
+        dragState = {
+          ...dragState,
+          moved: true,
+          currentPosition: nextPosition,
+        };
+        container?.position.set(nextPosition.x, nextPosition.y);
+        setActiveDragDataAttributes(dragState.nodeId, nextPosition);
+        requestRender();
         return;
       }
 
       setCameraState({
         ...cameraRef.current,
-        x: cameraStart.x + event.clientX - dragStart.x,
-        y: cameraStart.y + event.clientY - dragStart.y,
+        x: dragState.cameraStart.x + delta.x,
+        y: dragState.cameraStart.y + delta.y,
       });
     };
 
     const stopDragging = (event: PointerEvent) => {
-      dragging = false;
+      if (dragState?.mode === 'node') {
+        if (dragState.moved) {
+          onNodePositionChangeRef.current?.(dragState.nodeId, dragState.currentPosition);
+          setLastDragDataAttributes(dragState.nodeId, dragState.currentPosition);
+        }
+        clearActiveDragDataAttributes();
+        canvas.style.cursor = '';
+      }
+
+      dragState = null;
       if (canvas.hasPointerCapture(event.pointerId)) {
         canvas.releasePointerCapture(event.pointerId);
       }
@@ -248,6 +360,74 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
     }
 
     app.renderer.resize(Math.max(320, Math.floor(host.clientWidth)), Math.max(220, Math.floor(host.clientHeight)));
+  }
+
+  function findDraggableNodeAt(clientPoint: ScreenPoint, canvas: HTMLCanvasElement): SchematicNodeLayout | null {
+    const canvasRect = canvas.getBoundingClientRect();
+    const worldPoint = screenToWorld({
+      x: clientPoint.x - canvasRect.left,
+      y: clientPoint.y - canvasRect.top,
+    }, cameraRef.current);
+    const nodes = layoutRef.current.nodes;
+
+    for (let index = nodes.length - 1; index >= 0; index -= 1) {
+      const node = nodes[index];
+
+      if (!node) {
+        continue;
+      }
+
+      if (node.kind !== 'module') {
+        continue;
+      }
+
+      if (
+        worldPoint.x >= node.x
+        && worldPoint.x <= node.x + node.width
+        && worldPoint.y >= node.y
+        && worldPoint.y <= node.y + node.height
+      ) {
+        return node;
+      }
+    }
+
+    return null;
+  }
+
+  function setActiveDragDataAttributes(nodeId: string, position: ScreenPoint) {
+    const host = hostRef.current;
+
+    if (!host) {
+      return;
+    }
+
+    host.setAttribute('data-active-drag-node-id', nodeId);
+    host.setAttribute('data-active-drag-node-x', position.x.toFixed(1));
+    host.setAttribute('data-active-drag-node-y', position.y.toFixed(1));
+  }
+
+  function setLastDragDataAttributes(nodeId: string, position: ScreenPoint) {
+    const host = hostRef.current;
+
+    if (!host) {
+      return;
+    }
+
+    host.setAttribute('data-last-drag-node-id', nodeId);
+    host.setAttribute('data-last-drag-node-x', position.x.toFixed(1));
+    host.setAttribute('data-last-drag-node-y', position.y.toFixed(1));
+  }
+
+  function clearActiveDragDataAttributes() {
+    const host = hostRef.current;
+
+    if (!host) {
+      return;
+    }
+
+    host.removeAttribute('data-active-drag-node-id');
+    host.removeAttribute('data-active-drag-node-x');
+    host.removeAttribute('data-active-drag-node-y');
   }
 
   function setCameraState(nextCamera: CameraState) {
@@ -313,6 +493,9 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
       data-pan-y={camera.y.toFixed(1)}
       data-ticker-active={tickerActive ? 'true' : 'false'}
       data-render-count={renderCountRef.current}
+      data-first-module-id={firstDraggableNode?.id}
+      data-first-module-center-x={firstDraggableNode ? (firstDraggableNode.x + firstDraggableNode.width / 2).toFixed(1) : undefined}
+      data-first-module-center-y={firstDraggableNode ? (firstDraggableNode.y + firstDraggableNode.height / 2).toFixed(1) : undefined}
       className="relative min-h-0 flex-1 overflow-hidden bg-ide-bg"
     >
       {error ? (
@@ -365,6 +548,40 @@ function getFitCamera(bounds: SchematicLayoutBounds, viewportWidth: number, view
     x: viewportWidth / 2 - (bounds.x + bounds.width / 2) * zoom,
     y: viewportHeight / 2 - (bounds.y + bounds.height / 2) * zoom,
   };
+}
+
+function getCanvasPoint(point: { clientX: number; clientY: number }, canvas: HTMLCanvasElement): ScreenPoint {
+  const rect = canvas.getBoundingClientRect();
+
+  return {
+    x: point.clientX - rect.left,
+    y: point.clientY - rect.top,
+  };
+}
+
+function screenToWorld(point: ScreenPoint, camera: CameraState): ScreenPoint {
+  return {
+    x: (point.x - camera.x) / camera.zoom,
+    y: (point.y - camera.y) / camera.zoom,
+  };
+}
+
+function getNormalizedWheelDelta(event: WheelEvent, canvas: HTMLCanvasElement): ScreenPoint {
+  const rect = canvas.getBoundingClientRect();
+  const multiplier = event.deltaMode === 1
+    ? wheelLinePixels
+    : event.deltaMode === 2
+      ? Math.max(rect.width, rect.height)
+      : 1;
+
+  return {
+    x: event.deltaX * multiplier,
+    y: event.deltaY * multiplier,
+  };
+}
+
+function roundLayoutCoordinate(value: number) {
+  return Math.round(value * 10) / 10;
 }
 
 function clamp(value: number, min: number, max: number) {

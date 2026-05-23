@@ -7,6 +7,7 @@ export interface AsicSchematicSceneOptions {
   layout: SchematicLayoutResult;
   palette: AsicSchematicPalette;
   selectedNodeId?: string | null;
+  onNodeContainerCreated?: (node: SchematicNodeLayout, container: Container) => void;
   onNodeSelect?: (nodeId: string | null) => void;
   onModuleOpen?: (moduleId: string) => void;
 }
@@ -15,6 +16,7 @@ export function createAsicSchematicScene({
   layout,
   palette,
   selectedNodeId,
+  onNodeContainerCreated,
   onNodeSelect,
   onModuleOpen,
 }: AsicSchematicSceneOptions) {
@@ -24,7 +26,11 @@ export function createAsicSchematicScene({
 
   world.addChild(drawGrid(layout, palette), edgeLayer, nodeLayer);
   layout.edges.forEach((edge) => edgeLayer.addChild(drawEdge(edge, palette)));
-  layout.nodes.forEach((node) => nodeLayer.addChild(drawNode({ node, palette, selected: node.id === selectedNodeId, onNodeSelect, onModuleOpen })));
+  layout.nodes.forEach((node) => {
+    const container = drawNode({ node, palette, selected: node.id === selectedNodeId, onNodeSelect, onModuleOpen });
+    onNodeContainerCreated?.(node, container);
+    nodeLayer.addChild(container);
+  });
 
   return world;
 }
@@ -104,7 +110,7 @@ function drawNode({
   }
 
   container.eventMode = 'static';
-  container.cursor = node.canDrillDown ? 'pointer' : 'default';
+  container.cursor = node.kind === 'module' ? 'grab' : 'default';
   container.on('pointertap', () => onNodeSelect?.(node.id));
   container.on('rightclick', () => onNodeSelect?.(null));
   container.on('dblclick', () => {

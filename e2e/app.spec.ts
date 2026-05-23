@@ -4962,42 +4962,89 @@ test('asic schematic bottom panel renders a Pixi canvas with zoom and pan', asyn
   expect(canvasBox?.width ?? 0).toBeGreaterThan(100);
   expect(canvasBox?.height ?? 0).toBeGreaterThan(100);
 
+  const readCamera = async () => ({
+    x: Number(await panel.getAttribute('data-pan-x') ?? '0'),
+    y: Number(await panel.getAttribute('data-pan-y') ?? '0'),
+    zoom: Number(await panel.getAttribute('data-zoom') ?? '0'),
+  });
+  const readFirstModule = async () => ({
+    id: await canvasHost.getAttribute('data-first-module-id'),
+    x: Number(await canvasHost.getAttribute('data-first-module-center-x') ?? '0'),
+    y: Number(await canvasHost.getAttribute('data-first-module-center-y') ?? '0'),
+  });
+
   const idleRenderCount = Number(await canvasHost.getAttribute('data-render-count') ?? '0');
   await window.waitForTimeout(400);
   expect(Number(await canvasHost.getAttribute('data-render-count') ?? '0')).toBe(idleRenderCount);
 
-  const zoomBefore = await panel.getAttribute('data-zoom');
   await canvas.hover();
+  const zoomBefore = await readCamera();
+  await window.keyboard.down('Control');
   await window.mouse.wheel(0, -240);
-  await expect.poll(async () => panel.getAttribute('data-zoom'), {
+  await window.keyboard.up('Control');
+  await expect.poll(async () => (await readCamera()).zoom, {
     timeout: UI_READY_TIMEOUT_MS,
-  }).not.toBe(zoomBefore);
+  }).toBeGreaterThan(zoomBefore.zoom);
   await expect.poll(async () => Number(await canvasHost.getAttribute('data-render-count') ?? '0'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(idleRenderCount);
 
-  const panBefore = {
-    x: await panel.getAttribute('data-pan-x'),
-    y: await panel.getAttribute('data-pan-y'),
-  };
+  const verticalPanBefore = await readCamera();
+  await window.mouse.wheel(0, 120);
+  await expect.poll(async () => (await readCamera()).y, {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).not.toBe(verticalPanBefore.y);
+  const verticalPanAfter = await readCamera();
+  expect(verticalPanAfter.x).toBe(verticalPanBefore.x);
+
+  const horizontalPanBefore = await readCamera();
+  await window.keyboard.down('Shift');
+  await window.mouse.wheel(0, 120);
+  await window.keyboard.up('Shift');
+  await expect.poll(async () => (await readCamera()).x, {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).not.toBe(horizontalPanBefore.x);
+  const horizontalPanAfter = await readCamera();
+  expect(horizontalPanAfter.y).toBe(horizontalPanBefore.y);
+
+  const renderCountBeforeFit = Number(await canvasHost.getAttribute('data-render-count') ?? '0');
+  await window.getByLabel('Fit schematic').click();
+  await expect.poll(async () => Number(await canvasHost.getAttribute('data-render-count') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(renderCountBeforeFit);
+
+  const moduleBeforeDrag = await readFirstModule();
+  expect(moduleBeforeDrag.id).not.toBeNull();
+  const dragCamera = await readCamera();
   const dragBox = await canvas.boundingBox();
   expect(dragBox).not.toBeNull();
+  const edgeCountBeforeDrag = await panel.getAttribute('data-edge-count');
+  const renderCountBeforeDrag = Number(await canvasHost.getAttribute('data-render-count') ?? '0');
 
   if (dragBox) {
-    const centerX = dragBox.x + dragBox.width / 2;
-    const centerY = dragBox.y + dragBox.height / 2;
+    const centerX = dragBox.x + dragCamera.x + moduleBeforeDrag.x * dragCamera.zoom;
+    const centerY = dragBox.y + dragCamera.y + moduleBeforeDrag.y * dragCamera.zoom;
     await window.mouse.move(centerX, centerY);
     await window.mouse.down();
-    await window.mouse.move(centerX + 80, centerY + 32);
+    await window.mouse.move(centerX + 96, centerY + 40, { steps: 4 });
     await window.mouse.up();
   }
 
-  await expect.poll(async () => ({
-    x: await panel.getAttribute('data-pan-x'),
-    y: await panel.getAttribute('data-pan-y'),
-  }), {
+  await expect(canvasHost).toHaveAttribute('data-last-drag-node-id', moduleBeforeDrag.id ?? '');
+  await expect.poll(async () => Number(await canvasHost.getAttribute('data-last-drag-node-x') ?? '0'), {
     timeout: UI_READY_TIMEOUT_MS,
-  }).not.toEqual(panBefore);
+  }).toBeGreaterThan(moduleBeforeDrag.x);
+  await expect.poll(async () => Number(await canvasHost.getAttribute('data-render-count') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(renderCountBeforeDrag);
+  await expect(panel).toHaveAttribute('data-edge-count', edgeCountBeforeDrag ?? '');
+  await expect.poll(async () => Number(await canvasHost.getAttribute('data-first-module-center-x') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(moduleBeforeDrag.x);
+
+  const postDragIdleRenderCount = Number(await canvasHost.getAttribute('data-render-count') ?? '0');
+  await window.waitForTimeout(400);
+  expect(Number(await canvasHost.getAttribute('data-render-count') ?? '0')).toBe(postDragIdleRenderCount);
 
   await app.close();
 });

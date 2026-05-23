@@ -39,6 +39,8 @@ export interface LayoutAsicSchematicOptions {
   layoutEngine?: Pick<ElkInstance, 'layout'>;
 }
 
+export type SchematicNodePositionOverrides = Record<string, SchematicPoint | undefined>;
+
 export async function layoutAsicSchematic(
   graph: AsicSchematicGraph,
   moduleId = graph.rootModuleId,
@@ -68,6 +70,63 @@ export function findModulePath(graph: AsicSchematicGraph, targetModuleId: string
 
   const path = findModulePathFrom(graph, root, targetModuleId, new Set());
   return path ?? [root];
+}
+
+export function applySchematicNodePositions(
+  layout: SchematicLayoutResult,
+  positions: SchematicNodePositionOverrides,
+): SchematicLayoutResult {
+  if (!Object.values(positions).some(Boolean)) {
+    return layout;
+  }
+
+  let changed = false;
+  const nodes = layout.nodes.map((node) => {
+    const position = positions[node.id];
+
+    if (!position || node.kind !== 'module') {
+      return node;
+    }
+
+    const nextX = roundLayoutCoordinate(position.x);
+    const nextY = roundLayoutCoordinate(position.y);
+
+    if (nextX === node.x && nextY === node.y) {
+      return node;
+    }
+
+    changed = true;
+    const deltaX = nextX - node.x;
+    const deltaY = nextY - node.y;
+
+    return {
+      ...node,
+      x: nextX,
+      y: nextY,
+      ports: node.ports.map((port) => ({
+        ...port,
+        x: roundLayoutCoordinate(port.x + deltaX),
+        y: roundLayoutCoordinate(port.y + deltaY),
+      })),
+    };
+  });
+
+  if (!changed) {
+    return layout;
+  }
+
+  const nodeMap = new Map(nodes.map((node) => [node.id, node]));
+  const edges = layout.edges.map((edge) => ({
+    ...edge,
+    points: getFallbackEdgePoints(edge.from, edge.to, nodeMap),
+  }));
+
+  return {
+    ...layout,
+    nodes,
+    edges,
+    bounds: calculateBounds(nodes, edges),
+  };
 }
 
 function findModulePathFrom(
@@ -392,6 +451,10 @@ function calculateBounds(
     width: maxX - minX + 96,
     height: maxY - minY + 96,
   };
+}
+
+function roundLayoutCoordinate(value: number) {
+  return Math.round(value * 10) / 10;
 }
 
 function getModuleNodeHeight(ports: readonly AsicPort[]) {

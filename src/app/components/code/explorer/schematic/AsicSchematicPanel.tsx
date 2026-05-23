@@ -1,13 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronRight, Home, Maximize2, RotateCcw, Spline } from 'lucide-react';
 
 import { useTheme } from '../../../../context/ThemeContext';
 import { Button } from '../../../ui/button';
 import { TooltipIconButton } from '../../../ui/tooltip-icon-button';
 import { AsicSchematicCanvas, type AsicSchematicCanvasHandle } from './AsicSchematicCanvas';
-import { findModulePath, layoutAsicSchematic } from './asicSchematicLayout';
+import { applySchematicNodePositions, findModulePath, layoutAsicSchematic, type SchematicNodePositionOverrides } from './asicSchematicLayout';
 import { mockAsicSchematicGraph } from './asicSchematicMockData';
-import type { SchematicLayoutResult } from './asicSchematicTypes';
+import type { SchematicLayoutResult, SchematicPoint } from './asicSchematicTypes';
 
 interface CameraSnapshot {
   x: number;
@@ -24,10 +24,34 @@ export function AsicSchematicPanel() {
   const [camera, setCamera] = useState<CameraSnapshot>({ x: 0, y: 0, zoom: 1 });
   const [renderer, setRenderer] = useState('initializing');
   const [layoutState, setLayoutState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [positionOverridesByModule, setPositionOverridesByModule] = useState<Record<string, SchematicNodePositionOverrides>>({});
 
   const modulePath = useMemo(() => findModulePath(mockAsicSchematicGraph, moduleId), [moduleId]);
   const activeModule = mockAsicSchematicGraph.modules[moduleId];
-  const selectedNode = layout?.nodes.find((node) => node.id === selectedNodeId) ?? null;
+  const activeLayout = useMemo(
+    () => layout ? applySchematicNodePositions(layout, positionOverridesByModule[moduleId] ?? {}) : null,
+    [layout, moduleId, positionOverridesByModule],
+  );
+  const selectedNode = activeLayout?.nodes.find((node) => node.id === selectedNodeId) ?? null;
+
+  const handleNodePositionChange = useCallback((nodeId: string, position: SchematicPoint) => {
+    setPositionOverridesByModule((currentOverrides) => {
+      const moduleOverrides = currentOverrides[moduleId] ?? {};
+      const currentPosition = moduleOverrides[nodeId];
+
+      if (currentPosition?.x === position.x && currentPosition?.y === position.y) {
+        return currentOverrides;
+      }
+
+      return {
+        ...currentOverrides,
+        [moduleId]: {
+          ...moduleOverrides,
+          [nodeId]: position,
+        },
+      };
+    });
+  }, [moduleId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -59,8 +83,8 @@ export function AsicSchematicPanel() {
       data-renderer={renderer}
       data-theme={theme}
       data-module-id={moduleId}
-      data-node-count={layout?.nodes.length ?? 0}
-      data-edge-count={layout?.edges.length ?? 0}
+      data-node-count={activeLayout?.nodes.length ?? 0}
+      data-edge-count={activeLayout?.edges.length ?? 0}
       data-zoom={camera.zoom.toFixed(3)}
       data-pan-x={camera.x.toFixed(1)}
       data-pan-y={camera.y.toFixed(1)}
@@ -83,8 +107,8 @@ export function AsicSchematicPanel() {
           ))}
         </div>
         <div className="hidden items-center gap-2 text-[11px] text-ide-text-muted md:flex">
-          <span>{layout?.nodes.length ?? 0} modules</span>
-          <span>{layout?.edges.length ?? 0} nets</span>
+          <span>{activeLayout?.nodes.length ?? 0} modules</span>
+          <span>{activeLayout?.edges.length ?? 0} nets</span>
           <span>{renderer}</span>
         </div>
         <TooltipIconButton content="Root module">
@@ -127,15 +151,16 @@ export function AsicSchematicPanel() {
         {layoutState === 'loading' ? (
           <div className="flex flex-1 items-center justify-center text-[12px] text-ide-text-muted">Loading schematic...</div>
         ) : null}
-        {layoutState === 'ready' && layout ? (
+        {layoutState === 'ready' && activeLayout ? (
           <AsicSchematicCanvas
             ref={canvasRef}
-            layout={layout}
+            layout={activeLayout}
             selectedNodeId={selectedNodeId}
             themeKey={`${themeId}:${theme}`}
             onCameraChange={setCamera}
             onModuleOpen={setModuleId}
             onNodeSelect={setSelectedNodeId}
+            onNodePositionChange={handleNodePositionChange}
             onRendererChange={setRenderer}
           />
         ) : null}
