@@ -6,7 +6,11 @@ import {
   getSchematicNodeRect,
   layoutAsicSchematic,
   resolveSchematicNodeOverlaps,
+  schematicEdgeObstacleGap,
+  schematicGridSize,
+  schematicPolylineIntersectsRect,
   schematicRectsIntersect,
+  snapSchematicPointToGrid,
 } from './asicSchematicLayout';
 import { mockAsicSchematicGraph } from './asicSchematicMockData';
 import type { AsicNetEndpoint, SchematicLayoutResult } from './asicSchematicTypes';
@@ -45,6 +49,28 @@ describe('findModulePath', () => {
 });
 
 describe('applySchematicNodePositions', () => {
+  it('snaps moved modules to the visible schematic grid', async () => {
+    const layout = await layoutAsicSchematic(mockAsicSchematicGraph);
+    const moduleNode = layout.nodes.find((node) => node.kind === 'module');
+
+    expect(moduleNode).toBeDefined();
+    if (!moduleNode) {
+      return;
+    }
+
+    const moved = applySchematicNodePositions(layout, {
+      [moduleNode.id]: { x: 123, y: 77 },
+    }, {
+      snapToGrid: true,
+    });
+    const movedNode = moved.nodes.find((node) => node.id === moduleNode.id);
+
+    expect(movedNode?.x).toBe(120);
+    expect(movedNode?.y).toBe(80);
+    expect((movedNode?.x ?? 1) % schematicGridSize).toBe(0);
+    expect((movedNode?.y ?? 1) % schematicGridSize).toBe(0);
+  });
+
   it('moves module ports and reroutes connected edges', async () => {
     const layout = await layoutAsicSchematic(mockAsicSchematicGraph);
     const originalNode = layout.nodes.find((node) => node.id === 'u_cpu');
@@ -179,6 +205,49 @@ describe('applySchematicNodePositions', () => {
 
     expect(connectedEdge.points[0]).toEqual(getEndpointPoint(moved, connectedEdge.from));
     expect(connectedEdge.points[connectedEdge.points.length - 1]).toEqual(getEndpointPoint(moved, connectedEdge.to));
+  });
+
+  it('reroutes wires around non-endpoint module bodies after module movement', async () => {
+    const layout = await layoutAsicSchematic(mockAsicSchematicGraph);
+    const moduleNode = layout.nodes.find((node) => node.id === 'u_cpu');
+
+    expect(moduleNode).toBeDefined();
+    if (!moduleNode) {
+      return;
+    }
+
+    const moved = applySchematicNodePositions(layout, {
+      [moduleNode.id]: snapSchematicPointToGrid({ x: moduleNode.x + 220, y: moduleNode.y + 120 }),
+    }, {
+      avoidOverlaps: true,
+      snapToGrid: true,
+      selectedNodeIds: [moduleNode.id],
+    });
+    const moduleNodes = moved.nodes.filter((node) => node.kind === 'module');
+
+    moved.edges.forEach((edge) => {
+      const connectedNodeIds = new Set([edge.from.instanceId ?? `io:${edge.from.portId}`, edge.to.instanceId ?? `io:${edge.to.portId}`]);
+      const obstacleNodes = moduleNodes.filter((node) => !connectedNodeIds.has(node.id));
+
+      obstacleNodes.forEach((obstacleNode) => {
+        expect(schematicPolylineIntersectsRect(edge.points, getSchematicNodeRect(obstacleNode), schematicEdgeObstacleGap)).toBe(false);
+      });
+    });
+  });
+});
+
+describe('edge metadata', () => {
+  it('classifies single signals and buses for rendering', async () => {
+    const layout = await layoutAsicSchematic(mockAsicSchematicGraph);
+    const busEdge = layout.edges.find((edge) => edge.kind === 'bus');
+    const signalEdge = layout.edges.find((edge) => !edge.isBus);
+
+    expect(busEdge).toBeDefined();
+    expect(busEdge?.isBus).toBe(true);
+    expect(busEdge?.signalWidth).toBeGreaterThan(1);
+    expect(signalEdge).toBeDefined();
+    expect(signalEdge?.isBus).toBe(false);
+    expect(signalEdge?.signalWidth).toBe(1);
   });
 });
 

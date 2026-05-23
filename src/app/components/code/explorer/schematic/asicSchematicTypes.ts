@@ -71,6 +71,8 @@ export interface SchematicEdgeLayout {
   id: string;
   label: string;
   kind: AsicNet['kind'];
+  signalWidth: number;
+  isBus: boolean;
   from: AsicNetEndpoint;
   to: AsicNetEndpoint;
   points: SchematicPoint[];

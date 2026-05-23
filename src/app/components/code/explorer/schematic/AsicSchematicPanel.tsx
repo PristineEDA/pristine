@@ -5,7 +5,7 @@ import { useTheme } from '../../../../context/ThemeContext';
 import { Button } from '../../../ui/button';
 import { TooltipIconButton } from '../../../ui/tooltip-icon-button';
 import { AsicSchematicCanvas, type AsicSchematicCanvasHandle } from './AsicSchematicCanvas';
-import { applySchematicNodePositions, findModulePath, layoutAsicSchematic, type SchematicNodePositionOverrides } from './asicSchematicLayout';
+import { applySchematicNodePositions, findModulePath, layoutAsicSchematic, schematicGridSize, type SchematicNodePositionOverrides } from './asicSchematicLayout';
 import { mockAsicSchematicGraph } from './asicSchematicMockData';
 import type { SchematicLayoutResult } from './asicSchematicTypes';
 
@@ -21,6 +21,7 @@ export function AsicSchematicPanel() {
   const [moduleId, setModuleId] = useState(mockAsicSchematicGraph.rootModuleId);
   const [layout, setLayout] = useState<SchematicLayoutResult | null>(null);
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
+  const [selectedEdgeIds, setSelectedEdgeIds] = useState<string[]>([]);
   const [backStack, setBackStack] = useState<string[]>([]);
   const [forwardStack, setForwardStack] = useState<string[]>([]);
   const [camera, setCamera] = useState<CameraSnapshot>({ x: 0, y: 0, zoom: 1 });
@@ -35,6 +36,7 @@ export function AsicSchematicPanel() {
     [layout, moduleId, positionOverridesByModule],
   );
   const selectedNode = selectedNodeIds.length === 1 ? activeLayout?.nodes.find((node) => node.id === selectedNodeIds[0]) ?? null : null;
+  const selectedEdge = selectedEdgeIds.length === 1 ? activeLayout?.edges.find((edge) => edge.id === selectedEdgeIds[0]) ?? null : null;
   const parentModuleId = modulePath.length > 1 ? modulePath[modulePath.length - 2]?.id ?? null : null;
   const nextChildModuleId = forwardStack[0] ?? null;
 
@@ -93,6 +95,8 @@ export function AsicSchematicPanel() {
 
       const resolvedLayout = applySchematicNodePositions(layout, mergedOverrides, {
         avoidOverlaps: true,
+        snapToGrid: true,
+        gridSize: schematicGridSize,
         selectedNodeIds: movedNodeIds,
       });
       const resolvedOverrides = { ...mergedOverrides };
@@ -119,10 +123,25 @@ export function AsicSchematicPanel() {
     });
   }, [layout, moduleId]);
 
+  const handleNodeSelectionChange = useCallback((nodeIds: string[]) => {
+    setSelectedNodeIds(nodeIds);
+    if (nodeIds.length > 0) {
+      setSelectedEdgeIds([]);
+    }
+  }, []);
+
+  const handleEdgeSelectionChange = useCallback((edgeIds: string[]) => {
+    setSelectedEdgeIds(edgeIds);
+    if (edgeIds.length > 0) {
+      setSelectedNodeIds([]);
+    }
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     setLayoutState('loading');
     setSelectedNodeIds([]);
+    setSelectedEdgeIds([]);
 
     layoutAsicSchematic(mockAsicSchematicGraph, moduleId)
       .then((nextLayout) => {
@@ -153,6 +172,8 @@ export function AsicSchematicPanel() {
       data-edge-count={activeLayout?.edges.length ?? 0}
       data-selected-node-count={selectedNodeIds.length}
       data-selected-node-ids={selectedNodeIds.join(',')}
+      data-selected-edge-count={selectedEdgeIds.length}
+      data-selected-edge-ids={selectedEdgeIds.join(',')}
       data-zoom={camera.zoom.toFixed(3)}
       data-pan-x={camera.x.toFixed(1)}
       data-pan-y={camera.y.toFixed(1)}
@@ -224,6 +245,12 @@ export function AsicSchematicPanel() {
             <div className="mt-4 rounded-md border border-ide-border bg-ide-panel-bg p-2">
               <div className="font-medium text-ide-text">{selectedNodeIds.length} modules selected</div>
             </div>
+          ) : selectedEdge ? (
+            <div className="mt-4 rounded-md border border-ide-border bg-ide-panel-bg p-2">
+              <div className="font-medium text-ide-text">{selectedEdge.label}</div>
+              <div className="mt-1 text-ide-text-muted">{selectedEdge.isBus ? `${selectedEdge.signalWidth}-bit bus` : 'Single signal'}</div>
+              {selectedEdge.kind ? <div className="mt-1 text-ide-text-muted">{selectedEdge.kind}</div> : null}
+            </div>
           ) : null}
         </div>
 
@@ -238,10 +265,12 @@ export function AsicSchematicPanel() {
             ref={canvasRef}
             layout={activeLayout}
             selectedNodeIds={selectedNodeIds}
+            selectedEdgeIds={selectedEdgeIds}
             themeKey={`${themeId}:${theme}`}
             onCameraChange={setCamera}
             onModuleOpen={handleEnterModule}
-            onNodeSelectionChange={setSelectedNodeIds}
+            onNodeSelectionChange={handleNodeSelectionChange}
+            onEdgeSelectionChange={handleEdgeSelectionChange}
             onNodePositionsChange={handleNodePositionsChange}
             onRendererChange={setRenderer}
           />

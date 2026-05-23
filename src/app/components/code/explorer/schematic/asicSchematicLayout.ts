@@ -2,6 +2,7 @@ import ELK, { type ELK as ElkInstance, type ElkEdgeSection, type ElkNode, type E
 
 import type {
   AsicModule,
+  AsicNet,
   AsicNetEndpoint,
   AsicPort,
   AsicSchematicGraph,
@@ -50,11 +51,15 @@ export interface SchematicRect {
 
 export interface ApplySchematicNodePositionsOptions {
   avoidOverlaps?: boolean;
+  snapToGrid?: boolean;
+  gridSize?: number;
   nodeGap?: number;
   selectedNodeIds?: readonly string[];
 }
 
 const defaultNodeGap = 24;
+export const schematicGridSize = 40;
+export const schematicEdgeObstacleGap = 14;
 const overlapResolveIterationLimit = 80;
 
 export async function layoutAsicSchematic(
@@ -97,12 +102,17 @@ export function applySchematicNodePositions(
     return layout;
   }
 
+  const requestedPositions = options?.snapToGrid
+    ? snapSchematicNodePositions(positions, options.gridSize)
+    : positions;
   const resolvedPositions = options?.avoidOverlaps
-    ? resolveSchematicNodeOverlaps(layout, positions, {
+    ? resolveSchematicNodeOverlaps(layout, requestedPositions, {
+      snapToGrid: options.snapToGrid,
+      gridSize: options.gridSize,
       nodeGap: options.nodeGap,
       selectedNodeIds: options.selectedNodeIds,
     })
-    : positions;
+    : requestedPositions;
 
   let changed = false;
   const nodes = layout.nodes.map((node) => {
@@ -142,7 +152,7 @@ export function applySchematicNodePositions(
   const nodeMap = new Map(nodes.map((node) => [node.id, node]));
   const edges = layout.edges.map((edge) => ({
     ...edge,
-    points: getFallbackEdgePoints(edge.from, edge.to, nodeMap),
+    points: routeSchematicEdgePoints(edge, nodeMap),
   }));
 
   return {
@@ -154,6 +164,8 @@ export function applySchematicNodePositions(
 }
 
 export interface ResolveSchematicNodeOverlapsOptions {
+  snapToGrid?: boolean;
+  gridSize?: number;
   nodeGap?: number;
   selectedNodeIds?: readonly string[];
 }
@@ -207,13 +219,36 @@ export function resolveSchematicNodeOverlaps(
     const node = moduleById.get(nodeId);
     const position = resolvedPositions[nodeId] ?? (node ? { x: node.x, y: node.y } : { x: 0, y: 0 });
 
-    resolvedPositions[nodeId] = {
+    const shiftedPosition = {
       x: roundLayoutCoordinate(position.x + shift.x),
       y: roundLayoutCoordinate(position.y + shift.y),
     };
+
+    resolvedPositions[nodeId] = options?.snapToGrid
+      ? snapSchematicPointToGrid(shiftedPosition, options.gridSize)
+      : shiftedPosition;
   });
 
   return resolvedPositions;
+}
+
+export function snapSchematicPointToGrid(point: SchematicPoint, gridSize = schematicGridSize): SchematicPoint {
+  const safeGridSize = Number.isFinite(gridSize) && gridSize > 0 ? gridSize : schematicGridSize;
+
+  return {
+    x: roundLayoutCoordinate(Math.round(point.x / safeGridSize) * safeGridSize),
+    y: roundLayoutCoordinate(Math.round(point.y / safeGridSize) * safeGridSize),
+  };
+}
+
+export function snapSchematicNodePositions(
+  positions: SchematicNodePositionOverrides,
+  gridSize = schematicGridSize,
+): SchematicNodePositionOverrides {
+  return Object.fromEntries(Object.entries(positions).map(([nodeId, position]) => [
+    nodeId,
+    position ? snapSchematicPointToGrid(position, gridSize) : undefined,
+  ]));
 }
 
 export function getSchematicNodeRect(node: SchematicNodeLayout): SchematicRect {
@@ -232,6 +267,21 @@ export function schematicRectsIntersect(first: SchematicRect, second: SchematicR
     || first.y + first.height + gap <= second.y
     || second.y + second.height + gap <= first.y
   );
+}
+
+export function schematicPolylineIntersectsRect(points: readonly SchematicPoint[], rect: SchematicRect, gap = 0) {
+  const expandedRect = expandRect(rect, gap);
+
+  for (let index = 1; index < points.length; index += 1) {
+    const start = points[index - 1];
+    const end = points[index];
+
+    if (start && end && schematicSegmentIntersectsRect(start, end, expandedRect)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 function findModulePathFrom(
@@ -333,7 +383,7 @@ function toLayoutResult(
   const elkChildren = layout.children ?? [];
   const nodes = elkChildren.map((child) => toNodeLayout(graph, module, child));
   const nodeMap = new Map(nodes.map((node) => [node.id, node]));
-  const edges = toEdgeLayouts(module, layout.edges ?? [], nodeMap);
+  const edges = toEdgeLayouts(graph, module, layout.edges ?? [], nodeMap);
   const bounds = calculateBounds(nodes, edges);
 
   return { module, nodes, edges, bounds, usedFallback };
@@ -402,6 +452,7 @@ function toNodeLayout(graph: AsicSchematicGraph, module: AsicModule, elkNode: El
 }
 
 function toEdgeLayouts(
+  graph: AsicSchematicGraph,
   module: AsicModule,
   elkEdges: NonNullable<ElkNode['edges']>,
   nodeMap: Map<string, SchematicNodeLayout>,
@@ -412,20 +463,83 @@ function toEdgeLayouts(
       ? getSectionPoints(elkEdge.sections[0])
       : getFallbackEdgePoints(net.from, target, nodeMap);
 
-    return {
+    return createSchematicEdgeLayout(graph, module, net, target, index, routeSchematicEdgePoints({
       id: `${net.id}:${index}`,
       label: net.name,
       kind: net.kind,
+      signalWidth: getNetSignalWidth(graph, module, net.from, target),
+      isBus: isBusNet(graph, module, net.kind, net.from, target),
       from: net.from,
       to: target,
       points,
-    };
+    }, nodeMap));
   }));
 }
 
 function getSectionPoints(section: ElkEdgeSection): SchematicPoint[] {
   return [section.startPoint, ...(section.bendPoints ?? []), section.endPoint]
     .map((point) => ({ x: point.x, y: point.y }));
+}
+
+function createSchematicEdgeLayout(
+  graph: AsicSchematicGraph,
+  module: AsicModule,
+  net: AsicNet,
+  target: AsicNetEndpoint,
+  targetIndex: number,
+  points: SchematicPoint[],
+): SchematicEdgeLayout {
+  const signalWidth = getNetSignalWidth(graph, module, net.from, target);
+
+  return {
+    id: `${net.id}:${targetIndex}`,
+    label: net.name,
+    kind: net.kind,
+    signalWidth,
+    isBus: signalWidth > 1 || net.kind === 'bus',
+    from: net.from,
+    to: target,
+    points,
+  };
+}
+
+function getNetSignalWidth(
+  graph: AsicSchematicGraph,
+  module: AsicModule,
+  from: AsicNetEndpoint,
+  to: AsicNetEndpoint,
+) {
+  return Math.max(
+    getEndpointPortWidth(graph, module, from),
+    getEndpointPortWidth(graph, module, to),
+  );
+}
+
+function isBusNet(
+  graph: AsicSchematicGraph,
+  module: AsicModule,
+  kind: AsicNet['kind'],
+  from: AsicNetEndpoint,
+  to: AsicNetEndpoint,
+) {
+  return kind === 'bus' || getNetSignalWidth(graph, module, from, to) > 1;
+}
+
+function getEndpointPortWidth(graph: AsicSchematicGraph, module: AsicModule, endpoint: AsicNetEndpoint) {
+  const port = getEndpointPort(graph, module, endpoint);
+
+  return Math.max(1, port?.width ?? 1);
+}
+
+function getEndpointPort(graph: AsicSchematicGraph, module: AsicModule, endpoint: AsicNetEndpoint) {
+  if (!endpoint.instanceId) {
+    return module.ports.find((port) => port.id === endpoint.portId) ?? null;
+  }
+
+  const instance = module.instances.find((candidate) => candidate.id === endpoint.instanceId);
+  const childModule = instance ? graph.modules[instance.moduleId] : undefined;
+
+  return childModule?.ports.find((port) => port.id === endpoint.portId) ?? null;
 }
 
 function createFallbackLayout(graph: AsicSchematicGraph, module: AsicModule): SchematicLayoutResult {
@@ -471,14 +585,14 @@ function createFallbackLayout(graph: AsicSchematicGraph, module: AsicModule): Sc
   });
 
   const nodeMap = new Map(nodes.map((node) => [node.id, node]));
-  const edges = module.nets.flatMap((net) => net.to.map((target, index) => ({
-    id: `${net.id}:${index}`,
-    label: net.name,
-    kind: net.kind,
-    from: net.from,
-    to: target,
-    points: getFallbackEdgePoints(net.from, target, nodeMap),
-  })));
+  const edges = module.nets.flatMap((net) => net.to.map((target, index) => {
+    const edge = createSchematicEdgeLayout(graph, module, net, target, index, getFallbackEdgePoints(net.from, target, nodeMap));
+
+    return {
+      ...edge,
+      points: routeSchematicEdgePoints(edge, nodeMap),
+    };
+  }));
 
   return {
     module,
@@ -521,6 +635,259 @@ function getFallbackEdgePoints(
   const midX = start.x + (end.x - start.x) / 2;
 
   return [start, { x: midX, y: start.y }, { x: midX, y: end.y }, end];
+}
+
+export function routeSchematicEdgePoints(
+  edge: SchematicEdgeLayout,
+  nodeMap: Map<string, SchematicNodeLayout>,
+): SchematicPoint[] {
+  const start = findEndpointPoint(edge.from, nodeMap);
+  const end = findEndpointPoint(edge.to, nodeMap);
+  const obstacleRects = getSchematicEdgeObstacleRects(edge, nodeMap);
+  const searchedRoute = findOrthogonalRoute(start, end, obstacleRects);
+  const candidates = [searchedRoute, ...createOrthogonalRouteCandidates(start, end, obstacleRects)]
+    .filter((points): points is SchematicPoint[] => Boolean(points))
+    .map(normalizeRoutePoints)
+    .filter((points, index, allCandidates) => allCandidates.findIndex((candidate) => areSameRoute(candidate, points)) === index);
+  const validCandidates = candidates.filter((points) => !obstacleRects.some((rect) => schematicPolylineIntersectsRect(points, rect, schematicEdgeObstacleGap)));
+
+  validCandidates.sort((first, second) => getRouteScore(first) - getRouteScore(second));
+
+  return validCandidates[0] ?? normalizeRoutePoints(getFallbackEdgePoints(edge.from, edge.to, nodeMap));
+}
+
+function getSchematicEdgeObstacleRects(edge: SchematicEdgeLayout, nodeMap: Map<string, SchematicNodeLayout>) {
+  const connectedNodeIds = new Set([
+    getEndpointNodeId(edge.from),
+    getEndpointNodeId(edge.to),
+  ]);
+
+  return [...nodeMap.values()]
+    .filter((node) => node.kind === 'module' && !connectedNodeIds.has(node.id))
+    .map(getSchematicNodeRect);
+}
+
+function createOrthogonalRouteCandidates(
+  start: SchematicPoint,
+  end: SchematicPoint,
+  obstacleRects: readonly SchematicRect[],
+): SchematicPoint[][] {
+  const midX = start.x + (end.x - start.x) / 2;
+  const midY = start.y + (end.y - start.y) / 2;
+  const { candidateXs, candidateYs } = getRouteCoordinates(start, end, obstacleRects);
+  const candidates: SchematicPoint[][] = [];
+
+  if (start.x === end.x || start.y === end.y) {
+    candidates.push([start, end]);
+  }
+
+  candidateXs.forEach((x) => {
+    candidates.push([start, { x, y: start.y }, { x, y: end.y }, end]);
+  });
+  candidateYs.forEach((y) => {
+    candidates.push([start, { x: start.x, y }, { x: end.x, y }, end]);
+  });
+
+  candidates.push(
+    [start, { x: midX, y: start.y }, { x: midX, y: midY }, { x: end.x, y: midY }, end],
+    [start, { x: start.x, y: midY }, { x: midX, y: midY }, { x: midX, y: end.y }, end],
+  );
+
+  return candidates;
+}
+
+function findOrthogonalRoute(
+  start: SchematicPoint,
+  end: SchematicPoint,
+  obstacleRects: readonly SchematicRect[],
+): SchematicPoint[] | null {
+  if (obstacleRects.length === 0) {
+    return normalizeRoutePoints([start, { x: start.x + (end.x - start.x) / 2, y: start.y }, { x: start.x + (end.x - start.x) / 2, y: end.y }, end]);
+  }
+
+  const expandedObstacles = obstacleRects.map((rect) => expandRect(rect, schematicEdgeObstacleGap));
+  const { candidateXs, candidateYs } = getRouteCoordinates(start, end, obstacleRects);
+  const pointsByKey = new Map<string, SchematicPoint>();
+  const startKey = getRoutePointKey(start);
+  const endKey = getRoutePointKey(end);
+
+  [...candidateXs, start.x, end.x].forEach((x) => {
+    [...candidateYs, start.y, end.y].forEach((y) => {
+      const point = { x: roundLayoutCoordinate(x), y: roundLayoutCoordinate(y) };
+
+      if (!expandedObstacles.some((rect) => isPointInsideRect(point, rect))) {
+        pointsByKey.set(getRoutePointKey(point), point);
+      }
+    });
+  });
+  pointsByKey.set(startKey, start);
+  pointsByKey.set(endKey, end);
+
+  const routePoints = [...pointsByKey.values()];
+  const edgesByKey = new Map<string, Array<{ key: string; cost: number }>>();
+  const addGraphEdge = (first: SchematicPoint, second: SchematicPoint) => {
+    if (first.x !== second.x && first.y !== second.y) {
+      return;
+    }
+
+    if (expandedObstacles.some((rect) => schematicSegmentIntersectsRect(first, second, rect))) {
+      return;
+    }
+
+    const firstKey = getRoutePointKey(first);
+    const secondKey = getRoutePointKey(second);
+    const cost = Math.abs(first.x - second.x) + Math.abs(first.y - second.y);
+
+    edgesByKey.set(firstKey, [...edgesByKey.get(firstKey) ?? [], { key: secondKey, cost }]);
+    edgesByKey.set(secondKey, [...edgesByKey.get(secondKey) ?? [], { key: firstKey, cost }]);
+  };
+
+  uniqueCoordinates([...candidateYs, start.y, end.y]).forEach((y) => {
+    const rowPoints = routePoints.filter((point) => point.y === y).sort((first, second) => first.x - second.x);
+
+    for (let index = 1; index < rowPoints.length; index += 1) {
+      addGraphEdge(rowPoints[index - 1]!, rowPoints[index]!);
+    }
+  });
+  uniqueCoordinates([...candidateXs, start.x, end.x]).forEach((x) => {
+    const columnPoints = routePoints.filter((point) => point.x === x).sort((first, second) => first.y - second.y);
+
+    for (let index = 1; index < columnPoints.length; index += 1) {
+      addGraphEdge(columnPoints[index - 1]!, columnPoints[index]!);
+    }
+  });
+
+  const previousByKey = new Map<string, string>();
+  const distanceByKey = new Map<string, number>([[startKey, 0]]);
+  const pending = new Set(pointsByKey.keys());
+
+  while (pending.size > 0) {
+    const currentKey = [...pending].sort((first, second) => (distanceByKey.get(first) ?? Number.POSITIVE_INFINITY) - (distanceByKey.get(second) ?? Number.POSITIVE_INFINITY))[0];
+
+    if (!currentKey || (distanceByKey.get(currentKey) ?? Number.POSITIVE_INFINITY) === Number.POSITIVE_INFINITY) {
+      break;
+    }
+
+    pending.delete(currentKey);
+
+    if (currentKey === endKey) {
+      break;
+    }
+
+    const currentDistance = distanceByKey.get(currentKey) ?? Number.POSITIVE_INFINITY;
+    edgesByKey.get(currentKey)?.forEach((edge) => {
+      if (!pending.has(edge.key)) {
+        return;
+      }
+
+      const nextDistance = currentDistance + edge.cost + 8;
+
+      if (nextDistance < (distanceByKey.get(edge.key) ?? Number.POSITIVE_INFINITY)) {
+        distanceByKey.set(edge.key, nextDistance);
+        previousByKey.set(edge.key, currentKey);
+      }
+    });
+  }
+
+  if (!distanceByKey.has(endKey)) {
+    return null;
+  }
+
+  const route: SchematicPoint[] = [];
+  let currentKey: string | undefined = endKey;
+
+  while (currentKey) {
+    const point = pointsByKey.get(currentKey);
+
+    if (point) {
+      route.push(point);
+    }
+    currentKey = previousByKey.get(currentKey);
+  }
+
+  return route.reverse();
+}
+
+function getRouteCoordinates(
+  start: SchematicPoint,
+  end: SchematicPoint,
+  obstacleRects: readonly SchematicRect[],
+) {
+  const midX = start.x + (end.x - start.x) / 2;
+  const midY = start.y + (end.y - start.y) / 2;
+  const clearance = schematicEdgeObstacleGap + 2;
+
+  return {
+    candidateXs: uniqueCoordinates([
+      midX,
+      start.x,
+      end.x,
+      ...obstacleRects.flatMap((rect) => [rect.x - clearance, rect.x + rect.width + clearance]),
+    ]),
+    candidateYs: uniqueCoordinates([
+      midY,
+      start.y,
+      end.y,
+      ...obstacleRects.flatMap((rect) => [rect.y - clearance, rect.y + rect.height + clearance]),
+    ]),
+  };
+}
+
+function getRoutePointKey(point: SchematicPoint) {
+  return `${roundLayoutCoordinate(point.x)},${roundLayoutCoordinate(point.y)}`;
+}
+
+function uniqueCoordinates(values: readonly number[]) {
+  return [...new Set(values.map(roundLayoutCoordinate))]
+    .filter((value) => Number.isFinite(value))
+    .sort((first, second) => Math.abs(first) - Math.abs(second));
+}
+
+function normalizeRoutePoints(points: readonly SchematicPoint[]) {
+  const withoutDuplicates: SchematicPoint[] = [];
+
+  points.forEach((point) => {
+    const previous = withoutDuplicates[withoutDuplicates.length - 1];
+
+    if (!previous || previous.x !== point.x || previous.y !== point.y) {
+      withoutDuplicates.push({ x: roundLayoutCoordinate(point.x), y: roundLayoutCoordinate(point.y) });
+    }
+  });
+
+  return withoutDuplicates.filter((point, index, allPoints) => {
+    const previous = allPoints[index - 1];
+    const next = allPoints[index + 1];
+
+    if (!previous || !next) {
+      return true;
+    }
+
+    return !(previous.x === point.x && point.x === next.x) && !(previous.y === point.y && point.y === next.y);
+  });
+}
+
+function areSameRoute(first: readonly SchematicPoint[], second: readonly SchematicPoint[]) {
+  return first.length === second.length && first.every((point, index) => {
+    const otherPoint = second[index];
+
+    return otherPoint?.x === point.x && otherPoint.y === point.y;
+  });
+}
+
+function getRouteScore(points: readonly SchematicPoint[]) {
+  let length = 0;
+
+  for (let index = 1; index < points.length; index += 1) {
+    const previous = points[index - 1]!;
+    const point = points[index]!;
+    length += Math.abs(point.x - previous.x) + Math.abs(point.y - previous.y);
+  }
+
+  return length + Math.max(0, points.length - 2) * 24;
+}
+
+function getEndpointNodeId(endpoint: AsicNetEndpoint) {
+  return endpoint.instanceId ?? getIoNodeId(endpoint.portId);
 }
 
 function findEndpointPoint(endpoint: AsicNetEndpoint, nodeMap: Map<string, SchematicNodeLayout>): SchematicPoint {
@@ -644,6 +1011,74 @@ function shiftRects(rects: readonly SchematicRect[], shift: SchematicPoint) {
     x: rect.x + shift.x,
     y: rect.y + shift.y,
   }));
+}
+
+function expandRect(rect: SchematicRect, gap: number): SchematicRect {
+  return {
+    x: rect.x - gap,
+    y: rect.y - gap,
+    width: rect.width + gap * 2,
+    height: rect.height + gap * 2,
+  };
+}
+
+function schematicSegmentIntersectsRect(start: SchematicPoint, end: SchematicPoint, rect: SchematicRect) {
+  if (isPointInsideRect(start, rect) || isPointInsideRect(end, rect)) {
+    return true;
+  }
+
+  const rectPoints = [
+    { x: rect.x, y: rect.y },
+    { x: rect.x + rect.width, y: rect.y },
+    { x: rect.x + rect.width, y: rect.y + rect.height },
+    { x: rect.x, y: rect.y + rect.height },
+  ];
+
+  return rectPoints.some((point, index) => {
+    const nextPoint = rectPoints[(index + 1) % rectPoints.length]!;
+
+    return segmentsIntersect(start, end, point, nextPoint);
+  });
+}
+
+function isPointInsideRect(point: SchematicPoint, rect: SchematicRect) {
+  return point.x > rect.x
+    && point.x < rect.x + rect.width
+    && point.y > rect.y
+    && point.y < rect.y + rect.height;
+}
+
+function segmentsIntersect(firstStart: SchematicPoint, firstEnd: SchematicPoint, secondStart: SchematicPoint, secondEnd: SchematicPoint) {
+  const firstDirection = getOrientation(firstStart, firstEnd, secondStart);
+  const secondDirection = getOrientation(firstStart, firstEnd, secondEnd);
+  const thirdDirection = getOrientation(secondStart, secondEnd, firstStart);
+  const fourthDirection = getOrientation(secondStart, secondEnd, firstEnd);
+
+  if (firstDirection !== secondDirection && thirdDirection !== fourthDirection) {
+    return true;
+  }
+
+  return firstDirection === 0 && isPointOnSegment(firstStart, secondStart, firstEnd)
+    || secondDirection === 0 && isPointOnSegment(firstStart, secondEnd, firstEnd)
+    || thirdDirection === 0 && isPointOnSegment(secondStart, firstStart, secondEnd)
+    || fourthDirection === 0 && isPointOnSegment(secondStart, firstEnd, secondEnd);
+}
+
+function getOrientation(first: SchematicPoint, second: SchematicPoint, third: SchematicPoint) {
+  const value = (second.y - first.y) * (third.x - second.x) - (second.x - first.x) * (third.y - second.y);
+
+  if (Math.abs(value) < 0.001) {
+    return 0;
+  }
+
+  return value > 0 ? 1 : 2;
+}
+
+function isPointOnSegment(start: SchematicPoint, point: SchematicPoint, end: SchematicPoint) {
+  return point.x <= Math.max(start.x, end.x)
+    && point.x >= Math.min(start.x, end.x)
+    && point.y <= Math.max(start.y, end.y)
+    && point.y >= Math.min(start.y, end.y);
 }
 
 function roundLayoutCoordinate(value: number) {

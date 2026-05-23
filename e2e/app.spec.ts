@@ -4995,6 +4995,15 @@ test('asic schematic bottom panel renders Pixi layers with selection and hierarc
     centerY: number;
     canDrillDown: boolean;
   }>;
+  const readEdgeSnapshot = async () => JSON.parse(await canvasHost.getAttribute('data-edge-route-snapshot') ?? '[]') as Array<{
+    id: string;
+    isBus: boolean;
+    signalWidth: number;
+    style: 'bus' | 'signal';
+    fromNodeId: string;
+    toNodeId: string;
+    points: Array<{ x: number; y: number }>;
+  }>;
   const worldToScreen = async (point: { x: number; y: number }) => {
     const box = await canvas.boundingBox();
     const currentCamera = await readCamera();
@@ -5020,6 +5029,16 @@ test('asic schematic bottom panel renders Pixi layers with selection and hierarc
       await window.keyboard.up('Control');
     }
   };
+  const readFirstEdge = async () => ({
+    id: await canvasHost.getAttribute('data-first-edge-id'),
+    x: Number(await canvasHost.getAttribute('data-first-edge-center-x') ?? '0'),
+    y: Number(await canvasHost.getAttribute('data-first-edge-center-y') ?? '0'),
+  });
+  const clickEdge = async (edge: { x: number; y: number }) => {
+    const point = await worldToScreen(edge);
+
+    await window.mouse.click(point.x, point.y);
+  };
   const dragWorldRect = async (from: { x: number; y: number }, to: { x: number; y: number }, ctrlKey = false) => {
     const fromPoint = await worldToScreen(from);
     const toPoint = await worldToScreen(to);
@@ -5041,6 +5060,36 @@ test('asic schematic bottom panel renders Pixi layers with selection and hierarc
     || first.y + first.height + gap <= second.y
     || second.y + second.height + gap <= first.y
   );
+  const edgeIntersectsModule = (points: Array<{ x: number; y: number }>, module: { x: number; y: number; width: number; height: number }, gap = 14) => {
+    const rect = {
+      x: module.x - gap,
+      y: module.y - gap,
+      width: module.width + gap * 2,
+      height: module.height + gap * 2,
+    };
+    const pointInside = (point: { x: number; y: number }) => point.x > rect.x && point.x < rect.x + rect.width && point.y > rect.y && point.y < rect.y + rect.height;
+    const segmentIntersects = (start: { x: number; y: number }, end: { x: number; y: number }) => {
+      if (pointInside(start) || pointInside(end)) {
+        return true;
+      }
+
+      if (start.x === end.x) {
+        return start.x >= rect.x && start.x <= rect.x + rect.width
+          && Math.max(start.y, end.y) >= rect.y
+          && Math.min(start.y, end.y) <= rect.y + rect.height;
+      }
+
+      if (start.y === end.y) {
+        return start.y >= rect.y && start.y <= rect.y + rect.height
+          && Math.max(start.x, end.x) >= rect.x
+          && Math.min(start.x, end.x) <= rect.x + rect.width;
+      }
+
+      return false;
+    };
+
+    return points.slice(1).some((point, index) => segmentIntersects(points[index]!, point));
+  };
 
   const idleRenderCount = Number(await canvasHost.getAttribute('data-render-count') ?? '0');
   await window.waitForTimeout(400);
@@ -5057,6 +5106,12 @@ test('asic schematic bottom panel renders Pixi layers with selection and hierarc
   await expect.poll(async () => Number(await canvasHost.getAttribute('data-render-count') ?? '0'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(idleRenderCount);
+  await expect.poll(async () => Number(await canvasHost.getAttribute('data-label-scale') ?? '1'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeLessThanOrEqual(1);
+  await expect.poll(async () => Number(await canvasHost.getAttribute('data-text-resolution') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThanOrEqual(2);
 
   const verticalPanBefore = await readCamera();
   await window.mouse.wheel(0, 120);
@@ -5086,10 +5141,32 @@ test('asic schematic bottom panel renders Pixi layers with selection and hierarc
   const secondModule = await readSecondModule();
   expect(firstModule.id).not.toBeNull();
   expect(secondModule.id).not.toBeNull();
+  const firstEdge = await readFirstEdge();
+  expect(firstEdge.id).not.toBeNull();
+  await expect(canvasHost).toHaveAttribute('data-first-bus-edge-style', 'bus');
+  await expect(canvasHost).toHaveAttribute('data-first-signal-edge-style', 'signal');
 
   await clickModule(firstModule);
   await expect(panel).toHaveAttribute('data-selected-node-count', '1');
   await expect(panel).toHaveAttribute('data-selected-node-ids', firstModule.id ?? '');
+  await expect(panel).toHaveAttribute('data-selected-edge-count', '0');
+
+  await clickEdge(firstEdge);
+  await expect(panel).toHaveAttribute('data-selected-edge-count', '1');
+  await expect.poll(async () => {
+    const selectedEdgeIds = (await panel.getAttribute('data-selected-edge-ids') ?? '').split(',').filter(Boolean);
+    const knownEdgeIds = (await readEdgeSnapshot()).map((edge) => edge.id);
+
+    return selectedEdgeIds.length === 1 && knownEdgeIds.includes(selectedEdgeIds[0] ?? '') ? 'selected' : 'missing';
+  }, {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBe('selected');
+  await expect(panel).toHaveAttribute('data-selected-node-count', '0');
+
+  await clickModule(firstModule);
+  await expect(panel).toHaveAttribute('data-selected-node-count', '1');
+  await expect(panel).toHaveAttribute('data-selected-node-ids', firstModule.id ?? '');
+  await expect(panel).toHaveAttribute('data-selected-edge-count', '0');
 
   await clickModule(secondModule, true);
   await expect.poll(async () => (await panel.getAttribute('data-selected-node-ids') ?? '').split(',').filter(Boolean).sort(), {
@@ -5157,6 +5234,8 @@ test('asic schematic bottom panel renders Pixi layers with selection and hierarc
   }, {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBe(true);
+  expect(Number(await canvasHost.getAttribute('data-last-drag-node-x') ?? '0') % 40).toBe(0);
+  expect(Number(await canvasHost.getAttribute('data-last-drag-node-y') ?? '0') % 40).toBe(0);
   await expect.poll(async () => Number(await canvasHost.getAttribute('data-render-count') ?? '0'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(renderCountBeforeDrag);
@@ -5167,6 +5246,22 @@ test('asic schematic bottom panel renders Pixi layers with selection and hierarc
     const obstacleNodes = snapshot.filter((node) => !selectedNodeIds.includes(node.id));
 
     return movedSelectedNodes.every((selectedNode) => obstacleNodes.every((obstacleNode) => !modulesOverlap(selectedNode, obstacleNode))) ? 'clear' : 'overlap';
+  }, {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBe('clear');
+  await expect.poll(async () => {
+    const modules = await readModuleSnapshot();
+    const edges = await readEdgeSnapshot();
+
+    return edges.every((edge) => {
+      return modules.every((module) => {
+        if (module.id === edge.fromNodeId || module.id === edge.toNodeId) {
+          return true;
+        }
+
+        return !edgeIntersectsModule(edge.points, module);
+      });
+    }) ? 'clear' : 'blocked';
   }, {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBe('clear');
