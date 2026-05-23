@@ -857,7 +857,7 @@ async function openBottomTerminal(window: Awaited<ReturnType<typeof launchApp>>[
 
 function getBottomPanelTab(
   window: Awaited<ReturnType<typeof launchApp>>['window'],
-  tabId: 'terminal' | 'output' | 'problems' | 'debug' | 'lsp',
+  tabId: 'terminal' | 'output' | 'problems' | 'debug' | 'lsp' | 'schematic',
 ) {
   return window.getByTestId(`bottom-panel-tab-${tabId}`);
 }
@@ -4917,6 +4917,7 @@ test('terminal tab creates a real shell session and shows command output', async
   await expect(bottomPanelTabBar).toHaveClass(/(?:^|\s)border-ide-border(?:\s|$)/);
   await expectCompactPanelTabButton(getBottomPanelTab(window, 'terminal'));
   await expectCompactPanelTabButton(getBottomPanelTab(window, 'output'));
+  await expectCompactPanelTabButton(getBottomPanelTab(window, 'schematic'));
 
   const terminalInput = window.locator('[data-testid="terminal-host"] .xterm-helper-textarea');
   await expect(terminalInput).toHaveCount(1);
@@ -4927,6 +4928,76 @@ test('terminal tab creates a real shell session and shows command output', async
   await expect.poll(async () => readTerminalText(window), {
     timeout: 15000,
   }).toContain(marker);
+
+  await app.close();
+});
+
+test('asic schematic bottom panel renders a Pixi canvas with zoom and pan', async () => {
+  const { app, window } = await launchApp();
+
+  await openBottomTerminal(window);
+  await getBottomPanelTab(window, 'schematic').click();
+
+  const panel = window.getByTestId('asic-schematic-panel');
+  await expect(panel).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect(panel).toHaveAttribute('data-ready', 'true', { timeout: UI_READY_TIMEOUT_MS });
+  await expect(panel).toHaveAttribute('data-module-id', 'soc_top');
+  await expect(panel).toHaveAttribute('data-renderer', /^(webgpu|webgl)$/);
+  await expect.poll(async () => Number(await panel.getAttribute('data-node-count') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
+  await expect.poll(async () => Number(await panel.getAttribute('data-edge-count') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
+
+  const canvasHost = window.getByTestId('asic-schematic-canvas');
+  await expect(canvasHost).toHaveAttribute('data-ticker-active', 'false');
+  await expect.poll(async () => Number(await canvasHost.getAttribute('data-render-count') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
+  const canvas = canvasHost.locator('canvas[data-schematic-canvas="true"]');
+  await expect(canvas).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+
+  const canvasBox = await canvas.boundingBox();
+  expect(canvasBox?.width ?? 0).toBeGreaterThan(100);
+  expect(canvasBox?.height ?? 0).toBeGreaterThan(100);
+
+  const idleRenderCount = Number(await canvasHost.getAttribute('data-render-count') ?? '0');
+  await window.waitForTimeout(400);
+  expect(Number(await canvasHost.getAttribute('data-render-count') ?? '0')).toBe(idleRenderCount);
+
+  const zoomBefore = await panel.getAttribute('data-zoom');
+  await canvas.hover();
+  await window.mouse.wheel(0, -240);
+  await expect.poll(async () => panel.getAttribute('data-zoom'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).not.toBe(zoomBefore);
+  await expect.poll(async () => Number(await canvasHost.getAttribute('data-render-count') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(idleRenderCount);
+
+  const panBefore = {
+    x: await panel.getAttribute('data-pan-x'),
+    y: await panel.getAttribute('data-pan-y'),
+  };
+  const dragBox = await canvas.boundingBox();
+  expect(dragBox).not.toBeNull();
+
+  if (dragBox) {
+    const centerX = dragBox.x + dragBox.width / 2;
+    const centerY = dragBox.y + dragBox.height / 2;
+    await window.mouse.move(centerX, centerY);
+    await window.mouse.down();
+    await window.mouse.move(centerX + 80, centerY + 32);
+    await window.mouse.up();
+  }
+
+  await expect.poll(async () => ({
+    x: await panel.getAttribute('data-pan-x'),
+    y: await panel.getAttribute('data-pan-y'),
+  }), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).not.toEqual(panBefore);
 
   await app.close();
 });

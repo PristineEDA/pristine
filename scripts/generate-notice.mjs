@@ -44,6 +44,12 @@ const noticeFamilies = [
     note: 'This section preserves the MPL 2.0 text for the bundled components listed above.',
   },
   {
+    id: 'epl-2.0',
+    title: 'Eclipse Public License 2.0',
+    sourcePath: 'licenses/texts/EPL-2.0.txt',
+    note: 'This section preserves the Eclipse Public License 2.0 text for the bundled components listed above.',
+  },
+  {
     id: 'cc0-1.0',
     title: 'Creative Commons Zero v1.0 Universal',
     sourcePath: 'licenses/texts/CC0-1.0.txt',
@@ -77,6 +83,7 @@ const licenseLabelToFamilyIds = new Map([
   ['BSD-3-Clause', ['bsd-3-clause']],
   ['CC0-1.0', ['cc0-1.0']],
   ['MPL-2.0', ['mpl-2.0']],
+  ['EPL-2.0', ['epl-2.0']],
   ['OFL-1.1', ['ofl-1.1']],
   ['UFL-1.0', ['ufl-1.0']],
   ['MIT / OFL-1.1', ['mit', 'ofl-1.1']],

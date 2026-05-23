@@ -306,6 +306,20 @@ export const openSourceAttributionSections: AttributionSection[] = [
         license: 'MIT',
       },
       {
+        id: 'pixi-js',
+        name: 'PixiJS',
+        url: 'https://github.com/pixijs/pixijs',
+        author: 'PixiJS Team',
+        license: 'MIT',
+      },
+      {
+        id: 'elkjs',
+        name: 'elkjs',
+        url: 'https://github.com/kieler/elkjs',
+        author: 'Ulf Rüegg',
+        license: 'EPL-2.0',
+      },
+      {
         id: 'liveline',
         name: 'Liveline',
         url: 'https://github.com/benjitaylor/liveline',

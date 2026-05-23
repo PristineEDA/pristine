@@ -92,7 +92,7 @@ if (typeof HTMLCanvasElement !== 'undefined') {
       ctx.canvas = this;
       return ctx as unknown as ReturnType<typeof HTMLCanvasElement.prototype.getContext>;
     }
-    return originalGetContext!.call(this, contextId, ...rest);
+    return Reflect.apply(originalGetContext!, this, [contextId, ...rest]) as ReturnType<typeof HTMLCanvasElement.prototype.getContext>;
   } as typeof HTMLCanvasElement.prototype.getContext;
 }
 

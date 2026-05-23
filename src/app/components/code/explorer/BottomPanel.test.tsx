@@ -74,9 +74,13 @@ vi.mock('./terminalSessionStore', async (importOriginal) => {
   };
 });
 
+vi.mock('./schematic/AsicSchematicPanel', () => ({
+  AsicSchematicPanel: () => <div data-testid="asic-schematic-panel">ASIC schematic mock</div>,
+}));
+
 type TestUser = ReturnType<typeof userEvent.setup>;
 
-type BottomPanelTabId = 'terminal' | 'output' | 'problems' | 'debug' | 'lsp';
+type BottomPanelTabId = 'terminal' | 'output' | 'problems' | 'debug' | 'lsp' | 'schematic';
 
 async function clickButton(user: TestUser, name: string | RegExp) {
   await user.click(screen.getByRole('button', { name }));
@@ -183,6 +187,9 @@ describe('BottomPanel', () => {
     expect(await screen.findByTestId('lsp-panel')).toBeInTheDocument();
     expect(screen.getByText(/No LSP debug events yet\./i)).toBeInTheDocument();
 
+    await clickBottomTab(user, 'schematic');
+    expect(await screen.findByTestId('asic-schematic-panel')).toBeInTheDocument();
+
     await clickButton(user, /close panel/i);
     expect(terminateTerminalSessionMock).toHaveBeenCalled();
   });
@@ -236,7 +243,9 @@ describe('BottomPanel', () => {
     expectCompactTabButton('bottom-panel-tab-problems');
     expectCompactTabButton('bottom-panel-tab-debug');
     expectCompactTabButton('bottom-panel-tab-lsp');
+    expectCompactTabButton('bottom-panel-tab-schematic');
     expect(screen.getByTestId('bottom-panel-tab-terminal')).toHaveAccessibleName('Terminal');
+    expect(screen.getByTestId('bottom-panel-tab-schematic')).toHaveAccessibleName('Schematic');
     expect(screen.getByTestId('bottom-panel-tab-terminal')).toHaveAttribute('data-state', 'on');
   });
 });
