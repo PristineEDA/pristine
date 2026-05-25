@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import {
   CodeWorkspaceShell,
@@ -16,6 +16,7 @@ const panelRecords: Array<{ id?: string; collapsed?: boolean }> = [];
 const handleRecords: Array<{ hidden?: boolean }> = [];
 const panelResizeCalls: Array<{ id?: string; size: number | `${number}%` }> = [];
 const panelSnapHandlers = new Map<string, { onMinSnap?: () => void; onMaxSnap?: () => void }>();
+const panelImperativeHandles = new Map<string, { resize: (size: number | `${number}%`) => void }>();
 
 function latestPanelRecords(count: number) {
   return panelRecords.slice(-count);
@@ -84,6 +85,10 @@ vi.mock('../../ui/resizable', () => ({
       } else {
         panelRef.current = resizeHandle;
       }
+    }
+
+    if (id) {
+      panelImperativeHandles.set(id, resizeHandle);
     }
 
     if (id && snap) {
@@ -172,6 +177,7 @@ describe('CodeWorkspaceShell', () => {
     handleRecords.length = 0;
     panelResizeCalls.length = 0;
     panelSnapHandlers.clear();
+    panelImperativeHandles.clear();
 
     render(
       <CodeWorkspaceShell
@@ -214,10 +220,55 @@ describe('CodeWorkspaceShell', () => {
     ]);
   });
 
+  it('treats the bottom panel snap zone as maximized state', () => {
+    panelRecords.length = 0;
+    handleRecords.length = 0;
+    panelResizeCalls.length = 0;
+    panelSnapHandlers.clear();
+    panelImperativeHandles.clear();
+
+    render(
+      <CodeWorkspaceShell
+        activityBar={<div>Activity</div>}
+        showLeftPanel={false}
+        showBottomPanel
+        showRightPanel={false}
+        leftPanelId="left"
+        centerPanelId="center"
+        topPanelId="top"
+        bottomPanelId="bottom"
+        rightPanelId="right"
+        leftContent={<div>Explorer</div>}
+        topContent={<div>Editor</div>}
+        bottomContent={({ isMaximized }) => <div>{isMaximized ? 'restore-bottom' : 'maximize-bottom'}</div>}
+        rightContent={<div>Inspector</div>}
+        enableBottomPanelMaximize
+      />,
+    );
+
+    const bottomPanel = screen.getByTestId('panel-bottom');
+    const snapThreshold = Number(bottomPanel.getAttribute('data-snap-max-threshold'));
+    const bottomPanelHandle = panelImperativeHandles.get('bottom');
+
+    if (!bottomPanelHandle) {
+      throw new Error('Expected bottom panel imperative handle to be registered');
+    }
+
+    expect(snapThreshold).toBe(92);
+
+    act(() => {
+      bottomPanelHandle.resize(snapThreshold);
+    });
+
+    expect(screen.getByText('restore-bottom')).toBeInTheDocument();
+    expect(bottomPanel).toHaveAttribute('data-bottom-panel-maximized', 'true');
+  });
+
   it('uses the bottom panel minimum snap callback to auto-hide without closing the content', () => {
     panelRecords.length = 0;
     handleRecords.length = 0;
     panelSnapHandlers.clear();
+    panelImperativeHandles.clear();
     const onBottomPanelAutoHide = vi.fn();
 
     render(

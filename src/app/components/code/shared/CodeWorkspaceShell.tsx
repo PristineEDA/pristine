@@ -45,7 +45,6 @@ const BOTTOM_PANEL_MAX_SIZE = 100;
 const BOTTOM_PANEL_LEGACY_MAX_SIZE = 60;
 const BOTTOM_PANEL_MAX_SNAP_THRESHOLD = 92;
 const BOTTOM_PANEL_HIDE_SNAP_THRESHOLD = 16;
-const BOTTOM_PANEL_MAXIMIZED_THRESHOLD = 99;
 
 export interface CodeWorkspaceBottomPanelControls {
   isMaximized: boolean;
@@ -353,7 +352,7 @@ export function CodeWorkspaceShell({
   const handleBottomPanelSizeChange = useCallback((size: number) => {
     bottomPanelSizeRef.current = size;
 
-    const nextIsMaximized = size >= BOTTOM_PANEL_MAXIMIZED_THRESHOLD;
+    const nextIsMaximized = size >= BOTTOM_PANEL_MAX_SNAP_THRESHOLD;
     setIsBottomPanelMaximized((currentValue) => (currentValue === nextIsMaximized ? currentValue : nextIsMaximized));
 
     if (!nextIsMaximized && size > BOTTOM_PANEL_HIDE_SNAP_THRESHOLD) {
@@ -388,7 +387,7 @@ export function CodeWorkspaceShell({
     }
 
     const currentSize = bottomPanelSizeRef.current;
-    if (currentSize > BOTTOM_PANEL_HIDE_SNAP_THRESHOLD && currentSize < BOTTOM_PANEL_MAXIMIZED_THRESHOLD) {
+    if (currentSize > BOTTOM_PANEL_HIDE_SNAP_THRESHOLD && currentSize < BOTTOM_PANEL_MAX_SNAP_THRESHOLD) {
       lastNonMaximizedBottomPanelSizeRef.current = currentSize;
     }
 
