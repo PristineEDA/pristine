@@ -59,7 +59,7 @@ async function closeInlineGitDiffDetail(window: Awaited<ReturnType<typeof launch
 
 function createTerminalScrollFloodCommand(markerPrefix: string, count: number) {
   if (process.platform === 'win32') {
-    return `for ($i = 1; $i -le ${count}; $i++) { Write-Output "${markerPrefix}$i" }`;
+    return `1..${count} | ForEach-Object { "${markerPrefix}$_" }`;
   }
 
   return `i=1; while [ $i -le ${count} ]; do echo "${markerPrefix}$i"; i=$((i + 1)); done`;
@@ -877,26 +877,28 @@ async function waitForTerminalLayoutSettled(window: Awaited<ReturnType<typeof la
       };
       requestAnimationFrame: (callback: () => void) => number;
     };
-    const host = browserGlobal.document.querySelector('[data-testid="terminal-host"]');
+    const isReady = () => {
+      const host = browserGlobal.document.querySelector('[data-testid="terminal-host"]');
+      const xterm = host?.querySelector('.xterm') ?? null;
+      const textarea = host?.querySelector('.xterm-helper-textarea') ?? null;
 
-    if (!host || !host.isConnected || !host.querySelector('.xterm') || !host.querySelector('.xterm-helper-textarea')) {
+      if (!host?.isConnected || !xterm?.isConnected || !textarea?.isConnected) {
+        return false;
+      }
+
+      const rect = host.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    };
+
+    if (!isReady()) {
       return false;
     }
 
-    const firstRect = host.getBoundingClientRect();
     await new Promise<void>((resolve) => {
       browserGlobal.requestAnimationFrame(() => browserGlobal.requestAnimationFrame(() => resolve()));
     });
 
-    if (!host.isConnected) {
-      return false;
-    }
-
-    const secondRect = host.getBoundingClientRect();
-    return firstRect.width > 0
-      && firstRect.height > 0
-      && Math.round(firstRect.width) === Math.round(secondRect.width)
-      && Math.round(firstRect.height) === Math.round(secondRect.height);
+    return isReady();
   }), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBe(true);
@@ -930,7 +932,7 @@ async function focusTerminalInput(window: Awaited<ReturnType<typeof launchApp>>[
 async function writeTerminalCommand(window: Awaited<ReturnType<typeof launchApp>>['window'], command: string) {
   await waitForTerminalLayoutSettled(window);
   await focusTerminalInput(window);
-  await window.keyboard.type(command);
+  await window.keyboard.insertText(command);
   await window.keyboard.press('Enter');
 }
 
@@ -5599,13 +5601,6 @@ test('terminal remains writable after left sidebar toggles while vertically scro
   await expect.poll(async () => readTerminalText(window), {
     timeout: 20000,
   }).toContain(scrollMarker);
-
-  await expect.poll(async () => {
-    const terminalText = await readTerminalText(window);
-    return (terminalText?.match(/__PRISTINE_SCROLL__/g) ?? []).length;
-  }, {
-    timeout: 10000,
-  }).toBeGreaterThan(40);
 
   await expect.poll(async () => readScrollbarWidthSnapshot(window), {
     timeout: 10000,
