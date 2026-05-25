@@ -10,6 +10,37 @@ import { BottomPanel } from './BottomPanel';
 
 let mockedProblems: LspProblem[] = [];
 
+const terminalPanelMockState = vi.hoisted(() => {
+  let nextInstanceId = 1;
+  let mountCount = 0;
+  let unmountCount = 0;
+
+  return {
+    allocateInstanceId() {
+      const instanceId = nextInstanceId;
+      nextInstanceId += 1;
+      return instanceId;
+    },
+    getMountCount() {
+      return mountCount;
+    },
+    getUnmountCount() {
+      return unmountCount;
+    },
+    markMounted() {
+      mountCount += 1;
+    },
+    markUnmounted() {
+      unmountCount += 1;
+    },
+    reset() {
+      nextInstanceId = 1;
+      mountCount = 0;
+      unmountCount = 0;
+    },
+  };
+});
+
 function expectCompactTabButton(testId: string) {
   const tabButton = screen.getByTestId(testId);
   const icon = tabButton.querySelector('svg');
@@ -78,6 +109,34 @@ vi.mock('./schematic/AsicSchematicPanel', () => ({
   AsicSchematicPanel: () => <div data-testid="asic-schematic-panel">ASIC schematic mock</div>,
 }));
 
+vi.mock('./TerminalPanel', async () => {
+  const React = await import('react');
+
+  return {
+    TerminalPanel: ({ layoutVersion }: { layoutVersion?: string }) => {
+      const instanceIdRef = React.useRef<number | null>(null);
+
+      if (instanceIdRef.current === null) {
+        instanceIdRef.current = terminalPanelMockState.allocateInstanceId();
+      }
+
+      React.useEffect(() => {
+        terminalPanelMockState.markMounted();
+
+        return () => {
+          terminalPanelMockState.markUnmounted();
+        };
+      }, []);
+
+      return React.createElement('div', {
+        'data-testid': 'terminal-panel-mock',
+        'data-instance-id': String(instanceIdRef.current),
+        'data-layout-version': layoutVersion ?? '',
+      }, 'Terminal panel mock');
+    },
+  };
+});
+
 type TestUser = ReturnType<typeof userEvent.setup>;
 
 type BottomPanelTabId = 'terminal' | 'output' | 'problems' | 'debug' | 'lsp' | 'schematic';
@@ -92,6 +151,7 @@ async function clickBottomTab(user: TestUser, tabId: BottomPanelTabId) {
 
 describe('BottomPanel', () => {
   beforeEach(() => {
+    terminalPanelMockState.reset();
     terminateTerminalSessionMock.mockClear();
     mockedProblems = [
       {
@@ -189,6 +249,27 @@ describe('BottomPanel', () => {
 
     expect(screen.getByTestId('bottom-panel-maximize')).toHaveAccessibleName('Restore Panel');
     expect(screen.queryByRole('button', { name: /maximize panel/i })).not.toBeInTheDocument();
+  });
+
+  it('keeps the terminal panel mounted when only layoutVersion changes', () => {
+    const { rerender } = render(<BottomPanel layoutVersion="true:true:true:240" />);
+
+    const initialTerminalPanel = screen.getByTestId('terminal-panel-mock');
+    const initialInstanceId = initialTerminalPanel.getAttribute('data-instance-id');
+
+    expect(initialTerminalPanel).toHaveAttribute('data-layout-version', 'true:true:true:240');
+    expect(terminalPanelMockState.getMountCount()).toBe(1);
+    expect(terminalPanelMockState.getUnmountCount()).toBe(0);
+
+    rerender(<BottomPanel layoutVersion="false:true:true:240" />);
+
+    const rerenderedTerminalPanel = screen.getByTestId('terminal-panel-mock');
+
+    expect(rerenderedTerminalPanel).toBe(initialTerminalPanel);
+    expect(rerenderedTerminalPanel).toHaveAttribute('data-instance-id', initialInstanceId ?? '');
+    expect(rerenderedTerminalPanel).toHaveAttribute('data-layout-version', 'false:true:true:240');
+    expect(terminalPanelMockState.getMountCount()).toBe(1);
+    expect(terminalPanelMockState.getUnmountCount()).toBe(0);
   });
 
   it('switches between tabs and closes the panel', async () => {

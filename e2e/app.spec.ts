@@ -5614,11 +5614,11 @@ test('terminal remains writable after left sidebar toggles while vertically scro
 
   await window.getByTestId('toggle-left-panel').click();
   await expectCollapsedPanel(window.getByTestId('panel-left-panel'));
-  await expect(window.getByTestId('terminal-host')).toBeVisible();
+  await waitForTerminalLayoutSettled(window);
 
   await window.getByTestId('toggle-left-panel').click();
   await expect(window.getByTestId('panel-left-panel')).toBeVisible();
-  await expect(window.getByTestId('terminal-host')).toBeVisible();
+  await waitForTerminalLayoutSettled(window);
 
   await writeTerminalCommand(window, `echo ${afterToggleMarker}`);
 
