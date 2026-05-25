@@ -855,6 +855,30 @@ async function openBottomTerminal(window: Awaited<ReturnType<typeof launchApp>>[
   return terminalHost;
 }
 
+async function waitForTerminalLayoutSettled(window: Awaited<ReturnType<typeof launchApp>>['window']) {
+  const terminalHost = window.getByTestId('terminal-host');
+
+  await expect(terminalHost).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect(window.locator('[data-testid="terminal-host"] .xterm')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect(window.locator('[data-testid="terminal-host"] .xterm-helper-textarea')).toHaveCount(1);
+  await window.evaluate(() => new Promise<void>((resolve) => {
+    const browserGlobal = globalThis as unknown as {
+      requestAnimationFrame: (callback: () => void) => number;
+    };
+
+    browserGlobal.requestAnimationFrame(() => browserGlobal.requestAnimationFrame(() => resolve()));
+  }));
+}
+
+async function writeTerminalCommand(window: Awaited<ReturnType<typeof launchApp>>['window'], command: string) {
+  await waitForTerminalLayoutSettled(window);
+
+  const terminalHost = window.getByTestId('terminal-host');
+  await terminalHost.click();
+  await window.keyboard.type(command);
+  await window.keyboard.press('Enter');
+}
+
 function getBottomPanelTab(
   window: Awaited<ReturnType<typeof launchApp>>['window'],
   tabId: 'terminal' | 'output' | 'problems' | 'debug' | 'lsp' | 'schematic',
@@ -5480,7 +5504,6 @@ test('terminal remains writable after left sidebar toggles while vertically scro
 
   const { app, window } = await launchApp();
   const bottomPanel = window.getByTestId('panel-bottom-panel');
-  const terminalInput = window.locator('[data-testid="terminal-host"] .xterm-helper-textarea');
   const scrollCommand = createTerminalScrollFloodCommand('__PRISTINE_SCROLL__', 120);
   const scrollMarker = '__PRISTINE_SCROLL__120';
   const afterToggleMarker = '__PRISTINE_AFTER_LEFT_TOGGLE__';
@@ -5516,10 +5539,7 @@ test('terminal remains writable after left sidebar toggles while vertically scro
     return Math.round(panel.getBoundingClientRect().height);
   })).toBeLessThan(170);
 
-  await expect(terminalInput).toHaveCount(1);
-  await terminalInput.click();
-  await terminalInput.pressSequentially(scrollCommand);
-  await terminalInput.press('Enter');
+  await writeTerminalCommand(window, scrollCommand);
 
   await expect.poll(async () => readTerminalText(window), {
     timeout: 20000,
@@ -5550,10 +5570,7 @@ test('terminal remains writable after left sidebar toggles while vertically scro
   await expect(window.getByTestId('panel-left-panel')).toBeVisible();
   await expect(window.getByTestId('terminal-host')).toBeVisible();
 
-  await expect(terminalInput).toHaveCount(1);
-  await terminalInput.click();
-  await terminalInput.pressSequentially(`echo ${afterToggleMarker}`);
-  await terminalInput.press('Enter');
+  await writeTerminalCommand(window, `echo ${afterToggleMarker}`);
 
   await expect.poll(async () => readTerminalText(window), {
     timeout: 15000,
