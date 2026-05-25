@@ -861,20 +861,75 @@ async function waitForTerminalLayoutSettled(window: Awaited<ReturnType<typeof la
   await expect(terminalHost).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
   await expect(window.locator('[data-testid="terminal-host"] .xterm')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
   await expect(window.locator('[data-testid="terminal-host"] .xterm-helper-textarea')).toHaveCount(1);
-  await window.evaluate(() => new Promise<void>((resolve) => {
+  await expect.poll(async () => window.evaluate(async () => {
+    type RectLike = {
+      height: number;
+      width: number;
+    };
+    type ElementLike = {
+      getBoundingClientRect: () => RectLike;
+      isConnected: boolean;
+      querySelector: (selector: string) => ElementLike | null;
+    };
     const browserGlobal = globalThis as unknown as {
+      document: {
+        querySelector: (selector: string) => ElementLike | null;
+      };
       requestAnimationFrame: (callback: () => void) => number;
     };
+    const host = browserGlobal.document.querySelector('[data-testid="terminal-host"]');
 
-    browserGlobal.requestAnimationFrame(() => browserGlobal.requestAnimationFrame(() => resolve()));
-  }));
+    if (!host || !host.isConnected || !host.querySelector('.xterm') || !host.querySelector('.xterm-helper-textarea')) {
+      return false;
+    }
+
+    const firstRect = host.getBoundingClientRect();
+    await new Promise<void>((resolve) => {
+      browserGlobal.requestAnimationFrame(() => browserGlobal.requestAnimationFrame(() => resolve()));
+    });
+
+    if (!host.isConnected) {
+      return false;
+    }
+
+    const secondRect = host.getBoundingClientRect();
+    return firstRect.width > 0
+      && firstRect.height > 0
+      && Math.round(firstRect.width) === Math.round(secondRect.width)
+      && Math.round(firstRect.height) === Math.round(secondRect.height);
+  }), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBe(true);
+}
+
+async function focusTerminalInput(window: Awaited<ReturnType<typeof launchApp>>['window']) {
+  await expect.poll(async () => window.evaluate(() => {
+    type FocusableElementLike = {
+      focus: (options?: { preventScroll?: boolean }) => void;
+      isConnected: boolean;
+    };
+    const browserGlobal = globalThis as unknown as {
+      document: {
+        activeElement: unknown;
+        querySelector: (selector: string) => FocusableElementLike | null;
+      };
+    };
+    const textarea = browserGlobal.document.querySelector('[data-testid="terminal-host"] .xterm-helper-textarea');
+
+    if (!textarea || !textarea.isConnected) {
+      return false;
+    }
+
+    textarea.focus({ preventScroll: true });
+    return browserGlobal.document.activeElement === textarea;
+  }), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBe(true);
 }
 
 async function writeTerminalCommand(window: Awaited<ReturnType<typeof launchApp>>['window'], command: string) {
   await waitForTerminalLayoutSettled(window);
-
-  const terminalHost = window.getByTestId('terminal-host');
-  await terminalHost.click();
+  await focusTerminalInput(window);
   await window.keyboard.type(command);
   await window.keyboard.press('Enter');
 }
