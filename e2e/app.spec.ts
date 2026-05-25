@@ -931,9 +931,12 @@ async function focusTerminalInput(window: Awaited<ReturnType<typeof launchApp>>[
 
 async function writeTerminalCommand(window: Awaited<ReturnType<typeof launchApp>>['window'], command: string) {
   await waitForTerminalLayoutSettled(window);
+  const terminalInput = window.locator('[data-testid="terminal-host"] .xterm-helper-textarea');
+
+  await expect(terminalInput).toHaveCount(1);
   await focusTerminalInput(window);
-  await window.keyboard.insertText(command);
-  await window.keyboard.press('Enter');
+  await terminalInput.pressSequentially(command);
+  await terminalInput.press('Enter');
 }
 
 function getBottomPanelTab(
