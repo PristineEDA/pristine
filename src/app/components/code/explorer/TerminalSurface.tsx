@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
@@ -28,7 +28,45 @@ export function TerminalSurface({ layoutVersion }: TerminalSurfaceProps) {
   const pendingFrameRef = useRef<number | null>(null);
   const pendingFollowUpFrameRef = useRef<number | null>(null);
 
-  const syncE2EState = (buffer: string, pid: number | null) => {
+  const cancelScheduledSyncSize = useCallback(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    if (pendingFrameRef.current !== null) {
+      window.cancelAnimationFrame(pendingFrameRef.current);
+      pendingFrameRef.current = null;
+    }
+
+    if (pendingFollowUpFrameRef.current !== null) {
+      window.cancelAnimationFrame(pendingFollowUpFrameRef.current);
+      pendingFollowUpFrameRef.current = null;
+    }
+  }, []);
+
+  const scheduleSyncSize = useCallback((withFollowUp = false) => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    cancelScheduledSyncSize();
+
+    pendingFrameRef.current = window.requestAnimationFrame(() => {
+      pendingFrameRef.current = null;
+      syncSizeRef.current?.();
+
+      if (!withFollowUp) {
+        return;
+      }
+
+      pendingFollowUpFrameRef.current = window.requestAnimationFrame(() => {
+        pendingFollowUpFrameRef.current = null;
+        syncSizeRef.current?.();
+      });
+    });
+  }, [cancelScheduledSyncSize]);
+
+  const syncE2EState = (buffer: string, pid: number | null, sessionId: string | null) => {
     const host = hostRef.current;
     if (!host || !isE2E) {
       return;
@@ -37,10 +75,15 @@ export function TerminalSurface({ layoutVersion }: TerminalSurfaceProps) {
     host.dataset['terminalText'] = buffer.slice(-8000);
     if (pid) {
       host.dataset['terminalPid'] = String(pid);
-      return;
+    } else {
+      delete host.dataset['terminalPid'];
     }
 
-    delete host.dataset['terminalPid'];
+    if (sessionId) {
+      host.dataset['terminalSessionId'] = sessionId;
+    } else {
+      delete host.dataset['terminalSessionId'];
+    }
   };
 
   useEffect(() => {
@@ -48,35 +91,10 @@ export function TerminalSurface({ layoutVersion }: TerminalSurfaceProps) {
       return undefined;
     }
 
-    if (pendingFrameRef.current !== null) {
-      window.cancelAnimationFrame(pendingFrameRef.current);
-    }
+    scheduleSyncSize(true);
 
-    if (pendingFollowUpFrameRef.current !== null) {
-      window.cancelAnimationFrame(pendingFollowUpFrameRef.current);
-    }
-
-    pendingFrameRef.current = window.requestAnimationFrame(() => {
-      syncSizeRef.current?.();
-      pendingFrameRef.current = null;
-      pendingFollowUpFrameRef.current = window.requestAnimationFrame(() => {
-        syncSizeRef.current?.();
-        pendingFollowUpFrameRef.current = null;
-      });
-    });
-
-    return () => {
-      if (pendingFrameRef.current !== null) {
-        window.cancelAnimationFrame(pendingFrameRef.current);
-        pendingFrameRef.current = null;
-      }
-
-      if (pendingFollowUpFrameRef.current !== null) {
-        window.cancelAnimationFrame(pendingFollowUpFrameRef.current);
-        pendingFollowUpFrameRef.current = null;
-      }
-    };
-  }, [layoutVersion]);
+    return cancelScheduledSyncSize;
+  }, [cancelScheduledSyncSize, layoutVersion, scheduleSyncSize]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -104,7 +122,7 @@ export function TerminalSurface({ layoutVersion }: TerminalSurfaceProps) {
       term.write(snapshot.buffer);
       renderedBufferRef.current = snapshot.buffer.length;
     }
-    syncE2EState(snapshot.buffer, snapshot.pid);
+    syncE2EState(snapshot.buffer, snapshot.pid, snapshot.sessionId);
 
     const syncSize = () => {
       fitAddon.fit();
@@ -125,7 +143,7 @@ export function TerminalSurface({ layoutVersion }: TerminalSurfaceProps) {
         term.write(next.buffer.slice(renderedBufferRef.current));
         renderedBufferRef.current = next.buffer.length;
       }
-      syncE2EState(next.buffer, next.pid);
+      syncE2EState(next.buffer, next.pid, next.sessionId);
     };
 
     const unsubscribe = subscribeTerminalSession(syncFromStore);
@@ -140,20 +158,21 @@ export function TerminalSurface({ layoutVersion }: TerminalSurfaceProps) {
       host.closest('[data-panel-id="center-panel"]'),
     ].filter((element): element is HTMLElement => element instanceof HTMLElement);
     const resizeObserver = typeof ResizeObserver !== 'undefined'
-      ? new ResizeObserver(() => syncSize())
+      ? new ResizeObserver(() => scheduleSyncSize())
       : null;
 
     observedElements.forEach((element) => resizeObserver?.observe(element));
 
-    window.requestAnimationFrame(syncSize);
+    scheduleSyncSize();
 
     void ensureTerminalSession({ cols: term.cols, rows: term.rows }).then(() => {
       syncFromStore();
-      syncSize();
+      scheduleSyncSize(true);
     });
 
     return () => {
       syncSizeRef.current = null;
+      cancelScheduledSyncSize();
       resizeObserver?.disconnect();
       unsubscribe();
       inputSubscription.dispose();
@@ -161,7 +180,7 @@ export function TerminalSurface({ layoutVersion }: TerminalSurfaceProps) {
       term.dispose();
       terminalRef.current = null;
     };
-  }, [isE2E, terminalTheme]);
+  }, [cancelScheduledSyncSize, isE2E, scheduleSyncSize, terminalTheme]);
 
   return (
     <div

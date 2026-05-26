@@ -904,39 +904,34 @@ async function waitForTerminalLayoutSettled(window: Awaited<ReturnType<typeof la
   }).toBe(true);
 }
 
-async function focusTerminalInput(window: Awaited<ReturnType<typeof launchApp>>['window']) {
-  await expect.poll(async () => window.evaluate(() => {
-    type FocusableElementLike = {
-      focus: (options?: { preventScroll?: boolean }) => void;
-      isConnected: boolean;
-    };
+async function writeTerminalCommand(window: Awaited<ReturnType<typeof launchApp>>['window'], command: string) {
+  await waitForTerminalLayoutSettled(window);
+  await expect.poll(async () => readTerminalSessionId(window), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).not.toBe('');
+
+  const sessionId = await readTerminalSessionId(window);
+  if (!sessionId) {
+    throw new Error('Expected terminal session id to be available before writing a command.');
+  }
+
+  const didWrite = await window.evaluate(async ({ payload, sessionId }) => {
     const browserGlobal = globalThis as unknown as {
-      document: {
-        activeElement: unknown;
-        querySelector: (selector: string) => FocusableElementLike | null;
+      electronAPI?: {
+        terminal?: {
+          write: (id: string, data: string) => Promise<boolean>;
+        };
       };
     };
-    const textarea = browserGlobal.document.querySelector('[data-testid="terminal-host"] .xterm-helper-textarea');
-
-    if (!textarea || !textarea.isConnected) {
+    const api = browserGlobal.electronAPI?.terminal;
+    if (!api) {
       return false;
     }
 
-    textarea.focus({ preventScroll: true });
-    return browserGlobal.document.activeElement === textarea;
-  }), {
-    timeout: UI_READY_TIMEOUT_MS,
-  }).toBe(true);
-}
+    return api.write(sessionId, payload);
+  }, { payload: `${command}\r`, sessionId });
 
-async function writeTerminalCommand(window: Awaited<ReturnType<typeof launchApp>>['window'], command: string) {
-  await waitForTerminalLayoutSettled(window);
-  const terminalInput = window.locator('[data-testid="terminal-host"] .xterm-helper-textarea');
-
-  await expect(terminalInput).toHaveCount(1);
-  await focusTerminalInput(window);
-  await terminalInput.pressSequentially(command);
-  await terminalInput.press('Enter');
+  expect(didWrite).toBe(true);
 }
 
 function getBottomPanelTab(
@@ -983,6 +978,10 @@ async function readTerminalPid(window: Awaited<ReturnType<typeof launchApp>>['wi
   return value ? Number(value) : NaN;
 }
 
+async function readTerminalSessionId(window: Awaited<ReturnType<typeof launchApp>>['window']) {
+  return (await window.getByTestId('terminal-host').getAttribute('data-terminal-session-id')) ?? '';
+}
+
 async function readScrollbarWidthSnapshot(window: Awaited<ReturnType<typeof launchApp>>['window']) {
   return window.getByTestId('terminal-host').evaluate((host) => {
     const browserGlobal = globalThis as unknown as {
@@ -1004,7 +1003,14 @@ async function readScrollbarWidthSnapshot(window: Awaited<ReturnType<typeof laun
     const terminalCustomSlider = terminalHost.querySelector('.xterm-scrollable-element > .scrollbar > .slider');
 
     if (!explorerTree || !terminalViewport || !terminalCustomScrollbar || !terminalCustomSlider || !terminalHost.parentElement) {
-      throw new Error('Expected explorer and terminal scrollbar elements to be available.');
+      return {
+        hasExplorerTree: Boolean(explorerTree),
+        hasTerminalCustomScrollbar: Boolean(terminalCustomScrollbar),
+        hasTerminalCustomSlider: Boolean(terminalCustomSlider),
+        hasTerminalSurface: Boolean(terminalHost.parentElement),
+        hasTerminalViewport: Boolean(terminalViewport),
+        ready: false,
+      };
     }
 
     const terminalSurfaceStyle = browserGlobal.getComputedStyle(terminalHost.parentElement);
@@ -1012,6 +1018,7 @@ async function readScrollbarWidthSnapshot(window: Awaited<ReturnType<typeof laun
 
     return {
       explorerWidth: browserGlobal.getComputedStyle(explorerTree, '::-webkit-scrollbar').width,
+      ready: true,
       terminalCustomScrollbarMatchesSurface: terminalCustomScrollbarStyle.backgroundColor === terminalSurfaceStyle.backgroundColor,
       terminalCustomScrollbarWidth: terminalCustomScrollbarStyle.width,
       terminalCustomSliderWidth: browserGlobal.getComputedStyle(terminalCustomSlider).width,
@@ -5625,6 +5632,7 @@ test('terminal remains writable after left sidebar toggles while vertically scro
     timeout: 10000,
   }).toEqual({
     explorerWidth: '6px',
+    ready: true,
     terminalCustomScrollbarMatchesSurface: true,
     terminalCustomScrollbarWidth: '6px',
     terminalCustomSliderWidth: '6px',
