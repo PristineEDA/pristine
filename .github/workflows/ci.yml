@@ -16,9 +16,7 @@ env:
   PRISTINE_ENGINE_ARTIFACT_BRANCH: main
   PRISTINE_ENGINE_ARTIFACT_WORKFLOW: ci.yml
 
-permissions:
-  actions: read
-  contents: read
+permissions: read-all
 
 jobs:
   package-gate:

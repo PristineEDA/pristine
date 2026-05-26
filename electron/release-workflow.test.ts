@@ -110,6 +110,7 @@ describe('release workflow contract', () => {
     expect(workflow).toContain('PRISTINE_ENGINE_REMOTE_SOURCE_MODE: auto')
     expect(workflow).toContain('PRISTINE_ENGINE_ARTIFACT_BRANCH: main')
     expect(workflow).toContain('PRISTINE_ENGINE_ARTIFACT_WORKFLOW: ci.yml')
+    expect(workflow).toContain('permissions: read-all')
     expect(workflow).toContain('actions: read')
 
     expect(prepareEngineScript).toContain('getRemoteSourceMode')
