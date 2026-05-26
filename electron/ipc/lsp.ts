@@ -25,7 +25,7 @@ import type {
 } from '../../types/systemverilog-lsp.js';
 import { AsyncChannels, StreamChannels } from './channels.js';
 import { assertNumber, assertOptionalString, assertString, validatePathWithinRoot } from './validators.js';
-import { assertSlangServerPathAvailable, resolveSlangServerPath } from './slangServerPath.js';
+import { assertPristineEnginePathAvailable, resolvePristineEnginePath } from './pristineEnginePath.js';
 
 interface TrackedDocument {
   filePath: string;
@@ -582,7 +582,7 @@ function createTrackedDocument(filePath: string, text: string, languageId = SYST
 
 async function createSession(getMainWindow: () => BrowserWindow | null): Promise<LspSession> {
   const root = getProjectRoot();
-  const binaryPath = assertSlangServerPathAvailable(resolveSlangServerPath());
+  const binaryPath = assertPristineEnginePathAvailable(resolvePristineEnginePath());
   const serverProcess = childProcess.spawn(binaryPath, [], {
     cwd: root,
     shell: false,

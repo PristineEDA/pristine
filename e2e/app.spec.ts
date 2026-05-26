@@ -1975,7 +1975,7 @@ test('explorer opens a file into a new editor tab', async () => {
   await app.close();
 });
 
-test('systemverilog lsp smoke resolves a cross-file definition and symbol references', async () => {
+test('pristine-engine lsp smoke resolves a cross-file definition and symbol references', async () => {
   test.slow();
 
   const { app, window } = await launchApp();
@@ -2064,7 +2064,7 @@ test('systemverilog lsp smoke resolves a cross-file definition and symbol refere
   await app.close();
 });
 
-test('lsp bottom panel filters diagnostics and shows paired request responses', async () => {
+test('pristine-engine lsp bottom panel filters diagnostics and shows paired request responses', async () => {
   test.slow();
 
   const { app, window } = await launchApp();

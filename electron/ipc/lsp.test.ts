@@ -122,8 +122,8 @@ function createFakeConnection(): FakeConnection {
 
 describe('LSP IPC handlers', () => {
   const expectedBinaryPattern = process.platform === 'win32'
-    ? /binaries[\\/]slang-server\.exe$/
-    : /binaries[\\/]slang-server$/;
+    ? /binaries[\\/]pristine-engine\.exe$/
+    : /binaries[\\/]pristine-engine$/;
   const send = vi.fn();
   const getMainWindow = () => ({ webContents: { send } } as any);
   let fakeProcess: FakeProcess;

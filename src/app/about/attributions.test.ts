@@ -45,6 +45,23 @@ const directRuntimeDependencyAttributionIds = new Map([
 ]);
 
 describe('attributions', () => {
+  it('maps bundled SystemVerilog language support to pristine-engine', () => {
+    const bundledResourcesSection = openSourceAttributionSections.find((section) => section.id === 'bundled-binaries-and-extra-resources');
+    const bundledResourceIds = bundledResourcesSection?.items.map((item) => item.id) ?? [];
+
+    expect(bundledResourcesSection?.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'pristine-engine',
+          name: 'pristine-engine',
+          author: 'PristineEDA',
+          license: 'Apache-2.0',
+        }),
+      ]),
+    );
+    expect(bundledResourceIds).not.toContain(['slang', 'server'].join('-'));
+  });
+
   it('includes the bundled editor themes in the shared attribution data', () => {
     const bundledEditorThemesSection = openSourceAttributionSections.find((section) => section.id === 'bundled-editor-themes');
 

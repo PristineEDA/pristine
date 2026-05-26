@@ -128,6 +128,10 @@ extraResources:
       - LICENSE
       - ATTRIBUTIONS.md
       - NOTICE
+  - from: ../../licenses/pristine-engine
+    to: licenses/pristine-engine
+    filter:
+      - '**/*'
 asar: true
 asarUnpack:
   - node_modules/node-pty/**

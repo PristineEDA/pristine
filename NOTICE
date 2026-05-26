@@ -49,6 +49,7 @@ Covered components:
 - @ai-sdk/react (AI Agent Frameworks; declared as Apache-2.0)
 - streamdown (Content Rendering, Diagrams & State; declared as Apache-2.0)
 - Meslo Font (Bundled Font Assets; declared as Apache-2.0)
+- pristine-engine (Bundled Binaries & Extra Resources; declared as Apache-2.0)
 - pristine-res (Bundled Binaries & Extra Resources; declared as Apache-2.0)
 
 This section preserves the Apache License 2.0 text for the bundled components listed above.
@@ -421,7 +422,6 @@ Covered components:
 - Agave (Bundled Font Assets; declared as MIT)
 - Hack (Bundled Font Assets; declared as MIT / Bitstream Vera)
 - Monoid (Bundled Font Assets; declared as MIT / OFL-1.1)
-- slang-server (Bundled Binaries & Extra Resources; declared as MIT)
 
 This section preserves the shared MIT license terms. Project-specific authors and source URLs remain listed in ATTRIBUTIONS.md.
 
