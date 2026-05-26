@@ -57,6 +57,22 @@ test('GitHub release workflow is tag-gated and publishes staged package assets',
   expect(workflow).toContain('workflow_dispatch:');
   expect(workflow).toContain('PRISTINE_ENGINE_REMOTE_SOURCE_MODE: auto');
   expect(workflow).toContain('PRISTINE_ENGINE_ARTIFACT_BRANCH: main');
+  const buildStepTokenPattern = [
+    '- name: Build',
+    '\\s+env:',
+    '\\s+PRISTINE_ENGINE_GITHUB_TOKEN: \\$\\{\\{ github\\.token \\}\\}',
+    '\\s+run: pnpm build',
+  ].join('\\r?\\n');
+  const packageStepTokenPattern = [
+    '- name: Package application',
+    '\\s+env:',
+    "\\s+CSC_IDENTITY_AUTO_DISCOVERY: 'false'",
+    '\\s+PRISTINE_ENGINE_GITHUB_TOKEN: \\$\\{\\{ github\\.token \\}\\}',
+    '\\s+run: pnpm run build:app',
+  ].join('\\r?\\n');
+
+  expect(workflow).toMatch(new RegExp(buildStepTokenPattern));
+  expect(workflow.match(new RegExp(packageStepTokenPattern, 'g'))).toHaveLength(2);
   expect(workflow).toMatch(/permissions:\r?\n  actions: read\r?\n  contents: read/);
   expect(workflow).not.toContain('permissions: read-all');
   expect(workflow).not.toMatch(/push:\r?\n\s+branches:/);

@@ -118,6 +118,8 @@ jobs:
         run: pnpm typecheck
 
       - name: Build
+        env:
+          PRISTINE_ENGINE_GITHUB_TOKEN: ${{ github.token }}
         run: pnpm build
 
       - name: Run unit tests with coverage report
@@ -244,6 +246,7 @@ jobs:
       - name: Package application
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          PRISTINE_ENGINE_GITHUB_TOKEN: ${{ github.token }}
         run: pnpm run build:app && pnpm run prepare:package-app && pnpm exec electron-builder --projectDir .pristine-package/app ${{ matrix.builder_args }} --config electron-builder.yml --publish never
 
       - name: Run runtime performance comparison
@@ -379,6 +382,7 @@ jobs:
       - name: Package application
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          PRISTINE_ENGINE_GITHUB_TOKEN: ${{ github.token }}
         run: pnpm run build:app && pnpm run prepare:package-app && pnpm exec electron-builder --projectDir .pristine-package/app ${{ matrix.builder_args }} --config electron-builder.yml --publish never
 
       - name: Upload package artifacts

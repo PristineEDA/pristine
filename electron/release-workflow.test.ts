@@ -122,6 +122,22 @@ describe('release workflow contract', () => {
     expect(workflow).toContain('PRISTINE_ENGINE_ARTIFACT_BRANCH: main')
     expect(workflow).toContain('PRISTINE_ENGINE_ARTIFACT_WORKFLOW: ci.yml')
     expect(workflow).toContain('actions: read')
+    const buildStepTokenPattern = [
+      '- name: Build',
+      '\\s+env:',
+      '\\s+PRISTINE_ENGINE_GITHUB_TOKEN: \\$\\{\\{ github\\.token \\}\\}',
+      '\\s+run: pnpm build',
+    ].join('\\r?\\n')
+    const packageStepTokenPattern = [
+      '- name: Package application',
+      '\\s+env:',
+      "\\s+CSC_IDENTITY_AUTO_DISCOVERY: 'false'",
+      '\\s+PRISTINE_ENGINE_GITHUB_TOKEN: \\$\\{\\{ github\\.token \\}\\}',
+      '\\s+run: pnpm run build:app',
+    ].join('\\r?\\n')
+
+    expect(workflow).toMatch(new RegExp(buildStepTokenPattern))
+    expect(workflow.match(new RegExp(packageStepTokenPattern, 'g'))).toHaveLength(2)
 
     expect(prepareEngineScript).toContain('getRemoteSourceMode')
     expect(prepareEngineScript).toContain('resolveWorkflowArtifactDownload')
