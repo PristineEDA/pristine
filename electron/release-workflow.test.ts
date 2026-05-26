@@ -104,9 +104,12 @@ describe('release workflow contract', () => {
   it('keeps CI manually dispatchable with explicit read permissions', () => {
     const workflow = fs.readFileSync(workflowPath, 'utf8')
 
+    expect(workflow).toMatch(/on:\r?\n  push:\r?\n  pull_request:\r?\n  workflow_dispatch:/)
     expect(workflow).toContain('workflow_dispatch:')
     expect(workflow).toMatch(/permissions:\r?\n  actions: read\r?\n  contents: read/)
     expect(workflow).not.toContain('permissions: read-all')
+    expect(workflow).not.toMatch(/push:\r?\n\s+branches:/)
+    expect(workflow).not.toMatch(/push:[\s\S]*?\r?\n\s+tags:/)
   })
 
   it('routes pristine-engine downloads to main workflow artifacts for non-tags and latest releases for tags', () => {

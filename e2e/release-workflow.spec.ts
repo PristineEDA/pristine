@@ -53,11 +53,14 @@ test('GitHub release workflow is tag-gated and publishes staged package assets',
   const hook = fs.readFileSync(path.join(repoRoot, '.githooks', 'pre-commit'), 'utf8');
 
   expect(workflow).toContain('refs/tags/v*');
+  expect(workflow).toMatch(/on:\r?\n  push:\r?\n  pull_request:\r?\n  workflow_dispatch:/);
   expect(workflow).toContain('workflow_dispatch:');
   expect(workflow).toContain('PRISTINE_ENGINE_REMOTE_SOURCE_MODE: auto');
   expect(workflow).toContain('PRISTINE_ENGINE_ARTIFACT_BRANCH: main');
   expect(workflow).toMatch(/permissions:\r?\n  actions: read\r?\n  contents: read/);
   expect(workflow).not.toContain('permissions: read-all');
+  expect(workflow).not.toMatch(/push:\r?\n\s+branches:/);
+  expect(workflow).not.toMatch(/push:[\s\S]*?\r?\n\s+tags:/);
   expect(workflow).toContain('actions: read');
   expect(workflow).toContain('github-release:');
   expect(workflow).toContain('needs.package-gate.outputs.enabled');
