@@ -111,6 +111,7 @@ describe('preload bridge', () => {
     api.lsp.hover('rtl/core/cpu_top.sv', 4, 6);
     api.lsp.definition('rtl/core/cpu_top.sv', 4, 6);
     api.lsp.references('rtl/core/cpu_top.sv', 4, 6, false);
+    api.lsp.moduleHierarchy({ maxDepth: 12 });
     api.notices.revealBundledFiles();
     api.auth.openAccountPage('login');
     api.auth.getSession();
@@ -174,6 +175,7 @@ describe('preload bridge', () => {
     expect(mockInvoke).toHaveBeenCalledWith('async:lsp:hover', 'rtl/core/cpu_top.sv', 4, 6);
     expect(mockInvoke).toHaveBeenCalledWith('async:lsp:definition', 'rtl/core/cpu_top.sv', 4, 6);
     expect(mockInvoke).toHaveBeenCalledWith('async:lsp:references', 'rtl/core/cpu_top.sv', 4, 6, false);
+    expect(mockInvoke).toHaveBeenCalledWith('async:lsp:module-hierarchy', { maxDepth: 12 });
     expect(mockInvoke).toHaveBeenCalledWith('async:notices:reveal-bundled-files');
     expect(mockInvoke).toHaveBeenCalledWith('async:auth:open-account-page', 'login');
     expect(mockInvoke).toHaveBeenCalledWith('async:auth:get-session');

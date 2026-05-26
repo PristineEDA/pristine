@@ -3,6 +3,8 @@ import type {
   LspDebugEvent,
   LspDiagnosticsEvent,
   LspHover,
+  LspModuleHierarchy,
+  LspModuleHierarchyOptions,
   LspStateEvent,
   WorkspaceLocation,
 } from './systemverilog-lsp';
@@ -121,6 +123,7 @@ export interface ElectronAPI {
       character: number,
       includeDeclaration?: boolean,
     ) => Promise<WorkspaceLocation[]>;
+    moduleHierarchy: (options?: LspModuleHierarchyOptions) => Promise<LspModuleHierarchy>;
     onDebug: (callback: (payload: LspDebugEvent) => void) => () => void;
     onDiagnostics: (callback: (payload: LspDiagnosticsEvent) => void) => () => void;
     onState: (callback: (payload: LspStateEvent) => void) => () => void;

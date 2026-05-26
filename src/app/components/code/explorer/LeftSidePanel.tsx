@@ -5,6 +5,7 @@ import { useWorkspaceGitStatus } from '../../../git/workspaceGitStatus';
 import { FileTreeNode, type ExplorerContextMenuRequest } from './FileTreeNode';
 import { ExplorerPanelTabs, type ExplorerPanelTab } from './LeftSidePanelChrome';
 import { FileOutlinePanel } from './FileOutlinePanel';
+import { HierarchyPanel } from './HierarchyPanel';
 import { SPLIT_PANEL_CONTENT_TRANSITION_STYLE, useAnimatedSplitPanelPresence } from './useAnimatedSplitPanelPresence';
 import { useCodeViewerLayout } from '../../../context/CodeViewerLayoutContext';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '../../ui/resizable';
@@ -788,7 +789,14 @@ export function LeftSidePanel({
           />
 
           <ResizablePanel id="left-panel-secondary" defaultSize={50} minSize={25} minSizePx={120} collapsed={!splitPanelPresence.isExpanded}>
-            <ExplorerSecondaryPanel isExpanded={splitPanelPresence.isExpanded} />
+            <ExplorerSecondaryPanel
+              activeFileId={activeFileId}
+              isExpanded={splitPanelPresence.isExpanded}
+              onFileOpen={onFileOpen}
+              onLineJump={onLineJump}
+              refreshToken={refreshToken}
+              workspaceAvailable={workspaceAvailable}
+            />
           </ResizablePanel>
         </ResizablePanelGroup>
       )}
@@ -796,7 +804,21 @@ export function LeftSidePanel({
   );
 }
 
-function ExplorerSecondaryPanel({ isExpanded }: { isExpanded: boolean }) {
+function ExplorerSecondaryPanel({
+  activeFileId,
+  isExpanded,
+  onFileOpen,
+  onLineJump,
+  refreshToken,
+  workspaceAvailable,
+}: {
+  activeFileId: string;
+  isExpanded: boolean;
+  onFileOpen: (fileId: string, fileName: string) => void;
+  onLineJump: (line: number) => void;
+  refreshToken: number;
+  workspaceAvailable: boolean | null;
+}) {
   const { layoutMode } = useCodeViewerLayout();
   const splitPanelFrameClassName = getCodeWorkspacePanelFrameClassName(layoutMode, 'flex h-full flex-col bg-ide-bg text-ide-text');
 
@@ -819,12 +841,14 @@ function ExplorerSecondaryPanel({ isExpanded }: { isExpanded: boolean }) {
         </div>
       </div>
 
-      <div
-        data-testid="left-panel-secondary-placeholder"
-        className="flex min-h-0 flex-1 items-center justify-center px-3 py-2 text-center text-[12px] text-ide-text-muted"
-      >
-        Hierarchy is empty
-      </div>
+      <HierarchyPanel
+        activeFileId={activeFileId}
+        isVisible={isExpanded}
+        onFileOpen={onFileOpen}
+        onLineJump={onLineJump}
+        refreshToken={refreshToken}
+        workspaceAvailable={workspaceAvailable}
+      />
     </section>
   );
 }

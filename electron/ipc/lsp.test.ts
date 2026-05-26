@@ -107,6 +107,45 @@ function createFakeConnection(): FakeConnection {
         }];
       }
 
+      if (method === 'systemverilog/moduleHierarchy') {
+        return {
+          roots: [{
+            moduleName: 'cpu_top',
+            uri: 'file:///C:/workspace/Pristine/rtl/core/cpu_top.sv',
+            range: {
+              start: { line: 0, character: 0 },
+              end: { line: 6, character: 9 },
+            },
+            selectionRange: {
+              start: { line: 0, character: 7 },
+              end: { line: 0, character: 14 },
+            },
+            unresolved: false,
+            cycle: false,
+            children: [{
+              moduleName: 'alu',
+              instanceName: 'u_alu',
+              uri: 'file:///C:/workspace/Pristine/rtl/core/alu.sv',
+              instanceSelectionRange: {
+                start: { line: 2, character: 6 },
+                end: { line: 2, character: 11 },
+              },
+              unresolved: false,
+              cycle: false,
+              children: [],
+            }, {
+              moduleName: 'missing_block',
+              instanceName: 'u_missing',
+              uri: null,
+              unresolved: true,
+              cycle: false,
+              children: [],
+            }],
+          }],
+          messages: ['ok'],
+        };
+      }
+
       return null;
     }),
     sendNotification: vi.fn(async () => undefined),
@@ -283,6 +322,74 @@ describe('LSP IPC handlers', () => {
       direction: 'server->client',
       kind: 'stderr',
       text: 'server warning',
+    }));
+  });
+
+  it('forwards and normalizes module hierarchy results', async () => {
+    const hierarchyHandler = getHandler('async:lsp:module-hierarchy');
+
+    const hierarchy = await hierarchyHandler({}, { maxDepth: 8 });
+
+    expect(fakeConnection.sendRequest).toHaveBeenCalledWith('systemverilog/moduleHierarchy', { maxDepth: 8 });
+    expect(hierarchy).toEqual({
+      roots: [{
+        moduleName: 'cpu_top',
+        instanceName: undefined,
+        uri: 'file:///C:/workspace/Pristine/rtl/core/cpu_top.sv',
+        filePath: 'rtl/core/cpu_top.sv',
+        range: {
+          start: { line: 0, character: 0 },
+          end: { line: 6, character: 9 },
+        },
+        selectionRange: {
+          start: { line: 0, character: 7 },
+          end: { line: 0, character: 14 },
+        },
+        instanceRange: undefined,
+        instanceSelectionRange: undefined,
+        moduleSelectionRange: undefined,
+        unresolved: false,
+        cycle: false,
+        truncated: undefined,
+        children: [{
+          moduleName: 'alu',
+          instanceName: 'u_alu',
+          uri: 'file:///C:/workspace/Pristine/rtl/core/alu.sv',
+          filePath: 'rtl/core/alu.sv',
+          range: undefined,
+          selectionRange: undefined,
+          instanceRange: undefined,
+          instanceSelectionRange: {
+            start: { line: 2, character: 6 },
+            end: { line: 2, character: 11 },
+          },
+          moduleSelectionRange: undefined,
+          unresolved: false,
+          cycle: false,
+          truncated: undefined,
+          children: [],
+        }, {
+          moduleName: 'missing_block',
+          instanceName: 'u_missing',
+          uri: undefined,
+          filePath: undefined,
+          range: undefined,
+          selectionRange: undefined,
+          instanceRange: undefined,
+          instanceSelectionRange: undefined,
+          moduleSelectionRange: undefined,
+          unresolved: true,
+          cycle: false,
+          truncated: undefined,
+          children: [],
+        }],
+      }],
+      messages: ['ok'],
+    });
+    expect(send).toHaveBeenCalledWith('stream:lsp:debug', expect.objectContaining({
+      direction: 'client->server',
+      kind: 'request',
+      method: 'systemverilog/moduleHierarchy',
     }));
   });
 });

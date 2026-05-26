@@ -2064,6 +2064,49 @@ test('pristine-engine lsp smoke resolves a cross-file definition and symbol refe
   await app.close();
 });
 
+test('code view hierarchy renders module instantiations from pristine-engine', async () => {
+  test.slow();
+
+  const { app, window } = await launchApp();
+
+  await ensureExplorerVisible(window);
+  await openNestedWorkspaceFile(window, [
+    'file-tree-node-rtl',
+    'file-tree-node-rtl_core',
+    'file-tree-node-rtl_core_cpu_top_sv',
+  ]);
+
+  await expect(window.getByTestId('editor-tab-rtl/core/cpu_top.sv')).toBeVisible();
+  await waitForMonacoEditor(window);
+  await expect(window.locator('.monaco-editor .view-lines')).toContainText('alu u_alu', {
+    timeout: MONACO_READY_TIMEOUT_MS,
+  });
+
+  await window.getByTestId('left-panel-split-toggle').click();
+  await expect(window.getByTestId('left-panel-secondary-panel')).toBeVisible();
+
+  const topNode = window.getByTestId('hierarchy-node-label-cpu_top-root');
+  const aluInstanceNode = window.getByTestId('hierarchy-node-label-alu-u_alu');
+
+  await expect(topNode).toBeVisible({ timeout: 15000 });
+  await expect(aluInstanceNode).toBeVisible();
+  await expect(aluInstanceNode).toHaveText(/u_alu\s*:\s*alu/);
+
+  await window.getByRole('button', { name: 'Collapse cpu_top' }).click();
+  await expect(aluInstanceNode).toHaveCount(0);
+  await window.getByRole('button', { name: 'Expand cpu_top' }).click();
+  await expect(aluInstanceNode).toBeVisible();
+
+  await aluInstanceNode.click();
+  await expect(window.getByTestId('editor-tab-rtl/core/alu.sv')).toBeVisible();
+  await waitForMonacoEditor(window);
+  await expect(window.locator('.monaco-editor .view-lines')).toContainText('module alu', {
+    timeout: MONACO_READY_TIMEOUT_MS,
+  });
+
+  await app.close();
+});
+
 test('pristine-engine lsp bottom panel filters diagnostics and shows paired request responses', async () => {
   test.slow();
 
@@ -4660,7 +4703,10 @@ test('left panel split shows two stacked panels and keeps the explorer tree scro
     await expect(secondaryPanel).toHaveClass(/(?:^|\s)border(?:\s|$)/);
     await expect(secondaryPanel).toHaveClass(/(?:^|\s)bg-ide-bg(?:\s|$)/);
     await expect(window.getByTestId('left-panel-secondary-header')).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
-    await expect(window.getByTestId('left-panel-secondary-placeholder')).toContainText('Hierarchy is empty');
+    await expect.poll(async () => (
+      await window.getByTestId('hierarchy-tree').count()
+      + await window.getByTestId('left-panel-secondary-placeholder').count()
+    ), { timeout: UI_READY_TIMEOUT_MS }).toBeGreaterThan(0);
     await expect(splitHandle).toBeVisible();
     await expect(splitHandle).toHaveAttribute('aria-orientation', 'horizontal');
     await expect(splitHandle).toHaveClass(/(?:^|\s)overlay-handle(?:\s|$)/);

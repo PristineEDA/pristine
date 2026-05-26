@@ -19,6 +19,10 @@ import type {
   LspDiagnosticsEvent,
   LspHover,
   LspMarkupContent,
+  LspModuleHierarchy,
+  LspModuleHierarchyNode,
+  LspModuleHierarchyOptions,
+  LspRange,
   LspStateEvent,
   LspTextEdit,
   WorkspaceLocation,
@@ -508,6 +512,107 @@ function normalizeWorkspaceLocations(value: unknown): WorkspaceLocation[] {
     .filter((entry): entry is WorkspaceLocation => Boolean(entry));
 }
 
+function isLspRange(value: unknown): value is LspRange {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const candidate = value as { start?: Partial<LspRange['start']>; end?: Partial<LspRange['end']> };
+  return typeof candidate.start?.line === 'number'
+    && typeof candidate.start.character === 'number'
+    && typeof candidate.end?.line === 'number'
+    && typeof candidate.end.character === 'number';
+}
+
+function normalizeOptionalRange(value: unknown): LspRange | undefined {
+  return isLspRange(value) ? value : undefined;
+}
+
+function normalizeModuleHierarchyNode(value: unknown): LspModuleHierarchyNode | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const candidate = value as {
+    moduleName?: unknown;
+    instanceName?: unknown;
+    uri?: unknown;
+    range?: unknown;
+    selectionRange?: unknown;
+    instanceRange?: unknown;
+    instanceSelectionRange?: unknown;
+    moduleSelectionRange?: unknown;
+    unresolved?: unknown;
+    cycle?: unknown;
+    truncated?: unknown;
+    children?: unknown;
+  };
+  if (typeof candidate.moduleName !== 'string') {
+    return null;
+  }
+
+  const uri = typeof candidate.uri === 'string' ? candidate.uri : undefined;
+  const children = Array.isArray(candidate.children)
+    ? candidate.children
+      .map((entry) => normalizeModuleHierarchyNode(entry))
+      .filter((entry): entry is LspModuleHierarchyNode => Boolean(entry))
+    : [];
+
+  return {
+    moduleName: candidate.moduleName,
+    instanceName: typeof candidate.instanceName === 'string' ? candidate.instanceName : undefined,
+    uri,
+    filePath: uri ? getRelativeWorkspaceFilePath(uri) ?? undefined : undefined,
+    range: normalizeOptionalRange(candidate.range),
+    selectionRange: normalizeOptionalRange(candidate.selectionRange),
+    instanceRange: normalizeOptionalRange(candidate.instanceRange),
+    instanceSelectionRange: normalizeOptionalRange(candidate.instanceSelectionRange),
+    moduleSelectionRange: normalizeOptionalRange(candidate.moduleSelectionRange),
+    unresolved: candidate.unresolved === true,
+    cycle: candidate.cycle === true,
+    truncated: candidate.truncated === true ? true : undefined,
+    children,
+  };
+}
+
+function normalizeModuleHierarchy(value: unknown): LspModuleHierarchy {
+  if (!value || typeof value !== 'object') {
+    return { roots: [], messages: [] };
+  }
+
+  const candidate = value as { roots?: unknown; messages?: unknown };
+  const roots = Array.isArray(candidate.roots)
+    ? candidate.roots
+      .map((entry) => normalizeModuleHierarchyNode(entry))
+      .filter((entry): entry is LspModuleHierarchyNode => Boolean(entry))
+    : [];
+  const messages = Array.isArray(candidate.messages)
+    ? candidate.messages.filter((entry): entry is string => typeof entry === 'string')
+    : [];
+
+  return { roots, messages };
+}
+
+function normalizeModuleHierarchyOptions(value: unknown): LspModuleHierarchyOptions {
+  if (value === undefined || value === null) {
+    return {};
+  }
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`Expected object or undefined for "options", got ${typeof value}`);
+  }
+
+  const candidate = value as { moduleName?: unknown; maxDepth?: unknown };
+  assertOptionalString(candidate.moduleName, 'moduleName');
+  if (candidate.maxDepth !== undefined) {
+    assertNumber(candidate.maxDepth, 'maxDepth');
+  }
+
+  return {
+    moduleName: typeof candidate.moduleName === 'string' ? candidate.moduleName : undefined,
+    maxDepth: typeof candidate.maxDepth === 'number' ? candidate.maxDepth : undefined,
+  };
+}
+
 function createInitializeParams() {
   const root = getProjectRoot();
   const rootUri = absolutePathToFileUri(root);
@@ -906,4 +1011,14 @@ export function registerLspHandlers(getMainWindow: () => BrowserWindow | null): 
       });
     },
   );
+
+  ipcMain.handle(AsyncChannels.LSP_MODULE_HIERARCHY, async (_event, options?: unknown) => {
+    const normalizedOptions = normalizeModuleHierarchyOptions(options);
+
+    return withInitializedSession(getMainWindow, async (session) => {
+      const result = await sendDebugRequest(session, getMainWindow, 'systemverilog/moduleHierarchy', normalizedOptions);
+
+      return normalizeModuleHierarchy(result);
+    });
+  });
 }

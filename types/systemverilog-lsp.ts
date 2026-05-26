@@ -95,6 +95,32 @@ export interface WorkspaceLocation {
   range: LspRange;
 }
 
+export interface LspModuleHierarchyOptions {
+  moduleName?: string;
+  maxDepth?: number;
+}
+
+export interface LspModuleHierarchyNode {
+  moduleName: string;
+  instanceName?: string;
+  filePath?: string;
+  uri?: string;
+  range?: LspRange;
+  selectionRange?: LspRange;
+  instanceRange?: LspRange;
+  instanceSelectionRange?: LspRange;
+  moduleSelectionRange?: LspRange;
+  unresolved: boolean;
+  cycle: boolean;
+  truncated?: boolean;
+  children: LspModuleHierarchyNode[];
+}
+
+export interface LspModuleHierarchy {
+  roots: LspModuleHierarchyNode[];
+  messages: string[];
+}
+
 export interface LspStateEvent {
   status: 'starting' | 'ready' | 'stopped' | 'error';
   message?: string;

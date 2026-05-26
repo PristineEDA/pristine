@@ -89,6 +89,7 @@ export function createElectronApiMock(): ElectronAPI {
       hover: vi.fn().mockResolvedValue(null),
       definition: vi.fn().mockResolvedValue([]),
       references: vi.fn().mockResolvedValue([]),
+      moduleHierarchy: vi.fn().mockResolvedValue({ roots: [], messages: [] }),
       onDebug: vi.fn(() => vi.fn()),
       onDiagnostics: vi.fn(() => vi.fn()),
       onState: vi.fn(() => vi.fn()),
