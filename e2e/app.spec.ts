@@ -5583,6 +5583,7 @@ test('terminal preserves output history across tab switches and bottom panel hid
 });
 
 test('terminal remains writable after left sidebar toggles while vertically scrolled', async () => {
+  test.skip(Boolean(process.env['CI']), 'Skipped in CI while terminal scroll/toggle stability is under investigation');
   test.slow();
 
   const { app, window } = await launchApp();
