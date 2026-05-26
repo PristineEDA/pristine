@@ -158,6 +158,7 @@ describe('TerminalSurface', () => {
     render(<TerminalSurface />);
 
     expect(screen.getByText('Starting shell...')).toBeInTheDocument();
+    expect(screen.getByTestId('terminal-host')).not.toHaveAttribute('data-terminal-session-id');
 
     createRequest.resolve({ id: 'term-e2e', pid: 404, shell: 'powershell.exe' });
 
@@ -171,6 +172,7 @@ describe('TerminalSurface', () => {
     expect(terminalInstances[0]?.options).not.toHaveProperty('overviewRuler');
     await waitFor(() => expect(host).toHaveAttribute('data-terminal-text', 'PS> dir\r\n'));
     expect(host).toHaveAttribute('data-terminal-pid', '404');
+    expect(host).toHaveAttribute('data-terminal-session-id', 'term-e2e');
 
     fireEvent.click(host);
     expect(terminalInstances[0]?.focus).toHaveBeenCalledTimes(2);

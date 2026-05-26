@@ -2,7 +2,7 @@ import { Suspense, lazy, useMemo, useState, type ReactNode } from 'react';
 import {
   Terminal, X, Plus,
   AlertCircle, AlertTriangle, Info, Lightbulb,
-  Bug, Square, Logs, Workflow,
+  Bug, Square, Logs, Workflow, CircuitBoard, Maximize2, Minimize2,
 } from 'lucide-react';
 import { summarizeLspProblems, useLspProblems } from '../../../lsp/lspProblems';
 import { TerminalPanel } from './TerminalPanel';
@@ -22,8 +22,9 @@ import { getBottomPanelClassName, getBottomPanelTabBarClassName } from '../share
 const OutputPanel = lazy(() => import('./OutputPanel').then((module) => ({ default: module.OutputPanel })));
 const ProblemsTabPanel = lazy(() => import('./ProblemsTabPanel').then((module) => ({ default: module.ProblemsTabPanel })));
 const LspPanel = lazy(() => import('./LspPanel').then((module) => ({ default: module.LspPanel })));
+const AsicSchematicPanel = lazy(() => import('./schematic/AsicSchematicPanel').then((module) => ({ default: module.AsicSchematicPanel })));
 
-type BottomPanelTabId = 'terminal' | 'output' | 'problems' | 'debug' | 'lsp';
+type BottomPanelTabId = 'terminal' | 'output' | 'problems' | 'debug' | 'lsp' | 'schematic';
 
 const BOTTOM_PANEL_TAB_ITEMS = [
   { value: 'terminal', label: 'Terminal', icon: Terminal, testId: 'bottom-panel-tab-terminal' },
@@ -31,18 +32,23 @@ const BOTTOM_PANEL_TAB_ITEMS = [
   { value: 'problems', label: 'Problems', icon: AlertCircle, testId: 'bottom-panel-tab-problems' },
   { value: 'debug', label: 'Debug Console', icon: Bug, testId: 'bottom-panel-tab-debug' },
   { value: 'lsp', label: 'LSP', icon: Workflow, testId: 'bottom-panel-tab-lsp' },
+  { value: 'schematic', label: 'Schematic', icon: CircuitBoard, testId: 'bottom-panel-tab-schematic' },
 ] as const satisfies readonly IconTabToggleGroupItem[];
 
 interface BottomPanelProps {
+  isMaximized?: boolean;
   layoutVersion?: string;
   onClose?: () => void;
+  onMaximizeToggle?: () => void;
 }
 
-export function BottomPanel({ layoutVersion, onClose }: BottomPanelProps) {
+export function BottomPanel({ isMaximized = false, layoutVersion, onClose, onMaximizeToggle }: BottomPanelProps) {
   const { layoutMode } = useCodeViewerLayout();
   const [tab, setTab] = useState<BottomPanelTabId>('terminal');
   const problemsList = useLspProblems();
   const problemCounts = useMemo(() => summarizeLspProblems(problemsList), [problemsList]);
+  const maximizeLabel = isMaximized ? 'Restore Panel' : 'Maximize Panel';
+  const MaximizeIcon = isMaximized ? Minimize2 : Maximize2;
 
   const handleClose = () => {
     void terminateTerminalSession().finally(() => {
@@ -94,6 +100,11 @@ export function BottomPanel({ layoutVersion, onClose }: BottomPanelProps) {
         <LspPanel />
       </Suspense>
     ),
+    schematic: (
+      <Suspense fallback={<div className="flex h-full items-center justify-center text-ide-text-muted text-[12px]">Loading schematic...</div>}>
+        <AsicSchematicPanel />
+      </Suspense>
+    ),
   }), [layoutVersion, problemCounts.errorCount, problemCounts.hintCount, problemCounts.infoCount, problemCounts.warningCount, problemsList]);
 
   return (
@@ -124,6 +135,20 @@ export function BottomPanel({ layoutVersion, onClose }: BottomPanelProps) {
               <Plus size={13} />
             </Button>
           </TooltipIconButton>
+          {onMaximizeToggle && (
+            <TooltipIconButton content={maximizeLabel}>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                aria-label={maximizeLabel}
+                data-testid="bottom-panel-maximize"
+                className="text-ide-text-muted hover:text-ide-text"
+                onClick={onMaximizeToggle}
+              >
+                <MaximizeIcon size={13} />
+              </Button>
+            </TooltipIconButton>
+          )}
           <TooltipIconButton content="Close Panel">
             <Button
               variant="ghost"

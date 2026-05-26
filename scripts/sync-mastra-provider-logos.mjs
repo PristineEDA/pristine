@@ -145,7 +145,7 @@ for (const logoId of uniqueLogoIds) {
 const manifestEntries = providerEntries.map((entry) => ({
   providerId: entry.providerId,
   logoId: entry.logoId,
-  path: `/model-provider-logos/${entry.logoId}.svg`,
+  path: `model-provider-logos/${entry.logoId}.svg`,
   hasLogo: availableLogoIds.has(entry.logoId),
 }))
 

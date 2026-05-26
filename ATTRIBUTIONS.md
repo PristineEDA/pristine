@@ -221,6 +221,8 @@ Zod（https://github.com/colinhacks/zod）Colin McDonnell MIT
 ## Content Rendering, Diagrams & State
 
 Mermaid（https://github.com/mermaid-js/mermaid）Knut Sveidqvist MIT
+PixiJS（https://github.com/pixijs/pixijs）PixiJS Team MIT
+elkjs（https://github.com/kieler/elkjs）Ulf Rüegg EPL-2.0
 Liveline（https://github.com/benjitaylor/liveline）Benji Taylor MIT
 react-shiki（https://github.com/AVGVSTVS96/react-shiki）Bassim Shahidy MIT
 remark-gfm（https://github.com/remarkjs/remark-gfm）Titus Wormer MIT

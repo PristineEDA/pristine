@@ -13,6 +13,7 @@ import {
 } from './components/code/explorer/assistantPanelLayout';
 import {
   CodeWorkspaceShell,
+  type CodeWorkspaceBottomPanelControls,
   EXPLORER_LEFT_PANEL_DEFAULT_WIDTH_PX,
   EXPLORER_RIGHT_PANEL_MAX_WIDTH_PX,
   EXPLORER_RIGHT_PANEL_MIN_WIDTH_PX,
@@ -312,6 +313,8 @@ function AppLayout() {
     topContent,
     bottomContent,
     rightContent,
+    enableBottomPanelMaximize,
+    onBottomPanelAutoHide,
     overlay,
     useLeftPanelFrame,
     useRightPanelFrame,
@@ -330,8 +333,10 @@ function AppLayout() {
     rightPanelId: string;
     leftContent: React.ReactNode;
     topContent: React.ReactNode;
-    bottomContent: React.ReactNode;
+    bottomContent: React.ReactNode | ((controls: CodeWorkspaceBottomPanelControls) => React.ReactNode);
     rightContent: React.ReactNode;
+    enableBottomPanelMaximize?: boolean;
+    onBottomPanelAutoHide?: () => void;
     overlay?: React.ReactNode;
     useLeftPanelFrame?: boolean;
     useRightPanelFrame?: boolean;
@@ -360,6 +365,8 @@ function AppLayout() {
       topContent={topContent}
       bottomContent={bottomContent}
       rightContent={rightContent}
+      enableBottomPanelMaximize={enableBottomPanelMaximize}
+      onBottomPanelAutoHide={onBottomPanelAutoHide}
       leftFixedWidthPx={leftFixedWidthPx}
       onLeftFixedWidthChange={onLeftFixedWidthChange}
       rightFixedWidthPx={rightFixedWidthPx}
@@ -417,7 +424,16 @@ function AppLayout() {
         />
       ),
       topContent: <EditorSplitLayout jumpToLine={jumpToLine} onActiveFileReveal={handleEditorActiveFileReveal} />,
-      bottomContent: <BottomPanel layoutVersion={explorerBottomPanelLayoutVersion} onClose={() => setShowBottomPanel(false)} />,
+      bottomContent: ({ isMaximized, onMaximizeToggle }) => (
+        <BottomPanel
+          isMaximized={isMaximized}
+          layoutVersion={explorerBottomPanelLayoutVersion}
+          onClose={() => setShowBottomPanel(false)}
+          onMaximizeToggle={onMaximizeToggle}
+        />
+      ),
+      enableBottomPanelMaximize: true,
+      onBottomPanelAutoHide: () => setShowBottomPanel(false),
       rightContent: (
         <RightSidePanel
           currentOutlineId={activeTabId}

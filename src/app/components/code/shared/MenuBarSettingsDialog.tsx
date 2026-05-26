@@ -1,4 +1,5 @@
-import { useCallback, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
+import { Code2, Monitor, Palette, Search, Settings2, X, type LucideIcon } from 'lucide-react';
 import { useEditorSettings } from '../../../context/EditorSettingsContext';
 import {
   WORKBENCH_CODE_VIEWER_LAYOUT_MODE_CONFIG_KEY,
@@ -62,17 +63,21 @@ import type { ColorThemeOption } from '../../../theme/colorThemeTypes';
 import { Button } from '../../ui/button';
 import { Combobox, type ComboboxOption } from '../../ui/combobox';
 import {
+  commandSearchInputClassName,
+  commandSearchInputForegroundStyle,
+  commandSearchInputIconClassName,
+  commandSearchInputWrapperClassName,
+} from '../../ui/command';
+import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
-  DialogHeader,
   DialogTitle,
 } from '../../ui/dialog';
 import { ScrollArea } from '../../ui/scroll-area';
-import { Separator } from '../../ui/separator';
 import { Slider } from '../../ui/slider';
 import { Switch } from '../../ui/switch';
+import { cn } from '@/lib/utils';
 import { EditorFontAdvancedDialog } from './EditorFontAdvancedDialog';
 import { EditorThemeAdvancedDialog } from './EditorThemeAdvancedDialog';
 import { ColorThemePreviewCard, EditorFontPreviewCard } from './PickerPreviewCards';
@@ -80,11 +85,56 @@ import { ColorThemePreviewCard, EditorFontPreviewCard } from './PickerPreviewCar
 const CLOSE_ACTION_CONFIG_KEY = 'window.closeActionPreference';
 const FLOATING_INFO_VISIBLE_CONFIG_KEY = 'ui.floatingInfoWindow.visible';
 const THEME_PICKER_LAYOUT_MODE_CONFIG_KEY = 'workbench.themePickerLayoutMode';
-const settingsSectionClassName = 'rounded-md border border-border/85 bg-muted/55 px-3 py-2.5';
+const settingsSectionClassName = 'overflow-hidden rounded-md border border-border/75 bg-background/35';
 const settingsSectionTitleClassName = 'text-[13px] font-medium';
 const settingsSectionDescriptionClassName = 'text-[12px] text-muted-foreground';
 
 type ThemePickerLayoutMode = 'grouped' | 'list';
+type SettingsPageId = 'general' | 'appearance' | 'editor' | 'window';
+
+interface SettingsPageMetadata {
+  id: SettingsPageId;
+  description: string;
+  icon: LucideIcon;
+  label: string;
+}
+
+interface SettingsItemDefinition {
+  description: string;
+  element: ReactNode;
+  id: string;
+  keywords: string[];
+  pageId: SettingsPageId;
+  title: string;
+}
+
+const settingsPages: SettingsPageMetadata[] = [
+  {
+    id: 'general',
+    label: 'General',
+    description: 'Core workbench layout preferences.',
+    icon: Settings2,
+  },
+  {
+    id: 'appearance',
+    label: 'Appearance',
+    description: 'Theme and visual presentation.',
+    icon: Palette,
+  },
+  {
+    id: 'editor',
+    label: 'Editor',
+    description: 'Code editing fonts, behavior, and display aids.',
+    icon: Code2,
+  },
+  {
+    id: 'window',
+    label: 'Window',
+    description: 'Window closing and floating info behavior.',
+    icon: Monitor,
+  },
+];
+const defaultSettingsPage = settingsPages[0] as SettingsPageMetadata;
 
 const codeViewerLayoutModeOptions: Array<{
   value: CodeViewerLayoutMode;
@@ -285,14 +335,14 @@ function SettingsSwitchRow({
   title: string;
 }) {
   return (
-    <div className="flex items-center justify-between gap-4">
-      <div className="space-y-1">
+    <div className="flex items-center justify-between gap-4 px-4 py-3">
+      <div className="min-w-0 space-y-1">
         <p className={settingsSectionTitleClassName}>{title}</p>
         <p className={settingsSectionDescriptionClassName} data-testid={`${testId}-description`}>
           {description}
         </p>
       </div>
-      <Switch checked={checked} data-testid={testId} onCheckedChange={onCheckedChange} />
+      <Switch className="shrink-0" checked={checked} data-testid={testId} onCheckedChange={onCheckedChange} />
     </div>
   );
 }
@@ -324,33 +374,184 @@ function SettingsComboboxSection({
 }) {
   return (
     <div className={settingsSectionClassName}>
-      <div className="space-y-2.5">
-        <div className="space-y-1">
+      <div className="grid gap-3 px-4 py-3 md:grid-cols-[minmax(0,1fr)_minmax(220px,320px)] md:items-center">
+        <div className="min-w-0 space-y-1">
           <p className={settingsSectionTitleClassName}>{title}</p>
           <p className={settingsSectionDescriptionClassName} data-testid={`${testId}-description`}>
             {description}
           </p>
         </div>
-        <div className={action ? 'grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2' : undefined}>
-          <div className={action ? 'min-w-0 flex-1' : undefined}>
-            <Combobox
-              value={value}
-              onValueChange={onValueChange}
-              options={options}
-              placeholder={options.find((option) => option.value === value)?.label ?? options[0]?.label ?? ''}
-              previewPaneTestId={previewPaneTestId}
-              renderOptionPreview={renderOptionPreview}
-              searchPlaceholder={searchPlaceholder}
-              emptyText={emptyText}
-              triggerTestId={testId}
-              getOptionTestId={(optionValue) => `${testId.replace('-combobox', '-option')}-${optionValue}`}
-            />
+        <div className="min-w-0">
+          <div className={action ? 'grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2' : undefined}>
+            <div className={action ? 'min-w-0 flex-1' : undefined}>
+              <Combobox
+                value={value}
+                onValueChange={onValueChange}
+                options={options}
+                placeholder={options.find((option) => option.value === value)?.label ?? options[0]?.label ?? ''}
+                previewPaneTestId={previewPaneTestId}
+                renderOptionPreview={renderOptionPreview}
+                searchPlaceholder={searchPlaceholder}
+                emptyText={emptyText}
+                triggerTestId={testId}
+                getOptionTestId={(optionValue) => `${testId.replace('-combobox', '-option')}-${optionValue}`}
+              />
+            </div>
+            {action}
           </div>
-          {action}
         </div>
       </div>
     </div>
   );
+}
+
+function SettingsSliderSection({
+  children,
+  description,
+  title,
+  testId,
+}: {
+  children: ReactNode;
+  description: string;
+  title: string;
+  testId: string;
+}) {
+  return (
+    <div className={settingsSectionClassName}>
+      <div className="grid gap-3 px-4 py-3 md:grid-cols-[minmax(0,1fr)_minmax(220px,320px)] md:items-center">
+        <div className="min-w-0 space-y-1">
+          <p className={settingsSectionTitleClassName}>{title}</p>
+          <p className={settingsSectionDescriptionClassName} data-testid={`${testId}-description`}>
+            {description}
+          </p>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function SettingsInfoSection({
+  description,
+  testId,
+  title,
+}: {
+  description: string;
+  testId: string;
+  title: string;
+}) {
+  return (
+    <div className="rounded-md border border-border/60 bg-muted/25 px-4 py-3">
+      <div className="space-y-1">
+        <p className={settingsSectionTitleClassName}>{title}</p>
+        <p className={settingsSectionDescriptionClassName} data-testid={`${testId}-description`}>
+          {description}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function SettingsItemSection({
+  item,
+}: {
+  item: SettingsItemDefinition;
+}) {
+  return (
+    <div data-testid={`settings-item-${item.id}`}>
+      {item.element}
+    </div>
+  );
+}
+
+function SettingsItemsList({
+  items,
+}: {
+  items: SettingsItemDefinition[];
+}) {
+  return (
+    <div className="space-y-2.5">
+      {items.map((item) => (
+        <SettingsItemSection key={item.id} item={item} />
+      ))}
+    </div>
+  );
+}
+
+function SettingsSearchResults({
+  items,
+}: {
+  items: SettingsItemDefinition[];
+}) {
+  if (items.length === 0) {
+    return (
+      <div
+        className="flex min-h-56 flex-col items-center justify-center rounded-md border border-dashed border-border/80 bg-muted/20 px-6 text-center"
+        data-testid="settings-search-empty-state"
+      >
+        <p className="text-[13px] font-medium text-foreground">No settings found</p>
+        <p className="mt-1 max-w-sm text-[12px] text-muted-foreground">
+          Try searching by setting name, category, or a related keyword.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-5" data-testid="settings-search-results">
+      {settingsPages.map((page) => {
+        const pageItems = items.filter((item) => item.pageId === page.id);
+
+        if (pageItems.length === 0) {
+          return null;
+        }
+
+        return (
+          <section key={page.id} className="space-y-2.5" data-testid={`settings-search-results-${page.id}`}>
+            <div className="flex items-center gap-2 text-[12px] font-medium uppercase tracking-wide text-muted-foreground">
+              <page.icon className="size-3.5" />
+              {page.label}
+            </div>
+            <SettingsItemsList items={pageItems} />
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
+function SettingsPageContent({
+  items,
+  page,
+}: {
+  items: SettingsItemDefinition[];
+  page: SettingsPageMetadata;
+}) {
+  return (
+    <div className="space-y-4" data-testid={`settings-page-${page.id}`}>
+      <div className="space-y-1">
+        <p className="text-[18px] font-semibold leading-none text-foreground">{page.label}</p>
+        <p className="text-[13px] text-muted-foreground">{page.description}</p>
+      </div>
+      <SettingsItemsList items={items} />
+    </div>
+  );
+}
+
+function settingMatchesQuery(item: SettingsItemDefinition, page: SettingsPageMetadata, normalizedQuery: string) {
+  if (!normalizedQuery) {
+    return true;
+  }
+
+  const searchableText = [
+    item.title,
+    item.description,
+    page.label,
+    page.description,
+    ...item.keywords,
+  ].join(' ').toLowerCase();
+
+  return searchableText.includes(normalizedQuery);
 }
 
 export function useMenuBarSettingsController() {
@@ -670,383 +871,552 @@ export function MenuBarSettingsDialogs({
     settingsState,
     themeAdvancedDialogOpen,
   } = controller;
+  const [activePageId, setActivePageId] = useState<SettingsPageId>('general');
+  const [settingsSearchQuery, setSettingsSearchQuery] = useState('');
+  const normalizedSearchQuery = settingsSearchQuery.trim().toLowerCase();
+
+  useEffect(() => {
+    if (!settingsDialogOpen) {
+      setActivePageId('general');
+      setSettingsSearchQuery('');
+    }
+  }, [settingsDialogOpen]);
 
   const availableThemeOptionsById = useMemo(
     () => new Map(availableThemeOptions.map((option) => [option.value, option])),
     [availableThemeOptions],
   );
 
+  const settingsItems = useMemo<SettingsItemDefinition[]>(() => [
+    {
+      id: 'code-viewer-layout',
+      pageId: 'general',
+      title: 'Code viewer layout',
+      description: 'Choose how the code viewer arranges side panels, editor regions, bottom panels, and tabs.',
+      keywords: ['layout', 'code viewer', 'panels', 'tabs', 'minimal', 'compact'],
+      element: (
+        <SettingsComboboxSection
+          value={settingsState.codeViewerLayoutMode}
+          onValueChange={handleCodeViewerLayoutModeChange}
+          options={codeViewerLayoutModeOptions.map((option) => ({
+            value: option.value,
+            label: option.label,
+            description: option.description,
+          }))}
+          title="Code viewer layout"
+          description="Choose how the code viewer arranges side panels, editor regions, bottom panels, and tabs."
+          searchPlaceholder="Search code viewer layouts..."
+          emptyText="No code viewer layout found."
+          testId="settings-code-viewer-layout-combobox"
+        />
+      ),
+    },
+    {
+      id: 'ui-theme',
+      pageId: 'appearance',
+      title: 'UI theme',
+      description: 'Choose the VS Code color theme used across Pristine UI, Monaco, and the terminal.',
+      keywords: ['theme', 'appearance', 'color', 'monaco', 'terminal', 'import'],
+      element: (
+        <SettingsComboboxSection
+          value={settingsState.themeId}
+          onValueChange={handleThemeChange}
+          options={availableThemeOptions.map((option) => ({
+            value: option.value,
+            label: option.label,
+            description: option.description,
+          }))}
+          title="UI theme"
+          description="Choose the VS Code color theme used across Pristine UI, Monaco, and the terminal. Imported themes fall back to the matching built-in 2026 base theme for missing tokens."
+          searchPlaceholder="Search UI themes..."
+          emptyText="No UI theme found."
+          previewPaneTestId="settings-theme-combobox-preview-pane"
+          renderOptionPreview={(option) => {
+            const themeOption = availableThemeOptionsById.get(option.value);
+
+            if (!themeOption) {
+              return null;
+            }
+
+            return (
+              <ColorThemePreviewCard
+                isSelected={themeOption.value === settingsState.themeId}
+                option={themeOption}
+                preview={getThemePreview(themeOption.value)}
+                testIdPrefix="settings-theme-combobox-preview"
+              />
+            );
+          }}
+          testId="settings-theme-combobox"
+          action={(
+            <div className="flex shrink-0 items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                data-testid="settings-theme-advanced-button"
+                className="hover:cursor-pointer"
+                onClick={() => handleThemeAdvancedDialogOpenChange(true)}
+              >
+                Advanced
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                data-testid="settings-theme-import-button"
+                className="hover:cursor-pointer"
+                disabled={isImportingTheme}
+                onClick={() => {
+                  void handleThemeImport();
+                }}
+              >
+                {isImportingTheme ? 'Importing...' : 'Import'}
+              </Button>
+            </div>
+          )}
+        />
+      ),
+    },
+    {
+      id: 'editor-font-family',
+      pageId: 'editor',
+      title: 'Code editor font',
+      description: 'Choose the bundled monospace font used in Monaco editor tabs.',
+      keywords: ['editor', 'font', 'font family', 'monospace', 'monaco', 'code'],
+      element: (
+        <SettingsComboboxSection
+          value={settingsState.editorFontFamily}
+          onValueChange={handleEditorFontFamilyChange}
+          options={editorFontFamilyOptions.map((option) => ({
+            value: option.value,
+            label: option.label,
+            description: option.description,
+          }))}
+          title="Code editor font"
+          description="Choose the bundled monospace font used in Monaco editor tabs."
+          searchPlaceholder="Search editor fonts..."
+          emptyText="No editor font found."
+          previewPaneTestId="settings-editor-font-family-combobox-preview-pane"
+          renderOptionPreview={(option) => {
+            const fontFamily = parseEditorFontFamily(option.value);
+
+            return (
+              <EditorFontPreviewCard
+                fontFamily={fontFamily}
+                isSelected={fontFamily === settingsState.editorFontFamily}
+                testIdPrefix="settings-editor-font-family-combobox-preview"
+              />
+            );
+          }}
+          testId="settings-editor-font-family-combobox"
+          action={(
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              data-testid="settings-editor-font-family-advanced-button"
+              className="shrink-0 hover:cursor-pointer"
+              onClick={() => handleEditorFontAdvancedDialogOpenChange(true)}
+            >
+              Advanced
+            </Button>
+          )}
+        />
+      ),
+    },
+    {
+      id: 'editor-font-size',
+      pageId: 'editor',
+      title: 'Code editor font size',
+      description: 'Adjust the Monaco editor font size used in code tabs.',
+      keywords: ['editor', 'font', 'size', 'monaco', 'code'],
+      element: (
+        <SettingsSliderSection
+          title="Code editor font size"
+          description="Adjust the Monaco editor font size used in code tabs."
+          testId="editor-font-size"
+        >
+          <div className="flex min-w-0 items-center gap-3">
+            <Slider
+              aria-label="Code editor font size"
+              data-testid="settings-editor-font-size-slider"
+              min={10}
+              max={24}
+              step={1}
+              value={[settingsState.editorFontSize]}
+              onValueChange={handleEditorFontSizeChange}
+              onValueCommit={handleEditorFontSizeCommit}
+            />
+            <span
+              className="min-w-10 shrink-0 text-right text-[13px] font-medium text-foreground"
+              data-testid="settings-editor-font-size-value"
+            >
+              {settingsState.editorFontSize}px
+            </span>
+          </div>
+        </SettingsSliderSection>
+      ),
+    },
+    {
+      id: 'editor-behavior-display',
+      pageId: 'editor',
+      title: 'Editor behavior & display',
+      description: 'Configure Monaco behavior and display aids such as indentation, caret motion, wrapping, gutters, and guides.',
+      keywords: ['editor', 'behavior', 'display', 'monaco', 'guides', 'gutter'],
+      element: (
+        <SettingsInfoSection
+          title="Editor behavior & display"
+          description="Configure Monaco behavior and display aids such as indentation, caret motion, wrapping, gutters, and guides."
+          testId="editor-display"
+        />
+      ),
+    },
+    {
+      id: 'editor-word-wrap',
+      pageId: 'editor',
+      title: 'Word wrap',
+      description: 'Control how Monaco wraps long lines inside the current editor viewport.',
+      keywords: ['editor', 'word wrap', 'wrap', 'line wrapping'],
+      element: (
+        <SettingsComboboxSection
+          value={settingsState.editorWordWrap}
+          onValueChange={handleEditorWordWrapChange}
+          options={editorWordWrapOptions.map((option) => ({
+            value: option.value,
+            label: option.label,
+            description: option.description,
+          }))}
+          title="Word wrap"
+          description="Control how Monaco wraps long lines inside the current editor viewport."
+          searchPlaceholder="Search word wrap modes..."
+          emptyText="No word wrap mode found."
+          testId="settings-editor-word-wrap-combobox"
+        />
+      ),
+    },
+    {
+      id: 'editor-tab-size',
+      pageId: 'editor',
+      title: 'Tab size',
+      description: 'Choose how many spaces Monaco inserts and aligns when indentation uses tabs as spaces.',
+      keywords: ['editor', 'tab', 'tab size', 'spaces', 'indentation'],
+      element: (
+        <SettingsComboboxSection
+          value={String(settingsState.editorTabSize)}
+          onValueChange={handleEditorTabSizeChange}
+          options={editorTabSizeOptions.map((option) => ({
+            value: String(option.value),
+            label: option.label,
+            description: option.description,
+          }))}
+          title="Tab size"
+          description="Choose how many spaces Monaco inserts and aligns when indentation uses tabs as spaces."
+          searchPlaceholder="Search tab sizes..."
+          emptyText="No tab size found."
+          testId="settings-editor-tab-size-combobox"
+        />
+      ),
+    },
+    {
+      id: 'editor-cursor-blinking',
+      pageId: 'editor',
+      title: 'Cursor blinking',
+      description: 'Control the caret animation Monaco uses while the editor has focus.',
+      keywords: ['editor', 'cursor', 'caret', 'blinking', 'animation'],
+      element: (
+        <SettingsComboboxSection
+          value={settingsState.editorCursorBlinking}
+          onValueChange={handleEditorCursorBlinkingChange}
+          options={editorCursorBlinkingOptions.map((option) => ({
+            value: option.value,
+            label: option.label,
+            description: option.description,
+          }))}
+          title="Cursor blinking"
+          description="Control the caret animation Monaco uses while the editor has focus."
+          searchPlaceholder="Search cursor blinking modes..."
+          emptyText="No cursor blinking mode found."
+          testId="settings-editor-cursor-blinking-combobox"
+        />
+      ),
+    },
+    {
+      id: 'editor-render-whitespace',
+      pageId: 'editor',
+      title: 'Whitespace rendering',
+      description: 'Choose when visible whitespace markers should appear in the editor.',
+      keywords: ['editor', 'whitespace', 'spaces', 'markers', 'render'],
+      element: (
+        <SettingsComboboxSection
+          value={settingsState.editorRenderWhitespace}
+          onValueChange={handleEditorRenderWhitespaceChange}
+          options={editorRenderWhitespaceOptions.map((option) => ({
+            value: option.value,
+            label: option.label,
+            description: option.description,
+          }))}
+          title="Whitespace rendering"
+          description="Choose when visible whitespace markers should appear in the editor."
+          searchPlaceholder="Search whitespace modes..."
+          emptyText="No whitespace mode found."
+          testId="settings-editor-render-whitespace-combobox"
+        />
+      ),
+    },
+    {
+      id: 'editor-line-numbers',
+      pageId: 'editor',
+      title: 'Line numbers',
+      description: 'Choose whether the editor gutter shows absolute, relative, or interval line numbers.',
+      keywords: ['editor', 'line numbers', 'gutter', 'relative', 'interval'],
+      element: (
+        <SettingsComboboxSection
+          value={settingsState.editorLineNumbers}
+          onValueChange={handleEditorLineNumbersChange}
+          options={editorLineNumbersOptions.map((option) => ({
+            value: option.value,
+            label: option.label,
+            description: option.description,
+          }))}
+          title="Line numbers"
+          description="Choose whether the editor gutter shows absolute, relative, or interval line numbers."
+          searchPlaceholder="Search line number modes..."
+          emptyText="No line number mode found."
+          testId="settings-editor-line-numbers-combobox"
+        />
+      ),
+    },
+    {
+      id: 'editor-folding-strategy',
+      pageId: 'editor',
+      title: 'Folding strategy',
+      description: 'Choose whether Monaco folds from indentation only or uses language-aware providers when possible.',
+      keywords: ['editor', 'folding', 'strategy', 'indentation', 'language'],
+      element: (
+        <SettingsComboboxSection
+          value={settingsState.editorFoldingStrategy}
+          onValueChange={handleEditorFoldingStrategyChange}
+          options={editorFoldingStrategyOptions.map((option) => ({
+            value: option.value,
+            label: option.label,
+            description: option.description,
+          }))}
+          title="Folding strategy"
+          description="Choose whether Monaco folds from indentation only or uses language-aware providers when possible."
+          searchPlaceholder="Search folding strategies..."
+          emptyText="No folding strategy found."
+          testId="settings-editor-folding-strategy-combobox"
+        />
+      ),
+    },
+    {
+      id: 'editor-display-switches',
+      pageId: 'editor',
+      title: 'Display and guide toggles',
+      description: 'Enable editor ligatures, scrolling, minimap, glyph margin, inline Git diff, and guide rendering.',
+      keywords: ['editor', 'ligatures', 'smooth scrolling', 'minimap', 'glyph margin', 'inline git diff', 'bracket pair guides', 'indent guides'],
+      element: (
+        <div className={settingsSectionClassName}>
+          <div className="divide-y divide-border/70">
+            <SettingsSwitchRow checked={settingsState.editorFontLigatures} description="Enable Monaco font ligatures when the selected code font supports them." onCheckedChange={handleEditorFontLigaturesChange} testId="settings-editor-font-ligatures-switch" title="Font ligatures" />
+            <SettingsSwitchRow checked={settingsState.editorSmoothScrolling} description="Animate editor scrolling with Monaco's smooth scrolling behavior." onCheckedChange={handleEditorSmoothScrollingChange} testId="settings-editor-smooth-scrolling-switch" title="Smooth scrolling" />
+            <SettingsSwitchRow checked={settingsState.editorScrollBeyondLastLine} description="Keep extra blank space after the final line so the cursor can scroll below the file end." onCheckedChange={handleEditorScrollBeyondLastLineChange} testId="settings-editor-scroll-beyond-last-line-switch" title="Scroll beyond last line" />
+            <SettingsSwitchRow checked={settingsState.editorRenderControlCharacters} description="Render control characters such as tabs and other non-printable glyphs using Monaco's built-in markers." onCheckedChange={handleEditorRenderControlCharactersChange} testId="settings-editor-render-control-characters-switch" title="Render control characters" />
+            <SettingsSwitchRow checked={settingsState.editorMinimapEnabled} description="Show Monaco's minimap overview on the right side of the editor." onCheckedChange={handleEditorMinimapEnabledChange} testId="settings-editor-minimap-switch" title="Show minimap" />
+            <SettingsSwitchRow checked={settingsState.editorGlyphMargin} description="Keep the glyph margin visible for breakpoints, decorations, and code markers." onCheckedChange={handleEditorGlyphMarginChange} testId="settings-editor-glyph-margin-switch" title="Show glyph margin" />
+            <SettingsSwitchRow checked={settingsState.editorInlineGitDiffEnabled} description="Show HEAD versus workspace changes inline inside opened modified files." onCheckedChange={handleEditorInlineGitDiffEnabledChange} testId="settings-editor-inline-git-diff-switch" title="Inline Git Diff" />
+            <SettingsSwitchRow checked={settingsState.editorInlineGitDiffStateBackgroundsEnabled} description="Fill changed line numbers and editor rows with the inline Git diff state background." onCheckedChange={handleEditorInlineGitDiffStateBackgroundsEnabledChange} testId="settings-editor-inline-git-diff-backgrounds-switch" title="Inline Git Diff Backgrounds" />
+            <SettingsSwitchRow checked={settingsState.editorBracketPairGuides} description="Render Monaco's bracket pair guide lines to make nested scopes easier to scan." onCheckedChange={handleEditorBracketPairGuidesChange} testId="settings-editor-bracket-pair-guides-switch" title="Bracket pair guides" />
+            <SettingsSwitchRow checked={settingsState.editorIndentGuides} description="Render indentation guide lines that follow the current block structure." onCheckedChange={handleEditorIndentGuidesChange} testId="settings-editor-indent-guides-switch" title="Indent guides" />
+          </div>
+        </div>
+      ),
+    },
+    {
+      id: 'close-to-tray',
+      pageId: 'window',
+      title: 'Close to tray',
+      description: 'Keep Pristine running in the tray when the window is closed.',
+      keywords: ['window', 'close', 'tray', 'quit'],
+      element: (
+        <div className={settingsSectionClassName}>
+          <SettingsSwitchRow checked={settingsState.closeToTrayEnabled} description="Keep Pristine running in the tray when the window is closed." onCheckedChange={handleCloseToTrayChange} testId="settings-close-to-tray-switch" title="Close to tray" />
+        </div>
+      ),
+    },
+    {
+      id: 'floating-info-window',
+      pageId: 'window',
+      title: 'Show floating info window',
+      description: 'Display a detached always-on-top info window even while Pristine is hidden to tray.',
+      keywords: ['window', 'floating', 'info', 'tray', 'always on top'],
+      element: (
+        <div className={settingsSectionClassName}>
+          <SettingsSwitchRow checked={settingsState.floatingInfoWindowVisible} description="Display a detached always-on-top info window even while Pristine is hidden to tray." onCheckedChange={handleFloatingInfoWindowVisibleChange} testId="settings-floating-info-window-switch" title="Show floating info window" />
+        </div>
+      ),
+    },
+  ], [
+    availableThemeOptions,
+    availableThemeOptionsById,
+    getThemePreview,
+    handleCloseToTrayChange,
+    handleCodeViewerLayoutModeChange,
+    handleEditorBracketPairGuidesChange,
+    handleEditorCursorBlinkingChange,
+    handleEditorFoldingStrategyChange,
+    handleEditorFontAdvancedDialogOpenChange,
+    handleEditorFontFamilyChange,
+    handleEditorFontLigaturesChange,
+    handleEditorFontSizeChange,
+    handleEditorFontSizeCommit,
+    handleEditorGlyphMarginChange,
+    handleEditorIndentGuidesChange,
+    handleEditorInlineGitDiffEnabledChange,
+    handleEditorInlineGitDiffStateBackgroundsEnabledChange,
+    handleEditorLineNumbersChange,
+    handleEditorMinimapEnabledChange,
+    handleEditorRenderControlCharactersChange,
+    handleEditorRenderWhitespaceChange,
+    handleEditorScrollBeyondLastLineChange,
+    handleEditorSmoothScrollingChange,
+    handleEditorTabSizeChange,
+    handleEditorWordWrapChange,
+    handleFloatingInfoWindowVisibleChange,
+    handleThemeAdvancedDialogOpenChange,
+    handleThemeChange,
+    handleThemeImport,
+    isImportingTheme,
+    settingsState,
+  ]);
+  const settingsItemsByPage = useMemo(() => new Map(settingsPages.map((page) => [
+    page.id,
+    settingsItems.filter((item) => item.pageId === page.id),
+  ])), [settingsItems]);
+  const activePage = settingsPages.find((page) => page.id === activePageId) ?? defaultSettingsPage;
+  const activePageItems = settingsItemsByPage.get(activePage.id) ?? [];
+  const filteredSettingsItems = useMemo(() => settingsItems.filter((item) => {
+    const page = settingsPages.find((candidate) => candidate.id === item.pageId);
+    return Boolean(page && settingMatchesQuery(item, page, normalizedSearchQuery));
+  }), [normalizedSearchQuery, settingsItems]);
+  const hasSettingsSearchQuery = settingsSearchQuery.length > 0;
+  const showingSearchResults = normalizedSearchQuery.length > 0;
+
   return (
     <>
       <Dialog open={settingsDialogOpen} onOpenChange={handleSettingsDialogOpenChange}>
         <DialogContent
           data-testid="settings-dialog"
-          className="max-h-[85vh] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden sm:max-w-xl"
+          className="h-[min(760px,calc(100vh-2rem))] max-h-[calc(100vh-2rem)] gap-0 overflow-hidden border-ide-border bg-ide-bg p-0 text-ide-text shadow-2xl sm:max-w-6xl"
+          showCloseButton={false}
           style={dialogStyle}
         >
-          <DialogHeader>
-            <DialogTitle>Settings</DialogTitle>
-            <DialogDescription>
-              Manage workbench appearance, editor behavior, and window preferences.
-            </DialogDescription>
-          </DialogHeader>
-          <ScrollArea className="min-h-0">
-            <div className="space-y-2.5 pr-4">
-              <SettingsComboboxSection
-                value={settingsState.themeId}
-                onValueChange={handleThemeChange}
-                options={availableThemeOptions.map((option) => ({
-                  value: option.value,
-                  label: option.label,
-                  description: option.description,
-                }))}
-                title="UI theme"
-                description="Choose the VS Code color theme used across Pristine UI, Monaco, and the terminal. Imported themes fall back to the matching built-in 2026 base theme for missing tokens."
-                searchPlaceholder="Search UI themes..."
-                emptyText="No UI theme found."
-                previewPaneTestId="settings-theme-combobox-preview-pane"
-                renderOptionPreview={(option) => {
-                  const themeOption = availableThemeOptionsById.get(option.value);
-
-                  if (!themeOption) {
-                    return null;
-                  }
+          <div className="flex h-full min-h-0">
+            <aside className="flex w-64 shrink-0 flex-col border-r border-ide-border bg-ide-sidebar-bg/80 px-3 py-4">
+              <DialogTitle className="px-2 text-[20px] font-semibold text-ide-text">Settings</DialogTitle>
+              <DialogDescription className="sr-only">
+                Manage workbench appearance, editor behavior, and window preferences.
+              </DialogDescription>
+              <nav className="mt-7 space-y-1" aria-label="Settings sections">
+                {settingsPages.map((page) => {
+                  const Icon = page.icon;
+                  const isActive = activePage.id === page.id && !showingSearchResults;
 
                   return (
-                    <ColorThemePreviewCard
-                      isSelected={themeOption.value === settingsState.themeId}
-                      option={themeOption}
-                      preview={getThemePreview(themeOption.value)}
-                      testIdPrefix="settings-theme-combobox-preview"
-                    />
-                  );
-                }}
-                testId="settings-theme-combobox"
-                action={(
-                  <div className="flex shrink-0 items-center gap-2">
-                    <Button
+                    <button
+                      key={page.id}
                       type="button"
-                      variant="outline"
-                      size="sm"
-                      data-testid="settings-theme-advanced-button"
-                      className="hover:cursor-pointer"
-                      onClick={() => controller.handleThemeAdvancedDialogOpenChange(true)}
-                    >
-                      Advanced
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      data-testid="settings-theme-import-button"
-                      className="hover:cursor-pointer"
-                      disabled={isImportingTheme}
+                      aria-current={isActive ? 'page' : undefined}
+                      data-testid={`settings-nav-${page.id}`}
+                      className={cn(
+                        'flex h-10 w-full items-center rounded-md px-3 text-left text-[13px] font-medium leading-4 transition-colors hover:bg-ide-hover hover:text-ide-text',
+                        isActive ? 'bg-ide-selection text-ide-accent' : 'text-ide-text-muted',
+                      )}
                       onClick={() => {
-                        void handleThemeImport();
+                        setActivePageId(page.id);
+                        setSettingsSearchQuery('');
                       }}
                     >
-                      {isImportingTheme ? 'Importing...' : 'Import'}
-                    </Button>
-                  </div>
-                )}
-              />
-              <SettingsComboboxSection
-                value={settingsState.codeViewerLayoutMode}
-                onValueChange={handleCodeViewerLayoutModeChange}
-                options={codeViewerLayoutModeOptions.map((option) => ({
-                  value: option.value,
-                  label: option.label,
-                  description: option.description,
-                }))}
-                title="Code viewer layout"
-                description="Choose how the code viewer arranges side panels, editor regions, bottom panels, and tabs."
-                searchPlaceholder="Search code viewer layouts..."
-                emptyText="No code viewer layout found."
-                testId="settings-code-viewer-layout-combobox"
-              />
-              <div className={settingsSectionClassName}>
-                <div className="space-y-2.5">
-                  <div className="space-y-1">
-                    <p className={settingsSectionTitleClassName}>Code editor font size</p>
-                    <p className={settingsSectionDescriptionClassName} data-testid="editor-font-size-description">
-                      Adjust the Monaco editor font size used in code tabs.
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <Slider
-                      aria-label="Code editor font size"
-                      data-testid="settings-editor-font-size-slider"
-                      min={10}
-                      max={24}
-                      step={1}
-                      value={[settingsState.editorFontSize]}
-                      onValueChange={handleEditorFontSizeChange}
-                      onValueCommit={handleEditorFontSizeCommit}
-                    />
-                    <span
-                      className="min-w-10 text-right text-[13px] font-medium text-foreground"
-                      data-testid="settings-editor-font-size-value"
-                    >
-                      {settingsState.editorFontSize}px
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <SettingsComboboxSection
-                value={settingsState.editorFontFamily}
-                onValueChange={handleEditorFontFamilyChange}
-                options={editorFontFamilyOptions.map((option) => ({
-                  value: option.value,
-                  label: option.label,
-                  description: option.description,
-                }))}
-                title="Code editor font"
-                description="Choose the bundled monospace font used in Monaco editor tabs."
-                searchPlaceholder="Search editor fonts..."
-                emptyText="No editor font found."
-                previewPaneTestId="settings-editor-font-family-combobox-preview-pane"
-                renderOptionPreview={(option) => {
-                  const fontFamily = parseEditorFontFamily(option.value);
-
-                  return (
-                    <EditorFontPreviewCard
-                      fontFamily={fontFamily}
-                      isSelected={fontFamily === settingsState.editorFontFamily}
-                      testIdPrefix="settings-editor-font-family-combobox-preview"
-                    />
+                      <span className="flex min-w-0 items-end gap-3">
+                        <Icon
+                          aria-hidden="true"
+                          className="size-4 shrink-0"
+                          data-testid={`settings-nav-${page.id}-icon`}
+                        />
+                        <span className="truncate leading-4" data-testid={`settings-nav-${page.id}-label`}>
+                          {page.label}
+                        </span>
+                      </span>
+                    </button>
                   );
-                }}
-                testId="settings-editor-font-family-combobox"
-                action={(
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    data-testid="settings-editor-font-family-advanced-button"
-                    className="shrink-0 hover:cursor-pointer"
-                    onClick={() => controller.handleEditorFontAdvancedDialogOpenChange(true)}
-                  >
-                    Advanced
-                  </Button>
-                )}
-              />
-              <div className={settingsSectionClassName}>
-                <div className="space-y-1">
-                  <p className={settingsSectionTitleClassName}>Editor behavior &amp; display</p>
-                  <p className={settingsSectionDescriptionClassName} data-testid="editor-display-description">
-                    Configure Monaco behavior and display aids such as indentation, caret motion, wrapping, gutters, and guides.
-                  </p>
-                </div>
-              </div>
-              <SettingsComboboxSection
-                value={settingsState.editorWordWrap}
-                onValueChange={handleEditorWordWrapChange}
-                options={editorWordWrapOptions.map((option) => ({
-                  value: option.value,
-                  label: option.label,
-                  description: option.description,
-                }))}
-                title="Word wrap"
-                description="Control how Monaco wraps long lines inside the current editor viewport."
-                searchPlaceholder="Search word wrap modes..."
-                emptyText="No word wrap mode found."
-                testId="settings-editor-word-wrap-combobox"
-              />
-              <SettingsComboboxSection
-                value={String(settingsState.editorTabSize)}
-                onValueChange={handleEditorTabSizeChange}
-                options={editorTabSizeOptions.map((option) => ({
-                  value: String(option.value),
-                  label: option.label,
-                  description: option.description,
-                }))}
-                title="Tab size"
-                description="Choose how many spaces Monaco inserts and aligns when indentation uses tabs as spaces."
-                searchPlaceholder="Search tab sizes..."
-                emptyText="No tab size found."
-                testId="settings-editor-tab-size-combobox"
-              />
-              <SettingsComboboxSection
-                value={settingsState.editorCursorBlinking}
-                onValueChange={handleEditorCursorBlinkingChange}
-                options={editorCursorBlinkingOptions.map((option) => ({
-                  value: option.value,
-                  label: option.label,
-                  description: option.description,
-                }))}
-                title="Cursor blinking"
-                description="Control the caret animation Monaco uses while the editor has focus."
-                searchPlaceholder="Search cursor blinking modes..."
-                emptyText="No cursor blinking mode found."
-                testId="settings-editor-cursor-blinking-combobox"
-              />
-              <SettingsComboboxSection
-                value={settingsState.editorRenderWhitespace}
-                onValueChange={handleEditorRenderWhitespaceChange}
-                options={editorRenderWhitespaceOptions.map((option) => ({
-                  value: option.value,
-                  label: option.label,
-                  description: option.description,
-                }))}
-                title="Whitespace rendering"
-                description="Choose when visible whitespace markers should appear in the editor."
-                searchPlaceholder="Search whitespace modes..."
-                emptyText="No whitespace mode found."
-                testId="settings-editor-render-whitespace-combobox"
-              />
-              <SettingsComboboxSection
-                value={settingsState.editorLineNumbers}
-                onValueChange={handleEditorLineNumbersChange}
-                options={editorLineNumbersOptions.map((option) => ({
-                  value: option.value,
-                  label: option.label,
-                  description: option.description,
-                }))}
-                title="Line numbers"
-                description="Choose whether the editor gutter shows absolute, relative, or interval line numbers."
-                searchPlaceholder="Search line number modes..."
-                emptyText="No line number mode found."
-                testId="settings-editor-line-numbers-combobox"
-              />
-              <SettingsComboboxSection
-                value={settingsState.editorFoldingStrategy}
-                onValueChange={handleEditorFoldingStrategyChange}
-                options={editorFoldingStrategyOptions.map((option) => ({
-                  value: option.value,
-                  label: option.label,
-                  description: option.description,
-                }))}
-                title="Folding strategy"
-                description="Choose whether Monaco folds from indentation only or uses language-aware providers when possible."
-                searchPlaceholder="Search folding strategies..."
-                emptyText="No folding strategy found."
-                testId="settings-editor-folding-strategy-combobox"
-              />
-              <div className={settingsSectionClassName}>
-                <div className="space-y-3">
-                  <SettingsSwitchRow
-                    checked={settingsState.editorFontLigatures}
-                    description="Enable Monaco font ligatures when the selected code font supports them."
-                    onCheckedChange={handleEditorFontLigaturesChange}
-                    testId="settings-editor-font-ligatures-switch"
-                    title="Font ligatures"
+                })}
+              </nav>
+            </aside>
+            <div className="flex min-w-0 flex-1 flex-col">
+              <div className="flex shrink-0 items-center gap-3 border-b border-ide-border px-6 py-4">
+                <div
+                  className={cn(
+                    commandSearchInputWrapperClassName,
+                    'min-w-0 flex-1 rounded-md border border-ide-border bg-ide-tab-bg transition-colors focus-within:border-ide-accent',
+                  )}
+                  data-slot="settings-search-input-wrapper"
+                >
+                  <Search
+                    aria-hidden="true"
+                    className={cn(
+                      'pointer-events-none transition-opacity duration-150',
+                      commandSearchInputIconClassName,
+                      hasSettingsSearchQuery ? 'opacity-0' : 'opacity-100',
+                    )}
+                    data-testid="settings-search-icon"
                   />
-                  <Separator />
-                  <SettingsSwitchRow
-                    checked={settingsState.editorSmoothScrolling}
-                    description="Animate editor scrolling with Monaco's smooth scrolling behavior."
-                    onCheckedChange={handleEditorSmoothScrollingChange}
-                    testId="settings-editor-smooth-scrolling-switch"
-                    title="Smooth scrolling"
-                  />
-                  <Separator />
-                  <SettingsSwitchRow
-                    checked={settingsState.editorScrollBeyondLastLine}
-                    description="Keep extra blank space after the final line so the cursor can scroll below the file end."
-                    onCheckedChange={handleEditorScrollBeyondLastLineChange}
-                    testId="settings-editor-scroll-beyond-last-line-switch"
-                    title="Scroll beyond last line"
-                  />
-                  <Separator />
-                  <SettingsSwitchRow
-                    checked={settingsState.editorRenderControlCharacters}
-                    description="Render control characters such as tabs and other non-printable glyphs using Monaco's built-in markers."
-                    onCheckedChange={handleEditorRenderControlCharactersChange}
-                    testId="settings-editor-render-control-characters-switch"
-                    title="Render control characters"
-                  />
-                  <Separator />
-                  <SettingsSwitchRow
-                    checked={settingsState.editorMinimapEnabled}
-                    description="Show Monaco's minimap overview on the right side of the editor."
-                    onCheckedChange={handleEditorMinimapEnabledChange}
-                    testId="settings-editor-minimap-switch"
-                    title="Show minimap"
-                  />
-                  <Separator />
-                  <SettingsSwitchRow
-                    checked={settingsState.editorGlyphMargin}
-                    description="Keep the glyph margin visible for breakpoints, decorations, and code markers."
-                    onCheckedChange={handleEditorGlyphMarginChange}
-                    testId="settings-editor-glyph-margin-switch"
-                    title="Show glyph margin"
-                  />
-                  <Separator />
-                  <SettingsSwitchRow
-                    checked={settingsState.editorInlineGitDiffEnabled}
-                    description="Show HEAD versus workspace changes inline inside opened modified files."
-                    onCheckedChange={handleEditorInlineGitDiffEnabledChange}
-                    testId="settings-editor-inline-git-diff-switch"
-                    title="Inline Git Diff"
-                  />
-                  <Separator />
-                  <SettingsSwitchRow
-                    checked={settingsState.editorInlineGitDiffStateBackgroundsEnabled}
-                    description="Fill changed line numbers and editor rows with the inline Git diff state background."
-                    onCheckedChange={handleEditorInlineGitDiffStateBackgroundsEnabledChange}
-                    testId="settings-editor-inline-git-diff-backgrounds-switch"
-                    title="Inline Git Diff Backgrounds"
-                  />
-                  <Separator />
-                  <SettingsSwitchRow
-                    checked={settingsState.editorBracketPairGuides}
-                    description="Render Monaco's bracket pair guide lines to make nested scopes easier to scan."
-                    onCheckedChange={handleEditorBracketPairGuidesChange}
-                    testId="settings-editor-bracket-pair-guides-switch"
-                    title="Bracket pair guides"
-                  />
-                  <Separator />
-                  <SettingsSwitchRow
-                    checked={settingsState.editorIndentGuides}
-                    description="Render indentation guide lines that follow the current block structure."
-                    onCheckedChange={handleEditorIndentGuidesChange}
-                    testId="settings-editor-indent-guides-switch"
-                    title="Indent guides"
+                  <input
+                    type="search"
+                    autoCapitalize="none"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    data-testid="settings-search-input"
+                    spellCheck={false}
+                    value={settingsSearchQuery}
+                    onChange={(event) => setSettingsSearchQuery(event.target.value)}
+                    placeholder="Search settings..."
+                    className={cn(
+                      commandSearchInputClassName,
+                      'h-9 appearance-none py-0 text-[13px] leading-4 selection:bg-ide-selection selection:text-ide-text',
+                    )}
+                    style={commandSearchInputForegroundStyle}
                   />
                 </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Close settings"
+                  data-testid="settings-close-button"
+                  className="text-ide-text-muted hover:bg-ide-hover hover:text-ide-text"
+                  onClick={() => handleSettingsDialogOpenChange(false)}
+                >
+                  <X className="size-4" />
+                </Button>
               </div>
-              <div className={settingsSectionClassName}>
-                <div className="flex items-center justify-between gap-4">
-                  <div className="space-y-1">
-                    <p className={settingsSectionTitleClassName}>Close to tray</p>
-                    <p className={settingsSectionDescriptionClassName} data-testid="close-behavior-description">
-                      Keep Pristine running in the tray when the window is closed.
-                    </p>
-                  </div>
-                  <Switch
-                    checked={settingsState.closeToTrayEnabled}
-                    data-testid="settings-close-to-tray-switch"
-                    onCheckedChange={handleCloseToTrayChange}
-                  />
+              <ScrollArea className="min-h-0 flex-1">
+                <div className="px-6 py-5 pr-8">
+                  {showingSearchResults ? (
+                    <div className="space-y-4" data-testid="settings-page-search">
+                      <div className="space-y-1">
+                        <p className="text-[18px] font-semibold leading-none text-foreground">Search results</p>
+                        <p className="text-[13px] text-muted-foreground">Matching settings across all sections.</p>
+                      </div>
+                      <SettingsSearchResults items={filteredSettingsItems} />
+                    </div>
+                  ) : (
+                    <SettingsPageContent page={activePage} items={activePageItems} />
+                  )}
                 </div>
-              </div>
-              <div className={settingsSectionClassName}>
-                <div className="flex items-center justify-between gap-4">
-                  <div className="space-y-1">
-                    <p className={settingsSectionTitleClassName}>Show floating info window</p>
-                    <p className={settingsSectionDescriptionClassName} data-testid="floating-info-window-description">
-                      Display a detached always-on-top info window even while Pristine is hidden to tray.
-                    </p>
-                  </div>
-                  <Switch
-                    checked={settingsState.floatingInfoWindowVisible}
-                    data-testid="settings-floating-info-window-switch"
-                    onCheckedChange={handleFloatingInfoWindowVisibleChange}
-                  />
-                </div>
-              </div>
+              </ScrollArea>
             </div>
-          </ScrollArea>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              data-testid="settings-close-button"
-              onClick={() => handleSettingsDialogOpenChange(false)}
-            >
-              Close
-            </Button>
-          </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
 

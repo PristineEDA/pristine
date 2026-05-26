@@ -158,12 +158,23 @@ mac:
   await writeFile(path.join(stageApp, 'electron-builder.yml'), config, 'utf8');
 }
 
+function assertModelProviderLogoAssetsAvailable() {
+  const logoPath = path.join(stageApp, 'dist', 'model-provider-logos', 'openrouter.svg');
+
+  if (!existsSync(logoPath)) {
+    throw new Error(
+      'Cannot stage package: dist/model-provider-logos/openrouter.svg is missing. Run pnpm run sync:mastra-provider-logos and pnpm run build:app before packaging.',
+    );
+  }
+}
+
 async function main() {
   const rootManifest = await readJson(path.join(projectRoot, 'package.json'));
 
   await rm(stageRoot, { recursive: true, force: true });
   await mkdir(stageApp, { recursive: true });
   await copyDirectory('dist');
+  assertModelProviderLogoAssetsAvailable();
   await copyDirectory('dist-electron');
 
   for (const packageName of runtimePackages) {

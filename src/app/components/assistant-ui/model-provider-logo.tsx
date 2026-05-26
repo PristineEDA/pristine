@@ -21,6 +21,11 @@ const logoPathByProviderId = new Map<string, string>(
 );
 
 const availableLogoIds = new Set<string>(availableModelProviderLogoIds);
+const providerLogoAssetDirectory = "model-provider-logos";
+
+function normalizeLocalProviderLogoPath(path: string) {
+  return path.replace(/^\/+/, "");
+}
 
 export function normalizeProviderLogoId(providerId: string) {
   const baseProviderId = providerId.includes(".")
@@ -34,11 +39,11 @@ export function getLocalProviderLogoPath(providerId: string) {
   const manifestPath = logoPathByProviderId.get(providerId);
 
   if (manifestPath) {
-    return manifestPath;
+    return normalizeLocalProviderLogoPath(manifestPath);
   }
 
   const logoId = normalizeProviderLogoId(providerId);
-  return availableLogoIds.has(logoId) ? `/model-provider-logos/${logoId}.svg` : undefined;
+  return availableLogoIds.has(logoId) ? `${providerLogoAssetDirectory}/${logoId}.svg` : undefined;
 }
 
 export interface ModelProviderLogoProps {

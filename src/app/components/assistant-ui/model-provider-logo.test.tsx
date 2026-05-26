@@ -16,15 +16,16 @@ describe('ModelProviderLogo', () => {
 
   it('loads provider logos from the local public asset path', () => {
     expect(getLocalProviderLogoPath('openrouter')).toBe(
-      '/model-provider-logos/openrouter.svg',
+      'model-provider-logos/openrouter.svg',
     );
 
     render(<ModelProviderLogo providerId="openrouter" providerName="OpenRouter" />);
 
     expect(screen.getByAltText('OpenRouter logo')).toHaveAttribute(
       'src',
-      '/model-provider-logos/openrouter.svg',
+      'model-provider-logos/openrouter.svg',
     );
+    expect(screen.getByAltText('OpenRouter logo').getAttribute('src')).not.toMatch(/^\//);
   });
 
   it('falls back locally when a logo is unavailable or fails to load', () => {
