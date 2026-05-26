@@ -101,6 +101,14 @@ describe('release workflow contract', () => {
     expect(workflow).not.toMatch(/^  release:/m)
   })
 
+  it('keeps CI manually dispatchable with explicit read permissions', () => {
+    const workflow = fs.readFileSync(workflowPath, 'utf8')
+
+    expect(workflow).toContain('workflow_dispatch:')
+    expect(workflow).toMatch(/permissions:\r?\n  actions: read\r?\n  contents: read/)
+    expect(workflow).not.toContain('permissions: read-all')
+  })
+
   it('routes pristine-engine downloads to main workflow artifacts for non-tags and latest releases for tags', () => {
     const workflow = fs.readFileSync(workflowPath, 'utf8')
     const prepareEngineScript = fs.readFileSync(prepareEngineScriptPath, 'utf8')
@@ -110,7 +118,6 @@ describe('release workflow contract', () => {
     expect(workflow).toContain('PRISTINE_ENGINE_REMOTE_SOURCE_MODE: auto')
     expect(workflow).toContain('PRISTINE_ENGINE_ARTIFACT_BRANCH: main')
     expect(workflow).toContain('PRISTINE_ENGINE_ARTIFACT_WORKFLOW: ci.yml')
-    expect(workflow).toContain('permissions: read-all')
     expect(workflow).toContain('actions: read')
 
     expect(prepareEngineScript).toContain('getRemoteSourceMode')

@@ -8,6 +8,7 @@ on:
     tags:
       - '*'
   pull_request:
+  workflow_dispatch:
 
 env:
   PRISTINE_EMPTY_WALLPAPER_URL: https://raw.githubusercontent.com/PristineEDA/pristine-res/main/images/empty-wallpaper.png
@@ -16,7 +17,9 @@ env:
   PRISTINE_ENGINE_ARTIFACT_BRANCH: main
   PRISTINE_ENGINE_ARTIFACT_WORKFLOW: ci.yml
 
-permissions: read-all
+permissions:
+  actions: read
+  contents: read
 
 jobs:
   package-gate:
