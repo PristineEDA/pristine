@@ -11,6 +11,14 @@ on:
 
 env:
   PRISTINE_EMPTY_WALLPAPER_URL: https://raw.githubusercontent.com/PristineEDA/pristine-res/main/images/empty-wallpaper.png
+  PRISTINE_ENGINE_REPOSITORY: PristineEDA/pristine-engine
+  PRISTINE_ENGINE_REMOTE_SOURCE_MODE: auto
+  PRISTINE_ENGINE_ARTIFACT_BRANCH: main
+  PRISTINE_ENGINE_ARTIFACT_WORKFLOW: ci.yml
+
+permissions:
+  actions: read
+  contents: read
 
 jobs:
   package-gate:
@@ -404,6 +412,7 @@ jobs:
       - package-gate
     runs-on: ubuntu-24.04
     permissions:
+      actions: read
       contents: write
 
     steps:

@@ -8,6 +8,8 @@ import { describe, expect, it } from 'vitest'
 const repoRoot = path.resolve(__dirname, '..')
 const releaseScriptPath = path.join(repoRoot, 'scripts', 'release-version.mjs')
 const workflowPath = path.join(repoRoot, '.github', 'workflows', 'ci.yml')
+const prepareEngineScriptPath = path.join(repoRoot, 'scripts', 'prepare-pristine-engine.mjs')
+const engineRemoteSourceHelperPath = path.join(repoRoot, 'scripts', 'pristine-engine-remote-source.mjs')
 const hookPath = path.join(repoRoot, '.githooks', 'pre-commit')
 
 function createPackageFixture(rootVersion = '0.0.1', agentServerVersion = rootVersion) {
@@ -97,6 +99,29 @@ describe('release workflow contract', () => {
     expect(workflow).toContain('generate_release_notes: true')
     expect(workflow).toContain('contents: write')
     expect(workflow).not.toMatch(/^  release:/m)
+  })
+
+  it('routes pristine-engine downloads to main workflow artifacts for non-tags and latest releases for tags', () => {
+    const workflow = fs.readFileSync(workflowPath, 'utf8')
+    const prepareEngineScript = fs.readFileSync(prepareEngineScriptPath, 'utf8')
+    const engineRemoteSourceHelper = fs.readFileSync(engineRemoteSourceHelperPath, 'utf8')
+
+    expect(workflow).toContain('PRISTINE_ENGINE_REPOSITORY: PristineEDA/pristine-engine')
+    expect(workflow).toContain('PRISTINE_ENGINE_REMOTE_SOURCE_MODE: auto')
+    expect(workflow).toContain('PRISTINE_ENGINE_ARTIFACT_BRANCH: main')
+    expect(workflow).toContain('PRISTINE_ENGINE_ARTIFACT_WORKFLOW: ci.yml')
+    expect(workflow).toContain('actions: read')
+
+    expect(prepareEngineScript).toContain('getRemoteSourceMode')
+    expect(prepareEngineScript).toContain('resolveWorkflowArtifactDownload')
+    expect(prepareEngineScript).toContain('resolveReleaseDownload')
+    expect(prepareEngineScript).toContain('process.env.GITHUB_REF')
+    expect(prepareEngineScript).not.toContain("?? 'v0.1.1'")
+
+    expect(engineRemoteSourceHelper).toContain("return isGitTagRef(ref) ? 'release' : 'artifact'")
+    expect(engineRemoteSourceHelper).toContain("const releaseRoute = releaseVersion ? `releases/tags/${releaseVersion}` : 'releases/latest'")
+    expect(engineRemoteSourceHelper).toContain("runsUrl.searchParams.set('branch', branch)")
+    expect(engineRemoteSourceHelper).toContain("runsUrl.searchParams.set('status', 'success')")
   })
 
   it('filters uploaded package artifacts to distributable release files', () => {

@@ -6,14 +6,25 @@ import { pipeline } from 'node:stream/promises'
 import { createGunzip } from 'node:zlib'
 import extractZip from 'extract-zip'
 import tarFs from 'tar-fs'
+import {
+  DEFAULT_PRISTINE_ENGINE_ARTIFACT_BRANCH,
+  DEFAULT_PRISTINE_ENGINE_ARTIFACT_WORKFLOW,
+  DEFAULT_PRISTINE_ENGINE_REPOSITORY,
+  getRemoteSourceMode,
+  resolveReleaseDownload,
+  resolveWorkflowArtifactDownload,
+} from './pristine-engine-remote-source.mjs'
 
 const workspaceRoot = process.cwd()
 const binariesDir = path.join(workspaceRoot, 'binaries')
 const pristineEngineLicensesDir = path.join(workspaceRoot, 'licenses', 'pristine-engine')
 const isGitHubActions = process.env.GITHUB_ACTIONS === 'true'
-const remoteReleaseRepository = process.env.PRISTINE_ENGINE_REPOSITORY ?? 'PristineEDA/pristine-engine'
-const remoteReleaseVersion = process.env.PRISTINE_ENGINE_VERSION ?? 'v0.1.1'
+const remoteRepository = process.env.PRISTINE_ENGINE_REPOSITORY ?? DEFAULT_PRISTINE_ENGINE_REPOSITORY
+const remoteReleaseVersion = process.env.PRISTINE_ENGINE_VERSION
 const explicitReleaseAsset = process.env.PRISTINE_ENGINE_ASSET
+const remoteArtifactBranch = process.env.PRISTINE_ENGINE_ARTIFACT_BRANCH ?? DEFAULT_PRISTINE_ENGINE_ARTIFACT_BRANCH
+const remoteArtifactWorkflow = process.env.PRISTINE_ENGINE_ARTIFACT_WORKFLOW ?? DEFAULT_PRISTINE_ENGINE_ARTIFACT_WORKFLOW
+const explicitWorkflowArtifact = process.env.PRISTINE_ENGINE_ARTIFACT
 
 function getBinaryName(platform = process.platform) {
   return platform === 'win32' ? 'pristine-engine.exe' : 'pristine-engine'
@@ -29,108 +40,6 @@ function getDefaultLocalSourcePath(platform = process.platform) {
 
 function getDefaultLocalLicensesPath() {
   return path.resolve(workspaceRoot, '..', 'pristine-engine', 'build', 'install-smoke', 'share', 'pristine-engine', 'licenses')
-}
-
-function unique(values) {
-  return [...new Set(values.filter(Boolean))]
-}
-
-function getPreferredPlatformAssetId(platform = process.platform, arch = process.arch) {
-  const imageOS = (process.env.ImageOS ?? '').toLowerCase()
-
-  if (platform === 'win32') {
-    if (imageOS.includes('win22') || imageOS.includes('windows2022')) {
-      return `windows-2022-${arch}`
-    }
-
-    if (imageOS.includes('win25') || imageOS.includes('windows2025')) {
-      return `windows-2025-${arch}`
-    }
-
-    return null
-  }
-
-  if (platform === 'linux') {
-    if (imageOS.includes('ubuntu22') || imageOS.includes('ubuntu-22')) {
-      return `ubuntu-22.04-${arch}`
-    }
-
-    if (imageOS.includes('ubuntu24') || imageOS.includes('ubuntu-24')) {
-      return `ubuntu-24.04-${arch}`
-    }
-
-    return null
-  }
-
-  if (platform === 'darwin') {
-    if (imageOS.includes('macos15') || imageOS.includes('macos-15')) {
-      return `macos-15-${arch}`
-    }
-
-    if (imageOS.includes('macos26') || imageOS.includes('macos-26')) {
-      return `macos-26-${arch}`
-    }
-  }
-
-  return null
-}
-
-function getPlatformAssetIds(platform = process.platform, arch = process.arch) {
-  if (arch !== 'x64' && arch !== 'arm64') {
-    throw new Error(`Unsupported pristine-engine architecture: ${arch}`)
-  }
-
-  if (platform === 'win32') {
-    if (arch !== 'x64') {
-      throw new Error(`Unsupported pristine-engine architecture for Windows: ${arch}`)
-    }
-
-    return unique([
-      getPreferredPlatformAssetId(platform, arch),
-      `windows-${arch}`,
-      `windows-2025-${arch}`,
-      `windows-2022-${arch}`,
-    ])
-  }
-
-  if (platform === 'linux') {
-    if (arch !== 'x64') {
-      throw new Error(`Unsupported pristine-engine architecture for Linux: ${arch}`)
-    }
-
-    return unique([
-      getPreferredPlatformAssetId(platform, arch),
-      `linux-${arch}`,
-      `ubuntu-24.04-${arch}`,
-      `ubuntu-22.04-${arch}`,
-    ])
-  }
-
-  if (platform === 'darwin') {
-    return unique([
-      getPreferredPlatformAssetId(platform, arch),
-      `macos-${arch}`,
-      `macos-26-${arch}`,
-      `macos-15-${arch}`,
-    ])
-  }
-
-  return []
-}
-
-function getRemoteReleaseAssetCandidates(platform = process.platform, arch = process.arch) {
-  if (explicitReleaseAsset) {
-    return [explicitReleaseAsset]
-  }
-
-  return getPlatformAssetIds(platform, arch).flatMap((assetId) => [
-    `pristine-engine-${assetId}.zip`,
-    `pristine-engine-${remoteReleaseVersion}-${assetId}.zip`,
-  ])
-}
-
-function getRemoteReleaseAssetUrl(archiveFile) {
-  return `https://github.com/${remoteReleaseRepository}/releases/download/${remoteReleaseVersion}/${archiveFile}`
 }
 
 function getArchiveKind(archiveFile) {
@@ -207,11 +116,17 @@ async function removeLegacySlangServerBinaries() {
   ])
 }
 
-async function downloadRemoteFileIfAvailable(url, targetPath, label) {
+function getRemoteDownloadHeaders() {
+  const token = process.env.PRISTINE_ENGINE_GITHUB_TOKEN ?? process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN
+
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
+async function downloadRemoteFileIfAvailable(url, targetPath, label, headers = {}) {
   let response
 
   try {
-    response = await fetch(url)
+    response = await fetch(url, { headers })
   } catch (error) {
     throw new Error(
       `Failed to download ${label} from ${url}: ${error instanceof Error ? error.message : String(error)}`,
@@ -351,69 +266,111 @@ async function copyPreparedBinary(sourcePath, targetPath) {
 }
 
 async function downloadRemoteReleaseAsset(tempRoot) {
-  const releaseAssetCandidates = getRemoteReleaseAssetCandidates()
+  const releaseDownload = await resolveReleaseDownload({
+    repository: remoteRepository,
+    releaseVersion: remoteReleaseVersion,
+    explicitAsset: explicitReleaseAsset,
+  })
 
-  if (releaseAssetCandidates.length === 0) {
+  if (!releaseDownload) {
     console.log(`Skipping pristine-engine prepare on unsupported platform: ${process.platform}`)
     return null
   }
 
-  for (const archiveFile of releaseAssetCandidates) {
-    const archivePath = path.join(tempRoot, archiveFile)
-    const url = getRemoteReleaseAssetUrl(archiveFile)
-    const didDownload = await downloadRemoteFileIfAvailable(
-      url,
-      archivePath,
-      `pristine-engine release asset ${archiveFile}`,
-    )
+  const archivePath = path.join(tempRoot, releaseDownload.archiveFile)
+  const didDownload = await downloadRemoteFileIfAvailable(
+    releaseDownload.archiveUrl,
+    archivePath,
+    `pristine-engine ${releaseDownload.sourceLabel}`,
+    getRemoteDownloadHeaders(),
+  )
 
-    if (didDownload) {
-      return {
-        archiveFile,
-        archiveKind: getArchiveKind(archiveFile),
-        archivePath,
-      }
-    }
+  if (!didDownload) {
+    throw new Error(`Unable to download pristine-engine ${releaseDownload.sourceLabel}`)
   }
 
-  throw new Error(
-    `Unable to download a pristine-engine release asset from ${remoteReleaseRepository}@${remoteReleaseVersion}. Tried: ${releaseAssetCandidates.join(', ')}`,
-  )
+  return {
+    archiveFile: releaseDownload.archiveFile,
+    archiveKind: getArchiveKind(releaseDownload.archiveFile),
+    archivePath,
+    sourceLabel: releaseDownload.sourceLabel,
+  }
 }
 
-async function prepareBinaryFromRemoteRelease() {
+async function prepareBinaryFromRemoteArchive(downloadRemoteArchive) {
   const targetPath = getTargetPath()
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'pristine-engine-'))
 
   try {
-    const releaseAsset = await downloadRemoteReleaseAsset(tempRoot)
-    if (!releaseAsset) {
+    const remoteArchive = await downloadRemoteArchive(tempRoot)
+    if (!remoteArchive) {
       return
     }
 
     const extractDir = path.join(tempRoot, 'extract')
 
-    await extractArchive(releaseAsset.archivePath, releaseAsset.archiveKind, extractDir)
+    await extractArchive(remoteArchive.archivePath, remoteArchive.archiveKind, extractDir)
 
     const extractedBinaryPath = await findBinaryPath(extractDir, getBinaryName())
     if (!extractedBinaryPath) {
-      throw new Error(`Unable to locate ${getBinaryName()} inside ${releaseAsset.archiveFile}`)
+      throw new Error(`Unable to locate ${getBinaryName()} inside ${remoteArchive.archiveFile}`)
     }
 
     const licenseBundlePath = await findLicenseBundlePath(extractDir)
     if (!licenseBundlePath) {
-      throw new Error(`Unable to locate pristine-engine LICENSE, ATTRIBUTIONS.md, and NOTICE inside ${releaseAsset.archiveFile}`)
+      throw new Error(`Unable to locate pristine-engine LICENSE, ATTRIBUTIONS.md, and NOTICE inside ${remoteArchive.archiveFile}`)
     }
 
     await copyPreparedBinary(extractedBinaryPath, targetPath)
     await copyLicenseBundle(licenseBundlePath)
 
     console.log(
-      `Prepared pristine-engine from GitHub release ${remoteReleaseVersion}: ${path.relative(workspaceRoot, targetPath)}`,
+      `Prepared pristine-engine from ${remoteArchive.sourceLabel}: ${path.relative(workspaceRoot, targetPath)}`,
     )
   } finally {
     await rm(tempRoot, { recursive: true, force: true })
   }
+}
+
+async function prepareBinaryFromRemoteRelease() {
+  await prepareBinaryFromRemoteArchive(downloadRemoteReleaseAsset)
+}
+
+async function downloadRemoteWorkflowArtifact(tempRoot) {
+  const artifactDownload = await resolveWorkflowArtifactDownload({
+    repository: remoteRepository,
+    workflow: remoteArtifactWorkflow,
+    branch: remoteArtifactBranch,
+    explicitArtifact: explicitWorkflowArtifact,
+  })
+
+  if (!artifactDownload) {
+    console.log(`Skipping pristine-engine prepare on unsupported platform: ${process.platform}`)
+    return null
+  }
+
+  const archivePath = path.join(tempRoot, artifactDownload.archiveFile)
+  const didDownload = await downloadRemoteFileIfAvailable(
+    artifactDownload.archiveUrl,
+    archivePath,
+    `pristine-engine ${artifactDownload.sourceLabel}`,
+    getRemoteDownloadHeaders(),
+  )
+
+  if (!didDownload) {
+    throw new Error(`Unable to download pristine-engine ${artifactDownload.sourceLabel}`)
+  }
+
+  return {
+    archiveFile: artifactDownload.archiveFile,
+    archiveKind: getArchiveKind(artifactDownload.archiveFile),
+    archivePath,
+    sourceLabel: artifactDownload.sourceLabel,
+  }
+}
+
+async function prepareBinaryFromRemoteWorkflowArtifact() {
+  await prepareBinaryFromRemoteArchive(downloadRemoteWorkflowArtifact)
 }
 
 async function prepareBinaryFromLocalSource(sourcePath) {
@@ -432,7 +389,17 @@ async function main() {
   }
 
   if (isGitHubActions) {
-    await prepareBinaryFromRemoteRelease()
+    const remoteSourceMode = getRemoteSourceMode({
+      mode: process.env.PRISTINE_ENGINE_REMOTE_SOURCE_MODE ?? 'auto',
+      ref: process.env.GITHUB_REF ?? '',
+    })
+
+    if (remoteSourceMode === 'release') {
+      await prepareBinaryFromRemoteRelease()
+      return
+    }
+
+    await prepareBinaryFromRemoteWorkflowArtifact()
     return
   }
 
