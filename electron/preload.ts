@@ -1,7 +1,16 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { SyncChannels, AsyncChannels, StreamChannels } from './ipc/channels.js';
 import type { OpenThemeDialogResult, SaveDialogResult } from './ipc/dialog.js';
-import type { LspCompletionResponse, LspDebugEvent, LspDiagnosticsEvent, LspHover, LspStateEvent, WorkspaceLocation } from '../types/systemverilog-lsp.js';
+import type {
+  LspCompletionResponse,
+  LspDebugEvent,
+  LspDiagnosticsEvent,
+  LspHover,
+  LspModuleHierarchy,
+  LspModuleHierarchyOptions,
+  LspStateEvent,
+  WorkspaceLocation,
+} from '../types/systemverilog-lsp.js';
 import type { WorkspaceGitChangeEvent, WorkspaceGitFileDiffPayload, WorkspaceGitStatusPayload } from '../types/workspace-git.js';
 import type { MenuCommandEvent } from '../src/app/menu/applicationMenu.js';
 import type { WindowCloseDecision, WindowCloseRequest } from '../src/app/window/windowClose.js';
@@ -221,6 +230,8 @@ const electronAPI = {
         character,
         includeDeclaration,
       ) as Promise<WorkspaceLocation[]>,
+    moduleHierarchy: (options?: LspModuleHierarchyOptions) =>
+      ipcRenderer.invoke(AsyncChannels.LSP_MODULE_HIERARCHY, options) as Promise<LspModuleHierarchy>,
     onDiagnostics: (callback: (payload: LspDiagnosticsEvent) => void) => {
       const handler = (_event: Electron.IpcRendererEvent, payload: LspDiagnosticsEvent) => callback(payload);
       ipcRenderer.on(StreamChannels.LSP_DIAGNOSTICS, handler);

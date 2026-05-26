@@ -569,11 +569,11 @@ export const openSourceAttributionSections: AttributionSection[] = [
     title: 'Bundled Binaries & Extra Resources',
     items: [
       {
-        id: 'slang-server',
-        name: 'slang-server',
-        url: 'https://github.com/hudson-trading/slang-server',
-        author: 'Hudson Trading',
-        license: 'MIT',
+        id: 'pristine-engine',
+        name: 'pristine-engine',
+        url: 'https://github.com/PristineEDA/pristine-engine',
+        author: 'PristineEDA',
+        license: 'Apache-2.0',
       },
       {
         id: 'pristine-res',

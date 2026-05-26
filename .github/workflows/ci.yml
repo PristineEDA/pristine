@@ -2,15 +2,19 @@ name: CI
 
 on:
   push:
-    branches:
-      - dev
-      - main
-    tags:
-      - '*'
   pull_request:
+  workflow_dispatch:
 
 env:
   PRISTINE_EMPTY_WALLPAPER_URL: https://raw.githubusercontent.com/PristineEDA/pristine-res/main/images/empty-wallpaper.png
+  PRISTINE_ENGINE_REPOSITORY: PristineEDA/pristine-engine
+  PRISTINE_ENGINE_REMOTE_SOURCE_MODE: auto
+  PRISTINE_ENGINE_ARTIFACT_BRANCH: main
+  PRISTINE_ENGINE_ARTIFACT_WORKFLOW: ci.yml
+
+permissions:
+  actions: read
+  contents: read
 
 jobs:
   package-gate:
@@ -114,6 +118,8 @@ jobs:
         run: pnpm typecheck
 
       - name: Build
+        env:
+          PRISTINE_ENGINE_GITHUB_TOKEN: ${{ github.token }}
         run: pnpm build
 
       - name: Run unit tests with coverage report
@@ -240,6 +246,7 @@ jobs:
       - name: Package application
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          PRISTINE_ENGINE_GITHUB_TOKEN: ${{ github.token }}
         run: pnpm run build:app && pnpm run prepare:package-app && pnpm exec electron-builder --projectDir .pristine-package/app ${{ matrix.builder_args }} --config electron-builder.yml --publish never
 
       - name: Run runtime performance comparison
@@ -248,7 +255,7 @@ jobs:
           $perfResultsDir = Join-Path $PWD 'perf-results'
           New-Item -ItemType Directory -Path $perfResultsDir -Force | Out-Null
           $consoleLogPath = Join-Path $perfResultsDir 'compare-perf-console.log'
-          & .\compare-perf-taskmgr.ps1 -DurationSeconds 30 -ThresholdPercent 10 -MemoryThresholdPercent 3 -PackagedCpuUtilityAverageCheckpointPercent 2 -ResultOutputDirectory $perfResultsDir *>&1 | Tee-Object -FilePath $consoleLogPath
+          & .\compare-perf-taskmgr.ps1 -DurationSeconds 30 -ThresholdPercent 10 -MemoryThresholdPercent 3 -PackagedCpuUtilityAverageCheckpointPercent 2 -DevCommand "pnpm exec electron ." -ResultOutputDirectory $perfResultsDir *>&1 | Tee-Object -FilePath $consoleLogPath
           if ($LASTEXITCODE -ne 0) {
             exit $LASTEXITCODE
           }
@@ -375,6 +382,7 @@ jobs:
       - name: Package application
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          PRISTINE_ENGINE_GITHUB_TOKEN: ${{ github.token }}
         run: pnpm run build:app && pnpm run prepare:package-app && pnpm exec electron-builder --projectDir .pristine-package/app ${{ matrix.builder_args }} --config electron-builder.yml --publish never
 
       - name: Upload package artifacts
@@ -404,6 +412,7 @@ jobs:
       - package-gate
     runs-on: ubuntu-24.04
     permissions:
+      actions: read
       contents: write
 
     steps:

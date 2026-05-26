@@ -48,9 +48,38 @@ test('release version tooling supports branch sync and tag verification', () => 
 
 test('GitHub release workflow is tag-gated and publishes staged package assets', () => {
   const workflow = fs.readFileSync(path.join(repoRoot, '.github', 'workflows', 'ci.yml'), 'utf8');
+  const prepareEngineScript = fs.readFileSync(path.join(repoRoot, 'scripts', 'prepare-pristine-engine.mjs'), 'utf8');
+  const engineRemoteSourceHelper = fs.readFileSync(path.join(repoRoot, 'scripts', 'pristine-engine-remote-source.mjs'), 'utf8');
   const hook = fs.readFileSync(path.join(repoRoot, '.githooks', 'pre-commit'), 'utf8');
 
   expect(workflow).toContain('refs/tags/v*');
+  expect(workflow).toMatch(/on:\r?\n  push:\r?\n  pull_request:\r?\n  workflow_dispatch:/);
+  expect(workflow).toContain('workflow_dispatch:');
+  expect(workflow).toContain('PRISTINE_ENGINE_REMOTE_SOURCE_MODE: auto');
+  expect(workflow).toContain('PRISTINE_ENGINE_ARTIFACT_BRANCH: main');
+  const buildStepTokenPattern = [
+    '- name: Build',
+    '\\s+env:',
+    '\\s+PRISTINE_ENGINE_GITHUB_TOKEN: \\$\\{\\{ github\\.token \\}\\}',
+    '\\s+run: pnpm build',
+  ].join('\\r?\\n');
+  const packageStepTokenPattern = [
+    '- name: Package application',
+    '\\s+env:',
+    "\\s+CSC_IDENTITY_AUTO_DISCOVERY: 'false'",
+    '\\s+PRISTINE_ENGINE_GITHUB_TOKEN: \\$\\{\\{ github\\.token \\}\\}',
+    '\\s+run: pnpm run build:app',
+  ].join('\\r?\\n');
+
+  expect(workflow).toMatch(new RegExp(buildStepTokenPattern));
+  expect(workflow.match(new RegExp(packageStepTokenPattern, 'g'))).toHaveLength(2);
+  expect(workflow).toMatch(/permissions:\r?\n  actions: read\r?\n  contents: read/);
+  expect(workflow).not.toContain('permissions: read-all');
+  expect(workflow).not.toMatch(/push:\r?\n\s+branches:/);
+  expect(workflow).not.toMatch(/push:[\s\S]*?\r?\n\s+tags:/);
+  expect(workflow).toContain('actions: read');
+  expect(workflow).toContain('-DevCommand "pnpm exec electron ."');
+  expect(workflow).not.toContain('-DevCommand "pnpm run dev"');
   expect(workflow).toContain('github-release:');
   expect(workflow).toContain('needs.package-gate.outputs.enabled');
   expect(workflow).toContain('node scripts/release-version.mjs check --ref "${GITHUB_REF}"');
@@ -60,5 +89,11 @@ test('GitHub release workflow is tag-gated and publishes staged package assets',
   expect(workflow).toContain('softprops/action-gh-release@v2');
   expect(workflow).toContain('generate_release_notes: true');
   expect(workflow).toContain('!release/**/*-unpacked/**');
+  expect(prepareEngineScript).toContain('resolveWorkflowArtifactDownload');
+  expect(prepareEngineScript).toContain('resolveReleaseDownload');
+  expect(prepareEngineScript).toContain('process.env.GITHUB_REF');
+  expect(engineRemoteSourceHelper).toContain("return isGitTagRef(ref) ? 'release' : 'artifact'");
+  expect(engineRemoteSourceHelper).toContain("const releaseRoute = releaseVersion ? `releases/tags/${releaseVersion}` : 'releases/latest'");
+  expect(engineRemoteSourceHelper).toContain("runsUrl.searchParams.set('branch', branch)");
   expect(hook).toContain('node scripts/release-version.mjs sync --ref "$BRANCH"');
 });

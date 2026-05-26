@@ -1975,7 +1975,7 @@ test('explorer opens a file into a new editor tab', async () => {
   await app.close();
 });
 
-test('systemverilog lsp smoke resolves a cross-file definition and symbol references', async () => {
+test('pristine-engine lsp smoke resolves a cross-file definition and symbol references', async () => {
   test.slow();
 
   const { app, window } = await launchApp();
@@ -2064,7 +2064,120 @@ test('systemverilog lsp smoke resolves a cross-file definition and symbol refere
   await app.close();
 });
 
-test('lsp bottom panel filters diagnostics and shows paired request responses', async () => {
+test('code view hierarchy renders module instantiations from pristine-engine', async () => {
+  test.slow();
+
+  const { app, window } = await launchApp();
+  const aluSource = [
+    'module alu;',
+    'endmodule',
+  ].join('\n');
+  const cpuTopSource = [
+    'module cpu_top;',
+    '  alu u_alu ();',
+    '  missing_block u_missing ();',
+    'endmodule',
+  ].join('\n');
+  const hierarchyAutoDocuments = Array.from({ length: 14 }, (_, index) => {
+    const moduleName = index === 0 ? 'z_hierarchy_auto_top' : `z_hierarchy_level_${String(index).padStart(2, '0')}`;
+    const childModuleName = index < 13 ? `z_hierarchy_level_${String(index + 1).padStart(2, '0')}` : null;
+    const source = childModuleName
+      ? [`module ${moduleName};`, `  ${childModuleName} u_${childModuleName} ();`, 'endmodule'].join('\n')
+      : [`module ${moduleName};`, 'endmodule'].join('\n');
+
+    return {
+      filePath: `rtl/core/${moduleName}.sv`,
+      source,
+    };
+  });
+  const hierarchyManualSource = [
+    'module a_hierarchy_manual_top;',
+    'endmodule',
+  ].join('\n');
+
+  await ensureExplorerVisible(window);
+  await openNestedWorkspaceFile(window, [
+    'file-tree-node-rtl',
+    'file-tree-node-rtl_core',
+    'file-tree-node-rtl_core_cpu_top_sv',
+  ]);
+
+  await expect(window.getByTestId('editor-tab-rtl/core/cpu_top.sv')).toBeVisible();
+  await waitForMonacoEditor(window);
+  await expect(window.locator('.monaco-editor .view-lines')).toContainText('alu u_alu', {
+    timeout: MONACO_READY_TIMEOUT_MS,
+  });
+
+  await window.evaluate(async ({ nextAluSource, nextCpuTopSource, nextHierarchyAutoDocuments, nextHierarchyManualSource }) => {
+    const browserGlobal = globalThis as typeof globalThis & {
+      electronAPI?: {
+        lsp: {
+          openDocument: (filePath: string, languageId: string, text: string) => Promise<void>;
+        };
+      };
+    };
+
+    await browserGlobal.electronAPI?.lsp.openDocument('rtl/core/alu.sv', 'systemverilog', nextAluSource);
+    await browserGlobal.electronAPI?.lsp.openDocument('rtl/core/cpu_top.sv', 'systemverilog', nextCpuTopSource);
+    for (const { filePath, source } of nextHierarchyAutoDocuments) {
+      await browserGlobal.electronAPI?.lsp.openDocument(filePath, 'systemverilog', source);
+    }
+    await browserGlobal.electronAPI?.lsp.openDocument('rtl/core/a_hierarchy_manual_top.sv', 'systemverilog', nextHierarchyManualSource);
+  }, {
+    nextAluSource: aluSource,
+    nextCpuTopSource: cpuTopSource,
+    nextHierarchyAutoDocuments: hierarchyAutoDocuments,
+    nextHierarchyManualSource: hierarchyManualSource,
+  });
+
+  await window.getByTestId('left-panel-split-toggle').click();
+  await expect(window.getByTestId('left-panel-secondary-panel')).toBeVisible();
+
+  const topNode = window.getByTestId('hierarchy-node-label-cpu_top-root');
+  const aluInstanceNode = window.getByTestId('hierarchy-node-label-alu-u_alu');
+  const rootLabels = window.locator('[data-testid^="hierarchy-node-label-"][data-testid$="-root"]');
+  const manualTopNode = window.getByTestId('hierarchy-node-label-a_hierarchy_manual_top-root');
+
+  await expect(topNode).toBeVisible({ timeout: 15000 });
+  await expect(window.getByLabel('Automatic top module')).toBeVisible();
+  await expect(manualTopNode).toBeVisible();
+
+  const initialRootNames = await rootLabels.allTextContents();
+  expect(initialRootNames).toContain('z_hierarchy_auto_top');
+  expect(initialRootNames).toContain('a_hierarchy_manual_top');
+  const manualTopModuleName = initialRootNames[0] === 'a_hierarchy_manual_top'
+    ? 'z_hierarchy_auto_top'
+    : 'a_hierarchy_manual_top';
+  const selectedManualTopNode = window.getByTestId(`hierarchy-node-label-${manualTopModuleName}-root`);
+
+  await selectedManualTopNode.click({ button: 'right' });
+  await expect(window.getByTestId('explorer-context-menu')).toBeVisible();
+  await window.getByRole('menuitem', { name: '手动设置顶层' }).click();
+  await expect(rootLabels.first()).toHaveText(manualTopModuleName);
+  await expect(selectedManualTopNode).toHaveClass(/font-semibold/);
+  await expect(window.getByLabel('Manual top module')).toBeVisible();
+
+  await expect(aluInstanceNode).toBeVisible();
+  await expect(aluInstanceNode).toHaveText('u_alu');
+  await expect(aluInstanceNode).not.toContainText(': alu');
+  await expect(window.getByLabel('Unresolved module missing_block')).toBeVisible();
+
+  await window.getByRole('button', { name: 'Collapse cpu_top' }).click();
+  await expect(aluInstanceNode).toHaveCount(0);
+  await window.getByRole('button', { name: 'Expand cpu_top' }).click();
+  await expect(aluInstanceNode).toBeVisible();
+
+  await aluInstanceNode.click();
+  await expect(window.getByTestId('editor-tab-rtl/core/alu.sv')).toBeVisible();
+  await waitForMonacoEditor(window);
+  await expect(window.locator('.monaco-editor .view-lines')).toContainText('module alu', {
+    timeout: MONACO_READY_TIMEOUT_MS,
+  });
+
+  await app.close();
+});
+
+test('pristine-engine lsp bottom panel filters diagnostics and shows paired request responses', async () => {
   test.slow();
 
   const { app, window } = await launchApp();
@@ -4660,7 +4773,10 @@ test('left panel split shows two stacked panels and keeps the explorer tree scro
     await expect(secondaryPanel).toHaveClass(/(?:^|\s)border(?:\s|$)/);
     await expect(secondaryPanel).toHaveClass(/(?:^|\s)bg-ide-bg(?:\s|$)/);
     await expect(window.getByTestId('left-panel-secondary-header')).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
-    await expect(window.getByTestId('left-panel-secondary-placeholder')).toContainText('Hierarchy is empty');
+    await expect.poll(async () => (
+      await window.getByTestId('hierarchy-tree').count()
+      + await window.getByTestId('left-panel-secondary-placeholder').count()
+    ), { timeout: UI_READY_TIMEOUT_MS }).toBeGreaterThan(0);
     await expect(splitHandle).toBeVisible();
     await expect(splitHandle).toHaveAttribute('aria-orientation', 'horizontal');
     await expect(splitHandle).toHaveClass(/(?:^|\s)overlay-handle(?:\s|$)/);

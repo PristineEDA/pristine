@@ -56,6 +56,7 @@ export const AsyncChannels = {
   LSP_HOVER: 'async:lsp:hover',
   LSP_DEFINITION: 'async:lsp:definition',
   LSP_REFERENCES: 'async:lsp:references',
+  LSP_MODULE_HIERARCHY: 'async:lsp:module-hierarchy',
   CONFIG_SET: 'async:config:set',
 } as const;
 
