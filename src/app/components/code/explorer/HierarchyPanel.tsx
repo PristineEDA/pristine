@@ -1,8 +1,9 @@
-import { memo, useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertCircle, Box, ChevronDown, ChevronRight, Loader2, RefreshCw } from 'lucide-react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
+import { AlertCircle, Box, ChevronDown, ChevronRight, CircleDot, Loader2, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getPathBaseName } from '../../../workspace/workspaceFiles';
 import type { LspModuleHierarchy, LspModuleHierarchyNode } from '../../../../../types/systemverilog-lsp';
+import { ExplorerContextMenu, createContextMenuItem, type ExplorerContextMenuEntry } from './FileTreeNodeContextMenu';
 
 interface HierarchyPanelProps {
   activeFileId: string;
@@ -14,6 +15,24 @@ interface HierarchyPanelProps {
 }
 
 type HierarchyLoadState = 'idle' | 'loading' | 'ready' | 'error';
+type HierarchyTopKind = 'auto' | 'manual';
+
+interface HierarchyRootEntry {
+  node: LspModuleHierarchyNode;
+  originalIndex: number;
+  rootKey: string;
+  levelCount: number;
+  totalNodeCount: number;
+  fileName: string;
+  definitionLine: number;
+  topKind?: HierarchyTopKind;
+}
+
+interface HierarchyContextMenuState {
+  rootKey: string;
+  x: number;
+  y: number;
+}
 
 const MODULE_HIERARCHY_MAX_DEPTH = 64;
 
@@ -63,6 +82,123 @@ function getNodeStatusTestId(nodeKey: string, status: 'unresolved' | 'cycle' | '
   return `hierarchy-node-status-${status}-${nodeKey}`;
 }
 
+function getNodeDefinitionLine(node: LspModuleHierarchyNode) {
+  const line = node.moduleSelectionRange?.start.line
+    ?? node.selectionRange?.start.line
+    ?? node.range?.start.line;
+
+  return typeof line === 'number' ? line : Number.MAX_SAFE_INTEGER;
+}
+
+function getHierarchyNodeLevelCount(node: LspModuleHierarchyNode): number {
+  if (node.children.length === 0) {
+    return 1;
+  }
+
+  return 1 + Math.max(...node.children.map(getHierarchyNodeLevelCount));
+}
+
+function getHierarchyNodeTotalCount(node: LspModuleHierarchyNode): number {
+  return 1 + node.children.reduce((totalCount, child) => totalCount + getHierarchyNodeTotalCount(child), 0);
+}
+
+function getHierarchyRootFileName(node: LspModuleHierarchyNode) {
+  const sourcePath = node.filePath ?? node.uri;
+  return sourcePath ? getPathBaseName(sourcePath) : '';
+}
+
+function getHierarchyRootKey(node: LspModuleHierarchyNode, originalIndex: number) {
+  const locationKey = node.filePath ?? node.uri ?? `root:${originalIndex}`;
+  const definitionLine = getNodeDefinitionLine(node);
+  const definitionKey = definitionLine === Number.MAX_SAFE_INTEGER ? 'line:unknown' : `line:${definitionLine}`;
+
+  return [node.moduleName, node.instanceName ?? 'root', locationKey, definitionKey].join('|');
+}
+
+function createHierarchyRootEntry(node: LspModuleHierarchyNode, originalIndex: number): HierarchyRootEntry {
+  return {
+    node,
+    originalIndex,
+    rootKey: getHierarchyRootKey(node, originalIndex),
+    levelCount: getHierarchyNodeLevelCount(node),
+    totalNodeCount: getHierarchyNodeTotalCount(node),
+    fileName: getHierarchyRootFileName(node),
+    definitionLine: getNodeDefinitionLine(node),
+  };
+}
+
+function compareRootFileNames(left: string, right: string) {
+  if (left && right) {
+    if (left < right) {
+      return -1;
+    }
+
+    if (left > right) {
+      return 1;
+    }
+
+    return 0;
+  }
+
+  if (left) {
+    return -1;
+  }
+
+  if (right) {
+    return 1;
+  }
+
+  return 0;
+}
+
+function compareHierarchyRootEntries(left: HierarchyRootEntry, right: HierarchyRootEntry) {
+  const levelDifference = right.levelCount - left.levelCount;
+  if (levelDifference !== 0) {
+    return levelDifference;
+  }
+
+  const nodeCountDifference = right.totalNodeCount - left.totalNodeCount;
+  if (nodeCountDifference !== 0) {
+    return nodeCountDifference;
+  }
+
+  const fileNameDifference = compareRootFileNames(left.fileName, right.fileName);
+  if (fileNameDifference !== 0) {
+    return fileNameDifference;
+  }
+
+  const definitionLineDifference = left.definitionLine - right.definitionLine;
+  if (definitionLineDifference !== 0) {
+    return definitionLineDifference;
+  }
+
+  return left.originalIndex - right.originalIndex;
+}
+
+function getOrderedHierarchyRoots(rootEntries: HierarchyRootEntry[], manualTopRootKey: string | null) {
+  const sortedEntries = [...rootEntries].sort(compareHierarchyRootEntries);
+
+  if (manualTopRootKey) {
+    const manualTopIndex = sortedEntries.findIndex((entry) => entry.rootKey === manualTopRootKey);
+    if (manualTopIndex !== -1) {
+      const manualTopEntry = sortedEntries[manualTopIndex];
+      if (manualTopEntry) {
+        return [
+          { ...manualTopEntry, topKind: 'manual' as const },
+          ...sortedEntries
+            .filter((_, index) => index !== manualTopIndex)
+            .map((entry) => ({ ...entry, topKind: undefined })),
+        ];
+      }
+    }
+  }
+
+  return sortedEntries.map((entry, index) => ({
+    ...entry,
+    topKind: index === 0 ? 'auto' as const : undefined,
+  }));
+}
+
 export function HierarchyPanel({
   activeFileId,
   isVisible,
@@ -75,6 +211,9 @@ export function HierarchyPanel({
   const [hierarchy, setHierarchy] = useState<LspModuleHierarchy>({ roots: [], messages: [] });
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(() => new Set());
+  const [manualTopRootKey, setManualTopRootKey] = useState<string | null>(null);
+  const [contextMenu, setContextMenu] = useState<HierarchyContextMenuState | null>(null);
+  const treeRef = useRef<HTMLDivElement | null>(null);
 
   const loadHierarchy = useCallback(async (abortSignal?: AbortSignal) => {
     if (workspaceAvailable === null) {
@@ -164,6 +303,60 @@ export function HierarchyPanel({
 
   const hasMessages = hierarchy.messages.length > 0;
   const activeModuleHint = useMemo(() => getPathBaseName(activeFileId), [activeFileId]);
+  const rootEntries = useMemo(() => hierarchy.roots.map(createHierarchyRootEntry), [hierarchy.roots]);
+  const orderedRoots = useMemo(() => getOrderedHierarchyRoots(rootEntries, manualTopRootKey), [manualTopRootKey, rootEntries]);
+
+  useEffect(() => {
+    if (!manualTopRootKey) {
+      return;
+    }
+
+    if (!rootEntries.some((entry) => entry.rootKey === manualTopRootKey)) {
+      setManualTopRootKey(null);
+    }
+  }, [manualTopRootKey, rootEntries]);
+
+  useEffect(() => {
+    if (!contextMenu) {
+      return;
+    }
+
+    if (!rootEntries.some((entry) => entry.rootKey === contextMenu.rootKey)) {
+      setContextMenu(null);
+    }
+  }, [contextMenu, rootEntries]);
+
+  const handleOpenRootContextMenu = useCallback((rootKey: string, event: ReactMouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    treeRef.current?.focus();
+    setContextMenu({
+      rootKey,
+      x: event.clientX,
+      y: event.clientY,
+    });
+  }, []);
+
+  const handleSetManualTopRoot = useCallback((rootKey: string) => {
+    setManualTopRootKey(rootKey);
+    setContextMenu(null);
+  }, []);
+
+  const contextMenuItems = useMemo<ExplorerContextMenuEntry[]>(() => {
+    if (!contextMenu) {
+      return [];
+    }
+
+    return [
+      createContextMenuItem({
+        label: '手动设置顶层',
+        action: () => handleSetManualTopRoot(contextMenu.rootKey),
+      }),
+    ];
+  }, [contextMenu, handleSetManualTopRoot]);
+
+  const handleRequestTreeFocus = useCallback(() => {
+    treeRef.current?.focus();
+  }, []);
 
   if (state === 'loading' || state === 'idle') {
     return (
@@ -219,19 +412,38 @@ export function HierarchyPanel({
           <RefreshCw className="size-3" aria-hidden="true" />
         </button>
       </div>
-      <div data-testid="hierarchy-tree" className="min-h-0 flex-1 overflow-auto py-1" role="tree" aria-label="Module hierarchy">
-        {hierarchy.roots.map((node, index) => (
+      <div
+        ref={treeRef}
+        data-testid="hierarchy-tree"
+        className="min-h-0 flex-1 overflow-auto py-1 outline-none"
+        role="tree"
+        aria-label="Module hierarchy"
+        tabIndex={0}
+      >
+        {orderedRoots.map(({ node, originalIndex, rootKey, topKind }) => (
           <HierarchyTreeNode
-            key={`${index}:${node.moduleName}`}
+            key={rootKey}
             depth={0}
             expandedKeys={expandedKeys}
             node={node}
-            pathSegments={[`${index}:${node.moduleName}`]}
+            pathSegments={[`${originalIndex}:${node.moduleName}`]}
+            rootKey={rootKey}
+            topKind={topKind}
             onOpenNode={handleOpenNode}
+            onRootContextMenu={handleOpenRootContextMenu}
             onToggleNode={handleToggleNode}
           />
         ))}
       </div>
+      {contextMenu && (
+        <ExplorerContextMenu
+          items={contextMenuItems}
+          onClose={() => setContextMenu(null)}
+          onRequestTreeFocus={handleRequestTreeFocus}
+          x={contextMenu.x}
+          y={contextMenu.y}
+        />
+      )}
     </div>
   );
 }
@@ -241,7 +453,10 @@ interface HierarchyTreeNodeProps {
   expandedKeys: Set<string>;
   node: LspModuleHierarchyNode;
   pathSegments: string[];
+  rootKey?: string;
+  topKind?: HierarchyTopKind;
   onOpenNode: (node: LspModuleHierarchyNode) => void;
+  onRootContextMenu?: (rootKey: string, event: ReactMouseEvent<HTMLDivElement>) => void;
   onToggleNode: (nodeKey: string) => void;
 }
 
@@ -250,7 +465,10 @@ const HierarchyTreeNode = memo(function HierarchyTreeNode({
   expandedKeys,
   node,
   pathSegments,
+  rootKey,
+  topKind,
   onOpenNode,
+  onRootContextMenu,
   onToggleNode,
 }: HierarchyTreeNodeProps) {
   const nodeKey = getNodePathKey(pathSegments);
@@ -262,6 +480,15 @@ const HierarchyTreeNode = memo(function HierarchyTreeNode({
   const title = getNodeTitle(node);
   const statusLabel = node.cycle ? 'cycle' : node.truncated ? 'truncated' : null;
   const unresolvedStatusLabel = `Unresolved module ${node.moduleName}`;
+  const topLabel = topKind === 'manual' ? 'Manual top module' : topKind === 'auto' ? 'Automatic top module' : null;
+
+  const handleContextMenu = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
+    if (!rootKey) {
+      return;
+    }
+
+    onRootContextMenu?.(rootKey, event);
+  }, [onRootContextMenu, rootKey]);
 
   return (
     <div role="none">
@@ -271,6 +498,7 @@ const HierarchyTreeNode = memo(function HierarchyTreeNode({
         style={{ paddingLeft: depth * 12 + 4 }}
         role="treeitem"
         aria-expanded={hasChildren ? expanded : undefined}
+        onContextMenu={depth === 0 ? handleContextMenu : undefined}
       >
         {hasChildren ? (
           <button
@@ -303,11 +531,24 @@ const HierarchyTreeNode = memo(function HierarchyTreeNode({
           )}
         </span>
 
+        {topLabel && (
+          <span
+            data-testid={`hierarchy-node-top-indicator-${nodeKey}`}
+            className="flex h-4 w-4 shrink-0 items-center justify-center text-ide-accent"
+            aria-label={topLabel}
+            title={topLabel}
+            role="img"
+          >
+            <CircleDot className="h-3.5 w-3.5" aria-hidden="true" />
+          </span>
+        )}
+
         <button
           type="button"
           data-testid={`hierarchy-node-label-${sanitizeTestIdPart(node.moduleName)}-${sanitizeTestIdPart(node.instanceName ?? 'root')}`}
           className={cn(
             'ml-1 flex min-w-0 flex-1 items-center text-left text-[13px] font-normal',
+            topKind && 'font-semibold',
             canNavigate ? 'cursor-pointer hover:text-ide-accent' : 'cursor-default',
           )}
           disabled={!canNavigate}
@@ -343,6 +584,7 @@ const HierarchyTreeNode = memo(function HierarchyTreeNode({
           node={child}
           pathSegments={[...pathSegments, `${index}:${child.instanceName ?? child.moduleName}`]}
           onOpenNode={onOpenNode}
+          onRootContextMenu={onRootContextMenu}
           onToggleNode={onToggleNode}
         />
       ))}

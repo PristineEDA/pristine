@@ -78,6 +78,8 @@ test('GitHub release workflow is tag-gated and publishes staged package assets',
   expect(workflow).not.toMatch(/push:\r?\n\s+branches:/);
   expect(workflow).not.toMatch(/push:[\s\S]*?\r?\n\s+tags:/);
   expect(workflow).toContain('actions: read');
+  expect(workflow).toContain('-DevCommand "pnpm exec electron ."');
+  expect(workflow).not.toContain('-DevCommand "pnpm run dev"');
   expect(workflow).toContain('github-release:');
   expect(workflow).toContain('needs.package-gate.outputs.enabled');
   expect(workflow).toContain('node scripts/release-version.mjs check --ref "${GITHUB_REF}"');

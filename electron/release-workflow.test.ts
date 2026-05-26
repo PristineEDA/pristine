@@ -151,6 +151,15 @@ describe('release workflow contract', () => {
     expect(engineRemoteSourceHelper).toContain("runsUrl.searchParams.set('status', 'success')")
   })
 
+  it('runs CI runtime perf against the built Electron dev app and packaged app', () => {
+    const workflow = fs.readFileSync(workflowPath, 'utf8')
+
+    expect(workflow).toContain('Run runtime performance comparison')
+    expect(workflow).toContain('-DevCommand "pnpm exec electron ."')
+    expect(workflow).toContain('pnpm run build:app && pnpm run prepare:package-app')
+    expect(workflow).not.toContain('-DevCommand "pnpm run dev"')
+  })
+
   it('filters uploaded package artifacts to distributable release files', () => {
     const workflow = fs.readFileSync(workflowPath, 'utf8')
 

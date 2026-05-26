@@ -2078,6 +2078,22 @@ test('code view hierarchy renders module instantiations from pristine-engine', a
     '  missing_block u_missing ();',
     'endmodule',
   ].join('\n');
+  const hierarchyAutoDocuments = Array.from({ length: 14 }, (_, index) => {
+    const moduleName = index === 0 ? 'z_hierarchy_auto_top' : `z_hierarchy_level_${String(index).padStart(2, '0')}`;
+    const childModuleName = index < 13 ? `z_hierarchy_level_${String(index + 1).padStart(2, '0')}` : null;
+    const source = childModuleName
+      ? [`module ${moduleName};`, `  ${childModuleName} u_${childModuleName} ();`, 'endmodule'].join('\n')
+      : [`module ${moduleName};`, 'endmodule'].join('\n');
+
+    return {
+      filePath: `rtl/core/${moduleName}.sv`,
+      source,
+    };
+  });
+  const hierarchyManualSource = [
+    'module a_hierarchy_manual_top;',
+    'endmodule',
+  ].join('\n');
 
   await ensureExplorerVisible(window);
   await openNestedWorkspaceFile(window, [
@@ -2092,7 +2108,7 @@ test('code view hierarchy renders module instantiations from pristine-engine', a
     timeout: MONACO_READY_TIMEOUT_MS,
   });
 
-  await window.evaluate(async ({ nextAluSource, nextCpuTopSource }) => {
+  await window.evaluate(async ({ nextAluSource, nextCpuTopSource, nextHierarchyAutoDocuments, nextHierarchyManualSource }) => {
     const browserGlobal = globalThis as typeof globalThis & {
       electronAPI?: {
         lsp: {
@@ -2103,9 +2119,15 @@ test('code view hierarchy renders module instantiations from pristine-engine', a
 
     await browserGlobal.electronAPI?.lsp.openDocument('rtl/core/alu.sv', 'systemverilog', nextAluSource);
     await browserGlobal.electronAPI?.lsp.openDocument('rtl/core/cpu_top.sv', 'systemverilog', nextCpuTopSource);
+    for (const { filePath, source } of nextHierarchyAutoDocuments) {
+      await browserGlobal.electronAPI?.lsp.openDocument(filePath, 'systemverilog', source);
+    }
+    await browserGlobal.electronAPI?.lsp.openDocument('rtl/core/a_hierarchy_manual_top.sv', 'systemverilog', nextHierarchyManualSource);
   }, {
     nextAluSource: aluSource,
     nextCpuTopSource: cpuTopSource,
+    nextHierarchyAutoDocuments: hierarchyAutoDocuments,
+    nextHierarchyManualSource: hierarchyManualSource,
   });
 
   await window.getByTestId('left-panel-split-toggle').click();
@@ -2113,13 +2135,31 @@ test('code view hierarchy renders module instantiations from pristine-engine', a
 
   const topNode = window.getByTestId('hierarchy-node-label-cpu_top-root');
   const aluInstanceNode = window.getByTestId('hierarchy-node-label-alu-u_alu');
-  const unresolvedNodeIcon = window.getByTestId('hierarchy-node-status-unresolved-0_cpu_top__1_u_missing');
+  const rootLabels = window.locator('[data-testid^="hierarchy-node-label-"][data-testid$="-root"]');
+  const manualTopNode = window.getByTestId('hierarchy-node-label-a_hierarchy_manual_top-root');
 
   await expect(topNode).toBeVisible({ timeout: 15000 });
+  await expect(window.getByLabel('Automatic top module')).toBeVisible();
+  await expect(manualTopNode).toBeVisible();
+
+  const initialRootNames = await rootLabels.allTextContents();
+  expect(initialRootNames).toContain('z_hierarchy_auto_top');
+  expect(initialRootNames).toContain('a_hierarchy_manual_top');
+  const manualTopModuleName = initialRootNames[0] === 'a_hierarchy_manual_top'
+    ? 'z_hierarchy_auto_top'
+    : 'a_hierarchy_manual_top';
+  const selectedManualTopNode = window.getByTestId(`hierarchy-node-label-${manualTopModuleName}-root`);
+
+  await selectedManualTopNode.click({ button: 'right' });
+  await expect(window.getByTestId('explorer-context-menu')).toBeVisible();
+  await window.getByRole('menuitem', { name: '手动设置顶层' }).click();
+  await expect(rootLabels.first()).toHaveText(manualTopModuleName);
+  await expect(selectedManualTopNode).toHaveClass(/font-semibold/);
+  await expect(window.getByLabel('Manual top module')).toBeVisible();
+
   await expect(aluInstanceNode).toBeVisible();
   await expect(aluInstanceNode).toHaveText('u_alu');
   await expect(aluInstanceNode).not.toContainText(': alu');
-  await expect(unresolvedNodeIcon).toBeVisible();
   await expect(window.getByLabel('Unresolved module missing_block')).toBeVisible();
 
   await window.getByRole('button', { name: 'Collapse cpu_top' }).click();
