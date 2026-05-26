@@ -68,8 +68,11 @@ describe('HierarchyPanel', () => {
     expect(await screen.findByTestId('hierarchy-tree')).toBeInTheDocument();
     expect(window.electronAPI!.lsp.moduleHierarchy).toHaveBeenCalledWith({ maxDepth: 64 });
     expect(screen.getByTestId('hierarchy-node-label-cpu_top-root')).toHaveTextContent('cpu_top');
-    expect(screen.getByTestId('hierarchy-node-label-alu-u_alu')).toHaveTextContent('u_alu : alu');
-    expect(screen.getByText('unresolved')).toBeInTheDocument();
+    expect(screen.getByTestId('hierarchy-node-label-cpu_top-root')).toHaveClass('ml-1', 'flex', 'items-center', 'text-[13px]');
+    expect(screen.getByTestId('hierarchy-node-label-alu-u_alu')).toHaveTextContent(/^u_alu$/);
+    expect(screen.getByTestId('hierarchy-node-status-unresolved-0_cpu_top__1_u_missing')).toBeInTheDocument();
+    expect(screen.getByLabelText('Unresolved module missing_block')).toBeInTheDocument();
+    expect(screen.queryByText('unresolved')).not.toBeInTheDocument();
   });
 
   it('expands nodes and opens resolved modules at their source line', async () => {
@@ -81,7 +84,7 @@ describe('HierarchyPanel', () => {
     await screen.findByTestId('hierarchy-node-label-alu-u_alu');
     expect(screen.queryByTestId('hierarchy-node-label-leaf-u_leaf')).not.toBeInTheDocument();
 
-    await testUser.click(screen.getByRole('button', { name: 'Expand u_alu : alu' }));
+    await testUser.click(screen.getByRole('button', { name: 'Expand u_alu' }));
     expect(screen.getByTestId('hierarchy-node-label-leaf-u_leaf')).toBeInTheDocument();
 
     await testUser.click(screen.getByTestId('hierarchy-node-label-alu-u_alu'));

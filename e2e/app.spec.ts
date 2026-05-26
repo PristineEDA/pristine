@@ -2068,6 +2068,16 @@ test('code view hierarchy renders module instantiations from pristine-engine', a
   test.slow();
 
   const { app, window } = await launchApp();
+  const aluSource = [
+    'module alu;',
+    'endmodule',
+  ].join('\n');
+  const cpuTopSource = [
+    'module cpu_top;',
+    '  alu u_alu ();',
+    '  missing_block u_missing ();',
+    'endmodule',
+  ].join('\n');
 
   await ensureExplorerVisible(window);
   await openNestedWorkspaceFile(window, [
@@ -2082,15 +2092,35 @@ test('code view hierarchy renders module instantiations from pristine-engine', a
     timeout: MONACO_READY_TIMEOUT_MS,
   });
 
+  await window.evaluate(async ({ nextAluSource, nextCpuTopSource }) => {
+    const browserGlobal = globalThis as typeof globalThis & {
+      electronAPI?: {
+        lsp: {
+          openDocument: (filePath: string, languageId: string, text: string) => Promise<void>;
+        };
+      };
+    };
+
+    await browserGlobal.electronAPI?.lsp.openDocument('rtl/core/alu.sv', 'systemverilog', nextAluSource);
+    await browserGlobal.electronAPI?.lsp.openDocument('rtl/core/cpu_top.sv', 'systemverilog', nextCpuTopSource);
+  }, {
+    nextAluSource: aluSource,
+    nextCpuTopSource: cpuTopSource,
+  });
+
   await window.getByTestId('left-panel-split-toggle').click();
   await expect(window.getByTestId('left-panel-secondary-panel')).toBeVisible();
 
   const topNode = window.getByTestId('hierarchy-node-label-cpu_top-root');
   const aluInstanceNode = window.getByTestId('hierarchy-node-label-alu-u_alu');
+  const unresolvedNodeIcon = window.getByTestId('hierarchy-node-status-unresolved-0_cpu_top__1_u_missing');
 
   await expect(topNode).toBeVisible({ timeout: 15000 });
   await expect(aluInstanceNode).toBeVisible();
-  await expect(aluInstanceNode).toHaveText(/u_alu\s*:\s*alu/);
+  await expect(aluInstanceNode).toHaveText('u_alu');
+  await expect(aluInstanceNode).not.toContainText(': alu');
+  await expect(unresolvedNodeIcon).toBeVisible();
+  await expect(window.getByLabel('Unresolved module missing_block')).toBeVisible();
 
   await window.getByRole('button', { name: 'Collapse cpu_top' }).click();
   await expect(aluInstanceNode).toHaveCount(0);

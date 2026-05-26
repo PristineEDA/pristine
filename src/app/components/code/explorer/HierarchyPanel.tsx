@@ -26,7 +26,12 @@ function getNodePathKey(pathSegments: string[]) {
 }
 
 function getNodeLabel(node: LspModuleHierarchyNode) {
-  return node.instanceName ? `${node.instanceName} : ${node.moduleName}` : node.moduleName;
+  return node.instanceName ?? node.moduleName;
+}
+
+function getNodeTitle(node: LspModuleHierarchyNode) {
+  const label = getNodeLabel(node);
+  return node.instanceName ? `${label} (${node.moduleName})` : label;
 }
 
 function getNodeLine(node: LspModuleHierarchyNode) {
@@ -52,6 +57,10 @@ function getDefaultExpandedKeys(nodes: LspModuleHierarchyNode[]) {
 
 function isNavigationEnabled(node: LspModuleHierarchyNode) {
   return Boolean(node.filePath && !node.unresolved);
+}
+
+function getNodeStatusTestId(nodeKey: string, status: 'unresolved' | 'cycle' | 'truncated') {
+  return `hierarchy-node-status-${status}-${nodeKey}`;
 }
 
 export function HierarchyPanel({
@@ -250,56 +259,66 @@ const HierarchyTreeNode = memo(function HierarchyTreeNode({
   const line = getNodeLine(node);
   const canNavigate = isNavigationEnabled(node);
   const label = getNodeLabel(node);
-  const statusLabel = node.unresolved ? 'unresolved' : node.cycle ? 'cycle' : node.truncated ? 'truncated' : null;
+  const title = getNodeTitle(node);
+  const statusLabel = node.cycle ? 'cycle' : node.truncated ? 'truncated' : null;
+  const unresolvedStatusLabel = `Unresolved module ${node.moduleName}`;
 
   return (
     <div role="none">
       <div
         data-testid={`hierarchy-node-${nodeKey}`}
-        className={cn(
-          'group flex h-6 min-w-0 items-center gap-1 pr-2 text-[12px] text-ide-text hover:bg-ide-hover',
-          node.unresolved && 'text-ide-text-muted',
-        )}
-        style={{ paddingLeft: depth * 12 + 6 }}
+        className="group flex h-6 min-w-0 items-center gap-1 pr-2 text-ide-text hover:bg-ide-hover"
+        style={{ paddingLeft: depth * 12 + 4 }}
         role="treeitem"
         aria-expanded={hasChildren ? expanded : undefined}
       >
         {hasChildren ? (
           <button
             type="button"
-            className="inline-flex h-5 w-4 shrink-0 items-center justify-center text-ide-text-muted hover:text-ide-text"
+            className="inline-flex shrink-0 items-center justify-center text-ide-text-muted hover:text-ide-text"
             aria-label={`${expanded ? 'Collapse' : 'Expand'} ${label}`}
             title={`${expanded ? 'Collapse' : 'Expand'} ${label}`}
             onClick={() => onToggleNode(nodeKey)}
           >
-            {expanded ? <ChevronDown className="size-3" aria-hidden="true" /> : <ChevronRight className="size-3" aria-hidden="true" />}
+            {expanded ? <ChevronDown size={13} aria-hidden="true" /> : <ChevronRight size={13} aria-hidden="true" />}
           </button>
         ) : (
-          <span className="h-5 w-4 shrink-0" aria-hidden="true" />
+          <span className="w-3.5 shrink-0" aria-hidden="true" />
         )}
 
-        <span className="flex h-4 w-4 shrink-0 items-center justify-center">
-          <Box className={cn('size-3 text-ide-syntax-keyword', node.unresolved && 'text-ide-text-muted')} aria-hidden="true" />
+        <span
+          data-testid={node.unresolved ? getNodeStatusTestId(nodeKey, 'unresolved') : undefined}
+          className={cn(
+            'flex h-4 w-4 shrink-0 items-center justify-center',
+            node.unresolved ? 'text-ide-error' : 'text-ide-syntax-keyword',
+          )}
+          aria-label={node.unresolved ? unresolvedStatusLabel : undefined}
+          title={node.unresolved ? unresolvedStatusLabel : undefined}
+          role={node.unresolved ? 'img' : undefined}
+        >
+          {node.unresolved ? (
+            <AlertCircle className="h-3.5 w-3.5" aria-hidden="true" />
+          ) : (
+            <Box className="h-4 w-4" aria-hidden="true" />
+          )}
         </span>
 
         <button
           type="button"
           data-testid={`hierarchy-node-label-${sanitizeTestIdPart(node.moduleName)}-${sanitizeTestIdPart(node.instanceName ?? 'root')}`}
           className={cn(
-            'min-w-0 flex-1 truncate text-left',
+            'ml-1 flex min-w-0 flex-1 items-center text-left text-[13px] font-normal',
             canNavigate ? 'cursor-pointer hover:text-ide-accent' : 'cursor-default',
           )}
           disabled={!canNavigate}
-          title={canNavigate && node.filePath ? `${label} - ${node.filePath}` : label}
+          title={canNavigate && node.filePath ? `${title} - ${node.filePath}` : title}
           onClick={() => onOpenNode(node)}
         >
-          {node.instanceName && <span className="text-ide-text-muted">{node.instanceName}</span>}
-          {node.instanceName && <span className="text-ide-text-muted"> : </span>}
-          <span>{node.moduleName}</span>
+          <span className="min-w-0 truncate">{label}</span>
         </button>
 
         {statusLabel && (
-          <span className="shrink-0 text-[10px] text-ide-text-muted">{statusLabel}</span>
+          <span data-testid={getNodeStatusTestId(nodeKey, statusLabel)} className="shrink-0 text-[10px] text-ide-text-muted">{statusLabel}</span>
         )}
 
         {line !== null && (
