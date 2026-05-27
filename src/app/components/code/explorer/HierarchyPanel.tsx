@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import { AlertCircle, Box, ChevronDown, ChevronRight, ListTree, Loader2, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useModuleHierarchy, type ModuleHierarchyTop } from '../../../context/ModuleHierarchyContext';
 import { getPathBaseName } from '../../../workspace/workspaceFiles';
 import type { LspModuleHierarchy, LspModuleHierarchyNode } from '../../../../../types/systemverilog-lsp';
 import { ExplorerContextMenu, createContextMenuItem, type ExplorerContextMenuEntry } from './FileTreeNodeContextMenu';
@@ -214,6 +215,7 @@ export function HierarchyPanel({
   const [manualTopRootKey, setManualTopRootKey] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<HierarchyContextMenuState | null>(null);
   const treeRef = useRef<HTMLDivElement | null>(null);
+  const { setTop: setHierarchyTop } = useModuleHierarchy();
 
   const loadHierarchy = useCallback(async (abortSignal?: AbortSignal) => {
     if (workspaceAvailable === null) {
@@ -305,6 +307,26 @@ export function HierarchyPanel({
   const activeModuleHint = useMemo(() => getPathBaseName(activeFileId), [activeFileId]);
   const rootEntries = useMemo(() => hierarchy.roots.map(createHierarchyRootEntry), [hierarchy.roots]);
   const orderedRoots = useMemo(() => getOrderedHierarchyRoots(rootEntries, manualTopRootKey), [manualTopRootKey, rootEntries]);
+  const activeHierarchyTop = useMemo<ModuleHierarchyTop | null>(() => {
+    const entry = orderedRoots[0];
+
+    if (!entry) {
+      return null;
+    }
+
+    return {
+      rootKey: entry.rootKey,
+      moduleName: entry.node.moduleName,
+      instanceName: entry.node.instanceName,
+      filePath: entry.node.filePath,
+      uri: entry.node.uri,
+      kind: entry.topKind ?? 'auto',
+    };
+  }, [orderedRoots]);
+
+  useEffect(() => {
+    setHierarchyTop(activeHierarchyTop);
+  }, [activeHierarchyTop, setHierarchyTop]);
 
   useEffect(() => {
     if (!manualTopRootKey) {

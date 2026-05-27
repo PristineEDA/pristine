@@ -12,6 +12,7 @@ export interface AsicInstance {
   name: string;
   moduleId: string;
   role: string;
+  cellKind?: string;
 }
 
 export interface AsicNetEndpoint {
@@ -57,6 +58,7 @@ export interface SchematicNodeLayout {
   label: string;
   subtitle: string;
   kind: 'module' | 'port';
+  cellKind?: string;
   instanceId?: string;
   moduleId?: string;
   x: number;

@@ -146,6 +146,47 @@ function createFakeConnection(): FakeConnection {
         };
       }
 
+      if (method === 'systemverilog/schematic') {
+        return {
+          rootModuleId: 'cpu_top',
+          modules: [{
+            id: 'cpu_top',
+            name: 'cpu_top',
+            uri: 'file:///C:/workspace/Pristine/rtl/core/cpu_top.sv',
+            range: {
+              start: { line: 0, character: 0 },
+              end: { line: 8, character: 9 },
+            },
+            selectionRange: {
+              start: { line: 0, character: 7 },
+              end: { line: 0, character: 14 },
+            },
+            ports: [{
+              name: 'clk',
+              direction: 'input',
+              widthText: '',
+            }, {
+              name: 'y',
+              direction: 'output',
+              widthText: '[7:0]',
+            }],
+            cells: [{
+              id: 'u_and',
+              name: 'u_and',
+              type: 'and',
+              kind: 'and',
+              connections: [{ portName: 'Y', portIndex: 0, signal: 'y' }],
+            }],
+            nets: [{
+              name: 'y',
+              drivers: [{ nodeId: 'u_and', portName: 'Y' }],
+              loads: [{ nodeId: '$port:y', portName: 'y' }],
+            }],
+          }],
+          messages: ['ok'],
+        };
+      }
+
       return null;
     }),
     sendNotification: vi.fn(async () => undefined),
@@ -390,6 +431,64 @@ describe('LSP IPC handlers', () => {
       direction: 'client->server',
       kind: 'request',
       method: 'systemverilog/moduleHierarchy',
+    }));
+  });
+
+  it('forwards and normalizes schematic results', async () => {
+    const schematicHandler = getHandler('async:lsp:schematic');
+
+    const schematic = await schematicHandler({}, { moduleName: 'cpu_top', maxDepth: 8 });
+
+    expect(fakeConnection.sendRequest).toHaveBeenCalledWith('systemverilog/schematic', { moduleName: 'cpu_top', maxDepth: 8 });
+    expect(schematic).toEqual({
+      rootModuleId: 'cpu_top',
+      modules: [{
+        id: 'cpu_top',
+        name: 'cpu_top',
+        uri: 'file:///C:/workspace/Pristine/rtl/core/cpu_top.sv',
+        filePath: 'rtl/core/cpu_top.sv',
+        range: {
+          start: { line: 0, character: 0 },
+          end: { line: 8, character: 9 },
+        },
+        selectionRange: {
+          start: { line: 0, character: 7 },
+          end: { line: 0, character: 14 },
+        },
+        ports: [{
+          name: 'clk',
+          direction: 'input',
+          widthText: '',
+          range: undefined,
+          selectionRange: undefined,
+        }, {
+          name: 'y',
+          direction: 'output',
+          widthText: '[7:0]',
+          range: undefined,
+          selectionRange: undefined,
+        }],
+        cells: [{
+          id: 'u_and',
+          name: 'u_and',
+          type: 'and',
+          kind: 'and',
+          range: undefined,
+          selectionRange: undefined,
+          connections: [{ portName: 'Y', portIndex: 0, signal: 'y', range: undefined }],
+        }],
+        nets: [{
+          name: 'y',
+          drivers: [{ nodeId: 'u_and', portName: 'Y' }],
+          loads: [{ nodeId: '$port:y', portName: 'y' }],
+        }],
+      }],
+      messages: ['ok'],
+    });
+    expect(send).toHaveBeenCalledWith('stream:lsp:debug', expect.objectContaining({
+      direction: 'client->server',
+      kind: 'request',
+      method: 'systemverilog/schematic',
     }));
   });
 });

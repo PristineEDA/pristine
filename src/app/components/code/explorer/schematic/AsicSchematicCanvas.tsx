@@ -140,6 +140,7 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
   const firstDrillableNode = useMemo(() => moduleNodes.find((node) => node.canDrillDown && node.moduleId) ?? null, [moduleNodes]);
   const moduleNodeSnapshot = useMemo(() => JSON.stringify(moduleNodes.map((node) => ({
     id: node.id,
+    cellKind: node.cellKind ?? 'module',
     x: roundLayoutCoordinate(node.x),
     y: roundLayoutCoordinate(node.y),
     width: roundLayoutCoordinate(node.width),
@@ -148,6 +149,25 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
     centerY: roundLayoutCoordinate(node.y + node.height / 2),
     canDrillDown: node.canDrillDown,
   }))), [moduleNodes]);
+  const logicNodeSnapshot = useMemo(() => JSON.stringify(moduleNodes
+    .filter((node) => node.cellKind && node.cellKind !== 'module')
+    .map((node) => ({
+      id: node.id,
+      name: node.label,
+      type: node.subtitle,
+      cellKind: node.cellKind,
+      centerX: roundLayoutCoordinate(node.x + node.width / 2),
+      centerY: roundLayoutCoordinate(node.y + node.height / 2),
+    }))), [moduleNodes]);
+  const portNodeSnapshot = useMemo(() => JSON.stringify(layout.nodes
+    .filter((node) => node.kind === 'port')
+    .map((node) => ({
+      id: node.id,
+      name: node.label,
+      direction: node.ports[0]?.direction ?? 'inout',
+      centerX: roundLayoutCoordinate(node.x + node.width / 2),
+      centerY: roundLayoutCoordinate(node.y + node.height / 2),
+    }))), [layout.nodes]);
   const firstSelectableEdge = useMemo(() => layout.edges.find((edge) => edge.points.length > 1) ?? null, [layout.edges]);
   const firstSignalEdge = useMemo(() => layout.edges.find((edge) => !edge.isBus && edge.points.length > 1) ?? null, [layout.edges]);
   const firstBusEdge = useMemo(() => layout.edges.find((edge) => edge.isBus && edge.points.length > 1) ?? null, [layout.edges]);
@@ -409,6 +429,7 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
 
     const handlePointerMove = (event: PointerEvent) => {
       if (!dragState || dragState.pointerId !== event.pointerId) {
+        setHoveredNodeDataAttributes(findSchematicNodeAt({ x: event.clientX, y: event.clientY }, canvas));
         return;
       }
 
@@ -448,6 +469,7 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
           sceneRef.current?.nodeContainers.get(nodeId)?.position.set(position.x, position.y);
         });
         sceneRef.current?.updateSelection(dragState.nodeIds, nextPositions);
+        sceneRef.current?.updateDragFocus(dragState.nodeIds);
         updateAlignmentGuidesForDrag(dragState.nodeIds, nextPositions);
         setActiveDragDataAttributes(dragState.nodeIds, nextPositions);
         requestRender();
@@ -502,6 +524,7 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
           applyClickSelection(dragState.nodeIds[0] ?? null, dragState.additive);
         }
         clearAlignmentGuides();
+        sceneRef.current?.updateDragFocus(null);
         clearActiveDragDataAttributes();
         canvas.style.cursor = '';
       }
@@ -571,6 +594,7 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
 
     const handleMouseLeave = () => {
       canvasHovered = false;
+      clearHoveredNodeDataAttributes();
       updateKeyboardActiveAttribute();
     };
 
@@ -638,6 +662,12 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
   }
 
   function findDraggableNodeAt(clientPoint: ScreenPoint, canvas: HTMLCanvasElement): SchematicNodeLayout | null {
+    const node = findSchematicNodeAt(clientPoint, canvas);
+
+    return node?.kind === 'module' ? node : null;
+  }
+
+  function findSchematicNodeAt(clientPoint: ScreenPoint, canvas: HTMLCanvasElement): SchematicNodeLayout | null {
     const canvasRect = canvas.getBoundingClientRect();
     const worldPoint = screenToWorld({
       x: clientPoint.x - canvasRect.left,
@@ -649,10 +679,6 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
       const node = nodes[index];
 
       if (!node) {
-        continue;
-      }
-
-      if (node.kind !== 'module') {
         continue;
       }
 
@@ -861,6 +887,7 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
     host.setAttribute('data-active-drag-node-ids', nodeIds.join(','));
     host.setAttribute('data-active-drag-node-x', firstPosition.x.toFixed(1));
     host.setAttribute('data-active-drag-node-y', firstPosition.y.toFixed(1));
+    host.setAttribute('data-active-drag-hidden-edge-count', String(countConnectedEdges(nodeIds)));
   }
 
   function setLastDragDataAttributes(nodeIds: readonly string[], positions: SchematicNodePositionOverrides) {
@@ -894,6 +921,47 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
     host.removeAttribute('data-active-drag-node-ids');
     host.removeAttribute('data-active-drag-node-x');
     host.removeAttribute('data-active-drag-node-y');
+    host.removeAttribute('data-active-drag-hidden-edge-count');
+  }
+
+  function setHoveredNodeDataAttributes(node: SchematicNodeLayout | null) {
+    const host = hostRef.current;
+
+    if (!host) {
+      return;
+    }
+
+    if (!node) {
+      clearHoveredNodeDataAttributes();
+      return;
+    }
+
+    host.setAttribute('data-hover-node-id', node.id);
+    host.setAttribute('data-hover-node-label', `name:${node.label}`);
+    host.setAttribute('data-hover-node-type', `type:${node.subtitle}`);
+  }
+
+  function clearHoveredNodeDataAttributes() {
+    const host = hostRef.current;
+
+    if (!host) {
+      return;
+    }
+
+    host.removeAttribute('data-hover-node-id');
+    host.removeAttribute('data-hover-node-label');
+    host.removeAttribute('data-hover-node-type');
+  }
+
+  function countConnectedEdges(nodeIds: readonly string[]) {
+    const selectedNodeIds = new Set(nodeIds);
+
+    return layoutRef.current.edges.filter((edge) => {
+      const fromNodeId = edge.from.instanceId ?? `io:${edge.from.portId}`;
+      const toNodeId = edge.to.instanceId ?? `io:${edge.to.portId}`;
+
+      return selectedNodeIds.has(fromNodeId) || selectedNodeIds.has(toNodeId);
+    }).length;
   }
 
   function updateAlignmentGuidesForDrag(nodeIds: readonly string[], positions: SchematicNodePositionOverrides) {
@@ -1050,6 +1118,8 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
       data-selected-edge-highlight-color={selectedEdgeHighlightColor}
       data-marquee-active="false"
       data-module-node-snapshot={moduleNodeSnapshot}
+      data-logic-node-snapshot={logicNodeSnapshot}
+      data-port-node-snapshot={portNodeSnapshot}
       data-edge-route-snapshot={edgeRouteSnapshot}
       data-first-edge-id={firstSelectableEdge?.id}
       data-first-edge-center-x={firstSelectableEdgePoint ? firstSelectableEdgePoint.x.toFixed(1) : undefined}

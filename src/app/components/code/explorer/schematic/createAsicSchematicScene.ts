@@ -21,6 +21,7 @@ export interface AsicSchematicScene {
   updateGrid: (camera: SchematicCameraState, viewport: SchematicViewport, options?: SchematicGridOptions) => SchematicGridState;
   updateSelection: (selectedNodeIds: readonly string[], positions?: Record<string, { x: number; y: number } | undefined>) => void;
   updateEdgeSelection: (selectedEdgeIds: readonly string[]) => void;
+  updateDragFocus: (nodeIds: readonly string[] | null) => void;
   updateMarquee: (rect: SchematicWorldRect | null) => void;
   updateWires: (edges: readonly SchematicEdgeLayout[]) => void;
   updateZoom: (zoom: number) => SchematicTextZoomState;
@@ -94,18 +95,28 @@ export function createAsicSchematicScene({
   const textNodes: BitmapText[] = [];
   let currentEdges: readonly SchematicEdgeLayout[] = layout.edges;
   let currentSelectedEdgeIds: readonly string[] = selectedEdgeIds;
+  let currentDragFocusNodeIds: readonly string[] = [];
   drawGrid(gridOverlay, layout, palette, null, null, gridOptions);
 
   world.addChild(backgroundLayer, wireLayer, componentLayer, interactionLayer);
   backgroundLayer.addChild(gridOverlay);
   interactionLayer.addChild(guideOverlay, selectionOverlay, marqueeOverlay);
+  const tooltip = createNodeTooltip(palette, textNodes);
+  interactionLayer.addChild(tooltip.container);
   layout.nodes.forEach((node) => {
-    const container = drawNode({ node, palette, textNodes, onModuleOpen });
+    const container = drawNode({
+      node,
+      palette,
+      textNodes,
+      onModuleOpen,
+      onNodeHover: (hoveredNode) => showNodeTooltip(tooltip, hoveredNode),
+      onNodeHoverEnd: () => hideNodeTooltip(tooltip),
+    });
     nodeContainers.set(node.id, container);
     onNodeContainerCreated?.(node, container);
     componentLayer.addChild(container);
   });
-  drawWireLayer(wireLayer, currentEdges, palette, currentSelectedEdgeIds);
+  drawWireLayer(wireLayer, currentEdges, palette, currentSelectedEdgeIds, currentDragFocusNodeIds);
 
   const updateSelection = (nextSelectedNodeIds: readonly string[], positions?: Record<string, { x: number; y: number } | undefined>) => {
     drawSelectionOverlay(selectionOverlay, nextSelectedNodeIds, nodeMap, palette, positions);
@@ -121,11 +132,22 @@ export function createAsicSchematicScene({
   };
   const updateEdgeSelection = (nextSelectedEdgeIds: readonly string[]) => {
     currentSelectedEdgeIds = nextSelectedEdgeIds;
-    drawWireLayer(wireLayer, currentEdges, palette, currentSelectedEdgeIds);
+    drawWireLayer(wireLayer, currentEdges, palette, currentSelectedEdgeIds, currentDragFocusNodeIds);
+  };
+  const updateDragFocus = (nodeIds: readonly string[] | null) => {
+    currentDragFocusNodeIds = nodeIds ?? [];
+    const focusedNodeIds = new Set(currentDragFocusNodeIds);
+    const active = focusedNodeIds.size > 0;
+
+    backgroundLayer.alpha = active ? 0.32 : 1;
+    nodeContainers.forEach((container, nodeId) => {
+      container.alpha = active && !focusedNodeIds.has(nodeId) ? 0.28 : 1;
+    });
+    drawWireLayer(wireLayer, currentEdges, palette, currentSelectedEdgeIds, currentDragFocusNodeIds);
   };
   const updateWires = (edges: readonly SchematicEdgeLayout[]) => {
     currentEdges = edges;
-    drawWireLayer(wireLayer, currentEdges, palette, currentSelectedEdgeIds);
+    drawWireLayer(wireLayer, currentEdges, palette, currentSelectedEdgeIds, currentDragFocusNodeIds);
   };
   const updateZoom = () => updateTextZoom();
 
@@ -145,6 +167,7 @@ export function createAsicSchematicScene({
     updateGrid,
     updateSelection,
     updateEdgeSelection,
+    updateDragFocus,
     updateMarquee,
     updateWires,
     updateZoom,
@@ -156,11 +179,27 @@ function drawWireLayer(
   edges: readonly SchematicEdgeLayout[],
   palette: AsicSchematicPalette,
   selectedEdgeIds: readonly string[],
+  dragFocusNodeIds: readonly string[],
 ) {
   const selectedEdges = new Set(selectedEdgeIds);
+  const focusedNodeIds = new Set(dragFocusNodeIds);
+  const dragFocusActive = focusedNodeIds.size > 0;
 
   layer.removeChildren().forEach((child) => child.destroy({ children: true }));
-  edges.forEach((edge) => layer.addChild(drawEdge(edge, palette, selectedEdges.has(edge.id))));
+  edges.forEach((edge) => {
+    if (dragFocusActive && isEdgeConnectedToFocusedNode(edge, focusedNodeIds)) {
+      return;
+    }
+
+    layer.addChild(drawEdge(edge, palette, selectedEdges.has(edge.id), dragFocusActive ? 0.34 : 1));
+  });
+}
+
+function isEdgeConnectedToFocusedNode(edge: SchematicEdgeLayout, focusedNodeIds: Set<string>) {
+  const fromNodeId = edge.from.instanceId ?? `io:${edge.from.portId}`;
+  const toNodeId = edge.to.instanceId ?? `io:${edge.to.portId}`;
+
+  return focusedNodeIds.has(fromNodeId) || focusedNodeIds.has(toNodeId);
 }
 
 function drawSelectionOverlay(
@@ -242,7 +281,7 @@ function drawGrid(
   return { effectiveStep, enabled: true, gridSize, lineCount };
 }
 
-function drawEdge(edge: SchematicEdgeLayout, palette: AsicSchematicPalette, selected: boolean) {
+function drawEdge(edge: SchematicEdgeLayout, palette: AsicSchematicPalette, selected: boolean, alphaMultiplier = 1) {
   const graphics = new Graphics({ label: `schematic-edge:${edge.id}` });
   const color = getSchematicEdgeColor(edge, palette);
   const style = getEdgeStrokeStyle(edge, selected);
@@ -255,20 +294,20 @@ function drawEdge(edge: SchematicEdgeLayout, palette: AsicSchematicPalette, sele
   if (selected) {
     graphics.moveTo(firstPoint.x, firstPoint.y);
     remainingPoints.forEach((point) => graphics.lineTo(point.x, point.y));
-    graphics.stroke({ color, alpha: 0.42, width: style.width + 5, cap: 'round', join: 'round' });
+    graphics.stroke({ color, alpha: 0.42 * alphaMultiplier, width: style.width + 5, cap: 'round', join: 'round' });
   }
 
   graphics.moveTo(firstPoint.x, firstPoint.y);
   remainingPoints.forEach((point) => graphics.lineTo(point.x, point.y));
-  graphics.stroke({ color, alpha: style.alpha, width: style.width, cap: 'round', join: 'round' });
+  graphics.stroke({ color, alpha: style.alpha * alphaMultiplier, width: style.width, cap: 'round', join: 'round' });
 
   const lastPoint = edge.points[edge.points.length - 1];
   if (lastPoint) {
     if (edge.isBus) {
       const size = selected ? 7 : 5.5;
-      graphics.rect(lastPoint.x - size / 2, lastPoint.y - size / 2, size, size).fill({ color, alpha: 0.9 });
+      graphics.rect(lastPoint.x - size / 2, lastPoint.y - size / 2, size, size).fill({ color, alpha: 0.9 * alphaMultiplier });
     } else {
-      graphics.circle(lastPoint.x, lastPoint.y, selected ? 4.6 : 3).fill({ color, alpha: 0.88 });
+      graphics.circle(lastPoint.x, lastPoint.y, selected ? 4.6 : 3).fill({ color, alpha: 0.88 * alphaMultiplier });
     }
   }
 
@@ -307,22 +346,25 @@ function drawNode({
   palette,
   textNodes,
   onModuleOpen,
+  onNodeHover,
+  onNodeHoverEnd,
 }: {
   node: SchematicNodeLayout;
   palette: AsicSchematicPalette;
   textNodes: BitmapText[];
   onModuleOpen?: (moduleId: string) => void;
+  onNodeHover?: (node: SchematicNodeLayout) => void;
+  onNodeHoverEnd?: () => void;
 }) {
   const container = new Container({ label: `schematic-node:${node.id}`, x: node.x, y: node.y });
-  const fill = node.kind === 'port' ? palette.panelMuted : palette.panel;
-  const border = node.kind === 'port' ? palette.textMuted : palette.border;
 
-  container.addChild(new Graphics({ label: `schematic-node-body:${node.id}` })
-    .roundRect(0, 0, node.width, node.height, node.kind === 'port' ? 7 : 8)
-    .fill({ color: fill, alpha: node.kind === 'port' ? 0.88 : 0.96 })
-    .stroke({ color: border, alpha: 0.72, width: 1.2 }));
-  container.addChild(createText(textNodes, node.label, palette.text, node.kind === 'port' ? 11 : 12, '600', node.kind === 'port' ? 10 : 12, node.kind === 'port' ? 8 : 10));
-  container.addChild(createText(textNodes, node.subtitle, palette.textMuted, 10, '400', node.kind === 'port' ? 10 : 12, node.kind === 'port' ? 21 : 28));
+  if (node.kind === 'port') {
+    drawIoPortNode(container, node, palette, textNodes);
+  } else if (isLogicCellKind(node.cellKind)) {
+    drawLogicNode(container, node, palette, textNodes);
+  } else {
+    drawModuleNode(container, node, palette, textNodes);
+  }
 
   if (node.kind === 'module') {
     drawPorts(container, node, palette, textNodes);
@@ -341,8 +383,102 @@ function drawNode({
       onModuleOpen?.(node.moduleId);
     }
   });
+  container.on('pointerover', () => onNodeHover?.(node));
+  container.on('pointerout', () => onNodeHoverEnd?.());
 
   return container;
+}
+
+function drawModuleNode(container: Container, node: SchematicNodeLayout, palette: AsicSchematicPalette, textNodes: BitmapText[]) {
+  container.addChild(new Graphics({ label: `schematic-node-body:${node.id}` })
+    .roundRect(0, 0, node.width, node.height, 8)
+    .fill({ color: palette.panel, alpha: 0.96 })
+    .stroke({ color: palette.border, alpha: 0.72, width: 1.2 }));
+  container.addChild(createText(textNodes, node.label, palette.text, 12, '600', 12, 10));
+  container.addChild(createText(textNodes, node.subtitle, palette.textMuted, 10, '400', 12, 28));
+}
+
+function drawIoPortNode(container: Container, node: SchematicNodeLayout, palette: AsicSchematicPalette, textNodes: BitmapText[]) {
+  const port = node.ports[0];
+  const portColor = port?.direction === 'input' ? palette.info : port?.direction === 'output' ? palette.success : palette.warning;
+  const body = new Graphics({ label: `schematic-node-body:${node.id}` });
+  const notch = 13;
+
+  if (port?.direction === 'inout') {
+    body
+      .moveTo(notch, 0)
+      .lineTo(node.width - notch, 0)
+      .lineTo(node.width, node.height / 2)
+      .lineTo(node.width - notch, node.height)
+      .lineTo(notch, node.height)
+      .lineTo(0, node.height / 2)
+      .closePath();
+  } else {
+    body
+      .moveTo(0, 0)
+      .lineTo(node.width - notch, 0)
+      .lineTo(node.width, node.height / 2)
+      .lineTo(node.width - notch, node.height)
+      .lineTo(0, node.height)
+      .closePath();
+  }
+
+  body.fill({ color: palette.panelMuted, alpha: 0.9 }).stroke({ color: portColor, alpha: 0.82, width: 1.4 });
+  container.addChild(body);
+  container.addChild(createText(textNodes, node.label, palette.text, 11, '600', 10, 7));
+  container.addChild(createText(textNodes, node.subtitle, portColor, 9, '600', 10, 21));
+}
+
+function drawLogicNode(container: Container, node: SchematicNodeLayout, palette: AsicSchematicPalette, textNodes: BitmapText[]) {
+  const body = new Graphics({ label: `schematic-node-body:${node.id}` });
+  const kind = node.cellKind?.toLowerCase() ?? 'logic';
+  const fill = palette.panelMuted;
+
+  if (kind === 'mux') {
+    body
+      .moveTo(20, 0)
+      .lineTo(node.width - 8, 10)
+      .lineTo(node.width - 8, node.height - 10)
+      .lineTo(20, node.height)
+      .lineTo(8, node.height - 12)
+      .lineTo(8, 12)
+      .closePath();
+  } else if (kind === 'not') {
+    body
+      .moveTo(14, 10)
+      .lineTo(node.width - 24, node.height / 2)
+      .lineTo(14, node.height - 10)
+      .closePath()
+      .circle(node.width - 14, node.height / 2, 5);
+  } else if (kind === 'or' || kind === 'xor' || kind === 'xnor') {
+    body
+      .moveTo(14, 0)
+      .quadraticCurveTo(node.width - 10, 0, node.width, node.height / 2)
+      .quadraticCurveTo(node.width - 10, node.height, 14, node.height)
+      .quadraticCurveTo(30, node.height / 2, 14, 0);
+  } else {
+    body
+      .moveTo(8, 0)
+      .lineTo(node.width / 2, 0)
+      .quadraticCurveTo(node.width - 2, 0, node.width - 2, node.height / 2)
+      .quadraticCurveTo(node.width - 2, node.height, node.width / 2, node.height)
+      .lineTo(8, node.height)
+      .closePath();
+  }
+
+  body.fill({ color: fill, alpha: 0.96 }).stroke({ color: palette.accent, alpha: 0.72, width: 1.3 });
+  container.addChild(body);
+
+  const title = createText(textNodes, kind.toUpperCase(), palette.accent, 12, '600', node.width / 2, 10);
+  title.anchor.set(0.5, 0);
+  container.addChild(title);
+  const name = createText(textNodes, node.label, palette.textMuted, 9, '400', node.width / 2, 29);
+  name.anchor.set(0.5, 0);
+  container.addChild(name);
+}
+
+function isLogicCellKind(kind: string | undefined) {
+  return Boolean(kind && kind !== 'module');
 }
 
 function drawPorts(container: Container, node: SchematicNodeLayout, palette: AsicSchematicPalette, textNodes: BitmapText[] = []) {
@@ -362,6 +498,42 @@ function drawPorts(container: Container, node: SchematicNodeLayout, palette: Asi
     }
     container.addChild(portText);
   });
+}
+
+interface NodeTooltip {
+  container: Container;
+  body: Graphics;
+  nameText: BitmapText;
+  typeText: BitmapText;
+}
+
+function createNodeTooltip(palette: AsicSchematicPalette, textNodes: BitmapText[]): NodeTooltip {
+  const container = new Container({ label: 'schematic-node-tooltip', visible: false, zIndex: 100 });
+  const body = new Graphics({ label: 'schematic-node-tooltip-body' });
+  const nameText = createText(textNodes, '', palette.text, 10, '600', 8, 6);
+  const typeText = createText(textNodes, '', palette.textMuted, 10, '400', 8, 22);
+
+  container.addChild(body, nameText, typeText);
+  return { container, body, nameText, typeText };
+}
+
+function showNodeTooltip(tooltip: NodeTooltip, node: SchematicNodeLayout) {
+  tooltip.nameText.text = `name:${node.label}`;
+  tooltip.typeText.text = `type:${node.subtitle}`;
+  const width = Math.max(96, Math.max(tooltip.nameText.text.length, tooltip.typeText.text.length) * 6.8 + 16);
+  const height = 40;
+
+  tooltip.body
+    .clear()
+    .roundRect(0, 0, width, height, 6)
+    .fill({ color: 0x0f172a, alpha: 0.92 })
+    .stroke({ color: 0xffffff, alpha: 0.16, width: 1 });
+  tooltip.container.position.set(node.x + node.width + 12, node.y - 6);
+  tooltip.container.visible = true;
+}
+
+function hideNodeTooltip(tooltip: NodeTooltip) {
+  tooltip.container.visible = false;
 }
 
 function createText(textNodes: BitmapText[], text: string, fill: number, fontSize: number, fontWeight: '400' | '600', x: number, y: number) {

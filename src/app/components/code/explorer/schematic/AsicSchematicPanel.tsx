@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronRight, ChevronUp, Home, Maximize2, RotateCcw, Spline } from 'lucide-react';
 
+import { useModuleHierarchy } from '../../../../context/ModuleHierarchyContext';
 import { useSchematicSettings } from '../../../../context/SchematicSettingsContext';
 import { useTheme } from '../../../../context/ThemeContext';
 import { Button } from '../../../ui/button';
 import { TooltipIconButton } from '../../../ui/tooltip-icon-button';
 import { AsicSchematicCanvas, type AsicSchematicCanvasHandle } from './AsicSchematicCanvas';
 import { applySchematicNodePositions, findModulePath, layoutAsicSchematic, type SchematicNodePositionOverrides } from './asicSchematicLayout';
-import { mockAsicSchematicGraph } from './asicSchematicMockData';
-import type { SchematicLayoutResult } from './asicSchematicTypes';
+import type { AsicSchematicGraph, SchematicLayoutResult } from './asicSchematicTypes';
+import { lspSchematicToGraph } from './lspSchematicGraph';
 
 interface CameraSnapshot {
   x: number;
@@ -18,10 +19,13 @@ interface CameraSnapshot {
 
 export function AsicSchematicPanel() {
   const { theme, themeId } = useTheme();
+  const { top: hierarchyTop } = useModuleHierarchy();
   const schematicSettings = useSchematicSettings();
   const canvasRef = useRef<AsicSchematicCanvasHandle | null>(null);
-  const [moduleId, setModuleId] = useState(mockAsicSchematicGraph.rootModuleId);
+  const [graph, setGraph] = useState<AsicSchematicGraph | null>(null);
+  const [moduleId, setModuleId] = useState<string | null>(null);
   const [layout, setLayout] = useState<SchematicLayoutResult | null>(null);
+  const [schematicError, setSchematicError] = useState<string | null>(null);
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
   const [selectedEdgeIds, setSelectedEdgeIds] = useState<string[]>([]);
   const [backStack, setBackStack] = useState<string[]>([]);
@@ -31,10 +35,11 @@ export function AsicSchematicPanel() {
   const [layoutState, setLayoutState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [positionOverridesByModule, setPositionOverridesByModule] = useState<Record<string, SchematicNodePositionOverrides>>({});
 
-  const modulePath = useMemo(() => findModulePath(mockAsicSchematicGraph, moduleId), [moduleId]);
-  const activeModule = mockAsicSchematicGraph.modules[moduleId];
+  const topRequestKey = `${hierarchyTop?.rootKey ?? 'auto'}:${hierarchyTop?.moduleName ?? ''}`;
+  const modulePath = useMemo(() => graph && moduleId ? findModulePath(graph, moduleId) : [], [graph, moduleId]);
+  const activeModule = graph && moduleId ? graph.modules[moduleId] : null;
   const activeLayout = useMemo(
-    () => layout ? applySchematicNodePositions(layout, positionOverridesByModule[moduleId] ?? {}, {
+    () => layout && moduleId ? applySchematicNodePositions(layout, positionOverridesByModule[moduleId] ?? {}, {
       gridSize: schematicSettings.gridSize,
       snapToGrid: schematicSettings.snapToGrid,
     }) : null,
@@ -46,7 +51,7 @@ export function AsicSchematicPanel() {
   const nextChildModuleId = forwardStack[0] ?? null;
 
   const handleEnterModule = useCallback((nextModuleId: string) => {
-    if (nextModuleId === moduleId) {
+    if (!moduleId || nextModuleId === moduleId) {
       return;
     }
 
@@ -56,6 +61,10 @@ export function AsicSchematicPanel() {
   }, [moduleId]);
 
   const handleGoParentModule = useCallback(() => {
+    if (!moduleId) {
+      return;
+    }
+
     const nextModuleId = backStack[backStack.length - 1] ?? parentModuleId;
 
     if (!nextModuleId) {
@@ -68,7 +77,7 @@ export function AsicSchematicPanel() {
   }, [backStack, moduleId, parentModuleId]);
 
   const handleGoNextChildModule = useCallback(() => {
-    if (!nextChildModuleId) {
+    if (!moduleId || !nextChildModuleId) {
       return;
     }
 
@@ -84,8 +93,14 @@ export function AsicSchematicPanel() {
   }, []);
 
   const handleNodePositionsChange = useCallback((positions: SchematicNodePositionOverrides, movedNodeIds: readonly string[]) => {
+    if (!moduleId) {
+      return;
+    }
+
+    const currentModuleId = moduleId;
+
     setPositionOverridesByModule((currentOverrides) => {
-      const moduleOverrides = currentOverrides[moduleId] ?? {};
+      const moduleOverrides = currentOverrides[currentModuleId] ?? {};
       const mergedOverrides = {
         ...moduleOverrides,
         ...positions,
@@ -94,7 +109,7 @@ export function AsicSchematicPanel() {
       if (!layout) {
         return {
           ...currentOverrides,
-          [moduleId]: mergedOverrides,
+          [currentModuleId]: mergedOverrides,
         };
       }
 
@@ -123,7 +138,7 @@ export function AsicSchematicPanel() {
 
       return {
         ...currentOverrides,
-        [moduleId]: resolvedOverrides,
+        [currentModuleId]: resolvedOverrides,
       };
     });
   }, [layout, moduleId, schematicSettings.gridSize, schematicSettings.snapToGrid]);
@@ -144,11 +159,62 @@ export function AsicSchematicPanel() {
 
   useEffect(() => {
     let cancelled = false;
+    const lsp = window.electronAPI?.lsp;
+
+    setLayoutState('loading');
+    setLayout(null);
+    setGraph(null);
+    setModuleId(null);
+    setSelectedNodeIds([]);
+    setSelectedEdgeIds([]);
+    setBackStack([]);
+    setForwardStack([]);
+    setPositionOverridesByModule({});
+    setSchematicError(null);
+
+    if (!lsp?.schematic) {
+      setSchematicError('SystemVerilog schematic service is unavailable.');
+      setLayoutState('error');
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    lsp.schematic({ moduleName: hierarchyTop?.moduleName, maxDepth: 64 })
+      .then((nextSchematic) => {
+        if (cancelled) {
+          return;
+        }
+
+        const nextGraph = lspSchematicToGraph(nextSchematic);
+        setGraph(nextGraph);
+        setModuleId(nextGraph.rootModuleId);
+      })
+      .catch((error) => {
+        if (cancelled) {
+          return;
+        }
+
+        setSchematicError(error instanceof Error ? error.message : String(error));
+        setLayoutState('error');
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [hierarchyTop?.moduleName, topRequestKey]);
+
+  useEffect(() => {
+    if (!graph || !moduleId) {
+      return undefined;
+    }
+
+    let cancelled = false;
     setLayoutState('loading');
     setSelectedNodeIds([]);
     setSelectedEdgeIds([]);
 
-    layoutAsicSchematic(mockAsicSchematicGraph, moduleId)
+    layoutAsicSchematic(graph, moduleId)
       .then((nextLayout) => {
         if (!cancelled) {
           setLayout(nextLayout);
@@ -164,7 +230,7 @@ export function AsicSchematicPanel() {
     return () => {
       cancelled = true;
     };
-  }, [moduleId]);
+  }, [graph, moduleId]);
 
   return (
     <div
@@ -172,7 +238,8 @@ export function AsicSchematicPanel() {
       data-ready={layoutState === 'ready' && renderer !== 'initializing'}
       data-renderer={renderer}
       data-theme={theme}
-      data-module-id={moduleId}
+      data-module-id={moduleId ?? ''}
+      data-top-module={hierarchyTop?.moduleName ?? ''}
       data-node-count={activeLayout?.nodes.length ?? 0}
       data-edge-count={activeLayout?.edges.length ?? 0}
       data-selected-node-count={selectedNodeIds.length}
@@ -206,7 +273,7 @@ export function AsicSchematicPanel() {
           <span>{renderer}</span>
         </div>
         <TooltipIconButton content="Root module">
-          <Button variant="ghost" size="icon-xs" aria-label="Root module" onClick={() => handleDirectModuleNavigation(mockAsicSchematicGraph.rootModuleId)}>
+          <Button variant="ghost" size="icon-xs" aria-label="Root module" onClick={() => graph && handleDirectModuleNavigation(graph.rootModuleId)} disabled={!graph}>
             <Home size={12} />
           </Button>
         </TooltipIconButton>
@@ -235,7 +302,7 @@ export function AsicSchematicPanel() {
       <div className="flex min-h-0 flex-1">
         <div className="hidden w-52 shrink-0 border-r border-ide-border bg-ide-bg p-3 text-[11px] lg:block">
           <div className="font-medium text-ide-text">{activeModule?.name}</div>
-          <p className="mt-1 leading-4 text-ide-text-muted">{activeModule?.description}</p>
+          <p className="mt-1 leading-4 text-ide-text-muted">{activeModule?.description ?? 'Waiting for schematic data.'}</p>
           {selectedNode ? (
             <div className="mt-4 rounded-md border border-ide-border bg-ide-panel-bg p-2">
               <div className="font-medium text-ide-text">{selectedNode.label}</div>
@@ -260,7 +327,9 @@ export function AsicSchematicPanel() {
         </div>
 
         {layoutState === 'error' ? (
-          <div className="flex flex-1 items-center justify-center text-[12px] text-ide-text-muted">Unable to layout schematic.</div>
+          <div className="flex flex-1 items-center justify-center px-4 text-center text-[12px] text-ide-text-muted">
+            {schematicError ?? 'Unable to layout schematic.'}
+          </div>
         ) : null}
         {layoutState === 'loading' ? (
           <div className="flex flex-1 items-center justify-center text-[12px] text-ide-text-muted">Loading schematic...</div>

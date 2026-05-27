@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { HierarchyPanel } from './HierarchyPanel';
+import { ModuleHierarchyProvider } from '../../../context/ModuleHierarchyContext';
 import type { LspModuleHierarchyNode } from '../../../../../types/systemverilog-lsp';
 
 function createHierarchyNode(
@@ -42,7 +43,7 @@ function renderHierarchyPanel(props: Partial<ComponentProps<typeof HierarchyPane
   };
 
   return {
-    ...render(<HierarchyPanel {...componentProps} />),
+    ...render(<HierarchyPanel {...componentProps} />, { wrapper: ModuleHierarchyProvider }),
     props: componentProps,
   };
 }

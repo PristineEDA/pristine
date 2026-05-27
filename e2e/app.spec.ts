@@ -5160,6 +5160,55 @@ test('terminal tab creates a real shell session and shows command output', async
 
 test('asic schematic bottom panel renders Pixi layers with selection and hierarchy navigation', async () => {
   const { app, window } = await launchApp();
+  const cpuTopSource = [
+    'module cpu_top(input clk, input rst_n, input [3:0] a, input [3:0] b, input sel, output [3:0] y);',
+    '  logic [3:0] n1;',
+    '  logic [3:0] n2;',
+    '  logic [3:0] n3;',
+    '  alu u_alu(.a(a), .b(b), .y(n1));',
+    '  logic_child u_logic(.clk(clk), .rst_n(rst_n), .a(n1), .b(b), .sel(sel), .y(n2));',
+    '  and u_and(n3[0], a[0], b[0]);',
+    '  assign n3 = sel ? n1 : (a | b);',
+    '  assign y = n3;',
+    'endmodule',
+  ].join('\n');
+  const aluSource = [
+    'module alu(input [3:0] a, input [3:0] b, output [3:0] y);',
+    '  assign y = a ^ b;',
+    'endmodule',
+  ].join('\n');
+  const logicChildSource = [
+    'module logic_child(input clk, input rst_n, input [3:0] a, input [3:0] b, input sel, output [3:0] y);',
+    '  logic [3:0] gated;',
+    '  assign gated = a & b;',
+    '  assign y = sel ? gated : b;',
+    'endmodule',
+  ].join('\n');
+  const altTopSource = [
+    'module z_schematic_alt_top(input a, input b, output y);',
+    '  assign y = a | b;',
+    'endmodule',
+  ].join('\n');
+
+  await window.evaluate(async ({ nextCpuTopSource, nextAluSource, nextLogicChildSource, nextAltTopSource }) => {
+    const browserGlobal = globalThis as typeof globalThis & {
+      electronAPI?: {
+        lsp: {
+          openDocument: (filePath: string, languageId: string, text: string) => Promise<void>;
+        };
+      };
+    };
+
+    await browserGlobal.electronAPI?.lsp.openDocument('rtl/core/cpu_top.sv', 'systemverilog', nextCpuTopSource);
+    await browserGlobal.electronAPI?.lsp.openDocument('rtl/core/alu.sv', 'systemverilog', nextAluSource);
+    await browserGlobal.electronAPI?.lsp.openDocument('rtl/core/logic_child.sv', 'systemverilog', nextLogicChildSource);
+    await browserGlobal.electronAPI?.lsp.openDocument('rtl/core/z_schematic_alt_top.sv', 'systemverilog', nextAltTopSource);
+  }, {
+    nextCpuTopSource: cpuTopSource,
+    nextAluSource: aluSource,
+    nextLogicChildSource: logicChildSource,
+    nextAltTopSource: altTopSource,
+  });
 
   await openBottomTerminal(window);
   await getBottomPanelTab(window, 'schematic').click();
@@ -5167,7 +5216,7 @@ test('asic schematic bottom panel renders Pixi layers with selection and hierarc
   const panel = window.getByTestId('asic-schematic-panel');
   await expect(panel).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
   await expect(panel).toHaveAttribute('data-ready', 'true', { timeout: UI_READY_TIMEOUT_MS });
-  await expect(panel).toHaveAttribute('data-module-id', 'soc_top');
+  await expect(panel).toHaveAttribute('data-module-id', 'cpu_top');
   await expect(panel).toHaveAttribute('data-renderer', /^(webgpu|webgl)$/);
   await expect.poll(async () => Number(await panel.getAttribute('data-node-count') ?? '0'), {
     timeout: UI_READY_TIMEOUT_MS,
@@ -5213,6 +5262,7 @@ test('asic schematic bottom panel renders Pixi layers with selection and hierarc
   });
   const readModuleSnapshot = async () => JSON.parse(await canvasHost.getAttribute('data-module-node-snapshot') ?? '[]') as Array<{
     id: string;
+    cellKind: string;
     x: number;
     y: number;
     width: number;
@@ -5220,6 +5270,21 @@ test('asic schematic bottom panel renders Pixi layers with selection and hierarc
     centerX: number;
     centerY: number;
     canDrillDown: boolean;
+  }>;
+  const readLogicSnapshot = async () => JSON.parse(await canvasHost.getAttribute('data-logic-node-snapshot') ?? '[]') as Array<{
+    id: string;
+    name: string;
+    type: string;
+    cellKind: string;
+    centerX: number;
+    centerY: number;
+  }>;
+  const readPortSnapshot = async () => JSON.parse(await canvasHost.getAttribute('data-port-node-snapshot') ?? '[]') as Array<{
+    id: string;
+    name: string;
+    direction: string;
+    centerX: number;
+    centerY: number;
   }>;
   const readEdgeSnapshot = async () => JSON.parse(await canvasHost.getAttribute('data-edge-route-snapshot') ?? '[]') as Array<{
     id: string;
@@ -5393,10 +5458,20 @@ test('asic schematic bottom panel renders Pixi layers with selection and hierarc
   const secondModule = await readSecondModule();
   expect(firstModule.id).not.toBeNull();
   expect(secondModule.id).not.toBeNull();
+  await expect.poll(async () => (await readLogicSnapshot()).map((node) => node.cellKind).sort(), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toEqual(expect.arrayContaining(['and', 'mux', 'or']));
+  await expect.poll(async () => (await readPortSnapshot()).map((node) => node.direction).sort(), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toEqual(expect.arrayContaining(['input', 'output']));
   const firstEdge = await readFirstEdge();
   expect(firstEdge.id).not.toBeNull();
   await expect(canvasHost).toHaveAttribute('data-first-bus-edge-style', 'bus');
   await expect(canvasHost).toHaveAttribute('data-first-signal-edge-style', 'signal');
+
+  await window.mouse.move((await worldToScreen(firstModule)).x, (await worldToScreen(firstModule)).y);
+  await expect(canvasHost).toHaveAttribute('data-hover-node-label', `name:${firstModule.id}`);
+  await expect(canvasHost).toHaveAttribute('data-hover-node-type', /^type:/);
 
   await clickModule(firstModule);
   await expect(panel).toHaveAttribute('data-selected-node-count', '1');
@@ -5470,10 +5545,19 @@ test('asic schematic bottom panel renders Pixi layers with selection and hierarc
   const edgeCountBeforeDrag = await panel.getAttribute('data-edge-count');
   const renderCountBeforeDrag = Number(await canvasHost.getAttribute('data-render-count') ?? '0');
 
-  await dragWorldRect(
-    { x: dragSource.centerX, y: dragSource.centerY },
-    { x: dragObstacle.centerX, y: dragObstacle.centerY },
-  );
+  const dragStartPoint = await worldToScreen({ x: dragSource.centerX, y: dragSource.centerY });
+  const dragEndPoint = await worldToScreen({ x: dragObstacle.centerX, y: dragObstacle.centerY });
+
+  await window.mouse.move(dragStartPoint.x, dragStartPoint.y);
+  await window.mouse.down();
+  await window.mouse.move(dragEndPoint.x, dragEndPoint.y, { steps: 5 });
+  await expect.poll(async () => Number(await canvasHost.getAttribute('data-active-drag-hidden-edge-count') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
+  await expect.poll(async () => (await canvasHost.getAttribute('data-active-drag-node-ids') ?? '').split(',').filter(Boolean).sort(), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toEqual(selectedNodeIds);
+  await window.mouse.up();
 
   await expect(canvasHost).toHaveAttribute('data-last-drag-node-id', selectedNodeIds[0] ?? '');
   await expect.poll(async () => (await canvasHost.getAttribute('data-last-drag-node-ids') ?? '').split(',').filter(Boolean).sort(), {
@@ -5487,8 +5571,8 @@ test('asic schematic bottom panel renders Pixi layers with selection and hierarc
   }, {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBe(true);
-  expect(Number(await canvasHost.getAttribute('data-last-drag-node-x') ?? '0') % 40).toBe(0);
-  expect(Number(await canvasHost.getAttribute('data-last-drag-node-y') ?? '0') % 40).toBe(0);
+  expect(Math.abs(Number(await canvasHost.getAttribute('data-last-drag-node-x') ?? '0') % 40)).toBe(0);
+  expect(Math.abs(Number(await canvasHost.getAttribute('data-last-drag-node-y') ?? '0') % 40)).toBe(0);
   await expect.poll(async () => Number(await canvasHost.getAttribute('data-render-count') ?? '0'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(renderCountBeforeDrag);
@@ -5530,9 +5614,20 @@ test('asic schematic bottom panel renders Pixi layers with selection and hierarc
   await expect(panel).toHaveAttribute('data-module-id', drillableModule.targetId ?? '');
 
   await window.getByLabel('Parent module').click();
-  await expect(panel).toHaveAttribute('data-module-id', 'soc_top');
+  await expect(panel).toHaveAttribute('data-module-id', 'cpu_top');
   await window.getByLabel('Next child module').click();
   await expect(panel).toHaveAttribute('data-module-id', drillableModule.targetId ?? '');
+
+  await window.getByLabel('Root module').click();
+  await expect(panel).toHaveAttribute('data-module-id', 'cpu_top');
+  await ensureExplorerVisible(window);
+  await window.getByTestId('left-panel-split-toggle').click();
+  await window.getByTestId('left-panel-secondary-tab-hierarchy').click();
+  await expect(window.getByTestId('hierarchy-node-label-z_schematic_alt_top-root')).toBeVisible({ timeout: 15000 });
+  await window.getByTestId('hierarchy-node-label-z_schematic_alt_top-root').click({ button: 'right' });
+  await window.getByRole('menuitem', { name: 'Set as Simulation Top' }).click();
+  await expect(panel).toHaveAttribute('data-top-module', 'z_schematic_alt_top');
+  await expect(panel).toHaveAttribute('data-module-id', 'z_schematic_alt_top', { timeout: UI_READY_TIMEOUT_MS });
 
   await expect(panel).toHaveAttribute('data-ready', 'true');
   await expect.poll(async () => Number(await canvasHost.getAttribute('data-render-count') ?? '0'), {

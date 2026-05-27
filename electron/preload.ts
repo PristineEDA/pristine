@@ -8,6 +8,8 @@ import type {
   LspHover,
   LspModuleHierarchy,
   LspModuleHierarchyOptions,
+  LspSchematic,
+  LspSchematicOptions,
   LspStateEvent,
   WorkspaceLocation,
 } from '../types/systemverilog-lsp.js';
@@ -232,6 +234,8 @@ const electronAPI = {
       ) as Promise<WorkspaceLocation[]>,
     moduleHierarchy: (options?: LspModuleHierarchyOptions) =>
       ipcRenderer.invoke(AsyncChannels.LSP_MODULE_HIERARCHY, options) as Promise<LspModuleHierarchy>,
+    schematic: (options?: LspSchematicOptions) =>
+      ipcRenderer.invoke(AsyncChannels.LSP_SCHEMATIC, options) as Promise<LspSchematic>,
     onDiagnostics: (callback: (payload: LspDiagnosticsEvent) => void) => {
       const handler = (_event: Electron.IpcRendererEvent, payload: LspDiagnosticsEvent) => callback(payload);
       ipcRenderer.on(StreamChannels.LSP_DIAGNOSTICS, handler);
