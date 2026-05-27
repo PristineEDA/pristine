@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
-import { AlertCircle, Box, ChevronDown, ChevronRight, CircleDot, Loader2, RefreshCw } from 'lucide-react';
+import { AlertCircle, Box, ChevronDown, ChevronRight, ListTree, Loader2, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getPathBaseName } from '../../../workspace/workspaceFiles';
 import type { LspModuleHierarchy, LspModuleHierarchyNode } from '../../../../../types/systemverilog-lsp';
@@ -348,7 +348,7 @@ export function HierarchyPanel({
 
     return [
       createContextMenuItem({
-        label: '手动设置顶层',
+        label: 'Set as Simulation Top',
         action: () => handleSetManualTopRoot(contextMenu.rootKey),
       }),
     ];
@@ -400,18 +400,6 @@ export function HierarchyPanel({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <div className="flex h-7 shrink-0 items-center justify-between px-2 text-[11px] text-ide-text-muted">
-        <span className="truncate uppercase">Modules</span>
-        <button
-          type="button"
-          className="inline-flex h-5 w-5 items-center justify-center rounded hover:bg-ide-hover hover:text-ide-text"
-          aria-label="Reload module hierarchy"
-          title="Reload module hierarchy"
-          onClick={() => { void loadHierarchy(); }}
-        >
-          <RefreshCw className="size-3" aria-hidden="true" />
-        </button>
-      </div>
       <div
         ref={treeRef}
         data-testid="hierarchy-tree"
@@ -518,7 +506,7 @@ const HierarchyTreeNode = memo(function HierarchyTreeNode({
           data-testid={node.unresolved ? getNodeStatusTestId(nodeKey, 'unresolved') : undefined}
           className={cn(
             'flex h-4 w-4 shrink-0 items-center justify-center',
-            node.unresolved ? 'text-ide-error' : 'text-ide-syntax-keyword',
+            node.unresolved ? 'text-ide-warning' : 'text-ide-syntax-keyword',
           )}
           aria-label={node.unresolved ? unresolvedStatusLabel : undefined}
           title={node.unresolved ? unresolvedStatusLabel : undefined}
@@ -539,7 +527,7 @@ const HierarchyTreeNode = memo(function HierarchyTreeNode({
             title={topLabel}
             role="img"
           >
-            <CircleDot className="h-3.5 w-3.5" aria-hidden="true" />
+            <ListTree className="h-3.5 w-3.5" aria-hidden="true" />
           </span>
         )}
 
@@ -553,7 +541,7 @@ const HierarchyTreeNode = memo(function HierarchyTreeNode({
           )}
           disabled={!canNavigate}
           title={canNavigate && node.filePath ? `${title} - ${node.filePath}` : title}
-          onClick={() => onOpenNode(node)}
+          onDoubleClick={() => onOpenNode(node)}
         >
           <span className="min-w-0 truncate">{label}</span>
         </button>

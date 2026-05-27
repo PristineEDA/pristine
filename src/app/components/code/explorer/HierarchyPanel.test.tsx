@@ -94,12 +94,15 @@ describe('HierarchyPanel', () => {
 
     expect(await screen.findByTestId('hierarchy-tree')).toBeInTheDocument();
     expect(window.electronAPI!.lsp.moduleHierarchy).toHaveBeenCalledWith({ maxDepth: 64 });
+    expect(screen.queryByText('Modules')).not.toBeInTheDocument();
     expect(screen.getByTestId('hierarchy-node-label-cpu_top-root')).toHaveTextContent('cpu_top');
     expect(screen.getByTestId('hierarchy-node-label-cpu_top-root')).toHaveClass('ml-1', 'flex', 'items-center', 'text-[13px]');
     expect(screen.getByTestId('hierarchy-node-label-cpu_top-root')).toHaveClass('font-semibold');
     expect(screen.getByTestId('hierarchy-node-top-indicator-0_cpu_top')).toHaveAccessibleName('Automatic top module');
+    expect(screen.getByTestId('hierarchy-node-top-indicator-0_cpu_top').querySelector('svg')).toBeInTheDocument();
     expect(screen.getByTestId('hierarchy-node-label-alu-u_alu')).toHaveTextContent(/^u_alu$/);
     expect(screen.getByTestId('hierarchy-node-status-unresolved-0_cpu_top__1_u_missing')).toBeInTheDocument();
+    expect(screen.getByTestId('hierarchy-node-status-unresolved-0_cpu_top__1_u_missing')).toHaveClass('text-ide-warning');
     expect(screen.getByLabelText('Unresolved module missing_block')).toBeInTheDocument();
     expect(screen.queryByText('unresolved')).not.toBeInTheDocument();
   });
@@ -169,12 +172,12 @@ describe('HierarchyPanel', () => {
     expect(screen.getByTestId('hierarchy-node-top-indicator-0_auto_top')).toHaveAccessibleName('Automatic top module');
 
     openContextMenuForHierarchyNode('hierarchy-node-1_manual_top');
-    await testUser.click(screen.getByRole('menuitem', { name: '手动设置顶层' }));
+    await testUser.click(screen.getByRole('menuitem', { name: 'Set as Simulation Top' }));
 
     expect(getRootLabels()).toEqual(['manual_top', 'auto_top']);
     expect(screen.getByTestId('hierarchy-node-top-indicator-1_manual_top')).toHaveAccessibleName('Manual top module');
     expect(screen.getByTestId('hierarchy-node-label-manual_top-root')).toHaveClass('font-semibold');
-    expect(screen.queryByRole('menuitem', { name: '手动设置顶层' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Set as Simulation Top' })).not.toBeInTheDocument();
 
     rerender(<HierarchyPanel {...props} refreshToken={1} />);
     await waitFor(() => expect(window.electronAPI!.lsp.moduleHierarchy).toHaveBeenCalledTimes(2));
@@ -197,10 +200,10 @@ describe('HierarchyPanel', () => {
 
     await screen.findByTestId('hierarchy-node-label-auto_leaf-u_auto_leaf');
     openContextMenuForHierarchyNode('hierarchy-node-0_auto_top__0_u_auto_leaf');
-    expect(screen.queryByRole('menuitem', { name: '手动设置顶层' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Set as Simulation Top' })).not.toBeInTheDocument();
 
     openContextMenuForHierarchyNode('hierarchy-node-1_manual_top');
-    await testUser.click(screen.getByRole('menuitem', { name: '手动设置顶层' }));
+    await testUser.click(screen.getByRole('menuitem', { name: 'Set as Simulation Top' }));
     expect(getRootLabels()).toEqual(['manual_top', 'auto_top']);
 
     rerender(<HierarchyPanel {...props} refreshToken={1} />);
@@ -209,7 +212,7 @@ describe('HierarchyPanel', () => {
     expect(screen.getByTestId('hierarchy-node-top-indicator-0_auto_top')).toHaveAccessibleName('Automatic top module');
   });
 
-  it('expands nodes and opens resolved modules at their source line', async () => {
+  it('expands nodes, opens resolved modules on double click, and keeps line jumps on single click', async () => {
     const testUser = userEvent.setup();
     const onFileOpen = vi.fn();
     const onLineJump = vi.fn();
@@ -222,8 +225,16 @@ describe('HierarchyPanel', () => {
     expect(screen.getByTestId('hierarchy-node-label-leaf-u_leaf')).toBeInTheDocument();
 
     await testUser.click(screen.getByTestId('hierarchy-node-label-alu-u_alu'));
+    expect(onFileOpen).not.toHaveBeenCalled();
+    expect(onLineJump).not.toHaveBeenCalled();
+
+    await testUser.dblClick(screen.getByTestId('hierarchy-node-label-alu-u_alu'));
     expect(onFileOpen).toHaveBeenCalledWith('rtl/core/alu.sv', 'alu.sv');
     expect(onLineJump).toHaveBeenCalledWith(13);
+
+    await testUser.click(screen.getByRole('button', { name: 'Open u_alu at line 13' }));
+    expect(onFileOpen).toHaveBeenLastCalledWith('rtl/core/alu.sv', 'alu.sv');
+    expect(onLineJump).toHaveBeenLastCalledWith(13);
   });
 
   it('shows an empty hierarchy state when no roots are returned', async () => {

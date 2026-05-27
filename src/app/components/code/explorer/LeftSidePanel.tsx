@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
+import { Library, ListTree, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useWorkspaceGitStatus } from '../../../git/workspaceGitStatus';
 import { FileTreeNode, type ExplorerContextMenuRequest } from './FileTreeNode';
@@ -8,7 +9,14 @@ import { FileOutlinePanel } from './FileOutlinePanel';
 import { HierarchyPanel } from './HierarchyPanel';
 import { SPLIT_PANEL_CONTENT_TRANSITION_STYLE, useAnimatedSplitPanelPresence } from './useAnimatedSplitPanelPresence';
 import { useCodeViewerLayout } from '../../../context/CodeViewerLayoutContext';
+import { Button } from '../../ui/button';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '../../ui/resizable';
+import { TooltipIconButton } from '../../ui/tooltip-icon-button';
+import {
+  compactIconTabToggleIconSize,
+  compactIconTabToggleItemClassName,
+  IconTabToggleGroup,
+} from '../shared/IconTabToggleGroup';
 import {
   getCodeWorkspacePanelFrameClassName,
   getCodeWorkspacePanelGroupLayoutGapPx,
@@ -55,6 +63,13 @@ export {
   getExplorerPasteTargetPath,
   getExplorerRenameTarget,
 } from './LeftSidePanelKeyboard';
+
+type ExplorerSecondaryPanelTab = 'hierarchy' | 'libraries';
+
+const explorerSecondaryPanelTabs = [
+  { value: 'hierarchy', label: 'Hierarchy', icon: ListTree, testId: 'left-panel-secondary-tab-hierarchy' },
+  { value: 'libraries', label: 'Libraries', icon: Library, testId: 'left-panel-secondary-tab-libraries' },
+] as const;
 
 interface LeftSidePanelProps {
   activeFileId: string;
@@ -820,7 +835,10 @@ function ExplorerSecondaryPanel({
   workspaceAvailable: boolean | null;
 }) {
   const { layoutMode } = useCodeViewerLayout();
+  const [secondaryTab, setSecondaryTab] = useState<ExplorerSecondaryPanelTab>('hierarchy');
+  const [hierarchyReloadNonce, setHierarchyReloadNonce] = useState(0);
   const splitPanelFrameClassName = getCodeWorkspacePanelFrameClassName(layoutMode, 'flex h-full flex-col bg-ide-bg text-ide-text');
+  const hierarchyRefreshToken = refreshToken + hierarchyReloadNonce;
 
   return (
     <section
@@ -836,19 +854,50 @@ function ExplorerSecondaryPanel({
         data-code-viewer-layout-mode={layoutMode}
         className={getPanelHeaderClassName(layoutMode)}
       >
-        <div className="flex h-7 items-center text-[11px] font-semibold text-ide-text">
-          Hierarchy
+        <IconTabToggleGroup
+          items={explorerSecondaryPanelTabs}
+          value={secondaryTab}
+          onValueChange={(tab) => setSecondaryTab(tab as ExplorerSecondaryPanelTab)}
+          groupLabel="Left panel secondary tabs"
+          groupTestId="left-panel-secondary-tabs"
+          tooltipSide="bottom"
+          itemClassName={compactIconTabToggleItemClassName}
+          iconSize={compactIconTabToggleIconSize}
+        />
+
+        <div className="ml-auto flex items-center gap-1">
+          <TooltipIconButton content="Reload Hierarchy" side="bottom">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              className="text-ide-text-muted hover:text-ide-text"
+              aria-label="Reload module hierarchy"
+              onClick={() => setHierarchyReloadNonce((currentNonce) => currentNonce + 1)}
+            >
+              <RefreshCw size={13} />
+            </Button>
+          </TooltipIconButton>
         </div>
       </div>
 
-      <HierarchyPanel
-        activeFileId={activeFileId}
-        isVisible={isExpanded}
-        onFileOpen={onFileOpen}
-        onLineJump={onLineJump}
-        refreshToken={refreshToken}
-        workspaceAvailable={workspaceAvailable}
-      />
+      {secondaryTab === 'hierarchy' ? (
+        <HierarchyPanel
+          activeFileId={activeFileId}
+          isVisible={isExpanded && secondaryTab === 'hierarchy'}
+          onFileOpen={onFileOpen}
+          onLineJump={onLineJump}
+          refreshToken={hierarchyRefreshToken}
+          workspaceAvailable={workspaceAvailable}
+        />
+      ) : (
+        <div
+          data-testid="left-panel-libraries-placeholder"
+          className="flex min-h-0 flex-1 items-center justify-center px-3 py-2 text-center text-[12px] text-ide-text-muted"
+        >
+          Libraries is empty
+        </div>
+      )}
     </section>
   );
 }

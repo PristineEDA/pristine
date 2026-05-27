@@ -1,5 +1,5 @@
 import type { ComponentProps } from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -191,7 +191,10 @@ describe('LeftSidePanel', () => {
     expect(screen.getByTestId('left-panel-primary-panel')).toHaveClass('bg-ide-bg');
     expect(screen.getByTestId('left-panel-secondary-panel')).toHaveClass('bg-ide-bg');
     expect(screen.getByTestId('left-panel-secondary-header')).toHaveAttribute('data-code-viewer-layout-mode', 'compact');
-    expect(screen.getByTestId('left-panel-secondary-header')).toHaveTextContent('Hierarchy');
+    expect(screen.getByTestId('left-panel-secondary-tabs')).toBeInTheDocument();
+    expect(screen.getByTestId('left-panel-secondary-tab-hierarchy')).toHaveAttribute('data-state', 'on');
+    expect(screen.getByTestId('left-panel-secondary-tab-libraries')).toHaveAttribute('data-state', 'off');
+    expect(within(screen.getByTestId('left-panel-secondary-header')).getByRole('button', { name: 'Reload module hierarchy' })).toBeInTheDocument();
     expect(await screen.findByTestId('left-panel-secondary-placeholder')).toHaveTextContent('Hierarchy is empty');
     expect(screen.getByTestId('left-panel-split-resize-handle')).toHaveAttribute('aria-orientation', 'horizontal');
 
@@ -237,6 +240,25 @@ describe('LeftSidePanel', () => {
     expect(secondaryHeader).not.toHaveClass('border-ide-border');
     expect(secondaryHeader).not.toHaveClass('border-b');
     expect(resizeHandle).toHaveClass('overlay-handle', 'rounded-full', 'bg-transparent');
+  });
+
+  it('switches the secondary panel between hierarchy and libraries', async () => {
+    renderLeftSidePanel({}, { layoutMode: 'compact' });
+
+    await testUser.click(screen.getByTestId('left-panel-split-toggle'));
+    await waitFor(() => expect(screen.getByTestId('panel-left-panel-secondary')).toHaveAttribute('aria-hidden', 'false'));
+    expect(await screen.findByTestId('left-panel-secondary-placeholder')).toHaveTextContent('Hierarchy is empty');
+
+    await testUser.click(screen.getByTestId('left-panel-secondary-tab-libraries'));
+    expect(screen.getByTestId('left-panel-secondary-tab-hierarchy')).toHaveAttribute('data-state', 'off');
+    expect(screen.getByTestId('left-panel-secondary-tab-libraries')).toHaveAttribute('data-state', 'on');
+    expect(screen.getByTestId('left-panel-libraries-placeholder')).toHaveTextContent('Libraries is empty');
+    expect(screen.queryByTestId('left-panel-secondary-placeholder')).not.toBeInTheDocument();
+
+    await testUser.click(screen.getByTestId('left-panel-secondary-tab-hierarchy'));
+    expect(screen.getByTestId('left-panel-secondary-tab-hierarchy')).toHaveAttribute('data-state', 'on');
+    expect(await screen.findByTestId('left-panel-secondary-placeholder')).toHaveTextContent('Hierarchy is empty');
+    expect(screen.queryByTestId('left-panel-libraries-placeholder')).not.toBeInTheDocument();
   });
 
   it('does not render the legacy explorer toolbar buttons', async () => {

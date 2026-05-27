@@ -2132,6 +2132,15 @@ test('code view hierarchy renders module instantiations from pristine-engine', a
 
   await window.getByTestId('left-panel-split-toggle').click();
   await expect(window.getByTestId('left-panel-secondary-panel')).toBeVisible();
+  await expect(window.getByTestId('left-panel-secondary-tab-hierarchy')).toBeVisible();
+  await expect(window.getByTestId('left-panel-secondary-tab-libraries')).toBeVisible();
+  await expect(
+    window.getByTestId('left-panel-secondary-header').getByRole('button', { name: 'Reload module hierarchy' }),
+  ).toBeVisible();
+
+  await window.getByTestId('left-panel-secondary-tab-libraries').click();
+  await expect(window.getByTestId('left-panel-libraries-placeholder')).toHaveText('Libraries is empty');
+  await window.getByTestId('left-panel-secondary-tab-hierarchy').click();
 
   const topNode = window.getByTestId('hierarchy-node-label-cpu_top-root');
   const aluInstanceNode = window.getByTestId('hierarchy-node-label-alu-u_alu');
@@ -2152,7 +2161,7 @@ test('code view hierarchy renders module instantiations from pristine-engine', a
 
   await selectedManualTopNode.click({ button: 'right' });
   await expect(window.getByTestId('explorer-context-menu')).toBeVisible();
-  await window.getByRole('menuitem', { name: '手动设置顶层' }).click();
+  await window.getByRole('menuitem', { name: 'Set as Simulation Top' }).click();
   await expect(rootLabels.first()).toHaveText(manualTopModuleName);
   await expect(selectedManualTopNode).toHaveClass(/font-semibold/);
   await expect(window.getByLabel('Manual top module')).toBeVisible();
@@ -2167,7 +2176,7 @@ test('code view hierarchy renders module instantiations from pristine-engine', a
   await window.getByRole('button', { name: 'Expand cpu_top' }).click();
   await expect(aluInstanceNode).toBeVisible();
 
-  await aluInstanceNode.click();
+  await aluInstanceNode.dblclick();
   await expect(window.getByTestId('editor-tab-rtl/core/alu.sv')).toBeVisible();
   await waitForMonacoEditor(window);
   await expect(window.locator('.monaco-editor .view-lines')).toContainText('module alu', {
@@ -2733,6 +2742,7 @@ test('Explorer Copy creates a -copy file and keeps it after relaunch', async () 
 
   await sourceTreeNode.click({ button: 'right' });
   await expect(explorerContextMenu).toBeVisible();
+  await expect(window.getByRole('menuitem', { name: 'Set as Simulation Top' })).toHaveCount(0);
   await window.getByTestId('explorer-context-menu-item-copy').click();
 
   await sourceTreeNode.click({ button: 'right' });

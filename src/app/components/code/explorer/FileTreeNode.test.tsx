@@ -356,6 +356,7 @@ describe('FileTreeNode', () => {
     expect(getContextMenuShortcut('Paste')).toHaveTextContent('Ctrl+V');
     expect(getContextMenuShortcut('Rename')).toHaveTextContent('F2');
     expect(getContextMenuShortcut('Delete')).toHaveTextContent('Delete');
+    expect(screen.queryByRole('menuitem', { name: 'Set as Simulation Top' })).not.toBeInTheDocument();
     expect(getContextMenuItem('Copy Path')).toBeInTheDocument();
     expect(getContextMenuItem('Delete')).toHaveAttribute('data-variant', 'destructive');
     expect(getContextMenuItem('Delete')).not.toHaveClass('text-destructive', 'hover:bg-destructive/10', 'hover:text-destructive');
