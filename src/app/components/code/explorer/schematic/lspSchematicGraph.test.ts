@@ -13,8 +13,8 @@ describe('lspSchematicToGraph', () => {
         name: 'top',
         uri: 'file:///workspace/rtl/top.sv',
         ports: [
-          { name: 'a', direction: 'input', widthText: '' },
-          { name: 'y', direction: 'output', widthText: '[3:0]' },
+          { name: 'a', direction: 'input', widthText: 'logic' },
+          { name: 'y', direction: 'output', widthText: 'logic [3:0]' },
         ],
         cells: [{
           id: 'u_child',
@@ -50,8 +50,8 @@ describe('lspSchematicToGraph', () => {
         id: 'child',
         name: 'child',
         ports: [
-          { name: 'a', direction: 'input', widthText: '' },
-          { name: 'y', direction: 'output', widthText: '' },
+          { name: 'a', direction: 'input', widthText: 'logic' },
+          { name: 'y', direction: 'output', widthText: 'logic [3:0]' },
         ],
         cells: [],
         nets: [],
@@ -62,6 +62,10 @@ describe('lspSchematicToGraph', () => {
 
     expect(graph.rootModuleId).toBe('top');
     expect(graph.modules.top?.ports).toEqual([
+      { id: 'a', name: 'a', direction: 'input', width: undefined },
+      { id: 'y', name: 'y[3:0]', direction: 'output', width: 4 },
+    ]);
+    expect(graph.modules.child?.ports).toEqual([
       { id: 'a', name: 'a', direction: 'input', width: undefined },
       { id: 'y', name: 'y[3:0]', direction: 'output', width: 4 },
     ]);

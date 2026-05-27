@@ -22,8 +22,12 @@ export function AsicSchematicPanel() {
   const { top: hierarchyTop } = useModuleHierarchy();
   const schematicSettings = useSchematicSettings();
   const canvasRef = useRef<AsicSchematicCanvasHandle | null>(null);
+  const layoutCacheRef = useRef<Map<string, SchematicLayoutResult>>(new Map());
+  const prefetchingModuleIdsRef = useRef<Set<string>>(new Set());
+  const graphRef = useRef<AsicSchematicGraph | null>(null);
   const [graph, setGraph] = useState<AsicSchematicGraph | null>(null);
   const [moduleId, setModuleId] = useState<string | null>(null);
+  const [requestedModuleId, setRequestedModuleId] = useState<string | null>(null);
   const [layout, setLayout] = useState<SchematicLayoutResult | null>(null);
   const [schematicError, setSchematicError] = useState<string | null>(null);
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
@@ -33,8 +37,10 @@ export function AsicSchematicPanel() {
   const [camera, setCamera] = useState<CameraSnapshot>({ x: 0, y: 0, zoom: 1 });
   const [renderer, setRenderer] = useState('initializing');
   const [layoutState, setLayoutState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [layoutCacheSize, setLayoutCacheSize] = useState(0);
   const [positionOverridesByModule, setPositionOverridesByModule] = useState<Record<string, SchematicNodePositionOverrides>>({});
 
+  graphRef.current = graph;
   const topRequestKey = `${hierarchyTop?.rootKey ?? 'auto'}:${hierarchyTop?.moduleName ?? ''}`;
   const modulePath = useMemo(() => graph && moduleId ? findModulePath(graph, moduleId) : [], [graph, moduleId]);
   const activeModule = graph && moduleId ? graph.modules[moduleId] : null;
@@ -49,16 +55,44 @@ export function AsicSchematicPanel() {
   const selectedEdge = selectedEdgeIds.length === 1 ? activeLayout?.edges.find((edge) => edge.id === selectedEdgeIds[0]) ?? null : null;
   const parentModuleId = modulePath.length > 1 ? modulePath[modulePath.length - 2]?.id ?? null : null;
   const nextChildModuleId = forwardStack[0] ?? null;
+  const pendingModuleId = requestedModuleId && requestedModuleId !== moduleId ? requestedModuleId : null;
+
+  const cacheLayout = useCallback((nextModuleId: string, nextLayout: SchematicLayoutResult) => {
+    layoutCacheRef.current.set(nextModuleId, nextLayout);
+    setLayoutCacheSize(layoutCacheRef.current.size);
+  }, []);
+
+  const prefetchChildLayouts = useCallback((sourceGraph: AsicSchematicGraph, sourceLayout: SchematicLayoutResult) => {
+    sourceLayout.nodes.forEach((node) => {
+      const childModuleId = node.canDrillDown ? node.moduleId : null;
+
+      if (!childModuleId || layoutCacheRef.current.has(childModuleId) || prefetchingModuleIdsRef.current.has(childModuleId)) {
+        return;
+      }
+
+      prefetchingModuleIdsRef.current.add(childModuleId);
+      layoutAsicSchematic(sourceGraph, childModuleId)
+        .then((nextLayout) => {
+          if (graphRef.current === sourceGraph) {
+            cacheLayout(childModuleId, nextLayout);
+          }
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          prefetchingModuleIdsRef.current.delete(childModuleId);
+        });
+    });
+  }, [cacheLayout]);
 
   const handleEnterModule = useCallback((nextModuleId: string) => {
-    if (!moduleId || nextModuleId === moduleId) {
+    if (!moduleId || nextModuleId === moduleId || nextModuleId === requestedModuleId) {
       return;
     }
 
     setBackStack((currentStack) => [...currentStack, moduleId]);
     setForwardStack([]);
-    setModuleId(nextModuleId);
-  }, [moduleId]);
+    setRequestedModuleId(nextModuleId);
+  }, [moduleId, requestedModuleId]);
 
   const handleGoParentModule = useCallback(() => {
     if (!moduleId) {
@@ -73,7 +107,7 @@ export function AsicSchematicPanel() {
 
     setBackStack((currentStack) => currentStack.length > 0 ? currentStack.slice(0, -1) : currentStack);
     setForwardStack((currentStack) => [moduleId, ...currentStack.filter((candidate) => candidate !== moduleId)]);
-    setModuleId(nextModuleId);
+    setRequestedModuleId(nextModuleId);
   }, [backStack, moduleId, parentModuleId]);
 
   const handleGoNextChildModule = useCallback(() => {
@@ -83,13 +117,13 @@ export function AsicSchematicPanel() {
 
     setForwardStack((currentStack) => currentStack.slice(1));
     setBackStack((currentStack) => [...currentStack, moduleId]);
-    setModuleId(nextChildModuleId);
+    setRequestedModuleId(nextChildModuleId);
   }, [moduleId, nextChildModuleId]);
 
   const handleDirectModuleNavigation = useCallback((nextModuleId: string) => {
     setBackStack([]);
     setForwardStack([]);
-    setModuleId(nextModuleId);
+    setRequestedModuleId(nextModuleId);
   }, []);
 
   const handleNodePositionsChange = useCallback((positions: SchematicNodePositionOverrides, movedNodeIds: readonly string[]) => {
@@ -162,9 +196,14 @@ export function AsicSchematicPanel() {
     const lsp = window.electronAPI?.lsp;
 
     setLayoutState('loading');
+    layoutCacheRef.current.clear();
+    prefetchingModuleIdsRef.current.clear();
+    graphRef.current = null;
+    setLayoutCacheSize(0);
     setLayout(null);
     setGraph(null);
     setModuleId(null);
+    setRequestedModuleId(null);
     setSelectedNodeIds([]);
     setSelectedEdgeIds([]);
     setBackStack([]);
@@ -188,7 +227,7 @@ export function AsicSchematicPanel() {
 
         const nextGraph = lspSchematicToGraph(nextSchematic);
         setGraph(nextGraph);
-        setModuleId(nextGraph.rootModuleId);
+        setRequestedModuleId(nextGraph.rootModuleId);
       })
       .catch((error) => {
         if (cancelled) {
@@ -205,20 +244,33 @@ export function AsicSchematicPanel() {
   }, [hierarchyTop?.moduleName, topRequestKey]);
 
   useEffect(() => {
-    if (!graph || !moduleId) {
+    if (!graph || !requestedModuleId) {
       return undefined;
     }
 
     let cancelled = false;
-    setLayoutState('loading');
     setSelectedNodeIds([]);
     setSelectedEdgeIds([]);
 
-    layoutAsicSchematic(graph, moduleId)
+    const cachedLayout = layoutCacheRef.current.get(requestedModuleId);
+    if (cachedLayout) {
+      setLayout(cachedLayout);
+      setModuleId(requestedModuleId);
+      setLayoutState('ready');
+      prefetchChildLayouts(graph, cachedLayout);
+      return undefined;
+    }
+
+    setLayoutState('loading');
+
+    layoutAsicSchematic(graph, requestedModuleId)
       .then((nextLayout) => {
         if (!cancelled) {
+          cacheLayout(requestedModuleId, nextLayout);
           setLayout(nextLayout);
+          setModuleId(requestedModuleId);
           setLayoutState('ready');
+          prefetchChildLayouts(graph, nextLayout);
         }
       })
       .catch(() => {
@@ -230,7 +282,7 @@ export function AsicSchematicPanel() {
     return () => {
       cancelled = true;
     };
-  }, [graph, moduleId]);
+  }, [cacheLayout, graph, prefetchChildLayouts, requestedModuleId]);
 
   return (
     <div
@@ -239,6 +291,9 @@ export function AsicSchematicPanel() {
       data-renderer={renderer}
       data-theme={theme}
       data-module-id={moduleId ?? ''}
+      data-pending-module-id={pendingModuleId ?? ''}
+      data-layout-state={layoutState}
+      data-layout-cache-size={layoutCacheSize}
       data-top-module={hierarchyTop?.moduleName ?? ''}
       data-node-count={activeLayout?.nodes.length ?? 0}
       data-edge-count={activeLayout?.edges.length ?? 0}
@@ -306,7 +361,7 @@ export function AsicSchematicPanel() {
           {selectedNode ? (
             <div className="mt-4 rounded-md border border-ide-border bg-ide-panel-bg p-2">
               <div className="font-medium text-ide-text">{selectedNode.label}</div>
-              <div className="mt-1 text-ide-text-muted">{selectedNode.subtitle}</div>
+              <div className="mt-1 text-ide-text-muted">{selectedNode.tooltipType}</div>
               {selectedNode.canDrillDown && selectedNode.moduleId ? (
                 <Button size="xs" variant="ghost" className="mt-2 h-6 px-1.5 text-[11px]" onClick={() => handleEnterModule(selectedNode.moduleId!)}>
                   Open module
@@ -332,26 +387,33 @@ export function AsicSchematicPanel() {
           </div>
         ) : null}
         {layoutState === 'loading' ? (
-          <div className="flex flex-1 items-center justify-center text-[12px] text-ide-text-muted">Loading schematic...</div>
+          !activeLayout ? <div className="flex flex-1 items-center justify-center text-[12px] text-ide-text-muted">Loading schematic...</div> : null
         ) : null}
-        {layoutState === 'ready' && activeLayout ? (
-          <AsicSchematicCanvas
-            ref={canvasRef}
-            layout={activeLayout}
-            alignmentGuidesEnabled={schematicSettings.alignmentGuidesEnabled}
-            gridEnabled={schematicSettings.gridEnabled}
-            gridSize={schematicSettings.gridSize}
-            selectedNodeIds={selectedNodeIds}
-            selectedEdgeIds={selectedEdgeIds}
-            snapToGrid={schematicSettings.snapToGrid}
-            themeKey={`${themeId}:${theme}`}
-            onCameraChange={setCamera}
-            onModuleOpen={handleEnterModule}
-            onNodeSelectionChange={handleNodeSelectionChange}
-            onEdgeSelectionChange={handleEdgeSelectionChange}
-            onNodePositionsChange={handleNodePositionsChange}
-            onRendererChange={setRenderer}
-          />
+        {activeLayout ? (
+          <div className="relative flex min-h-0 flex-1">
+            <AsicSchematicCanvas
+              ref={canvasRef}
+              layout={activeLayout}
+              alignmentGuidesEnabled={schematicSettings.alignmentGuidesEnabled}
+              gridEnabled={schematicSettings.gridEnabled}
+              gridSize={schematicSettings.gridSize}
+              selectedNodeIds={selectedNodeIds}
+              selectedEdgeIds={selectedEdgeIds}
+              snapToGrid={schematicSettings.snapToGrid}
+              themeKey={`${themeId}:${theme}`}
+              onCameraChange={setCamera}
+              onModuleOpen={handleEnterModule}
+              onNodeSelectionChange={handleNodeSelectionChange}
+              onEdgeSelectionChange={handleEdgeSelectionChange}
+              onNodePositionsChange={handleNodePositionsChange}
+              onRendererChange={setRenderer}
+            />
+            {layoutState === 'loading' ? (
+              <div className="pointer-events-none absolute right-3 top-3 rounded border border-ide-border bg-ide-panel-bg/90 px-2 py-1 text-[11px] text-ide-text-muted shadow-sm">
+                Loading {pendingModuleId ?? 'schematic'}...
+              </div>
+            ) : null}
+          </div>
         ) : null}
       </div>
     </div>

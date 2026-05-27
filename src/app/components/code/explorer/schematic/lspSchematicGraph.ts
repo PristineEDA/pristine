@@ -62,12 +62,18 @@ function lspModuleToAsicModule(module: LspSchematicModule, schematic: LspSchemat
 }
 
 function lspPortToAsicPort(port: LspSchematicPort): AsicPort {
+  const displayWidthText = getDisplayWidthText(port.widthText);
+
   return {
     id: port.name,
-    name: port.widthText ? `${port.name}${port.widthText}` : port.name,
+    name: displayWidthText ? `${port.name}${displayWidthText}` : port.name,
     direction: port.direction,
     width: getWidthFromText(port.widthText),
   };
+}
+
+function getDisplayWidthText(widthText: string) {
+  return widthText.match(/\[[^\]]+\]/g)?.join('') ?? '';
 }
 
 function lspNetToAsicNets(

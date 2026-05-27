@@ -301,16 +301,6 @@ function drawEdge(edge: SchematicEdgeLayout, palette: AsicSchematicPalette, sele
   remainingPoints.forEach((point) => graphics.lineTo(point.x, point.y));
   graphics.stroke({ color, alpha: style.alpha * alphaMultiplier, width: style.width, cap: 'round', join: 'round' });
 
-  const lastPoint = edge.points[edge.points.length - 1];
-  if (lastPoint) {
-    if (edge.isBus) {
-      const size = selected ? 7 : 5.5;
-      graphics.rect(lastPoint.x - size / 2, lastPoint.y - size / 2, size, size).fill({ color, alpha: 0.9 * alphaMultiplier });
-    } else {
-      graphics.circle(lastPoint.x, lastPoint.y, selected ? 4.6 : 3).fill({ color, alpha: 0.88 * alphaMultiplier });
-    }
-  }
-
   return graphics;
 }
 
@@ -394,8 +384,7 @@ function drawModuleNode(container: Container, node: SchematicNodeLayout, palette
     .roundRect(0, 0, node.width, node.height, 8)
     .fill({ color: palette.panel, alpha: 0.96 })
     .stroke({ color: palette.border, alpha: 0.72, width: 1.2 }));
-  container.addChild(createText(textNodes, node.label, palette.text, 12, '600', 12, 10));
-  container.addChild(createText(textNodes, node.subtitle, palette.textMuted, 10, '400', 12, 28));
+  container.addChild(createText(textNodes, node.label, palette.text, 12, '600', 12, 15));
 }
 
 function drawIoPortNode(container: Container, node: SchematicNodeLayout, palette: AsicSchematicPalette, textNodes: BitmapText[]) {
@@ -425,8 +414,7 @@ function drawIoPortNode(container: Container, node: SchematicNodeLayout, palette
 
   body.fill({ color: palette.panelMuted, alpha: 0.9 }).stroke({ color: portColor, alpha: 0.82, width: 1.4 });
   container.addChild(body);
-  container.addChild(createText(textNodes, node.label, palette.text, 11, '600', 10, 7));
-  container.addChild(createText(textNodes, node.subtitle, portColor, 9, '600', 10, 21));
+  container.addChild(createText(textNodes, node.label, palette.text, 11, '600', 10, 13));
 }
 
 function drawLogicNode(container: Container, node: SchematicNodeLayout, palette: AsicSchematicPalette, textNodes: BitmapText[]) {
@@ -469,12 +457,9 @@ function drawLogicNode(container: Container, node: SchematicNodeLayout, palette:
   body.fill({ color: fill, alpha: 0.96 }).stroke({ color: palette.accent, alpha: 0.72, width: 1.3 });
   container.addChild(body);
 
-  const title = createText(textNodes, kind.toUpperCase(), palette.accent, 12, '600', node.width / 2, 10);
-  title.anchor.set(0.5, 0);
-  container.addChild(title);
-  const name = createText(textNodes, node.label, palette.textMuted, 9, '400', node.width / 2, 29);
-  name.anchor.set(0.5, 0);
-  container.addChild(name);
+  const label = createText(textNodes, node.label, palette.text, 11, '600', node.width / 2, node.height / 2 - 7);
+  label.anchor.set(0.5, 0);
+  container.addChild(label);
 }
 
 function isLogicCellKind(kind: string | undefined) {
@@ -489,7 +474,6 @@ function drawPorts(container: Container, node: SchematicNodeLayout, palette: Asi
     const labelX = port.side === 'west' ? 10 : node.width - 10;
     const portColor = port.direction === 'input' ? palette.info : port.direction === 'output' ? palette.success : palette.warning;
 
-    container.addChild(new Graphics().circle(anchorX, localY, 3.6).fill({ color: portColor, alpha: 0.9 }));
     container.addChild(new Graphics().moveTo(anchorX, localY).lineTo(anchorX + sideMultiplier * 8, localY).stroke({ color: portColor, alpha: 0.64, width: 1 }));
 
     const portText = createText(textNodes, port.name, palette.textMuted, 9, '400', labelX, localY - 6);
@@ -519,7 +503,7 @@ function createNodeTooltip(palette: AsicSchematicPalette, textNodes: BitmapText[
 
 function showNodeTooltip(tooltip: NodeTooltip, node: SchematicNodeLayout) {
   tooltip.nameText.text = `name:${node.label}`;
-  tooltip.typeText.text = `type:${node.subtitle}`;
+  tooltip.typeText.text = `type:${node.tooltipType}`;
   const width = Math.max(96, Math.max(tooltip.nameText.text.length, tooltip.typeText.text.length) * 6.8 + 16);
   const height = 40;
 

@@ -7,6 +7,7 @@ const createModuleNode = (id: string, x: number, y: number, width = 100, height 
   id,
   label: id,
   subtitle: id,
+  tooltipType: id,
   kind: 'module',
   instanceId: id,
   moduleId: `${id}_module`,

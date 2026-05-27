@@ -57,6 +57,7 @@ export interface SchematicNodeLayout {
   id: string;
   label: string;
   subtitle: string;
+  tooltipType: string;
   kind: 'module' | 'port';
   cellKind?: string;
   instanceId?: string;

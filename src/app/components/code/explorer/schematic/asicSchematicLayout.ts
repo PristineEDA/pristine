@@ -405,7 +405,8 @@ function toNodeLayout(graph: AsicSchematicGraph, module: AsicModule, elkNode: El
     return {
       id: elkNode.id,
       label: port.name,
-      subtitle: port.direction.toUpperCase(),
+      subtitle: '',
+      tooltipType: port.direction,
       kind: 'port',
       x,
       y,
@@ -439,7 +440,8 @@ function toNodeLayout(graph: AsicSchematicGraph, module: AsicModule, elkNode: El
   return {
     id: instance.id,
     label: instance.name,
-    subtitle: childModule?.name ?? instance.moduleId,
+    subtitle: '',
+    tooltipType: childModule?.name ?? instance.moduleId,
     kind: 'module',
     cellKind: instance.cellKind,
     instanceId: instance.id,
@@ -564,7 +566,8 @@ function createFallbackLayout(graph: AsicSchematicGraph, module: AsicModule): Sc
     nodes.push({
       id: instance.id,
       label: instance.name,
-      subtitle: childModule?.name ?? instance.moduleId,
+      subtitle: '',
+      tooltipType: childModule?.name ?? instance.moduleId,
       kind: 'module',
       cellKind: instance.cellKind,
       instanceId: instance.id,
@@ -612,7 +615,8 @@ function createFallbackPortNode(port: AsicPort, x: number, y: number): Schematic
   return {
     id: getIoNodeId(port.id),
     label: port.name,
-    subtitle: port.direction.toUpperCase(),
+    subtitle: '',
+    tooltipType: port.direction,
     kind: 'port',
     x,
     y,

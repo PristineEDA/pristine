@@ -29,6 +29,20 @@ describe('layoutAsicSchematic', () => {
     expect(layout.usedFallback).toBe(false);
   });
 
+  it('keeps module and top-level port type metadata out of visible subtitles', async () => {
+    const layout = await layoutAsicSchematic(mockAsicSchematicGraph);
+    const moduleNode = layout.nodes.find((node) => node.kind === 'module');
+    const portNode = layout.nodes.find((node) => node.kind === 'port');
+
+    expect(moduleNode).toBeDefined();
+    expect(portNode).toBeDefined();
+    expect(moduleNode?.subtitle).toBe('');
+    expect(moduleNode?.tooltipType).toBeTruthy();
+    expect(moduleNode?.label).toBe(moduleNode?.instanceId);
+    expect(portNode?.subtitle).toBe('');
+    expect(portNode?.tooltipType).toMatch(/^(input|output|inout)$/);
+  });
+
   it('falls back to deterministic columns when ELK layout fails', async () => {
     const layoutEngine = {
       layout: vi.fn().mockRejectedValue(new Error('layout unavailable')),

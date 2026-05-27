@@ -5161,7 +5161,7 @@ test('terminal tab creates a real shell session and shows command output', async
 test('asic schematic bottom panel renders Pixi layers with selection and hierarchy navigation', async () => {
   const { app, window } = await launchApp();
   const cpuTopSource = [
-    'module cpu_top(input clk, input rst_n, input [3:0] a, input [3:0] b, input sel, output [3:0] y);',
+    'module cpu_top(input logic clk, input logic rst_n, input logic [3:0] a, input logic [3:0] b, input logic sel, output logic [3:0] y);',
     '  logic [3:0] n1;',
     '  logic [3:0] n2;',
     '  logic [3:0] n3;',
@@ -5173,19 +5173,19 @@ test('asic schematic bottom panel renders Pixi layers with selection and hierarc
     'endmodule',
   ].join('\n');
   const aluSource = [
-    'module alu(input [3:0] a, input [3:0] b, output [3:0] y);',
+    'module alu(input logic [3:0] a, input logic [3:0] b, output logic [3:0] y);',
     '  assign y = a ^ b;',
     'endmodule',
   ].join('\n');
   const logicChildSource = [
-    'module logic_child(input clk, input rst_n, input [3:0] a, input [3:0] b, input sel, output [3:0] y);',
+    'module logic_child(input logic clk, input logic rst_n, input logic [3:0] a, input logic [3:0] b, input logic sel, output logic [3:0] y);',
     '  logic [3:0] gated;',
     '  assign gated = a & b;',
     '  assign y = sel ? gated : b;',
     'endmodule',
   ].join('\n');
   const altTopSource = [
-    'module z_schematic_alt_top(input a, input b, output y);',
+    'module z_schematic_alt_top(input logic a, input logic b, output logic y);',
     '  assign y = a | b;',
     'endmodule',
   ].join('\n');
@@ -5262,6 +5262,9 @@ test('asic schematic bottom panel renders Pixi layers with selection and hierarc
   });
   const readModuleSnapshot = async () => JSON.parse(await canvasHost.getAttribute('data-module-node-snapshot') ?? '[]') as Array<{
     id: string;
+    label: string;
+    subtitle: string;
+    type: string;
     cellKind: string;
     x: number;
     y: number;
@@ -5274,6 +5277,7 @@ test('asic schematic bottom panel renders Pixi layers with selection and hierarc
   const readLogicSnapshot = async () => JSON.parse(await canvasHost.getAttribute('data-logic-node-snapshot') ?? '[]') as Array<{
     id: string;
     name: string;
+    subtitle: string;
     type: string;
     cellKind: string;
     centerX: number;
@@ -5282,6 +5286,8 @@ test('asic schematic bottom panel renders Pixi layers with selection and hierarc
   const readPortSnapshot = async () => JSON.parse(await canvasHost.getAttribute('data-port-node-snapshot') ?? '[]') as Array<{
     id: string;
     name: string;
+    subtitle: string;
+    type: string;
     direction: string;
     centerX: number;
     centerY: number;
@@ -5464,6 +5470,11 @@ test('asic schematic bottom panel renders Pixi layers with selection and hierarc
   await expect.poll(async () => (await readPortSnapshot()).map((node) => node.direction).sort(), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toEqual(expect.arrayContaining(['input', 'output']));
+  expect((await readModuleSnapshot()).filter((node) => node.subtitle !== '' || node.label !== node.id || node.type.length === 0)).toEqual([]);
+  expect((await readPortSnapshot()).filter((node) => node.subtitle !== '' || node.type !== node.direction)).toEqual([]);
+  expect((await readPortSnapshot()).filter((port) => port.name.toLowerCase().includes('logic'))).toEqual([]);
+  await expect(canvasHost).toHaveAttribute('data-port-marker-count', '0');
+  await expect(canvasHost).toHaveAttribute('data-edge-end-marker-count', '0');
   const firstEdge = await readFirstEdge();
   expect(firstEdge.id).not.toBeNull();
   await expect(canvasHost).toHaveAttribute('data-first-bus-edge-style', 'bus');
@@ -5472,6 +5483,14 @@ test('asic schematic bottom panel renders Pixi layers with selection and hierarc
   await window.mouse.move((await worldToScreen(firstModule)).x, (await worldToScreen(firstModule)).y);
   await expect(canvasHost).toHaveAttribute('data-hover-node-label', `name:${firstModule.id}`);
   await expect(canvasHost).toHaveAttribute('data-hover-node-type', /^type:/);
+  const firstPortNode = (await readPortSnapshot())[0];
+  expect(firstPortNode).toBeDefined();
+  if (firstPortNode) {
+    const firstPortPoint = await worldToScreen({ x: firstPortNode.centerX, y: firstPortNode.centerY });
+    await window.mouse.move(firstPortPoint.x, firstPortPoint.y);
+    await expect(canvasHost).toHaveAttribute('data-hover-node-label', `name:${firstPortNode.name}`);
+    await expect(canvasHost).toHaveAttribute('data-hover-node-type', `type:${firstPortNode.direction}`);
+  }
 
   await clickModule(firstModule);
   await expect(panel).toHaveAttribute('data-selected-node-count', '1');
@@ -5609,9 +5628,14 @@ test('asic schematic bottom panel renders Pixi layers with selection and hierarc
   const drillableModule = await readDrillableModule();
   expect(drillableModule.id).not.toBeNull();
   expect(drillableModule.targetId).not.toBeNull();
+  await expect.poll(async () => Number(await panel.getAttribute('data-layout-cache-size') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(1);
   const drillPoint = await worldToScreen(drillableModule);
   await window.mouse.dblclick(drillPoint.x, drillPoint.y);
-  await expect(panel).toHaveAttribute('data-module-id', drillableModule.targetId ?? '');
+  await expect.poll(async () => await panel.getAttribute('data-module-id'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBe(drillableModule.targetId ?? '');
 
   await window.getByLabel('Parent module').click();
   await expect(panel).toHaveAttribute('data-module-id', 'cpu_top');

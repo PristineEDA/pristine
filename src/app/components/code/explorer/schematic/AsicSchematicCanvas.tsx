@@ -140,6 +140,9 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
   const firstDrillableNode = useMemo(() => moduleNodes.find((node) => node.canDrillDown && node.moduleId) ?? null, [moduleNodes]);
   const moduleNodeSnapshot = useMemo(() => JSON.stringify(moduleNodes.map((node) => ({
     id: node.id,
+    label: node.label,
+    subtitle: node.subtitle,
+    type: node.tooltipType,
     cellKind: node.cellKind ?? 'module',
     x: roundLayoutCoordinate(node.x),
     y: roundLayoutCoordinate(node.y),
@@ -154,7 +157,8 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
     .map((node) => ({
       id: node.id,
       name: node.label,
-      type: node.subtitle,
+      subtitle: node.subtitle,
+      type: node.tooltipType,
       cellKind: node.cellKind,
       centerX: roundLayoutCoordinate(node.x + node.width / 2),
       centerY: roundLayoutCoordinate(node.y + node.height / 2),
@@ -164,6 +168,8 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
     .map((node) => ({
       id: node.id,
       name: node.label,
+      subtitle: node.subtitle,
+      type: node.tooltipType,
       direction: node.ports[0]?.direction ?? 'inout',
       centerX: roundLayoutCoordinate(node.x + node.width / 2),
       centerY: roundLayoutCoordinate(node.y + node.height / 2),
@@ -938,7 +944,7 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
 
     host.setAttribute('data-hover-node-id', node.id);
     host.setAttribute('data-hover-node-label', `name:${node.label}`);
-    host.setAttribute('data-hover-node-type', `type:${node.subtitle}`);
+    host.setAttribute('data-hover-node-type', `type:${node.tooltipType}`);
   }
 
   function clearHoveredNodeDataAttributes() {
@@ -1120,6 +1126,8 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
       data-module-node-snapshot={moduleNodeSnapshot}
       data-logic-node-snapshot={logicNodeSnapshot}
       data-port-node-snapshot={portNodeSnapshot}
+      data-port-marker-count={0}
+      data-edge-end-marker-count={0}
       data-edge-route-snapshot={edgeRouteSnapshot}
       data-first-edge-id={firstSelectableEdge?.id}
       data-first-edge-center-x={firstSelectableEdgePoint ? firstSelectableEdgePoint.x.toFixed(1) : undefined}
