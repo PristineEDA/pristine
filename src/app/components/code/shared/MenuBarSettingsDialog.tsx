@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
-import { Code2, Monitor, Palette, Search, Settings2, X, type LucideIcon } from 'lucide-react';
+import { CircuitBoard, Code2, Monitor, Palette, Search, Settings2, X, type LucideIcon } from 'lucide-react';
 import { useEditorSettings } from '../../../context/EditorSettingsContext';
+import { useSchematicSettings } from '../../../context/SchematicSettingsContext';
 import {
   WORKBENCH_CODE_VIEWER_LAYOUT_MODE_CONFIG_KEY,
   parseCodeViewerLayoutMode,
@@ -54,6 +55,18 @@ import {
   parseEditorWordWrap,
 } from '../../../editor/editorSettings';
 import {
+  MAX_SCHEMATIC_GRID_SIZE,
+  MIN_SCHEMATIC_GRID_SIZE,
+  SCHEMATIC_ALIGNMENT_GUIDES_ENABLED_CONFIG_KEY,
+  SCHEMATIC_GRID_ENABLED_CONFIG_KEY,
+  SCHEMATIC_GRID_SIZE_CONFIG_KEY,
+  SCHEMATIC_SNAP_TO_GRID_CONFIG_KEY,
+  parseSchematicAlignmentGuidesEnabled,
+  parseSchematicGridEnabled,
+  parseSchematicGridSize,
+  parseSchematicSnapToGrid,
+} from '../../../schematic/schematicSettings';
+import {
   parseConfiguredColorThemeId,
   parseImportedColorThemeRecords,
   WORKBENCH_COLOR_THEME_CONFIG_KEY,
@@ -90,7 +103,7 @@ const settingsSectionTitleClassName = 'text-[13px] font-medium';
 const settingsSectionDescriptionClassName = 'text-[12px] text-muted-foreground';
 
 type ThemePickerLayoutMode = 'grouped' | 'list';
-type SettingsPageId = 'general' | 'appearance' | 'editor' | 'window';
+type SettingsPageId = 'general' | 'appearance' | 'editor' | 'schematic' | 'window';
 
 interface SettingsPageMetadata {
   id: SettingsPageId;
@@ -126,6 +139,12 @@ const settingsPages: SettingsPageMetadata[] = [
     label: 'Editor',
     description: 'Code editing fonts, behavior, and display aids.',
     icon: Code2,
+  },
+  {
+    id: 'schematic',
+    label: 'Schematic',
+    description: 'Canvas grid, snapping, and alignment preferences.',
+    icon: CircuitBoard,
   },
   {
     id: 'window',
@@ -177,6 +196,10 @@ export interface MenuBarSettingsState {
   editorSmoothScrolling: ReturnType<typeof getConfiguredEditorSmoothScrolling>;
   editorTabSize: ReturnType<typeof getConfiguredEditorTabSize>;
   editorWordWrap: ReturnType<typeof getConfiguredEditorWordWrap>;
+  schematicAlignmentGuidesEnabled: ReturnType<typeof getConfiguredSchematicAlignmentGuidesEnabled>;
+  schematicGridEnabled: ReturnType<typeof getConfiguredSchematicGridEnabled>;
+  schematicGridSize: ReturnType<typeof getConfiguredSchematicGridSize>;
+  schematicSnapToGrid: ReturnType<typeof getConfiguredSchematicSnapToGrid>;
 }
 
 function getConfiguredCloseAction(): 'quit' | 'tray' {
@@ -293,6 +316,22 @@ function getConfiguredEditorIndentGuides() {
   return getConfiguredEditorBooleanSetting(EDITOR_INDENT_GUIDES_CONFIG_KEY, DEFAULT_EDITOR_INDENT_GUIDES);
 }
 
+function getConfiguredSchematicGridEnabled() {
+  return parseSchematicGridEnabled(window.electronAPI?.config.get(SCHEMATIC_GRID_ENABLED_CONFIG_KEY));
+}
+
+function getConfiguredSchematicGridSize() {
+  return parseSchematicGridSize(window.electronAPI?.config.get(SCHEMATIC_GRID_SIZE_CONFIG_KEY));
+}
+
+function getConfiguredSchematicSnapToGrid() {
+  return parseSchematicSnapToGrid(window.electronAPI?.config.get(SCHEMATIC_SNAP_TO_GRID_CONFIG_KEY));
+}
+
+function getConfiguredSchematicAlignmentGuidesEnabled() {
+  return parseSchematicAlignmentGuidesEnabled(window.electronAPI?.config.get(SCHEMATIC_ALIGNMENT_GUIDES_ENABLED_CONFIG_KEY));
+}
+
 function getPersistedSettingsState(): MenuBarSettingsState {
   return {
     codeViewerLayoutMode: getConfiguredCodeViewerLayoutMode(),
@@ -318,6 +357,10 @@ function getPersistedSettingsState(): MenuBarSettingsState {
     editorSmoothScrolling: getConfiguredEditorSmoothScrolling(),
     editorTabSize: getConfiguredEditorTabSize(),
     editorWordWrap: getConfiguredEditorWordWrap(),
+    schematicAlignmentGuidesEnabled: getConfiguredSchematicAlignmentGuidesEnabled(),
+    schematicGridEnabled: getConfiguredSchematicGridEnabled(),
+    schematicGridSize: getConfiguredSchematicGridSize(),
+    schematicSnapToGrid: getConfiguredSchematicSnapToGrid(),
   };
 }
 
@@ -577,6 +620,12 @@ export function useMenuBarSettingsController() {
     setWordWrap: setEditorWordWrap,
   } = useEditorSettings();
   const {
+    setAlignmentGuidesEnabled: setSchematicAlignmentGuidesEnabled,
+    setGridEnabled: setSchematicGridEnabled,
+    setGridSize: setSchematicGridSize,
+    setSnapToGrid: setSchematicSnapToGrid,
+  } = useSchematicSettings();
+  const {
     availableThemes,
     getThemePreview,
     importTheme,
@@ -777,6 +826,31 @@ export function useMenuBarSettingsController() {
     setEditorIndentGuides(checked);
   };
 
+  const handleSchematicGridEnabledChange = (checked: boolean) => {
+    patchSettingsState({ schematicGridEnabled: checked });
+    setSchematicGridEnabled(checked);
+  };
+
+  const handleSchematicGridSizeChange = (value: number[]) => {
+    patchSettingsState({ schematicGridSize: parseSchematicGridSize(value[0] ?? settingsState.schematicGridSize) });
+  };
+
+  const handleSchematicGridSizeCommit = (value: number[]) => {
+    const nextValue = parseSchematicGridSize(value[0] ?? settingsState.schematicGridSize);
+    patchSettingsState({ schematicGridSize: nextValue });
+    setSchematicGridSize(nextValue);
+  };
+
+  const handleSchematicSnapToGridChange = (checked: boolean) => {
+    patchSettingsState({ schematicSnapToGrid: checked });
+    setSchematicSnapToGrid(checked);
+  };
+
+  const handleSchematicAlignmentGuidesEnabledChange = (checked: boolean) => {
+    patchSettingsState({ schematicAlignmentGuidesEnabled: checked });
+    setSchematicAlignmentGuidesEnabled(checked);
+  };
+
   const openSettingsDialog = useCallback(() => {
     handleSettingsDialogOpenChange(true);
   }, [handleSettingsDialogOpenChange]);
@@ -814,6 +888,11 @@ export function useMenuBarSettingsController() {
     handleThemeImport,
     handleEditorWordWrapChange,
     handleFloatingInfoWindowVisibleChange,
+    handleSchematicAlignmentGuidesEnabledChange,
+    handleSchematicGridEnabledChange,
+    handleSchematicGridSizeChange,
+    handleSchematicGridSizeCommit,
+    handleSchematicSnapToGridChange,
     handleSettingsDialogOpenChange,
     isImportingTheme,
     openSettingsDialog,
@@ -865,6 +944,11 @@ export function MenuBarSettingsDialogs({
     handleThemeImport,
     handleEditorWordWrapChange,
     handleFloatingInfoWindowVisibleChange,
+    handleSchematicAlignmentGuidesEnabledChange,
+    handleSchematicGridEnabledChange,
+    handleSchematicGridSizeChange,
+    handleSchematicGridSizeCommit,
+    handleSchematicSnapToGridChange,
     handleSettingsDialogOpenChange,
     isImportingTheme,
     settingsDialogOpen,
@@ -1234,6 +1318,55 @@ export function MenuBarSettingsDialogs({
       ),
     },
     {
+      id: 'schematic-grid-size',
+      pageId: 'schematic',
+      title: 'Grid size',
+      description: 'Adjust the visible schematic grid and keyboard pan step size.',
+      keywords: ['schematic', 'grid', 'size', 'canvas', 'pan', 'keyboard'],
+      element: (
+        <SettingsSliderSection
+          title="Grid size"
+          description="Adjust the visible schematic grid and keyboard pan step size."
+          testId="schematic-grid-size"
+        >
+          <div className="flex min-w-0 items-center gap-3">
+            <Slider
+              aria-label="Schematic grid size"
+              data-testid="settings-schematic-grid-size-slider"
+              min={MIN_SCHEMATIC_GRID_SIZE}
+              max={MAX_SCHEMATIC_GRID_SIZE}
+              step={1}
+              value={[settingsState.schematicGridSize]}
+              onValueChange={handleSchematicGridSizeChange}
+              onValueCommit={handleSchematicGridSizeCommit}
+            />
+            <span
+              className="min-w-10 shrink-0 text-right text-[13px] font-medium text-foreground"
+              data-testid="settings-schematic-grid-size-value"
+            >
+              {settingsState.schematicGridSize}px
+            </span>
+          </div>
+        </SettingsSliderSection>
+      ),
+    },
+    {
+      id: 'schematic-display-interaction',
+      pageId: 'schematic',
+      title: 'Display and interaction toggles',
+      description: 'Configure the schematic grid, drag snapping, and temporary alignment guides.',
+      keywords: ['schematic', 'grid', 'snap', 'drag', 'alignment', 'guides'],
+      element: (
+        <div className={settingsSectionClassName}>
+          <div className="divide-y divide-border/70">
+            <SettingsSwitchRow checked={settingsState.schematicGridEnabled} description="Show the background grid across the full schematic viewport." onCheckedChange={handleSchematicGridEnabledChange} testId="settings-schematic-grid-switch" title="Show grid" />
+            <SettingsSwitchRow checked={settingsState.schematicSnapToGrid} description="Snap dragged modules to the configured grid points." onCheckedChange={handleSchematicSnapToGridChange} testId="settings-schematic-snap-to-grid-switch" title="Snap dragging to grid" />
+            <SettingsSwitchRow checked={settingsState.schematicAlignmentGuidesEnabled} description="Show temporary edge and center alignment guides while dragging modules." onCheckedChange={handleSchematicAlignmentGuidesEnabledChange} testId="settings-schematic-alignment-guides-switch" title="Alignment guides" />
+          </div>
+        </div>
+      ),
+    },
+    {
       id: 'close-to-tray',
       pageId: 'window',
       title: 'Close to tray',
@@ -1284,6 +1417,11 @@ export function MenuBarSettingsDialogs({
     handleEditorTabSizeChange,
     handleEditorWordWrapChange,
     handleFloatingInfoWindowVisibleChange,
+    handleSchematicAlignmentGuidesEnabledChange,
+    handleSchematicGridEnabledChange,
+    handleSchematicGridSizeChange,
+    handleSchematicGridSizeCommit,
+    handleSchematicSnapToGridChange,
     handleThemeAdvancedDialogOpenChange,
     handleThemeChange,
     handleThemeImport,

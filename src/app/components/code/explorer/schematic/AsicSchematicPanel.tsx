@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronRight, ChevronUp, Home, Maximize2, RotateCcw, Spline } from 'lucide-react';
 
+import { useSchematicSettings } from '../../../../context/SchematicSettingsContext';
 import { useTheme } from '../../../../context/ThemeContext';
 import { Button } from '../../../ui/button';
 import { TooltipIconButton } from '../../../ui/tooltip-icon-button';
 import { AsicSchematicCanvas, type AsicSchematicCanvasHandle } from './AsicSchematicCanvas';
-import { applySchematicNodePositions, findModulePath, layoutAsicSchematic, schematicGridSize, type SchematicNodePositionOverrides } from './asicSchematicLayout';
+import { applySchematicNodePositions, findModulePath, layoutAsicSchematic, type SchematicNodePositionOverrides } from './asicSchematicLayout';
 import { mockAsicSchematicGraph } from './asicSchematicMockData';
 import type { SchematicLayoutResult } from './asicSchematicTypes';
 
@@ -17,6 +18,7 @@ interface CameraSnapshot {
 
 export function AsicSchematicPanel() {
   const { theme, themeId } = useTheme();
+  const schematicSettings = useSchematicSettings();
   const canvasRef = useRef<AsicSchematicCanvasHandle | null>(null);
   const [moduleId, setModuleId] = useState(mockAsicSchematicGraph.rootModuleId);
   const [layout, setLayout] = useState<SchematicLayoutResult | null>(null);
@@ -32,8 +34,11 @@ export function AsicSchematicPanel() {
   const modulePath = useMemo(() => findModulePath(mockAsicSchematicGraph, moduleId), [moduleId]);
   const activeModule = mockAsicSchematicGraph.modules[moduleId];
   const activeLayout = useMemo(
-    () => layout ? applySchematicNodePositions(layout, positionOverridesByModule[moduleId] ?? {}) : null,
-    [layout, moduleId, positionOverridesByModule],
+    () => layout ? applySchematicNodePositions(layout, positionOverridesByModule[moduleId] ?? {}, {
+      gridSize: schematicSettings.gridSize,
+      snapToGrid: schematicSettings.snapToGrid,
+    }) : null,
+    [layout, moduleId, positionOverridesByModule, schematicSettings.gridSize, schematicSettings.snapToGrid],
   );
   const selectedNode = selectedNodeIds.length === 1 ? activeLayout?.nodes.find((node) => node.id === selectedNodeIds[0]) ?? null : null;
   const selectedEdge = selectedEdgeIds.length === 1 ? activeLayout?.edges.find((edge) => edge.id === selectedEdgeIds[0]) ?? null : null;
@@ -95,8 +100,8 @@ export function AsicSchematicPanel() {
 
       const resolvedLayout = applySchematicNodePositions(layout, mergedOverrides, {
         avoidOverlaps: true,
-        snapToGrid: true,
-        gridSize: schematicGridSize,
+        snapToGrid: schematicSettings.snapToGrid,
+        gridSize: schematicSettings.gridSize,
         selectedNodeIds: movedNodeIds,
       });
       const resolvedOverrides = { ...mergedOverrides };
@@ -121,7 +126,7 @@ export function AsicSchematicPanel() {
         [moduleId]: resolvedOverrides,
       };
     });
-  }, [layout, moduleId]);
+  }, [layout, moduleId, schematicSettings.gridSize, schematicSettings.snapToGrid]);
 
   const handleNodeSelectionChange = useCallback((nodeIds: string[]) => {
     setSelectedNodeIds(nodeIds);
@@ -264,8 +269,12 @@ export function AsicSchematicPanel() {
           <AsicSchematicCanvas
             ref={canvasRef}
             layout={activeLayout}
+            alignmentGuidesEnabled={schematicSettings.alignmentGuidesEnabled}
+            gridEnabled={schematicSettings.gridEnabled}
+            gridSize={schematicSettings.gridSize}
             selectedNodeIds={selectedNodeIds}
             selectedEdgeIds={selectedEdgeIds}
+            snapToGrid={schematicSettings.snapToGrid}
             themeKey={`${themeId}:${theme}`}
             onCameraChange={setCamera}
             onModuleOpen={handleEnterModule}

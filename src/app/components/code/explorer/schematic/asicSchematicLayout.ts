@@ -60,6 +60,7 @@ export interface ApplySchematicNodePositionsOptions {
 const defaultNodeGap = 24;
 export const schematicGridSize = 40;
 export const schematicEdgeObstacleGap = 14;
+export const schematicRouteHorizontalStubLength = 24;
 const overlapResolveIterationLimit = 80;
 
 export async function layoutAsicSchematic(
@@ -625,13 +626,15 @@ function createFallbackPortNode(port: AsicPort, x: number, y: number): Schematic
   };
 }
 
+function getFallbackEdgePoints(from: AsicNetEndpoint, to: AsicNetEndpoint, nodeMap: Map<string, SchematicNodeLayout>): SchematicPoint[];
+function getFallbackEdgePoints(start: SchematicPoint, end: SchematicPoint): SchematicPoint[];
 function getFallbackEdgePoints(
-  from: AsicNetEndpoint,
-  to: AsicNetEndpoint,
-  nodeMap: Map<string, SchematicNodeLayout>,
+  first: AsicNetEndpoint | SchematicPoint,
+  second: AsicNetEndpoint | SchematicPoint,
+  nodeMap?: Map<string, SchematicNodeLayout>,
 ): SchematicPoint[] {
-  const start = findEndpointPoint(from, nodeMap);
-  const end = findEndpointPoint(to, nodeMap);
+  const start = nodeMap ? findEndpointPoint(first as AsicNetEndpoint, nodeMap) : first as SchematicPoint;
+  const end = nodeMap ? findEndpointPoint(second as AsicNetEndpoint, nodeMap) : second as SchematicPoint;
   const midX = start.x + (end.x - start.x) / 2;
 
   return [start, { x: midX, y: start.y }, { x: midX, y: end.y }, end];
@@ -641,19 +644,21 @@ export function routeSchematicEdgePoints(
   edge: SchematicEdgeLayout,
   nodeMap: Map<string, SchematicNodeLayout>,
 ): SchematicPoint[] {
-  const start = findEndpointPoint(edge.from, nodeMap);
-  const end = findEndpointPoint(edge.to, nodeMap);
+  const start = findEndpointRoutePoint(edge.from, nodeMap);
+  const end = findEndpointRoutePoint(edge.to, nodeMap);
   const obstacleRects = getSchematicEdgeObstacleRects(edge, nodeMap);
-  const searchedRoute = findOrthogonalRoute(start, end, obstacleRects);
-  const candidates = [searchedRoute, ...createOrthogonalRouteCandidates(start, end, obstacleRects)]
+  const searchedRoute = findOrthogonalRoute(start.stub, end.stub, obstacleRects);
+  const protectedPointKeys = new Set([getRoutePointKey(start.stub), getRoutePointKey(end.stub)]);
+  const candidates = [searchedRoute, ...createOrthogonalRouteCandidates(start.stub, end.stub, obstacleRects)]
     .filter((points): points is SchematicPoint[] => Boolean(points))
-    .map(normalizeRoutePoints)
+    .map((points) => normalizeRoutePoints(points))
+    .map((points) => createStubbedRoute(start, end, points, protectedPointKeys))
     .filter((points, index, allCandidates) => allCandidates.findIndex((candidate) => areSameRoute(candidate, points)) === index);
   const validCandidates = candidates.filter((points) => !obstacleRects.some((rect) => schematicPolylineIntersectsRect(points, rect, schematicEdgeObstacleGap)));
 
   validCandidates.sort((first, second) => getRouteScore(first) - getRouteScore(second));
 
-  return validCandidates[0] ?? normalizeRoutePoints(getFallbackEdgePoints(edge.from, edge.to, nodeMap));
+  return validCandidates[0] ?? createStubbedRoute(start, end, getFallbackEdgePoints(start.stub, end.stub), protectedPointKeys);
 }
 
 function getSchematicEdgeObstacleRects(edge: SchematicEdgeLayout, nodeMap: Map<string, SchematicNodeLayout>) {
@@ -843,7 +848,7 @@ function uniqueCoordinates(values: readonly number[]) {
     .sort((first, second) => Math.abs(first) - Math.abs(second));
 }
 
-function normalizeRoutePoints(points: readonly SchematicPoint[]) {
+function normalizeRoutePoints(points: readonly SchematicPoint[], protectedPointKeys = new Set<string>()) {
   const withoutDuplicates: SchematicPoint[] = [];
 
   points.forEach((point) => {
@@ -855,6 +860,10 @@ function normalizeRoutePoints(points: readonly SchematicPoint[]) {
   });
 
   return withoutDuplicates.filter((point, index, allPoints) => {
+    if (protectedPointKeys.has(getRoutePointKey(point))) {
+      return true;
+    }
+
     const previous = allPoints[index - 1];
     const next = allPoints[index + 1];
 
@@ -888,6 +897,61 @@ function getRouteScore(points: readonly SchematicPoint[]) {
 
 function getEndpointNodeId(endpoint: AsicNetEndpoint) {
   return endpoint.instanceId ?? getIoNodeId(endpoint.portId);
+}
+
+interface SchematicEndpointRoutePoint {
+  point: SchematicPoint;
+  stub: SchematicPoint;
+}
+
+function createStubbedRoute(
+  start: SchematicEndpointRoutePoint,
+  end: SchematicEndpointRoutePoint,
+  routeBetweenStubs: readonly SchematicPoint[],
+  protectedPointKeys: Set<string>,
+) {
+  return normalizeRoutePoints([
+    start.point,
+    start.stub,
+    ...routeBetweenStubs.slice(1, -1),
+    end.stub,
+    end.point,
+  ], protectedPointKeys);
+}
+
+function findEndpointRoutePoint(endpoint: AsicNetEndpoint, nodeMap: Map<string, SchematicNodeLayout>): SchematicEndpointRoutePoint {
+  const node = nodeMap.get(endpoint.instanceId ?? getIoNodeId(endpoint.portId));
+  const port = node?.ports.find((candidate) => candidate.id === endpoint.portId);
+  const point = port ? { x: port.x, y: port.y } : { x: node?.x ?? 0, y: node?.y ?? 0 };
+  const direction = getEndpointHorizontalDirection(point, node, port);
+
+  return {
+    point,
+    stub: {
+      x: roundLayoutCoordinate(point.x + direction * schematicRouteHorizontalStubLength),
+      y: point.y,
+    },
+  };
+}
+
+function getEndpointHorizontalDirection(
+  point: SchematicPoint,
+  node?: SchematicNodeLayout,
+  port?: SchematicPortLayout,
+) {
+  if (port?.side === 'west') {
+    return -1;
+  }
+
+  if (port?.side === 'east') {
+    return 1;
+  }
+
+  if (node) {
+    return point.x < node.x + node.width / 2 ? -1 : 1;
+  }
+
+  return 1;
 }
 
 function findEndpointPoint(endpoint: AsicNetEndpoint, nodeMap: Map<string, SchematicNodeLayout>): SchematicPoint {

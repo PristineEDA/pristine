@@ -1,6 +1,7 @@
-import { Container, Graphics, Text } from 'pixi.js';
+import { BitmapFont, BitmapText, Container, Graphics } from 'pixi.js';
 
 import type { AsicSchematicPalette } from './asicSchematicPalette';
+import type { SchematicAlignmentGuide } from './asicSchematicGuides';
 import type { SchematicEdgeLayout, SchematicLayoutResult, SchematicNodeLayout } from './asicSchematicTypes';
 
 export type SchematicLayerName = 'background' | 'wire' | 'component' | 'interaction';
@@ -16,6 +17,8 @@ export interface AsicSchematicScene {
   world: Container;
   layers: Record<SchematicLayerName, Container>;
   nodeContainers: Map<string, Container>;
+  updateAlignmentGuides: (guides: readonly SchematicAlignmentGuide[]) => SchematicAlignmentGuideState;
+  updateGrid: (camera: SchematicCameraState, viewport: SchematicViewport, options?: SchematicGridOptions) => SchematicGridState;
   updateSelection: (selectedNodeIds: readonly string[], positions?: Record<string, { x: number; y: number } | undefined>) => void;
   updateEdgeSelection: (selectedEdgeIds: readonly string[]) => void;
   updateMarquee: (rect: SchematicWorldRect | null) => void;
@@ -26,9 +29,40 @@ export interface AsicSchematicScene {
 export interface SchematicTextZoomState {
   labelScale: number;
   textResolution: number;
+  textFontStatus: 'bitmap-ready';
+  textRenderer: 'bitmap';
+}
+
+export interface SchematicCameraState {
+  x: number;
+  y: number;
+  zoom: number;
+}
+
+export interface SchematicViewport {
+  width: number;
+  height: number;
+}
+
+export interface SchematicGridOptions {
+  enabled: boolean;
+  gridSize: number;
+}
+
+export interface SchematicGridState {
+  effectiveStep: number;
+  enabled: boolean;
+  gridSize: number;
+  lineCount: number;
+}
+
+export interface SchematicAlignmentGuideState {
+  count: number;
+  visible: boolean;
 }
 
 export interface AsicSchematicSceneOptions {
+  gridOptions?: SchematicGridOptions;
   layout: SchematicLayoutResult;
   palette: AsicSchematicPalette;
   selectedNodeIds?: readonly string[];
@@ -38,6 +72,7 @@ export interface AsicSchematicSceneOptions {
 }
 
 export function createAsicSchematicScene({
+  gridOptions = { enabled: true, gridSize: 40 },
   layout,
   palette,
   selectedNodeIds = [],
@@ -50,17 +85,20 @@ export function createAsicSchematicScene({
   const wireLayer = new Container({ label: 'schematic-layer-wire', zIndex: 10 });
   const componentLayer = new Container({ label: 'schematic-layer-component', zIndex: 20, sortableChildren: true });
   const interactionLayer = new Container({ label: 'schematic-layer-interaction', zIndex: 30 });
+  const gridOverlay = new Graphics({ label: 'schematic-grid' });
+  const guideOverlay = new Graphics({ label: 'schematic-alignment-guides' });
   const selectionOverlay = new Graphics({ label: 'schematic-selection-overlay' });
   const marqueeOverlay = new Graphics({ label: 'schematic-marquee-overlay' });
   const nodeContainers = new Map<string, Container>();
   const nodeMap = new Map(layout.nodes.map((node) => [node.id, node]));
-  const textNodes: Text[] = [];
+  const textNodes: BitmapText[] = [];
   let currentEdges: readonly SchematicEdgeLayout[] = layout.edges;
   let currentSelectedEdgeIds: readonly string[] = selectedEdgeIds;
+  drawGrid(gridOverlay, layout, palette, null, null, gridOptions);
 
   world.addChild(backgroundLayer, wireLayer, componentLayer, interactionLayer);
-  backgroundLayer.addChild(drawGrid(layout, palette));
-  interactionLayer.addChild(selectionOverlay, marqueeOverlay);
+  backgroundLayer.addChild(gridOverlay);
+  interactionLayer.addChild(guideOverlay, selectionOverlay, marqueeOverlay);
   layout.nodes.forEach((node) => {
     const container = drawNode({ node, palette, textNodes, onModuleOpen });
     nodeContainers.set(node.id, container);
@@ -75,6 +113,12 @@ export function createAsicSchematicScene({
   const updateMarquee = (rect: SchematicWorldRect | null) => {
     drawMarqueeOverlay(marqueeOverlay, rect, palette);
   };
+  const updateAlignmentGuides = (guides: readonly SchematicAlignmentGuide[]) => {
+    return drawAlignmentGuides(guideOverlay, guides, palette);
+  };
+  const updateGrid = (camera: SchematicCameraState, viewport: SchematicViewport, options = gridOptions) => {
+    return drawGrid(gridOverlay, layout, palette, camera, viewport, options);
+  };
   const updateEdgeSelection = (nextSelectedEdgeIds: readonly string[]) => {
     currentSelectedEdgeIds = nextSelectedEdgeIds;
     drawWireLayer(wireLayer, currentEdges, palette, currentSelectedEdgeIds);
@@ -83,7 +127,7 @@ export function createAsicSchematicScene({
     currentEdges = edges;
     drawWireLayer(wireLayer, currentEdges, palette, currentSelectedEdgeIds);
   };
-  const updateZoom = (zoom: number) => updateTextZoom(textNodes, zoom);
+  const updateZoom = () => updateTextZoom();
 
   updateSelection(selectedNodeIds);
   updateEdgeSelection(selectedEdgeIds);
@@ -97,6 +141,8 @@ export function createAsicSchematicScene({
       interaction: interactionLayer,
     },
     nodeContainers,
+    updateAlignmentGuides,
+    updateGrid,
     updateSelection,
     updateEdgeSelection,
     updateMarquee,
@@ -156,28 +202,49 @@ function drawMarqueeOverlay(graphics: Graphics, rect: SchematicWorldRect | null,
     .stroke({ color: palette.selected, alpha: 0.8, width: 1.4, pixelLine: true });
 }
 
-function drawGrid(layout: SchematicLayoutResult, palette: AsicSchematicPalette) {
-  const grid = new Graphics({ label: 'schematic-grid' });
-  const step = 40;
-  const startX = Math.floor(layout.bounds.x / step) * step;
-  const startY = Math.floor(layout.bounds.y / step) * step;
-  const endX = layout.bounds.x + layout.bounds.width;
-  const endY = layout.bounds.y + layout.bounds.height;
+function drawGrid(
+  graphics: Graphics,
+  layout: SchematicLayoutResult,
+  palette: AsicSchematicPalette,
+  camera: SchematicCameraState | null,
+  viewport: SchematicViewport | null,
+  options: SchematicGridOptions,
+): SchematicGridState {
+  graphics.clear();
 
-  for (let x = startX; x <= endX; x += step) {
-    grid.moveTo(x, startY).lineTo(x, endY).stroke({ color: palette.grid, alpha: 0.16, width: 1, pixelLine: true });
+  const gridSize = normalizeGridSize(options.gridSize);
+  if (!options.enabled) {
+    return { effectiveStep: gridSize, enabled: false, gridSize, lineCount: 0 };
   }
 
-  for (let y = startY; y <= endY; y += step) {
-    grid.moveTo(startX, y).lineTo(endX, y).stroke({ color: palette.grid, alpha: 0.16, width: 1, pixelLine: true });
+  const zoom = camera?.zoom && camera.zoom > 0 ? camera.zoom : 1;
+  const effectiveStep = getEffectiveGridStep(gridSize, zoom);
+  const visibleRect = camera && viewport
+    ? getVisibleWorldRect(camera, viewport)
+    : layout.bounds;
+  const padding = effectiveStep * 2;
+  const startX = Math.floor((visibleRect.x - padding) / effectiveStep) * effectiveStep;
+  const startY = Math.floor((visibleRect.y - padding) / effectiveStep) * effectiveStep;
+  const endX = visibleRect.x + visibleRect.width + padding;
+  const endY = visibleRect.y + visibleRect.height + padding;
+  let lineCount = 0;
+
+  for (let x = startX; x <= endX; x += effectiveStep) {
+    graphics.moveTo(x, startY).lineTo(x, endY).stroke({ color: palette.grid, alpha: 0.16, width: 1, pixelLine: true });
+    lineCount += 1;
   }
 
-  return grid;
+  for (let y = startY; y <= endY; y += effectiveStep) {
+    graphics.moveTo(startX, y).lineTo(endX, y).stroke({ color: palette.grid, alpha: 0.16, width: 1, pixelLine: true });
+    lineCount += 1;
+  }
+
+  return { effectiveStep, enabled: true, gridSize, lineCount };
 }
 
 function drawEdge(edge: SchematicEdgeLayout, palette: AsicSchematicPalette, selected: boolean) {
   const graphics = new Graphics({ label: `schematic-edge:${edge.id}` });
-  const color = getEdgeColor(edge, palette);
+  const color = getSchematicEdgeColor(edge, palette);
   const style = getEdgeStrokeStyle(edge, selected);
   const [firstPoint, ...remainingPoints] = edge.points;
 
@@ -188,7 +255,7 @@ function drawEdge(edge: SchematicEdgeLayout, palette: AsicSchematicPalette, sele
   if (selected) {
     graphics.moveTo(firstPoint.x, firstPoint.y);
     remainingPoints.forEach((point) => graphics.lineTo(point.x, point.y));
-    graphics.stroke({ color: palette.selected, alpha: 0.92, width: style.width + 5, cap: 'round', join: 'round' });
+    graphics.stroke({ color, alpha: 0.42, width: style.width + 5, cap: 'round', join: 'round' });
   }
 
   graphics.moveTo(firstPoint.x, firstPoint.y);
@@ -206,6 +273,21 @@ function drawEdge(edge: SchematicEdgeLayout, palette: AsicSchematicPalette, sele
   }
 
   return graphics;
+}
+
+export function getSchematicEdgeColor(edge: SchematicEdgeLayout, palette: AsicSchematicPalette) {
+  switch (edge.kind) {
+    case 'clock':
+      return palette.clock;
+    case 'reset':
+      return palette.reset;
+    case 'control':
+      return palette.warning;
+    case 'bus':
+      return palette.accent;
+    default:
+      return palette.wire;
+  }
 }
 
 function getEdgeStrokeStyle(edge: SchematicEdgeLayout, selected: boolean) {
@@ -228,7 +310,7 @@ function drawNode({
 }: {
   node: SchematicNodeLayout;
   palette: AsicSchematicPalette;
-  textNodes: Text[];
+  textNodes: BitmapText[];
   onModuleOpen?: (moduleId: string) => void;
 }) {
   const container = new Container({ label: `schematic-node:${node.id}`, x: node.x, y: node.y });
@@ -263,7 +345,7 @@ function drawNode({
   return container;
 }
 
-function drawPorts(container: Container, node: SchematicNodeLayout, palette: AsicSchematicPalette, textNodes: Text[] = []) {
+function drawPorts(container: Container, node: SchematicNodeLayout, palette: AsicSchematicPalette, textNodes: BitmapText[] = []) {
   node.ports.forEach((port) => {
     const localY = port.y - node.y;
     const sideMultiplier = port.side === 'west' ? 1 : -1;
@@ -282,48 +364,115 @@ function drawPorts(container: Container, node: SchematicNodeLayout, palette: Asi
   });
 }
 
-function createText(textNodes: Text[], text: string, fill: number, fontSize: number, fontWeight: '400' | '600', x: number, y: number) {
-  const textNode = new Text({
+function createText(textNodes: BitmapText[], text: string, fill: number, fontSize: number, fontWeight: '400' | '600', x: number, y: number) {
+  ensureSchematicBitmapFonts();
+
+  const textNode = new BitmapText({
     text,
     style: {
       fill,
-      fontFamily: 'JetBrains Mono, Consolas, monospace',
+      fontFamily: fontWeight === '600' ? schematicBitmapFontSemibold : schematicBitmapFontRegular,
       fontSize,
-      fontWeight,
     },
     x,
     y,
-    resolution: 2,
   });
 
   textNodes.push(textNode);
   return textNode;
 }
 
-function updateTextZoom(textNodes: readonly Text[], zoom: number): SchematicTextZoomState {
-  const safeZoom = Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
-  const labelScale = safeZoom > 1 ? 1 / safeZoom : 1;
-  const textResolution = Math.min(4, Math.max(2, Math.ceil(safeZoom * 2)));
-
-  textNodes.forEach((textNode) => {
-    textNode.scale.set(labelScale);
-    (textNode as Text & { resolution: number }).resolution = textResolution;
-  });
-
-  return { labelScale, textResolution };
+function updateTextZoom(): SchematicTextZoomState {
+  return {
+    labelScale: 1,
+    textFontStatus: 'bitmap-ready',
+    textRenderer: 'bitmap',
+    textResolution: schematicBitmapFontResolution,
+  };
 }
 
-function getEdgeColor(edge: SchematicEdgeLayout, palette: AsicSchematicPalette) {
-  switch (edge.kind) {
-    case 'clock':
-      return palette.clock;
-    case 'reset':
-      return palette.reset;
-    case 'control':
-      return palette.warning;
-    case 'bus':
-      return palette.accent;
-    default:
-      return palette.wire;
+function drawAlignmentGuides(
+  graphics: Graphics,
+  guides: readonly SchematicAlignmentGuide[],
+  palette: AsicSchematicPalette,
+): SchematicAlignmentGuideState {
+  graphics.clear();
+
+  guides.forEach((guide) => {
+    const color = guide.kind === 'center' ? palette.accent : palette.warning;
+    const alpha = guide.kind === 'center' ? 0.82 : 0.58;
+
+    if (guide.orientation === 'vertical') {
+      graphics.moveTo(guide.position, guide.start).lineTo(guide.position, guide.end).stroke({ color, alpha, width: 1, pixelLine: true });
+    } else {
+      graphics.moveTo(guide.start, guide.position).lineTo(guide.end, guide.position).stroke({ color, alpha, width: 1, pixelLine: true });
+    }
+  });
+
+  return { count: guides.length, visible: guides.length > 0 };
+}
+
+function normalizeGridSize(gridSize: number) {
+  return Number.isFinite(gridSize) && gridSize > 0 ? Math.max(1, Math.round(gridSize)) : 40;
+}
+
+function getEffectiveGridStep(gridSize: number, zoom: number) {
+  let step = gridSize;
+  while (step * zoom < 8) {
+    step *= 2;
   }
+
+  return step;
+}
+
+function getVisibleWorldRect(camera: SchematicCameraState, viewport: SchematicViewport) {
+  const safeZoom = camera.zoom > 0 ? camera.zoom : 1;
+
+  return {
+    x: (0 - camera.x) / safeZoom,
+    y: (0 - camera.y) / safeZoom,
+    width: viewport.width / safeZoom,
+    height: viewport.height / safeZoom,
+  };
+}
+
+const schematicBitmapFontRegular = 'PristineSchematicBitmapRegular';
+const schematicBitmapFontSemibold = 'PristineSchematicBitmapSemibold';
+const schematicBitmapFontResolution = 3;
+let schematicBitmapFontsInstalled = false;
+
+function ensureSchematicBitmapFonts() {
+  if (schematicBitmapFontsInstalled) {
+    return;
+  }
+
+  const commonOptions = {
+    chars: [[' ', '~']],
+    dynamicFill: true,
+    padding: 6,
+    resolution: schematicBitmapFontResolution,
+  };
+
+  BitmapFont.install({
+    ...commonOptions,
+    name: schematicBitmapFontRegular,
+    style: {
+      fill: 0xffffff,
+      fontFamily: 'JetBrains Mono, Consolas, monospace',
+      fontSize: 16,
+      fontWeight: '400',
+    },
+  });
+  BitmapFont.install({
+    ...commonOptions,
+    name: schematicBitmapFontSemibold,
+    style: {
+      fill: 0xffffff,
+      fontFamily: 'JetBrains Mono, Consolas, monospace',
+      fontSize: 16,
+      fontWeight: '600',
+    },
+  });
+
+  schematicBitmapFontsInstalled = true;
 }

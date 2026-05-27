@@ -25,13 +25,16 @@ import {
   setEditorSmoothScrollingMock,
   setEditorTabSizeMock,
   setEditorWordWrapMock,
+  setSchematicAlignmentGuidesEnabledMock,
+  setSchematicGridEnabledMock,
+  setSchematicSnapToGridMock,
   setThemeMock,
 } from './MenuBar.testSupport';
 
 const SETTINGS_DIALOG_TEST_TIMEOUT_MS = 30000;
 const SETTINGS_PICKER_TEST_TIMEOUT_MS = 15000;
 
-async function openSettingsPage(user: ReturnType<typeof userEvent.setup>, page: 'general' | 'appearance' | 'editor' | 'window') {
+async function openSettingsPage(user: ReturnType<typeof userEvent.setup>, page: 'general' | 'appearance' | 'editor' | 'schematic' | 'window') {
   await user.click(screen.getByTestId(`settings-nav-${page}`));
   expect(screen.getByTestId(`settings-page-${page}`)).toBeVisible();
 }
@@ -161,6 +164,14 @@ describe('MenuBar settings', () => {
     expect(screen.getByTestId('settings-nav-editor')).toHaveAttribute('aria-current', 'page');
     expect(screen.getByTestId('settings-editor-font-family-combobox')).toBeVisible();
 
+    await openSettingsPage(user, 'schematic');
+    expect(screen.getByTestId('settings-nav-schematic')).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByTestId('settings-schematic-grid-size-slider')).toBeVisible();
+    expect(screen.getByTestId('settings-schematic-grid-size-value')).toHaveTextContent('40px');
+    expect(screen.getByTestId('settings-schematic-grid-switch')).toHaveAttribute('data-state', 'checked');
+    expect(screen.getByTestId('settings-schematic-snap-to-grid-switch')).toHaveAttribute('data-state', 'checked');
+    expect(screen.getByTestId('settings-schematic-alignment-guides-switch')).toHaveAttribute('data-state', 'checked');
+
     await openSettingsPage(user, 'window');
     expect(screen.getByTestId('settings-nav-window')).toHaveAttribute('aria-current', 'page');
     expect(screen.getByTestId('settings-close-to-tray-switch')).toBeVisible();
@@ -197,6 +208,27 @@ describe('MenuBar settings', () => {
     expect(screen.getByTestId('settings-search-icon')).toHaveClass('opacity-100');
     expect(screen.getByTestId('settings-nav-general')).toHaveAttribute('aria-current', 'page');
     expect(screen.getByTestId('settings-page-general')).toBeVisible();
+  });
+
+  it('updates schematic grid and guide preferences from settings', async () => {
+    const user = userEvent.setup();
+
+    renderMenuBar();
+
+    await user.click(screen.getByTestId('menu-settings-button'));
+    expect(await screen.findByTestId('settings-dialog')).toBeVisible();
+
+    await openSettingsPage(user, 'schematic');
+    await user.click(screen.getByTestId('settings-schematic-grid-switch'));
+    expect(setSchematicGridEnabledMock).toHaveBeenCalledWith(false);
+
+    await user.click(screen.getByTestId('settings-schematic-snap-to-grid-switch'));
+    expect(setSchematicSnapToGridMock).toHaveBeenCalledWith(false);
+
+    await user.click(screen.getByTestId('settings-schematic-alignment-guides-switch'));
+    expect(setSchematicAlignmentGuidesEnabledMock).toHaveBeenCalledWith(false);
+
+    expect(screen.getByTestId('settings-schematic-grid-size-value')).toHaveTextContent('40px');
   });
 
   it('shows editor settings plus the unified theme, close-to-tray and floating info window visibility', async () => {

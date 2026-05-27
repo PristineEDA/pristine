@@ -30,6 +30,10 @@ export const setEditorIndentGuidesMock = vi.fn();
 export const setEditorThemeMock = vi.fn();
 export const setThemeMock = vi.fn();
 export const toggleThemeMock = vi.fn();
+export const setSchematicAlignmentGuidesEnabledMock = vi.fn();
+export const setSchematicGridEnabledMock = vi.fn();
+export const setSchematicGridSizeMock = vi.fn();
+export const setSchematicSnapToGridMock = vi.fn();
 export const importThemeMock = vi.fn<() => Promise<ColorThemeOption | null>>();
 export const getThemePreviewMock = vi.fn<(themeId: string) => ColorThemePreviewPalette>();
 export const clearUserErrorMock = vi.fn();
@@ -683,6 +687,20 @@ const defaultEditorSettingsMockState: EditorSettingsMockState = {
   wordWrap: 'off',
 };
 
+interface SchematicSettingsMockState {
+  alignmentGuidesEnabled: boolean;
+  gridEnabled: boolean;
+  gridSize: number;
+  snapToGrid: boolean;
+}
+
+const defaultSchematicSettingsMockState: SchematicSettingsMockState = {
+  alignmentGuidesEnabled: true,
+  gridEnabled: true,
+  gridSize: 40,
+  snapToGrid: true,
+};
+
 const defaultUserMockState: UserMockState = {
   errorMessage: null,
   isSyncing: false,
@@ -691,6 +709,7 @@ const defaultUserMockState: UserMockState = {
 };
 
 const editorSettingsMockState: EditorSettingsMockState = { ...defaultEditorSettingsMockState };
+const schematicSettingsMockState: SchematicSettingsMockState = { ...defaultSchematicSettingsMockState };
 const themeMockState: {
   activeTheme: ResolvedColorTheme;
   availableThemes: ColorThemeOption[];
@@ -753,6 +772,19 @@ vi.mock('../../../context/EditorSettingsContext', () => ({
   }),
 }));
 
+vi.mock('../../../context/SchematicSettingsContext', () => ({
+  useSchematicSettings: () => ({
+    alignmentGuidesEnabled: schematicSettingsMockState.alignmentGuidesEnabled,
+    gridEnabled: schematicSettingsMockState.gridEnabled,
+    gridSize: schematicSettingsMockState.gridSize,
+    snapToGrid: schematicSettingsMockState.snapToGrid,
+    setAlignmentGuidesEnabled: setSchematicAlignmentGuidesEnabledMock,
+    setGridEnabled: setSchematicGridEnabledMock,
+    setGridSize: setSchematicGridSizeMock,
+    setSnapToGrid: setSchematicSnapToGridMock,
+  }),
+}));
+
 vi.mock('../../../context/ThemeContext', () => ({
   useTheme: () => ({
     theme: themeMockState.theme,
@@ -787,6 +819,7 @@ vi.mock('../../../editor/fontLoader', () => ({
 
 function resetContextMockState() {
   Object.assign(editorSettingsMockState, defaultEditorSettingsMockState);
+  Object.assign(schematicSettingsMockState, defaultSchematicSettingsMockState);
   Object.assign(userMockState, defaultUserMockState);
   themeMockState.availableThemes = [...defaultColorThemeOptions];
   themeMockState.importedThemes = [];
@@ -816,6 +849,13 @@ function resetEditorSettingsMocks() {
   setEditorTabSizeMock.mockReset();
   setEditorThemeMock.mockReset();
   setEditorWordWrapMock.mockReset();
+}
+
+function resetSchematicSettingsMocks() {
+  setSchematicAlignmentGuidesEnabledMock.mockReset();
+  setSchematicGridEnabledMock.mockReset();
+  setSchematicGridSizeMock.mockReset();
+  setSchematicSnapToGridMock.mockReset();
 }
 
 function resetThemeMocks() {
@@ -882,6 +922,7 @@ function resetElectronApiMocks() {
 beforeEach(() => {
   resetContextMockState();
   resetEditorSettingsMocks();
+  resetSchematicSettingsMocks();
   resetThemeMocks();
   resetUserMocks();
   resetWorkspaceCommandMocks();

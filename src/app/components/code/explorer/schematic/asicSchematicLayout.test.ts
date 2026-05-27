@@ -8,6 +8,7 @@ import {
   resolveSchematicNodeOverlaps,
   schematicEdgeObstacleGap,
   schematicGridSize,
+  schematicRouteHorizontalStubLength,
   schematicPolylineIntersectsRect,
   schematicRectsIntersect,
   snapSchematicPointToGrid,
@@ -103,6 +104,37 @@ describe('applySchematicNodePositions', () => {
       expect(edge.points[0]).toEqual(start);
       expect(edge.points[edge.points.length - 1]).toEqual(end);
     });
+  });
+
+  it('respects custom grid size and unsnapped movement options', async () => {
+    const layout = await layoutAsicSchematic(mockAsicSchematicGraph);
+    const moduleNode = layout.nodes.find((node) => node.kind === 'module');
+
+    expect(moduleNode).toBeDefined();
+    if (!moduleNode) {
+      return;
+    }
+
+    const customGridMoved = applySchematicNodePositions(layout, {
+      [moduleNode.id]: { x: 37, y: 51 },
+    }, {
+      gridSize: 12,
+      snapToGrid: true,
+    });
+    const customGridNode = customGridMoved.nodes.find((node) => node.id === moduleNode.id);
+
+    expect(customGridNode?.x).toBe(36);
+    expect(customGridNode?.y).toBe(48);
+
+    const unsnappedMoved = applySchematicNodePositions(layout, {
+      [moduleNode.id]: { x: 37, y: 51 },
+    }, {
+      snapToGrid: false,
+    });
+    const unsnappedNode = unsnappedMoved.nodes.find((node) => node.id === moduleNode.id);
+
+    expect(unsnappedNode?.x).toBe(37);
+    expect(unsnappedNode?.y).toBe(51);
   });
 
   it('ignores IO port position overrides', async () => {
@@ -248,6 +280,28 @@ describe('edge metadata', () => {
     expect(signalEdge).toBeDefined();
     expect(signalEdge?.isBus).toBe(false);
     expect(signalEdge?.signalWidth).toBe(1);
+  });
+
+  it('routes edges with fixed horizontal endpoint stubs', async () => {
+    const layout = await layoutAsicSchematic(mockAsicSchematicGraph);
+    const routedEdge = layout.edges.find((edge) => edge.points.length >= 4);
+
+    expect(routedEdge).toBeDefined();
+    if (!routedEdge) {
+      return;
+    }
+
+    const start = getEndpointPoint(layout, routedEdge.from);
+    const end = getEndpointPoint(layout, routedEdge.to);
+    const firstStub = routedEdge.points[1]!;
+    const lastStub = routedEdge.points[routedEdge.points.length - 2]!;
+
+    expect(routedEdge.points[0]).toEqual(start);
+    expect(routedEdge.points[routedEdge.points.length - 1]).toEqual(end);
+    expect(firstStub.y).toBe(start.y);
+    expect(Math.abs(firstStub.x - start.x)).toBe(schematicRouteHorizontalStubLength);
+    expect(lastStub.y).toBe(end.y);
+    expect(Math.abs(lastStub.x - end.x)).toBe(schematicRouteHorizontalStubLength);
   });
 });
 

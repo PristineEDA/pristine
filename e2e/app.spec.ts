@@ -15,7 +15,7 @@ const fixtureWorkspace = path.join(__dirname, '..', 'test', 'fixtures', 'workspa
 const releaseRoot = path.join(__dirname, '..', 'release');
 const MONACO_READY_TIMEOUT_MS = 60000;
 const UI_READY_TIMEOUT_MS = 60000;
-type SettingsPageId = 'general' | 'appearance' | 'editor' | 'window';
+type SettingsPageId = 'general' | 'appearance' | 'editor' | 'schematic' | 'window';
 
 function normalizeComparableMonospaceFontFamily(fontFamily: string) {
   const tokens = fontFamily
@@ -1747,6 +1747,15 @@ test('settings dialog supports subpage navigation and global search', async () =
   await openSettingsPage(window, 'editor');
   await expect(window.getByTestId('settings-nav-editor')).toHaveAttribute('aria-current', 'page');
   await expect(window.getByTestId('settings-editor-font-family-combobox')).toBeVisible();
+
+  await openSettingsPage(window, 'schematic');
+  await expect(window.getByTestId('settings-nav-schematic')).toHaveAttribute('aria-current', 'page');
+  await expect(window.getByTestId('settings-schematic-grid-size-slider')).toBeVisible();
+  await expect(window.getByTestId('settings-schematic-grid-size-value')).toHaveText(/\d+px/);
+  await setSwitchChecked(window.getByTestId('settings-schematic-grid-switch'), false);
+  await expect.poll(async () => readConfigValue(window, 'schematic.grid.enabled')).toBe(false);
+  await setSwitchChecked(window.getByTestId('settings-schematic-grid-switch'), true);
+  await expect.poll(async () => readConfigValue(window, 'schematic.grid.enabled')).toBe(true);
 
   await openSettingsPage(window, 'window');
   await expect(window.getByTestId('settings-nav-window')).toHaveAttribute('aria-current', 'page');
@@ -5219,6 +5228,7 @@ test('asic schematic bottom panel renders Pixi layers with selection and hierarc
     style: 'bus' | 'signal';
     fromNodeId: string;
     toNodeId: string;
+    hasHorizontalStubs: boolean;
     points: Array<{ x: number; y: number }>;
   }>;
   const worldToScreen = async (point: { x: number; y: number }) => {
@@ -5326,9 +5336,34 @@ test('asic schematic bottom panel renders Pixi layers with selection and hierarc
   await expect.poll(async () => Number(await canvasHost.getAttribute('data-label-scale') ?? '1'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeLessThanOrEqual(1);
+  await expect(canvasHost).toHaveAttribute('data-text-renderer', 'bitmap');
+  await expect(canvasHost).toHaveAttribute('data-text-font-status', 'bitmap-ready');
   await expect.poll(async () => Number(await canvasHost.getAttribute('data-text-resolution') ?? '0'), {
     timeout: UI_READY_TIMEOUT_MS,
-  }).toBeGreaterThanOrEqual(2);
+  }).toBeGreaterThanOrEqual(3);
+  await expect(canvasHost).toHaveAttribute('data-grid-enabled', 'true');
+  const runtimeGridSize = Number(await canvasHost.getAttribute('data-grid-size') ?? '0');
+  expect(runtimeGridSize).toBeGreaterThan(0);
+  await expect.poll(async () => Number(await canvasHost.getAttribute('data-grid-line-count') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
+  await expect(canvasHost).toHaveAttribute('data-snap-to-grid', 'true');
+  await expect(canvasHost).toHaveAttribute('data-alignment-guides-enabled', 'true');
+
+  await canvas.focus();
+  await expect(canvasHost).toHaveAttribute('data-keyboard-active', 'true');
+  const keyboardPanBefore = await readCamera();
+  await window.keyboard.press('ArrowRight');
+  await expect.poll(async () => (await readCamera()).x, {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeCloseTo(keyboardPanBefore.x - runtimeGridSize, 1);
+  const shiftedKeyboardPanBefore = await readCamera();
+  await window.keyboard.down('Shift');
+  await window.keyboard.press('ArrowDown');
+  await window.keyboard.up('Shift');
+  await expect.poll(async () => (await readCamera()).y, {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeCloseTo(shiftedKeyboardPanBefore.y - runtimeGridSize * 4, 1);
 
   const verticalPanBefore = await readCamera();
   await window.mouse.wheel(0, 120);
@@ -5370,6 +5405,7 @@ test('asic schematic bottom panel renders Pixi layers with selection and hierarc
 
   await clickEdge(firstEdge);
   await expect(panel).toHaveAttribute('data-selected-edge-count', '1');
+  await expect(canvasHost).toHaveAttribute('data-selected-edge-highlight-color', /^#[0-9a-f]{6}$/);
   await expect.poll(async () => {
     const selectedEdgeIds = (await panel.getAttribute('data-selected-edge-ids') ?? '').split(',').filter(Boolean);
     const knownEdgeIds = (await readEdgeSnapshot()).map((edge) => edge.id);
@@ -5482,6 +5518,9 @@ test('asic schematic bottom panel renders Pixi layers with selection and hierarc
   }, {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBe('clear');
+  await expect.poll(async () => (await readEdgeSnapshot()).every((edge) => edge.hasHorizontalStubs), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBe(true);
 
   const drillableModule = await readDrillableModule();
   expect(drillableModule.id).not.toBeNull();
