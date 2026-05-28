@@ -12,6 +12,7 @@ function createHierarchyNode(
 ): LspModuleHierarchyNode {
   return {
     moduleName,
+    kind: 'module',
     filePath: `rtl/core/${moduleName}.sv`,
     moduleSelectionRange: {
       start: { line: 0, character: 7 },
@@ -53,6 +54,7 @@ describe('HierarchyPanel', () => {
     vi.mocked(window.electronAPI!.lsp.moduleHierarchy).mockResolvedValue({
       roots: [{
         moduleName: 'cpu_top',
+        kind: 'module',
         filePath: 'rtl/core/cpu_top.sv',
         selectionRange: {
           start: { line: 0, character: 7 },
@@ -62,6 +64,7 @@ describe('HierarchyPanel', () => {
         cycle: false,
         children: [{
           moduleName: 'alu',
+          kind: 'module',
           instanceName: 'u_alu',
           filePath: 'rtl/core/alu.sv',
           instanceSelectionRange: {
@@ -72,6 +75,7 @@ describe('HierarchyPanel', () => {
           cycle: false,
           children: [{
             moduleName: 'leaf',
+            kind: 'module',
             instanceName: 'u_leaf',
             filePath: 'rtl/core/leaf.sv',
             unresolved: false,
@@ -79,7 +83,16 @@ describe('HierarchyPanel', () => {
             children: [],
           }],
         }, {
+          moduleName: 'bus_if',
+          kind: 'interface',
+          instanceName: 'bus',
+          filePath: 'rtl/core/bus_if.sv',
+          unresolved: false,
+          cycle: false,
+          children: [],
+        }, {
           moduleName: 'missing_block',
+          kind: 'module',
           instanceName: 'u_missing',
           unresolved: true,
           cycle: false,
@@ -102,8 +115,12 @@ describe('HierarchyPanel', () => {
     expect(screen.getByTestId('hierarchy-node-top-indicator-0_cpu_top')).toHaveAccessibleName('Automatic top module');
     expect(screen.getByTestId('hierarchy-node-top-indicator-0_cpu_top').querySelector('svg')).toBeInTheDocument();
     expect(screen.getByTestId('hierarchy-node-label-alu-u_alu')).toHaveTextContent(/^u_alu$/);
-    expect(screen.getByTestId('hierarchy-node-status-unresolved-0_cpu_top__1_u_missing')).toBeInTheDocument();
-    expect(screen.getByTestId('hierarchy-node-status-unresolved-0_cpu_top__1_u_missing')).toHaveClass('text-ide-warning');
+    expect(screen.getByTestId('hierarchy-node-label-bus_if-bus')).toHaveTextContent(/^bus$/);
+    expect(screen.getByTestId('hierarchy-node-icon-0_cpu_top__1_bus')).toHaveAccessibleName('Interface bus_if');
+    expect(screen.getByTestId('hierarchy-node-icon-0_cpu_top__1_bus')).toHaveClass('text-ide-syntax-function');
+    expect(screen.getByTestId('hierarchy-node-icon-0_cpu_top__1_bus').querySelector('svg.lucide-network')).toBeInTheDocument();
+    expect(screen.getByTestId('hierarchy-node-status-unresolved-0_cpu_top__2_u_missing')).toBeInTheDocument();
+    expect(screen.getByTestId('hierarchy-node-status-unresolved-0_cpu_top__2_u_missing')).toHaveClass('text-ide-warning');
     expect(screen.getByLabelText('Unresolved module missing_block')).toBeInTheDocument();
     expect(screen.queryByText('unresolved')).not.toBeInTheDocument();
   });

@@ -100,8 +100,11 @@ export interface LspModuleHierarchyOptions {
   maxDepth?: number;
 }
 
+export type LspModuleHierarchyNodeKind = 'module' | 'interface';
+
 export interface LspModuleHierarchyNode {
   moduleName: string;
+  kind: LspModuleHierarchyNodeKind;
   instanceName?: string;
   filePath?: string;
   uri?: string;

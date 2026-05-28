@@ -2081,9 +2081,14 @@ test('code view hierarchy renders module instantiations from pristine-engine', a
     'module alu;',
     'endmodule',
   ].join('\n');
+  const busInterfaceSource = [
+    'interface bus_if;',
+    'endinterface',
+  ].join('\n');
   const cpuTopSource = [
     'module cpu_top;',
     '  alu u_alu ();',
+    '  bus_if bus ();',
     '  missing_block u_missing ();',
     'endmodule',
   ].join('\n');
@@ -2117,7 +2122,7 @@ test('code view hierarchy renders module instantiations from pristine-engine', a
     timeout: MONACO_READY_TIMEOUT_MS,
   });
 
-  await window.evaluate(async ({ nextAluSource, nextCpuTopSource, nextHierarchyAutoDocuments, nextHierarchyManualSource }) => {
+  await window.evaluate(async ({ nextAluSource, nextBusInterfaceSource, nextCpuTopSource, nextHierarchyAutoDocuments, nextHierarchyManualSource }) => {
     const browserGlobal = globalThis as typeof globalThis & {
       electronAPI?: {
         lsp: {
@@ -2127,6 +2132,7 @@ test('code view hierarchy renders module instantiations from pristine-engine', a
     };
 
     await browserGlobal.electronAPI?.lsp.openDocument('rtl/core/alu.sv', 'systemverilog', nextAluSource);
+    await browserGlobal.electronAPI?.lsp.openDocument('rtl/core/bus_if.sv', 'systemverilog', nextBusInterfaceSource);
     await browserGlobal.electronAPI?.lsp.openDocument('rtl/core/cpu_top.sv', 'systemverilog', nextCpuTopSource);
     for (const { filePath, source } of nextHierarchyAutoDocuments) {
       await browserGlobal.electronAPI?.lsp.openDocument(filePath, 'systemverilog', source);
@@ -2134,6 +2140,7 @@ test('code view hierarchy renders module instantiations from pristine-engine', a
     await browserGlobal.electronAPI?.lsp.openDocument('rtl/core/a_hierarchy_manual_top.sv', 'systemverilog', nextHierarchyManualSource);
   }, {
     nextAluSource: aluSource,
+    nextBusInterfaceSource: busInterfaceSource,
     nextCpuTopSource: cpuTopSource,
     nextHierarchyAutoDocuments: hierarchyAutoDocuments,
     nextHierarchyManualSource: hierarchyManualSource,
@@ -2153,6 +2160,7 @@ test('code view hierarchy renders module instantiations from pristine-engine', a
 
   const topNode = window.getByTestId('hierarchy-node-label-cpu_top-root');
   const aluInstanceNode = window.getByTestId('hierarchy-node-label-alu-u_alu');
+  const interfaceInstanceNode = window.getByTestId('hierarchy-node-label-bus_if-bus');
   const rootLabels = window.locator('[data-testid^="hierarchy-node-label-"][data-testid$="-root"]');
   const manualTopNode = window.getByTestId('hierarchy-node-label-a_hierarchy_manual_top-root');
 
@@ -2178,6 +2186,9 @@ test('code view hierarchy renders module instantiations from pristine-engine', a
   await expect(aluInstanceNode).toBeVisible();
   await expect(aluInstanceNode).toHaveText('u_alu');
   await expect(aluInstanceNode).not.toContainText(': alu');
+  await expect(interfaceInstanceNode).toBeVisible();
+  await expect(interfaceInstanceNode).toHaveText('bus');
+  await expect(window.getByLabel('Interface bus_if').locator('svg.lucide-network')).toBeVisible();
   await expect(window.getByLabel('Unresolved module missing_block')).toBeVisible();
 
   await window.getByRole('button', { name: 'Collapse cpu_top' }).click();
@@ -5316,6 +5327,61 @@ test('asic schematic bottom panel renders Pixi layers with selection and hierarc
       y: box.y + currentCamera.y + point.y * currentCamera.zoom,
     };
   };
+  const waitForCanvasInteractionIdle = async () => {
+    await expect.poll(async () => {
+      const activeDragNodeIds = await canvasHost.getAttribute('data-active-drag-node-ids');
+      const marqueeActive = await canvasHost.getAttribute('data-marquee-active');
+      const alignmentGuidesVisible = await canvasHost.getAttribute('data-alignment-guides-visible');
+
+      return [
+        activeDragNodeIds ? 'dragging' : 'idle',
+        marqueeActive,
+        alignmentGuidesVisible,
+      ].join('|');
+    }, {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBe('idle|false|false');
+  };
+  const moveToDrillableModuleAndWaitForHover = async () => {
+    let drillableModule = await readDrillableModule();
+    expect(drillableModule.id).not.toBeNull();
+    expect(drillableModule.targetId).not.toBeNull();
+
+    let drillPoint = await worldToScreen(drillableModule);
+    await window.mouse.move(drillPoint.x, drillPoint.y);
+
+    await expect.poll(async () => {
+      drillableModule = await readDrillableModule();
+      if (!drillableModule.id || !drillableModule.targetId) {
+        return 'missing-drillable-module';
+      }
+
+      drillPoint = await worldToScreen(drillableModule);
+      await window.mouse.move(drillPoint.x, drillPoint.y);
+      const hoverNodeId = await canvasHost.getAttribute('data-hover-node-id');
+      if (hoverNodeId === drillableModule.id) {
+        return 'hit';
+      }
+
+      const currentCamera = await readCamera();
+      const canvasBox = await canvas.boundingBox();
+      return [
+        `hover:${hoverNodeId ?? 'none'}`,
+        `expected:${drillableModule.id}`,
+        `world:${drillableModule.x.toFixed(1)},${drillableModule.y.toFixed(1)}`,
+        `screen:${drillPoint.x.toFixed(1)},${drillPoint.y.toFixed(1)}`,
+        `camera:${currentCamera.x.toFixed(1)},${currentCamera.y.toFixed(1)},${currentCamera.zoom.toFixed(3)}`,
+        `canvas:${canvasBox ? `${canvasBox.x.toFixed(1)},${canvasBox.y.toFixed(1)},${canvasBox.width.toFixed(1)},${canvasBox.height.toFixed(1)}` : 'missing'}`,
+      ].join('|');
+    }, {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBe('hit');
+
+    drillableModule = await readDrillableModule();
+    drillPoint = await worldToScreen(drillableModule);
+
+    return { drillableModule, drillPoint };
+  };
   const clickModule = async (module: { x: number; y: number }, ctrlKey = false) => {
     const point = await worldToScreen(module);
 
@@ -5625,13 +5691,11 @@ test('asic schematic bottom panel renders Pixi layers with selection and hierarc
     timeout: UI_READY_TIMEOUT_MS,
   }).toBe(true);
 
-  const drillableModule = await readDrillableModule();
-  expect(drillableModule.id).not.toBeNull();
-  expect(drillableModule.targetId).not.toBeNull();
+  await waitForCanvasInteractionIdle();
   await expect.poll(async () => Number(await panel.getAttribute('data-layout-cache-size') ?? '0'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(1);
-  const drillPoint = await worldToScreen(drillableModule);
+  const { drillableModule, drillPoint } = await moveToDrillableModuleAndWaitForHover();
   await window.mouse.dblclick(drillPoint.x, drillPoint.y);
   await expect.poll(async () => await panel.getAttribute('data-module-id'), {
     timeout: UI_READY_TIMEOUT_MS,

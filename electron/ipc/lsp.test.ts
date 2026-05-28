@@ -111,6 +111,7 @@ function createFakeConnection(): FakeConnection {
         return {
           roots: [{
             moduleName: 'cpu_top',
+            kind: 'module',
             uri: 'file:///C:/workspace/Pristine/rtl/core/cpu_top.sv',
             range: {
               start: { line: 0, character: 0 },
@@ -124,12 +125,21 @@ function createFakeConnection(): FakeConnection {
             cycle: false,
             children: [{
               moduleName: 'alu',
+              kind: 'module',
               instanceName: 'u_alu',
               uri: 'file:///C:/workspace/Pristine/rtl/core/alu.sv',
               instanceSelectionRange: {
                 start: { line: 2, character: 6 },
                 end: { line: 2, character: 11 },
               },
+              unresolved: false,
+              cycle: false,
+              children: [],
+            }, {
+              moduleName: 'bus_if',
+              kind: 'interface',
+              instanceName: 'bus',
+              uri: 'file:///C:/workspace/Pristine/rtl/core/bus_if.sv',
               unresolved: false,
               cycle: false,
               children: [],
@@ -375,6 +385,7 @@ describe('LSP IPC handlers', () => {
     expect(hierarchy).toEqual({
       roots: [{
         moduleName: 'cpu_top',
+        kind: 'module',
         instanceName: undefined,
         uri: 'file:///C:/workspace/Pristine/rtl/core/cpu_top.sv',
         filePath: 'rtl/core/cpu_top.sv',
@@ -394,6 +405,7 @@ describe('LSP IPC handlers', () => {
         truncated: undefined,
         children: [{
           moduleName: 'alu',
+          kind: 'module',
           instanceName: 'u_alu',
           uri: 'file:///C:/workspace/Pristine/rtl/core/alu.sv',
           filePath: 'rtl/core/alu.sv',
@@ -410,7 +422,23 @@ describe('LSP IPC handlers', () => {
           truncated: undefined,
           children: [],
         }, {
+          moduleName: 'bus_if',
+          kind: 'interface',
+          instanceName: 'bus',
+          uri: 'file:///C:/workspace/Pristine/rtl/core/bus_if.sv',
+          filePath: 'rtl/core/bus_if.sv',
+          range: undefined,
+          selectionRange: undefined,
+          instanceRange: undefined,
+          instanceSelectionRange: undefined,
+          moduleSelectionRange: undefined,
+          unresolved: false,
+          cycle: false,
+          truncated: undefined,
+          children: [],
+        }, {
           moduleName: 'missing_block',
+          kind: 'module',
           instanceName: 'u_missing',
           uri: undefined,
           filePath: undefined,

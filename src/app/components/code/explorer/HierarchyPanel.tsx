@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
-import { AlertCircle, Box, ChevronDown, ChevronRight, ListTree, Loader2, RefreshCw } from 'lucide-react';
+import { AlertCircle, Box, ChevronDown, ChevronRight, ListTree, Loader2, Network, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useModuleHierarchy, type ModuleHierarchyTop } from '../../../context/ModuleHierarchyContext';
 import { getPathBaseName } from '../../../workspace/workspaceFiles';
@@ -77,6 +77,10 @@ function getDefaultExpandedKeys(nodes: LspModuleHierarchyNode[]) {
 
 function isNavigationEnabled(node: LspModuleHierarchyNode) {
   return Boolean(node.filePath && !node.unresolved);
+}
+
+function getNodeKindLabel(node: LspModuleHierarchyNode) {
+  return node.kind === 'interface' ? 'Interface' : 'Module';
 }
 
 function getNodeStatusTestId(nodeKey: string, status: 'unresolved' | 'cycle' | 'truncated') {
@@ -488,8 +492,9 @@ const HierarchyTreeNode = memo(function HierarchyTreeNode({
   const canNavigate = isNavigationEnabled(node);
   const label = getNodeLabel(node);
   const title = getNodeTitle(node);
+  const kindLabel = getNodeKindLabel(node);
   const statusLabel = node.cycle ? 'cycle' : node.truncated ? 'truncated' : null;
-  const unresolvedStatusLabel = `Unresolved module ${node.moduleName}`;
+  const unresolvedStatusLabel = `Unresolved ${kindLabel.toLowerCase()} ${node.moduleName}`;
   const topLabel = topKind === 'manual' ? 'Manual top module' : topKind === 'auto' ? 'Automatic top module' : null;
 
   const handleContextMenu = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
@@ -525,17 +530,19 @@ const HierarchyTreeNode = memo(function HierarchyTreeNode({
         )}
 
         <span
-          data-testid={node.unresolved ? getNodeStatusTestId(nodeKey, 'unresolved') : undefined}
+          data-testid={node.unresolved ? getNodeStatusTestId(nodeKey, 'unresolved') : `hierarchy-node-icon-${nodeKey}`}
           className={cn(
             'flex h-4 w-4 shrink-0 items-center justify-center',
-            node.unresolved ? 'text-ide-warning' : 'text-ide-syntax-keyword',
+            node.unresolved ? 'text-ide-warning' : node.kind === 'interface' ? 'text-ide-syntax-function' : 'text-ide-syntax-keyword',
           )}
-          aria-label={node.unresolved ? unresolvedStatusLabel : undefined}
-          title={node.unresolved ? unresolvedStatusLabel : undefined}
-          role={node.unresolved ? 'img' : undefined}
+          aria-label={node.unresolved ? unresolvedStatusLabel : `${kindLabel} ${node.moduleName}`}
+          title={node.unresolved ? unresolvedStatusLabel : `${kindLabel} ${node.moduleName}`}
+          role="img"
         >
           {node.unresolved ? (
             <AlertCircle className="h-3.5 w-3.5" aria-hidden="true" />
+          ) : node.kind === 'interface' ? (
+            <Network className="h-4 w-4" aria-hidden="true" />
           ) : (
             <Box className="h-4 w-4" aria-hidden="true" />
           )}

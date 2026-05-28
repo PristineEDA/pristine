@@ -544,6 +544,7 @@ function normalizeModuleHierarchyNode(value: unknown): LspModuleHierarchyNode | 
 
   const candidate = value as {
     moduleName?: unknown;
+    kind?: unknown;
     instanceName?: unknown;
     uri?: unknown;
     range?: unknown;
@@ -569,6 +570,7 @@ function normalizeModuleHierarchyNode(value: unknown): LspModuleHierarchyNode | 
 
   return {
     moduleName: candidate.moduleName,
+    kind: candidate.kind === 'interface' ? 'interface' : 'module',
     instanceName: typeof candidate.instanceName === 'string' ? candidate.instanceName : undefined,
     uri,
     filePath: uri ? getRelativeWorkspaceFilePath(uri) ?? undefined : undefined,
