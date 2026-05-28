@@ -2,7 +2,7 @@ import { BitmapFont, BitmapText, Container, Graphics } from 'pixi.js';
 
 import type { AsicSchematicPalette } from './asicSchematicPalette';
 import type { SchematicAlignmentGuide } from './asicSchematicGuides';
-import { getSchematicEndpointStubLength, isLogicCellKind, moduleLabelTopOffset } from './asicSchematicLayout';
+import { isLogicCellKind, moduleLabelTopOffset } from './asicSchematicLayout';
 import type { SchematicEdgeLayout, SchematicLayoutResult, SchematicNodeLayout } from './asicSchematicTypes';
 
 export type SchematicLayerName = 'background' | 'wire' | 'component' | 'interaction';
@@ -215,17 +215,15 @@ function drawSelectionOverlay(
   selectedNodeIds.forEach((nodeId) => {
     const node = nodeMap.get(nodeId);
 
-    if (!node || node.kind !== 'module') {
+    if (!node) {
       return;
     }
 
     const position = positions?.[nodeId];
     const x = position?.x ?? node.x;
     const y = position?.y ?? node.y;
-    const topPadding = isLogicCellKind(node.cellKind) ? 5 : moduleLabelTopOffset + 6;
 
-    graphics
-      .roundRect(x - 5, y - topPadding, node.width + 10, node.height + topPadding + 5, 10)
+    drawNodeOutline(graphics, node, x, y)
       .stroke({ color: palette.selected, alpha: 0.96, width: 2.2 });
   });
 }
@@ -396,70 +394,21 @@ function drawIoPortNode(container: Container, node: SchematicNodeLayout, palette
   const port = node.ports[0];
   const portColor = port?.direction === 'input' ? palette.info : port?.direction === 'output' ? palette.success : palette.warning;
   const body = new Graphics({ label: `schematic-node-body:${node.id}` });
-  const notch = 13;
 
-  if (port?.direction === 'inout') {
-    body
-      .moveTo(notch, 0)
-      .lineTo(node.width - notch, 0)
-      .lineTo(node.width, node.height / 2)
-      .lineTo(node.width - notch, node.height)
-      .lineTo(notch, node.height)
-      .lineTo(0, node.height / 2)
-      .closePath();
-  } else {
-    body
-      .moveTo(0, 0)
-      .lineTo(node.width - notch, 0)
-      .lineTo(node.width, node.height / 2)
-      .lineTo(node.width - notch, node.height)
-      .lineTo(0, node.height)
-      .closePath();
-  }
-
-  body.fill({ color: palette.panelMuted, alpha: 0.9 }).stroke({ color: portColor, alpha: 0.82, width: 1.4 });
+  drawIoPortOutline(body, node, 0, 0)
+    .fill({ color: palette.panelMuted, alpha: 0.9 })
+    .stroke({ color: portColor, alpha: 0.82, width: 1.4 });
   container.addChild(body);
-  container.addChild(createText(textNodes, node.label, palette.text, 11, '600', 10, 13));
+  container.addChild(createText(textNodes, node.label, palette.text, 11, '600', port?.side === 'west' ? 18 : 10, 13));
 }
 
 function drawLogicNode(container: Container, node: SchematicNodeLayout, palette: AsicSchematicPalette, textNodes: BitmapText[]) {
   const body = new Graphics({ label: `schematic-node-body:${node.id}` });
-  const kind = node.cellKind?.toLowerCase() ?? 'logic';
   const fill = palette.warning;
 
-  if (kind === 'mux') {
-    body
-      .moveTo(20, 0)
-      .lineTo(node.width - 8, 10)
-      .lineTo(node.width - 8, node.height - 10)
-      .lineTo(20, node.height)
-      .lineTo(8, node.height - 12)
-      .lineTo(8, 12)
-      .closePath();
-  } else if (kind === 'not') {
-    body
-      .moveTo(14, 10)
-      .lineTo(node.width - 24, node.height / 2)
-      .lineTo(14, node.height - 10)
-      .closePath()
-      .circle(node.width - 14, node.height / 2, 5);
-  } else if (kind === 'or' || kind === 'xor' || kind === 'xnor') {
-    body
-      .moveTo(14, 0)
-      .quadraticCurveTo(node.width - 10, 0, node.width, node.height / 2)
-      .quadraticCurveTo(node.width - 10, node.height, 14, node.height)
-      .quadraticCurveTo(30, node.height / 2, 14, 0);
-  } else {
-    body
-      .moveTo(8, 0)
-      .lineTo(node.width / 2, 0)
-      .quadraticCurveTo(node.width - 2, 0, node.width - 2, node.height / 2)
-      .quadraticCurveTo(node.width - 2, node.height, node.width / 2, node.height)
-      .lineTo(8, node.height)
-      .closePath();
-  }
-
-  body.fill({ color: fill, alpha: 0.2 }).stroke({ color: palette.warning, alpha: 0.9, width: 1.4 });
+  drawLogicNodeOutline(body, node, 0, 0)
+    .fill({ color: fill, alpha: 0.2 })
+    .stroke({ color: palette.warning, alpha: 0.9, width: 1.4 });
   container.addChild(body);
 
   const label = createText(textNodes, node.label, palette.text, 9, '600', node.width / 2, node.height / 2);
@@ -469,19 +418,10 @@ function drawLogicNode(container: Container, node: SchematicNodeLayout, palette:
 
 function drawPorts(container: Container, node: SchematicNodeLayout, palette: AsicSchematicPalette, textNodes: BitmapText[] = []) {
   const showPortLabels = !isLogicCellKind(node.cellKind);
-  const connectorLength = getSchematicEndpointStubLength(node);
 
   node.ports.forEach((port) => {
     const localY = port.y - node.y;
-    const sideMultiplier = port.side === 'west' ? 1 : -1;
-    const anchorX = port.x - node.x;
     const labelX = port.side === 'west' ? 10 : node.width - 10;
-    const portColor = port.direction === 'input' ? palette.info : port.direction === 'output' ? palette.success : palette.warning;
-
-    container.addChild(new Graphics({ label: `schematic-port-connector:${node.id}:${port.id}` })
-      .moveTo(anchorX, localY)
-      .lineTo(anchorX + sideMultiplier * connectorLength, localY)
-      .stroke({ color: portColor, alpha: 0.74, width: isLogicCellKind(node.cellKind) ? 1.2 : 1 }));
 
     if (!showPortLabels) {
       return;
@@ -493,6 +433,92 @@ function drawPorts(container: Container, node: SchematicNodeLayout, palette: Asi
     }
     container.addChild(portText);
   });
+}
+
+function drawNodeOutline(graphics: Graphics, node: SchematicNodeLayout, x: number, y: number) {
+  if (node.kind === 'port') {
+    return drawIoPortOutline(graphics, node, x, y);
+  }
+
+  if (isLogicCellKind(node.cellKind)) {
+    return drawLogicNodeOutline(graphics, node, x, y);
+  }
+
+  return graphics.roundRect(x, y, node.width, node.height, 8);
+}
+
+function drawIoPortOutline(graphics: Graphics, node: SchematicNodeLayout, x: number, y: number) {
+  const port = node.ports[0];
+  const notch = 13;
+
+  if (port?.direction === 'inout') {
+    return graphics
+      .moveTo(x + notch, y)
+      .lineTo(x + node.width - notch, y)
+      .lineTo(x + node.width, y + node.height / 2)
+      .lineTo(x + node.width - notch, y + node.height)
+      .lineTo(x + notch, y + node.height)
+      .lineTo(x, y + node.height / 2)
+      .closePath();
+  }
+
+  if (port?.direction === 'output') {
+    return graphics
+      .moveTo(x + notch, y)
+      .lineTo(x + node.width, y)
+      .lineTo(x + node.width, y + node.height)
+      .lineTo(x + notch, y + node.height)
+      .lineTo(x, y + node.height / 2)
+      .closePath();
+  }
+
+  return graphics
+    .moveTo(x, y)
+    .lineTo(x + node.width - notch, y)
+    .lineTo(x + node.width, y + node.height / 2)
+    .lineTo(x + node.width - notch, y + node.height)
+    .lineTo(x, y + node.height)
+    .closePath();
+}
+
+function drawLogicNodeOutline(graphics: Graphics, node: SchematicNodeLayout, x: number, y: number) {
+  const kind = node.cellKind?.toLowerCase() ?? 'logic';
+
+  if (kind === 'mux') {
+    return graphics
+      .moveTo(x + 20, y)
+      .lineTo(x + node.width - 8, y + 10)
+      .lineTo(x + node.width - 8, y + node.height - 10)
+      .lineTo(x + 20, y + node.height)
+      .lineTo(x + 8, y + node.height - 12)
+      .lineTo(x + 8, y + 12)
+      .closePath();
+  }
+
+  if (kind === 'not') {
+    return graphics
+      .moveTo(x + 14, y + 10)
+      .lineTo(x + node.width - 24, y + node.height / 2)
+      .lineTo(x + 14, y + node.height - 10)
+      .closePath()
+      .circle(x + node.width - 14, y + node.height / 2, 5);
+  }
+
+  if (kind === 'or' || kind === 'xor' || kind === 'xnor') {
+    return graphics
+      .moveTo(x + 14, y)
+      .quadraticCurveTo(x + node.width - 10, y, x + node.width, y + node.height / 2)
+      .quadraticCurveTo(x + node.width - 10, y + node.height, x + 14, y + node.height)
+      .quadraticCurveTo(x + 30, y + node.height / 2, x + 14, y);
+  }
+
+  return graphics
+    .moveTo(x + 8, y)
+    .lineTo(x + node.width / 2, y)
+    .quadraticCurveTo(x + node.width - 2, y, x + node.width - 2, y + node.height / 2)
+    .quadraticCurveTo(x + node.width - 2, y + node.height, x + node.width / 2, y + node.height)
+    .lineTo(x + 8, y + node.height)
+    .closePath();
 }
 
 interface NodeTooltip {

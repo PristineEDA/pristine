@@ -14,6 +14,7 @@ describe('lspSchematicToGraph', () => {
         uri: 'file:///workspace/rtl/top.sv',
         ports: [
           { name: 'a', direction: 'input', widthText: 'logic' },
+          { name: 'pad', direction: 'inout', widthText: 'logic' },
           { name: 'y', direction: 'output', widthText: 'logic [3:0]' },
         ],
         cells: [{
@@ -23,7 +24,17 @@ describe('lspSchematicToGraph', () => {
           kind: 'module',
           connections: [
             { portName: 'a', portIndex: 0, signal: 'a' },
-            { portName: 'y', portIndex: 1, signal: 'n1' },
+            { portName: 'pad', portIndex: 1, signal: 'pad' },
+            { portName: 'y', portIndex: 2, signal: 'n1' },
+          ],
+        }, {
+          id: 'u_unresolved',
+          name: 'u_unresolved',
+          type: 'missing_child',
+          kind: 'module',
+          connections: [
+            { portName: 'pad', portIndex: 0, signal: 'pad' },
+            { portName: 'done', portIndex: 1, signal: 'y' },
           ],
         }, {
           id: '$mux0',
@@ -44,13 +55,18 @@ describe('lspSchematicToGraph', () => {
         }, {
           name: 'y',
           drivers: [{ nodeId: '$mux0', portName: 'Y' }],
-          loads: [{ nodeId: '$port:y', portName: 'y' }],
+          loads: [{ nodeId: '$port:y', portName: 'y' }, { nodeId: 'u_unresolved', portName: 'done' }],
+        }, {
+          name: 'pad',
+          drivers: [{ nodeId: '$port:pad', portName: 'pad' }],
+          loads: [{ nodeId: 'u_child', portName: 'pad' }, { nodeId: 'u_unresolved', portName: 'pad' }],
         }],
       }, {
         id: 'child',
         name: 'child',
         ports: [
           { name: 'a', direction: 'input', widthText: 'logic' },
+          { name: 'pad', direction: 'input', widthText: 'logic' },
           { name: 'y', direction: 'output', widthText: 'logic [3:0]' },
         ],
         cells: [],
@@ -63,14 +79,17 @@ describe('lspSchematicToGraph', () => {
     expect(graph.rootModuleId).toBe('top');
     expect(graph.modules.top?.ports).toEqual([
       { id: 'a', name: 'a', direction: 'input', width: undefined },
+      { id: 'pad', name: 'pad', direction: 'inout', width: undefined },
       { id: 'y', name: 'y[3:0]', direction: 'output', width: 4 },
     ]);
     expect(graph.modules.child?.ports).toEqual([
       { id: 'a', name: 'a', direction: 'input', width: undefined },
+      { id: 'pad', name: 'pad', direction: 'inout', width: undefined },
       { id: 'y', name: 'y[3:0]', direction: 'output', width: 4 },
     ]);
     expect(graph.modules.top?.instances).toEqual([
       { id: 'u_child', name: 'u_child', moduleId: 'child', role: 'module', cellKind: 'module' },
+      { id: 'u_unresolved', name: 'u_unresolved', moduleId: 'missing_child', role: 'module', cellKind: 'module' },
       { id: '$mux0', name: '$mux0', moduleId: 'logic:mux', role: 'mux', cellKind: 'mux' },
     ]);
     expect(graph.modules['logic:mux']?.ports.map((port) => [port.id, port.direction])).toEqual([
@@ -91,9 +110,20 @@ describe('lspSchematicToGraph', () => {
         id: 'top:y:1',
         name: 'y',
         from: { instanceId: '$mux0', portId: 'Y' },
-        to: [{ portId: 'y' }],
+        to: [{ portId: 'y' }, { instanceId: 'u_unresolved', portId: 'done' }],
         kind: 'bus',
       },
+      {
+        id: 'top:pad:2',
+        name: 'pad',
+        from: { portId: 'pad' },
+        to: [{ instanceId: 'u_child', portId: 'pad' }, { instanceId: 'u_unresolved', portId: 'pad' }],
+        kind: 'data',
+      },
+    ]);
+    expect(graph.modules.missing_child?.ports.map((port) => [port.id, port.direction])).toEqual([
+      ['pad', 'inout'],
+      ['done', 'output'],
     ]);
   });
 });

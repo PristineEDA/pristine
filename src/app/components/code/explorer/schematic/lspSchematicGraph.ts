@@ -22,9 +22,12 @@ export function lspSchematicToGraph(schematic: LspSchematic): AsicSchematicGraph
     module.cells.forEach((cell) => {
       const moduleId = getCellModuleId(cell, schematic);
       if (!modules.has(moduleId)) {
-        modules.set(moduleId, createSyntheticModule(cell, moduleId));
+        modules.set(moduleId, createSyntheticModule(cell, moduleId, module));
       }
     });
+  });
+  schematic.modules.forEach((module) => {
+    refineChildModulePortDirections(module, schematic, modules);
   });
 
   if (!modules.has(rootModuleId)) {
@@ -126,11 +129,11 @@ function getCellModuleId(cell: LspSchematicCell, schematic: LspSchematic) {
   return cell.kind === 'module' ? cell.type : `logic:${cell.kind}`;
 }
 
-function createSyntheticModule(cell: LspSchematicCell, moduleId: string): AsicModule {
+function createSyntheticModule(cell: LspSchematicCell, moduleId: string, parentModule: LspSchematicModule): AsicModule {
   const ports = uniqueCellPorts(cell).map((connection) => ({
     id: connection.portName,
     name: connection.portName,
-    direction: inferCellPortDirection(cell, connection.portName, connection.portIndex),
+    direction: inferCellPortDirection(cell, connection.portName, connection.portIndex, parentModule),
   } satisfies AsicPort));
 
   return {
@@ -143,19 +146,156 @@ function createSyntheticModule(cell: LspSchematicCell, moduleId: string): AsicMo
   };
 }
 
+function refineChildModulePortDirections(
+  parentModule: LspSchematicModule,
+  schematic: LspSchematic,
+  modules: Map<string, AsicModule>,
+) {
+  parentModule.cells.forEach((cell) => {
+    const moduleId = getCellModuleId(cell, schematic);
+    const module = modules.get(moduleId);
+
+    if (!module) {
+      return;
+    }
+
+    const cellPorts = uniqueCellPorts(cell);
+    const connectionByPortId = new Map(cellPorts.map((connection) => [connection.portName, connection]));
+    const ports = module.ports.map((port) => {
+      const connection = connectionByPortId.get(port.id);
+
+      if (!connection) {
+        return port;
+      }
+
+      const inferredDirection = inferCellPortDirection(cell, port.id, connection.portIndex, parentModule);
+
+      if (inferredDirection === port.direction || !shouldRefinePortDirection(port.direction, inferredDirection)) {
+        return port;
+      }
+
+      return {
+        ...port,
+        direction: inferredDirection,
+      };
+    });
+    cellPorts.forEach((connection) => {
+      if (ports.some((port) => port.id === connection.portName)) {
+        return;
+      }
+
+      ports.push({
+        id: connection.portName,
+        name: connection.portName,
+        direction: inferCellPortDirection(cell, connection.portName, connection.portIndex, parentModule),
+      });
+    });
+
+    if (ports.some((port, index) => port !== module.ports[index])) {
+      modules.set(moduleId, { ...module, ports });
+    }
+  });
+}
+
+function shouldRefinePortDirection(currentDirection: AsicPort['direction'], inferredDirection: AsicPort['direction']) {
+  return inferredDirection === 'inout'
+    || (currentDirection === 'input' && inferredDirection === 'output');
+}
+
 function uniqueCellPorts(cell: LspSchematicCell) {
   return [...new Map(cell.connections.map((connection) => [connection.portName, connection])).values()]
     .sort((left, right) => left.portIndex - right.portIndex);
 }
 
-function inferCellPortDirection(cell: LspSchematicCell, portName: string, portIndex: number): AsicPort['direction'] {
+function inferCellPortDirection(
+  cell: LspSchematicCell,
+  portName: string,
+  portIndex: number,
+  parentModule: LspSchematicModule,
+): AsicPort['direction'] {
   const normalizedPortName = portName.toLowerCase();
+  const connection = cell.connections.find((candidate) => candidate.portName === portName);
+  const connectedTopPort = connection
+    ? findParentPortBySignal(parentModule, connection.signal)
+    : undefined;
+
+  if (connectedTopPort?.direction === 'inout') {
+    return 'inout';
+  }
+
+  if (connectedTopPort?.direction === 'output') {
+    return 'output';
+  }
+
+  const directionFromNet = inferCellPortDirectionFromNets(cell, portName, parentModule);
+  if (directionFromNet) {
+    return directionFromNet;
+  }
 
   if (cell.kind !== 'module' && (normalizedPortName === 'y' || normalizedPortName === 'o' || normalizedPortName === 'out' || portIndex === 0)) {
     return 'output';
   }
 
+  if (parentModule.nets.some((net) => net.drivers.some((endpoint) => endpoint.nodeId === cell.id && endpoint.portName === portName))) {
+    return 'output';
+  }
+
   return 'input';
+}
+
+function inferCellPortDirectionFromNets(
+  cell: LspSchematicCell,
+  portName: string,
+  parentModule: LspSchematicModule,
+): AsicPort['direction'] | null {
+  for (const net of parentModule.nets) {
+    const endpoints = [...net.drivers, ...net.loads];
+    const connectsCellPort = endpoints.some((endpoint) => endpoint.nodeId === cell.id && endpoint.portName === portName);
+
+    if (!connectsCellPort) {
+      continue;
+    }
+
+    const connectedTopPorts = endpoints
+      .map((endpoint) => getExternalPortName(endpoint))
+      .filter((name): name is string => Boolean(name))
+      .map((name) => findParentPortBySignal(parentModule, name))
+      .filter((port): port is LspSchematicPort => Boolean(port));
+
+    if (connectedTopPorts.some((port) => port.direction === 'inout')) {
+      return 'inout';
+    }
+
+    if (connectedTopPorts.some((port) => port.direction === 'output')) {
+      return 'output';
+    }
+
+    if (net.drivers.some((endpoint) => endpoint.nodeId === cell.id && endpoint.portName === portName)) {
+      return 'output';
+    }
+  }
+
+  return null;
+}
+
+function getExternalPortName(endpoint: LspSchematicEndpoint) {
+  if (!endpoint.nodeId.startsWith(externalPortNodePrefix)) {
+    return null;
+  }
+
+  return endpoint.nodeId.slice(externalPortNodePrefix.length) || endpoint.portName;
+}
+
+function findParentPortBySignal(module: LspSchematicModule, signal: string) {
+  const normalizedSignal = normalizeSignalName(signal);
+
+  return module.ports.find((port) => normalizeSignalName(port.name) === normalizedSignal);
+}
+
+function normalizeSignalName(signal: string) {
+  return signal
+    .replace(/\[[^\]]+\]/g, '')
+    .replace(/\.[^.]+$/g, '');
 }
 
 function getWidthFromText(widthText: string) {

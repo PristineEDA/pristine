@@ -434,8 +434,7 @@ function toNodeLayout(graph: AsicSchematicGraph, module: AsicModule, elkNode: El
   if (elkNode.id.startsWith('io:')) {
     const portId = elkNode.id.slice(3);
     const port = module.ports.find((candidate) => candidate.id === portId)!;
-    const elkPort = elkNode.ports?.[0];
-    const side = getLayoutSide(port.direction === 'output' ? 'west' : 'east');
+    const side = getTopLevelPortLayoutSide(port);
 
     return {
       id: elkNode.id,
@@ -450,8 +449,8 @@ function toNodeLayout(graph: AsicSchematicGraph, module: AsicModule, elkNode: El
       ports: [{
         ...port,
         side,
-        x: x + (elkPort?.x ?? (side === 'west' ? 0 : width)),
-        y: y + (elkPort?.y ?? height / 2),
+        x: getPortAnchorX(x, width, side),
+        y: roundLayoutCoordinate(y + height / 2),
       }],
       canDrillDown: false,
     };
@@ -468,8 +467,8 @@ function toNodeLayout(graph: AsicSchematicGraph, module: AsicModule, elkNode: El
     return {
       ...port,
       side,
-      x: x + (elkPort?.x ?? (side === 'west' ? 0 : width)),
-      y: y + (elkPort?.y ?? getFallbackPortY(childPorts, port, isLogicGate ? height : undefined)),
+      x: getPortAnchorX(x, width, side),
+      y: roundLayoutCoordinate(y + getPortAnchorYOffset(elkPort, getFallbackPortY(childPorts, port, isLogicGate ? height : undefined))),
     } satisfies SchematicPortLayout;
   });
 
@@ -617,7 +616,7 @@ function createFallbackLayout(graph: AsicSchematicGraph, module: AsicModule): Sc
       ports: ports.map((port) => ({
         ...port,
         side: getPortLayoutSide(port),
-        x: x + (port.direction === 'input' ? 0 : width),
+        x: getPortAnchorX(x, width, getPortLayoutSide(port)),
         y: y + getFallbackPortY(ports, port, isLogicGate ? height : undefined),
       })),
       canDrillDown: Boolean(childModule && childModule.instances.length > 0),
@@ -648,7 +647,7 @@ function createFallbackLayout(graph: AsicSchematicGraph, module: AsicModule): Sc
 }
 
 function createFallbackPortNode(port: AsicPort, x: number, y: number): SchematicNodeLayout {
-  const side = getLayoutSide(port.direction === 'output' ? 'west' : 'east');
+  const side = getTopLevelPortLayoutSide(port);
 
   return {
     id: getIoNodeId(port.id),
@@ -663,7 +662,7 @@ function createFallbackPortNode(port: AsicPort, x: number, y: number): Schematic
     ports: [{
       ...port,
       side,
-      x: x + (side === 'west' ? 0 : ioNodeWidth),
+      x: getPortAnchorX(x, ioNodeWidth, side),
       y: y + ioNodeHeight / 2,
     }],
     canDrillDown: false,
@@ -1291,13 +1290,37 @@ function getInstancePortId(instanceId: string, portId: string) {
 }
 
 function getElkPortSide(port: AsicPort) {
-  return port.direction === 'input' ? 'WEST' : port.direction === 'output' ? 'EAST' : 'SOUTH';
+  return port.direction === 'input' ? 'WEST' : 'EAST';
 }
 
 function getPortLayoutSide(port: AsicPort) {
-  return getLayoutSide(port.direction === 'input' ? 'west' : port.direction === 'output' ? 'east' : 'south');
+  return getLayoutSide(port.direction === 'input' ? 'west' : 'east');
+}
+
+function getTopLevelPortLayoutSide(port: AsicPort) {
+  return getLayoutSide(port.direction === 'output' ? 'west' : 'east');
 }
 
 function getLayoutSide(side: SchematicPortLayout['side']) {
   return side;
+}
+
+function getPortAnchorX(nodeX: number, nodeWidth: number, side: SchematicPortLayout['side']) {
+  if (side === 'west') {
+    return roundLayoutCoordinate(nodeX);
+  }
+
+  if (side === 'east') {
+    return roundLayoutCoordinate(nodeX + nodeWidth);
+  }
+
+  return roundLayoutCoordinate(nodeX + nodeWidth / 2);
+}
+
+function getPortAnchorYOffset(elkPort: ElkPort | undefined, fallbackY: number) {
+  if (typeof elkPort?.y === 'number') {
+    return roundLayoutCoordinate(elkPort.y + (elkPort.height ?? 0) / 2);
+  }
+
+  return fallbackY;
 }

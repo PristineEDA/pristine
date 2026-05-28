@@ -69,6 +69,42 @@ const logicGateGraph: AsicSchematicGraph = {
   },
 };
 
+const inoutPortGraph: AsicSchematicGraph = {
+  rootModuleId: 'top',
+  modules: {
+    top: {
+      id: 'top',
+      name: 'top',
+      description: '',
+      ports: [
+        { id: 'clk', name: 'clk', direction: 'input' },
+        { id: 'bus', name: 'bus', direction: 'inout', width: 8 },
+        { id: 'done', name: 'done', direction: 'output' },
+      ],
+      instances: [
+        { id: 'u_pad', name: 'u_pad', moduleId: 'pad', role: 'module', cellKind: 'module' },
+      ],
+      nets: [
+        { id: 'net_clk', name: 'clk', from: { portId: 'clk' }, to: [{ instanceId: 'u_pad', portId: 'clk' }] },
+        { id: 'net_bus', name: 'bus', from: { portId: 'bus' }, to: [{ instanceId: 'u_pad', portId: 'bus' }], kind: 'bus' },
+        { id: 'net_done', name: 'done', from: { instanceId: 'u_pad', portId: 'done' }, to: [{ portId: 'done' }] },
+      ],
+    },
+    pad: {
+      id: 'pad',
+      name: 'pad',
+      description: '',
+      ports: [
+        { id: 'clk', name: 'clk', direction: 'input' },
+        { id: 'bus', name: 'bus', direction: 'inout', width: 8 },
+        { id: 'done', name: 'done', direction: 'output' },
+      ],
+      instances: [],
+      nets: [],
+    },
+  },
+};
+
 describe('layoutAsicSchematic', () => {
   it('creates a positioned module graph from mock ASIC hierarchy', async () => {
     const layout = await layoutAsicSchematic(mockAsicSchematicGraph);
@@ -444,6 +480,30 @@ describe('edge metadata', () => {
       expect(edge.points[0]).toEqual(getEndpointPoint(layout, edge.from));
       expect(edge.points[edge.points.length - 1]).toEqual(getEndpointPoint(layout, edge.to));
     });
+  });
+
+  it('places module inout ports on the right and keeps connected wires attached', async () => {
+    const layout = await layoutAsicSchematic(inoutPortGraph);
+    const moduleNode = layout.nodes.find((node) => node.id === 'u_pad');
+    const inoutPort = moduleNode?.ports.find((port) => port.direction === 'inout');
+
+    expect(moduleNode).toBeDefined();
+    expect(inoutPort).toBeDefined();
+    if (!moduleNode || !inoutPort) {
+      return;
+    }
+
+    expect(inoutPort.side).toBe('east');
+    expect(inoutPort.x).toBe(moduleNode.x + moduleNode.width);
+
+    const inoutEdge = layout.edges.find((edge) => edge.to.instanceId === moduleNode.id && edge.to.portId === inoutPort.id);
+    expect(inoutEdge).toBeDefined();
+    if (!inoutEdge) {
+      return;
+    }
+
+    expect(inoutEdge.points[0]).toEqual(getEndpointPoint(layout, inoutEdge.from));
+    expect(inoutEdge.points[inoutEdge.points.length - 1]).toEqual(getEndpointPoint(layout, inoutEdge.to));
   });
 });
 

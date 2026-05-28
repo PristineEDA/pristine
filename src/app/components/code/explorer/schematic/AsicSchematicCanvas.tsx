@@ -186,6 +186,8 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
   const firstSelectableEdgePoint = firstSelectableEdge ? getEdgeHitPoint(firstSelectableEdge) : null;
   const firstSignalEdgePoint = firstSignalEdge ? getEdgeHitPoint(firstSignalEdge) : null;
   const firstBusEdgePoint = firstBusEdge ? getEdgeHitPoint(firstBusEdge) : null;
+  const selectedNodeIdsKey = selectedNodeIds.join(',');
+  const selectedEdgeIdsKey = selectedEdgeIds.join(',');
   const edgeRouteSnapshot = useMemo(() => JSON.stringify(layout.edges.map((edge) => ({
     id: edge.id,
     isBus: edge.isBus,
@@ -196,9 +198,34 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
     hasHorizontalStubs: hasHorizontalRouteStubs(edge.points),
     points: edge.points.map((point) => ({ x: roundLayoutCoordinate(point.x), y: roundLayoutCoordinate(point.y) })),
   }))), [layout.edges]);
+  const modulePortSnapshot = useMemo(() => JSON.stringify(moduleNodes.flatMap((node) => node.ports.map((port) => ({
+    nodeId: node.id,
+    portId: port.id,
+    name: port.name,
+    direction: port.direction,
+    side: port.side,
+    x: roundLayoutCoordinate(port.x),
+    y: roundLayoutCoordinate(port.y),
+  })))), [moduleNodes]);
+  const selectedNodeHighlightSnapshot = useMemo(() => JSON.stringify(selectedNodeIds.flatMap((nodeId) => {
+    const node = layout.nodes.find((candidate) => candidate.id === nodeId);
+
+    if (!node) {
+      return [];
+    }
+
+    return [{
+      id: node.id,
+      kind: node.kind,
+      outline: node.kind === 'port' ? 'io-port' : isLogicCellKind(node.cellKind) ? 'logic-shape' : 'module-body',
+      x: roundLayoutCoordinate(node.x),
+      y: roundLayoutCoordinate(node.y),
+      width: roundLayoutCoordinate(node.width),
+      height: roundLayoutCoordinate(node.height),
+      includesExternalLabel: false,
+    }];
+  })), [layout.nodes, selectedNodeIdsKey]);
   const portWireMisalignmentCount = useMemo(() => countPortWireMisalignments(layout), [layout]);
-  const selectedNodeIdsKey = selectedNodeIds.join(',');
-  const selectedEdgeIdsKey = selectedEdgeIds.join(',');
   const selectedEdgeHighlightColor = useMemo(() => {
     const selectedEdgeId = selectedEdgeIds[0];
     const selectedEdge = selectedEdgeId ? layout.edges.find((edge) => edge.id === selectedEdgeId) : null;
@@ -412,9 +439,12 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
         };
         canvas.style.cursor = 'grabbing';
       } else {
-        const edge = findSelectableEdgeAt(clientPoint, canvas);
+        const selectableNode = findSchematicNodeAt(clientPoint, canvas);
+        const edge = selectableNode ? null : findSelectableEdgeAt(clientPoint, canvas);
 
-        if (edge) {
+        if (selectableNode) {
+          applyClickSelection(selectableNode.id, event.ctrlKey || event.metaKey);
+        } else if (edge) {
           dragState = {
             mode: 'edge',
             pointerId: event.pointerId,
@@ -543,7 +573,7 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
       }
 
       if (dragState?.mode === 'edge') {
-        if (!dragState.moved) {
+        if (!dragState.moved && dragState.edgeId) {
           commitEdgeSelection([dragState.edgeId]);
         }
 
@@ -776,12 +806,8 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
     };
   }
 
-  function getModuleNodesInRect(rect: SchematicWorldRect) {
+  function getSelectableNodesInRect(rect: SchematicWorldRect) {
     return layoutRef.current.nodes.filter((node) => {
-      if (node.kind !== 'module') {
-        return false;
-      }
-
       return node.x < rect.x + rect.width
         && node.x + node.width > rect.x
         && node.y < rect.y + rect.height
@@ -810,7 +836,7 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
   }
 
   function applyMarqueeSelection(rect: SchematicWorldRect, additive: boolean) {
-    const hitNodeIds = getModuleNodesInRect(rect).map((node) => node.id);
+    const hitNodeIds = getSelectableNodesInRect(rect).map((node) => node.id);
 
     if (!additive) {
       commitSelection(hitNodeIds);
@@ -857,11 +883,11 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
   }
 
   function normalizeSelectedNodeIds(nodeIds: readonly string[]) {
-    const moduleNodeIds = new Set(layoutRef.current.nodes.filter((node) => node.kind === 'module').map((node) => node.id));
+    const selectableNodeIds = new Set(layoutRef.current.nodes.map((node) => node.id));
     const uniqueNodeIds = new Set<string>();
 
     nodeIds.forEach((nodeId) => {
-      if (moduleNodeIds.has(nodeId)) {
+      if (selectableNodeIds.has(nodeId)) {
         uniqueNodeIds.add(nodeId);
       }
     });
@@ -1133,6 +1159,8 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
       data-module-node-snapshot={moduleNodeSnapshot}
       data-logic-node-snapshot={logicNodeSnapshot}
       data-port-node-snapshot={portNodeSnapshot}
+      data-module-port-snapshot={modulePortSnapshot}
+      data-selected-node-highlight-snapshot={selectedNodeHighlightSnapshot}
       data-port-marker-count={0}
       data-edge-end-marker-count={0}
       data-module-label-placement="outside-top-center"

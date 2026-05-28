@@ -4926,8 +4926,18 @@ test('left panel split shows two stacked panels and keeps the explorer tree scro
 
     await splitToggle.click();
     await expect(splitToggle).toHaveAttribute('aria-pressed', 'false');
-    await expect(secondaryResizablePanel).toHaveAttribute('aria-hidden', 'true');
-    await expect(window.getByTestId('left-panel-secondary-panel')).toHaveAttribute('style', /opacity: 0/);
+    await expect.poll(async () => {
+      if (await secondaryResizablePanel.count() === 0) {
+        return 'unmounted';
+      }
+
+      const ariaHidden = await secondaryResizablePanel.getAttribute('aria-hidden');
+      const secondaryPanelStyle = await window.getByTestId('left-panel-secondary-panel').getAttribute('style');
+
+      return ariaHidden === 'true' && /opacity:\s*0/.test(secondaryPanelStyle ?? '')
+        ? 'hidden'
+        : 'visible';
+    }, { timeout: UI_READY_TIMEOUT_MS }).toMatch(/^(hidden|unmounted)$/);
     await expect(splitHandle).toHaveCount(0);
     await expect(secondaryPanel).toHaveCount(0, { timeout: UI_READY_TIMEOUT_MS });
   } finally {
@@ -5227,12 +5237,12 @@ test('terminal tab creates a real shell session and shows command output', async
 test('asic schematic bottom panel renders Pixi layers with selection and hierarchy navigation', async () => {
   const { app, window } = await launchApp();
   const cpuTopSource = [
-    'module cpu_top(input logic clk, input logic rst_n, input logic [3:0] a, input logic [3:0] b, input logic sel, output logic [3:0] y);',
+    'module cpu_top(input logic clk, input logic rst_n, input logic [3:0] a, input logic [3:0] b, input logic sel, inout tri [3:0] pad, output logic [3:0] y);',
     '  logic [3:0] n1;',
     '  logic [3:0] n2;',
     '  logic [3:0] n3;',
     '  alu u_alu(.a(a), .b(b), .y(n1));',
-    '  logic_child u_logic(.clk(clk), .rst_n(rst_n), .a(n1), .b(b), .sel(sel), .y(n2));',
+    '  logic_child u_logic(.clk(clk), .rst_n(rst_n), .a(n1), .b(b), .sel(sel), .pad(pad), .y(n2));',
     '  and u_and(n3[0], a[0], b[0]);',
     '  assign n3 = sel ? n1 : (a | b);',
     '  assign y = n3;',
@@ -5244,8 +5254,9 @@ test('asic schematic bottom panel renders Pixi layers with selection and hierarc
     'endmodule',
   ].join('\n');
   const logicChildSource = [
-    'module logic_child(input logic clk, input logic rst_n, input logic [3:0] a, input logic [3:0] b, input logic sel, output logic [3:0] y);',
+    'module logic_child(input logic clk, input logic rst_n, input logic [3:0] a, input logic [3:0] b, input logic sel, inout tri [3:0] pad, output logic [3:0] y);',
     '  logic [3:0] gated;',
+    '  assign pad = sel ? gated : 4\'bz;',
     '  assign gated = a & b;',
     '  assign y = sel ? gated : b;',
     'endmodule',
@@ -5361,6 +5372,25 @@ test('asic schematic bottom panel renders Pixi layers with selection and hierarc
     direction: string;
     centerX: number;
     centerY: number;
+  }>;
+  const readModulePortSnapshot = async () => JSON.parse(await canvasHost.getAttribute('data-module-port-snapshot') ?? '[]') as Array<{
+    nodeId: string;
+    portId: string;
+    name: string;
+    direction: string;
+    side: string;
+    x: number;
+    y: number;
+  }>;
+  const readSelectedNodeHighlightSnapshot = async () => JSON.parse(await canvasHost.getAttribute('data-selected-node-highlight-snapshot') ?? '[]') as Array<{
+    id: string;
+    kind: string;
+    outline: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    includesExternalLabel: boolean;
   }>;
   const readEdgeSnapshot = async () => JSON.parse(await canvasHost.getAttribute('data-edge-route-snapshot') ?? '[]') as Array<{
     id: string;
@@ -5494,6 +5524,20 @@ test('asic schematic bottom panel renders Pixi layers with selection and hierarc
       await window.keyboard.down('Control');
     }
     await window.mouse.click(point.x, point.y);
+    if (ctrlKey) {
+      await window.keyboard.up('Control');
+    }
+  };
+  const clickWorldPoint = async (point: { x: number; y: number } | { centerX: number; centerY: number }, ctrlKey = false) => {
+    const worldPoint = 'centerX' in point
+      ? { x: point.centerX, y: point.centerY }
+      : point;
+    const screenPoint = await worldToScreen(worldPoint);
+
+    if (ctrlKey) {
+      await window.keyboard.down('Control');
+    }
+    await window.mouse.click(screenPoint.x, screenPoint.y);
     if (ctrlKey) {
       await window.keyboard.up('Control');
     }
@@ -5656,7 +5700,10 @@ test('asic schematic bottom panel renders Pixi layers with selection and hierarc
   const initialLogicSnapshot = await readLogicSnapshot();
   await expect.poll(async () => (await readPortSnapshot()).map((node) => node.direction).sort(), {
     timeout: UI_READY_TIMEOUT_MS,
-  }).toEqual(expect.arrayContaining(['input', 'output']));
+  }).toEqual(expect.arrayContaining(['input', 'output', 'inout']));
+  await expect.poll(async () => (await readModulePortSnapshot()).some((port) => port.direction === 'inout' && port.side === 'east'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBe(true);
   expect((await readModuleSnapshot()).filter((node) => node.subtitle !== '' || node.label !== node.id || node.type.length === 0)).toEqual([]);
   expect((await readPortSnapshot()).filter((node) => node.subtitle !== '' || node.type !== node.direction)).toEqual([]);
   expect((await readPortSnapshot()).filter((port) => port.name.toLowerCase().includes('logic'))).toEqual([]);
@@ -5700,6 +5747,14 @@ test('asic schematic bottom panel renders Pixi layers with selection and hierarc
   await expect(panel).toHaveAttribute('data-selected-node-count', '1');
   await expect(panel).toHaveAttribute('data-selected-node-ids', firstModule.id ?? '');
   await expect(panel).toHaveAttribute('data-selected-edge-count', '0');
+  await expect.poll(async () => readSelectedNodeHighlightSnapshot(), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toEqual([expect.objectContaining({
+    id: firstModule.id,
+    includesExternalLabel: false,
+    kind: 'module',
+    outline: expect.stringMatching(/^(logic-shape|module-body)$/),
+  })]);
 
   await clickEdge(firstEdge);
   await expect(panel).toHaveAttribute('data-selected-edge-count', '1');
@@ -5713,6 +5768,38 @@ test('asic schematic bottom panel renders Pixi layers with selection and hierarc
     timeout: UI_READY_TIMEOUT_MS,
   }).toBe('selected');
   await expect(panel).toHaveAttribute('data-selected-node-count', '0');
+
+  await clickModule(firstModule);
+  await expect(panel).toHaveAttribute('data-selected-node-count', '1');
+  await expect(panel).toHaveAttribute('data-selected-node-ids', firstModule.id ?? '');
+  await expect(panel).toHaveAttribute('data-selected-edge-count', '0');
+
+  const portSnapshots = await readPortSnapshot();
+  const inputPortNode = portSnapshots.find((port) => port.direction === 'input');
+  const outputPortNode = portSnapshots.find((port) => port.direction === 'output');
+  const inoutPortNode = portSnapshots.find((port) => port.direction === 'inout');
+  expect(inputPortNode).toBeDefined();
+  expect(outputPortNode).toBeDefined();
+  expect(inoutPortNode).toBeDefined();
+  if (!inputPortNode || !outputPortNode || !inoutPortNode) {
+    throw new Error('Expected input, output, and inout schematic IO port nodes.');
+  }
+
+  await clickWorldPoint(inputPortNode);
+  await expect(panel).toHaveAttribute('data-selected-node-count', '1');
+  await expect(panel).toHaveAttribute('data-selected-node-ids', inputPortNode.id);
+  await expect.poll(async () => readSelectedNodeHighlightSnapshot(), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toEqual([expect.objectContaining({
+    id: inputPortNode.id,
+    includesExternalLabel: false,
+    kind: 'port',
+    outline: 'io-port',
+  })]);
+  await clickWorldPoint(outputPortNode);
+  await expect(panel).toHaveAttribute('data-selected-node-ids', outputPortNode.id);
+  await clickWorldPoint(inoutPortNode);
+  await expect(panel).toHaveAttribute('data-selected-node-ids', inoutPortNode.id);
 
   await clickModule(firstModule);
   await expect(panel).toHaveAttribute('data-selected-node-count', '1');

@@ -370,7 +370,7 @@ export function AsicSchematicPanel() {
             </div>
           ) : selectedNodeIds.length > 1 ? (
             <div className="mt-4 rounded-md border border-ide-border bg-ide-panel-bg p-2">
-              <div className="font-medium text-ide-text">{selectedNodeIds.length} modules selected</div>
+              <div className="font-medium text-ide-text">{selectedNodeIds.length} items selected</div>
             </div>
           ) : selectedEdge ? (
             <div className="mt-4 rounded-md border border-ide-border bg-ide-panel-bg p-2">
