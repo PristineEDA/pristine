@@ -4,7 +4,7 @@ import { Application } from 'pixi.js';
 import { readAsicSchematicPalette } from './asicSchematicPalette';
 import { createAsicSchematicScene, getSchematicEdgeColor, type AsicSchematicScene, type SchematicAlignmentGuideState, type SchematicGridState, type SchematicTextZoomState, type SchematicWorldRect } from './createAsicSchematicScene';
 import { getSchematicAlignmentGuides, type SchematicAlignmentGuide } from './asicSchematicGuides';
-import { resolveSchematicNodeOverlaps, snapSchematicNodePositions, type SchematicNodePositionOverrides } from './asicSchematicLayout';
+import { isLogicCellKind, resolveSchematicNodeOverlaps, snapSchematicNodePositions, type SchematicNodePositionOverrides } from './asicSchematicLayout';
 import type { SchematicEdgeLayout, SchematicLayoutBounds, SchematicLayoutResult, SchematicNodeLayout, SchematicPoint } from './asicSchematicTypes';
 
 type PixiRendererPreference = 'webgpu' | 'webgl';
@@ -135,6 +135,8 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
 
   const moduleId = layout.module.id;
   const moduleNodes = useMemo(() => layout.nodes.filter((node) => node.kind === 'module'), [layout]);
+  const logicNodes = useMemo(() => moduleNodes.filter((node) => isLogicCellKind(node.cellKind)), [moduleNodes]);
+  const schematicPalette = useMemo(() => readAsicSchematicPalette(), [themeKey]);
   const firstDraggableNode = moduleNodes[0] ?? null;
   const secondDraggableNode = moduleNodes[1] ?? null;
   const firstDrillableNode = useMemo(() => moduleNodes.find((node) => node.canDrillDown && node.moduleId) ?? null, [moduleNodes]);
@@ -153,13 +155,17 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
     canDrillDown: node.canDrillDown,
   }))), [moduleNodes]);
   const logicNodeSnapshot = useMemo(() => JSON.stringify(moduleNodes
-    .filter((node) => node.cellKind && node.cellKind !== 'module')
+    .filter((node) => isLogicCellKind(node.cellKind))
     .map((node) => ({
       id: node.id,
       name: node.label,
       subtitle: node.subtitle,
       type: node.tooltipType,
       cellKind: node.cellKind,
+      x: roundLayoutCoordinate(node.x),
+      y: roundLayoutCoordinate(node.y),
+      width: roundLayoutCoordinate(node.width),
+      height: roundLayoutCoordinate(node.height),
       centerX: roundLayoutCoordinate(node.x + node.width / 2),
       centerY: roundLayoutCoordinate(node.y + node.height / 2),
     }))), [moduleNodes]);
@@ -190,14 +196,15 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
     hasHorizontalStubs: hasHorizontalRouteStubs(edge.points),
     points: edge.points.map((point) => ({ x: roundLayoutCoordinate(point.x), y: roundLayoutCoordinate(point.y) })),
   }))), [layout.edges]);
+  const portWireMisalignmentCount = useMemo(() => countPortWireMisalignments(layout), [layout]);
   const selectedNodeIdsKey = selectedNodeIds.join(',');
   const selectedEdgeIdsKey = selectedEdgeIds.join(',');
   const selectedEdgeHighlightColor = useMemo(() => {
     const selectedEdgeId = selectedEdgeIds[0];
     const selectedEdge = selectedEdgeId ? layout.edges.find((edge) => edge.id === selectedEdgeId) : null;
 
-    return selectedEdge ? formatHexColor(getSchematicEdgeColor(selectedEdge, readAsicSchematicPalette())) : undefined;
-  }, [layout.edges, selectedEdgeIdsKey, themeKey]);
+    return selectedEdge ? formatHexColor(getSchematicEdgeColor(selectedEdge, schematicPalette)) : undefined;
+  }, [layout.edges, schematicPalette, selectedEdgeIdsKey]);
 
   useImperativeHandle(ref, () => ({
     fitToView,
@@ -1128,6 +1135,12 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
       data-port-node-snapshot={portNodeSnapshot}
       data-port-marker-count={0}
       data-edge-end-marker-count={0}
+      data-module-label-placement="outside-top-center"
+      data-gate-port-label-count={0}
+      data-logic-node-color-family={logicNodes.length > 0 ? 'yellow' : undefined}
+      data-logic-node-fill-color={logicNodes.length > 0 ? formatHexColor(schematicPalette.warning) : undefined}
+      data-logic-node-stroke-color={logicNodes.length > 0 ? formatHexColor(schematicPalette.warning) : undefined}
+      data-port-wire-misalignment-count={portWireMisalignmentCount}
       data-edge-route-snapshot={edgeRouteSnapshot}
       data-first-edge-id={firstSelectableEdge?.id}
       data-first-edge-center-x={firstSelectableEdgePoint ? firstSelectableEdgePoint.x.toFixed(1) : undefined}
@@ -1160,6 +1173,36 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
     </div>
   );
 });
+
+function countPortWireMisalignments(layout: SchematicLayoutResult) {
+  const nodeMap = new Map(layout.nodes.map((node) => [node.id, node]));
+
+  return layout.edges.reduce((count, edge) => {
+    const firstPoint = edge.points[0];
+    const lastPoint = edge.points[edge.points.length - 1];
+    const fromPoint = findEndpointPortPoint(edge.from, nodeMap);
+    const toPoint = findEndpointPortPoint(edge.to, nodeMap);
+
+    return count
+      + (firstPoint && fromPoint && areSameLayoutPoint(firstPoint, fromPoint) ? 0 : 1)
+      + (lastPoint && toPoint && areSameLayoutPoint(lastPoint, toPoint) ? 0 : 1);
+  }, 0);
+}
+
+function findEndpointPortPoint(
+  endpoint: SchematicEdgeLayout['from'],
+  nodeMap: Map<string, SchematicNodeLayout>,
+): SchematicPoint | null {
+  const node = nodeMap.get(endpoint.instanceId ?? `io:${endpoint.portId}`);
+  const port = node?.ports.find((candidate) => candidate.id === endpoint.portId);
+
+  return port ? { x: port.x, y: port.y } : null;
+}
+
+function areSameLayoutPoint(first: SchematicPoint, second: SchematicPoint) {
+  return roundLayoutCoordinate(first.x) === roundLayoutCoordinate(second.x)
+    && roundLayoutCoordinate(first.y) === roundLayoutCoordinate(second.y);
+}
 
 function getEdgeHitPoint(edge: SchematicEdgeLayout): SchematicPoint {
   const segments = edge.points.slice(1).map((point, index) => ({

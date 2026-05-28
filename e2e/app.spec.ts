@@ -5291,6 +5291,10 @@ test('asic schematic bottom panel renders Pixi layers with selection and hierarc
     subtitle: string;
     type: string;
     cellKind: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
     centerX: number;
     centerY: number;
   }>;
@@ -5313,19 +5317,55 @@ test('asic schematic bottom panel renders Pixi layers with selection and hierarc
     hasHorizontalStubs: boolean;
     points: Array<{ x: number; y: number }>;
   }>;
-  const worldToScreen = async (point: { x: number; y: number }) => {
+  const getCanvasBox = async () => {
     const box = await canvas.boundingBox();
-    const currentCamera = await readCamera();
 
     expect(box).not.toBeNull();
     if (!box) {
-      return { x: 0, y: 0 };
+      throw new Error('Expected schematic canvas bounding box.');
     }
+
+    return box;
+  };
+  const worldToScreen = async (point: { x: number; y: number }) => {
+    const box = await getCanvasBox();
+    const currentCamera = await readCamera();
 
     return {
       x: box.x + currentCamera.x + point.x * currentCamera.zoom,
       y: box.y + currentCamera.y + point.y * currentCamera.zoom,
     };
+  };
+  const isPointInsideCanvas = async (point: { x: number; y: number }, margin = 8) => {
+    const box = await getCanvasBox();
+
+    return point.x >= box.x + margin
+      && point.x <= box.x + box.width - margin
+      && point.y >= box.y + margin
+      && point.y <= box.y + box.height - margin;
+  };
+  const panCanvasTowardWorldPoint = async (worldPoint: { x: number; y: number }) => {
+    const box = await getCanvasBox();
+    const screenPoint = await worldToScreen(worldPoint);
+    const targetPoint = {
+      x: box.x + box.width / 2,
+      y: box.y + box.height / 2,
+    };
+    const deltaX = targetPoint.x - screenPoint.x;
+    const deltaY = targetPoint.y - screenPoint.y;
+
+    await window.mouse.move(targetPoint.x, targetPoint.y);
+    if (Math.abs(deltaX) > 1) {
+      try {
+        await window.keyboard.down('Shift');
+        await window.mouse.wheel(0, -deltaX);
+      } finally {
+        await window.keyboard.up('Shift');
+      }
+    }
+    if (Math.abs(deltaY) > 1) {
+      await window.mouse.wheel(0, -deltaY);
+    }
   };
   const waitForCanvasInteractionIdle = async () => {
     await expect.poll(async () => {
@@ -5348,6 +5388,16 @@ test('asic schematic bottom panel renders Pixi layers with selection and hierarc
     expect(drillableModule.targetId).not.toBeNull();
 
     let drillPoint = await worldToScreen(drillableModule);
+    if (!await isPointInsideCanvas(drillPoint)) {
+      await panCanvasTowardWorldPoint(drillableModule);
+      await expect.poll(async () => {
+        drillPoint = await worldToScreen(drillableModule);
+
+        return await isPointInsideCanvas(drillPoint) ? 'inside' : 'outside';
+      }, {
+        timeout: UI_READY_TIMEOUT_MS,
+      }).toBe('inside');
+    }
     await window.mouse.move(drillPoint.x, drillPoint.y);
 
     await expect.poll(async () => {
@@ -5424,6 +5474,20 @@ test('asic schematic bottom panel renders Pixi layers with selection and hierarc
     || first.y + first.height + gap <= second.y
     || second.y + second.height + gap <= first.y
   );
+  const findModuleOverlap = (
+    selectedModules: Array<{ id: string; x: number; y: number; width: number; height: number }>,
+    obstacleModules: Array<{ id: string; x: number; y: number; width: number; height: number }>,
+  ) => {
+    for (const selectedModule of selectedModules) {
+      for (const obstacleModule of obstacleModules) {
+        if (modulesOverlap(selectedModule, obstacleModule)) {
+          return `${selectedModule.id}->${obstacleModule.id}`;
+        }
+      }
+    }
+
+    return null;
+  };
   const edgeIntersectsModule = (points: Array<{ x: number; y: number }>, module: { x: number; y: number; width: number; height: number }, gap = 14) => {
     const rect = {
       x: module.x - gap,
@@ -5533,12 +5597,31 @@ test('asic schematic bottom panel renders Pixi layers with selection and hierarc
   await expect.poll(async () => (await readLogicSnapshot()).map((node) => node.cellKind).sort(), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toEqual(expect.arrayContaining(['and', 'mux', 'or']));
+  const initialModuleSnapshot = await readModuleSnapshot();
+  const initialLogicSnapshot = await readLogicSnapshot();
   await expect.poll(async () => (await readPortSnapshot()).map((node) => node.direction).sort(), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toEqual(expect.arrayContaining(['input', 'output']));
   expect((await readModuleSnapshot()).filter((node) => node.subtitle !== '' || node.label !== node.id || node.type.length === 0)).toEqual([]);
   expect((await readPortSnapshot()).filter((node) => node.subtitle !== '' || node.type !== node.direction)).toEqual([]);
   expect((await readPortSnapshot()).filter((port) => port.name.toLowerCase().includes('logic'))).toEqual([]);
+  const smallestRegularModule = initialModuleSnapshot
+    .filter((node) => !node.cellKind || node.cellKind === 'module')
+    .sort((first, second) => first.width * first.height - second.width * second.height)[0];
+  expect(smallestRegularModule).toBeDefined();
+  expect(initialLogicSnapshot.length).toBeGreaterThan(0);
+  if (smallestRegularModule) {
+    initialLogicSnapshot.forEach((node) => {
+      expect(node.width).toBeLessThanOrEqual(smallestRegularModule.width / 2);
+      expect(node.width * node.height).toBeLessThan(smallestRegularModule.width * smallestRegularModule.height / 2);
+    });
+  }
+  await expect(canvasHost).toHaveAttribute('data-module-label-placement', 'outside-top-center');
+  await expect(canvasHost).toHaveAttribute('data-gate-port-label-count', '0');
+  await expect(canvasHost).toHaveAttribute('data-logic-node-color-family', 'yellow');
+  await expect(canvasHost).toHaveAttribute('data-logic-node-fill-color', /^#[0-9a-f]{6}$/);
+  await expect(canvasHost).toHaveAttribute('data-logic-node-stroke-color', /^#[0-9a-f]{6}$/);
+  await expect(canvasHost).toHaveAttribute('data-port-wire-misalignment-count', '0');
   await expect(canvasHost).toHaveAttribute('data-port-marker-count', '0');
   await expect(canvasHost).toHaveAttribute('data-edge-end-marker-count', '0');
   const firstEdge = await readFirstEdge();
@@ -5666,8 +5749,9 @@ test('asic schematic bottom panel renders Pixi layers with selection and hierarc
     const snapshot = await readModuleSnapshot();
     const movedSelectedNodes = snapshot.filter((node) => selectedNodeIds.includes(node.id));
     const obstacleNodes = snapshot.filter((node) => !selectedNodeIds.includes(node.id));
+    const overlap = findModuleOverlap(movedSelectedNodes, obstacleNodes);
 
-    return movedSelectedNodes.every((selectedNode) => obstacleNodes.every((obstacleNode) => !modulesOverlap(selectedNode, obstacleNode))) ? 'clear' : 'overlap';
+    return overlap ? `overlap:${overlap}` : 'clear';
   }, {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBe('clear');
@@ -5690,6 +5774,7 @@ test('asic schematic bottom panel renders Pixi layers with selection and hierarc
   await expect.poll(async () => (await readEdgeSnapshot()).every((edge) => edge.hasHorizontalStubs), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBe(true);
+  await expect(canvasHost).toHaveAttribute('data-port-wire-misalignment-count', '0');
 
   await waitForCanvasInteractionIdle();
   await expect.poll(async () => Number(await panel.getAttribute('data-layout-cache-size') ?? '0'), {

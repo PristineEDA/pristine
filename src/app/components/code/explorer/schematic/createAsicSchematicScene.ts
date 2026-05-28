@@ -2,6 +2,7 @@ import { BitmapFont, BitmapText, Container, Graphics } from 'pixi.js';
 
 import type { AsicSchematicPalette } from './asicSchematicPalette';
 import type { SchematicAlignmentGuide } from './asicSchematicGuides';
+import { getSchematicEndpointStubLength, isLogicCellKind, moduleLabelTopOffset } from './asicSchematicLayout';
 import type { SchematicEdgeLayout, SchematicLayoutResult, SchematicNodeLayout } from './asicSchematicTypes';
 
 export type SchematicLayerName = 'background' | 'wire' | 'component' | 'interaction';
@@ -221,9 +222,10 @@ function drawSelectionOverlay(
     const position = positions?.[nodeId];
     const x = position?.x ?? node.x;
     const y = position?.y ?? node.y;
+    const topPadding = isLogicCellKind(node.cellKind) ? 5 : moduleLabelTopOffset + 6;
 
     graphics
-      .roundRect(x - 5, y - 5, node.width + 10, node.height + 10, 10)
+      .roundRect(x - 5, y - topPadding, node.width + 10, node.height + topPadding + 5, 10)
       .stroke({ color: palette.selected, alpha: 0.96, width: 2.2 });
   });
 }
@@ -384,7 +386,10 @@ function drawModuleNode(container: Container, node: SchematicNodeLayout, palette
     .roundRect(0, 0, node.width, node.height, 8)
     .fill({ color: palette.panel, alpha: 0.96 })
     .stroke({ color: palette.border, alpha: 0.72, width: 1.2 }));
-  container.addChild(createText(textNodes, node.label, palette.text, 12, '600', 12, 15));
+
+  const label = createText(textNodes, node.label, palette.text, 12, '600', node.width / 2, -moduleLabelTopOffset);
+  label.anchor.set(0.5, 0);
+  container.addChild(label);
 }
 
 function drawIoPortNode(container: Container, node: SchematicNodeLayout, palette: AsicSchematicPalette, textNodes: BitmapText[]) {
@@ -420,7 +425,7 @@ function drawIoPortNode(container: Container, node: SchematicNodeLayout, palette
 function drawLogicNode(container: Container, node: SchematicNodeLayout, palette: AsicSchematicPalette, textNodes: BitmapText[]) {
   const body = new Graphics({ label: `schematic-node-body:${node.id}` });
   const kind = node.cellKind?.toLowerCase() ?? 'logic';
-  const fill = palette.panelMuted;
+  const fill = palette.warning;
 
   if (kind === 'mux') {
     body
@@ -454,27 +459,33 @@ function drawLogicNode(container: Container, node: SchematicNodeLayout, palette:
       .closePath();
   }
 
-  body.fill({ color: fill, alpha: 0.96 }).stroke({ color: palette.accent, alpha: 0.72, width: 1.3 });
+  body.fill({ color: fill, alpha: 0.2 }).stroke({ color: palette.warning, alpha: 0.9, width: 1.4 });
   container.addChild(body);
 
-  const label = createText(textNodes, node.label, palette.text, 11, '600', node.width / 2, node.height / 2 - 7);
-  label.anchor.set(0.5, 0);
+  const label = createText(textNodes, node.label, palette.text, 9, '600', node.width / 2, node.height / 2);
+  label.anchor.set(0.5, 0.5);
   container.addChild(label);
 }
 
-function isLogicCellKind(kind: string | undefined) {
-  return Boolean(kind && kind !== 'module');
-}
-
 function drawPorts(container: Container, node: SchematicNodeLayout, palette: AsicSchematicPalette, textNodes: BitmapText[] = []) {
+  const showPortLabels = !isLogicCellKind(node.cellKind);
+  const connectorLength = getSchematicEndpointStubLength(node);
+
   node.ports.forEach((port) => {
     const localY = port.y - node.y;
     const sideMultiplier = port.side === 'west' ? 1 : -1;
-    const anchorX = port.side === 'west' ? -1 : node.width + 1;
+    const anchorX = port.x - node.x;
     const labelX = port.side === 'west' ? 10 : node.width - 10;
     const portColor = port.direction === 'input' ? palette.info : port.direction === 'output' ? palette.success : palette.warning;
 
-    container.addChild(new Graphics().moveTo(anchorX, localY).lineTo(anchorX + sideMultiplier * 8, localY).stroke({ color: portColor, alpha: 0.64, width: 1 }));
+    container.addChild(new Graphics({ label: `schematic-port-connector:${node.id}:${port.id}` })
+      .moveTo(anchorX, localY)
+      .lineTo(anchorX + sideMultiplier * connectorLength, localY)
+      .stroke({ color: portColor, alpha: 0.74, width: isLogicCellKind(node.cellKind) ? 1.2 : 1 }));
+
+    if (!showPortLabels) {
+      return;
+    }
 
     const portText = createText(textNodes, port.name, palette.textMuted, 9, '400', labelX, localY - 6);
     if (port.side === 'east') {
