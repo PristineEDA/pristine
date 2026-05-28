@@ -104,6 +104,8 @@ describe('HierarchyPanel', () => {
   });
 
   it('loads and renders module instantiation hierarchy from the LSP API', async () => {
+    const testUser = userEvent.setup();
+
     renderHierarchyPanel();
 
     expect(await screen.findByTestId('hierarchy-tree')).toBeInTheDocument();
@@ -118,7 +120,9 @@ describe('HierarchyPanel', () => {
     expect(screen.getByTestId('hierarchy-node-label-bus_if-bus')).toHaveTextContent(/^bus$/);
     expect(screen.getByTestId('hierarchy-node-icon-0_cpu_top__1_bus')).toHaveAccessibleName('Interface bus_if');
     expect(screen.getByTestId('hierarchy-node-icon-0_cpu_top__1_bus')).toHaveClass('text-ide-syntax-function');
-    expect(screen.getByTestId('hierarchy-node-icon-0_cpu_top__1_bus').querySelector('svg.lucide-network')).toBeInTheDocument();
+    expect(screen.getByTestId('hierarchy-node-icon-0_cpu_top__1_bus').querySelector('svg.lucide-ethernet-port')).toBeInTheDocument();
+    await testUser.hover(screen.getByTestId('hierarchy-node-label-bus_if-bus'));
+    expect(await screen.findByRole('tooltip', { name: 'rtl/core/bus_if.sv' })).toBeInTheDocument();
     expect(screen.getByTestId('hierarchy-node-status-unresolved-0_cpu_top__2_u_missing')).toBeInTheDocument();
     expect(screen.getByTestId('hierarchy-node-status-unresolved-0_cpu_top__2_u_missing')).toHaveClass('text-ide-warning');
     expect(screen.getByLabelText('Unresolved module missing_block')).toBeInTheDocument();

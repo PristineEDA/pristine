@@ -2188,7 +2188,62 @@ test('code view hierarchy renders module instantiations from pristine-engine', a
   await expect(aluInstanceNode).not.toContainText(': alu');
   await expect(interfaceInstanceNode).toBeVisible();
   await expect(interfaceInstanceNode).toHaveText('bus');
-  await expect(window.getByLabel('Interface bus_if').locator('svg.lucide-network')).toBeVisible();
+  const interfaceRow = interfaceInstanceNode.locator('xpath=ancestor::*[@role="treeitem"][1]');
+  const interfaceIcon = interfaceRow.locator('[data-testid^="hierarchy-node-icon-"]');
+  await expect(interfaceIcon).toHaveAccessibleName('Interface bus_if');
+  await expect(interfaceIcon.locator('svg.lucide-ethernet-port')).toBeVisible();
+  await interfaceInstanceNode.hover();
+  const hierarchyTooltip = window.getByRole('tooltip', { name: 'rtl/core/bus_if.sv' });
+  await expect(hierarchyTooltip).toBeVisible();
+  const hierarchyTooltipSurface = window.getByTestId('hierarchy-node-tooltip');
+  await expect(hierarchyTooltipSurface).toBeVisible();
+  const tooltipBox = await hierarchyTooltipSurface.boundingBox();
+  const labelBox = await interfaceInstanceNode.boundingBox();
+  expect(tooltipBox).not.toBeNull();
+  expect(labelBox).not.toBeNull();
+  if (tooltipBox && labelBox) {
+    expect(Math.abs(tooltipBox.x - labelBox.x)).toBeLessThanOrEqual(8);
+    expect(tooltipBox.y).toBeGreaterThanOrEqual(labelBox.y + labelBox.height - 2);
+  }
+  await expect.poll(async () => hierarchyTooltipSurface.evaluate((element) => {
+    const style = (globalThis as unknown as {
+      getComputedStyle: (target: unknown) => {
+        backgroundColor: string;
+        borderBottomColor: string;
+        borderBottomStyle: string;
+        borderBottomWidth: string;
+        opacity: string;
+      };
+    }).getComputedStyle(element);
+    return {
+      backgroundColor: style.backgroundColor,
+      borderBottomColor: style.borderBottomColor,
+      borderBottomStyle: style.borderBottomStyle,
+      borderBottomWidth: style.borderBottomWidth,
+      opacity: style.opacity,
+    };
+  })).toMatchObject({
+    borderBottomStyle: 'solid',
+    opacity: '1',
+  });
+  await expect.poll(async () => hierarchyTooltipSurface.evaluate((element) => {
+    const { backgroundColor, borderBottomColor, borderBottomWidth } = (globalThis as unknown as {
+      getComputedStyle: (target: unknown) => {
+        backgroundColor: string;
+        borderBottomColor: string;
+        borderBottomWidth: string;
+      };
+    }).getComputedStyle(element);
+    return {
+      hasOpaqueBackground: !backgroundColor.endsWith(', 0)') && backgroundColor !== 'transparent' && backgroundColor !== 'rgba(0, 0, 0, 0)',
+      hasBottomBorder: Number.parseFloat(borderBottomWidth) > 0,
+      hasDistinctBorderColor: borderBottomColor !== 'transparent' && borderBottomColor !== 'rgba(0, 0, 0, 0)' && borderBottomColor !== backgroundColor,
+    };
+  })).toEqual({
+    hasBottomBorder: true,
+    hasDistinctBorderColor: true,
+    hasOpaqueBackground: true,
+  });
   await expect(window.getByLabel('Unresolved module missing_block')).toBeVisible();
 
   await window.getByRole('button', { name: 'Collapse cpu_top' }).click();
