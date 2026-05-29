@@ -4401,11 +4401,26 @@ test('assistant model selector uses shared command search styling and local prov
     const searchInput = await openAssistantModelSelector(window);
     const expectedTextColor = await readNormalizedCssColorVariable(window, '--ide-text');
     const visualState = await readSearchInputVisualState(searchInput);
+    const sectionHeaders = window.locator('[data-slot="model-selector-section-header"]');
 
     await expect(searchInput).toHaveClass(/(?:^|\s)pristine-command-search-input(?:\s|$)/);
     expect(visualState.color).toBe(expectedTextColor);
     expect(visualState.caretColor).toBe(expectedTextColor);
     expect(visualState.webkitTextFillColor).toBe(expectedTextColor);
+
+    await expect(sectionHeaders).toHaveCount(2);
+    await expect(sectionHeaders.nth(0)).toHaveText('Official');
+    await expect(sectionHeaders.nth(1)).toHaveText('Gateway');
+    await expect(window.getByTestId('model-selector-provider-openrouter')).toBeVisible({
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+
+    const moreTrigger = window.getByTestId('model-selector-provider-more');
+    await expect(moreTrigger).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+    await moreTrigger.hover();
+    await expect(window.getByTestId('model-selector-provider-mastra')).toBeVisible({
+      timeout: UI_READY_TIMEOUT_MS,
+    });
 
     await searchInput.fill('openrouter');
     await expect(window.locator('[data-slot="model-selector-provider"]').filter({ hasText: 'OpenRouter' })).toBeVisible({
