@@ -1,4 +1,5 @@
 import { Suspense, lazy, useEffect, useState } from 'react';
+import { AlertTriangle, BarChart3, CircuitBoard, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '../../ui/skeleton';
 import { TooltipProvider } from '../../ui/tooltip';
@@ -6,21 +7,55 @@ import { ASSISTANT_THREAD_LIST_DEFAULT_WIDTH_PX } from './assistantPanelLayout';
 import { RightPanelTabs, type RightSidePanelTab } from './RightSidePanelChrome';
 import { SPLIT_PANEL_CONTENT_TRANSITION_STYLE, useAnimatedSplitPanelPresence } from './useAnimatedSplitPanelPresence';
 import { useCodeViewerLayout } from '../../../context/CodeViewerLayoutContext';
+import { Button } from '../../ui/button';
+import { TooltipIconButton } from '../../ui/tooltip-icon-button';
 import {
   getCodeWorkspacePanelFrameClassName,
   getCodeWorkspacePanelGroupLayoutGapPx,
   getCodeWorkspaceResizeHandleClassName,
   getPanelHeaderClassName,
 } from '../shared/codeViewerLayoutStyles';
+import {
+  compactIconTabToggleIconSize,
+  compactIconTabToggleItemClassName,
+  IconTabToggleGroup,
+} from '../shared/IconTabToggleGroup';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '../../ui/resizable';
+
+type RightPanelSecondaryTab = 'module-info' | 'resource-usage' | 'x-propagation';
+
+const RIGHT_PANEL_SECONDARY_TAB_ITEMS = [
+  { value: 'module-info', label: 'Module Information', icon: CircuitBoard, testId: 'right-panel-secondary-tab-module-info' },
+  { value: 'resource-usage', label: 'Module Resource Usage', icon: BarChart3, testId: 'right-panel-secondary-tab-resource-usage' },
+  { value: 'x-propagation', label: 'X Propagation', icon: AlertTriangle, testId: 'right-panel-secondary-tab-x-propagation' },
+] as const;
+
+const RIGHT_PANEL_SECONDARY_COPY: Record<RightPanelSecondaryTab, {
+  description: string;
+  items: string[];
+  title: string;
+}> = {
+  'module-info': {
+    title: 'Module Information',
+    description: 'Register maps, signal-flow tracebacks, and state-machine diagrams will land here.',
+    items: ['Register map placeholder', 'Signal trace placeholder', 'State machine diagram placeholder'],
+  },
+  'resource-usage': {
+    title: 'Module Resource Usage',
+    description: 'Combinational and sequential cell utilization will be summarized in this panel.',
+    items: ['Combinational utilization placeholder', 'Sequential utilization placeholder', 'Module area snapshot placeholder'],
+  },
+  'x-propagation': {
+    title: 'X Propagation',
+    description: 'Unknown-state sources and their fanout paths will be visualized here.',
+    items: ['X-state source placeholder', 'Propagation path placeholder', 'Resolution hotspot placeholder'],
+  },
+};
 
 const AIAgentPanel = lazy(() => import('./AIAgentPanel').then((module) => ({ default: module.AIAgentPanel })));
 const FileOutlinePanel = lazy(() => import('./FileOutlinePanel').then((module) => ({ default: module.FileOutlinePanel })));
 const StaticCheckPanel = lazy(() => import('./StaticCheckPanel').then((module) => ({ default: module.StaticCheckPanel })));
 const ReferencesPanel = lazy(() => import('./ReferencesPanel').then((module) => ({ default: module.ReferencesPanel })));
-
-const RIGHT_PANEL_SECONDARY_TITLE = 'Details';
-const RIGHT_PANEL_SECONDARY_PLACEHOLDER = 'Details is empty';
 
 function AssistantPanelSkeleton() {
   return (
@@ -203,7 +238,9 @@ export function RightSidePanel({
 
 function RightPanelSecondaryPanel({ isExpanded }: { isExpanded: boolean }) {
   const { layoutMode } = useCodeViewerLayout();
+  const [secondaryTab, setSecondaryTab] = useState<RightPanelSecondaryTab>('module-info');
   const splitPanelFrameClassName = getCodeWorkspacePanelFrameClassName(layoutMode, 'flex h-full flex-col bg-ide-bg text-ide-text');
+  const secondaryContent = RIGHT_PANEL_SECONDARY_COPY[secondaryTab];
 
   return (
     <section
@@ -219,12 +256,53 @@ function RightPanelSecondaryPanel({ isExpanded }: { isExpanded: boolean }) {
         data-code-viewer-layout-mode={layoutMode}
         className={getPanelHeaderClassName(layoutMode)}
       >
-        {RIGHT_PANEL_SECONDARY_TITLE}
+        <IconTabToggleGroup
+          items={RIGHT_PANEL_SECONDARY_TAB_ITEMS}
+          value={secondaryTab}
+          onValueChange={(tab) => setSecondaryTab(tab as RightPanelSecondaryTab)}
+          groupLabel="Right panel secondary tabs"
+          groupTestId="right-panel-secondary-tabs"
+          tooltipSide="bottom"
+          itemClassName={compactIconTabToggleItemClassName}
+          iconSize={compactIconTabToggleIconSize}
+        />
+
+        <div className="ml-auto flex items-center gap-1">
+          <TooltipIconButton content="Placeholder action" side="bottom">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              aria-label="Secondary panel placeholder action"
+              className="text-ide-text-muted hover:text-ide-text"
+              onClick={() => undefined}
+            >
+              <Sparkles size={13} />
+            </Button>
+          </TooltipIconButton>
+        </div>
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <div data-testid="right-panel-secondary-placeholder" className="px-4 py-3 text-ide-text-muted text-[12px]">
-          {RIGHT_PANEL_SECONDARY_PLACEHOLDER}
+        <div
+          data-testid="right-panel-secondary-placeholder"
+          data-right-panel-secondary-tab={secondaryTab}
+          className="flex min-h-0 flex-1 flex-col overflow-auto px-3 py-3"
+        >
+          <div className="rounded-md border border-ide-border bg-ide-hover/30 p-3">
+            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-ide-text-muted">
+              Placeholder
+            </p>
+            <h3 className="mt-2 text-[13px] font-medium text-ide-text">{secondaryContent.title}</h3>
+            <p className="mt-1 text-[12px] leading-5 text-ide-text-muted">{secondaryContent.description}</p>
+            <div className="mt-3 space-y-2">
+              {secondaryContent.items.map((item) => (
+                <div key={item} className="rounded-md border border-dashed border-ide-border/80 px-2.5 py-2 text-[11px] text-ide-text-muted">
+                  {item}
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </section>

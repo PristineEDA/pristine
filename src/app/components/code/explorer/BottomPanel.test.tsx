@@ -229,12 +229,16 @@ describe('BottomPanel', () => {
 
     render(<BottomPanel onMaximizeToggle={onMaximizeToggle} />);
 
+    const maximizeIcon = screen.getByTestId('bottom-panel-maximize').querySelector('svg');
+
     const toolbarButtonLabels = screen
       .getAllByRole('button')
       .map((button) => button.getAttribute('aria-label'))
       .filter((label): label is string => label === 'New Terminal' || label === 'Maximize Panel' || label === 'Close Panel');
 
     expect(toolbarButtonLabels).toEqual(['New Terminal', 'Maximize Panel', 'Close Panel']);
+    expect(maximizeIcon).not.toBeNull();
+    expect(maximizeIcon).toHaveClass('lucide-maximize');
 
     await clickButton(user, /maximize panel/i);
 
@@ -248,6 +252,7 @@ describe('BottomPanel', () => {
     render(<BottomPanel isMaximized onMaximizeToggle={onMaximizeToggle} />);
 
     expect(screen.getByTestId('bottom-panel-maximize')).toHaveAccessibleName('Restore Panel');
+    expect(screen.getByTestId('bottom-panel-maximize').querySelector('svg')).toHaveClass('lucide-minimize-2');
     expect(screen.queryByRole('button', { name: /maximize panel/i })).not.toBeInTheDocument();
   });
 

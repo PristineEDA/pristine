@@ -4453,7 +4453,13 @@ test('assistant chat list expansion widens the whole right sidebar and supports 
   await expect(assistantMainPanel).not.toHaveClass(/(?:^|\s)bg-background(?:\s|$)/);
   await expect(window.getByTestId('assistant-panel-header')).toBeVisible();
   await expect(window.getByTestId('assistant-panel-header').getByText('Pristine Agent')).toHaveCount(0);
-  await expect(window.getByTestId('right-panel-secondary-placeholder')).toContainText('Details is empty');
+  await expect(window.getByTestId('right-panel-secondary-tabs')).toBeVisible();
+  await expectCompactPanelTabButton(window.getByTestId('right-panel-secondary-tab-module-info'));
+  await expectCompactPanelTabButton(window.getByTestId('right-panel-secondary-tab-resource-usage'));
+  await expectCompactPanelTabButton(window.getByTestId('right-panel-secondary-tab-x-propagation'));
+  await expect(window.getByTestId('right-panel-secondary-placeholder')).toHaveAttribute('data-right-panel-secondary-tab', 'module-info');
+  await expect(window.getByTestId('right-panel-secondary-placeholder')).toContainText('Module Information');
+  await expect(window.getByTestId('right-panel-secondary-placeholder')).toContainText('Register map placeholder');
 
   const initialRightPanelWidth = await waitForElementPixelWidthBetween(rightPanel, 295, 305);
   const initialAssistantWidth = await waitForElementPixelWidthBetween(assistantMainPanel, 295, 305);
@@ -4583,7 +4589,15 @@ test('right panel split shows two stacked panels and keeps the panel layout-awar
     await expect(secondaryPanel).toHaveClass(/(?:^|\s)border(?:\s|$)/);
     await expect(secondaryPanel).toHaveClass(/(?:^|\s)bg-ide-bg(?:\s|$)/);
     await expect(window.getByTestId('right-panel-secondary-header')).toHaveAttribute('data-code-viewer-layout-mode', 'minimal');
-    await expect(window.getByTestId('right-panel-secondary-placeholder')).toContainText('Details is empty');
+    await expect(window.getByTestId('right-panel-secondary-tabs')).toBeVisible();
+    await expect(window.getByTestId('right-panel-secondary-placeholder')).toHaveAttribute('data-right-panel-secondary-tab', 'module-info');
+    await expect(window.getByTestId('right-panel-secondary-placeholder')).toContainText('Module Information');
+    await window.getByTestId('right-panel-secondary-tab-resource-usage').click();
+    await expect(window.getByTestId('right-panel-secondary-placeholder')).toHaveAttribute('data-right-panel-secondary-tab', 'resource-usage');
+    await expect(window.getByTestId('right-panel-secondary-placeholder')).toContainText('Module Resource Usage');
+    await window.getByTestId('right-panel-secondary-tab-x-propagation').click();
+    await expect(window.getByTestId('right-panel-secondary-placeholder')).toHaveAttribute('data-right-panel-secondary-tab', 'x-propagation');
+    await expect(window.getByTestId('right-panel-secondary-placeholder')).toContainText('X Propagation');
     await expect(splitHandle).toBeVisible();
     await expect(splitHandle).toHaveAttribute('aria-orientation', 'horizontal');
     await expect(splitHandle).toHaveClass(/(?:^|\s)overlay-handle(?:\s|$)/);

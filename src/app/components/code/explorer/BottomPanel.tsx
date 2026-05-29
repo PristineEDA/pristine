@@ -2,7 +2,7 @@ import { Suspense, lazy, useMemo, useState, type ReactNode } from 'react';
 import {
   Terminal, X, Plus,
   AlertCircle, AlertTriangle, Info, Lightbulb,
-  Bug, Square, Logs, Workflow, CircuitBoard, Maximize2, Minimize2,
+  Bug, Square, Logs, Workflow, CircuitBoard, Maximize, Minimize2,
 } from 'lucide-react';
 import { summarizeLspProblems, useLspProblems } from '../../../lsp/lspProblems';
 import { TerminalPanel } from './TerminalPanel';
@@ -48,7 +48,7 @@ export function BottomPanel({ isMaximized = false, layoutVersion, onClose, onMax
   const problemsList = useLspProblems();
   const problemCounts = useMemo(() => summarizeLspProblems(problemsList), [problemsList]);
   const maximizeLabel = isMaximized ? 'Restore Panel' : 'Maximize Panel';
-  const MaximizeIcon = isMaximized ? Minimize2 : Maximize2;
+  const MaximizeIcon = isMaximized ? Minimize2 : Maximize;
 
   const handleClose = () => {
     void terminateTerminalSession().finally(() => {

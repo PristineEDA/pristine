@@ -118,8 +118,17 @@ describe('RightSidePanel', () => {
     expect(screen.getByTestId('right-panel-primary-panel')).toHaveClass('bg-ide-bg');
     expect(screen.getByTestId('right-panel-secondary-panel')).toHaveClass('bg-ide-bg');
     expect(screen.getByTestId('right-panel-secondary-header')).toHaveAttribute('data-code-viewer-layout-mode', 'compact');
-    expect(screen.getByTestId('right-panel-secondary-header')).toHaveTextContent('Details');
-    expect(screen.getByTestId('right-panel-secondary-placeholder')).toHaveTextContent('Details is empty');
+    expect(screen.getByTestId('right-panel-secondary-tabs')).toBeInTheDocument();
+    expectCompactTabButton('right-panel-secondary-tab-module-info');
+    expectCompactTabButton('right-panel-secondary-tab-resource-usage');
+    expectCompactTabButton('right-panel-secondary-tab-x-propagation');
+    expect(screen.getByTestId('right-panel-secondary-tab-module-info')).toHaveAttribute('data-state', 'on');
+    expect(screen.getByTestId('right-panel-secondary-tab-resource-usage')).toHaveAttribute('data-state', 'off');
+    expect(screen.getByTestId('right-panel-secondary-tab-x-propagation')).toHaveAttribute('data-state', 'off');
+    expect(screen.getByRole('button', { name: 'Secondary panel placeholder action' })).toBeInTheDocument();
+    expect(screen.getByTestId('right-panel-secondary-placeholder')).toHaveAttribute('data-right-panel-secondary-tab', 'module-info');
+    expect(screen.getByTestId('right-panel-secondary-placeholder')).toHaveTextContent('Module Information');
+    expect(screen.getByTestId('right-panel-secondary-placeholder')).toHaveTextContent('Register map placeholder');
     expect(screen.getByTestId('right-panel-split-resize-handle')).toHaveAttribute('aria-orientation', 'horizontal');
 
     await user.click(expandedSplitToggle);
@@ -165,7 +174,38 @@ describe('RightSidePanel', () => {
     expect(secondaryHeader).not.toHaveClass('border');
     expect(secondaryHeader).not.toHaveClass('border-ide-border');
     expect(secondaryHeader).not.toHaveClass('border-b');
+    expect(screen.getByTestId('right-panel-secondary-tabs')).toBeInTheDocument();
     expect(resizeHandle).toHaveClass('overlay-handle', 'rounded-full', 'bg-transparent');
+  });
+
+  it('switches the right secondary panel between placeholder tabs', async () => {
+    const user = userEvent.setup();
+
+    renderRightSidePanelInLayout('compact');
+
+    await user.click(screen.getByTestId('right-panel-split-toggle'));
+    await waitFor(() => expect(screen.getByTestId('panel-right-panel-secondary')).toHaveAttribute('aria-hidden', 'false'));
+
+    const placeholder = screen.getByTestId('right-panel-secondary-placeholder');
+
+    expect(placeholder).toHaveAttribute('data-right-panel-secondary-tab', 'module-info');
+    expect(placeholder).toHaveTextContent('Signal trace placeholder');
+
+    await user.click(screen.getByTestId('right-panel-secondary-tab-resource-usage'));
+    expect(screen.getByTestId('right-panel-secondary-tab-module-info')).toHaveAttribute('data-state', 'off');
+    expect(screen.getByTestId('right-panel-secondary-tab-resource-usage')).toHaveAttribute('data-state', 'on');
+    expect(screen.getByTestId('right-panel-secondary-placeholder')).toHaveAttribute('data-right-panel-secondary-tab', 'resource-usage');
+    expect(screen.getByTestId('right-panel-secondary-placeholder')).toHaveTextContent('Module Resource Usage');
+    expect(screen.getByTestId('right-panel-secondary-placeholder')).toHaveTextContent('Combinational utilization placeholder');
+    expect(screen.queryByText('Register map placeholder')).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId('right-panel-secondary-tab-x-propagation'));
+    expect(screen.getByTestId('right-panel-secondary-tab-resource-usage')).toHaveAttribute('data-state', 'off');
+    expect(screen.getByTestId('right-panel-secondary-tab-x-propagation')).toHaveAttribute('data-state', 'on');
+    expect(screen.getByTestId('right-panel-secondary-placeholder')).toHaveAttribute('data-right-panel-secondary-tab', 'x-propagation');
+    expect(screen.getByTestId('right-panel-secondary-placeholder')).toHaveTextContent('X Propagation');
+    expect(screen.getByTestId('right-panel-secondary-placeholder')).toHaveTextContent('Propagation path placeholder');
+    expect(screen.queryByText('Combinational utilization placeholder')).not.toBeInTheDocument();
   });
 
   it('navigates static check items to their source file and line', async () => {
