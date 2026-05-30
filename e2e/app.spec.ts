@@ -5279,18 +5279,48 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
 
   const canvasHost = window.getByTestId('waveform-canvas');
   await expect(canvasHost).toHaveAttribute('data-renderer', /^(webgpu|webgl)$/);
+  await expect(canvasHost).toHaveAttribute('data-layer-count', '4');
+  await expect(canvasHost).toHaveAttribute('data-layer-names', 'background,content,status,operation');
+  await expect(canvasHost).toHaveAttribute('data-row-count', '10');
+  await expect(canvasHost).toHaveAttribute('data-row-height', '30');
+  await expect(canvasHost).toHaveAttribute('data-first-signal-lane-y', '60.00');
+  await expect.poll(async () => Number(await canvasHost.getAttribute('data-x-state-count') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
+  await expect.poll(async () => Number(await canvasHost.getAttribute('data-z-state-count') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
+  await expect.poll(async () => Number(await canvasHost.getAttribute('data-pulse-fill-count') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
   await expect.poll(async () => Number(await canvasHost.getAttribute('data-render-count') ?? '0'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(0);
   await expect(canvasHost.locator('canvas')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
 
-  await window.getByTestId('waveform-signal-row-u_top_module1-counting').click();
-  await expect(panel).toHaveAttribute('data-selected-signal-id', 'u_top_module1-counting');
-
   const canvasBox = await canvasHost.boundingBox();
   if (!canvasBox) {
     throw new Error('Expected waveform canvas geometry to be measurable');
   }
+
+  const alignedSecondGroupRow = window.getByTestId('waveform-signal-row-u_top_module1-clk');
+  await expect(alignedSecondGroupRow).toHaveAttribute('data-row-index', '6');
+  await expect(alignedSecondGroupRow).toHaveAttribute('data-lane-y', '210.00');
+  const alignedSecondGroupRowBox = await alignedSecondGroupRow.boundingBox();
+  if (!alignedSecondGroupRowBox) {
+    throw new Error('Expected second group waveform signal row geometry to be measurable');
+  }
+
+  const alignedSecondGroupLaneY = Number(await alignedSecondGroupRow.getAttribute('data-lane-y') ?? 'NaN');
+  expect(Number.isFinite(alignedSecondGroupLaneY)).toBe(true);
+  expect(Math.abs(alignedSecondGroupRowBox.y - canvasBox.y - alignedSecondGroupLaneY)).toBeLessThanOrEqual(2);
+
+  const countingRow = window.getByTestId('waveform-signal-row-u_top_module1-counting');
+  await countingRow.click();
+  await expect(panel).toHaveAttribute('data-selected-signal-id', 'u_top_module1-counting');
+  await expect(countingRow).toHaveAttribute('data-row-index', '9');
+  await expect(countingRow).toHaveAttribute('data-lane-y', '300.00');
+  await expect(canvasHost).toHaveAttribute('data-selected-signal-lane-y', '300.00');
 
   await canvasHost.click({ position: { x: Math.floor(canvasBox.width * 0.72), y: 86 } });
   await expect.poll(async () => Number(await panel.getAttribute('data-cursor-time') ?? '0'), {
@@ -5307,8 +5337,8 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
   await expect(panel).toHaveAttribute('data-zoom', '1.00');
   await window.getByTestId('waveform-settings').click();
   await expect(window.getByTestId('waveform-settings-popover')).toBeVisible();
-  await window.getByTestId('waveform-add-signals').click();
-  await expect(window.getByTestId('waveform-signal-picker')).toBeVisible();
+  await expect(window.getByTestId('waveform-add-signals')).toHaveCount(0);
+  await expect(window.getByTestId('waveform-signal-picker')).toHaveCount(0);
 
   await app.close();
 });

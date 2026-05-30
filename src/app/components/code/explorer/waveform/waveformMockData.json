@@ -1,0 +1,164 @@
+{
+  "id": "counter-waveform-mock",
+  "title": "counter_tb",
+  "timescaleUnit": "ns",
+  "duration": 200,
+  "cursorTime": 84,
+  "groups": [
+    { "id": "tb_top_module1", "label": "tb_top_module1" },
+    { "id": "u_top_module1", "label": "u_top_module1" }
+  ],
+  "signals": [
+    {
+      "id": "tb_top_module1-clk",
+      "groupId": "tb_top_module1",
+      "name": "clk",
+      "path": "tb_top_module1.clk",
+      "kind": "clock",
+      "color": "#38d8ff",
+      "transitions": [
+        { "time": 0, "value": "0" },
+        { "time": 10, "value": "1" },
+        { "time": 20, "value": "0" },
+        { "time": 30, "value": "1" },
+        { "time": 40, "value": "0" },
+        { "time": 50, "value": "1" },
+        { "time": 60, "value": "0" },
+        { "time": 70, "value": "1" },
+        { "time": 80, "value": "0" },
+        { "time": 90, "value": "1" },
+        { "time": 100, "value": "0" },
+        { "time": 110, "value": "1" },
+        { "time": 120, "value": "0" },
+        { "time": 130, "value": "1" },
+        { "time": 140, "value": "0" },
+        { "time": 150, "value": "1" },
+        { "time": 160, "value": "0" },
+        { "time": 170, "value": "1" },
+        { "time": 180, "value": "0" },
+        { "time": 190, "value": "1" },
+        { "time": 200, "value": "0" }
+      ]
+    },
+    {
+      "id": "tb_top_module1-data",
+      "groupId": "tb_top_module1",
+      "name": "data",
+      "path": "tb_top_module1.data",
+      "kind": "logic",
+      "color": "#5ee37c",
+      "transitions": [
+        { "time": 0, "value": "0" },
+        { "time": 45, "value": "1" },
+        { "time": 70, "value": "0" },
+        { "time": 82, "value": "1" },
+        { "time": 96, "value": "0" },
+        { "time": 156, "value": "1" },
+        { "time": 176, "value": "0" },
+        { "time": 188, "value": "z" }
+      ]
+    },
+    {
+      "id": "tb_top_module1-reset",
+      "groupId": "tb_top_module1",
+      "name": "reset",
+      "path": "tb_top_module1.reset",
+      "kind": "logic",
+      "color": "#ffcb6b",
+      "transitions": [
+        { "time": 0, "value": "1" },
+        { "time": 18, "value": "0" }
+      ]
+    },
+    {
+      "id": "tb_top_module1-done_counting",
+      "groupId": "tb_top_module1",
+      "name": "done_counting",
+      "path": "tb_top_module1.done_counting",
+      "kind": "logic",
+      "color": "#ac8dff",
+      "transitions": [
+        { "time": 0, "value": "0" },
+        { "time": 142, "value": "1" },
+        { "time": 182, "value": "0" }
+      ]
+    },
+    {
+      "id": "u_top_module1-clk",
+      "groupId": "u_top_module1",
+      "name": "clk",
+      "path": "tb_top_module1.u_top_module1.clk",
+      "kind": "clock",
+      "color": "#ffe66d",
+      "transitions": [
+        { "time": 0, "value": "0" },
+        { "time": 10, "value": "1" },
+        { "time": 20, "value": "0" },
+        { "time": 30, "value": "1" },
+        { "time": 40, "value": "0" },
+        { "time": 50, "value": "1" },
+        { "time": 60, "value": "0" },
+        { "time": 70, "value": "1" },
+        { "time": 80, "value": "0" },
+        { "time": 90, "value": "1" },
+        { "time": 100, "value": "0" },
+        { "time": 110, "value": "1" },
+        { "time": 120, "value": "0" },
+        { "time": 130, "value": "1" },
+        { "time": 140, "value": "0" },
+        { "time": 150, "value": "1" },
+        { "time": 160, "value": "0" },
+        { "time": 170, "value": "1" },
+        { "time": 180, "value": "0" },
+        { "time": 190, "value": "1" },
+        { "time": 200, "value": "0" }
+      ]
+    },
+    {
+      "id": "u_top_module1-shift_ena",
+      "groupId": "u_top_module1",
+      "name": "shift_ena",
+      "path": "tb_top_module1.u_top_module1.shift_ena",
+      "kind": "logic",
+      "color": "#7bdff2",
+      "transitions": [
+        { "time": 0, "value": "z" },
+        { "time": 10, "value": "0" },
+        { "time": 82, "value": "1" },
+        { "time": 128, "value": "0" }
+      ]
+    },
+    {
+      "id": "u_top_module1-done",
+      "groupId": "u_top_module1",
+      "name": "done",
+      "path": "tb_top_module1.u_top_module1.done",
+      "kind": "logic",
+      "color": "#f78c6c",
+      "transitions": [
+        { "time": 0, "value": "x" },
+        { "time": 10, "value": "0" },
+        { "time": 148, "value": "1" }
+      ]
+    },
+    {
+      "id": "u_top_module1-counting",
+      "groupId": "u_top_module1",
+      "name": "counting",
+      "path": "tb_top_module1.u_top_module1.counting",
+      "kind": "bus",
+      "width": 4,
+      "color": "#88f7a6",
+      "transitions": [
+        { "time": 0, "value": "x" },
+        { "time": 10, "value": "0" },
+        { "time": 52, "value": "1" },
+        { "time": 82, "value": "2" },
+        { "time": 112, "value": "3" },
+        { "time": 142, "value": "4" },
+        { "time": 172, "value": "5" },
+        { "time": 190, "value": "z" }
+      ]
+    }
+  ]
+}

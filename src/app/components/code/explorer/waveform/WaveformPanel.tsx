@@ -1,11 +1,12 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { ChevronLeft, ChevronRight, Maximize2, MousePointer2, Plus, RotateCcw, Settings2, SlidersHorizontal, ZoomIn, ZoomOut } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Maximize2, MousePointer2, RotateCcw, Settings2, SlidersHorizontal, ZoomIn, ZoomOut } from 'lucide-react';
 
 import { Button } from '../../../ui/button';
 import { TooltipIconButton } from '../../../ui/tooltip-icon-button';
 import {
   fitWaveformViewport,
   formatWaveformValue,
+  getWaveformDisplayRows,
   getInitialWaveformViewport,
   getSignalValueAtTime,
   getWaveformSignalTestId,
@@ -14,7 +15,8 @@ import {
   zoomWaveformViewport,
 } from './waveformLayout';
 import { mockWaveformData } from './waveformMockData';
-import type { WaveformRendererStatus, WaveformSignal, WaveformViewport } from './waveformTypes';
+import type { WaveformRendererStatus, WaveformViewport } from './waveformTypes';
+import type { WaveformSignalDisplayRow } from './waveformLayout';
 import { WaveformCanvas } from './WaveformCanvas';
 
 const zoomButtonFactor = 1.35;
@@ -26,11 +28,11 @@ export function WaveformPanel() {
   const [renderer, setRenderer] = useState<WaveformRendererStatus>('initializing');
   const [selectedSignalId, setSelectedSignalId] = useState<string | null>(data.signals[0]?.id ?? null);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [signalPickerOpen, setSignalPickerOpen] = useState(false);
   const selectedSignal = useMemo(
     () => data.signals.find((signal) => signal.id === selectedSignalId) ?? data.signals[0] ?? null,
     [data.signals, selectedSignalId],
   );
+  const displayRows = useMemo(() => getWaveformDisplayRows(data), [data]);
   const selectedValue = selectedSignal ? getSignalValueAtTime(selectedSignal, cursorTime) : '-';
   const zoomLevel = data.duration / getWaveformViewportSpan(viewport);
 
@@ -115,51 +117,28 @@ export function WaveformPanel() {
             <span className="text-right">Value</span>
           </div>
           <div className="bottom-panel-scrollbar min-h-0 flex-1 overflow-auto">
-            {data.groups.map((group) => (
-              <div key={group.id}>
-                <div className="sticky top-0 z-10 border-b border-ide-border bg-ide-sidebar-bg/95 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-ide-text-muted backdrop-blur">
-                  {group.label}
+            {displayRows.map((row) => (
+              row.kind === 'group' ? (
+                <div
+                  className="flex h-[30px] items-center border-b border-ide-border bg-ide-sidebar-bg/95 px-3 text-[10px] font-medium uppercase tracking-[0.08em] text-ide-text-muted"
+                  data-lane-y={row.y.toFixed(2)}
+                  data-row-index={row.rowIndex}
+                  data-testid={`waveform-group-row-${row.group.id}`}
+                  key={row.id}
+                >
+                  {row.group.label}
                 </div>
-                {data.signals.filter((signal) => signal.groupId === group.id).map((signal) => (
-                  <SignalRow
-                    cursorTime={cursorTime}
-                    key={signal.id}
-                    selected={signal.id === selectedSignalId}
-                    signal={signal}
-                    onSelect={() => setSelectedSignalId(signal.id)}
-                  />
-                ))}
-              </div>
+              ) : (
+                <SignalRow
+                  cursorTime={cursorTime}
+                  key={row.id}
+                  row={row}
+                  selected={row.signal.id === selectedSignalId}
+                  onSelect={() => setSelectedSignalId(row.signal.id)}
+                />
+              )
             ))}
-          </div>
-          <div className="shrink-0 border-t border-ide-border p-2">
-            <Button
-              aria-expanded={signalPickerOpen}
-              className="h-7 w-full justify-center text-[11px]"
-              data-testid="waveform-add-signals"
-              size="xs"
-              variant={signalPickerOpen ? 'secondary' : 'ghost'}
-              onClick={() => setSignalPickerOpen((current) => !current)}
-            >
-              <Plus size={12} />
-              Add Signals
-            </Button>
-            {signalPickerOpen && (
-              <div className="mt-2 rounded border border-ide-border bg-ide-bg p-2" data-testid="waveform-signal-picker">
-                <div className="text-[11px] text-ide-text-muted">Available mock scopes</div>
-                <div className="mt-1 grid gap-1 text-[11px] text-ide-text">
-                  <label className="flex items-center gap-2">
-                    <input checked readOnly className="size-3 accent-[var(--ide-accent)]" type="checkbox" />
-                    tb_top_module1
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input checked readOnly className="size-3 accent-[var(--ide-accent)]" type="checkbox" />
-                    u_top_module1
-                  </label>
-                </div>
               </div>
-            )}
-          </div>
         </aside>
 
         <main className="relative flex min-w-0 flex-1 flex-col bg-[#111111]">
@@ -198,17 +177,20 @@ export function WaveformPanel() {
 
 interface SignalRowProps {
   cursorTime: number;
+  row: WaveformSignalDisplayRow;
   selected: boolean;
-  signal: WaveformSignal;
   onSelect: () => void;
 }
 
-function SignalRow({ cursorTime, selected, signal, onSelect }: SignalRowProps) {
+function SignalRow({ cursorTime, selected, row, onSelect }: SignalRowProps) {
+  const signal = row.signal;
   const value = getSignalValueAtTime(signal, cursorTime);
 
   return (
     <button
       className={`grid h-[30px] w-full grid-cols-[1fr_56px] items-center gap-2 border-b border-ide-border/70 px-3 text-left text-[11px] transition-colors ${selected ? 'bg-ide-accent/15 text-ide-text' : 'text-ide-text-muted hover:bg-ide-tab-hover hover:text-ide-text'}`}
+      data-lane-y={row.y.toFixed(2)}
+      data-row-index={row.rowIndex}
       data-testid={getWaveformSignalTestId(signal.id)}
       type="button"
       onClick={onSelect}

@@ -2,11 +2,22 @@ import { describe, expect, it } from 'vitest';
 
 import {
   fitWaveformViewport,
+  getWaveformCanvasHeightForData,
+  getWaveformDigitalPulseFillCount,
+  getWaveformDisplayRows,
+  getWaveformFirstSignalLaneY,
+  getWaveformSignalLaneY,
   getSignalValueAtTime,
+  getWaveformStateCounts,
   getWaveformSignalTestId,
   getWaveformTicks,
+  isHighImpedanceWaveformValue,
+  isUnknownWaveformValue,
   panWaveformViewport,
   timeToX,
+  waveformBottomPadding,
+  waveformHeaderHeight,
+  waveformLaneHeight,
   xToTime,
   zoomWaveformViewport,
 } from './waveformLayout';
@@ -39,6 +50,50 @@ describe('waveformLayout', () => {
     expect(getSignalValueAtTime(signal!, 9)).toBe('x');
     expect(getSignalValueAtTime(signal!, 84)).toBe('2');
     expect(getSignalValueAtTime(signal!, 160)).toBe('4');
+  });
+
+  it('detects X and Z states from parsed waveform data', () => {
+    const shiftEnable = mockWaveformData.signals.find((candidate) => candidate.id === 'u_top_module1-shift_ena');
+    const counts = getWaveformStateCounts(mockWaveformData);
+
+    expect(shiftEnable).toBeDefined();
+    expect(isUnknownWaveformValue('X')).toBe(true);
+    expect(isHighImpedanceWaveformValue(getSignalValueAtTime(shiftEnable!, 5))).toBe(true);
+    expect(counts.xStateCount).toBeGreaterThan(0);
+    expect(counts.zStateCount).toBeGreaterThan(0);
+  });
+
+  it('keeps signal lanes aligned with group rows in the shared row model', () => {
+    const rows = getWaveformDisplayRows(mockWaveformData);
+    const countingLaneY = getWaveformSignalLaneY(mockWaveformData, 'u_top_module1-counting');
+
+    expect(rows).toHaveLength(10);
+    expect(rows.map((row) => row.kind)).toEqual([
+      'group',
+      'signal',
+      'signal',
+      'signal',
+      'signal',
+      'group',
+      'signal',
+      'signal',
+      'signal',
+      'signal',
+    ]);
+    expect(getWaveformFirstSignalLaneY(mockWaveformData)).toBe(waveformHeaderHeight + waveformLaneHeight);
+    expect(getWaveformSignalLaneY(mockWaveformData, 'u_top_module1-clk')).toBe(waveformHeaderHeight + 6 * waveformLaneHeight);
+    expect(countingLaneY).toBe(waveformHeaderHeight + 9 * waveformLaneHeight);
+    expect(getWaveformCanvasHeightForData(mockWaveformData)).toBe(waveformHeaderHeight + rows.length * waveformLaneHeight + waveformBottomPadding);
+  });
+
+  it('counts fillable high pulse intervals without counting low digital intervals', () => {
+    const pulseFillCount = getWaveformDigitalPulseFillCount(mockWaveformData, fitWaveformViewport(mockWaveformData));
+    const digitalIntervalCount = mockWaveformData.signals
+      .filter((signal) => signal.kind !== 'bus')
+      .reduce((count, signal) => count + Math.max(0, signal.transitions.length - 1), 0);
+
+    expect(pulseFillCount).toBeGreaterThan(0);
+    expect(pulseFillCount).toBeLessThan(digitalIntervalCount);
   });
 
   it('creates stable ticks and signal row ids', () => {

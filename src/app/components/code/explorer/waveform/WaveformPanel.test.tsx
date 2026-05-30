@@ -2,7 +2,16 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
-import { getWaveformViewportSpan } from './waveformLayout';
+import { waveformLayerNames } from './createWaveformScene';
+import {
+  getWaveformDigitalPulseFillCount,
+  getWaveformDisplayRows,
+  getWaveformFirstSignalLaneY,
+  getWaveformSignalLaneY,
+  getWaveformStateCounts,
+  getWaveformViewportSpan,
+  waveformLaneHeight,
+} from './waveformLayout';
 import type { WaveformDataSet, WaveformViewport } from './waveformTypes';
 import { WaveformPanel } from './WaveformPanel';
 
@@ -19,21 +28,37 @@ vi.mock('./WaveformCanvas', () => ({
     selectedSignalId: string | null;
     viewport: WaveformViewport;
     onCursorTimeChange: (time: number) => void;
-  }) => (
-    <button
-      data-cursor-time={cursorTime.toFixed(2)}
-      data-selected-signal-id={selectedSignalId ?? ''}
-      data-signal-count={data.signals.length}
-      data-testid="waveform-canvas"
-      data-visible-window-end={viewport.endTime.toFixed(2)}
-      data-visible-window-start={viewport.startTime.toFixed(2)}
-      data-zoom={(data.duration / getWaveformViewportSpan(viewport)).toFixed(2)}
-      type="button"
-      onClick={() => onCursorTimeChange(128)}
-    >
-      Mock waveform canvas
-    </button>
-  ),
+  }) => {
+    const displayRows = getWaveformDisplayRows(data);
+    const firstSignalLaneY = getWaveformFirstSignalLaneY(data);
+    const selectedSignalLaneY = getWaveformSignalLaneY(data, selectedSignalId);
+    const stateCounts = getWaveformStateCounts(data);
+
+    return (
+      <button
+        data-cursor-time={cursorTime.toFixed(2)}
+        data-first-signal-lane-y={firstSignalLaneY?.toFixed(2) ?? ''}
+        data-layer-count={waveformLayerNames.length}
+        data-layer-names={waveformLayerNames.join(',')}
+        data-pulse-fill-count={getWaveformDigitalPulseFillCount(data, viewport)}
+        data-row-count={displayRows.length}
+        data-row-height={waveformLaneHeight}
+        data-selected-signal-id={selectedSignalId ?? ''}
+        data-selected-signal-lane-y={selectedSignalLaneY?.toFixed(2) ?? ''}
+        data-signal-count={data.signals.length}
+        data-testid="waveform-canvas"
+        data-visible-window-end={viewport.endTime.toFixed(2)}
+        data-visible-window-start={viewport.startTime.toFixed(2)}
+        data-x-state-count={stateCounts.xStateCount}
+        data-z-state-count={stateCounts.zStateCount}
+        data-zoom={(data.duration / getWaveformViewportSpan(viewport)).toFixed(2)}
+        type="button"
+        onClick={() => onCursorTimeChange(128)}
+      >
+        Mock waveform canvas
+      </button>
+    );
+  },
 }));
 
 describe('WaveformPanel', () => {
@@ -47,10 +72,20 @@ describe('WaveformPanel', () => {
     expect(panel).toHaveAttribute('data-signal-count', '8');
     expect(screen.getByText('tb_top_module1')).toBeInTheDocument();
     expect(screen.getByText('u_top_module1')).toBeInTheDocument();
+    expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-layer-names', 'background,content,status,operation');
+    expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-row-count', '10');
+    expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-first-signal-lane-y', '60.00');
+    expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-x-state-count'))).toBeGreaterThan(0);
+    expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-z-state-count'))).toBeGreaterThan(0);
+    expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-pulse-fill-count'))).toBeGreaterThan(0);
+    expect(screen.getByTestId('waveform-group-row-u_top_module1')).toHaveAttribute('data-row-index', '5');
 
     await user.click(screen.getByTestId('waveform-signal-row-u_top_module1-counting'));
 
     expect(panel).toHaveAttribute('data-selected-signal-id', 'u_top_module1-counting');
+    expect(screen.getByTestId('waveform-signal-row-u_top_module1-counting')).toHaveAttribute('data-row-index', '9');
+    expect(screen.getByTestId('waveform-signal-row-u_top_module1-counting')).toHaveAttribute('data-lane-y', '300.00');
+    expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-selected-signal-lane-y', '300.00');
     expect(screen.getByText('[3:0]')).toBeInTheDocument();
     expect(screen.getByText('84.0ns')).toBeInTheDocument();
     expect(screen.getAllByText('2').length).toBeGreaterThan(0);
@@ -79,8 +114,7 @@ describe('WaveformPanel', () => {
 
     await user.click(screen.getByRole('button', { name: /waveform settings/i }));
     expect(screen.getByTestId('waveform-settings-popover')).toBeInTheDocument();
-
-    await user.click(screen.getByRole('button', { name: /add signals/i }));
-    expect(screen.getByTestId('waveform-signal-picker')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /add signals/i })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('waveform-signal-picker')).not.toBeInTheDocument();
   });
 });

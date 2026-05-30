@@ -1,15 +1,21 @@
 import { useEffect, useRef, useState } from 'react';
 import { Application } from 'pixi.js';
 
-import { createWaveformScene, type WaveformScene } from './createWaveformScene';
+import { createWaveformScene, waveformLayerNames, type WaveformScene } from './createWaveformScene';
 import {
   clampTime,
-  getWaveformCanvasHeight,
+  getWaveformCanvasHeightForData,
+  getWaveformDigitalPulseFillCount,
+  getWaveformDisplayRows,
+  getWaveformFirstSignalLaneY,
+  getWaveformSignalLaneY,
+  getWaveformStateCounts,
   getWaveformViewportSpan,
   panWaveformViewport,
   timeToX,
   waveformCanvasMinHeight,
   waveformCanvasMinWidth,
+  waveformLaneHeight,
   xToTime,
   zoomWaveformViewport,
 } from './waveformLayout';
@@ -236,7 +242,7 @@ export function WaveformCanvas({
     }
 
     const width = Math.max(waveformCanvasMinWidth, Math.floor(host.clientWidth));
-    const height = Math.max(waveformCanvasMinHeight, getWaveformCanvasHeight(dataRef.current.signals.length), Math.floor(host.clientHeight));
+    const height = Math.max(waveformCanvasMinHeight, getWaveformCanvasHeightForData(dataRef.current), Math.floor(host.clientHeight));
 
     app.renderer.resize(width, height);
     sceneRef.current?.world.destroy({ children: true });
@@ -269,6 +275,11 @@ export function WaveformCanvas({
 
   const zoomLevel = data.duration / getWaveformViewportSpan(viewport);
   const cursorX = timeToX(cursorTime, viewport, waveformCanvasMinWidth);
+  const displayRows = getWaveformDisplayRows(data);
+  const firstSignalLaneY = getWaveformFirstSignalLaneY(data);
+  const selectedSignalLaneY = getWaveformSignalLaneY(data, selectedSignalId);
+  const stateCounts = getWaveformStateCounts(data);
+  const pulseFillCount = getWaveformDigitalPulseFillCount(data, viewport);
 
   return (
     <div
@@ -277,11 +288,20 @@ export function WaveformCanvas({
       className="relative h-full min-h-0 flex-1 cursor-crosshair overflow-hidden bg-[#111111] outline-none"
       data-cursor-time={cursorTime.toFixed(2)}
       data-cursor-x={cursorX.toFixed(2)}
+      data-layer-count={waveformLayerNames.length}
+      data-layer-names={waveformLayerNames.join(',')}
+      data-first-signal-lane-y={formatOptionalNumber(firstSignalLaneY)}
+      data-pulse-fill-count={pulseFillCount}
       data-render-count={renderCount}
       data-renderer={renderer}
+      data-row-count={displayRows.length}
+      data-row-height={waveformLaneHeight}
+      data-selected-signal-lane-y={formatOptionalNumber(selectedSignalLaneY)}
       data-testid="waveform-canvas"
       data-visible-window-end={viewport.endTime.toFixed(2)}
       data-visible-window-start={viewport.startTime.toFixed(2)}
+      data-x-state-count={stateCounts.xStateCount}
+      data-z-state-count={stateCounts.zStateCount}
       data-zoom={zoomLevel.toFixed(2)}
       role="img"
       tabIndex={0}
@@ -325,4 +345,8 @@ async function createPixiApp(host: HTMLElement) {
   }
 
   throw lastError instanceof Error ? lastError : new Error('Unable to initialize waveform renderer.');
+}
+
+function formatOptionalNumber(value: number | null) {
+  return value === null ? '' : value.toFixed(2);
 }

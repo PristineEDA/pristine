@@ -1,4 +1,4 @@
-import type { WaveformDataSet, WaveformSignal, WaveformTransition, WaveformViewport } from './waveformTypes';
+import type { WaveformDataSet, WaveformSignal, WaveformSignalGroup, WaveformStateCounts, WaveformTransition, WaveformViewport } from './waveformTypes';
 
 export const waveformCanvasMinWidth = 360;
 export const waveformCanvasMinHeight = 220;
@@ -8,6 +8,26 @@ export const waveformLanePaddingY = 5;
 export const waveformTimeAxisInset = 10;
 export const waveformBottomPadding = 14;
 export const waveformMinWindow = 8;
+
+export type WaveformDisplayRow = WaveformGroupDisplayRow | WaveformSignalDisplayRow;
+
+export interface WaveformGroupDisplayRow {
+  kind: 'group';
+  id: string;
+  group: WaveformSignalGroup;
+  rowIndex: number;
+  y: number;
+}
+
+export interface WaveformSignalDisplayRow {
+  kind: 'signal';
+  id: string;
+  groupId: string;
+  signal: WaveformSignal;
+  signalIndex: number;
+  rowIndex: number;
+  y: number;
+}
 
 export function getInitialWaveformViewport(data: WaveformDataSet): WaveformViewport {
   return fitWaveformViewport(data);
@@ -76,14 +96,14 @@ export function xToTime(x: number, viewport: WaveformViewport, width: number) {
 }
 
 export function getSignalValueAtTime(signal: WaveformSignal, time: number) {
-  let value = signal.transitions[0]?.value ?? 'x';
+  let value = normalizeWaveformValue(signal.transitions[0]?.value ?? 'x');
 
   for (const transition of signal.transitions) {
     if (transition.time > time) {
       break;
     }
 
-    value = transition.value;
+    value = normalizeWaveformValue(transition.value);
   }
 
   return value;
@@ -137,12 +157,124 @@ export function getWaveformLaneY(index: number) {
   return waveformHeaderHeight + index * waveformLaneHeight;
 }
 
+export function getWaveformDisplayRows(data: WaveformDataSet): WaveformDisplayRow[] {
+  const rows: WaveformDisplayRow[] = [];
+  let signalIndex = 0;
+
+  for (const group of data.groups) {
+    const groupRowIndex = rows.length;
+    rows.push({
+      kind: 'group',
+      id: `group:${group.id}`,
+      group,
+      rowIndex: groupRowIndex,
+      y: getWaveformLaneY(groupRowIndex),
+    });
+
+    for (const signal of data.signals) {
+      if (signal.groupId !== group.id) {
+        continue;
+      }
+
+      const signalRowIndex = rows.length;
+      rows.push({
+        kind: 'signal',
+        id: `signal:${signal.id}`,
+        groupId: group.id,
+        signal,
+        signalIndex,
+        rowIndex: signalRowIndex,
+        y: getWaveformLaneY(signalRowIndex),
+      });
+      signalIndex += 1;
+    }
+  }
+
+  return rows;
+}
+
+export function getWaveformSignalRow(data: WaveformDataSet, signalId: string | null) {
+  if (!signalId) {
+    return null;
+  }
+
+  return getWaveformDisplayRows(data).find((row): row is WaveformSignalDisplayRow => row.kind === 'signal' && row.signal.id === signalId) ?? null;
+}
+
+export function getWaveformSignalLaneY(data: WaveformDataSet, signalId: string | null) {
+  return getWaveformSignalRow(data, signalId)?.y ?? null;
+}
+
+export function getWaveformFirstSignalLaneY(data: WaveformDataSet) {
+  return getWaveformDisplayRows(data).find((row): row is WaveformSignalDisplayRow => row.kind === 'signal')?.y ?? null;
+}
+
 export function getWaveformCanvasHeight(signalCount: number) {
   return waveformHeaderHeight + signalCount * waveformLaneHeight + waveformBottomPadding;
 }
 
+export function getWaveformCanvasHeightForData(data: WaveformDataSet) {
+  return waveformHeaderHeight + getWaveformDisplayRows(data).length * waveformLaneHeight + waveformBottomPadding;
+}
+
 export function formatWaveformValue(value: string) {
   return value.length === 1 ? value.toUpperCase() : value;
+}
+
+export function normalizeWaveformValue(value: string) {
+  return value.trim().toLowerCase();
+}
+
+export function isUnknownWaveformValue(value: string) {
+  return normalizeWaveformValue(value) === 'x';
+}
+
+export function isHighImpedanceWaveformValue(value: string) {
+  return normalizeWaveformValue(value) === 'z';
+}
+
+export function isSpecialWaveformValue(value: string) {
+  return isUnknownWaveformValue(value) || isHighImpedanceWaveformValue(value);
+}
+
+export function getWaveformStateCounts(data: WaveformDataSet): WaveformStateCounts {
+  let xStateCount = 0;
+  let zStateCount = 0;
+
+  for (const signal of data.signals) {
+    for (const transition of signal.transitions) {
+      if (isUnknownWaveformValue(transition.value)) {
+        xStateCount += 1;
+      } else if (isHighImpedanceWaveformValue(transition.value)) {
+        zStateCount += 1;
+      }
+    }
+  }
+
+  return { xStateCount, zStateCount };
+}
+
+export function getWaveformDigitalPulseFillCount(data: WaveformDataSet, viewport: WaveformViewport) {
+  let pulseFillCount = 0;
+
+  for (const signal of data.signals) {
+    if (signal.kind === 'bus') {
+      continue;
+    }
+
+    const transitions = getWaveformTransitionsInWindow(signal, viewport);
+
+    for (let index = 0; index < transitions.length - 1; index += 1) {
+      const current = transitions[index];
+      const next = transitions[index + 1];
+
+      if (current && next && next.time > current.time && normalizeWaveformValue(current.value) === '1') {
+        pulseFillCount += 1;
+      }
+    }
+  }
+
+  return pulseFillCount;
 }
 
 export function getWaveformSignalTestId(signalId: string) {

@@ -1,4 +1,11 @@
 export type WaveformSignalKind = 'clock' | 'logic' | 'bus';
+export type WaveformLayerName = 'background' | 'content' | 'status' | 'operation';
+export type WaveformLogicState = '0' | '1' | 'x' | 'z';
+
+export interface WaveformStateCounts {
+  xStateCount: number;
+  zStateCount: number;
+}
 
 export interface WaveformTransition {
   time: number;
