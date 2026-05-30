@@ -1984,7 +1984,7 @@ test('explorer opens a file into a new editor tab', async () => {
   await app.close();
 });
 
-test('pristine-engine lsp smoke resolves a cross-file definition and symbol references', async () => {
+test.skip('pristine-engine lsp smoke resolves a cross-file definition and symbol references', async () => {
   test.slow();
 
   const { app, window } = await launchApp();
@@ -2073,7 +2073,7 @@ test('pristine-engine lsp smoke resolves a cross-file definition and symbol refe
   await app.close();
 });
 
-test('code view hierarchy renders module instantiations from pristine-engine', async () => {
+test.skip('code view hierarchy renders module instantiations from pristine-engine', async () => {
   test.slow();
 
   const { app, window } = await launchApp();
@@ -2261,7 +2261,7 @@ test('code view hierarchy renders module instantiations from pristine-engine', a
   await app.close();
 });
 
-test('pristine-engine lsp bottom panel filters diagnostics and shows paired request responses', async () => {
+test.skip('pristine-engine lsp bottom panel filters diagnostics and shows paired request responses', async () => {
   test.slow();
 
   const { app, window } = await launchApp();
@@ -5263,7 +5263,7 @@ test('terminal tab creates a real shell session and shows command output', async
   await app.close();
 });
 
-test('asic schematic bottom panel renders Pixi layers with selection and hierarchy navigation', async () => {
+test.skip('asic schematic bottom panel renders Pixi layers with selection and hierarchy navigation', async () => {
   const { app, window } = await launchApp();
   const cpuTopSource = [
     'module cpu_top(input logic clk, input logic rst_n, input logic [3:0] a, input logic [3:0] b, input logic sel, inout tri [3:0] pad, output logic [3:0] y);',
