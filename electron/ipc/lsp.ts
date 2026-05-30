@@ -23,6 +23,15 @@ import type {
   LspModuleHierarchyNode,
   LspModuleHierarchyOptions,
   LspRange,
+  LspSchematic,
+  LspSchematicCell,
+  LspSchematicConnection,
+  LspSchematicEndpoint,
+  LspSchematicModule,
+  LspSchematicNet,
+  LspSchematicOptions,
+  LspSchematicPort,
+  LspSchematicPortDirection,
   LspStateEvent,
   LspTextEdit,
   WorkspaceLocation,
@@ -535,6 +544,7 @@ function normalizeModuleHierarchyNode(value: unknown): LspModuleHierarchyNode | 
 
   const candidate = value as {
     moduleName?: unknown;
+    kind?: unknown;
     instanceName?: unknown;
     uri?: unknown;
     range?: unknown;
@@ -560,6 +570,7 @@ function normalizeModuleHierarchyNode(value: unknown): LspModuleHierarchyNode | 
 
   return {
     moduleName: candidate.moduleName,
+    kind: candidate.kind === 'interface' ? 'interface' : 'module',
     instanceName: typeof candidate.instanceName === 'string' ? candidate.instanceName : undefined,
     uri,
     filePath: uri ? getRelativeWorkspaceFilePath(uri) ?? undefined : undefined,
@@ -611,6 +622,190 @@ function normalizeModuleHierarchyOptions(value: unknown): LspModuleHierarchyOpti
     moduleName: typeof candidate.moduleName === 'string' ? candidate.moduleName : undefined,
     maxDepth: typeof candidate.maxDepth === 'number' ? candidate.maxDepth : undefined,
   };
+}
+
+function normalizeSchematicPortDirection(value: unknown): LspSchematicPortDirection {
+  return value === 'input' || value === 'output' || value === 'inout' ? value : 'inout';
+}
+
+function normalizeSchematicPort(value: unknown): LspSchematicPort | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const candidate = value as {
+    name?: unknown;
+    direction?: unknown;
+    widthText?: unknown;
+    range?: unknown;
+    selectionRange?: unknown;
+  };
+  if (typeof candidate.name !== 'string') {
+    return null;
+  }
+
+  return {
+    name: candidate.name,
+    direction: normalizeSchematicPortDirection(candidate.direction),
+    widthText: typeof candidate.widthText === 'string' ? candidate.widthText : '',
+    range: normalizeOptionalRange(candidate.range),
+    selectionRange: normalizeOptionalRange(candidate.selectionRange),
+  };
+}
+
+function normalizeSchematicConnection(value: unknown): LspSchematicConnection | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const candidate = value as { portName?: unknown; portIndex?: unknown; signal?: unknown; range?: unknown };
+  if (typeof candidate.signal !== 'string') {
+    return null;
+  }
+
+  return {
+    portName: typeof candidate.portName === 'string' ? candidate.portName : '',
+    portIndex: typeof candidate.portIndex === 'number' ? candidate.portIndex : -1,
+    signal: candidate.signal,
+    range: normalizeOptionalRange(candidate.range),
+  };
+}
+
+function normalizeSchematicCell(value: unknown): LspSchematicCell | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const candidate = value as {
+    id?: unknown;
+    name?: unknown;
+    type?: unknown;
+    kind?: unknown;
+    range?: unknown;
+    selectionRange?: unknown;
+    connections?: unknown;
+  };
+  if (typeof candidate.id !== 'string' || typeof candidate.name !== 'string' || typeof candidate.type !== 'string') {
+    return null;
+  }
+
+  return {
+    id: candidate.id,
+    name: candidate.name,
+    type: candidate.type,
+    kind: typeof candidate.kind === 'string' ? candidate.kind : candidate.type,
+    range: normalizeOptionalRange(candidate.range),
+    selectionRange: normalizeOptionalRange(candidate.selectionRange),
+    connections: Array.isArray(candidate.connections)
+      ? candidate.connections
+        .map((entry) => normalizeSchematicConnection(entry))
+        .filter((entry): entry is LspSchematicConnection => Boolean(entry))
+      : [],
+  };
+}
+
+function normalizeSchematicEndpoint(value: unknown): LspSchematicEndpoint | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const candidate = value as { nodeId?: unknown; portName?: unknown };
+  if (typeof candidate.nodeId !== 'string' || typeof candidate.portName !== 'string') {
+    return null;
+  }
+
+  return { nodeId: candidate.nodeId, portName: candidate.portName };
+}
+
+function normalizeSchematicNet(value: unknown): LspSchematicNet | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const candidate = value as { name?: unknown; drivers?: unknown; loads?: unknown };
+  if (typeof candidate.name !== 'string') {
+    return null;
+  }
+
+  const normalizeEndpoints = (entries: unknown): LspSchematicEndpoint[] => Array.isArray(entries)
+    ? entries
+      .map((entry) => normalizeSchematicEndpoint(entry))
+      .filter((entry): entry is LspSchematicEndpoint => Boolean(entry))
+    : [];
+
+  return {
+    name: candidate.name,
+    drivers: normalizeEndpoints(candidate.drivers),
+    loads: normalizeEndpoints(candidate.loads),
+  };
+}
+
+function normalizeSchematicModule(value: unknown): LspSchematicModule | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const candidate = value as {
+    id?: unknown;
+    name?: unknown;
+    uri?: unknown;
+    range?: unknown;
+    selectionRange?: unknown;
+    ports?: unknown;
+    cells?: unknown;
+    nets?: unknown;
+  };
+  if (typeof candidate.id !== 'string' || typeof candidate.name !== 'string') {
+    return null;
+  }
+
+  const uri = typeof candidate.uri === 'string' ? candidate.uri : undefined;
+  return {
+    id: candidate.id,
+    name: candidate.name,
+    uri,
+    filePath: uri ? getRelativeWorkspaceFilePath(uri) ?? undefined : undefined,
+    range: normalizeOptionalRange(candidate.range),
+    selectionRange: normalizeOptionalRange(candidate.selectionRange),
+    ports: Array.isArray(candidate.ports)
+      ? candidate.ports
+        .map((entry) => normalizeSchematicPort(entry))
+        .filter((entry): entry is LspSchematicPort => Boolean(entry))
+      : [],
+    cells: Array.isArray(candidate.cells)
+      ? candidate.cells
+        .map((entry) => normalizeSchematicCell(entry))
+        .filter((entry): entry is LspSchematicCell => Boolean(entry))
+      : [],
+    nets: Array.isArray(candidate.nets)
+      ? candidate.nets
+        .map((entry) => normalizeSchematicNet(entry))
+        .filter((entry): entry is LspSchematicNet => Boolean(entry))
+      : [],
+  };
+}
+
+function normalizeSchematic(value: unknown): LspSchematic {
+  if (!value || typeof value !== 'object') {
+    return { rootModuleId: null, modules: [], messages: [] };
+  }
+
+  const candidate = value as { rootModuleId?: unknown; modules?: unknown; messages?: unknown };
+  return {
+    rootModuleId: typeof candidate.rootModuleId === 'string' ? candidate.rootModuleId : null,
+    modules: Array.isArray(candidate.modules)
+      ? candidate.modules
+        .map((entry) => normalizeSchematicModule(entry))
+        .filter((entry): entry is LspSchematicModule => Boolean(entry))
+      : [],
+    messages: Array.isArray(candidate.messages)
+      ? candidate.messages.filter((entry): entry is string => typeof entry === 'string')
+      : [],
+  };
+}
+
+function normalizeSchematicOptions(value: unknown): LspSchematicOptions {
+  return normalizeModuleHierarchyOptions(value);
 }
 
 function createInitializeParams() {
@@ -1019,6 +1214,16 @@ export function registerLspHandlers(getMainWindow: () => BrowserWindow | null): 
       const result = await sendDebugRequest(session, getMainWindow, 'systemverilog/moduleHierarchy', normalizedOptions);
 
       return normalizeModuleHierarchy(result);
+    });
+  });
+
+  ipcMain.handle(AsyncChannels.LSP_SCHEMATIC, async (_event, options?: unknown) => {
+    const normalizedOptions = normalizeSchematicOptions(options);
+
+    return withInitializedSession(getMainWindow, async (session) => {
+      const result = await sendDebugRequest(session, getMainWindow, 'systemverilog/schematic', normalizedOptions);
+
+      return normalizeSchematic(result);
     });
   });
 }

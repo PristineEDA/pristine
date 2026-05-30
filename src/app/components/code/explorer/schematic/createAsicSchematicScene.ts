@@ -1,6 +1,8 @@
-import { Container, Graphics, Text } from 'pixi.js';
+import { BitmapFont, BitmapText, Container, Graphics } from 'pixi.js';
 
 import type { AsicSchematicPalette } from './asicSchematicPalette';
+import type { SchematicAlignmentGuide } from './asicSchematicGuides';
+import { isLogicCellKind, moduleLabelTopOffset } from './asicSchematicLayout';
 import type { SchematicEdgeLayout, SchematicLayoutResult, SchematicNodeLayout } from './asicSchematicTypes';
 
 export type SchematicLayerName = 'background' | 'wire' | 'component' | 'interaction';
@@ -16,8 +18,11 @@ export interface AsicSchematicScene {
   world: Container;
   layers: Record<SchematicLayerName, Container>;
   nodeContainers: Map<string, Container>;
+  updateAlignmentGuides: (guides: readonly SchematicAlignmentGuide[]) => SchematicAlignmentGuideState;
+  updateGrid: (camera: SchematicCameraState, viewport: SchematicViewport, options?: SchematicGridOptions) => SchematicGridState;
   updateSelection: (selectedNodeIds: readonly string[], positions?: Record<string, { x: number; y: number } | undefined>) => void;
   updateEdgeSelection: (selectedEdgeIds: readonly string[]) => void;
+  updateDragFocus: (nodeIds: readonly string[] | null) => void;
   updateMarquee: (rect: SchematicWorldRect | null) => void;
   updateWires: (edges: readonly SchematicEdgeLayout[]) => void;
   updateZoom: (zoom: number) => SchematicTextZoomState;
@@ -26,9 +31,40 @@ export interface AsicSchematicScene {
 export interface SchematicTextZoomState {
   labelScale: number;
   textResolution: number;
+  textFontStatus: 'bitmap-ready';
+  textRenderer: 'bitmap';
+}
+
+export interface SchematicCameraState {
+  x: number;
+  y: number;
+  zoom: number;
+}
+
+export interface SchematicViewport {
+  width: number;
+  height: number;
+}
+
+export interface SchematicGridOptions {
+  enabled: boolean;
+  gridSize: number;
+}
+
+export interface SchematicGridState {
+  effectiveStep: number;
+  enabled: boolean;
+  gridSize: number;
+  lineCount: number;
+}
+
+export interface SchematicAlignmentGuideState {
+  count: number;
+  visible: boolean;
 }
 
 export interface AsicSchematicSceneOptions {
+  gridOptions?: SchematicGridOptions;
   layout: SchematicLayoutResult;
   palette: AsicSchematicPalette;
   selectedNodeIds?: readonly string[];
@@ -38,6 +74,7 @@ export interface AsicSchematicSceneOptions {
 }
 
 export function createAsicSchematicScene({
+  gridOptions = { enabled: true, gridSize: 40 },
   layout,
   palette,
   selectedNodeIds = [],
@@ -50,24 +87,37 @@ export function createAsicSchematicScene({
   const wireLayer = new Container({ label: 'schematic-layer-wire', zIndex: 10 });
   const componentLayer = new Container({ label: 'schematic-layer-component', zIndex: 20, sortableChildren: true });
   const interactionLayer = new Container({ label: 'schematic-layer-interaction', zIndex: 30 });
+  const gridOverlay = new Graphics({ label: 'schematic-grid' });
+  const guideOverlay = new Graphics({ label: 'schematic-alignment-guides' });
   const selectionOverlay = new Graphics({ label: 'schematic-selection-overlay' });
   const marqueeOverlay = new Graphics({ label: 'schematic-marquee-overlay' });
   const nodeContainers = new Map<string, Container>();
   const nodeMap = new Map(layout.nodes.map((node) => [node.id, node]));
-  const textNodes: Text[] = [];
+  const textNodes: BitmapText[] = [];
   let currentEdges: readonly SchematicEdgeLayout[] = layout.edges;
   let currentSelectedEdgeIds: readonly string[] = selectedEdgeIds;
+  let currentDragFocusNodeIds: readonly string[] = [];
+  drawGrid(gridOverlay, layout, palette, null, null, gridOptions);
 
   world.addChild(backgroundLayer, wireLayer, componentLayer, interactionLayer);
-  backgroundLayer.addChild(drawGrid(layout, palette));
-  interactionLayer.addChild(selectionOverlay, marqueeOverlay);
+  backgroundLayer.addChild(gridOverlay);
+  interactionLayer.addChild(guideOverlay, selectionOverlay, marqueeOverlay);
+  const tooltip = createNodeTooltip(palette, textNodes);
+  interactionLayer.addChild(tooltip.container);
   layout.nodes.forEach((node) => {
-    const container = drawNode({ node, palette, textNodes, onModuleOpen });
+    const container = drawNode({
+      node,
+      palette,
+      textNodes,
+      onModuleOpen,
+      onNodeHover: (hoveredNode) => showNodeTooltip(tooltip, hoveredNode),
+      onNodeHoverEnd: () => hideNodeTooltip(tooltip),
+    });
     nodeContainers.set(node.id, container);
     onNodeContainerCreated?.(node, container);
     componentLayer.addChild(container);
   });
-  drawWireLayer(wireLayer, currentEdges, palette, currentSelectedEdgeIds);
+  drawWireLayer(wireLayer, currentEdges, palette, currentSelectedEdgeIds, currentDragFocusNodeIds);
 
   const updateSelection = (nextSelectedNodeIds: readonly string[], positions?: Record<string, { x: number; y: number } | undefined>) => {
     drawSelectionOverlay(selectionOverlay, nextSelectedNodeIds, nodeMap, palette, positions);
@@ -75,15 +125,32 @@ export function createAsicSchematicScene({
   const updateMarquee = (rect: SchematicWorldRect | null) => {
     drawMarqueeOverlay(marqueeOverlay, rect, palette);
   };
+  const updateAlignmentGuides = (guides: readonly SchematicAlignmentGuide[]) => {
+    return drawAlignmentGuides(guideOverlay, guides, palette);
+  };
+  const updateGrid = (camera: SchematicCameraState, viewport: SchematicViewport, options = gridOptions) => {
+    return drawGrid(gridOverlay, layout, palette, camera, viewport, options);
+  };
   const updateEdgeSelection = (nextSelectedEdgeIds: readonly string[]) => {
     currentSelectedEdgeIds = nextSelectedEdgeIds;
-    drawWireLayer(wireLayer, currentEdges, palette, currentSelectedEdgeIds);
+    drawWireLayer(wireLayer, currentEdges, palette, currentSelectedEdgeIds, currentDragFocusNodeIds);
+  };
+  const updateDragFocus = (nodeIds: readonly string[] | null) => {
+    currentDragFocusNodeIds = nodeIds ?? [];
+    const focusedNodeIds = new Set(currentDragFocusNodeIds);
+    const active = focusedNodeIds.size > 0;
+
+    backgroundLayer.alpha = active ? 0.32 : 1;
+    nodeContainers.forEach((container, nodeId) => {
+      container.alpha = active && !focusedNodeIds.has(nodeId) ? 0.28 : 1;
+    });
+    drawWireLayer(wireLayer, currentEdges, palette, currentSelectedEdgeIds, currentDragFocusNodeIds);
   };
   const updateWires = (edges: readonly SchematicEdgeLayout[]) => {
     currentEdges = edges;
-    drawWireLayer(wireLayer, currentEdges, palette, currentSelectedEdgeIds);
+    drawWireLayer(wireLayer, currentEdges, palette, currentSelectedEdgeIds, currentDragFocusNodeIds);
   };
-  const updateZoom = (zoom: number) => updateTextZoom(textNodes, zoom);
+  const updateZoom = () => updateTextZoom();
 
   updateSelection(selectedNodeIds);
   updateEdgeSelection(selectedEdgeIds);
@@ -97,8 +164,11 @@ export function createAsicSchematicScene({
       interaction: interactionLayer,
     },
     nodeContainers,
+    updateAlignmentGuides,
+    updateGrid,
     updateSelection,
     updateEdgeSelection,
+    updateDragFocus,
     updateMarquee,
     updateWires,
     updateZoom,
@@ -110,11 +180,27 @@ function drawWireLayer(
   edges: readonly SchematicEdgeLayout[],
   palette: AsicSchematicPalette,
   selectedEdgeIds: readonly string[],
+  dragFocusNodeIds: readonly string[],
 ) {
   const selectedEdges = new Set(selectedEdgeIds);
+  const focusedNodeIds = new Set(dragFocusNodeIds);
+  const dragFocusActive = focusedNodeIds.size > 0;
 
   layer.removeChildren().forEach((child) => child.destroy({ children: true }));
-  edges.forEach((edge) => layer.addChild(drawEdge(edge, palette, selectedEdges.has(edge.id))));
+  edges.forEach((edge) => {
+    if (dragFocusActive && isEdgeConnectedToFocusedNode(edge, focusedNodeIds)) {
+      return;
+    }
+
+    layer.addChild(drawEdge(edge, palette, selectedEdges.has(edge.id), dragFocusActive ? 0.34 : 1));
+  });
+}
+
+function isEdgeConnectedToFocusedNode(edge: SchematicEdgeLayout, focusedNodeIds: Set<string>) {
+  const fromNodeId = edge.from.instanceId ?? `io:${edge.from.portId}`;
+  const toNodeId = edge.to.instanceId ?? `io:${edge.to.portId}`;
+
+  return focusedNodeIds.has(fromNodeId) || focusedNodeIds.has(toNodeId);
 }
 
 function drawSelectionOverlay(
@@ -129,7 +215,7 @@ function drawSelectionOverlay(
   selectedNodeIds.forEach((nodeId) => {
     const node = nodeMap.get(nodeId);
 
-    if (!node || node.kind !== 'module') {
+    if (!node) {
       return;
     }
 
@@ -137,8 +223,7 @@ function drawSelectionOverlay(
     const x = position?.x ?? node.x;
     const y = position?.y ?? node.y;
 
-    graphics
-      .roundRect(x - 5, y - 5, node.width + 10, node.height + 10, 10)
+    drawNodeOutline(graphics, node, x, y)
       .stroke({ color: palette.selected, alpha: 0.96, width: 2.2 });
   });
 }
@@ -156,28 +241,49 @@ function drawMarqueeOverlay(graphics: Graphics, rect: SchematicWorldRect | null,
     .stroke({ color: palette.selected, alpha: 0.8, width: 1.4, pixelLine: true });
 }
 
-function drawGrid(layout: SchematicLayoutResult, palette: AsicSchematicPalette) {
-  const grid = new Graphics({ label: 'schematic-grid' });
-  const step = 40;
-  const startX = Math.floor(layout.bounds.x / step) * step;
-  const startY = Math.floor(layout.bounds.y / step) * step;
-  const endX = layout.bounds.x + layout.bounds.width;
-  const endY = layout.bounds.y + layout.bounds.height;
+function drawGrid(
+  graphics: Graphics,
+  layout: SchematicLayoutResult,
+  palette: AsicSchematicPalette,
+  camera: SchematicCameraState | null,
+  viewport: SchematicViewport | null,
+  options: SchematicGridOptions,
+): SchematicGridState {
+  graphics.clear();
 
-  for (let x = startX; x <= endX; x += step) {
-    grid.moveTo(x, startY).lineTo(x, endY).stroke({ color: palette.grid, alpha: 0.16, width: 1, pixelLine: true });
+  const gridSize = normalizeGridSize(options.gridSize);
+  if (!options.enabled) {
+    return { effectiveStep: gridSize, enabled: false, gridSize, lineCount: 0 };
   }
 
-  for (let y = startY; y <= endY; y += step) {
-    grid.moveTo(startX, y).lineTo(endX, y).stroke({ color: palette.grid, alpha: 0.16, width: 1, pixelLine: true });
+  const zoom = camera?.zoom && camera.zoom > 0 ? camera.zoom : 1;
+  const effectiveStep = getEffectiveGridStep(gridSize, zoom);
+  const visibleRect = camera && viewport
+    ? getVisibleWorldRect(camera, viewport)
+    : layout.bounds;
+  const padding = effectiveStep * 2;
+  const startX = Math.floor((visibleRect.x - padding) / effectiveStep) * effectiveStep;
+  const startY = Math.floor((visibleRect.y - padding) / effectiveStep) * effectiveStep;
+  const endX = visibleRect.x + visibleRect.width + padding;
+  const endY = visibleRect.y + visibleRect.height + padding;
+  let lineCount = 0;
+
+  for (let x = startX; x <= endX; x += effectiveStep) {
+    graphics.moveTo(x, startY).lineTo(x, endY).stroke({ color: palette.grid, alpha: 0.16, width: 1, pixelLine: true });
+    lineCount += 1;
   }
 
-  return grid;
+  for (let y = startY; y <= endY; y += effectiveStep) {
+    graphics.moveTo(startX, y).lineTo(endX, y).stroke({ color: palette.grid, alpha: 0.16, width: 1, pixelLine: true });
+    lineCount += 1;
+  }
+
+  return { effectiveStep, enabled: true, gridSize, lineCount };
 }
 
-function drawEdge(edge: SchematicEdgeLayout, palette: AsicSchematicPalette, selected: boolean) {
+function drawEdge(edge: SchematicEdgeLayout, palette: AsicSchematicPalette, selected: boolean, alphaMultiplier = 1) {
   const graphics = new Graphics({ label: `schematic-edge:${edge.id}` });
-  const color = getEdgeColor(edge, palette);
+  const color = getSchematicEdgeColor(edge, palette);
   const style = getEdgeStrokeStyle(edge, selected);
   const [firstPoint, ...remainingPoints] = edge.points;
 
@@ -188,24 +294,29 @@ function drawEdge(edge: SchematicEdgeLayout, palette: AsicSchematicPalette, sele
   if (selected) {
     graphics.moveTo(firstPoint.x, firstPoint.y);
     remainingPoints.forEach((point) => graphics.lineTo(point.x, point.y));
-    graphics.stroke({ color: palette.selected, alpha: 0.92, width: style.width + 5, cap: 'round', join: 'round' });
+    graphics.stroke({ color, alpha: 0.42 * alphaMultiplier, width: style.width + 5, cap: 'round', join: 'round' });
   }
 
   graphics.moveTo(firstPoint.x, firstPoint.y);
   remainingPoints.forEach((point) => graphics.lineTo(point.x, point.y));
-  graphics.stroke({ color, alpha: style.alpha, width: style.width, cap: 'round', join: 'round' });
-
-  const lastPoint = edge.points[edge.points.length - 1];
-  if (lastPoint) {
-    if (edge.isBus) {
-      const size = selected ? 7 : 5.5;
-      graphics.rect(lastPoint.x - size / 2, lastPoint.y - size / 2, size, size).fill({ color, alpha: 0.9 });
-    } else {
-      graphics.circle(lastPoint.x, lastPoint.y, selected ? 4.6 : 3).fill({ color, alpha: 0.88 });
-    }
-  }
+  graphics.stroke({ color, alpha: style.alpha * alphaMultiplier, width: style.width, cap: 'round', join: 'round' });
 
   return graphics;
+}
+
+export function getSchematicEdgeColor(edge: SchematicEdgeLayout, palette: AsicSchematicPalette) {
+  switch (edge.kind) {
+    case 'clock':
+      return palette.clock;
+    case 'reset':
+      return palette.reset;
+    case 'control':
+      return palette.warning;
+    case 'bus':
+      return palette.accent;
+    default:
+      return palette.wire;
+  }
 }
 
 function getEdgeStrokeStyle(edge: SchematicEdgeLayout, selected: boolean) {
@@ -225,22 +336,25 @@ function drawNode({
   palette,
   textNodes,
   onModuleOpen,
+  onNodeHover,
+  onNodeHoverEnd,
 }: {
   node: SchematicNodeLayout;
   palette: AsicSchematicPalette;
-  textNodes: Text[];
+  textNodes: BitmapText[];
   onModuleOpen?: (moduleId: string) => void;
+  onNodeHover?: (node: SchematicNodeLayout) => void;
+  onNodeHoverEnd?: () => void;
 }) {
   const container = new Container({ label: `schematic-node:${node.id}`, x: node.x, y: node.y });
-  const fill = node.kind === 'port' ? palette.panelMuted : palette.panel;
-  const border = node.kind === 'port' ? palette.textMuted : palette.border;
 
-  container.addChild(new Graphics({ label: `schematic-node-body:${node.id}` })
-    .roundRect(0, 0, node.width, node.height, node.kind === 'port' ? 7 : 8)
-    .fill({ color: fill, alpha: node.kind === 'port' ? 0.88 : 0.96 })
-    .stroke({ color: border, alpha: 0.72, width: 1.2 }));
-  container.addChild(createText(textNodes, node.label, palette.text, node.kind === 'port' ? 11 : 12, '600', node.kind === 'port' ? 10 : 12, node.kind === 'port' ? 8 : 10));
-  container.addChild(createText(textNodes, node.subtitle, palette.textMuted, 10, '400', node.kind === 'port' ? 10 : 12, node.kind === 'port' ? 21 : 28));
+  if (node.kind === 'port') {
+    drawIoPortNode(container, node, palette, textNodes);
+  } else if (isLogicCellKind(node.cellKind)) {
+    drawLogicNode(container, node, palette, textNodes);
+  } else {
+    drawModuleNode(container, node, palette, textNodes);
+  }
 
   if (node.kind === 'module') {
     drawPorts(container, node, palette, textNodes);
@@ -259,20 +373,59 @@ function drawNode({
       onModuleOpen?.(node.moduleId);
     }
   });
+  container.on('pointerover', () => onNodeHover?.(node));
+  container.on('pointerout', () => onNodeHoverEnd?.());
 
   return container;
 }
 
-function drawPorts(container: Container, node: SchematicNodeLayout, palette: AsicSchematicPalette, textNodes: Text[] = []) {
+function drawModuleNode(container: Container, node: SchematicNodeLayout, palette: AsicSchematicPalette, textNodes: BitmapText[]) {
+  container.addChild(new Graphics({ label: `schematic-node-body:${node.id}` })
+    .roundRect(0, 0, node.width, node.height, 8)
+    .fill({ color: palette.panel, alpha: 0.96 })
+    .stroke({ color: palette.border, alpha: 0.72, width: 1.2 }));
+
+  const label = createText(textNodes, node.label, palette.text, 12, '600', node.width / 2, -moduleLabelTopOffset);
+  label.anchor.set(0.5, 0);
+  container.addChild(label);
+}
+
+function drawIoPortNode(container: Container, node: SchematicNodeLayout, palette: AsicSchematicPalette, textNodes: BitmapText[]) {
+  const port = node.ports[0];
+  const portColor = port?.direction === 'input' ? palette.info : port?.direction === 'output' ? palette.success : palette.warning;
+  const body = new Graphics({ label: `schematic-node-body:${node.id}` });
+
+  drawIoPortOutline(body, node, 0, 0)
+    .fill({ color: palette.panelMuted, alpha: 0.9 })
+    .stroke({ color: portColor, alpha: 0.82, width: 1.4 });
+  container.addChild(body);
+  container.addChild(createText(textNodes, node.label, palette.text, 11, '600', port?.side === 'west' ? 18 : 10, 13));
+}
+
+function drawLogicNode(container: Container, node: SchematicNodeLayout, palette: AsicSchematicPalette, textNodes: BitmapText[]) {
+  const body = new Graphics({ label: `schematic-node-body:${node.id}` });
+  const fill = palette.warning;
+
+  drawLogicNodeOutline(body, node, 0, 0)
+    .fill({ color: fill, alpha: 0.2 })
+    .stroke({ color: palette.warning, alpha: 0.9, width: 1.4 });
+  container.addChild(body);
+
+  const label = createText(textNodes, node.label, palette.text, 9, '600', node.width / 2, node.height / 2);
+  label.anchor.set(0.5, 0.5);
+  container.addChild(label);
+}
+
+function drawPorts(container: Container, node: SchematicNodeLayout, palette: AsicSchematicPalette, textNodes: BitmapText[] = []) {
+  const showPortLabels = !isLogicCellKind(node.cellKind);
+
   node.ports.forEach((port) => {
     const localY = port.y - node.y;
-    const sideMultiplier = port.side === 'west' ? 1 : -1;
-    const anchorX = port.side === 'west' ? -1 : node.width + 1;
     const labelX = port.side === 'west' ? 10 : node.width - 10;
-    const portColor = port.direction === 'input' ? palette.info : port.direction === 'output' ? palette.success : palette.warning;
 
-    container.addChild(new Graphics().circle(anchorX, localY, 3.6).fill({ color: portColor, alpha: 0.9 }));
-    container.addChild(new Graphics().moveTo(anchorX, localY).lineTo(anchorX + sideMultiplier * 8, localY).stroke({ color: portColor, alpha: 0.64, width: 1 }));
+    if (!showPortLabels) {
+      return;
+    }
 
     const portText = createText(textNodes, port.name, palette.textMuted, 9, '400', labelX, localY - 6);
     if (port.side === 'east') {
@@ -282,48 +435,237 @@ function drawPorts(container: Container, node: SchematicNodeLayout, palette: Asi
   });
 }
 
-function createText(textNodes: Text[], text: string, fill: number, fontSize: number, fontWeight: '400' | '600', x: number, y: number) {
-  const textNode = new Text({
+function drawNodeOutline(graphics: Graphics, node: SchematicNodeLayout, x: number, y: number) {
+  if (node.kind === 'port') {
+    return drawIoPortOutline(graphics, node, x, y);
+  }
+
+  if (isLogicCellKind(node.cellKind)) {
+    return drawLogicNodeOutline(graphics, node, x, y);
+  }
+
+  return graphics.roundRect(x, y, node.width, node.height, 8);
+}
+
+function drawIoPortOutline(graphics: Graphics, node: SchematicNodeLayout, x: number, y: number) {
+  const port = node.ports[0];
+  const notch = 13;
+
+  if (port?.direction === 'inout') {
+    return graphics
+      .moveTo(x + notch, y)
+      .lineTo(x + node.width - notch, y)
+      .lineTo(x + node.width, y + node.height / 2)
+      .lineTo(x + node.width - notch, y + node.height)
+      .lineTo(x + notch, y + node.height)
+      .lineTo(x, y + node.height / 2)
+      .closePath();
+  }
+
+  if (port?.direction === 'output') {
+    return graphics
+      .moveTo(x + notch, y)
+      .lineTo(x + node.width, y)
+      .lineTo(x + node.width, y + node.height)
+      .lineTo(x + notch, y + node.height)
+      .lineTo(x, y + node.height / 2)
+      .closePath();
+  }
+
+  return graphics
+    .moveTo(x, y)
+    .lineTo(x + node.width - notch, y)
+    .lineTo(x + node.width, y + node.height / 2)
+    .lineTo(x + node.width - notch, y + node.height)
+    .lineTo(x, y + node.height)
+    .closePath();
+}
+
+function drawLogicNodeOutline(graphics: Graphics, node: SchematicNodeLayout, x: number, y: number) {
+  const kind = node.cellKind?.toLowerCase() ?? 'logic';
+
+  if (kind === 'mux') {
+    return graphics
+      .moveTo(x + 20, y)
+      .lineTo(x + node.width - 8, y + 10)
+      .lineTo(x + node.width - 8, y + node.height - 10)
+      .lineTo(x + 20, y + node.height)
+      .lineTo(x + 8, y + node.height - 12)
+      .lineTo(x + 8, y + 12)
+      .closePath();
+  }
+
+  if (kind === 'not') {
+    return graphics
+      .moveTo(x + 14, y + 10)
+      .lineTo(x + node.width - 24, y + node.height / 2)
+      .lineTo(x + 14, y + node.height - 10)
+      .closePath()
+      .circle(x + node.width - 14, y + node.height / 2, 5);
+  }
+
+  if (kind === 'or' || kind === 'xor' || kind === 'xnor') {
+    return graphics
+      .moveTo(x + 14, y)
+      .quadraticCurveTo(x + node.width - 10, y, x + node.width, y + node.height / 2)
+      .quadraticCurveTo(x + node.width - 10, y + node.height, x + 14, y + node.height)
+      .quadraticCurveTo(x + 30, y + node.height / 2, x + 14, y);
+  }
+
+  return graphics
+    .moveTo(x + 8, y)
+    .lineTo(x + node.width / 2, y)
+    .quadraticCurveTo(x + node.width - 2, y, x + node.width - 2, y + node.height / 2)
+    .quadraticCurveTo(x + node.width - 2, y + node.height, x + node.width / 2, y + node.height)
+    .lineTo(x + 8, y + node.height)
+    .closePath();
+}
+
+interface NodeTooltip {
+  container: Container;
+  body: Graphics;
+  nameText: BitmapText;
+  typeText: BitmapText;
+}
+
+function createNodeTooltip(palette: AsicSchematicPalette, textNodes: BitmapText[]): NodeTooltip {
+  const container = new Container({ label: 'schematic-node-tooltip', visible: false, zIndex: 100 });
+  const body = new Graphics({ label: 'schematic-node-tooltip-body' });
+  const nameText = createText(textNodes, '', palette.text, 10, '600', 8, 6);
+  const typeText = createText(textNodes, '', palette.textMuted, 10, '400', 8, 22);
+
+  container.addChild(body, nameText, typeText);
+  return { container, body, nameText, typeText };
+}
+
+function showNodeTooltip(tooltip: NodeTooltip, node: SchematicNodeLayout) {
+  tooltip.nameText.text = `name:${node.label}`;
+  tooltip.typeText.text = `type:${node.tooltipType}`;
+  const width = Math.max(96, Math.max(tooltip.nameText.text.length, tooltip.typeText.text.length) * 6.8 + 16);
+  const height = 40;
+
+  tooltip.body
+    .clear()
+    .roundRect(0, 0, width, height, 6)
+    .fill({ color: 0x0f172a, alpha: 0.92 })
+    .stroke({ color: 0xffffff, alpha: 0.16, width: 1 });
+  tooltip.container.position.set(node.x + node.width + 12, node.y - 6);
+  tooltip.container.visible = true;
+}
+
+function hideNodeTooltip(tooltip: NodeTooltip) {
+  tooltip.container.visible = false;
+}
+
+function createText(textNodes: BitmapText[], text: string, fill: number, fontSize: number, fontWeight: '400' | '600', x: number, y: number) {
+  ensureSchematicBitmapFonts();
+
+  const textNode = new BitmapText({
     text,
     style: {
       fill,
-      fontFamily: 'JetBrains Mono, Consolas, monospace',
+      fontFamily: fontWeight === '600' ? schematicBitmapFontSemibold : schematicBitmapFontRegular,
       fontSize,
-      fontWeight,
     },
     x,
     y,
-    resolution: 2,
   });
 
   textNodes.push(textNode);
   return textNode;
 }
 
-function updateTextZoom(textNodes: readonly Text[], zoom: number): SchematicTextZoomState {
-  const safeZoom = Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
-  const labelScale = safeZoom > 1 ? 1 / safeZoom : 1;
-  const textResolution = Math.min(4, Math.max(2, Math.ceil(safeZoom * 2)));
-
-  textNodes.forEach((textNode) => {
-    textNode.scale.set(labelScale);
-    (textNode as Text & { resolution: number }).resolution = textResolution;
-  });
-
-  return { labelScale, textResolution };
+function updateTextZoom(): SchematicTextZoomState {
+  return {
+    labelScale: 1,
+    textFontStatus: 'bitmap-ready',
+    textRenderer: 'bitmap',
+    textResolution: schematicBitmapFontResolution,
+  };
 }
 
-function getEdgeColor(edge: SchematicEdgeLayout, palette: AsicSchematicPalette) {
-  switch (edge.kind) {
-    case 'clock':
-      return palette.clock;
-    case 'reset':
-      return palette.reset;
-    case 'control':
-      return palette.warning;
-    case 'bus':
-      return palette.accent;
-    default:
-      return palette.wire;
+function drawAlignmentGuides(
+  graphics: Graphics,
+  guides: readonly SchematicAlignmentGuide[],
+  palette: AsicSchematicPalette,
+): SchematicAlignmentGuideState {
+  graphics.clear();
+
+  guides.forEach((guide) => {
+    const color = guide.kind === 'center' ? palette.accent : palette.warning;
+    const alpha = guide.kind === 'center' ? 0.82 : 0.58;
+
+    if (guide.orientation === 'vertical') {
+      graphics.moveTo(guide.position, guide.start).lineTo(guide.position, guide.end).stroke({ color, alpha, width: 1, pixelLine: true });
+    } else {
+      graphics.moveTo(guide.start, guide.position).lineTo(guide.end, guide.position).stroke({ color, alpha, width: 1, pixelLine: true });
+    }
+  });
+
+  return { count: guides.length, visible: guides.length > 0 };
+}
+
+function normalizeGridSize(gridSize: number) {
+  return Number.isFinite(gridSize) && gridSize > 0 ? Math.max(1, Math.round(gridSize)) : 40;
+}
+
+function getEffectiveGridStep(gridSize: number, zoom: number) {
+  let step = gridSize;
+  while (step * zoom < 8) {
+    step *= 2;
   }
+
+  return step;
+}
+
+function getVisibleWorldRect(camera: SchematicCameraState, viewport: SchematicViewport) {
+  const safeZoom = camera.zoom > 0 ? camera.zoom : 1;
+
+  return {
+    x: (0 - camera.x) / safeZoom,
+    y: (0 - camera.y) / safeZoom,
+    width: viewport.width / safeZoom,
+    height: viewport.height / safeZoom,
+  };
+}
+
+const schematicBitmapFontRegular = 'PristineSchematicBitmapRegular';
+const schematicBitmapFontSemibold = 'PristineSchematicBitmapSemibold';
+const schematicBitmapFontResolution = 3;
+let schematicBitmapFontsInstalled = false;
+
+function ensureSchematicBitmapFonts() {
+  if (schematicBitmapFontsInstalled) {
+    return;
+  }
+
+  const commonOptions = {
+    chars: [[' ', '~']],
+    dynamicFill: true,
+    padding: 6,
+    resolution: schematicBitmapFontResolution,
+  };
+
+  BitmapFont.install({
+    ...commonOptions,
+    name: schematicBitmapFontRegular,
+    style: {
+      fill: 0xffffff,
+      fontFamily: 'JetBrains Mono, Consolas, monospace',
+      fontSize: 16,
+      fontWeight: '400',
+    },
+  });
+  BitmapFont.install({
+    ...commonOptions,
+    name: schematicBitmapFontSemibold,
+    style: {
+      fill: 0xffffff,
+      fontFamily: 'JetBrains Mono, Consolas, monospace',
+      fontSize: 16,
+      fontWeight: '600',
+    },
+  });
+
+  schematicBitmapFontsInstalled = true;
 }

@@ -2,8 +2,9 @@ import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState }
 import { Application } from 'pixi.js';
 
 import { readAsicSchematicPalette } from './asicSchematicPalette';
-import { createAsicSchematicScene, type AsicSchematicScene, type SchematicTextZoomState, type SchematicWorldRect } from './createAsicSchematicScene';
-import { resolveSchematicNodeOverlaps, schematicGridSize, snapSchematicNodePositions, type SchematicNodePositionOverrides } from './asicSchematicLayout';
+import { createAsicSchematicScene, getSchematicEdgeColor, type AsicSchematicScene, type SchematicAlignmentGuideState, type SchematicGridState, type SchematicTextZoomState, type SchematicWorldRect } from './createAsicSchematicScene';
+import { getSchematicAlignmentGuides, type SchematicAlignmentGuide } from './asicSchematicGuides';
+import { isLogicCellKind, resolveSchematicNodeOverlaps, snapSchematicNodePositions, type SchematicNodePositionOverrides } from './asicSchematicLayout';
 import type { SchematicEdgeLayout, SchematicLayoutBounds, SchematicLayoutResult, SchematicNodeLayout, SchematicPoint } from './asicSchematicTypes';
 
 type PixiRendererPreference = 'webgpu' | 'webgl';
@@ -54,9 +55,13 @@ export interface AsicSchematicCanvasHandle {
 }
 
 interface AsicSchematicCanvasProps {
+  alignmentGuidesEnabled: boolean;
+  gridEnabled: boolean;
+  gridSize: number;
   layout: SchematicLayoutResult;
   selectedNodeIds: readonly string[];
   selectedEdgeIds: readonly string[];
+  snapToGrid: boolean;
   themeKey: string;
   onCameraChange?: (camera: CameraState) => void;
   onModuleOpen?: (moduleId: string) => void;
@@ -71,11 +76,21 @@ const maxZoom = 2.4;
 const dragThreshold = 4;
 const wheelLinePixels = 40;
 const defaultCamera: CameraState = { x: 24, y: 24, zoom: 1 };
+const defaultTextZoom: SchematicTextZoomState = {
+  labelScale: 1,
+  textFontStatus: 'bitmap-ready',
+  textRenderer: 'bitmap',
+  textResolution: 3,
+};
 
 export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSchematicCanvasProps>(function AsicSchematicCanvas({
+  alignmentGuidesEnabled,
+  gridEnabled,
+  gridSize,
   layout,
   selectedNodeIds,
   selectedEdgeIds,
+  snapToGrid,
   themeKey,
   onCameraChange,
   onModuleOpen,
@@ -99,10 +114,13 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
   const onEdgeSelectionChangeRef = useRef(onEdgeSelectionChange);
   const onNodePositionsChangeRef = useRef(onNodePositionsChange);
   const cameraRef = useRef<CameraState>(defaultCamera);
+  const settingsRef = useRef({ alignmentGuidesEnabled, gridEnabled, gridSize, snapToGrid });
   const [renderer, setRenderer] = useState<PixiRendererStatus>('initializing');
   const [error, setError] = useState<string | null>(null);
   const [camera, setCamera] = useState(defaultCamera);
-  const [textZoom, setTextZoom] = useState<SchematicTextZoomState>({ labelScale: 1, textResolution: 2 });
+  const [textZoom, setTextZoom] = useState<SchematicTextZoomState>(defaultTextZoom);
+  const [gridState, setGridState] = useState<SchematicGridState>({ effectiveStep: gridSize, enabled: gridEnabled, gridSize, lineCount: 0 });
+  const [alignmentGuideState, setAlignmentGuideState] = useState<SchematicAlignmentGuideState>({ count: 0, visible: false });
   const [tickerActive, setTickerActive] = useState(false);
   const [layerNames, setLayerNames] = useState<string[]>([]);
 
@@ -113,14 +131,21 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
   onNodeSelectionChangeRef.current = onNodeSelectionChange;
   onEdgeSelectionChangeRef.current = onEdgeSelectionChange;
   onNodePositionsChangeRef.current = onNodePositionsChange;
+  settingsRef.current = { alignmentGuidesEnabled, gridEnabled, gridSize, snapToGrid };
 
   const moduleId = layout.module.id;
   const moduleNodes = useMemo(() => layout.nodes.filter((node) => node.kind === 'module'), [layout]);
+  const logicNodes = useMemo(() => moduleNodes.filter((node) => isLogicCellKind(node.cellKind)), [moduleNodes]);
+  const schematicPalette = useMemo(() => readAsicSchematicPalette(), [themeKey]);
   const firstDraggableNode = moduleNodes[0] ?? null;
   const secondDraggableNode = moduleNodes[1] ?? null;
   const firstDrillableNode = useMemo(() => moduleNodes.find((node) => node.canDrillDown && node.moduleId) ?? null, [moduleNodes]);
   const moduleNodeSnapshot = useMemo(() => JSON.stringify(moduleNodes.map((node) => ({
     id: node.id,
+    label: node.label,
+    subtitle: node.subtitle,
+    type: node.tooltipType,
+    cellKind: node.cellKind ?? 'module',
     x: roundLayoutCoordinate(node.x),
     y: roundLayoutCoordinate(node.y),
     width: roundLayoutCoordinate(node.width),
@@ -129,12 +154,40 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
     centerY: roundLayoutCoordinate(node.y + node.height / 2),
     canDrillDown: node.canDrillDown,
   }))), [moduleNodes]);
+  const logicNodeSnapshot = useMemo(() => JSON.stringify(moduleNodes
+    .filter((node) => isLogicCellKind(node.cellKind))
+    .map((node) => ({
+      id: node.id,
+      name: node.label,
+      subtitle: node.subtitle,
+      type: node.tooltipType,
+      cellKind: node.cellKind,
+      x: roundLayoutCoordinate(node.x),
+      y: roundLayoutCoordinate(node.y),
+      width: roundLayoutCoordinate(node.width),
+      height: roundLayoutCoordinate(node.height),
+      centerX: roundLayoutCoordinate(node.x + node.width / 2),
+      centerY: roundLayoutCoordinate(node.y + node.height / 2),
+    }))), [moduleNodes]);
+  const portNodeSnapshot = useMemo(() => JSON.stringify(layout.nodes
+    .filter((node) => node.kind === 'port')
+    .map((node) => ({
+      id: node.id,
+      name: node.label,
+      subtitle: node.subtitle,
+      type: node.tooltipType,
+      direction: node.ports[0]?.direction ?? 'inout',
+      centerX: roundLayoutCoordinate(node.x + node.width / 2),
+      centerY: roundLayoutCoordinate(node.y + node.height / 2),
+    }))), [layout.nodes]);
   const firstSelectableEdge = useMemo(() => layout.edges.find((edge) => edge.points.length > 1) ?? null, [layout.edges]);
   const firstSignalEdge = useMemo(() => layout.edges.find((edge) => !edge.isBus && edge.points.length > 1) ?? null, [layout.edges]);
   const firstBusEdge = useMemo(() => layout.edges.find((edge) => edge.isBus && edge.points.length > 1) ?? null, [layout.edges]);
   const firstSelectableEdgePoint = firstSelectableEdge ? getEdgeHitPoint(firstSelectableEdge) : null;
   const firstSignalEdgePoint = firstSignalEdge ? getEdgeHitPoint(firstSignalEdge) : null;
   const firstBusEdgePoint = firstBusEdge ? getEdgeHitPoint(firstBusEdge) : null;
+  const selectedNodeIdsKey = selectedNodeIds.join(',');
+  const selectedEdgeIdsKey = selectedEdgeIds.join(',');
   const edgeRouteSnapshot = useMemo(() => JSON.stringify(layout.edges.map((edge) => ({
     id: edge.id,
     isBus: edge.isBus,
@@ -142,10 +195,43 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
     style: edge.isBus ? 'bus' : 'signal',
     fromNodeId: edge.from.instanceId ?? `io:${edge.from.portId}`,
     toNodeId: edge.to.instanceId ?? `io:${edge.to.portId}`,
+    hasHorizontalStubs: hasHorizontalRouteStubs(edge.points),
     points: edge.points.map((point) => ({ x: roundLayoutCoordinate(point.x), y: roundLayoutCoordinate(point.y) })),
   }))), [layout.edges]);
-  const selectedNodeIdsKey = selectedNodeIds.join(',');
-  const selectedEdgeIdsKey = selectedEdgeIds.join(',');
+  const modulePortSnapshot = useMemo(() => JSON.stringify(moduleNodes.flatMap((node) => node.ports.map((port) => ({
+    nodeId: node.id,
+    portId: port.id,
+    name: port.name,
+    direction: port.direction,
+    side: port.side,
+    x: roundLayoutCoordinate(port.x),
+    y: roundLayoutCoordinate(port.y),
+  })))), [moduleNodes]);
+  const selectedNodeHighlightSnapshot = useMemo(() => JSON.stringify(selectedNodeIds.flatMap((nodeId) => {
+    const node = layout.nodes.find((candidate) => candidate.id === nodeId);
+
+    if (!node) {
+      return [];
+    }
+
+    return [{
+      id: node.id,
+      kind: node.kind,
+      outline: node.kind === 'port' ? 'io-port' : isLogicCellKind(node.cellKind) ? 'logic-shape' : 'module-body',
+      x: roundLayoutCoordinate(node.x),
+      y: roundLayoutCoordinate(node.y),
+      width: roundLayoutCoordinate(node.width),
+      height: roundLayoutCoordinate(node.height),
+      includesExternalLabel: false,
+    }];
+  })), [layout.nodes, selectedNodeIdsKey]);
+  const portWireMisalignmentCount = useMemo(() => countPortWireMisalignments(layout), [layout]);
+  const selectedEdgeHighlightColor = useMemo(() => {
+    const selectedEdgeId = selectedEdgeIds[0];
+    const selectedEdge = selectedEdgeId ? layout.edges.find((edge) => edge.id === selectedEdgeId) : null;
+
+    return selectedEdge ? formatHexColor(getSchematicEdgeColor(selectedEdge, schematicPalette)) : undefined;
+  }, [layout.edges, schematicPalette, selectedEdgeIdsKey]);
 
   useImperativeHandle(ref, () => ({
     fitToView,
@@ -219,6 +305,18 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
   }, [layout, themeKey]);
 
   useEffect(() => {
+    updateSceneGrid();
+    requestRender();
+  }, [gridEnabled, gridSize]);
+
+  useEffect(() => {
+    if (!alignmentGuidesEnabled) {
+      clearAlignmentGuides();
+      requestRender();
+    }
+  }, [alignmentGuidesEnabled]);
+
+  useEffect(() => {
     sceneRef.current?.updateSelection(selectedNodeIds);
     requestRender();
   }, [selectedNodeIdsKey]);
@@ -246,6 +344,10 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
     }
 
     const scene = createAsicSchematicScene({
+      gridOptions: {
+        enabled: settingsRef.current.gridEnabled,
+        gridSize: settingsRef.current.gridSize,
+      },
       layout,
       palette: readAsicSchematicPalette(),
       selectedNodeIds,
@@ -255,12 +357,19 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
     sceneRef.current = scene;
     setLayerNames(Object.keys(scene.layers));
     app.stage.addChild(scene.world);
+    updateSceneGrid();
     requestRender();
   }
 
   function installCanvasInteractions(app: Application) {
     const canvas = app.canvas;
     let dragState: DragState | null = null;
+    let canvasHovered = false;
+    let canvasFocused = false;
+
+    const updateKeyboardActiveAttribute = () => {
+      hostRef.current?.setAttribute('data-keyboard-active', canvasHovered || canvasFocused ? 'true' : 'false');
+    };
 
     const handleWheel = (event: WheelEvent) => {
       event.preventDefault();
@@ -301,6 +410,8 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
         return;
       }
 
+      canvas.focus({ preventScroll: true });
+
       const clientPoint = { x: event.clientX, y: event.clientY };
       const node = findDraggableNodeAt(clientPoint, canvas);
 
@@ -328,9 +439,12 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
         };
         canvas.style.cursor = 'grabbing';
       } else {
-        const edge = findSelectableEdgeAt(clientPoint, canvas);
+        const selectableNode = findSchematicNodeAt(clientPoint, canvas);
+        const edge = selectableNode ? null : findSelectableEdgeAt(clientPoint, canvas);
 
-        if (edge) {
+        if (selectableNode) {
+          applyClickSelection(selectableNode.id, event.ctrlKey || event.metaKey);
+        } else if (edge) {
           dragState = {
             mode: 'edge',
             pointerId: event.pointerId,
@@ -358,6 +472,7 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
 
     const handlePointerMove = (event: PointerEvent) => {
       if (!dragState || dragState.pointerId !== event.pointerId) {
+        setHoveredNodeDataAttributes(findSchematicNodeAt({ x: event.clientX, y: event.clientY }, canvas));
         return;
       }
 
@@ -376,7 +491,11 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
         const nextPositions = resolveSchematicNodeOverlaps(
           layoutRef.current,
           getDraggedNodePositions(dragState.nodeStarts, delta),
-          { selectedNodeIds: dragState.nodeIds, snapToGrid: true, gridSize: schematicGridSize },
+          {
+            selectedNodeIds: dragState.nodeIds,
+            snapToGrid: settingsRef.current.snapToGrid,
+            gridSize: settingsRef.current.gridSize,
+          },
         );
 
         dragState = {
@@ -393,6 +512,8 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
           sceneRef.current?.nodeContainers.get(nodeId)?.position.set(position.x, position.y);
         });
         sceneRef.current?.updateSelection(dragState.nodeIds, nextPositions);
+        sceneRef.current?.updateDragFocus(dragState.nodeIds);
+        updateAlignmentGuidesForDrag(dragState.nodeIds, nextPositions);
         setActiveDragDataAttributes(dragState.nodeIds, nextPositions);
         requestRender();
         return;
@@ -445,12 +566,14 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
         } else {
           applyClickSelection(dragState.nodeIds[0] ?? null, dragState.additive);
         }
+        clearAlignmentGuides();
+        sceneRef.current?.updateDragFocus(null);
         clearActiveDragDataAttributes();
         canvas.style.cursor = '';
       }
 
       if (dragState?.mode === 'edge') {
-        if (!dragState.moved) {
+        if (!dragState.moved && dragState.edgeId) {
           commitEdgeSelection([dragState.edgeId]);
         }
 
@@ -486,19 +609,72 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
       onModuleOpenRef.current?.(node.moduleId);
     };
 
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!canvasHovered && !canvasFocused || isEditableKeyboardTarget(event.target)) {
+        return;
+      }
+
+      const direction = getArrowPanDirection(event.key);
+      if (!direction) {
+        return;
+      }
+
+      event.preventDefault();
+      const step = settingsRef.current.gridSize * (event.shiftKey ? 4 : 1);
+      const current = cameraRef.current;
+
+      setCameraState({
+        ...current,
+        x: current.x + direction.x * step,
+        y: current.y + direction.y * step,
+      });
+    };
+
+    const handleMouseEnter = () => {
+      canvasHovered = true;
+      updateKeyboardActiveAttribute();
+    };
+
+    const handleMouseLeave = () => {
+      canvasHovered = false;
+      clearHoveredNodeDataAttributes();
+      updateKeyboardActiveAttribute();
+    };
+
+    const handleFocus = () => {
+      canvasFocused = true;
+      updateKeyboardActiveAttribute();
+    };
+
+    const handleBlur = () => {
+      canvasFocused = false;
+      updateKeyboardActiveAttribute();
+    };
+
     canvas.addEventListener('wheel', handleWheel, { passive: false });
+    canvas.addEventListener('keydown', handleKeyDown);
+    canvas.addEventListener('mouseenter', handleMouseEnter);
+    canvas.addEventListener('mouseleave', handleMouseLeave);
+    canvas.addEventListener('focus', handleFocus);
+    canvas.addEventListener('blur', handleBlur);
     canvas.addEventListener('pointerdown', handlePointerDown);
     canvas.addEventListener('pointermove', handlePointerMove);
     canvas.addEventListener('pointerup', stopDragging);
     canvas.addEventListener('pointercancel', stopDragging);
     canvas.addEventListener('dblclick', handleDoubleClick);
     canvas.dataset.schematicCanvas = 'true';
+    canvas.tabIndex = 0;
     canvas.style.width = '100%';
     canvas.style.height = '100%';
     canvas.style.display = 'block';
 
     return () => {
       canvas.removeEventListener('wheel', handleWheel);
+      canvas.removeEventListener('keydown', handleKeyDown);
+      canvas.removeEventListener('mouseenter', handleMouseEnter);
+      canvas.removeEventListener('mouseleave', handleMouseLeave);
+      canvas.removeEventListener('focus', handleFocus);
+      canvas.removeEventListener('blur', handleBlur);
       canvas.removeEventListener('pointerdown', handlePointerDown);
       canvas.removeEventListener('pointermove', handlePointerMove);
       canvas.removeEventListener('pointerup', stopDragging);
@@ -529,6 +705,12 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
   }
 
   function findDraggableNodeAt(clientPoint: ScreenPoint, canvas: HTMLCanvasElement): SchematicNodeLayout | null {
+    const node = findSchematicNodeAt(clientPoint, canvas);
+
+    return node?.kind === 'module' ? node : null;
+  }
+
+  function findSchematicNodeAt(clientPoint: ScreenPoint, canvas: HTMLCanvasElement): SchematicNodeLayout | null {
     const canvasRect = canvas.getBoundingClientRect();
     const worldPoint = screenToWorld({
       x: clientPoint.x - canvasRect.left,
@@ -540,10 +722,6 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
       const node = nodes[index];
 
       if (!node) {
-        continue;
-      }
-
-      if (node.kind !== 'module') {
         continue;
       }
 
@@ -597,7 +775,7 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
   }
 
   function getDraggedNodePositions(nodeStarts: SchematicNodePositionOverrides, delta: ScreenPoint): SchematicNodePositionOverrides {
-    return snapSchematicNodePositions(Object.fromEntries(Object.entries(nodeStarts).flatMap(([nodeId, startPosition]) => {
+    const positions = Object.fromEntries(Object.entries(nodeStarts).flatMap(([nodeId, startPosition]) => {
       if (!startPosition) {
         return [];
       }
@@ -606,7 +784,11 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
         x: roundLayoutCoordinate(startPosition.x + delta.x / cameraRef.current.zoom),
         y: roundLayoutCoordinate(startPosition.y + delta.y / cameraRef.current.zoom),
       }]];
-    })), schematicGridSize);
+    }));
+
+    return settingsRef.current.snapToGrid
+      ? snapSchematicNodePositions(positions, settingsRef.current.gridSize)
+      : positions;
   }
 
   function getWorldRectFromClientPoints(startClient: ScreenPoint, endClient: ScreenPoint, canvas: HTMLCanvasElement): SchematicWorldRect {
@@ -624,12 +806,8 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
     };
   }
 
-  function getModuleNodesInRect(rect: SchematicWorldRect) {
+  function getSelectableNodesInRect(rect: SchematicWorldRect) {
     return layoutRef.current.nodes.filter((node) => {
-      if (node.kind !== 'module') {
-        return false;
-      }
-
       return node.x < rect.x + rect.width
         && node.x + node.width > rect.x
         && node.y < rect.y + rect.height
@@ -658,7 +836,7 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
   }
 
   function applyMarqueeSelection(rect: SchematicWorldRect, additive: boolean) {
-    const hitNodeIds = getModuleNodesInRect(rect).map((node) => node.id);
+    const hitNodeIds = getSelectableNodesInRect(rect).map((node) => node.id);
 
     if (!additive) {
       commitSelection(hitNodeIds);
@@ -705,11 +883,11 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
   }
 
   function normalizeSelectedNodeIds(nodeIds: readonly string[]) {
-    const moduleNodeIds = new Set(layoutRef.current.nodes.filter((node) => node.kind === 'module').map((node) => node.id));
+    const selectableNodeIds = new Set(layoutRef.current.nodes.map((node) => node.id));
     const uniqueNodeIds = new Set<string>();
 
     nodeIds.forEach((nodeId) => {
-      if (moduleNodeIds.has(nodeId)) {
+      if (selectableNodeIds.has(nodeId)) {
         uniqueNodeIds.add(nodeId);
       }
     });
@@ -748,6 +926,7 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
     host.setAttribute('data-active-drag-node-ids', nodeIds.join(','));
     host.setAttribute('data-active-drag-node-x', firstPosition.x.toFixed(1));
     host.setAttribute('data-active-drag-node-y', firstPosition.y.toFixed(1));
+    host.setAttribute('data-active-drag-hidden-edge-count', String(countConnectedEdges(nodeIds)));
   }
 
   function setLastDragDataAttributes(nodeIds: readonly string[], positions: SchematicNodePositionOverrides) {
@@ -781,6 +960,85 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
     host.removeAttribute('data-active-drag-node-ids');
     host.removeAttribute('data-active-drag-node-x');
     host.removeAttribute('data-active-drag-node-y');
+    host.removeAttribute('data-active-drag-hidden-edge-count');
+  }
+
+  function setHoveredNodeDataAttributes(node: SchematicNodeLayout | null) {
+    const host = hostRef.current;
+
+    if (!host) {
+      return;
+    }
+
+    if (!node) {
+      clearHoveredNodeDataAttributes();
+      return;
+    }
+
+    host.setAttribute('data-hover-node-id', node.id);
+    host.setAttribute('data-hover-node-label', `name:${node.label}`);
+    host.setAttribute('data-hover-node-type', `type:${node.tooltipType}`);
+  }
+
+  function clearHoveredNodeDataAttributes() {
+    const host = hostRef.current;
+
+    if (!host) {
+      return;
+    }
+
+    host.removeAttribute('data-hover-node-id');
+    host.removeAttribute('data-hover-node-label');
+    host.removeAttribute('data-hover-node-type');
+  }
+
+  function countConnectedEdges(nodeIds: readonly string[]) {
+    const selectedNodeIds = new Set(nodeIds);
+
+    return layoutRef.current.edges.filter((edge) => {
+      const fromNodeId = edge.from.instanceId ?? `io:${edge.from.portId}`;
+      const toNodeId = edge.to.instanceId ?? `io:${edge.to.portId}`;
+
+      return selectedNodeIds.has(fromNodeId) || selectedNodeIds.has(toNodeId);
+    }).length;
+  }
+
+  function updateAlignmentGuidesForDrag(nodeIds: readonly string[], positions: SchematicNodePositionOverrides) {
+    const guides = settingsRef.current.alignmentGuidesEnabled
+      ? getSchematicAlignmentGuides(layoutRef.current, nodeIds, positions, Math.max(2, 8 / cameraRef.current.zoom))
+      : [];
+    const nextState = sceneRef.current?.updateAlignmentGuides(guides) ?? { count: 0, visible: false };
+
+    setAlignmentGuideState((currentState) => currentState.count === nextState.count && currentState.visible === nextState.visible
+      ? currentState
+      : nextState);
+    setAlignmentGuideDataAttributes(nextState, guides);
+  }
+
+  function clearAlignmentGuides() {
+    const nextState = sceneRef.current?.updateAlignmentGuides([]) ?? { count: 0, visible: false };
+
+    setAlignmentGuideState((currentState) => currentState.count === nextState.count && currentState.visible === nextState.visible
+      ? currentState
+      : nextState);
+    setAlignmentGuideDataAttributes(nextState, []);
+  }
+
+  function setAlignmentGuideDataAttributes(state: SchematicAlignmentGuideState, guides: readonly SchematicAlignmentGuide[]) {
+    const host = hostRef.current;
+
+    if (!host) {
+      return;
+    }
+
+    host.setAttribute('data-alignment-guides-visible', state.visible ? 'true' : 'false');
+    host.setAttribute('data-alignment-guides-count', String(state.count));
+
+    if (guides.length > 0) {
+      host.setAttribute('data-alignment-guides', guides.map((guide) => `${guide.orientation}:${guide.kind}:${guide.position.toFixed(1)}`).join('|'));
+    } else {
+      host.removeAttribute('data-alignment-guides');
+    }
   }
 
   function setCameraState(nextCamera: CameraState) {
@@ -805,12 +1063,39 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
     const nextCamera = cameraRef.current;
     scene.world.position.set(nextCamera.x, nextCamera.y);
     scene.world.scale.set(nextCamera.zoom);
+    updateSceneGrid(nextCamera);
     const nextTextZoom = scene.updateZoom(nextCamera.zoom);
     setTextZoom((currentTextZoom) => currentTextZoom.labelScale === nextTextZoom.labelScale
       && currentTextZoom.textResolution === nextTextZoom.textResolution
+      && currentTextZoom.textRenderer === nextTextZoom.textRenderer
+      && currentTextZoom.textFontStatus === nextTextZoom.textFontStatus
       ? currentTextZoom
       : nextTextZoom);
     requestRender();
+  }
+
+  function updateSceneGrid(nextCamera = cameraRef.current) {
+    const host = hostRef.current;
+    const scene = sceneRef.current;
+
+    if (!host || !scene) {
+      return;
+    }
+
+    const nextGridState = scene.updateGrid(nextCamera, {
+      width: Math.max(1, host.clientWidth),
+      height: Math.max(1, host.clientHeight),
+    }, {
+      enabled: settingsRef.current.gridEnabled,
+      gridSize: settingsRef.current.gridSize,
+    });
+
+    setGridState((currentState) => currentState.enabled === nextGridState.enabled
+      && currentState.gridSize === nextGridState.gridSize
+      && currentState.effectiveStep === nextGridState.effectiveStep
+      && currentState.lineCount === nextGridState.lineCount
+      ? currentState
+      : nextGridState);
   }
 
   function requestRender() {
@@ -853,15 +1138,37 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
       data-render-count={renderCountRef.current}
       data-layer-count={layerNames.length}
       data-layer-names={layerNames.join(',')}
-      data-grid-size={schematicGridSize}
+      data-grid-effective-step={gridState.effectiveStep}
+      data-grid-enabled={gridState.enabled ? 'true' : 'false'}
+      data-grid-line-count={gridState.lineCount}
+      data-grid-size={gridState.gridSize}
       data-label-scale={textZoom.labelScale.toFixed(3)}
+      data-text-font-status={textZoom.textFontStatus}
       data-text-resolution={textZoom.textResolution}
+      data-text-renderer={textZoom.textRenderer}
+      data-snap-to-grid={snapToGrid ? 'true' : 'false'}
+      data-alignment-guides-enabled={alignmentGuidesEnabled ? 'true' : 'false'}
+      data-alignment-guides-visible={alignmentGuideState.visible ? 'true' : 'false'}
+      data-alignment-guides-count={alignmentGuideState.count}
       data-selected-node-count={selectedNodeIds.length}
       data-selected-node-ids={selectedNodeIds.join(',')}
       data-selected-edge-count={selectedEdgeIds.length}
       data-selected-edge-ids={selectedEdgeIds.join(',')}
+      data-selected-edge-highlight-color={selectedEdgeHighlightColor}
       data-marquee-active="false"
       data-module-node-snapshot={moduleNodeSnapshot}
+      data-logic-node-snapshot={logicNodeSnapshot}
+      data-port-node-snapshot={portNodeSnapshot}
+      data-module-port-snapshot={modulePortSnapshot}
+      data-selected-node-highlight-snapshot={selectedNodeHighlightSnapshot}
+      data-port-marker-count={0}
+      data-edge-end-marker-count={0}
+      data-module-label-placement="outside-top-center"
+      data-gate-port-label-count={0}
+      data-logic-node-color-family={logicNodes.length > 0 ? 'yellow' : undefined}
+      data-logic-node-fill-color={logicNodes.length > 0 ? formatHexColor(schematicPalette.warning) : undefined}
+      data-logic-node-stroke-color={logicNodes.length > 0 ? formatHexColor(schematicPalette.warning) : undefined}
+      data-port-wire-misalignment-count={portWireMisalignmentCount}
       data-edge-route-snapshot={edgeRouteSnapshot}
       data-first-edge-id={firstSelectableEdge?.id}
       data-first-edge-center-x={firstSelectableEdgePoint ? firstSelectableEdgePoint.x.toFixed(1) : undefined}
@@ -894,6 +1201,36 @@ export const AsicSchematicCanvas = forwardRef<AsicSchematicCanvasHandle, AsicSch
     </div>
   );
 });
+
+function countPortWireMisalignments(layout: SchematicLayoutResult) {
+  const nodeMap = new Map(layout.nodes.map((node) => [node.id, node]));
+
+  return layout.edges.reduce((count, edge) => {
+    const firstPoint = edge.points[0];
+    const lastPoint = edge.points[edge.points.length - 1];
+    const fromPoint = findEndpointPortPoint(edge.from, nodeMap);
+    const toPoint = findEndpointPortPoint(edge.to, nodeMap);
+
+    return count
+      + (firstPoint && fromPoint && areSameLayoutPoint(firstPoint, fromPoint) ? 0 : 1)
+      + (lastPoint && toPoint && areSameLayoutPoint(lastPoint, toPoint) ? 0 : 1);
+  }, 0);
+}
+
+function findEndpointPortPoint(
+  endpoint: SchematicEdgeLayout['from'],
+  nodeMap: Map<string, SchematicNodeLayout>,
+): SchematicPoint | null {
+  const node = nodeMap.get(endpoint.instanceId ?? `io:${endpoint.portId}`);
+  const port = node?.ports.find((candidate) => candidate.id === endpoint.portId);
+
+  return port ? { x: port.x, y: port.y } : null;
+}
+
+function areSameLayoutPoint(first: SchematicPoint, second: SchematicPoint) {
+  return roundLayoutCoordinate(first.x) === roundLayoutCoordinate(second.x)
+    && roundLayoutCoordinate(first.y) === roundLayoutCoordinate(second.y);
+}
 
 function getEdgeHitPoint(edge: SchematicEdgeLayout): SchematicPoint {
   const segments = edge.points.slice(1).map((point, index) => ({
@@ -1031,4 +1368,49 @@ function roundLayoutCoordinate(value: number) {
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
+}
+
+function getArrowPanDirection(key: string): ScreenPoint | null {
+  switch (key) {
+    case 'ArrowLeft':
+      return { x: 1, y: 0 };
+    case 'ArrowRight':
+      return { x: -1, y: 0 };
+    case 'ArrowUp':
+      return { x: 0, y: 1 };
+    case 'ArrowDown':
+      return { x: 0, y: -1 };
+    default:
+      return null;
+  }
+}
+
+function isEditableKeyboardTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  return Boolean(target.closest('input, textarea, select, [contenteditable="true"], .monaco-editor'));
+}
+
+function hasHorizontalRouteStubs(points: readonly SchematicPoint[]) {
+  const firstPoint = points[0];
+  const firstStub = points[1];
+  const lastStub = points[points.length - 2];
+  const lastPoint = points[points.length - 1];
+
+  return Boolean(
+    firstPoint
+    && firstStub
+    && lastStub
+    && lastPoint
+    && firstPoint.y === firstStub.y
+    && firstPoint.x !== firstStub.x
+    && lastPoint.y === lastStub.y
+    && lastPoint.x !== lastStub.x,
+  );
+}
+
+function formatHexColor(color: number) {
+  return `#${Math.max(0, Math.min(0xffffff, color)).toString(16).padStart(6, '0')}`;
 }

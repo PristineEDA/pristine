@@ -55,6 +55,21 @@ type ModelSelection = {
   provider: ModelProviderOption;
 };
 
+type ProviderDisplayBucket =
+  | "official-cn-open-source"
+  | "official-cn-commercial"
+  | "official-global-commercial"
+  | "official-global-open-source"
+  | "gateway-primary"
+  | "gateway-more";
+
+type ProviderDisplaySection = {
+  id: "official" | "gateway";
+  title: string;
+  providers: readonly ModelProviderOption[];
+  overflowProviders?: readonly ModelProviderOption[];
+};
+
 type ModelSelectorContextValue = {
   providers: readonly ModelProviderOption[];
   selectedModelId: string;
@@ -66,6 +81,56 @@ const ModelSelectorContext = createContext<ModelSelectorContextValue | null>(
   null,
 );
 
+const OFFICIAL_CN_OPEN_SOURCE_PROVIDER_IDS = new Set([
+  "alibaba",
+  "alibaba-cn",
+  "deepseek",
+]);
+
+const OFFICIAL_CN_COMMERCIAL_PROVIDER_IDS = new Set([
+  "kimi-for-coding",
+  "minimax",
+  "minimax-cn",
+  "moonshotai",
+  "moonshotai-cn",
+  "stepfun",
+  "xiaomi",
+  "zai",
+  "zhipuai",
+]);
+
+const OFFICIAL_GLOBAL_COMMERCIAL_PROVIDER_IDS = new Set([
+  "anthropic",
+  "google",
+  "mistral",
+  "nova",
+  "nvidia",
+  "openai",
+  "perplexity",
+  "upstage",
+  "xai",
+]);
+
+const OFFICIAL_GLOBAL_OPEN_SOURCE_PROVIDER_IDS = new Set([
+  "abliteration-ai",
+  "llama",
+]);
+
+const GATEWAY_PRIMARY_PROVIDER_IDS = new Set(["openrouter"]);
+
+const PROVIDER_BUCKET_ORDER: readonly ProviderDisplayBucket[] = [
+  "official-cn-open-source",
+  "official-cn-commercial",
+  "official-global-commercial",
+  "official-global-open-source",
+  "gateway-primary",
+  "gateway-more",
+];
+
+const PROVIDER_BUCKET_RANK = new Map(
+  PROVIDER_BUCKET_ORDER.map((bucket, index) => [bucket, index]),
+);
+
 function useModelSelectorContext() {
   const ctx = useContext(ModelSelectorContext);
   if (!ctx) {
@@ -74,6 +139,98 @@ function useModelSelectorContext() {
     );
   }
   return ctx;
+}
+
+function getProviderDisplayBucket(
+  provider: ModelProviderOption,
+): ProviderDisplayBucket {
+  const providerId = provider.id.toLowerCase();
+
+  if (GATEWAY_PRIMARY_PROVIDER_IDS.has(providerId)) {
+    return "gateway-primary";
+  }
+
+  if (OFFICIAL_CN_OPEN_SOURCE_PROVIDER_IDS.has(providerId)) {
+    return "official-cn-open-source";
+  }
+
+  if (OFFICIAL_CN_COMMERCIAL_PROVIDER_IDS.has(providerId)) {
+    return "official-cn-commercial";
+  }
+
+  if (OFFICIAL_GLOBAL_COMMERCIAL_PROVIDER_IDS.has(providerId)) {
+    return "official-global-commercial";
+  }
+
+  if (OFFICIAL_GLOBAL_OPEN_SOURCE_PROVIDER_IDS.has(providerId)) {
+    return "official-global-open-source";
+  }
+
+  return "gateway-more";
+}
+
+function compareProvidersForDisplay(
+  left: ModelProviderOption,
+  right: ModelProviderOption,
+) {
+  const leftRank = PROVIDER_BUCKET_RANK.get(getProviderDisplayBucket(left)) ?? Number.MAX_SAFE_INTEGER;
+  const rightRank = PROVIDER_BUCKET_RANK.get(getProviderDisplayBucket(right)) ?? Number.MAX_SAFE_INTEGER;
+
+  if (leftRank !== rightRank) {
+    return leftRank - rightRank;
+  }
+
+  return left.name.localeCompare(right.name, undefined, { sensitivity: "base" });
+}
+
+function sortProvidersForDisplay(
+  providers: readonly ModelProviderOption[],
+) {
+  return [...providers].sort(compareProvidersForDisplay);
+}
+
+function buildProviderDisplaySections(
+  providers: readonly ModelProviderOption[],
+  {
+    collapseGatewayMore,
+  }: {
+    collapseGatewayMore: boolean;
+  },
+): ProviderDisplaySection[] {
+  const officialProviders = providers.filter((provider) => {
+    const bucket = getProviderDisplayBucket(provider);
+    return bucket !== "gateway-primary" && bucket !== "gateway-more";
+  });
+  const gatewayPrimaryProviders = providers.filter(
+    (provider) => getProviderDisplayBucket(provider) === "gateway-primary",
+  );
+  const gatewayMoreProviders = providers.filter(
+    (provider) => getProviderDisplayBucket(provider) === "gateway-more",
+  );
+  const sections: ProviderDisplaySection[] = [];
+
+  if (officialProviders.length > 0) {
+    sections.push({
+      id: "official",
+      title: "Official",
+      providers: officialProviders,
+    });
+  }
+
+  if (gatewayPrimaryProviders.length > 0 || gatewayMoreProviders.length > 0) {
+    sections.push({
+      id: "gateway",
+      title: "Gateway",
+      providers: collapseGatewayMore
+        ? gatewayPrimaryProviders
+        : [...gatewayPrimaryProviders, ...gatewayMoreProviders],
+      ...(collapseGatewayMore && gatewayMoreProviders.length > 0
+        ? { overflowProviders: gatewayMoreProviders }
+        : undefined),
+    });
+  }
+
+  return sections;
 }
 
 function createFallbackProvider(models: readonly ModelOption[] | undefined) {
@@ -265,9 +422,20 @@ function ModelSelectorContent({
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const shouldRestoreSearchFocusRef = useRef(false);
   const hasSearchQuery = searchQuery.trim().length > 0;
+  const orderedProviders = useMemo(
+    () => sortProvidersForDisplay(providers),
+    [providers],
+  );
   const filteredProviders = useMemo(
-    () => filterProvidersByQuery(providers, searchQuery),
-    [providers, searchQuery],
+    () => filterProvidersByQuery(orderedProviders, searchQuery),
+    [orderedProviders, searchQuery],
+  );
+  const displaySections = useMemo(
+    () => buildProviderDisplaySections(
+      hasSearchQuery ? filteredProviders : orderedProviders,
+      { collapseGatewayMore: !hasSearchQuery },
+    ),
+    [filteredProviders, hasSearchQuery, orderedProviders],
   );
   const normalizedActiveSearchIndex = filteredProviders.length > 0
     ? Math.min(activeSearchIndex, filteredProviders.length - 1)
@@ -385,11 +553,11 @@ function ModelSelectorContent({
           </div>
           <div data-slot="model-selector-provider-list" className="p-1">
             {filteredProviders.length > 0 ? (
-              filteredProviders.map((provider) => (
-                <ModelSelectorProvider
-                  key={provider.id}
-                  provider={provider}
-                  searchSelected={provider.id === activeSearchProviderId}
+              displaySections.map((section) => (
+                <ModelSelectorSection
+                  key={section.id}
+                  section={section}
+                  activeSearchProviderId={activeSearchProviderId}
                 />
               ))
             ) : (
@@ -400,6 +568,70 @@ function ModelSelectorContent({
           </div>
         </>}
     </DropdownMenuContent>
+  );
+}
+
+function ModelSelectorSection({
+  section,
+  activeSearchProviderId,
+}: {
+  section: ProviderDisplaySection;
+  activeSearchProviderId?: string;
+}) {
+  return (
+    <div
+      data-slot="model-selector-section"
+      data-section={section.id}
+      data-testid={`model-selector-section-${section.id}`}
+      className="pb-1 first:pt-0"
+    >
+      <div
+        data-slot="model-selector-section-header"
+        className="px-2 pb-1 pt-2 text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground first:pt-0"
+      >
+        {section.title}
+      </div>
+      {section.providers.map((provider) => (
+        <ModelSelectorProvider
+          key={provider.id}
+          provider={provider}
+          searchSelected={provider.id === activeSearchProviderId}
+        />
+      ))}
+      {section.overflowProviders && section.overflowProviders.length > 0 ? (
+        <ModelSelectorOverflowProviders providers={section.overflowProviders} />
+      ) : null}
+    </div>
+  );
+}
+
+function ModelSelectorOverflowProviders({
+  providers,
+}: {
+  providers: readonly ModelProviderOption[];
+}) {
+  return (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger
+        id="model-selector-provider-more"
+        data-slot="model-selector-provider-overflow"
+        data-testid="model-selector-provider-more"
+        className="min-w-0 text-[12px]"
+      >
+        <span className="min-w-0 flex-1 truncate font-normal">More</span>
+        <span className="mr-4 shrink-0 text-[10px] text-muted-foreground">
+          {providers.length}
+        </span>
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent
+        data-slot="model-selector-provider-overflow-content"
+        className="max-h-[min(28rem,var(--radix-dropdown-menu-content-available-height))] w-52 min-w-52 overflow-y-auto p-1"
+      >
+        {providers.map((provider) => (
+          <ModelSelectorProvider key={provider.id} provider={provider} />
+        ))}
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
   );
 }
 
@@ -422,6 +654,7 @@ function ModelSelectorProvider({
       <DropdownMenuSubTrigger
         id={`model-selector-provider-${provider.id}`}
         data-slot="model-selector-provider"
+        data-testid={`model-selector-provider-${provider.id}`}
         data-search-selected={searchSelected ? "true" : "false"}
         disabled={provider.disabled || provider.models.length === 0}
         className={cn(

@@ -100,8 +100,11 @@ export interface LspModuleHierarchyOptions {
   maxDepth?: number;
 }
 
+export type LspModuleHierarchyNodeKind = 'module' | 'interface';
+
 export interface LspModuleHierarchyNode {
   moduleName: string;
+  kind: LspModuleHierarchyNodeKind;
   instanceName?: string;
   filePath?: string;
   uri?: string;
@@ -118,6 +121,67 @@ export interface LspModuleHierarchyNode {
 
 export interface LspModuleHierarchy {
   roots: LspModuleHierarchyNode[];
+  messages: string[];
+}
+
+export interface LspSchematicOptions {
+  moduleName?: string;
+  maxDepth?: number;
+}
+
+export type LspSchematicPortDirection = 'input' | 'output' | 'inout';
+
+export interface LspSchematicPort {
+  name: string;
+  direction: LspSchematicPortDirection;
+  widthText: string;
+  range?: LspRange;
+  selectionRange?: LspRange;
+}
+
+export interface LspSchematicConnection {
+  portName: string;
+  portIndex: number;
+  signal: string;
+  range?: LspRange;
+}
+
+export interface LspSchematicCell {
+  id: string;
+  name: string;
+  type: string;
+  kind: string;
+  range?: LspRange;
+  selectionRange?: LspRange;
+  connections: LspSchematicConnection[];
+}
+
+export interface LspSchematicEndpoint {
+  nodeId: string;
+  portName: string;
+}
+
+export interface LspSchematicNet {
+  name: string;
+  drivers: LspSchematicEndpoint[];
+  loads: LspSchematicEndpoint[];
+}
+
+export interface LspSchematicModule {
+  id: string;
+  name: string;
+  filePath?: string;
+  uri?: string;
+  range?: LspRange;
+  selectionRange?: LspRange;
+  ports: LspSchematicPort[];
+  cells: LspSchematicCell[];
+  nets: LspSchematicNet[];
+}
+
+export interface LspSchematic {
+  rootModuleId: string | null;
+  modules: LspSchematicModule[];
   messages: string[];
 }
 

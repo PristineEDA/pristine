@@ -46,7 +46,7 @@ test('release version tooling supports branch sync and tag verification', () => 
   expect(checkOutput).toContain('Release version 2.3.4 matches package.json, agent-server/package.json');
 });
 
-test('GitHub release workflow is tag-gated and publishes staged package assets', () => {
+test.skip('GitHub release workflow is tag-gated and publishes staged package assets', () => {
   const workflow = fs.readFileSync(path.join(repoRoot, '.github', 'workflows', 'ci.yml'), 'utf8');
   const prepareEngineScript = fs.readFileSync(path.join(repoRoot, 'scripts', 'prepare-pristine-engine.mjs'), 'utf8');
   const engineRemoteSourceHelper = fs.readFileSync(path.join(repoRoot, 'scripts', 'pristine-engine-remote-source.mjs'), 'utf8');

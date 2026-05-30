@@ -234,7 +234,6 @@ export function createExplorerTreeContextMenuItems({
 
     return [
       ...items,
-      createContextMenuItem({ label: 'Set as Simulation Top', action: () => {} }),
       createContextMenuItem({ label: 'Copy Path', action: () => {} }),
     ];
   }
@@ -275,7 +274,6 @@ export function createExplorerTreeContextMenuItems({
       variant: 'destructive',
     }),
     createContextMenuSeparator('manage-separator'),
-    createContextMenuItem({ label: 'Set as Simulation Top', action: () => {} }),
     createContextMenuItem({ label: 'Copy Path', action: () => {} }),
     createContextMenuItem({ label: 'Copy Relative Path', action: () => {} }),
   ];

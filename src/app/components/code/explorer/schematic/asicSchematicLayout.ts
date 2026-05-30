@@ -16,12 +16,15 @@ import type {
 
 const moduleNodeWidth = 190;
 const moduleNodeBaseHeight = 88;
+export const logicGateNodeWidth = moduleNodeWidth / 2;
 const ioNodeWidth = 96;
 const ioNodeHeight = 34;
 const portHeight = 18;
 const fallbackColumnGap = 260;
 const fallbackRowGap = 116;
 const fallbackMargin = 56;
+export const moduleLabelTopOffset = 20;
+const moduleLabelHeight = 14;
 
 const elk = new ELK({
   defaultLayoutOptions: {
@@ -60,6 +63,8 @@ export interface ApplySchematicNodePositionsOptions {
 const defaultNodeGap = 24;
 export const schematicGridSize = 40;
 export const schematicEdgeObstacleGap = 14;
+export const schematicRouteHorizontalStubLength = 24;
+export const schematicLogicGateRouteHorizontalStubLength = schematicRouteHorizontalStubLength / 2;
 const overlapResolveIterationLimit = 80;
 
 export async function layoutAsicSchematic(
@@ -208,23 +213,53 @@ export function resolveSchematicNodeOverlaps(
   const groupNodes = [...selectedNodeIds]
     .map((nodeId) => moduleById.get(nodeId))
     .filter((node): node is SchematicNodeLayout => Boolean(node));
-  const groupRects = groupNodes.map((node) => getSchematicNodeRectWithPosition(node, resolvedPositions[node.id]));
-  const shift = getNonOverlappingGroupShift(groupRects, obstacleRects, nodeGap);
+  let nextResolvedPositions = resolvedPositions;
 
-  if (shift.x === 0 && shift.y === 0) {
-    return resolvedPositions;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const groupRects = groupNodes.map((node) => getSchematicNodeRectWithPosition(node, nextResolvedPositions[node.id]));
+    const shift = getNonOverlappingGroupShift(groupRects, obstacleRects, nodeGap);
+
+    if (shift.x === 0 && shift.y === 0) {
+      return nextResolvedPositions;
+    }
+
+    nextResolvedPositions = shiftSelectedNodePositions(groupNodes, nextResolvedPositions, shift, options);
+
+    const shiftedGroupRects = groupNodes.map((node) => getSchematicNodeRectWithPosition(node, nextResolvedPositions[node.id]));
+    if (!hasAnyOverlap(shiftedGroupRects, obstacleRects, nodeGap)) {
+      return nextResolvedPositions;
+    }
   }
 
-  selectedNodeIds.forEach((nodeId) => {
-    const node = moduleById.get(nodeId);
-    const position = resolvedPositions[nodeId] ?? (node ? { x: node.x, y: node.y } : { x: 0, y: 0 });
+  if (options?.snapToGrid) {
+    const groupRects = groupNodes.map((node) => getSchematicNodeRectWithPosition(node, nextResolvedPositions[node.id]));
+    const gridShift = getNonOverlappingGridShift(groupRects, obstacleRects, nodeGap, options.gridSize);
+
+    if (gridShift.x !== 0 || gridShift.y !== 0) {
+      return shiftSelectedNodePositions(groupNodes, nextResolvedPositions, gridShift, { ...options, snapToGrid: false });
+    }
+  }
+
+  return nextResolvedPositions;
+}
+
+function shiftSelectedNodePositions(
+  groupNodes: readonly SchematicNodeLayout[],
+  positions: SchematicNodePositionOverrides,
+  shift: SchematicPoint,
+  options?: ResolveSchematicNodeOverlapsOptions,
+): SchematicNodePositionOverrides {
+  const resolvedPositions: SchematicNodePositionOverrides = { ...positions };
+
+  groupNodes.forEach((node) => {
+    const position = resolvedPositions[node.id] ?? { x: node.x, y: node.y };
 
     const shiftedPosition = {
       x: roundLayoutCoordinate(position.x + shift.x),
       y: roundLayoutCoordinate(position.y + shift.y),
     };
 
-    resolvedPositions[nodeId] = options?.snapToGrid
+    resolvedPositions[node.id] = options?.snapToGrid
       ? snapSchematicPointToGrid(shiftedPosition, options.gridSize)
       : shiftedPosition;
   });
@@ -321,17 +356,18 @@ function createElkGraph(graph: AsicSchematicGraph, module: AsicModule): ElkNode 
   return {
     id: `module:${module.id}`,
     layoutOptions: {
-      'elk.padding': '[top=40,left=48,bottom=40,right=48]',
+      'elk.padding': '[top=64,left=48,bottom=40,right=48]',
     },
     children: [
       ...module.ports.map((port) => createIoElkNode(port)),
       ...module.instances.map((instance) => {
         const childModule = graph.modules[instance.moduleId];
         const ports = childModule?.ports ?? [];
+        const dimensions = getInstanceNodeDimensions(instance.cellKind, ports);
         return {
           id: instance.id,
-          width: moduleNodeWidth,
-          height: getModuleNodeHeight(ports),
+          width: dimensions.width,
+          height: dimensions.height,
           ports: ports.map((port) => createInstanceElkPort(instance.id, port)),
           labels: [{ text: instance.name }],
         } satisfies ElkNode;
@@ -398,13 +434,13 @@ function toNodeLayout(graph: AsicSchematicGraph, module: AsicModule, elkNode: El
   if (elkNode.id.startsWith('io:')) {
     const portId = elkNode.id.slice(3);
     const port = module.ports.find((candidate) => candidate.id === portId)!;
-    const elkPort = elkNode.ports?.[0];
-    const side = getLayoutSide(port.direction === 'output' ? 'west' : 'east');
+    const side = getTopLevelPortLayoutSide(port);
 
     return {
       id: elkNode.id,
       label: port.name,
-      subtitle: port.direction.toUpperCase(),
+      subtitle: '',
+      tooltipType: port.direction,
       kind: 'port',
       x,
       y,
@@ -413,8 +449,8 @@ function toNodeLayout(graph: AsicSchematicGraph, module: AsicModule, elkNode: El
       ports: [{
         ...port,
         side,
-        x: x + (elkPort?.x ?? (side === 'west' ? 0 : width)),
-        y: y + (elkPort?.y ?? height / 2),
+        x: getPortAnchorX(x, width, side),
+        y: roundLayoutCoordinate(y + height / 2),
       }],
       canDrillDown: false,
     };
@@ -423,6 +459,7 @@ function toNodeLayout(graph: AsicSchematicGraph, module: AsicModule, elkNode: El
   const instance = module.instances.find((candidate) => candidate.id === elkNode.id)!;
   const childModule = graph.modules[instance.moduleId];
   const childPorts = childModule?.ports ?? [];
+  const isLogicGate = isLogicCellKind(instance.cellKind);
   const ports = childPorts.map((port) => {
     const elkPort = elkNode.ports?.find((candidate) => candidate.id === getInstancePortId(instance.id, port.id));
     const side = getPortLayoutSide(port);
@@ -430,16 +467,18 @@ function toNodeLayout(graph: AsicSchematicGraph, module: AsicModule, elkNode: El
     return {
       ...port,
       side,
-      x: x + (elkPort?.x ?? (side === 'west' ? 0 : width)),
-      y: y + (elkPort?.y ?? getFallbackPortY(childPorts, port)),
+      x: getPortAnchorX(x, width, side),
+      y: roundLayoutCoordinate(y + getPortAnchorYOffset(elkPort, getFallbackPortY(childPorts, port, isLogicGate ? height : undefined))),
     } satisfies SchematicPortLayout;
   });
 
   return {
     id: instance.id,
     label: instance.name,
-    subtitle: childModule?.name ?? instance.moduleId,
+    subtitle: '',
+    tooltipType: childModule?.name ?? instance.moduleId,
     kind: 'module',
+    cellKind: instance.cellKind,
     instanceId: instance.id,
     moduleId: instance.moduleId,
     x,
@@ -556,14 +595,18 @@ function createFallbackLayout(graph: AsicSchematicGraph, module: AsicModule): Sc
     const ports = childModule?.ports ?? [];
     const x = fallbackMargin + fallbackColumnGap;
     const y = fallbackMargin + index * fallbackRowGap;
-    const width = moduleNodeWidth;
-    const height = getModuleNodeHeight(ports);
+    const dimensions = getInstanceNodeDimensions(instance.cellKind, ports);
+    const width = dimensions.width;
+    const height = dimensions.height;
+    const isLogicGate = isLogicCellKind(instance.cellKind);
 
     nodes.push({
       id: instance.id,
       label: instance.name,
-      subtitle: childModule?.name ?? instance.moduleId,
+      subtitle: '',
+      tooltipType: childModule?.name ?? instance.moduleId,
       kind: 'module',
+      cellKind: instance.cellKind,
       instanceId: instance.id,
       moduleId: instance.moduleId,
       x,
@@ -573,8 +616,8 @@ function createFallbackLayout(graph: AsicSchematicGraph, module: AsicModule): Sc
       ports: ports.map((port) => ({
         ...port,
         side: getPortLayoutSide(port),
-        x: x + (port.direction === 'input' ? 0 : width),
-        y: y + getFallbackPortY(ports, port),
+        x: getPortAnchorX(x, width, getPortLayoutSide(port)),
+        y: y + getFallbackPortY(ports, port, isLogicGate ? height : undefined),
       })),
       canDrillDown: Boolean(childModule && childModule.instances.length > 0),
     });
@@ -604,12 +647,13 @@ function createFallbackLayout(graph: AsicSchematicGraph, module: AsicModule): Sc
 }
 
 function createFallbackPortNode(port: AsicPort, x: number, y: number): SchematicNodeLayout {
-  const side = getLayoutSide(port.direction === 'output' ? 'west' : 'east');
+  const side = getTopLevelPortLayoutSide(port);
 
   return {
     id: getIoNodeId(port.id),
     label: port.name,
-    subtitle: port.direction.toUpperCase(),
+    subtitle: '',
+    tooltipType: port.direction,
     kind: 'port',
     x,
     y,
@@ -618,20 +662,22 @@ function createFallbackPortNode(port: AsicPort, x: number, y: number): Schematic
     ports: [{
       ...port,
       side,
-      x: x + (side === 'west' ? 0 : ioNodeWidth),
+      x: getPortAnchorX(x, ioNodeWidth, side),
       y: y + ioNodeHeight / 2,
     }],
     canDrillDown: false,
   };
 }
 
+function getFallbackEdgePoints(from: AsicNetEndpoint, to: AsicNetEndpoint, nodeMap: Map<string, SchematicNodeLayout>): SchematicPoint[];
+function getFallbackEdgePoints(start: SchematicPoint, end: SchematicPoint): SchematicPoint[];
 function getFallbackEdgePoints(
-  from: AsicNetEndpoint,
-  to: AsicNetEndpoint,
-  nodeMap: Map<string, SchematicNodeLayout>,
+  first: AsicNetEndpoint | SchematicPoint,
+  second: AsicNetEndpoint | SchematicPoint,
+  nodeMap?: Map<string, SchematicNodeLayout>,
 ): SchematicPoint[] {
-  const start = findEndpointPoint(from, nodeMap);
-  const end = findEndpointPoint(to, nodeMap);
+  const start = nodeMap ? findEndpointPoint(first as AsicNetEndpoint, nodeMap) : first as SchematicPoint;
+  const end = nodeMap ? findEndpointPoint(second as AsicNetEndpoint, nodeMap) : second as SchematicPoint;
   const midX = start.x + (end.x - start.x) / 2;
 
   return [start, { x: midX, y: start.y }, { x: midX, y: end.y }, end];
@@ -641,19 +687,21 @@ export function routeSchematicEdgePoints(
   edge: SchematicEdgeLayout,
   nodeMap: Map<string, SchematicNodeLayout>,
 ): SchematicPoint[] {
-  const start = findEndpointPoint(edge.from, nodeMap);
-  const end = findEndpointPoint(edge.to, nodeMap);
+  const start = findEndpointRoutePoint(edge.from, nodeMap);
+  const end = findEndpointRoutePoint(edge.to, nodeMap);
   const obstacleRects = getSchematicEdgeObstacleRects(edge, nodeMap);
-  const searchedRoute = findOrthogonalRoute(start, end, obstacleRects);
-  const candidates = [searchedRoute, ...createOrthogonalRouteCandidates(start, end, obstacleRects)]
+  const searchedRoute = findOrthogonalRoute(start.stub, end.stub, obstacleRects);
+  const protectedPointKeys = new Set([getRoutePointKey(start.stub), getRoutePointKey(end.stub)]);
+  const candidates = [searchedRoute, ...createOrthogonalRouteCandidates(start.stub, end.stub, obstacleRects)]
     .filter((points): points is SchematicPoint[] => Boolean(points))
-    .map(normalizeRoutePoints)
+    .map((points) => normalizeRoutePoints(points))
+    .map((points) => createStubbedRoute(start, end, points, protectedPointKeys))
     .filter((points, index, allCandidates) => allCandidates.findIndex((candidate) => areSameRoute(candidate, points)) === index);
   const validCandidates = candidates.filter((points) => !obstacleRects.some((rect) => schematicPolylineIntersectsRect(points, rect, schematicEdgeObstacleGap)));
 
   validCandidates.sort((first, second) => getRouteScore(first) - getRouteScore(second));
 
-  return validCandidates[0] ?? normalizeRoutePoints(getFallbackEdgePoints(edge.from, edge.to, nodeMap));
+  return validCandidates[0] ?? createStubbedRoute(start, end, getFallbackEdgePoints(start.stub, end.stub), protectedPointKeys);
 }
 
 function getSchematicEdgeObstacleRects(edge: SchematicEdgeLayout, nodeMap: Map<string, SchematicNodeLayout>) {
@@ -843,7 +891,7 @@ function uniqueCoordinates(values: readonly number[]) {
     .sort((first, second) => Math.abs(first) - Math.abs(second));
 }
 
-function normalizeRoutePoints(points: readonly SchematicPoint[]) {
+function normalizeRoutePoints(points: readonly SchematicPoint[], protectedPointKeys = new Set<string>()) {
   const withoutDuplicates: SchematicPoint[] = [];
 
   points.forEach((point) => {
@@ -855,6 +903,10 @@ function normalizeRoutePoints(points: readonly SchematicPoint[]) {
   });
 
   return withoutDuplicates.filter((point, index, allPoints) => {
+    if (protectedPointKeys.has(getRoutePointKey(point))) {
+      return true;
+    }
+
     const previous = allPoints[index - 1];
     const next = allPoints[index + 1];
 
@@ -890,6 +942,72 @@ function getEndpointNodeId(endpoint: AsicNetEndpoint) {
   return endpoint.instanceId ?? getIoNodeId(endpoint.portId);
 }
 
+interface SchematicEndpointRoutePoint {
+  point: SchematicPoint;
+  stub: SchematicPoint;
+}
+
+function createStubbedRoute(
+  start: SchematicEndpointRoutePoint,
+  end: SchematicEndpointRoutePoint,
+  routeBetweenStubs: readonly SchematicPoint[],
+  protectedPointKeys: Set<string>,
+) {
+  return normalizeRoutePoints([
+    start.point,
+    start.stub,
+    ...routeBetweenStubs.slice(1, -1),
+    end.stub,
+    end.point,
+  ], protectedPointKeys);
+}
+
+function findEndpointRoutePoint(endpoint: AsicNetEndpoint, nodeMap: Map<string, SchematicNodeLayout>): SchematicEndpointRoutePoint {
+  const node = nodeMap.get(endpoint.instanceId ?? getIoNodeId(endpoint.portId));
+  const port = node?.ports.find((candidate) => candidate.id === endpoint.portId);
+  const point = port ? { x: port.x, y: port.y } : { x: node?.x ?? 0, y: node?.y ?? 0 };
+  const direction = getEndpointHorizontalDirection(point, node, port);
+  const stubLength = getEndpointStubLength(node);
+
+  return {
+    point,
+    stub: {
+      x: roundLayoutCoordinate(point.x + direction * stubLength),
+      y: point.y,
+    },
+  };
+}
+
+export function getSchematicEndpointStubLength(node?: Pick<SchematicNodeLayout, 'cellKind'> | null) {
+  return isLogicCellKind(node?.cellKind)
+    ? schematicLogicGateRouteHorizontalStubLength
+    : schematicRouteHorizontalStubLength;
+}
+
+function getEndpointStubLength(node?: SchematicNodeLayout) {
+  return getSchematicEndpointStubLength(node);
+}
+
+function getEndpointHorizontalDirection(
+  point: SchematicPoint,
+  node?: SchematicNodeLayout,
+  port?: SchematicPortLayout,
+) {
+  if (port?.side === 'west') {
+    return -1;
+  }
+
+  if (port?.side === 'east') {
+    return 1;
+  }
+
+  if (node) {
+    return point.x < node.x + node.width / 2 ? -1 : 1;
+  }
+
+  return 1;
+}
+
 function findEndpointPoint(endpoint: AsicNetEndpoint, nodeMap: Map<string, SchematicNodeLayout>): SchematicPoint {
   const node = nodeMap.get(endpoint.instanceId ?? getIoNodeId(endpoint.portId));
   const port = node?.ports.find((candidate) => candidate.id === endpoint.portId);
@@ -901,10 +1019,18 @@ function calculateBounds(
   nodes: readonly SchematicNodeLayout[],
   edges: readonly SchematicEdgeLayout[],
 ): SchematicLayoutBounds {
-  const nodePoints = nodes.flatMap((node) => [
-    { x: node.x, y: node.y },
-    { x: node.x + node.width, y: node.y + node.height },
-  ]);
+  const nodePoints = nodes.flatMap((node) => {
+    const points = [
+      { x: node.x, y: node.y },
+      { x: node.x + node.width, y: node.y + node.height },
+    ];
+
+    if (node.kind === 'module' && !isLogicCellKind(node.cellKind)) {
+      points.push({ x: node.x + node.width / 2, y: node.y - moduleLabelTopOffset - moduleLabelHeight });
+    }
+
+    return points;
+  });
   const edgePoints = edges.flatMap((edge) => edge.points);
   const points = [...nodePoints, ...edgePoints];
 
@@ -1001,6 +1127,33 @@ function getNonOverlappingGroupShift(groupRects: readonly SchematicRect[], obsta
   return validCandidates[0] ?? { x: 0, y: 0 };
 }
 
+function getNonOverlappingGridShift(groupRects: readonly SchematicRect[], obstacleRects: readonly SchematicRect[], nodeGap: number, gridSize?: number): SchematicPoint {
+  const safeGridSize = Number.isFinite(gridSize) && (gridSize ?? 0) > 0 ? gridSize! : schematicGridSize;
+
+  for (let radius = 1; radius <= overlapResolveIterationLimit; radius += 1) {
+    const candidates: SchematicPoint[] = [];
+
+    for (let xStep = -radius; xStep <= radius; xStep += 1) {
+      for (let yStep = -radius; yStep <= radius; yStep += 1) {
+        if (Math.max(Math.abs(xStep), Math.abs(yStep)) !== radius) {
+          continue;
+        }
+
+        candidates.push({ x: xStep * safeGridSize, y: yStep * safeGridSize });
+      }
+    }
+
+    candidates.sort((first, second) => Math.hypot(first.x, first.y) - Math.hypot(second.x, second.y));
+    const validCandidate = candidates.find((candidate) => !hasAnyOverlap(shiftRects(groupRects, candidate), obstacleRects, nodeGap));
+
+    if (validCandidate) {
+      return validCandidate;
+    }
+  }
+
+  return { x: 0, y: 0 };
+}
+
 function hasAnyOverlap(groupRects: readonly SchematicRect[], obstacleRects: readonly SchematicRect[], nodeGap: number) {
   return groupRects.some((groupRect) => obstacleRects.some((obstacleRect) => schematicRectsIntersect(groupRect, obstacleRect, nodeGap)));
 }
@@ -1085,15 +1238,38 @@ function roundLayoutCoordinate(value: number) {
   return Math.round(value * 10) / 10;
 }
 
+export function isLogicCellKind(kind: string | undefined) {
+  return Boolean(kind && kind !== 'module');
+}
+
+function getInstanceNodeDimensions(cellKind: string | undefined, ports: readonly AsicPort[]) {
+  if (isLogicCellKind(cellKind)) {
+    return {
+      width: logicGateNodeWidth,
+      height: roundLayoutCoordinate(getModuleNodeHeight(ports) / 2),
+    };
+  }
+
+  return {
+    width: moduleNodeWidth,
+    height: getModuleNodeHeight(ports),
+  };
+}
+
 function getModuleNodeHeight(ports: readonly AsicPort[]) {
   const leftCount = ports.filter((port) => port.direction === 'input').length;
   const rightCount = ports.filter((port) => port.direction !== 'input').length;
   return Math.max(moduleNodeBaseHeight, 48 + Math.max(leftCount, rightCount) * portHeight);
 }
 
-function getFallbackPortY(ports: readonly AsicPort[], port: AsicPort) {
+function getFallbackPortY(ports: readonly AsicPort[], port: AsicPort, nodeHeight?: number) {
   const sameSidePorts = ports.filter((candidate) => getPortLayoutSide(candidate) === getPortLayoutSide(port));
   const index = sameSidePorts.findIndex((candidate) => candidate.id === port.id);
+
+  if (nodeHeight !== undefined) {
+    return roundLayoutCoordinate((nodeHeight / (sameSidePorts.length + 1)) * (Math.max(index, 0) + 1));
+  }
+
   return 42 + Math.max(index, 0) * portHeight;
 }
 
@@ -1114,13 +1290,37 @@ function getInstancePortId(instanceId: string, portId: string) {
 }
 
 function getElkPortSide(port: AsicPort) {
-  return port.direction === 'input' ? 'WEST' : port.direction === 'output' ? 'EAST' : 'SOUTH';
+  return port.direction === 'input' ? 'WEST' : 'EAST';
 }
 
 function getPortLayoutSide(port: AsicPort) {
-  return getLayoutSide(port.direction === 'input' ? 'west' : port.direction === 'output' ? 'east' : 'south');
+  return getLayoutSide(port.direction === 'input' ? 'west' : 'east');
+}
+
+function getTopLevelPortLayoutSide(port: AsicPort) {
+  return getLayoutSide(port.direction === 'output' ? 'west' : 'east');
 }
 
 function getLayoutSide(side: SchematicPortLayout['side']) {
   return side;
+}
+
+function getPortAnchorX(nodeX: number, nodeWidth: number, side: SchematicPortLayout['side']) {
+  if (side === 'west') {
+    return roundLayoutCoordinate(nodeX);
+  }
+
+  if (side === 'east') {
+    return roundLayoutCoordinate(nodeX + nodeWidth);
+  }
+
+  return roundLayoutCoordinate(nodeX + nodeWidth / 2);
+}
+
+function getPortAnchorYOffset(elkPort: ElkPort | undefined, fallbackY: number) {
+  if (typeof elkPort?.y === 'number') {
+    return roundLayoutCoordinate(elkPort.y + (elkPort.height ?? 0) / 2);
+  }
+
+  return fallbackY;
 }

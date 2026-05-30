@@ -30,6 +30,7 @@ import {
   useWorkspaceView,
 } from './context/WorkspaceContext';
 import { CodeViewerLayoutProvider } from './context/CodeViewerLayoutContext';
+import { ModuleHierarchyProvider } from './context/ModuleHierarchyContext';
 import { SidebarProvider } from './components/ui/sidebar';
 import { refreshWorkspaceGitStatus } from './git/workspaceGitStatus';
 import { useGlobalAppShortcuts } from './useGlobalAppShortcuts';
@@ -646,7 +647,9 @@ export default function App() {
   return (
     <WorkspaceProvider>
       <CodeViewerLayoutProvider>
-        <AppLayout />
+        <ModuleHierarchyProvider>
+          <AppLayout />
+        </ModuleHierarchyProvider>
       </CodeViewerLayoutProvider>
     </WorkspaceProvider>
   );
