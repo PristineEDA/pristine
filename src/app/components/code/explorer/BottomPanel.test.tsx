@@ -109,6 +109,10 @@ vi.mock('./schematic/AsicSchematicPanel', () => ({
   AsicSchematicPanel: () => <div data-testid="asic-schematic-panel">ASIC schematic mock</div>,
 }));
 
+vi.mock('./waveform/WaveformPanel', () => ({
+  WaveformPanel: () => <div data-testid="waveform-panel">Waveform mock</div>,
+}));
+
 vi.mock('./TerminalPanel', async () => {
   const React = await import('react');
 
@@ -139,7 +143,7 @@ vi.mock('./TerminalPanel', async () => {
 
 type TestUser = ReturnType<typeof userEvent.setup>;
 
-type BottomPanelTabId = 'terminal' | 'output' | 'problems' | 'debug' | 'lsp' | 'schematic';
+type BottomPanelTabId = 'terminal' | 'output' | 'problems' | 'debug' | 'lsp' | 'schematic' | 'waveform';
 
 async function clickButton(user: TestUser, name: string | RegExp) {
   await user.click(screen.getByRole('button', { name }));
@@ -304,6 +308,9 @@ describe('BottomPanel', () => {
     await clickBottomTab(user, 'schematic');
     expect(await screen.findByTestId('asic-schematic-panel')).toBeInTheDocument();
 
+    await clickBottomTab(user, 'waveform');
+    expect(await screen.findByTestId('waveform-panel')).toBeInTheDocument();
+
     await clickButton(user, /close panel/i);
     expect(terminateTerminalSessionMock).toHaveBeenCalled();
   });
@@ -358,8 +365,10 @@ describe('BottomPanel', () => {
     expectCompactTabButton('bottom-panel-tab-debug');
     expectCompactTabButton('bottom-panel-tab-lsp');
     expectCompactTabButton('bottom-panel-tab-schematic');
+    expectCompactTabButton('bottom-panel-tab-waveform');
     expect(screen.getByTestId('bottom-panel-tab-terminal')).toHaveAccessibleName('Terminal');
     expect(screen.getByTestId('bottom-panel-tab-schematic')).toHaveAccessibleName('Schematic');
+    expect(screen.getByTestId('bottom-panel-tab-waveform')).toHaveAccessibleName('Waveform');
     expect(screen.getByTestId('bottom-panel-tab-terminal')).toHaveAttribute('data-state', 'on');
   });
 });

@@ -936,7 +936,7 @@ async function writeTerminalCommand(window: Awaited<ReturnType<typeof launchApp>
 
 function getBottomPanelTab(
   window: Awaited<ReturnType<typeof launchApp>>['window'],
-  tabId: 'terminal' | 'output' | 'problems' | 'debug' | 'lsp' | 'schematic',
+  tabId: 'terminal' | 'output' | 'problems' | 'debug' | 'lsp' | 'schematic' | 'waveform',
 ) {
   return window.getByTestId(`bottom-panel-tab-${tabId}`);
 }
@@ -5249,6 +5249,7 @@ test('terminal tab creates a real shell session and shows command output', async
   await expectCompactPanelTabButton(getBottomPanelTab(window, 'terminal'));
   await expectCompactPanelTabButton(getBottomPanelTab(window, 'output'));
   await expectCompactPanelTabButton(getBottomPanelTab(window, 'schematic'));
+  await expectCompactPanelTabButton(getBottomPanelTab(window, 'waveform'));
 
   const terminalInput = window.locator('[data-testid="terminal-host"] .xterm-helper-textarea');
   await expect(terminalInput).toHaveCount(1);
@@ -5259,6 +5260,55 @@ test('terminal tab creates a real shell session and shows command output', async
   await expect.poll(async () => readTerminalText(window), {
     timeout: 15000,
   }).toContain(marker);
+
+  await app.close();
+});
+
+test('waveform bottom panel renders mock Pixi waveform and controls', async () => {
+  const { app, window } = await launchApp();
+
+  await openBottomTerminal(window);
+  await getBottomPanelTab(window, 'waveform').click();
+
+  const panel = window.getByTestId('waveform-panel');
+  await expect(panel).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect(panel).toHaveAttribute('data-signal-count', '8');
+  await expect(panel).toHaveAttribute('data-ready', 'true', { timeout: UI_READY_TIMEOUT_MS });
+  await expect(panel).toHaveAttribute('data-renderer', /^(webgpu|webgl)$/);
+  await expect(panel).toHaveAttribute('data-selected-signal-id', 'tb_top_module1-clk');
+
+  const canvasHost = window.getByTestId('waveform-canvas');
+  await expect(canvasHost).toHaveAttribute('data-renderer', /^(webgpu|webgl)$/);
+  await expect.poll(async () => Number(await canvasHost.getAttribute('data-render-count') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
+  await expect(canvasHost.locator('canvas')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+
+  await window.getByTestId('waveform-signal-row-u_top_module1-counting').click();
+  await expect(panel).toHaveAttribute('data-selected-signal-id', 'u_top_module1-counting');
+
+  const canvasBox = await canvasHost.boundingBox();
+  if (!canvasBox) {
+    throw new Error('Expected waveform canvas geometry to be measurable');
+  }
+
+  await canvasHost.click({ position: { x: Math.floor(canvasBox.width * 0.72), y: 86 } });
+  await expect.poll(async () => Number(await panel.getAttribute('data-cursor-time') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(100);
+
+  const initialZoom = Number(await panel.getAttribute('data-zoom') ?? '0');
+  await window.getByTestId('waveform-zoom-in').click();
+  await expect.poll(async () => Number(await panel.getAttribute('data-zoom') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(initialZoom);
+
+  await window.getByTestId('waveform-fit').click();
+  await expect(panel).toHaveAttribute('data-zoom', '1.00');
+  await window.getByTestId('waveform-settings').click();
+  await expect(window.getByTestId('waveform-settings-popover')).toBeVisible();
+  await window.getByTestId('waveform-add-signals').click();
+  await expect(window.getByTestId('waveform-signal-picker')).toBeVisible();
 
   await app.close();
 });

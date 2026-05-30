@@ -2,7 +2,7 @@ import { Suspense, lazy, useMemo, useState, type ReactNode } from 'react';
 import {
   Terminal, X, Plus,
   AlertCircle, AlertTriangle, Info, Lightbulb,
-  Bug, Square, Logs, Workflow, CircuitBoard, Maximize, Minimize2,
+  Bug, Square, Logs, Workflow, CircuitBoard, Activity, Maximize, Minimize2,
 } from 'lucide-react';
 import { summarizeLspProblems, useLspProblems } from '../../../lsp/lspProblems';
 import { TerminalPanel } from './TerminalPanel';
@@ -23,8 +23,9 @@ const OutputPanel = lazy(() => import('./OutputPanel').then((module) => ({ defau
 const ProblemsTabPanel = lazy(() => import('./ProblemsTabPanel').then((module) => ({ default: module.ProblemsTabPanel })));
 const LspPanel = lazy(() => import('./LspPanel').then((module) => ({ default: module.LspPanel })));
 const AsicSchematicPanel = lazy(() => import('./schematic/AsicSchematicPanel').then((module) => ({ default: module.AsicSchematicPanel })));
+const WaveformPanel = lazy(() => import('./waveform/WaveformPanel').then((module) => ({ default: module.WaveformPanel })));
 
-type BottomPanelTabId = 'terminal' | 'output' | 'problems' | 'debug' | 'lsp' | 'schematic';
+type BottomPanelTabId = 'terminal' | 'output' | 'problems' | 'debug' | 'lsp' | 'schematic' | 'waveform';
 
 const BOTTOM_PANEL_TAB_ITEMS = [
   { value: 'terminal', label: 'Terminal', icon: Terminal, testId: 'bottom-panel-tab-terminal' },
@@ -33,6 +34,7 @@ const BOTTOM_PANEL_TAB_ITEMS = [
   { value: 'debug', label: 'Debug Console', icon: Bug, testId: 'bottom-panel-tab-debug' },
   { value: 'lsp', label: 'LSP', icon: Workflow, testId: 'bottom-panel-tab-lsp' },
   { value: 'schematic', label: 'Schematic', icon: CircuitBoard, testId: 'bottom-panel-tab-schematic' },
+  { value: 'waveform', label: 'Waveform', icon: Activity, testId: 'bottom-panel-tab-waveform' },
 ] as const satisfies readonly IconTabToggleGroupItem[];
 
 interface BottomPanelProps {
@@ -103,6 +105,11 @@ export function BottomPanel({ isMaximized = false, layoutVersion, onClose, onMax
     schematic: (
       <Suspense fallback={<div className="flex h-full items-center justify-center text-ide-text-muted text-[12px]">Loading schematic...</div>}>
         <AsicSchematicPanel />
+      </Suspense>
+    ),
+    waveform: (
+      <Suspense fallback={<div className="flex h-full items-center justify-center text-ide-text-muted text-[12px]">Loading waveform...</div>}>
+        <WaveformPanel />
       </Suspense>
     ),
   }), [layoutVersion, problemCounts.errorCount, problemCounts.hintCount, problemCounts.infoCount, problemCounts.warningCount, problemsList]);
