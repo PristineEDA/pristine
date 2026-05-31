@@ -171,7 +171,7 @@ export function WaveformPanel() {
       data-visible-window-start={viewport.startTime.toFixed(2)}
       data-zoom={zoomLevel.toFixed(2)}
     >
-      <div className="flex min-h-8 shrink-0 items-center gap-2 border-b border-ide-border bg-ide-tab-bg px-3 py-1.5">
+      <div className="flex min-h-8 shrink-0 items-center gap-2 border-b border-ide-border bg-ide-tab-bg px-3 py-1.5" data-testid="waveform-toolbar">
         <div className="flex min-w-0 items-center gap-2">
           <SlidersHorizontal size={13} className="text-ide-accent" />
           <span className="truncate text-[12px] font-medium text-ide-text">Waveform</span>
@@ -180,7 +180,14 @@ export function WaveformPanel() {
           </span>
         </div>
 
-        <div className="ml-auto flex items-center gap-1">
+        <div className="ml-auto flex min-w-0 items-center gap-2">
+          <WaveformCursorInfo
+            cursorTime={cursorTime}
+            signalName={selectedSignal?.name ?? '-'}
+            timescaleUnit={data.timescaleUnit}
+            value={formatWaveformValue(selectedValue)}
+          />
+          <div className="flex shrink-0 items-center gap-1">
           <ToolbarIconButton label="Pan waveform left" onClick={handlePanLeft}>
             <ChevronLeft size={13} />
           </ToolbarIconButton>
@@ -202,6 +209,7 @@ export function WaveformPanel() {
           <ToolbarIconButton label="Waveform settings" onClick={() => setSettingsOpen((current) => !current)} testId="waveform-settings">
             <Settings2 size={13} />
           </ToolbarIconButton>
+          </div>
         </div>
       </div>
 
@@ -250,12 +258,6 @@ export function WaveformPanel() {
 
         <ResizablePanel defaultSize={74} minSize={45} id="waveform-renderer">
           <main className="relative flex h-full w-full min-w-0 flex-1 flex-col bg-[#111111]">
-            <div className="pointer-events-none absolute right-3 top-2 z-10 flex max-w-[52%] items-center gap-2 rounded border border-ide-border bg-ide-bg/90 px-2 py-1 text-[11px] text-ide-text shadow-sm">
-              <MousePointer2 size={12} className="text-ide-accent" />
-              <span className="truncate">{cursorTime.toFixed(1)}{data.timescaleUnit}</span>
-              <span className="text-ide-text-muted">{selectedSignal?.name ?? '-'}</span>
-              <span className="font-mono text-ide-accent">{formatWaveformValue(selectedValue)}</span>
-            </div>
             {settingsOpen && (
               <div className="absolute right-3 top-10 z-20 w-52 rounded border border-ide-border bg-ide-bg p-2 text-[11px] text-ide-text shadow-xl" data-testid="waveform-settings-popover">
                 <div className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-2">
@@ -312,20 +314,47 @@ function SignalRow({ cursorTime, selected, row, onSelect }: SignalRowProps) {
 
   return (
     <button
-      className={`grid h-[30px] w-full grid-cols-[minmax(0,1fr)_56px] items-end gap-2 border-b border-ide-border/70 px-3 pb-1 text-left text-[11px] leading-[14px] transition-colors ${selected ? 'bg-ide-accent/15 text-ide-text' : 'text-ide-text-muted hover:bg-ide-tab-hover hover:text-ide-text'}`}
+      className={`grid h-[30px] w-full grid-cols-[minmax(0,1fr)_56px] items-center gap-2 border-b border-ide-border/70 px-3 pb-1 text-left text-[11px] leading-[14px] transition-colors ${selected ? 'bg-ide-accent/15 text-ide-text' : 'text-ide-text-muted hover:bg-ide-tab-hover hover:text-ide-text'}`}
       data-lane-y={row.y.toFixed(2)}
       data-row-index={row.rowIndex}
       data-testid={getWaveformSignalTestId(signal.id)}
       type="button"
       onClick={onSelect}
     >
-      <span className="flex min-w-0 items-end gap-2 leading-[14px]">
-        <span className="mb-[3px] h-2 w-2 shrink-0 rounded-sm" style={{ backgroundColor: signal.color }} />
-        <span className="min-w-0 truncate font-mono leading-[14px]">{signal.name}</span>
-        {signal.width && <span className="shrink-0 rounded border border-ide-border px-1 text-[10px] leading-[10px] text-ide-text-muted">[{signal.width - 1}:0]</span>}
+      <span className="flex min-w-0 items-center gap-2">
+        <span className="h-2 w-2 shrink-0 rounded-sm" style={{ backgroundColor: signal.color }} />
+        <span className="flex min-w-0 items-baseline gap-2">
+          <span className="min-w-0 truncate font-mono leading-[14px]">{signal.name}</span>
+          {signal.width && (
+            <span className="inline-flex h-[14px] shrink-0 items-center rounded border border-ide-border px-1 text-[10px] leading-none text-ide-text-muted">
+              [{signal.width - 1}:0]
+            </span>
+          )}
+        </span>
       </span>
       <span className="min-w-0 truncate text-right font-mono leading-[14px] text-ide-text">{formatWaveformValue(value)}</span>
     </button>
+  );
+}
+
+interface WaveformCursorInfoProps {
+  cursorTime: number;
+  signalName: string;
+  timescaleUnit: string;
+  value: string;
+}
+
+function WaveformCursorInfo({ cursorTime, signalName, timescaleUnit, value }: WaveformCursorInfoProps) {
+  return (
+    <div
+      className="flex min-w-0 max-w-[360px] items-center gap-2 rounded border border-ide-border bg-ide-bg/90 px-2 py-1 text-[11px] text-ide-text shadow-sm"
+      data-testid="waveform-toolbar-cursor-info"
+    >
+      <MousePointer2 size={12} className="shrink-0 text-ide-accent" />
+      <span className="shrink-0" data-testid="waveform-toolbar-cursor-time">{cursorTime.toFixed(1)}{timescaleUnit}</span>
+      <span className="min-w-0 truncate text-ide-text-muted" data-testid="waveform-toolbar-cursor-signal">{signalName}</span>
+      <span className="shrink-0 font-mono text-ide-accent" data-testid="waveform-toolbar-cursor-value">{value}</span>
+    </div>
   );
 }
 

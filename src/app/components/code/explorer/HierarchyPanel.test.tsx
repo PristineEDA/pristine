@@ -29,6 +29,10 @@ function getRootLabels() {
   return screen.getAllByTestId(/^hierarchy-node-label-.*-root$/).map((node) => node.textContent);
 }
 
+async function expectRootLabels(expectedLabels: string[]) {
+  await waitFor(() => expect(getRootLabels()).toEqual(expectedLabels));
+}
+
 function openContextMenuForHierarchyNode(testId: string) {
   fireEvent.contextMenu(screen.getByTestId(testId), { clientX: 120, clientY: 140 });
 }
@@ -190,20 +194,20 @@ describe('HierarchyPanel', () => {
     const { rerender, props } = renderHierarchyPanel();
 
     await screen.findByTestId('hierarchy-node-label-auto_top-root');
-    expect(getRootLabels()).toEqual(['auto_top', 'manual_top']);
+    await expectRootLabels(['auto_top', 'manual_top']);
     expect(screen.getByTestId('hierarchy-node-top-indicator-0_auto_top')).toHaveAccessibleName('Automatic top module');
 
     openContextMenuForHierarchyNode('hierarchy-node-1_manual_top');
     await testUser.click(screen.getByRole('menuitem', { name: 'Set as Simulation Top' }));
 
-    expect(getRootLabels()).toEqual(['manual_top', 'auto_top']);
+    await expectRootLabels(['manual_top', 'auto_top']);
     expect(screen.getByTestId('hierarchy-node-top-indicator-1_manual_top')).toHaveAccessibleName('Manual top module');
     expect(screen.getByTestId('hierarchy-node-label-manual_top-root')).toHaveClass('font-semibold');
     expect(screen.queryByRole('menuitem', { name: 'Set as Simulation Top' })).not.toBeInTheDocument();
 
     rerender(<HierarchyPanel {...props} refreshToken={1} />);
     await waitFor(() => expect(window.electronAPI!.lsp.moduleHierarchy).toHaveBeenCalledTimes(2));
-    expect(getRootLabels()).toEqual(['manual_top', 'auto_top']);
+    await expectRootLabels(['manual_top', 'auto_top']);
     expect(screen.getByTestId('hierarchy-node-top-indicator-1_manual_top')).toHaveAccessibleName('Manual top module');
   });
 
@@ -226,11 +230,11 @@ describe('HierarchyPanel', () => {
 
     openContextMenuForHierarchyNode('hierarchy-node-1_manual_top');
     await testUser.click(screen.getByRole('menuitem', { name: 'Set as Simulation Top' }));
-    expect(getRootLabels()).toEqual(['manual_top', 'auto_top']);
+    await expectRootLabels(['manual_top', 'auto_top']);
 
     rerender(<HierarchyPanel {...props} refreshToken={1} />);
     await waitFor(() => expect(window.electronAPI!.lsp.moduleHierarchy).toHaveBeenCalledTimes(2));
-    expect(getRootLabels()).toEqual(['auto_top']);
+    await expectRootLabels(['auto_top']);
     expect(screen.getByTestId('hierarchy-node-top-indicator-0_auto_top')).toHaveAccessibleName('Automatic top module');
   });
 

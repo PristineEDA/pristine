@@ -99,14 +99,16 @@ describe('WaveformPanel', () => {
     expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-pulse-fill-count'))).toBeGreaterThan(0);
     expect(screen.getByTestId('waveform-signal-list-resize-handle')).toBeInTheDocument();
     expect(screen.getByTestId('panel-waveform-signal-list')).toHaveAttribute('data-default-size', '10');
+    expect(screen.getByTestId('waveform-toolbar-cursor-info')).toBeInTheDocument();
+    expect(screen.getByTestId('waveform-toolbar-cursor-time')).toHaveTextContent('84.0ns');
     expect(screen.getByTestId('waveform-signal-list-bottom-spacer')).toHaveClass('h-3');
     expect(screen.getByTestId('waveform-horizontal-scrollbar')).toBeInTheDocument();
     expect(screen.getByTestId('waveform-group-row-u_top_module1')).toHaveAttribute('data-row-index', '5');
     expect(screen.getByTestId('waveform-group-row-dense_test_signals')).toHaveAttribute('data-row-index', '10');
-    expect(screen.getByTestId('waveform-signal-row-u_top_module1-counting')).toHaveClass('items-end');
+    expect(screen.getByTestId('waveform-signal-row-u_top_module1-counting')).toHaveClass('items-center');
     expect(screen.getByTestId('waveform-signal-row-u_top_module1-counting')).toHaveClass('pb-1');
     expect(screen.getByText('counting')).toHaveClass('leading-[14px]');
-    expect(screen.getByText('[3:0]')).toHaveClass('leading-[10px]');
+    expect(screen.getByText('[3:0]')).toHaveClass('leading-none');
 
     await user.click(screen.getByTestId('waveform-signal-row-u_top_module1-counting'));
 
@@ -115,7 +117,9 @@ describe('WaveformPanel', () => {
     expect(screen.getByTestId('waveform-signal-row-u_top_module1-counting')).toHaveAttribute('data-lane-y', '300.00');
     expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-selected-signal-lane-y', '300.00');
     expect(screen.getByText('[3:0]')).toBeInTheDocument();
-    expect(screen.getByText('84.0ns')).toBeInTheDocument();
+    expect(screen.getByTestId('waveform-toolbar-cursor-time')).toHaveTextContent('84.0ns');
+    expect(screen.getByTestId('waveform-toolbar-cursor-signal')).toHaveTextContent('counting');
+    expect(screen.getByTestId('waveform-toolbar-cursor-value')).toHaveTextContent('2');
     expect(screen.getAllByText('2').length).toBeGreaterThan(0);
 
     await user.click(screen.getByTestId('waveform-signal-row-dense-signal-40'));
@@ -128,6 +132,7 @@ describe('WaveformPanel', () => {
     await user.click(screen.getByTestId('waveform-canvas'));
 
     await waitFor(() => expect(panel).toHaveAttribute('data-cursor-time', '128.00'));
+    expect(screen.getByTestId('waveform-toolbar-cursor-time')).toHaveTextContent('128.0ns');
     expect(screen.getAllByText('3').length).toBeGreaterThan(0);
   });
 

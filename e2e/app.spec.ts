@@ -5271,11 +5271,18 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
   await getBottomPanelTab(window, 'waveform').click();
 
   const panel = window.getByTestId('waveform-panel');
+  const toolbar = window.getByTestId('waveform-toolbar');
+  const cursorInfo = window.getByTestId('waveform-toolbar-cursor-info');
+  const cursorInfoTime = window.getByTestId('waveform-toolbar-cursor-time');
+  const cursorInfoSignal = window.getByTestId('waveform-toolbar-cursor-signal');
+  const cursorInfoValue = window.getByTestId('waveform-toolbar-cursor-value');
   await expect(panel).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
   await expect(panel).toHaveAttribute('data-signal-count', '48');
   await expect(panel).toHaveAttribute('data-ready', 'true', { timeout: UI_READY_TIMEOUT_MS });
   await expect(panel).toHaveAttribute('data-renderer', /^(webgpu|webgl)$/);
   await expect(panel).toHaveAttribute('data-selected-signal-id', 'tb_top_module1-clk');
+  await expect(cursorInfo).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect(cursorInfoTime).toHaveText(/84\.0ns/);
 
   const canvasHost = window.getByTestId('waveform-canvas');
   await expect(canvasHost).toHaveAttribute('data-renderer', /^(webgpu|webgl)$/);
@@ -5315,13 +5322,17 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
   const canvasBox = await canvasHost.boundingBox();
   const innerCanvasBox = await canvasHost.locator('canvas').boundingBox();
   const viewportBox = await waveformViewport.boundingBox();
-  if (!canvasBox || !innerCanvasBox || !viewportBox) {
+  const toolbarBox = await toolbar.boundingBox();
+  const cursorInfoBox = await cursorInfo.boundingBox();
+  if (!canvasBox || !innerCanvasBox || !viewportBox || !toolbarBox || !cursorInfoBox) {
     throw new Error('Expected waveform canvas geometry to be measurable');
   }
 
   expect(Math.abs(canvasBox.height - viewportBox.height)).toBeLessThanOrEqual(2);
   expect(Math.abs(innerCanvasBox.height - canvasBox.height)).toBeLessThanOrEqual(2);
   expect(Math.abs(innerCanvasBox.width - canvasBox.width)).toBeLessThanOrEqual(2);
+  expect(cursorInfoBox.y).toBeGreaterThanOrEqual(toolbarBox.y - 1);
+  expect(cursorInfoBox.y + cursorInfoBox.height).toBeLessThanOrEqual(toolbarBox.y + toolbarBox.height + 1);
 
   const signalPanel = window.getByTestId('panel-waveform-signal-list');
   const resizeHandle = window.getByTestId('waveform-signal-list-resize-handle');
@@ -5362,11 +5373,14 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
   await expect(countingRow).toHaveAttribute('data-row-index', '9');
   await expect(countingRow).toHaveAttribute('data-lane-y', '300.00');
   await expect(canvasHost).toHaveAttribute('data-selected-signal-lane-y', '300.00');
+  await expect(cursorInfoSignal).toHaveText(/counting/);
+  await expect(cursorInfoValue).toHaveText(/^2$/);
 
   await canvasHost.click({ position: { x: Math.floor(canvasBox.width * 0.72), y: 86 } });
   await expect.poll(async () => Number(await panel.getAttribute('data-cursor-time') ?? '0'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(100);
+  await expect(cursorInfoTime).toHaveText(/\d+\.\dns/);
 
   const initialZoom = Number(await panel.getAttribute('data-zoom') ?? '0');
   await window.getByTestId('waveform-zoom-in').click();
