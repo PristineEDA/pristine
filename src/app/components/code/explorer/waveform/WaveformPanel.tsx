@@ -206,40 +206,41 @@ export function WaveformPanel() {
       </div>
 
       <ResizablePanelGroup orientation="horizontal" layoutGapPx={4} className="min-h-0 flex-1 overflow-hidden">
-        <ResizablePanel defaultSize={26} minSizePx={220} maxSizePx={420} id="waveform-signal-list">
-        <aside className="flex h-full min-w-0 flex-col border-r border-ide-border bg-ide-sidebar-bg">
-          <div className="grid h-[30px] shrink-0 grid-cols-[1fr_56px] items-end border-b border-ide-border px-3 pb-1 text-[10px] font-medium uppercase tracking-[0.08em] text-ide-text-muted">
-            <span>Signal</span>
-            <span className="text-right">Value</span>
-          </div>
-          <div
-            ref={signalScrollRef}
-            className="bottom-panel-scrollbar min-h-0 flex-1 overflow-auto"
-            onScroll={() => syncVerticalScroll(signalScrollRef.current)}
-          >
-            {displayRows.map((row) => (
-              row.kind === 'group' ? (
-                <div
-                  className="flex h-[30px] items-end border-b border-ide-border bg-ide-sidebar-bg/95 px-3 pb-1 text-[10px] font-medium uppercase tracking-[0.08em] text-ide-text-muted"
-                  data-lane-y={row.y.toFixed(2)}
-                  data-row-index={row.rowIndex}
-                  data-testid={`waveform-group-row-${row.group.id}`}
-                  key={row.id}
-                >
-                  {row.group.label}
-                </div>
-              ) : (
-                <SignalRow
-                  cursorTime={cursorTime}
-                  key={row.id}
-                  row={row}
-                  selected={row.signal.id === selectedSignalId}
-                  onSelect={() => setSelectedSignalId(row.signal.id)}
-                />
-              )
-            ))}
+        <ResizablePanel defaultSize={14} minSizePx={180} maxSizePx={420} id="waveform-signal-list">
+          <aside className="flex h-full min-w-0 flex-col border-r border-ide-border bg-ide-sidebar-bg">
+            <div className="grid h-[30px] shrink-0 grid-cols-[1fr_56px] items-stretch border-b border-ide-border px-3 text-[10px] font-medium uppercase tracking-[0.08em] text-ide-text-muted">
+              <span className="flex items-end pb-1 leading-none">Signal</span>
+              <span className="flex items-end justify-end pb-1 leading-none">Value</span>
+            </div>
+            <div
+              ref={signalScrollRef}
+              className="bottom-panel-scrollbar min-h-0 flex-1 overflow-auto"
+              onScroll={() => syncVerticalScroll(signalScrollRef.current)}
+            >
+              {displayRows.map((row) => (
+                row.kind === 'group' ? (
+                  <div
+                    className="flex h-[30px] items-end border-b border-ide-border bg-ide-sidebar-bg/95 px-3 pb-1 text-[10px] font-medium uppercase tracking-[0.08em] text-ide-text-muted"
+                    data-lane-y={row.y.toFixed(2)}
+                    data-row-index={row.rowIndex}
+                    data-testid={`waveform-group-row-${row.group.id}`}
+                    key={row.id}
+                  >
+                    {row.group.label}
+                  </div>
+                ) : (
+                  <SignalRow
+                    cursorTime={cursorTime}
+                    key={row.id}
+                    row={row}
+                    selected={row.signal.id === selectedSignalId}
+                    onSelect={() => setSelectedSignalId(row.signal.id)}
+                  />
+                )
+              ))}
               </div>
-        </aside>
+            <div aria-hidden="true" className="h-3 shrink-0 border-t border-ide-border bg-ide-sidebar-bg" data-testid="waveform-signal-list-bottom-spacer" />
+          </aside>
         </ResizablePanel>
 
         <ResizableHandle
@@ -248,7 +249,7 @@ export function WaveformPanel() {
         />
 
         <ResizablePanel defaultSize={74} minSize={45} id="waveform-renderer">
-        <main className="relative flex h-full w-full min-w-0 flex-1 flex-col bg-[#111111]">
+          <main className="relative flex h-full w-full min-w-0 flex-1 flex-col bg-[#111111]">
           <div className="pointer-events-none absolute right-3 top-2 z-10 flex max-w-[52%] items-center gap-2 rounded border border-ide-border bg-ide-bg/90 px-2 py-1 text-[11px] text-ide-text shadow-sm">
             <MousePointer2 size={12} className="text-ide-accent" />
             <span className="truncate">{cursorTime.toFixed(1)}{data.timescaleUnit}</span>
@@ -291,7 +292,7 @@ export function WaveformPanel() {
           >
             <div aria-hidden="true" className="h-px" style={{ width: horizontalMetrics.contentWidth }} />
           </div>
-        </main>
+          </main>
         </ResizablePanel>
       </ResizablePanelGroup>
     </div>
@@ -311,19 +312,19 @@ function SignalRow({ cursorTime, selected, row, onSelect }: SignalRowProps) {
 
   return (
     <button
-      className={`grid h-[30px] w-full grid-cols-[1fr_56px] items-end gap-2 border-b border-ide-border/70 px-3 pb-[5px] text-left text-[11px] leading-none transition-colors ${selected ? 'bg-ide-accent/15 text-ide-text' : 'text-ide-text-muted hover:bg-ide-tab-hover hover:text-ide-text'}`}
+      className={`grid h-[30px] w-full grid-cols-[1fr_56px] items-stretch gap-2 border-b border-ide-border/70 px-3 text-left text-[11px] leading-none transition-colors ${selected ? 'bg-ide-accent/15 text-ide-text' : 'text-ide-text-muted hover:bg-ide-tab-hover hover:text-ide-text'}`}
       data-lane-y={row.y.toFixed(2)}
       data-row-index={row.rowIndex}
       data-testid={getWaveformSignalTestId(signal.id)}
       type="button"
       onClick={onSelect}
     >
-      <span className="flex min-w-0 items-end gap-2 leading-none">
+      <span className="flex min-w-0 items-end gap-2 pb-[5px] leading-none">
         <span className="mb-px h-2 w-2 shrink-0 rounded-sm" style={{ backgroundColor: signal.color }} />
         <span className="min-w-0 truncate font-mono">{signal.name}</span>
         {signal.width && <span className="shrink-0 self-end rounded border border-ide-border px-1 text-[10px] leading-[10px] text-ide-text-muted">[{signal.width - 1}:0]</span>}
       </span>
-      <span className="truncate text-right font-mono leading-none text-ide-text">{formatWaveformValue(value)}</span>
+      <span className="flex min-w-0 items-end justify-end pb-[5px] font-mono leading-none text-ide-text"><span className="truncate">{formatWaveformValue(value)}</span></span>
     </button>
   );
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Container, Text } from 'pixi.js';
 
-import { createWaveformScene, getWaveformBusHexagonBevel, waveformLayerNames } from './createWaveformScene';
+import { createWaveformScene, getWaveformBusHexagonBevel, waveformLayerNames, waveformStateStripeSpacing } from './createWaveformScene';
 import { fitWaveformViewport, getWaveformCanvasHeightForData, getWaveformDigitalPulseFillCount, getWaveformDisplayRows, getWaveformShapeCounts, getWaveformSignalLaneY } from './waveformLayout';
 import { mockWaveformData } from './waveformMockData';
 
@@ -22,6 +22,7 @@ describe('createWaveformScene', () => {
     expect(scene.layers.content.children.length).toBeGreaterThan(0);
     expect(scene.layers.content.children.length).toBeLessThan(mockWaveformData.signals.length);
     expect(scene.layers.status.children.length).toBeGreaterThan(0);
+    expect(scene.layers.status.children.some((child) => child instanceof Container && child.label === 'waveform-header-overlay')).toBe(true);
     expect(scene.layers.operation.children.length).toBeGreaterThan(0);
     expect(scene.firstSignalLaneY).toBe(getWaveformSignalLaneY(mockWaveformData, 'tb_top_module1-clk'));
     expect(scene.selectedSignalLaneY).toBe(getWaveformSignalLaneY(mockWaveformData, 'u_top_module1-counting'));
@@ -65,6 +66,10 @@ describe('createWaveformScene', () => {
     expect(getWaveformBusHexagonBevel(32, 20)).toBe(getWaveformBusHexagonBevel(160, 20));
     expect(getWaveformBusHexagonBevel(160, 20)).toBe(getWaveformBusHexagonBevel(400, 20));
     expect(getWaveformBusHexagonBevel(5, 20)).toBeLessThan(getWaveformBusHexagonBevel(32, 20));
+  });
+
+  it('uses the same stripe density for X and Z state hatches', () => {
+    expect(waveformStateStripeSpacing).toBe(8);
   });
 });
 

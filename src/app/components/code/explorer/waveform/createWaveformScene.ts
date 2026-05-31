@@ -23,6 +23,7 @@ import {
 import type { WaveformDataSet, WaveformLayerName, WaveformShapeCounts, WaveformSignal, WaveformStateCounts, WaveformViewport } from './waveformTypes';
 
 export const waveformLayerNames: readonly WaveformLayerName[] = ['background', 'content', 'status', 'operation'];
+export const waveformStateStripeSpacing = 8;
 
 export type WaveformSceneLayers = Record<WaveformLayerName, Container>;
 
@@ -73,7 +74,7 @@ export function createWaveformScene(options: WaveformSceneOptions): WaveformScen
 
   layers.background.addChild(base);
   drawLanes(layers.background, rows, options);
-  drawGrid(layers.background, options);
+  drawGrid(layers.background, layers.status, options);
   drawSignals(layers.content, rows, options);
   drawCursor(layers.status, layers.operation, options);
 
@@ -127,29 +128,49 @@ function drawLanes(target: Container, rows: ReturnType<typeof getWaveformDisplay
   target.addChild(lanes);
 }
 
-function drawGrid(target: Container, options: WaveformSceneOptions) {
+function drawGrid(target: Container, headerTarget: Container, options: WaveformSceneOptions) {
   const ticks = getWaveformTicks(options.viewport, options.width);
   const grid = new Graphics();
-  const labels = new Container();
+  const headerOverlay = new Container({ label: 'waveform-header-overlay' });
+  const header = new Graphics();
+  const labels = new Container({ label: 'waveform-header-labels' });
 
   grid
     .moveTo(0, waveformHeaderHeight)
     .lineTo(options.width, waveformHeaderHeight)
     .stroke({ color: palette.gridStrong, width: 1, alpha: 0.9 });
 
+  header
+    .rect(0, 0, options.width, waveformHeaderHeight)
+    .fill({ color: palette.header, alpha: 1 })
+    .moveTo(0, waveformHeaderHeight - 0.5)
+    .lineTo(options.width, waveformHeaderHeight - 0.5)
+    .stroke({ color: palette.gridStrong, width: 1, alpha: 0.9 });
+
   for (const tick of ticks) {
     const x = Math.round(timeToX(tick, options.viewport, options.width)) + 0.5;
+    const labelText = `${tick}${options.data.timescaleUnit}`;
+    const labelWidth = getEstimatedTextWidth(labelText, 10) + 8;
 
     grid
-      .moveTo(x, 0)
+      .moveTo(x, waveformHeaderHeight)
       .lineTo(x, options.height)
       .stroke({ color: tick === 0 ? palette.gridStrong : palette.grid, width: 1, alpha: tick === 0 ? 0.72 : 0.42 });
 
-    const label = createText(`${tick}${options.data.timescaleUnit}`, palette.textMuted, 10, x + 4, 8);
+    header
+      .moveTo(x, 0)
+      .lineTo(x, waveformHeaderHeight)
+      .stroke({ color: tick === 0 ? palette.gridStrong : palette.grid, width: 1, alpha: tick === 0 ? 0.72 : 0.42 })
+      .roundRect(x + 2, 5, labelWidth, 16, 2)
+      .fill({ color: palette.header, alpha: 0.96 });
+
+    const label = createText(labelText, palette.textMuted, 10, x + 4, 8);
     labels.addChild(label);
   }
 
-  target.addChild(grid, labels);
+  headerOverlay.addChild(header, labels);
+  target.addChild(grid);
+  headerTarget.addChild(headerOverlay);
 }
 
 function drawSignals(target: Container, rows: ReturnType<typeof getWaveformDisplayRows>, options: WaveformSceneOptions) {
@@ -391,7 +412,7 @@ function addSpecialStateCharacters(labels: Text[], state: 'x' | 'z', color: numb
 }
 
 function drawBackslashHatch(target: Graphics, x: number, y: number, width: number, height: number, color: number) {
-  const spacing = 8;
+  const spacing = waveformStateStripeSpacing;
   const left = x + 1;
   const right = x + width - 1;
   const bottom = y + height - 1;
@@ -412,16 +433,16 @@ function drawBackslashHatch(target: Graphics, x: number, y: number, width: numbe
 }
 
 function drawChevronHatch(target: Graphics, x: number, y: number, width: number, height: number, color: number) {
-  const spacing = 10;
+  const spacing = waveformStateStripeSpacing;
   const top = y + 2;
   const bottom = y + height - 2;
   const centerY = y + height / 2;
   const right = x + width - 2;
 
   for (let start = x + 2; start < right; start += spacing) {
-    const tipX = Math.min(start + 5, right);
+    const tipX = start + 5;
 
-    if (tipX <= start + 1) {
+    if (tipX <= start + 1 || start >= right) {
       continue;
     }
 
@@ -439,6 +460,10 @@ function getScrolledY(y: number, options: WaveformSceneOptions) {
 
 function isLaneOutsideVisibleCanvas(y: number, height: number) {
   return y + waveformLaneHeight < waveformHeaderHeight - waveformLaneHeight || y > height + waveformLaneHeight;
+}
+
+function getEstimatedTextWidth(text: string, fontSize: number) {
+  return text.length * fontSize * 0.58;
 }
 
 function drawCursor(statusLayer: Container, operationLayer: Container, options: WaveformSceneOptions) {

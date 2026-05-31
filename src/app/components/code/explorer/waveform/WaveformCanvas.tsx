@@ -318,6 +318,7 @@ export function WaveformCanvas({
       data-canvas-height={canvasSize.height.toFixed(2)}
       data-canvas-width={canvasSize.width.toFixed(2)}
       data-first-signal-lane-y={formatOptionalNumber(firstSignalLaneY)}
+      data-header-background="opaque"
       data-pulse-fill-count={pulseFillCount}
       data-render-count={renderCount}
       data-renderer={renderer}

@@ -5281,6 +5281,7 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
   await expect(canvasHost).toHaveAttribute('data-renderer', /^(webgpu|webgl)$/);
   await expect(canvasHost).toHaveAttribute('data-layer-count', '4');
   await expect(canvasHost).toHaveAttribute('data-layer-names', 'background,content,status,operation');
+  await expect(canvasHost).toHaveAttribute('data-header-background', 'opaque');
   await expect(canvasHost).toHaveAttribute('data-row-count', '51');
   await expect(canvasHost).toHaveAttribute('data-row-height', '30');
   await expect(canvasHost).toHaveAttribute('data-first-signal-lane-y', '60.00');
@@ -5324,12 +5325,16 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
 
   const signalPanel = window.getByTestId('panel-waveform-signal-list');
   const resizeHandle = window.getByTestId('waveform-signal-list-resize-handle');
+  await expect(signalPanel).toHaveAttribute('data-default-size', '14');
   const signalPanelBox = await signalPanel.boundingBox();
   const resizeHandleBox = await resizeHandle.boundingBox();
 
   if (!signalPanelBox || !resizeHandleBox) {
     throw new Error('Expected waveform signal panel resize geometry to be measurable');
   }
+
+  expect(signalPanelBox.width).toBeGreaterThanOrEqual(180);
+  expect(signalPanelBox.width).toBeLessThanOrEqual(430);
 
   await window.mouse.move(resizeHandleBox.x + resizeHandleBox.width / 2, resizeHandleBox.y + resizeHandleBox.height / 2);
   await window.mouse.down();
@@ -5429,6 +5434,18 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
 
     return Math.abs(denseRowBox.y - scrolledCanvasBox.y - selectedSignalLaneY);
   }, { timeout: UI_READY_TIMEOUT_MS }).toBeLessThanOrEqual(2);
+
+  await expect.poll(async () => {
+    const scrolledCanvasBox = await canvasHost.boundingBox();
+    const selectedSignalVisibleY = Number(await canvasHost.getAttribute('data-selected-signal-visible-y') ?? 'NaN');
+    const rowHeight = Number(await canvasHost.getAttribute('data-row-height') ?? 'NaN');
+
+    if (!scrolledCanvasBox || !Number.isFinite(selectedSignalVisibleY) || !Number.isFinite(rowHeight)) {
+      return false;
+    }
+
+    return selectedSignalVisibleY >= 30 && selectedSignalVisibleY + rowHeight <= scrolledCanvasBox.height + 2;
+  }, { timeout: UI_READY_TIMEOUT_MS }).toBe(true);
 
   await app.close();
 });

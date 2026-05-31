@@ -45,6 +45,7 @@ vi.mock('./WaveformCanvas', () => ({
         data-canvas-height="320.00"
         data-canvas-width="900.00"
         data-first-signal-lane-y={firstSignalLaneY?.toFixed(2) ?? ''}
+        data-header-background="opaque"
         data-layer-count={waveformLayerNames.length}
         data-layer-names={waveformLayerNames.join(',')}
         data-pulse-fill-count={getWaveformDigitalPulseFillCount(data, viewport)}
@@ -89,6 +90,7 @@ describe('WaveformPanel', () => {
     expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-canvas-height', '320.00');
     expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-canvas-width', '900.00');
     expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-first-signal-lane-y', '60.00');
+    expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-header-background', 'opaque');
     expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-bus-hexagon-count'))).toBeGreaterThan(0);
     expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-x-state-count'))).toBeGreaterThan(0);
     expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-x-state-block-count'))).toBeGreaterThan(0);
@@ -96,10 +98,12 @@ describe('WaveformPanel', () => {
     expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-z-state-count'))).toBeGreaterThan(0);
     expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-pulse-fill-count'))).toBeGreaterThan(0);
     expect(screen.getByTestId('waveform-signal-list-resize-handle')).toBeInTheDocument();
+    expect(screen.getByTestId('panel-waveform-signal-list')).toHaveAttribute('data-default-size', '14');
+    expect(screen.getByTestId('waveform-signal-list-bottom-spacer')).toHaveClass('h-3');
     expect(screen.getByTestId('waveform-horizontal-scrollbar')).toBeInTheDocument();
     expect(screen.getByTestId('waveform-group-row-u_top_module1')).toHaveAttribute('data-row-index', '5');
     expect(screen.getByTestId('waveform-group-row-dense_test_signals')).toHaveAttribute('data-row-index', '10');
-    expect(screen.getByTestId('waveform-signal-row-u_top_module1-counting')).toHaveClass('items-end');
+    expect(screen.getByTestId('waveform-signal-row-u_top_module1-counting')).toHaveClass('items-stretch');
     expect(screen.getByText('[3:0]')).toHaveClass('self-end');
 
     await user.click(screen.getByTestId('waveform-signal-row-u_top_module1-counting'));
