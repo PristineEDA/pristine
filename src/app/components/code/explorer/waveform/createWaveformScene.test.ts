@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Container, Text } from 'pixi.js';
 
-import { createWaveformScene, getWaveformBusHexagonBevel, waveformLayerNames, waveformStateStripeSpacing } from './createWaveformScene';
+import { clipWaveformLineToBounds, createWaveformScene, getWaveformBusHexagonBevel, waveformHighImpedanceStripeSpacing, waveformLayerNames, waveformUnknownStripeSpacing } from './createWaveformScene';
 import { fitWaveformViewport, getWaveformCanvasHeightForData, getWaveformDigitalPulseFillCount, getWaveformDisplayRows, getWaveformShapeCounts, getWaveformSignalLaneY } from './waveformLayout';
 import { mockWaveformData } from './waveformMockData';
 
@@ -68,8 +68,20 @@ describe('createWaveformScene', () => {
     expect(getWaveformBusHexagonBevel(5, 20)).toBeLessThan(getWaveformBusHexagonBevel(32, 20));
   });
 
-  it('uses the same stripe density for X and Z state hatches', () => {
-    expect(waveformStateStripeSpacing).toBe(8);
+  it('uses denser chevrons for Z hatches while preserving the X hatch spacing', () => {
+    expect(waveformUnknownStripeSpacing).toBe(8);
+    expect(waveformHighImpedanceStripeSpacing).toBe(5);
+    expect(waveformHighImpedanceStripeSpacing).toBeLessThan(waveformUnknownStripeSpacing);
+  });
+
+  it('clips Z chevron strokes to the state rectangle without changing their slope', () => {
+    const clipped = clipWaveformLineToBounds(10, 2, 17, 10, { bottom: 18, left: 1, right: 12, top: 2 });
+
+    expect(clipped).not.toBeNull();
+    expect(clipped?.x1).toBe(10);
+    expect(clipped?.y1).toBe(2);
+    expect(clipped?.x2).toBe(12);
+    expect(clipped?.y2).toBeCloseTo(4.2857, 4);
   });
 });
 

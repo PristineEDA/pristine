@@ -206,11 +206,11 @@ export function WaveformPanel() {
       </div>
 
       <ResizablePanelGroup orientation="horizontal" layoutGapPx={4} className="min-h-0 flex-1 overflow-hidden">
-        <ResizablePanel defaultSize={14} minSizePx={180} maxSizePx={420} id="waveform-signal-list">
+        <ResizablePanel defaultSize={12} minSizePx={160} maxSizePx={420} id="waveform-signal-list">
           <aside className="flex h-full min-w-0 flex-col border-r border-ide-border bg-ide-sidebar-bg">
-            <div className="grid h-[30px] shrink-0 grid-cols-[1fr_56px] items-stretch border-b border-ide-border px-3 text-[10px] font-medium uppercase tracking-[0.08em] text-ide-text-muted">
-              <span className="flex items-end pb-1 leading-none">Signal</span>
-              <span className="flex items-end justify-end pb-1 leading-none">Value</span>
+            <div className="grid h-[30px] shrink-0 grid-cols-[minmax(0,1fr)_56px] items-end gap-2 border-b border-ide-border px-3 pb-[5px] text-[10px] font-medium uppercase leading-none tracking-[0.08em] text-ide-text-muted">
+              <span>Signal</span>
+              <span className="text-right">Value</span>
             </div>
             <div
               ref={signalScrollRef}
@@ -220,7 +220,7 @@ export function WaveformPanel() {
               {displayRows.map((row) => (
                 row.kind === 'group' ? (
                   <div
-                    className="flex h-[30px] items-end border-b border-ide-border bg-ide-sidebar-bg/95 px-3 pb-1 text-[10px] font-medium uppercase tracking-[0.08em] text-ide-text-muted"
+                    className="flex h-[30px] items-end border-b border-ide-border bg-ide-sidebar-bg/95 px-3 pb-[5px] text-[10px] font-medium uppercase leading-none tracking-[0.08em] text-ide-text-muted"
                     data-lane-y={row.y.toFixed(2)}
                     data-row-index={row.rowIndex}
                     data-testid={`waveform-group-row-${row.group.id}`}
@@ -238,7 +238,7 @@ export function WaveformPanel() {
                   />
                 )
               ))}
-              </div>
+            </div>
             <div aria-hidden="true" className="h-3 shrink-0 border-t border-ide-border bg-ide-sidebar-bg" data-testid="waveform-signal-list-bottom-spacer" />
           </aside>
         </ResizablePanel>
@@ -250,48 +250,48 @@ export function WaveformPanel() {
 
         <ResizablePanel defaultSize={74} minSize={45} id="waveform-renderer">
           <main className="relative flex h-full w-full min-w-0 flex-1 flex-col bg-[#111111]">
-          <div className="pointer-events-none absolute right-3 top-2 z-10 flex max-w-[52%] items-center gap-2 rounded border border-ide-border bg-ide-bg/90 px-2 py-1 text-[11px] text-ide-text shadow-sm">
-            <MousePointer2 size={12} className="text-ide-accent" />
-            <span className="truncate">{cursorTime.toFixed(1)}{data.timescaleUnit}</span>
-            <span className="text-ide-text-muted">{selectedSignal?.name ?? '-'}</span>
-            <span className="font-mono text-ide-accent">{formatWaveformValue(selectedValue)}</span>
-          </div>
-          {settingsOpen && (
-            <div className="absolute right-3 top-10 z-20 w-52 rounded border border-ide-border bg-ide-bg p-2 text-[11px] text-ide-text shadow-xl" data-testid="waveform-settings-popover">
-              <div className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-2">
-                <span className="text-ide-text-muted">Timescale</span>
-                <span>{data.timescaleUnit}</span>
-                <span className="text-ide-text-muted">Window</span>
-                <span>{getWaveformViewportSpan(viewport).toFixed(0)}{data.timescaleUnit}</span>
-                <span className="text-ide-text-muted">Renderer</span>
-                <span className="uppercase">{renderer}</span>
-              </div>
+            <div className="pointer-events-none absolute right-3 top-2 z-10 flex max-w-[52%] items-center gap-2 rounded border border-ide-border bg-ide-bg/90 px-2 py-1 text-[11px] text-ide-text shadow-sm">
+              <MousePointer2 size={12} className="text-ide-accent" />
+              <span className="truncate">{cursorTime.toFixed(1)}{data.timescaleUnit}</span>
+              <span className="text-ide-text-muted">{selectedSignal?.name ?? '-'}</span>
+              <span className="font-mono text-ide-accent">{formatWaveformValue(selectedValue)}</span>
             </div>
-          )}
-          <div ref={waveformViewportRef} className="relative min-h-0 w-full flex-1 overflow-hidden" data-testid="waveform-viewport">
-            <WaveformCanvas
-              cursorTime={cursorTime}
-              data={data}
-              selectedSignalId={selectedSignalId}
-              verticalScrollTop={verticalScrollTop}
-              viewport={viewport}
-              onCursorTimeChange={setCursorTime}
-              onRendererChange={setRenderer}
-              onVerticalScrollDelta={handleCanvasVerticalScrollDelta}
-              onViewportChange={setViewport}
-            />
-          </div>
-          <div
-            ref={horizontalScrollRef}
-            className="bottom-panel-scrollbar h-3 shrink-0 overflow-x-auto overflow-y-hidden border-t border-ide-border bg-[#0c0c0c]"
-            data-horizontal-content-width={horizontalMetrics.contentWidth.toFixed(2)}
-            data-horizontal-scroll-left={horizontalMetrics.scrollLeft.toFixed(2)}
-            data-horizontal-scroll-range={horizontalMetrics.maxScrollLeft.toFixed(2)}
-            data-testid="waveform-horizontal-scrollbar"
-            onScroll={handleHorizontalScroll}
-          >
-            <div aria-hidden="true" className="h-px" style={{ width: horizontalMetrics.contentWidth }} />
-          </div>
+            {settingsOpen && (
+              <div className="absolute right-3 top-10 z-20 w-52 rounded border border-ide-border bg-ide-bg p-2 text-[11px] text-ide-text shadow-xl" data-testid="waveform-settings-popover">
+                <div className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-2">
+                  <span className="text-ide-text-muted">Timescale</span>
+                  <span>{data.timescaleUnit}</span>
+                  <span className="text-ide-text-muted">Window</span>
+                  <span>{getWaveformViewportSpan(viewport).toFixed(0)}{data.timescaleUnit}</span>
+                  <span className="text-ide-text-muted">Renderer</span>
+                  <span className="uppercase">{renderer}</span>
+                </div>
+              </div>
+            )}
+            <div ref={waveformViewportRef} className="relative min-h-0 w-full flex-1 overflow-hidden" data-testid="waveform-viewport">
+              <WaveformCanvas
+                cursorTime={cursorTime}
+                data={data}
+                selectedSignalId={selectedSignalId}
+                verticalScrollTop={verticalScrollTop}
+                viewport={viewport}
+                onCursorTimeChange={setCursorTime}
+                onRendererChange={setRenderer}
+                onVerticalScrollDelta={handleCanvasVerticalScrollDelta}
+                onViewportChange={setViewport}
+              />
+            </div>
+            <div
+              ref={horizontalScrollRef}
+              className="bottom-panel-scrollbar h-3 shrink-0 overflow-x-auto overflow-y-hidden border-t border-ide-border bg-[#0c0c0c]"
+              data-horizontal-content-width={horizontalMetrics.contentWidth.toFixed(2)}
+              data-horizontal-scroll-left={horizontalMetrics.scrollLeft.toFixed(2)}
+              data-horizontal-scroll-range={horizontalMetrics.maxScrollLeft.toFixed(2)}
+              data-testid="waveform-horizontal-scrollbar"
+              onScroll={handleHorizontalScroll}
+            >
+              <div aria-hidden="true" className="h-px" style={{ width: horizontalMetrics.contentWidth }} />
+            </div>
           </main>
         </ResizablePanel>
       </ResizablePanelGroup>
@@ -312,19 +312,19 @@ function SignalRow({ cursorTime, selected, row, onSelect }: SignalRowProps) {
 
   return (
     <button
-      className={`grid h-[30px] w-full grid-cols-[1fr_56px] items-stretch gap-2 border-b border-ide-border/70 px-3 text-left text-[11px] leading-none transition-colors ${selected ? 'bg-ide-accent/15 text-ide-text' : 'text-ide-text-muted hover:bg-ide-tab-hover hover:text-ide-text'}`}
+      className={`grid h-[30px] w-full grid-cols-[minmax(0,1fr)_56px] items-end gap-2 border-b border-ide-border/70 px-3 pb-[5px] text-left text-[11px] leading-none transition-colors ${selected ? 'bg-ide-accent/15 text-ide-text' : 'text-ide-text-muted hover:bg-ide-tab-hover hover:text-ide-text'}`}
       data-lane-y={row.y.toFixed(2)}
       data-row-index={row.rowIndex}
       data-testid={getWaveformSignalTestId(signal.id)}
       type="button"
       onClick={onSelect}
     >
-      <span className="flex min-w-0 items-end gap-2 pb-[5px] leading-none">
-        <span className="mb-px h-2 w-2 shrink-0 rounded-sm" style={{ backgroundColor: signal.color }} />
-        <span className="min-w-0 truncate font-mono">{signal.name}</span>
-        {signal.width && <span className="shrink-0 self-end rounded border border-ide-border px-1 text-[10px] leading-[10px] text-ide-text-muted">[{signal.width - 1}:0]</span>}
+      <span className="flex min-w-0 items-baseline gap-2 leading-[11px]">
+        <span className="mb-px h-2 w-2 shrink-0 self-end rounded-sm" style={{ backgroundColor: signal.color }} />
+        <span className="min-w-0 truncate font-mono leading-[11px]">{signal.name}</span>
+        {signal.width && <span className="shrink-0 translate-y-px rounded border border-ide-border px-1 text-[10px] leading-[10px] text-ide-text-muted">[{signal.width - 1}:0]</span>}
       </span>
-      <span className="flex min-w-0 items-end justify-end pb-[5px] font-mono leading-none text-ide-text"><span className="truncate">{formatWaveformValue(value)}</span></span>
+      <span className="min-w-0 truncate text-right font-mono leading-[11px] text-ide-text">{formatWaveformValue(value)}</span>
     </button>
   );
 }

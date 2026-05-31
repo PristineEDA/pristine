@@ -23,7 +23,8 @@ import {
 import type { WaveformDataSet, WaveformLayerName, WaveformShapeCounts, WaveformSignal, WaveformStateCounts, WaveformViewport } from './waveformTypes';
 
 export const waveformLayerNames: readonly WaveformLayerName[] = ['background', 'content', 'status', 'operation'];
-export const waveformStateStripeSpacing = 8;
+export const waveformUnknownStripeSpacing = 8;
+export const waveformHighImpedanceStripeSpacing = 5;
 
 export type WaveformSceneLayers = Record<WaveformLayerName, Container>;
 
@@ -412,7 +413,7 @@ function addSpecialStateCharacters(labels: Text[], state: 'x' | 'z', color: numb
 }
 
 function drawBackslashHatch(target: Graphics, x: number, y: number, width: number, height: number, color: number) {
-  const spacing = waveformStateStripeSpacing;
+  const spacing = waveformUnknownStripeSpacing;
   const left = x + 1;
   const right = x + width - 1;
   const bottom = y + height - 1;
@@ -433,10 +434,11 @@ function drawBackslashHatch(target: Graphics, x: number, y: number, width: numbe
 }
 
 function drawChevronHatch(target: Graphics, x: number, y: number, width: number, height: number, color: number) {
-  const spacing = waveformStateStripeSpacing;
+  const spacing = waveformHighImpedanceStripeSpacing;
   const top = y + 2;
   const bottom = y + height - 2;
   const centerY = y + height / 2;
+  const left = x + 1;
   const right = x + width - 2;
 
   for (let start = x + 2; start < right; start += spacing) {
@@ -446,12 +448,76 @@ function drawChevronHatch(target: Graphics, x: number, y: number, width: number,
       continue;
     }
 
-    target
-      .moveTo(start, top)
-      .lineTo(tipX, centerY)
-      .lineTo(start, bottom)
-      .stroke({ color, width: 1, alpha: 0.62 });
+    drawClippedLine(target, start, top, tipX, centerY, { left, right, top, bottom }, color, 0.62);
+    drawClippedLine(target, tipX, centerY, start, bottom, { left, right, top, bottom }, color, 0.62);
   }
+}
+
+export interface WaveformClipBounds {
+  bottom: number;
+  left: number;
+  right: number;
+  top: number;
+}
+
+function drawClippedLine(target: Graphics, x1: number, y1: number, x2: number, y2: number, bounds: WaveformClipBounds, color: number, alpha: number) {
+  const clipped = clipWaveformLineToBounds(x1, y1, x2, y2, bounds);
+
+  if (!clipped) {
+    return;
+  }
+
+  target
+    .moveTo(clipped.x1, clipped.y1)
+    .lineTo(clipped.x2, clipped.y2)
+    .stroke({ color, width: 1, alpha });
+}
+
+export function clipWaveformLineToBounds(x1: number, y1: number, x2: number, y2: number, bounds: WaveformClipBounds) {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  let entry = 0;
+  let exit = 1;
+
+  function clip(edgeDelta: number, edgeOffset: number) {
+    if (edgeDelta === 0) {
+      return edgeOffset >= 0;
+    }
+
+    const ratio = edgeOffset / edgeDelta;
+
+    if (edgeDelta < 0) {
+      if (ratio > exit) {
+        return false;
+      }
+
+      entry = Math.max(entry, ratio);
+      return true;
+    }
+
+    if (ratio < entry) {
+      return false;
+    }
+
+    exit = Math.min(exit, ratio);
+    return true;
+  }
+
+  if (
+    !clip(-dx, x1 - bounds.left) ||
+    !clip(dx, bounds.right - x1) ||
+    !clip(-dy, y1 - bounds.top) ||
+    !clip(dy, bounds.bottom - y1)
+  ) {
+    return null;
+  }
+
+  return {
+    x1: x1 + entry * dx,
+    y1: y1 + entry * dy,
+    x2: x1 + exit * dx,
+    y2: y1 + exit * dy,
+  };
 }
 
 function getScrolledY(y: number, options: WaveformSceneOptions) {

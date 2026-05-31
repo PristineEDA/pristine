@@ -5325,7 +5325,7 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
 
   const signalPanel = window.getByTestId('panel-waveform-signal-list');
   const resizeHandle = window.getByTestId('waveform-signal-list-resize-handle');
-  await expect(signalPanel).toHaveAttribute('data-default-size', '14');
+  await expect(signalPanel).toHaveAttribute('data-default-size', '12');
   const signalPanelBox = await signalPanel.boundingBox();
   const resizeHandleBox = await resizeHandle.boundingBox();
 
@@ -5333,8 +5333,8 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
     throw new Error('Expected waveform signal panel resize geometry to be measurable');
   }
 
-  expect(signalPanelBox.width).toBeGreaterThanOrEqual(180);
-  expect(signalPanelBox.width).toBeLessThanOrEqual(430);
+  expect(signalPanelBox.width).toBeGreaterThanOrEqual(158);
+  expect(signalPanelBox.width).toBeLessThanOrEqual(360);
 
   await window.mouse.move(resizeHandleBox.x + resizeHandleBox.width / 2, resizeHandleBox.y + resizeHandleBox.height / 2);
   await window.mouse.down();
