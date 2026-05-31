@@ -6,6 +6,7 @@ import {
   getWaveformDisplayRows,
   getWaveformFirstSignalLaneY,
   getWaveformSignalLaneY,
+  getWaveformShapeCounts,
   getWaveformStateCounts,
   getWaveformTicks,
   getWaveformTransitionsInWindow,
@@ -19,7 +20,7 @@ import {
   waveformLanePaddingY,
   waveformTimeAxisInset,
 } from './waveformLayout';
-import type { WaveformDataSet, WaveformLayerName, WaveformSignal, WaveformStateCounts, WaveformViewport } from './waveformTypes';
+import type { WaveformDataSet, WaveformLayerName, WaveformShapeCounts, WaveformSignal, WaveformStateCounts, WaveformViewport } from './waveformTypes';
 
 export const waveformLayerNames: readonly WaveformLayerName[] = ['background', 'content', 'status', 'operation'];
 
@@ -28,6 +29,7 @@ export type WaveformSceneLayers = Record<WaveformLayerName, Container>;
 export interface WaveformScene {
   world: Container;
   layers: WaveformSceneLayers;
+  shapeCounts: WaveformShapeCounts;
   digitalPulseFillCount: number;
   firstSignalLaneY: number | null;
   rowCount: number;
@@ -79,6 +81,7 @@ export function createWaveformScene(options: WaveformSceneOptions): WaveformScen
   return {
     world,
     layers,
+    shapeCounts: getWaveformShapeCounts(options.data, options.viewport),
     digitalPulseFillCount: getWaveformDigitalPulseFillCount(options.data, options.viewport),
     firstSignalLaneY: getWaveformFirstSignalLaneY(options.data),
     rowCount: rows.length,
@@ -256,12 +259,14 @@ function drawBusWaveform(target: Container, signal: WaveformSignal, options: Wav
     if (isUnknownWaveformValue(currentValue)) {
       drawUnknownStateBlock(bus, x1, y, width, height, 3);
     } else if (isHighImpedanceWaveformValue(currentValue)) {
-      drawHighImpedanceStateBlock(bus, x1, y, width, height, 3);
+      drawHighImpedanceStateBlock(bus, x1, y, width, height);
     } else {
-      bus
-        .roundRect(x1, y, width, height, 3)
-        .fill({ color: busColor, alpha: 0.16 })
-        .stroke({ color: busColor, width: 1.2, alpha: 0.82 });
+      drawElongatedHexagon(bus, x1, y, width, height, {
+        color: busColor,
+        fillAlpha: 0.16,
+        strokeAlpha: 0.84,
+        strokeWidth: 1.2,
+      });
     }
 
     const textColor = isUnknownWaveformValue(currentValue) ? palette.unknown : isHighImpedanceWaveformValue(currentValue) ? palette.highImpedance : palette.text;
@@ -284,20 +289,57 @@ function drawUnknownStateBlock(target: Graphics, x: number, y: number, width: nu
   drawBackslashHatch(target, x, y, width, height, palette.unknown);
 }
 
-function drawHighImpedanceStateBlock(target: Graphics, x: number, y: number, width: number, height: number, radius = 2) {
-  const zY = y + height * 0.22;
-  const zHeight = height * 0.56;
+function drawHighImpedanceStateBlock(target: Graphics, x: number, y: number, width: number, height: number) {
   const centerY = y + height / 2;
+  const bevel = getElongatedHexagonBevel(width, height);
+
+  drawElongatedHexagon(target, x, y, width, height, {
+    color: palette.highImpedance,
+    fillAlpha: 0.16,
+    strokeAlpha: 0.84,
+    strokeWidth: 1,
+  });
 
   target
-    .roundRect(x, zY, width, zHeight, radius)
-    .fill({ color: palette.highImpedance, alpha: 0.16 })
-    .stroke({ color: palette.highImpedance, width: 1, alpha: 0.82 });
-
-  target
-    .moveTo(x, centerY)
-    .lineTo(x + width, centerY)
+    .moveTo(x + bevel, centerY)
+    .lineTo(x + width - bevel, centerY)
     .stroke({ color: palette.highImpedance, width: 1, alpha: 0.66 });
+}
+
+interface ElongatedHexagonStyle {
+  color: number;
+  fillAlpha: number;
+  strokeAlpha: number;
+  strokeWidth: number;
+}
+
+function drawElongatedHexagon(target: Graphics, x: number, y: number, width: number, height: number, style: ElongatedHexagonStyle) {
+  const safeWidth = Math.max(1, width);
+  const safeHeight = Math.max(1, height);
+  const bevel = getElongatedHexagonBevel(safeWidth, safeHeight);
+  const centerY = y + safeHeight / 2;
+
+  target
+    .poly([
+      x + bevel,
+      y,
+      x + safeWidth - bevel,
+      y,
+      x + safeWidth,
+      centerY,
+      x + safeWidth - bevel,
+      y + safeHeight,
+      x + bevel,
+      y + safeHeight,
+      x,
+      centerY,
+    ], true)
+    .fill({ color: style.color, alpha: style.fillAlpha })
+    .stroke({ color: style.color, width: style.strokeWidth, alpha: style.strokeAlpha, join: 'miter' });
+}
+
+function getElongatedHexagonBevel(width: number, height: number) {
+  return Math.max(0, Math.min(height * 0.45, width * 0.18, 10));
 }
 
 function drawBackslashHatch(target: Graphics, x: number, y: number, width: number, height: number, color: number) {

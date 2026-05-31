@@ -1,4 +1,4 @@
-import type { WaveformDataSet, WaveformSignal, WaveformSignalGroup, WaveformStateCounts, WaveformTransition, WaveformViewport } from './waveformTypes';
+import type { WaveformDataSet, WaveformShapeCounts, WaveformSignal, WaveformSignalGroup, WaveformStateCounts, WaveformTransition, WaveformViewport } from './waveformTypes';
 
 export const waveformCanvasMinWidth = 360;
 export const waveformCanvasMinHeight = 220;
@@ -275,6 +275,36 @@ export function getWaveformDigitalPulseFillCount(data: WaveformDataSet, viewport
   }
 
   return pulseFillCount;
+}
+
+export function getWaveformShapeCounts(data: WaveformDataSet, viewport: WaveformViewport): WaveformShapeCounts {
+  let busHexagonCount = 0;
+  let zHexagonCount = 0;
+
+  for (const signal of data.signals) {
+    const transitions = getWaveformTransitionsInWindow(signal, viewport);
+
+    for (let index = 0; index < transitions.length - 1; index += 1) {
+      const current = transitions[index];
+      const next = transitions[index + 1];
+
+      if (!current || !next || next.time <= current.time) {
+        continue;
+      }
+
+      const currentValue = normalizeWaveformValue(current.value);
+
+      if (isHighImpedanceWaveformValue(currentValue)) {
+        zHexagonCount += 1;
+      }
+
+      if (signal.kind === 'bus' && !isSpecialWaveformValue(currentValue)) {
+        busHexagonCount += 1;
+      }
+    }
+  }
+
+  return { busHexagonCount, zHexagonCount };
 }
 
 export function getWaveformSignalTestId(signalId: string) {

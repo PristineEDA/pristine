@@ -7,6 +7,7 @@ import {
   getWaveformDisplayRows,
   getWaveformFirstSignalLaneY,
   getWaveformSignalLaneY,
+  getWaveformShapeCounts,
   getSignalValueAtTime,
   getWaveformStateCounts,
   getWaveformSignalTestId,
@@ -67,23 +68,22 @@ describe('waveformLayout', () => {
     const rows = getWaveformDisplayRows(mockWaveformData);
     const countingLaneY = getWaveformSignalLaneY(mockWaveformData, 'u_top_module1-counting');
 
-    expect(rows).toHaveLength(10);
-    expect(rows.map((row) => row.kind)).toEqual([
-      'group',
-      'signal',
-      'signal',
-      'signal',
-      'signal',
-      'group',
-      'signal',
-      'signal',
-      'signal',
-      'signal',
-    ]);
+    expect(rows).toHaveLength(51);
+    expect(rows.filter((row) => row.kind === 'signal')).toHaveLength(48);
+    expect(rows.filter((row) => row.kind === 'group').map((row) => row.rowIndex)).toEqual([0, 5, 10]);
     expect(getWaveformFirstSignalLaneY(mockWaveformData)).toBe(waveformHeaderHeight + waveformLaneHeight);
     expect(getWaveformSignalLaneY(mockWaveformData, 'u_top_module1-clk')).toBe(waveformHeaderHeight + 6 * waveformLaneHeight);
     expect(countingLaneY).toBe(waveformHeaderHeight + 9 * waveformLaneHeight);
+    expect(getWaveformSignalLaneY(mockWaveformData, 'dense-signal-01')).toBe(waveformHeaderHeight + 11 * waveformLaneHeight);
+    expect(getWaveformSignalLaneY(mockWaveformData, 'dense-signal-40')).toBe(waveformHeaderHeight + 50 * waveformLaneHeight);
     expect(getWaveformCanvasHeightForData(mockWaveformData)).toBe(waveformHeaderHeight + rows.length * waveformLaneHeight + waveformBottomPadding);
+  });
+
+  it('counts hexagon-shaped bus and Z intervals in the visible viewport', () => {
+    const shapeCounts = getWaveformShapeCounts(mockWaveformData, fitWaveformViewport(mockWaveformData));
+
+    expect(shapeCounts.busHexagonCount).toBeGreaterThan(0);
+    expect(shapeCounts.zHexagonCount).toBeGreaterThan(0);
   });
 
   it('counts fillable high pulse intervals without counting low digital intervals', () => {

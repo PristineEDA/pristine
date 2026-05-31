@@ -5272,7 +5272,7 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
 
   const panel = window.getByTestId('waveform-panel');
   await expect(panel).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
-  await expect(panel).toHaveAttribute('data-signal-count', '8');
+  await expect(panel).toHaveAttribute('data-signal-count', '48');
   await expect(panel).toHaveAttribute('data-ready', 'true', { timeout: UI_READY_TIMEOUT_MS });
   await expect(panel).toHaveAttribute('data-renderer', /^(webgpu|webgl)$/);
   await expect(panel).toHaveAttribute('data-selected-signal-id', 'tb_top_module1-clk');
@@ -5281,13 +5281,19 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
   await expect(canvasHost).toHaveAttribute('data-renderer', /^(webgpu|webgl)$/);
   await expect(canvasHost).toHaveAttribute('data-layer-count', '4');
   await expect(canvasHost).toHaveAttribute('data-layer-names', 'background,content,status,operation');
-  await expect(canvasHost).toHaveAttribute('data-row-count', '10');
+  await expect(canvasHost).toHaveAttribute('data-row-count', '51');
   await expect(canvasHost).toHaveAttribute('data-row-height', '30');
   await expect(canvasHost).toHaveAttribute('data-first-signal-lane-y', '60.00');
+  await expect.poll(async () => Number(await canvasHost.getAttribute('data-bus-hexagon-count') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
   await expect.poll(async () => Number(await canvasHost.getAttribute('data-x-state-count') ?? '0'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(0);
   await expect.poll(async () => Number(await canvasHost.getAttribute('data-z-state-count') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
+  await expect.poll(async () => Number(await canvasHost.getAttribute('data-z-hexagon-count') ?? '0'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(0);
   await expect.poll(async () => Number(await canvasHost.getAttribute('data-pulse-fill-count') ?? '0'), {
@@ -5339,6 +5345,26 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
   await expect(window.getByTestId('waveform-settings-popover')).toBeVisible();
   await expect(window.getByTestId('waveform-add-signals')).toHaveCount(0);
   await expect(window.getByTestId('waveform-signal-picker')).toHaveCount(0);
+
+  const denseRow = window.getByTestId('waveform-signal-row-dense-signal-40');
+  await denseRow.scrollIntoViewIfNeeded();
+  await denseRow.click();
+  await expect(panel).toHaveAttribute('data-selected-signal-id', 'dense-signal-40');
+  await expect(denseRow).toHaveAttribute('data-row-index', '50');
+  await expect(denseRow).toHaveAttribute('data-lane-y', '1530.00');
+  await expect(canvasHost).toHaveAttribute('data-selected-signal-lane-y', '1530.00');
+
+  await expect.poll(async () => {
+    const denseRowBox = await denseRow.boundingBox();
+    const scrolledCanvasBox = await canvasHost.boundingBox();
+    const selectedSignalLaneY = Number(await canvasHost.getAttribute('data-selected-signal-lane-y') ?? 'NaN');
+
+    if (!denseRowBox || !scrolledCanvasBox || !Number.isFinite(selectedSignalLaneY)) {
+      return Number.POSITIVE_INFINITY;
+    }
+
+    return Math.abs(denseRowBox.y - scrolledCanvasBox.y - selectedSignalLaneY);
+  }, { timeout: UI_READY_TIMEOUT_MS }).toBeLessThanOrEqual(2);
 
   await app.close();
 });

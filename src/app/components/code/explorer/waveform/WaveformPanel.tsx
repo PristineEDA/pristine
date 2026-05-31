@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { ChevronLeft, ChevronRight, Maximize2, MousePointer2, RotateCcw, Settings2, SlidersHorizontal, ZoomIn, ZoomOut } from 'lucide-react';
 
 import { Button } from '../../../ui/button';
@@ -28,6 +28,9 @@ export function WaveformPanel() {
   const [renderer, setRenderer] = useState<WaveformRendererStatus>('initializing');
   const [selectedSignalId, setSelectedSignalId] = useState<string | null>(data.signals[0]?.id ?? null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const signalScrollRef = useRef<HTMLDivElement | null>(null);
+  const waveformScrollRef = useRef<HTMLDivElement | null>(null);
+  const syncingScrollRef = useRef(false);
   const selectedSignal = useMemo(
     () => data.signals.find((signal) => signal.id === selectedSignalId) ?? data.signals[0] ?? null,
     [data.signals, selectedSignalId],
@@ -61,6 +64,18 @@ export function WaveformPanel() {
     setViewport(getInitialWaveformViewport(data));
     setCursorTime(data.cursorTime);
     setSelectedSignalId(data.signals[0]?.id ?? null);
+  }
+
+  function syncVerticalScroll(source: HTMLDivElement | null, target: HTMLDivElement | null) {
+    if (!source || !target || syncingScrollRef.current) {
+      return;
+    }
+
+    syncingScrollRef.current = true;
+    target.scrollTop = source.scrollTop;
+    window.requestAnimationFrame(() => {
+      syncingScrollRef.current = false;
+    });
   }
 
   return (
@@ -116,7 +131,11 @@ export function WaveformPanel() {
             <span>Signal</span>
             <span className="text-right">Value</span>
           </div>
-          <div className="bottom-panel-scrollbar min-h-0 flex-1 overflow-auto">
+          <div
+            ref={signalScrollRef}
+            className="bottom-panel-scrollbar min-h-0 flex-1 overflow-auto"
+            onScroll={() => syncVerticalScroll(signalScrollRef.current, waveformScrollRef.current)}
+          >
             {displayRows.map((row) => (
               row.kind === 'group' ? (
                 <div
@@ -160,15 +179,21 @@ export function WaveformPanel() {
               </div>
             </div>
           )}
-          <WaveformCanvas
-            cursorTime={cursorTime}
-            data={data}
-            selectedSignalId={selectedSignalId}
-            viewport={viewport}
-            onCursorTimeChange={setCursorTime}
-            onRendererChange={setRenderer}
-            onViewportChange={setViewport}
-          />
+          <div
+            ref={waveformScrollRef}
+            className="bottom-panel-scrollbar min-h-0 flex-1 overflow-auto"
+            onScroll={() => syncVerticalScroll(waveformScrollRef.current, signalScrollRef.current)}
+          >
+            <WaveformCanvas
+              cursorTime={cursorTime}
+              data={data}
+              selectedSignalId={selectedSignalId}
+              viewport={viewport}
+              onCursorTimeChange={setCursorTime}
+              onRendererChange={setRenderer}
+              onViewportChange={setViewport}
+            />
+          </div>
         </main>
       </div>
     </div>

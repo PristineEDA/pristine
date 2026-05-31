@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { createWaveformScene, waveformLayerNames } from './createWaveformScene';
-import { fitWaveformViewport, getWaveformDigitalPulseFillCount, getWaveformDisplayRows, getWaveformSignalLaneY } from './waveformLayout';
+import { fitWaveformViewport, getWaveformDigitalPulseFillCount, getWaveformDisplayRows, getWaveformShapeCounts, getWaveformSignalLaneY } from './waveformLayout';
 import { mockWaveformData } from './waveformMockData';
 
 describe('createWaveformScene', () => {
@@ -23,6 +23,9 @@ describe('createWaveformScene', () => {
     expect(scene.layers.operation.children.length).toBeGreaterThan(0);
     expect(scene.firstSignalLaneY).toBe(getWaveformSignalLaneY(mockWaveformData, 'tb_top_module1-clk'));
     expect(scene.selectedSignalLaneY).toBe(getWaveformSignalLaneY(mockWaveformData, 'u_top_module1-counting'));
+    expect(scene.shapeCounts).toEqual(getWaveformShapeCounts(mockWaveformData, fitWaveformViewport(mockWaveformData)));
+    expect(scene.shapeCounts.busHexagonCount).toBeGreaterThan(0);
+    expect(scene.shapeCounts.zHexagonCount).toBeGreaterThan(0);
     expect(scene.digitalPulseFillCount).toBe(getWaveformDigitalPulseFillCount(mockWaveformData, fitWaveformViewport(mockWaveformData)));
     expect(scene.digitalPulseFillCount).toBeGreaterThan(0);
     expect(scene.stateCounts.xStateCount).toBeGreaterThan(0);

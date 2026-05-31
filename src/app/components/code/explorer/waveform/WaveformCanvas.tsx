@@ -9,6 +9,7 @@ import {
   getWaveformDisplayRows,
   getWaveformFirstSignalLaneY,
   getWaveformSignalLaneY,
+  getWaveformShapeCounts,
   getWaveformStateCounts,
   getWaveformViewportSpan,
   panWaveformViewport,
@@ -276,9 +277,11 @@ export function WaveformCanvas({
   const zoomLevel = data.duration / getWaveformViewportSpan(viewport);
   const cursorX = timeToX(cursorTime, viewport, waveformCanvasMinWidth);
   const displayRows = getWaveformDisplayRows(data);
+  const canvasHeight = getWaveformCanvasHeightForData(data);
   const firstSignalLaneY = getWaveformFirstSignalLaneY(data);
   const selectedSignalLaneY = getWaveformSignalLaneY(data, selectedSignalId);
   const stateCounts = getWaveformStateCounts(data);
+  const shapeCounts = getWaveformShapeCounts(data, viewport);
   const pulseFillCount = getWaveformDigitalPulseFillCount(data, viewport);
 
   return (
@@ -290,6 +293,7 @@ export function WaveformCanvas({
       data-cursor-x={cursorX.toFixed(2)}
       data-layer-count={waveformLayerNames.length}
       data-layer-names={waveformLayerNames.join(',')}
+      data-bus-hexagon-count={shapeCounts.busHexagonCount}
       data-first-signal-lane-y={formatOptionalNumber(firstSignalLaneY)}
       data-pulse-fill-count={pulseFillCount}
       data-render-count={renderCount}
@@ -301,9 +305,11 @@ export function WaveformCanvas({
       data-visible-window-end={viewport.endTime.toFixed(2)}
       data-visible-window-start={viewport.startTime.toFixed(2)}
       data-x-state-count={stateCounts.xStateCount}
+      data-z-hexagon-count={shapeCounts.zHexagonCount}
       data-z-state-count={stateCounts.zStateCount}
       data-zoom={zoomLevel.toFixed(2)}
       role="img"
+      style={{ minHeight: canvasHeight }}
       tabIndex={0}
     >
       {renderer === 'error' && (

@@ -7,6 +7,11 @@ export interface WaveformStateCounts {
   zStateCount: number;
 }
 
+export interface WaveformShapeCounts {
+  busHexagonCount: number;
+  zHexagonCount: number;
+}
+
 export interface WaveformTransition {
   time: number;
   value: string;
