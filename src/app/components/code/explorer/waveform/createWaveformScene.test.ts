@@ -70,7 +70,7 @@ describe('createWaveformScene', () => {
 
   it('uses denser chevrons for Z hatches while preserving the X hatch spacing', () => {
     expect(waveformUnknownStripeSpacing).toBe(8);
-    expect(waveformHighImpedanceStripeSpacing).toBe(5);
+    expect(waveformHighImpedanceStripeSpacing).toBe(6);
     expect(waveformHighImpedanceStripeSpacing).toBeLessThan(waveformUnknownStripeSpacing);
   });
 

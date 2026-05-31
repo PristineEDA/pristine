@@ -24,7 +24,7 @@ import type { WaveformDataSet, WaveformLayerName, WaveformShapeCounts, WaveformS
 
 export const waveformLayerNames: readonly WaveformLayerName[] = ['background', 'content', 'status', 'operation'];
 export const waveformUnknownStripeSpacing = 8;
-export const waveformHighImpedanceStripeSpacing = 5;
+export const waveformHighImpedanceStripeSpacing = 6;
 
 export type WaveformSceneLayers = Record<WaveformLayerName, Container>;
 

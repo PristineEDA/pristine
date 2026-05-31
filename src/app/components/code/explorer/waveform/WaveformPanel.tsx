@@ -206,9 +206,9 @@ export function WaveformPanel() {
       </div>
 
       <ResizablePanelGroup orientation="horizontal" layoutGapPx={4} className="min-h-0 flex-1 overflow-hidden">
-        <ResizablePanel defaultSize={12} minSizePx={160} maxSizePx={420} id="waveform-signal-list">
+        <ResizablePanel defaultSize={10} minSizePx={160} maxSizePx={420} id="waveform-signal-list">
           <aside className="flex h-full min-w-0 flex-col border-r border-ide-border bg-ide-sidebar-bg">
-            <div className="grid h-[30px] shrink-0 grid-cols-[minmax(0,1fr)_56px] items-end gap-2 border-b border-ide-border px-3 pb-[5px] text-[10px] font-medium uppercase leading-none tracking-[0.08em] text-ide-text-muted">
+            <div className="grid h-[30px] shrink-0 grid-cols-[minmax(0,1fr)_56px] items-end gap-2 border-b border-ide-border px-3 pb-1 text-[10px] font-medium uppercase leading-[14px] tracking-[0.08em] text-ide-text-muted">
               <span>Signal</span>
               <span className="text-right">Value</span>
             </div>
@@ -220,7 +220,7 @@ export function WaveformPanel() {
               {displayRows.map((row) => (
                 row.kind === 'group' ? (
                   <div
-                    className="flex h-[30px] items-end border-b border-ide-border bg-ide-sidebar-bg/95 px-3 pb-[5px] text-[10px] font-medium uppercase leading-none tracking-[0.08em] text-ide-text-muted"
+                    className="flex h-[30px] items-end border-b border-ide-border bg-ide-sidebar-bg/95 px-3 pb-1 text-[10px] font-medium uppercase leading-[14px] tracking-[0.08em] text-ide-text-muted"
                     data-lane-y={row.y.toFixed(2)}
                     data-row-index={row.rowIndex}
                     data-testid={`waveform-group-row-${row.group.id}`}
@@ -312,19 +312,19 @@ function SignalRow({ cursorTime, selected, row, onSelect }: SignalRowProps) {
 
   return (
     <button
-      className={`grid h-[30px] w-full grid-cols-[minmax(0,1fr)_56px] items-end gap-2 border-b border-ide-border/70 px-3 pb-[5px] text-left text-[11px] leading-none transition-colors ${selected ? 'bg-ide-accent/15 text-ide-text' : 'text-ide-text-muted hover:bg-ide-tab-hover hover:text-ide-text'}`}
+      className={`grid h-[30px] w-full grid-cols-[minmax(0,1fr)_56px] items-end gap-2 border-b border-ide-border/70 px-3 pb-1 text-left text-[11px] leading-[14px] transition-colors ${selected ? 'bg-ide-accent/15 text-ide-text' : 'text-ide-text-muted hover:bg-ide-tab-hover hover:text-ide-text'}`}
       data-lane-y={row.y.toFixed(2)}
       data-row-index={row.rowIndex}
       data-testid={getWaveformSignalTestId(signal.id)}
       type="button"
       onClick={onSelect}
     >
-      <span className="flex min-w-0 items-baseline gap-2 leading-[11px]">
-        <span className="mb-px h-2 w-2 shrink-0 self-end rounded-sm" style={{ backgroundColor: signal.color }} />
-        <span className="min-w-0 truncate font-mono leading-[11px]">{signal.name}</span>
-        {signal.width && <span className="shrink-0 translate-y-px rounded border border-ide-border px-1 text-[10px] leading-[10px] text-ide-text-muted">[{signal.width - 1}:0]</span>}
+      <span className="flex min-w-0 items-end gap-2 leading-[14px]">
+        <span className="mb-[3px] h-2 w-2 shrink-0 rounded-sm" style={{ backgroundColor: signal.color }} />
+        <span className="min-w-0 truncate font-mono leading-[14px]">{signal.name}</span>
+        {signal.width && <span className="shrink-0 rounded border border-ide-border px-1 text-[10px] leading-[10px] text-ide-text-muted">[{signal.width - 1}:0]</span>}
       </span>
-      <span className="min-w-0 truncate text-right font-mono leading-[11px] text-ide-text">{formatWaveformValue(value)}</span>
+      <span className="min-w-0 truncate text-right font-mono leading-[14px] text-ide-text">{formatWaveformValue(value)}</span>
     </button>
   );
 }
