@@ -5278,7 +5278,7 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
   const cursorInfoSignal = window.getByTestId('waveform-toolbar-cursor-signal');
   const cursorInfoValue = window.getByTestId('waveform-toolbar-cursor-value');
   await expect(panel).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
-  await expect(panel).toHaveAttribute('data-signal-count', '48');
+  await expect(panel).toHaveAttribute('data-signal-count', '168');
   await expect(panel).toHaveAttribute('data-ready', 'true', { timeout: UI_READY_TIMEOUT_MS });
   await expect(panel).toHaveAttribute('data-renderer', /^(webgpu|webgl)$/);
   await expect(panel).toHaveAttribute('data-selected-signal-id', 'tb_top_module1-clk');
@@ -5296,36 +5296,60 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
   }).toBe(true);
 
   const canvasHost = window.getByTestId('waveform-canvas');
+  const readCanvasNumber = async (attribute: string) => Number(await canvasHost.getAttribute(attribute) ?? '0');
   await expect(canvasHost).toHaveAttribute('data-renderer', /^(webgpu|webgl)$/);
   await expect(canvasHost).toHaveAttribute('data-layer-count', '4');
   await expect(canvasHost).toHaveAttribute('data-layer-names', 'background,content,status,operation');
   await expect(canvasHost).toHaveAttribute('data-header-background', 'opaque');
-  await expect(canvasHost).toHaveAttribute('data-row-count', '51');
+  await expect(canvasHost).toHaveAttribute('data-row-count', '171');
   await expect(canvasHost).toHaveAttribute('data-row-height', '30');
   await expect(canvasHost).toHaveAttribute('data-first-signal-lane-y', '60.00');
-  await expect.poll(async () => Number(await canvasHost.getAttribute('data-bus-hexagon-count') ?? '0'), {
+  await expect.poll(async () => readCanvasNumber('data-bus-hexagon-count'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(0);
-  await expect.poll(async () => Number(await canvasHost.getAttribute('data-x-state-count') ?? '0'), {
+  await expect.poll(async () => readCanvasNumber('data-x-state-count'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(0);
-  await expect.poll(async () => Number(await canvasHost.getAttribute('data-z-state-count') ?? '0'), {
+  await expect.poll(async () => readCanvasNumber('data-z-state-count'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(0);
-  await expect.poll(async () => Number(await canvasHost.getAttribute('data-x-state-block-count') ?? '0'), {
+  await expect.poll(async () => readCanvasNumber('data-x-state-block-count'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(0);
-  await expect.poll(async () => Number(await canvasHost.getAttribute('data-z-state-block-count') ?? '0'), {
+  await expect.poll(async () => readCanvasNumber('data-z-state-block-count'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(0);
-  await expect.poll(async () => Number(await canvasHost.getAttribute('data-pulse-fill-count') ?? '0'), {
+  await expect.poll(async () => readCanvasNumber('data-pulse-fill-count'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(0);
-  await expect.poll(async () => Number(await canvasHost.getAttribute('data-render-count') ?? '0'), {
+  await expect.poll(async () => readCanvasNumber('data-render-count'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(0);
+  await expect.poll(async () => readCanvasNumber('data-visible-row-count'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
+  await expect.poll(async () => readCanvasNumber('data-culled-row-count'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
+  await expect.poll(async () => readCanvasNumber('data-rendered-signal-count'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
+  await expect.poll(async () => readCanvasNumber('data-cacheable-signal-count'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
+  await expect.poll(async () => readCanvasNumber('data-coalesced-segment-count'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
+  await expect.poll(async () => {
+    const sourceSegmentCount = await readCanvasNumber('data-source-segment-count');
+    const renderedSegmentCount = await readCanvasNumber('data-rendered-segment-count');
+
+    return sourceSegmentCount > 0 && renderedSegmentCount > 0 && renderedSegmentCount <= sourceSegmentCount;
+  }, {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBe(true);
   await expect(canvasHost.locator('canvas')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
-  await expect.poll(async () => Number(await canvasHost.getAttribute('data-canvas-height') ?? '0'), {
+  await expect.poll(async () => readCanvasNumber('data-canvas-height'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(220);
 

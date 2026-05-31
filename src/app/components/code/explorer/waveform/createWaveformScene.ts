@@ -1,15 +1,16 @@
-import { Container, Graphics, Text } from 'pixi.js';
+import { Container, Graphics, Rectangle, Sprite, Text, type Renderer, type Texture } from 'pixi.js';
 
 import {
   formatWaveformValue,
   getWaveformDigitalPulseFillCount,
   getWaveformDisplayRows,
   getWaveformFirstSignalLaneY,
+  getWaveformRenderSegments,
   getWaveformSignalLaneY,
   getWaveformShapeCounts,
   getWaveformStateCounts,
   getWaveformTicks,
-  getWaveformTransitionsInWindow,
+  getVisibleWaveformRows,
   isHighImpedanceWaveformValue,
   isSpecialWaveformValue,
   isUnknownWaveformValue,
@@ -20,7 +21,7 @@ import {
   waveformLanePaddingY,
   waveformTimeAxisInset,
 } from './waveformLayout';
-import type { WaveformDataSet, WaveformLayerName, WaveformShapeCounts, WaveformSignal, WaveformStateCounts, WaveformViewport } from './waveformTypes';
+import type { WaveformDataSet, WaveformLayerName, WaveformRenderSegmentResult, WaveformRenderStats, WaveformShapeCounts, WaveformSignal, WaveformStateCounts, WaveformViewport } from './waveformTypes';
 
 export const waveformLayerNames: readonly WaveformLayerName[] = ['background', 'content', 'status', 'operation'];
 export const waveformUnknownStripeSpacing = 8;
@@ -28,12 +29,23 @@ export const waveformHighImpedanceStripeSpacing = 6;
 
 export type WaveformSceneLayers = Record<WaveformLayerName, Container>;
 
+export interface WaveformSignalTextureCacheEntry {
+  texture: Texture;
+  renderedLabelCount: number;
+}
+
+export interface WaveformSignalTextureCache {
+  get: (key: string) => WaveformSignalTextureCacheEntry | null | undefined;
+  set: (key: string, entry: WaveformSignalTextureCacheEntry) => void;
+}
+
 export interface WaveformScene {
   world: Container;
   layers: WaveformSceneLayers;
   shapeCounts: WaveformShapeCounts;
   digitalPulseFillCount: number;
   firstSignalLaneY: number | null;
+  renderStats: WaveformRenderStats;
   rowCount: number;
   selectedSignalLaneY: number | null;
   stateCounts: WaveformStateCounts;
@@ -45,6 +57,8 @@ interface WaveformSceneOptions {
   cursorTime: number;
   height: number;
   selectedSignalId: string | null;
+  signalTextureCache?: WaveformSignalTextureCache;
+  textureRenderer?: Pick<Renderer, 'generateTexture'>;
   verticalScrollTop?: number;
   width: number;
 }
@@ -69,14 +83,16 @@ export function createWaveformScene(options: WaveformSceneOptions): WaveformScen
   const layers = createLayers();
   const base = new Graphics();
   const rows = getWaveformDisplayRows(options.data);
+  const visibleRows = getVisibleWaveformRows(rows, options.verticalScrollTop ?? 0, options.height);
+  const renderStats = createRenderStats(visibleRows.visibleRowCount, visibleRows.culledRowCount);
 
   base.rect(0, 0, options.width, options.height).fill({ color: palette.background });
   base.rect(0, 0, options.width, waveformHeaderHeight).fill({ color: palette.header });
 
   layers.background.addChild(base);
-  drawLanes(layers.background, rows, options);
+  drawLanes(layers.background, visibleRows.rows, options);
   drawGrid(layers.background, layers.status, options);
-  drawSignals(layers.content, rows, options);
+  drawSignals(layers.content, visibleRows.rows, options, renderStats);
   drawCursor(layers.status, layers.operation, options);
 
   world.addChild(layers.background, layers.content, layers.status, layers.operation);
@@ -87,9 +103,26 @@ export function createWaveformScene(options: WaveformSceneOptions): WaveformScen
     shapeCounts: getWaveformShapeCounts(options.data, options.viewport),
     digitalPulseFillCount: getWaveformDigitalPulseFillCount(options.data, options.viewport),
     firstSignalLaneY: getWaveformFirstSignalLaneY(options.data),
+    renderStats,
     rowCount: rows.length,
     selectedSignalLaneY: getWaveformSignalLaneY(options.data, options.selectedSignalId),
     stateCounts: getWaveformStateCounts(options.data),
+  };
+}
+
+function createRenderStats(visibleRowCount: number, culledRowCount: number): WaveformRenderStats {
+  return {
+    visibleRowCount,
+    culledRowCount,
+    renderedSignalCount: 0,
+    sourceSegmentCount: 0,
+    renderedSegmentCount: 0,
+    coalescedSegmentCount: 0,
+    renderedLabelCount: 0,
+    cacheableSignalCount: 0,
+    cacheHitCount: 0,
+    cacheMissCount: 0,
+    cachedSignalCount: 0,
   };
 }
 
@@ -109,10 +142,6 @@ function drawLanes(target: Container, rows: ReturnType<typeof getWaveformDisplay
     const isGroup = row.kind === 'group';
     const y = getScrolledY(row.y, options);
     const isSelected = row.kind === 'signal' && row.signal.id === options.selectedSignalId;
-
-    if (isLaneOutsideVisibleCanvas(y, options.height)) {
-      return;
-    }
 
     lanes
       .rect(0, y, options.width, waveformLaneHeight)
@@ -174,7 +203,7 @@ function drawGrid(target: Container, headerTarget: Container, options: WaveformS
   headerTarget.addChild(headerOverlay);
 }
 
-function drawSignals(target: Container, rows: ReturnType<typeof getWaveformDisplayRows>, options: WaveformSceneOptions) {
+function drawSignals(target: Container, rows: ReturnType<typeof getWaveformDisplayRows>, options: WaveformSceneOptions, renderStats: WaveformRenderStats) {
   rows.forEach((row) => {
     if (row.kind !== 'signal') {
       return;
@@ -182,24 +211,70 @@ function drawSignals(target: Container, rows: ReturnType<typeof getWaveformDispl
 
     const signal = row.signal;
     const laneY = getScrolledY(row.y, options);
-    const signalLayer = new Container();
+    const segmentResult = getWaveformRenderSegments(signal, options.viewport, options.width);
 
-    if (isLaneOutsideVisibleCanvas(laneY, options.height)) {
-      return;
+    renderStats.renderedSignalCount += 1;
+    renderStats.sourceSegmentCount += segmentResult.sourceSegmentCount;
+    renderStats.renderedSegmentCount += segmentResult.renderedSegmentCount;
+    renderStats.coalescedSegmentCount += segmentResult.coalescedSegmentCount;
+
+    const cacheKey = shouldCacheSignalTexture(segmentResult) ? getSignalTextureCacheKey(signal, options, segmentResult) : null;
+
+    if (cacheKey) {
+      renderStats.cacheableSignalCount += 1;
+      const cached = options.signalTextureCache?.get(cacheKey);
+
+      if (cached && !cached.texture.destroyed) {
+        const sprite = new Sprite(cached.texture);
+        sprite.y = laneY;
+        target.addChild(sprite);
+        renderStats.cacheHitCount += 1;
+        renderStats.renderedLabelCount += cached.renderedLabelCount;
+        return;
+      }
     }
+
+    const signalLayer = new Container({ label: `waveform-signal-layer-${signal.id}` });
+    let renderedLabelCount = 0;
 
     if (signal.kind === 'bus') {
-      drawBusWaveform(signalLayer, signal, options, laneY);
+      renderedLabelCount = drawBusWaveform(signalLayer, signal, segmentResult, 0);
     } else {
-      drawDigitalWaveform(signalLayer, signal, options, laneY);
+      renderedLabelCount = drawDigitalWaveform(signalLayer, signal, options, segmentResult, 0);
     }
 
+    renderStats.renderedLabelCount += renderedLabelCount;
+
+    if (cacheKey && options.signalTextureCache && options.textureRenderer) {
+      renderStats.cacheMissCount += 1;
+
+      try {
+        const texture = options.textureRenderer.generateTexture({
+          target: signalLayer,
+          frame: new Rectangle(0, 0, options.width, waveformLaneHeight),
+          resolution: 1,
+          antialias: false,
+        });
+        options.signalTextureCache.set(cacheKey, { texture, renderedLabelCount });
+        const sprite = new Sprite(texture);
+        sprite.y = laneY;
+        target.addChild(sprite);
+        signalLayer.destroy({ children: true });
+        renderStats.cachedSignalCount += 1;
+        return;
+      } catch {
+        signalLayer.cacheAsTexture({ resolution: 1, antialias: false });
+      }
+    } else if (cacheKey) {
+      signalLayer.cacheAsTexture({ resolution: 1, antialias: false });
+    }
+
+    signalLayer.y = laneY;
     target.addChild(signalLayer);
   });
 }
 
-function drawDigitalWaveform(target: Container, signal: WaveformSignal, options: WaveformSceneOptions, laneY: number) {
-  const transitions = getWaveformTransitionsInWindow(signal, options.viewport);
+function drawDigitalWaveform(target: Container, signal: WaveformSignal, options: WaveformSceneOptions, segmentResult: WaveformRenderSegmentResult, laneY: number) {
   const line = new Graphics();
   const stateLabels: Text[] = [];
   const lineColor = parseHexColor(signal.color);
@@ -209,28 +284,33 @@ function drawDigitalWaveform(target: Container, signal: WaveformSignal, options:
   const bottomY = laneY + waveformLaneHeight - waveformLanePaddingY - 2;
   const midY = laneY + waveformLaneHeight / 2;
 
-  for (let index = 0; index < transitions.length - 1; index += 1) {
-    const current = transitions[index];
-    const next = transitions[index + 1];
+  for (let index = 0; index < segmentResult.segments.length; index += 1) {
+    const segment = segmentResult.segments[index];
+    const nextSegment = segmentResult.segments[index + 1];
 
-    if (!current || !next) {
+    if (!segment) {
       continue;
     }
 
-    const x1 = timeToX(current.time, options.viewport, options.width);
-    const x2 = timeToX(next.time, options.viewport, options.width);
-    const width = Math.max(1, x2 - x1);
-    const currentValue = normalizeWaveformValue(current.value);
-    const nextValue = normalizeWaveformValue(next.value);
+    const x1 = segment.x1;
+    const x2 = segment.x2;
+    const width = segment.width;
+    const currentValue = normalizeWaveformValue(segment.value);
+    const nextValue = nextSegment ? normalizeWaveformValue(nextSegment.value) : currentValue;
 
-    if (isUnknownWaveformValue(currentValue)) {
+    if (segment.hasUnknown || isUnknownWaveformValue(currentValue)) {
       drawUnknownStateBlock(line, stateLabels, x1, laneTop, width, laneBottom - laneTop);
       continue;
     }
 
-    if (isHighImpedanceWaveformValue(currentValue)) {
+    if (segment.hasHighImpedance || isHighImpedanceWaveformValue(currentValue)) {
       drawHighImpedanceStateBlock(line, stateLabels, x1, laneTop, width, laneBottom - laneTop);
 
+      continue;
+    }
+
+    if (segment.mixed) {
+      drawDigitalActivityBlock(line, x1, topY, width, bottomY - topY, lineColor, signal.kind);
       continue;
     }
 
@@ -246,7 +326,7 @@ function drawDigitalWaveform(target: Container, signal: WaveformSignal, options:
       .lineTo(x2, y)
       .stroke({ color: lineColor, width: signal.kind === 'clock' ? 1.7 : 2, alpha: 0.96 });
 
-    if (nextValue !== currentValue && !isSpecialWaveformValue(nextValue)) {
+    if (nextSegment && !nextSegment.mixed && nextValue !== currentValue && !isSpecialWaveformValue(nextValue)) {
       const nextY = nextValue === '1' ? topY : bottomY;
       line
         .moveTo(x2, y)
@@ -261,6 +341,7 @@ function drawDigitalWaveform(target: Container, signal: WaveformSignal, options:
     .stroke({ color: 0xffffff, width: 1, alpha: 0.04 });
 
   target.addChild(line, ...stateLabels);
+  return stateLabels.length;
 }
 
 function drawDigitalPulseFill(target: Graphics, x: number, y: number, width: number, height: number, color: number, signalKind: WaveformSignal['kind']) {
@@ -269,47 +350,58 @@ function drawDigitalPulseFill(target: Graphics, x: number, y: number, width: num
     .fill({ color, alpha: signalKind === 'clock' ? 0.12 : 0.18 });
 }
 
-function drawBusWaveform(target: Container, signal: WaveformSignal, options: WaveformSceneOptions, laneY: number) {
-  const transitions = getWaveformTransitionsInWindow(signal, options.viewport);
+function drawDigitalActivityBlock(target: Graphics, x: number, y: number, width: number, height: number, color: number, signalKind: WaveformSignal['kind']) {
+  const midY = y + height / 2;
+
+  target
+    .rect(x, y, width, Math.max(1, height))
+    .fill({ color, alpha: signalKind === 'clock' ? 0.08 : 0.12 })
+    .moveTo(x, midY)
+    .lineTo(x + width, midY)
+    .stroke({ color, width: signalKind === 'clock' ? 1.3 : 1.6, alpha: 0.84 });
+}
+
+function drawBusWaveform(target: Container, signal: WaveformSignal, segmentResult: WaveformRenderSegmentResult, laneY: number) {
   const bus = new Graphics();
   const valueLabels: Text[] = [];
   const busColor = parseHexColor(signal.color);
   const y = laneY + waveformLanePaddingY;
   const height = waveformLaneHeight - waveformLanePaddingY * 2;
 
-  for (let index = 0; index < transitions.length - 1; index += 1) {
-    const current = transitions[index];
-    const next = transitions[index + 1];
-
-    if (!current || !next) {
+  for (const segment of segmentResult.segments) {
+    if (!segment) {
       continue;
     }
 
-    const x1 = timeToX(current.time, options.viewport, options.width);
-    const x2 = timeToX(next.time, options.viewport, options.width);
-    const width = Math.max(1, x2 - x1);
-    const currentValue = normalizeWaveformValue(current.value);
+    const x1 = segment.x1;
+    const width = segment.width;
+    const currentValue = normalizeWaveformValue(segment.value);
 
-    if (isUnknownWaveformValue(currentValue)) {
+    if (segment.hasUnknown || isUnknownWaveformValue(currentValue)) {
       drawUnknownStateBlock(bus, valueLabels, x1, y, width, height);
-    } else if (isHighImpedanceWaveformValue(currentValue)) {
+    } else if (segment.hasHighImpedance || isHighImpedanceWaveformValue(currentValue)) {
       drawHighImpedanceStateBlock(bus, valueLabels, x1, y, width, height);
     } else {
       drawElongatedHexagon(bus, x1, y, width, height, {
         color: busColor,
-        fillAlpha: 0.16,
-        strokeAlpha: 0.84,
+        fillAlpha: segment.mixed ? 0.1 : 0.16,
+        strokeAlpha: segment.mixed ? 0.58 : 0.84,
         strokeWidth: 1.2,
       });
     }
 
-    if (!isSpecialWaveformValue(currentValue) && width >= 24) {
+    if (!segment.mixed && !isSpecialWaveformValue(currentValue) && width >= 24) {
       valueLabels.push(createText(formatWaveformValue(currentValue), palette.text, 10, x1 + 7, y + 4));
     }
   }
 
   target.addChild(bus);
-  target.addChild(...valueLabels);
+
+  if (valueLabels.length > 0) {
+    target.addChild(...valueLabels);
+  }
+
+  return valueLabels.length;
 }
 
 function drawUnknownStateBlock(target: Graphics, labels: Text[], x: number, y: number, width: number, height: number) {
@@ -524,8 +616,28 @@ function getScrolledY(y: number, options: WaveformSceneOptions) {
   return y - (options.verticalScrollTop ?? 0);
 }
 
-function isLaneOutsideVisibleCanvas(y: number, height: number) {
-  return y + waveformLaneHeight < waveformHeaderHeight - waveformLaneHeight || y > height + waveformLaneHeight;
+function shouldCacheSignalTexture(segmentResult: WaveformRenderSegmentResult) {
+  return segmentResult.sourceSegmentCount >= 48 || segmentResult.renderedSegmentCount >= 32 || segmentResult.coalescedSegmentCount >= 16;
+}
+
+function getSignalTextureCacheKey(signal: WaveformSignal, options: WaveformSceneOptions, segmentResult: WaveformRenderSegmentResult) {
+  const lastTransition = signal.transitions[signal.transitions.length - 1];
+
+  return [
+    options.data.id,
+    signal.id,
+    signal.kind,
+    signal.color,
+    options.width,
+    options.viewport.startTime.toFixed(3),
+    options.viewport.endTime.toFixed(3),
+    signal.transitions.length,
+    lastTransition?.time.toFixed(3) ?? '0.000',
+    lastTransition?.value ?? '',
+    segmentResult.sourceSegmentCount,
+    segmentResult.renderedSegmentCount,
+    segmentResult.coalescedSegmentCount,
+  ].join(':');
 }
 
 function getEstimatedTextWidth(text: string, fontSize: number) {

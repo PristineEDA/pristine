@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { Container, Text } from 'pixi.js';
+import { Container, Text, Texture } from 'pixi.js';
 
-import { clipWaveformLineToBounds, createWaveformScene, getWaveformBusHexagonBevel, waveformHighImpedanceStripeSpacing, waveformLayerNames, waveformUnknownStripeSpacing } from './createWaveformScene';
+import { clipWaveformLineToBounds, createWaveformScene, getWaveformBusHexagonBevel, waveformHighImpedanceStripeSpacing, waveformLayerNames, waveformUnknownStripeSpacing, type WaveformSignalTextureCacheEntry } from './createWaveformScene';
 import { fitWaveformViewport, getWaveformCanvasHeightForData, getWaveformDigitalPulseFillCount, getWaveformDisplayRows, getWaveformShapeCounts, getWaveformSignalLaneY } from './waveformLayout';
 import { mockWaveformData } from './waveformMockData';
 
@@ -34,8 +34,46 @@ describe('createWaveformScene', () => {
     expect(scene.digitalPulseFillCount).toBeGreaterThan(0);
     expect(scene.stateCounts.xStateCount).toBeGreaterThan(0);
     expect(scene.stateCounts.zStateCount).toBeGreaterThan(0);
+    expect(scene.renderStats.visibleRowCount).toBeGreaterThan(0);
+    expect(scene.renderStats.culledRowCount).toBeGreaterThan(0);
+    expect(scene.renderStats.renderedSignalCount).toBeGreaterThan(0);
+    expect(scene.renderStats.renderedSignalCount).toBeLessThan(mockWaveformData.signals.length);
+    expect(scene.renderStats.sourceSegmentCount).toBeGreaterThan(scene.renderStats.renderedSegmentCount);
+    expect(scene.renderStats.coalescedSegmentCount).toBeGreaterThan(0);
 
     scene.world.destroy({ children: true });
+  });
+
+  it('records cache misses and hits for cacheable dense signal textures', () => {
+    const cache = new Map<string, WaveformSignalTextureCacheEntry>();
+    const signalTextureCache = {
+      get: (key: string) => cache.get(key),
+      set: (key: string, entry: WaveformSignalTextureCacheEntry) => cache.set(key, entry),
+    };
+    const textureRenderer = {
+      generateTexture: () => Texture.EMPTY,
+    };
+    const baseOptions = {
+      cursorTime: mockWaveformData.cursorTime,
+      data: mockWaveformData,
+      height: 420,
+      selectedSignalId: null,
+      signalTextureCache,
+      textureRenderer,
+      viewport: fitWaveformViewport(mockWaveformData),
+      width: 900,
+    };
+
+    const firstScene = createWaveformScene(baseOptions);
+    firstScene.world.destroy({ children: true });
+    const secondScene = createWaveformScene(baseOptions);
+
+    expect(firstScene.renderStats.cacheableSignalCount).toBeGreaterThan(0);
+    expect(firstScene.renderStats.cacheMissCount).toBeGreaterThan(0);
+    expect(firstScene.renderStats.cachedSignalCount).toBeGreaterThan(0);
+    expect(secondScene.renderStats.cacheHitCount).toBeGreaterThan(0);
+
+    secondScene.world.destroy({ children: true });
   });
 
   it('draws a single X or Z text label per special-state block', () => {

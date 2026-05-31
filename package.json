@@ -38,6 +38,7 @@
     "test:unit": "pnpm run prepare:waveform-mock-data && pnpm run prepare:bundled-theme-assets && vitest run",
     "test:coverage": "pnpm run prepare:waveform-mock-data && pnpm run prepare:bundled-theme-assets && vitest run --coverage",
     "test:e2e": "pnpm run prepare:waveform-mock-data && pnpm run prepare:bundled-theme-assets && playwright test --max-failures=1",
+    "test:e2e:waveform-perf": "pnpm run prepare:waveform-mock-data && pnpm run prepare:bundled-theme-assets && playwright test --config playwright.waveform-perf.config.ts",
     "package:linux:x64": "pnpm run build:app && pnpm run prepare:package-app && electron-builder --projectDir .pristine-package/app --linux AppImage deb --x64 --config electron-builder.yml",
     "package:win:x64": "pnpm run build:app && pnpm run verify:node-pty-binary -- --platform win32 --arch x64 && pnpm run prepare:package-app && electron-builder --projectDir .pristine-package/app --win nsis portable --x64 --config electron-builder.yml",
     "package:mac:x64": "pnpm run build:app && pnpm run prepare:package-app && electron-builder --projectDir .pristine-package/app --mac dmg --x64 --config electron-builder.yml",

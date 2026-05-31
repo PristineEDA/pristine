@@ -12,9 +12,9 @@ describe('waveformDataLoader', () => {
 
     expect(data.title).toBe('counter_tb');
     expect(data.groups.map((group) => group.label)).toEqual(['tb_top_module1', 'u_top_module1', 'dense_test_signals']);
-    expect(data.signals).toHaveLength(48);
-    expect(denseSignals).toHaveLength(40);
-    expect(Math.min(...denseSignals.map((signal) => signal.transitions.length))).toBeGreaterThanOrEqual(50);
+    expect(data.signals).toHaveLength(168);
+    expect(denseSignals).toHaveLength(160);
+    expect(Math.min(...denseSignals.map((signal) => signal.transitions.length))).toBeGreaterThanOrEqual(180);
     expect(counting?.width).toBe(4);
     expect(counting?.transitions[0]?.value).toBe('x');
     expect(lastCountingTransition?.value).toBe('z');

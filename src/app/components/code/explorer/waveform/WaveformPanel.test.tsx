@@ -81,12 +81,12 @@ describe('WaveformPanel', () => {
 
     const panel = screen.getByTestId('waveform-panel');
 
-    expect(panel).toHaveAttribute('data-signal-count', '48');
+    expect(panel).toHaveAttribute('data-signal-count', '168');
     expect(screen.getByText('tb_top_module1')).toBeInTheDocument();
     expect(screen.getByText('u_top_module1')).toBeInTheDocument();
     expect(screen.getByText('dense_test_signals')).toBeInTheDocument();
     expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-layer-names', 'background,content,status,operation');
-    expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-row-count', '51');
+    expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-row-count', '171');
     expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-canvas-height', '320.00');
     expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-canvas-width', '900.00');
     expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-first-signal-lane-y', '60.00');
@@ -160,5 +160,5 @@ describe('WaveformPanel', () => {
     expect(screen.getByTestId('waveform-settings-popover')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /add signals/i })).not.toBeInTheDocument();
     expect(screen.queryByTestId('waveform-signal-picker')).not.toBeInTheDocument();
-  });
+  }, 20000);
 });

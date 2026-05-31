@@ -16,7 +16,7 @@ const targetPath = path.join(
 );
 
 const mockDuration = 200;
-const denseSignalCount = 40;
+const denseSignalCount = 160;
 const denseSignalColors = [
   '#2dd4bf',
   '#22c55e',
@@ -50,31 +50,40 @@ function makeDenseTransitions(index, kind) {
   transitions.push({ time, value });
 
   for (let stepIndex = 1; time < mockDuration; stepIndex += 1) {
-    const step = 2 + ((index * 3 + stepIndex * 2) % 5);
-    time = Math.min(mockDuration, time + step);
+    const step = getDenseTransitionStep(index, stepIndex, kind);
+    time = Number(Math.min(mockDuration, time + step).toFixed(3));
 
     if (kind === 'clock') {
       value = value === '1' ? '0' : '1';
     } else if (kind === 'bus') {
-      if (stepIndex % 29 === 0) {
+      if (stepIndex % 41 === 0) {
         value = 'z';
-      } else if (stepIndex % 17 === 0) {
+      } else if (stepIndex % 23 === 0) {
         value = 'x';
       } else {
-        value = ((stepIndex * (index + 5) + index) % 256).toString(16);
+        value = ((stepIndex * (index + 5) + index * 13) % 4096).toString(16);
       }
-    } else if (stepIndex % 31 === 0) {
+    } else if (stepIndex % 53 === 0) {
       value = 'z';
-    } else if (stepIndex % 19 === 0) {
+    } else if (stepIndex % 37 === 0) {
       value = 'x';
     } else {
       value = String((stepIndex + index) % 2);
     }
 
-    transitions.push({ time: Number(time.toFixed(3)), value });
+    transitions.push({ time, value });
   }
 
   return transitions;
+}
+
+function getDenseTransitionStep(index, stepIndex, kind) {
+  const base = kind === 'clock' ? 0.42 : kind === 'bus' ? 0.58 : 0.5;
+  const burstScale = index % 7 === 0 && stepIndex % 17 < 8 ? 0.58 : 1;
+  const jitter = ((index * 17 + stepIndex * 11) % 9) * 0.055;
+  const drift = ((index + stepIndex) % 5) * 0.13;
+
+  return Math.max(0.18, base * burstScale + jitter + drift);
 }
 
 function makeDenseSignals() {

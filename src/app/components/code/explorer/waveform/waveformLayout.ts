@@ -1,4 +1,4 @@
-import type { WaveformDataSet, WaveformShapeCounts, WaveformSignal, WaveformSignalGroup, WaveformStateCounts, WaveformTransition, WaveformViewport } from './waveformTypes';
+import type { WaveformDataSet, WaveformRenderSegment, WaveformRenderSegmentResult, WaveformShapeCounts, WaveformSignal, WaveformSignalGroup, WaveformStateCounts, WaveformTransition, WaveformViewport } from './waveformTypes';
 
 export const waveformCanvasMinWidth = 360;
 export const waveformCanvasMinHeight = 220;
@@ -8,6 +8,7 @@ export const waveformLanePaddingY = 5;
 export const waveformTimeAxisInset = 10;
 export const waveformBottomPadding = 14;
 export const waveformMinWindow = 8;
+export const waveformSegmentCoalescePixelThreshold = 5;
 
 export type WaveformDisplayRow = WaveformGroupDisplayRow | WaveformSignalDisplayRow;
 
@@ -130,6 +131,77 @@ export function getWaveformTransitionsInWindow(signal: WaveformSignal, viewport:
   transitions.push({ time: viewport.endTime, value: getSignalValueAtTime(signal, viewport.endTime) });
 
   return transitions;
+}
+
+export interface WaveformVisibleRows {
+  rows: WaveformDisplayRow[];
+  visibleRowCount: number;
+  culledRowCount: number;
+}
+
+export function getVisibleWaveformRows(rows: readonly WaveformDisplayRow[], verticalScrollTop: number, height: number, overscanRowCount = 8): WaveformVisibleRows {
+  const top = waveformHeaderHeight - waveformLaneHeight * overscanRowCount;
+  const bottom = height + waveformLaneHeight * overscanRowCount;
+  const visibleRows = rows.filter((row) => {
+    const y = row.y - verticalScrollTop;
+
+    return y + waveformLaneHeight >= top && y <= bottom;
+  });
+
+  return {
+    rows: visibleRows,
+    visibleRowCount: visibleRows.length,
+    culledRowCount: rows.length - visibleRows.length,
+  };
+}
+
+export function getWaveformRenderSegments(
+  signal: WaveformSignal,
+  viewport: WaveformViewport,
+  width: number,
+  minPixelWidth = waveformSegmentCoalescePixelThreshold,
+): WaveformRenderSegmentResult {
+  const transitions = getWaveformTransitionsInWindow(signal, viewport);
+  const sourceSegments: WaveformRenderSegment[] = [];
+
+  for (let index = 0; index < transitions.length - 1; index += 1) {
+    const current = transitions[index];
+    const next = transitions[index + 1];
+
+    if (!current || !next || next.time <= current.time) {
+      continue;
+    }
+
+    sourceSegments.push(createRenderSegment(current, next, viewport, width));
+  }
+
+  if (minPixelWidth <= 0 || sourceSegments.length <= 1) {
+    return createRenderSegmentResult(sourceSegments, sourceSegments.length);
+  }
+
+  const segments: WaveformRenderSegment[] = [];
+  let pending: WaveformRenderSegment | null = null;
+
+  for (const sourceSegment of sourceSegments) {
+    if (!pending) {
+      pending = sourceSegment;
+      continue;
+    }
+
+    if (shouldCoalesceRenderSegment(pending, sourceSegment, minPixelWidth)) {
+      pending = mergeRenderSegments(pending, sourceSegment);
+      continue;
+    }
+
+    segments.push(pending);
+    pending = sourceSegment;
+  }
+
+  if (pending) {
+    segments.push(pending);
+  }
+
+  return createRenderSegmentResult(segments, sourceSegments.length);
 }
 
 export function getWaveformTickStep(viewport: WaveformViewport, width: number) {
@@ -340,4 +412,58 @@ export function getWaveformSignalTestId(signalId: string) {
 
 function getWaveformUsableWidth(width: number) {
   return Math.max(1, width - waveformTimeAxisInset * 2);
+}
+
+function createRenderSegment(current: WaveformTransition, next: WaveformTransition, viewport: WaveformViewport, width: number): WaveformRenderSegment {
+  const value = normalizeWaveformValue(current.value);
+  const x1 = timeToX(current.time, viewport, width);
+  const x2 = timeToX(next.time, viewport, width);
+
+  return {
+    startTime: current.time,
+    endTime: next.time,
+    x1,
+    x2,
+    width: Math.max(1, x2 - x1),
+    value,
+    sourceSegmentCount: 1,
+    mixed: false,
+    hasUnknown: isUnknownWaveformValue(value),
+    hasHighImpedance: isHighImpedanceWaveformValue(value),
+  };
+}
+
+function createRenderSegmentResult(segments: WaveformRenderSegment[], sourceSegmentCount: number): WaveformRenderSegmentResult {
+  return {
+    segments,
+    sourceSegmentCount,
+    renderedSegmentCount: segments.length,
+    coalescedSegmentCount: Math.max(0, sourceSegmentCount - segments.length),
+  };
+}
+
+function shouldCoalesceRenderSegment(previous: WaveformRenderSegment, next: WaveformRenderSegment, minPixelWidth: number) {
+  const combinedWidth = Math.max(1, next.x2 - previous.x1);
+  const samePixelBucket = Math.floor(previous.x1 / minPixelWidth) === Math.floor(next.x2 / minPixelWidth);
+
+  return previous.width < minPixelWidth || samePixelBucket || (next.width < minPixelWidth && combinedWidth <= minPixelWidth * 2);
+}
+
+function mergeRenderSegments(previous: WaveformRenderSegment, next: WaveformRenderSegment): WaveformRenderSegment {
+  const hasUnknown = previous.hasUnknown || next.hasUnknown;
+  const hasHighImpedance = previous.hasHighImpedance || next.hasHighImpedance;
+  const mixed = previous.mixed || next.mixed || previous.value !== next.value;
+
+  return {
+    startTime: previous.startTime,
+    endTime: next.endTime,
+    x1: previous.x1,
+    x2: next.x2,
+    width: Math.max(1, next.x2 - previous.x1),
+    value: hasUnknown ? 'x' : hasHighImpedance ? 'z' : previous.value,
+    sourceSegmentCount: previous.sourceSegmentCount + next.sourceSegmentCount,
+    mixed,
+    hasUnknown,
+    hasHighImpedance,
+  };
 }

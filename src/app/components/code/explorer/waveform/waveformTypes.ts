@@ -13,6 +13,40 @@ export interface WaveformShapeCounts {
   zStateBlockCount: number;
 }
 
+export interface WaveformRenderSegment {
+  startTime: number;
+  endTime: number;
+  x1: number;
+  x2: number;
+  width: number;
+  value: string;
+  sourceSegmentCount: number;
+  mixed: boolean;
+  hasUnknown: boolean;
+  hasHighImpedance: boolean;
+}
+
+export interface WaveformRenderSegmentResult {
+  segments: WaveformRenderSegment[];
+  sourceSegmentCount: number;
+  renderedSegmentCount: number;
+  coalescedSegmentCount: number;
+}
+
+export interface WaveformRenderStats {
+  visibleRowCount: number;
+  culledRowCount: number;
+  renderedSignalCount: number;
+  sourceSegmentCount: number;
+  renderedSegmentCount: number;
+  coalescedSegmentCount: number;
+  renderedLabelCount: number;
+  cacheableSignalCount: number;
+  cacheHitCount: number;
+  cacheMissCount: number;
+  cachedSignalCount: number;
+}
+
 export interface WaveformTransition {
   time: number;
   value: string;

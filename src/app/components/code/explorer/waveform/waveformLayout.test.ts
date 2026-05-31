@@ -6,12 +6,14 @@ import {
   getWaveformDigitalPulseFillCount,
   getWaveformDisplayRows,
   getWaveformFirstSignalLaneY,
+  getWaveformRenderSegments,
   getWaveformSignalLaneY,
   getWaveformShapeCounts,
   getSignalValueAtTime,
   getWaveformStateCounts,
   getWaveformSignalTestId,
   getWaveformTicks,
+  getVisibleWaveformRows,
   isHighImpedanceWaveformValue,
   isUnknownWaveformValue,
   panWaveformViewport,
@@ -68,8 +70,8 @@ describe('waveformLayout', () => {
     const rows = getWaveformDisplayRows(mockWaveformData);
     const countingLaneY = getWaveformSignalLaneY(mockWaveformData, 'u_top_module1-counting');
 
-    expect(rows).toHaveLength(51);
-    expect(rows.filter((row) => row.kind === 'signal')).toHaveLength(48);
+    expect(rows).toHaveLength(171);
+    expect(rows.filter((row) => row.kind === 'signal')).toHaveLength(168);
     expect(rows.filter((row) => row.kind === 'group').map((row) => row.rowIndex)).toEqual([0, 5, 10]);
     expect(getWaveformFirstSignalLaneY(mockWaveformData)).toBe(waveformHeaderHeight + waveformLaneHeight);
     expect(getWaveformSignalLaneY(mockWaveformData, 'u_top_module1-clk')).toBe(waveformHeaderHeight + 6 * waveformLaneHeight);
@@ -77,6 +79,32 @@ describe('waveformLayout', () => {
     expect(getWaveformSignalLaneY(mockWaveformData, 'dense-signal-01')).toBe(waveformHeaderHeight + 11 * waveformLaneHeight);
     expect(getWaveformSignalLaneY(mockWaveformData, 'dense-signal-40')).toBe(waveformHeaderHeight + 50 * waveformLaneHeight);
     expect(getWaveformCanvasHeightForData(mockWaveformData)).toBe(waveformHeaderHeight + rows.length * waveformLaneHeight + waveformBottomPadding);
+  });
+
+  it('returns only visible rows with overscan for Pixi scene culling', () => {
+    const rows = getWaveformDisplayRows(mockWaveformData);
+    const initialRows = getVisibleWaveformRows(rows, 0, 220);
+    const scrolledRows = getVisibleWaveformRows(rows, 1470, 320);
+
+    expect(initialRows.visibleRowCount).toBeGreaterThan(0);
+    expect(initialRows.visibleRowCount).toBeLessThan(rows.length);
+    expect(initialRows.culledRowCount).toBe(rows.length - initialRows.visibleRowCount);
+    expect(initialRows.rows.some((row) => row.kind === 'signal' && row.signal.id === 'dense-signal-01')).toBe(true);
+    expect(scrolledRows.rows.some((row) => row.kind === 'signal' && row.signal.id === 'dense-signal-40')).toBe(true);
+  });
+
+  it('coalesces subpixel dense segments only when the viewport is zoomed out', () => {
+    const signal = mockWaveformData.signals.find((candidate) => candidate.id === 'dense-signal-01');
+
+    expect(signal).toBeDefined();
+
+    const fullViewportSegments = getWaveformRenderSegments(signal!, fitWaveformViewport(mockWaveformData), 360);
+    const zoomedViewportSegments = getWaveformRenderSegments(signal!, { startTime: 0, endTime: 8 }, 900);
+
+    expect(fullViewportSegments.sourceSegmentCount).toBeGreaterThan(100);
+    expect(fullViewportSegments.renderedSegmentCount).toBeLessThan(fullViewportSegments.sourceSegmentCount);
+    expect(fullViewportSegments.coalescedSegmentCount).toBeGreaterThan(0);
+    expect(zoomedViewportSegments.coalescedSegmentCount).toBe(0);
   });
 
   it('counts bus hexagon intervals and rectangular special-state blocks in the visible viewport', () => {
