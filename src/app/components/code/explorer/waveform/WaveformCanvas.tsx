@@ -45,7 +45,8 @@ interface DragState {
 
 const dragThreshold = 4;
 const zoomWheelFactor = 1.18;
-const waveformSignalTextureCacheLimit = 96;
+const waveformSignalTextureCacheLimit = 48;
+const waveformSignalTextureCacheByteLimit = 32 * 1024 * 1024;
 
 export function WaveformCanvas({
   cursorTime,
@@ -64,6 +65,7 @@ export function WaveformCanvas({
   const renderFrameRef = useRef<number | null>(null);
   const dragRef = useRef<DragState | null>(null);
   const signalTextureCacheRef = useRef(new Map<string, WaveformSignalTextureCacheEntry>());
+  const signalTextureCacheBytesRef = useRef(0);
   const textureCacheDataIdRef = useRef(data.id);
   const dataRef = useRef(data);
   const viewportRef = useRef(viewport);
@@ -276,11 +278,17 @@ export function WaveformCanvas({
       width: '100%',
     });
     setCanvasSize({ width, height });
-    sceneRef.current?.world.destroy({ children: true });
+    const previousScene = sceneRef.current;
+    app.stage.removeChildren();
+    sceneRef.current = null;
+    previousScene?.world.destroy({ children: true });
+
+    const renderResolution = getRendererResolution(app);
     sceneRef.current = createWaveformScene({
       cursorTime: cursorTimeRef.current,
       data: dataRef.current,
       height,
+      renderResolution,
       selectedSignalId: selectedSignalIdRef.current,
       signalTextureCache: {
         get: getCachedSignalTexture,
@@ -291,8 +299,11 @@ export function WaveformCanvas({
       viewport: viewportRef.current,
       width,
     });
-    setRenderStats(sceneRef.current.renderStats);
-    app.stage.removeChildren();
+    setRenderStats({
+      ...sceneRef.current.renderStats,
+      textureCacheBytes: signalTextureCacheBytesRef.current,
+      textureCacheSize: signalTextureCacheRef.current.size,
+    });
     app.stage.addChild(sceneRef.current.world);
     requestRender();
   }
@@ -313,26 +324,34 @@ export function WaveformCanvas({
   function setCachedSignalTexture(key: string, entry: WaveformSignalTextureCacheEntry) {
     const existing = signalTextureCacheRef.current.get(key);
 
-    if (existing && existing.texture !== entry.texture) {
-      destroyCachedTexture(existing);
+    if (existing) {
+      removeCachedSignalTexture(key);
     }
 
     signalTextureCacheRef.current.set(key, entry);
+    signalTextureCacheBytesRef.current += entry.estimatedBytes;
 
-    while (signalTextureCacheRef.current.size > waveformSignalTextureCacheLimit) {
+    while (signalTextureCacheRef.current.size > waveformSignalTextureCacheLimit || signalTextureCacheBytesRef.current > waveformSignalTextureCacheByteLimit) {
       const oldestKey = signalTextureCacheRef.current.keys().next().value;
 
       if (typeof oldestKey !== 'string') {
         break;
       }
 
-      const oldestEntry = signalTextureCacheRef.current.get(oldestKey);
-      signalTextureCacheRef.current.delete(oldestKey);
-
-      if (oldestEntry) {
-        destroyCachedTexture(oldestEntry);
-      }
+      removeCachedSignalTexture(oldestKey);
     }
+  }
+
+  function removeCachedSignalTexture(key: string) {
+    const entry = signalTextureCacheRef.current.get(key);
+
+    if (!entry) {
+      return;
+    }
+
+    signalTextureCacheRef.current.delete(key);
+    signalTextureCacheBytesRef.current = Math.max(0, signalTextureCacheBytesRef.current - entry.estimatedBytes);
+    destroyCachedTexture(entry);
   }
 
   function clearSignalTextureCache() {
@@ -341,6 +360,7 @@ export function WaveformCanvas({
     }
 
     signalTextureCacheRef.current.clear();
+    signalTextureCacheBytesRef.current = 0;
   }
 
   function requestRender() {
@@ -381,14 +401,20 @@ export function WaveformCanvas({
       data-cache-miss-count={renderStats.cacheMissCount}
       data-cacheable-signal-count={renderStats.cacheableSignalCount}
       data-cached-signal-count={renderStats.cachedSignalCount}
+      data-compact-signal-count={renderStats.compactSignalCount}
       data-canvas-height={canvasSize.height.toFixed(2)}
       data-canvas-width={canvasSize.width.toFixed(2)}
       data-coalesced-segment-count={renderStats.coalescedSegmentCount}
       data-culled-row-count={renderStats.culledRowCount}
+      data-dense-column-count={renderStats.denseColumnCount}
+      data-dense-run-count={renderStats.denseRunCount}
+      data-dense-signal-count={renderStats.denseSignalCount}
+      data-detail-signal-count={renderStats.detailSignalCount}
       data-first-signal-lane-y={formatOptionalNumber(firstSignalLaneY)}
       data-header-background="opaque"
       data-pulse-fill-count={pulseFillCount}
       data-render-count={renderCount}
+      data-render-resolution={renderStats.renderResolution.toFixed(2)}
       data-rendered-label-count={renderStats.renderedLabelCount}
       data-rendered-segment-count={renderStats.renderedSegmentCount}
       data-rendered-signal-count={renderStats.renderedSignalCount}
@@ -403,6 +429,9 @@ export function WaveformCanvas({
       data-x-state-count={stateCounts.xStateCount}
       data-source-segment-count={renderStats.sourceSegmentCount}
       data-selected-signal-visible-y={formatOptionalNumber(selectedSignalVisibleY)}
+      data-suppressed-label-count={renderStats.suppressedLabelCount}
+      data-texture-cache-bytes={renderStats.textureCacheBytes}
+      data-texture-cache-size={renderStats.textureCacheSize}
       data-vertical-scroll-top={verticalScrollTop.toFixed(2)}
       data-x-state-block-count={shapeCounts.xStateBlockCount}
       data-z-state-block-count={shapeCounts.zStateBlockCount}
@@ -470,7 +499,22 @@ function createEmptyRenderStats(): WaveformRenderStats {
     cacheHitCount: 0,
     cacheMissCount: 0,
     cachedSignalCount: 0,
+    compactSignalCount: 0,
+    denseColumnCount: 0,
+    denseRunCount: 0,
+    denseSignalCount: 0,
+    detailSignalCount: 0,
+    renderResolution: 1,
+    suppressedLabelCount: 0,
+    textureCacheBytes: 0,
+    textureCacheSize: 0,
   };
+}
+
+function getRendererResolution(app: Application) {
+  const renderer = app.renderer as { resolution?: number };
+
+  return Math.max(1, renderer.resolution ?? Math.min(window.devicePixelRatio || 1, 2));
 }
 
 function destroyCachedTexture(entry: WaveformSignalTextureCacheEntry) {

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { Container, Text, Texture } from 'pixi.js';
 
 import { clipWaveformLineToBounds, createWaveformScene, getWaveformBusHexagonBevel, waveformHighImpedanceStripeSpacing, waveformLayerNames, waveformUnknownStripeSpacing, type WaveformSignalTextureCacheEntry } from './createWaveformScene';
@@ -38,13 +38,15 @@ describe('createWaveformScene', () => {
     expect(scene.renderStats.culledRowCount).toBeGreaterThan(0);
     expect(scene.renderStats.renderedSignalCount).toBeGreaterThan(0);
     expect(scene.renderStats.renderedSignalCount).toBeLessThan(mockWaveformData.signals.length);
-    expect(scene.renderStats.sourceSegmentCount).toBeGreaterThan(scene.renderStats.renderedSegmentCount);
-    expect(scene.renderStats.coalescedSegmentCount).toBeGreaterThan(0);
+    expect(scene.renderStats.renderedSegmentCount).toBeGreaterThan(0);
+    expect(scene.renderStats.denseSignalCount).toBeGreaterThan(0);
+    expect(scene.renderStats.denseColumnCount).toBeGreaterThan(0);
+    expect(scene.renderStats.denseRunCount).toBeGreaterThan(0);
 
     scene.world.destroy({ children: true });
   });
 
-  it('records cache misses and hits for cacheable dense signal textures', () => {
+  it('records cache misses and hits for cacheable signal textures outside dense mode', () => {
     const cache = new Map<string, WaveformSignalTextureCacheEntry>();
     const signalTextureCache = {
       get: (key: string) => cache.get(key),
@@ -60,7 +62,7 @@ describe('createWaveformScene', () => {
       selectedSignalId: null,
       signalTextureCache,
       textureRenderer,
-      viewport: fitWaveformViewport(mockWaveformData),
+      viewport: { startTime: 0, endTime: 80 },
       width: 900,
     };
 
@@ -74,6 +76,54 @@ describe('createWaveformScene', () => {
     expect(secondScene.renderStats.cacheHitCount).toBeGreaterThan(0);
 
     secondScene.world.destroy({ children: true });
+  });
+
+  it('generates cache textures at the renderer resolution for crisp cached rows', () => {
+    const cache = new Map<string, WaveformSignalTextureCacheEntry>();
+    const signalTextureCache = {
+      get: (key: string) => cache.get(key),
+      set: (key: string, entry: WaveformSignalTextureCacheEntry) => cache.set(key, entry),
+    };
+    const generateTexture = vi.fn(() => Texture.EMPTY);
+    const scene = createWaveformScene({
+      cursorTime: mockWaveformData.cursorTime,
+      data: mockWaveformData,
+      height: 420,
+      renderResolution: 2,
+      selectedSignalId: null,
+      signalTextureCache,
+      textureRenderer: { generateTexture },
+      viewport: { startTime: 0, endTime: 80 },
+      width: 900,
+    });
+
+    expect(generateTexture).toHaveBeenCalledWith(expect.objectContaining({
+      antialias: false,
+      resolution: 2,
+    }));
+
+    scene.world.destroy({ children: true });
+  });
+
+  it('suppresses X and Z text labels while drawing dense pixel runs', () => {
+    const viewport = fitWaveformViewport(mockWaveformData);
+    const scene = createWaveformScene({
+      cursorTime: mockWaveformData.cursorTime,
+      data: mockWaveformData,
+      height: getWaveformCanvasHeightForData(mockWaveformData),
+      selectedSignalId: null,
+      viewport,
+      width: 360,
+    });
+    const stateLabels = collectText(scene.layers.content).filter((text) => text === 'x' || text === 'z');
+    const shapeCounts = getWaveformShapeCounts(mockWaveformData, viewport);
+
+    expect(scene.renderStats.denseSignalCount).toBeGreaterThan(0);
+    expect(scene.renderStats.denseRunCount).toBeGreaterThan(0);
+    expect(scene.renderStats.suppressedLabelCount).toBeGreaterThan(0);
+    expect(stateLabels.length).toBeLessThan(shapeCounts.xStateBlockCount + shapeCounts.zStateBlockCount);
+
+    scene.world.destroy({ children: true });
   });
 
   it('draws a single X or Z text label per special-state block', () => {

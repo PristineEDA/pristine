@@ -93,7 +93,7 @@ describe('waveformLayout', () => {
     expect(scrolledRows.rows.some((row) => row.kind === 'signal' && row.signal.id === 'dense-signal-40')).toBe(true);
   });
 
-  it('coalesces subpixel dense segments only when the viewport is zoomed out', () => {
+  it('uses dense pixel-column runs only when the viewport is zoomed out', () => {
     const signal = mockWaveformData.signals.find((candidate) => candidate.id === 'dense-signal-01');
 
     expect(signal).toBeDefined();
@@ -102,8 +102,11 @@ describe('waveformLayout', () => {
     const zoomedViewportSegments = getWaveformRenderSegments(signal!, { startTime: 0, endTime: 8 }, 900);
 
     expect(fullViewportSegments.sourceSegmentCount).toBeGreaterThan(100);
-    expect(fullViewportSegments.renderedSegmentCount).toBeLessThan(fullViewportSegments.sourceSegmentCount);
-    expect(fullViewportSegments.coalescedSegmentCount).toBeGreaterThan(0);
+    expect(fullViewportSegments.densityMode).toBe('dense');
+    expect(fullViewportSegments.denseColumnCount).toBeGreaterThan(0);
+    expect(fullViewportSegments.denseRunCount).toBeGreaterThan(0);
+    expect(fullViewportSegments.renderedSegmentCount).toBe(fullViewportSegments.denseRunCount);
+    expect(zoomedViewportSegments.densityMode).toBe('detail');
     expect(zoomedViewportSegments.coalescedSegmentCount).toBe(0);
   });
 

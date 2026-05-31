@@ -5334,17 +5334,22 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
   await expect.poll(async () => readCanvasNumber('data-rendered-signal-count'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(0);
-  await expect.poll(async () => readCanvasNumber('data-cacheable-signal-count'), {
+  await expect.poll(async () => readCanvasNumber('data-dense-signal-count'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(0);
-  await expect.poll(async () => readCanvasNumber('data-coalesced-segment-count'), {
+  await expect.poll(async () => readCanvasNumber('data-dense-run-count'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
+  await expect.poll(async () => readCanvasNumber('data-suppressed-label-count'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(0);
   await expect.poll(async () => {
     const sourceSegmentCount = await readCanvasNumber('data-source-segment-count');
     const renderedSegmentCount = await readCanvasNumber('data-rendered-segment-count');
+    const textureCacheBytes = await readCanvasNumber('data-texture-cache-bytes');
+    const renderResolution = await readCanvasNumber('data-render-resolution');
 
-    return sourceSegmentCount > 0 && renderedSegmentCount > 0 && renderedSegmentCount <= sourceSegmentCount;
+    return sourceSegmentCount > 0 && renderedSegmentCount > 0 && renderResolution >= 1 && textureCacheBytes <= 32 * 1024 * 1024;
   }, {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBe(true);

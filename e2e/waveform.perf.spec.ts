@@ -114,10 +114,19 @@ async function readCanvasStats(canvasHost: ReturnType<Page['getByTestId']>) {
     cacheableSignalCount: await readNumber('data-cacheable-signal-count'),
     cachedSignalCount: await readNumber('data-cached-signal-count'),
     coalescedSegmentCount: await readNumber('data-coalesced-segment-count'),
+    compactSignalCount: await readNumber('data-compact-signal-count'),
     culledRowCount: await readNumber('data-culled-row-count'),
+    denseColumnCount: await readNumber('data-dense-column-count'),
+    denseRunCount: await readNumber('data-dense-run-count'),
+    denseSignalCount: await readNumber('data-dense-signal-count'),
+    detailSignalCount: await readNumber('data-detail-signal-count'),
+    renderResolution: await readNumber('data-render-resolution'),
     renderedSegmentCount: await readNumber('data-rendered-segment-count'),
     renderedSignalCount: await readNumber('data-rendered-signal-count'),
     sourceSegmentCount: await readNumber('data-source-segment-count'),
+    suppressedLabelCount: await readNumber('data-suppressed-label-count'),
+    textureCacheBytes: await readNumber('data-texture-cache-bytes'),
+    textureCacheSize: await readNumber('data-texture-cache-size'),
     visibleRowCount: await readNumber('data-visible-row-count'),
   };
 }
@@ -164,10 +173,12 @@ test('waveform dense render opt-in baseline', async () => {
 
     expect(stats.sourceSegmentCount).toBeGreaterThan(0);
     expect(stats.renderedSegmentCount).toBeGreaterThan(0);
-    expect(stats.renderedSegmentCount).toBeLessThanOrEqual(stats.sourceSegmentCount);
-    expect(stats.coalescedSegmentCount).toBeGreaterThan(0);
+    expect(stats.denseSignalCount).toBeGreaterThan(0);
+    expect(stats.denseRunCount).toBeGreaterThan(0);
+    expect(stats.suppressedLabelCount).toBeGreaterThan(0);
     expect(stats.culledRowCount).toBeGreaterThan(0);
-    expect(stats.cacheableSignalCount).toBeGreaterThan(0);
+    expect(stats.renderResolution).toBeGreaterThanOrEqual(1);
+    expect(stats.textureCacheBytes).toBeLessThanOrEqual(32 * 1024 * 1024);
 
     console.log(JSON.stringify({
       name: 'waveform-dense-render-baseline',
