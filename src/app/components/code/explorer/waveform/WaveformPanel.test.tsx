@@ -42,6 +42,8 @@ vi.mock('./WaveformCanvas', () => ({
       <button
         data-cursor-time={cursorTime.toFixed(2)}
         data-bus-hexagon-count={shapeCounts.busHexagonCount}
+        data-canvas-height="320.00"
+        data-canvas-width="900.00"
         data-first-signal-lane-y={firstSignalLaneY?.toFixed(2) ?? ''}
         data-layer-count={waveformLayerNames.length}
         data-layer-names={waveformLayerNames.join(',')}
@@ -84,6 +86,8 @@ describe('WaveformPanel', () => {
     expect(screen.getByText('dense_test_signals')).toBeInTheDocument();
     expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-layer-names', 'background,content,status,operation');
     expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-row-count', '51');
+    expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-canvas-height', '320.00');
+    expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-canvas-width', '900.00');
     expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-first-signal-lane-y', '60.00');
     expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-bus-hexagon-count'))).toBeGreaterThan(0);
     expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-x-state-count'))).toBeGreaterThan(0);
@@ -95,6 +99,8 @@ describe('WaveformPanel', () => {
     expect(screen.getByTestId('waveform-horizontal-scrollbar')).toBeInTheDocument();
     expect(screen.getByTestId('waveform-group-row-u_top_module1')).toHaveAttribute('data-row-index', '5');
     expect(screen.getByTestId('waveform-group-row-dense_test_signals')).toHaveAttribute('data-row-index', '10');
+    expect(screen.getByTestId('waveform-signal-row-u_top_module1-counting')).toHaveClass('items-end');
+    expect(screen.getByText('[3:0]')).toHaveClass('self-end');
 
     await user.click(screen.getByTestId('waveform-signal-row-u_top_module1-counting'));
 

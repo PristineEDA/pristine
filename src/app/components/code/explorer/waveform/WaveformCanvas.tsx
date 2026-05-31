@@ -72,6 +72,7 @@ export function WaveformCanvas({
   const verticalScrollTopRef = useRef(verticalScrollTop);
   const [renderer, setRenderer] = useState<WaveformRendererStatus>('initializing');
   const [renderCount, setRenderCount] = useState(0);
+  const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
 
   dataRef.current = data;
   viewportRef.current = viewport;
@@ -259,6 +260,12 @@ export function WaveformCanvas({
     const height = Math.max(waveformCanvasMinHeight, Math.floor(host.clientHeight));
 
     app.renderer.resize(width, height);
+    Object.assign(app.canvas.style, {
+      display: 'block',
+      height: '100%',
+      width: '100%',
+    });
+    setCanvasSize({ width, height });
     sceneRef.current?.world.destroy({ children: true });
     sceneRef.current = createWaveformScene({
       cursorTime: cursorTimeRef.current,
@@ -302,12 +309,14 @@ export function WaveformCanvas({
     <div
       ref={hostRef}
       aria-label="Waveform canvas"
-      className="relative h-full min-h-0 flex-1 cursor-crosshair overflow-hidden bg-[#111111] outline-none"
+      className="relative h-full min-h-0 w-full flex-1 cursor-crosshair overflow-hidden bg-[#111111] outline-none"
       data-cursor-time={cursorTime.toFixed(2)}
       data-cursor-x={cursorX.toFixed(2)}
       data-layer-count={waveformLayerNames.length}
       data-layer-names={waveformLayerNames.join(',')}
       data-bus-hexagon-count={shapeCounts.busHexagonCount}
+      data-canvas-height={canvasSize.height.toFixed(2)}
+      data-canvas-width={canvasSize.width.toFixed(2)}
       data-first-signal-lane-y={formatOptionalNumber(firstSignalLaneY)}
       data-pulse-fill-count={pulseFillCount}
       data-render-count={renderCount}

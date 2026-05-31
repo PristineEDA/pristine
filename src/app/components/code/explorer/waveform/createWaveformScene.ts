@@ -108,7 +108,7 @@ function drawLanes(target: Container, rows: ReturnType<typeof getWaveformDisplay
     const y = getScrolledY(row.y, options);
     const isSelected = row.kind === 'signal' && row.signal.id === options.selectedSignalId;
 
-    if (y + waveformLaneHeight < waveformHeaderHeight || y > options.height) {
+    if (isLaneOutsideVisibleCanvas(y, options.height)) {
       return;
     }
 
@@ -162,7 +162,7 @@ function drawSignals(target: Container, rows: ReturnType<typeof getWaveformDispl
     const laneY = getScrolledY(row.y, options);
     const signalLayer = new Container();
 
-    if (laneY + waveformLaneHeight < waveformHeaderHeight || laneY > options.height) {
+    if (isLaneOutsideVisibleCanvas(laneY, options.height)) {
       return;
     }
 
@@ -366,7 +366,16 @@ function drawElongatedHexagon(target: Graphics, x: number, y: number, width: num
 }
 
 function getElongatedHexagonBevel(width: number, height: number) {
-  return Math.max(0, Math.min(height * 0.28, width * 0.04, 5));
+  return getWaveformBusHexagonBevel(width, height);
+}
+
+export function getWaveformBusHexagonBevel(width: number, height: number) {
+  const safeWidth = Math.max(1, width);
+  const safeHeight = Math.max(1, height);
+  const baseBevel = Math.min(safeHeight * 0.22, 4);
+  const narrowSegmentLimit = Math.max(0, safeWidth / 2 - 1);
+
+  return Math.max(0, Math.min(baseBevel, narrowSegmentLimit));
 }
 
 function addSpecialStateCharacters(labels: Text[], state: 'x' | 'z', color: number, x: number, y: number, width: number, height: number) {
@@ -375,15 +384,10 @@ function addSpecialStateCharacters(labels: Text[], state: 'x' | 'z', color: numb
   }
 
   const fontSize = Math.max(8, Math.min(11, height * 0.58));
-  const step = Math.max(fontSize + 4, 12);
-  const count = Math.max(1, Math.floor((width - 4) / step));
-  const contentWidth = (count - 1) * step;
-  const startX = count === 1 ? x + width / 2 - fontSize * 0.28 : x + Math.max(4, (width - contentWidth) / 2 - fontSize * 0.28);
+  const textX = x + width / 2 - fontSize * 0.28;
   const textY = y + Math.max(1, (height - fontSize) / 2 - 1);
 
-  for (let index = 0; index < count; index += 1) {
-    labels.push(createText(state, color, fontSize, startX + index * step, textY));
-  }
+  labels.push(createText(state, color, fontSize, textX, textY));
 }
 
 function drawBackslashHatch(target: Graphics, x: number, y: number, width: number, height: number, color: number) {
@@ -431,6 +435,10 @@ function drawChevronHatch(target: Graphics, x: number, y: number, width: number,
 
 function getScrolledY(y: number, options: WaveformSceneOptions) {
   return y - (options.verticalScrollTop ?? 0);
+}
+
+function isLaneOutsideVisibleCanvas(y: number, height: number) {
+  return y + waveformLaneHeight < waveformHeaderHeight - waveformLaneHeight || y > height + waveformLaneHeight;
 }
 
 function drawCursor(statusLayer: Container, operationLayer: Container, options: WaveformSceneOptions) {

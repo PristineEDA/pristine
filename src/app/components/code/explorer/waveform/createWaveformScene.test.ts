@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { Container, Text } from 'pixi.js';
 
-import { createWaveformScene, waveformLayerNames } from './createWaveformScene';
-import { fitWaveformViewport, getWaveformDigitalPulseFillCount, getWaveformDisplayRows, getWaveformShapeCounts, getWaveformSignalLaneY } from './waveformLayout';
+import { createWaveformScene, getWaveformBusHexagonBevel, waveformLayerNames } from './createWaveformScene';
+import { fitWaveformViewport, getWaveformCanvasHeightForData, getWaveformDigitalPulseFillCount, getWaveformDisplayRows, getWaveformShapeCounts, getWaveformSignalLaneY } from './waveformLayout';
 import { mockWaveformData } from './waveformMockData';
 
 describe('createWaveformScene', () => {
@@ -35,4 +36,50 @@ describe('createWaveformScene', () => {
 
     scene.world.destroy({ children: true });
   });
+
+  it('draws a single X or Z text label per special-state block', () => {
+    const viewport = fitWaveformViewport(mockWaveformData);
+    const scene = createWaveformScene({
+      cursorTime: mockWaveformData.cursorTime,
+      data: mockWaveformData,
+      height: getWaveformCanvasHeightForData(mockWaveformData),
+      selectedSignalId: null,
+      viewport,
+      width: 900,
+    });
+    const stateLabels = collectText(scene.layers.content).filter((text) => text === 'x' || text === 'z');
+    const xLabels = stateLabels.filter((text) => text === 'x');
+    const zLabels = stateLabels.filter((text) => text === 'z');
+    const shapeCounts = getWaveformShapeCounts(mockWaveformData, viewport);
+
+    expect(xLabels.length).toBeGreaterThan(0);
+    expect(zLabels.length).toBeGreaterThan(0);
+    expect(xLabels.length).toBeLessThanOrEqual(shapeCounts.xStateBlockCount);
+    expect(zLabels.length).toBeLessThanOrEqual(shapeCounts.zStateBlockCount);
+    expect(stateLabels.every((text) => text.length === 1)).toBe(true);
+
+    scene.world.destroy({ children: true });
+  });
+
+  it('keeps bus hexagon bevel consistent across normal-width bus segments', () => {
+    expect(getWaveformBusHexagonBevel(32, 20)).toBe(getWaveformBusHexagonBevel(160, 20));
+    expect(getWaveformBusHexagonBevel(160, 20)).toBe(getWaveformBusHexagonBevel(400, 20));
+    expect(getWaveformBusHexagonBevel(5, 20)).toBeLessThan(getWaveformBusHexagonBevel(32, 20));
+  });
 });
+
+function collectText(container: Container): string[] {
+  const texts: string[] = [];
+
+  for (const child of container.children) {
+    if (child instanceof Text) {
+      texts.push(String(child.text));
+    }
+
+    if (child instanceof Container) {
+      texts.push(...collectText(child));
+    }
+  }
+
+  return texts;
+}

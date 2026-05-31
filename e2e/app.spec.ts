@@ -5306,11 +5306,21 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(0);
   await expect(canvasHost.locator('canvas')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect.poll(async () => Number(await canvasHost.getAttribute('data-canvas-height') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(220);
 
+  const waveformViewport = window.getByTestId('waveform-viewport');
   const canvasBox = await canvasHost.boundingBox();
-  if (!canvasBox) {
+  const innerCanvasBox = await canvasHost.locator('canvas').boundingBox();
+  const viewportBox = await waveformViewport.boundingBox();
+  if (!canvasBox || !innerCanvasBox || !viewportBox) {
     throw new Error('Expected waveform canvas geometry to be measurable');
   }
+
+  expect(Math.abs(canvasBox.height - viewportBox.height)).toBeLessThanOrEqual(2);
+  expect(Math.abs(innerCanvasBox.height - canvasBox.height)).toBeLessThanOrEqual(2);
+  expect(Math.abs(innerCanvasBox.width - canvasBox.width)).toBeLessThanOrEqual(2);
 
   const signalPanel = window.getByTestId('panel-waveform-signal-list');
   const resizeHandle = window.getByTestId('waveform-signal-list-resize-handle');
