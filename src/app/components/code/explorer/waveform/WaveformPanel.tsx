@@ -187,7 +187,7 @@ export function WaveformPanel() {
             timescaleUnit={data.timescaleUnit}
             value={formatWaveformValue(selectedValue)}
           />
-          <div className="flex shrink-0 items-center gap-1">
+          <div className="flex shrink-0 items-center gap-1" data-testid="waveform-toolbar-actions">
           <ToolbarIconButton label="Pan waveform left" onClick={handlePanLeft}>
             <ChevronLeft size={13} />
           </ToolbarIconButton>
@@ -323,7 +323,7 @@ function SignalRow({ cursorTime, selected, row, onSelect }: SignalRowProps) {
     >
       <span className="flex min-w-0 items-center gap-2">
         <span className="h-2 w-2 shrink-0 rounded-sm" style={{ backgroundColor: signal.color }} />
-        <span className="flex min-w-0 items-baseline gap-2">
+        <span className="flex min-w-0 items-center gap-2" data-testid={`waveform-signal-primary-${signal.id}`}>
           <span className="min-w-0 truncate font-mono leading-[14px]">{signal.name}</span>
           {signal.width && (
             <span className="inline-flex h-[14px] shrink-0 items-center rounded border border-ide-border px-1 text-[10px] leading-none text-ide-text-muted">

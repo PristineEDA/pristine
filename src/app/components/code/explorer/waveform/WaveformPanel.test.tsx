@@ -107,6 +107,9 @@ describe('WaveformPanel', () => {
     expect(screen.getByTestId('waveform-group-row-dense_test_signals')).toHaveAttribute('data-row-index', '10');
     expect(screen.getByTestId('waveform-signal-row-u_top_module1-counting')).toHaveClass('items-center');
     expect(screen.getByTestId('waveform-signal-row-u_top_module1-counting')).toHaveClass('pb-1');
+    expect(screen.getByTestId('waveform-toolbar-actions')).toBeInTheDocument();
+    expect(screen.getByTestId('waveform-signal-primary-u_top_module1-counting')).toHaveClass('items-center');
+    expect(screen.getByTestId('waveform-signal-primary-u_top_module1-counting')).not.toHaveClass('items-baseline');
     expect(screen.getByText('counting')).toHaveClass('leading-[14px]');
     expect(screen.getByText('[3:0]')).toHaveClass('leading-none');
 
