@@ -79,11 +79,12 @@ describe('waveformLayout', () => {
     expect(getWaveformCanvasHeightForData(mockWaveformData)).toBe(waveformHeaderHeight + rows.length * waveformLaneHeight + waveformBottomPadding);
   });
 
-  it('counts hexagon-shaped bus and Z intervals in the visible viewport', () => {
+  it('counts bus hexagon intervals and rectangular special-state blocks in the visible viewport', () => {
     const shapeCounts = getWaveformShapeCounts(mockWaveformData, fitWaveformViewport(mockWaveformData));
 
     expect(shapeCounts.busHexagonCount).toBeGreaterThan(0);
-    expect(shapeCounts.zHexagonCount).toBeGreaterThan(0);
+    expect(shapeCounts.xStateBlockCount).toBeGreaterThan(0);
+    expect(shapeCounts.zStateBlockCount).toBeGreaterThan(0);
   });
 
   it('counts fillable high pulse intervals without counting low digital intervals', () => {

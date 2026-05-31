@@ -9,7 +9,8 @@ export interface WaveformStateCounts {
 
 export interface WaveformShapeCounts {
   busHexagonCount: number;
-  zHexagonCount: number;
+  xStateBlockCount: number;
+  zStateBlockCount: number;
 }
 
 export interface WaveformTransition {

@@ -279,7 +279,8 @@ export function getWaveformDigitalPulseFillCount(data: WaveformDataSet, viewport
 
 export function getWaveformShapeCounts(data: WaveformDataSet, viewport: WaveformViewport): WaveformShapeCounts {
   let busHexagonCount = 0;
-  let zHexagonCount = 0;
+  let xStateBlockCount = 0;
+  let zStateBlockCount = 0;
 
   for (const signal of data.signals) {
     const transitions = getWaveformTransitionsInWindow(signal, viewport);
@@ -294,8 +295,10 @@ export function getWaveformShapeCounts(data: WaveformDataSet, viewport: Waveform
 
       const currentValue = normalizeWaveformValue(current.value);
 
-      if (isHighImpedanceWaveformValue(currentValue)) {
-        zHexagonCount += 1;
+      if (isUnknownWaveformValue(currentValue)) {
+        xStateBlockCount += 1;
+      } else if (isHighImpedanceWaveformValue(currentValue)) {
+        zStateBlockCount += 1;
       }
 
       if (signal.kind === 'bus' && !isSpecialWaveformValue(currentValue)) {
@@ -304,7 +307,31 @@ export function getWaveformShapeCounts(data: WaveformDataSet, viewport: Waveform
     }
   }
 
-  return { busHexagonCount, zHexagonCount };
+  return { busHexagonCount, xStateBlockCount, zStateBlockCount };
+}
+
+export function getWaveformHorizontalScrollMetrics(viewport: WaveformViewport, duration: number, viewportWidth: number) {
+  const safeWidth = Math.max(1, viewportWidth);
+  const span = getWaveformViewportSpan(viewport);
+  const safeDuration = Math.max(waveformMinWindow, duration);
+  const contentWidth = Math.max(safeWidth, safeWidth * safeDuration / Math.min(span, safeDuration));
+  const maxScrollLeft = Math.max(0, contentWidth - safeWidth);
+  const maxStartTime = Math.max(0, safeDuration - span);
+  const scrollLeft = maxStartTime <= 0 || maxScrollLeft <= 0
+    ? 0
+    : (Math.min(Math.max(0, viewport.startTime), maxStartTime) / maxStartTime) * maxScrollLeft;
+
+  return { contentWidth, maxScrollLeft, maxStartTime, scrollLeft };
+}
+
+export function getWaveformViewportForHorizontalScroll(viewport: WaveformViewport, duration: number, viewportWidth: number, scrollLeft: number) {
+  const metrics = getWaveformHorizontalScrollMetrics(viewport, duration, viewportWidth);
+  const span = getWaveformViewportSpan(viewport);
+  const startTime = metrics.maxScrollLeft <= 0 || metrics.maxStartTime <= 0
+    ? 0
+    : (Math.min(Math.max(0, scrollLeft), metrics.maxScrollLeft) / metrics.maxScrollLeft) * metrics.maxStartTime;
+
+  return clampWaveformViewport({ startTime, endTime: startTime + span }, duration);
 }
 
 export function getWaveformSignalTestId(signalId: string) {

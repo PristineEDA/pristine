@@ -21,6 +21,7 @@ vi.mock('./WaveformCanvas', () => ({
     cursorTime,
     data,
     selectedSignalId,
+    verticalScrollTop,
     viewport,
     onCursorTimeChange,
   }: {
@@ -29,6 +30,7 @@ vi.mock('./WaveformCanvas', () => ({
     selectedSignalId: string | null;
     viewport: WaveformViewport;
     onCursorTimeChange: (time: number) => void;
+    verticalScrollTop: number;
   }) => {
     const displayRows = getWaveformDisplayRows(data);
     const firstSignalLaneY = getWaveformFirstSignalLaneY(data);
@@ -48,12 +50,15 @@ vi.mock('./WaveformCanvas', () => ({
         data-row-height={waveformLaneHeight}
         data-selected-signal-id={selectedSignalId ?? ''}
         data-selected-signal-lane-y={selectedSignalLaneY?.toFixed(2) ?? ''}
+        data-selected-signal-visible-y={selectedSignalLaneY === null ? '' : (selectedSignalLaneY - verticalScrollTop).toFixed(2)}
         data-signal-count={data.signals.length}
         data-testid="waveform-canvas"
+        data-vertical-scroll-top={verticalScrollTop.toFixed(2)}
         data-visible-window-end={viewport.endTime.toFixed(2)}
         data-visible-window-start={viewport.startTime.toFixed(2)}
         data-x-state-count={stateCounts.xStateCount}
-        data-z-hexagon-count={shapeCounts.zHexagonCount}
+        data-x-state-block-count={shapeCounts.xStateBlockCount}
+        data-z-state-block-count={shapeCounts.zStateBlockCount}
         data-z-state-count={stateCounts.zStateCount}
         data-zoom={(data.duration / getWaveformViewportSpan(viewport)).toFixed(2)}
         type="button"
@@ -82,9 +87,12 @@ describe('WaveformPanel', () => {
     expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-first-signal-lane-y', '60.00');
     expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-bus-hexagon-count'))).toBeGreaterThan(0);
     expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-x-state-count'))).toBeGreaterThan(0);
-    expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-z-hexagon-count'))).toBeGreaterThan(0);
+    expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-x-state-block-count'))).toBeGreaterThan(0);
+    expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-z-state-block-count'))).toBeGreaterThan(0);
     expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-z-state-count'))).toBeGreaterThan(0);
     expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-pulse-fill-count'))).toBeGreaterThan(0);
+    expect(screen.getByTestId('waveform-signal-list-resize-handle')).toBeInTheDocument();
+    expect(screen.getByTestId('waveform-horizontal-scrollbar')).toBeInTheDocument();
     expect(screen.getByTestId('waveform-group-row-u_top_module1')).toHaveAttribute('data-row-index', '5');
     expect(screen.getByTestId('waveform-group-row-dense_test_signals')).toHaveAttribute('data-row-index', '10');
 
@@ -122,6 +130,7 @@ describe('WaveformPanel', () => {
     await user.click(screen.getByRole('button', { name: /zoom in waveform/i }));
 
     await waitFor(() => expect(Number(panel.getAttribute('data-zoom'))).toBeGreaterThan(initialZoom));
+    expect(Number(screen.getByTestId('waveform-horizontal-scrollbar').getAttribute('data-horizontal-scroll-range'))).toBeGreaterThanOrEqual(0);
 
     await user.click(screen.getByRole('button', { name: /fit waveform/i }));
 

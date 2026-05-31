@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import rawMockWaveformData from './waveformMockData.json';
+import rawMockWaveformData from './waveformMockData.generated.json';
 import { parseWaveformDataJson } from './waveformDataLoader';
 
 describe('waveformDataLoader', () => {

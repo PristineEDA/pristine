@@ -43,6 +43,7 @@ interface WaveformSceneOptions {
   cursorTime: number;
   height: number;
   selectedSignalId: string | null;
+  verticalScrollTop?: number;
   width: number;
 }
 
@@ -58,7 +59,7 @@ const palette = {
   textMuted: 0x8a8f98,
   cursor: 0xffd166,
   unknown: 0xff6b8a,
-  highImpedance: 0x9bd3ff,
+  highImpedance: 0xff9800,
 };
 
 export function createWaveformScene(options: WaveformSceneOptions): WaveformScene {
@@ -104,16 +105,21 @@ function drawLanes(target: Container, rows: ReturnType<typeof getWaveformDisplay
 
   rows.forEach((row) => {
     const isGroup = row.kind === 'group';
+    const y = getScrolledY(row.y, options);
     const isSelected = row.kind === 'signal' && row.signal.id === options.selectedSignalId;
 
+    if (y + waveformLaneHeight < waveformHeaderHeight || y > options.height) {
+      return;
+    }
+
     lanes
-      .rect(0, row.y, options.width, waveformLaneHeight)
+      .rect(0, y, options.width, waveformLaneHeight)
       .fill({ color: isSelected ? palette.selectedLane : isGroup ? palette.header : row.rowIndex % 2 === 0 ? palette.laneEven : palette.laneOdd, alpha: isSelected ? 0.72 : isGroup ? 0.78 : 1 });
 
     if (isGroup) {
       lanes
-        .moveTo(0, row.y + waveformLaneHeight - 0.5)
-        .lineTo(options.width, row.y + waveformLaneHeight - 0.5)
+        .moveTo(0, y + waveformLaneHeight - 0.5)
+        .lineTo(options.width, y + waveformLaneHeight - 0.5)
         .stroke({ color: palette.gridStrong, width: 1, alpha: 0.32 });
     }
   });
@@ -153,23 +159,27 @@ function drawSignals(target: Container, rows: ReturnType<typeof getWaveformDispl
     }
 
     const signal = row.signal;
-    const laneY = row.y;
+    const laneY = getScrolledY(row.y, options);
     const signalLayer = new Container();
-    const line = new Graphics();
+
+    if (laneY + waveformLaneHeight < waveformHeaderHeight || laneY > options.height) {
+      return;
+    }
 
     if (signal.kind === 'bus') {
       drawBusWaveform(signalLayer, signal, options, laneY);
     } else {
-      drawDigitalWaveform(line, signal, options, laneY);
-      signalLayer.addChild(line);
+      drawDigitalWaveform(signalLayer, signal, options, laneY);
     }
 
     target.addChild(signalLayer);
   });
 }
 
-function drawDigitalWaveform(target: Graphics, signal: WaveformSignal, options: WaveformSceneOptions, laneY: number) {
+function drawDigitalWaveform(target: Container, signal: WaveformSignal, options: WaveformSceneOptions, laneY: number) {
   const transitions = getWaveformTransitionsInWindow(signal, options.viewport);
+  const line = new Graphics();
+  const stateLabels: Text[] = [];
   const lineColor = parseHexColor(signal.color);
   const laneTop = laneY + waveformLanePaddingY;
   const laneBottom = laneY + waveformLaneHeight - waveformLanePaddingY;
@@ -192,12 +202,12 @@ function drawDigitalWaveform(target: Graphics, signal: WaveformSignal, options: 
     const nextValue = normalizeWaveformValue(next.value);
 
     if (isUnknownWaveformValue(currentValue)) {
-      drawUnknownStateBlock(target, x1, laneTop, width, laneBottom - laneTop);
+      drawUnknownStateBlock(line, stateLabels, x1, laneTop, width, laneBottom - laneTop);
       continue;
     }
 
     if (isHighImpedanceWaveformValue(currentValue)) {
-      drawHighImpedanceStateBlock(target, x1, laneTop, width, laneBottom - laneTop);
+      drawHighImpedanceStateBlock(line, stateLabels, x1, laneTop, width, laneBottom - laneTop);
 
       continue;
     }
@@ -206,27 +216,29 @@ function drawDigitalWaveform(target: Graphics, signal: WaveformSignal, options: 
     const y = isHigh ? topY : bottomY;
 
     if (isHigh) {
-      drawDigitalPulseFill(target, x1, topY, width, bottomY - topY, lineColor, signal.kind);
+      drawDigitalPulseFill(line, x1, topY, width, bottomY - topY, lineColor, signal.kind);
     }
 
-    target
+    line
       .moveTo(x1, y)
       .lineTo(x2, y)
       .stroke({ color: lineColor, width: signal.kind === 'clock' ? 1.7 : 2, alpha: 0.96 });
 
     if (nextValue !== currentValue && !isSpecialWaveformValue(nextValue)) {
       const nextY = nextValue === '1' ? topY : bottomY;
-      target
+      line
         .moveTo(x2, y)
         .lineTo(x2, nextY)
         .stroke({ color: lineColor, width: 1.7, alpha: 0.9 });
     }
   }
 
-  target
+  line
     .moveTo(waveformTimeAxisInset, midY)
     .lineTo(options.width - waveformTimeAxisInset, midY)
     .stroke({ color: 0xffffff, width: 1, alpha: 0.04 });
+
+  target.addChild(line, ...stateLabels);
 }
 
 function drawDigitalPulseFill(target: Graphics, x: number, y: number, width: number, height: number, color: number, signalKind: WaveformSignal['kind']) {
@@ -257,9 +269,9 @@ function drawBusWaveform(target: Container, signal: WaveformSignal, options: Wav
     const currentValue = normalizeWaveformValue(current.value);
 
     if (isUnknownWaveformValue(currentValue)) {
-      drawUnknownStateBlock(bus, x1, y, width, height, 3);
+      drawUnknownStateBlock(bus, valueLabels, x1, y, width, height);
     } else if (isHighImpedanceWaveformValue(currentValue)) {
-      drawHighImpedanceStateBlock(bus, x1, y, width, height);
+      drawHighImpedanceStateBlock(bus, valueLabels, x1, y, width, height);
     } else {
       drawElongatedHexagon(bus, x1, y, width, height, {
         color: busColor,
@@ -269,10 +281,8 @@ function drawBusWaveform(target: Container, signal: WaveformSignal, options: Wav
       });
     }
 
-    const textColor = isUnknownWaveformValue(currentValue) ? palette.unknown : isHighImpedanceWaveformValue(currentValue) ? palette.highImpedance : palette.text;
-
-    if (width >= 24) {
-      valueLabels.push(createText(formatWaveformValue(currentValue), textColor, 10, x1 + 7, y + 4));
+    if (!isSpecialWaveformValue(currentValue) && width >= 24) {
+      valueLabels.push(createText(formatWaveformValue(currentValue), palette.text, 10, x1 + 7, y + 4));
     }
   }
 
@@ -280,30 +290,47 @@ function drawBusWaveform(target: Container, signal: WaveformSignal, options: Wav
   target.addChild(...valueLabels);
 }
 
-function drawUnknownStateBlock(target: Graphics, x: number, y: number, width: number, height: number, radius = 2) {
-  target
-    .roundRect(x, y, width, height, radius)
-    .fill({ color: palette.unknown, alpha: 0.22 })
-    .stroke({ color: palette.unknown, width: 1, alpha: 0.86 });
-
-  drawBackslashHatch(target, x, y, width, height, palette.unknown);
+function drawUnknownStateBlock(target: Graphics, labels: Text[], x: number, y: number, width: number, height: number) {
+  drawSpecialStateBlock(target, x, y, width, height, {
+    color: palette.unknown,
+    fillAlpha: 0.22,
+    pattern: 'backslash',
+    state: 'x',
+    strokeAlpha: 0.86,
+  });
+  addSpecialStateCharacters(labels, 'x', palette.unknown, x, y, width, height);
 }
 
-function drawHighImpedanceStateBlock(target: Graphics, x: number, y: number, width: number, height: number) {
-  const centerY = y + height / 2;
-  const bevel = getElongatedHexagonBevel(width, height);
-
-  drawElongatedHexagon(target, x, y, width, height, {
+function drawHighImpedanceStateBlock(target: Graphics, labels: Text[], x: number, y: number, width: number, height: number) {
+  drawSpecialStateBlock(target, x, y, width, height, {
     color: palette.highImpedance,
-    fillAlpha: 0.16,
-    strokeAlpha: 0.84,
-    strokeWidth: 1,
+    fillAlpha: 0.18,
+    pattern: 'chevron',
+    state: 'z',
+    strokeAlpha: 0.88,
   });
+  addSpecialStateCharacters(labels, 'z', palette.highImpedance, x, y, width, height);
+}
 
+interface SpecialStateBlockStyle {
+  color: number;
+  fillAlpha: number;
+  pattern: 'backslash' | 'chevron';
+  state: 'x' | 'z';
+  strokeAlpha: number;
+}
+
+function drawSpecialStateBlock(target: Graphics, x: number, y: number, width: number, height: number, style: SpecialStateBlockStyle) {
   target
-    .moveTo(x + bevel, centerY)
-    .lineTo(x + width - bevel, centerY)
-    .stroke({ color: palette.highImpedance, width: 1, alpha: 0.66 });
+    .roundRect(x, y, width, height, 2)
+    .fill({ color: style.color, alpha: style.fillAlpha })
+    .stroke({ color: style.color, width: 1, alpha: style.strokeAlpha });
+
+  if (style.pattern === 'chevron') {
+    drawChevronHatch(target, x, y, width, height, style.color);
+  } else {
+    drawBackslashHatch(target, x, y, width, height, style.color);
+  }
 }
 
 interface ElongatedHexagonStyle {
@@ -339,7 +366,24 @@ function drawElongatedHexagon(target: Graphics, x: number, y: number, width: num
 }
 
 function getElongatedHexagonBevel(width: number, height: number) {
-  return Math.max(0, Math.min(height * 0.45, width * 0.18, 10));
+  return Math.max(0, Math.min(height * 0.28, width * 0.04, 5));
+}
+
+function addSpecialStateCharacters(labels: Text[], state: 'x' | 'z', color: number, x: number, y: number, width: number, height: number) {
+  if (width < 8 || height < 10) {
+    return;
+  }
+
+  const fontSize = Math.max(8, Math.min(11, height * 0.58));
+  const step = Math.max(fontSize + 4, 12);
+  const count = Math.max(1, Math.floor((width - 4) / step));
+  const contentWidth = (count - 1) * step;
+  const startX = count === 1 ? x + width / 2 - fontSize * 0.28 : x + Math.max(4, (width - contentWidth) / 2 - fontSize * 0.28);
+  const textY = y + Math.max(1, (height - fontSize) / 2 - 1);
+
+  for (let index = 0; index < count; index += 1) {
+    labels.push(createText(state, color, fontSize, startX + index * step, textY));
+  }
 }
 
 function drawBackslashHatch(target: Graphics, x: number, y: number, width: number, height: number, color: number) {
@@ -361,6 +405,32 @@ function drawBackslashHatch(target: Graphics, x: number, y: number, width: numbe
       .lineTo(segmentEndX, Math.min(bottom, y + segmentEndX - start + 1))
       .stroke({ color, width: 1, alpha: 0.54 });
   }
+}
+
+function drawChevronHatch(target: Graphics, x: number, y: number, width: number, height: number, color: number) {
+  const spacing = 10;
+  const top = y + 2;
+  const bottom = y + height - 2;
+  const centerY = y + height / 2;
+  const right = x + width - 2;
+
+  for (let start = x + 2; start < right; start += spacing) {
+    const tipX = Math.min(start + 5, right);
+
+    if (tipX <= start + 1) {
+      continue;
+    }
+
+    target
+      .moveTo(start, top)
+      .lineTo(tipX, centerY)
+      .lineTo(start, bottom)
+      .stroke({ color, width: 1, alpha: 0.62 });
+  }
+}
+
+function getScrolledY(y: number, options: WaveformSceneOptions) {
+  return y - (options.verticalScrollTop ?? 0);
 }
 
 function drawCursor(statusLayer: Container, operationLayer: Container, options: WaveformSceneOptions) {

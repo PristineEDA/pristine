@@ -1,15 +1,19 @@
-import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ChevronLeft, ChevronRight, Maximize2, MousePointer2, RotateCcw, Settings2, SlidersHorizontal, ZoomIn, ZoomOut } from 'lucide-react';
 
 import { Button } from '../../../ui/button';
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '../../../ui/resizable';
 import { TooltipIconButton } from '../../../ui/tooltip-icon-button';
 import {
   fitWaveformViewport,
   formatWaveformValue,
+  getWaveformCanvasHeightForData,
   getWaveformDisplayRows,
+  getWaveformHorizontalScrollMetrics,
   getInitialWaveformViewport,
   getSignalValueAtTime,
   getWaveformSignalTestId,
+  getWaveformViewportForHorizontalScroll,
   getWaveformViewportSpan,
   panWaveformViewport,
   zoomWaveformViewport,
@@ -29,8 +33,12 @@ export function WaveformPanel() {
   const [selectedSignalId, setSelectedSignalId] = useState<string | null>(data.signals[0]?.id ?? null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const signalScrollRef = useRef<HTMLDivElement | null>(null);
-  const waveformScrollRef = useRef<HTMLDivElement | null>(null);
+  const waveformViewportRef = useRef<HTMLDivElement | null>(null);
+  const horizontalScrollRef = useRef<HTMLDivElement | null>(null);
   const syncingScrollRef = useRef(false);
+  const syncingHorizontalScrollRef = useRef(false);
+  const [verticalScrollTop, setVerticalScrollTop] = useState(0);
+  const [waveformViewportWidth, setWaveformViewportWidth] = useState(0);
   const selectedSignal = useMemo(
     () => data.signals.find((signal) => signal.id === selectedSignalId) ?? data.signals[0] ?? null,
     [data.signals, selectedSignalId],
@@ -38,6 +46,45 @@ export function WaveformPanel() {
   const displayRows = useMemo(() => getWaveformDisplayRows(data), [data]);
   const selectedValue = selectedSignal ? getSignalValueAtTime(selectedSignal, cursorTime) : '-';
   const zoomLevel = data.duration / getWaveformViewportSpan(viewport);
+  const waveformCanvasHeight = getWaveformCanvasHeightForData(data);
+  const horizontalMetrics = getWaveformHorizontalScrollMetrics(viewport, data.duration, waveformViewportWidth);
+
+  useEffect(() => {
+    const viewportElement = waveformViewportRef.current;
+
+    if (!viewportElement) {
+      return;
+    }
+
+    function updateWidth() {
+      setWaveformViewportWidth(Math.max(0, Math.floor(viewportElement?.clientWidth ?? 0)));
+    }
+
+    updateWidth();
+
+    if (typeof ResizeObserver === 'undefined') {
+      return;
+    }
+
+    const resizeObserver = new ResizeObserver(updateWidth);
+    resizeObserver.observe(viewportElement);
+
+    return () => resizeObserver.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const horizontalScrollElement = horizontalScrollRef.current;
+
+    if (!horizontalScrollElement) {
+      return;
+    }
+
+    syncingHorizontalScrollRef.current = true;
+    horizontalScrollElement.scrollLeft = horizontalMetrics.scrollLeft;
+    window.requestAnimationFrame(() => {
+      syncingHorizontalScrollRef.current = false;
+    });
+  }, [horizontalMetrics.contentWidth, horizontalMetrics.scrollLeft]);
 
   function handleZoomIn() {
     setViewport((currentViewport) => zoomWaveformViewport(currentViewport, cursorTime, zoomButtonFactor, data.duration));
@@ -66,16 +113,46 @@ export function WaveformPanel() {
     setSelectedSignalId(data.signals[0]?.id ?? null);
   }
 
-  function syncVerticalScroll(source: HTMLDivElement | null, target: HTMLDivElement | null) {
-    if (!source || !target || syncingScrollRef.current) {
+  function syncVerticalScroll(source: HTMLDivElement | null) {
+    if (!source || syncingScrollRef.current) {
       return;
     }
 
     syncingScrollRef.current = true;
-    target.scrollTop = source.scrollTop;
+    setVerticalScrollTop(clampVerticalScrollTop(source.scrollTop));
     window.requestAnimationFrame(() => {
       syncingScrollRef.current = false;
     });
+  }
+
+  function handleCanvasVerticalScrollDelta(delta: number) {
+    setVerticalScrollTop((current) => {
+      const next = clampVerticalScrollTop(current + delta);
+
+      if (signalScrollRef.current) {
+        signalScrollRef.current.scrollTop = next;
+      }
+
+      return next;
+    });
+  }
+
+  function handleHorizontalScroll() {
+    const horizontalScrollElement = horizontalScrollRef.current;
+
+    if (!horizontalScrollElement || syncingHorizontalScrollRef.current) {
+      return;
+    }
+
+    setViewport(getWaveformViewportForHorizontalScroll(viewport, data.duration, waveformViewportWidth, horizontalScrollElement.scrollLeft));
+  }
+
+  function clampVerticalScrollTop(scrollTop: number) {
+    const maxScrollTop = signalScrollRef.current
+      ? Math.max(0, signalScrollRef.current.scrollHeight - signalScrollRef.current.clientHeight)
+      : Math.max(0, waveformCanvasHeight);
+
+    return Math.min(Math.max(0, scrollTop), maxScrollTop);
   }
 
   return (
@@ -125,16 +202,17 @@ export function WaveformPanel() {
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1 overflow-hidden">
-        <aside className="flex w-[280px] min-w-[220px] max-w-[38%] shrink-0 flex-col border-r border-ide-border bg-ide-sidebar-bg">
-          <div className="grid h-[30px] shrink-0 grid-cols-[1fr_56px] items-center border-b border-ide-border px-3 text-[10px] font-medium uppercase tracking-[0.08em] text-ide-text-muted">
+      <ResizablePanelGroup orientation="horizontal" layoutGapPx={4} className="min-h-0 flex-1 overflow-hidden">
+        <ResizablePanel defaultSize={26} minSizePx={220} maxSizePx={420} id="waveform-signal-list">
+        <aside className="flex h-full min-w-0 flex-col border-r border-ide-border bg-ide-sidebar-bg">
+          <div className="grid h-[30px] shrink-0 grid-cols-[1fr_56px] items-end border-b border-ide-border px-3 pb-1 text-[10px] font-medium uppercase tracking-[0.08em] text-ide-text-muted">
             <span>Signal</span>
             <span className="text-right">Value</span>
           </div>
           <div
             ref={signalScrollRef}
             className="bottom-panel-scrollbar min-h-0 flex-1 overflow-auto"
-            onScroll={() => syncVerticalScroll(signalScrollRef.current, waveformScrollRef.current)}
+            onScroll={() => syncVerticalScroll(signalScrollRef.current)}
           >
             {displayRows.map((row) => (
               row.kind === 'group' ? (
@@ -159,7 +237,14 @@ export function WaveformPanel() {
             ))}
               </div>
         </aside>
+        </ResizablePanel>
 
+        <ResizableHandle
+          className="bg-ide-border/80 hover:bg-ide-accent/70"
+          data-testid="waveform-signal-list-resize-handle"
+        />
+
+        <ResizablePanel defaultSize={74} minSize={45} id="waveform-renderer">
         <main className="relative flex min-w-0 flex-1 flex-col bg-[#111111]">
           <div className="pointer-events-none absolute right-3 top-2 z-10 flex max-w-[52%] items-center gap-2 rounded border border-ide-border bg-ide-bg/90 px-2 py-1 text-[11px] text-ide-text shadow-sm">
             <MousePointer2 size={12} className="text-ide-accent" />
@@ -179,23 +264,33 @@ export function WaveformPanel() {
               </div>
             </div>
           )}
-          <div
-            ref={waveformScrollRef}
-            className="bottom-panel-scrollbar min-h-0 flex-1 overflow-auto"
-            onScroll={() => syncVerticalScroll(waveformScrollRef.current, signalScrollRef.current)}
-          >
+          <div ref={waveformViewportRef} className="relative min-h-0 flex-1 overflow-hidden" data-testid="waveform-viewport">
             <WaveformCanvas
               cursorTime={cursorTime}
               data={data}
               selectedSignalId={selectedSignalId}
+              verticalScrollTop={verticalScrollTop}
               viewport={viewport}
               onCursorTimeChange={setCursorTime}
               onRendererChange={setRenderer}
+              onVerticalScrollDelta={handleCanvasVerticalScrollDelta}
               onViewportChange={setViewport}
             />
           </div>
+          <div
+            ref={horizontalScrollRef}
+            className="bottom-panel-scrollbar h-3 shrink-0 overflow-x-auto overflow-y-hidden border-t border-ide-border bg-[#0c0c0c]"
+            data-horizontal-content-width={horizontalMetrics.contentWidth.toFixed(2)}
+            data-horizontal-scroll-left={horizontalMetrics.scrollLeft.toFixed(2)}
+            data-horizontal-scroll-range={horizontalMetrics.maxScrollLeft.toFixed(2)}
+            data-testid="waveform-horizontal-scrollbar"
+            onScroll={handleHorizontalScroll}
+          >
+            <div aria-hidden="true" className="h-px" style={{ width: horizontalMetrics.contentWidth }} />
+          </div>
         </main>
-      </div>
+        </ResizablePanel>
+      </ResizablePanelGroup>
     </div>
   );
 }
@@ -213,19 +308,19 @@ function SignalRow({ cursorTime, selected, row, onSelect }: SignalRowProps) {
 
   return (
     <button
-      className={`grid h-[30px] w-full grid-cols-[1fr_56px] items-center gap-2 border-b border-ide-border/70 px-3 text-left text-[11px] transition-colors ${selected ? 'bg-ide-accent/15 text-ide-text' : 'text-ide-text-muted hover:bg-ide-tab-hover hover:text-ide-text'}`}
+      className={`grid h-[30px] w-full grid-cols-[1fr_56px] items-end gap-2 border-b border-ide-border/70 px-3 pb-[5px] pt-1 text-left text-[11px] leading-none transition-colors ${selected ? 'bg-ide-accent/15 text-ide-text' : 'text-ide-text-muted hover:bg-ide-tab-hover hover:text-ide-text'}`}
       data-lane-y={row.y.toFixed(2)}
       data-row-index={row.rowIndex}
       data-testid={getWaveformSignalTestId(signal.id)}
       type="button"
       onClick={onSelect}
     >
-      <span className="flex min-w-0 items-center gap-2">
+      <span className="flex min-w-0 items-end gap-2 leading-none">
         <span className="h-2 w-2 shrink-0 rounded-sm" style={{ backgroundColor: signal.color }} />
         <span className="min-w-0 truncate font-mono">{signal.name}</span>
         {signal.width && <span className="shrink-0 rounded border border-ide-border px-1 text-[10px] text-ide-text-muted">[{signal.width - 1}:0]</span>}
       </span>
-      <span className="truncate text-right font-mono text-ide-text">{formatWaveformValue(value)}</span>
+      <span className="truncate text-right font-mono leading-none text-ide-text">{formatWaveformValue(value)}</span>
     </button>
   );
 }

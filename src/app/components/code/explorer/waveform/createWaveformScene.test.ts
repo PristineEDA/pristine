@@ -18,14 +18,16 @@ describe('createWaveformScene', () => {
     expect(Object.keys(scene.layers)).toEqual(waveformLayerNames);
     expect(scene.world.children).toHaveLength(waveformLayerNames.length);
     expect(scene.rowCount).toBe(getWaveformDisplayRows(mockWaveformData).length);
-    expect(scene.layers.content.children).toHaveLength(mockWaveformData.signals.length);
+    expect(scene.layers.content.children.length).toBeGreaterThan(0);
+    expect(scene.layers.content.children.length).toBeLessThan(mockWaveformData.signals.length);
     expect(scene.layers.status.children.length).toBeGreaterThan(0);
     expect(scene.layers.operation.children.length).toBeGreaterThan(0);
     expect(scene.firstSignalLaneY).toBe(getWaveformSignalLaneY(mockWaveformData, 'tb_top_module1-clk'));
     expect(scene.selectedSignalLaneY).toBe(getWaveformSignalLaneY(mockWaveformData, 'u_top_module1-counting'));
     expect(scene.shapeCounts).toEqual(getWaveformShapeCounts(mockWaveformData, fitWaveformViewport(mockWaveformData)));
     expect(scene.shapeCounts.busHexagonCount).toBeGreaterThan(0);
-    expect(scene.shapeCounts.zHexagonCount).toBeGreaterThan(0);
+    expect(scene.shapeCounts.xStateBlockCount).toBeGreaterThan(0);
+    expect(scene.shapeCounts.zStateBlockCount).toBeGreaterThan(0);
     expect(scene.digitalPulseFillCount).toBe(getWaveformDigitalPulseFillCount(mockWaveformData, fitWaveformViewport(mockWaveformData)));
     expect(scene.digitalPulseFillCount).toBeGreaterThan(0);
     expect(scene.stateCounts.xStateCount).toBeGreaterThan(0);

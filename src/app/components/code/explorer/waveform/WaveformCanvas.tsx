@@ -4,7 +4,6 @@ import { Application } from 'pixi.js';
 import { createWaveformScene, waveformLayerNames, type WaveformScene } from './createWaveformScene';
 import {
   clampTime,
-  getWaveformCanvasHeightForData,
   getWaveformDigitalPulseFillCount,
   getWaveformDisplayRows,
   getWaveformFirstSignalLaneY,
@@ -28,9 +27,11 @@ interface WaveformCanvasProps {
   cursorTime: number;
   data: WaveformDataSet;
   selectedSignalId: string | null;
+  verticalScrollTop: number;
   viewport: WaveformViewport;
   onCursorTimeChange: (time: number) => void;
   onRendererChange?: (renderer: WaveformRendererStatus) => void;
+  onVerticalScrollDelta: (delta: number) => void;
   onViewportChange: (viewport: WaveformViewport) => void;
 }
 
@@ -49,9 +50,11 @@ export function WaveformCanvas({
   cursorTime,
   data,
   selectedSignalId,
+  verticalScrollTop,
   viewport,
   onCursorTimeChange,
   onRendererChange,
+  onVerticalScrollDelta,
   onViewportChange,
 }: WaveformCanvasProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -64,7 +67,9 @@ export function WaveformCanvas({
   const cursorTimeRef = useRef(cursorTime);
   const selectedSignalIdRef = useRef(selectedSignalId);
   const onCursorTimeChangeRef = useRef(onCursorTimeChange);
+  const onVerticalScrollDeltaRef = useRef(onVerticalScrollDelta);
   const onViewportChangeRef = useRef(onViewportChange);
+  const verticalScrollTopRef = useRef(verticalScrollTop);
   const [renderer, setRenderer] = useState<WaveformRendererStatus>('initializing');
   const [renderCount, setRenderCount] = useState(0);
 
@@ -73,7 +78,9 @@ export function WaveformCanvas({
   cursorTimeRef.current = cursorTime;
   selectedSignalIdRef.current = selectedSignalId;
   onCursorTimeChangeRef.current = onCursorTimeChange;
+  onVerticalScrollDeltaRef.current = onVerticalScrollDelta;
   onViewportChangeRef.current = onViewportChange;
+  verticalScrollTopRef.current = verticalScrollTop;
 
   useEffect(() => {
     let disposed = false;
@@ -133,7 +140,7 @@ export function WaveformCanvas({
 
   useEffect(() => {
     resizeAndDraw();
-  }, [cursorTime, data, selectedSignalId, viewport]);
+  }, [cursorTime, data, selectedSignalId, verticalScrollTop, viewport]);
 
   useEffect(() => {
     const hostElement = hostRef.current;
@@ -149,18 +156,24 @@ export function WaveformCanvas({
       const currentData = dataRef.current;
       const width = Math.max(waveformCanvasMinWidth, host.clientWidth);
 
-      event.preventDefault();
-
       if (event.ctrlKey || event.metaKey || event.altKey) {
+        event.preventDefault();
         const centerTime = clampTime(getPointerTime(event.clientX), currentData.duration);
         const zoomFactor = event.deltaY > 0 ? 1 / zoomWheelFactor : zoomWheelFactor;
         onViewportChangeRef.current(zoomWaveformViewport(currentViewport, centerTime, zoomFactor, currentData.duration));
         return;
       }
 
-      const deltaPixels = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
-      const deltaTime = deltaPixels * getWaveformViewportSpan(currentViewport) / Math.max(1, width);
-      onViewportChangeRef.current(panWaveformViewport(currentViewport, deltaTime, currentData.duration));
+      if (event.shiftKey) {
+        event.preventDefault();
+        const deltaPixels = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+        const deltaTime = deltaPixels * getWaveformViewportSpan(currentViewport) / Math.max(1, width);
+        onViewportChangeRef.current(panWaveformViewport(currentViewport, deltaTime, currentData.duration));
+        return;
+      }
+
+      event.preventDefault();
+      onVerticalScrollDeltaRef.current(event.deltaY || event.deltaX);
     }
 
     function handlePointerDown(event: PointerEvent) {
@@ -243,7 +256,7 @@ export function WaveformCanvas({
     }
 
     const width = Math.max(waveformCanvasMinWidth, Math.floor(host.clientWidth));
-    const height = Math.max(waveformCanvasMinHeight, getWaveformCanvasHeightForData(dataRef.current), Math.floor(host.clientHeight));
+    const height = Math.max(waveformCanvasMinHeight, Math.floor(host.clientHeight));
 
     app.renderer.resize(width, height);
     sceneRef.current?.world.destroy({ children: true });
@@ -252,6 +265,7 @@ export function WaveformCanvas({
       data: dataRef.current,
       height,
       selectedSignalId: selectedSignalIdRef.current,
+      verticalScrollTop: verticalScrollTopRef.current,
       viewport: viewportRef.current,
       width,
     });
@@ -277,9 +291,9 @@ export function WaveformCanvas({
   const zoomLevel = data.duration / getWaveformViewportSpan(viewport);
   const cursorX = timeToX(cursorTime, viewport, waveformCanvasMinWidth);
   const displayRows = getWaveformDisplayRows(data);
-  const canvasHeight = getWaveformCanvasHeightForData(data);
   const firstSignalLaneY = getWaveformFirstSignalLaneY(data);
   const selectedSignalLaneY = getWaveformSignalLaneY(data, selectedSignalId);
+  const selectedSignalVisibleY = selectedSignalLaneY === null ? null : selectedSignalLaneY - verticalScrollTop;
   const stateCounts = getWaveformStateCounts(data);
   const shapeCounts = getWaveformShapeCounts(data, viewport);
   const pulseFillCount = getWaveformDigitalPulseFillCount(data, viewport);
@@ -305,11 +319,14 @@ export function WaveformCanvas({
       data-visible-window-end={viewport.endTime.toFixed(2)}
       data-visible-window-start={viewport.startTime.toFixed(2)}
       data-x-state-count={stateCounts.xStateCount}
-      data-z-hexagon-count={shapeCounts.zHexagonCount}
+      data-selected-signal-visible-y={formatOptionalNumber(selectedSignalVisibleY)}
+      data-vertical-scroll-top={verticalScrollTop.toFixed(2)}
+      data-x-state-block-count={shapeCounts.xStateBlockCount}
+      data-z-state-block-count={shapeCounts.zStateBlockCount}
       data-z-state-count={stateCounts.zStateCount}
       data-zoom={zoomLevel.toFixed(2)}
       role="img"
-      style={{ minHeight: canvasHeight }}
+      style={{ minHeight: waveformCanvasMinHeight }}
       tabIndex={0}
     >
       {renderer === 'error' && (
