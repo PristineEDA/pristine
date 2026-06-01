@@ -1,7 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { Application } from 'pixi.js';
 
-import { createWaveformScene, waveformLayerNames, type WaveformScene, type WaveformSignalTextureCacheEntry } from './createWaveformScene';
+import {
+  createWaveformScene,
+  updateWaveformSceneCursor,
+  updateWaveformSceneSelection,
+  updateWaveformSceneVerticalScroll,
+  waveformLayerNames,
+  type WaveformScene,
+  type WaveformSignalTextureCacheEntry,
+} from './createWaveformScene';
 import {
   clampTime,
   getWaveformDigitalPulseFillCount,
@@ -19,7 +27,14 @@ import {
   xToTime,
   zoomWaveformViewport,
 } from './waveformLayout';
-import type { WaveformDataSet, WaveformRenderMetrics, WaveformRendererStatus, WaveformRenderStats, WaveformViewport } from './waveformTypes';
+import type {
+  WaveformDataSet,
+  WaveformRenderMetrics,
+  WaveformRendererStatus,
+  WaveformRenderStats,
+  WaveformSceneUpdateMetrics,
+  WaveformViewport,
+} from './waveformTypes';
 
 type PixiRendererPreference = 'webgpu' | 'webgl';
 
@@ -77,6 +92,7 @@ export function WaveformCanvas({
     fps: number[];
     previousCompletedAt: number | null;
   }>({ durations: [], fps: [], previousCompletedAt: null });
+  const sceneUpdateMetricsRef = useRef<WaveformSceneUpdateMetrics>(createEmptySceneUpdateMetrics());
   const viewportRef = useRef(viewport);
   const cursorTimeRef = useRef(cursorTime);
   const selectedSignalIdRef = useRef(selectedSignalId);
@@ -126,10 +142,10 @@ export function WaveformCanvas({
         appRef.current = result.app;
         setRenderer(result.renderer);
         onRendererChange?.(result.renderer);
-        resizeAndDraw();
+        rebuildScene();
 
         resizeObserver = new ResizeObserver(() => {
-          resizeAndDraw();
+          rebuildScene();
         });
         resizeObserver.observe(host);
       } catch {
@@ -160,13 +176,53 @@ export function WaveformCanvas({
         fps: [],
         previousCompletedAt: null,
       };
+      sceneUpdateMetricsRef.current = createEmptySceneUpdateMetrics();
       activeApp?.destroy({ removeView: true, releaseGlobalResources: true }, { children: true });
     };
   }, [onRendererChange]);
 
   useEffect(() => {
-    resizeAndDraw();
-  }, [cursorTime, data, selectedSignalId, verticalScrollTop, viewport]);
+    rebuildScene();
+  }, [data, viewport]);
+
+  useEffect(() => {
+    const scene = sceneRef.current;
+
+    if (!scene || scene.state.cursorTime === cursorTime) {
+      return;
+    }
+
+    updateWaveformSceneCursor(scene, cursorTime);
+    sceneUpdateMetricsRef.current.cursorUpdateCount += 1;
+    applyRenderStats(scene.renderStats);
+    requestRender();
+  }, [cursorTime]);
+
+  useEffect(() => {
+    const scene = sceneRef.current;
+
+    if (!scene || scene.state.selectedSignalId === selectedSignalId) {
+      return;
+    }
+
+    updateWaveformSceneSelection(scene, selectedSignalId);
+    sceneUpdateMetricsRef.current.selectionUpdateCount += 1;
+    applyRenderStats(scene.renderStats);
+    requestRender();
+  }, [selectedSignalId]);
+
+  useEffect(() => {
+    const scene = sceneRef.current;
+
+    if (!scene || scene.state.verticalScrollTop === verticalScrollTop) {
+      return;
+    }
+
+    updateWaveformSceneVerticalScroll(scene, verticalScrollTop);
+    sceneUpdateMetricsRef.current.verticalScrollUpdateCount += 1;
+    applyRenderStats(scene.renderStats);
+    requestRender();
+  }, [verticalScrollTop]);
 
   useEffect(() => {
     const hostElement = hostRef.current;
@@ -273,7 +329,7 @@ export function WaveformCanvas({
     };
   }, []);
 
-  function resizeAndDraw() {
+  function rebuildScene() {
     const app = appRef.current;
     const host = hostRef.current;
 
@@ -317,15 +373,22 @@ export function WaveformCanvas({
       viewport: viewportRef.current,
       width,
     });
-    const nextRenderStats = {
-      ...sceneRef.current.renderStats,
-      textureCacheBytes: signalTextureCacheBytesRef.current,
-      textureCacheSize: signalTextureCacheRef.current.size,
-    };
-    renderStatsRef.current = nextRenderStats;
-    setRenderStats(nextRenderStats);
+    sceneUpdateMetricsRef.current.fullSceneRebuildCount += 1;
+    applyRenderStats(sceneRef.current.renderStats);
     app.stage.addChild(sceneRef.current.world);
     requestRender();
+  }
+
+  function applyRenderStats(baseStats: WaveformRenderStats) {
+    const nextRenderStats = {
+      ...baseStats,
+      textureCacheBytes: signalTextureCacheBytesRef.current,
+      textureCacheSize: signalTextureCacheRef.current.size,
+      ...sceneUpdateMetricsRef.current,
+    };
+
+    renderStatsRef.current = nextRenderStats;
+    setRenderStats(nextRenderStats);
   }
 
   function getCachedSignalTexture(key: string) {
@@ -457,6 +520,7 @@ export function WaveformCanvas({
       data-dense-column-count={renderStats.denseColumnCount}
       data-dense-run-count={renderStats.denseRunCount}
       data-dense-signal-count={renderStats.denseSignalCount}
+      data-full-scene-rebuild-count={renderStats.fullSceneRebuildCount}
       data-detail-signal-count={renderStats.detailSignalCount}
       data-first-signal-lane-y={formatOptionalNumber(firstSignalLaneY)}
       data-header-background="opaque"
@@ -481,11 +545,15 @@ export function WaveformCanvas({
       data-x-state-count={stateCounts.xStateCount}
       data-source-segment-count={renderStats.sourceSegmentCount}
       data-selected-signal-visible-y={formatOptionalNumber(selectedSignalVisibleY)}
+      data-selection-update-count={renderStats.selectionUpdateCount}
       data-suppressed-label-count={renderStats.suppressedLabelCount}
       data-texture-cache-bytes={renderStats.textureCacheBytes}
       data-texture-cache-size={renderStats.textureCacheSize}
+      data-cursor-update-count={renderStats.cursorUpdateCount}
       data-vertical-scroll-top={verticalScrollTop.toFixed(2)}
+      data-vertical-scroll-update-count={renderStats.verticalScrollUpdateCount}
       data-visible-primitive-count={renderMetrics.visiblePrimitiveCount}
+      data-viewport-content-update-count={renderStats.viewportContentUpdateCount}
       data-x-state-block-count={shapeCounts.xStateBlockCount}
       data-z-state-block-count={shapeCounts.zStateBlockCount}
       data-z-state-count={stateCounts.zStateCount}
@@ -561,6 +629,21 @@ function createEmptyRenderStats(): WaveformRenderStats {
     suppressedLabelCount: 0,
     textureCacheBytes: 0,
     textureCacheSize: 0,
+    fullSceneRebuildCount: 0,
+    viewportContentUpdateCount: 0,
+    verticalScrollUpdateCount: 0,
+    cursorUpdateCount: 0,
+    selectionUpdateCount: 0,
+  };
+}
+
+function createEmptySceneUpdateMetrics(): WaveformSceneUpdateMetrics {
+  return {
+    fullSceneRebuildCount: 0,
+    viewportContentUpdateCount: 0,
+    verticalScrollUpdateCount: 0,
+    selectionUpdateCount: 0,
+    cursorUpdateCount: 0,
   };
 }
 

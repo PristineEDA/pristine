@@ -1,9 +1,11 @@
 import { test, expect, _electron as electron, type Page } from '@playwright/test';
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const fixtureWorkspace = path.join(__dirname, '..', 'test', 'fixtures', 'workspace');
+const releaseRoot = path.join(__dirname, '..', 'release');
 const UI_READY_TIMEOUT_MS = 60000;
 
 interface StartupWindowEntry {
@@ -15,6 +17,30 @@ interface StartupWindowEntry {
 function getE2EUserDataPath() {
   return test.info().outputPath('electron-user-data');
 }
+
+function findPackagedWindowsExecutablePath() {
+  if (process.platform !== 'win32' || !fs.existsSync(releaseRoot)) {
+    return null;
+  }
+
+  const releaseVersions = fs
+    .readdirSync(releaseRoot, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort((left, right) => right.localeCompare(left, undefined, { numeric: true }));
+
+  for (const version of releaseVersions) {
+    const candidatePath = path.join(releaseRoot, version, 'win-unpacked', 'Pristine.exe');
+
+    if (fs.existsSync(candidatePath)) {
+      return candidatePath;
+    }
+  }
+
+  return null;
+}
+
+const packagedWindowsExecutablePath = findPackagedWindowsExecutablePath();
 
 async function getPageTitleSafely(page: Page) {
   if (page.isClosed()) {
@@ -83,6 +109,26 @@ async function launchApp() {
   return { app, window };
 }
 
+async function launchPackagedWindowsApp() {
+  if (!packagedWindowsExecutablePath) {
+    throw new Error('Packaged Windows executable not found');
+  }
+
+  const app = await electron.launch({
+    executablePath: packagedWindowsExecutablePath,
+    env: {
+      ...process.env,
+      PRISTINE_E2E: '1',
+      PRISTINE_PROJECT_ROOT: fixtureWorkspace,
+      PRISTINE_USER_DATA_PATH: getE2EUserDataPath(),
+    },
+  });
+
+  const window = await resolveMainWindow(app);
+
+  return { app, window };
+}
+
 async function openWaveformPanel(window: Page) {
   const toggleBottomPanel = window.getByTestId('toggle-bottom-panel');
   await expect(toggleBottomPanel).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
@@ -120,6 +166,7 @@ async function readCanvasStats(canvasHost: ReturnType<Page['getByTestId']>) {
     denseRunCount: await readNumber('data-dense-run-count'),
     denseSignalCount: await readNumber('data-dense-signal-count'),
     detailSignalCount: await readNumber('data-detail-signal-count'),
+    fullSceneRebuildCount: await readNumber('data-full-scene-rebuild-count'),
     renderResolution: await readNumber('data-render-resolution'),
     renderedSegmentCount: await readNumber('data-rendered-segment-count'),
     renderedSignalCount: await readNumber('data-rendered-signal-count'),
@@ -127,7 +174,11 @@ async function readCanvasStats(canvasHost: ReturnType<Page['getByTestId']>) {
     suppressedLabelCount: await readNumber('data-suppressed-label-count'),
     textureCacheBytes: await readNumber('data-texture-cache-bytes'),
     textureCacheSize: await readNumber('data-texture-cache-size'),
+    cursorUpdateCount: await readNumber('data-cursor-update-count'),
+    selectionUpdateCount: await readNumber('data-selection-update-count'),
     visibleRowCount: await readNumber('data-visible-row-count'),
+    verticalScrollUpdateCount: await readNumber('data-vertical-scroll-update-count'),
+    viewportContentUpdateCount: await readNumber('data-viewport-content-update-count'),
   };
 }
 
@@ -158,6 +209,52 @@ async function readJsHeapBytes(window: Page) {
 
     return performanceWithMemory.memory?.usedJSHeapSize ?? 0;
   });
+}
+
+async function waitForNextRender(canvasHost: ReturnType<Page['getByTestId']>, action: () => Promise<void>) {
+  const beforeRenderCount = Number(await canvasHost.getAttribute('data-render-count') ?? '0');
+
+  await action();
+
+  await expect.poll(async () => Number(await canvasHost.getAttribute('data-render-count') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(beforeRenderCount);
+}
+
+async function capturePerfSample(
+  window: Page,
+  panel: ReturnType<Page['getByTestId']>,
+  canvasHost: ReturnType<Page['getByTestId']>,
+  phase: string,
+  elapsedMs: number,
+) {
+  const [canvasStats, panelMetrics, jsHeapBytes] = await Promise.all([
+    readCanvasStats(canvasHost),
+    readPanelMetrics(panel),
+    readJsHeapBytes(window),
+  ]);
+
+  return {
+    phase,
+    elapsedMs,
+    renderCount: Number(await canvasHost.getAttribute('data-render-count') ?? '0'),
+    canvasStats,
+    panelMetrics,
+    jsHeapBytes,
+  };
+}
+
+function diffInteractionMetrics(
+  start: Awaited<ReturnType<typeof readCanvasStats>>,
+  end: Awaited<ReturnType<typeof readCanvasStats>>,
+) {
+  return {
+    fullSceneRebuildCount: end.fullSceneRebuildCount - start.fullSceneRebuildCount,
+    cursorUpdateCount: end.cursorUpdateCount - start.cursorUpdateCount,
+    selectionUpdateCount: end.selectionUpdateCount - start.selectionUpdateCount,
+    verticalScrollUpdateCount: end.verticalScrollUpdateCount - start.verticalScrollUpdateCount,
+    viewportContentUpdateCount: end.viewportContentUpdateCount - start.viewportContentUpdateCount,
+  };
 }
 
 test('waveform dense render opt-in baseline', async () => {
@@ -255,6 +352,141 @@ test('waveform dense render opt-in baseline', async () => {
       },
       denseStats,
       finalStats,
+    }, null, 2));
+  } finally {
+    await app.close();
+  }
+});
+
+test('packaged waveform sustained 10s viewport and interaction perf', async () => {
+  test.skip(process.platform !== 'win32', 'Packaged waveform perf runs on Windows only');
+  test.skip(!packagedWindowsExecutablePath, 'Run pnpm run package:win before executing packaged waveform perf');
+
+  const { app, window } = await launchPackagedWindowsApp();
+
+  try {
+    const panel = await openWaveformPanel(window);
+    const canvasHost = window.getByTestId('waveform-canvas');
+    const panRightButton = window.getByRole('button', { name: /pan waveform right/i });
+    const panLeftButton = window.getByRole('button', { name: /pan waveform left/i });
+    const zoomInButton = window.getByTestId('waveform-zoom-in');
+    const zoomOutButton = window.getByTestId('waveform-zoom-out');
+    const signalRowIds = [
+      'waveform-signal-row-u_top_module1-counting',
+      'waveform-signal-row-dense-signal-40',
+      'waveform-signal-row-tb_top_module1-clk',
+    ] as const;
+
+    await expect(canvasHost).toHaveAttribute('data-renderer', /^(webgpu|webgl)$/);
+    await waitForNextRender(canvasHost, async () => {
+      await zoomInButton.click();
+    });
+
+    const jsHeapBefore = await readJsHeapBytes(window);
+    const samples: Array<Awaited<ReturnType<typeof capturePerfSample>>> = [];
+    const phaseSnapshots = {
+      panStart: await readCanvasStats(canvasHost),
+      panEnd: null as Awaited<ReturnType<typeof readCanvasStats>> | null,
+      zoomStart: null as Awaited<ReturnType<typeof readCanvasStats>> | null,
+      zoomEnd: null as Awaited<ReturnType<typeof readCanvasStats>> | null,
+      cursorStart: null as Awaited<ReturnType<typeof readCanvasStats>> | null,
+      cursorEnd: null as Awaited<ReturnType<typeof readCanvasStats>> | null,
+      selectionStart: null as Awaited<ReturnType<typeof readCanvasStats>> | null,
+      selectionEnd: null as Awaited<ReturnType<typeof readCanvasStats>> | null,
+    };
+    const phaseStartedAt = Date.now();
+
+    for (let index = 0; index < 10; index += 1) {
+      await waitForNextRender(canvasHost, async () => {
+        await (index % 2 === 0 ? panRightButton : panLeftButton).click();
+      });
+      samples.push(await capturePerfSample(window, panel, canvasHost, 'pan', Date.now() - phaseStartedAt));
+      await window.waitForTimeout(250);
+    }
+
+    phaseSnapshots.panEnd = await readCanvasStats(canvasHost);
+    phaseSnapshots.zoomStart = phaseSnapshots.panEnd;
+
+    for (let index = 0; index < 10; index += 1) {
+      await waitForNextRender(canvasHost, async () => {
+        await (index % 2 === 0 ? zoomInButton : zoomOutButton).click();
+      });
+      samples.push(await capturePerfSample(window, panel, canvasHost, 'zoom', Date.now() - phaseStartedAt));
+      await window.waitForTimeout(250);
+    }
+
+    phaseSnapshots.zoomEnd = await readCanvasStats(canvasHost);
+    phaseSnapshots.cursorStart = phaseSnapshots.zoomEnd;
+
+    for (let index = 0; index < 10; index += 1) {
+      const box = await canvasHost.boundingBox();
+
+      if (!box) {
+        throw new Error('Expected waveform canvas bounding box for cursor perf interactions.');
+      }
+
+      const x = 40 + (index % 5) * Math.max(30, Math.floor((box.width - 80) / 5));
+      const y = Math.max(40, Math.min(box.height - 40, 96));
+
+      await waitForNextRender(canvasHost, async () => {
+        await canvasHost.click({ position: { x, y } });
+      });
+      samples.push(await capturePerfSample(window, panel, canvasHost, 'cursor', Date.now() - phaseStartedAt));
+      await window.waitForTimeout(250);
+    }
+
+    phaseSnapshots.cursorEnd = await readCanvasStats(canvasHost);
+    phaseSnapshots.selectionStart = phaseSnapshots.cursorEnd;
+
+    for (let index = 0; index < 10; index += 1) {
+      await waitForNextRender(canvasHost, async () => {
+        await window.getByTestId(signalRowIds[index % signalRowIds.length]).click();
+      });
+      samples.push(await capturePerfSample(window, panel, canvasHost, 'selection', Date.now() - phaseStartedAt));
+      await window.waitForTimeout(250);
+    }
+
+    phaseSnapshots.selectionEnd = await readCanvasStats(canvasHost);
+
+    const totalElapsedMs = Date.now() - phaseStartedAt;
+    const jsHeapAfter = await readJsHeapBytes(window);
+    const finalStats = await readCanvasStats(canvasHost);
+    const finalPanelMetrics = await readPanelMetrics(panel);
+    const panDelta = diffInteractionMetrics(phaseSnapshots.panStart, phaseSnapshots.panEnd);
+    const zoomDelta = diffInteractionMetrics(phaseSnapshots.zoomStart, phaseSnapshots.zoomEnd);
+    const cursorDelta = diffInteractionMetrics(phaseSnapshots.cursorStart, phaseSnapshots.cursorEnd);
+    const selectionDelta = diffInteractionMetrics(phaseSnapshots.selectionStart, phaseSnapshots.selectionEnd);
+
+    expect(totalElapsedMs).toBeGreaterThanOrEqual(9000);
+    expect(samples.length).toBe(40);
+    expect(panDelta.fullSceneRebuildCount).toBeGreaterThan(0);
+    expect(zoomDelta.fullSceneRebuildCount).toBeGreaterThan(0);
+    expect(cursorDelta.fullSceneRebuildCount).toBe(0);
+    expect(cursorDelta.cursorUpdateCount).toBeGreaterThan(0);
+    expect(selectionDelta.fullSceneRebuildCount).toBe(0);
+    expect(selectionDelta.selectionUpdateCount).toBeGreaterThan(0);
+    expect(finalStats.textureCacheBytes).toBeLessThanOrEqual(32 * 1024 * 1024);
+    expect(jsHeapAfter - jsHeapBefore).toBeLessThan(192 * 1024 * 1024);
+
+    console.log(JSON.stringify({
+      name: 'packaged-waveform-sustained-10s',
+      executablePath: packagedWindowsExecutablePath,
+      renderer: await panel.getAttribute('data-renderer'),
+      totalElapsedMs,
+      jsHeapBytes: {
+        before: jsHeapBefore,
+        after: jsHeapAfter,
+        delta: jsHeapAfter - jsHeapBefore,
+      },
+      phaseDeltas: {
+        pan: panDelta,
+        zoom: zoomDelta,
+        cursor: cursorDelta,
+        selection: selectionDelta,
+      },
+      finalPanelMetrics,
+      finalStats,
+      samples,
     }, null, 2));
   } finally {
     await app.close();

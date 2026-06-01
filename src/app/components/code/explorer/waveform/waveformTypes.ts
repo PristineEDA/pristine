@@ -72,6 +72,11 @@ export interface WaveformRenderStats {
   suppressedLabelCount: number;
   textureCacheBytes: number;
   textureCacheSize: number;
+  fullSceneRebuildCount: number;
+  viewportContentUpdateCount: number;
+  verticalScrollUpdateCount: number;
+  cursorUpdateCount: number;
+  selectionUpdateCount: number;
 }
 
 export interface WaveformRenderMetrics {
@@ -80,6 +85,14 @@ export interface WaveformRenderMetrics {
   lastFps: number | null;
   averageFps: number | null;
   visiblePrimitiveCount: number;
+}
+
+export interface WaveformSceneUpdateMetrics {
+  fullSceneRebuildCount: number;
+  viewportContentUpdateCount: number;
+  verticalScrollUpdateCount: number;
+  selectionUpdateCount: number;
+  cursorUpdateCount: number;
 }
 
 export interface WaveformTransition {

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Container, Text, Texture } from 'pixi.js';
 
-import { clipWaveformLineToBounds, createWaveformScene, getWaveformBusHexagonBevel, waveformHighImpedanceStripeSpacing, waveformLayerNames, waveformUnknownStripeSpacing, type WaveformSignalTextureCacheEntry } from './createWaveformScene';
+import { clipWaveformLineToBounds, createWaveformScene, getWaveformBusHexagonBevel, updateWaveformSceneCursor, updateWaveformSceneSelection, updateWaveformSceneVerticalScroll, waveformHighImpedanceStripeSpacing, waveformLayerNames, waveformUnknownStripeSpacing, type WaveformSignalTextureCacheEntry } from './createWaveformScene';
 import { fitWaveformViewport, getWaveformCanvasHeightForData, getWaveformDigitalPulseFillCount, getWaveformDisplayRows, getWaveformShapeCounts, getWaveformSignalLaneY } from './waveformLayout';
 import { mockWaveformData } from './waveformMockData';
 
@@ -170,6 +170,36 @@ describe('createWaveformScene', () => {
     expect(clipped?.y1).toBe(2);
     expect(clipped?.x2).toBe(12);
     expect(clipped?.y2).toBeCloseTo(4.2857, 4);
+  });
+
+  it('updates cursor, selection, and vertical scroll in place without replacing the world', () => {
+    const scene = createWaveformScene({
+      cursorTime: mockWaveformData.cursorTime,
+      data: mockWaveformData,
+      height: 320,
+      selectedSignalId: 'u_top_module1-counting',
+      viewport: fitWaveformViewport(mockWaveformData),
+      width: 900,
+    });
+    const originalWorld = scene.world;
+    const originalBackgroundLayer = scene.layers.background;
+    const initialVisibleRowCount = scene.renderStats.visibleRowCount;
+
+    updateWaveformSceneCursor(scene, 128);
+    updateWaveformSceneSelection(scene, 'dense-signal-40');
+    updateWaveformSceneVerticalScroll(scene, 1470);
+
+    expect(scene.world).toBe(originalWorld);
+    expect(scene.layers.background).toBe(originalBackgroundLayer);
+    expect(scene.state.cursorTime).toBe(128);
+    expect(scene.selectedSignalLaneY).toBe(getWaveformSignalLaneY(mockWaveformData, 'dense-signal-40'));
+    expect(scene.renderStats.visibleRowCount).not.toBe(initialVisibleRowCount);
+    expect(scene.nodes.statusCursor.children.length).toBeGreaterThan(0);
+    expect(scene.nodes.operationCursor.children.length).toBeGreaterThan(0);
+    expect(scene.nodes.backgroundLanes.children.length).toBeGreaterThan(0);
+    expect(scene.nodes.contentRows.children.length).toBeGreaterThan(0);
+
+    scene.world.destroy({ children: true });
   });
 });
 

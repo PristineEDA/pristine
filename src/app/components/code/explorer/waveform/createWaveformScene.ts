@@ -2,6 +2,7 @@ import { Container, Graphics, Rectangle, Sprite, Text, type Renderer, type Textu
 
 import {
   formatWaveformValue,
+  type WaveformDisplayRow,
   getWaveformDigitalPulseFillCount,
   getWaveformDisplayRows,
   getWaveformFirstSignalLaneY,
@@ -11,6 +12,7 @@ import {
   getWaveformStateCounts,
   getWaveformTicks,
   getVisibleWaveformRows,
+  type WaveformVisibleRows,
   isHighImpedanceWaveformValue,
   isSpecialWaveformValue,
   isUnknownWaveformValue,
@@ -44,6 +46,8 @@ export interface WaveformSignalTextureCache {
 export interface WaveformScene {
   world: Container;
   layers: WaveformSceneLayers;
+  nodes: WaveformSceneNodes;
+  state: WaveformSceneState;
   shapeCounts: WaveformShapeCounts;
   digitalPulseFillCount: number;
   firstSignalLaneY: number | null;
@@ -51,6 +55,31 @@ export interface WaveformScene {
   rowCount: number;
   selectedSignalLaneY: number | null;
   stateCounts: WaveformStateCounts;
+}
+
+interface WaveformSceneNodes {
+  backgroundBase: Container;
+  backgroundGrid: Container;
+  backgroundLanes: Container;
+  contentRows: Container;
+  statusCursor: Container;
+  statusHeader: Container;
+  operationCursor: Container;
+}
+
+interface WaveformSceneState {
+  cursorTime: number;
+  data: WaveformDataSet;
+  height: number;
+  renderResolution: number;
+  rows: WaveformDisplayRow[];
+  selectedSignalId: string | null;
+  signalTextureCache?: WaveformSignalTextureCache;
+  textureRenderer?: Pick<Renderer, 'generateTexture'>;
+  verticalScrollTop: number;
+  viewport: WaveformViewport;
+  visibleRows: WaveformVisibleRows;
+  width: number;
 }
 
 interface WaveformSceneOptions {
@@ -84,25 +113,28 @@ const palette = {
 export function createWaveformScene(options: WaveformSceneOptions): WaveformScene {
   const world = new Container();
   const layers = createLayers();
-  const base = new Graphics();
   const rows = getWaveformDisplayRows(options.data);
   const visibleRows = getVisibleWaveformRows(rows, options.verticalScrollTop ?? 0, options.height);
+  const nodes = createSceneNodes();
   const renderStats = createRenderStats(visibleRows.visibleRowCount, visibleRows.culledRowCount, getRenderResolution(options));
-
-  base.rect(0, 0, options.width, options.height).fill({ color: palette.background });
-  base.rect(0, 0, options.width, waveformHeaderHeight).fill({ color: palette.header });
-
-  layers.background.addChild(base);
-  drawLanes(layers.background, visibleRows.rows, options);
-  drawGrid(layers.background, layers.status, options);
-  drawSignals(layers.content, visibleRows.rows, options, renderStats);
-  drawCursor(layers.status, layers.operation, options);
-
-  world.addChild(layers.background, layers.content, layers.status, layers.operation);
-
-  return {
+  const scene: WaveformScene = {
     world,
     layers,
+    nodes,
+    state: {
+      cursorTime: options.cursorTime,
+      data: options.data,
+      height: options.height,
+      renderResolution: getRenderResolution(options),
+      rows,
+      selectedSignalId: options.selectedSignalId,
+      signalTextureCache: options.signalTextureCache,
+      textureRenderer: options.textureRenderer,
+      verticalScrollTop: options.verticalScrollTop ?? 0,
+      viewport: options.viewport,
+      visibleRows,
+      width: options.width,
+    },
     shapeCounts: getWaveformShapeCounts(options.data, options.viewport),
     digitalPulseFillCount: getWaveformDigitalPulseFillCount(options.data, options.viewport),
     firstSignalLaneY: getWaveformFirstSignalLaneY(options.data),
@@ -111,6 +143,36 @@ export function createWaveformScene(options: WaveformSceneOptions): WaveformScen
     selectedSignalLaneY: getWaveformSignalLaneY(options.data, options.selectedSignalId),
     stateCounts: getWaveformStateCounts(options.data),
   };
+
+  layers.background.addChild(nodes.backgroundBase, nodes.backgroundGrid, nodes.backgroundLanes);
+  layers.content.addChild(nodes.contentRows);
+  layers.status.addChild(nodes.statusHeader, nodes.statusCursor);
+  layers.operation.addChild(nodes.operationCursor);
+  world.addChild(layers.background, layers.content, layers.status, layers.operation);
+
+  redrawWaveformSceneBase(scene);
+  redrawWaveformSceneGrid(scene);
+  redrawWaveformSceneRows(scene);
+  redrawWaveformSceneCursor(scene);
+
+  return scene;
+}
+
+export function updateWaveformSceneCursor(scene: WaveformScene, cursorTime: number) {
+  scene.state.cursorTime = cursorTime;
+  redrawWaveformSceneCursor(scene);
+}
+
+export function updateWaveformSceneSelection(scene: WaveformScene, selectedSignalId: string | null) {
+  scene.state.selectedSignalId = selectedSignalId;
+  scene.selectedSignalLaneY = getWaveformSignalLaneY(scene.state.data, selectedSignalId);
+  redrawWaveformSceneLanes(scene);
+}
+
+export function updateWaveformSceneVerticalScroll(scene: WaveformScene, verticalScrollTop: number) {
+  scene.state.verticalScrollTop = verticalScrollTop;
+  scene.state.visibleRows = getVisibleWaveformRows(scene.state.rows, verticalScrollTop, scene.state.height);
+  redrawWaveformSceneRows(scene);
 }
 
 function createRenderStats(visibleRowCount: number, culledRowCount: number, renderResolution: number): WaveformRenderStats {
@@ -135,6 +197,11 @@ function createRenderStats(visibleRowCount: number, culledRowCount: number, rend
     suppressedLabelCount: 0,
     textureCacheBytes: 0,
     textureCacheSize: 0,
+    fullSceneRebuildCount: 0,
+    viewportContentUpdateCount: 0,
+    verticalScrollUpdateCount: 0,
+    cursorUpdateCount: 0,
+    selectionUpdateCount: 0,
   };
 }
 
@@ -155,6 +222,79 @@ function createLayers(): WaveformSceneLayers {
     status: new Container({ label: 'waveform-layer-status' }),
     operation: new Container({ label: 'waveform-layer-operation' }),
   };
+}
+
+function createSceneNodes(): WaveformSceneNodes {
+  return {
+    backgroundBase: new Container({ label: 'waveform-background-base' }),
+    backgroundGrid: new Container({ label: 'waveform-background-grid' }),
+    backgroundLanes: new Container({ label: 'waveform-background-lanes' }),
+    contentRows: new Container({ label: 'waveform-content-rows' }),
+    statusCursor: new Container({ label: 'waveform-status-cursor' }),
+    statusHeader: new Container({ label: 'waveform-header-overlay' }),
+    operationCursor: new Container({ label: 'waveform-operation-cursor' }),
+  };
+}
+
+function redrawWaveformSceneBase(scene: WaveformScene) {
+  clearContainer(scene.nodes.backgroundBase);
+
+  const base = new Graphics();
+  base.rect(0, 0, scene.state.width, scene.state.height).fill({ color: palette.background });
+  base.rect(0, 0, scene.state.width, waveformHeaderHeight).fill({ color: palette.header });
+  scene.nodes.backgroundBase.addChild(base);
+}
+
+function redrawWaveformSceneGrid(scene: WaveformScene) {
+  clearContainer(scene.nodes.backgroundGrid);
+  clearContainer(scene.nodes.statusHeader);
+  drawGrid(scene.nodes.backgroundGrid, scene.nodes.statusHeader, getSceneOptions(scene));
+}
+
+function redrawWaveformSceneRows(scene: WaveformScene) {
+  scene.renderStats = createRenderStats(
+    scene.state.visibleRows.visibleRowCount,
+    scene.state.visibleRows.culledRowCount,
+    scene.state.renderResolution,
+  );
+
+  redrawWaveformSceneLanes(scene);
+  clearContainer(scene.nodes.contentRows);
+  drawSignals(scene.nodes.contentRows, scene.state.visibleRows.rows, getSceneOptions(scene), scene.renderStats);
+}
+
+function redrawWaveformSceneLanes(scene: WaveformScene) {
+  clearContainer(scene.nodes.backgroundLanes);
+  drawLanes(scene.nodes.backgroundLanes, scene.state.visibleRows.rows, getSceneOptions(scene));
+}
+
+function redrawWaveformSceneCursor(scene: WaveformScene) {
+  clearContainer(scene.nodes.statusCursor);
+  clearContainer(scene.nodes.operationCursor);
+  drawCursor(scene.nodes.statusCursor, scene.nodes.operationCursor, getSceneOptions(scene));
+}
+
+function getSceneOptions(scene: WaveformScene): WaveformSceneOptions {
+  return {
+    cursorTime: scene.state.cursorTime,
+    data: scene.state.data,
+    height: scene.state.height,
+    renderResolution: scene.state.renderResolution,
+    selectedSignalId: scene.state.selectedSignalId,
+    signalTextureCache: scene.state.signalTextureCache,
+    textureRenderer: scene.state.textureRenderer,
+    verticalScrollTop: scene.state.verticalScrollTop,
+    viewport: scene.state.viewport,
+    width: scene.state.width,
+  };
+}
+
+function clearContainer(container: Container) {
+  const removedChildren = container.removeChildren();
+
+  for (const child of removedChildren) {
+    child.destroy({ children: true });
+  }
 }
 
 function drawLanes(target: Container, rows: ReturnType<typeof getWaveformDisplayRows>, options: WaveformSceneOptions) {
