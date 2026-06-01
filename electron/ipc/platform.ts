@@ -1,5 +1,6 @@
-import { ipcMain } from 'electron';
-import { SyncChannels } from './channels.js';
+import { app, ipcMain } from 'electron';
+import { AsyncChannels, SyncChannels } from './channels.js';
+import type { ElectronGpuDiagnostics, ElectronGpuInfo } from '../../types/electron-gpu.js';
 
 export function registerPlatformHandler(): void {
   ipcMain.on(SyncChannels.PLATFORM, (event) => {
@@ -14,4 +15,30 @@ export function registerPlatformHandler(): void {
       },
     };
   });
+
+  ipcMain.handle(AsyncChannels.PLATFORM_GET_GPU_DIAGNOSTICS, async (): Promise<ElectronGpuDiagnostics> => {
+    let info: ElectronGpuInfo | null = null;
+    let infoError: string | null = null;
+
+    try {
+      info = await app.getGPUInfo('basic') as ElectronGpuInfo;
+    } catch (error) {
+      infoError = error instanceof Error ? error.message : String(error);
+    }
+
+    return {
+      hardwareAccelerationEnabled: getHardwareAccelerationEnabled(),
+      featureStatus: app.getGPUFeatureStatus() as unknown as Record<string, string>,
+      info,
+      infoError,
+    };
+  });
+}
+
+function getHardwareAccelerationEnabled() {
+  const electronApp = app as typeof app & {
+    isHardwareAccelerationEnabled?: () => boolean;
+  };
+
+  return electronApp.isHardwareAccelerationEnabled?.() ?? true;
 }

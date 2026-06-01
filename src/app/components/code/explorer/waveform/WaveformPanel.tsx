@@ -19,8 +19,9 @@ import {
   zoomWaveformViewport,
 } from './waveformLayout';
 import { mockWaveformData } from './waveformMockData';
-import type { WaveformRendererStatus, WaveformViewport } from './waveformTypes';
+import type { WaveformRenderMetrics, WaveformRendererStatus, WaveformViewport } from './waveformTypes';
 import type { WaveformSignalDisplayRow } from './waveformLayout';
+import type { ElectronGpuDiagnostics, RendererGpuSupportDiagnostics } from '../../../../../../types/electron-gpu';
 import { WaveformCanvas } from './WaveformCanvas';
 
 const zoomButtonFactor = 1.35;
@@ -29,9 +30,13 @@ export function WaveformPanel() {
   const data = mockWaveformData;
   const [viewport, setViewport] = useState<WaveformViewport>(() => getInitialWaveformViewport(data));
   const [cursorTime, setCursorTime] = useState(data.cursorTime);
+  const [renderMetrics, setRenderMetrics] = useState<WaveformRenderMetrics>(() => createEmptyWaveformRenderMetrics());
+  const [gpuDiagnostics, setGpuDiagnostics] = useState<ElectronGpuDiagnostics | null>(null);
+  const [gpuDiagnosticsStatus, setGpuDiagnosticsStatus] = useState<'pending' | 'ready' | 'unavailable'>('pending');
   const [renderer, setRenderer] = useState<WaveformRendererStatus>('initializing');
   const [selectedSignalId, setSelectedSignalId] = useState<string | null>(data.signals[0]?.id ?? null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [rendererGpuSupport] = useState<RendererGpuSupportDiagnostics>(() => detectRendererGpuSupport());
   const signalScrollRef = useRef<HTMLDivElement | null>(null);
   const waveformViewportRef = useRef<HTMLDivElement | null>(null);
   const horizontalScrollRef = useRef<HTMLDivElement | null>(null);
@@ -48,6 +53,33 @@ export function WaveformPanel() {
   const zoomLevel = data.duration / getWaveformViewportSpan(viewport);
   const waveformCanvasHeight = getWaveformCanvasHeightForData(data);
   const horizontalMetrics = getWaveformHorizontalScrollMetrics(viewport, data.duration, waveformViewportWidth);
+
+  useEffect(() => {
+    let cancelled = false;
+    const getDiagnostics = window.electronAPI?.gpu?.getDiagnostics;
+
+    if (!getDiagnostics) {
+      setGpuDiagnosticsStatus('unavailable');
+      return;
+    }
+
+    void getDiagnostics().then((nextDiagnostics) => {
+      if (cancelled) {
+        return;
+      }
+
+      setGpuDiagnostics(nextDiagnostics);
+      setGpuDiagnosticsStatus('ready');
+    }).catch(() => {
+      if (!cancelled) {
+        setGpuDiagnosticsStatus('unavailable');
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const viewportElement = waveformViewportRef.current;
@@ -161,13 +193,27 @@ export function WaveformPanel() {
   return (
     <div
       className="flex h-full min-h-0 flex-col bg-ide-bg text-ide-text"
+      data-average-fps={formatOptionalMetricNumber(renderMetrics.averageFps)}
+      data-average-render-ms={formatOptionalMetricNumber(renderMetrics.averageRenderDurationMs)}
+      data-browser-webgl={String(rendererGpuSupport.webgl)}
+      data-browser-webgl2={String(rendererGpuSupport.webgl2)}
+      data-browser-webgpu={String(rendererGpuSupport.webgpu)}
       data-cursor-time={cursorTime.toFixed(2)}
+      data-gpu-active-device-count={getElectronGpuDeviceCount(gpuDiagnostics)}
+      data-gpu-feature-gpu-compositing={formatGpuFeatureValue(gpuDiagnosticsStatus, gpuDiagnostics?.featureStatus['gpu_compositing'])}
+      data-gpu-feature-webgl={formatGpuFeatureValue(gpuDiagnosticsStatus, gpuDiagnostics?.featureStatus['webgl'])}
+      data-gpu-feature-webgpu={formatGpuFeatureValue(gpuDiagnosticsStatus, gpuDiagnostics?.featureStatus['webgpu'])}
+      data-gpu-hardware-acceleration={formatGpuBooleanValue(gpuDiagnosticsStatus, gpuDiagnostics?.hardwareAccelerationEnabled)}
+      data-gpu-info-error={gpuDiagnostics?.infoError ?? ''}
+      data-last-fps={formatOptionalMetricNumber(renderMetrics.lastFps)}
+      data-last-render-ms={formatOptionalMetricNumber(renderMetrics.lastRenderDurationMs)}
       data-ready={renderer !== 'initializing' ? 'true' : 'false'}
       data-renderer={renderer}
       data-selected-signal-id={selectedSignalId ?? ''}
       data-signal-count={data.signals.length}
       data-testid="waveform-panel"
       data-visible-window-end={viewport.endTime.toFixed(2)}
+      data-visible-primitive-count={renderMetrics.visiblePrimitiveCount}
       data-visible-window-start={viewport.startTime.toFixed(2)}
       data-zoom={zoomLevel.toFixed(2)}
     >
@@ -181,6 +227,7 @@ export function WaveformPanel() {
         </div>
 
         <div className="ml-auto flex min-w-0 items-center gap-2">
+          <WaveformMetricInfo metrics={renderMetrics} />
           <WaveformCursorInfo
             cursorTime={cursorTime}
             signalName={selectedSignal?.name ?? '-'}
@@ -267,6 +314,26 @@ export function WaveformPanel() {
                   <span>{getWaveformViewportSpan(viewport).toFixed(0)}{data.timescaleUnit}</span>
                   <span className="text-ide-text-muted">Renderer</span>
                   <span className="uppercase">{renderer}</span>
+                  <span className="text-ide-text-muted">HW accel</span>
+                  <span data-testid="waveform-gpu-hardware-acceleration">{formatGpuBooleanValue(gpuDiagnosticsStatus, gpuDiagnostics?.hardwareAccelerationEnabled)}</span>
+                  <span className="text-ide-text-muted">Compositing</span>
+                  <span data-testid="waveform-gpu-compositing-status">{formatGpuFeatureValue(gpuDiagnosticsStatus, gpuDiagnostics?.featureStatus['gpu_compositing'])}</span>
+                  <span className="text-ide-text-muted">Electron WebGPU</span>
+                  <span data-testid="waveform-gpu-webgpu-status">{formatGpuFeatureValue(gpuDiagnosticsStatus, gpuDiagnostics?.featureStatus['webgpu'])}</span>
+                  <span className="text-ide-text-muted">Electron WebGL</span>
+                  <span data-testid="waveform-gpu-webgl-status">{formatGpuFeatureValue(gpuDiagnosticsStatus, gpuDiagnostics?.featureStatus['webgl'])}</span>
+                  <span className="text-ide-text-muted">Browser WebGPU</span>
+                  <span data-testid="waveform-browser-webgpu-status">{formatRendererSupportValue(rendererGpuSupport.webgpu)}</span>
+                  <span className="text-ide-text-muted">Browser WebGL2</span>
+                  <span data-testid="waveform-browser-webgl2-status">{formatRendererSupportValue(rendererGpuSupport.webgl2)}</span>
+                  <span className="text-ide-text-muted">Active GPU(s)</span>
+                  <span data-testid="waveform-gpu-active-device-count">{getElectronGpuDeviceCount(gpuDiagnostics)}</span>
+                  {gpuDiagnostics?.infoError && (
+                    <>
+                      <span className="text-ide-text-muted">GPU info</span>
+                      <span data-testid="waveform-gpu-info-error">{gpuDiagnostics.infoError}</span>
+                    </>
+                  )}
                 </div>
               </div>
             )}
@@ -278,6 +345,7 @@ export function WaveformPanel() {
                 verticalScrollTop={verticalScrollTop}
                 viewport={viewport}
                 onCursorTimeChange={setCursorTime}
+                onMetricsChange={setRenderMetrics}
                 onRendererChange={setRenderer}
                 onVerticalScrollDelta={handleCanvasVerticalScrollDelta}
                 onViewportChange={setViewport}
@@ -344,6 +412,37 @@ interface WaveformCursorInfoProps {
   value: string;
 }
 
+interface WaveformMetricInfoProps {
+  metrics: WaveformRenderMetrics;
+}
+
+function WaveformMetricInfo({ metrics }: WaveformMetricInfoProps) {
+  return (
+    <div
+      className="flex shrink-0 items-center gap-3 rounded border border-ide-border bg-ide-bg/90 px-2 py-1 text-[11px] text-ide-text shadow-sm"
+      data-testid="waveform-toolbar-metrics"
+    >
+      <div className="flex items-center gap-1" data-testid="waveform-toolbar-metrics-render">
+        <span className="text-ide-text-muted">Render</span>
+        <span className="font-mono text-ide-text" data-testid="waveform-toolbar-metrics-render-last">{formatMetricValue(metrics.lastRenderDurationMs, 1)}</span>
+        <span className="text-ide-text-muted">/</span>
+        <span className="font-mono text-ide-accent" data-testid="waveform-toolbar-metrics-render-avg">{formatMetricValue(metrics.averageRenderDurationMs, 1)}</span>
+        <span className="text-ide-text-muted">ms</span>
+      </div>
+      <div className="flex items-center gap-1" data-testid="waveform-toolbar-metrics-fps">
+        <span className="text-ide-text-muted">FPS</span>
+        <span className="font-mono text-ide-text" data-testid="waveform-toolbar-metrics-fps-last">{formatMetricValue(metrics.lastFps, 1)}</span>
+        <span className="text-ide-text-muted">/</span>
+        <span className="font-mono text-ide-accent" data-testid="waveform-toolbar-metrics-fps-avg">{formatMetricValue(metrics.averageFps, 1)}</span>
+      </div>
+      <div className="flex items-center gap-1" data-testid="waveform-toolbar-metrics-primitives">
+        <span className="text-ide-text-muted">Prim</span>
+        <span className="font-mono text-ide-accent" data-testid="waveform-toolbar-metrics-primitives-value">{metrics.visiblePrimitiveCount}</span>
+      </div>
+    </div>
+  );
+}
+
 function WaveformCursorInfo({ cursorTime, signalName, timescaleUnit, value }: WaveformCursorInfoProps) {
   return (
     <div
@@ -381,4 +480,81 @@ function ToolbarIconButton({ children, label, testId, onClick }: ToolbarIconButt
       </Button>
     </TooltipIconButton>
   );
+}
+
+function createEmptyWaveformRenderMetrics(): WaveformRenderMetrics {
+  return {
+    lastRenderDurationMs: null,
+    averageRenderDurationMs: null,
+    lastFps: null,
+    averageFps: null,
+    visiblePrimitiveCount: 0,
+  };
+}
+
+function formatMetricValue(value: number | null, digits: number) {
+  return value === null ? '--' : value.toFixed(digits);
+}
+
+function formatOptionalMetricNumber(value: number | null) {
+  return value === null ? '' : value.toFixed(2);
+}
+
+function detectRendererGpuSupport(): RendererGpuSupportDiagnostics {
+  if (typeof document === 'undefined') {
+    return { webgpu: false, webgl2: false, webgl: false };
+  }
+
+  const canvas = document.createElement('canvas');
+  const maybeNavigator = navigator as Navigator & { gpu?: unknown };
+
+  return {
+    webgpu: typeof maybeNavigator.gpu !== 'undefined',
+    webgl2: tryGetCanvasContext(canvas, 'webgl2'),
+    webgl: tryGetCanvasContext(canvas, 'webgl') || tryGetCanvasContext(canvas, 'experimental-webgl'),
+  };
+}
+
+function tryGetCanvasContext(canvas: HTMLCanvasElement, contextId: 'experimental-webgl' | 'webgl' | 'webgl2') {
+  try {
+    return canvas.getContext(contextId) !== null;
+  } catch {
+    return false;
+  }
+}
+
+function formatGpuBooleanValue(status: 'pending' | 'ready' | 'unavailable', value: boolean | undefined) {
+  if (status === 'pending') {
+    return 'pending';
+  }
+
+  if (status === 'unavailable' || typeof value === 'undefined') {
+    return 'unavailable';
+  }
+
+  return value ? 'true' : 'false';
+}
+
+function formatGpuFeatureValue(status: 'pending' | 'ready' | 'unavailable', value: string | undefined) {
+  if (status === 'pending') {
+    return 'pending';
+  }
+
+  if (status === 'unavailable') {
+    return 'unavailable';
+  }
+
+  return value ?? 'unknown';
+}
+
+function formatRendererSupportValue(value: boolean) {
+  return value ? 'available' : 'unavailable';
+}
+
+function getElectronGpuDeviceCount(gpuDiagnostics: ElectronGpuDiagnostics | null) {
+  const gpuDevice = gpuDiagnostics?.info && 'gpuDevice' in gpuDiagnostics.info
+    ? gpuDiagnostics.info.gpuDevice
+    : null;
+
+  return Array.isArray(gpuDevice) ? gpuDevice.length : 0;
 }

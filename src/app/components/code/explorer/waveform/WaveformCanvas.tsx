@@ -19,7 +19,7 @@ import {
   xToTime,
   zoomWaveformViewport,
 } from './waveformLayout';
-import type { WaveformDataSet, WaveformRendererStatus, WaveformRenderStats, WaveformViewport } from './waveformTypes';
+import type { WaveformDataSet, WaveformRenderMetrics, WaveformRendererStatus, WaveformRenderStats, WaveformViewport } from './waveformTypes';
 
 type PixiRendererPreference = 'webgpu' | 'webgl';
 
@@ -30,6 +30,7 @@ interface WaveformCanvasProps {
   verticalScrollTop: number;
   viewport: WaveformViewport;
   onCursorTimeChange: (time: number) => void;
+  onMetricsChange?: (metrics: WaveformRenderMetrics) => void;
   onRendererChange?: (renderer: WaveformRendererStatus) => void;
   onVerticalScrollDelta: (delta: number) => void;
   onViewportChange: (viewport: WaveformViewport) => void;
@@ -47,6 +48,7 @@ const dragThreshold = 4;
 const zoomWheelFactor = 1.18;
 const waveformSignalTextureCacheLimit = 48;
 const waveformSignalTextureCacheByteLimit = 32 * 1024 * 1024;
+const waveformMetricSampleWindowSize = 30;
 
 export function WaveformCanvas({
   cursorTime,
@@ -55,6 +57,7 @@ export function WaveformCanvas({
   verticalScrollTop,
   viewport,
   onCursorTimeChange,
+  onMetricsChange,
   onRendererChange,
   onVerticalScrollDelta,
   onViewportChange,
@@ -68,23 +71,33 @@ export function WaveformCanvas({
   const signalTextureCacheBytesRef = useRef(0);
   const textureCacheDataIdRef = useRef(data.id);
   const dataRef = useRef(data);
+  const renderStatsRef = useRef<WaveformRenderStats>(createEmptyRenderStats());
+  const renderMetricHistoryRef = useRef<{
+    durations: number[];
+    fps: number[];
+    previousCompletedAt: number | null;
+  }>({ durations: [], fps: [], previousCompletedAt: null });
   const viewportRef = useRef(viewport);
   const cursorTimeRef = useRef(cursorTime);
   const selectedSignalIdRef = useRef(selectedSignalId);
   const onCursorTimeChangeRef = useRef(onCursorTimeChange);
+  const onMetricsChangeRef = useRef(onMetricsChange);
   const onVerticalScrollDeltaRef = useRef(onVerticalScrollDelta);
   const onViewportChangeRef = useRef(onViewportChange);
   const verticalScrollTopRef = useRef(verticalScrollTop);
   const [renderer, setRenderer] = useState<WaveformRendererStatus>('initializing');
   const [renderCount, setRenderCount] = useState(0);
+  const [renderMetrics, setRenderMetrics] = useState<WaveformRenderMetrics>(createEmptyRenderMetrics());
   const [renderStats, setRenderStats] = useState<WaveformRenderStats>(createEmptyRenderStats());
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
 
   dataRef.current = data;
+  renderStatsRef.current = renderStats;
   viewportRef.current = viewport;
   cursorTimeRef.current = cursorTime;
   selectedSignalIdRef.current = selectedSignalId;
   onCursorTimeChangeRef.current = onCursorTimeChange;
+  onMetricsChangeRef.current = onMetricsChange;
   onVerticalScrollDeltaRef.current = onVerticalScrollDelta;
   onViewportChangeRef.current = onViewportChange;
   verticalScrollTopRef.current = verticalScrollTop;
@@ -142,6 +155,11 @@ export function WaveformCanvas({
       sceneRef.current?.world.destroy({ children: true });
       sceneRef.current = null;
       appRef.current = null;
+      renderMetricHistoryRef.current = {
+        durations: [],
+        fps: [],
+        previousCompletedAt: null,
+      };
       activeApp?.destroy({ removeView: true, releaseGlobalResources: true }, { children: true });
     };
   }, [onRendererChange]);
@@ -299,11 +317,13 @@ export function WaveformCanvas({
       viewport: viewportRef.current,
       width,
     });
-    setRenderStats({
+    const nextRenderStats = {
       ...sceneRef.current.renderStats,
       textureCacheBytes: signalTextureCacheBytesRef.current,
       textureCacheSize: signalTextureCacheRef.current.size,
-    });
+    };
+    renderStatsRef.current = nextRenderStats;
+    setRenderStats(nextRenderStats);
     app.stage.addChild(sceneRef.current.world);
     requestRender();
   }
@@ -372,9 +392,37 @@ export function WaveformCanvas({
 
     renderFrameRef.current = window.requestAnimationFrame(() => {
       renderFrameRef.current = null;
+      const renderStartedAt = performance.now();
       app.render();
+      publishRenderMetrics(performance.now() - renderStartedAt);
       setRenderCount((currentRenderCount) => currentRenderCount + 1);
     });
+  }
+
+  function publishRenderMetrics(renderDurationMs: number) {
+    const history = renderMetricHistoryRef.current;
+    const completedAt = performance.now();
+    const lastFps = history.previousCompletedAt === null
+      ? null
+      : 1000 / Math.max(1, completedAt - history.previousCompletedAt);
+
+    history.previousCompletedAt = completedAt;
+    pushMetricSample(history.durations, renderDurationMs);
+
+    if (lastFps !== null) {
+      pushMetricSample(history.fps, lastFps);
+    }
+
+    const nextMetrics: WaveformRenderMetrics = {
+      lastRenderDurationMs: renderDurationMs,
+      averageRenderDurationMs: getAverageMetric(history.durations),
+      lastFps,
+      averageFps: history.fps.length > 0 ? getAverageMetric(history.fps) : null,
+      visiblePrimitiveCount: getVisiblePrimitiveCount(sceneRef.current, renderStatsRef.current),
+    };
+
+    setRenderMetrics(nextMetrics);
+    onMetricsChangeRef.current?.(nextMetrics);
   }
 
   const zoomLevel = data.duration / getWaveformViewportSpan(viewport);
@@ -412,6 +460,10 @@ export function WaveformCanvas({
       data-detail-signal-count={renderStats.detailSignalCount}
       data-first-signal-lane-y={formatOptionalNumber(firstSignalLaneY)}
       data-header-background="opaque"
+      data-average-fps={formatOptionalNumber(renderMetrics.averageFps)}
+      data-average-render-ms={formatOptionalNumber(renderMetrics.averageRenderDurationMs)}
+      data-last-fps={formatOptionalNumber(renderMetrics.lastFps)}
+      data-last-render-ms={formatOptionalNumber(renderMetrics.lastRenderDurationMs)}
       data-pulse-fill-count={pulseFillCount}
       data-render-count={renderCount}
       data-render-resolution={renderStats.renderResolution.toFixed(2)}
@@ -433,6 +485,7 @@ export function WaveformCanvas({
       data-texture-cache-bytes={renderStats.textureCacheBytes}
       data-texture-cache-size={renderStats.textureCacheSize}
       data-vertical-scroll-top={verticalScrollTop.toFixed(2)}
+      data-visible-primitive-count={renderMetrics.visiblePrimitiveCount}
       data-x-state-block-count={shapeCounts.xStateBlockCount}
       data-z-state-block-count={shapeCounts.zStateBlockCount}
       data-z-state-count={stateCounts.zStateCount}
@@ -511,10 +564,51 @@ function createEmptyRenderStats(): WaveformRenderStats {
   };
 }
 
+function createEmptyRenderMetrics(): WaveformRenderMetrics {
+  return {
+    lastRenderDurationMs: null,
+    averageRenderDurationMs: null,
+    lastFps: null,
+    averageFps: null,
+    visiblePrimitiveCount: 0,
+  };
+}
+
 function getRendererResolution(app: Application) {
   const renderer = app.renderer as { resolution?: number };
 
   return Math.max(1, renderer.resolution ?? Math.min(window.devicePixelRatio || 1, 2));
+}
+
+function getVisiblePrimitiveCount(scene: WaveformScene | null, renderStats: WaveformRenderStats) {
+  if (!scene) {
+    return 0;
+  }
+
+  return renderStats.renderedSegmentCount
+    + renderStats.renderedLabelCount
+    + scene.shapeCounts.busHexagonCount
+    + scene.shapeCounts.xStateBlockCount
+    + scene.shapeCounts.zStateBlockCount
+    + scene.digitalPulseFillCount;
+}
+
+function pushMetricSample(samples: number[], nextValue: number) {
+  samples.push(nextValue);
+
+  if (samples.length > waveformMetricSampleWindowSize) {
+    samples.splice(0, samples.length - waveformMetricSampleWindowSize);
+  }
+}
+
+function getAverageMetric(samples: number[]) {
+  if (samples.length === 0) {
+    return null;
+  }
+
+  const total = samples.reduce((sum, sample) => sum + sample, 0);
+
+  return total / samples.length;
 }
 
 function destroyCachedTexture(entry: WaveformSignalTextureCacheEntry) {

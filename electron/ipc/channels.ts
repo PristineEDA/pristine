@@ -12,6 +12,7 @@ export const SyncChannels = {
 } as const;
 
 export const AsyncChannels = {
+  PLATFORM_GET_GPU_DIAGNOSTICS: 'async:platform:get-gpu-diagnostics',
   AUTH_OPEN_ACCOUNT_PAGE: 'async:auth:open-account-page',
   AUTH_GET_SESSION: 'async:auth:get-session',
   AUTH_SIGN_OUT: 'async:auth:sign-out',

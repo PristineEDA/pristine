@@ -17,6 +17,7 @@ import type { WorkspaceGitChangeEvent, WorkspaceGitFileDiffPayload, WorkspaceGit
 import type { MenuCommandEvent } from '../src/app/menu/applicationMenu.js';
 import type { WindowCloseDecision, WindowCloseRequest } from '../src/app/window/windowClose.js';
 import type { AuthView, DesktopAuthSession } from '../src/app/auth/types.js';
+import type { ElectronGpuDiagnostics } from '../types/electron-gpu.js';
 
 // ─── Sync Helpers ─────────────────────────────────────────────────────────────
 
@@ -83,6 +84,11 @@ const electronAPI = {
     const handler = (_event: Electron.IpcRendererEvent, payload: WorkspaceGitChangeEvent) => callback(payload);
     ipcRenderer.on(StreamChannels.WORKSPACE_CHANGE, handler);
     return () => { ipcRenderer.removeListener(StreamChannels.WORKSPACE_CHANGE, handler); };
+  },
+
+  gpu: {
+    getDiagnostics: () =>
+      ipcRenderer.invoke(AsyncChannels.PLATFORM_GET_GPU_DIAGNOSTICS) as Promise<ElectronGpuDiagnostics>,
   },
 
   // ── File System (async, project-dir scoped) ──

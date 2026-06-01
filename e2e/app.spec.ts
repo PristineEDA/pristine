@@ -5357,6 +5357,27 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
   await expect.poll(async () => readCanvasNumber('data-canvas-height'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(220);
+  await expect.poll(async () => Number(await panel.getAttribute('data-last-render-ms') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
+  await expect.poll(async () => Number(await panel.getAttribute('data-visible-primitive-count') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
+  await expect(panel).toHaveAttribute('data-gpu-hardware-acceleration', 'true');
+
+  const resolvedRenderer = await canvasHost.getAttribute('data-renderer');
+  const gpuFeatureWebgl = await panel.getAttribute('data-gpu-feature-webgl');
+  const gpuFeatureWebgpu = await panel.getAttribute('data-gpu-feature-webgpu');
+
+  if (resolvedRenderer === 'webgpu') {
+    await expect(panel).toHaveAttribute('data-browser-webgpu', 'true');
+    expect(gpuFeatureWebgpu?.startsWith('disabled')).toBe(false);
+  }
+
+  if (resolvedRenderer === 'webgl') {
+    await expect(panel).toHaveAttribute('data-browser-webgl2', 'true');
+    expect(gpuFeatureWebgl?.startsWith('disabled')).toBe(false);
+  }
 
   const waveformViewport = window.getByTestId('waveform-viewport');
   const canvasBox = await canvasHost.boundingBox();
@@ -5464,6 +5485,10 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
   expect(Math.abs(fixedCanvasBoxAfterWheel.y - fixedCanvasBox.y)).toBeLessThanOrEqual(1);
   await window.getByTestId('waveform-settings').click();
   await expect(window.getByTestId('waveform-settings-popover')).toBeVisible();
+  await expect(window.getByTestId('waveform-gpu-hardware-acceleration')).toHaveText('true');
+  await expect(window.getByTestId('waveform-gpu-compositing-status')).not.toHaveText('pending');
+  await expect(window.getByTestId('waveform-gpu-webgl-status')).not.toHaveText('pending');
+  await expect(window.getByTestId('waveform-gpu-webgpu-status')).not.toHaveText('pending');
   await expect(window.getByTestId('waveform-add-signals')).toHaveCount(0);
   await expect(window.getByTestId('waveform-signal-picker')).toHaveCount(0);
 

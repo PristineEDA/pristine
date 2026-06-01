@@ -74,6 +74,14 @@ export interface WaveformRenderStats {
   textureCacheSize: number;
 }
 
+export interface WaveformRenderMetrics {
+  lastRenderDurationMs: number | null;
+  averageRenderDurationMs: number | null;
+  lastFps: number | null;
+  averageFps: number | null;
+  visiblePrimitiveCount: number;
+}
+
 export interface WaveformTransition {
   time: number;
   value: string;

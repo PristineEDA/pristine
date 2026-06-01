@@ -131,6 +131,35 @@ async function readCanvasStats(canvasHost: ReturnType<Page['getByTestId']>) {
   };
 }
 
+async function readPanelMetrics(panel: ReturnType<Page['getByTestId']>) {
+  const readNumber = async (attribute: string) => Number(await panel.getAttribute(attribute) ?? '0');
+
+  return {
+    averageFps: await readNumber('data-average-fps'),
+    averageRenderMs: await readNumber('data-average-render-ms'),
+    lastFps: await readNumber('data-last-fps'),
+    lastRenderMs: await readNumber('data-last-render-ms'),
+    visiblePrimitiveCount: await readNumber('data-visible-primitive-count'),
+    browserWebgl2: await panel.getAttribute('data-browser-webgl2'),
+    browserWebgpu: await panel.getAttribute('data-browser-webgpu'),
+    gpuFeatureWebgl: await panel.getAttribute('data-gpu-feature-webgl'),
+    gpuFeatureWebgpu: await panel.getAttribute('data-gpu-feature-webgpu'),
+    gpuHardwareAcceleration: await panel.getAttribute('data-gpu-hardware-acceleration'),
+  };
+}
+
+async function readJsHeapBytes(window: Page) {
+  return window.evaluate(() => {
+    const performanceWithMemory = performance as Performance & {
+      memory?: {
+        usedJSHeapSize?: number;
+      };
+    };
+
+    return performanceWithMemory.memory?.usedJSHeapSize ?? 0;
+  });
+}
+
 test('waveform dense render opt-in baseline', async () => {
   const { app, window } = await launchApp();
 
@@ -144,6 +173,13 @@ test('waveform dense render opt-in baseline', async () => {
     await expect.poll(async () => Number(await canvasHost.getAttribute('data-render-count') ?? '0'), {
       timeout: UI_READY_TIMEOUT_MS,
     }).toBeGreaterThan(0);
+    await expect.poll(async () => Number(await panel.getAttribute('data-last-render-ms') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(0);
+    await expect.poll(async () => Number(await panel.getAttribute('data-visible-primitive-count') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(0);
+    const denseStats = await readCanvasStats(canvasHost);
 
     const measureRender = async (label: string, action: () => Promise<void>) => {
       const beforeRenderCount = Number(await canvasHost.getAttribute('data-render-count') ?? '0');
@@ -157,34 +193,68 @@ test('waveform dense render opt-in baseline', async () => {
       return { label, elapsedMs: Date.now() - startedAt };
     };
 
+    const initialPanelMetrics = await readPanelMetrics(panel);
+    const jsHeapBeforeBurst = await readJsHeapBytes(window);
+
     const timings = [
       await measureRender('zoom-in', async () => {
         await window.getByTestId('waveform-zoom-in').click();
       }),
-      await measureRender('vertical-scroll', async () => {
-        await canvasHost.hover();
-        await window.mouse.wheel(0, 420);
-      }),
-      await measureRender('fit', async () => {
-        await window.getByTestId('waveform-fit').click();
-      }),
     ];
-    const stats = await readCanvasStats(canvasHost);
 
-    expect(stats.sourceSegmentCount).toBeGreaterThan(0);
-    expect(stats.renderedSegmentCount).toBeGreaterThan(0);
-    expect(stats.denseSignalCount).toBeGreaterThan(0);
-    expect(stats.denseRunCount).toBeGreaterThan(0);
-    expect(stats.suppressedLabelCount).toBeGreaterThan(0);
-    expect(stats.culledRowCount).toBeGreaterThan(0);
-    expect(stats.renderResolution).toBeGreaterThanOrEqual(1);
-    expect(stats.textureCacheBytes).toBeLessThanOrEqual(32 * 1024 * 1024);
+    timings.push(await measureRender('vertical-scroll', async () => {
+      await canvasHost.hover();
+      await window.mouse.wheel(0, 420);
+    }));
+    timings.push(await measureRender('fit', async () => {
+      await window.getByTestId('waveform-fit').click();
+    }));
+    const burstTimings = [] as Array<{ label: string; elapsedMs: number }>;
+
+    for (let cycle = 0; cycle < 3; cycle += 1) {
+      burstTimings.push(await measureRender(`burst-pan-${cycle}`, async () => {
+        await canvasHost.hover();
+        await window.keyboard.down('Shift');
+        await window.mouse.wheel(0, 220);
+        await window.keyboard.up('Shift');
+      }));
+      burstTimings.push(await measureRender(`burst-zoom-${cycle}`, async () => {
+        await canvasHost.hover();
+        await window.keyboard.down('Control');
+        await window.mouse.wheel(0, cycle % 2 === 0 ? -180 : 180);
+        await window.keyboard.up('Control');
+      }));
+    }
+
+    const finalStats = await readCanvasStats(canvasHost);
+    const finalPanelMetrics = await readPanelMetrics(panel);
+    const jsHeapAfterBurst = await readJsHeapBytes(window);
+
+    expect(denseStats.denseSignalCount).toBeGreaterThan(0);
+    expect(denseStats.denseRunCount).toBeGreaterThan(0);
+    expect(denseStats.suppressedLabelCount).toBeGreaterThan(0);
+    expect(finalStats.sourceSegmentCount).toBeGreaterThan(0);
+    expect(finalStats.renderedSegmentCount).toBeGreaterThan(0);
+    expect(finalStats.culledRowCount).toBeGreaterThan(0);
+    expect(finalStats.renderResolution).toBeGreaterThanOrEqual(1);
+    expect(finalStats.textureCacheBytes).toBeLessThanOrEqual(32 * 1024 * 1024);
 
     console.log(JSON.stringify({
       name: 'waveform-dense-render-baseline',
+      renderer: await panel.getAttribute('data-renderer'),
       zoom: Number(await panel.getAttribute('data-zoom') ?? '0'),
-      timings,
-      stats,
+      timings: [...timings, ...burstTimings],
+      panelMetrics: {
+        initial: initialPanelMetrics,
+        final: finalPanelMetrics,
+      },
+      jsHeapBytes: {
+        beforeBurst: jsHeapBeforeBurst,
+        afterBurst: jsHeapAfterBurst,
+        delta: jsHeapAfterBurst - jsHeapBeforeBurst,
+      },
+      denseStats,
+      finalStats,
     }, null, 2));
   } finally {
     await app.close();

@@ -15,6 +15,7 @@ import type { OpenThemeDialogResult, SaveDialogResult } from '../electron/ipc/di
 import type { MenuCommandEvent } from '../src/app/menu/applicationMenu';
 import type { WindowCloseDecision, WindowCloseRequest } from '../src/app/window/windowClose';
 import type { AuthView, DesktopAuthSession } from '../src/app/auth/types';
+import type { ElectronGpuDiagnostics } from './electron-gpu';
 
 export interface ElectronAPI {
   platform: string;
@@ -42,6 +43,10 @@ export interface ElectronAPI {
   onCloseRequested: (callback: (request: WindowCloseRequest) => void) => () => void;
   onWindowFocus: (callback: () => void) => () => void;
   onWorkspaceChange: (callback: (payload: WorkspaceGitChangeEvent) => void) => () => void;
+
+  gpu: {
+    getDiagnostics: () => Promise<ElectronGpuDiagnostics>;
+  };
 
   // File system (project-dir scoped)
   fs: {
