@@ -168,6 +168,8 @@ async function readCanvasStats(canvasHost: ReturnType<Page['getByTestId']>) {
     detailSignalCount: await readNumber('data-detail-signal-count'),
     fullSceneRebuildCount: await readNumber('data-full-scene-rebuild-count'),
     rowAttachCount: await readNumber('data-row-attach-count'),
+    rowContentRedrawCount: await readNumber('data-row-content-redraw-count'),
+    rowContentSkipCount: await readNumber('data-row-content-skip-count'),
     rowRecycleCount: await readNumber('data-row-recycle-count'),
     rowReuseCount: await readNumber('data-row-reuse-count'),
     renderResolution: await readNumber('data-render-resolution'),
@@ -254,6 +256,8 @@ function diffInteractionMetrics(
   return {
     fullSceneRebuildCount: end.fullSceneRebuildCount - start.fullSceneRebuildCount,
     rowAttachCount: end.rowAttachCount - start.rowAttachCount,
+    rowContentRedrawCount: end.rowContentRedrawCount - start.rowContentRedrawCount,
+    rowContentSkipCount: end.rowContentSkipCount - start.rowContentSkipCount,
     rowRecycleCount: end.rowRecycleCount - start.rowRecycleCount,
     rowReuseCount: end.rowReuseCount - start.rowReuseCount,
     cursorUpdateCount: end.cursorUpdateCount - start.cursorUpdateCount,
@@ -467,15 +471,25 @@ test('packaged waveform sustained 10s viewport and interaction perf', async () =
     const zoomSamples = samples.filter((sample) => sample.phase === 'zoom');
     const panVisibleRowCounts = [...new Set(panSamples.map((sample) => sample.canvasStats.visibleRowCount))];
     const zoomVisibleRowCounts = [...new Set(zoomSamples.map((sample) => sample.canvasStats.visibleRowCount))];
+    const panVisibleRowCount = panVisibleRowCounts[0] ?? 0;
+    const zoomVisibleRowCount = zoomVisibleRowCounts[0] ?? 0;
+    const observedHeapBytes = [jsHeapBefore, ...samples.map((sample) => sample.jsHeapBytes), jsHeapAfter].filter((value) => value > 0);
+    const jsHeapRange = observedHeapBytes.length > 0
+      ? Math.max(...observedHeapBytes) - Math.min(...observedHeapBytes)
+      : 0;
 
     expect(totalElapsedMs).toBeGreaterThanOrEqual(9000);
     expect(samples.length).toBe(40);
     expect(panDelta.fullSceneRebuildCount).toBe(0);
     expect(panDelta.viewportContentUpdateCount).toBeGreaterThan(0);
-    expect(panDelta.rowReuseCount).toBeGreaterThan(0);
+    expect(panDelta.rowReuseCount).toBeGreaterThanOrEqual(panDelta.viewportContentUpdateCount * panVisibleRowCount);
+    expect(panDelta.rowContentSkipCount).toBeGreaterThanOrEqual(panDelta.viewportContentUpdateCount);
+    expect(panDelta.rowContentRedrawCount).toBeLessThan(panDelta.rowReuseCount);
     expect(zoomDelta.fullSceneRebuildCount).toBe(0);
     expect(zoomDelta.viewportContentUpdateCount).toBeGreaterThan(0);
-    expect(zoomDelta.rowReuseCount).toBeGreaterThan(0);
+    expect(zoomDelta.rowReuseCount).toBeGreaterThanOrEqual(zoomDelta.viewportContentUpdateCount * zoomVisibleRowCount);
+    expect(zoomDelta.rowContentSkipCount).toBeGreaterThanOrEqual(zoomDelta.viewportContentUpdateCount);
+    expect(zoomDelta.rowContentRedrawCount).toBeLessThan(zoomDelta.rowReuseCount);
     expect(cursorDelta.fullSceneRebuildCount).toBe(0);
     expect(cursorDelta.cursorUpdateCount).toBeGreaterThan(0);
     expect(cursorDelta.viewportContentUpdateCount).toBe(0);
@@ -485,7 +499,8 @@ test('packaged waveform sustained 10s viewport and interaction perf', async () =
     expect(panVisibleRowCounts).toHaveLength(1);
     expect(zoomVisibleRowCounts).toHaveLength(1);
     expect(finalStats.textureCacheBytes).toBeLessThanOrEqual(32 * 1024 * 1024);
-    expect(jsHeapAfter - jsHeapBefore).toBeLessThan(192 * 1024 * 1024);
+    expect(jsHeapAfter - jsHeapBefore).toBeLessThan(64 * 1024 * 1024);
+    expect(jsHeapRange).toBeLessThan(64 * 1024 * 1024);
 
     console.log(JSON.stringify({
       name: 'packaged-waveform-sustained-10s',
@@ -496,6 +511,7 @@ test('packaged waveform sustained 10s viewport and interaction perf', async () =
         before: jsHeapBefore,
         after: jsHeapAfter,
         delta: jsHeapAfter - jsHeapBefore,
+        range: jsHeapRange,
       },
       phaseDeltas: {
         pan: panDelta,

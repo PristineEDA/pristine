@@ -78,7 +78,27 @@ interface WaveformSceneRowRegistry {
 interface WaveformSceneRowNode {
   laneContainer: Container;
   contentContainer: Container;
+  contentMetrics: WaveformRowContentMetrics;
+  contentSignature: string | null;
   rowId: string | null;
+}
+
+interface WaveformRowContentMetrics {
+  renderedSignalCount: number;
+  sourceSegmentCount: number;
+  renderedSegmentCount: number;
+  coalescedSegmentCount: number;
+  renderedLabelCount: number;
+  cacheableSignalCount: number;
+  cacheHitCount: number;
+  cacheMissCount: number;
+  cachedSignalCount: number;
+  compactSignalCount: number;
+  denseColumnCount: number;
+  denseRunCount: number;
+  denseSignalCount: number;
+  detailSignalCount: number;
+  suppressedLabelCount: number;
 }
 
 interface WaveformRowLifecycleStats {
@@ -90,6 +110,7 @@ interface WaveformRowLifecycleStats {
 interface RedrawWaveformSceneRowsOptions {
   redrawContent?: boolean;
   redrawLanes?: boolean;
+  reuseContentSignature?: boolean;
 }
 
 interface WaveformSceneState {
@@ -207,7 +228,7 @@ export function updateWaveformSceneViewport(scene: WaveformScene, viewport: Wave
   scene.shapeCounts = getWaveformShapeCounts(scene.state.data, viewport);
   scene.digitalPulseFillCount = getWaveformDigitalPulseFillCount(scene.state.data, viewport);
   redrawWaveformSceneGrid(scene);
-  redrawWaveformSceneRows(scene, { redrawLanes: false });
+  redrawWaveformSceneRows(scene, { redrawLanes: false, reuseContentSignature: true });
   redrawWaveformSceneCursor(scene);
 }
 
@@ -218,6 +239,8 @@ function createRenderStats(visibleRowCount: number, culledRowCount: number, rend
     rowAttachCount: 0,
     rowReuseCount: 0,
     rowRecycleCount: 0,
+    rowContentRedrawCount: 0,
+    rowContentSkipCount: 0,
     renderedSignalCount: 0,
     sourceSegmentCount: 0,
     renderedSegmentCount: 0,
@@ -288,7 +311,29 @@ function createRowNode(): WaveformSceneRowNode {
   return {
     laneContainer: new Container({ label: 'waveform-row-lane' }),
     contentContainer: new Container({ label: 'waveform-row-content' }),
+    contentMetrics: createEmptyRowContentMetrics(),
+    contentSignature: null,
     rowId: null,
+  };
+}
+
+function createEmptyRowContentMetrics(): WaveformRowContentMetrics {
+  return {
+    renderedSignalCount: 0,
+    sourceSegmentCount: 0,
+    renderedSegmentCount: 0,
+    coalescedSegmentCount: 0,
+    renderedLabelCount: 0,
+    cacheableSignalCount: 0,
+    cacheHitCount: 0,
+    cacheMissCount: 0,
+    cachedSignalCount: 0,
+    compactSignalCount: 0,
+    denseColumnCount: 0,
+    denseRunCount: 0,
+    denseSignalCount: 0,
+    detailSignalCount: 0,
+    suppressedLabelCount: 0,
   };
 }
 
@@ -308,24 +353,27 @@ function redrawWaveformSceneGrid(scene: WaveformScene) {
 }
 
 function redrawWaveformSceneRows(scene: WaveformScene, options: RedrawWaveformSceneRowsOptions = {}) {
-  scene.renderStats = createRenderStats(
+  const nextRenderStats = createRenderStats(
     scene.state.visibleRows.visibleRowCount,
     scene.state.visibleRows.culledRowCount,
     scene.state.renderResolution,
   );
   const rowLifecycle = syncVisibleRows(scene);
 
-  scene.renderStats.rowAttachCount = rowLifecycle.rowAttachCount;
-  scene.renderStats.rowReuseCount = rowLifecycle.rowReuseCount;
-  scene.renderStats.rowRecycleCount = rowLifecycle.rowRecycleCount;
+  nextRenderStats.rowAttachCount = rowLifecycle.rowAttachCount;
+  nextRenderStats.rowReuseCount = rowLifecycle.rowReuseCount;
+  nextRenderStats.rowRecycleCount = rowLifecycle.rowRecycleCount;
 
   if (options.redrawLanes ?? true) {
     redrawWaveformSceneLanes(scene);
   }
 
   if (options.redrawContent ?? true) {
-    redrawWaveformSceneContent(scene);
+    redrawWaveformSceneContent(scene, options.reuseContentSignature ?? false, nextRenderStats);
   }
+
+  accumulateVisibleRowContentMetrics(scene, nextRenderStats);
+  scene.renderStats = nextRenderStats;
 }
 
 function redrawWaveformSceneLanes(scene: WaveformScene) {
@@ -343,7 +391,7 @@ function redrawWaveformSceneLanes(scene: WaveformScene) {
   });
 }
 
-function redrawWaveformSceneContent(scene: WaveformScene) {
+function redrawWaveformSceneContent(scene: WaveformScene, reuseContentSignature: boolean, renderStats: WaveformRenderStats) {
   const sceneOptions = getSceneOptions(scene);
 
   scene.state.visibleRows.rows.forEach((row) => {
@@ -353,9 +401,53 @@ function redrawWaveformSceneContent(scene: WaveformScene) {
       return;
     }
 
+    const segmentResult = getWaveformRenderSegments(row.signal, sceneOptions.viewport, sceneOptions.width, undefined, getRenderResolution(sceneOptions));
+    const contentSignature = getSignalRenderSignature(row.signal, sceneOptions, segmentResult);
+
+    if (reuseContentSignature && rowNode.contentSignature === contentSignature) {
+      renderStats.rowContentSkipCount += 1;
+      return;
+    }
+
     clearContainer(rowNode.contentContainer);
-    drawSignalRow(rowNode.contentContainer, row, sceneOptions, scene.renderStats);
+    rowNode.contentMetrics = drawSignalRow(rowNode.contentContainer, row, sceneOptions, segmentResult);
+    rowNode.contentSignature = contentSignature;
+    renderStats.rowContentRedrawCount += 1;
   });
+}
+
+function accumulateVisibleRowContentMetrics(scene: WaveformScene, target: WaveformRenderStats) {
+  scene.state.visibleRows.rows.forEach((row) => {
+    if (row.kind !== 'signal') {
+      return;
+    }
+
+    const rowNode = scene.rowRegistry.activeRows.get(row.id);
+
+    if (!rowNode) {
+      return;
+    }
+
+    accumulateRowContentMetrics(target, rowNode.contentMetrics);
+  });
+}
+
+function accumulateRowContentMetrics(target: WaveformRenderStats, source: WaveformRowContentMetrics) {
+  target.renderedSignalCount += source.renderedSignalCount;
+  target.sourceSegmentCount += source.sourceSegmentCount;
+  target.renderedSegmentCount += source.renderedSegmentCount;
+  target.coalescedSegmentCount += source.coalescedSegmentCount;
+  target.renderedLabelCount += source.renderedLabelCount;
+  target.cacheableSignalCount += source.cacheableSignalCount;
+  target.cacheHitCount += source.cacheHitCount;
+  target.cacheMissCount += source.cacheMissCount;
+  target.cachedSignalCount += source.cachedSignalCount;
+  target.compactSignalCount += source.compactSignalCount;
+  target.denseColumnCount += source.denseColumnCount;
+  target.denseRunCount += source.denseRunCount;
+  target.denseSignalCount += source.denseSignalCount;
+  target.detailSignalCount += source.detailSignalCount;
+  target.suppressedLabelCount += source.suppressedLabelCount;
 }
 
 function redrawWaveformSceneCursor(scene: WaveformScene) {
@@ -441,11 +533,18 @@ function acquireRowNode(scene: WaveformScene) {
 function recycleRowNode(scene: WaveformScene, rowNode: WaveformSceneRowNode) {
   attachContainer(rowNode.laneContainer, scene.nodes.backgroundLanePool);
   attachContainer(rowNode.contentContainer, scene.nodes.contentRowPool);
+  rowNode.contentMetrics = createEmptyRowContentMetrics();
+  rowNode.contentSignature = null;
   rowNode.rowId = null;
   scene.rowRegistry.pool.push(rowNode);
 }
 
 function bindRowNode(rowNode: WaveformSceneRowNode, row: WaveformDisplayRow) {
+  if (rowNode.rowId !== row.id) {
+    rowNode.contentMetrics = createEmptyRowContentMetrics();
+    rowNode.contentSignature = null;
+  }
+
   rowNode.rowId = row.id;
   rowNode.laneContainer.label = `waveform-row-lane-${row.id}`;
   rowNode.contentContainer.label = `waveform-row-content-${row.id}`;
@@ -535,44 +634,44 @@ function drawGrid(target: Container, headerTarget: Container, options: WaveformS
   headerTarget.addChild(headerOverlay);
 }
 
-function drawSignalRow(target: Container, row: WaveformDisplayRow, options: WaveformSceneOptions, renderStats: WaveformRenderStats) {
+function drawSignalRow(target: Container, row: WaveformDisplayRow, options: WaveformSceneOptions, segmentResult: WaveformRenderSegmentResult): WaveformRowContentMetrics {
   if (row.kind !== 'signal') {
-    return;
+    return createEmptyRowContentMetrics();
   }
 
   const signal = row.signal;
   const laneY = getScrolledY(row.y, options);
-  const segmentResult = getWaveformRenderSegments(signal, options.viewport, options.width, undefined, getRenderResolution(options));
+  const contentMetrics = createEmptyRowContentMetrics();
 
-  renderStats.renderedSignalCount += 1;
-  renderStats.sourceSegmentCount += segmentResult.sourceSegmentCount;
-  renderStats.renderedSegmentCount += segmentResult.renderedSegmentCount;
-  renderStats.coalescedSegmentCount += segmentResult.coalescedSegmentCount;
-  renderStats.denseColumnCount += segmentResult.denseColumnCount;
-  renderStats.denseRunCount += segmentResult.denseRunCount;
+  contentMetrics.renderedSignalCount += 1;
+  contentMetrics.sourceSegmentCount += segmentResult.sourceSegmentCount;
+  contentMetrics.renderedSegmentCount += segmentResult.renderedSegmentCount;
+  contentMetrics.coalescedSegmentCount += segmentResult.coalescedSegmentCount;
+  contentMetrics.denseColumnCount += segmentResult.denseColumnCount;
+  contentMetrics.denseRunCount += segmentResult.denseRunCount;
 
   if (segmentResult.densityMode === 'dense') {
-    renderStats.denseSignalCount += 1;
+    contentMetrics.denseSignalCount += 1;
   } else if (segmentResult.densityMode === 'compact') {
-    renderStats.compactSignalCount += 1;
+    contentMetrics.compactSignalCount += 1;
   } else {
-    renderStats.detailSignalCount += 1;
+    contentMetrics.detailSignalCount += 1;
   }
 
   const cacheKey = shouldCacheSignalTexture(segmentResult, options) ? getSignalTextureCacheKey(signal, options, segmentResult) : null;
 
   if (cacheKey) {
-    renderStats.cacheableSignalCount += 1;
+    contentMetrics.cacheableSignalCount += 1;
     const cached = options.signalTextureCache?.get(cacheKey);
 
     if (cached && !cached.texture.destroyed) {
       const sprite = new Sprite(cached.texture);
       sprite.y = laneY;
       target.addChild(sprite);
-      renderStats.cacheHitCount += 1;
-      renderStats.renderedLabelCount += cached.renderedLabelCount;
-      renderStats.suppressedLabelCount += cached.suppressedLabelCount;
-      return;
+      contentMetrics.cacheHitCount += 1;
+      contentMetrics.renderedLabelCount += cached.renderedLabelCount;
+      contentMetrics.suppressedLabelCount += cached.suppressedLabelCount;
+      return contentMetrics;
     }
   }
 
@@ -585,11 +684,11 @@ function drawSignalRow(target: Container, row: WaveformDisplayRow, options: Wave
     drawResult = drawDigitalWaveform(signalLayer, signal, options, segmentResult, 0);
   }
 
-  renderStats.renderedLabelCount += drawResult.renderedLabelCount;
-  renderStats.suppressedLabelCount += drawResult.suppressedLabelCount;
+  contentMetrics.renderedLabelCount += drawResult.renderedLabelCount;
+  contentMetrics.suppressedLabelCount += drawResult.suppressedLabelCount;
 
   if (cacheKey && options.signalTextureCache && options.textureRenderer) {
-    renderStats.cacheMissCount += 1;
+    contentMetrics.cacheMissCount += 1;
 
     try {
       const renderResolution = getRenderResolution(options);
@@ -609,8 +708,8 @@ function drawSignalRow(target: Container, row: WaveformDisplayRow, options: Wave
       sprite.y = laneY;
       target.addChild(sprite);
       signalLayer.destroy({ children: true });
-      renderStats.cachedSignalCount += 1;
-      return;
+      contentMetrics.cachedSignalCount += 1;
+      return contentMetrics;
     } catch {
       // Fall through to direct Graphics rendering if texture generation is unavailable.
     }
@@ -618,6 +717,26 @@ function drawSignalRow(target: Container, row: WaveformDisplayRow, options: Wave
 
   signalLayer.y = laneY;
   target.addChild(signalLayer);
+  return contentMetrics;
+}
+
+function getSignalRenderSignature(signal: WaveformSignal, options: WaveformSceneOptions, segmentResult: WaveformRenderSegmentResult) {
+  return [
+    signal.id,
+    signal.kind,
+    segmentResult.densityMode,
+    options.width,
+    getRenderResolution(options).toFixed(2),
+    segmentResult.segments.map((segment) => [
+      segment.x1.toFixed(4),
+      segment.x2.toFixed(4),
+      segment.value,
+      segment.sourceSegmentCount,
+      segment.mixed ? '1' : '0',
+      segment.hasUnknown ? '1' : '0',
+      segment.hasHighImpedance ? '1' : '0',
+    ].join(',')).join('|'),
+  ].join(':');
 }
 
 function drawDigitalWaveform(target: Container, signal: WaveformSignal, options: WaveformSceneOptions, segmentResult: WaveformRenderSegmentResult, laneY: number): DrawSignalResult {

@@ -4,6 +4,7 @@ import { Container, Text, Texture } from 'pixi.js';
 import { clipWaveformLineToBounds, createWaveformScene, getWaveformBusHexagonBevel, updateWaveformSceneCursor, updateWaveformSceneSelection, updateWaveformSceneVerticalScroll, updateWaveformSceneViewport, waveformHighImpedanceStripeSpacing, waveformLayerNames, waveformUnknownStripeSpacing, type WaveformSignalTextureCacheEntry } from './createWaveformScene';
 import { fitWaveformViewport, getWaveformCanvasHeightForData, getWaveformDigitalPulseFillCount, getWaveformDisplayRows, getWaveformShapeCounts, getWaveformSignalLaneY } from './waveformLayout';
 import { mockWaveformData } from './waveformMockData';
+import type { WaveformDataSet } from './waveformTypes';
 
 describe('createWaveformScene', () => {
   it('builds explicit render layers and reports X/Z state coverage', () => {
@@ -222,6 +223,76 @@ describe('createWaveformScene', () => {
     expect(scene.nodes.statusHeader.children.length).toBeGreaterThan(0);
     expect(scene.nodes.backgroundLanes.children.length).toBeGreaterThan(0);
     expect(scene.nodes.contentRows.children.length).toBeGreaterThan(0);
+
+    scene.world.destroy({ children: true });
+  });
+
+  it('reuses unchanged row content across viewport updates when a row signature stays stable', () => {
+    const data: WaveformDataSet = {
+      id: 'row-signature-data',
+      title: 'row-signature',
+      timescaleUnit: 'ns',
+      duration: 200,
+      cursorTime: 40,
+      groups: [
+        {
+          id: 'g0',
+          label: 'g0',
+        },
+      ],
+      signals: [
+        {
+          id: 'static-low',
+          groupId: 'g0',
+          name: 'static_low',
+          path: 'g0.static_low',
+          kind: 'logic',
+          color: '#38d8ff',
+          transitions: [
+            { time: 0, value: '0' },
+          ],
+        },
+        {
+          id: 'toggle',
+          groupId: 'g0',
+          name: 'toggle',
+          path: 'g0.toggle',
+          kind: 'logic',
+          color: '#ff6b8a',
+          transitions: [
+            { time: 0, value: '0' },
+            { time: 40, value: '1' },
+            { time: 60, value: '0' },
+            { time: 140, value: '1' },
+          ],
+        },
+      ],
+    };
+    const scene = createWaveformScene({
+      cursorTime: data.cursorTime,
+      data,
+      height: getWaveformCanvasHeightForData(data),
+      selectedSignalId: null,
+      viewport: { startTime: 0, endTime: 100 },
+      width: 900,
+    });
+    const staticRowNode = scene.rowRegistry.activeRows.get('signal:static-low');
+    const toggledRowNode = scene.rowRegistry.activeRows.get('signal:toggle');
+    const staticContentBefore = staticRowNode?.contentContainer.children[0] ?? null;
+    const toggledContentBefore = toggledRowNode?.contentContainer.children[0] ?? null;
+
+    expect(staticContentBefore).not.toBeNull();
+    expect(toggledContentBefore).not.toBeNull();
+
+    updateWaveformSceneViewport(scene, { startTime: 20, endTime: 120 });
+
+    const staticContentAfter = scene.rowRegistry.activeRows.get('signal:static-low')?.contentContainer.children[0] ?? null;
+    const toggledContentAfter = scene.rowRegistry.activeRows.get('signal:toggle')?.contentContainer.children[0] ?? null;
+
+    expect(staticContentAfter).toBe(staticContentBefore);
+    expect(toggledContentAfter).not.toBe(toggledContentBefore);
+    expect(scene.renderStats.rowContentSkipCount).toBe(1);
+    expect(scene.renderStats.rowContentRedrawCount).toBe(1);
 
     scene.world.destroy({ children: true });
   });

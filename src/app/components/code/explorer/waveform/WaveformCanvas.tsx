@@ -400,6 +400,8 @@ export function WaveformCanvas({
     sceneUpdateMetricsRef.current.rowAttachCount += baseStats.rowAttachCount;
     sceneUpdateMetricsRef.current.rowReuseCount += baseStats.rowReuseCount;
     sceneUpdateMetricsRef.current.rowRecycleCount += baseStats.rowRecycleCount;
+    sceneUpdateMetricsRef.current.rowContentRedrawCount += baseStats.rowContentRedrawCount;
+    sceneUpdateMetricsRef.current.rowContentSkipCount += baseStats.rowContentSkipCount;
   }
 
   function applyRenderStats(baseStats: WaveformRenderStats) {
@@ -555,6 +557,8 @@ export function WaveformCanvas({
       data-render-count={renderCount}
       data-render-resolution={renderStats.renderResolution.toFixed(2)}
       data-row-attach-count={renderStats.rowAttachCount}
+      data-row-content-redraw-count={renderStats.rowContentRedrawCount}
+      data-row-content-skip-count={renderStats.rowContentSkipCount}
       data-row-recycle-count={renderStats.rowRecycleCount}
       data-row-reuse-count={renderStats.rowReuseCount}
       data-rendered-label-count={renderStats.renderedLabelCount}
@@ -644,6 +648,8 @@ function createEmptyRenderStats(): WaveformRenderStats {
     rowAttachCount: 0,
     rowReuseCount: 0,
     rowRecycleCount: 0,
+    rowContentRedrawCount: 0,
+    rowContentSkipCount: 0,
     renderedSignalCount: 0,
     sourceSegmentCount: 0,
     renderedSegmentCount: 0,
@@ -680,6 +686,8 @@ function createEmptySceneUpdateMetrics(): WaveformSceneUpdateMetrics {
     rowAttachCount: 0,
     rowReuseCount: 0,
     rowRecycleCount: 0,
+    rowContentRedrawCount: 0,
+    rowContentSkipCount: 0,
   };
 }
 
