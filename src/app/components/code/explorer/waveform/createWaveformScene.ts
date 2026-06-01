@@ -175,6 +175,15 @@ export function updateWaveformSceneVerticalScroll(scene: WaveformScene, vertical
   redrawWaveformSceneRows(scene);
 }
 
+export function updateWaveformSceneViewport(scene: WaveformScene, viewport: WaveformViewport) {
+  scene.state.viewport = viewport;
+  scene.shapeCounts = getWaveformShapeCounts(scene.state.data, viewport);
+  scene.digitalPulseFillCount = getWaveformDigitalPulseFillCount(scene.state.data, viewport);
+  redrawWaveformSceneGrid(scene);
+  redrawWaveformSceneRows(scene);
+  redrawWaveformSceneCursor(scene);
+}
+
 function createRenderStats(visibleRowCount: number, culledRowCount: number, renderResolution: number): WaveformRenderStats {
   return {
     visibleRowCount,

@@ -6,6 +6,7 @@ import {
   updateWaveformSceneCursor,
   updateWaveformSceneSelection,
   updateWaveformSceneVerticalScroll,
+  updateWaveformSceneViewport,
   waveformLayerNames,
   type WaveformScene,
   type WaveformSignalTextureCacheEntry,
@@ -183,7 +184,20 @@ export function WaveformCanvas({
 
   useEffect(() => {
     rebuildScene();
-  }, [data, viewport]);
+  }, [data]);
+
+  useEffect(() => {
+    const scene = sceneRef.current;
+
+    if (!scene || areViewportsEqual(scene.state.viewport, viewport)) {
+      return;
+    }
+
+    updateWaveformSceneViewport(scene, viewport);
+    sceneUpdateMetricsRef.current.viewportContentUpdateCount += 1;
+    applyRenderStats(scene.renderStats);
+    requestRender();
+  }, [viewport]);
 
   useEffect(() => {
     const scene = sceneRef.current;
@@ -605,6 +619,10 @@ async function createPixiApp(host: HTMLElement) {
 
 function formatOptionalNumber(value: number | null) {
   return value === null ? '' : value.toFixed(2);
+}
+
+function areViewportsEqual(left: WaveformViewport, right: WaveformViewport) {
+  return left.startTime === right.startTime && left.endTime === right.endTime;
 }
 
 function createEmptyRenderStats(): WaveformRenderStats {

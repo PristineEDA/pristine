@@ -265,6 +265,10 @@ test('waveform dense render opt-in baseline', async () => {
 
     const canvasHost = window.getByTestId('waveform-canvas');
     const panel = window.getByTestId('waveform-panel');
+    const panRightButton = window.getByRole('button', { name: /pan waveform right/i });
+    const panLeftButton = window.getByRole('button', { name: /pan waveform left/i });
+    const zoomInButton = window.getByTestId('waveform-zoom-in');
+    const zoomOutButton = window.getByTestId('waveform-zoom-out');
     await expect(canvasHost).toHaveAttribute('data-renderer', /^(webgpu|webgl)$/);
     await expect(canvasHost).toHaveAttribute('data-row-count', '171');
     await expect.poll(async () => Number(await canvasHost.getAttribute('data-render-count') ?? '0'), {
@@ -295,7 +299,7 @@ test('waveform dense render opt-in baseline', async () => {
 
     const timings = [
       await measureRender('zoom-in', async () => {
-        await window.getByTestId('waveform-zoom-in').click();
+        await zoomInButton.click();
       }),
     ];
 
@@ -306,20 +310,17 @@ test('waveform dense render opt-in baseline', async () => {
     timings.push(await measureRender('fit', async () => {
       await window.getByTestId('waveform-fit').click();
     }));
+    timings.push(await measureRender('post-fit-zoom-in', async () => {
+      await zoomInButton.click();
+    }));
     const burstTimings = [] as Array<{ label: string; elapsedMs: number }>;
 
     for (let cycle = 0; cycle < 3; cycle += 1) {
       burstTimings.push(await measureRender(`burst-pan-${cycle}`, async () => {
-        await canvasHost.hover();
-        await window.keyboard.down('Shift');
-        await window.mouse.wheel(0, 220);
-        await window.keyboard.up('Shift');
+        await (cycle % 2 === 0 ? panRightButton : panLeftButton).click();
       }));
       burstTimings.push(await measureRender(`burst-zoom-${cycle}`, async () => {
-        await canvasHost.hover();
-        await window.keyboard.down('Control');
-        await window.mouse.wheel(0, cycle % 2 === 0 ? -180 : 180);
-        await window.keyboard.up('Control');
+        await (cycle % 2 === 0 ? zoomInButton : zoomOutButton).click();
       }));
     }
 
@@ -456,15 +457,25 @@ test('packaged waveform sustained 10s viewport and interaction perf', async () =
     const zoomDelta = diffInteractionMetrics(phaseSnapshots.zoomStart, phaseSnapshots.zoomEnd);
     const cursorDelta = diffInteractionMetrics(phaseSnapshots.cursorStart, phaseSnapshots.cursorEnd);
     const selectionDelta = diffInteractionMetrics(phaseSnapshots.selectionStart, phaseSnapshots.selectionEnd);
+    const panSamples = samples.filter((sample) => sample.phase === 'pan');
+    const zoomSamples = samples.filter((sample) => sample.phase === 'zoom');
+    const panVisibleRowCounts = [...new Set(panSamples.map((sample) => sample.canvasStats.visibleRowCount))];
+    const zoomVisibleRowCounts = [...new Set(zoomSamples.map((sample) => sample.canvasStats.visibleRowCount))];
 
     expect(totalElapsedMs).toBeGreaterThanOrEqual(9000);
     expect(samples.length).toBe(40);
-    expect(panDelta.fullSceneRebuildCount).toBeGreaterThan(0);
-    expect(zoomDelta.fullSceneRebuildCount).toBeGreaterThan(0);
+    expect(panDelta.fullSceneRebuildCount).toBe(0);
+    expect(panDelta.viewportContentUpdateCount).toBeGreaterThan(0);
+    expect(zoomDelta.fullSceneRebuildCount).toBe(0);
+    expect(zoomDelta.viewportContentUpdateCount).toBeGreaterThan(0);
     expect(cursorDelta.fullSceneRebuildCount).toBe(0);
     expect(cursorDelta.cursorUpdateCount).toBeGreaterThan(0);
+    expect(cursorDelta.viewportContentUpdateCount).toBe(0);
     expect(selectionDelta.fullSceneRebuildCount).toBe(0);
     expect(selectionDelta.selectionUpdateCount).toBeGreaterThan(0);
+    expect(selectionDelta.viewportContentUpdateCount).toBe(0);
+    expect(panVisibleRowCounts).toHaveLength(1);
+    expect(zoomVisibleRowCounts).toHaveLength(1);
     expect(finalStats.textureCacheBytes).toBeLessThanOrEqual(32 * 1024 * 1024);
     expect(jsHeapAfter - jsHeapBefore).toBeLessThan(192 * 1024 * 1024);
 
@@ -483,6 +494,10 @@ test('packaged waveform sustained 10s viewport and interaction perf', async () =
         zoom: zoomDelta,
         cursor: cursorDelta,
         selection: selectionDelta,
+      },
+      phaseVisibleRowCounts: {
+        pan: panVisibleRowCounts,
+        zoom: zoomVisibleRowCounts,
       },
       finalPanelMetrics,
       finalStats,
