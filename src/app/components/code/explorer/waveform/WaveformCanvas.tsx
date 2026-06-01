@@ -195,6 +195,7 @@ export function WaveformCanvas({
 
     updateWaveformSceneViewport(scene, viewport);
     sceneUpdateMetricsRef.current.viewportContentUpdateCount += 1;
+    accumulateRowLifecycleMetrics(scene.renderStats);
     applyRenderStats(scene.renderStats);
     requestRender();
   }, [viewport]);
@@ -234,6 +235,7 @@ export function WaveformCanvas({
 
     updateWaveformSceneVerticalScroll(scene, verticalScrollTop);
     sceneUpdateMetricsRef.current.verticalScrollUpdateCount += 1;
+    accumulateRowLifecycleMetrics(scene.renderStats);
     applyRenderStats(scene.renderStats);
     requestRender();
   }, [verticalScrollTop]);
@@ -388,9 +390,16 @@ export function WaveformCanvas({
       width,
     });
     sceneUpdateMetricsRef.current.fullSceneRebuildCount += 1;
+    accumulateRowLifecycleMetrics(sceneRef.current.renderStats);
     applyRenderStats(sceneRef.current.renderStats);
     app.stage.addChild(sceneRef.current.world);
     requestRender();
+  }
+
+  function accumulateRowLifecycleMetrics(baseStats: WaveformRenderStats) {
+    sceneUpdateMetricsRef.current.rowAttachCount += baseStats.rowAttachCount;
+    sceneUpdateMetricsRef.current.rowReuseCount += baseStats.rowReuseCount;
+    sceneUpdateMetricsRef.current.rowRecycleCount += baseStats.rowRecycleCount;
   }
 
   function applyRenderStats(baseStats: WaveformRenderStats) {
@@ -545,6 +554,9 @@ export function WaveformCanvas({
       data-pulse-fill-count={pulseFillCount}
       data-render-count={renderCount}
       data-render-resolution={renderStats.renderResolution.toFixed(2)}
+      data-row-attach-count={renderStats.rowAttachCount}
+      data-row-recycle-count={renderStats.rowRecycleCount}
+      data-row-reuse-count={renderStats.rowReuseCount}
       data-rendered-label-count={renderStats.renderedLabelCount}
       data-rendered-segment-count={renderStats.renderedSegmentCount}
       data-rendered-signal-count={renderStats.renderedSignalCount}
@@ -629,6 +641,9 @@ function createEmptyRenderStats(): WaveformRenderStats {
   return {
     visibleRowCount: 0,
     culledRowCount: 0,
+    rowAttachCount: 0,
+    rowReuseCount: 0,
+    rowRecycleCount: 0,
     renderedSignalCount: 0,
     sourceSegmentCount: 0,
     renderedSegmentCount: 0,
@@ -662,6 +677,9 @@ function createEmptySceneUpdateMetrics(): WaveformSceneUpdateMetrics {
     verticalScrollUpdateCount: 0,
     selectionUpdateCount: 0,
     cursorUpdateCount: 0,
+    rowAttachCount: 0,
+    rowReuseCount: 0,
+    rowRecycleCount: 0,
   };
 }
 

@@ -184,12 +184,22 @@ describe('createWaveformScene', () => {
     const originalWorld = scene.world;
     const originalBackgroundLayer = scene.layers.background;
     const initialVisibleRowCount = scene.renderStats.visibleRowCount;
+    const initialContentChildren = [...scene.nodes.contentRows.children];
     const nextViewport = { startTime: 40, endTime: 140 };
+
+    expect(scene.renderStats.rowAttachCount).toBeGreaterThan(0);
 
     updateWaveformSceneCursor(scene, 128);
     updateWaveformSceneSelection(scene, 'dense-signal-40');
-    updateWaveformSceneVerticalScroll(scene, 1470);
+    updateWaveformSceneVerticalScroll(scene, 330);
+    const scrolledContentChildren = [...scene.nodes.contentRows.children];
+    const verticalScrollRowStats = {
+      rowAttachCount: scene.renderStats.rowAttachCount,
+      rowReuseCount: scene.renderStats.rowReuseCount,
+      rowRecycleCount: scene.renderStats.rowRecycleCount,
+    };
     updateWaveformSceneViewport(scene, nextViewport);
+    const viewportContentChildren = [...scene.nodes.contentRows.children];
 
     expect(scene.world).toBe(originalWorld);
     expect(scene.layers.background).toBe(originalBackgroundLayer);
@@ -199,6 +209,14 @@ describe('createWaveformScene', () => {
     expect(scene.shapeCounts).toEqual(getWaveformShapeCounts(mockWaveformData, nextViewport));
     expect(scene.digitalPulseFillCount).toBe(getWaveformDigitalPulseFillCount(mockWaveformData, nextViewport));
     expect(scene.renderStats.visibleRowCount).not.toBe(initialVisibleRowCount);
+    expect(verticalScrollRowStats.rowAttachCount).toBeGreaterThan(0);
+    expect(verticalScrollRowStats.rowReuseCount).toBeGreaterThan(0);
+    expect(verticalScrollRowStats.rowRecycleCount).toBeGreaterThan(0);
+    expect(scene.renderStats.rowAttachCount).toBe(0);
+    expect(scene.renderStats.rowReuseCount).toBeGreaterThan(0);
+    expect(scene.renderStats.rowRecycleCount).toBe(0);
+    expect(scrolledContentChildren.some((child) => initialContentChildren.includes(child))).toBe(true);
+    expect(viewportContentChildren[0]).toBe(scrolledContentChildren[0]);
     expect(scene.nodes.statusCursor.children.length).toBeGreaterThan(0);
     expect(scene.nodes.operationCursor.children.length).toBeGreaterThan(0);
     expect(scene.nodes.statusHeader.children.length).toBeGreaterThan(0);

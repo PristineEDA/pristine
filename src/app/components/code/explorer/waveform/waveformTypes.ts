@@ -54,6 +54,9 @@ export interface WaveformRenderSegmentResult {
 export interface WaveformRenderStats {
   visibleRowCount: number;
   culledRowCount: number;
+  rowAttachCount: number;
+  rowReuseCount: number;
+  rowRecycleCount: number;
   renderedSignalCount: number;
   sourceSegmentCount: number;
   renderedSegmentCount: number;
@@ -93,6 +96,9 @@ export interface WaveformSceneUpdateMetrics {
   verticalScrollUpdateCount: number;
   selectionUpdateCount: number;
   cursorUpdateCount: number;
+  rowAttachCount: number;
+  rowReuseCount: number;
+  rowRecycleCount: number;
 }
 
 export interface WaveformTransition {

@@ -47,6 +47,7 @@ export interface WaveformScene {
   world: Container;
   layers: WaveformSceneLayers;
   nodes: WaveformSceneNodes;
+  rowRegistry: WaveformSceneRowRegistry;
   state: WaveformSceneState;
   shapeCounts: WaveformShapeCounts;
   digitalPulseFillCount: number;
@@ -61,10 +62,34 @@ interface WaveformSceneNodes {
   backgroundBase: Container;
   backgroundGrid: Container;
   backgroundLanes: Container;
+  backgroundLanePool: Container;
   contentRows: Container;
+  contentRowPool: Container;
   statusCursor: Container;
   statusHeader: Container;
   operationCursor: Container;
+}
+
+interface WaveformSceneRowRegistry {
+  activeRows: Map<string, WaveformSceneRowNode>;
+  pool: WaveformSceneRowNode[];
+}
+
+interface WaveformSceneRowNode {
+  laneContainer: Container;
+  contentContainer: Container;
+  rowId: string | null;
+}
+
+interface WaveformRowLifecycleStats {
+  rowAttachCount: number;
+  rowReuseCount: number;
+  rowRecycleCount: number;
+}
+
+interface RedrawWaveformSceneRowsOptions {
+  redrawContent?: boolean;
+  redrawLanes?: boolean;
 }
 
 interface WaveformSceneState {
@@ -116,11 +141,13 @@ export function createWaveformScene(options: WaveformSceneOptions): WaveformScen
   const rows = getWaveformDisplayRows(options.data);
   const visibleRows = getVisibleWaveformRows(rows, options.verticalScrollTop ?? 0, options.height);
   const nodes = createSceneNodes();
+  const rowRegistry = createRowRegistry();
   const renderStats = createRenderStats(visibleRows.visibleRowCount, visibleRows.culledRowCount, getRenderResolution(options));
   const scene: WaveformScene = {
     world,
     layers,
     nodes,
+    rowRegistry,
     state: {
       cursorTime: options.cursorTime,
       data: options.data,
@@ -144,8 +171,8 @@ export function createWaveformScene(options: WaveformSceneOptions): WaveformScen
     stateCounts: getWaveformStateCounts(options.data),
   };
 
-  layers.background.addChild(nodes.backgroundBase, nodes.backgroundGrid, nodes.backgroundLanes);
-  layers.content.addChild(nodes.contentRows);
+  layers.background.addChild(nodes.backgroundBase, nodes.backgroundGrid, nodes.backgroundLanes, nodes.backgroundLanePool);
+  layers.content.addChild(nodes.contentRows, nodes.contentRowPool);
   layers.status.addChild(nodes.statusHeader, nodes.statusCursor);
   layers.operation.addChild(nodes.operationCursor);
   world.addChild(layers.background, layers.content, layers.status, layers.operation);
@@ -180,7 +207,7 @@ export function updateWaveformSceneViewport(scene: WaveformScene, viewport: Wave
   scene.shapeCounts = getWaveformShapeCounts(scene.state.data, viewport);
   scene.digitalPulseFillCount = getWaveformDigitalPulseFillCount(scene.state.data, viewport);
   redrawWaveformSceneGrid(scene);
-  redrawWaveformSceneRows(scene);
+  redrawWaveformSceneRows(scene, { redrawLanes: false });
   redrawWaveformSceneCursor(scene);
 }
 
@@ -188,6 +215,9 @@ function createRenderStats(visibleRowCount: number, culledRowCount: number, rend
   return {
     visibleRowCount,
     culledRowCount,
+    rowAttachCount: 0,
+    rowReuseCount: 0,
+    rowRecycleCount: 0,
     renderedSignalCount: 0,
     sourceSegmentCount: 0,
     renderedSegmentCount: 0,
@@ -238,10 +268,27 @@ function createSceneNodes(): WaveformSceneNodes {
     backgroundBase: new Container({ label: 'waveform-background-base' }),
     backgroundGrid: new Container({ label: 'waveform-background-grid' }),
     backgroundLanes: new Container({ label: 'waveform-background-lanes' }),
+    backgroundLanePool: new Container({ label: 'waveform-background-lane-pool', visible: false }),
     contentRows: new Container({ label: 'waveform-content-rows' }),
+    contentRowPool: new Container({ label: 'waveform-content-row-pool', visible: false }),
     statusCursor: new Container({ label: 'waveform-status-cursor' }),
     statusHeader: new Container({ label: 'waveform-header-overlay' }),
     operationCursor: new Container({ label: 'waveform-operation-cursor' }),
+  };
+}
+
+function createRowRegistry(): WaveformSceneRowRegistry {
+  return {
+    activeRows: new Map<string, WaveformSceneRowNode>(),
+    pool: [],
+  };
+}
+
+function createRowNode(): WaveformSceneRowNode {
+  return {
+    laneContainer: new Container({ label: 'waveform-row-lane' }),
+    contentContainer: new Container({ label: 'waveform-row-content' }),
+    rowId: null,
   };
 }
 
@@ -260,21 +307,55 @@ function redrawWaveformSceneGrid(scene: WaveformScene) {
   drawGrid(scene.nodes.backgroundGrid, scene.nodes.statusHeader, getSceneOptions(scene));
 }
 
-function redrawWaveformSceneRows(scene: WaveformScene) {
+function redrawWaveformSceneRows(scene: WaveformScene, options: RedrawWaveformSceneRowsOptions = {}) {
   scene.renderStats = createRenderStats(
     scene.state.visibleRows.visibleRowCount,
     scene.state.visibleRows.culledRowCount,
     scene.state.renderResolution,
   );
+  const rowLifecycle = syncVisibleRows(scene);
 
-  redrawWaveformSceneLanes(scene);
-  clearContainer(scene.nodes.contentRows);
-  drawSignals(scene.nodes.contentRows, scene.state.visibleRows.rows, getSceneOptions(scene), scene.renderStats);
+  scene.renderStats.rowAttachCount = rowLifecycle.rowAttachCount;
+  scene.renderStats.rowReuseCount = rowLifecycle.rowReuseCount;
+  scene.renderStats.rowRecycleCount = rowLifecycle.rowRecycleCount;
+
+  if (options.redrawLanes ?? true) {
+    redrawWaveformSceneLanes(scene);
+  }
+
+  if (options.redrawContent ?? true) {
+    redrawWaveformSceneContent(scene);
+  }
 }
 
 function redrawWaveformSceneLanes(scene: WaveformScene) {
-  clearContainer(scene.nodes.backgroundLanes);
-  drawLanes(scene.nodes.backgroundLanes, scene.state.visibleRows.rows, getSceneOptions(scene));
+  const sceneOptions = getSceneOptions(scene);
+
+  scene.state.visibleRows.rows.forEach((row) => {
+    const rowNode = scene.rowRegistry.activeRows.get(row.id);
+
+    if (!rowNode) {
+      return;
+    }
+
+    clearContainer(rowNode.laneContainer);
+    drawLanes(rowNode.laneContainer, [row], sceneOptions);
+  });
+}
+
+function redrawWaveformSceneContent(scene: WaveformScene) {
+  const sceneOptions = getSceneOptions(scene);
+
+  scene.state.visibleRows.rows.forEach((row) => {
+    const rowNode = scene.rowRegistry.activeRows.get(row.id);
+
+    if (!rowNode || row.kind !== 'signal') {
+      return;
+    }
+
+    clearContainer(rowNode.contentContainer);
+    drawSignalRow(rowNode.contentContainer, row, sceneOptions, scene.renderStats);
+  });
 }
 
 function redrawWaveformSceneCursor(scene: WaveformScene) {
@@ -303,6 +384,86 @@ function clearContainer(container: Container) {
 
   for (const child of removedChildren) {
     child.destroy({ children: true });
+  }
+}
+
+function syncVisibleRows(scene: WaveformScene): WaveformRowLifecycleStats {
+  const nextVisibleIds = new Set(scene.state.visibleRows.rows.map((row) => row.id));
+  const lifecycle: WaveformRowLifecycleStats = {
+    rowAttachCount: 0,
+    rowReuseCount: 0,
+    rowRecycleCount: 0,
+  };
+
+  for (const [rowId, rowNode] of scene.rowRegistry.activeRows) {
+    if (nextVisibleIds.has(rowId)) {
+      continue;
+    }
+
+    recycleRowNode(scene, rowNode);
+    scene.rowRegistry.activeRows.delete(rowId);
+    lifecycle.rowRecycleCount += 1;
+  }
+
+  let laneIndex = 0;
+  let contentIndex = 0;
+
+  scene.state.visibleRows.rows.forEach((row) => {
+    const existingNode = scene.rowRegistry.activeRows.get(row.id);
+    const rowNode = existingNode ?? acquireRowNode(scene);
+
+    if (existingNode) {
+      lifecycle.rowReuseCount += 1;
+    } else {
+      lifecycle.rowAttachCount += 1;
+      scene.rowRegistry.activeRows.set(row.id, rowNode);
+    }
+
+    bindRowNode(rowNode, row);
+    attachContainer(rowNode.laneContainer, scene.nodes.backgroundLanes, laneIndex);
+    laneIndex += 1;
+
+    if (row.kind === 'signal') {
+      attachContainer(rowNode.contentContainer, scene.nodes.contentRows, contentIndex);
+      contentIndex += 1;
+    } else {
+      attachContainer(rowNode.contentContainer, scene.nodes.contentRowPool);
+    }
+  });
+
+  return lifecycle;
+}
+
+function acquireRowNode(scene: WaveformScene) {
+  return scene.rowRegistry.pool.pop() ?? createRowNode();
+}
+
+function recycleRowNode(scene: WaveformScene, rowNode: WaveformSceneRowNode) {
+  attachContainer(rowNode.laneContainer, scene.nodes.backgroundLanePool);
+  attachContainer(rowNode.contentContainer, scene.nodes.contentRowPool);
+  rowNode.rowId = null;
+  scene.rowRegistry.pool.push(rowNode);
+}
+
+function bindRowNode(rowNode: WaveformSceneRowNode, row: WaveformDisplayRow) {
+  rowNode.rowId = row.id;
+  rowNode.laneContainer.label = `waveform-row-lane-${row.id}`;
+  rowNode.contentContainer.label = `waveform-row-content-${row.id}`;
+}
+
+function attachContainer(container: Container, parent: Container, index?: number) {
+  if (container.parent !== parent) {
+    parent.addChild(container);
+  }
+
+  if (typeof index !== 'number') {
+    return;
+  }
+
+  const boundedIndex = Math.min(index, Math.max(0, parent.children.length - 1));
+
+  if (parent.getChildIndex(container) !== boundedIndex) {
+    parent.setChildIndex(container, boundedIndex);
   }
 }
 
@@ -374,91 +535,89 @@ function drawGrid(target: Container, headerTarget: Container, options: WaveformS
   headerTarget.addChild(headerOverlay);
 }
 
-function drawSignals(target: Container, rows: ReturnType<typeof getWaveformDisplayRows>, options: WaveformSceneOptions, renderStats: WaveformRenderStats) {
-  rows.forEach((row) => {
-    if (row.kind !== 'signal') {
+function drawSignalRow(target: Container, row: WaveformDisplayRow, options: WaveformSceneOptions, renderStats: WaveformRenderStats) {
+  if (row.kind !== 'signal') {
+    return;
+  }
+
+  const signal = row.signal;
+  const laneY = getScrolledY(row.y, options);
+  const segmentResult = getWaveformRenderSegments(signal, options.viewport, options.width, undefined, getRenderResolution(options));
+
+  renderStats.renderedSignalCount += 1;
+  renderStats.sourceSegmentCount += segmentResult.sourceSegmentCount;
+  renderStats.renderedSegmentCount += segmentResult.renderedSegmentCount;
+  renderStats.coalescedSegmentCount += segmentResult.coalescedSegmentCount;
+  renderStats.denseColumnCount += segmentResult.denseColumnCount;
+  renderStats.denseRunCount += segmentResult.denseRunCount;
+
+  if (segmentResult.densityMode === 'dense') {
+    renderStats.denseSignalCount += 1;
+  } else if (segmentResult.densityMode === 'compact') {
+    renderStats.compactSignalCount += 1;
+  } else {
+    renderStats.detailSignalCount += 1;
+  }
+
+  const cacheKey = shouldCacheSignalTexture(segmentResult, options) ? getSignalTextureCacheKey(signal, options, segmentResult) : null;
+
+  if (cacheKey) {
+    renderStats.cacheableSignalCount += 1;
+    const cached = options.signalTextureCache?.get(cacheKey);
+
+    if (cached && !cached.texture.destroyed) {
+      const sprite = new Sprite(cached.texture);
+      sprite.y = laneY;
+      target.addChild(sprite);
+      renderStats.cacheHitCount += 1;
+      renderStats.renderedLabelCount += cached.renderedLabelCount;
+      renderStats.suppressedLabelCount += cached.suppressedLabelCount;
       return;
     }
+  }
 
-    const signal = row.signal;
-    const laneY = getScrolledY(row.y, options);
-    const segmentResult = getWaveformRenderSegments(signal, options.viewport, options.width, undefined, getRenderResolution(options));
+  const signalLayer = new Container({ label: `waveform-signal-layer-${signal.id}` });
+  let drawResult: DrawSignalResult;
 
-    renderStats.renderedSignalCount += 1;
-    renderStats.sourceSegmentCount += segmentResult.sourceSegmentCount;
-    renderStats.renderedSegmentCount += segmentResult.renderedSegmentCount;
-    renderStats.coalescedSegmentCount += segmentResult.coalescedSegmentCount;
-    renderStats.denseColumnCount += segmentResult.denseColumnCount;
-    renderStats.denseRunCount += segmentResult.denseRunCount;
+  if (signal.kind === 'bus') {
+    drawResult = drawBusWaveform(signalLayer, signal, options, segmentResult, 0);
+  } else {
+    drawResult = drawDigitalWaveform(signalLayer, signal, options, segmentResult, 0);
+  }
 
-    if (segmentResult.densityMode === 'dense') {
-      renderStats.denseSignalCount += 1;
-    } else if (segmentResult.densityMode === 'compact') {
-      renderStats.compactSignalCount += 1;
-    } else {
-      renderStats.detailSignalCount += 1;
+  renderStats.renderedLabelCount += drawResult.renderedLabelCount;
+  renderStats.suppressedLabelCount += drawResult.suppressedLabelCount;
+
+  if (cacheKey && options.signalTextureCache && options.textureRenderer) {
+    renderStats.cacheMissCount += 1;
+
+    try {
+      const renderResolution = getRenderResolution(options);
+      const texture = options.textureRenderer.generateTexture({
+        target: signalLayer,
+        frame: new Rectangle(0, 0, options.width, waveformLaneHeight),
+        resolution: renderResolution,
+        antialias: false,
+      });
+      options.signalTextureCache.set(cacheKey, {
+        estimatedBytes: estimateSignalTextureBytes(options.width, waveformLaneHeight, renderResolution),
+        texture,
+        renderedLabelCount: drawResult.renderedLabelCount,
+        suppressedLabelCount: drawResult.suppressedLabelCount,
+      });
+      const sprite = new Sprite(texture);
+      sprite.y = laneY;
+      target.addChild(sprite);
+      signalLayer.destroy({ children: true });
+      renderStats.cachedSignalCount += 1;
+      return;
+    } catch {
+      // Fall through to direct Graphics rendering if texture generation is unavailable.
     }
+  }
 
-    const cacheKey = shouldCacheSignalTexture(segmentResult, options) ? getSignalTextureCacheKey(signal, options, segmentResult) : null;
-
-    if (cacheKey) {
-      renderStats.cacheableSignalCount += 1;
-      const cached = options.signalTextureCache?.get(cacheKey);
-
-      if (cached && !cached.texture.destroyed) {
-        const sprite = new Sprite(cached.texture);
-        sprite.y = laneY;
-        target.addChild(sprite);
-        renderStats.cacheHitCount += 1;
-        renderStats.renderedLabelCount += cached.renderedLabelCount;
-        renderStats.suppressedLabelCount += cached.suppressedLabelCount;
-        return;
-      }
-    }
-
-    const signalLayer = new Container({ label: `waveform-signal-layer-${signal.id}` });
-    let drawResult: DrawSignalResult;
-
-    if (signal.kind === 'bus') {
-      drawResult = drawBusWaveform(signalLayer, signal, options, segmentResult, 0);
-    } else {
-      drawResult = drawDigitalWaveform(signalLayer, signal, options, segmentResult, 0);
-    }
-
-    renderStats.renderedLabelCount += drawResult.renderedLabelCount;
-    renderStats.suppressedLabelCount += drawResult.suppressedLabelCount;
-
-    if (cacheKey && options.signalTextureCache && options.textureRenderer) {
-      renderStats.cacheMissCount += 1;
-
-      try {
-        const renderResolution = getRenderResolution(options);
-        const texture = options.textureRenderer.generateTexture({
-          target: signalLayer,
-          frame: new Rectangle(0, 0, options.width, waveformLaneHeight),
-          resolution: renderResolution,
-          antialias: false,
-        });
-        options.signalTextureCache.set(cacheKey, {
-          estimatedBytes: estimateSignalTextureBytes(options.width, waveformLaneHeight, renderResolution),
-          texture,
-          renderedLabelCount: drawResult.renderedLabelCount,
-          suppressedLabelCount: drawResult.suppressedLabelCount,
-        });
-        const sprite = new Sprite(texture);
-        sprite.y = laneY;
-        target.addChild(sprite);
-        signalLayer.destroy({ children: true });
-        renderStats.cachedSignalCount += 1;
-        return;
-      } catch {
-        // Fall through to direct Graphics rendering if texture generation is unavailable.
-      }
-    }
-
-    signalLayer.y = laneY;
-    target.addChild(signalLayer);
-  });
+  signalLayer.y = laneY;
+  target.addChild(signalLayer);
 }
 
 function drawDigitalWaveform(target: Container, signal: WaveformSignal, options: WaveformSceneOptions, segmentResult: WaveformRenderSegmentResult, laneY: number): DrawSignalResult {

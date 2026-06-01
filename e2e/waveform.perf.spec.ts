@@ -167,6 +167,9 @@ async function readCanvasStats(canvasHost: ReturnType<Page['getByTestId']>) {
     denseSignalCount: await readNumber('data-dense-signal-count'),
     detailSignalCount: await readNumber('data-detail-signal-count'),
     fullSceneRebuildCount: await readNumber('data-full-scene-rebuild-count'),
+    rowAttachCount: await readNumber('data-row-attach-count'),
+    rowRecycleCount: await readNumber('data-row-recycle-count'),
+    rowReuseCount: await readNumber('data-row-reuse-count'),
     renderResolution: await readNumber('data-render-resolution'),
     renderedSegmentCount: await readNumber('data-rendered-segment-count'),
     renderedSignalCount: await readNumber('data-rendered-signal-count'),
@@ -250,6 +253,9 @@ function diffInteractionMetrics(
 ) {
   return {
     fullSceneRebuildCount: end.fullSceneRebuildCount - start.fullSceneRebuildCount,
+    rowAttachCount: end.rowAttachCount - start.rowAttachCount,
+    rowRecycleCount: end.rowRecycleCount - start.rowRecycleCount,
+    rowReuseCount: end.rowReuseCount - start.rowReuseCount,
     cursorUpdateCount: end.cursorUpdateCount - start.cursorUpdateCount,
     selectionUpdateCount: end.selectionUpdateCount - start.selectionUpdateCount,
     verticalScrollUpdateCount: end.verticalScrollUpdateCount - start.verticalScrollUpdateCount,
@@ -466,8 +472,10 @@ test('packaged waveform sustained 10s viewport and interaction perf', async () =
     expect(samples.length).toBe(40);
     expect(panDelta.fullSceneRebuildCount).toBe(0);
     expect(panDelta.viewportContentUpdateCount).toBeGreaterThan(0);
+    expect(panDelta.rowReuseCount).toBeGreaterThan(0);
     expect(zoomDelta.fullSceneRebuildCount).toBe(0);
     expect(zoomDelta.viewportContentUpdateCount).toBeGreaterThan(0);
+    expect(zoomDelta.rowReuseCount).toBeGreaterThan(0);
     expect(cursorDelta.fullSceneRebuildCount).toBe(0);
     expect(cursorDelta.cursorUpdateCount).toBeGreaterThan(0);
     expect(cursorDelta.viewportContentUpdateCount).toBe(0);
