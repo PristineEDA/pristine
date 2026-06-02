@@ -90,10 +90,22 @@ describe('StatusBar', () => {
 
     expect(screen.getByTestId('status-bar-branch-label')).toHaveTextContent('feature/git-ui');
     expect(screen.getByText('Sync')).toBeInTheDocument();
+    expect(screen.getByTestId('status-bar-cursor-icon').compareDocumentPosition(
+      screen.getByTestId('status-bar-file-format-icon'),
+    )).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(screen.getByTestId('status-bar-file-format-icon').compareDocumentPosition(
+      screen.getByTestId('status-bar-indentation-icon'),
+    )).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(screen.getByTestId('status-bar-indentation-icon').compareDocumentPosition(
+      screen.getByTestId('status-bar-language-icon'),
+    )).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(screen.getByTestId('status-bar-cursor-icon')).toBeInTheDocument();
     expect(screen.getByText('18:4')).toBeInTheDocument();
+    expect(screen.getByTestId('status-bar-file-format-icon')).toBeInTheDocument();
     expect(screen.getByText('LF:UTF-8')).toBeInTheDocument();
+    expect(screen.getByTestId('status-bar-indentation-icon')).toBeInTheDocument();
     expect(screen.getByText('4 spaces')).toBeInTheDocument();
+    expect(screen.getByTestId('status-bar-cursor-icon').closest('[data-slot="hover-card-trigger"]')).not.toHaveClass('w-[4.25rem]');
     expect(screen.queryByText('SystemVerilog')).not.toBeInTheDocument();
     expect(screen.getByTestId('status-bar-language-icon')).toHaveAttribute('data-icon-key', 'systemverilog');
     expect(screen.getByText('Verilator 5.024')).toBeInTheDocument();
@@ -173,6 +185,9 @@ describe('StatusBar', () => {
     expect(screen.queryByText('1:1')).not.toBeInTheDocument();
     expect(screen.queryByText('4 spaces')).not.toBeInTheDocument();
     expect(screen.queryByText('LF:UTF-8')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('status-bar-cursor-icon')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('status-bar-file-format-icon')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('status-bar-indentation-icon')).not.toBeInTheDocument();
     expect(screen.queryByTestId('status-bar-language-icon')).not.toBeInTheDocument();
     expect(screen.queryByText('UTF-8')).not.toBeInTheDocument();
     expect(screen.queryByText('LF')).not.toBeInTheDocument();

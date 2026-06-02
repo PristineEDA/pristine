@@ -1,11 +1,13 @@
 import type { ReactNode } from 'react';
 import {
   GitBranch, AlertCircle, AlertTriangle, Bell, CheckCircle2,
+  AlignHorizontalSpaceAround,
   Briefcase,
-  IndentIncrease,
+  ClipboardType,
   Save,
-  TextCursor,
+  SquareMousePointer,
   LoaderCircle,
+  type LucideIcon,
 } from 'lucide-react';
 import { getWorkspaceGitBranchLabel, useWorkspaceGitStatus } from '../../../../git/workspaceGitStatus';
 import { summarizeLspProblems, useLspProblems } from '../../../../lsp/lspProblems';
@@ -140,6 +142,29 @@ function StatusBarHoverItem({
   );
 }
 
+interface StatusBarIconTextItemProps {
+  icon: LucideIcon;
+  iconTestId?: string;
+  itemClassName: string;
+  text: string;
+  textClassName?: string;
+}
+
+function StatusBarIconTextItem({
+  icon: Icon,
+  iconTestId,
+  itemClassName,
+  text,
+  textClassName,
+}: StatusBarIconTextItemProps) {
+  return (
+    <div className={itemClassName}>
+      <Icon size={12} data-testid={iconTestId} />
+      <span className={textClassName}>{text}</span>
+    </div>
+  );
+}
+
 export interface StatusBarProps {
   activeFileId: string;
   cursorLine: number;
@@ -173,7 +198,8 @@ export function StatusBar({
     : STATUS_BAR_HOVER_COPY.language;
   const buttonItemClassName = 'flex h-full items-center gap-1 px-2 text-[11px] disabled:cursor-default disabled:opacity-60';
   const compactItemClassName = 'flex h-full items-center gap-1 px-2 text-[11px] cursor-pointer';
-  const compactTextItemClassName = 'flex h-full items-center px-2 text-[11px] cursor-pointer';
+  const compactEditorStatusItemClassName = 'flex h-full shrink-0 items-center gap-1 px-1.5 text-[11px] cursor-pointer';
+  const compactTextItemClassName = 'flex h-full shrink-0 items-center px-2 text-[11px] cursor-pointer';
   const groupedItemClassName = 'flex h-full items-center gap-2.5 px-2 text-[11px] cursor-pointer';
   const wideItemClassName = 'flex h-full items-center gap-1 px-2.5 text-[11px] cursor-pointer';
 
@@ -267,23 +293,29 @@ export function StatusBar({
           {hasActiveEditor && (
             <>
               <StatusBarHoverItem copy={STATUS_BAR_HOVER_COPY.cursor}>
-                <div className={wideItemClassName}>
-                  <TextCursor size={12} data-testid="status-bar-cursor-icon" />
-                  <span>
-                    {cursorLine}:{cursorCol}
-                  </span>
-                </div>
+                <StatusBarIconTextItem
+                  icon={SquareMousePointer}
+                  iconTestId="status-bar-cursor-icon"
+                  itemClassName={compactEditorStatusItemClassName}
+                  text={`${cursorLine}:${cursorCol}`}
+                  textClassName="tabular-nums"
+                />
               </StatusBarHoverItem>
               <StatusBarHoverItem copy={STATUS_BAR_HOVER_COPY.fileFormat}>
-                <div className={compactTextItemClassName}>
-                  <span>LF:UTF-8</span>
-                </div>
+                <StatusBarIconTextItem
+                  icon={ClipboardType}
+                  iconTestId="status-bar-file-format-icon"
+                  itemClassName={compactEditorStatusItemClassName}
+                  text="LF:UTF-8"
+                />
               </StatusBarHoverItem>
               <StatusBarHoverItem copy={STATUS_BAR_HOVER_COPY.indentation}>
-                <div className={compactItemClassName}>
-                  <IndentIncrease size={12} />
-                  <span>4 spaces</span>
-                </div>
+                <StatusBarIconTextItem
+                  icon={AlignHorizontalSpaceAround}
+                  iconTestId="status-bar-indentation-icon"
+                  itemClassName={compactEditorStatusItemClassName}
+                  text="4 spaces"
+                />
               </StatusBarHoverItem>
               <StatusBarHoverItem copy={languageHoverCopy}>
                 <div className={compactTextItemClassName}>

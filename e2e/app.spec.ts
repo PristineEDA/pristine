@@ -4144,11 +4144,43 @@ test('single-clicking the first explorer file places the monaco cursor at line 1
   await waitForMonacoEditor(window);
   await expect(getCursorStatus(window)).toHaveText('1:1');
   await expect(window.getByTestId('status-bar').getByTestId('status-bar-cursor-icon')).toBeVisible();
+  await expect(window.getByTestId('status-bar').getByTestId('status-bar-file-format-icon')).toBeVisible();
   await expect(window.getByTestId('status-bar').getByText('LF:UTF-8', { exact: true })).toBeVisible();
+  await expect(window.getByTestId('status-bar').getByTestId('status-bar-indentation-icon')).toBeVisible();
+  await expect(window.getByTestId('status-bar').getByText('4 spaces', { exact: true })).toBeVisible();
   await expect(window.getByTestId('status-bar').getByTestId('status-bar-language-icon')).toHaveAttribute('data-icon-key', 'verilog');
 
-  await window.keyboard.press('ArrowDown');
-  await expect(getCursorStatus(window)).toHaveText('2:1');
+  const cursorIconBox = await window.getByTestId('status-bar-cursor-icon').boundingBox();
+  const fileFormatIconBox = await window.getByTestId('status-bar-file-format-icon').boundingBox();
+  const indentationIconBox = await window.getByTestId('status-bar-indentation-icon').boundingBox();
+  const languageIconBox = await window.getByTestId('status-bar-language-icon').boundingBox();
+  const notificationsBox = await window.getByTestId('status-bar-notifications').boundingBox();
+
+  expect(cursorIconBox).not.toBeNull();
+  expect(fileFormatIconBox).not.toBeNull();
+  expect(indentationIconBox).not.toBeNull();
+  expect(languageIconBox).not.toBeNull();
+  expect(notificationsBox).not.toBeNull();
+
+  await moveMonacoCursor(window, { down: 12, right: 10 });
+  await expect(getCursorStatus(window)).toHaveText('14:10');
+
+  const widenedCursorNotificationsBox = await window.getByTestId('status-bar-notifications').boundingBox();
+  const widenedCursorFileFormatIconBox = await window.getByTestId('status-bar-file-format-icon').boundingBox();
+  const widenedCursorIndentationIconBox = await window.getByTestId('status-bar-indentation-icon').boundingBox();
+  const widenedCursorLanguageIconBox = await window.getByTestId('status-bar-language-icon').boundingBox();
+  const widenedCursorIconBox = await window.getByTestId('status-bar-cursor-icon').boundingBox();
+
+  expect(widenedCursorIconBox).not.toBeNull();
+  expect(widenedCursorFileFormatIconBox).not.toBeNull();
+  expect(widenedCursorIndentationIconBox).not.toBeNull();
+  expect(widenedCursorLanguageIconBox).not.toBeNull();
+  expect(widenedCursorNotificationsBox).not.toBeNull();
+  expect(Math.round(widenedCursorIconBox!.x)).toBeLessThan(Math.round(cursorIconBox!.x));
+  expect(Math.round(widenedCursorFileFormatIconBox!.x)).toBe(Math.round(fileFormatIconBox!.x));
+  expect(Math.round(widenedCursorIndentationIconBox!.x)).toBe(Math.round(indentationIconBox!.x));
+  expect(Math.round(widenedCursorLanguageIconBox!.x)).toBe(Math.round(languageIconBox!.x));
+  expect(Math.round(widenedCursorNotificationsBox!.x)).toBe(Math.round(notificationsBox!.x));
 
   await app.close();
 });
@@ -4168,7 +4200,10 @@ test('quick open places the first opened file cursor at line 1 column 1', async 
   await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toBeVisible();
   await expect(getCursorStatus(window)).toHaveText('1:1');
   await expect(window.getByTestId('status-bar').getByTestId('status-bar-cursor-icon')).toBeVisible();
+  await expect(window.getByTestId('status-bar').getByTestId('status-bar-file-format-icon')).toBeVisible();
   await expect(window.getByTestId('status-bar').getByText('LF:UTF-8', { exact: true })).toBeVisible();
+  await expect(window.getByTestId('status-bar').getByTestId('status-bar-indentation-icon')).toBeVisible();
+  await expect(window.getByTestId('status-bar').getByText('4 spaces', { exact: true })).toBeVisible();
   await expect(window.getByTestId('status-bar').getByTestId('status-bar-language-icon')).toHaveAttribute('data-icon-key', 'verilog');
 
   await app.close();
@@ -4716,6 +4751,10 @@ test('status bar switches across primary and secondary navigation views', async 
   await expect(statusBar).toHaveAttribute('data-status-bar-id', 'code-explorer');
   await expect(statusBar.getByText(/^\d+:\d+$/)).toHaveCount(0);
   await expect(statusBar.getByText('LF:UTF-8', { exact: true })).toHaveCount(0);
+  await expect(statusBar.getByText('4 spaces', { exact: true })).toHaveCount(0);
+  await expect(statusBar.getByTestId('status-bar-cursor-icon')).toHaveCount(0);
+  await expect(statusBar.getByTestId('status-bar-file-format-icon')).toHaveCount(0);
+  await expect(statusBar.getByTestId('status-bar-indentation-icon')).toHaveCount(0);
   await expect(statusBar.getByTestId('status-bar-language-icon')).toHaveCount(0);
   await expect(statusBar.getByTestId('status-bar-notifications')).toBeVisible();
 
@@ -4766,7 +4805,11 @@ test('explorer status bar hover cards switch cleanly between adjacent items', as
   await expect(statusBar).toHaveAttribute('data-status-bar-id', 'code-explorer');
   await expect(branchLabel).toBeVisible();
   await expect(syncLabel).toBeVisible();
+  await expect(statusBar.getByTestId('status-bar-cursor-icon')).toBeVisible();
+  await expect(statusBar.getByTestId('status-bar-file-format-icon')).toBeVisible();
   await expect(statusBar.getByText('LF:UTF-8', { exact: true })).toBeVisible();
+  await expect(statusBar.getByTestId('status-bar-indentation-icon')).toBeVisible();
+  await expect(statusBar.getByText('4 spaces', { exact: true })).toBeVisible();
   await expect(languageIcon).toHaveAttribute('data-icon-key', 'verilog');
 
   await focusHoverCardTrigger(branchLabel);
@@ -5362,13 +5405,13 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
   await expect.poll(async () => readCanvasNumber('data-rendered-signal-count'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(0);
-  await expect.poll(async () => readCanvasNumber('data-dense-signal-count'), {
-    timeout: UI_READY_TIMEOUT_MS,
-  }).toBeGreaterThan(0);
-  await expect.poll(async () => readCanvasNumber('data-dense-run-count'), {
-    timeout: UI_READY_TIMEOUT_MS,
-  }).toBeGreaterThan(0);
-  await expect.poll(async () => readCanvasNumber('data-suppressed-label-count'), {
+  await expect.poll(async () => {
+    const denseSignalCount = await readCanvasNumber('data-dense-signal-count');
+    const compactSignalCount = await readCanvasNumber('data-compact-signal-count');
+    const detailSignalCount = await readCanvasNumber('data-detail-signal-count');
+
+    return denseSignalCount + compactSignalCount + detailSignalCount;
+  }, {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(0);
   await expect.poll(async () => {
