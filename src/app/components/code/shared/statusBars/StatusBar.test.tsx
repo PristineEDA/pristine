@@ -90,34 +90,55 @@ describe('StatusBar', () => {
 
     expect(screen.getByTestId('status-bar-branch-label')).toHaveTextContent('feature/git-ui');
     expect(screen.getByText('Sync')).toBeInTheDocument();
-    expect(screen.getByText('Ln 18, Col 4')).toBeInTheDocument();
-    expect(screen.getByText('SystemVerilog')).toBeInTheDocument();
+    expect(screen.getByTestId('status-bar-cursor-icon')).toBeInTheDocument();
+    expect(screen.getByText('18:4')).toBeInTheDocument();
+    expect(screen.getByText('LF:UTF-8')).toBeInTheDocument();
+    expect(screen.getByText('4 spaces')).toBeInTheDocument();
+    expect(screen.queryByText('SystemVerilog')).not.toBeInTheDocument();
+    expect(screen.getByTestId('status-bar-language-icon')).toHaveAttribute('data-icon-key', 'systemverilog');
     expect(screen.getByText('Verilator 5.024')).toBeInTheDocument();
     expect(screen.getByTestId('status-bar-error-count')).toHaveTextContent('1');
     expect(screen.getByTestId('status-bar-warning-count')).toHaveTextContent('1');
   });
 
-  it('shows specialized labels for config and script files used in the editor area', () => {
+  it('uses the file tree icon mapping for config and script files used in the editor area', () => {
     const { rerender } = render(
       <StatusBar activeFileId="constraints/timing.xdc" cursorLine={1} cursorCol={1} />,
     );
 
-    expect(screen.getByText('XDC')).toBeInTheDocument();
+    expect(screen.getByTestId('status-bar-language-icon')).toHaveAttribute('data-icon-key', 'fpga-constraint');
 
     rerender(<StatusBar activeFileId="scripts/build.tcl" cursorLine={1} cursorCol={1} />);
-    expect(screen.getByText('Tcl')).toBeInTheDocument();
+    expect(screen.getByTestId('status-bar-language-icon')).toHaveAttribute('data-icon-key', 'tcl');
 
     rerender(<StatusBar activeFileId="scripts/deploy.sh" cursorLine={1} cursorCol={1} />);
-    expect(screen.getByText('Shell')).toBeInTheDocument();
+    expect(screen.getByTestId('status-bar-language-icon')).toHaveAttribute('data-icon-key', 'console');
 
     rerender(<StatusBar activeFileId="config/project.json" cursorLine={1} cursorCol={1} />);
-    expect(screen.getByText('JSON')).toBeInTheDocument();
+    expect(screen.getByTestId('status-bar-language-icon')).toHaveAttribute('data-icon-key', 'json');
 
     rerender(<StatusBar activeFileId="startup/crt0.s" cursorLine={1} cursorCol={1} />);
-    expect(screen.getByText('Assembly')).toBeInTheDocument();
+    expect(screen.getByTestId('status-bar-language-icon')).toHaveAttribute('data-icon-key', 'assembly');
 
     rerender(<StatusBar activeFileId="build/Makefile" cursorLine={1} cursorCol={1} />);
-    expect(screen.getByText('Makefile')).toBeInTheDocument();
+    expect(screen.getByTestId('status-bar-language-icon')).toHaveAttribute('data-icon-key', 'makefile');
+  });
+
+  it('shows the inferred language label in the file icon hover card description', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <StatusBar activeFileId="rtl/tb/tb_cpu_top.sv" cursorLine={18} cursorCol={4} />,
+    );
+
+    const languageIconTrigger = screen.getByTestId('status-bar-language-icon').closest('[data-slot="hover-card-trigger"]');
+
+    expect(languageIconTrigger).not.toBeNull();
+
+    await user.hover(languageIconTrigger as HTMLElement);
+
+    expect(await screen.findByText('Language Mode')).toBeInTheDocument();
+    expect(screen.getByText('SystemVerilog')).toBeInTheDocument();
   });
 
   it('falls back to the generic git label when no project files are open or the workspace is not a git repo', () => {
@@ -140,14 +161,21 @@ describe('StatusBar', () => {
     expect(screen.getByTestId('status-bar-branch-label')).toHaveTextContent('feature/git-ui');
   });
 
-  it('shows 0 error and warning counts when no file is open', () => {
+  it('shows diagnostics counts, keeps notifications, and hides editor-only right status items when no file is open', () => {
     render(
       <StatusBar activeFileId="" cursorLine={1} cursorCol={1} />,
     );
 
-    expect(screen.getByText('Plain Text')).toBeInTheDocument();
     expect(screen.getByTestId('status-bar-error-count')).toHaveTextContent('0');
     expect(screen.getByTestId('status-bar-warning-count')).toHaveTextContent('0');
+    expect(screen.getByTestId('status-bar-notifications')).toBeInTheDocument();
+    expect(screen.queryByText('Plain Text')).not.toBeInTheDocument();
+    expect(screen.queryByText('1:1')).not.toBeInTheDocument();
+    expect(screen.queryByText('4 spaces')).not.toBeInTheDocument();
+    expect(screen.queryByText('LF:UTF-8')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('status-bar-language-icon')).not.toBeInTheDocument();
+    expect(screen.queryByText('UTF-8')).not.toBeInTheDocument();
+    expect(screen.queryByText('LF')).not.toBeInTheDocument();
   });
 
   it('adds stronger hover highlights, delays hover card open, and closes it immediately on leave', async () => {

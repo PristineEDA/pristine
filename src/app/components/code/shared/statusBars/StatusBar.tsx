@@ -1,14 +1,17 @@
 import type { ReactNode } from 'react';
 import {
   GitBranch, AlertCircle, AlertTriangle, Bell, CheckCircle2,
-  Zap,
+  Briefcase,
+  IndentIncrease,
   Save,
+  TextCursor,
   LoaderCircle,
 } from 'lucide-react';
 import { getWorkspaceGitBranchLabel, useWorkspaceGitStatus } from '../../../../git/workspaceGitStatus';
 import { summarizeLspProblems, useLspProblems } from '../../../../lsp/lspProblems';
-import { getEditorLanguageLabel } from '../../../../workspace/workspaceFiles';
+import { getEditorLanguageLabel, getPathBaseName } from '../../../../workspace/workspaceFiles';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '../../../ui/hover-card';
+import { WorkspaceFileIcon } from '../WorkspaceEntryIcon';
 import { StatusBarFrame } from './StatusBarFrame';
 
 interface StatusBarHoverCopy {
@@ -28,8 +31,7 @@ type StatusBarHoverKey =
   | 'verilator'
   | 'cursor'
   | 'indentation'
-  | 'encoding'
-  | 'lineEnding'
+  | 'fileFormat'
   | 'language'
   | 'notifications';
 
@@ -84,14 +86,9 @@ const STATUS_BAR_HOVER_COPY: Record<StatusBarHoverKey, StatusBarHoverCopy> = {
     description: 'Placeholder details about the active indentation mode.',
     meta: 'Preview content only',
   },
-  encoding: {
-    title: 'Encoding',
-    description: 'Placeholder details about the active file encoding.',
-    meta: 'Preview content only',
-  },
-  lineEnding: {
-    title: 'Line Endings',
-    description: 'Placeholder details about the active line ending mode.',
+  fileFormat: {
+    title: 'File Format',
+    description: 'Placeholder details about the active line ending and encoding.',
     meta: 'Preview content only',
   },
   language: {
@@ -168,13 +165,17 @@ export function StatusBar({
   const problemsList = useLspProblems(activeFileId);
   const { errorCount, warningCount } = summarizeLspProblems(problemsList);
   const branchLabel = getWorkspaceGitBranchLabel(gitStatus);
-  const lang = activeFileId ? getEditorLanguageLabel(activeFileId) : 'Plain Text';
+  const hasActiveEditor = activeFileId.length > 0;
+  const lang = hasActiveEditor ? getEditorLanguageLabel(activeFileId) : '';
+  const activeFileName = hasActiveEditor ? getPathBaseName(activeFileId) : '';
+  const languageHoverCopy = hasActiveEditor
+    ? { ...STATUS_BAR_HOVER_COPY.language, description: lang }
+    : STATUS_BAR_HOVER_COPY.language;
   const buttonItemClassName = 'flex h-full items-center gap-1 px-2 text-[11px] disabled:cursor-default disabled:opacity-60';
   const compactItemClassName = 'flex h-full items-center gap-1 px-2 text-[11px] cursor-pointer';
   const compactTextItemClassName = 'flex h-full items-center px-2 text-[11px] cursor-pointer';
   const groupedItemClassName = 'flex h-full items-center gap-2.5 px-2 text-[11px] cursor-pointer';
   const wideItemClassName = 'flex h-full items-center gap-1 px-2.5 text-[11px] cursor-pointer';
-  const wideTextItemClassName = 'flex h-full items-center px-2.5 text-[11px] cursor-pointer';
 
   return (
     <StatusBarFrame
@@ -255,7 +256,7 @@ export function StatusBar({
           </StatusBarHoverItem>
           <StatusBarHoverItem copy={STATUS_BAR_HOVER_COPY.verilator}>
             <div className={compactItemClassName}>
-              <Zap size={11} className="text-ide-info" />
+              <Briefcase size={11} />
               <span>Verilator 5.024</span>
             </div>
           </StatusBarHoverItem>
@@ -263,35 +264,41 @@ export function StatusBar({
       )}
       right={(
         <>
-          <StatusBarHoverItem copy={STATUS_BAR_HOVER_COPY.cursor}>
-            <div className={wideTextItemClassName}>
-              <span>
-                Ln {cursorLine}, Col {cursorCol}
-              </span>
-            </div>
-          </StatusBarHoverItem>
-          <StatusBarHoverItem copy={STATUS_BAR_HOVER_COPY.indentation}>
-            <div className={compactTextItemClassName}>
-              <span>Spaces: 4</span>
-            </div>
-          </StatusBarHoverItem>
-          <StatusBarHoverItem copy={STATUS_BAR_HOVER_COPY.encoding}>
-            <div className={compactTextItemClassName}>
-              <span>UTF-8</span>
-            </div>
-          </StatusBarHoverItem>
-          <StatusBarHoverItem copy={STATUS_BAR_HOVER_COPY.lineEnding}>
-            <div className={compactTextItemClassName}>
-              <span>LF</span>
-            </div>
-          </StatusBarHoverItem>
-          <StatusBarHoverItem copy={STATUS_BAR_HOVER_COPY.language}>
-            <div className={wideTextItemClassName}>
-              <span>{lang}</span>
-            </div>
-          </StatusBarHoverItem>
+          {hasActiveEditor && (
+            <>
+              <StatusBarHoverItem copy={STATUS_BAR_HOVER_COPY.cursor}>
+                <div className={wideItemClassName}>
+                  <TextCursor size={12} data-testid="status-bar-cursor-icon" />
+                  <span>
+                    {cursorLine}:{cursorCol}
+                  </span>
+                </div>
+              </StatusBarHoverItem>
+              <StatusBarHoverItem copy={STATUS_BAR_HOVER_COPY.fileFormat}>
+                <div className={compactTextItemClassName}>
+                  <span>LF:UTF-8</span>
+                </div>
+              </StatusBarHoverItem>
+              <StatusBarHoverItem copy={STATUS_BAR_HOVER_COPY.indentation}>
+                <div className={compactItemClassName}>
+                  <IndentIncrease size={12} />
+                  <span>4 spaces</span>
+                </div>
+              </StatusBarHoverItem>
+              <StatusBarHoverItem copy={languageHoverCopy}>
+                <div className={compactTextItemClassName}>
+                  <WorkspaceFileIcon
+                    name={activeFileName}
+                    path={activeFileId}
+                    className="h-3.5 w-3.5"
+                    testId="status-bar-language-icon"
+                  />
+                </div>
+              </StatusBarHoverItem>
+            </>
+          )}
           <StatusBarHoverItem copy={STATUS_BAR_HOVER_COPY.notifications}>
-            <div className={compactTextItemClassName}>
+            <div className={compactTextItemClassName} data-testid="status-bar-notifications">
               <Bell size={12} />
             </div>
           </StatusBarHoverItem>

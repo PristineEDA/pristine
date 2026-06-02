@@ -31,8 +31,9 @@ describe('AppStatusBar', () => {
     expect(screen.getByTestId('status-bar')).toHaveClass('bg-ide-unified-chrome-bg', 'text-ide-unified-chrome-fg');
     expect(screen.getByTestId('status-bar')).not.toHaveClass('border-ide-statusbar-border');
     expect(screen.getByText('feature/git-ui')).toBeInTheDocument();
-    expect(screen.getByText('Ln 18, Col 4')).toBeInTheDocument();
-    expect(screen.getByText('SystemVerilog')).toBeInTheDocument();
+    expect(screen.getByText('18:4')).toBeInTheDocument();
+    expect(screen.queryByText('SystemVerilog')).not.toBeInTheDocument();
+    expect(screen.getByTestId('status-bar-language-icon')).toHaveAttribute('data-icon-key', 'systemverilog');
   });
 
   it('renders a placeholder status bar for code views without an implementation', () => {

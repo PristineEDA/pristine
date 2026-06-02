@@ -1227,7 +1227,7 @@ async function moveMonacoCursor(
 }
 
 function getCursorStatus(window: Awaited<ReturnType<typeof launchApp>>['window']) {
-  return window.getByText(/^Ln \d+, Col \d+$/);
+  return window.getByTestId('status-bar').getByText(/^\d+:\d+$/);
 }
 
 async function clearRememberedCloseBehavior(window: Awaited<ReturnType<typeof launchApp>>['window']) {
@@ -4142,10 +4142,13 @@ test('single-clicking the first explorer file places the monaco cursor at line 1
   await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toBeVisible();
   await expect(window.getByTestId('editor-tab-title-rtl/core/reg_file.v')).toHaveClass(/italic/);
   await waitForMonacoEditor(window);
-  await expect(getCursorStatus(window)).toHaveText('Ln 1, Col 1');
+  await expect(getCursorStatus(window)).toHaveText('1:1');
+  await expect(window.getByTestId('status-bar').getByTestId('status-bar-cursor-icon')).toBeVisible();
+  await expect(window.getByTestId('status-bar').getByText('LF:UTF-8', { exact: true })).toBeVisible();
+  await expect(window.getByTestId('status-bar').getByTestId('status-bar-language-icon')).toHaveAttribute('data-icon-key', 'verilog');
 
   await window.keyboard.press('ArrowDown');
-  await expect(getCursorStatus(window)).toHaveText('Ln 2, Col 1');
+  await expect(getCursorStatus(window)).toHaveText('2:1');
 
   await app.close();
 });
@@ -4163,7 +4166,10 @@ test('quick open places the first opened file cursor at line 1 column 1', async 
 
   await expect(window.getByTestId('quick-open-overlay')).toHaveCount(0);
   await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toBeVisible();
-  await expect(getCursorStatus(window)).toHaveText('Ln 1, Col 1');
+  await expect(getCursorStatus(window)).toHaveText('1:1');
+  await expect(window.getByTestId('status-bar').getByTestId('status-bar-cursor-icon')).toBeVisible();
+  await expect(window.getByTestId('status-bar').getByText('LF:UTF-8', { exact: true })).toBeVisible();
+  await expect(window.getByTestId('status-bar').getByTestId('status-bar-language-icon')).toHaveAttribute('data-icon-key', 'verilog');
 
   await app.close();
 });
@@ -4179,24 +4185,24 @@ test('monaco restores cursor position across file switches and tab reopen while 
   ], { finalAction: 'dblclick' });
 
   await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toBeVisible();
-  await expect(getCursorStatus(window)).toHaveText('Ln 1, Col 1');
+  await expect(getCursorStatus(window)).toHaveText('1:1');
 
   await moveMonacoCursor(window, { down: 3, right: 4 });
-  await expect(getCursorStatus(window)).toHaveText('Ln 4, Col 5');
+  await expect(getCursorStatus(window)).toHaveText('4:5');
 
   await window.getByTestId('file-tree-node-README_md').dblclick();
   await expect(window.getByTestId('editor-tab-README.md')).toBeVisible();
-  await expect(getCursorStatus(window)).toHaveText('Ln 1, Col 1');
+  await expect(getCursorStatus(window)).toHaveText('1:1');
 
   await window.getByTestId('editor-tab-rtl/core/reg_file.v').click();
-  await expect(getCursorStatus(window)).toHaveText('Ln 4, Col 5');
+  await expect(getCursorStatus(window)).toHaveText('4:5');
 
   await window.getByTestId('editor-tab-close-rtl/core/reg_file.v').click();
   await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toHaveCount(0);
 
   await window.getByTestId('file-tree-node-rtl_core_reg_file_v').dblclick();
   await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toBeVisible();
-  await expect(getCursorStatus(window)).toHaveText('Ln 4, Col 5');
+  await expect(getCursorStatus(window)).toHaveText('4:5');
 
   await app.close();
 });
@@ -4213,7 +4219,7 @@ test('ctrl+p quick open escape restores the previous editor cursor position and 
 
   await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toBeVisible();
   await moveMonacoCursor(window, { down: 2, right: 6 });
-  await expect(getCursorStatus(window)).toHaveText('Ln 3, Col 7');
+  await expect(getCursorStatus(window)).toHaveText('3:7');
 
   await window.keyboard.press('Control+P');
   const quickOpenInput = window.getByTestId('quick-open-input');
@@ -4224,10 +4230,10 @@ test('ctrl+p quick open escape restores the previous editor cursor position and 
 
   await expect(window.getByTestId('quick-open-overlay')).toHaveCount(0);
   await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toHaveAttribute('data-active', 'true');
-  await expect(getCursorStatus(window)).toHaveText('Ln 3, Col 7');
+  await expect(getCursorStatus(window)).toHaveText('3:7');
 
   await window.keyboard.press('ArrowDown');
-  await expect(getCursorStatus(window)).toHaveText('Ln 4, Col 7');
+  await expect(getCursorStatus(window)).toHaveText('4:7');
 
   await app.close();
 });
@@ -4708,13 +4714,24 @@ test('status bar switches across primary and secondary navigation views', async 
   await window.getByTestId('activity-item-explorer').click();
   await expect(window.getByTestId('panel-center-panel')).toBeVisible();
   await expect(statusBar).toHaveAttribute('data-status-bar-id', 'code-explorer');
-  await expect(statusBar).toContainText('Ln 1, Col 1');
+  await expect(statusBar.getByText(/^\d+:\d+$/)).toHaveCount(0);
+  await expect(statusBar.getByText('LF:UTF-8', { exact: true })).toHaveCount(0);
+  await expect(statusBar.getByTestId('status-bar-language-icon')).toHaveCount(0);
+  await expect(statusBar.getByTestId('status-bar-notifications')).toBeVisible();
 
   await app.close();
 });
 
 test('explorer status bar hover cards switch cleanly between adjacent items', async () => {
   const { app, window } = await launchApp();
+  await ensureExplorerVisible(window);
+  await openNestedWorkspaceFile(window, [
+    'file-tree-node-rtl',
+    'file-tree-node-rtl_core',
+    'file-tree-node-rtl_core_reg_file_v',
+  ]);
+  await waitForMonacoEditor(window);
+
   type FocusableTriggerNode = {
     focus?: () => void;
     getAttribute?: (name: string) => string | null;
@@ -4742,10 +4759,15 @@ test('explorer status bar hover cards switch cleanly between adjacent items', as
   const syncLabel = statusBar.getByText('Sync', { exact: true });
   const branchCardTitle = window.getByText('Git Branch', { exact: true });
   const syncCardTitle = window.getByText('Sync Status', { exact: true });
+  const languageIcon = statusBar.getByTestId('status-bar-language-icon');
+  const languageCardTitle = window.getByText('Language Mode', { exact: true });
+  const languageCardDescription = window.getByText('Verilog', { exact: true });
 
   await expect(statusBar).toHaveAttribute('data-status-bar-id', 'code-explorer');
   await expect(branchLabel).toBeVisible();
   await expect(syncLabel).toBeVisible();
+  await expect(statusBar.getByText('LF:UTF-8', { exact: true })).toBeVisible();
+  await expect(languageIcon).toHaveAttribute('data-icon-key', 'verilog');
 
   await focusHoverCardTrigger(branchLabel);
   await expect(branchCardTitle).toBeVisible();
@@ -4754,6 +4776,12 @@ test('explorer status bar hover cards switch cleanly between adjacent items', as
 
   await expect(branchCardTitle).toHaveCount(0);
   await expect(syncCardTitle).toBeVisible();
+
+  await focusHoverCardTrigger(languageIcon);
+
+  await expect(syncCardTitle).toHaveCount(0);
+  await expect(languageCardTitle).toBeVisible();
+  await expect(languageCardDescription).toBeVisible();
 
   await app.close();
 });
