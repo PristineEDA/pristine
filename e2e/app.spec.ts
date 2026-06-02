@@ -9,6 +9,7 @@ import {
   ASSISTANT_THREAD_LIST_DEFAULT_WIDTH_PX,
   ASSISTANT_THREAD_LIST_RESIZE_HANDLE_WIDTH_PX,
 } from '../src/app/components/code/explorer/assistantPanelLayout';
+import { waveformCanvasMinHeight } from '../src/app/components/code/explorer/waveform/waveformLayout';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const fixtureWorkspace = path.join(__dirname, '..', 'test', 'fixtures', 'workspace');
@@ -5427,7 +5428,7 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
   await expect(canvasHost.locator('canvas')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
   await expect.poll(async () => readCanvasNumber('data-canvas-height'), {
     timeout: UI_READY_TIMEOUT_MS,
-  }).toBeGreaterThan(220);
+  }).toBeGreaterThanOrEqual(waveformCanvasMinHeight);
   await expect.poll(async () => Number(await panel.getAttribute('data-last-render-ms') ?? '0'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(0);
