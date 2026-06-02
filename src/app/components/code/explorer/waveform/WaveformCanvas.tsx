@@ -4,6 +4,7 @@ import { Application } from 'pixi.js';
 import {
   createWaveformScene,
   updateWaveformSceneCursor,
+  updateWaveformScenePan,
   updateWaveformSceneSelection,
   updateWaveformSceneVerticalScroll,
   updateWaveformSceneViewport,
@@ -193,7 +194,12 @@ export function WaveformCanvas({
       return;
     }
 
-    updateWaveformSceneViewport(scene, viewport);
+    const handledAsPan = updateWaveformScenePan(scene, viewport);
+
+    if (!handledAsPan) {
+      updateWaveformSceneViewport(scene, viewport);
+    }
+
     sceneUpdateMetricsRef.current.viewportContentUpdateCount += 1;
     accumulateRowLifecycleMetrics(scene.renderStats);
     applyRenderStats(scene.renderStats);
@@ -402,6 +408,9 @@ export function WaveformCanvas({
     sceneUpdateMetricsRef.current.rowRecycleCount += baseStats.rowRecycleCount;
     sceneUpdateMetricsRef.current.rowContentRedrawCount += baseStats.rowContentRedrawCount;
     sceneUpdateMetricsRef.current.rowContentSkipCount += baseStats.rowContentSkipCount;
+    sceneUpdateMetricsRef.current.panBufferHitCount += baseStats.panBufferHitCount;
+    sceneUpdateMetricsRef.current.panBufferMissCount += baseStats.panBufferMissCount;
+    sceneUpdateMetricsRef.current.panPixelShiftCount += baseStats.panPixelShiftCount;
   }
 
   function applyRenderStats(baseStats: WaveformRenderStats) {
@@ -556,6 +565,9 @@ export function WaveformCanvas({
       data-pulse-fill-count={pulseFillCount}
       data-render-count={renderCount}
       data-render-resolution={renderStats.renderResolution.toFixed(2)}
+      data-pan-buffer-hit-count={renderStats.panBufferHitCount}
+      data-pan-buffer-miss-count={renderStats.panBufferMissCount}
+      data-pan-pixel-shift-count={renderStats.panPixelShiftCount}
       data-row-attach-count={renderStats.rowAttachCount}
       data-row-content-redraw-count={renderStats.rowContentRedrawCount}
       data-row-content-skip-count={renderStats.rowContentSkipCount}
@@ -650,6 +662,9 @@ function createEmptyRenderStats(): WaveformRenderStats {
     rowRecycleCount: 0,
     rowContentRedrawCount: 0,
     rowContentSkipCount: 0,
+    panBufferHitCount: 0,
+    panBufferMissCount: 0,
+    panPixelShiftCount: 0,
     renderedSignalCount: 0,
     sourceSegmentCount: 0,
     renderedSegmentCount: 0,
@@ -688,6 +703,9 @@ function createEmptySceneUpdateMetrics(): WaveformSceneUpdateMetrics {
     rowRecycleCount: 0,
     rowContentRedrawCount: 0,
     rowContentSkipCount: 0,
+    panBufferHitCount: 0,
+    panBufferMissCount: 0,
+    panPixelShiftCount: 0,
   };
 }
 

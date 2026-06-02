@@ -11,6 +11,7 @@ import {
   getWaveformShapeCounts,
   getWaveformStateCounts,
   getWaveformTicks,
+  getWaveformViewportSpan,
   getVisibleWaveformRows,
   type WaveformVisibleRows,
   isHighImpedanceWaveformValue,
@@ -114,6 +115,7 @@ interface RedrawWaveformSceneRowsOptions {
 }
 
 interface WaveformSceneState {
+  horizontalBuffer: WaveformHorizontalBufferState;
   cursorTime: number;
   data: WaveformDataSet;
   height: number;
@@ -125,6 +127,13 @@ interface WaveformSceneState {
   verticalScrollTop: number;
   viewport: WaveformViewport;
   visibleRows: WaveformVisibleRows;
+  width: number;
+}
+
+interface WaveformHorizontalBufferState {
+  bufferPixels: number;
+  offsetX: number;
+  viewport: WaveformViewport;
   width: number;
 }
 
@@ -155,6 +164,9 @@ const palette = {
   unknown: 0xff6b8a,
   highImpedance: 0xff9800,
 };
+const waveformHorizontalBufferMinPixels = 256;
+const waveformHorizontalBufferMaxPixels = 512;
+const viewportSpanEpsilon = 0.000001;
 
 export function createWaveformScene(options: WaveformSceneOptions): WaveformScene {
   const world = new Container();
@@ -163,6 +175,7 @@ export function createWaveformScene(options: WaveformSceneOptions): WaveformScen
   const visibleRows = getVisibleWaveformRows(rows, options.verticalScrollTop ?? 0, options.height);
   const nodes = createSceneNodes();
   const rowRegistry = createRowRegistry();
+  const horizontalBuffer = createHorizontalBufferState(options.viewport, options.width, getRenderResolution(options));
   const renderStats = createRenderStats(visibleRows.visibleRowCount, visibleRows.culledRowCount, getRenderResolution(options));
   const scene: WaveformScene = {
     world,
@@ -170,6 +183,7 @@ export function createWaveformScene(options: WaveformSceneOptions): WaveformScen
     nodes,
     rowRegistry,
     state: {
+      horizontalBuffer,
       cursorTime: options.cursorTime,
       data: options.data,
       height: options.height,
@@ -202,6 +216,7 @@ export function createWaveformScene(options: WaveformSceneOptions): WaveformScen
   redrawWaveformSceneGrid(scene);
   redrawWaveformSceneRows(scene);
   redrawWaveformSceneCursor(scene);
+  applyHorizontalBufferOffset(scene);
 
   return scene;
 }
@@ -223,13 +238,57 @@ export function updateWaveformSceneVerticalScroll(scene: WaveformScene, vertical
   redrawWaveformSceneRows(scene);
 }
 
-export function updateWaveformSceneViewport(scene: WaveformScene, viewport: WaveformViewport) {
+export function updateWaveformScenePan(scene: WaveformScene, viewport: WaveformViewport) {
+  const previousOffsetX = getHorizontalBufferOffset(
+    scene.state.horizontalBuffer.viewport,
+    scene.state.viewport,
+    getWaveformViewportSpan(scene.state.viewport),
+    scene.state.width,
+    scene.state.renderResolution,
+  );
+
+  if (!canShiftHorizontalBuffer(scene, viewport)) {
+    scene.renderStats = createRenderStats(
+      scene.state.visibleRows.visibleRowCount,
+      scene.state.visibleRows.culledRowCount,
+      scene.state.renderResolution,
+    );
+    scene.renderStats.panBufferMissCount = 1;
+    return false;
+  }
+
   scene.state.viewport = viewport;
+  scene.shapeCounts = getWaveformShapeCounts(scene.state.data, viewport);
+  scene.digitalPulseFillCount = getWaveformDigitalPulseFillCount(scene.state.data, viewport);
+  applyHorizontalBufferOffset(scene);
+  redrawWaveformSceneCursor(scene);
+  scene.renderStats = createRenderStats(
+    scene.state.visibleRows.visibleRowCount,
+    scene.state.visibleRows.culledRowCount,
+    scene.state.renderResolution,
+  );
+  scene.renderStats.rowReuseCount = scene.state.visibleRows.rows.length;
+  scene.renderStats.panBufferHitCount = 1;
+  scene.renderStats.panPixelShiftCount = Math.abs(scene.state.horizontalBuffer.offsetX - previousOffsetX);
+  scene.renderStats.rowContentSkipCount = scene.state.visibleRows.rows.filter((row) => row.kind === 'signal').length;
+  accumulateVisibleRowContentMetrics(scene, scene.renderStats);
+  return true;
+}
+
+export function updateWaveformSceneViewport(scene: WaveformScene, viewport: WaveformViewport) {
+  const previousViewport = scene.state.viewport;
+  scene.state.viewport = viewport;
+  scene.state.horizontalBuffer = createHorizontalBufferState(viewport, scene.state.width, scene.state.renderResolution);
   scene.shapeCounts = getWaveformShapeCounts(scene.state.data, viewport);
   scene.digitalPulseFillCount = getWaveformDigitalPulseFillCount(scene.state.data, viewport);
   redrawWaveformSceneGrid(scene);
   redrawWaveformSceneRows(scene, { redrawLanes: false, reuseContentSignature: true });
   redrawWaveformSceneCursor(scene);
+  applyHorizontalBufferOffset(scene);
+
+  if (Math.abs(getWaveformViewportSpan(previousViewport) - getWaveformViewportSpan(viewport)) <= viewportSpanEpsilon) {
+    scene.renderStats.panBufferMissCount = 1;
+  }
 }
 
 function createRenderStats(visibleRowCount: number, culledRowCount: number, renderResolution: number): WaveformRenderStats {
@@ -241,6 +300,9 @@ function createRenderStats(visibleRowCount: number, culledRowCount: number, rend
     rowRecycleCount: 0,
     rowContentRedrawCount: 0,
     rowContentSkipCount: 0,
+    panBufferHitCount: 0,
+    panBufferMissCount: 0,
+    panPixelShiftCount: 0,
     renderedSignalCount: 0,
     sourceSegmentCount: 0,
     renderedSegmentCount: 0,
@@ -349,7 +411,8 @@ function redrawWaveformSceneBase(scene: WaveformScene) {
 function redrawWaveformSceneGrid(scene: WaveformScene) {
   clearContainer(scene.nodes.backgroundGrid);
   clearContainer(scene.nodes.statusHeader);
-  drawGrid(scene.nodes.backgroundGrid, scene.nodes.statusHeader, getSceneOptions(scene));
+  drawGrid(scene.nodes.backgroundGrid, scene.nodes.statusHeader, getHorizontalBufferSceneOptions(scene));
+  applyHorizontalBufferOffset(scene);
 }
 
 function redrawWaveformSceneRows(scene: WaveformScene, options: RedrawWaveformSceneRowsOptions = {}) {
@@ -392,7 +455,7 @@ function redrawWaveformSceneLanes(scene: WaveformScene) {
 }
 
 function redrawWaveformSceneContent(scene: WaveformScene, reuseContentSignature: boolean, renderStats: WaveformRenderStats) {
-  const sceneOptions = getSceneOptions(scene);
+  const sceneOptions = getHorizontalBufferSceneOptions(scene);
 
   scene.state.visibleRows.rows.forEach((row) => {
     const rowNode = scene.rowRegistry.activeRows.get(row.id);
@@ -469,6 +532,69 @@ function getSceneOptions(scene: WaveformScene): WaveformSceneOptions {
     viewport: scene.state.viewport,
     width: scene.state.width,
   };
+}
+
+function getHorizontalBufferSceneOptions(scene: WaveformScene): WaveformSceneOptions {
+  return {
+    ...getSceneOptions(scene),
+    viewport: scene.state.horizontalBuffer.viewport,
+    width: scene.state.horizontalBuffer.width,
+  };
+}
+
+function createHorizontalBufferState(viewport: WaveformViewport, width: number, renderResolution: number): WaveformHorizontalBufferState {
+  const safeWidth = Math.max(1, width);
+  const span = getWaveformViewportSpan(viewport);
+  const usableWidth = getWaveformUsableWidth(safeWidth);
+  const bufferPixels = Math.min(waveformHorizontalBufferMaxPixels, Math.max(waveformHorizontalBufferMinPixels, Math.round(safeWidth * 0.5)));
+  const bufferTime = bufferPixels * span / usableWidth;
+  const bufferViewport = {
+    startTime: viewport.startTime - bufferTime,
+    endTime: viewport.endTime + bufferTime,
+  };
+  const bufferWidth = safeWidth + bufferPixels * 2;
+  const offsetX = getHorizontalBufferOffset(bufferViewport, viewport, span, safeWidth, renderResolution);
+
+  return {
+    bufferPixels,
+    offsetX,
+    viewport: bufferViewport,
+    width: bufferWidth,
+  };
+}
+
+function canShiftHorizontalBuffer(scene: WaveformScene, viewport: WaveformViewport) {
+  const currentSpan = getWaveformViewportSpan(scene.state.viewport);
+  const nextSpan = getWaveformViewportSpan(viewport);
+
+  return Math.abs(currentSpan - nextSpan) <= viewportSpanEpsilon
+    && viewport.startTime >= scene.state.horizontalBuffer.viewport.startTime
+    && viewport.endTime <= scene.state.horizontalBuffer.viewport.endTime;
+}
+
+function applyHorizontalBufferOffset(scene: WaveformScene) {
+  const offsetX = getHorizontalBufferOffset(
+    scene.state.horizontalBuffer.viewport,
+    scene.state.viewport,
+    getWaveformViewportSpan(scene.state.viewport),
+    scene.state.width,
+    scene.state.renderResolution,
+  );
+
+  scene.state.horizontalBuffer.offsetX = offsetX;
+  scene.nodes.backgroundGrid.x = offsetX;
+  scene.nodes.contentRows.x = offsetX;
+  scene.nodes.statusHeader.x = offsetX;
+}
+
+function getHorizontalBufferOffset(bufferViewport: WaveformViewport, viewport: WaveformViewport, span: number, width: number, renderResolution: number) {
+  const pxPerTime = getWaveformUsableWidth(width) / Math.max(1, span);
+
+  return snapToDevicePixel((bufferViewport.startTime - viewport.startTime) * pxPerTime, renderResolution);
+}
+
+function getWaveformUsableWidth(width: number) {
+  return Math.max(1, width - waveformTimeAxisInset * 2);
 }
 
 function clearContainer(container: Container) {

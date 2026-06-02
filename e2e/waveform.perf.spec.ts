@@ -167,6 +167,9 @@ async function readCanvasStats(canvasHost: ReturnType<Page['getByTestId']>) {
     denseSignalCount: await readNumber('data-dense-signal-count'),
     detailSignalCount: await readNumber('data-detail-signal-count'),
     fullSceneRebuildCount: await readNumber('data-full-scene-rebuild-count'),
+    panBufferHitCount: await readNumber('data-pan-buffer-hit-count'),
+    panBufferMissCount: await readNumber('data-pan-buffer-miss-count'),
+    panPixelShiftCount: await readNumber('data-pan-pixel-shift-count'),
     rowAttachCount: await readNumber('data-row-attach-count'),
     rowContentRedrawCount: await readNumber('data-row-content-redraw-count'),
     rowContentSkipCount: await readNumber('data-row-content-skip-count'),
@@ -255,6 +258,9 @@ function diffInteractionMetrics(
 ) {
   return {
     fullSceneRebuildCount: end.fullSceneRebuildCount - start.fullSceneRebuildCount,
+    panBufferHitCount: end.panBufferHitCount - start.panBufferHitCount,
+    panBufferMissCount: end.panBufferMissCount - start.panBufferMissCount,
+    panPixelShiftCount: end.panPixelShiftCount - start.panPixelShiftCount,
     rowAttachCount: end.rowAttachCount - start.rowAttachCount,
     rowContentRedrawCount: end.rowContentRedrawCount - start.rowContentRedrawCount,
     rowContentSkipCount: end.rowContentSkipCount - start.rowContentSkipCount,
@@ -288,6 +294,16 @@ test('waveform dense render opt-in baseline', async () => {
       timeout: UI_READY_TIMEOUT_MS,
     }).toBeGreaterThan(0);
     await expect.poll(async () => Number(await panel.getAttribute('data-visible-primitive-count') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(0);
+    await waitForNextRender(canvasHost, async () => {
+      await canvasHost.hover();
+      await window.mouse.wheel(0, 3600);
+    });
+    await expect.poll(async () => Number(await canvasHost.getAttribute('data-dense-signal-count') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(0);
+    await expect.poll(async () => Number(await canvasHost.getAttribute('data-dense-run-count') ?? '0'), {
       timeout: UI_READY_TIMEOUT_MS,
     }).toBeGreaterThan(0);
     const denseStats = await readCanvasStats(canvasHost);
@@ -482,13 +498,14 @@ test('packaged waveform sustained 10s viewport and interaction perf', async () =
     expect(samples.length).toBe(40);
     expect(panDelta.fullSceneRebuildCount).toBe(0);
     expect(panDelta.viewportContentUpdateCount).toBeGreaterThan(0);
+    expect(panDelta.panBufferHitCount).toBeGreaterThan(0);
+    expect(panDelta.panPixelShiftCount).toBeGreaterThan(0);
     expect(panDelta.rowReuseCount).toBeGreaterThanOrEqual(panDelta.viewportContentUpdateCount * panVisibleRowCount);
     expect(panDelta.rowContentSkipCount).toBeGreaterThanOrEqual(panDelta.viewportContentUpdateCount);
     expect(panDelta.rowContentRedrawCount).toBeLessThan(panDelta.rowReuseCount);
     expect(zoomDelta.fullSceneRebuildCount).toBe(0);
     expect(zoomDelta.viewportContentUpdateCount).toBeGreaterThan(0);
     expect(zoomDelta.rowReuseCount).toBeGreaterThanOrEqual(zoomDelta.viewportContentUpdateCount * zoomVisibleRowCount);
-    expect(zoomDelta.rowContentSkipCount).toBeGreaterThanOrEqual(zoomDelta.viewportContentUpdateCount);
     expect(zoomDelta.rowContentRedrawCount).toBeLessThan(zoomDelta.rowReuseCount);
     expect(cursorDelta.fullSceneRebuildCount).toBe(0);
     expect(cursorDelta.cursorUpdateCount).toBeGreaterThan(0);

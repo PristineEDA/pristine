@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Container, Text, Texture } from 'pixi.js';
 
-import { clipWaveformLineToBounds, createWaveformScene, getWaveformBusHexagonBevel, updateWaveformSceneCursor, updateWaveformSceneSelection, updateWaveformSceneVerticalScroll, updateWaveformSceneViewport, waveformHighImpedanceStripeSpacing, waveformLayerNames, waveformUnknownStripeSpacing, type WaveformSignalTextureCacheEntry } from './createWaveformScene';
+import { clipWaveformLineToBounds, createWaveformScene, getWaveformBusHexagonBevel, updateWaveformSceneCursor, updateWaveformScenePan, updateWaveformSceneSelection, updateWaveformSceneVerticalScroll, updateWaveformSceneViewport, waveformHighImpedanceStripeSpacing, waveformLayerNames, waveformUnknownStripeSpacing, type WaveformSignalTextureCacheEntry } from './createWaveformScene';
 import { fitWaveformViewport, getWaveformCanvasHeightForData, getWaveformDigitalPulseFillCount, getWaveformDisplayRows, getWaveformShapeCounts, getWaveformSignalLaneY } from './waveformLayout';
 import { mockWaveformData } from './waveformMockData';
 import type { WaveformDataSet } from './waveformTypes';
@@ -273,7 +273,7 @@ describe('createWaveformScene', () => {
       data,
       height: getWaveformCanvasHeightForData(data),
       selectedSignalId: null,
-      viewport: { startTime: 0, endTime: 100 },
+      viewport: { startTime: 60, endTime: 160 },
       width: 900,
     });
     const staticRowNode = scene.rowRegistry.activeRows.get('signal:static-low');
@@ -284,7 +284,7 @@ describe('createWaveformScene', () => {
     expect(staticContentBefore).not.toBeNull();
     expect(toggledContentBefore).not.toBeNull();
 
-    updateWaveformSceneViewport(scene, { startTime: 20, endTime: 120 });
+    updateWaveformSceneViewport(scene, { startTime: 80, endTime: 180 });
 
     const staticContentAfter = scene.rowRegistry.activeRows.get('signal:static-low')?.contentContainer.children[0] ?? null;
     const toggledContentAfter = scene.rowRegistry.activeRows.get('signal:toggle')?.contentContainer.children[0] ?? null;
@@ -293,6 +293,35 @@ describe('createWaveformScene', () => {
     expect(toggledContentAfter).not.toBe(toggledContentBefore);
     expect(scene.renderStats.rowContentSkipCount).toBe(1);
     expect(scene.renderStats.rowContentRedrawCount).toBe(1);
+
+    scene.world.destroy({ children: true });
+  });
+
+  it('uses the horizontal buffer for same-span pan without redrawing row content', () => {
+    const scene = createWaveformScene({
+      cursorTime: mockWaveformData.cursorTime,
+      data: mockWaveformData,
+      height: 320,
+      selectedSignalId: null,
+      viewport: { startTime: 20, endTime: 120 },
+      width: 900,
+    });
+    const originalContentChildren = [...scene.nodes.contentRows.children];
+    const originalContentX = scene.nodes.contentRows.x;
+    const nextViewport = { startTime: 30, endTime: 130 };
+
+    expect(updateWaveformScenePan(scene, nextViewport)).toBe(true);
+
+    expect(scene.state.viewport).toEqual(nextViewport);
+    expect(scene.nodes.contentRows.children).toEqual(originalContentChildren);
+    expect(scene.nodes.contentRows.x).not.toBe(originalContentX);
+    expect(scene.nodes.backgroundGrid.x).toBe(scene.nodes.contentRows.x);
+    expect(scene.nodes.statusHeader.x).toBe(scene.nodes.contentRows.x);
+    expect(scene.renderStats.panBufferHitCount).toBe(1);
+    expect(scene.renderStats.panBufferMissCount).toBe(0);
+    expect(scene.renderStats.panPixelShiftCount).toBeGreaterThan(0);
+    expect(scene.renderStats.rowContentRedrawCount).toBe(0);
+    expect(scene.renderStats.rowContentSkipCount).toBeGreaterThan(0);
 
     scene.world.destroy({ children: true });
   });
