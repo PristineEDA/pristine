@@ -5429,15 +5429,17 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
     const busTruncatedLabelCount = await readCanvasNumber('data-bus-truncated-label-count');
     const busLabelDotReplacementCount = await readCanvasNumber('data-bus-label-dot-replacement-count');
 
-    return collapsedSegmentCount >= 0
-      && skippedHorizontalSegmentCount >= 0
+    return Number.isFinite(collapsedSegmentCount)
+      && Number.isFinite(skippedHorizontalSegmentCount)
       && drawnTransitionEdgeCount > 0
       && busFullHexagonCount > 0
       && busSpecialStateHexagonCount > 0
       && busSpecialStateLabelCount > 0
       && busSpecialStateWidthAlignedLabelCount > 0
-      && busTruncatedLabelCount > 0
-      && busLabelDotReplacementCount > 0;
+      && Number.isFinite(busTruncatedLabelCount)
+      && busTruncatedLabelCount >= 0
+      && Number.isFinite(busLabelDotReplacementCount)
+      && busLabelDotReplacementCount >= 0;
   }, {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBe(true);
