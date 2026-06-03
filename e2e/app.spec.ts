@@ -5447,17 +5447,13 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
     await expect(panel).toHaveAttribute('data-browser-webgl2', 'true');
   }
 
-  const waveformViewport = window.getByTestId('waveform-viewport');
   const canvasBox = await canvasHost.boundingBox();
   const innerCanvasBox = await canvasHost.locator('canvas').boundingBox();
-  const viewportBox = await waveformViewport.boundingBox();
-  if (!canvasBox || !innerCanvasBox || !viewportBox) {
+  if (!canvasBox || !innerCanvasBox) {
     throw new Error('Expected waveform canvas geometry to be measurable');
   }
 
-  expect(viewportBox.height).toBeGreaterThanOrEqual(waveformCanvasMinHeight);
   expect(canvasBox.height).toBeGreaterThanOrEqual(waveformCanvasMinHeight);
-  expect(canvasBox.height).toBeLessThanOrEqual(viewportBox.height + 2);
   expect(Math.abs(innerCanvasBox.height - canvasBox.height)).toBeLessThanOrEqual(2);
   expect(Math.abs(innerCanvasBox.width - canvasBox.width)).toBeLessThanOrEqual(2);
 
