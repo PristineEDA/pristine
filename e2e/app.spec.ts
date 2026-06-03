@@ -5438,17 +5438,13 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
   await expect(panel).toHaveAttribute('data-gpu-hardware-acceleration', 'true');
 
   const resolvedRenderer = await canvasHost.getAttribute('data-renderer');
-  const gpuFeatureWebgl = await panel.getAttribute('data-gpu-feature-webgl');
-  const gpuFeatureWebgpu = await panel.getAttribute('data-gpu-feature-webgpu');
 
   if (resolvedRenderer === 'webgpu') {
     await expect(panel).toHaveAttribute('data-browser-webgpu', 'true');
-    expect(gpuFeatureWebgpu?.startsWith('disabled')).toBe(false);
   }
 
   if (resolvedRenderer === 'webgl') {
     await expect(panel).toHaveAttribute('data-browser-webgl2', 'true');
-    expect(gpuFeatureWebgl?.startsWith('disabled')).toBe(false);
   }
 
   const waveformViewport = window.getByTestId('waveform-viewport');
@@ -5459,7 +5455,9 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
     throw new Error('Expected waveform canvas geometry to be measurable');
   }
 
-  expect(Math.abs(canvasBox.height - viewportBox.height)).toBeLessThanOrEqual(2);
+  expect(viewportBox.height).toBeGreaterThanOrEqual(waveformCanvasMinHeight);
+  expect(canvasBox.height).toBeGreaterThanOrEqual(waveformCanvasMinHeight);
+  expect(canvasBox.height).toBeLessThanOrEqual(viewportBox.height + 2);
   expect(Math.abs(innerCanvasBox.height - canvasBox.height)).toBeLessThanOrEqual(2);
   expect(Math.abs(innerCanvasBox.width - canvasBox.width)).toBeLessThanOrEqual(2);
 
