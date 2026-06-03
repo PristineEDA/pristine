@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Container, Text, Texture } from 'pixi.js';
 
-import { clipWaveformLineToBounds, createWaveformScene, getWaveformBusHexagonBevel, updateWaveformSceneCursor, updateWaveformScenePan, updateWaveformSceneSelection, updateWaveformSceneVerticalScroll, updateWaveformSceneViewport, waveformHighImpedanceStripeSpacing, waveformLayerNames, waveformUnknownStripeSpacing, type WaveformSignalTextureCacheEntry } from './createWaveformScene';
+import { clipWaveformLineToBounds, createWaveformScene, getWaveformBusHexagonBevel, getWaveformBusSpecialStateHexDigitWidth, getWaveformDigitalSegmentStrokeWidth, getWaveformDigitalSpecialStateBounds, updateWaveformSceneCursor, updateWaveformScenePan, updateWaveformSceneSelection, updateWaveformSceneVerticalScroll, updateWaveformSceneViewport, waveformHighImpedanceStripeSpacing, waveformLayerNames, waveformUnknownStripeSpacing, type WaveformSignalTextureCacheEntry } from './createWaveformScene';
 import { fitWaveformViewport, getWaveformCanvasHeightForData, getWaveformDigitalPulseFillCount, getWaveformDisplayRows, getWaveformShapeCounts, getWaveformSignalLaneY } from './waveformLayout';
 import { mockWaveformData } from './waveformMockData';
 import type { WaveformDataSet } from './waveformTypes';
@@ -77,6 +77,46 @@ describe('createWaveformScene', () => {
     expect(secondScene.renderStats.cacheHitCount).toBeGreaterThan(0);
 
     secondScene.world.destroy({ children: true });
+  });
+
+  it('does not reuse cached bus X/Z labels across different signal widths', () => {
+    const cache = new Map<string, WaveformSignalTextureCacheEntry>();
+    const signalTextureCache = {
+      get: (key: string) => cache.get(key),
+      set: (key: string, entry: WaveformSignalTextureCacheEntry) => cache.set(key, entry),
+    };
+    const textureRenderer = {
+      generateTexture: () => Texture.EMPTY,
+    };
+
+    const width4Scene = createWaveformScene({
+      cursorTime: 0,
+      data: createBusSpecialStateDataSet(4, 80),
+      height: 120,
+      selectedSignalId: null,
+      signalTextureCache,
+      textureRenderer,
+      viewport: { startTime: 0, endTime: 3200 },
+      width: 900,
+    });
+    const width8Scene = createWaveformScene({
+      cursorTime: 0,
+      data: createBusSpecialStateDataSet(8, 80),
+      height: 120,
+      selectedSignalId: null,
+      signalTextureCache,
+      textureRenderer,
+      viewport: { startTime: 0, endTime: 3200 },
+      width: 900,
+    });
+
+    expect(width4Scene.renderStats.cacheMissCount).toBeGreaterThan(0);
+    expect(width8Scene.renderStats.cacheMissCount).toBeGreaterThan(0);
+    expect(width8Scene.renderStats.cacheHitCount).toBe(0);
+    expect(cache.size).toBeGreaterThanOrEqual(2);
+
+    width4Scene.world.destroy({ children: true });
+    width8Scene.world.destroy({ children: true });
   });
 
   it('generates cache textures at the renderer resolution for crisp cached rows', () => {
@@ -173,7 +213,7 @@ describe('createWaveformScene', () => {
     scene.world.destroy({ children: true });
   });
 
-  it('draws a single X or Z text label per special-state block', () => {
+  it('keeps single-bit X/Z text labels as single characters', () => {
     const viewport = fitWaveformViewport(mockWaveformData);
     const scene = createWaveformScene({
       cursorTime: mockWaveformData.cursorTime,
@@ -195,6 +235,60 @@ describe('createWaveformScene', () => {
     expect(stateLabels.every((text) => text.length === 1)).toBe(true);
 
     scene.world.destroy({ children: true });
+  });
+
+  it('draws multi-bit X/Z labels aligned to hexadecimal digit width', () => {
+    const cases = [
+      { expectedX: 'x', expectedZ: 'z', signalWidth: 4 },
+      { expectedX: 'xx', expectedZ: 'zz', signalWidth: 8 },
+      { expectedX: 'xxxx', expectedZ: 'zzzz', signalWidth: 16 },
+    ];
+
+    for (const { expectedX, expectedZ, signalWidth } of cases) {
+      const scene = createWaveformScene({
+        cursorTime: 0,
+        data: createBusSpecialStateDataSet(signalWidth),
+        height: 120,
+        selectedSignalId: null,
+        viewport: { startTime: 0, endTime: 120 },
+        width: 900,
+      });
+      const labels = collectText(scene.layers.content);
+
+      expect(labels).toContain(expectedX);
+      expect(labels).toContain(expectedZ);
+      expect(scene.renderStats.busSpecialStateHexagonCount).toBeGreaterThanOrEqual(2);
+      expect(scene.renderStats.busSpecialStateLabelCount).toBeGreaterThanOrEqual(2);
+      expect(scene.renderStats.busSpecialStateWidthAlignedLabelCount).toBeGreaterThanOrEqual(2);
+      expect(scene.renderStats.busFullHexagonCount).toBeGreaterThanOrEqual(scene.renderStats.busSpecialStateHexagonCount);
+
+      scene.world.destroy({ children: true });
+    }
+  });
+
+  it('computes bus X/Z label width from hexadecimal digits', () => {
+    expect(getWaveformBusSpecialStateHexDigitWidth(undefined)).toBe(1);
+    expect(getWaveformBusSpecialStateHexDigitWidth(1)).toBe(1);
+    expect(getWaveformBusSpecialStateHexDigitWidth(4)).toBe(1);
+    expect(getWaveformBusSpecialStateHexDigitWidth(5)).toBe(2);
+    expect(getWaveformBusSpecialStateHexDigitWidth(8)).toBe(2);
+    expect(getWaveformBusSpecialStateHexDigitWidth(16)).toBe(4);
+  });
+
+  it('uses the normal digital segment stroke width for single-bit X/Z blocks', () => {
+    expect(getWaveformDigitalSegmentStrokeWidth('clock')).toBe(1.7);
+    expect(getWaveformDigitalSegmentStrokeWidth('logic')).toBe(2);
+  });
+
+  it('aligns single-bit X/Z block bounds to normal digital high and low levels', () => {
+    expect(getWaveformDigitalSpecialStateBounds(0)).toEqual({
+      height: 16,
+      y: 7,
+    });
+    expect(getWaveformDigitalSpecialStateBounds(42)).toEqual({
+      height: 16,
+      y: 49,
+    });
   });
 
   it('keeps bus hexagon bevel consistent across normal-width bus segments', () => {
@@ -372,6 +466,36 @@ describe('createWaveformScene', () => {
     scene.world.destroy({ children: true });
   });
 });
+
+function createBusSpecialStateDataSet(width: number, segmentCount = 3): WaveformDataSet {
+  const values = ['x', 'z', '0', '1'];
+  const duration = segmentCount * 40;
+  const transitions = Array.from({ length: segmentCount + 1 }, (_, index) => ({
+    time: index * 40,
+    value: values[index % values.length] ?? '0',
+  }));
+
+  return {
+    id: 'bus-special-state-width-fixture',
+    title: 'bus-special-state-width-fixture',
+    timescaleUnit: 'ns',
+    duration,
+    cursorTime: 0,
+    groups: [{ id: 'g0', label: 'g0' }],
+    signals: [
+      {
+        id: 'bus-special',
+        groupId: 'g0',
+        name: 'bus_special',
+        path: 'g0.bus_special',
+        kind: 'bus',
+        color: '#8fd694',
+        width,
+        transitions,
+      },
+    ],
+  };
+}
 
 function collectText(container: Container): string[] {
   const texts: string[] = [];
