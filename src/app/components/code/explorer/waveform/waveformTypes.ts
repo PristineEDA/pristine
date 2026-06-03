@@ -55,6 +55,8 @@ export interface WaveformRenderStats {
   busSpecialStateHexagonCount: number;
   busSpecialStateLabelCount: number;
   busSpecialStateWidthAlignedLabelCount: number;
+  busTruncatedLabelCount: number;
+  busLabelDotReplacementCount: number;
   renderedLabelCount: number;
   cacheableSignalCount: number;
   cacheHitCount: number;

@@ -63,6 +63,8 @@ vi.mock('./WaveformCanvas', () => ({
         data-bus-special-state-hexagon-count="2"
         data-bus-special-state-label-count="2"
         data-bus-special-state-width-aligned-label-count="2"
+        data-bus-truncated-label-count="3"
+        data-bus-label-dot-replacement-count="5"
         data-bus-vertical-fallback-count="1"
         data-canvas-height="320.00"
         data-canvas-width="900.00"
@@ -133,6 +135,8 @@ describe('WaveformPanel', () => {
     expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-bus-special-state-hexagon-count'))).toBeGreaterThan(0);
     expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-bus-special-state-label-count'))).toBeGreaterThan(0);
     expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-bus-special-state-width-aligned-label-count'))).toBeGreaterThan(0);
+    expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-bus-truncated-label-count'))).toBeGreaterThan(0);
+    expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-bus-label-dot-replacement-count'))).toBeGreaterThan(0);
     expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-collapsed-segment-count'))).toBeGreaterThan(0);
     expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-drawn-horizontal-segment-count'))).toBeGreaterThan(0);
     expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-drawn-transition-edge-count'))).toBeGreaterThan(0);

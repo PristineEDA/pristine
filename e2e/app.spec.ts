@@ -5425,6 +5425,8 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
     const busSpecialStateHexagonCount = await readCanvasNumber('data-bus-special-state-hexagon-count');
     const busSpecialStateLabelCount = await readCanvasNumber('data-bus-special-state-label-count');
     const busSpecialStateWidthAlignedLabelCount = await readCanvasNumber('data-bus-special-state-width-aligned-label-count');
+    const busTruncatedLabelCount = await readCanvasNumber('data-bus-truncated-label-count');
+    const busLabelDotReplacementCount = await readCanvasNumber('data-bus-label-dot-replacement-count');
 
     return collapsedSegmentCount >= 0
       && skippedHorizontalSegmentCount >= 0
@@ -5432,7 +5434,9 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
       && busFullHexagonCount > 0
       && busSpecialStateHexagonCount > 0
       && busSpecialStateLabelCount > 0
-      && busSpecialStateWidthAlignedLabelCount > 0;
+      && busSpecialStateWidthAlignedLabelCount > 0
+      && busTruncatedLabelCount > 0
+      && busLabelDotReplacementCount > 0;
   }, {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBe(true);

@@ -39,6 +39,8 @@ export interface WaveformSignalTextureCacheEntry {
   busSpecialStateHexagonCount: number;
   busSpecialStateLabelCount: number;
   busSpecialStateWidthAlignedLabelCount: number;
+  busTruncatedLabelCount: number;
+  busLabelDotReplacementCount: number;
   busVerticalFallbackCount: number;
   collapsedSegmentCount: number;
   drawnHorizontalSegmentCount: number;
@@ -110,6 +112,8 @@ interface WaveformRowContentMetrics {
   busSpecialStateHexagonCount: number;
   busSpecialStateLabelCount: number;
   busSpecialStateWidthAlignedLabelCount: number;
+  busTruncatedLabelCount: number;
+  busLabelDotReplacementCount: number;
   busVerticalFallbackCount: number;
   renderedLabelCount: number;
   cacheableSignalCount: number;
@@ -335,6 +339,8 @@ function createRenderStats(visibleRowCount: number, culledRowCount: number, rend
     busSpecialStateHexagonCount: 0,
     busSpecialStateLabelCount: 0,
     busSpecialStateWidthAlignedLabelCount: 0,
+    busTruncatedLabelCount: 0,
+    busLabelDotReplacementCount: 0,
     busVerticalFallbackCount: 0,
     renderedLabelCount: 0,
     cacheableSignalCount: 0,
@@ -359,6 +365,8 @@ interface DrawSignalResult {
   busSpecialStateHexagonCount: number;
   busSpecialStateLabelCount: number;
   busSpecialStateWidthAlignedLabelCount: number;
+  busTruncatedLabelCount: number;
+  busLabelDotReplacementCount: number;
   busVerticalFallbackCount: number;
   collapsedSegmentCount: number;
   drawnHorizontalSegmentCount: number;
@@ -369,6 +377,8 @@ interface DrawSignalResult {
 }
 
 interface SpecialStateLabelResult {
+  busLabelDotReplacementCount?: number;
+  busTruncatedLabelCount?: number;
   renderedLabelCount: number;
   suppressedLabelCount: number;
 }
@@ -429,6 +439,8 @@ function createEmptyRowContentMetrics(): WaveformRowContentMetrics {
     busSpecialStateHexagonCount: 0,
     busSpecialStateLabelCount: 0,
     busSpecialStateWidthAlignedLabelCount: 0,
+    busTruncatedLabelCount: 0,
+    busLabelDotReplacementCount: 0,
     busVerticalFallbackCount: 0,
     renderedLabelCount: 0,
     cacheableSignalCount: 0,
@@ -573,6 +585,8 @@ function accumulateRowContentMetrics(target: WaveformRenderStats, source: Wavefo
   target.busSpecialStateHexagonCount += source.busSpecialStateHexagonCount;
   target.busSpecialStateLabelCount += source.busSpecialStateLabelCount;
   target.busSpecialStateWidthAlignedLabelCount += source.busSpecialStateWidthAlignedLabelCount;
+  target.busTruncatedLabelCount += source.busTruncatedLabelCount;
+  target.busLabelDotReplacementCount += source.busLabelDotReplacementCount;
   target.busVerticalFallbackCount += source.busVerticalFallbackCount;
   target.renderedLabelCount += source.renderedLabelCount;
   target.cacheableSignalCount += source.cacheableSignalCount;
@@ -854,6 +868,8 @@ function drawSignalRow(target: Container, row: WaveformDisplayRow, options: Wave
       contentMetrics.busSpecialStateHexagonCount += cached.busSpecialStateHexagonCount;
       contentMetrics.busSpecialStateLabelCount += cached.busSpecialStateLabelCount;
       contentMetrics.busSpecialStateWidthAlignedLabelCount += cached.busSpecialStateWidthAlignedLabelCount;
+      contentMetrics.busTruncatedLabelCount += cached.busTruncatedLabelCount;
+      contentMetrics.busLabelDotReplacementCount += cached.busLabelDotReplacementCount;
       contentMetrics.busVerticalFallbackCount += cached.busVerticalFallbackCount;
       return contentMetrics;
     }
@@ -879,6 +895,8 @@ function drawSignalRow(target: Container, row: WaveformDisplayRow, options: Wave
   contentMetrics.busSpecialStateHexagonCount += drawResult.busSpecialStateHexagonCount;
   contentMetrics.busSpecialStateLabelCount += drawResult.busSpecialStateLabelCount;
   contentMetrics.busSpecialStateWidthAlignedLabelCount += drawResult.busSpecialStateWidthAlignedLabelCount;
+  contentMetrics.busTruncatedLabelCount += drawResult.busTruncatedLabelCount;
+  contentMetrics.busLabelDotReplacementCount += drawResult.busLabelDotReplacementCount;
   contentMetrics.busVerticalFallbackCount += drawResult.busVerticalFallbackCount;
 
   if (cacheKey && options.signalTextureCache && options.textureRenderer) {
@@ -898,6 +916,8 @@ function drawSignalRow(target: Container, row: WaveformDisplayRow, options: Wave
         busSpecialStateHexagonCount: drawResult.busSpecialStateHexagonCount,
         busSpecialStateLabelCount: drawResult.busSpecialStateLabelCount,
         busSpecialStateWidthAlignedLabelCount: drawResult.busSpecialStateWidthAlignedLabelCount,
+        busTruncatedLabelCount: drawResult.busTruncatedLabelCount,
+        busLabelDotReplacementCount: drawResult.busLabelDotReplacementCount,
         busVerticalFallbackCount: drawResult.busVerticalFallbackCount,
         collapsedSegmentCount: drawResult.collapsedSegmentCount,
         drawnHorizontalSegmentCount: drawResult.drawnHorizontalSegmentCount,
@@ -1108,9 +1128,8 @@ function drawBusWaveform(target: Container, signal: WaveformSignal, options: Wav
       }
     }
 
-    if (segmentShape.kind === 'full' && !isSpecialWaveformValue(currentValue) && width >= 24) {
-      valueLabels.push(createText(formatWaveformValue(currentValue), palette.text, 10, x1 + 7, y + 4));
-      labelCounts.renderedLabelCount += 1;
+    if (segmentShape.kind === 'full' && !segment.hasUnknown && !segment.hasHighImpedance && !isSpecialWaveformValue(currentValue)) {
+      mergeDrawSignalResult(labelCounts, addBusLabel(valueLabels, formatWaveformValue(currentValue), palette.text, x1, y, width, height));
     }
   }
 
@@ -1166,6 +1185,8 @@ function drawBusSpecialStateSegment(
     result.suppressedLabelCount += labelResult.suppressedLabelCount;
     result.busSpecialStateLabelCount += labelResult.renderedLabelCount;
     result.busSpecialStateWidthAlignedLabelCount += labelResult.widthAlignedLabelCount;
+    result.busTruncatedLabelCount += labelResult.busTruncatedLabelCount ?? 0;
+    result.busLabelDotReplacementCount += labelResult.busLabelDotReplacementCount ?? 0;
     return result;
   }
 
@@ -1198,24 +1219,13 @@ interface BusSpecialStateLabelResult extends SpecialStateLabelResult {
 }
 
 function addBusSpecialStateLabel(labels: Text[], signal: WaveformSignal, state: 'x' | 'z', labelColor: number, x: number, y: number, width: number, height: number): BusSpecialStateLabelResult {
-  if (width < 24 || height < 10) {
-    return { renderedLabelCount: 0, suppressedLabelCount: 1, widthAlignedLabelCount: 0 };
-  }
-
   const hexDigitWidth = getWaveformBusSpecialStateHexDigitWidth(signal.width);
   const labelText = state.repeat(hexDigitWidth);
-  const fontSize = 10;
-  const estimatedWidth = getEstimatedTextWidth(labelText, fontSize);
+  const result = addBusLabel(labels, labelText, labelColor, x, y, width, height);
 
-  if (estimatedWidth > width - 10) {
-    return { renderedLabelCount: 0, suppressedLabelCount: 1, widthAlignedLabelCount: 0 };
-  }
-
-  labels.push(createText(labelText, labelColor, fontSize, x + 7, y + 4));
   return {
-    renderedLabelCount: 1,
-    suppressedLabelCount: 0,
-    widthAlignedLabelCount: labelText.length === hexDigitWidth ? 1 : 0,
+    ...result,
+    widthAlignedLabelCount: result.renderedLabelCount > 0 && labelText.length === hexDigitWidth ? 1 : 0,
   };
 }
 
@@ -1367,6 +1377,113 @@ export function getWaveformBusHexagonBevel(width: number, height: number) {
   return Math.max(0, Math.min(baseBevel, narrowSegmentLimit));
 }
 
+export interface WaveformBusLabelBounds {
+  left: number;
+  right: number;
+  width: number;
+}
+
+export interface WaveformFittedBusLabelText {
+  fits: boolean;
+  replacementCount: number;
+  text: string;
+  truncated: boolean;
+}
+
+export function getWaveformBusLabelBounds(x: number, width: number, height: number): WaveformBusLabelBounds {
+  const safeWidth = Math.max(1, width);
+  const bevel = getWaveformBusHexagonBevel(safeWidth, height);
+  const left = x + bevel;
+  const right = x + safeWidth - bevel;
+
+  return {
+    left,
+    right,
+    width: Math.max(0, right - left),
+  };
+}
+
+export function getWaveformFittedBusLabelText(text: string, maxWidth: number, fontSize: number): WaveformFittedBusLabelText {
+  if (text.length === 0 || maxWidth <= 0 || fontSize <= 0) {
+    return {
+      fits: false,
+      replacementCount: 0,
+      text: '',
+      truncated: text.length > 0,
+    };
+  }
+
+  if (getEstimatedTextWidth(text, fontSize) <= maxWidth) {
+    return {
+      fits: true,
+      replacementCount: 0,
+      text,
+      truncated: false,
+    };
+  }
+
+  const dotWidth = getEstimatedTextWidth('.', fontSize);
+
+  if (dotWidth > maxWidth) {
+    return {
+      fits: false,
+      replacementCount: text.length,
+      text: '',
+      truncated: true,
+    };
+  }
+
+  const chars = [...text];
+
+  for (let index = chars.length - 1; index >= 0; index -= 1) {
+    chars[index] = '.';
+    const candidate = chars.join('');
+
+    if (getEstimatedTextWidth(candidate, fontSize) <= maxWidth) {
+      return {
+        fits: true,
+        replacementCount: text.length - index,
+        text: candidate,
+        truncated: true,
+      };
+    }
+  }
+
+  return {
+    fits: true,
+    replacementCount: text.length,
+    text: '.',
+    truncated: true,
+  };
+}
+
+function addBusLabel(labels: Text[], labelText: string, labelColor: number, x: number, y: number, width: number, height: number): SpecialStateLabelResult {
+  if (height < 10) {
+    return { renderedLabelCount: 0, suppressedLabelCount: 1 };
+  }
+
+  const fontSize = 10;
+  const bounds = getWaveformBusLabelBounds(x, width, height);
+  const fittedLabel = getWaveformFittedBusLabelText(labelText, bounds.width, fontSize);
+
+  if (!fittedLabel.fits) {
+    return {
+      busLabelDotReplacementCount: fittedLabel.replacementCount,
+      busTruncatedLabelCount: fittedLabel.truncated ? 1 : 0,
+      renderedLabelCount: 0,
+      suppressedLabelCount: 1,
+    };
+  }
+
+  labels.push(createText(fittedLabel.text, labelColor, fontSize, bounds.left, y + 4));
+  return {
+    busLabelDotReplacementCount: fittedLabel.replacementCount,
+    busTruncatedLabelCount: fittedLabel.truncated ? 1 : 0,
+    renderedLabelCount: 1,
+    suppressedLabelCount: 0,
+  };
+}
+
 function addSpecialStateCharacters(labels: Text[], state: 'x' | 'z', color: number, x: number, y: number, width: number, height: number, showText: boolean): SpecialStateLabelResult {
   if (!showText) {
     return { renderedLabelCount: 0, suppressedLabelCount: 1 };
@@ -1515,6 +1632,8 @@ function createDrawSignalResult(): DrawSignalResult {
     busSpecialStateHexagonCount: 0,
     busSpecialStateLabelCount: 0,
     busSpecialStateWidthAlignedLabelCount: 0,
+    busTruncatedLabelCount: 0,
+    busLabelDotReplacementCount: 0,
     busVerticalFallbackCount: 0,
     collapsedSegmentCount: 0,
     drawnHorizontalSegmentCount: 0,
@@ -1531,6 +1650,8 @@ function mergeDrawSignalResult(target: DrawSignalResult, source: SpecialStateLab
   target.busSpecialStateHexagonCount += source.busSpecialStateHexagonCount ?? 0;
   target.busSpecialStateLabelCount += source.busSpecialStateLabelCount ?? 0;
   target.busSpecialStateWidthAlignedLabelCount += source.busSpecialStateWidthAlignedLabelCount ?? 0;
+  target.busTruncatedLabelCount += source.busTruncatedLabelCount ?? 0;
+  target.busLabelDotReplacementCount += source.busLabelDotReplacementCount ?? 0;
   target.busVerticalFallbackCount += source.busVerticalFallbackCount ?? 0;
   target.collapsedSegmentCount += source.collapsedSegmentCount ?? 0;
   target.drawnHorizontalSegmentCount += source.drawnHorizontalSegmentCount ?? 0;
@@ -1557,6 +1678,7 @@ function shouldCacheSignalTexture(segmentResult: WaveformRenderSegmentResult, op
 
 function getSignalTextureCacheKey(signal: WaveformSignal, options: WaveformSceneOptions, segmentResult: WaveformRenderSegmentResult) {
   const lastTransition = signal.transitions[signal.transitions.length - 1];
+  const busLabelSignature = signal.kind === 'bus' ? getBusLabelTextureCacheSignature(signal, segmentResult, getRenderResolution(options)) : '';
 
   return [
     options.data.id,
@@ -1573,6 +1695,7 @@ function getSignalTextureCacheKey(signal: WaveformSignal, options: WaveformScene
     lastTransition?.value ?? '',
     segmentResult.sourceSegmentCount,
     segmentResult.renderedSegmentCount,
+    busLabelSignature,
     segmentResult.segments.map((segment) => [
       segment.x1.toFixed(4),
       segment.x2.toFixed(4),
@@ -1581,6 +1704,44 @@ function getSignalTextureCacheKey(signal: WaveformSignal, options: WaveformScene
       segment.hasHighImpedance ? '1' : '0',
     ].join(',')).join('|'),
   ].join(':');
+}
+
+function getBusLabelTextureCacheSignature(signal: WaveformSignal, segmentResult: WaveformRenderSegmentResult, renderResolution: number) {
+  const labelFitVersion = 'bus-label-fit-v1';
+  const height = waveformLaneHeight - waveformLanePaddingY * 2;
+
+  return [
+    labelFitVersion,
+    segmentResult.segments.map((segment) => {
+      const value = normalizeWaveformValue(segment.value);
+      const shape = getBusSegmentShape(segment, height, renderResolution);
+
+      if (shape.kind !== 'full') {
+        return 'none';
+      }
+
+      let labelText: string;
+
+      if (segment.hasUnknown || isUnknownWaveformValue(value)) {
+        labelText = 'x'.repeat(getWaveformBusSpecialStateHexDigitWidth(signal.width));
+      } else if (segment.hasHighImpedance || isHighImpedanceWaveformValue(value)) {
+        labelText = 'z'.repeat(getWaveformBusSpecialStateHexDigitWidth(signal.width));
+      } else if (!isSpecialWaveformValue(value)) {
+        labelText = formatWaveformValue(value);
+      } else {
+        return 'none';
+      }
+
+      const bounds = getWaveformBusLabelBounds(segment.x1, segment.width, height);
+      const fitted = getWaveformFittedBusLabelText(labelText, bounds.width, 10);
+
+      return [
+        segment.x1.toFixed(4),
+        segment.x2.toFixed(4),
+        fitted.fits ? fitted.text : '',
+      ].join(',');
+    }).join('|'),
+  ].join('=');
 }
 
 function isSegmentHorizontallyVisible(segment: WaveformRenderSegment, renderResolution: number) {
@@ -1632,7 +1793,11 @@ function snapToDevicePixel(value: number, renderResolution: number) {
 }
 
 function getEstimatedTextWidth(text: string, fontSize: number) {
-  return text.length * fontSize * 0.58;
+  return [...text].reduce((width, character) => width + getEstimatedTextCharacterWidth(character, fontSize), 0);
+}
+
+function getEstimatedTextCharacterWidth(character: string, fontSize: number) {
+  return fontSize * (character === '.' ? 0.32 : 0.58);
 }
 
 function drawCursor(statusLayer: Container, operationLayer: Container, options: WaveformSceneOptions) {

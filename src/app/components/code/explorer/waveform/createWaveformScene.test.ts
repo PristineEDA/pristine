@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Container, Text, Texture } from 'pixi.js';
 
-import { clipWaveformLineToBounds, createWaveformScene, getWaveformBusHexagonBevel, getWaveformBusSpecialStateHexDigitWidth, getWaveformDigitalSegmentStrokeWidth, getWaveformDigitalSpecialStateBounds, updateWaveformSceneCursor, updateWaveformScenePan, updateWaveformSceneSelection, updateWaveformSceneVerticalScroll, updateWaveformSceneViewport, waveformHighImpedanceStripeSpacing, waveformLayerNames, waveformUnknownStripeSpacing, type WaveformSignalTextureCacheEntry } from './createWaveformScene';
+import { clipWaveformLineToBounds, createWaveformScene, getWaveformBusHexagonBevel, getWaveformBusLabelBounds, getWaveformBusSpecialStateHexDigitWidth, getWaveformDigitalSegmentStrokeWidth, getWaveformDigitalSpecialStateBounds, getWaveformFittedBusLabelText, updateWaveformSceneCursor, updateWaveformScenePan, updateWaveformSceneSelection, updateWaveformSceneVerticalScroll, updateWaveformSceneViewport, waveformHighImpedanceStripeSpacing, waveformLayerNames, waveformUnknownStripeSpacing, type WaveformSignalTextureCacheEntry } from './createWaveformScene';
 import { fitWaveformViewport, getWaveformCanvasHeightForData, getWaveformDigitalPulseFillCount, getWaveformDisplayRows, getWaveformRulerScrollIndicatorMetrics, getWaveformShapeCounts, getWaveformSignalLaneY } from './waveformLayout';
 import { mockWaveformData } from './waveformMockData';
 import type { WaveformDataSet } from './waveformTypes';
@@ -272,6 +272,25 @@ describe('createWaveformScene', () => {
     }
   });
 
+  it('truncates bus value and X/Z labels with trailing dots when hexagons shrink', () => {
+    const scene = createWaveformScene({
+      cursorTime: 0,
+      data: createBusSpecialStateDataSet(8, 6),
+      height: 120,
+      selectedSignalId: null,
+      viewport: { startTime: 0, endTime: 520 },
+      width: 220,
+    });
+    const labels = collectText(scene.layers.content);
+
+    expect(labels.some((label) => label.includes('.'))).toBe(true);
+    expect(scene.renderStats.busTruncatedLabelCount).toBeGreaterThan(0);
+    expect(scene.renderStats.busLabelDotReplacementCount).toBeGreaterThan(0);
+    expect(scene.renderStats.busSpecialStateLabelCount).toBeGreaterThan(0);
+
+    scene.world.destroy({ children: true });
+  });
+
   it('computes bus X/Z label width from hexadecimal digits', () => {
     expect(getWaveformBusSpecialStateHexDigitWidth(undefined)).toBe(1);
     expect(getWaveformBusSpecialStateHexDigitWidth(1)).toBe(1);
@@ -279,6 +298,43 @@ describe('createWaveformScene', () => {
     expect(getWaveformBusSpecialStateHexDigitWidth(5)).toBe(2);
     expect(getWaveformBusSpecialStateHexDigitWidth(8)).toBe(2);
     expect(getWaveformBusSpecialStateHexDigitWidth(16)).toBe(4);
+  });
+
+  it('aligns bus labels to the full hexagon top horizontal segment', () => {
+    const bounds = getWaveformBusLabelBounds(10, 160, 20);
+    const bevel = getWaveformBusHexagonBevel(160, 20);
+
+    expect(bounds.left).toBe(10 + bevel);
+    expect(bounds.right).toBe(10 + 160 - bevel);
+    expect(bounds.width).toBe(160 - bevel * 2);
+  });
+
+  it('fits bus labels by greedily replacing trailing characters with dots', () => {
+    const fullText = getWaveformFittedBusLabelText('abcd', 24, 10);
+    const oneReplacement = getWaveformFittedBusLabelText('abcd', 23, 10);
+    const twoReplacements = getWaveformFittedBusLabelText('abcd', 20, 10);
+    const tooNarrow = getWaveformFittedBusLabelText('abcd', 2, 10);
+
+    expect(fullText).toEqual({
+      fits: true,
+      replacementCount: 0,
+      text: 'abcd',
+      truncated: false,
+    });
+    expect(oneReplacement).toEqual({
+      fits: true,
+      replacementCount: 1,
+      text: 'abc.',
+      truncated: true,
+    });
+    expect(twoReplacements).toEqual({
+      fits: true,
+      replacementCount: 2,
+      text: 'ab..',
+      truncated: true,
+    });
+    expect(tooNarrow.fits).toBe(false);
+    expect(tooNarrow.text).toBe('');
   });
 
   it('uses the normal digital segment stroke width for single-bit X/Z blocks', () => {

@@ -606,6 +606,8 @@ export function WaveformCanvas({
       data-bus-special-state-hexagon-count={renderStats.busSpecialStateHexagonCount}
       data-bus-special-state-label-count={renderStats.busSpecialStateLabelCount}
       data-bus-special-state-width-aligned-label-count={renderStats.busSpecialStateWidthAlignedLabelCount}
+      data-bus-truncated-label-count={renderStats.busTruncatedLabelCount}
+      data-bus-label-dot-replacement-count={renderStats.busLabelDotReplacementCount}
       data-bus-vertical-fallback-count={renderStats.busVerticalFallbackCount}
       data-canvas-height={canvasSize.height.toFixed(2)}
       data-canvas-width={canvasSize.width.toFixed(2)}
@@ -741,6 +743,8 @@ function createEmptyRenderStats(): WaveformRenderStats {
     busSpecialStateHexagonCount: 0,
     busSpecialStateLabelCount: 0,
     busSpecialStateWidthAlignedLabelCount: 0,
+    busTruncatedLabelCount: 0,
+    busLabelDotReplacementCount: 0,
     busVerticalFallbackCount: 0,
     renderedLabelCount: 0,
     cacheableSignalCount: 0,
