@@ -824,7 +824,7 @@ function drawGrid(target: Container, headerTarget: Container, options: WaveformS
       .lineTo(x, waveformHeaderHeight)
       .stroke({ color: tick === 0 ? palette.gridStrong : palette.grid, width: 1, alpha: tick === 0 ? 0.72 : 0.42 });
 
-    const label = createText(labelText, palette.text, 10, x + 4, 8);
+    const label = createText(labelText, palette.text, 10, x + 4, 6);
     labels.addChild(label);
   }
 
@@ -1801,27 +1801,27 @@ function getEstimatedTextCharacterWidth(character: string, fontSize: number) {
 }
 
 function drawCursor(statusLayer: Container, operationLayer: Container, options: WaveformSceneOptions) {
-  const cursorLine = new Graphics();
-  const cursorBadge = new Graphics();
   const x = Math.round(timeToX(options.cursorTime, options.viewport, options.width)) + 0.5;
-  const clampedX = Math.min(Math.max(waveformTimeAxisInset, x), options.width - waveformTimeAxisInset);
   const labelText = `${options.cursorTime.toFixed(1)}${options.data.timescaleUnit}`;
 
+  if (options.cursorTime < options.viewport.startTime || options.cursorTime > options.viewport.endTime) {
+    return;
+  }
+
+  const cursorLine = new Graphics({ label: `waveform-cursor-line-x-${x.toFixed(2)}` });
+  const cursorBadge = new Graphics({ label: 'waveform-cursor-badge' });
+
   cursorLine
-    .moveTo(clampedX, 0)
-    .lineTo(clampedX, options.height)
+    .moveTo(x, 0)
+    .lineTo(x, options.height)
     .stroke({ color: palette.cursor, width: 1.5, alpha: 0.95 });
 
   cursorBadge
-    .roundRect(clampedX - 27, 3, 54, 18, 4)
+    .roundRect(x - 27, 2, 54, 18, 4)
     .fill({ color: 0x2a2410, alpha: 0.96 })
     .stroke({ color: palette.cursor, width: 1, alpha: 0.9 });
 
-  cursorBadge
-    .poly([clampedX - 5, waveformHeaderHeight - 1, clampedX + 5, waveformHeaderHeight - 1, clampedX, waveformHeaderHeight + 6], true)
-    .fill({ color: palette.cursor, alpha: 0.82 });
-
-  const label = createText(labelText, palette.cursor, 10, clampedX - 22, 7);
+  const label = createText(labelText, palette.cursor, 10, x - 22, 6);
 
   statusLayer.addChild(cursorLine);
   operationLayer.addChild(cursorBadge, label);

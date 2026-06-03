@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { Container, Text, Texture } from 'pixi.js';
 
 import { clipWaveformLineToBounds, createWaveformScene, getWaveformBusHexagonBevel, getWaveformBusLabelBounds, getWaveformBusSpecialStateHexDigitWidth, getWaveformDigitalSegmentStrokeWidth, getWaveformDigitalSpecialStateBounds, getWaveformFittedBusLabelText, updateWaveformSceneCursor, updateWaveformScenePan, updateWaveformSceneSelection, updateWaveformSceneVerticalScroll, updateWaveformSceneViewport, waveformHighImpedanceStripeSpacing, waveformLayerNames, waveformUnknownStripeSpacing, type WaveformSignalTextureCacheEntry } from './createWaveformScene';
-import { fitWaveformViewport, getWaveformCanvasHeightForData, getWaveformDigitalPulseFillCount, getWaveformDisplayRows, getWaveformRulerScrollIndicatorMetrics, getWaveformShapeCounts, getWaveformSignalLaneY } from './waveformLayout';
+import { fitWaveformViewport, getWaveformCanvasHeightForData, getWaveformDigitalPulseFillCount, getWaveformDisplayRows, getWaveformRulerScrollIndicatorMetrics, getWaveformShapeCounts, getWaveformSignalLaneY, timeToX, waveformHeaderHeight } from './waveformLayout';
 import { mockWaveformData } from './waveformMockData';
 import type { WaveformDataSet } from './waveformTypes';
 
@@ -30,6 +30,8 @@ describe('createWaveformScene', () => {
     expect(scene.layers.status.children.indexOf(scene.nodes.statusRulerIndicator)).toBeLessThan(scene.layers.status.children.indexOf(scene.nodes.statusHeader));
     expect(scene.nodes.statusHeaderBackground.children.length).toBe(1);
     expect(scene.nodes.statusRulerIndicator.children.length).toBe(1);
+    expect(getWaveformRulerScrollIndicatorMetrics(scene.state.viewport, scene.state.data.duration, scene.state.width).height).toBe(22);
+    expect(waveformHeaderHeight).toBe(22);
     expect(scene.layers.operation.children.length).toBeGreaterThan(0);
     expect(scene.firstSignalLaneY).toBe(getWaveformSignalLaneY(mockWaveformData, 'tb_top_module1-clk'));
     expect(scene.selectedSignalLaneY).toBe(getWaveformSignalLaneY(mockWaveformData, 'u_top_module1-counting'));
@@ -425,6 +427,38 @@ describe('createWaveformScene', () => {
     expect(scene.nodes.statusHeader.children.length).toBeGreaterThan(0);
     expect(scene.nodes.backgroundLanes.children.length).toBeGreaterThan(0);
     expect(scene.nodes.contentRows.children.length).toBeGreaterThan(0);
+
+    scene.world.destroy({ children: true });
+  });
+
+  it('draws cursor marker at the true time position and hides it outside the viewport', () => {
+    const viewport = { startTime: 40, endTime: 140 };
+    const scene = createWaveformScene({
+      cursorTime: 84,
+      data: mockWaveformData,
+      height: 320,
+      selectedSignalId: null,
+      viewport,
+      width: 900,
+    });
+    const expectedX = Math.round(timeToX(84, viewport, 900)) + 0.5;
+
+    expect(scene.nodes.statusCursor.children).toHaveLength(1);
+    expect(scene.nodes.operationCursor.children).toHaveLength(2);
+    expect(scene.nodes.statusCursor.children[0]?.label).toBe(`waveform-cursor-line-x-${expectedX.toFixed(2)}`);
+    expect(scene.nodes.operationCursor.children.some((child) => child.label === 'waveform-cursor-badge')).toBe(true);
+
+    updateWaveformSceneCursor(scene, 20);
+
+    expect(scene.nodes.statusCursor.children).toHaveLength(0);
+    expect(scene.nodes.operationCursor.children).toHaveLength(0);
+
+    updateWaveformSceneCursor(scene, 128);
+    const nextExpectedX = Math.round(timeToX(128, viewport, 900)) + 0.5;
+
+    expect(scene.nodes.statusCursor.children).toHaveLength(1);
+    expect(scene.nodes.operationCursor.children).toHaveLength(2);
+    expect(scene.nodes.statusCursor.children[0]?.label).toBe(`waveform-cursor-line-x-${nextExpectedX.toFixed(2)}`);
 
     scene.world.destroy({ children: true });
   });

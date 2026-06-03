@@ -79,7 +79,7 @@ vi.mock('./WaveformCanvas', () => ({
         data-row-count={displayRows.length}
         data-row-height={waveformLaneHeight}
         data-ruler-scroll-indicator-color="#8e8e8e"
-        data-ruler-scroll-indicator-height="30.00"
+        data-ruler-scroll-indicator-height="22.00"
         data-ruler-scroll-indicator-left="0.00"
         data-ruler-scroll-indicator-scrollable="false"
         data-ruler-scroll-indicator-width="900.00"
@@ -92,6 +92,7 @@ vi.mock('./WaveformCanvas', () => ({
         data-vertical-scroll-top={verticalScrollTop.toFixed(2)}
         data-visible-window-end={viewport.endTime.toFixed(2)}
         data-visible-window-start={viewport.startTime.toFixed(2)}
+        data-waveform-header-height="22.00"
         data-x-state-count={stateCounts.xStateCount}
         data-x-state-block-count={shapeCounts.xStateBlockCount}
         data-z-state-block-count={shapeCounts.zStateBlockCount}
@@ -123,11 +124,12 @@ describe('WaveformPanel', () => {
     expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-row-count', '171');
     expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-canvas-height', '320.00');
     expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-canvas-width', '900.00');
-    expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-first-signal-lane-y', '60.00');
+    expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-first-signal-lane-y', '52.00');
     expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-header-background', 'opaque');
     expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-ruler-scroll-indicator-color', '#8e8e8e');
-    expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-ruler-scroll-indicator-height', '30.00');
+    expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-ruler-scroll-indicator-height', '22.00');
     expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-ruler-scroll-indicator-scrollable', 'false');
+    expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-waveform-header-height', '22.00');
     expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-bus-hexagon-count'))).toBeGreaterThan(0);
     expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-bus-full-hexagon-count'))).toBeGreaterThan(0);
     expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-bus-fold-only-count'))).toBeGreaterThan(0);
@@ -185,8 +187,8 @@ describe('WaveformPanel', () => {
 
     expect(panel).toHaveAttribute('data-selected-signal-id', 'u_top_module1-counting');
     expect(screen.getByTestId('waveform-signal-row-u_top_module1-counting')).toHaveAttribute('data-row-index', '9');
-    expect(screen.getByTestId('waveform-signal-row-u_top_module1-counting')).toHaveAttribute('data-lane-y', '300.00');
-    expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-selected-signal-lane-y', '300.00');
+    expect(screen.getByTestId('waveform-signal-row-u_top_module1-counting')).toHaveAttribute('data-lane-y', '292.00');
+    expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-selected-signal-lane-y', '292.00');
     expect(screen.getByText('[3:0]')).toBeInTheDocument();
     expect(screen.getByTestId('waveform-toolbar-cursor-time')).toHaveTextContent('84.0ns');
     expect(screen.getByTestId('waveform-toolbar-cursor-signal')).toHaveTextContent('counting');
@@ -197,8 +199,8 @@ describe('WaveformPanel', () => {
 
     expect(panel).toHaveAttribute('data-selected-signal-id', 'dense-signal-40');
     expect(screen.getByTestId('waveform-signal-row-dense-signal-40')).toHaveAttribute('data-row-index', '50');
-    expect(screen.getByTestId('waveform-signal-row-dense-signal-40')).toHaveAttribute('data-lane-y', '1530.00');
-    expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-selected-signal-lane-y', '1530.00');
+    expect(screen.getByTestId('waveform-signal-row-dense-signal-40')).toHaveAttribute('data-lane-y', '1522.00');
+    expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-selected-signal-lane-y', '1522.00');
 
     await user.click(screen.getByTestId('waveform-canvas'));
 

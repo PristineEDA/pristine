@@ -2,7 +2,7 @@ import type { WaveformDataSet, WaveformRenderSegment, WaveformRenderSegmentResul
 
 export const waveformCanvasMinWidth = 360;
 export const waveformCanvasMinHeight = 220;
-export const waveformHeaderHeight = 30;
+export const waveformHeaderHeight = 22;
 export const waveformLaneHeight = 30;
 export const waveformLanePaddingY = 5;
 export const waveformTimeAxisInset = 10;

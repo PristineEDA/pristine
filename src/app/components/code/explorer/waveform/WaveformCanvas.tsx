@@ -577,7 +577,9 @@ export function WaveformCanvas({
   }
 
   const zoomLevel = data.duration / getWaveformViewportSpan(viewport);
-  const cursorX = timeToX(cursorTime, viewport, waveformCanvasMinWidth);
+  const effectiveCanvasWidth = Math.max(waveformCanvasMinWidth, canvasSize.width || waveformCanvasMinWidth);
+  const cursorX = timeToX(cursorTime, viewport, effectiveCanvasWidth);
+  const cursorVisible = cursorTime >= viewport.startTime && cursorTime <= viewport.endTime;
   const displayRows = getWaveformDisplayRows(data);
   const firstSignalLaneY = getWaveformFirstSignalLaneY(data);
   const selectedSignalLaneY = getWaveformSignalLaneY(data, selectedSignalId);
@@ -585,7 +587,7 @@ export function WaveformCanvas({
   const stateCounts = getWaveformStateCounts(data);
   const shapeCounts = getWaveformShapeCounts(data, viewport);
   const pulseFillCount = getWaveformDigitalPulseFillCount(data, viewport);
-  const rulerIndicatorMetrics = getWaveformRulerScrollIndicatorMetrics(viewport, data.duration, Math.max(waveformCanvasMinWidth, canvasSize.width || waveformCanvasMinWidth));
+  const rulerIndicatorMetrics = getWaveformRulerScrollIndicatorMetrics(viewport, data.duration, effectiveCanvasWidth);
 
   return (
     <div
@@ -593,6 +595,7 @@ export function WaveformCanvas({
       aria-label="Waveform canvas"
       className="relative h-full min-h-0 w-full flex-1 cursor-crosshair overflow-hidden bg-[#111111] outline-none"
       data-cursor-time={cursorTime.toFixed(2)}
+      data-cursor-visible={String(cursorVisible)}
       data-cursor-x={cursorX.toFixed(2)}
       data-layer-count={waveformLayerNames.length}
       data-layer-names={waveformLayerNames.join(',')}
@@ -649,6 +652,7 @@ export function WaveformCanvas({
       data-visible-window-end={viewport.endTime.toFixed(2)}
       data-visible-window-start={viewport.startTime.toFixed(2)}
       data-visible-row-count={renderStats.visibleRowCount}
+      data-waveform-header-height={waveformHeaderHeight.toFixed(2)}
       data-x-state-count={stateCounts.xStateCount}
       data-source-segment-count={renderStats.sourceSegmentCount}
       data-selected-signal-visible-y={formatOptionalNumber(selectedSignalVisibleY)}
