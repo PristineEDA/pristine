@@ -9,6 +9,7 @@ import {
   ASSISTANT_THREAD_LIST_DEFAULT_WIDTH_PX,
   ASSISTANT_THREAD_LIST_RESIZE_HANDLE_WIDTH_PX,
 } from '../src/app/components/code/explorer/assistantPanelLayout';
+import { waveformCanvasMinHeight } from '../src/app/components/code/explorer/waveform/waveformLayout';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const fixtureWorkspace = path.join(__dirname, '..', 'test', 'fixtures', 'workspace');
@@ -936,7 +937,7 @@ async function writeTerminalCommand(window: Awaited<ReturnType<typeof launchApp>
 
 function getBottomPanelTab(
   window: Awaited<ReturnType<typeof launchApp>>['window'],
-  tabId: 'terminal' | 'output' | 'problems' | 'debug' | 'lsp' | 'schematic',
+  tabId: 'terminal' | 'output' | 'problems' | 'debug' | 'lsp' | 'schematic' | 'waveform',
 ) {
   return window.getByTestId(`bottom-panel-tab-${tabId}`);
 }
@@ -1227,7 +1228,7 @@ async function moveMonacoCursor(
 }
 
 function getCursorStatus(window: Awaited<ReturnType<typeof launchApp>>['window']) {
-  return window.getByText(/^Ln \d+, Col \d+$/);
+  return window.getByTestId('status-bar').getByText(/^\d+:\d+$/);
 }
 
 async function clearRememberedCloseBehavior(window: Awaited<ReturnType<typeof launchApp>>['window']) {
@@ -4142,10 +4143,45 @@ test('single-clicking the first explorer file places the monaco cursor at line 1
   await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toBeVisible();
   await expect(window.getByTestId('editor-tab-title-rtl/core/reg_file.v')).toHaveClass(/italic/);
   await waitForMonacoEditor(window);
-  await expect(getCursorStatus(window)).toHaveText('Ln 1, Col 1');
+  await expect(getCursorStatus(window)).toHaveText('1:1');
+  await expect(window.getByTestId('status-bar').getByTestId('status-bar-cursor-icon')).toBeVisible();
+  await expect(window.getByTestId('status-bar').getByTestId('status-bar-file-format-icon')).toBeVisible();
+  await expect(window.getByTestId('status-bar').getByText('LF:UTF-8', { exact: true })).toBeVisible();
+  await expect(window.getByTestId('status-bar').getByTestId('status-bar-indentation-icon')).toBeVisible();
+  await expect(window.getByTestId('status-bar').getByText('4 spaces', { exact: true })).toBeVisible();
+  await expect(window.getByTestId('status-bar').getByTestId('status-bar-language-icon')).toHaveAttribute('data-icon-key', 'verilog');
 
-  await window.keyboard.press('ArrowDown');
-  await expect(getCursorStatus(window)).toHaveText('Ln 2, Col 1');
+  const cursorIconBox = await window.getByTestId('status-bar-cursor-icon').boundingBox();
+  const fileFormatIconBox = await window.getByTestId('status-bar-file-format-icon').boundingBox();
+  const indentationIconBox = await window.getByTestId('status-bar-indentation-icon').boundingBox();
+  const languageIconBox = await window.getByTestId('status-bar-language-icon').boundingBox();
+  const notificationsBox = await window.getByTestId('status-bar-notifications').boundingBox();
+
+  expect(cursorIconBox).not.toBeNull();
+  expect(fileFormatIconBox).not.toBeNull();
+  expect(indentationIconBox).not.toBeNull();
+  expect(languageIconBox).not.toBeNull();
+  expect(notificationsBox).not.toBeNull();
+
+  await moveMonacoCursor(window, { down: 12, right: 10 });
+  await expect(getCursorStatus(window)).toHaveText('14:10');
+
+  const widenedCursorNotificationsBox = await window.getByTestId('status-bar-notifications').boundingBox();
+  const widenedCursorFileFormatIconBox = await window.getByTestId('status-bar-file-format-icon').boundingBox();
+  const widenedCursorIndentationIconBox = await window.getByTestId('status-bar-indentation-icon').boundingBox();
+  const widenedCursorLanguageIconBox = await window.getByTestId('status-bar-language-icon').boundingBox();
+  const widenedCursorIconBox = await window.getByTestId('status-bar-cursor-icon').boundingBox();
+
+  expect(widenedCursorIconBox).not.toBeNull();
+  expect(widenedCursorFileFormatIconBox).not.toBeNull();
+  expect(widenedCursorIndentationIconBox).not.toBeNull();
+  expect(widenedCursorLanguageIconBox).not.toBeNull();
+  expect(widenedCursorNotificationsBox).not.toBeNull();
+  expect(Math.round(widenedCursorIconBox!.x)).toBeLessThan(Math.round(cursorIconBox!.x));
+  expect(Math.round(widenedCursorFileFormatIconBox!.x)).toBe(Math.round(fileFormatIconBox!.x));
+  expect(Math.round(widenedCursorIndentationIconBox!.x)).toBe(Math.round(indentationIconBox!.x));
+  expect(Math.round(widenedCursorLanguageIconBox!.x)).toBe(Math.round(languageIconBox!.x));
+  expect(Math.round(widenedCursorNotificationsBox!.x)).toBe(Math.round(notificationsBox!.x));
 
   await app.close();
 });
@@ -4163,7 +4199,13 @@ test('quick open places the first opened file cursor at line 1 column 1', async 
 
   await expect(window.getByTestId('quick-open-overlay')).toHaveCount(0);
   await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toBeVisible();
-  await expect(getCursorStatus(window)).toHaveText('Ln 1, Col 1');
+  await expect(getCursorStatus(window)).toHaveText('1:1');
+  await expect(window.getByTestId('status-bar').getByTestId('status-bar-cursor-icon')).toBeVisible();
+  await expect(window.getByTestId('status-bar').getByTestId('status-bar-file-format-icon')).toBeVisible();
+  await expect(window.getByTestId('status-bar').getByText('LF:UTF-8', { exact: true })).toBeVisible();
+  await expect(window.getByTestId('status-bar').getByTestId('status-bar-indentation-icon')).toBeVisible();
+  await expect(window.getByTestId('status-bar').getByText('4 spaces', { exact: true })).toBeVisible();
+  await expect(window.getByTestId('status-bar').getByTestId('status-bar-language-icon')).toHaveAttribute('data-icon-key', 'verilog');
 
   await app.close();
 });
@@ -4179,24 +4221,24 @@ test('monaco restores cursor position across file switches and tab reopen while 
   ], { finalAction: 'dblclick' });
 
   await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toBeVisible();
-  await expect(getCursorStatus(window)).toHaveText('Ln 1, Col 1');
+  await expect(getCursorStatus(window)).toHaveText('1:1');
 
   await moveMonacoCursor(window, { down: 3, right: 4 });
-  await expect(getCursorStatus(window)).toHaveText('Ln 4, Col 5');
+  await expect(getCursorStatus(window)).toHaveText('4:5');
 
   await window.getByTestId('file-tree-node-README_md').dblclick();
   await expect(window.getByTestId('editor-tab-README.md')).toBeVisible();
-  await expect(getCursorStatus(window)).toHaveText('Ln 1, Col 1');
+  await expect(getCursorStatus(window)).toHaveText('1:1');
 
   await window.getByTestId('editor-tab-rtl/core/reg_file.v').click();
-  await expect(getCursorStatus(window)).toHaveText('Ln 4, Col 5');
+  await expect(getCursorStatus(window)).toHaveText('4:5');
 
   await window.getByTestId('editor-tab-close-rtl/core/reg_file.v').click();
   await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toHaveCount(0);
 
   await window.getByTestId('file-tree-node-rtl_core_reg_file_v').dblclick();
   await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toBeVisible();
-  await expect(getCursorStatus(window)).toHaveText('Ln 4, Col 5');
+  await expect(getCursorStatus(window)).toHaveText('4:5');
 
   await app.close();
 });
@@ -4213,7 +4255,7 @@ test('ctrl+p quick open escape restores the previous editor cursor position and 
 
   await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toBeVisible();
   await moveMonacoCursor(window, { down: 2, right: 6 });
-  await expect(getCursorStatus(window)).toHaveText('Ln 3, Col 7');
+  await expect(getCursorStatus(window)).toHaveText('3:7');
 
   await window.keyboard.press('Control+P');
   const quickOpenInput = window.getByTestId('quick-open-input');
@@ -4224,10 +4266,10 @@ test('ctrl+p quick open escape restores the previous editor cursor position and 
 
   await expect(window.getByTestId('quick-open-overlay')).toHaveCount(0);
   await expect(window.getByTestId('editor-tab-rtl/core/reg_file.v')).toHaveAttribute('data-active', 'true');
-  await expect(getCursorStatus(window)).toHaveText('Ln 3, Col 7');
+  await expect(getCursorStatus(window)).toHaveText('3:7');
 
   await window.keyboard.press('ArrowDown');
-  await expect(getCursorStatus(window)).toHaveText('Ln 4, Col 7');
+  await expect(getCursorStatus(window)).toHaveText('4:7');
 
   await app.close();
 });
@@ -4708,13 +4750,28 @@ test('status bar switches across primary and secondary navigation views', async 
   await window.getByTestId('activity-item-explorer').click();
   await expect(window.getByTestId('panel-center-panel')).toBeVisible();
   await expect(statusBar).toHaveAttribute('data-status-bar-id', 'code-explorer');
-  await expect(statusBar).toContainText('Ln 1, Col 1');
+  await expect(statusBar.getByText(/^\d+:\d+$/)).toHaveCount(0);
+  await expect(statusBar.getByText('LF:UTF-8', { exact: true })).toHaveCount(0);
+  await expect(statusBar.getByText('4 spaces', { exact: true })).toHaveCount(0);
+  await expect(statusBar.getByTestId('status-bar-cursor-icon')).toHaveCount(0);
+  await expect(statusBar.getByTestId('status-bar-file-format-icon')).toHaveCount(0);
+  await expect(statusBar.getByTestId('status-bar-indentation-icon')).toHaveCount(0);
+  await expect(statusBar.getByTestId('status-bar-language-icon')).toHaveCount(0);
+  await expect(statusBar.getByTestId('status-bar-notifications')).toBeVisible();
 
   await app.close();
 });
 
 test('explorer status bar hover cards switch cleanly between adjacent items', async () => {
   const { app, window } = await launchApp();
+  await ensureExplorerVisible(window);
+  await openNestedWorkspaceFile(window, [
+    'file-tree-node-rtl',
+    'file-tree-node-rtl_core',
+    'file-tree-node-rtl_core_reg_file_v',
+  ]);
+  await waitForMonacoEditor(window);
+
   type FocusableTriggerNode = {
     focus?: () => void;
     getAttribute?: (name: string) => string | null;
@@ -4742,10 +4799,19 @@ test('explorer status bar hover cards switch cleanly between adjacent items', as
   const syncLabel = statusBar.getByText('Sync', { exact: true });
   const branchCardTitle = window.getByText('Git Branch', { exact: true });
   const syncCardTitle = window.getByText('Sync Status', { exact: true });
+  const languageIcon = statusBar.getByTestId('status-bar-language-icon');
+  const languageCardTitle = window.getByText('Language Mode', { exact: true });
+  const languageCardDescription = window.getByText('Verilog', { exact: true });
 
   await expect(statusBar).toHaveAttribute('data-status-bar-id', 'code-explorer');
   await expect(branchLabel).toBeVisible();
   await expect(syncLabel).toBeVisible();
+  await expect(statusBar.getByTestId('status-bar-cursor-icon')).toBeVisible();
+  await expect(statusBar.getByTestId('status-bar-file-format-icon')).toBeVisible();
+  await expect(statusBar.getByText('LF:UTF-8', { exact: true })).toBeVisible();
+  await expect(statusBar.getByTestId('status-bar-indentation-icon')).toBeVisible();
+  await expect(statusBar.getByText('4 spaces', { exact: true })).toBeVisible();
+  await expect(languageIcon).toHaveAttribute('data-icon-key', 'verilog');
 
   await focusHoverCardTrigger(branchLabel);
   await expect(branchCardTitle).toBeVisible();
@@ -4754,6 +4820,12 @@ test('explorer status bar hover cards switch cleanly between adjacent items', as
 
   await expect(branchCardTitle).toHaveCount(0);
   await expect(syncCardTitle).toBeVisible();
+
+  await focusHoverCardTrigger(languageIcon);
+
+  await expect(syncCardTitle).toHaveCount(0);
+  await expect(languageCardTitle).toBeVisible();
+  await expect(languageCardDescription).toBeVisible();
 
   await app.close();
 });
@@ -5249,6 +5321,7 @@ test('terminal tab creates a real shell session and shows command output', async
   await expectCompactPanelTabButton(getBottomPanelTab(window, 'terminal'));
   await expectCompactPanelTabButton(getBottomPanelTab(window, 'output'));
   await expectCompactPanelTabButton(getBottomPanelTab(window, 'schematic'));
+  await expectCompactPanelTabButton(getBottomPanelTab(window, 'waveform'));
 
   const terminalInput = window.locator('[data-testid="terminal-host"] .xterm-helper-textarea');
   await expect(terminalInput).toHaveCount(1);
@@ -5259,6 +5332,263 @@ test('terminal tab creates a real shell session and shows command output', async
   await expect.poll(async () => readTerminalText(window), {
     timeout: 15000,
   }).toContain(marker);
+
+  await app.close();
+});
+
+test('waveform bottom panel renders mock Pixi waveform and controls', async () => {
+  const { app, window } = await launchApp();
+
+  await openBottomTerminal(window);
+  await getBottomPanelTab(window, 'waveform').click();
+
+  const panel = window.getByTestId('waveform-panel');
+  const toolbar = window.getByTestId('waveform-toolbar');
+  const toolbarActions = window.getByTestId('waveform-toolbar-actions');
+  const cursorInfo = window.getByTestId('waveform-toolbar-cursor-info');
+  const cursorInfoTime = window.getByTestId('waveform-toolbar-cursor-time');
+  const cursorInfoSignal = window.getByTestId('waveform-toolbar-cursor-signal');
+  const cursorInfoValue = window.getByTestId('waveform-toolbar-cursor-value');
+  await expect(panel).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect(panel).toHaveAttribute('data-signal-count', '168');
+  await expect(panel).toHaveAttribute('data-ready', 'true', { timeout: UI_READY_TIMEOUT_MS });
+  await expect(panel).toHaveAttribute('data-renderer', /^(webgpu|webgl)$/);
+  await expect(panel).toHaveAttribute('data-selected-signal-id', 'tb_top_module1-clk');
+  await expect(toolbarActions).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect(cursorInfo).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect(cursorInfoTime).toHaveText(/84\.0ns/);
+  await expect.poll(async () => toolbar.evaluate((element) => {
+    const markup = String((element as { innerHTML?: string }).innerHTML ?? '');
+    const cursorIndex = markup.indexOf('waveform-toolbar-cursor-info');
+    const actionsIndex = markup.indexOf('waveform-toolbar-actions');
+
+    return cursorIndex !== -1 && actionsIndex !== -1 && cursorIndex < actionsIndex;
+  }), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBe(true);
+
+  const canvasHost = window.getByTestId('waveform-canvas');
+  const readCanvasNumber = async (attribute: string) => Number(await canvasHost.getAttribute(attribute) ?? '0');
+  await expect(canvasHost).toHaveAttribute('data-renderer', /^(webgpu|webgl)$/);
+  await expect(canvasHost).toHaveAttribute('data-layer-count', '4');
+  await expect(canvasHost).toHaveAttribute('data-layer-names', 'background,content,status,operation');
+  await expect(canvasHost).toHaveAttribute('data-header-background', 'opaque');
+  await expect(canvasHost).toHaveAttribute('data-row-count', '171');
+  await expect(canvasHost).toHaveAttribute('data-row-height', '30');
+  await expect(canvasHost).toHaveAttribute('data-first-signal-lane-y', '60.00');
+  await expect.poll(async () => readCanvasNumber('data-bus-hexagon-count'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
+  await expect.poll(async () => readCanvasNumber('data-x-state-count'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
+  await expect.poll(async () => readCanvasNumber('data-z-state-count'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
+  await expect.poll(async () => readCanvasNumber('data-x-state-block-count'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
+  await expect.poll(async () => readCanvasNumber('data-z-state-block-count'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
+  await expect.poll(async () => readCanvasNumber('data-pulse-fill-count'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
+  await expect.poll(async () => readCanvasNumber('data-render-count'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
+  await expect.poll(async () => readCanvasNumber('data-visible-row-count'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
+  await expect.poll(async () => readCanvasNumber('data-culled-row-count'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
+  await expect.poll(async () => readCanvasNumber('data-rendered-signal-count'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
+  await expect.poll(async () => {
+    const denseSignalCount = await readCanvasNumber('data-dense-signal-count');
+    const compactSignalCount = await readCanvasNumber('data-compact-signal-count');
+    const detailSignalCount = await readCanvasNumber('data-detail-signal-count');
+
+    return denseSignalCount + compactSignalCount + detailSignalCount;
+  }, {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
+  await expect.poll(async () => {
+    const sourceSegmentCount = await readCanvasNumber('data-source-segment-count');
+    const renderedSegmentCount = await readCanvasNumber('data-rendered-segment-count');
+    const textureCacheBytes = await readCanvasNumber('data-texture-cache-bytes');
+    const renderResolution = await readCanvasNumber('data-render-resolution');
+
+    return sourceSegmentCount > 0 && renderedSegmentCount > 0 && renderResolution >= 1 && textureCacheBytes <= 32 * 1024 * 1024;
+  }, {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBe(true);
+  await expect(canvasHost.locator('canvas')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect.poll(async () => readCanvasNumber('data-canvas-height'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThanOrEqual(waveformCanvasMinHeight);
+  await expect.poll(async () => Number(await panel.getAttribute('data-last-render-ms') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
+  await expect.poll(async () => Number(await panel.getAttribute('data-visible-primitive-count') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
+  await expect(panel).toHaveAttribute('data-gpu-hardware-acceleration', 'true');
+
+  const resolvedRenderer = await canvasHost.getAttribute('data-renderer');
+
+  if (resolvedRenderer === 'webgpu') {
+    await expect(panel).toHaveAttribute('data-browser-webgpu', 'true');
+  }
+
+  if (resolvedRenderer === 'webgl') {
+    await expect(panel).toHaveAttribute('data-browser-webgl2', 'true');
+  }
+
+  const canvasBox = await canvasHost.boundingBox();
+  const innerCanvasBox = await canvasHost.locator('canvas').boundingBox();
+  if (!canvasBox || !innerCanvasBox) {
+    throw new Error('Expected waveform canvas geometry to be measurable');
+  }
+
+  expect(canvasBox.height).toBeGreaterThanOrEqual(waveformCanvasMinHeight);
+  expect(Math.abs(innerCanvasBox.height - canvasBox.height)).toBeLessThanOrEqual(2);
+  expect(Math.abs(innerCanvasBox.width - canvasBox.width)).toBeLessThanOrEqual(2);
+
+  const signalPanel = window.getByTestId('panel-waveform-signal-list');
+  const resizeHandle = window.getByTestId('waveform-signal-list-resize-handle');
+  const countingPrimary = window.getByTestId('waveform-signal-primary-u_top_module1-counting');
+  await expect(signalPanel).toHaveAttribute('data-default-size', '10');
+  const signalPanelBox = await signalPanel.boundingBox();
+  const resizeHandleBox = await resizeHandle.boundingBox();
+
+  if (!signalPanelBox || !resizeHandleBox) {
+    throw new Error('Expected waveform signal panel resize geometry to be measurable');
+  }
+
+  expect(signalPanelBox.width).toBeGreaterThan(0);
+  expect(resizeHandleBox.width).toBeGreaterThan(0);
+
+  await window.mouse.move(resizeHandleBox.x + resizeHandleBox.width / 2, resizeHandleBox.y + resizeHandleBox.height / 2);
+  await window.mouse.down();
+  await window.mouse.move(resizeHandleBox.x + resizeHandleBox.width / 2 + 72, resizeHandleBox.y + resizeHandleBox.height / 2);
+  await window.mouse.up();
+  await expect.poll(async () => (await signalPanel.boundingBox())?.width ?? 0, {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(signalPanelBox.width + 24);
+
+  const alignedSecondGroupRow = window.getByTestId('waveform-signal-row-u_top_module1-clk');
+  await expect(alignedSecondGroupRow).toHaveAttribute('data-row-index', '6');
+  await expect(alignedSecondGroupRow).toHaveAttribute('data-lane-y', '210.00');
+  const alignedSecondGroupRowBox = await alignedSecondGroupRow.boundingBox();
+  if (!alignedSecondGroupRowBox) {
+    throw new Error('Expected second group waveform signal row geometry to be measurable');
+  }
+
+  const alignedSecondGroupLaneY = Number(await alignedSecondGroupRow.getAttribute('data-lane-y') ?? 'NaN');
+  expect(Number.isFinite(alignedSecondGroupLaneY)).toBe(true);
+  expect(Math.abs(alignedSecondGroupRowBox.y - canvasBox.y - alignedSecondGroupLaneY)).toBeLessThanOrEqual(2);
+
+  const countingRow = window.getByTestId('waveform-signal-row-u_top_module1-counting');
+  await countingRow.click();
+  await expect(panel).toHaveAttribute('data-selected-signal-id', 'u_top_module1-counting');
+  await expect(countingRow).toHaveAttribute('data-row-index', '9');
+  await expect(countingRow).toHaveAttribute('data-lane-y', '300.00');
+  await expect(countingPrimary).toHaveClass(/items-center/);
+  await expect(canvasHost).toHaveAttribute('data-selected-signal-lane-y', '300.00');
+  await expect(cursorInfoSignal).toHaveText(/counting/);
+  await expect(cursorInfoValue).toHaveText(/^2$/);
+
+  await canvasHost.click({ position: { x: Math.floor(canvasBox.width * 0.72), y: 86 } });
+  await expect.poll(async () => Number(await panel.getAttribute('data-cursor-time') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(100);
+  await expect(cursorInfoTime).toHaveText(/\d+\.\dns/);
+
+  const initialZoom = Number(await panel.getAttribute('data-zoom') ?? '0');
+  await window.getByTestId('waveform-zoom-in').click();
+  await expect.poll(async () => Number(await panel.getAttribute('data-zoom') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(initialZoom);
+  const horizontalScrollbar = window.getByTestId('waveform-horizontal-scrollbar');
+  await expect.poll(async () => Number(await horizontalScrollbar.getAttribute('data-horizontal-scroll-range') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
+
+  const startBeforeShiftWheel = Number(await panel.getAttribute('data-visible-window-start') ?? '0');
+  await canvasHost.hover();
+  await window.keyboard.down('Shift');
+  await window.mouse.wheel(0, 160);
+  await window.keyboard.up('Shift');
+  await expect.poll(async () => Number(await panel.getAttribute('data-visible-window-start') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(startBeforeShiftWheel);
+
+  const zoomBeforeCtrlWheel = Number(await panel.getAttribute('data-zoom') ?? '0');
+  await window.keyboard.down('Control');
+  await window.mouse.wheel(0, -160);
+  await window.keyboard.up('Control');
+  await expect.poll(async () => Number(await panel.getAttribute('data-zoom') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(zoomBeforeCtrlWheel);
+
+  await window.getByTestId('waveform-fit').click();
+  await expect(panel).toHaveAttribute('data-zoom', '1.00');
+  const fixedCanvasBox = await canvasHost.boundingBox();
+  await canvasHost.hover();
+  await window.mouse.wheel(0, 360);
+  await expect.poll(async () => Number(await canvasHost.getAttribute('data-vertical-scroll-top') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
+  const fixedCanvasBoxAfterWheel = await canvasHost.boundingBox();
+
+  if (!fixedCanvasBox || !fixedCanvasBoxAfterWheel) {
+    throw new Error('Expected waveform canvas geometry after wheel to be measurable');
+  }
+
+  expect(Math.abs(fixedCanvasBoxAfterWheel.y - fixedCanvasBox.y)).toBeLessThanOrEqual(1);
+  await window.getByTestId('waveform-settings').click();
+  await expect(window.getByTestId('waveform-settings-popover')).toBeVisible();
+  await expect(window.getByTestId('waveform-gpu-hardware-acceleration')).toHaveText('true');
+  await expect(window.getByTestId('waveform-gpu-compositing-status')).not.toHaveText('pending');
+  await expect(window.getByTestId('waveform-gpu-webgl-status')).not.toHaveText('pending');
+  await expect(window.getByTestId('waveform-gpu-webgpu-status')).not.toHaveText('pending');
+  await expect(window.getByTestId('waveform-add-signals')).toHaveCount(0);
+  await expect(window.getByTestId('waveform-signal-picker')).toHaveCount(0);
+
+  const denseRow = window.getByTestId('waveform-signal-row-dense-signal-40');
+  await denseRow.scrollIntoViewIfNeeded();
+  await denseRow.click();
+  await expect(panel).toHaveAttribute('data-selected-signal-id', 'dense-signal-40');
+  await expect(denseRow).toHaveAttribute('data-row-index', '50');
+  await expect(denseRow).toHaveAttribute('data-lane-y', '1530.00');
+  await expect(canvasHost).toHaveAttribute('data-selected-signal-lane-y', '1530.00');
+
+  await expect.poll(async () => {
+    const denseRowBox = await denseRow.boundingBox();
+    const scrolledCanvasBox = await canvasHost.boundingBox();
+    const selectedSignalLaneY = Number(await canvasHost.getAttribute('data-selected-signal-visible-y') ?? 'NaN');
+
+    if (!denseRowBox || !scrolledCanvasBox || !Number.isFinite(selectedSignalLaneY)) {
+      return Number.POSITIVE_INFINITY;
+    }
+
+    return Math.abs(denseRowBox.y - scrolledCanvasBox.y - selectedSignalLaneY);
+  }, { timeout: UI_READY_TIMEOUT_MS }).toBeLessThanOrEqual(2);
+
+  await expect.poll(async () => {
+    const scrolledCanvasBox = await canvasHost.boundingBox();
+    const selectedSignalVisibleY = Number(await canvasHost.getAttribute('data-selected-signal-visible-y') ?? 'NaN');
+    const rowHeight = Number(await canvasHost.getAttribute('data-row-height') ?? 'NaN');
+
+    if (!scrolledCanvasBox || !Number.isFinite(selectedSignalVisibleY) || !Number.isFinite(rowHeight)) {
+      return false;
+    }
+
+    return selectedSignalVisibleY >= 30 && selectedSignalVisibleY + rowHeight <= scrolledCanvasBox.height + 2;
+  }, { timeout: UI_READY_TIMEOUT_MS }).toBe(true);
 
   await app.close();
 });

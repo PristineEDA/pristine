@@ -26,3 +26,5 @@ perf-results/
 .pristine-vendor/
 .pristine-package/
 src/app/theme/bundled-upstream/
+src/app/components/code/explorer/waveform/waveformMockData.json
+src/app/components/code/explorer/waveform/waveformMockData.generated.json

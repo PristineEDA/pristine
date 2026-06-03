@@ -1,13 +1,29 @@
 import { vi } from 'vitest';
 import type { ElectronAPI } from '../../types/electron-api';
 
+const defaultGpuDiagnostics = {
+  hardwareAccelerationEnabled: true,
+  featureStatus: {
+    gpu_compositing: 'enabled',
+    webgl: 'enabled',
+    webgpu: 'enabled',
+  },
+  info: {
+    auxAttributes: {
+      glResetNotificationStrategy: 0,
+    },
+    gpuDevice: [{ active: true, deviceId: 1234, vendorId: 4321 }],
+  },
+  infoError: null,
+};
+
 export function createElectronApiMock(): ElectronAPI {
   return {
     platform: 'win32',
     arch: 'x64',
     isE2E: false,
     versions: {
-      electron: '33.0.0',
+      electron: '35.0.0',
       node: process.versions.node,
       chrome: '130.0.0.0',
     },
@@ -26,6 +42,9 @@ export function createElectronApiMock(): ElectronAPI {
     onCloseRequested: vi.fn(() => vi.fn()),
     onWindowFocus: vi.fn(() => vi.fn()),
     onWorkspaceChange: vi.fn(() => vi.fn()),
+    gpu: {
+      getDiagnostics: vi.fn().mockResolvedValue(defaultGpuDiagnostics),
+    },
     fs: {
       readFile: vi.fn().mockResolvedValue(''),
       readFileAbsolute: vi.fn().mockResolvedValue(''),
