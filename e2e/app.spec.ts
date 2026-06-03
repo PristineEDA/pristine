@@ -5537,8 +5537,15 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
   await expect.poll(async () => Number(await horizontalScrollbar.getAttribute('data-horizontal-scroll-range') ?? '0'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(0);
+  await expect(canvasHost).toHaveAttribute('data-ruler-scroll-indicator-color', '#8e8e8e');
+  await expect(canvasHost).toHaveAttribute('data-ruler-scroll-indicator-height', '30.00');
+  await expect(canvasHost).toHaveAttribute('data-ruler-scroll-indicator-scrollable', 'true');
+  await expect.poll(async () => readCanvasNumber('data-ruler-scroll-indicator-width'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeLessThan(canvasBox.width);
 
   const startBeforeShiftWheel = Number(await panel.getAttribute('data-visible-window-start') ?? '0');
+  const rulerLeftBeforeShiftWheel = Number(await canvasHost.getAttribute('data-ruler-scroll-indicator-left') ?? '0');
   await canvasHost.hover();
   await window.keyboard.down('Shift');
   await window.mouse.wheel(0, 160);
@@ -5546,6 +5553,30 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
   await expect.poll(async () => Number(await panel.getAttribute('data-visible-window-start') ?? '0'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(startBeforeShiftWheel);
+  await expect.poll(async () => Number(await canvasHost.getAttribute('data-ruler-scroll-indicator-left') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(rulerLeftBeforeShiftWheel);
+
+  const startBeforeRulerDrag = Number(await panel.getAttribute('data-visible-window-start') ?? '0');
+  const horizontalScrollLeftBeforeRulerDrag = Number(await horizontalScrollbar.getAttribute('data-horizontal-scroll-left') ?? '0');
+  const rulerLeftBeforeDrag = Number(await canvasHost.getAttribute('data-ruler-scroll-indicator-left') ?? '0');
+  const rulerWidthBeforeDrag = Number(await canvasHost.getAttribute('data-ruler-scroll-indicator-width') ?? '0');
+  const rulerCanvasBox = await canvasHost.boundingBox();
+  if (!rulerCanvasBox) {
+    throw new Error('Expected waveform canvas geometry before ruler drag to be measurable');
+  }
+  const rulerCenterY = rulerCanvasBox.y + 15;
+  const rulerStartX = rulerCanvasBox.x + rulerLeftBeforeDrag + Math.max(8, Math.min(rulerWidthBeforeDrag - 4, rulerWidthBeforeDrag / 2));
+  await window.mouse.move(rulerStartX, rulerCenterY);
+  await window.mouse.down();
+  await window.mouse.move(rulerStartX - Math.max(90, rulerCanvasBox.width * 0.1), rulerCenterY);
+  await window.mouse.up();
+  await expect.poll(async () => Number(await panel.getAttribute('data-visible-window-start') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeLessThan(startBeforeRulerDrag);
+  await expect.poll(async () => Number(await horizontalScrollbar.getAttribute('data-horizontal-scroll-left') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeLessThan(horizontalScrollLeftBeforeRulerDrag);
 
   const zoomBeforeCtrlWheel = Number(await panel.getAttribute('data-zoom') ?? '0');
   await window.keyboard.down('Control');

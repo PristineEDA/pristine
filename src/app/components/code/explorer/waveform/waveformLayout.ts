@@ -371,12 +371,46 @@ export function getWaveformHorizontalScrollMetrics(viewport: WaveformViewport, d
   return { contentWidth, maxScrollLeft, maxStartTime, scrollLeft };
 }
 
+export function getWaveformRulerScrollIndicatorMetrics(viewport: WaveformViewport, duration: number, viewportWidth: number) {
+  const safeWidth = Math.max(1, viewportWidth);
+  const span = getWaveformViewportSpan(viewport);
+  const safeDuration = Math.max(waveformMinWindow, duration);
+  const maxStartTime = Math.max(0, safeDuration - span);
+  const visibleRatio = Math.min(1, span / safeDuration);
+  const width = Math.max(1, safeWidth * visibleRatio);
+  const maxLeft = Math.max(0, safeWidth - width);
+  const left = maxStartTime <= 0 || maxLeft <= 0
+    ? 0
+    : (Math.min(Math.max(0, viewport.startTime), maxStartTime) / maxStartTime) * maxLeft;
+
+  return {
+    color: 0x8e8e8e,
+    height: waveformHeaderHeight,
+    left,
+    maxLeft,
+    scrollable: maxStartTime > 0 && maxLeft > 0,
+    width,
+  };
+}
+
 export function getWaveformViewportForHorizontalScroll(viewport: WaveformViewport, duration: number, viewportWidth: number, scrollLeft: number) {
   const metrics = getWaveformHorizontalScrollMetrics(viewport, duration, viewportWidth);
   const span = getWaveformViewportSpan(viewport);
   const startTime = metrics.maxScrollLeft <= 0 || metrics.maxStartTime <= 0
     ? 0
     : (Math.min(Math.max(0, scrollLeft), metrics.maxScrollLeft) / metrics.maxScrollLeft) * metrics.maxStartTime;
+
+  return clampWaveformViewport({ startTime, endTime: startTime + span }, duration);
+}
+
+export function getWaveformViewportForRulerScrollIndicator(viewport: WaveformViewport, duration: number, viewportWidth: number, indicatorLeft: number) {
+  const metrics = getWaveformRulerScrollIndicatorMetrics(viewport, duration, viewportWidth);
+  const span = getWaveformViewportSpan(viewport);
+  const safeDuration = Math.max(waveformMinWindow, duration);
+  const maxStartTime = Math.max(0, safeDuration - span);
+  const startTime = !metrics.scrollable || metrics.maxLeft <= 0 || maxStartTime <= 0
+    ? 0
+    : (Math.min(Math.max(0, indicatorLeft), metrics.maxLeft) / metrics.maxLeft) * maxStartTime;
 
   return clampWaveformViewport({ startTime, endTime: startTime + span }, duration);
 }

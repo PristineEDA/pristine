@@ -7,12 +7,16 @@ import {
   getWaveformDisplayRows,
   getWaveformFirstSignalLaneY,
   getWaveformRenderSegments,
+  getWaveformHorizontalScrollMetrics,
+  getWaveformRulerScrollIndicatorMetrics,
   getWaveformSignalLaneY,
   getWaveformShapeCounts,
   getSignalValueAtTime,
   getWaveformStateCounts,
   getWaveformSignalTestId,
   getWaveformTicks,
+  getWaveformViewportSpan,
+  getWaveformViewportForRulerScrollIndicator,
   getVisibleWaveformRows,
   isHighImpedanceWaveformValue,
   isUnknownWaveformValue,
@@ -44,6 +48,40 @@ describe('waveformLayout', () => {
     expect(zoomed).toEqual({ startTime: 50, endTime: 150 });
     expect(pannedLeft.startTime).toBe(0);
     expect(pannedRight.endTime).toBe(mockWaveformData.duration);
+  });
+
+  it('maps the ruler scroll indicator to the same viewport range as the horizontal scrollbar', () => {
+    const fitted = fitWaveformViewport(mockWaveformData);
+    const zoomed = zoomWaveformViewport(fitted, 100, 2, mockWaveformData.duration);
+    const panned = panWaveformViewport(zoomed, 50, mockWaveformData.duration);
+    const width = 900;
+    const fittedMetrics = getWaveformRulerScrollIndicatorMetrics(fitted, mockWaveformData.duration, width);
+    const zoomedMetrics = getWaveformRulerScrollIndicatorMetrics(zoomed, mockWaveformData.duration, width);
+    const pannedMetrics = getWaveformRulerScrollIndicatorMetrics(panned, mockWaveformData.duration, width);
+    const horizontalMetrics = getWaveformHorizontalScrollMetrics(panned, mockWaveformData.duration, width);
+
+    expect(fittedMetrics).toEqual(expect.objectContaining({
+      color: 0x8e8e8e,
+      height: waveformHeaderHeight,
+      left: 0,
+      scrollable: false,
+      width,
+    }));
+    expect(zoomedMetrics.scrollable).toBe(true);
+    expect(zoomedMetrics.width).toBeLessThan(width);
+    expect(pannedMetrics.left).toBeGreaterThan(zoomedMetrics.left);
+    expect(pannedMetrics.left / pannedMetrics.maxLeft).toBeCloseTo(horizontalMetrics.scrollLeft / horizontalMetrics.maxScrollLeft, 4);
+  });
+
+  it('returns a viewport from ruler indicator drag positions without changing the zoom span', () => {
+    const fitted = fitWaveformViewport(mockWaveformData);
+    const zoomed = zoomWaveformViewport(fitted, 100, 2, mockWaveformData.duration);
+    const metrics = getWaveformRulerScrollIndicatorMetrics(zoomed, mockWaveformData.duration, 900);
+    const nextViewport = getWaveformViewportForRulerScrollIndicator(zoomed, mockWaveformData.duration, 900, metrics.maxLeft);
+
+    expect(getWaveformViewportSpan(nextViewport)).toBe(getWaveformViewportSpan(zoomed));
+    expect(nextViewport.endTime).toBe(mockWaveformData.duration);
+    expect(getWaveformViewportForRulerScrollIndicator(zoomed, mockWaveformData.duration, 900, -100).startTime).toBe(0);
   });
 
   it('returns signal values at cursor time', () => {

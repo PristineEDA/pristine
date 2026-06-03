@@ -17,14 +17,17 @@ import {
   getWaveformDigitalPulseFillCount,
   getWaveformDisplayRows,
   getWaveformFirstSignalLaneY,
+  getWaveformRulerScrollIndicatorMetrics,
   getWaveformSignalLaneY,
   getWaveformShapeCounts,
   getWaveformStateCounts,
+  getWaveformViewportForRulerScrollIndicator,
   getWaveformViewportSpan,
   panWaveformViewport,
   timeToX,
   waveformCanvasMinHeight,
   waveformCanvasMinWidth,
+  waveformHeaderHeight,
   waveformLaneHeight,
   xToTime,
   zoomWaveformViewport,
@@ -61,6 +64,11 @@ interface DragState {
   moved: boolean;
 }
 
+interface RulerScrollDragState {
+  indicatorOffsetX: number;
+  pointerId: number;
+}
+
 const dragThreshold = 4;
 const zoomWheelFactor = 1.18;
 const waveformSignalTextureCacheLimit = 48;
@@ -84,6 +92,7 @@ export function WaveformCanvas({
   const sceneRef = useRef<WaveformScene | null>(null);
   const renderFrameRef = useRef<number | null>(null);
   const dragRef = useRef<DragState | null>(null);
+  const rulerScrollDragRef = useRef<RulerScrollDragState | null>(null);
   const signalTextureCacheRef = useRef(new Map<string, WaveformSignalTextureCacheEntry>());
   const signalTextureCacheBytesRef = useRef(0);
   const textureCacheDataIdRef = useRef(data.id);
@@ -285,6 +294,30 @@ export function WaveformCanvas({
         return;
       }
 
+      const rect = host.getBoundingClientRect();
+      const pointerX = event.clientX - rect.left;
+      const pointerY = event.clientY - rect.top;
+
+      if (pointerY >= 0 && pointerY <= waveformHeaderHeight) {
+        const width = Math.max(waveformCanvasMinWidth, rect.width);
+        const currentViewport = viewportRef.current;
+        const metrics = getWaveformRulerScrollIndicatorMetrics(currentViewport, dataRef.current.duration, width);
+        const pointerInsideIndicator = pointerX >= metrics.left && pointerX <= metrics.left + metrics.width;
+        const indicatorOffsetX = pointerInsideIndicator ? pointerX - metrics.left : metrics.width / 2;
+
+        rulerScrollDragRef.current = {
+          indicatorOffsetX,
+          pointerId: event.pointerId,
+        };
+        host.setPointerCapture(event.pointerId);
+
+        if (!pointerInsideIndicator) {
+          updateViewportFromRulerPointer(pointerX, indicatorOffsetX, width);
+        }
+
+        return;
+      }
+
       dragRef.current = {
         pointerId: event.pointerId,
         startX: event.clientX,
@@ -296,6 +329,14 @@ export function WaveformCanvas({
     }
 
     function handlePointerMove(event: PointerEvent) {
+      const rulerDrag = rulerScrollDragRef.current;
+
+      if (rulerDrag && rulerDrag.pointerId === event.pointerId) {
+        const rect = host.getBoundingClientRect();
+        updateViewportFromRulerPointer(event.clientX - rect.left, rulerDrag.indicatorOffsetX, Math.max(waveformCanvasMinWidth, rect.width));
+        return;
+      }
+
       const drag = dragRef.current;
 
       if (!drag || drag.pointerId !== event.pointerId) {
@@ -316,6 +357,14 @@ export function WaveformCanvas({
     }
 
     function handlePointerUp(event: PointerEvent) {
+      const rulerDrag = rulerScrollDragRef.current;
+
+      if (rulerDrag && rulerDrag.pointerId === event.pointerId) {
+        rulerScrollDragRef.current = null;
+        host.releasePointerCapture(event.pointerId);
+        return;
+      }
+
       const drag = dragRef.current;
 
       if (!drag || drag.pointerId !== event.pointerId) {
@@ -334,6 +383,11 @@ export function WaveformCanvas({
       const rect = host.getBoundingClientRect();
       const x = clientX - rect.left;
       return xToTime(x, viewportRef.current, Math.max(waveformCanvasMinWidth, rect.width));
+    }
+
+    function updateViewportFromRulerPointer(pointerX: number, indicatorOffsetX: number, width: number) {
+      const nextLeft = pointerX - indicatorOffsetX;
+      onViewportChangeRef.current(getWaveformViewportForRulerScrollIndicator(viewportRef.current, dataRef.current.duration, width, nextLeft));
     }
 
     host.addEventListener('wheel', handleWheel, { passive: false });
@@ -531,6 +585,7 @@ export function WaveformCanvas({
   const stateCounts = getWaveformStateCounts(data);
   const shapeCounts = getWaveformShapeCounts(data, viewport);
   const pulseFillCount = getWaveformDigitalPulseFillCount(data, viewport);
+  const rulerIndicatorMetrics = getWaveformRulerScrollIndicatorMetrics(viewport, data.duration, Math.max(waveformCanvasMinWidth, canvasSize.width || waveformCanvasMinWidth));
 
   return (
     <div
@@ -582,6 +637,11 @@ export function WaveformCanvas({
       data-renderer={renderer}
       data-row-count={displayRows.length}
       data-row-height={waveformLaneHeight}
+      data-ruler-scroll-indicator-color={`#${rulerIndicatorMetrics.color.toString(16).padStart(6, '0')}`}
+      data-ruler-scroll-indicator-height={rulerIndicatorMetrics.height.toFixed(2)}
+      data-ruler-scroll-indicator-left={rulerIndicatorMetrics.left.toFixed(2)}
+      data-ruler-scroll-indicator-scrollable={String(rulerIndicatorMetrics.scrollable)}
+      data-ruler-scroll-indicator-width={rulerIndicatorMetrics.width.toFixed(2)}
       data-selected-signal-lane-y={formatOptionalNumber(selectedSignalLaneY)}
       data-testid="waveform-canvas"
       data-visible-window-end={viewport.endTime.toFixed(2)}

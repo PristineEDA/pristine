@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { Container, Text, Texture } from 'pixi.js';
 
 import { clipWaveformLineToBounds, createWaveformScene, getWaveformBusHexagonBevel, getWaveformBusSpecialStateHexDigitWidth, getWaveformDigitalSegmentStrokeWidth, getWaveformDigitalSpecialStateBounds, updateWaveformSceneCursor, updateWaveformScenePan, updateWaveformSceneSelection, updateWaveformSceneVerticalScroll, updateWaveformSceneViewport, waveformHighImpedanceStripeSpacing, waveformLayerNames, waveformUnknownStripeSpacing, type WaveformSignalTextureCacheEntry } from './createWaveformScene';
-import { fitWaveformViewport, getWaveformCanvasHeightForData, getWaveformDigitalPulseFillCount, getWaveformDisplayRows, getWaveformShapeCounts, getWaveformSignalLaneY } from './waveformLayout';
+import { fitWaveformViewport, getWaveformCanvasHeightForData, getWaveformDigitalPulseFillCount, getWaveformDisplayRows, getWaveformRulerScrollIndicatorMetrics, getWaveformShapeCounts, getWaveformSignalLaneY } from './waveformLayout';
 import { mockWaveformData } from './waveformMockData';
 import type { WaveformDataSet } from './waveformTypes';
 
@@ -23,7 +23,13 @@ describe('createWaveformScene', () => {
     expect(scene.layers.content.children.length).toBeGreaterThan(0);
     expect(scene.layers.content.children.length).toBeLessThan(mockWaveformData.signals.length);
     expect(scene.layers.status.children.length).toBeGreaterThan(0);
+    expect(scene.layers.status.children.some((child) => child instanceof Container && child.label === 'waveform-header-background')).toBe(true);
     expect(scene.layers.status.children.some((child) => child instanceof Container && child.label === 'waveform-header-overlay')).toBe(true);
+    expect(scene.layers.status.children.some((child) => child instanceof Container && child.label === 'waveform-ruler-scroll-indicator')).toBe(true);
+    expect(scene.layers.status.children.indexOf(scene.nodes.statusHeaderBackground)).toBeLessThan(scene.layers.status.children.indexOf(scene.nodes.statusRulerIndicator));
+    expect(scene.layers.status.children.indexOf(scene.nodes.statusRulerIndicator)).toBeLessThan(scene.layers.status.children.indexOf(scene.nodes.statusHeader));
+    expect(scene.nodes.statusHeaderBackground.children.length).toBe(1);
+    expect(scene.nodes.statusRulerIndicator.children.length).toBe(1);
     expect(scene.layers.operation.children.length).toBeGreaterThan(0);
     expect(scene.firstSignalLaneY).toBe(getWaveformSignalLaneY(mockWaveformData, 'tb_top_module1-clk'));
     expect(scene.selectedSignalLaneY).toBe(getWaveformSignalLaneY(mockWaveformData, 'u_top_module1-counting'));
@@ -448,15 +454,22 @@ describe('createWaveformScene', () => {
     });
     const originalContentChildren = [...scene.nodes.contentRows.children];
     const originalContentX = scene.nodes.contentRows.x;
+    const originalRulerIndicatorChildren = [...scene.nodes.statusRulerIndicator.children];
     const nextViewport = { startTime: 30, endTime: 130 };
 
     expect(updateWaveformScenePan(scene, nextViewport)).toBe(true);
+
+    const nextRulerIndicatorMetrics = getWaveformRulerScrollIndicatorMetrics(nextViewport, mockWaveformData.duration, 900);
 
     expect(scene.state.viewport).toEqual(nextViewport);
     expect(scene.nodes.contentRows.children).toEqual(originalContentChildren);
     expect(scene.nodes.contentRows.x).not.toBe(originalContentX);
     expect(scene.nodes.backgroundGrid.x).toBe(scene.nodes.contentRows.x);
     expect(scene.nodes.statusHeader.x).toBe(scene.nodes.contentRows.x);
+    expect(scene.nodes.statusHeaderBackground.x).toBe(0);
+    expect(scene.nodes.statusRulerIndicator.x).toBe(0);
+    expect(scene.nodes.statusRulerIndicator.children).not.toEqual(originalRulerIndicatorChildren);
+    expect(nextRulerIndicatorMetrics.left).toBeGreaterThan(0);
     expect(scene.renderStats.panBufferHitCount).toBe(1);
     expect(scene.renderStats.panBufferMissCount).toBe(0);
     expect(scene.renderStats.panPixelShiftCount).toBeGreaterThan(0);

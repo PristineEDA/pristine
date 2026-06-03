@@ -7,6 +7,7 @@ import {
   getWaveformDisplayRows,
   getWaveformFirstSignalLaneY,
   getWaveformRenderSegments,
+  getWaveformRulerScrollIndicatorMetrics,
   getWaveformSignalLaneY,
   getWaveformShapeCounts,
   getWaveformStateCounts,
@@ -78,6 +79,8 @@ interface WaveformSceneNodes {
   contentRowPool: Container;
   statusCursor: Container;
   statusHeader: Container;
+  statusHeaderBackground: Container;
+  statusRulerIndicator: Container;
   operationCursor: Container;
 }
 
@@ -222,11 +225,12 @@ export function createWaveformScene(options: WaveformSceneOptions): WaveformScen
 
   layers.background.addChild(nodes.backgroundBase, nodes.backgroundGrid, nodes.backgroundLanes, nodes.backgroundLanePool);
   layers.content.addChild(nodes.contentRows, nodes.contentRowPool);
-  layers.status.addChild(nodes.statusHeader, nodes.statusCursor);
+  layers.status.addChild(nodes.statusHeaderBackground, nodes.statusRulerIndicator, nodes.statusHeader, nodes.statusCursor);
   layers.operation.addChild(nodes.operationCursor);
   world.addChild(layers.background, layers.content, layers.status, layers.operation);
 
   redrawWaveformSceneBase(scene);
+  redrawWaveformSceneRulerIndicator(scene);
   redrawWaveformSceneGrid(scene);
   redrawWaveformSceneRows(scene);
   redrawWaveformSceneCursor(scene);
@@ -274,6 +278,7 @@ export function updateWaveformScenePan(scene: WaveformScene, viewport: WaveformV
   scene.state.viewport = viewport;
   scene.shapeCounts = getWaveformShapeCounts(scene.state.data, viewport);
   scene.digitalPulseFillCount = getWaveformDigitalPulseFillCount(scene.state.data, viewport);
+  redrawWaveformSceneRulerIndicator(scene);
   applyHorizontalBufferOffset(scene);
   redrawWaveformSceneCursor(scene);
   scene.renderStats = createRenderStats(
@@ -295,6 +300,7 @@ export function updateWaveformSceneViewport(scene: WaveformScene, viewport: Wave
   scene.state.horizontalBuffer = createHorizontalBufferState(viewport, scene.state.width, scene.state.renderResolution);
   scene.shapeCounts = getWaveformShapeCounts(scene.state.data, viewport);
   scene.digitalPulseFillCount = getWaveformDigitalPulseFillCount(scene.state.data, viewport);
+  redrawWaveformSceneRulerIndicator(scene);
   redrawWaveformSceneGrid(scene);
   redrawWaveformSceneRows(scene, { redrawLanes: false, reuseContentSignature: true });
   redrawWaveformSceneCursor(scene);
@@ -386,6 +392,8 @@ function createSceneNodes(): WaveformSceneNodes {
     contentRowPool: new Container({ label: 'waveform-content-row-pool', visible: false }),
     statusCursor: new Container({ label: 'waveform-status-cursor' }),
     statusHeader: new Container({ label: 'waveform-header-overlay' }),
+    statusHeaderBackground: new Container({ label: 'waveform-header-background' }),
+    statusRulerIndicator: new Container({ label: 'waveform-ruler-scroll-indicator' }),
     operationCursor: new Container({ label: 'waveform-operation-cursor' }),
   };
 }
@@ -440,7 +448,32 @@ function redrawWaveformSceneBase(scene: WaveformScene) {
   scene.nodes.backgroundBase.addChild(base);
 }
 
+function redrawWaveformSceneRulerIndicator(scene: WaveformScene) {
+  clearContainer(scene.nodes.statusRulerIndicator);
+
+  const metrics = getWaveformRulerScrollIndicatorMetrics(scene.state.viewport, scene.state.data.duration, scene.state.width);
+  const indicator = new Graphics();
+  indicator
+    .rect(metrics.left, 0, metrics.width, metrics.height)
+    .fill({ color: metrics.color, alpha: 1 });
+  scene.nodes.statusRulerIndicator.addChild(indicator);
+}
+
+function redrawWaveformSceneHeaderBackground(scene: WaveformScene) {
+  clearContainer(scene.nodes.statusHeaderBackground);
+
+  const headerBackground = new Graphics();
+  headerBackground
+    .rect(0, 0, scene.state.width, waveformHeaderHeight)
+    .fill({ color: palette.header, alpha: 1 })
+    .moveTo(0, waveformHeaderHeight - 0.5)
+    .lineTo(scene.state.width, waveformHeaderHeight - 0.5)
+    .stroke({ color: palette.gridStrong, width: 1, alpha: 0.9 });
+  scene.nodes.statusHeaderBackground.addChild(headerBackground);
+}
+
 function redrawWaveformSceneGrid(scene: WaveformScene) {
+  redrawWaveformSceneHeaderBackground(scene);
   clearContainer(scene.nodes.backgroundGrid);
   clearContainer(scene.nodes.statusHeader);
   drawGrid(scene.nodes.backgroundGrid, scene.nodes.statusHeader, getHorizontalBufferSceneOptions(scene));
@@ -763,17 +796,9 @@ function drawGrid(target: Container, headerTarget: Container, options: WaveformS
     .lineTo(options.width, waveformHeaderHeight)
     .stroke({ color: palette.gridStrong, width: 1, alpha: 0.9 });
 
-  header
-    .rect(0, 0, options.width, waveformHeaderHeight)
-    .fill({ color: palette.header, alpha: 1 })
-    .moveTo(0, waveformHeaderHeight - 0.5)
-    .lineTo(options.width, waveformHeaderHeight - 0.5)
-    .stroke({ color: palette.gridStrong, width: 1, alpha: 0.9 });
-
   for (const tick of ticks) {
     const x = Math.round(timeToX(tick, options.viewport, options.width)) + 0.5;
     const labelText = `${tick}${options.data.timescaleUnit}`;
-    const labelWidth = getEstimatedTextWidth(labelText, 10) + 8;
 
     grid
       .moveTo(x, waveformHeaderHeight)
@@ -783,11 +808,9 @@ function drawGrid(target: Container, headerTarget: Container, options: WaveformS
     header
       .moveTo(x, 0)
       .lineTo(x, waveformHeaderHeight)
-      .stroke({ color: tick === 0 ? palette.gridStrong : palette.grid, width: 1, alpha: tick === 0 ? 0.72 : 0.42 })
-      .roundRect(x + 2, 5, labelWidth, 16, 2)
-      .fill({ color: palette.header, alpha: 0.96 });
+      .stroke({ color: tick === 0 ? palette.gridStrong : palette.grid, width: 1, alpha: tick === 0 ? 0.72 : 0.42 });
 
-    const label = createText(labelText, palette.textMuted, 10, x + 4, 8);
+    const label = createText(labelText, palette.text, 10, x + 4, 8);
     labels.addChild(label);
   }
 

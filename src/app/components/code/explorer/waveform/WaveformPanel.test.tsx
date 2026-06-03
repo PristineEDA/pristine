@@ -76,6 +76,11 @@ vi.mock('./WaveformCanvas', () => ({
         data-pulse-fill-count={getWaveformDigitalPulseFillCount(data, viewport)}
         data-row-count={displayRows.length}
         data-row-height={waveformLaneHeight}
+        data-ruler-scroll-indicator-color="#8e8e8e"
+        data-ruler-scroll-indicator-height="30.00"
+        data-ruler-scroll-indicator-left="0.00"
+        data-ruler-scroll-indicator-scrollable="false"
+        data-ruler-scroll-indicator-width="900.00"
         data-selected-signal-id={selectedSignalId ?? ''}
         data-selected-signal-lane-y={selectedSignalLaneY?.toFixed(2) ?? ''}
         data-selected-signal-visible-y={selectedSignalLaneY === null ? '' : (selectedSignalLaneY - verticalScrollTop).toFixed(2)}
@@ -118,6 +123,9 @@ describe('WaveformPanel', () => {
     expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-canvas-width', '900.00');
     expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-first-signal-lane-y', '60.00');
     expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-header-background', 'opaque');
+    expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-ruler-scroll-indicator-color', '#8e8e8e');
+    expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-ruler-scroll-indicator-height', '30.00');
+    expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-ruler-scroll-indicator-scrollable', 'false');
     expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-bus-hexagon-count'))).toBeGreaterThan(0);
     expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-bus-full-hexagon-count'))).toBeGreaterThan(0);
     expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-bus-fold-only-count'))).toBeGreaterThan(0);
