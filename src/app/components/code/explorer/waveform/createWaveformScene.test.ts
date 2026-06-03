@@ -40,9 +40,9 @@ describe('createWaveformScene', () => {
     expect(scene.renderStats.renderedSignalCount).toBeGreaterThan(0);
     expect(scene.renderStats.renderedSignalCount).toBeLessThan(mockWaveformData.signals.length);
     expect(scene.renderStats.renderedSegmentCount).toBeGreaterThan(0);
-    expect(scene.renderStats.denseSignalCount).toBeGreaterThan(0);
-    expect(scene.renderStats.denseColumnCount).toBeGreaterThan(0);
-    expect(scene.renderStats.denseRunCount).toBeGreaterThan(0);
+    expect(scene.renderStats.drawnHorizontalSegmentCount).toBeGreaterThan(0);
+    expect(scene.renderStats.collapsedSegmentCount).toBe(scene.renderStats.skippedHorizontalSegmentCount);
+    expect(scene.renderStats.busFullHexagonCount).toBeGreaterThan(0);
 
     scene.world.destroy({ children: true });
   });
@@ -106,7 +106,7 @@ describe('createWaveformScene', () => {
     scene.world.destroy({ children: true });
   });
 
-  it('suppresses X and Z text labels while drawing dense pixel runs', () => {
+  it('skips invisible digital segments while preserving visible special-state labels', () => {
     const viewport = fitWaveformViewport(mockWaveformData);
     const scene = createWaveformScene({
       cursorTime: mockWaveformData.cursorTime,
@@ -119,10 +119,56 @@ describe('createWaveformScene', () => {
     const stateLabels = collectText(scene.layers.content).filter((text) => text === 'x' || text === 'z');
     const shapeCounts = getWaveformShapeCounts(mockWaveformData, viewport);
 
-    expect(scene.renderStats.denseSignalCount).toBeGreaterThan(0);
-    expect(scene.renderStats.denseRunCount).toBeGreaterThan(0);
+    expect(scene.renderStats.skippedHorizontalSegmentCount).toBeGreaterThan(0);
+    expect(scene.renderStats.collapsedSegmentCount).toBeGreaterThan(0);
     expect(scene.renderStats.suppressedLabelCount).toBeGreaterThan(0);
     expect(stateLabels.length).toBeLessThan(shapeCounts.xStateBlockCount + shapeCounts.zStateBlockCount);
+
+    scene.world.destroy({ children: true });
+  });
+
+  it('reports full, fold-only, and vertical fallback bus drawing shapes', () => {
+    const data: WaveformDataSet = {
+      id: 'bus-shapes',
+      title: 'bus-shapes',
+      timescaleUnit: 'ns',
+      duration: 1000,
+      cursorTime: 0,
+      groups: [{ id: 'g0', label: 'g0' }],
+      signals: [
+        {
+          id: 'bus',
+          groupId: 'g0',
+          name: 'bus',
+          path: 'g0.bus',
+          kind: 'bus',
+          color: '#8fd694',
+          width: 8,
+          transitions: [
+            { time: 0, value: '0' },
+            { time: 100, value: '1' },
+            { time: 110, value: '2' },
+            { time: 110.1, value: '3' },
+            { time: 120, value: '4' },
+            { time: 1000, value: '5' },
+          ],
+        },
+      ],
+    };
+    const scene = createWaveformScene({
+      cursorTime: 0,
+      data,
+      height: 120,
+      renderResolution: 1,
+      selectedSignalId: null,
+      viewport: { startTime: 0, endTime: 1000 },
+      width: 360,
+    });
+
+    expect(scene.renderStats.busFullHexagonCount).toBeGreaterThan(0);
+    expect(scene.renderStats.busFoldOnlyCount).toBeGreaterThan(0);
+    expect(scene.renderStats.busVerticalFallbackCount).toBeGreaterThan(0);
+    expect(scene.renderStats.skippedHorizontalSegmentCount).toBe(scene.renderStats.busFoldOnlyCount + scene.renderStats.busVerticalFallbackCount);
 
     scene.world.destroy({ children: true });
   });

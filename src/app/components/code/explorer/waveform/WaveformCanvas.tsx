@@ -546,16 +546,16 @@ export function WaveformCanvas({
       data-cache-miss-count={renderStats.cacheMissCount}
       data-cacheable-signal-count={renderStats.cacheableSignalCount}
       data-cached-signal-count={renderStats.cachedSignalCount}
-      data-compact-signal-count={renderStats.compactSignalCount}
+      data-bus-fold-only-count={renderStats.busFoldOnlyCount}
+      data-bus-full-hexagon-count={renderStats.busFullHexagonCount}
+      data-bus-vertical-fallback-count={renderStats.busVerticalFallbackCount}
       data-canvas-height={canvasSize.height.toFixed(2)}
       data-canvas-width={canvasSize.width.toFixed(2)}
-      data-coalesced-segment-count={renderStats.coalescedSegmentCount}
+      data-collapsed-segment-count={renderStats.collapsedSegmentCount}
       data-culled-row-count={renderStats.culledRowCount}
-      data-dense-column-count={renderStats.denseColumnCount}
-      data-dense-run-count={renderStats.denseRunCount}
-      data-dense-signal-count={renderStats.denseSignalCount}
+      data-drawn-horizontal-segment-count={renderStats.drawnHorizontalSegmentCount}
+      data-drawn-transition-edge-count={renderStats.drawnTransitionEdgeCount}
       data-full-scene-rebuild-count={renderStats.fullSceneRebuildCount}
-      data-detail-signal-count={renderStats.detailSignalCount}
       data-first-signal-lane-y={formatOptionalNumber(firstSignalLaneY)}
       data-header-background="opaque"
       data-average-fps={formatOptionalNumber(renderMetrics.averageFps)}
@@ -588,6 +588,7 @@ export function WaveformCanvas({
       data-source-segment-count={renderStats.sourceSegmentCount}
       data-selected-signal-visible-y={formatOptionalNumber(selectedSignalVisibleY)}
       data-selection-update-count={renderStats.selectionUpdateCount}
+      data-skipped-horizontal-segment-count={renderStats.skippedHorizontalSegmentCount}
       data-suppressed-label-count={renderStats.suppressedLabelCount}
       data-texture-cache-bytes={renderStats.textureCacheBytes}
       data-texture-cache-size={renderStats.textureCacheSize}
@@ -668,17 +669,18 @@ function createEmptyRenderStats(): WaveformRenderStats {
     renderedSignalCount: 0,
     sourceSegmentCount: 0,
     renderedSegmentCount: 0,
-    coalescedSegmentCount: 0,
+    collapsedSegmentCount: 0,
+    drawnHorizontalSegmentCount: 0,
+    skippedHorizontalSegmentCount: 0,
+    drawnTransitionEdgeCount: 0,
+    busFullHexagonCount: 0,
+    busFoldOnlyCount: 0,
+    busVerticalFallbackCount: 0,
     renderedLabelCount: 0,
     cacheableSignalCount: 0,
     cacheHitCount: 0,
     cacheMissCount: 0,
     cachedSignalCount: 0,
-    compactSignalCount: 0,
-    denseColumnCount: 0,
-    denseRunCount: 0,
-    denseSignalCount: 0,
-    detailSignalCount: 0,
     renderResolution: 1,
     suppressedLabelCount: 0,
     textureCacheBytes: 0,
@@ -732,7 +734,9 @@ function getVisiblePrimitiveCount(scene: WaveformScene | null, renderStats: Wave
 
   return renderStats.renderedSegmentCount
     + renderStats.renderedLabelCount
-    + scene.shapeCounts.busHexagonCount
+    + renderStats.busFullHexagonCount
+    + renderStats.busFoldOnlyCount
+    + renderStats.busVerticalFallbackCount
     + scene.shapeCounts.xStateBlockCount
     + scene.shapeCounts.zStateBlockCount
     + scene.digitalPulseFillCount;

@@ -58,8 +58,14 @@ vi.mock('./WaveformCanvas', () => ({
       <button
         data-cursor-time={cursorTime.toFixed(2)}
         data-bus-hexagon-count={shapeCounts.busHexagonCount}
+        data-bus-fold-only-count="2"
+        data-bus-full-hexagon-count={shapeCounts.busHexagonCount}
+        data-bus-vertical-fallback-count="1"
         data-canvas-height="320.00"
         data-canvas-width="900.00"
+        data-collapsed-segment-count="12"
+        data-drawn-horizontal-segment-count="148"
+        data-drawn-transition-edge-count="64"
         data-first-signal-lane-y={firstSignalLaneY?.toFixed(2) ?? ''}
         data-header-background="opaque"
         data-layer-count={waveformLayerNames.length}
@@ -71,6 +77,7 @@ vi.mock('./WaveformCanvas', () => ({
         data-selected-signal-lane-y={selectedSignalLaneY?.toFixed(2) ?? ''}
         data-selected-signal-visible-y={selectedSignalLaneY === null ? '' : (selectedSignalLaneY - verticalScrollTop).toFixed(2)}
         data-signal-count={data.signals.length}
+        data-skipped-horizontal-segment-count="12"
         data-testid="waveform-canvas"
         data-vertical-scroll-top={verticalScrollTop.toFixed(2)}
         data-visible-window-end={viewport.endTime.toFixed(2)}
@@ -109,6 +116,13 @@ describe('WaveformPanel', () => {
     expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-first-signal-lane-y', '60.00');
     expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-header-background', 'opaque');
     expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-bus-hexagon-count'))).toBeGreaterThan(0);
+    expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-bus-full-hexagon-count'))).toBeGreaterThan(0);
+    expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-bus-fold-only-count'))).toBeGreaterThan(0);
+    expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-bus-vertical-fallback-count'))).toBeGreaterThan(0);
+    expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-collapsed-segment-count'))).toBeGreaterThan(0);
+    expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-drawn-horizontal-segment-count'))).toBeGreaterThan(0);
+    expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-drawn-transition-edge-count'))).toBeGreaterThan(0);
+    expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-skipped-horizontal-segment-count'))).toBeGreaterThan(0);
     expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-x-state-count'))).toBeGreaterThan(0);
     expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-x-state-block-count'))).toBeGreaterThan(0);
     expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-z-state-block-count'))).toBeGreaterThan(0);

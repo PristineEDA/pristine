@@ -5407,14 +5407,29 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(0);
   await expect.poll(async () => {
-    const denseSignalCount = await readCanvasNumber('data-dense-signal-count');
-    const compactSignalCount = await readCanvasNumber('data-compact-signal-count');
-    const detailSignalCount = await readCanvasNumber('data-detail-signal-count');
+    const drawnHorizontalSegmentCount = await readCanvasNumber('data-drawn-horizontal-segment-count');
 
-    return denseSignalCount + compactSignalCount + detailSignalCount;
+    return drawnHorizontalSegmentCount > 0;
   }, {
     timeout: UI_READY_TIMEOUT_MS,
-  }).toBeGreaterThan(0);
+  }).toBe(true);
+  await expect(canvasHost).not.toHaveAttribute('data-dense-signal-count');
+  await expect(canvasHost).not.toHaveAttribute('data-compact-signal-count');
+  await expect(canvasHost).not.toHaveAttribute('data-detail-signal-count');
+  await expect(canvasHost).not.toHaveAttribute('data-coalesced-segment-count');
+  await expect.poll(async () => {
+    const collapsedSegmentCount = await readCanvasNumber('data-collapsed-segment-count');
+    const skippedHorizontalSegmentCount = await readCanvasNumber('data-skipped-horizontal-segment-count');
+    const drawnTransitionEdgeCount = await readCanvasNumber('data-drawn-transition-edge-count');
+    const busFullHexagonCount = await readCanvasNumber('data-bus-full-hexagon-count');
+
+    return collapsedSegmentCount >= 0
+      && skippedHorizontalSegmentCount >= 0
+      && drawnTransitionEdgeCount > 0
+      && busFullHexagonCount > 0;
+  }, {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBe(true);
   await expect.poll(async () => {
     const sourceSegmentCount = await readCanvasNumber('data-source-segment-count');
     const renderedSegmentCount = await readCanvasNumber('data-rendered-segment-count');

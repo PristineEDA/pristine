@@ -1,7 +1,6 @@
 export type WaveformSignalKind = 'clock' | 'logic' | 'bus';
 export type WaveformLayerName = 'background' | 'content' | 'status' | 'operation';
 export type WaveformLogicState = '0' | '1' | 'x' | 'z';
-export type WaveformRenderDensityMode = 'detail' | 'compact' | 'dense';
 
 export interface WaveformStateCounts {
   xStateCount: number;
@@ -22,33 +21,14 @@ export interface WaveformRenderSegment {
   width: number;
   value: string;
   sourceSegmentCount: number;
-  mixed: boolean;
   hasUnknown: boolean;
   hasHighImpedance: boolean;
-}
-
-export interface WaveformDenseColumn {
-  column: number;
-  x1: number;
-  x2: number;
-  width: number;
-  value: string;
-  sourceSegmentCount: number;
-  mixed: boolean;
-  hasUnknown: boolean;
-  hasHighImpedance: boolean;
-  hasHigh: boolean;
-  hasLow: boolean;
 }
 
 export interface WaveformRenderSegmentResult {
-  densityMode: WaveformRenderDensityMode;
   segments: WaveformRenderSegment[];
   sourceSegmentCount: number;
   renderedSegmentCount: number;
-  coalescedSegmentCount: number;
-  denseColumnCount: number;
-  denseRunCount: number;
 }
 
 export interface WaveformRenderStats {
@@ -65,17 +45,18 @@ export interface WaveformRenderStats {
   renderedSignalCount: number;
   sourceSegmentCount: number;
   renderedSegmentCount: number;
-  coalescedSegmentCount: number;
+  collapsedSegmentCount: number;
+  drawnHorizontalSegmentCount: number;
+  skippedHorizontalSegmentCount: number;
+  drawnTransitionEdgeCount: number;
+  busFullHexagonCount: number;
+  busFoldOnlyCount: number;
+  busVerticalFallbackCount: number;
   renderedLabelCount: number;
   cacheableSignalCount: number;
   cacheHitCount: number;
   cacheMissCount: number;
   cachedSignalCount: number;
-  compactSignalCount: number;
-  denseColumnCount: number;
-  denseRunCount: number;
-  denseSignalCount: number;
-  detailSignalCount: number;
   renderResolution: number;
   suppressedLabelCount: number;
   textureCacheBytes: number;
