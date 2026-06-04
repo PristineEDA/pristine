@@ -210,7 +210,7 @@ function createFakeConnection(): FakeConnection {
   };
 }
 
-describe.skip('LSP IPC handlers', () => {
+describe('LSP IPC handlers', () => {
   const expectedBinaryPattern = process.platform === 'win32'
     ? /binaries[\\/]pristine-engine\.exe$/
     : /binaries[\\/]pristine-engine$/;

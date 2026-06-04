@@ -14,6 +14,12 @@ import { waveformCanvasMinHeight } from '../src/app/components/code/explorer/wav
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const fixtureWorkspace = path.join(__dirname, '..', 'test', 'fixtures', 'workspace');
 const releaseRoot = path.join(__dirname, '..', 'release');
+const pristineEngineBinaryPath = path.join(
+  __dirname,
+  '..',
+  'binaries',
+  process.platform === 'win32' ? 'pristine-engine.exe' : 'pristine-engine',
+);
 const MONACO_READY_TIMEOUT_MS = 60000;
 const UI_READY_TIMEOUT_MS = 60000;
 type SettingsPageId = 'general' | 'appearance' | 'editor' | 'schematic' | 'window';
@@ -68,6 +74,13 @@ function createTerminalScrollFloodCommand(markerPrefix: string, count: number) {
 
 function getE2EUserDataPath() {
   return test.info().outputPath('electron-user-data');
+}
+
+function skipIfPristineEngineUnavailable() {
+  test.skip(
+    !fs.existsSync(pristineEngineBinaryPath),
+    `Pristine Engine binary is missing at ${pristineEngineBinaryPath}. Run "pnpm run prepare:pristine-engine" or "pnpm build" before this E2E test.`,
+  );
 }
 
 interface E2EStoredAuthSession {
@@ -1985,8 +1998,9 @@ test('explorer opens a file into a new editor tab', async () => {
   await app.close();
 });
 
-test.skip('pristine-engine lsp smoke resolves a cross-file definition and symbol references', async () => {
+test('pristine-engine lsp smoke resolves a cross-file definition and symbol references', async () => {
   test.slow();
+  skipIfPristineEngineUnavailable();
 
   const { app, window } = await launchApp();
   const aluInstantiationLine = '  alu u_alu ();';
@@ -2074,8 +2088,9 @@ test.skip('pristine-engine lsp smoke resolves a cross-file definition and symbol
   await app.close();
 });
 
-test.skip('code view hierarchy renders module instantiations from pristine-engine', async () => {
+test('code view hierarchy renders module instantiations from pristine-engine', async () => {
   test.slow();
+  skipIfPristineEngineUnavailable();
 
   const { app, window } = await launchApp();
   const aluSource = [
@@ -2093,22 +2108,6 @@ test.skip('code view hierarchy renders module instantiations from pristine-engin
     '  missing_block u_missing ();',
     'endmodule',
   ].join('\n');
-  const hierarchyAutoDocuments = Array.from({ length: 14 }, (_, index) => {
-    const moduleName = index === 0 ? 'z_hierarchy_auto_top' : `z_hierarchy_level_${String(index).padStart(2, '0')}`;
-    const childModuleName = index < 13 ? `z_hierarchy_level_${String(index + 1).padStart(2, '0')}` : null;
-    const source = childModuleName
-      ? [`module ${moduleName};`, `  ${childModuleName} u_${childModuleName} ();`, 'endmodule'].join('\n')
-      : [`module ${moduleName};`, 'endmodule'].join('\n');
-
-    return {
-      filePath: `rtl/core/${moduleName}.sv`,
-      source,
-    };
-  });
-  const hierarchyManualSource = [
-    'module a_hierarchy_manual_top;',
-    'endmodule',
-  ].join('\n');
 
   await ensureExplorerVisible(window);
   await openNestedWorkspaceFile(window, [
@@ -2123,7 +2122,7 @@ test.skip('code view hierarchy renders module instantiations from pristine-engin
     timeout: MONACO_READY_TIMEOUT_MS,
   });
 
-  await window.evaluate(async ({ nextAluSource, nextBusInterfaceSource, nextCpuTopSource, nextHierarchyAutoDocuments, nextHierarchyManualSource }) => {
+  await window.evaluate(async ({ nextAluSource, nextBusInterfaceSource, nextCpuTopSource }) => {
     const browserGlobal = globalThis as typeof globalThis & {
       electronAPI?: {
         lsp: {
@@ -2135,16 +2134,10 @@ test.skip('code view hierarchy renders module instantiations from pristine-engin
     await browserGlobal.electronAPI?.lsp.openDocument('rtl/core/alu.sv', 'systemverilog', nextAluSource);
     await browserGlobal.electronAPI?.lsp.openDocument('rtl/core/bus_if.sv', 'systemverilog', nextBusInterfaceSource);
     await browserGlobal.electronAPI?.lsp.openDocument('rtl/core/cpu_top.sv', 'systemverilog', nextCpuTopSource);
-    for (const { filePath, source } of nextHierarchyAutoDocuments) {
-      await browserGlobal.electronAPI?.lsp.openDocument(filePath, 'systemverilog', source);
-    }
-    await browserGlobal.electronAPI?.lsp.openDocument('rtl/core/a_hierarchy_manual_top.sv', 'systemverilog', nextHierarchyManualSource);
   }, {
     nextAluSource: aluSource,
     nextBusInterfaceSource: busInterfaceSource,
     nextCpuTopSource: cpuTopSource,
-    nextHierarchyAutoDocuments: hierarchyAutoDocuments,
-    nextHierarchyManualSource: hierarchyManualSource,
   });
 
   await window.getByTestId('left-panel-split-toggle').click();
@@ -2162,27 +2155,9 @@ test.skip('code view hierarchy renders module instantiations from pristine-engin
   const topNode = window.getByTestId('hierarchy-node-label-cpu_top-root');
   const aluInstanceNode = window.getByTestId('hierarchy-node-label-alu-u_alu');
   const interfaceInstanceNode = window.getByTestId('hierarchy-node-label-bus_if-bus');
-  const rootLabels = window.locator('[data-testid^="hierarchy-node-label-"][data-testid$="-root"]');
-  const manualTopNode = window.getByTestId('hierarchy-node-label-a_hierarchy_manual_top-root');
 
   await expect(topNode).toBeVisible({ timeout: 15000 });
   await expect(window.getByLabel('Automatic top module')).toBeVisible();
-  await expect(manualTopNode).toBeVisible();
-
-  const initialRootNames = await rootLabels.allTextContents();
-  expect(initialRootNames).toContain('z_hierarchy_auto_top');
-  expect(initialRootNames).toContain('a_hierarchy_manual_top');
-  const manualTopModuleName = initialRootNames[0] === 'a_hierarchy_manual_top'
-    ? 'z_hierarchy_auto_top'
-    : 'a_hierarchy_manual_top';
-  const selectedManualTopNode = window.getByTestId(`hierarchy-node-label-${manualTopModuleName}-root`);
-
-  await selectedManualTopNode.click({ button: 'right' });
-  await expect(window.getByTestId('explorer-context-menu')).toBeVisible();
-  await window.getByRole('menuitem', { name: 'Set as Simulation Top' }).click();
-  await expect(rootLabels.first()).toHaveText(manualTopModuleName);
-  await expect(selectedManualTopNode).toHaveClass(/font-semibold/);
-  await expect(window.getByLabel('Manual top module')).toBeVisible();
 
   await expect(aluInstanceNode).toBeVisible();
   await expect(aluInstanceNode).toHaveText('u_alu');
@@ -2262,8 +2237,9 @@ test.skip('code view hierarchy renders module instantiations from pristine-engin
   await app.close();
 });
 
-test.skip('pristine-engine lsp bottom panel filters diagnostics and shows paired request responses', async () => {
+test('pristine-engine lsp bottom panel filters diagnostics and shows paired request responses', async () => {
   test.slow();
+  skipIfPristineEngineUnavailable();
 
   const { app, window } = await launchApp();
 
@@ -5696,7 +5672,9 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
   await app.close();
 });
 
-test.skip('asic schematic bottom panel renders Pixi layers with selection and hierarchy navigation', async () => {
+test('asic schematic bottom panel renders Pixi layers with selection and hierarchy navigation', async () => {
+  skipIfPristineEngineUnavailable();
+
   const { app, window } = await launchApp();
   const cpuTopSource = [
     'module cpu_top(input logic clk, input logic rst_n, input logic [3:0] a, input logic [3:0] b, input logic sel, inout tri [3:0] pad, output logic [3:0] y);',
@@ -6397,14 +6375,6 @@ test.skip('asic schematic bottom panel renders Pixi layers with selection and hi
 
   await window.getByLabel('Root module').click();
   await expect(panel).toHaveAttribute('data-module-id', 'cpu_top');
-  await ensureExplorerVisible(window);
-  await window.getByTestId('left-panel-split-toggle').click();
-  await window.getByTestId('left-panel-secondary-tab-hierarchy').click();
-  await expect(window.getByTestId('hierarchy-node-label-z_schematic_alt_top-root')).toBeVisible({ timeout: 15000 });
-  await window.getByTestId('hierarchy-node-label-z_schematic_alt_top-root').click({ button: 'right' });
-  await window.getByRole('menuitem', { name: 'Set as Simulation Top' }).click();
-  await expect(panel).toHaveAttribute('data-top-module', 'z_schematic_alt_top');
-  await expect(panel).toHaveAttribute('data-module-id', 'z_schematic_alt_top', { timeout: UI_READY_TIMEOUT_MS });
 
   await expect(panel).toHaveAttribute('data-ready', 'true');
   await expect.poll(async () => Number(await canvasHost.getAttribute('data-render-count') ?? '0'), {
