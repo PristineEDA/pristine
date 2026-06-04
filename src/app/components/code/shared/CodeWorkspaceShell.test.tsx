@@ -17,6 +17,7 @@ const handleRecords: Array<{ hidden?: boolean }> = [];
 const panelResizeCalls: Array<{ id?: string; size: number | `${number}%` }> = [];
 const panelSnapHandlers = new Map<string, { onMinSnap?: () => void; onMaxSnap?: () => void }>();
 const panelImperativeHandles = new Map<string, { resize: (size: number | `${number}%`) => void }>();
+const mockedEnsureLspStreamSubscriptions = vi.fn();
 
 function latestPanelRecords(count: number) {
   return panelRecords.slice(-count);
@@ -120,7 +121,36 @@ vi.mock('../../ui/resizable', () => ({
   },
 }));
 
+vi.mock('../../../lsp/systemVerilogLspBridge', () => ({
+  systemVerilogLspBridge: {
+    ensureStreamSubscriptions: () => mockedEnsureLspStreamSubscriptions(),
+  },
+}));
+
 describe('CodeWorkspaceShell', () => {
+  it('installs LSP stream subscriptions before any editor pane is opened', () => {
+    render(
+      <CodeWorkspaceShell
+        shellTestId="workspace-shell"
+        activityBar={<div>Activity</div>}
+        showLeftPanel
+        showBottomPanel
+        showRightPanel
+        leftPanelId="left"
+        centerPanelId="center"
+        topPanelId="top"
+        bottomPanelId="bottom"
+        rightPanelId="right"
+        leftContent={<div>Explorer</div>}
+        topContent={<div>Editor</div>}
+        bottomContent={<div>Terminal</div>}
+        rightContent={<div>Inspector</div>}
+      />,
+    );
+
+    expect(mockedEnsureLspStreamSubscriptions).toHaveBeenCalledTimes(1);
+  });
+
   it('renders all visible regions with the percentage layout by default', () => {
     panelRecords.length = 0;
     handleRecords.length = 0;

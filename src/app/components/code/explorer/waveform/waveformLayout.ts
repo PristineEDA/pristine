@@ -1,19 +1,14 @@
-import type { WaveformDataSet, WaveformDenseColumn, WaveformRenderDensityMode, WaveformRenderSegment, WaveformRenderSegmentResult, WaveformShapeCounts, WaveformSignal, WaveformSignalGroup, WaveformStateCounts, WaveformTransition, WaveformViewport } from './waveformTypes';
+import type { WaveformDataSet, WaveformRenderSegment, WaveformRenderSegmentResult, WaveformShapeCounts, WaveformSignal, WaveformSignalGroup, WaveformStateCounts, WaveformTransition, WaveformViewport } from './waveformTypes';
 
 export const waveformCanvasMinWidth = 360;
 export const waveformCanvasMinHeight = 220;
-export const waveformHeaderHeight = 30;
+export const waveformHeaderHeight = 22;
 export const waveformLaneHeight = 30;
 export const waveformLanePaddingY = 5;
 export const waveformTimeAxisInset = 10;
 export const waveformBottomPadding = 14;
 export const waveformMinWindow = 8;
 export const waveformSegmentCoalescePixelThreshold = 5;
-const waveformDenseAverageCssWidth = 6;
-const waveformCompactAverageCssWidth = 10;
-const waveformDenseMinimumSegmentCount = 96;
-const waveformCompactMinimumSegmentCount = 48;
-const waveformIndistinguishableDevicePixels = 1.15;
 
 export type WaveformDisplayRow = WaveformGroupDisplayRow | WaveformSignalDisplayRow;
 
@@ -164,8 +159,8 @@ export function getWaveformRenderSegments(
   signal: WaveformSignal,
   viewport: WaveformViewport,
   width: number,
-  minPixelWidth = waveformSegmentCoalescePixelThreshold,
-  renderResolution = 1,
+  _minPixelWidth = waveformSegmentCoalescePixelThreshold,
+  _renderResolution = 1,
 ): WaveformRenderSegmentResult {
   const transitions = getWaveformTransitionsInWindow(signal, viewport);
   const sourceSegments: WaveformRenderSegment[] = [];
@@ -181,41 +176,7 @@ export function getWaveformRenderSegments(
     sourceSegments.push(createRenderSegment(current, next, viewport, width));
   }
 
-  const densityMode = getWaveformRenderDensityMode(sourceSegments);
-
-  if (densityMode === 'dense') {
-    const denseResult = getWaveformDenseColumnRuns(signal, sourceSegments, renderResolution);
-
-    return createRenderSegmentResult(denseResult.runs, sourceSegments.length, densityMode, denseResult.columnCount, denseResult.runs.length);
-  }
-
-  if (minPixelWidth <= 0 || sourceSegments.length <= 1) {
-    return createRenderSegmentResult(sourceSegments, sourceSegments.length, densityMode);
-  }
-
-  const segments: WaveformRenderSegment[] = [];
-  let pending: WaveformRenderSegment | null = null;
-
-  for (const sourceSegment of sourceSegments) {
-    if (!pending) {
-      pending = sourceSegment;
-      continue;
-    }
-
-    if (densityMode !== 'detail' && shouldCoalesceRenderSegment(pending, sourceSegment, minPixelWidth, renderResolution)) {
-      pending = mergeRenderSegments(pending, sourceSegment);
-      continue;
-    }
-
-    segments.push(pending);
-    pending = sourceSegment;
-  }
-
-  if (pending) {
-    segments.push(pending);
-  }
-
-  return createRenderSegmentResult(segments, sourceSegments.length, densityMode);
+  return createRenderSegmentResult(sourceSegments, sourceSegments.length);
 }
 
 export function getWaveformTickStep(viewport: WaveformViewport, width: number) {
@@ -410,12 +371,46 @@ export function getWaveformHorizontalScrollMetrics(viewport: WaveformViewport, d
   return { contentWidth, maxScrollLeft, maxStartTime, scrollLeft };
 }
 
+export function getWaveformRulerScrollIndicatorMetrics(viewport: WaveformViewport, duration: number, viewportWidth: number) {
+  const safeWidth = Math.max(1, viewportWidth);
+  const span = getWaveformViewportSpan(viewport);
+  const safeDuration = Math.max(waveformMinWindow, duration);
+  const maxStartTime = Math.max(0, safeDuration - span);
+  const visibleRatio = Math.min(1, span / safeDuration);
+  const width = Math.max(1, safeWidth * visibleRatio);
+  const maxLeft = Math.max(0, safeWidth - width);
+  const left = maxStartTime <= 0 || maxLeft <= 0
+    ? 0
+    : (Math.min(Math.max(0, viewport.startTime), maxStartTime) / maxStartTime) * maxLeft;
+
+  return {
+    color: 0x8e8e8e,
+    height: waveformHeaderHeight,
+    left,
+    maxLeft,
+    scrollable: maxStartTime > 0 && maxLeft > 0,
+    width,
+  };
+}
+
 export function getWaveformViewportForHorizontalScroll(viewport: WaveformViewport, duration: number, viewportWidth: number, scrollLeft: number) {
   const metrics = getWaveformHorizontalScrollMetrics(viewport, duration, viewportWidth);
   const span = getWaveformViewportSpan(viewport);
   const startTime = metrics.maxScrollLeft <= 0 || metrics.maxStartTime <= 0
     ? 0
     : (Math.min(Math.max(0, scrollLeft), metrics.maxScrollLeft) / metrics.maxScrollLeft) * metrics.maxStartTime;
+
+  return clampWaveformViewport({ startTime, endTime: startTime + span }, duration);
+}
+
+export function getWaveformViewportForRulerScrollIndicator(viewport: WaveformViewport, duration: number, viewportWidth: number, indicatorLeft: number) {
+  const metrics = getWaveformRulerScrollIndicatorMetrics(viewport, duration, viewportWidth);
+  const span = getWaveformViewportSpan(viewport);
+  const safeDuration = Math.max(waveformMinWindow, duration);
+  const maxStartTime = Math.max(0, safeDuration - span);
+  const startTime = !metrics.scrollable || metrics.maxLeft <= 0 || maxStartTime <= 0
+    ? 0
+    : (Math.min(Math.max(0, indicatorLeft), metrics.maxLeft) / metrics.maxLeft) * maxStartTime;
 
   return clampWaveformViewport({ startTime, endTime: startTime + span }, duration);
 }
@@ -441,7 +436,6 @@ function createRenderSegment(current: WaveformTransition, next: WaveformTransiti
     width: Math.max(1, x2 - x1),
     value,
     sourceSegmentCount: 1,
-    mixed: false,
     hasUnknown: isUnknownWaveformValue(value),
     hasHighImpedance: isHighImpedanceWaveformValue(value),
   };
@@ -450,247 +444,10 @@ function createRenderSegment(current: WaveformTransition, next: WaveformTransiti
 function createRenderSegmentResult(
   segments: WaveformRenderSegment[],
   sourceSegmentCount: number,
-  densityMode: WaveformRenderDensityMode,
-  denseColumnCount = 0,
-  denseRunCount = 0,
 ): WaveformRenderSegmentResult {
   return {
-    densityMode,
     segments,
     sourceSegmentCount,
     renderedSegmentCount: segments.length,
-    coalescedSegmentCount: Math.max(0, sourceSegmentCount - segments.length),
-    denseColumnCount,
-    denseRunCount,
-  };
-}
-
-function getWaveformRenderDensityMode(sourceSegments: readonly WaveformRenderSegment[]): WaveformRenderDensityMode {
-  if (sourceSegments.length < waveformCompactMinimumSegmentCount) {
-    return 'detail';
-  }
-
-  const averageCssWidth = sourceSegments.reduce((total, segment) => total + segment.width, 0) / sourceSegments.length;
-  const narrowSegmentCount = sourceSegments.filter((segment) => segment.width <= waveformDenseAverageCssWidth).length;
-  const narrowRatio = narrowSegmentCount / sourceSegments.length;
-
-  if (sourceSegments.length >= waveformDenseMinimumSegmentCount && (averageCssWidth <= waveformDenseAverageCssWidth || narrowRatio >= 0.62)) {
-    return 'dense';
-  }
-
-  if (averageCssWidth <= waveformCompactAverageCssWidth || narrowRatio >= 0.36) {
-    return 'compact';
-  }
-
-  return 'detail';
-}
-
-interface DenseColumnAccumulator {
-  column: number;
-  sourceSegmentCount: number;
-  values: Set<string>;
-  hasUnknown: boolean;
-  hasHighImpedance: boolean;
-  hasHigh: boolean;
-  hasLow: boolean;
-}
-
-function getWaveformDenseColumnRuns(signal: WaveformSignal, sourceSegments: readonly WaveformRenderSegment[], renderResolution: number) {
-  const safeResolution = Math.max(1, renderResolution);
-  const columns = new Map<number, DenseColumnAccumulator>();
-
-  for (const segment of sourceSegments) {
-    const startColumn = Math.floor(segment.x1 * safeResolution);
-    const endColumn = Math.max(startColumn + 1, Math.ceil(segment.x2 * safeResolution));
-
-    for (let column = startColumn; column < endColumn; column += 1) {
-      const accumulator = columns.get(column) ?? createDenseColumnAccumulator(column);
-      accumulator.sourceSegmentCount += segment.sourceSegmentCount;
-      accumulator.values.add(segment.value);
-      accumulator.hasUnknown ||= segment.hasUnknown;
-      accumulator.hasHighImpedance ||= segment.hasHighImpedance;
-      accumulator.hasHigh ||= segment.value === '1';
-      accumulator.hasLow ||= segment.value === '0';
-      columns.set(column, accumulator);
-    }
-  }
-
-  const denseColumns = Array.from(columns.values())
-    .sort((left, right) => left.column - right.column)
-    .map((column) => createDenseColumn(signal, column, safeResolution));
-  const runs: WaveformRenderSegment[] = [];
-  let pending: WaveformDenseColumn | null = null;
-
-  for (const column of denseColumns) {
-    if (!pending) {
-      pending = column;
-      continue;
-    }
-
-    if (canMergeDenseColumns(pending, column)) {
-      pending = mergeDenseColumns(pending, column);
-      continue;
-    }
-
-    runs.push(denseColumnToRenderSegment(pending));
-    pending = column;
-  }
-
-  if (pending) {
-    runs.push(denseColumnToRenderSegment(pending));
-  }
-
-  return {
-    columnCount: denseColumns.length,
-    runs,
-  };
-}
-
-function createDenseColumnAccumulator(column: number): DenseColumnAccumulator {
-  return {
-    column,
-    sourceSegmentCount: 0,
-    values: new Set<string>(),
-    hasUnknown: false,
-    hasHighImpedance: false,
-    hasHigh: false,
-    hasLow: false,
-  };
-}
-
-function createDenseColumn(signal: WaveformSignal, accumulator: DenseColumnAccumulator, renderResolution: number): WaveformDenseColumn {
-  const values = Array.from(accumulator.values);
-  const hasMultipleValues = values.length > 1;
-  const value = getDenseColumnValue(signal, accumulator, hasMultipleValues);
-
-  return {
-    column: accumulator.column,
-    x1: accumulator.column / renderResolution,
-    x2: (accumulator.column + 1) / renderResolution,
-    width: 1 / renderResolution,
-    value,
-    sourceSegmentCount: accumulator.sourceSegmentCount,
-    mixed: hasMultipleValues || (signal.kind !== 'bus' && accumulator.hasHigh && accumulator.hasLow),
-    hasUnknown: accumulator.hasUnknown,
-    hasHighImpedance: accumulator.hasHighImpedance,
-    hasHigh: accumulator.hasHigh,
-    hasLow: accumulator.hasLow,
-  };
-}
-
-function getDenseColumnValue(signal: WaveformSignal, column: DenseColumnAccumulator, hasMultipleValues: boolean) {
-  if (column.hasUnknown) {
-    return 'x';
-  }
-
-  if (column.hasHighImpedance) {
-    return 'z';
-  }
-
-  if (signal.kind !== 'bus') {
-    if (column.hasHigh && column.hasLow) {
-      return 'mixed';
-    }
-
-    return column.hasHigh ? '1' : '0';
-  }
-
-  return hasMultipleValues ? 'mixed' : Array.from(column.values)[0] ?? 'x';
-}
-
-function canMergeDenseColumns(previous: WaveformDenseColumn, next: WaveformDenseColumn) {
-  return previous.column + 1 === next.column && getDenseColumnVisualKey(previous) === getDenseColumnVisualKey(next);
-}
-
-function mergeDenseColumns(previous: WaveformDenseColumn, next: WaveformDenseColumn): WaveformDenseColumn {
-  return {
-    ...previous,
-    x2: next.x2,
-    width: Math.max(previous.width, next.x2 - previous.x1),
-    sourceSegmentCount: previous.sourceSegmentCount + next.sourceSegmentCount,
-    mixed: previous.mixed || next.mixed,
-    hasUnknown: previous.hasUnknown || next.hasUnknown,
-    hasHighImpedance: previous.hasHighImpedance || next.hasHighImpedance,
-    hasHigh: previous.hasHigh || next.hasHigh,
-    hasLow: previous.hasLow || next.hasLow,
-  };
-}
-
-function getDenseColumnVisualKey(column: WaveformDenseColumn) {
-  if (column.hasUnknown) {
-    return 'x';
-  }
-
-  if (column.hasHighImpedance) {
-    return 'z';
-  }
-
-  if (column.mixed) {
-    return 'mixed';
-  }
-
-  return column.value;
-}
-
-function denseColumnToRenderSegment(column: WaveformDenseColumn): WaveformRenderSegment {
-  return {
-    startTime: 0,
-    endTime: 0,
-    x1: column.x1,
-    x2: column.x2,
-    width: column.width,
-    value: column.value,
-    sourceSegmentCount: column.sourceSegmentCount,
-    mixed: column.mixed,
-    hasUnknown: column.hasUnknown,
-    hasHighImpedance: column.hasHighImpedance,
-  };
-}
-
-function shouldCoalesceRenderSegment(previous: WaveformRenderSegment, next: WaveformRenderSegment, minPixelWidth: number, renderResolution: number) {
-  const previousDeviceWidth = previous.width * renderResolution;
-  const nextDeviceWidth = next.width * renderResolution;
-  const boundaryIsHidden = Math.floor(previous.x2 * renderResolution) === Math.floor(next.x1 * renderResolution);
-  const sameVisualState = getRenderSegmentVisualKey(previous) === getRenderSegmentVisualKey(next);
-
-  if (sameVisualState && (boundaryIsHidden || previous.width < minPixelWidth || next.width < minPixelWidth)) {
-    return true;
-  }
-
-  return boundaryIsHidden && previousDeviceWidth <= waveformIndistinguishableDevicePixels && nextDeviceWidth <= waveformIndistinguishableDevicePixels;
-}
-
-function getRenderSegmentVisualKey(segment: WaveformRenderSegment) {
-  if (segment.hasUnknown) {
-    return 'x';
-  }
-
-  if (segment.hasHighImpedance) {
-    return 'z';
-  }
-
-  if (segment.mixed) {
-    return 'mixed';
-  }
-
-  return segment.value;
-}
-
-function mergeRenderSegments(previous: WaveformRenderSegment, next: WaveformRenderSegment): WaveformRenderSegment {
-  const hasUnknown = previous.hasUnknown || next.hasUnknown;
-  const hasHighImpedance = previous.hasHighImpedance || next.hasHighImpedance;
-  const mixed = previous.mixed || next.mixed || previous.value !== next.value;
-
-  return {
-    startTime: previous.startTime,
-    endTime: next.endTime,
-    x1: previous.x1,
-    x2: next.x2,
-    width: Math.max(1, next.x2 - previous.x1),
-    value: hasUnknown ? 'x' : hasHighImpedance ? 'z' : previous.value,
-    sourceSegmentCount: previous.sourceSegmentCount + next.sourceSegmentCount,
-    mixed,
-    hasUnknown,
-    hasHighImpedance,
   };
 }

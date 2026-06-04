@@ -7,6 +7,7 @@ import {
   EXPLORER_RIGHT_PANEL_MIN_WIDTH_PX,
 } from './codeWorkspaceLayout';
 import { useCodeViewerLayout } from '../../../context/CodeViewerLayoutContext';
+import { systemVerilogLspBridge } from '../../../lsp/systemVerilogLspBridge';
 import {
   getCodeWorkspaceBodyClassName,
   getCodeWorkspaceCenterColumnClassName,
@@ -322,6 +323,10 @@ export function CodeWorkspaceShell({
     ? clampFixedPanelWidth(rightFixedWidthPx, fixedRightMinWidth, fixedRightMaxWidth)
     : null;
   const panelGroupLayoutGapPx = getCodeWorkspacePanelGroupLayoutGapPx(layoutMode);
+
+  useLayoutEffect(() => {
+    systemVerilogLspBridge.ensureStreamSubscriptions();
+  }, []);
 
   if (hasFixedRightPanel && showRightPanel) {
     fixedRightPanelWasOpenedRef.current = true;

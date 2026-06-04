@@ -16,6 +16,7 @@ import {
   getWaveformViewportForHorizontalScroll,
   getWaveformViewportSpan,
   panWaveformViewport,
+  waveformHeaderHeight,
   zoomWaveformViewport,
 } from './waveformLayout';
 import { mockWaveformData } from './waveformMockData';
@@ -263,7 +264,10 @@ export function WaveformPanel() {
       <ResizablePanelGroup orientation="horizontal" layoutGapPx={4} className="min-h-0 flex-1 overflow-hidden">
         <ResizablePanel defaultSize={10} minSizePx={160} maxSizePx={420} id="waveform-signal-list">
           <aside className="flex h-full min-w-0 flex-col border-r border-ide-border bg-ide-sidebar-bg">
-            <div className="grid h-[30px] shrink-0 grid-cols-[minmax(0,1fr)_56px] items-end gap-2 border-b border-ide-border px-3 pb-1 text-[10px] font-medium uppercase leading-[14px] tracking-[0.08em] text-ide-text-muted">
+            <div
+              className="grid shrink-0 grid-cols-[minmax(0,1fr)_56px] items-end gap-2 border-b border-ide-border px-3 pb-1 text-[10px] font-medium uppercase leading-[14px] tracking-[0.08em] text-ide-text-muted"
+              style={{ height: waveformHeaderHeight }}
+            >
               <span>Signal</span>
               <span className="text-right">Value</span>
             </div>

@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Container, Text, Texture } from 'pixi.js';
 
-import { clipWaveformLineToBounds, createWaveformScene, getWaveformBusHexagonBevel, updateWaveformSceneCursor, updateWaveformScenePan, updateWaveformSceneSelection, updateWaveformSceneVerticalScroll, updateWaveformSceneViewport, waveformHighImpedanceStripeSpacing, waveformLayerNames, waveformUnknownStripeSpacing, type WaveformSignalTextureCacheEntry } from './createWaveformScene';
-import { fitWaveformViewport, getWaveformCanvasHeightForData, getWaveformDigitalPulseFillCount, getWaveformDisplayRows, getWaveformShapeCounts, getWaveformSignalLaneY } from './waveformLayout';
+import { clipWaveformLineToBounds, createWaveformScene, getWaveformBusHexagonBevel, getWaveformBusLabelBounds, getWaveformBusSpecialStateHexDigitWidth, getWaveformDigitalSegmentStrokeWidth, getWaveformDigitalSpecialStateBounds, getWaveformFittedBusLabelText, updateWaveformSceneCursor, updateWaveformScenePan, updateWaveformSceneSelection, updateWaveformSceneVerticalScroll, updateWaveformSceneViewport, waveformHighImpedanceStripeSpacing, waveformLayerNames, waveformUnknownStripeSpacing, type WaveformSignalTextureCacheEntry } from './createWaveformScene';
+import { fitWaveformViewport, getWaveformCanvasHeightForData, getWaveformDigitalPulseFillCount, getWaveformDisplayRows, getWaveformRulerScrollIndicatorMetrics, getWaveformShapeCounts, getWaveformSignalLaneY, timeToX, waveformHeaderHeight } from './waveformLayout';
 import { mockWaveformData } from './waveformMockData';
 import type { WaveformDataSet } from './waveformTypes';
 
@@ -23,7 +23,15 @@ describe('createWaveformScene', () => {
     expect(scene.layers.content.children.length).toBeGreaterThan(0);
     expect(scene.layers.content.children.length).toBeLessThan(mockWaveformData.signals.length);
     expect(scene.layers.status.children.length).toBeGreaterThan(0);
+    expect(scene.layers.status.children.some((child) => child instanceof Container && child.label === 'waveform-header-background')).toBe(true);
     expect(scene.layers.status.children.some((child) => child instanceof Container && child.label === 'waveform-header-overlay')).toBe(true);
+    expect(scene.layers.status.children.some((child) => child instanceof Container && child.label === 'waveform-ruler-scroll-indicator')).toBe(true);
+    expect(scene.layers.status.children.indexOf(scene.nodes.statusHeaderBackground)).toBeLessThan(scene.layers.status.children.indexOf(scene.nodes.statusRulerIndicator));
+    expect(scene.layers.status.children.indexOf(scene.nodes.statusRulerIndicator)).toBeLessThan(scene.layers.status.children.indexOf(scene.nodes.statusHeader));
+    expect(scene.nodes.statusHeaderBackground.children.length).toBe(1);
+    expect(scene.nodes.statusRulerIndicator.children.length).toBe(1);
+    expect(getWaveformRulerScrollIndicatorMetrics(scene.state.viewport, scene.state.data.duration, scene.state.width).height).toBe(22);
+    expect(waveformHeaderHeight).toBe(22);
     expect(scene.layers.operation.children.length).toBeGreaterThan(0);
     expect(scene.firstSignalLaneY).toBe(getWaveformSignalLaneY(mockWaveformData, 'tb_top_module1-clk'));
     expect(scene.selectedSignalLaneY).toBe(getWaveformSignalLaneY(mockWaveformData, 'u_top_module1-counting'));
@@ -40,9 +48,9 @@ describe('createWaveformScene', () => {
     expect(scene.renderStats.renderedSignalCount).toBeGreaterThan(0);
     expect(scene.renderStats.renderedSignalCount).toBeLessThan(mockWaveformData.signals.length);
     expect(scene.renderStats.renderedSegmentCount).toBeGreaterThan(0);
-    expect(scene.renderStats.denseSignalCount).toBeGreaterThan(0);
-    expect(scene.renderStats.denseColumnCount).toBeGreaterThan(0);
-    expect(scene.renderStats.denseRunCount).toBeGreaterThan(0);
+    expect(scene.renderStats.drawnHorizontalSegmentCount).toBeGreaterThan(0);
+    expect(scene.renderStats.collapsedSegmentCount).toBe(scene.renderStats.skippedHorizontalSegmentCount);
+    expect(scene.renderStats.busFullHexagonCount).toBeGreaterThan(0);
 
     scene.world.destroy({ children: true });
   });
@@ -79,6 +87,46 @@ describe('createWaveformScene', () => {
     secondScene.world.destroy({ children: true });
   });
 
+  it('does not reuse cached bus X/Z labels across different signal widths', () => {
+    const cache = new Map<string, WaveformSignalTextureCacheEntry>();
+    const signalTextureCache = {
+      get: (key: string) => cache.get(key),
+      set: (key: string, entry: WaveformSignalTextureCacheEntry) => cache.set(key, entry),
+    };
+    const textureRenderer = {
+      generateTexture: () => Texture.EMPTY,
+    };
+
+    const width4Scene = createWaveformScene({
+      cursorTime: 0,
+      data: createBusSpecialStateDataSet(4, 80),
+      height: 120,
+      selectedSignalId: null,
+      signalTextureCache,
+      textureRenderer,
+      viewport: { startTime: 0, endTime: 3200 },
+      width: 900,
+    });
+    const width8Scene = createWaveformScene({
+      cursorTime: 0,
+      data: createBusSpecialStateDataSet(8, 80),
+      height: 120,
+      selectedSignalId: null,
+      signalTextureCache,
+      textureRenderer,
+      viewport: { startTime: 0, endTime: 3200 },
+      width: 900,
+    });
+
+    expect(width4Scene.renderStats.cacheMissCount).toBeGreaterThan(0);
+    expect(width8Scene.renderStats.cacheMissCount).toBeGreaterThan(0);
+    expect(width8Scene.renderStats.cacheHitCount).toBe(0);
+    expect(cache.size).toBeGreaterThanOrEqual(2);
+
+    width4Scene.world.destroy({ children: true });
+    width8Scene.world.destroy({ children: true });
+  });
+
   it('generates cache textures at the renderer resolution for crisp cached rows', () => {
     const cache = new Map<string, WaveformSignalTextureCacheEntry>();
     const signalTextureCache = {
@@ -106,7 +154,7 @@ describe('createWaveformScene', () => {
     scene.world.destroy({ children: true });
   });
 
-  it('suppresses X and Z text labels while drawing dense pixel runs', () => {
+  it('skips invisible digital segments while preserving visible special-state labels', () => {
     const viewport = fitWaveformViewport(mockWaveformData);
     const scene = createWaveformScene({
       cursorTime: mockWaveformData.cursorTime,
@@ -119,15 +167,61 @@ describe('createWaveformScene', () => {
     const stateLabels = collectText(scene.layers.content).filter((text) => text === 'x' || text === 'z');
     const shapeCounts = getWaveformShapeCounts(mockWaveformData, viewport);
 
-    expect(scene.renderStats.denseSignalCount).toBeGreaterThan(0);
-    expect(scene.renderStats.denseRunCount).toBeGreaterThan(0);
+    expect(scene.renderStats.skippedHorizontalSegmentCount).toBeGreaterThan(0);
+    expect(scene.renderStats.collapsedSegmentCount).toBeGreaterThan(0);
     expect(scene.renderStats.suppressedLabelCount).toBeGreaterThan(0);
     expect(stateLabels.length).toBeLessThan(shapeCounts.xStateBlockCount + shapeCounts.zStateBlockCount);
 
     scene.world.destroy({ children: true });
   });
 
-  it('draws a single X or Z text label per special-state block', () => {
+  it('reports full, fold-only, and vertical fallback bus drawing shapes', () => {
+    const data: WaveformDataSet = {
+      id: 'bus-shapes',
+      title: 'bus-shapes',
+      timescaleUnit: 'ns',
+      duration: 1000,
+      cursorTime: 0,
+      groups: [{ id: 'g0', label: 'g0' }],
+      signals: [
+        {
+          id: 'bus',
+          groupId: 'g0',
+          name: 'bus',
+          path: 'g0.bus',
+          kind: 'bus',
+          color: '#8fd694',
+          width: 8,
+          transitions: [
+            { time: 0, value: '0' },
+            { time: 100, value: '1' },
+            { time: 110, value: '2' },
+            { time: 110.1, value: '3' },
+            { time: 120, value: '4' },
+            { time: 1000, value: '5' },
+          ],
+        },
+      ],
+    };
+    const scene = createWaveformScene({
+      cursorTime: 0,
+      data,
+      height: 120,
+      renderResolution: 1,
+      selectedSignalId: null,
+      viewport: { startTime: 0, endTime: 1000 },
+      width: 360,
+    });
+
+    expect(scene.renderStats.busFullHexagonCount).toBeGreaterThan(0);
+    expect(scene.renderStats.busFoldOnlyCount).toBeGreaterThan(0);
+    expect(scene.renderStats.busVerticalFallbackCount).toBeGreaterThan(0);
+    expect(scene.renderStats.skippedHorizontalSegmentCount).toBe(scene.renderStats.busFoldOnlyCount + scene.renderStats.busVerticalFallbackCount);
+
+    scene.world.destroy({ children: true });
+  });
+
+  it('keeps single-bit X/Z text labels as single characters', () => {
     const viewport = fitWaveformViewport(mockWaveformData);
     const scene = createWaveformScene({
       cursorTime: mockWaveformData.cursorTime,
@@ -149,6 +243,116 @@ describe('createWaveformScene', () => {
     expect(stateLabels.every((text) => text.length === 1)).toBe(true);
 
     scene.world.destroy({ children: true });
+  });
+
+  it('draws multi-bit X/Z labels aligned to hexadecimal digit width', () => {
+    const cases = [
+      { expectedX: 'x', expectedZ: 'z', signalWidth: 4 },
+      { expectedX: 'xx', expectedZ: 'zz', signalWidth: 8 },
+      { expectedX: 'xxxx', expectedZ: 'zzzz', signalWidth: 16 },
+    ];
+
+    for (const { expectedX, expectedZ, signalWidth } of cases) {
+      const scene = createWaveformScene({
+        cursorTime: 0,
+        data: createBusSpecialStateDataSet(signalWidth),
+        height: 120,
+        selectedSignalId: null,
+        viewport: { startTime: 0, endTime: 120 },
+        width: 900,
+      });
+      const labels = collectText(scene.layers.content);
+
+      expect(labels).toContain(expectedX);
+      expect(labels).toContain(expectedZ);
+      expect(scene.renderStats.busSpecialStateHexagonCount).toBeGreaterThanOrEqual(2);
+      expect(scene.renderStats.busSpecialStateLabelCount).toBeGreaterThanOrEqual(2);
+      expect(scene.renderStats.busSpecialStateWidthAlignedLabelCount).toBeGreaterThanOrEqual(2);
+      expect(scene.renderStats.busFullHexagonCount).toBeGreaterThanOrEqual(scene.renderStats.busSpecialStateHexagonCount);
+
+      scene.world.destroy({ children: true });
+    }
+  });
+
+  it('truncates bus value and X/Z labels with trailing dots when hexagons shrink', () => {
+    const scene = createWaveformScene({
+      cursorTime: 0,
+      data: createBusSpecialStateDataSet(8, 6),
+      height: 120,
+      selectedSignalId: null,
+      viewport: { startTime: 0, endTime: 520 },
+      width: 220,
+    });
+    const labels = collectText(scene.layers.content);
+
+    expect(labels.some((label) => label.includes('.'))).toBe(true);
+    expect(scene.renderStats.busTruncatedLabelCount).toBeGreaterThan(0);
+    expect(scene.renderStats.busLabelDotReplacementCount).toBeGreaterThan(0);
+    expect(scene.renderStats.busSpecialStateLabelCount).toBeGreaterThan(0);
+
+    scene.world.destroy({ children: true });
+  });
+
+  it('computes bus X/Z label width from hexadecimal digits', () => {
+    expect(getWaveformBusSpecialStateHexDigitWidth(undefined)).toBe(1);
+    expect(getWaveformBusSpecialStateHexDigitWidth(1)).toBe(1);
+    expect(getWaveformBusSpecialStateHexDigitWidth(4)).toBe(1);
+    expect(getWaveformBusSpecialStateHexDigitWidth(5)).toBe(2);
+    expect(getWaveformBusSpecialStateHexDigitWidth(8)).toBe(2);
+    expect(getWaveformBusSpecialStateHexDigitWidth(16)).toBe(4);
+  });
+
+  it('aligns bus labels to the full hexagon top horizontal segment', () => {
+    const bounds = getWaveformBusLabelBounds(10, 160, 20);
+    const bevel = getWaveformBusHexagonBevel(160, 20);
+
+    expect(bounds.left).toBe(10 + bevel);
+    expect(bounds.right).toBe(10 + 160 - bevel);
+    expect(bounds.width).toBe(160 - bevel * 2);
+  });
+
+  it('fits bus labels by greedily replacing trailing characters with dots', () => {
+    const fullText = getWaveformFittedBusLabelText('abcd', 24, 10);
+    const oneReplacement = getWaveformFittedBusLabelText('abcd', 23, 10);
+    const twoReplacements = getWaveformFittedBusLabelText('abcd', 20, 10);
+    const tooNarrow = getWaveformFittedBusLabelText('abcd', 2, 10);
+
+    expect(fullText).toEqual({
+      fits: true,
+      replacementCount: 0,
+      text: 'abcd',
+      truncated: false,
+    });
+    expect(oneReplacement).toEqual({
+      fits: true,
+      replacementCount: 1,
+      text: 'abc.',
+      truncated: true,
+    });
+    expect(twoReplacements).toEqual({
+      fits: true,
+      replacementCount: 2,
+      text: 'ab..',
+      truncated: true,
+    });
+    expect(tooNarrow.fits).toBe(false);
+    expect(tooNarrow.text).toBe('');
+  });
+
+  it('uses the normal digital segment stroke width for single-bit X/Z blocks', () => {
+    expect(getWaveformDigitalSegmentStrokeWidth('clock')).toBe(1.7);
+    expect(getWaveformDigitalSegmentStrokeWidth('logic')).toBe(2);
+  });
+
+  it('aligns single-bit X/Z block bounds to normal digital high and low levels', () => {
+    expect(getWaveformDigitalSpecialStateBounds(0)).toEqual({
+      height: 16,
+      y: 7,
+    });
+    expect(getWaveformDigitalSpecialStateBounds(42)).toEqual({
+      height: 16,
+      y: 49,
+    });
   });
 
   it('keeps bus hexagon bevel consistent across normal-width bus segments', () => {
@@ -223,6 +427,38 @@ describe('createWaveformScene', () => {
     expect(scene.nodes.statusHeader.children.length).toBeGreaterThan(0);
     expect(scene.nodes.backgroundLanes.children.length).toBeGreaterThan(0);
     expect(scene.nodes.contentRows.children.length).toBeGreaterThan(0);
+
+    scene.world.destroy({ children: true });
+  });
+
+  it('draws cursor marker at the true time position and hides it outside the viewport', () => {
+    const viewport = { startTime: 40, endTime: 140 };
+    const scene = createWaveformScene({
+      cursorTime: 84,
+      data: mockWaveformData,
+      height: 320,
+      selectedSignalId: null,
+      viewport,
+      width: 900,
+    });
+    const expectedX = Math.round(timeToX(84, viewport, 900)) + 0.5;
+
+    expect(scene.nodes.statusCursor.children).toHaveLength(1);
+    expect(scene.nodes.operationCursor.children).toHaveLength(2);
+    expect(scene.nodes.statusCursor.children[0]?.label).toBe(`waveform-cursor-line-x-${expectedX.toFixed(2)}`);
+    expect(scene.nodes.operationCursor.children.some((child) => child.label === 'waveform-cursor-badge')).toBe(true);
+
+    updateWaveformSceneCursor(scene, 20);
+
+    expect(scene.nodes.statusCursor.children).toHaveLength(0);
+    expect(scene.nodes.operationCursor.children).toHaveLength(0);
+
+    updateWaveformSceneCursor(scene, 128);
+    const nextExpectedX = Math.round(timeToX(128, viewport, 900)) + 0.5;
+
+    expect(scene.nodes.statusCursor.children).toHaveLength(1);
+    expect(scene.nodes.operationCursor.children).toHaveLength(2);
+    expect(scene.nodes.statusCursor.children[0]?.label).toBe(`waveform-cursor-line-x-${nextExpectedX.toFixed(2)}`);
 
     scene.world.destroy({ children: true });
   });
@@ -308,15 +544,22 @@ describe('createWaveformScene', () => {
     });
     const originalContentChildren = [...scene.nodes.contentRows.children];
     const originalContentX = scene.nodes.contentRows.x;
+    const originalRulerIndicatorChildren = [...scene.nodes.statusRulerIndicator.children];
     const nextViewport = { startTime: 30, endTime: 130 };
 
     expect(updateWaveformScenePan(scene, nextViewport)).toBe(true);
+
+    const nextRulerIndicatorMetrics = getWaveformRulerScrollIndicatorMetrics(nextViewport, mockWaveformData.duration, 900);
 
     expect(scene.state.viewport).toEqual(nextViewport);
     expect(scene.nodes.contentRows.children).toEqual(originalContentChildren);
     expect(scene.nodes.contentRows.x).not.toBe(originalContentX);
     expect(scene.nodes.backgroundGrid.x).toBe(scene.nodes.contentRows.x);
     expect(scene.nodes.statusHeader.x).toBe(scene.nodes.contentRows.x);
+    expect(scene.nodes.statusHeaderBackground.x).toBe(0);
+    expect(scene.nodes.statusRulerIndicator.x).toBe(0);
+    expect(scene.nodes.statusRulerIndicator.children).not.toEqual(originalRulerIndicatorChildren);
+    expect(nextRulerIndicatorMetrics.left).toBeGreaterThan(0);
     expect(scene.renderStats.panBufferHitCount).toBe(1);
     expect(scene.renderStats.panBufferMissCount).toBe(0);
     expect(scene.renderStats.panPixelShiftCount).toBeGreaterThan(0);
@@ -326,6 +569,36 @@ describe('createWaveformScene', () => {
     scene.world.destroy({ children: true });
   });
 });
+
+function createBusSpecialStateDataSet(width: number, segmentCount = 3): WaveformDataSet {
+  const values = ['x', 'z', '0', '1'];
+  const duration = segmentCount * 40;
+  const transitions = Array.from({ length: segmentCount + 1 }, (_, index) => ({
+    time: index * 40,
+    value: values[index % values.length] ?? '0',
+  }));
+
+  return {
+    id: 'bus-special-state-width-fixture',
+    title: 'bus-special-state-width-fixture',
+    timescaleUnit: 'ns',
+    duration,
+    cursorTime: 0,
+    groups: [{ id: 'g0', label: 'g0' }],
+    signals: [
+      {
+        id: 'bus-special',
+        groupId: 'g0',
+        name: 'bus_special',
+        path: 'g0.bus_special',
+        kind: 'bus',
+        color: '#8fd694',
+        width,
+        transitions,
+      },
+    ],
+  };
+}
 
 function collectText(container: Container): string[] {
   const texts: string[] = [];

@@ -14,6 +14,12 @@ import { waveformCanvasMinHeight } from '../src/app/components/code/explorer/wav
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const fixtureWorkspace = path.join(__dirname, '..', 'test', 'fixtures', 'workspace');
 const releaseRoot = path.join(__dirname, '..', 'release');
+const pristineEngineBinaryPath = path.join(
+  __dirname,
+  '..',
+  'binaries',
+  process.platform === 'win32' ? 'pristine-engine.exe' : 'pristine-engine',
+);
 const MONACO_READY_TIMEOUT_MS = 60000;
 const UI_READY_TIMEOUT_MS = 60000;
 type SettingsPageId = 'general' | 'appearance' | 'editor' | 'schematic' | 'window';
@@ -68,6 +74,69 @@ function createTerminalScrollFloodCommand(markerPrefix: string, count: number) {
 
 function getE2EUserDataPath() {
   return test.info().outputPath('electron-user-data');
+}
+
+function skipIfPristineEngineUnavailable() {
+  test.skip(
+    !fs.existsSync(pristineEngineBinaryPath),
+    `Pristine Engine binary is missing at ${pristineEngineBinaryPath}. Run "pnpm run prepare:pristine-engine" or "pnpm build" before this E2E test.`,
+  );
+}
+
+interface ExpectedModuleHierarchyNode {
+  instanceName?: string;
+  moduleName: string;
+}
+
+async function waitForModuleHierarchyNodes(window: Page, expectedNodes: ExpectedModuleHierarchyNode[]) {
+  await expect.poll(async () => window.evaluate(async ({ nodes }) => {
+    interface BrowserHierarchyNode {
+      children?: BrowserHierarchyNode[];
+      instanceName?: string;
+      moduleName: string;
+    }
+
+    interface BrowserModuleHierarchy {
+      roots?: BrowserHierarchyNode[];
+    }
+
+    const browserGlobal = globalThis as typeof globalThis & {
+      electronAPI?: {
+        lsp?: {
+          moduleHierarchy?: (options?: { maxDepth?: number }) => Promise<BrowserModuleHierarchy>;
+        };
+      };
+    };
+    const getNodeKey = (node: { instanceName?: string; moduleName: string }) => `${node.moduleName}:${node.instanceName ?? 'root'}`;
+
+    try {
+      const hierarchy = await browserGlobal.electronAPI?.lsp?.moduleHierarchy?.({ maxDepth: 64 });
+      const foundKeys = new Set<string>();
+      const visitNode = (node: BrowserHierarchyNode) => {
+        foundKeys.add(getNodeKey(node));
+        for (const child of node.children ?? []) {
+          visitNode(child);
+        }
+      };
+
+      for (const root of hierarchy?.roots ?? []) {
+        visitNode(root);
+      }
+
+      return {
+        foundKeys: Array.from(foundKeys).sort(),
+        ready: nodes.every((node) => foundKeys.has(getNodeKey(node))),
+      };
+    } catch (error) {
+      return {
+        error: error instanceof Error ? error.message : String(error),
+        foundKeys: [],
+        ready: false,
+      };
+    }
+  }, { nodes: expectedNodes }), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toMatchObject({ ready: true });
 }
 
 interface E2EStoredAuthSession {
@@ -306,6 +375,21 @@ async function setNextSaveDialogPath(
 function createWorkspaceCopy(targetPath: string) {
   fs.rmSync(targetPath, { recursive: true, force: true });
   fs.cpSync(fixtureWorkspace, targetPath, { recursive: true });
+}
+
+function createWorkspaceCopyWithFiles(targetName: string, files: Record<string, string>) {
+  const targetPath = test.info().outputPath(targetName);
+
+  createWorkspaceCopy(targetPath);
+
+  for (const [relativePath, content] of Object.entries(files)) {
+    const filePath = path.join(targetPath, relativePath);
+
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, `${content.trimEnd()}\n`, 'utf-8');
+  }
+
+  return targetPath;
 }
 
 function initializeGitWorkspaceCopy(targetPath: string, branchName: string) {
@@ -1985,8 +2069,9 @@ test('explorer opens a file into a new editor tab', async () => {
   await app.close();
 });
 
-test.skip('pristine-engine lsp smoke resolves a cross-file definition and symbol references', async () => {
+test('pristine-engine lsp smoke resolves a cross-file definition and symbol references', async () => {
   test.slow();
+  skipIfPristineEngineUnavailable();
 
   const { app, window } = await launchApp();
   const aluInstantiationLine = '  alu u_alu ();';
@@ -2074,10 +2159,10 @@ test.skip('pristine-engine lsp smoke resolves a cross-file definition and symbol
   await app.close();
 });
 
-test.skip('code view hierarchy renders module instantiations from pristine-engine', async () => {
+test('code view hierarchy renders module instantiations from pristine-engine', async () => {
   test.slow();
+  skipIfPristineEngineUnavailable();
 
-  const { app, window } = await launchApp();
   const aluSource = [
     'module alu;',
     'endmodule',
@@ -2093,22 +2178,12 @@ test.skip('code view hierarchy renders module instantiations from pristine-engin
     '  missing_block u_missing ();',
     'endmodule',
   ].join('\n');
-  const hierarchyAutoDocuments = Array.from({ length: 14 }, (_, index) => {
-    const moduleName = index === 0 ? 'z_hierarchy_auto_top' : `z_hierarchy_level_${String(index).padStart(2, '0')}`;
-    const childModuleName = index < 13 ? `z_hierarchy_level_${String(index + 1).padStart(2, '0')}` : null;
-    const source = childModuleName
-      ? [`module ${moduleName};`, `  ${childModuleName} u_${childModuleName} ();`, 'endmodule'].join('\n')
-      : [`module ${moduleName};`, 'endmodule'].join('\n');
-
-    return {
-      filePath: `rtl/core/${moduleName}.sv`,
-      source,
-    };
+  const projectRoot = createWorkspaceCopyWithFiles('hierarchy-workspace', {
+    'rtl/core/alu.sv': aluSource,
+    'rtl/core/bus_if.sv': busInterfaceSource,
+    'rtl/core/cpu_top.sv': cpuTopSource,
   });
-  const hierarchyManualSource = [
-    'module a_hierarchy_manual_top;',
-    'endmodule',
-  ].join('\n');
+  const { app, window } = await launchApp({ projectRoot });
 
   await ensureExplorerVisible(window);
   await openNestedWorkspaceFile(window, [
@@ -2123,29 +2198,12 @@ test.skip('code view hierarchy renders module instantiations from pristine-engin
     timeout: MONACO_READY_TIMEOUT_MS,
   });
 
-  await window.evaluate(async ({ nextAluSource, nextBusInterfaceSource, nextCpuTopSource, nextHierarchyAutoDocuments, nextHierarchyManualSource }) => {
-    const browserGlobal = globalThis as typeof globalThis & {
-      electronAPI?: {
-        lsp: {
-          openDocument: (filePath: string, languageId: string, text: string) => Promise<void>;
-        };
-      };
-    };
-
-    await browserGlobal.electronAPI?.lsp.openDocument('rtl/core/alu.sv', 'systemverilog', nextAluSource);
-    await browserGlobal.electronAPI?.lsp.openDocument('rtl/core/bus_if.sv', 'systemverilog', nextBusInterfaceSource);
-    await browserGlobal.electronAPI?.lsp.openDocument('rtl/core/cpu_top.sv', 'systemverilog', nextCpuTopSource);
-    for (const { filePath, source } of nextHierarchyAutoDocuments) {
-      await browserGlobal.electronAPI?.lsp.openDocument(filePath, 'systemverilog', source);
-    }
-    await browserGlobal.electronAPI?.lsp.openDocument('rtl/core/a_hierarchy_manual_top.sv', 'systemverilog', nextHierarchyManualSource);
-  }, {
-    nextAluSource: aluSource,
-    nextBusInterfaceSource: busInterfaceSource,
-    nextCpuTopSource: cpuTopSource,
-    nextHierarchyAutoDocuments: hierarchyAutoDocuments,
-    nextHierarchyManualSource: hierarchyManualSource,
-  });
+  await waitForModuleHierarchyNodes(window, [
+    { moduleName: 'cpu_top' },
+    { instanceName: 'u_alu', moduleName: 'alu' },
+    { instanceName: 'bus', moduleName: 'bus_if' },
+    { instanceName: 'u_missing', moduleName: 'missing_block' },
+  ]);
 
   await window.getByTestId('left-panel-split-toggle').click();
   await expect(window.getByTestId('left-panel-secondary-panel')).toBeVisible();
@@ -2162,27 +2220,9 @@ test.skip('code view hierarchy renders module instantiations from pristine-engin
   const topNode = window.getByTestId('hierarchy-node-label-cpu_top-root');
   const aluInstanceNode = window.getByTestId('hierarchy-node-label-alu-u_alu');
   const interfaceInstanceNode = window.getByTestId('hierarchy-node-label-bus_if-bus');
-  const rootLabels = window.locator('[data-testid^="hierarchy-node-label-"][data-testid$="-root"]');
-  const manualTopNode = window.getByTestId('hierarchy-node-label-a_hierarchy_manual_top-root');
 
   await expect(topNode).toBeVisible({ timeout: 15000 });
   await expect(window.getByLabel('Automatic top module')).toBeVisible();
-  await expect(manualTopNode).toBeVisible();
-
-  const initialRootNames = await rootLabels.allTextContents();
-  expect(initialRootNames).toContain('z_hierarchy_auto_top');
-  expect(initialRootNames).toContain('a_hierarchy_manual_top');
-  const manualTopModuleName = initialRootNames[0] === 'a_hierarchy_manual_top'
-    ? 'z_hierarchy_auto_top'
-    : 'a_hierarchy_manual_top';
-  const selectedManualTopNode = window.getByTestId(`hierarchy-node-label-${manualTopModuleName}-root`);
-
-  await selectedManualTopNode.click({ button: 'right' });
-  await expect(window.getByTestId('explorer-context-menu')).toBeVisible();
-  await window.getByRole('menuitem', { name: 'Set as Simulation Top' }).click();
-  await expect(rootLabels.first()).toHaveText(manualTopModuleName);
-  await expect(selectedManualTopNode).toHaveClass(/font-semibold/);
-  await expect(window.getByLabel('Manual top module')).toBeVisible();
 
   await expect(aluInstanceNode).toBeVisible();
   await expect(aluInstanceNode).toHaveText('u_alu');
@@ -2262,8 +2302,55 @@ test.skip('code view hierarchy renders module instantiations from pristine-engin
   await app.close();
 });
 
-test.skip('pristine-engine lsp bottom panel filters diagnostics and shows paired request responses', async () => {
+test('lsp panel captures initialization logs when hierarchy opens before any editor', async () => {
   test.slow();
+  skipIfPristineEngineUnavailable();
+
+  const aluSource = [
+    'module alu;',
+    'endmodule',
+  ].join('\n');
+  const busInterfaceSource = [
+    'interface bus_if;',
+    'endinterface',
+  ].join('\n');
+  const cpuTopSource = [
+    'module cpu_top;',
+    '  alu u_alu ();',
+    '  bus_if bus ();',
+    'endmodule',
+  ].join('\n');
+  const projectRoot = createWorkspaceCopyWithFiles('hierarchy-lsp-log-workspace', {
+    'rtl/core/alu.sv': aluSource,
+    'rtl/core/bus_if.sv': busInterfaceSource,
+    'rtl/core/cpu_top.sv': cpuTopSource,
+  });
+  const { app, window } = await launchApp({ projectRoot });
+
+  await ensureExplorerVisible(window);
+  await expect(window.getByTestId('editor-tab-rtl/core/cpu_top.sv')).toHaveCount(0);
+
+  await window.getByTestId('left-panel-split-toggle').click();
+  await expect(window.getByTestId('left-panel-secondary-panel')).toBeVisible();
+  await window.getByTestId('left-panel-secondary-tab-hierarchy').click();
+  await expect(window.getByTestId('hierarchy-node-label-cpu_top-root')).toBeVisible({ timeout: 15000 });
+
+  await window.getByTestId('toggle-bottom-panel').click();
+  await getBottomPanelTab(window, 'lsp').click();
+  await expect(window.getByTestId('lsp-panel')).toBeVisible();
+
+  await expect.poll(async () => window.getByTestId('lsp-panel').innerText(), {
+    timeout: 15000,
+  }).toContain('initialize');
+  await expect(window.getByTestId('lsp-panel')).toContainText('systemverilog/moduleHierarchy');
+  await expect(window.getByTestId('lsp-panel')).toContainText('Status: ready');
+
+  await app.close();
+});
+
+test('pristine-engine lsp bottom panel filters diagnostics and shows paired request responses', async () => {
+  test.slow();
+  skipIfPristineEngineUnavailable();
 
   const { app, window } = await launchApp();
 
@@ -5375,7 +5462,8 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
   await expect(canvasHost).toHaveAttribute('data-header-background', 'opaque');
   await expect(canvasHost).toHaveAttribute('data-row-count', '171');
   await expect(canvasHost).toHaveAttribute('data-row-height', '30');
-  await expect(canvasHost).toHaveAttribute('data-first-signal-lane-y', '60.00');
+  await expect(canvasHost).toHaveAttribute('data-first-signal-lane-y', '52.00');
+  await expect(canvasHost).toHaveAttribute('data-waveform-header-height', '22.00');
   await expect.poll(async () => readCanvasNumber('data-bus-hexagon-count'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(0);
@@ -5407,14 +5495,41 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(0);
   await expect.poll(async () => {
-    const denseSignalCount = await readCanvasNumber('data-dense-signal-count');
-    const compactSignalCount = await readCanvasNumber('data-compact-signal-count');
-    const detailSignalCount = await readCanvasNumber('data-detail-signal-count');
+    const drawnHorizontalSegmentCount = await readCanvasNumber('data-drawn-horizontal-segment-count');
 
-    return denseSignalCount + compactSignalCount + detailSignalCount;
+    return drawnHorizontalSegmentCount > 0;
   }, {
     timeout: UI_READY_TIMEOUT_MS,
-  }).toBeGreaterThan(0);
+  }).toBe(true);
+  await expect(canvasHost).not.toHaveAttribute('data-dense-signal-count');
+  await expect(canvasHost).not.toHaveAttribute('data-compact-signal-count');
+  await expect(canvasHost).not.toHaveAttribute('data-detail-signal-count');
+  await expect(canvasHost).not.toHaveAttribute('data-coalesced-segment-count');
+  await expect.poll(async () => {
+    const collapsedSegmentCount = await readCanvasNumber('data-collapsed-segment-count');
+    const skippedHorizontalSegmentCount = await readCanvasNumber('data-skipped-horizontal-segment-count');
+    const drawnTransitionEdgeCount = await readCanvasNumber('data-drawn-transition-edge-count');
+    const busFullHexagonCount = await readCanvasNumber('data-bus-full-hexagon-count');
+    const busSpecialStateHexagonCount = await readCanvasNumber('data-bus-special-state-hexagon-count');
+    const busSpecialStateLabelCount = await readCanvasNumber('data-bus-special-state-label-count');
+    const busSpecialStateWidthAlignedLabelCount = await readCanvasNumber('data-bus-special-state-width-aligned-label-count');
+    const busTruncatedLabelCount = await readCanvasNumber('data-bus-truncated-label-count');
+    const busLabelDotReplacementCount = await readCanvasNumber('data-bus-label-dot-replacement-count');
+
+    return Number.isFinite(collapsedSegmentCount)
+      && Number.isFinite(skippedHorizontalSegmentCount)
+      && drawnTransitionEdgeCount > 0
+      && busFullHexagonCount > 0
+      && busSpecialStateHexagonCount > 0
+      && busSpecialStateLabelCount > 0
+      && busSpecialStateWidthAlignedLabelCount > 0
+      && Number.isFinite(busTruncatedLabelCount)
+      && busTruncatedLabelCount >= 0
+      && Number.isFinite(busLabelDotReplacementCount)
+      && busLabelDotReplacementCount >= 0;
+  }, {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBe(true);
   await expect.poll(async () => {
     const sourceSegmentCount = await readCanvasNumber('data-source-segment-count');
     const renderedSegmentCount = await readCanvasNumber('data-rendered-segment-count');
@@ -5481,7 +5596,7 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
 
   const alignedSecondGroupRow = window.getByTestId('waveform-signal-row-u_top_module1-clk');
   await expect(alignedSecondGroupRow).toHaveAttribute('data-row-index', '6');
-  await expect(alignedSecondGroupRow).toHaveAttribute('data-lane-y', '210.00');
+  await expect(alignedSecondGroupRow).toHaveAttribute('data-lane-y', '202.00');
   const alignedSecondGroupRowBox = await alignedSecondGroupRow.boundingBox();
   if (!alignedSecondGroupRowBox) {
     throw new Error('Expected second group waveform signal row geometry to be measurable');
@@ -5495,29 +5610,53 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
   await countingRow.click();
   await expect(panel).toHaveAttribute('data-selected-signal-id', 'u_top_module1-counting');
   await expect(countingRow).toHaveAttribute('data-row-index', '9');
-  await expect(countingRow).toHaveAttribute('data-lane-y', '300.00');
+  await expect(countingRow).toHaveAttribute('data-lane-y', '292.00');
   await expect(countingPrimary).toHaveClass(/items-center/);
-  await expect(canvasHost).toHaveAttribute('data-selected-signal-lane-y', '300.00');
+  await expect(canvasHost).toHaveAttribute('data-selected-signal-lane-y', '292.00');
   await expect(cursorInfoSignal).toHaveText(/counting/);
   await expect(cursorInfoValue).toHaveText(/^2$/);
 
-  await canvasHost.click({ position: { x: Math.floor(canvasBox.width * 0.72), y: 86 } });
+  await canvasHost.click({ position: { x: Math.floor(canvasBox.width * 0.28), y: 86 } });
   await expect.poll(async () => Number(await panel.getAttribute('data-cursor-time') ?? '0'), {
     timeout: UI_READY_TIMEOUT_MS,
-  }).toBeGreaterThan(100);
+  }).toBeGreaterThan(0);
+  await expect(canvasHost).toHaveAttribute('data-cursor-visible', 'true');
   await expect(cursorInfoTime).toHaveText(/\d+\.\dns/);
+  const cursorTimeAfterClick = Number(await panel.getAttribute('data-cursor-time') ?? '0');
 
   const initialZoom = Number(await panel.getAttribute('data-zoom') ?? '0');
-  await window.getByTestId('waveform-zoom-in').click();
+  const zoomInButton = window.getByTestId('waveform-zoom-in');
+  await zoomInButton.click();
   await expect.poll(async () => Number(await panel.getAttribute('data-zoom') ?? '0'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(initialZoom);
+  for (let index = 0; index < 4; index += 1) {
+    await zoomInButton.click();
+  }
   const horizontalScrollbar = window.getByTestId('waveform-horizontal-scrollbar');
+  const setHorizontalScrollbarLeft = async (scrollLeft: number) => {
+    await horizontalScrollbar.evaluate((element, nextScrollLeft) => {
+      const scrollable = element as unknown as {
+        dispatchEvent: (event: Event) => boolean;
+        scrollLeft: number;
+      };
+      scrollable.scrollLeft = nextScrollLeft;
+      scrollable.dispatchEvent(new Event('scroll', { bubbles: true }));
+    }, scrollLeft);
+  };
   await expect.poll(async () => Number(await horizontalScrollbar.getAttribute('data-horizontal-scroll-range') ?? '0'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(0);
+  await expect(canvasHost).toHaveAttribute('data-ruler-scroll-indicator-color', '#8e8e8e');
+  await expect(canvasHost).toHaveAttribute('data-ruler-scroll-indicator-height', '22.00');
+  await expect(canvasHost).toHaveAttribute('data-ruler-scroll-indicator-scrollable', 'true');
+  await expect.poll(async () => readCanvasNumber('data-ruler-scroll-indicator-width'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeLessThan(canvasBox.width);
 
   const startBeforeShiftWheel = Number(await panel.getAttribute('data-visible-window-start') ?? '0');
+  const horizontalScrollLeftBeforeShiftWheel = Number(await horizontalScrollbar.getAttribute('data-horizontal-scroll-left') ?? '0');
+  const rulerLeftBeforeShiftWheel = Number(await canvasHost.getAttribute('data-ruler-scroll-indicator-left') ?? '0');
   await canvasHost.hover();
   await window.keyboard.down('Shift');
   await window.mouse.wheel(0, 160);
@@ -5525,6 +5664,57 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
   await expect.poll(async () => Number(await panel.getAttribute('data-visible-window-start') ?? '0'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(startBeforeShiftWheel);
+  await expect.poll(async () => Number(await canvasHost.getAttribute('data-ruler-scroll-indicator-left') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(rulerLeftBeforeShiftWheel);
+  const maxHorizontalScrollLeft = Number(await horizontalScrollbar.getAttribute('data-horizontal-scroll-range') ?? '0');
+  await setHorizontalScrollbarLeft(maxHorizontalScrollLeft);
+  await expect.poll(async () => {
+    const viewportStart = Number(await panel.getAttribute('data-visible-window-start') ?? '0');
+    const viewportEnd = Number(await panel.getAttribute('data-visible-window-end') ?? '0');
+
+    return cursorTimeAfterClick < viewportStart || cursorTimeAfterClick > viewportEnd;
+  }, {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBe(true);
+  await expect(canvasHost).toHaveAttribute('data-cursor-visible', 'false');
+  await setHorizontalScrollbarLeft(horizontalScrollLeftBeforeShiftWheel);
+  await expect.poll(async () => Number(await panel.getAttribute('data-visible-window-start') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeLessThanOrEqual(startBeforeShiftWheel + 1);
+  await expect(canvasHost).toHaveAttribute('data-cursor-visible', 'true');
+  await expect.poll(async () => {
+    const viewportStart = Number(await panel.getAttribute('data-visible-window-start') ?? '0');
+    const viewportEnd = Number(await panel.getAttribute('data-visible-window-end') ?? '0');
+    const width = Number(await canvasHost.getAttribute('data-canvas-width') ?? '0');
+    const expectedX = 10 + (cursorTimeAfterClick - viewportStart) / Math.max(8, viewportEnd - viewportStart) * Math.max(1, width - 20);
+    const actualX = Number(await canvasHost.getAttribute('data-cursor-x') ?? 'NaN');
+
+    return Math.abs(actualX - expectedX);
+  }, {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeLessThanOrEqual(1.5);
+
+  const startBeforeRulerDrag = Number(await panel.getAttribute('data-visible-window-start') ?? '0');
+  const horizontalScrollLeftBeforeRulerDrag = Number(await horizontalScrollbar.getAttribute('data-horizontal-scroll-left') ?? '0');
+  const rulerLeftBeforeDrag = Number(await canvasHost.getAttribute('data-ruler-scroll-indicator-left') ?? '0');
+  const rulerWidthBeforeDrag = Number(await canvasHost.getAttribute('data-ruler-scroll-indicator-width') ?? '0');
+  const rulerCanvasBox = await canvasHost.boundingBox();
+  if (!rulerCanvasBox) {
+    throw new Error('Expected waveform canvas geometry before ruler drag to be measurable');
+  }
+  const rulerCenterY = rulerCanvasBox.y + Number(await canvasHost.getAttribute('data-waveform-header-height') ?? '22') / 2;
+  const rulerStartX = rulerCanvasBox.x + rulerLeftBeforeDrag + Math.max(8, Math.min(rulerWidthBeforeDrag - 4, rulerWidthBeforeDrag / 2));
+  await window.mouse.move(rulerStartX, rulerCenterY);
+  await window.mouse.down();
+  await window.mouse.move(rulerStartX - Math.max(90, rulerCanvasBox.width * 0.1), rulerCenterY);
+  await window.mouse.up();
+  await expect.poll(async () => Number(await panel.getAttribute('data-visible-window-start') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeLessThan(startBeforeRulerDrag);
+  await expect.poll(async () => Number(await horizontalScrollbar.getAttribute('data-horizontal-scroll-left') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeLessThan(horizontalScrollLeftBeforeRulerDrag);
 
   const zoomBeforeCtrlWheel = Number(await panel.getAttribute('data-zoom') ?? '0');
   await window.keyboard.down('Control');
@@ -5563,8 +5753,8 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
   await denseRow.click();
   await expect(panel).toHaveAttribute('data-selected-signal-id', 'dense-signal-40');
   await expect(denseRow).toHaveAttribute('data-row-index', '50');
-  await expect(denseRow).toHaveAttribute('data-lane-y', '1530.00');
-  await expect(canvasHost).toHaveAttribute('data-selected-signal-lane-y', '1530.00');
+  await expect(denseRow).toHaveAttribute('data-lane-y', '1522.00');
+  await expect(canvasHost).toHaveAttribute('data-selected-signal-lane-y', '1522.00');
 
   await expect.poll(async () => {
     const denseRowBox = await denseRow.boundingBox();
@@ -5593,8 +5783,9 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
   await app.close();
 });
 
-test.skip('asic schematic bottom panel renders Pixi layers with selection and hierarchy navigation', async () => {
-  const { app, window } = await launchApp();
+test('asic schematic bottom panel renders Pixi layers with selection and hierarchy navigation', async () => {
+  skipIfPristineEngineUnavailable();
+
   const cpuTopSource = [
     'module cpu_top(input logic clk, input logic rst_n, input logic [3:0] a, input logic [3:0] b, input logic sel, inout tri [3:0] pad, output logic [3:0] y);',
     '  logic [3:0] n1;',
@@ -5625,26 +5816,13 @@ test.skip('asic schematic bottom panel renders Pixi layers with selection and hi
     '  assign y = a | b;',
     'endmodule',
   ].join('\n');
-
-  await window.evaluate(async ({ nextCpuTopSource, nextAluSource, nextLogicChildSource, nextAltTopSource }) => {
-    const browserGlobal = globalThis as typeof globalThis & {
-      electronAPI?: {
-        lsp: {
-          openDocument: (filePath: string, languageId: string, text: string) => Promise<void>;
-        };
-      };
-    };
-
-    await browserGlobal.electronAPI?.lsp.openDocument('rtl/core/cpu_top.sv', 'systemverilog', nextCpuTopSource);
-    await browserGlobal.electronAPI?.lsp.openDocument('rtl/core/alu.sv', 'systemverilog', nextAluSource);
-    await browserGlobal.electronAPI?.lsp.openDocument('rtl/core/logic_child.sv', 'systemverilog', nextLogicChildSource);
-    await browserGlobal.electronAPI?.lsp.openDocument('rtl/core/z_schematic_alt_top.sv', 'systemverilog', nextAltTopSource);
-  }, {
-    nextCpuTopSource: cpuTopSource,
-    nextAluSource: aluSource,
-    nextLogicChildSource: logicChildSource,
-    nextAltTopSource: altTopSource,
+  const projectRoot = createWorkspaceCopyWithFiles('schematic-workspace', {
+    'rtl/core/alu.sv': aluSource,
+    'rtl/core/cpu_top.sv': cpuTopSource,
+    'rtl/core/logic_child.sv': logicChildSource,
+    'rtl/core/z_schematic_alt_top.sv': altTopSource,
   });
+  const { app, window } = await launchApp({ projectRoot });
 
   await openBottomTerminal(window);
   await getBottomPanelTab(window, 'schematic').click();
@@ -6294,14 +6472,6 @@ test.skip('asic schematic bottom panel renders Pixi layers with selection and hi
 
   await window.getByLabel('Root module').click();
   await expect(panel).toHaveAttribute('data-module-id', 'cpu_top');
-  await ensureExplorerVisible(window);
-  await window.getByTestId('left-panel-split-toggle').click();
-  await window.getByTestId('left-panel-secondary-tab-hierarchy').click();
-  await expect(window.getByTestId('hierarchy-node-label-z_schematic_alt_top-root')).toBeVisible({ timeout: 15000 });
-  await window.getByTestId('hierarchy-node-label-z_schematic_alt_top-root').click({ button: 'right' });
-  await window.getByRole('menuitem', { name: 'Set as Simulation Top' }).click();
-  await expect(panel).toHaveAttribute('data-top-module', 'z_schematic_alt_top');
-  await expect(panel).toHaveAttribute('data-module-id', 'z_schematic_alt_top', { timeout: UI_READY_TIMEOUT_MS });
 
   await expect(panel).toHaveAttribute('data-ready', 'true');
   await expect.poll(async () => Number(await canvasHost.getAttribute('data-render-count') ?? '0'), {

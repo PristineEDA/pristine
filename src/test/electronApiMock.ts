@@ -110,6 +110,7 @@ export function createElectronApiMock(): ElectronAPI {
       references: vi.fn().mockResolvedValue([]),
       moduleHierarchy: vi.fn().mockResolvedValue({ roots: [], messages: [] }),
       schematic: vi.fn().mockResolvedValue({ rootModuleId: null, modules: [], messages: [] }),
+      getDebugEvents: vi.fn().mockResolvedValue([]),
       onDebug: vi.fn(() => vi.fn()),
       onDiagnostics: vi.fn(() => vi.fn()),
       onState: vi.fn(() => vi.fn()),

@@ -210,7 +210,7 @@ function createFakeConnection(): FakeConnection {
   };
 }
 
-describe.skip('LSP IPC handlers', () => {
+describe('LSP IPC handlers', () => {
   const expectedBinaryPattern = process.platform === 'win32'
     ? /binaries[\\/]pristine-engine\.exe$/
     : /binaries[\\/]pristine-engine$/;
@@ -231,6 +231,7 @@ describe.skip('LSP IPC handlers', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     disposeLspSession();
   });
 
@@ -302,6 +303,33 @@ describe.skip('LSP IPC handlers', () => {
     }));
   });
 
+  it('keeps a bounded LSP debug history for renderers that subscribe late', async () => {
+    const openHandler = getHandler('async:lsp:open-document');
+    const historyHandler = getHandler('async:lsp:get-debug-events');
+
+    await openHandler({}, 'rtl/core/cpu_top.sv', 'systemverilog', 'module cpu_top; endmodule');
+
+    const history = await historyHandler({});
+
+    expect(history).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        direction: 'session',
+        kind: 'lifecycle',
+        status: 'starting',
+      }),
+      expect.objectContaining({
+        direction: 'client->server',
+        kind: 'request',
+        method: 'initialize',
+      }),
+      expect.objectContaining({
+        direction: 'session',
+        kind: 'lifecycle',
+        status: 'ready',
+      }),
+    ]));
+  });
+
   it('forwards diagnostics and normalizes definition results to workspace-relative paths', async () => {
     const openHandler = getHandler('async:lsp:open-document');
     const definitionHandler = getHandler('async:lsp:definition');
@@ -358,6 +386,49 @@ describe.skip('LSP IPC handlers', () => {
       kind: 'response',
       method: 'textDocument/definition',
       filePath: 'rtl/core/alu.sv',
+    }));
+  });
+
+  it('returns a safe completion fallback and emits a debug error when requests time out', async () => {
+    const openHandler = getHandler('async:lsp:open-document');
+    const completionHandler = getHandler('async:lsp:completion');
+
+    await openHandler({}, 'rtl/core/cpu_top.sv', 'systemverilog', 'module cpu_top; endmodule');
+    fakeConnection.sendRequest.mockImplementation((method: string) => {
+      if (method === 'textDocument/completion') {
+        return new Promise(() => undefined);
+      }
+
+      return Promise.resolve(null);
+    });
+
+    vi.useFakeTimers();
+    const completion = completionHandler({}, 'rtl/core/cpu_top.sv', 3, 4);
+
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    await expect(completion).resolves.toBeNull();
+    expect(fakeConnection.sendRequest).toHaveBeenCalledWith('textDocument/completion', expect.objectContaining({
+      textDocument: {
+        uri: 'file:///C:/workspace/Pristine/rtl/core/cpu_top.sv',
+      },
+      position: {
+        line: 3,
+        character: 4,
+      },
+    }));
+    expect(send).toHaveBeenCalledWith('stream:lsp:debug', expect.objectContaining({
+      direction: 'server->client',
+      kind: 'response',
+      method: 'textDocument/completion',
+      filePath: 'rtl/core/cpu_top.sv',
+      text: expect.stringContaining('timed out after 10000ms'),
+      payload: expect.objectContaining({
+        error: expect.objectContaining({
+          name: 'LspRequestTimeoutError',
+          message: expect.stringContaining('textDocument/completion'),
+        }),
+      }),
     }));
   });
 

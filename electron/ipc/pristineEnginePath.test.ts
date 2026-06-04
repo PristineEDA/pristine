@@ -26,7 +26,7 @@ import {
   resolvePristineEnginePath,
 } from './pristineEnginePath.js';
 
-describe.skip('pristine-engine path helpers', () => {
+describe('pristine-engine path helpers', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });

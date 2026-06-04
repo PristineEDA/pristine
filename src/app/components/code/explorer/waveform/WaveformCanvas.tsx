@@ -17,14 +17,17 @@ import {
   getWaveformDigitalPulseFillCount,
   getWaveformDisplayRows,
   getWaveformFirstSignalLaneY,
+  getWaveformRulerScrollIndicatorMetrics,
   getWaveformSignalLaneY,
   getWaveformShapeCounts,
   getWaveformStateCounts,
+  getWaveformViewportForRulerScrollIndicator,
   getWaveformViewportSpan,
   panWaveformViewport,
   timeToX,
   waveformCanvasMinHeight,
   waveformCanvasMinWidth,
+  waveformHeaderHeight,
   waveformLaneHeight,
   xToTime,
   zoomWaveformViewport,
@@ -61,6 +64,11 @@ interface DragState {
   moved: boolean;
 }
 
+interface RulerScrollDragState {
+  indicatorOffsetX: number;
+  pointerId: number;
+}
+
 const dragThreshold = 4;
 const zoomWheelFactor = 1.18;
 const waveformSignalTextureCacheLimit = 48;
@@ -84,6 +92,7 @@ export function WaveformCanvas({
   const sceneRef = useRef<WaveformScene | null>(null);
   const renderFrameRef = useRef<number | null>(null);
   const dragRef = useRef<DragState | null>(null);
+  const rulerScrollDragRef = useRef<RulerScrollDragState | null>(null);
   const signalTextureCacheRef = useRef(new Map<string, WaveformSignalTextureCacheEntry>());
   const signalTextureCacheBytesRef = useRef(0);
   const textureCacheDataIdRef = useRef(data.id);
@@ -285,6 +294,30 @@ export function WaveformCanvas({
         return;
       }
 
+      const rect = host.getBoundingClientRect();
+      const pointerX = event.clientX - rect.left;
+      const pointerY = event.clientY - rect.top;
+
+      if (pointerY >= 0 && pointerY <= waveformHeaderHeight) {
+        const width = Math.max(waveformCanvasMinWidth, rect.width);
+        const currentViewport = viewportRef.current;
+        const metrics = getWaveformRulerScrollIndicatorMetrics(currentViewport, dataRef.current.duration, width);
+        const pointerInsideIndicator = pointerX >= metrics.left && pointerX <= metrics.left + metrics.width;
+        const indicatorOffsetX = pointerInsideIndicator ? pointerX - metrics.left : metrics.width / 2;
+
+        rulerScrollDragRef.current = {
+          indicatorOffsetX,
+          pointerId: event.pointerId,
+        };
+        host.setPointerCapture(event.pointerId);
+
+        if (!pointerInsideIndicator) {
+          updateViewportFromRulerPointer(pointerX, indicatorOffsetX, width);
+        }
+
+        return;
+      }
+
       dragRef.current = {
         pointerId: event.pointerId,
         startX: event.clientX,
@@ -296,6 +329,14 @@ export function WaveformCanvas({
     }
 
     function handlePointerMove(event: PointerEvent) {
+      const rulerDrag = rulerScrollDragRef.current;
+
+      if (rulerDrag && rulerDrag.pointerId === event.pointerId) {
+        const rect = host.getBoundingClientRect();
+        updateViewportFromRulerPointer(event.clientX - rect.left, rulerDrag.indicatorOffsetX, Math.max(waveformCanvasMinWidth, rect.width));
+        return;
+      }
+
       const drag = dragRef.current;
 
       if (!drag || drag.pointerId !== event.pointerId) {
@@ -316,6 +357,14 @@ export function WaveformCanvas({
     }
 
     function handlePointerUp(event: PointerEvent) {
+      const rulerDrag = rulerScrollDragRef.current;
+
+      if (rulerDrag && rulerDrag.pointerId === event.pointerId) {
+        rulerScrollDragRef.current = null;
+        host.releasePointerCapture(event.pointerId);
+        return;
+      }
+
       const drag = dragRef.current;
 
       if (!drag || drag.pointerId !== event.pointerId) {
@@ -334,6 +383,11 @@ export function WaveformCanvas({
       const rect = host.getBoundingClientRect();
       const x = clientX - rect.left;
       return xToTime(x, viewportRef.current, Math.max(waveformCanvasMinWidth, rect.width));
+    }
+
+    function updateViewportFromRulerPointer(pointerX: number, indicatorOffsetX: number, width: number) {
+      const nextLeft = pointerX - indicatorOffsetX;
+      onViewportChangeRef.current(getWaveformViewportForRulerScrollIndicator(viewportRef.current, dataRef.current.duration, width, nextLeft));
     }
 
     host.addEventListener('wheel', handleWheel, { passive: false });
@@ -523,7 +577,9 @@ export function WaveformCanvas({
   }
 
   const zoomLevel = data.duration / getWaveformViewportSpan(viewport);
-  const cursorX = timeToX(cursorTime, viewport, waveformCanvasMinWidth);
+  const effectiveCanvasWidth = Math.max(waveformCanvasMinWidth, canvasSize.width || waveformCanvasMinWidth);
+  const cursorX = timeToX(cursorTime, viewport, effectiveCanvasWidth);
+  const cursorVisible = cursorTime >= viewport.startTime && cursorTime <= viewport.endTime;
   const displayRows = getWaveformDisplayRows(data);
   const firstSignalLaneY = getWaveformFirstSignalLaneY(data);
   const selectedSignalLaneY = getWaveformSignalLaneY(data, selectedSignalId);
@@ -531,6 +587,7 @@ export function WaveformCanvas({
   const stateCounts = getWaveformStateCounts(data);
   const shapeCounts = getWaveformShapeCounts(data, viewport);
   const pulseFillCount = getWaveformDigitalPulseFillCount(data, viewport);
+  const rulerIndicatorMetrics = getWaveformRulerScrollIndicatorMetrics(viewport, data.duration, effectiveCanvasWidth);
 
   return (
     <div
@@ -538,6 +595,7 @@ export function WaveformCanvas({
       aria-label="Waveform canvas"
       className="relative h-full min-h-0 w-full flex-1 cursor-crosshair overflow-hidden bg-[#111111] outline-none"
       data-cursor-time={cursorTime.toFixed(2)}
+      data-cursor-visible={String(cursorVisible)}
       data-cursor-x={cursorX.toFixed(2)}
       data-layer-count={waveformLayerNames.length}
       data-layer-names={waveformLayerNames.join(',')}
@@ -546,16 +604,21 @@ export function WaveformCanvas({
       data-cache-miss-count={renderStats.cacheMissCount}
       data-cacheable-signal-count={renderStats.cacheableSignalCount}
       data-cached-signal-count={renderStats.cachedSignalCount}
-      data-compact-signal-count={renderStats.compactSignalCount}
+      data-bus-fold-only-count={renderStats.busFoldOnlyCount}
+      data-bus-full-hexagon-count={renderStats.busFullHexagonCount}
+      data-bus-special-state-hexagon-count={renderStats.busSpecialStateHexagonCount}
+      data-bus-special-state-label-count={renderStats.busSpecialStateLabelCount}
+      data-bus-special-state-width-aligned-label-count={renderStats.busSpecialStateWidthAlignedLabelCount}
+      data-bus-truncated-label-count={renderStats.busTruncatedLabelCount}
+      data-bus-label-dot-replacement-count={renderStats.busLabelDotReplacementCount}
+      data-bus-vertical-fallback-count={renderStats.busVerticalFallbackCount}
       data-canvas-height={canvasSize.height.toFixed(2)}
       data-canvas-width={canvasSize.width.toFixed(2)}
-      data-coalesced-segment-count={renderStats.coalescedSegmentCount}
+      data-collapsed-segment-count={renderStats.collapsedSegmentCount}
       data-culled-row-count={renderStats.culledRowCount}
-      data-dense-column-count={renderStats.denseColumnCount}
-      data-dense-run-count={renderStats.denseRunCount}
-      data-dense-signal-count={renderStats.denseSignalCount}
+      data-drawn-horizontal-segment-count={renderStats.drawnHorizontalSegmentCount}
+      data-drawn-transition-edge-count={renderStats.drawnTransitionEdgeCount}
       data-full-scene-rebuild-count={renderStats.fullSceneRebuildCount}
-      data-detail-signal-count={renderStats.detailSignalCount}
       data-first-signal-lane-y={formatOptionalNumber(firstSignalLaneY)}
       data-header-background="opaque"
       data-average-fps={formatOptionalNumber(renderMetrics.averageFps)}
@@ -579,15 +642,22 @@ export function WaveformCanvas({
       data-renderer={renderer}
       data-row-count={displayRows.length}
       data-row-height={waveformLaneHeight}
+      data-ruler-scroll-indicator-color={`#${rulerIndicatorMetrics.color.toString(16).padStart(6, '0')}`}
+      data-ruler-scroll-indicator-height={rulerIndicatorMetrics.height.toFixed(2)}
+      data-ruler-scroll-indicator-left={rulerIndicatorMetrics.left.toFixed(2)}
+      data-ruler-scroll-indicator-scrollable={String(rulerIndicatorMetrics.scrollable)}
+      data-ruler-scroll-indicator-width={rulerIndicatorMetrics.width.toFixed(2)}
       data-selected-signal-lane-y={formatOptionalNumber(selectedSignalLaneY)}
       data-testid="waveform-canvas"
       data-visible-window-end={viewport.endTime.toFixed(2)}
       data-visible-window-start={viewport.startTime.toFixed(2)}
       data-visible-row-count={renderStats.visibleRowCount}
+      data-waveform-header-height={waveformHeaderHeight.toFixed(2)}
       data-x-state-count={stateCounts.xStateCount}
       data-source-segment-count={renderStats.sourceSegmentCount}
       data-selected-signal-visible-y={formatOptionalNumber(selectedSignalVisibleY)}
       data-selection-update-count={renderStats.selectionUpdateCount}
+      data-skipped-horizontal-segment-count={renderStats.skippedHorizontalSegmentCount}
       data-suppressed-label-count={renderStats.suppressedLabelCount}
       data-texture-cache-bytes={renderStats.textureCacheBytes}
       data-texture-cache-size={renderStats.textureCacheSize}
@@ -668,17 +738,23 @@ function createEmptyRenderStats(): WaveformRenderStats {
     renderedSignalCount: 0,
     sourceSegmentCount: 0,
     renderedSegmentCount: 0,
-    coalescedSegmentCount: 0,
+    collapsedSegmentCount: 0,
+    drawnHorizontalSegmentCount: 0,
+    skippedHorizontalSegmentCount: 0,
+    drawnTransitionEdgeCount: 0,
+    busFullHexagonCount: 0,
+    busFoldOnlyCount: 0,
+    busSpecialStateHexagonCount: 0,
+    busSpecialStateLabelCount: 0,
+    busSpecialStateWidthAlignedLabelCount: 0,
+    busTruncatedLabelCount: 0,
+    busLabelDotReplacementCount: 0,
+    busVerticalFallbackCount: 0,
     renderedLabelCount: 0,
     cacheableSignalCount: 0,
     cacheHitCount: 0,
     cacheMissCount: 0,
     cachedSignalCount: 0,
-    compactSignalCount: 0,
-    denseColumnCount: 0,
-    denseRunCount: 0,
-    denseSignalCount: 0,
-    detailSignalCount: 0,
     renderResolution: 1,
     suppressedLabelCount: 0,
     textureCacheBytes: 0,
@@ -732,7 +808,9 @@ function getVisiblePrimitiveCount(scene: WaveformScene | null, renderStats: Wave
 
   return renderStats.renderedSegmentCount
     + renderStats.renderedLabelCount
-    + scene.shapeCounts.busHexagonCount
+    + renderStats.busFullHexagonCount
+    + renderStats.busFoldOnlyCount
+    + renderStats.busVerticalFallbackCount
     + scene.shapeCounts.xStateBlockCount
     + scene.shapeCounts.zStateBlockCount
     + scene.digitalPulseFillCount;

@@ -52,7 +52,7 @@ function createJsonResponse(body: unknown) {
   })
 }
 
-describe.skip('pristine-engine remote source selection', () => {
+describe('pristine-engine remote source selection', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
   })

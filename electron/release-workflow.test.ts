@@ -48,6 +48,147 @@ function runReleaseScript(root: string, args: string[]) {
   return result
 }
 
+function getPreparedEngineBinaryName() {
+  return process.platform === 'win32' ? 'pristine-engine.exe' : 'pristine-engine'
+}
+
+function writeFixtureFile(filePath: string, contents: string) {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true })
+  fs.writeFileSync(filePath, contents)
+}
+
+function createPrepareEngineFixture() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pristine-prepare-engine-'))
+  const appRoot = path.join(root, 'pristine')
+  const engineRoot = path.join(root, 'pristine-engine')
+  const binaryName = getPreparedEngineBinaryName()
+  const licenseRoot = path.join(engineRoot, 'build', 'install-smoke', 'share', 'pristine-engine', 'licenses')
+
+  fs.mkdirSync(appRoot, { recursive: true })
+  fs.mkdirSync(licenseRoot, { recursive: true })
+  writeFixtureFile(path.join(licenseRoot, 'LICENSE'), 'license')
+  writeFixtureFile(path.join(licenseRoot, 'ATTRIBUTIONS.md'), 'attributions')
+  writeFixtureFile(path.join(licenseRoot, 'NOTICE'), 'notice')
+
+  return {
+    appRoot,
+    cleanup: () => fs.rmSync(root, { recursive: true, force: true }),
+    paths: {
+      release: path.join(engineRoot, 'build', 'release', binaryName),
+      installSmoke: path.join(engineRoot, 'build', 'install-smoke', 'bin', binaryName),
+      dev: path.join(engineRoot, 'build', 'dev', binaryName),
+      clangCl: path.join(engineRoot, 'build', 'clang-cl', binaryName),
+      target: path.join(appRoot, 'binaries', binaryName),
+    },
+  }
+}
+
+function runPrepareEngineScript(appRoot: string, envOverrides: Record<string, string | undefined> = {}) {
+  const env = { ...process.env }
+  for (const key of [
+    'GITHUB_ACTIONS',
+    'PRISTINE_ENGINE_SOURCE',
+    'PRISTINE_ENGINE_ALLOW_DEBUG_SOURCE',
+    'PRISTINE_ENGINE_LICENSES_SOURCE',
+  ]) {
+    delete env[key]
+  }
+  for (const [key, value] of Object.entries(envOverrides)) {
+    if (value === undefined) {
+      delete env[key]
+      continue
+    }
+
+    env[key] = value
+  }
+
+  const result = spawnSync(process.execPath, [prepareEngineScriptPath], {
+    cwd: appRoot,
+    env,
+    encoding: 'utf8',
+    windowsHide: true,
+  })
+
+  if (result.error) {
+    throw result.error
+  }
+
+  return result
+}
+
+const itLocalWindowsEnginePrepare = process.platform === 'win32' ? it : it.skip
+
+describe('local pristine-engine prepare', () => {
+  itLocalWindowsEnginePrepare('prefers a release build over install-smoke', () => {
+    const fixture = createPrepareEngineFixture()
+
+    try {
+      writeFixtureFile(fixture.paths.release, 'release-binary')
+      writeFixtureFile(fixture.paths.installSmoke, 'install-smoke-binary')
+
+      const result = runPrepareEngineScript(fixture.appRoot)
+
+      expect(result.status).toBe(0)
+      expect(fs.readFileSync(fixture.paths.target, 'utf8')).toBe('release-binary')
+    } finally {
+      fixture.cleanup()
+    }
+  })
+
+  itLocalWindowsEnginePrepare('falls back to install-smoke when no release build exists', () => {
+    const fixture = createPrepareEngineFixture()
+
+    try {
+      writeFixtureFile(fixture.paths.installSmoke, 'install-smoke-binary')
+
+      const result = runPrepareEngineScript(fixture.appRoot)
+
+      expect(result.status).toBe(0)
+      expect(fs.readFileSync(fixture.paths.target, 'utf8')).toBe('install-smoke-binary')
+    } finally {
+      fixture.cleanup()
+    }
+  })
+
+  it.each(['dev', 'clangCl'] as const)('rejects explicit Debug source paths from build/%s', (sourceKey) => {
+    const fixture = createPrepareEngineFixture()
+    const sourcePath = fixture.paths[sourceKey]
+
+    try {
+      writeFixtureFile(sourcePath, 'debug-binary')
+
+      const result = runPrepareEngineScript(fixture.appRoot, {
+        PRISTINE_ENGINE_SOURCE: sourcePath,
+      })
+
+      expect(result.status).toBe(1)
+      expect(result.stderr).toContain('Debug pristine-engine source is not allowed')
+      expect(result.stderr).toContain('PRISTINE_ENGINE_ALLOW_DEBUG_SOURCE=1')
+      expect(fs.existsSync(fixture.paths.target)).toBe(false)
+    } finally {
+      fixture.cleanup()
+    }
+  })
+
+  it('allows an explicit Debug source only when opted in', () => {
+    const fixture = createPrepareEngineFixture()
+
+    try {
+      writeFixtureFile(fixture.paths.dev, 'debug-binary')
+
+      const result = runPrepareEngineScript(fixture.appRoot, {
+        PRISTINE_ENGINE_SOURCE: fixture.paths.dev,
+        PRISTINE_ENGINE_ALLOW_DEBUG_SOURCE: '1',
+      })
+
+      expect(result.status).toBe(0)
+      expect(fs.readFileSync(fixture.paths.target, 'utf8')).toBe('debug-binary')
+    } finally {
+      fixture.cleanup()
+    }
+  })
+})
+
 describe('release workflow contract', () => {
   it('syncs root and agent-server package versions from release branch names', () => {
     const root = createPackageFixture()
@@ -112,7 +253,7 @@ describe('release workflow contract', () => {
     expect(workflow).not.toMatch(/push:[\s\S]*?\r?\n\s+tags:/)
   })
 
-  it.skip('routes pristine-engine downloads to main workflow artifacts for non-tags and latest releases for tags', () => {
+  it('routes pristine-engine downloads to main workflow artifacts for non-tags and latest releases for tags', () => {
     const workflow = fs.readFileSync(workflowPath, 'utf8')
     const prepareEngineScript = fs.readFileSync(prepareEngineScriptPath, 'utf8')
     const engineRemoteSourceHelper = fs.readFileSync(engineRemoteSourceHelperPath, 'utf8')
