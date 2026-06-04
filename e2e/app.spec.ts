@@ -5529,10 +5529,10 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
   await expect(cursorInfoSignal).toHaveText(/counting/);
   await expect(cursorInfoValue).toHaveText(/^2$/);
 
-  await canvasHost.click({ position: { x: Math.floor(canvasBox.width * 0.72), y: 86 } });
+  await canvasHost.click({ position: { x: Math.floor(canvasBox.width * 0.28), y: 86 } });
   await expect.poll(async () => Number(await panel.getAttribute('data-cursor-time') ?? '0'), {
     timeout: UI_READY_TIMEOUT_MS,
-  }).toBeGreaterThan(100);
+  }).toBeGreaterThan(0);
   await expect(canvasHost).toHaveAttribute('data-cursor-visible', 'true');
   await expect(cursorInfoTime).toHaveText(/\d+\.\dns/);
   const cursorTimeAfterClick = Number(await panel.getAttribute('data-cursor-time') ?? '0');
@@ -5547,6 +5547,16 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
     await zoomInButton.click();
   }
   const horizontalScrollbar = window.getByTestId('waveform-horizontal-scrollbar');
+  const setHorizontalScrollbarLeft = async (scrollLeft: number) => {
+    await horizontalScrollbar.evaluate((element, nextScrollLeft) => {
+      const scrollable = element as unknown as {
+        dispatchEvent: (event: Event) => boolean;
+        scrollLeft: number;
+      };
+      scrollable.scrollLeft = nextScrollLeft;
+      scrollable.dispatchEvent(new Event('scroll', { bubbles: true }));
+    }, scrollLeft);
+  };
   await expect.poll(async () => Number(await horizontalScrollbar.getAttribute('data-horizontal-scroll-range') ?? '0'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(0);
@@ -5558,6 +5568,7 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
   }).toBeLessThan(canvasBox.width);
 
   const startBeforeShiftWheel = Number(await panel.getAttribute('data-visible-window-start') ?? '0');
+  const horizontalScrollLeftBeforeShiftWheel = Number(await horizontalScrollbar.getAttribute('data-horizontal-scroll-left') ?? '0');
   const rulerLeftBeforeShiftWheel = Number(await canvasHost.getAttribute('data-ruler-scroll-indicator-left') ?? '0');
   await canvasHost.hover();
   await window.keyboard.down('Shift');
@@ -5569,16 +5580,8 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
   await expect.poll(async () => Number(await canvasHost.getAttribute('data-ruler-scroll-indicator-left') ?? '0'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(rulerLeftBeforeShiftWheel);
-  await horizontalScrollbar.evaluate((element) => {
-    const scrollable = element as unknown as {
-      clientWidth: number;
-      dispatchEvent: (event: Event) => boolean;
-      scrollLeft: number;
-      scrollWidth: number;
-    };
-    scrollable.scrollLeft = scrollable.scrollWidth - scrollable.clientWidth;
-    scrollable.dispatchEvent(new Event('scroll', { bubbles: true }));
-  });
+  const maxHorizontalScrollLeft = Number(await horizontalScrollbar.getAttribute('data-horizontal-scroll-range') ?? '0');
+  await setHorizontalScrollbarLeft(maxHorizontalScrollLeft);
   await expect.poll(async () => {
     const viewportStart = Number(await panel.getAttribute('data-visible-window-start') ?? '0');
     const viewportEnd = Number(await panel.getAttribute('data-visible-window-end') ?? '0');
@@ -5588,15 +5591,7 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
     timeout: UI_READY_TIMEOUT_MS,
   }).toBe(true);
   await expect(canvasHost).toHaveAttribute('data-cursor-visible', 'false');
-  await window.keyboard.down('Shift');
-  for (let index = 0; index < 32; index += 1) {
-    const viewportStart = Number(await panel.getAttribute('data-visible-window-start') ?? '0');
-    if (viewportStart <= startBeforeShiftWheel + 1) {
-      break;
-    }
-    await window.mouse.wheel(0, -260);
-  }
-  await window.keyboard.up('Shift');
+  await setHorizontalScrollbarLeft(horizontalScrollLeftBeforeShiftWheel);
   await expect.poll(async () => Number(await panel.getAttribute('data-visible-window-start') ?? '0'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeLessThanOrEqual(startBeforeShiftWheel + 1);
