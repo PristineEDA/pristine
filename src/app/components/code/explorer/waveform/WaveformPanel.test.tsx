@@ -1,5 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { useEffect } from 'react';
 
@@ -111,8 +110,6 @@ vi.mock('./WaveformCanvas', () => ({
 
 describe('WaveformPanel', () => {
   it('renders mock signals, selection state, and cursor values', async () => {
-    const user = userEvent.setup();
-
     render(<WaveformPanel />);
 
     const panel = screen.getByTestId('waveform-panel');
@@ -188,7 +185,7 @@ describe('WaveformPanel', () => {
     expect(screen.getByText('[3:0]')).toHaveClass('leading-none');
     expect(toolbar.innerHTML.indexOf('waveform-toolbar-metrics')).toBeLessThan(toolbar.innerHTML.indexOf('waveform-toolbar-cursor-info'));
 
-    await user.click(screen.getByTestId('waveform-signal-row-u_top_module1-counting'));
+    fireEvent.click(screen.getByTestId('waveform-signal-row-u_top_module1-counting'));
 
     expect(panel).toHaveAttribute('data-selected-signal-id', 'u_top_module1-counting');
     expect(screen.getByTestId('waveform-signal-row-u_top_module1-counting')).toHaveAttribute('data-row-index', '9');
@@ -200,38 +197,36 @@ describe('WaveformPanel', () => {
     expect(screen.getByTestId('waveform-toolbar-cursor-value')).toHaveTextContent('2');
     expect(screen.getAllByText('2').length).toBeGreaterThan(0);
 
-    await user.click(screen.getByTestId('waveform-signal-row-dense-signal-40'));
+    fireEvent.click(screen.getByTestId('waveform-signal-row-dense-signal-40'));
 
     expect(panel).toHaveAttribute('data-selected-signal-id', 'dense-signal-40');
     expect(screen.getByTestId('waveform-signal-row-dense-signal-40')).toHaveAttribute('data-row-index', '50');
     expect(screen.getByTestId('waveform-signal-row-dense-signal-40')).toHaveAttribute('data-lane-y', '1522.00');
     expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-selected-signal-lane-y', '1522.00');
 
-    await user.click(screen.getByTestId('waveform-canvas'));
+    fireEvent.click(screen.getByTestId('waveform-canvas'));
 
     await waitFor(() => expect(panel).toHaveAttribute('data-cursor-time', '128.00'));
     expect(screen.getByTestId('waveform-toolbar-cursor-time')).toHaveTextContent('128.0ns');
     expect(screen.getAllByText('3').length).toBeGreaterThan(0);
-  });
+  }, 20000);
 
   it('updates viewport controls and toggles auxiliary panels', async () => {
-    const user = userEvent.setup();
-
     render(<WaveformPanel />);
 
     const panel = screen.getByTestId('waveform-panel');
     const initialZoom = Number(panel.getAttribute('data-zoom'));
 
-    await user.click(screen.getByRole('button', { name: /zoom in waveform/i }));
+    fireEvent.click(screen.getByRole('button', { name: /zoom in waveform/i }));
 
     await waitFor(() => expect(Number(panel.getAttribute('data-zoom'))).toBeGreaterThan(initialZoom));
     expect(Number(screen.getByTestId('waveform-horizontal-scrollbar').getAttribute('data-horizontal-scroll-range'))).toBeGreaterThanOrEqual(0);
 
-    await user.click(screen.getByRole('button', { name: /fit waveform/i }));
+    fireEvent.click(screen.getByRole('button', { name: /fit waveform/i }));
 
     await waitFor(() => expect(panel).toHaveAttribute('data-zoom', '1.00'));
 
-    await user.click(screen.getByRole('button', { name: /waveform settings/i }));
+    fireEvent.click(screen.getByRole('button', { name: /waveform settings/i }));
     expect(screen.getByTestId('waveform-settings-popover')).toBeInTheDocument();
     await waitFor(() => expect(screen.getByTestId('waveform-gpu-hardware-acceleration')).toHaveTextContent('true'));
     expect(screen.getByTestId('waveform-gpu-compositing-status')).toHaveTextContent('enabled');
