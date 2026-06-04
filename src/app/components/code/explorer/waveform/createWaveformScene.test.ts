@@ -30,6 +30,7 @@ describe('createWaveformScene', () => {
     expect(scene.layers.status.children.indexOf(scene.nodes.statusRulerIndicator)).toBeLessThan(scene.layers.status.children.indexOf(scene.nodes.statusHeader));
     expect(scene.nodes.statusHeaderBackground.children.length).toBe(1);
     expect(scene.nodes.statusRulerIndicator.children.length).toBe(1);
+    expect(getWaveformRulerScrollIndicatorMetrics(scene.state.viewport, scene.state.data.duration, scene.state.width).cornerRadius).toBe(3);
     expect(getWaveformRulerScrollIndicatorMetrics(scene.state.viewport, scene.state.data.duration, scene.state.width).height).toBe(22);
     expect(waveformHeaderHeight).toBe(22);
     expect(scene.layers.operation.children.length).toBeGreaterThan(0);

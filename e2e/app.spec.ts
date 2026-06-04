@@ -3654,7 +3654,8 @@ test('Monaco editor shows inline git diff for opened modified files and hides it
 
     await window.getByTestId('file-tree-node-rtl_core_cpu_top_sv').dblclick();
     await waitForMonacoEditor(window);
-    await expect(window.locator('.monaco-editor .view-lines')).toContainText('assign data_ready', { timeout: MONACO_READY_TIMEOUT_MS });
+    await expect(window.getByTestId('editor-tab-rtl/core/cpu_top.sv')).toHaveAttribute('data-active', 'true');
+    await expect(window.locator('.monaco-editor .view-lines')).toContainText("data_ready = 1'b1", { timeout: MONACO_READY_TIMEOUT_MS });
     const removedInlineDiffMarginDecoration = window.locator('.pristine-inline-git-diff-margin-removed').first();
     const removedInlineDiffLineNumber = window.locator('.line-numbers.pristine-inline-git-diff-line-number-removed').first();
     await expect(removedInlineDiffMarginDecoration).toBeVisible({ timeout: MONACO_READY_TIMEOUT_MS });
@@ -5672,7 +5673,10 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
   }).toBeGreaterThan(0);
   await expect(canvasHost).toHaveAttribute('data-ruler-scroll-indicator-color', '#8e8e8e');
   await expect(canvasHost).toHaveAttribute('data-ruler-scroll-indicator-height', '22.00');
+  await expect(canvasHost).toHaveAttribute('data-ruler-scroll-indicator-radius', '3.00');
   await expect(canvasHost).toHaveAttribute('data-ruler-scroll-indicator-scrollable', 'true');
+  await expect(canvasHost).toHaveClass(/cursor-default/);
+  await expect(canvasHost).not.toHaveClass(/cursor-crosshair/);
   await expect.poll(async () => readCanvasNumber('data-ruler-scroll-indicator-width'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeLessThan(canvasBox.width);

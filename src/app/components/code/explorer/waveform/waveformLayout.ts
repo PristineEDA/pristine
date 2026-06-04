@@ -385,6 +385,7 @@ export function getWaveformRulerScrollIndicatorMetrics(viewport: WaveformViewpor
 
   return {
     color: 0x8e8e8e,
+    cornerRadius: 3,
     height: waveformHeaderHeight,
     left,
     maxLeft,

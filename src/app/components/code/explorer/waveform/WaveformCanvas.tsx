@@ -593,7 +593,7 @@ export function WaveformCanvas({
     <div
       ref={hostRef}
       aria-label="Waveform canvas"
-      className="relative h-full min-h-0 w-full flex-1 cursor-crosshair overflow-hidden bg-[#111111] outline-none"
+      className="relative h-full min-h-0 w-full flex-1 cursor-default overflow-hidden bg-[#111111] outline-none"
       data-cursor-time={cursorTime.toFixed(2)}
       data-cursor-visible={String(cursorVisible)}
       data-cursor-x={cursorX.toFixed(2)}
@@ -645,6 +645,7 @@ export function WaveformCanvas({
       data-ruler-scroll-indicator-color={`#${rulerIndicatorMetrics.color.toString(16).padStart(6, '0')}`}
       data-ruler-scroll-indicator-height={rulerIndicatorMetrics.height.toFixed(2)}
       data-ruler-scroll-indicator-left={rulerIndicatorMetrics.left.toFixed(2)}
+      data-ruler-scroll-indicator-radius={rulerIndicatorMetrics.cornerRadius.toFixed(2)}
       data-ruler-scroll-indicator-scrollable={String(rulerIndicatorMetrics.scrollable)}
       data-ruler-scroll-indicator-width={rulerIndicatorMetrics.width.toFixed(2)}
       data-selected-signal-lane-y={formatOptionalNumber(selectedSignalLaneY)}

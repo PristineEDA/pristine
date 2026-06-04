@@ -466,7 +466,7 @@ function redrawWaveformSceneRulerIndicator(scene: WaveformScene) {
   const metrics = getWaveformRulerScrollIndicatorMetrics(scene.state.viewport, scene.state.data.duration, scene.state.width);
   const indicator = new Graphics();
   indicator
-    .rect(metrics.left, 0, metrics.width, metrics.height)
+    .roundRect(metrics.left, 0, metrics.width, metrics.height, metrics.cornerRadius)
     .fill({ color: metrics.color, alpha: 1 });
   scene.nodes.statusRulerIndicator.addChild(indicator);
 }

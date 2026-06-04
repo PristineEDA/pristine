@@ -62,6 +62,7 @@ describe('waveformLayout', () => {
 
     expect(fittedMetrics).toEqual(expect.objectContaining({
       color: 0x8e8e8e,
+      cornerRadius: 3,
       height: waveformHeaderHeight,
       left: 0,
       scrollable: false,
