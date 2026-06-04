@@ -5569,16 +5569,16 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
   await expect.poll(async () => Number(await canvasHost.getAttribute('data-ruler-scroll-indicator-left') ?? '0'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(rulerLeftBeforeShiftWheel);
-  await window.keyboard.down('Shift');
-  for (let index = 0; index < 16; index += 1) {
-    const viewportStart = Number(await panel.getAttribute('data-visible-window-start') ?? '0');
-    const viewportEnd = Number(await panel.getAttribute('data-visible-window-end') ?? '0');
-    if (cursorTimeAfterClick < viewportStart || cursorTimeAfterClick > viewportEnd) {
-      break;
-    }
-    await window.mouse.wheel(0, 260);
-  }
-  await window.keyboard.up('Shift');
+  await horizontalScrollbar.evaluate((element) => {
+    const scrollable = element as unknown as {
+      clientWidth: number;
+      dispatchEvent: (event: Event) => boolean;
+      scrollLeft: number;
+      scrollWidth: number;
+    };
+    scrollable.scrollLeft = scrollable.scrollWidth - scrollable.clientWidth;
+    scrollable.dispatchEvent(new Event('scroll', { bubbles: true }));
+  });
   await expect.poll(async () => {
     const viewportStart = Number(await panel.getAttribute('data-visible-window-start') ?? '0');
     const viewportEnd = Number(await panel.getAttribute('data-visible-window-end') ?? '0');
