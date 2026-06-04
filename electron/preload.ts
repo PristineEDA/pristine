@@ -2,15 +2,33 @@ import { contextBridge, ipcRenderer } from 'electron';
 import { SyncChannels, AsyncChannels, StreamChannels } from './ipc/channels.js';
 import type { OpenThemeDialogResult, SaveDialogResult } from './ipc/dialog.js';
 import type {
+  LspCallHierarchyIncomingCall,
+  LspCallHierarchyItem,
+  LspCallHierarchyOutgoingCall,
+  LspCodeAction,
+  LspCompletionItem,
   LspCompletionResponse,
   LspDebugEvent,
+  LspDiagnostic,
   LspDiagnosticsEvent,
+  LspDocumentHighlight,
+  LspDocumentLink,
+  LspDocumentSymbol,
+  LspFoldingRange,
   LspHover,
+  LspInlayHint,
   LspModuleHierarchy,
   LspModuleHierarchyOptions,
+  LspPrepareRenameResult,
+  LspRange,
   LspSchematic,
   LspSchematicOptions,
+  LspSelectionRange,
+  LspSemanticTokens,
+  LspSignatureHelp,
   LspStateEvent,
+  LspWorkspaceEdit,
+  LspWorkspaceSymbol,
   WorkspaceLocation,
 } from '../types/systemverilog-lsp.js';
 import type { WorkspaceGitChangeEvent, WorkspaceGitFileDiffPayload, WorkspaceGitStatusPayload } from '../types/workspace-git.js';
@@ -206,6 +224,8 @@ const electronAPI = {
   },
 
   lsp: {
+    ensureInitialized: () =>
+      ipcRenderer.invoke(AsyncChannels.LSP_ENSURE_INITIALIZED) as Promise<void>,
     openDocument: (filePath: string, languageId: string, text: string) =>
       ipcRenderer.invoke(AsyncChannels.LSP_OPEN_DOCUMENT, filePath, languageId, text) as Promise<void>,
     changeDocument: (filePath: string, text: string) =>
@@ -226,10 +246,48 @@ const electronAPI = {
       triggerCharacter,
       triggerKind,
     ) as Promise<LspCompletionResponse | null>,
+    completionResolve: (item: LspCompletionItem) =>
+      ipcRenderer.invoke(AsyncChannels.LSP_COMPLETION_RESOLVE, item) as Promise<LspCompletionItem | null>,
     hover: (filePath: string, line: number, character: number) =>
       ipcRenderer.invoke(AsyncChannels.LSP_HOVER, filePath, line, character) as Promise<LspHover | null>,
     definition: (filePath: string, line: number, character: number) =>
       ipcRenderer.invoke(AsyncChannels.LSP_DEFINITION, filePath, line, character) as Promise<WorkspaceLocation[]>,
+    typeDefinition: (filePath: string, line: number, character: number) =>
+      ipcRenderer.invoke(AsyncChannels.LSP_TYPE_DEFINITION, filePath, line, character) as Promise<WorkspaceLocation[]>,
+    implementation: (filePath: string, line: number, character: number) =>
+      ipcRenderer.invoke(AsyncChannels.LSP_IMPLEMENTATION, filePath, line, character) as Promise<WorkspaceLocation[]>,
+    documentHighlights: (filePath: string, line: number, character: number) =>
+      ipcRenderer.invoke(AsyncChannels.LSP_DOCUMENT_HIGHLIGHTS, filePath, line, character) as Promise<LspDocumentHighlight[]>,
+    documentLinks: (filePath: string) =>
+      ipcRenderer.invoke(AsyncChannels.LSP_DOCUMENT_LINKS, filePath) as Promise<LspDocumentLink[]>,
+    inlayHints: (filePath: string, range: LspRange) =>
+      ipcRenderer.invoke(AsyncChannels.LSP_INLAY_HINTS, filePath, range) as Promise<LspInlayHint[]>,
+    codeActions: (filePath: string, range: LspRange, diagnostics: LspDiagnostic[] = []) =>
+      ipcRenderer.invoke(AsyncChannels.LSP_CODE_ACTIONS, filePath, range, diagnostics) as Promise<LspCodeAction[]>,
+    foldingRanges: (filePath: string) =>
+      ipcRenderer.invoke(AsyncChannels.LSP_FOLDING_RANGES, filePath) as Promise<LspFoldingRange[]>,
+    semanticTokensFull: (filePath: string) =>
+      ipcRenderer.invoke(AsyncChannels.LSP_SEMANTIC_TOKENS_FULL, filePath) as Promise<LspSemanticTokens>,
+    selectionRanges: (filePath: string, positions: Array<{ line: number; character: number }>) =>
+      ipcRenderer.invoke(AsyncChannels.LSP_SELECTION_RANGES, filePath, positions) as Promise<LspSelectionRange[]>,
+    signatureHelp: (
+      filePath: string,
+      line: number,
+      character: number,
+      triggerCharacter?: string,
+      triggerKind?: number,
+      isRetrigger?: boolean,
+    ) => ipcRenderer.invoke(
+      AsyncChannels.LSP_SIGNATURE_HELP,
+      filePath,
+      line,
+      character,
+      triggerCharacter,
+      triggerKind,
+      isRetrigger,
+    ) as Promise<LspSignatureHelp | null>,
+    documentSymbols: (filePath: string) =>
+      ipcRenderer.invoke(AsyncChannels.LSP_DOCUMENT_SYMBOLS, filePath) as Promise<LspDocumentSymbol[]>,
     references: (filePath: string, line: number, character: number, includeDeclaration = true) =>
       ipcRenderer.invoke(
         AsyncChannels.LSP_REFERENCES,
@@ -238,6 +296,18 @@ const electronAPI = {
         character,
         includeDeclaration,
       ) as Promise<WorkspaceLocation[]>,
+    prepareCallHierarchy: (filePath: string, line: number, character: number) =>
+      ipcRenderer.invoke(AsyncChannels.LSP_PREPARE_CALL_HIERARCHY, filePath, line, character) as Promise<LspCallHierarchyItem[]>,
+    callHierarchyIncoming: (item: LspCallHierarchyItem) =>
+      ipcRenderer.invoke(AsyncChannels.LSP_CALL_HIERARCHY_INCOMING, item) as Promise<LspCallHierarchyIncomingCall[]>,
+    callHierarchyOutgoing: (item: LspCallHierarchyItem) =>
+      ipcRenderer.invoke(AsyncChannels.LSP_CALL_HIERARCHY_OUTGOING, item) as Promise<LspCallHierarchyOutgoingCall[]>,
+    workspaceSymbols: (query: string) =>
+      ipcRenderer.invoke(AsyncChannels.LSP_WORKSPACE_SYMBOLS, query) as Promise<LspWorkspaceSymbol[]>,
+    prepareRename: (filePath: string, line: number, character: number) =>
+      ipcRenderer.invoke(AsyncChannels.LSP_PREPARE_RENAME, filePath, line, character) as Promise<LspPrepareRenameResult | null>,
+    rename: (filePath: string, line: number, character: number, newName: string) =>
+      ipcRenderer.invoke(AsyncChannels.LSP_RENAME, filePath, line, character, newName) as Promise<LspWorkspaceEdit | null>,
     moduleHierarchy: (options?: LspModuleHierarchyOptions) =>
       ipcRenderer.invoke(AsyncChannels.LSP_MODULE_HIERARCHY, options) as Promise<LspModuleHierarchy>,
     schematic: (options?: LspSchematicOptions) =>

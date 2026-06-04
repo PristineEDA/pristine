@@ -81,6 +81,7 @@ export interface LspCompletionItem {
   insertTextFormat?: number;
   textEdit?: LspTextEdit;
   additionalTextEdits?: LspTextEdit[];
+  data?: LspDebugValue;
 }
 
 export interface LspCompletionList {
@@ -93,6 +94,121 @@ export type LspCompletionResponse = LspCompletionItem[] | LspCompletionList;
 export interface WorkspaceLocation {
   filePath: string;
   range: LspRange;
+}
+
+export interface LspDocumentSymbol {
+  name: string;
+  detail?: string;
+  kind: number;
+  range: LspRange;
+  selectionRange: LspRange;
+  children?: LspDocumentSymbol[];
+}
+
+export interface LspDocumentHighlight {
+  range: LspRange;
+  kind?: number;
+}
+
+export interface LspDocumentLink {
+  range: LspRange;
+  target?: string;
+  tooltip?: string;
+}
+
+export interface LspInlayHint {
+  position: LspPosition;
+  label: string;
+  kind?: number;
+  tooltip?: string | LspMarkupContent;
+  textEdits?: LspTextEdit[];
+}
+
+export interface LspCodeAction {
+  title: string;
+  kind?: string;
+  diagnostics?: LspDiagnostic[];
+  edit?: LspWorkspaceEdit;
+  isPreferred?: boolean;
+}
+
+export interface LspFoldingRange {
+  startLine: number;
+  startCharacter?: number;
+  endLine: number;
+  endCharacter?: number;
+  kind?: string;
+}
+
+export interface LspSemanticTokens {
+  resultId?: string;
+  data: number[];
+}
+
+export interface LspSelectionRange {
+  range: LspRange;
+  parent?: LspSelectionRange;
+}
+
+export interface LspSignatureInformation {
+  label: string;
+  documentation?: string | LspMarkupContent;
+  parameters?: Array<{
+    label: string | [number, number];
+    documentation?: string | LspMarkupContent;
+  }>;
+}
+
+export interface LspSignatureHelp {
+  signatures: LspSignatureInformation[];
+  activeSignature?: number;
+  activeParameter?: number;
+}
+
+export interface LspCallHierarchyItem {
+  name: string;
+  kind: number;
+  uri: string;
+  filePath?: string;
+  range: LspRange;
+  selectionRange: LspRange;
+  detail?: string;
+  data?: LspDebugValue;
+}
+
+export interface LspCallHierarchyIncomingCall {
+  from: LspCallHierarchyItem;
+  fromRanges: LspRange[];
+}
+
+export interface LspCallHierarchyOutgoingCall {
+  to: LspCallHierarchyItem;
+  fromRanges: LspRange[];
+}
+
+export interface LspWorkspaceSymbol {
+  name: string;
+  kind: number;
+  location: WorkspaceLocation;
+  containerName?: string;
+}
+
+export interface LspPrepareRenameResult {
+  range: LspRange;
+  placeholder: string;
+}
+
+export interface LspWorkspaceEdit {
+  changes: Record<string, LspTextEdit[]>;
+  documentChanges?: Array<{
+    kind: 'create';
+    filePath: string;
+    uri: string;
+    options?: {
+      ignoreIfExists?: boolean;
+      overwrite?: boolean;
+    };
+  }>;
 }
 
 export interface LspModuleHierarchyOptions {

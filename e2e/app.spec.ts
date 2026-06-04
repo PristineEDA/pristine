@@ -2348,6 +2348,29 @@ test('lsp panel captures initialization logs when hierarchy opens before any edi
   await app.close();
 });
 
+test('lsp panel shows prewarmed initialization logs before any SystemVerilog file opens', async () => {
+  test.slow();
+  skipIfPristineEngineUnavailable();
+
+  const { app, window } = await launchApp();
+
+  await ensureExplorerVisible(window);
+  await expect(window.getByTestId('editor-tab-rtl/core/cpu_top.sv')).toHaveCount(0);
+
+  await window.getByTestId('toggle-bottom-panel').click();
+  await getBottomPanelTab(window, 'lsp').click();
+  await expect(window.getByTestId('lsp-panel')).toBeVisible();
+
+  await expect.poll(async () => window.getByTestId('lsp-panel').innerText(), {
+    timeout: 15000,
+  }).toContain('initialize');
+  await expect(window.getByTestId('lsp-panel')).toContainText('initialized');
+  await expect(window.getByTestId('lsp-panel')).toContainText('Status: ready');
+  await expect(window.getByTestId('lsp-panel')).not.toContainText('textDocument/didOpen');
+
+  await app.close();
+});
+
 test('pristine-engine lsp bottom panel filters diagnostics and shows paired request responses', async () => {
   test.slow();
   skipIfPristineEngineUnavailable();

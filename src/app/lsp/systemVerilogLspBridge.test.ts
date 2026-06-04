@@ -9,6 +9,20 @@ function createMonacoMock() {
   const hoverProviders: any[] = [];
   const definitionProviders: any[] = [];
   const referenceProviders: any[] = [];
+  const typeDefinitionProviders: any[] = [];
+  const implementationProviders: any[] = [];
+  const documentHighlightProviders: any[] = [];
+  const documentSymbolProviders: any[] = [];
+  const linkProviders: any[] = [];
+  const inlayHintProviders: any[] = [];
+  const codeActionProviders: any[] = [];
+  const foldingRangeProviders: any[] = [];
+  const semanticTokensProviders: any[] = [];
+  const selectionRangeProviders: any[] = [];
+  const signatureHelpProviders: any[] = [];
+  const callHierarchyProviders: any[] = [];
+  const workspaceSymbolProviders: any[] = [];
+  const renameProviders: any[] = [];
 
   const monaco = {
     MarkerSeverity: {
@@ -54,6 +68,48 @@ function createMonacoMock() {
       CompletionItemInsertTextRule: {
         InsertAsSnippet: 'snippet',
       },
+      SymbolKind: {
+        Array: 'array',
+        Boolean: 'boolean',
+        Class: 'class',
+        Constant: 'constant',
+        Constructor: 'constructor',
+        Enum: 'enum',
+        EnumMember: 'enum-member',
+        Event: 'event',
+        Field: 'field',
+        File: 'file',
+        Function: 'function',
+        Interface: 'interface',
+        Key: 'key',
+        Method: 'method',
+        Module: 'module',
+        Namespace: 'namespace',
+        Null: 'null',
+        Number: 'number',
+        Object: 'object',
+        Operator: 'operator',
+        Package: 'package',
+        Property: 'property',
+        String: 'string',
+        Struct: 'struct',
+        TypeParameter: 'type-parameter',
+        Variable: 'variable',
+      },
+      DocumentHighlightKind: {
+        Text: 'text',
+        Read: 'read',
+        Write: 'write',
+      },
+      InlayHintKind: {
+        Type: 'type',
+        Parameter: 'parameter',
+      },
+      FoldingRangeKind: {
+        Comment: 'comment',
+        Imports: 'imports',
+        Region: 'region',
+      },
       registerCompletionItemProvider: vi.fn((_languageId: string, provider: any) => {
         completionProviders.push(provider);
         return { dispose: vi.fn() };
@@ -70,6 +126,62 @@ function createMonacoMock() {
         referenceProviders.push(provider);
         return { dispose: vi.fn() };
       }),
+      registerTypeDefinitionProvider: vi.fn((_languageId: string, provider: any) => {
+        typeDefinitionProviders.push(provider);
+        return { dispose: vi.fn() };
+      }),
+      registerImplementationProvider: vi.fn((_languageId: string, provider: any) => {
+        implementationProviders.push(provider);
+        return { dispose: vi.fn() };
+      }),
+      registerDocumentHighlightProvider: vi.fn((_languageId: string, provider: any) => {
+        documentHighlightProviders.push(provider);
+        return { dispose: vi.fn() };
+      }),
+      registerDocumentSymbolProvider: vi.fn((_languageId: string, provider: any) => {
+        documentSymbolProviders.push(provider);
+        return { dispose: vi.fn() };
+      }),
+      registerLinkProvider: vi.fn((_languageId: string, provider: any) => {
+        linkProviders.push(provider);
+        return { dispose: vi.fn() };
+      }),
+      registerInlayHintsProvider: vi.fn((_languageId: string, provider: any) => {
+        inlayHintProviders.push(provider);
+        return { dispose: vi.fn() };
+      }),
+      registerCodeActionProvider: vi.fn((_languageId: string, provider: any) => {
+        codeActionProviders.push(provider);
+        return { dispose: vi.fn() };
+      }),
+      registerFoldingRangeProvider: vi.fn((_languageId: string, provider: any) => {
+        foldingRangeProviders.push(provider);
+        return { dispose: vi.fn() };
+      }),
+      registerDocumentSemanticTokensProvider: vi.fn((_languageId: string, provider: any) => {
+        semanticTokensProviders.push(provider);
+        return { dispose: vi.fn() };
+      }),
+      registerSelectionRangeProvider: vi.fn((_languageId: string, provider: any) => {
+        selectionRangeProviders.push(provider);
+        return { dispose: vi.fn() };
+      }),
+      registerSignatureHelpProvider: vi.fn((_languageId: string, provider: any) => {
+        signatureHelpProviders.push(provider);
+        return { dispose: vi.fn() };
+      }),
+      registerCallHierarchyProvider: vi.fn((_languageId: string, provider: any) => {
+        callHierarchyProviders.push(provider);
+        return { dispose: vi.fn() };
+      }),
+      registerWorkspaceSymbolProvider: vi.fn((provider: any) => {
+        workspaceSymbolProviders.push(provider);
+        return { dispose: vi.fn() };
+      }),
+      registerRenameProvider: vi.fn((_languageId: string, provider: any) => {
+        renameProviders.push(provider);
+        return { dispose: vi.fn() };
+      }),
     },
     editor: {
       setModelMarkers: vi.fn(),
@@ -79,6 +191,20 @@ function createMonacoMock() {
       hoverProviders,
       definitionProviders,
       referenceProviders,
+      typeDefinitionProviders,
+      implementationProviders,
+      documentHighlightProviders,
+      documentSymbolProviders,
+      linkProviders,
+      inlayHintProviders,
+      codeActionProviders,
+      foldingRangeProviders,
+      semanticTokensProviders,
+      selectionRangeProviders,
+      signatureHelpProviders,
+      callHierarchyProviders,
+      workspaceSymbolProviders,
+      renameProviders,
     },
   };
 
@@ -130,10 +256,29 @@ describe('systemVerilogLspBridge', () => {
     electronApi.lsp.openDocument.mockResolvedValue(undefined);
     electronApi.lsp.changeDocument.mockResolvedValue(undefined);
     electronApi.lsp.closeDocument.mockResolvedValue(undefined);
+    electronApi.lsp.ensureInitialized.mockResolvedValue(undefined);
     electronApi.lsp.completion.mockResolvedValue(null);
+    electronApi.lsp.completionResolve.mockImplementation(async (item: unknown) => item);
     electronApi.lsp.hover.mockResolvedValue(null);
     electronApi.lsp.definition.mockResolvedValue([]);
+    electronApi.lsp.typeDefinition.mockResolvedValue([]);
+    electronApi.lsp.implementation.mockResolvedValue([]);
+    electronApi.lsp.documentHighlights.mockResolvedValue([]);
+    electronApi.lsp.documentLinks.mockResolvedValue([]);
+    electronApi.lsp.inlayHints.mockResolvedValue([]);
+    electronApi.lsp.codeActions.mockResolvedValue([]);
+    electronApi.lsp.foldingRanges.mockResolvedValue([]);
+    electronApi.lsp.semanticTokensFull.mockResolvedValue({ data: [] });
+    electronApi.lsp.selectionRanges.mockResolvedValue([]);
+    electronApi.lsp.signatureHelp.mockResolvedValue(null);
+    electronApi.lsp.documentSymbols.mockResolvedValue([]);
     electronApi.lsp.references.mockResolvedValue([]);
+    electronApi.lsp.prepareCallHierarchy.mockResolvedValue([]);
+    electronApi.lsp.callHierarchyIncoming.mockResolvedValue([]);
+    electronApi.lsp.callHierarchyOutgoing.mockResolvedValue([]);
+    electronApi.lsp.workspaceSymbols.mockResolvedValue([]);
+    electronApi.lsp.prepareRename.mockResolvedValue(null);
+    electronApi.lsp.rename.mockResolvedValue(null);
     electronApi.lsp.getDebugEvents.mockResolvedValue([]);
     electronApi.lsp.onDebug = vi.fn((callback: DebugHandler) => {
       debugHandler = callback;
@@ -164,8 +309,16 @@ describe('systemVerilogLspBridge', () => {
           detail: 'logic',
           documentation: 'Signal declaration',
           insertTextFormat: 2,
+          data: { source: 'semanticEngine', stableId: 'ready', label: 'data_ready' },
         },
       ],
+    });
+    electronApi.lsp.completionResolve.mockResolvedValue({
+      label: 'data_ready',
+      kind: 6,
+      detail: 'logic resolved',
+      documentation: { kind: 'markdown', value: 'Resolved docs' },
+      insertText: 'data_ready',
     });
     electronApi.lsp.hover.mockResolvedValue({
       contents: 'Signal declaration',
@@ -192,6 +345,46 @@ describe('systemVerilogLspBridge', () => {
         },
       },
     ]);
+    electronApi.lsp.typeDefinition.mockResolvedValue([
+      {
+        filePath: 'rtl/core/types.sv',
+        range: {
+          start: { line: 2, character: 4 },
+          end: { line: 2, character: 11 },
+        },
+      },
+    ]);
+    electronApi.lsp.documentSymbols.mockResolvedValue([
+      {
+        name: 'cpu_top',
+        kind: 2,
+        range: {
+          start: { line: 0, character: 0 },
+          end: { line: 4, character: 9 },
+        },
+        selectionRange: {
+          start: { line: 0, character: 7 },
+          end: { line: 0, character: 14 },
+        },
+      },
+    ]);
+    electronApi.lsp.signatureHelp.mockResolvedValue({
+      signatures: [{ label: 'child(input logic clk)', parameters: [{ label: 'clk' }] }],
+      activeSignature: 0,
+      activeParameter: 0,
+    });
+    electronApi.lsp.semanticTokensFull.mockResolvedValue({ data: [0, 7, 7, 1, 0] });
+    electronApi.lsp.rename.mockResolvedValue({
+      changes: {
+        'rtl/core/cpu_top.sv': [{
+          range: {
+            start: { line: 1, character: 2 },
+            end: { line: 1, character: 7 },
+          },
+          newText: 'valid',
+        }],
+      },
+    });
 
     const { systemVerilogLspBridge } = await loadBridgeModule();
     const monaco = createMonacoMock();
@@ -214,6 +407,11 @@ describe('systemVerilogLspBridge', () => {
     expect(monaco.languages.registerHoverProvider).toHaveBeenCalledTimes(1);
     expect(monaco.languages.registerDefinitionProvider).toHaveBeenCalledTimes(1);
     expect(monaco.languages.registerReferenceProvider).toHaveBeenCalledTimes(1);
+    expect(monaco.languages.registerTypeDefinitionProvider).toHaveBeenCalledTimes(1);
+    expect(monaco.languages.registerDocumentSymbolProvider).toHaveBeenCalledTimes(1);
+    expect(monaco.languages.registerSignatureHelpProvider).toHaveBeenCalledTimes(1);
+    expect(monaco.languages.registerDocumentSemanticTokensProvider).toHaveBeenCalledTimes(1);
+    expect(monaco.languages.registerRenameProvider).toHaveBeenCalledTimes(1);
 
     const completionResult = await monaco.__providers.completionProviders[0].provideCompletionItems(
       model,
@@ -232,6 +430,12 @@ describe('systemVerilogLspBridge', () => {
         }),
       ],
     });
+    const resolvedCompletion = await monaco.__providers.completionProviders[0].resolveCompletionItem(completionResult.suggestions[0]);
+    expect(electronApi.lsp.completionResolve).toHaveBeenCalledWith(expect.objectContaining({ label: 'data_ready' }));
+    expect(resolvedCompletion).toEqual(expect.objectContaining({
+      detail: 'logic resolved',
+      documentation: { value: 'Resolved docs' },
+    }));
 
     const hoverResult = await monaco.__providers.hoverProviders[0].provideHover(model, { lineNumber: 4, column: 5 });
     expect(electronApi.lsp.hover).toHaveBeenCalledWith('rtl/core/cpu_top.sv', 3, 4);
@@ -273,6 +477,62 @@ describe('systemVerilogLspBridge', () => {
         },
       },
     ]);
+
+    const typeDefinitionResult = await monaco.__providers.typeDefinitionProviders[0].provideTypeDefinition(model, { lineNumber: 3, column: 5 });
+    expect(electronApi.lsp.typeDefinition).toHaveBeenCalledWith('rtl/core/cpu_top.sv', 2, 4);
+    expect(typeDefinitionResult).toEqual([
+      {
+        uri: { path: 'rtl/core/types.sv' },
+        range: {
+          startLineNumber: 3,
+          startColumn: 5,
+          endLineNumber: 3,
+          endColumn: 12,
+        },
+      },
+    ]);
+
+    const symbolsResult = await monaco.__providers.documentSymbolProviders[0].provideDocumentSymbols(model);
+    expect(electronApi.lsp.documentSymbols).toHaveBeenCalledWith('rtl/core/cpu_top.sv');
+    expect(symbolsResult).toEqual([
+      expect.objectContaining({
+        name: 'cpu_top',
+        kind: 'module',
+      }),
+    ]);
+
+    const signatureResult = await monaco.__providers.signatureHelpProviders[0].provideSignatureHelp(
+      model,
+      { lineNumber: 4, column: 18 },
+      {},
+      { triggerKind: 2, triggerCharacter: '(' },
+    );
+    expect(electronApi.lsp.signatureHelp).toHaveBeenCalledWith('rtl/core/cpu_top.sv', 3, 17, '(', 2, false);
+    expect(signatureResult.value.signatures[0].label).toBe('child(input logic clk)');
+
+    const tokensResult = await monaco.__providers.semanticTokensProviders[0].provideDocumentSemanticTokens(model);
+    expect(electronApi.lsp.semanticTokensFull).toHaveBeenCalledWith('rtl/core/cpu_top.sv');
+    expect(Array.from(tokensResult.data)).toEqual([0, 7, 7, 1, 0]);
+
+    const renameResult = await monaco.__providers.renameProviders[0].provideRenameEdits(model, { lineNumber: 2, column: 3 }, 'valid');
+    expect(electronApi.lsp.rename).toHaveBeenCalledWith('rtl/core/cpu_top.sv', 1, 2, 'valid');
+    expect(renameResult).toEqual({
+      edits: [
+        {
+          resource: { path: 'rtl/core/cpu_top.sv' },
+          textEdit: {
+            range: {
+              startLineNumber: 2,
+              startColumn: 3,
+              endLineNumber: 2,
+              endColumn: 8,
+            },
+            text: 'valid',
+          },
+          versionId: undefined,
+        },
+      ],
+    });
   });
 
   it('debounces change notifications and only closes after the last attached editor detaches', async () => {
@@ -509,5 +769,20 @@ describe('systemVerilogLspBridge', () => {
     expect(monaco.languages.registerCompletionItemProvider).toHaveBeenCalledTimes(1);
 
     unsubscribe();
+  });
+
+  it('prewarms the language server once after stream subscriptions are installed', async () => {
+    const electronApi = window.electronAPI as any;
+    const { systemVerilogLspBridge } = await loadBridgeModule();
+
+    await Promise.all([
+      systemVerilogLspBridge.ensureInitialized(),
+      systemVerilogLspBridge.ensureInitialized(),
+    ]);
+
+    expect(electronApi.lsp.onDebug).toHaveBeenCalledTimes(1);
+    expect(electronApi.lsp.onDiagnostics).toHaveBeenCalledTimes(1);
+    expect(electronApi.lsp.onState).toHaveBeenCalledTimes(1);
+    expect(electronApi.lsp.ensureInitialized).toHaveBeenCalledTimes(1);
   });
 });

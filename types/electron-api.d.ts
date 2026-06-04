@@ -1,13 +1,31 @@
 import type {
   LspCompletionResponse,
+  LspCompletionItem,
+  LspCallHierarchyIncomingCall,
+  LspCallHierarchyItem,
+  LspCallHierarchyOutgoingCall,
+  LspCodeAction,
   LspDebugEvent,
+  LspDiagnostic,
   LspDiagnosticsEvent,
+  LspDocumentHighlight,
+  LspDocumentLink,
+  LspDocumentSymbol,
+  LspFoldingRange,
   LspHover,
+  LspInlayHint,
   LspModuleHierarchy,
   LspModuleHierarchyOptions,
+  LspPrepareRenameResult,
   LspSchematic,
   LspSchematicOptions,
+  LspSelectionRange,
+  LspSemanticTokens,
+  LspSignatureHelp,
   LspStateEvent,
+  LspWorkspaceEdit,
+  LspWorkspaceSymbol,
+  LspRange,
   WorkspaceLocation,
 } from './systemverilog-lsp';
 import type { WorkspaceGitChangeEvent, WorkspaceGitFileDiffPayload, WorkspaceGitStatusPayload } from './workspace-git';
@@ -112,6 +130,7 @@ export interface ElectronAPI {
   };
 
   lsp: {
+    ensureInitialized: () => Promise<void>;
     openDocument: (filePath: string, languageId: string, text: string) => Promise<void>;
     changeDocument: (filePath: string, text: string) => Promise<void>;
     closeDocument: (filePath: string) => Promise<void>;
@@ -122,14 +141,39 @@ export interface ElectronAPI {
       triggerCharacter?: string,
       triggerKind?: number,
     ) => Promise<LspCompletionResponse | null>;
+    completionResolve: (item: LspCompletionItem) => Promise<LspCompletionItem | null>;
     hover: (filePath: string, line: number, character: number) => Promise<LspHover | null>;
     definition: (filePath: string, line: number, character: number) => Promise<WorkspaceLocation[]>;
+    typeDefinition: (filePath: string, line: number, character: number) => Promise<WorkspaceLocation[]>;
+    implementation: (filePath: string, line: number, character: number) => Promise<WorkspaceLocation[]>;
+    documentHighlights: (filePath: string, line: number, character: number) => Promise<LspDocumentHighlight[]>;
+    documentLinks: (filePath: string) => Promise<LspDocumentLink[]>;
+    inlayHints: (filePath: string, range: LspRange) => Promise<LspInlayHint[]>;
+    codeActions: (filePath: string, range: LspRange, diagnostics?: LspDiagnostic[]) => Promise<LspCodeAction[]>;
+    foldingRanges: (filePath: string) => Promise<LspFoldingRange[]>;
+    semanticTokensFull: (filePath: string) => Promise<LspSemanticTokens>;
+    selectionRanges: (filePath: string, positions: Array<{ line: number; character: number }>) => Promise<LspSelectionRange[]>;
+    signatureHelp: (
+      filePath: string,
+      line: number,
+      character: number,
+      triggerCharacter?: string,
+      triggerKind?: number,
+      isRetrigger?: boolean,
+    ) => Promise<LspSignatureHelp | null>;
+    documentSymbols: (filePath: string) => Promise<LspDocumentSymbol[]>;
     references: (
       filePath: string,
       line: number,
       character: number,
       includeDeclaration?: boolean,
     ) => Promise<WorkspaceLocation[]>;
+    prepareCallHierarchy: (filePath: string, line: number, character: number) => Promise<LspCallHierarchyItem[]>;
+    callHierarchyIncoming: (item: LspCallHierarchyItem) => Promise<LspCallHierarchyIncomingCall[]>;
+    callHierarchyOutgoing: (item: LspCallHierarchyItem) => Promise<LspCallHierarchyOutgoingCall[]>;
+    workspaceSymbols: (query: string) => Promise<LspWorkspaceSymbol[]>;
+    prepareRename: (filePath: string, line: number, character: number) => Promise<LspPrepareRenameResult | null>;
+    rename: (filePath: string, line: number, character: number, newName: string) => Promise<LspWorkspaceEdit | null>;
     moduleHierarchy: (options?: LspModuleHierarchyOptions) => Promise<LspModuleHierarchy>;
     schematic: (options?: LspSchematicOptions) => Promise<LspSchematic>;
     getDebugEvents: () => Promise<LspDebugEvent[]>;

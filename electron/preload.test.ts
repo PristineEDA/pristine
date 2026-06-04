@@ -105,13 +105,50 @@ describe('preload bridge', () => {
     api.terminal.write('terminal-1', 'help');
     api.terminal.resize('terminal-1', 160, 50);
     api.terminal.kill('terminal-1');
+    api.lsp.ensureInitialized();
     api.lsp.openDocument('rtl/core/cpu_top.sv', 'systemverilog', 'module cpu_top; endmodule');
     api.lsp.changeDocument('rtl/core/cpu_top.sv', 'module cpu_top; logic a; endmodule');
     api.lsp.closeDocument('rtl/core/cpu_top.sv');
     api.lsp.completion('rtl/core/cpu_top.sv', 4, 6, '.', 2);
+    api.lsp.completionResolve({ label: 'data_ready' });
     api.lsp.hover('rtl/core/cpu_top.sv', 4, 6);
     api.lsp.definition('rtl/core/cpu_top.sv', 4, 6);
+    api.lsp.typeDefinition('rtl/core/cpu_top.sv', 4, 6);
+    api.lsp.implementation('rtl/core/cpu_top.sv', 4, 6);
+    api.lsp.documentHighlights('rtl/core/cpu_top.sv', 4, 6);
+    api.lsp.documentLinks('rtl/core/cpu_top.sv');
+    api.lsp.inlayHints('rtl/core/cpu_top.sv', {
+      start: { line: 0, character: 0 },
+      end: { line: 10, character: 0 },
+    });
+    api.lsp.codeActions('rtl/core/cpu_top.sv', {
+      start: { line: 0, character: 0 },
+      end: { line: 1, character: 0 },
+    });
+    api.lsp.foldingRanges('rtl/core/cpu_top.sv');
+    api.lsp.semanticTokensFull('rtl/core/cpu_top.sv');
+    api.lsp.selectionRanges('rtl/core/cpu_top.sv', [{ line: 4, character: 6 }]);
+    api.lsp.signatureHelp('rtl/core/cpu_top.sv', 4, 6, '(', 2, false);
+    api.lsp.documentSymbols('rtl/core/cpu_top.sv');
     api.lsp.references('rtl/core/cpu_top.sv', 4, 6, false);
+    api.lsp.prepareCallHierarchy('rtl/core/cpu_top.sv', 4, 6);
+    api.lsp.callHierarchyIncoming({
+      name: 'cpu_top',
+      kind: 2,
+      uri: 'file:///workspace/rtl/core/cpu_top.sv',
+      range: { start: { line: 0, character: 0 }, end: { line: 1, character: 0 } },
+      selectionRange: { start: { line: 0, character: 7 }, end: { line: 0, character: 14 } },
+    });
+    api.lsp.callHierarchyOutgoing({
+      name: 'cpu_top',
+      kind: 2,
+      uri: 'file:///workspace/rtl/core/cpu_top.sv',
+      range: { start: { line: 0, character: 0 }, end: { line: 1, character: 0 } },
+      selectionRange: { start: { line: 0, character: 7 }, end: { line: 0, character: 14 } },
+    });
+    api.lsp.workspaceSymbols('cpu');
+    api.lsp.prepareRename('rtl/core/cpu_top.sv', 4, 6);
+    api.lsp.rename('rtl/core/cpu_top.sv', 4, 6, 'valid');
     api.lsp.moduleHierarchy({ maxDepth: 12 });
     api.lsp.schematic({ moduleName: 'cpu_top', maxDepth: 12 });
     api.lsp.getDebugEvents();
@@ -172,13 +209,36 @@ describe('preload bridge', () => {
     expect(mockInvoke).toHaveBeenCalledWith('async:terminal:write', 'terminal-1', 'help');
     expect(mockInvoke).toHaveBeenCalledWith('async:terminal:resize', 'terminal-1', 160, 50);
     expect(mockInvoke).toHaveBeenCalledWith('async:terminal:kill', 'terminal-1');
+    expect(mockInvoke).toHaveBeenCalledWith('async:lsp:ensure-initialized');
     expect(mockInvoke).toHaveBeenCalledWith('async:lsp:open-document', 'rtl/core/cpu_top.sv', 'systemverilog', 'module cpu_top; endmodule');
     expect(mockInvoke).toHaveBeenCalledWith('async:lsp:change-document', 'rtl/core/cpu_top.sv', 'module cpu_top; logic a; endmodule');
     expect(mockInvoke).toHaveBeenCalledWith('async:lsp:close-document', 'rtl/core/cpu_top.sv');
     expect(mockInvoke).toHaveBeenCalledWith('async:lsp:completion', 'rtl/core/cpu_top.sv', 4, 6, '.', 2);
+    expect(mockInvoke).toHaveBeenCalledWith('async:lsp:completion-resolve', { label: 'data_ready' });
     expect(mockInvoke).toHaveBeenCalledWith('async:lsp:hover', 'rtl/core/cpu_top.sv', 4, 6);
     expect(mockInvoke).toHaveBeenCalledWith('async:lsp:definition', 'rtl/core/cpu_top.sv', 4, 6);
+    expect(mockInvoke).toHaveBeenCalledWith('async:lsp:type-definition', 'rtl/core/cpu_top.sv', 4, 6);
+    expect(mockInvoke).toHaveBeenCalledWith('async:lsp:implementation', 'rtl/core/cpu_top.sv', 4, 6);
+    expect(mockInvoke).toHaveBeenCalledWith('async:lsp:document-highlights', 'rtl/core/cpu_top.sv', 4, 6);
+    expect(mockInvoke).toHaveBeenCalledWith('async:lsp:document-links', 'rtl/core/cpu_top.sv');
+    expect(mockInvoke).toHaveBeenCalledWith('async:lsp:inlay-hints', 'rtl/core/cpu_top.sv', {
+      start: { line: 0, character: 0 },
+      end: { line: 10, character: 0 },
+    });
+    expect(mockInvoke).toHaveBeenCalledWith('async:lsp:code-actions', 'rtl/core/cpu_top.sv', {
+      start: { line: 0, character: 0 },
+      end: { line: 1, character: 0 },
+    }, []);
+    expect(mockInvoke).toHaveBeenCalledWith('async:lsp:folding-ranges', 'rtl/core/cpu_top.sv');
+    expect(mockInvoke).toHaveBeenCalledWith('async:lsp:semantic-tokens-full', 'rtl/core/cpu_top.sv');
+    expect(mockInvoke).toHaveBeenCalledWith('async:lsp:selection-ranges', 'rtl/core/cpu_top.sv', [{ line: 4, character: 6 }]);
+    expect(mockInvoke).toHaveBeenCalledWith('async:lsp:signature-help', 'rtl/core/cpu_top.sv', 4, 6, '(', 2, false);
+    expect(mockInvoke).toHaveBeenCalledWith('async:lsp:document-symbols', 'rtl/core/cpu_top.sv');
     expect(mockInvoke).toHaveBeenCalledWith('async:lsp:references', 'rtl/core/cpu_top.sv', 4, 6, false);
+    expect(mockInvoke).toHaveBeenCalledWith('async:lsp:prepare-call-hierarchy', 'rtl/core/cpu_top.sv', 4, 6);
+    expect(mockInvoke).toHaveBeenCalledWith('async:lsp:workspace-symbols', 'cpu');
+    expect(mockInvoke).toHaveBeenCalledWith('async:lsp:prepare-rename', 'rtl/core/cpu_top.sv', 4, 6);
+    expect(mockInvoke).toHaveBeenCalledWith('async:lsp:rename', 'rtl/core/cpu_top.sv', 4, 6, 'valid');
     expect(mockInvoke).toHaveBeenCalledWith('async:lsp:module-hierarchy', { maxDepth: 12 });
     expect(mockInvoke).toHaveBeenCalledWith('async:lsp:schematic', { moduleName: 'cpu_top', maxDepth: 12 });
     expect(mockInvoke).toHaveBeenCalledWith('async:lsp:get-debug-events');

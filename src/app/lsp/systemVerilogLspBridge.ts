@@ -1,12 +1,23 @@
 import type {
+  LspCallHierarchyIncomingCall,
+  LspCallHierarchyItem,
+  LspCallHierarchyOutgoingCall,
+  LspCodeAction,
   LspCompletionItem,
   LspCompletionResponse,
   LspDebugEvent,
   LspDiagnostic,
+  LspDocumentHighlight,
+  LspDocumentSymbol,
   LspHover,
+  LspInlayHint,
   LspMarkedString,
   LspMarkupContent,
+  LspRange,
+  LspSelectionRange,
   LspTextEdit,
+  LspWorkspaceEdit,
+  LspWorkspaceSymbol,
   WorkspaceLocation,
 } from '../../../types/systemverilog-lsp';
 import { claimMonacoRegistration, resetMonacoRegistrationForTests } from '../editor/monacoRegistrationTracker';
@@ -16,6 +27,10 @@ const CHANGE_DEBOUNCE_MS = 120;
 const DEBUG_EVENT_LIMIT = 200;
 const LSP_MARKER_OWNER = 'slang-lsp';
 const LSP_PROVIDER_REGISTRATION_KEY = 'systemverilog-lsp-providers';
+const SYSTEMVERILOG_SEMANTIC_TOKEN_LEGEND = {
+  tokenTypes: ['namespace', 'type', 'class', 'enum', 'interface', 'function', 'variable', 'parameter', 'enumMember'],
+  tokenModifiers: [],
+};
 
 type NavigateToLocation = (filePath: string, line: number, col: number) => void;
 
@@ -129,10 +144,196 @@ function toMonacoCompletionKind(monaco: any, kind?: number) {
   }
 }
 
+function toMonacoSymbolKind(monaco: any, kind?: number) {
+  switch (kind) {
+    case 2:
+      return monaco.languages.SymbolKind.Module;
+    case 3:
+      return monaco.languages.SymbolKind.Namespace;
+    case 4:
+      return monaco.languages.SymbolKind.Package;
+    case 5:
+      return monaco.languages.SymbolKind.Class;
+    case 6:
+      return monaco.languages.SymbolKind.Method;
+    case 7:
+      return monaco.languages.SymbolKind.Property;
+    case 8:
+      return monaco.languages.SymbolKind.Field;
+    case 9:
+      return monaco.languages.SymbolKind.Constructor;
+    case 10:
+      return monaco.languages.SymbolKind.Enum;
+    case 11:
+      return monaco.languages.SymbolKind.Interface;
+    case 12:
+      return monaco.languages.SymbolKind.Function;
+    case 13:
+      return monaco.languages.SymbolKind.Variable;
+    case 14:
+      return monaco.languages.SymbolKind.Constant;
+    case 15:
+      return monaco.languages.SymbolKind.String;
+    case 16:
+      return monaco.languages.SymbolKind.Number;
+    case 17:
+      return monaco.languages.SymbolKind.Boolean;
+    case 18:
+      return monaco.languages.SymbolKind.Array;
+    case 19:
+      return monaco.languages.SymbolKind.Object;
+    case 20:
+      return monaco.languages.SymbolKind.Key;
+    case 21:
+      return monaco.languages.SymbolKind.Null;
+    case 22:
+      return monaco.languages.SymbolKind.EnumMember;
+    case 23:
+      return monaco.languages.SymbolKind.Struct;
+    case 24:
+      return monaco.languages.SymbolKind.Event;
+    case 25:
+      return monaco.languages.SymbolKind.Operator;
+    case 26:
+      return monaco.languages.SymbolKind.TypeParameter;
+    default:
+      return monaco.languages.SymbolKind.Variable;
+  }
+}
+
+function toMonacoDocumentHighlightKind(monaco: any, kind?: number) {
+  switch (kind) {
+    case 2:
+      return monaco.languages.DocumentHighlightKind.Read;
+    case 3:
+      return monaco.languages.DocumentHighlightKind.Write;
+    default:
+      return monaco.languages.DocumentHighlightKind.Text;
+  }
+}
+
+function toMonacoInlayHintKind(monaco: any, kind?: number) {
+  switch (kind) {
+    case 1:
+      return monaco.languages.InlayHintKind.Type;
+    case 2:
+      return monaco.languages.InlayHintKind.Parameter;
+    default:
+      return undefined;
+  }
+}
+
+function toMonacoFoldingRangeKind(monaco: any, kind?: string) {
+  switch (kind) {
+    case 'comment':
+      return monaco.languages.FoldingRangeKind.Comment;
+    case 'imports':
+      return monaco.languages.FoldingRangeKind.Imports;
+    case 'region':
+      return monaco.languages.FoldingRangeKind.Region;
+    default:
+      return undefined;
+  }
+}
+
 function toMonacoTextEdit(edit: LspTextEdit) {
   return {
     range: toMonacoRange(edit.range),
     text: edit.newText,
+  };
+}
+
+function toMonacoPosition(position: { line: number; character: number }) {
+  return {
+    lineNumber: position.line + 1,
+    column: position.character + 1,
+  };
+}
+
+function toLspRange(range: {
+  startLineNumber: number;
+  startColumn: number;
+  endLineNumber: number;
+  endColumn: number;
+}): LspRange {
+  return {
+    start: {
+      line: range.startLineNumber - 1,
+      character: range.startColumn - 1,
+    },
+    end: {
+      line: range.endLineNumber - 1,
+      character: range.endColumn - 1,
+    },
+  };
+}
+
+function toMonacoLocation(monaco: any, location: WorkspaceLocation) {
+  return {
+    uri: monaco.Uri.parse(location.filePath),
+    range: toMonacoRange(location.range),
+  };
+}
+
+function toMonacoWorkspaceEdit(monaco: any, edit: LspWorkspaceEdit | null) {
+  if (!edit) {
+    return undefined;
+  }
+
+  const textEdits = Object.entries(edit.changes).flatMap(([filePath, entries]) => (
+    entries.map((textEdit) => ({
+      resource: monaco.Uri.parse(filePath),
+      textEdit: toMonacoTextEdit(textEdit),
+      versionId: undefined,
+    }))
+  ));
+  const fileEdits = edit.documentChanges?.map((change) => ({
+    newResource: monaco.Uri.parse(change.filePath),
+    options: change.options,
+  })) ?? [];
+  const edits = [
+    ...fileEdits,
+    ...textEdits,
+  ];
+
+  return { edits };
+}
+
+function toMonacoSelectionRange(range: LspSelectionRange): any {
+  const parent = range.parent ? toMonacoSelectionRange(range.parent) : undefined;
+  return {
+    range: toMonacoRange(range.range),
+    parent,
+  };
+}
+
+function toMonacoCallHierarchyItem(monaco: any, item: LspCallHierarchyItem) {
+  return {
+    _lspItem: item,
+    name: item.name,
+    kind: toMonacoSymbolKind(monaco, item.kind),
+    uri: monaco.Uri.parse(item.filePath ?? item.uri),
+    range: toMonacoRange(item.range),
+    selectionRange: toMonacoRange(item.selectionRange),
+    detail: item.detail,
+  };
+}
+
+function getLspCallHierarchyItem(item: any): LspCallHierarchyItem | null {
+  return item?._lspItem ?? null;
+}
+
+function toMonacoIncomingCall(monaco: any, call: LspCallHierarchyIncomingCall) {
+  return {
+    from: toMonacoCallHierarchyItem(monaco, call.from),
+    fromRanges: call.fromRanges.map((range) => toMonacoRange(range)),
+  };
+}
+
+function toMonacoOutgoingCall(monaco: any, call: LspCallHierarchyOutgoingCall) {
+  return {
+    to: toMonacoCallHierarchyItem(monaco, call.to),
+    fromRanges: call.fromRanges.map((range) => toMonacoRange(range)),
   };
 }
 
@@ -198,6 +399,8 @@ class SystemVerilogLspBridge {
   private debugSubscriptionInstalled = false;
 
   private stateSubscriptionInstalled = false;
+
+  private ensureInitializedPromise: Promise<void> | null = null;
 
   private diagnosticsListeners = new Set<() => void>();
 
@@ -337,6 +540,25 @@ class SystemVerilogLspBridge {
     }
   }
 
+  ensureInitialized() {
+    const api = getLspApi();
+    if (!api?.ensureInitialized) {
+      return Promise.resolve();
+    }
+
+    this.ensureStreamSubscriptions(this.currentMonaco);
+    if (!this.ensureInitializedPromise) {
+      this.ensureInitializedPromise = api.ensureInitialized()
+        .catch((error) => {
+          this.ensureInitializedPromise = null;
+          this.handleError(error);
+          throw error;
+        });
+    }
+
+    return this.ensureInitializedPromise;
+  }
+
   private ensureEditorActions(monaco: any, editor: any, onNavigateToLocation?: NavigateToLocation) {
     if (!editor?.addAction) {
       return;
@@ -465,6 +687,20 @@ class SystemVerilogLspBridge {
     }
   }
 
+  private async requestCompletionResolve(item: LspCompletionItem) {
+    const api = getLspApi();
+    if (!api?.completionResolve) {
+      return item;
+    }
+
+    try {
+      return await api.completionResolve(item) ?? item;
+    } catch (error) {
+      this.handleError(error);
+      return item;
+    }
+  }
+
   private async requestHover(filePath: string, position: { lineNumber: number; column: number }) {
     const api = getLspApi();
     if (!api) {
@@ -493,6 +729,34 @@ class SystemVerilogLspBridge {
     }
   }
 
+  private async requestTypeDefinition(filePath: string, position: { lineNumber: number; column: number }) {
+    const api = getLspApi();
+    if (!api?.typeDefinition) {
+      return [];
+    }
+
+    try {
+      return await api.typeDefinition(filePath, position.lineNumber - 1, position.column - 1);
+    } catch (error) {
+      this.handleError(error);
+      return [];
+    }
+  }
+
+  private async requestImplementation(filePath: string, position: { lineNumber: number; column: number }) {
+    const api = getLspApi();
+    if (!api?.implementation) {
+      return [];
+    }
+
+    try {
+      return await api.implementation(filePath, position.lineNumber - 1, position.column - 1);
+    } catch (error) {
+      this.handleError(error);
+      return [];
+    }
+  }
+
   private async requestReferences(filePath: string, position: { lineNumber: number; column: number }) {
     const api = getLspApi();
     if (!api) {
@@ -504,6 +768,226 @@ class SystemVerilogLspBridge {
     } catch (error) {
       this.handleError(error);
       return [];
+    }
+  }
+
+  private async requestDocumentHighlights(filePath: string, position: { lineNumber: number; column: number }) {
+    const api = getLspApi();
+    if (!api?.documentHighlights) {
+      return [];
+    }
+
+    try {
+      return await api.documentHighlights(filePath, position.lineNumber - 1, position.column - 1);
+    } catch (error) {
+      this.handleError(error);
+      return [];
+    }
+  }
+
+  private async requestDocumentSymbols(filePath: string) {
+    const api = getLspApi();
+    if (!api?.documentSymbols) {
+      return [];
+    }
+
+    try {
+      return await api.documentSymbols(filePath);
+    } catch (error) {
+      this.handleError(error);
+      return [];
+    }
+  }
+
+  private async requestDocumentLinks(filePath: string) {
+    const api = getLspApi();
+    if (!api?.documentLinks) {
+      return [];
+    }
+
+    try {
+      return await api.documentLinks(filePath);
+    } catch (error) {
+      this.handleError(error);
+      return [];
+    }
+  }
+
+  private async requestInlayHints(filePath: string, range: LspRange) {
+    const api = getLspApi();
+    if (!api?.inlayHints) {
+      return [];
+    }
+
+    try {
+      return await api.inlayHints(filePath, range);
+    } catch (error) {
+      this.handleError(error);
+      return [];
+    }
+  }
+
+  private async requestCodeActions(filePath: string, range: LspRange, diagnostics: LspDiagnostic[]) {
+    const api = getLspApi();
+    if (!api?.codeActions) {
+      return [];
+    }
+
+    try {
+      return await api.codeActions(filePath, range, diagnostics);
+    } catch (error) {
+      this.handleError(error);
+      return [];
+    }
+  }
+
+  private async requestFoldingRanges(filePath: string) {
+    const api = getLspApi();
+    if (!api?.foldingRanges) {
+      return [];
+    }
+
+    try {
+      return await api.foldingRanges(filePath);
+    } catch (error) {
+      this.handleError(error);
+      return [];
+    }
+  }
+
+  private async requestSemanticTokens(filePath: string) {
+    const api = getLspApi();
+    if (!api?.semanticTokensFull) {
+      return { data: [] };
+    }
+
+    try {
+      return await api.semanticTokensFull(filePath);
+    } catch (error) {
+      this.handleError(error);
+      return { data: [] };
+    }
+  }
+
+  private async requestSelectionRanges(filePath: string, positions: Array<{ lineNumber: number; column: number }>) {
+    const api = getLspApi();
+    if (!api?.selectionRanges) {
+      return [];
+    }
+
+    try {
+      return await api.selectionRanges(filePath, positions.map((position) => ({
+        line: position.lineNumber - 1,
+        character: position.column - 1,
+      })));
+    } catch (error) {
+      this.handleError(error);
+      return [];
+    }
+  }
+
+  private async requestSignatureHelp(filePath: string, position: { lineNumber: number; column: number }, context: any) {
+    const api = getLspApi();
+    if (!api?.signatureHelp) {
+      return null;
+    }
+
+    try {
+      return await api.signatureHelp(
+        filePath,
+        position.lineNumber - 1,
+        position.column - 1,
+        typeof context?.triggerCharacter === 'string' ? context.triggerCharacter : undefined,
+        typeof context?.triggerKind === 'number' ? context.triggerKind : undefined,
+        context?.isRetrigger === true,
+      );
+    } catch (error) {
+      this.handleError(error);
+      return null;
+    }
+  }
+
+  private async requestPrepareCallHierarchy(filePath: string, position: { lineNumber: number; column: number }) {
+    const api = getLspApi();
+    if (!api?.prepareCallHierarchy) {
+      return [];
+    }
+
+    try {
+      return await api.prepareCallHierarchy(filePath, position.lineNumber - 1, position.column - 1);
+    } catch (error) {
+      this.handleError(error);
+      return [];
+    }
+  }
+
+  private async requestCallHierarchyIncoming(item: LspCallHierarchyItem) {
+    const api = getLspApi();
+    if (!api?.callHierarchyIncoming) {
+      return [];
+    }
+
+    try {
+      return await api.callHierarchyIncoming(item);
+    } catch (error) {
+      this.handleError(error);
+      return [];
+    }
+  }
+
+  private async requestCallHierarchyOutgoing(item: LspCallHierarchyItem) {
+    const api = getLspApi();
+    if (!api?.callHierarchyOutgoing) {
+      return [];
+    }
+
+    try {
+      return await api.callHierarchyOutgoing(item);
+    } catch (error) {
+      this.handleError(error);
+      return [];
+    }
+  }
+
+  private async requestWorkspaceSymbols(query: string) {
+    const api = getLspApi();
+    if (!api?.workspaceSymbols) {
+      return [];
+    }
+
+    try {
+      return await api.workspaceSymbols(query);
+    } catch (error) {
+      this.handleError(error);
+      return [];
+    }
+  }
+
+  private async requestPrepareRename(filePath: string, position: { lineNumber: number; column: number }) {
+    const api = getLspApi();
+    if (!api?.prepareRename) {
+      return null;
+    }
+
+    try {
+      return await api.prepareRename(filePath, position.lineNumber - 1, position.column - 1);
+    } catch (error) {
+      this.handleError(error);
+      return null;
+    }
+  }
+
+  private async requestRename(filePath: string, position: { lineNumber: number; column: number }, newName: string) {
+    const api = getLspApi();
+    if (!api?.rename) {
+      return null;
+    }
+
+    try {
+      return await api.rename(filePath, position.lineNumber - 1, position.column - 1, newName);
+    } catch (error) {
+      this.handleError(error);
+      return null;
     }
   }
 
@@ -553,10 +1037,32 @@ class SystemVerilogLspBridge {
               ? monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet
               : undefined,
             additionalTextEdits: item.additionalTextEdits?.map((edit) => toMonacoTextEdit(edit)),
+            __lspCompletionItem: item,
           };
         });
 
         return { suggestions };
+      },
+      resolveCompletionItem: async (item: any) => {
+        const sourceItem = item.__lspCompletionItem as LspCompletionItem | undefined;
+        if (!sourceItem) {
+          return item;
+        }
+
+        const resolvedItem = await this.requestCompletionResolve(sourceItem);
+        return {
+          ...item,
+          detail: resolvedItem.detail ?? item.detail,
+          documentation: resolvedItem.documentation
+            ? { value: formatHoverContents(resolvedItem.documentation) }
+            : item.documentation,
+          insertText: resolvedItem.insertText ?? item.insertText,
+          insertTextRules: resolvedItem.insertTextFormat === 2
+            ? monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet
+            : item.insertTextRules,
+          additionalTextEdits: resolvedItem.additionalTextEdits?.map((edit) => toMonacoTextEdit(edit)) ?? item.additionalTextEdits,
+          __lspCompletionItem: resolvedItem,
+        };
       },
     });
 
@@ -592,10 +1098,7 @@ class SystemVerilogLspBridge {
         }
 
         const locations = await this.requestDefinition(filePath, position);
-        return locations.map((location) => ({
-          uri: monaco.Uri.parse(location.filePath),
-          range: toMonacoRange(location.range),
-        }));
+        return locations.map((location) => toMonacoLocation(monaco, location));
       },
     });
 
@@ -607,10 +1110,283 @@ class SystemVerilogLspBridge {
         }
 
         const locations = await this.requestReferences(filePath, position);
-        return locations.map((location) => ({
-          uri: monaco.Uri.parse(location.filePath),
-          range: toMonacoRange(location.range),
+        return locations.map((location) => toMonacoLocation(monaco, location));
+      },
+    });
+
+    monaco.languages.registerTypeDefinitionProvider?.('systemverilog', {
+      provideTypeDefinition: async (model: any, position: any) => {
+        const filePath = getModelPath(model, this.modelFilePaths);
+        if (!filePath) {
+          return [];
+        }
+
+        const locations = await this.requestTypeDefinition(filePath, position);
+        return locations.map((location) => toMonacoLocation(monaco, location));
+      },
+    });
+
+    monaco.languages.registerImplementationProvider?.('systemverilog', {
+      provideImplementation: async (model: any, position: any) => {
+        const filePath = getModelPath(model, this.modelFilePaths);
+        if (!filePath) {
+          return [];
+        }
+
+        const locations = await this.requestImplementation(filePath, position);
+        return locations.map((location) => toMonacoLocation(monaco, location));
+      },
+    });
+
+    monaco.languages.registerDocumentHighlightProvider?.('systemverilog', {
+      provideDocumentHighlights: async (model: any, position: any) => {
+        const filePath = getModelPath(model, this.modelFilePaths);
+        if (!filePath) {
+          return [];
+        }
+
+        const highlights = await this.requestDocumentHighlights(filePath, position);
+        return highlights.map((highlight: LspDocumentHighlight) => ({
+          range: toMonacoRange(highlight.range),
+          kind: toMonacoDocumentHighlightKind(monaco, highlight.kind),
         }));
+      },
+    });
+
+    monaco.languages.registerDocumentSymbolProvider?.('systemverilog', {
+      provideDocumentSymbols: async (model: any) => {
+        const filePath = getModelPath(model, this.modelFilePaths);
+        if (!filePath) {
+          return [];
+        }
+
+        const toSymbol = (symbol: LspDocumentSymbol): any => ({
+          name: symbol.name,
+          detail: symbol.detail,
+          kind: toMonacoSymbolKind(monaco, symbol.kind),
+          range: toMonacoRange(symbol.range),
+          selectionRange: toMonacoRange(symbol.selectionRange),
+          children: symbol.children?.map(toSymbol) ?? [],
+        });
+
+        const symbols = await this.requestDocumentSymbols(filePath);
+        return symbols.map(toSymbol);
+      },
+    });
+
+    monaco.languages.registerLinkProvider?.('systemverilog', {
+      provideLinks: async (model: any) => {
+        const filePath = getModelPath(model, this.modelFilePaths);
+        if (!filePath) {
+          return { links: [] };
+        }
+
+        const links = await this.requestDocumentLinks(filePath);
+        return {
+          links: links.map((link) => ({
+            range: toMonacoRange(link.range),
+            url: link.target,
+            tooltip: link.tooltip,
+          })),
+        };
+      },
+    });
+
+    monaco.languages.registerInlayHintsProvider?.('systemverilog', {
+      provideInlayHints: async (model: any, range: any) => {
+        const filePath = getModelPath(model, this.modelFilePaths);
+        if (!filePath) {
+          return { hints: [], dispose: () => undefined };
+        }
+
+        const hints = await this.requestInlayHints(filePath, toLspRange(range));
+        return {
+          hints: hints.map((hint: LspInlayHint) => ({
+            position: toMonacoPosition(hint.position),
+            label: hint.label,
+            kind: toMonacoInlayHintKind(monaco, hint.kind),
+            tooltip: typeof hint.tooltip === 'string'
+              ? hint.tooltip
+              : hint.tooltip?.value,
+            textEdits: hint.textEdits?.map((edit) => toMonacoTextEdit(edit)),
+          })),
+          dispose: () => undefined,
+        };
+      },
+    });
+
+    monaco.languages.registerCodeActionProvider?.('systemverilog', {
+      provideCodeActions: async (model: any, range: any, context: any) => {
+        const filePath = getModelPath(model, this.modelFilePaths);
+        if (!filePath) {
+          return { actions: [], dispose: () => undefined };
+        }
+
+        const actions = await this.requestCodeActions(filePath, toLspRange(range), context?.markers ?? []);
+        return {
+          actions: actions.map((action: LspCodeAction) => ({
+            title: action.title,
+            kind: action.kind,
+            diagnostics: action.diagnostics,
+            edit: toMonacoWorkspaceEdit(monaco, action.edit ?? null),
+            isPreferred: action.isPreferred,
+          })),
+          dispose: () => undefined,
+        };
+      },
+    });
+
+    monaco.languages.registerFoldingRangeProvider?.('systemverilog', {
+      provideFoldingRanges: async (model: any) => {
+        const filePath = getModelPath(model, this.modelFilePaths);
+        if (!filePath) {
+          return [];
+        }
+
+        const ranges = await this.requestFoldingRanges(filePath);
+        return ranges.map((range) => ({
+          start: range.startLine + 1,
+          startColumn: typeof range.startCharacter === 'number' ? range.startCharacter + 1 : undefined,
+          end: range.endLine + 1,
+          endColumn: typeof range.endCharacter === 'number' ? range.endCharacter + 1 : undefined,
+          kind: toMonacoFoldingRangeKind(monaco, range.kind),
+        }));
+      },
+    });
+
+    monaco.languages.registerDocumentSemanticTokensProvider?.('systemverilog', {
+      getLegend: () => SYSTEMVERILOG_SEMANTIC_TOKEN_LEGEND,
+      provideDocumentSemanticTokens: async (model: any) => {
+        const filePath = getModelPath(model, this.modelFilePaths);
+        if (!filePath) {
+          return { data: new Uint32Array() };
+        }
+
+        const tokens = await this.requestSemanticTokens(filePath);
+        return {
+          resultId: tokens.resultId,
+          data: Uint32Array.from(tokens.data),
+        };
+      },
+      releaseDocumentSemanticTokens: () => undefined,
+    });
+
+    monaco.languages.registerSelectionRangeProvider?.('systemverilog', {
+      provideSelectionRanges: async (model: any, positions: any[]) => {
+        const filePath = getModelPath(model, this.modelFilePaths);
+        if (!filePath) {
+          return [];
+        }
+
+        const ranges = await this.requestSelectionRanges(filePath, positions);
+        return ranges.map((range: LspSelectionRange) => toMonacoSelectionRange(range));
+      },
+    });
+
+    monaco.languages.registerSignatureHelpProvider?.('systemverilog', {
+      signatureHelpTriggerCharacters: ['(', ','],
+      signatureHelpRetriggerCharacters: [','],
+      provideSignatureHelp: async (model: any, position: any, _token: any, context: any) => {
+        const filePath = getModelPath(model, this.modelFilePaths);
+        if (!filePath) {
+          return null;
+        }
+
+        const signatureHelp = await this.requestSignatureHelp(filePath, position, context);
+        if (!signatureHelp) {
+          return null;
+        }
+
+        return {
+          value: {
+            signatures: signatureHelp.signatures.map((signature) => ({
+              label: signature.label,
+              documentation: signature.documentation
+                ? { value: formatHoverContents(signature.documentation) }
+                : undefined,
+              parameters: signature.parameters?.map((parameter) => ({
+                label: parameter.label,
+                documentation: parameter.documentation
+                  ? { value: formatHoverContents(parameter.documentation) }
+                  : undefined,
+              })) ?? [],
+            })),
+            activeSignature: signatureHelp.activeSignature ?? 0,
+            activeParameter: signatureHelp.activeParameter ?? 0,
+          },
+          dispose: () => undefined,
+        };
+      },
+    });
+
+    monaco.languages.registerCallHierarchyProvider?.('systemverilog', {
+      prepareCallHierarchy: async (model: any, position: any) => {
+        const filePath = getModelPath(model, this.modelFilePaths);
+        if (!filePath) {
+          return [];
+        }
+
+        const items = await this.requestPrepareCallHierarchy(filePath, position);
+        return items.map((item) => toMonacoCallHierarchyItem(monaco, item));
+      },
+      provideCallHierarchyIncomingCalls: async (item: any) => {
+        const lspItem = getLspCallHierarchyItem(item);
+        if (!lspItem) {
+          return [];
+        }
+
+        const calls = await this.requestCallHierarchyIncoming(lspItem);
+        return calls.map((call) => toMonacoIncomingCall(monaco, call));
+      },
+      provideCallHierarchyOutgoingCalls: async (item: any) => {
+        const lspItem = getLspCallHierarchyItem(item);
+        if (!lspItem) {
+          return [];
+        }
+
+        const calls = await this.requestCallHierarchyOutgoing(lspItem);
+        return calls.map((call) => toMonacoOutgoingCall(monaco, call));
+      },
+    });
+
+    monaco.languages.registerWorkspaceSymbolProvider?.({
+      provideWorkspaceSymbols: async (query: string) => {
+        const symbols = await this.requestWorkspaceSymbols(query);
+        return symbols.map((symbol: LspWorkspaceSymbol) => ({
+          name: symbol.name,
+          kind: toMonacoSymbolKind(monaco, symbol.kind),
+          containerName: symbol.containerName,
+          location: toMonacoLocation(monaco, symbol.location),
+        }));
+      },
+      resolveWorkspaceSymbol: async (symbol: any) => symbol,
+    });
+
+    monaco.languages.registerRenameProvider?.('systemverilog', {
+      provideRenameEdits: async (model: any, position: any, newName: string) => {
+        const filePath = getModelPath(model, this.modelFilePaths);
+        if (!filePath) {
+          return null;
+        }
+
+        const edit = await this.requestRename(filePath, position, newName);
+        return toMonacoWorkspaceEdit(monaco, edit) ?? null;
+      },
+      resolveRenameLocation: async (model: any, position: any) => {
+        const filePath = getModelPath(model, this.modelFilePaths);
+        if (!filePath) {
+          return null;
+        }
+
+        const result = await this.requestPrepareRename(filePath, position);
+        if (!result) {
+          return null;
+        }
+
+        return {
+          range: toMonacoRange(result.range),
+          text: result.placeholder,
+        };
       },
     });
   }

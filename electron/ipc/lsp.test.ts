@@ -107,6 +107,66 @@ function createFakeConnection(): FakeConnection {
         }];
       }
 
+      if (method === 'textDocument/typeDefinition') {
+        return [{
+          uri: 'file:///C:/workspace/Pristine/rtl/core/types.sv',
+          range: {
+            start: { line: 2, character: 4 },
+            end: { line: 2, character: 11 },
+          },
+        }];
+      }
+
+      if (method === 'completionItem/resolve') {
+        return {
+          label: 'data_ready',
+          kind: 6,
+          detail: 'logic resolved',
+          documentation: { kind: 'markdown', value: 'Resolved docs' },
+        };
+      }
+
+      if (method === 'textDocument/documentSymbol') {
+        return [{
+          name: 'cpu_top',
+          kind: 2,
+          range: {
+            start: { line: 0, character: 0 },
+            end: { line: 4, character: 9 },
+          },
+          selectionRange: {
+            start: { line: 0, character: 7 },
+            end: { line: 0, character: 14 },
+          },
+        }];
+      }
+
+      if (method === 'textDocument/semanticTokens/full') {
+        return { data: [0, 7, 7, 1, 0] };
+      }
+
+      if (method === 'textDocument/signatureHelp') {
+        return {
+          signatures: [{ label: 'child(input logic clk)', parameters: [{ label: 'clk' }] }],
+          activeSignature: 0,
+          activeParameter: 0,
+        };
+      }
+
+      if (method === 'textDocument/rename') {
+        return {
+          changes: {
+            'file:///C:/workspace/Pristine/rtl/core/cpu_top.sv': [{
+              range: {
+                start: { line: 1, character: 2 },
+                end: { line: 1, character: 7 },
+              },
+              newText: 'valid',
+            }],
+          },
+        };
+      }
+
       if (method === 'systemverilog/moduleHierarchy') {
         return {
           roots: [{
@@ -330,6 +390,22 @@ describe('LSP IPC handlers', () => {
     ]));
   });
 
+  it('prewarms the LSP session without opening a document', async () => {
+    const ensureHandler = getHandler('async:lsp:ensure-initialized');
+
+    await ensureHandler({});
+
+    expect(mockSpawn).toHaveBeenCalledTimes(1);
+    expect(fakeConnection.sendRequest).toHaveBeenCalledWith('initialize', expect.any(Object));
+    expect(fakeConnection.sendNotification).toHaveBeenCalledWith('initialized', {});
+    expect(fakeConnection.sendNotification).not.toHaveBeenCalledWith('textDocument/didOpen', expect.anything());
+    expect(send).toHaveBeenCalledWith('stream:lsp:debug', expect.objectContaining({
+      direction: 'session',
+      kind: 'lifecycle',
+      status: 'ready',
+    }));
+  });
+
   it('forwards diagnostics and normalizes definition results to workspace-relative paths', async () => {
     const openHandler = getHandler('async:lsp:open-document');
     const definitionHandler = getHandler('async:lsp:definition');
@@ -430,6 +506,90 @@ describe('LSP IPC handlers', () => {
         }),
       }),
     }));
+  });
+
+  it('uses a 30 second timeout for hierarchy requests', async () => {
+    const hierarchyHandler = getHandler('async:lsp:module-hierarchy');
+
+    fakeConnection.sendRequest.mockImplementation((method: string) => {
+      if (method === 'initialize') {
+        return Promise.resolve({});
+      }
+      if (method === 'systemverilog/moduleHierarchy') {
+        return new Promise(() => undefined);
+      }
+
+      return Promise.resolve(null);
+    });
+
+    vi.useFakeTimers();
+    const hierarchy = hierarchyHandler({}, { maxDepth: 8 });
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(19_999);
+    await Promise.resolve();
+
+    let settled = false;
+    void hierarchy.then(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(1);
+
+    await expect(hierarchy).resolves.toEqual({
+      roots: [],
+      messages: [expect.stringContaining('timed out after 30000ms')],
+    });
+  });
+
+  it('forwards and normalizes additional Monaco LSP capability requests', async () => {
+    const resolveHandler = getHandler('async:lsp:completion-resolve');
+    const typeDefinitionHandler = getHandler('async:lsp:type-definition');
+    const documentSymbolsHandler = getHandler('async:lsp:document-symbols');
+    const semanticTokensHandler = getHandler('async:lsp:semantic-tokens-full');
+    const signatureHelpHandler = getHandler('async:lsp:signature-help');
+    const renameHandler = getHandler('async:lsp:rename');
+
+    await expect(resolveHandler({}, { label: 'data_ready', data: { source: 'semanticEngine' } })).resolves.toEqual(
+      expect.objectContaining({
+        label: 'data_ready',
+        detail: 'logic resolved',
+        documentation: { kind: 'markdown', value: 'Resolved docs' },
+      }),
+    );
+    await expect(typeDefinitionHandler({}, 'rtl/core/cpu_top.sv', 2, 4)).resolves.toEqual([{
+      filePath: 'rtl/core/types.sv',
+      range: {
+        start: { line: 2, character: 4 },
+        end: { line: 2, character: 11 },
+      },
+    }]);
+    await expect(documentSymbolsHandler({}, 'rtl/core/cpu_top.sv')).resolves.toEqual([
+      expect.objectContaining({
+        name: 'cpu_top',
+        kind: 2,
+      }),
+    ]);
+    await expect(semanticTokensHandler({}, 'rtl/core/cpu_top.sv')).resolves.toEqual({ data: [0, 7, 7, 1, 0] });
+    await expect(signatureHelpHandler({}, 'rtl/core/cpu_top.sv', 3, 17, '(', 2, false)).resolves.toEqual({
+      signatures: [{ label: 'child(input logic clk)', documentation: undefined, parameters: [{ label: 'clk', documentation: undefined }] }],
+      activeSignature: 0,
+      activeParameter: 0,
+    });
+    await expect(renameHandler({}, 'rtl/core/cpu_top.sv', 1, 2, 'valid')).resolves.toEqual({
+      changes: {
+        'rtl/core/cpu_top.sv': [{
+          range: {
+            start: { line: 1, character: 2 },
+            end: { line: 1, character: 7 },
+          },
+          newText: 'valid',
+        }],
+      },
+    });
   });
 
   it('emits stderr output as debug events', async () => {

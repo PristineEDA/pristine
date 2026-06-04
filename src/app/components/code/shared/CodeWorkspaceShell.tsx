@@ -326,6 +326,7 @@ export function CodeWorkspaceShell({
 
   useLayoutEffect(() => {
     systemVerilogLspBridge.ensureStreamSubscriptions();
+    void systemVerilogLspBridge.ensureInitialized();
   }, []);
 
   if (hasFixedRightPanel && showRightPanel) {
