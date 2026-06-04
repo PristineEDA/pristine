@@ -61,6 +61,19 @@ interface LspSession {
 const SYSTEMVERILOG_LANGUAGE_ID = 'systemverilog';
 const CLIENT_NAME = 'Pristine Monaco LSP';
 const CLIENT_VERSION = '0.0.1';
+const LSP_REQUEST_TIMEOUT_MS = 10_000;
+const LSP_INITIALIZE_TIMEOUT_MS = 30_000;
+
+interface SendDebugRequestOptions {
+  timeoutMs?: number;
+}
+
+class LspRequestTimeoutError extends Error {
+  constructor(readonly method: string, readonly timeoutMs: number) {
+    super(`LSP request "${method}" timed out after ${timeoutMs}ms`);
+    this.name = 'LspRequestTimeoutError';
+  }
+}
 
 let projectRoot: string | null = null;
 let activeSessionPromise: Promise<LspSession> | null = null;
@@ -289,14 +302,44 @@ async function sendDebugNotification(
   await session.connection.sendNotification(method, params);
 }
 
+function withLspRequestTimeout<T>(request: Promise<T>, method: string, timeoutMs: number): Promise<T> {
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    return request;
+  }
+
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_resolve, reject) => {
+    timeoutHandle = setTimeout(() => {
+      reject(new LspRequestTimeoutError(method, timeoutMs));
+    }, timeoutMs);
+  });
+
+  return Promise.race([request, timeoutPromise]).finally(() => {
+    if (timeoutHandle) {
+      clearTimeout(timeoutHandle);
+    }
+  });
+}
+
+function isLspRequestTimeoutError(error: unknown): error is LspRequestTimeoutError {
+  return error instanceof LspRequestTimeoutError
+    || (error instanceof Error && error.name === 'LspRequestTimeoutError');
+}
+
+function getLspRequestErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 async function sendDebugRequest<T>(
   session: LspSession,
   getMainWindow: () => BrowserWindow | null,
   method: string,
   params: unknown,
+  options: SendDebugRequestOptions = {},
 ): Promise<T> {
   const requestId = session.nextDebugRequestId++;
   const filePath = getDebugFilePath(params);
+  const timeoutMs = options.timeoutMs ?? LSP_REQUEST_TIMEOUT_MS;
 
   sendLspDebug(getMainWindow, {
     direction: 'client->server',
@@ -308,7 +351,7 @@ async function sendDebugRequest<T>(
   });
 
   try {
-    const result = await session.connection.sendRequest(method, params);
+    const result = await withLspRequestTimeout(session.connection.sendRequest(method, params), method, timeoutMs);
     sendLspDebug(getMainWindow, {
       direction: 'server->client',
       kind: 'response',
@@ -328,7 +371,7 @@ async function sendDebugRequest<T>(
       payload: {
         error: toDebugValue(error),
       },
-      text: error instanceof Error ? error.message : String(error),
+      text: getLspRequestErrorMessage(error),
     });
     throw error;
   }
@@ -961,7 +1004,9 @@ async function createSession(getMainWindow: () => BrowserWindow | null): Promise
   });
 
   connection.listen();
-  session.initialized = sendDebugRequest(session, getMainWindow, 'initialize', createInitializeParams())
+  session.initialized = sendDebugRequest(session, getMainWindow, 'initialize', createInitializeParams(), {
+    timeoutMs: LSP_INITIALIZE_TIMEOUT_MS,
+  })
     .then(() => {
       return sendDebugNotification(session, getMainWindow, 'initialized', {});
     })
@@ -1139,18 +1184,26 @@ export function registerLspHandlers(getMainWindow: () => BrowserWindow | null): 
       }
 
       return withInitializedSession(getMainWindow, async (session) => {
-        const result = await sendDebugRequest(session, getMainWindow, 'textDocument/completion', {
-          textDocument: { uri: getDocumentUri(filePath) },
-          position: { line, character },
-          context: triggerKind === undefined
-            ? undefined
-            : {
-              triggerKind,
-              triggerCharacter,
-            },
-        });
+        try {
+          const result = await sendDebugRequest(session, getMainWindow, 'textDocument/completion', {
+            textDocument: { uri: getDocumentUri(filePath) },
+            position: { line, character },
+            context: triggerKind === undefined
+              ? undefined
+              : {
+                triggerKind,
+                triggerCharacter,
+              },
+          });
 
-        return normalizeCompletionResponse(result);
+          return normalizeCompletionResponse(result);
+        } catch (error) {
+          if (isLspRequestTimeoutError(error)) {
+            return null;
+          }
+
+          throw error;
+        }
       });
     },
   );
@@ -1161,12 +1214,20 @@ export function registerLspHandlers(getMainWindow: () => BrowserWindow | null): 
     assertNumber(character, 'character');
 
     return withInitializedSession(getMainWindow, async (session) => {
-      const result = await sendDebugRequest(session, getMainWindow, 'textDocument/hover', {
-        textDocument: { uri: getDocumentUri(filePath) },
-        position: { line, character },
-      });
+      try {
+        const result = await sendDebugRequest(session, getMainWindow, 'textDocument/hover', {
+          textDocument: { uri: getDocumentUri(filePath) },
+          position: { line, character },
+        });
 
-      return normalizeHover(result);
+        return normalizeHover(result);
+      } catch (error) {
+        if (isLspRequestTimeoutError(error)) {
+          return null;
+        }
+
+        throw error;
+      }
     });
   });
 
@@ -1176,12 +1237,20 @@ export function registerLspHandlers(getMainWindow: () => BrowserWindow | null): 
     assertNumber(character, 'character');
 
     return withInitializedSession(getMainWindow, async (session) => {
-      const result = await sendDebugRequest(session, getMainWindow, 'textDocument/definition', {
-        textDocument: { uri: getDocumentUri(filePath) },
-        position: { line, character },
-      });
+      try {
+        const result = await sendDebugRequest(session, getMainWindow, 'textDocument/definition', {
+          textDocument: { uri: getDocumentUri(filePath) },
+          position: { line, character },
+        });
 
-      return normalizeWorkspaceLocations(result);
+        return normalizeWorkspaceLocations(result);
+      } catch (error) {
+        if (isLspRequestTimeoutError(error)) {
+          return [];
+        }
+
+        throw error;
+      }
     });
   });
 
@@ -1196,13 +1265,21 @@ export function registerLspHandlers(getMainWindow: () => BrowserWindow | null): 
       }
 
       return withInitializedSession(getMainWindow, async (session) => {
-        const result = await sendDebugRequest(session, getMainWindow, 'textDocument/references', {
-          textDocument: { uri: getDocumentUri(filePath) },
-          position: { line, character },
-          context: { includeDeclaration: includeDeclaration !== false },
-        });
+        try {
+          const result = await sendDebugRequest(session, getMainWindow, 'textDocument/references', {
+            textDocument: { uri: getDocumentUri(filePath) },
+            position: { line, character },
+            context: { includeDeclaration: includeDeclaration !== false },
+          });
 
-        return normalizeWorkspaceLocations(result);
+          return normalizeWorkspaceLocations(result);
+        } catch (error) {
+          if (isLspRequestTimeoutError(error)) {
+            return [];
+          }
+
+          throw error;
+        }
       });
     },
   );
@@ -1211,9 +1288,17 @@ export function registerLspHandlers(getMainWindow: () => BrowserWindow | null): 
     const normalizedOptions = normalizeModuleHierarchyOptions(options);
 
     return withInitializedSession(getMainWindow, async (session) => {
-      const result = await sendDebugRequest(session, getMainWindow, 'systemverilog/moduleHierarchy', normalizedOptions);
+      try {
+        const result = await sendDebugRequest(session, getMainWindow, 'systemverilog/moduleHierarchy', normalizedOptions);
 
-      return normalizeModuleHierarchy(result);
+        return normalizeModuleHierarchy(result);
+      } catch (error) {
+        if (isLspRequestTimeoutError(error)) {
+          return { roots: [], messages: [getLspRequestErrorMessage(error)] };
+        }
+
+        throw error;
+      }
     });
   });
 
@@ -1221,9 +1306,17 @@ export function registerLspHandlers(getMainWindow: () => BrowserWindow | null): 
     const normalizedOptions = normalizeSchematicOptions(options);
 
     return withInitializedSession(getMainWindow, async (session) => {
-      const result = await sendDebugRequest(session, getMainWindow, 'systemverilog/schematic', normalizedOptions);
+      try {
+        const result = await sendDebugRequest(session, getMainWindow, 'systemverilog/schematic', normalizedOptions);
 
-      return normalizeSchematic(result);
+        return normalizeSchematic(result);
+      } catch (error) {
+        if (isLspRequestTimeoutError(error)) {
+          return { rootModuleId: null, modules: [], messages: [getLspRequestErrorMessage(error)] };
+        }
+
+        throw error;
+      }
     });
   });
 }

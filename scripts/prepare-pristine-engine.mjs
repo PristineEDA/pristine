@@ -34,12 +34,62 @@ function getTargetPath(platform = process.platform) {
   return path.join(binariesDir, getBinaryName(platform))
 }
 
-function getDefaultLocalSourcePath(platform = process.platform) {
-  return path.resolve(workspaceRoot, '..', 'pristine-engine', 'build', 'dev', getBinaryName(platform))
+function getDefaultLocalSourceCandidates(platform = process.platform) {
+  const binaryName = getBinaryName(platform)
+
+  return [
+    path.resolve(workspaceRoot, '..', 'pristine-engine', 'build', 'release', binaryName),
+    path.resolve(workspaceRoot, '..', 'pristine-engine', 'build', 'install-smoke', 'bin', binaryName),
+  ]
 }
 
 function getDefaultLocalLicensesPath() {
   return path.resolve(workspaceRoot, '..', 'pristine-engine', 'build', 'install-smoke', 'share', 'pristine-engine', 'licenses')
+}
+
+async function resolveDefaultLocalSourcePath(platform = process.platform) {
+  const sourceCandidates = getDefaultLocalSourceCandidates(platform)
+
+  for (const sourceCandidate of sourceCandidates) {
+    const sourceStats = await readFileStatsIfExists(sourceCandidate)
+    if (sourceStats?.isFile()) {
+      return sourceCandidate
+    }
+  }
+
+  throw new Error(
+    [
+      'Pristine Engine local release binary not found.',
+      'Build pristine-engine with the release preset or install-smoke target before packaging Pristine.',
+      'Tried:',
+      ...sourceCandidates.map((sourceCandidate) => `  - ${sourceCandidate}`),
+    ].join('\n'),
+  )
+}
+
+function normalizePathForMatching(filePath) {
+  return path.resolve(filePath).replace(/\\/g, '/').toLowerCase()
+}
+
+function isKnownDebugLocalSourcePath(sourcePath) {
+  const normalizedSourcePath = normalizePathForMatching(sourcePath)
+
+  return normalizedSourcePath.includes('/build/dev/')
+    || normalizedSourcePath.includes('/build/clang-cl/')
+}
+
+function assertNonDebugLocalSourcePath(sourcePath) {
+  if (process.env.PRISTINE_ENGINE_ALLOW_DEBUG_SOURCE === '1' || !isKnownDebugLocalSourcePath(sourcePath)) {
+    return
+  }
+
+  throw new Error(
+    [
+      `Debug pristine-engine source is not allowed for packaging/build: ${sourcePath}`,
+      'Use a non-debug source such as build/release or build/install-smoke/bin.',
+      'Set PRISTINE_ENGINE_ALLOW_DEBUG_SOURCE=1 only when intentionally testing a debug engine.',
+    ].join('\n'),
+  )
 }
 
 function getArchiveKind(archiveFile) {
@@ -374,9 +424,11 @@ async function prepareBinaryFromRemoteWorkflowArtifact() {
 }
 
 async function prepareBinaryFromLocalSource(sourcePath) {
+  const resolvedSourcePath = path.resolve(sourcePath)
   const licenseBundlePath = process.env.PRISTINE_ENGINE_LICENSES_SOURCE ?? getDefaultLocalLicensesPath()
 
-  await copyPreparedBinary(sourcePath, getTargetPath())
+  assertNonDebugLocalSourcePath(resolvedSourcePath)
+  await copyPreparedBinary(resolvedSourcePath, getTargetPath())
   await copyLicenseBundle(licenseBundlePath)
 }
 
@@ -408,7 +460,7 @@ async function main() {
     return
   }
 
-  await prepareBinaryFromLocalSource(getDefaultLocalSourcePath())
+  await prepareBinaryFromLocalSource(await resolveDefaultLocalSourcePath())
 }
 
 main().catch((error) => {
