@@ -377,6 +377,21 @@ function createWorkspaceCopy(targetPath: string) {
   fs.cpSync(fixtureWorkspace, targetPath, { recursive: true });
 }
 
+function createWorkspaceCopyWithFiles(targetName: string, files: Record<string, string>) {
+  const targetPath = test.info().outputPath(targetName);
+
+  createWorkspaceCopy(targetPath);
+
+  for (const [relativePath, content] of Object.entries(files)) {
+    const filePath = path.join(targetPath, relativePath);
+
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, `${content.trimEnd()}\n`, 'utf-8');
+  }
+
+  return targetPath;
+}
+
 function initializeGitWorkspaceCopy(targetPath: string, branchName: string) {
   const gitIgnorePath = path.join(targetPath, '.gitignore');
   const existingGitIgnore = fs.existsSync(gitIgnorePath)
@@ -2148,7 +2163,6 @@ test('code view hierarchy renders module instantiations from pristine-engine', a
   test.slow();
   skipIfPristineEngineUnavailable();
 
-  const { app, window } = await launchApp();
   const aluSource = [
     'module alu;',
     'endmodule',
@@ -2164,6 +2178,12 @@ test('code view hierarchy renders module instantiations from pristine-engine', a
     '  missing_block u_missing ();',
     'endmodule',
   ].join('\n');
+  const projectRoot = createWorkspaceCopyWithFiles('hierarchy-workspace', {
+    'rtl/core/alu.sv': aluSource,
+    'rtl/core/bus_if.sv': busInterfaceSource,
+    'rtl/core/cpu_top.sv': cpuTopSource,
+  });
+  const { app, window } = await launchApp({ projectRoot });
 
   await ensureExplorerVisible(window);
   await openNestedWorkspaceFile(window, [
@@ -2176,24 +2196,6 @@ test('code view hierarchy renders module instantiations from pristine-engine', a
   await waitForMonacoEditor(window);
   await expect(window.locator('.monaco-editor .view-lines')).toContainText('alu u_alu', {
     timeout: MONACO_READY_TIMEOUT_MS,
-  });
-
-  await window.evaluate(async ({ nextAluSource, nextBusInterfaceSource, nextCpuTopSource }) => {
-    const browserGlobal = globalThis as typeof globalThis & {
-      electronAPI?: {
-        lsp: {
-          openDocument: (filePath: string, languageId: string, text: string) => Promise<void>;
-        };
-      };
-    };
-
-    await browserGlobal.electronAPI?.lsp.openDocument('rtl/core/alu.sv', 'systemverilog', nextAluSource);
-    await browserGlobal.electronAPI?.lsp.openDocument('rtl/core/bus_if.sv', 'systemverilog', nextBusInterfaceSource);
-    await browserGlobal.electronAPI?.lsp.openDocument('rtl/core/cpu_top.sv', 'systemverilog', nextCpuTopSource);
-  }, {
-    nextAluSource: aluSource,
-    nextBusInterfaceSource: busInterfaceSource,
-    nextCpuTopSource: cpuTopSource,
   });
 
   await waitForModuleHierarchyNodes(window, [
@@ -2304,7 +2306,6 @@ test('lsp panel captures initialization logs when hierarchy opens before any edi
   test.slow();
   skipIfPristineEngineUnavailable();
 
-  const { app, window } = await launchApp();
   const aluSource = [
     'module alu;',
     'endmodule',
@@ -2319,33 +2320,15 @@ test('lsp panel captures initialization logs when hierarchy opens before any edi
     '  bus_if bus ();',
     'endmodule',
   ].join('\n');
+  const projectRoot = createWorkspaceCopyWithFiles('hierarchy-lsp-log-workspace', {
+    'rtl/core/alu.sv': aluSource,
+    'rtl/core/bus_if.sv': busInterfaceSource,
+    'rtl/core/cpu_top.sv': cpuTopSource,
+  });
+  const { app, window } = await launchApp({ projectRoot });
 
   await ensureExplorerVisible(window);
   await expect(window.getByTestId('editor-tab-rtl/core/cpu_top.sv')).toHaveCount(0);
-
-  await window.evaluate(async ({ nextAluSource, nextBusInterfaceSource, nextCpuTopSource }) => {
-    const browserGlobal = globalThis as typeof globalThis & {
-      electronAPI?: {
-        lsp: {
-          openDocument: (filePath: string, languageId: string, text: string) => Promise<void>;
-        };
-      };
-    };
-
-    await browserGlobal.electronAPI?.lsp.openDocument('rtl/core/alu.sv', 'systemverilog', nextAluSource);
-    await browserGlobal.electronAPI?.lsp.openDocument('rtl/core/bus_if.sv', 'systemverilog', nextBusInterfaceSource);
-    await browserGlobal.electronAPI?.lsp.openDocument('rtl/core/cpu_top.sv', 'systemverilog', nextCpuTopSource);
-  }, {
-    nextAluSource: aluSource,
-    nextBusInterfaceSource: busInterfaceSource,
-    nextCpuTopSource: cpuTopSource,
-  });
-
-  await waitForModuleHierarchyNodes(window, [
-    { moduleName: 'cpu_top' },
-    { instanceName: 'u_alu', moduleName: 'alu' },
-    { instanceName: 'bus', moduleName: 'bus_if' },
-  ]);
 
   await window.getByTestId('left-panel-split-toggle').click();
   await expect(window.getByTestId('left-panel-secondary-panel')).toBeVisible();
@@ -5803,7 +5786,6 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
 test('asic schematic bottom panel renders Pixi layers with selection and hierarchy navigation', async () => {
   skipIfPristineEngineUnavailable();
 
-  const { app, window } = await launchApp();
   const cpuTopSource = [
     'module cpu_top(input logic clk, input logic rst_n, input logic [3:0] a, input logic [3:0] b, input logic sel, inout tri [3:0] pad, output logic [3:0] y);',
     '  logic [3:0] n1;',
@@ -5834,26 +5816,13 @@ test('asic schematic bottom panel renders Pixi layers with selection and hierarc
     '  assign y = a | b;',
     'endmodule',
   ].join('\n');
-
-  await window.evaluate(async ({ nextCpuTopSource, nextAluSource, nextLogicChildSource, nextAltTopSource }) => {
-    const browserGlobal = globalThis as typeof globalThis & {
-      electronAPI?: {
-        lsp: {
-          openDocument: (filePath: string, languageId: string, text: string) => Promise<void>;
-        };
-      };
-    };
-
-    await browserGlobal.electronAPI?.lsp.openDocument('rtl/core/cpu_top.sv', 'systemverilog', nextCpuTopSource);
-    await browserGlobal.electronAPI?.lsp.openDocument('rtl/core/alu.sv', 'systemverilog', nextAluSource);
-    await browserGlobal.electronAPI?.lsp.openDocument('rtl/core/logic_child.sv', 'systemverilog', nextLogicChildSource);
-    await browserGlobal.electronAPI?.lsp.openDocument('rtl/core/z_schematic_alt_top.sv', 'systemverilog', nextAltTopSource);
-  }, {
-    nextCpuTopSource: cpuTopSource,
-    nextAluSource: aluSource,
-    nextLogicChildSource: logicChildSource,
-    nextAltTopSource: altTopSource,
+  const projectRoot = createWorkspaceCopyWithFiles('schematic-workspace', {
+    'rtl/core/alu.sv': aluSource,
+    'rtl/core/cpu_top.sv': cpuTopSource,
+    'rtl/core/logic_child.sv': logicChildSource,
+    'rtl/core/z_schematic_alt_top.sv': altTopSource,
   });
+  const { app, window } = await launchApp({ projectRoot });
 
   await openBottomTerminal(window);
   await getBottomPanelTab(window, 'schematic').click();
