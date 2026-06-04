@@ -83,6 +83,62 @@ function skipIfPristineEngineUnavailable() {
   );
 }
 
+interface ExpectedModuleHierarchyNode {
+  instanceName?: string;
+  moduleName: string;
+}
+
+async function waitForModuleHierarchyNodes(window: Page, expectedNodes: ExpectedModuleHierarchyNode[]) {
+  await expect.poll(async () => window.evaluate(async ({ nodes }) => {
+    interface BrowserHierarchyNode {
+      children?: BrowserHierarchyNode[];
+      instanceName?: string;
+      moduleName: string;
+    }
+
+    interface BrowserModuleHierarchy {
+      roots?: BrowserHierarchyNode[];
+    }
+
+    const browserGlobal = globalThis as typeof globalThis & {
+      electronAPI?: {
+        lsp?: {
+          moduleHierarchy?: (options?: { maxDepth?: number }) => Promise<BrowserModuleHierarchy>;
+        };
+      };
+    };
+    const getNodeKey = (node: { instanceName?: string; moduleName: string }) => `${node.moduleName}:${node.instanceName ?? 'root'}`;
+
+    try {
+      const hierarchy = await browserGlobal.electronAPI?.lsp?.moduleHierarchy?.({ maxDepth: 64 });
+      const foundKeys = new Set<string>();
+      const visitNode = (node: BrowserHierarchyNode) => {
+        foundKeys.add(getNodeKey(node));
+        for (const child of node.children ?? []) {
+          visitNode(child);
+        }
+      };
+
+      for (const root of hierarchy?.roots ?? []) {
+        visitNode(root);
+      }
+
+      return {
+        foundKeys: Array.from(foundKeys).sort(),
+        ready: nodes.every((node) => foundKeys.has(getNodeKey(node))),
+      };
+    } catch (error) {
+      return {
+        error: error instanceof Error ? error.message : String(error),
+        foundKeys: [],
+        ready: false,
+      };
+    }
+  }, { nodes: expectedNodes }), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toMatchObject({ ready: true });
+}
+
 interface E2EStoredAuthSession {
   accessToken: string;
   profile: {
@@ -2140,6 +2196,13 @@ test('code view hierarchy renders module instantiations from pristine-engine', a
     nextCpuTopSource: cpuTopSource,
   });
 
+  await waitForModuleHierarchyNodes(window, [
+    { moduleName: 'cpu_top' },
+    { instanceName: 'u_alu', moduleName: 'alu' },
+    { instanceName: 'bus', moduleName: 'bus_if' },
+    { instanceName: 'u_missing', moduleName: 'missing_block' },
+  ]);
+
   await window.getByTestId('left-panel-split-toggle').click();
   await expect(window.getByTestId('left-panel-secondary-panel')).toBeVisible();
   await expect(window.getByTestId('left-panel-secondary-tab-hierarchy')).toBeVisible();
@@ -2277,6 +2340,12 @@ test('lsp panel captures initialization logs when hierarchy opens before any edi
     nextBusInterfaceSource: busInterfaceSource,
     nextCpuTopSource: cpuTopSource,
   });
+
+  await waitForModuleHierarchyNodes(window, [
+    { moduleName: 'cpu_top' },
+    { instanceName: 'u_alu', moduleName: 'alu' },
+    { instanceName: 'bus', moduleName: 'bus_if' },
+  ]);
 
   await window.getByTestId('left-panel-split-toggle').click();
   await expect(window.getByTestId('left-panel-secondary-panel')).toBeVisible();
