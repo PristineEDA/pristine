@@ -303,6 +303,33 @@ describe('LSP IPC handlers', () => {
     }));
   });
 
+  it('keeps a bounded LSP debug history for renderers that subscribe late', async () => {
+    const openHandler = getHandler('async:lsp:open-document');
+    const historyHandler = getHandler('async:lsp:get-debug-events');
+
+    await openHandler({}, 'rtl/core/cpu_top.sv', 'systemverilog', 'module cpu_top; endmodule');
+
+    const history = await historyHandler({});
+
+    expect(history).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        direction: 'session',
+        kind: 'lifecycle',
+        status: 'starting',
+      }),
+      expect.objectContaining({
+        direction: 'client->server',
+        kind: 'request',
+        method: 'initialize',
+      }),
+      expect.objectContaining({
+        direction: 'session',
+        kind: 'lifecycle',
+        status: 'ready',
+      }),
+    ]));
+  });
+
   it('forwards diagnostics and normalizes definition results to workspace-relative paths', async () => {
     const openHandler = getHandler('async:lsp:open-document');
     const definitionHandler = getHandler('async:lsp:definition');

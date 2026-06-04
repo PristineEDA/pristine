@@ -59,6 +59,7 @@ export const AsyncChannels = {
   LSP_REFERENCES: 'async:lsp:references',
   LSP_MODULE_HIERARCHY: 'async:lsp:module-hierarchy',
   LSP_SCHEMATIC: 'async:lsp:schematic',
+  LSP_GET_DEBUG_EVENTS: 'async:lsp:get-debug-events',
   CONFIG_SET: 'async:config:set',
 } as const;
 

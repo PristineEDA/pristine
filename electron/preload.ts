@@ -242,6 +242,8 @@ const electronAPI = {
       ipcRenderer.invoke(AsyncChannels.LSP_MODULE_HIERARCHY, options) as Promise<LspModuleHierarchy>,
     schematic: (options?: LspSchematicOptions) =>
       ipcRenderer.invoke(AsyncChannels.LSP_SCHEMATIC, options) as Promise<LspSchematic>,
+    getDebugEvents: () =>
+      ipcRenderer.invoke(AsyncChannels.LSP_GET_DEBUG_EVENTS) as Promise<LspDebugEvent[]>,
     onDiagnostics: (callback: (payload: LspDiagnosticsEvent) => void) => {
       const handler = (_event: Electron.IpcRendererEvent, payload: LspDiagnosticsEvent) => callback(payload);
       ipcRenderer.on(StreamChannels.LSP_DIAGNOSTICS, handler);

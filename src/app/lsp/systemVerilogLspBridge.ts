@@ -191,6 +191,8 @@ class SystemVerilogLspBridge {
 
   private editorNavigationHandlers = new WeakMap<any, NavigateToLocation | undefined>();
 
+  private currentMonaco: any = null;
+
   private diagnosticsSubscriptionInstalled = false;
 
   private debugSubscriptionInstalled = false;
@@ -210,7 +212,25 @@ class SystemVerilogLspBridge {
   }
 
   private appendDebugEvent(event: LspDebugEvent) {
-    this.debugEvents = [...this.debugEvents, event].slice(-DEBUG_EVENT_LIMIT);
+    this.appendDebugEvents([event]);
+  }
+
+  private appendDebugEvents(events: LspDebugEvent[]) {
+    if (events.length === 0) {
+      return;
+    }
+
+    const eventsBySequence = new Map<number, LspDebugEvent>();
+    for (const event of this.debugEvents) {
+      eventsBySequence.set(event.sequence, event);
+    }
+    for (const event of events) {
+      eventsBySequence.set(event.sequence, event);
+    }
+
+    this.debugEvents = [...eventsBySequence.values()]
+      .sort((left, right) => left.sequence - right.sequence)
+      .slice(-DEBUG_EVENT_LIMIT);
     this.notifyDebugListeners();
   }
 
@@ -267,17 +287,23 @@ class SystemVerilogLspBridge {
     console.error(message);
   }
 
-  private ensureStreamSubscriptions(monaco: any) {
+  ensureStreamSubscriptions(monaco?: any) {
     const api = getLspApi();
     if (!api) {
       return;
+    }
+
+    if (monaco) {
+      this.currentMonaco = monaco;
     }
 
     if (!this.diagnosticsSubscriptionInstalled) {
       api.onDiagnostics((payload) => {
         const filePath = normalizeWorkspacePath(payload.filePath);
         this.updateDiagnostics(filePath, payload.diagnostics);
-        this.applyDiagnostics(monaco, filePath);
+        if (this.currentMonaco) {
+          this.applyDiagnostics(this.currentMonaco, filePath);
+        }
       });
       this.diagnosticsSubscriptionInstalled = true;
     }
@@ -287,6 +313,16 @@ class SystemVerilogLspBridge {
         this.appendDebugEvent(payload);
       });
       this.debugSubscriptionInstalled = true;
+
+      if (typeof api.getDebugEvents === 'function') {
+        void api.getDebugEvents()
+          .then((events) => {
+            this.appendDebugEvents(events);
+          })
+          .catch((error) => {
+            this.handleError(error);
+          });
+      }
     }
 
     if (!this.stateSubscriptionInstalled) {

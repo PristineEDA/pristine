@@ -2237,6 +2237,65 @@ test('code view hierarchy renders module instantiations from pristine-engine', a
   await app.close();
 });
 
+test('lsp panel captures initialization logs when hierarchy opens before any editor', async () => {
+  test.slow();
+  skipIfPristineEngineUnavailable();
+
+  const { app, window } = await launchApp();
+  const aluSource = [
+    'module alu;',
+    'endmodule',
+  ].join('\n');
+  const busInterfaceSource = [
+    'interface bus_if;',
+    'endinterface',
+  ].join('\n');
+  const cpuTopSource = [
+    'module cpu_top;',
+    '  alu u_alu ();',
+    '  bus_if bus ();',
+    'endmodule',
+  ].join('\n');
+
+  await ensureExplorerVisible(window);
+  await expect(window.getByTestId('editor-tab-rtl/core/cpu_top.sv')).toHaveCount(0);
+
+  await window.evaluate(async ({ nextAluSource, nextBusInterfaceSource, nextCpuTopSource }) => {
+    const browserGlobal = globalThis as typeof globalThis & {
+      electronAPI?: {
+        lsp: {
+          openDocument: (filePath: string, languageId: string, text: string) => Promise<void>;
+        };
+      };
+    };
+
+    await browserGlobal.electronAPI?.lsp.openDocument('rtl/core/alu.sv', 'systemverilog', nextAluSource);
+    await browserGlobal.electronAPI?.lsp.openDocument('rtl/core/bus_if.sv', 'systemverilog', nextBusInterfaceSource);
+    await browserGlobal.electronAPI?.lsp.openDocument('rtl/core/cpu_top.sv', 'systemverilog', nextCpuTopSource);
+  }, {
+    nextAluSource: aluSource,
+    nextBusInterfaceSource: busInterfaceSource,
+    nextCpuTopSource: cpuTopSource,
+  });
+
+  await window.getByTestId('left-panel-split-toggle').click();
+  await expect(window.getByTestId('left-panel-secondary-panel')).toBeVisible();
+  await window.getByTestId('left-panel-secondary-tab-hierarchy').click();
+  await expect(window.getByTestId('hierarchy-node-label-cpu_top-root')).toBeVisible({ timeout: 15000 });
+
+  await window.getByTestId('toggle-bottom-panel').click();
+  await getBottomPanelTab(window, 'lsp').click();
+  await expect(window.getByTestId('lsp-panel')).toBeVisible();
+
+  await expect.poll(async () => window.getByTestId('lsp-panel').innerText(), {
+    timeout: 15000,
+  }).toContain('initialize');
+  await expect(window.getByTestId('lsp-panel')).toContainText('systemverilog/moduleHierarchy');
+  await expect(window.getByTestId('lsp-panel')).toContainText('Status: ready');
+
+  await app.close();
+});
+
 test('pristine-engine lsp bottom panel filters diagnostics and shows paired request responses', async () => {
   test.slow();
   skipIfPristineEngineUnavailable();

@@ -63,6 +63,7 @@ const CLIENT_NAME = 'Pristine Monaco LSP';
 const CLIENT_VERSION = '0.0.1';
 const LSP_REQUEST_TIMEOUT_MS = 10_000;
 const LSP_INITIALIZE_TIMEOUT_MS = 30_000;
+const LSP_DEBUG_EVENT_LIMIT = 200;
 
 interface SendDebugRequestOptions {
   timeoutMs?: number;
@@ -79,6 +80,7 @@ let projectRoot: string | null = null;
 let activeSessionPromise: Promise<LspSession> | null = null;
 let activeSession: LspSession | null = null;
 let nextDebugEventSequence = 1;
+let lspDebugEvents: LspDebugEvent[] = [];
 const WINDOWS_ABSOLUTE_PATH_PATTERN = /^[A-Za-z]:[\\/]/;
 const WINDOWS_FILE_URI_PATH_PATTERN = /^\/[A-Za-z]:\//;
 
@@ -183,11 +185,14 @@ function sendLspState(getMainWindow: () => BrowserWindow | null, payload: LspSta
 }
 
 function sendLspDebug(getMainWindow: () => BrowserWindow | null, payload: Omit<LspDebugEvent, 'sequence' | 'timestamp'>): void {
-  getMainWindow()?.webContents.send(StreamChannels.LSP_DEBUG, {
+  const event = {
     sequence: nextDebugEventSequence++,
     timestamp: new Date().toISOString(),
     ...payload,
-  } satisfies LspDebugEvent);
+  } satisfies LspDebugEvent;
+
+  lspDebugEvents = [...lspDebugEvents, event].slice(-LSP_DEBUG_EVENT_LIMIT);
+  getMainWindow()?.webContents.send(StreamChannels.LSP_DEBUG, event);
 }
 
 function emitLspLifecycle(getMainWindow: () => BrowserWindow | null, payload: LspStateEvent): void {
@@ -1077,6 +1082,8 @@ export function disposeLspSession(): void {
 }
 
 export function registerLspHandlers(getMainWindow: () => BrowserWindow | null): void {
+  ipcMain.handle(AsyncChannels.LSP_GET_DEBUG_EVENTS, async () => lspDebugEvents);
+
   ipcMain.handle(AsyncChannels.LSP_OPEN_DOCUMENT, async (_event, filePath: unknown, languageId: unknown, text: unknown) => {
     assertString(filePath, 'filePath');
     assertString(languageId, 'languageId');

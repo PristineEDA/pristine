@@ -134,6 +134,7 @@ describe('systemVerilogLspBridge', () => {
     electronApi.lsp.hover.mockResolvedValue(null);
     electronApi.lsp.definition.mockResolvedValue([]);
     electronApi.lsp.references.mockResolvedValue([]);
+    electronApi.lsp.getDebugEvents.mockResolvedValue([]);
     electronApi.lsp.onDebug = vi.fn((callback: DebugHandler) => {
       debugHandler = callback;
       return vi.fn();
@@ -443,6 +444,69 @@ describe('systemVerilogLspBridge', () => {
     expect(snapshot).toHaveLength(200);
     expect(snapshot[0]).toEqual(expect.objectContaining({ sequence: 6, method: 'method-6' }));
     expect(snapshot[snapshot.length - 1]).toEqual(expect.objectContaining({ sequence: 205, method: 'method-205' }));
+
+    unsubscribe();
+  });
+
+  it('captures debug events before Monaco registers editor providers', async () => {
+    const electronApi = window.electronAPI as any;
+    const { systemVerilogLspBridge } = await loadBridgeModule();
+    const listener = vi.fn();
+
+    electronApi.lsp.getDebugEvents.mockResolvedValue([
+      {
+        sequence: 1,
+        timestamp: '2026-01-01T00:00:00.000Z',
+        direction: 'session',
+        kind: 'lifecycle',
+      },
+    ]);
+    systemVerilogLspBridge.ensureStreamSubscriptions();
+    const unsubscribe = systemVerilogLspBridge.subscribeToDebugEvents(listener);
+
+    expect(electronApi.lsp.onDebug).toHaveBeenCalledTimes(1);
+    expect(electronApi.lsp.onDiagnostics).toHaveBeenCalledTimes(1);
+    expect(electronApi.lsp.onState).toHaveBeenCalledTimes(1);
+    expect(electronApi.lsp.getDebugEvents).toHaveBeenCalledTimes(1);
+    expect(debugHandler).toBeTypeOf('function');
+
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledTimes(1));
+    expect(systemVerilogLspBridge.getDebugEvents()).toEqual([
+      expect.objectContaining({
+        sequence: 1,
+        direction: 'session',
+        kind: 'lifecycle',
+      }),
+    ]);
+
+    debugHandler?.({
+      sequence: 2,
+      timestamp: '2026-01-01T00:00:01.000Z',
+      direction: 'session',
+      kind: 'lifecycle',
+    });
+
+    expect(listener).toHaveBeenCalledTimes(2);
+    expect(systemVerilogLspBridge.getDebugEvents()).toEqual([
+      expect.objectContaining({
+        sequence: 1,
+        direction: 'session',
+        kind: 'lifecycle',
+      }),
+      expect.objectContaining({
+        sequence: 2,
+        direction: 'session',
+        kind: 'lifecycle',
+      }),
+    ]);
+
+    const monaco = createMonacoMock();
+    systemVerilogLspBridge.ensureRegistered(monaco);
+
+    expect(electronApi.lsp.onDebug).toHaveBeenCalledTimes(1);
+    expect(electronApi.lsp.onDiagnostics).toHaveBeenCalledTimes(1);
+    expect(electronApi.lsp.onState).toHaveBeenCalledTimes(1);
+    expect(monaco.languages.registerCompletionItemProvider).toHaveBeenCalledTimes(1);
 
     unsubscribe();
   });

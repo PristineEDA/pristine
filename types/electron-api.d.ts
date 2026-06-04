@@ -132,6 +132,7 @@ export interface ElectronAPI {
     ) => Promise<WorkspaceLocation[]>;
     moduleHierarchy: (options?: LspModuleHierarchyOptions) => Promise<LspModuleHierarchy>;
     schematic: (options?: LspSchematicOptions) => Promise<LspSchematic>;
+    getDebugEvents: () => Promise<LspDebugEvent[]>;
     onDebug: (callback: (payload: LspDebugEvent) => void) => () => void;
     onDiagnostics: (callback: (payload: LspDiagnosticsEvent) => void) => () => void;
     onState: (callback: (payload: LspStateEvent) => void) => () => void;
