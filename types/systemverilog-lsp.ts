@@ -240,6 +240,37 @@ export interface LspModuleHierarchy {
   messages: string[];
 }
 
+export interface LspOutlineOptions {
+  maxDepth?: number;
+  limit?: number;
+  includeChildren?: boolean;
+  includeFlat?: boolean;
+}
+
+export interface LspOutlineItem {
+  id: string;
+  parentId: string | null;
+  name: string;
+  kind: string;
+  symbolKind: number;
+  range: LspRange;
+  selectionRange: LspRange;
+  depth: number;
+  children: LspOutlineItem[];
+}
+
+export interface LspOutlineResult {
+  uri: string;
+  filePath?: string;
+  version: number;
+  generation: number;
+  roots: LspOutlineItem[];
+  items: LspOutlineItem[];
+  partial: boolean;
+  truncated: boolean;
+  messages: string[];
+}
+
 export interface LspSchematicOptions {
   moduleName?: string;
   maxDepth?: number;

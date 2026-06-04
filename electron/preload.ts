@@ -19,6 +19,8 @@ import type {
   LspInlayHint,
   LspModuleHierarchy,
   LspModuleHierarchyOptions,
+  LspOutlineOptions,
+  LspOutlineResult,
   LspPrepareRenameResult,
   LspRange,
   LspSchematic,
@@ -308,6 +310,8 @@ const electronAPI = {
       ipcRenderer.invoke(AsyncChannels.LSP_PREPARE_RENAME, filePath, line, character) as Promise<LspPrepareRenameResult | null>,
     rename: (filePath: string, line: number, character: number, newName: string) =>
       ipcRenderer.invoke(AsyncChannels.LSP_RENAME, filePath, line, character, newName) as Promise<LspWorkspaceEdit | null>,
+    outline: (filePath: string, options?: LspOutlineOptions) =>
+      ipcRenderer.invoke(AsyncChannels.LSP_OUTLINE, filePath, options) as Promise<LspOutlineResult>,
     moduleHierarchy: (options?: LspModuleHierarchyOptions) =>
       ipcRenderer.invoke(AsyncChannels.LSP_MODULE_HIERARCHY, options) as Promise<LspModuleHierarchy>,
     schematic: (options?: LspSchematicOptions) =>

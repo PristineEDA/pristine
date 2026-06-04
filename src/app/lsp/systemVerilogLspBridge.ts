@@ -13,6 +13,8 @@ import type {
   LspInlayHint,
   LspMarkedString,
   LspMarkupContent,
+  LspOutlineOptions,
+  LspOutlineResult,
   LspRange,
   LspSelectionRange,
   LspTextEdit,
@@ -33,6 +35,13 @@ const SYSTEMVERILOG_SEMANTIC_TOKEN_LEGEND = {
 };
 
 type NavigateToLocation = (filePath: string, line: number, col: number) => void;
+
+export type SystemVerilogDocumentSyncKind = 'open' | 'change' | 'close';
+
+export interface SystemVerilogDocumentSyncEvent {
+  filePath: string;
+  kind: SystemVerilogDocumentSyncKind;
+}
 
 interface TrackedDocument {
   refCount: number;
@@ -406,6 +415,8 @@ class SystemVerilogLspBridge {
 
   private debugListeners = new Set<() => void>();
 
+  private documentSyncListeners = new Set<(event: SystemVerilogDocumentSyncEvent) => void>();
+
   private loggedErrorMessage: string | null = null;
 
   private notifyDebugListeners() {
@@ -474,6 +485,19 @@ class SystemVerilogLspBridge {
     return () => {
       this.debugListeners.delete(listener);
     };
+  }
+
+  subscribeToDocumentSyncEvents(listener: (event: SystemVerilogDocumentSyncEvent) => void) {
+    this.documentSyncListeners.add(listener);
+    return () => {
+      this.documentSyncListeners.delete(listener);
+    };
+  }
+
+  private notifyDocumentSyncListeners(event: SystemVerilogDocumentSyncEvent) {
+    this.documentSyncListeners.forEach((listener) => {
+      listener(event);
+    });
   }
 
   private handleError(error: unknown) {
@@ -661,10 +685,28 @@ class SystemVerilogLspBridge {
 
       trackedDocument.pendingText = null;
       trackedDocument.text = nextText;
-      void api.changeDocument(filePath, nextText).catch((error) => {
-        this.handleError(error);
-      });
+      void api.changeDocument(filePath, nextText)
+        .then(() => {
+          this.notifyDocumentSyncListeners({ filePath, kind: 'change' });
+        })
+        .catch((error) => {
+          this.handleError(error);
+        });
     }, CHANGE_DEBOUNCE_MS);
+  }
+
+  async requestOutline(filePath: string, options?: LspOutlineOptions): Promise<LspOutlineResult | null> {
+    const api = getLspApi();
+    if (!api?.outline) {
+      return null;
+    }
+
+    try {
+      return await api.outline(normalizeWorkspacePath(filePath), options);
+    } catch (error) {
+      this.handleError(error);
+      return null;
+    }
   }
 
   private async requestCompletion(filePath: string, position: { lineNumber: number; column: number }, context: any) {
@@ -1428,9 +1470,13 @@ class SystemVerilogLspBridge {
       this.modelFilePaths.set(model, filePath);
     }
 
-    void api.openDocument(filePath, 'systemverilog', text).catch((error) => {
-      this.handleError(error);
-    });
+    void api.openDocument(filePath, 'systemverilog', text)
+      .then(() => {
+        this.notifyDocumentSyncListeners({ filePath, kind: 'open' });
+      })
+      .catch((error) => {
+        this.handleError(error);
+      });
     this.applyDiagnostics(monaco, filePath);
 
     return () => {
@@ -1455,9 +1501,13 @@ class SystemVerilogLspBridge {
       }
 
       this.trackedDocuments.delete(filePath);
-      void api.closeDocument(filePath).catch((error) => {
-        this.handleError(error);
-      });
+      void api.closeDocument(filePath)
+        .then(() => {
+          this.notifyDocumentSyncListeners({ filePath, kind: 'close' });
+        })
+        .catch((error) => {
+          this.handleError(error);
+        });
     };
   }
 

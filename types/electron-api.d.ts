@@ -16,6 +16,8 @@ import type {
   LspInlayHint,
   LspModuleHierarchy,
   LspModuleHierarchyOptions,
+  LspOutlineOptions,
+  LspOutlineResult,
   LspPrepareRenameResult,
   LspSchematic,
   LspSchematicOptions,
@@ -174,6 +176,7 @@ export interface ElectronAPI {
     workspaceSymbols: (query: string) => Promise<LspWorkspaceSymbol[]>;
     prepareRename: (filePath: string, line: number, character: number) => Promise<LspPrepareRenameResult | null>;
     rename: (filePath: string, line: number, character: number, newName: string) => Promise<LspWorkspaceEdit | null>;
+    outline: (filePath: string, options?: LspOutlineOptions) => Promise<LspOutlineResult>;
     moduleHierarchy: (options?: LspModuleHierarchyOptions) => Promise<LspModuleHierarchy>;
     schematic: (options?: LspSchematicOptions) => Promise<LspSchematic>;
     getDebugEvents: () => Promise<LspDebugEvent[]>;

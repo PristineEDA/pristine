@@ -149,6 +149,7 @@ describe('preload bridge', () => {
     api.lsp.workspaceSymbols('cpu');
     api.lsp.prepareRename('rtl/core/cpu_top.sv', 4, 6);
     api.lsp.rename('rtl/core/cpu_top.sv', 4, 6, 'valid');
+    api.lsp.outline('rtl/core/cpu_top.sv', { maxDepth: 8, limit: 2000 });
     api.lsp.moduleHierarchy({ maxDepth: 12 });
     api.lsp.schematic({ moduleName: 'cpu_top', maxDepth: 12 });
     api.lsp.getDebugEvents();
@@ -239,6 +240,7 @@ describe('preload bridge', () => {
     expect(mockInvoke).toHaveBeenCalledWith('async:lsp:workspace-symbols', 'cpu');
     expect(mockInvoke).toHaveBeenCalledWith('async:lsp:prepare-rename', 'rtl/core/cpu_top.sv', 4, 6);
     expect(mockInvoke).toHaveBeenCalledWith('async:lsp:rename', 'rtl/core/cpu_top.sv', 4, 6, 'valid');
+    expect(mockInvoke).toHaveBeenCalledWith('async:lsp:outline', 'rtl/core/cpu_top.sv', { maxDepth: 8, limit: 2000 });
     expect(mockInvoke).toHaveBeenCalledWith('async:lsp:module-hierarchy', { maxDepth: 12 });
     expect(mockInvoke).toHaveBeenCalledWith('async:lsp:schematic', { moduleName: 'cpu_top', maxDepth: 12 });
     expect(mockInvoke).toHaveBeenCalledWith('async:lsp:get-debug-events');

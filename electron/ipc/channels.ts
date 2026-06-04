@@ -76,6 +76,7 @@ export const AsyncChannels = {
   LSP_WORKSPACE_SYMBOLS: 'async:lsp:workspace-symbols',
   LSP_PREPARE_RENAME: 'async:lsp:prepare-rename',
   LSP_RENAME: 'async:lsp:rename',
+  LSP_OUTLINE: 'async:lsp:outline',
   LSP_MODULE_HIERARCHY: 'async:lsp:module-hierarchy',
   LSP_SCHEMATIC: 'async:lsp:schematic',
   LSP_GET_DEBUG_EVENTS: 'async:lsp:get-debug-events',

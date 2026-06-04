@@ -1661,8 +1661,24 @@ test('app launches and shows main UI', async () => {
   await expect(explorerPanel).toHaveClass(/(?:^|\s)rounded-md(?:\s|$)/);
   await expect(explorerPanel).toHaveClass(/(?:^|\s)border(?:\s|$)/);
   await expectCompactPanelTabButton(window.getByTestId('left-panel-tab-explorer'));
-  await expectCompactPanelTabButton(window.getByTestId('left-panel-tab-outline'));
+  await expectCompactPanelTabButton(window.getByTestId('left-panel-tab-git'));
+  await window.getByTestId('left-panel-tab-git').click();
+  await expect(window.getByTestId('left-panel-git-placeholder')).toHaveText('No source control changes');
   await expect(mainContentStack).toBeVisible();
+
+  await app.close();
+});
+
+test('left outline slot is now source control placeholder', async () => {
+  const { app, window } = await launchApp();
+
+  await ensureExplorerVisible(window);
+  await expectCompactPanelTabButton(window.getByTestId('left-panel-tab-git'));
+  await expect(window.getByRole('radio', { name: 'Source Control' })).toBeVisible();
+  await window.getByTestId('left-panel-tab-git').click();
+
+  await expect(window.getByTestId('left-panel-git-placeholder')).toHaveText('No source control changes');
+  await expect(window.getByTestId('left-panel-tab-outline')).toHaveCount(0);
 
   await app.close();
 });
@@ -2155,6 +2171,23 @@ test('pristine-engine lsp smoke resolves a cross-file definition and symbol refe
     hasAtLeastTwoReferences: true,
     allReferencePathsLocal: true,
   });
+
+  await ensureRightPanelVisible(window);
+  await window.getByTestId('right-panel-tab-outline').click();
+  await expect(window.getByTestId('outline-tree')).toBeVisible({ timeout: 15000 });
+  await expect(window.getByTestId('outline-node-label-module-cpu_top')).toBeVisible();
+  await expect(window.getByTestId('outline-node-label-variable-data_ready')).toBeVisible();
+
+  await window.getByRole('button', { name: 'Collapse cpu_top' }).click();
+  await expect(window.getByTestId('outline-node-label-variable-data_ready')).toHaveCount(0);
+  await window.getByRole('button', { name: 'Expand cpu_top' }).click();
+  await expect(window.getByTestId('outline-node-label-variable-data_ready')).toBeVisible();
+  await window.getByRole('button', { name: 'Open data_ready at line 2' }).click();
+  await expect(window.locator('.monaco-editor .line-numbers.active-line-number')).toContainText('2');
+
+  await window.getByTestId('toggle-bottom-panel').click();
+  await getBottomPanelTab(window, 'lsp').click();
+  await expect(window.getByTestId('lsp-panel')).toContainText('systemverilog/outline', { timeout: 10000 });
 
   await app.close();
 });

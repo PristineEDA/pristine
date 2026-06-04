@@ -31,6 +31,9 @@ import type {
   LspModuleHierarchy,
   LspModuleHierarchyNode,
   LspModuleHierarchyOptions,
+  LspOutlineItem,
+  LspOutlineOptions,
+  LspOutlineResult,
   LspPosition,
   LspPrepareRenameResult,
   LspRange,
@@ -80,6 +83,7 @@ const CLIENT_NAME = 'Pristine Monaco LSP';
 const CLIENT_VERSION = '0.0.1';
 const LSP_REQUEST_TIMEOUT_MS = 10_000;
 const LSP_INITIALIZE_TIMEOUT_MS = 30_000;
+const LSP_OUTLINE_TIMEOUT_MS = 30_000;
 const LSP_MODULE_HIERARCHY_TIMEOUT_MS = 30_000;
 const LSP_DEBUG_EVENT_LIMIT = 200;
 
@@ -1221,6 +1225,137 @@ function normalizeModuleHierarchyOptions(value: unknown): LspModuleHierarchyOpti
   };
 }
 
+function normalizeOutlineItem(value: unknown): LspOutlineItem | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const candidate = value as {
+    id?: unknown;
+    parentId?: unknown;
+    name?: unknown;
+    kind?: unknown;
+    symbolKind?: unknown;
+    range?: unknown;
+    selectionRange?: unknown;
+    depth?: unknown;
+    children?: unknown;
+  };
+  const range = normalizeOptionalRange(candidate.range);
+  const selectionRange = normalizeOptionalRange(candidate.selectionRange);
+  if (
+    typeof candidate.id !== 'string'
+    || typeof candidate.name !== 'string'
+    || typeof candidate.kind !== 'string'
+    || !range
+    || !selectionRange
+  ) {
+    return null;
+  }
+
+  return {
+    id: candidate.id,
+    parentId: typeof candidate.parentId === 'string' ? candidate.parentId : null,
+    name: candidate.name,
+    kind: candidate.kind,
+    symbolKind: typeof candidate.symbolKind === 'number' ? candidate.symbolKind : 0,
+    range,
+    selectionRange,
+    depth: typeof candidate.depth === 'number' ? candidate.depth : 0,
+    children: Array.isArray(candidate.children)
+      ? candidate.children
+        .map((entry) => normalizeOutlineItem(entry))
+        .filter((entry): entry is LspOutlineItem => Boolean(entry))
+      : [],
+  };
+}
+
+function normalizeOutlineItems(value: unknown): LspOutlineItem[] {
+  return Array.isArray(value)
+    ? value
+      .map((entry) => normalizeOutlineItem(entry))
+      .filter((entry): entry is LspOutlineItem => Boolean(entry))
+    : [];
+}
+
+function createEmptyOutlineResult(uri = '', messages: string[] = []): LspOutlineResult {
+  return {
+    uri,
+    filePath: uri ? getRelativeWorkspaceFilePath(uri) ?? undefined : undefined,
+    version: 0,
+    generation: 0,
+    roots: [],
+    items: [],
+    partial: false,
+    truncated: false,
+    messages,
+  };
+}
+
+function normalizeOutlineResult(value: unknown): LspOutlineResult {
+  if (!value || typeof value !== 'object') {
+    return createEmptyOutlineResult();
+  }
+
+  const candidate = value as {
+    uri?: unknown;
+    version?: unknown;
+    generation?: unknown;
+    roots?: unknown;
+    items?: unknown;
+    partial?: unknown;
+    truncated?: unknown;
+    messages?: unknown;
+  };
+  const uri = typeof candidate.uri === 'string' ? candidate.uri : '';
+
+  return {
+    uri,
+    filePath: uri ? getRelativeWorkspaceFilePath(uri) ?? undefined : undefined,
+    version: typeof candidate.version === 'number' ? candidate.version : 0,
+    generation: typeof candidate.generation === 'number' ? candidate.generation : 0,
+    roots: normalizeOutlineItems(candidate.roots),
+    items: normalizeOutlineItems(candidate.items),
+    partial: candidate.partial === true,
+    truncated: candidate.truncated === true,
+    messages: Array.isArray(candidate.messages)
+      ? candidate.messages.filter((entry): entry is string => typeof entry === 'string')
+      : [],
+  };
+}
+
+function normalizeOutlineOptions(value: unknown): Required<LspOutlineOptions> {
+  if (value !== undefined && value !== null && (typeof value !== 'object' || Array.isArray(value))) {
+    throw new Error(`Expected object or undefined for "options", got ${typeof value}`);
+  }
+
+  const candidate = (value ?? {}) as {
+    maxDepth?: unknown;
+    limit?: unknown;
+    includeChildren?: unknown;
+    includeFlat?: unknown;
+  };
+  if (candidate.maxDepth !== undefined) {
+    assertNumber(candidate.maxDepth, 'maxDepth');
+  }
+  if (candidate.limit !== undefined) {
+    assertNumber(candidate.limit, 'limit');
+  }
+  if (candidate.includeChildren !== undefined && typeof candidate.includeChildren !== 'boolean') {
+    throw new Error(`Expected boolean for "includeChildren", got ${typeof candidate.includeChildren}`);
+  }
+  if (candidate.includeFlat !== undefined && typeof candidate.includeFlat !== 'boolean') {
+    throw new Error(`Expected boolean for "includeFlat", got ${typeof candidate.includeFlat}`);
+  }
+
+  return {
+    maxDepth: typeof candidate.maxDepth === 'number' ? candidate.maxDepth : 8,
+    limit: typeof candidate.limit === 'number' ? candidate.limit : 2000,
+    includeChildren: typeof candidate.includeChildren === 'boolean' ? candidate.includeChildren : true,
+    includeFlat: typeof candidate.includeFlat === 'boolean' ? candidate.includeFlat : true,
+  };
+}
+
 function normalizeSchematicPortDirection(value: unknown): LspSchematicPortDirection {
   return value === 'input' || value === 'output' || value === 'inout' ? value : 'inout';
 }
@@ -2298,6 +2433,31 @@ export function registerLspHandlers(getMainWindow: () => BrowserWindow | null): 
       } catch (error) {
         if (isLspRequestTimeoutError(error)) {
           return null;
+        }
+
+        throw error;
+      }
+    });
+  });
+
+  ipcMain.handle(AsyncChannels.LSP_OUTLINE, async (_event, filePath: unknown, options?: unknown) => {
+    assertString(filePath, 'filePath');
+    const normalizedOptions = normalizeOutlineOptions(options);
+    const uri = getDocumentUri(filePath);
+
+    return withInitializedSession(getMainWindow, async (session) => {
+      try {
+        const result = await sendDebugRequest(session, getMainWindow, 'systemverilog/outline', {
+          textDocument: { uri },
+          ...normalizedOptions,
+        }, {
+          timeoutMs: LSP_OUTLINE_TIMEOUT_MS,
+        });
+
+        return normalizeOutlineResult(result);
+      } catch (error) {
+        if (isLspRequestTimeoutError(error)) {
+          return createEmptyOutlineResult(uri, [getLspRequestErrorMessage(error)]);
         }
 
         throw error;

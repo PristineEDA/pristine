@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   CodeViewerLayoutProvider,
   WORKBENCH_CODE_VIEWER_LAYOUT_MODE_CONFIG_KEY,
@@ -44,6 +44,52 @@ function renderRightSidePanelInLayout(layoutMode: CodeViewerLayoutMode) {
 }
 
 describe('RightSidePanel', () => {
+  beforeEach(() => {
+    vi.mocked(window.electronAPI!.lsp.outline).mockResolvedValue({
+      uri: 'file:///C:/workspace/Pristine/rtl/core/alu.sv',
+      filePath: 'rtl/core/alu.sv',
+      version: 1,
+      generation: 2,
+      partial: false,
+      truncated: false,
+      roots: [{
+        id: 'outline:0',
+        parentId: null,
+        name: 'alu',
+        kind: 'module',
+        symbolKind: 2,
+        range: {
+          start: { line: 7, character: 0 },
+          end: { line: 45, character: 9 },
+        },
+        selectionRange: {
+          start: { line: 7, character: 7 },
+          end: { line: 7, character: 10 },
+        },
+        depth: 0,
+        children: [{
+          id: 'outline:0.0',
+          parentId: 'outline:0',
+          name: 'ALU logic',
+          kind: 'function',
+          symbolKind: 12,
+          range: {
+            start: { line: 41, character: 2 },
+            end: { line: 45, character: 5 },
+          },
+          selectionRange: {
+            start: { line: 41, character: 9 },
+            end: { line: 41, character: 18 },
+          },
+          depth: 1,
+          children: [],
+        }],
+      }],
+      items: [],
+      messages: [],
+    });
+  });
+
   it('shows an assistant skeleton while the AI panel chunk is still loading', () => {
     render(
       <RightSidePanel currentOutlineId="rtl/core/alu.v" onFileOpen={vi.fn()} onLineJump={vi.fn()} />,
@@ -244,18 +290,26 @@ describe('RightSidePanel', () => {
     expect(onLineJump).toHaveBeenCalledWith(40);
   }, PANEL_TEST_TIMEOUT_MS);
 
-  it('renders the current file outline and jumps to the selected symbol line', async () => {
+  it('renders the current file outline from pristine-engine and jumps to selected symbols', async () => {
     const user = userEvent.setup();
     const onLineJump = vi.fn();
 
     render(
-      <RightSidePanel currentOutlineId="rtl/core/alu.v" onFileOpen={vi.fn()} onLineJump={onLineJump} />,
+      <RightSidePanel currentOutlineId="rtl/core/alu.sv" onFileOpen={vi.fn()} onLineJump={onLineJump} />,
     );
 
     await clickButton(user, /outline/i);
-    expect(await screen.findByText(/OUTLINE - alu\.v/i, undefined, { timeout: PANEL_ITEM_TIMEOUT_MS })).toBeInTheDocument();
+    expect(await screen.findByTestId('outline-tree', undefined, { timeout: PANEL_ITEM_TIMEOUT_MS })).toBeInTheDocument();
+    expect(window.electronAPI!.lsp.outline).toHaveBeenCalledWith('rtl/core/alu.sv', {
+      maxDepth: 8,
+      limit: 2000,
+      includeChildren: true,
+      includeFlat: true,
+    });
+    expect(screen.getByTestId('outline-node-label-module-alu')).toBeInTheDocument();
+    expect(screen.getByTestId('outline-node-label-function-ALU_logic')).toBeInTheDocument();
 
-    await user.click(await screen.findByText('always @(*) [ALU logic]', undefined, { timeout: PANEL_ITEM_TIMEOUT_MS }));
+    await user.click(screen.getByRole('button', { name: 'Open ALU logic at line 42' }));
 
     expect(onLineJump).toHaveBeenCalledWith(42);
   }, PANEL_TEST_TIMEOUT_MS);

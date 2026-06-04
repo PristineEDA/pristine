@@ -257,6 +257,17 @@ describe('systemVerilogLspBridge', () => {
     electronApi.lsp.changeDocument.mockResolvedValue(undefined);
     electronApi.lsp.closeDocument.mockResolvedValue(undefined);
     electronApi.lsp.ensureInitialized.mockResolvedValue(undefined);
+    electronApi.lsp.outline.mockResolvedValue({
+      uri: 'file:///workspace/rtl/core/cpu_top.sv',
+      filePath: 'rtl/core/cpu_top.sv',
+      version: 1,
+      generation: 1,
+      roots: [],
+      items: [],
+      partial: false,
+      truncated: false,
+      messages: [],
+    });
     electronApi.lsp.completion.mockResolvedValue(null);
     electronApi.lsp.completionResolve.mockImplementation(async (item: unknown) => item);
     electronApi.lsp.hover.mockResolvedValue(null);
@@ -578,6 +589,60 @@ describe('systemVerilogLspBridge', () => {
     disposeSecond();
     expect(electronApi.lsp.closeDocument).toHaveBeenCalledTimes(1);
     expect(electronApi.lsp.closeDocument).toHaveBeenCalledWith('rtl/core/cpu_top.sv');
+  });
+
+  it('publishes document sync events after open, change, and close requests settle', async () => {
+    vi.useFakeTimers();
+    const { systemVerilogLspBridge } = await loadBridgeModule();
+    const monaco = createMonacoMock();
+    const model = createModelMock();
+    const editor = createEditorMock(model);
+    const listener = vi.fn();
+    const unsubscribe = systemVerilogLspBridge.subscribeToDocumentSyncEvents(listener);
+
+    const dispose = systemVerilogLspBridge.attachDocument({
+      monaco,
+      editor,
+      filePath: 'rtl/core/cpu_top.sv',
+      text: 'module cpu_top; endmodule',
+    });
+    await Promise.resolve();
+
+    expect(listener).toHaveBeenCalledWith({ filePath: 'rtl/core/cpu_top.sv', kind: 'open' });
+
+    systemVerilogLspBridge.updateDocument('rtl/core/cpu_top.sv', 'module cpu_top; logic valid; endmodule');
+    vi.advanceTimersByTime(120);
+    await Promise.resolve();
+
+    expect(listener).toHaveBeenCalledWith({ filePath: 'rtl/core/cpu_top.sv', kind: 'change' });
+
+    dispose();
+    await Promise.resolve();
+
+    expect(listener).toHaveBeenCalledWith({ filePath: 'rtl/core/cpu_top.sv', kind: 'close' });
+    unsubscribe();
+  });
+
+  it('requests SystemVerilog outline through the preload API', async () => {
+    const electronApi = window.electronAPI as any;
+    const { systemVerilogLspBridge } = await loadBridgeModule();
+
+    await expect(systemVerilogLspBridge.requestOutline('rtl/core/cpu_top.sv', {
+      maxDepth: 8,
+      limit: 2000,
+      includeChildren: true,
+      includeFlat: true,
+    })).resolves.toEqual(expect.objectContaining({
+      filePath: 'rtl/core/cpu_top.sv',
+      roots: [],
+    }));
+
+    expect(electronApi.lsp.outline).toHaveBeenCalledWith('rtl/core/cpu_top.sv', {
+      maxDepth: 8,
+      limit: 2000,
+      includeChildren: true,
+      includeFlat: true,
+    });
   });
 
   it('applies diagnostics to all attached models and uses F12 actions for navigation', async () => {

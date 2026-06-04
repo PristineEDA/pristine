@@ -167,6 +167,65 @@ function createFakeConnection(): FakeConnection {
         };
       }
 
+      if (method === 'systemverilog/outline') {
+        return {
+          uri: 'file:///C:/workspace/Pristine/rtl/core/cpu_top.sv',
+          version: 3,
+          generation: 7,
+          partial: false,
+          truncated: false,
+          roots: [{
+            id: 'outline:0',
+            parentId: null,
+            name: 'cpu_top',
+            kind: 'module',
+            symbolKind: 2,
+            range: {
+              start: { line: 0, character: 0 },
+              end: { line: 6, character: 9 },
+            },
+            selectionRange: {
+              start: { line: 0, character: 7 },
+              end: { line: 0, character: 14 },
+            },
+            depth: 0,
+            children: [{
+              id: 'outline:0.0',
+              parentId: 'outline:0',
+              name: 'ready',
+              kind: 'variable',
+              symbolKind: 13,
+              range: {
+                start: { line: 2, character: 2 },
+                end: { line: 2, character: 13 },
+              },
+              selectionRange: {
+                start: { line: 2, character: 8 },
+                end: { line: 2, character: 13 },
+              },
+              depth: 1,
+            }],
+          }],
+          items: [{
+            id: 'outline:0',
+            parentId: null,
+            name: 'cpu_top',
+            kind: 'module',
+            symbolKind: 2,
+            range: {
+              start: { line: 0, character: 0 },
+              end: { line: 6, character: 9 },
+            },
+            selectionRange: {
+              start: { line: 0, character: 7 },
+              end: { line: 0, character: 14 },
+            },
+            depth: 0,
+          }],
+          messages: ['ok'],
+        };
+      }
+
       if (method === 'systemverilog/moduleHierarchy') {
         return {
           roots: [{
@@ -545,6 +604,46 @@ describe('LSP IPC handlers', () => {
     });
   });
 
+  it('uses a 30 second timeout for outline requests', async () => {
+    const outlineHandler = getHandler('async:lsp:outline');
+
+    fakeConnection.sendRequest.mockImplementation((method: string) => {
+      if (method === 'initialize') {
+        return Promise.resolve({});
+      }
+      if (method === 'systemverilog/outline') {
+        return new Promise(() => undefined);
+      }
+
+      return Promise.resolve(null);
+    });
+
+    vi.useFakeTimers();
+    const outline = outlineHandler({}, 'rtl/core/cpu_top.sv');
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(19_999);
+    await Promise.resolve();
+
+    let settled = false;
+    void outline.then(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(1);
+
+    await expect(outline).resolves.toEqual(expect.objectContaining({
+      uri: 'file:///C:/workspace/Pristine/rtl/core/cpu_top.sv',
+      filePath: 'rtl/core/cpu_top.sv',
+      roots: [],
+      items: [],
+      messages: [expect.stringContaining('timed out after 30000ms')],
+    }));
+  });
+
   it('forwards and normalizes additional Monaco LSP capability requests', async () => {
     const resolveHandler = getHandler('async:lsp:completion-resolve');
     const typeDefinitionHandler = getHandler('async:lsp:type-definition');
@@ -604,6 +703,84 @@ describe('LSP IPC handlers', () => {
       direction: 'server->client',
       kind: 'stderr',
       text: 'server warning',
+    }));
+  });
+
+  it('forwards and normalizes SystemVerilog outline results', async () => {
+    const outlineHandler = getHandler('async:lsp:outline');
+
+    const outline = await outlineHandler({}, 'rtl/core/cpu_top.sv');
+
+    expect(fakeConnection.sendRequest).toHaveBeenCalledWith('systemverilog/outline', {
+      textDocument: { uri: 'file:///C:/workspace/Pristine/rtl/core/cpu_top.sv' },
+      maxDepth: 8,
+      limit: 2000,
+      includeChildren: true,
+      includeFlat: true,
+    });
+    expect(outline).toEqual({
+      uri: 'file:///C:/workspace/Pristine/rtl/core/cpu_top.sv',
+      filePath: 'rtl/core/cpu_top.sv',
+      version: 3,
+      generation: 7,
+      partial: false,
+      truncated: false,
+      roots: [{
+        id: 'outline:0',
+        parentId: null,
+        name: 'cpu_top',
+        kind: 'module',
+        symbolKind: 2,
+        range: {
+          start: { line: 0, character: 0 },
+          end: { line: 6, character: 9 },
+        },
+        selectionRange: {
+          start: { line: 0, character: 7 },
+          end: { line: 0, character: 14 },
+        },
+        depth: 0,
+        children: [{
+          id: 'outline:0.0',
+          parentId: 'outline:0',
+          name: 'ready',
+          kind: 'variable',
+          symbolKind: 13,
+          range: {
+            start: { line: 2, character: 2 },
+            end: { line: 2, character: 13 },
+          },
+          selectionRange: {
+            start: { line: 2, character: 8 },
+            end: { line: 2, character: 13 },
+          },
+          depth: 1,
+          children: [],
+        }],
+      }],
+      items: [{
+        id: 'outline:0',
+        parentId: null,
+        name: 'cpu_top',
+        kind: 'module',
+        symbolKind: 2,
+        range: {
+          start: { line: 0, character: 0 },
+          end: { line: 6, character: 9 },
+        },
+        selectionRange: {
+          start: { line: 0, character: 7 },
+          end: { line: 0, character: 14 },
+        },
+        depth: 0,
+        children: [],
+      }],
+      messages: ['ok'],
+    });
+    expect(send).toHaveBeenCalledWith('stream:lsp:debug', expect.objectContaining({
+      direction: 'client->server',
+      kind: 'request',
+      method: 'systemverilog/outline',
     }));
   });
 
