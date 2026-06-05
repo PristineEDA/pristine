@@ -176,11 +176,13 @@ describe('WaveformPanel', () => {
     expect(screen.getByTestId('waveform-horizontal-scrollbar')).toBeInTheDocument();
     expect(screen.getByTestId('waveform-group-row-u_top_module1')).toHaveAttribute('data-row-index', '5');
     expect(screen.getByTestId('waveform-group-row-dense_test_signals')).toHaveAttribute('data-row-index', '10');
-    expect(screen.getByTestId('waveform-signal-row-u_top_module1-counting')).toHaveClass('items-center');
+    expect(screen.getByTestId('waveform-signal-row-u_top_module1-counting')).toHaveClass('items-end');
     expect(screen.getByTestId('waveform-signal-row-u_top_module1-counting')).toHaveClass('pb-1');
     expect(screen.getByTestId('waveform-toolbar-actions')).toBeInTheDocument();
     expect(screen.getByTestId('waveform-signal-primary-u_top_module1-counting')).toHaveClass('items-center');
-    expect(screen.getByTestId('waveform-signal-primary-u_top_module1-counting')).not.toHaveClass('items-baseline');
+    expect(screen.getByTestId('waveform-signal-value-u_top_module1-counting')).toHaveClass('h-[14px]');
+    expect(screen.getByTestId('waveform-signal-value-u_top_module1-counting')).toHaveClass('items-end');
+    expect(screen.getByTestId('waveform-signal-value-u_top_module1-counting')).toHaveClass('justify-end');
     expect(screen.getByText('counting')).toHaveClass('leading-[14px]');
     expect(screen.getByText('[3:0]')).toHaveClass('leading-none');
     expect(toolbar.innerHTML.indexOf('waveform-toolbar-metrics')).toBeLessThan(toolbar.innerHTML.indexOf('waveform-toolbar-cursor-info'));

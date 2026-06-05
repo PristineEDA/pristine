@@ -5700,7 +5700,11 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
   await expect(panel).toHaveAttribute('data-selected-signal-id', 'u_top_module1-counting');
   await expect(countingRow).toHaveAttribute('data-row-index', '9');
   await expect(countingRow).toHaveAttribute('data-lane-y', '292.00');
+  await expect(countingRow).toHaveClass(/items-end/);
   await expect(countingPrimary).toHaveClass(/items-center/);
+  await expect(window.getByTestId('waveform-signal-value-u_top_module1-counting')).toHaveClass(/h-\[14px\]/);
+  await expect(window.getByTestId('waveform-signal-value-u_top_module1-counting')).toHaveClass(/items-end/);
+  await expect(window.getByTestId('waveform-signal-value-u_top_module1-counting')).toHaveClass(/justify-end/);
   await expect(canvasHost).toHaveAttribute('data-selected-signal-lane-y', '292.00');
   await expect(cursorInfoSignal).toHaveText(/counting/);
   await expect(cursorInfoValue).toHaveText(/^2$/);

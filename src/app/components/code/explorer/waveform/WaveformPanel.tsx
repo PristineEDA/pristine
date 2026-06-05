@@ -386,7 +386,7 @@ function SignalRow({ cursorTime, selected, row, onSelect }: SignalRowProps) {
 
   return (
     <button
-      className={`grid h-[30px] w-full grid-cols-[minmax(0,1fr)_56px] items-center gap-2 border-b border-ide-border/70 px-3 pb-1 text-left text-[11px] leading-[14px] transition-colors ${selected ? 'bg-ide-accent/15 text-ide-text' : 'text-ide-text-muted hover:bg-ide-tab-hover hover:text-ide-text'}`}
+      className={`grid h-[30px] w-full grid-cols-[minmax(0,1fr)_56px] items-end gap-2 border-b border-ide-border/70 px-3 pb-1 text-left text-[11px] leading-[14px] transition-colors ${selected ? 'bg-ide-accent/15 text-ide-text' : 'text-ide-text-muted hover:bg-ide-tab-hover hover:text-ide-text'}`}
       data-lane-y={row.y.toFixed(2)}
       data-row-index={row.rowIndex}
       data-testid={getWaveformSignalTestId(signal.id)}
@@ -404,7 +404,12 @@ function SignalRow({ cursorTime, selected, row, onSelect }: SignalRowProps) {
           )}
         </span>
       </span>
-      <span className="min-w-0 truncate text-right font-mono leading-[14px] text-ide-text">{formatWaveformValue(value)}</span>
+      <span
+        className="flex h-[14px] min-w-0 items-end justify-end text-right font-mono text-ide-text"
+        data-testid={`waveform-signal-value-${signal.id}`}
+      >
+        <span className="min-w-0 max-w-full truncate leading-none">{formatWaveformValue(value)}</span>
+      </span>
     </button>
   );
 }
