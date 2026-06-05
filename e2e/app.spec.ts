@@ -2097,7 +2097,11 @@ test('pristine-engine lsp smoke resolves a cross-file definition and symbol refe
     'endmodule',
   ].join('\n');
   const cpuTopSource = [
-    'module cpu_top;',
+    'module cpu_top #(',
+    '  parameter int Width = 8',
+    ') (',
+    '  input logic clk_i',
+    ');',
     '  logic data_ready;',
     '',
     '  alu u_alu ();',
@@ -2146,8 +2150,8 @@ test('pristine-engine lsp smoke resolves a cross-file definition and symbol refe
     };
 
     try {
-      const definition = await browserGlobal.electronAPI?.lsp.definition('rtl/core/cpu_top.sv', 3, definitionCharacter);
-      const references = await browserGlobal.electronAPI?.lsp.references('rtl/core/cpu_top.sv', 1, referencesCharacter, true);
+      const definition = await browserGlobal.electronAPI?.lsp.definition('rtl/core/cpu_top.sv', 7, definitionCharacter);
+      const references = await browserGlobal.electronAPI?.lsp.references('rtl/core/cpu_top.sv', 5, referencesCharacter, true);
 
       return {
         definitionFilePath: definition?.[0]?.filePath ?? null,
@@ -2176,14 +2180,42 @@ test('pristine-engine lsp smoke resolves a cross-file definition and symbol refe
   await window.getByTestId('right-panel-tab-outline').click();
   await expect(window.getByTestId('outline-tree')).toBeVisible({ timeout: 15000 });
   await expect(window.getByTestId('outline-node-label-module-cpu_top')).toBeVisible();
+  await expect(window.getByTestId('outline-kind-group-label-parameter')).toHaveText('Parameter');
+  await expect(window.getByTestId('outline-kind-group-count-parameter')).toHaveText('(1)');
+  await expect(window.getByTestId('outline-node-label-parameter-Width')).toBeVisible();
+  await expect(window.getByTestId('outline-node-detail-parameter-Width')).toHaveText('int = 8');
+  await expect(window.getByTestId('outline-kind-group-label-port')).toHaveText('Port');
+  await expect(window.getByTestId('outline-kind-group-count-port')).toHaveText('(1)');
+  await expect(window.getByTestId('outline-node-label-port-clk_i')).toBeVisible();
+  await expect(window.getByTestId('outline-node-detail-port-clk_i')).toHaveText('input logic');
+  const clkOutlineLabel = window.getByTestId('outline-node-label-port-clk_i');
+  const clkOutlineLabelBox = await clkOutlineLabel.boundingBox();
+  if (!clkOutlineLabelBox) {
+    throw new Error('Expected clk_i outline label bounds.');
+  }
+  const outlineHoverPoint = {
+    x: clkOutlineLabelBox.x + clkOutlineLabelBox.width / 2,
+    y: clkOutlineLabelBox.y + clkOutlineLabelBox.height / 2,
+  };
+  await window.mouse.move(outlineHoverPoint.x, outlineHoverPoint.y);
+  const outlineTooltip = window.getByRole('tooltip');
+  await expect(outlineTooltip).toContainText('input logic');
+  await expect.poll(async () => {
+    const tooltipBox = await outlineTooltip.boundingBox();
+    return tooltipBox ? tooltipBox.y > outlineHoverPoint.y : false;
+  }).toBe(true);
+  await expect(window.getByTestId('outline-kind-group-label-variable')).toHaveText('Variable');
   await expect(window.getByTestId('outline-node-label-variable-data_ready')).toBeVisible();
+  await expect(window.getByTestId('outline-kind-group-label-instance')).toHaveText('Instance');
+  await expect(window.getByTestId('outline-node-label-instance-u_alu')).toBeVisible();
+  await expect(window.getByTestId('outline-node-detail-instance-u_alu')).toHaveText('alu');
 
-  await window.getByRole('button', { name: 'Collapse cpu_top' }).click();
+  await window.getByTestId('outline-kind-group-variable').click();
   await expect(window.getByTestId('outline-node-label-variable-data_ready')).toHaveCount(0);
-  await window.getByRole('button', { name: 'Expand cpu_top' }).click();
+  await window.getByTestId('outline-kind-group-variable').click();
   await expect(window.getByTestId('outline-node-label-variable-data_ready')).toBeVisible();
-  await window.getByRole('button', { name: 'Open data_ready at line 2' }).click();
-  await expect(window.locator('.monaco-editor .line-numbers.active-line-number')).toContainText('2');
+  await window.getByTestId('outline-node-label-variable-data_ready').click();
+  await expect(window.locator('.monaco-editor .line-numbers.active-line-number')).toContainText('6');
 
   await window.getByTestId('toggle-bottom-panel').click();
   await getBottomPanelTab(window, 'lsp').click();

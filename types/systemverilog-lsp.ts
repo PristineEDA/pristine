@@ -252,6 +252,12 @@ export interface LspOutlineItem {
   parentId: string | null;
   name: string;
   kind: string;
+  detail?: string;
+  declaration?: string;
+  type?: string;
+  direction?: string;
+  value?: string;
+  moduleName?: string;
   symbolKind: number;
   range: LspRange;
   selectionRange: LspRange;

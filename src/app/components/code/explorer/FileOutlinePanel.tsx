@@ -3,7 +3,12 @@ import { AlertCircle, Loader2, RefreshCw } from 'lucide-react';
 import type { LspOutlineItem, LspOutlineResult } from '../../../../../types/systemverilog-lsp';
 import { systemVerilogLspBridge, type SystemVerilogDocumentSyncEvent } from '../../../lsp/systemVerilogLspBridge';
 import { getEditorLanguage, getPathBaseName, normalizeWorkspacePath } from '../../../workspace/workspaceFiles';
-import { getOutlineNodeKey, OutlineNode } from './OutlineNode';
+import {
+  createPlainOutlineNode,
+  getOutlineNodeKey,
+  OutlineNode,
+  type OutlineTreeNode,
+} from './OutlineNode';
 
 const OUTLINE_MAX_DEPTH = 8;
 const OUTLINE_LIMIT = 2000;
@@ -25,14 +30,53 @@ function createEmptyOutline(filePath = ''): LspOutlineResult {
   };
 }
 
-function getDefaultExpandedKeys(items: LspOutlineItem[]) {
-  const expandedKeys = new Set<string>();
+function createGroupedOutlineChildren(items: LspOutlineItem[], parentId: string): OutlineTreeNode[] {
+  const groups = new Map<string, OutlineTreeNode[]>();
 
-  items.forEach((item, index) => {
-    if (item.children.length > 0) {
-      expandedKeys.add(getOutlineNodeKey([`${index}:${item.id}:${item.name}`]));
+  items.forEach((item) => {
+    const groupItems = groups.get(item.kind) ?? [];
+    groupItems.push(createPlainOutlineNode(item));
+    groups.set(item.kind, groupItems);
+  });
+
+  return [...groups.entries()].map(([kind, children]) => ({
+    type: 'kind-group',
+    id: `${parentId}:kind:${kind}`,
+    kind,
+    children,
+  }));
+}
+
+function createRootOutlineNode(item: LspOutlineItem): OutlineTreeNode {
+  return {
+    type: 'item',
+    item,
+    children: createGroupedOutlineChildren(item.children, item.id),
+  };
+}
+
+function getOutlineTreeNodeStableId(node: OutlineTreeNode) {
+  return node.type === 'item' ? `${node.item.id}:${node.item.name}` : node.id;
+}
+
+function collectDefaultExpandedKeys(
+  nodes: OutlineTreeNode[],
+  expandedKeys: Set<string>,
+  pathSegments: string[] = [],
+) {
+  nodes.forEach((node, index) => {
+    const nextPathSegments = [...pathSegments, `${index}:${getOutlineTreeNodeStableId(node)}`];
+    if (node.children.length > 0) {
+      expandedKeys.add(getOutlineNodeKey(nextPathSegments));
+      collectDefaultExpandedKeys(node.children, expandedKeys, nextPathSegments);
     }
   });
+}
+
+function getDefaultExpandedKeys(nodes: OutlineTreeNode[]) {
+  const expandedKeys = new Set<string>();
+
+  collectDefaultExpandedKeys(nodes, expandedKeys);
 
   return expandedKeys;
 }
@@ -93,8 +137,9 @@ export function FileOutlinePanel({ currentOutlineId, onLineJump }: FileOutlinePa
       }
 
       const normalizedOutline = nextOutline ?? createEmptyOutline(requestFilePath);
+      const nextOutlineNodes = normalizedOutline.roots.map(createRootOutlineNode);
       setOutline(normalizedOutline);
-      setExpandedKeys(getDefaultExpandedKeys(normalizedOutline.roots));
+      setExpandedKeys(getDefaultExpandedKeys(nextOutlineNodes));
       setState('ready');
     } catch (error) {
       if (
@@ -193,6 +238,7 @@ export function FileOutlinePanel({ currentOutlineId, onLineJump }: FileOutlinePa
       return next;
     });
   }, []);
+  const outlineNodes = useMemo(() => outline.roots.map(createRootOutlineNode), [outline.roots]);
 
   if (!currentOutlineId) {
     return (
@@ -286,15 +332,15 @@ export function FileOutlinePanel({ currentOutlineId, onLineJump }: FileOutlinePa
         aria-label={`Outline for ${displayName}`}
         tabIndex={0}
       >
-        {outline.roots.map((item, index) => (
+        {outlineNodes.map((node, index) => (
           <OutlineNode
-            key={item.id}
+            key={getOutlineTreeNodeStableId(node)}
             depth={0}
             expandedKeys={expandedKeys}
-            item={item}
+            node={node}
             onLineJump={onLineJump}
             onToggleNode={handleToggleNode}
-            pathSegments={[`${index}:${item.id}:${item.name}`]}
+            pathSegments={[`${index}:${getOutlineTreeNodeStableId(node)}`]}
           />
         ))}
       </div>

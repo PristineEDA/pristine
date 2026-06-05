@@ -1235,6 +1235,12 @@ function normalizeOutlineItem(value: unknown): LspOutlineItem | null {
     parentId?: unknown;
     name?: unknown;
     kind?: unknown;
+    detail?: unknown;
+    declaration?: unknown;
+    type?: unknown;
+    direction?: unknown;
+    value?: unknown;
+    moduleName?: unknown;
     symbolKind?: unknown;
     range?: unknown;
     selectionRange?: unknown;
@@ -1258,6 +1264,12 @@ function normalizeOutlineItem(value: unknown): LspOutlineItem | null {
     parentId: typeof candidate.parentId === 'string' ? candidate.parentId : null,
     name: candidate.name,
     kind: candidate.kind,
+    detail: typeof candidate.detail === 'string' ? candidate.detail : undefined,
+    declaration: typeof candidate.declaration === 'string' ? candidate.declaration : undefined,
+    type: typeof candidate.type === 'string' ? candidate.type : undefined,
+    direction: typeof candidate.direction === 'string' ? candidate.direction : undefined,
+    value: typeof candidate.value === 'string' ? candidate.value : undefined,
+    moduleName: typeof candidate.moduleName === 'string' ? candidate.moduleName : undefined,
     symbolKind: typeof candidate.symbolKind === 'number' ? candidate.symbolKind : 0,
     range,
     selectionRange,
