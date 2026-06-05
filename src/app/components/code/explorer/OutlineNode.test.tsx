@@ -133,11 +133,15 @@ describe('OutlineNode', () => {
 
     expect(screen.getByTestId('outline-node-label-port-clk')).toHaveTextContent('clk');
     expect(screen.getByTestId('outline-node-label-port-clk')).toHaveTextContent('input logic');
-    expect(screen.getByTestId('outline-node-label-port-clk')).toHaveClass('leading-[14px]');
-    expect(screen.getByTestId('outline-node-label-port-clk')).toHaveClass('truncate');
+    expect(screen.getByTestId('outline-node-label-port-clk')).toHaveClass('flex');
+    expect(screen.getByTestId('outline-node-label-port-clk')).toHaveClass('h-4');
+    expect(screen.getByTestId('outline-node-label-port-clk')).toHaveClass('items-center');
+    expect(screen.getByTestId(`outline-node-icon-${getOutlineNodeKey(['0:outline:0:top'])}`)).toHaveClass('h-4');
+    expect(screen.getByTestId(`outline-node-icon-${getOutlineNodeKey(['0:outline:0:top'])}`)).toHaveClass('items-center');
+    expect(screen.getByTestId(`outline-node-icon-${getOutlineNodeKey(['0:outline:0:top'])}`)).toHaveClass('justify-center');
     expect(screen.getByTestId('outline-node-detail-port-clk')).toHaveTextContent('input logic');
     expect(screen.getByTestId('outline-node-detail-port-clk')).toHaveClass('text-[11px]');
-    expect(screen.getByTestId('outline-node-detail-port-clk')).toHaveClass('leading-[14px]');
+    expect(screen.getByTestId('outline-node-detail-port-clk')).toHaveClass('leading-4');
     expect(screen.getByTestId('outline-node-detail-port-clk')).toHaveClass('align-baseline');
     expect(screen.getByTestId('outline-node-detail-port-clk')).toHaveClass('text-ide-text-muted');
 
