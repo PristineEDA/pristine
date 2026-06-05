@@ -362,17 +362,17 @@ export const OutlineNode = memo(function OutlineNode({
       <span
         data-testid={labelTestId}
         className={cn(
-          'ml-1 flex min-w-0 flex-1 items-baseline text-left text-[13px] font-normal',
+          'ml-1 block min-w-0 flex-1 truncate text-left text-[13px] leading-[14px] font-normal',
           line !== null ? 'group-hover:text-ide-accent' : 'cursor-default',
         )}
       >
-        <span className="min-w-0 truncate">{item.name}</span>
+        <span className="align-baseline">{item.name}</span>
         {detail && (
           <>
-            <span className="mx-1 shrink-0 text-[11px] text-ide-text-muted">:</span>
+            <span className="mx-1 align-baseline text-[11px] leading-[14px] text-ide-text-muted">:</span>
             <span
               data-testid={detailTestId}
-              className="min-w-0 truncate text-[11px] text-ide-text-muted"
+              className="align-baseline text-[11px] leading-[14px] text-ide-text-muted"
             >
               {detail}
             </span>

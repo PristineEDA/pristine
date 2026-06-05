@@ -133,8 +133,12 @@ describe('OutlineNode', () => {
 
     expect(screen.getByTestId('outline-node-label-port-clk')).toHaveTextContent('clk');
     expect(screen.getByTestId('outline-node-label-port-clk')).toHaveTextContent('input logic');
+    expect(screen.getByTestId('outline-node-label-port-clk')).toHaveClass('leading-[14px]');
+    expect(screen.getByTestId('outline-node-label-port-clk')).toHaveClass('truncate');
     expect(screen.getByTestId('outline-node-detail-port-clk')).toHaveTextContent('input logic');
     expect(screen.getByTestId('outline-node-detail-port-clk')).toHaveClass('text-[11px]');
+    expect(screen.getByTestId('outline-node-detail-port-clk')).toHaveClass('leading-[14px]');
+    expect(screen.getByTestId('outline-node-detail-port-clk')).toHaveClass('align-baseline');
     expect(screen.getByTestId('outline-node-detail-port-clk')).toHaveClass('text-ide-text-muted');
 
     renderOutlineNode({
