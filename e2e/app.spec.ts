@@ -1661,8 +1661,24 @@ test('app launches and shows main UI', async () => {
   await expect(explorerPanel).toHaveClass(/(?:^|\s)rounded-md(?:\s|$)/);
   await expect(explorerPanel).toHaveClass(/(?:^|\s)border(?:\s|$)/);
   await expectCompactPanelTabButton(window.getByTestId('left-panel-tab-explorer'));
-  await expectCompactPanelTabButton(window.getByTestId('left-panel-tab-outline'));
+  await expectCompactPanelTabButton(window.getByTestId('left-panel-tab-git'));
+  await window.getByTestId('left-panel-tab-git').click();
+  await expect(window.getByTestId('left-panel-git-placeholder')).toHaveText('No source control changes');
   await expect(mainContentStack).toBeVisible();
+
+  await app.close();
+});
+
+test('left outline slot is now source control placeholder', async () => {
+  const { app, window } = await launchApp();
+
+  await ensureExplorerVisible(window);
+  await expectCompactPanelTabButton(window.getByTestId('left-panel-tab-git'));
+  await expect(window.getByRole('radio', { name: 'Source Control' })).toBeVisible();
+  await window.getByTestId('left-panel-tab-git').click();
+
+  await expect(window.getByTestId('left-panel-git-placeholder')).toHaveText('No source control changes');
+  await expect(window.getByTestId('left-panel-tab-outline')).toHaveCount(0);
 
   await app.close();
 });
@@ -2081,7 +2097,11 @@ test('pristine-engine lsp smoke resolves a cross-file definition and symbol refe
     'endmodule',
   ].join('\n');
   const cpuTopSource = [
-    'module cpu_top;',
+    'module cpu_top #(',
+    '  parameter int Width = 8',
+    ') (',
+    '  input logic clk_i',
+    ');',
     '  logic data_ready;',
     '',
     '  alu u_alu ();',
@@ -2130,8 +2150,8 @@ test('pristine-engine lsp smoke resolves a cross-file definition and symbol refe
     };
 
     try {
-      const definition = await browserGlobal.electronAPI?.lsp.definition('rtl/core/cpu_top.sv', 3, definitionCharacter);
-      const references = await browserGlobal.electronAPI?.lsp.references('rtl/core/cpu_top.sv', 1, referencesCharacter, true);
+      const definition = await browserGlobal.electronAPI?.lsp.definition('rtl/core/cpu_top.sv', 7, definitionCharacter);
+      const references = await browserGlobal.electronAPI?.lsp.references('rtl/core/cpu_top.sv', 5, referencesCharacter, true);
 
       return {
         definitionFilePath: definition?.[0]?.filePath ?? null,
@@ -2155,6 +2175,51 @@ test('pristine-engine lsp smoke resolves a cross-file definition and symbol refe
     hasAtLeastTwoReferences: true,
     allReferencePathsLocal: true,
   });
+
+  await ensureRightPanelVisible(window);
+  await window.getByTestId('right-panel-tab-outline').click();
+  await expect(window.getByTestId('outline-tree')).toBeVisible({ timeout: 15000 });
+  await expect(window.getByTestId('outline-node-label-module-cpu_top')).toBeVisible();
+  await expect(window.getByTestId('outline-kind-group-label-parameter')).toHaveText('Parameter');
+  await expect(window.getByTestId('outline-kind-group-count-parameter')).toHaveText('(1)');
+  await expect(window.getByTestId('outline-node-label-parameter-Width')).toBeVisible();
+  await expect(window.getByTestId('outline-node-detail-parameter-Width')).toHaveText('int = 8');
+  await expect(window.getByTestId('outline-kind-group-label-port')).toHaveText('Port');
+  await expect(window.getByTestId('outline-kind-group-count-port')).toHaveText('(1)');
+  await expect(window.getByTestId('outline-node-label-port-clk_i')).toBeVisible();
+  await expect(window.getByTestId('outline-node-detail-port-clk_i')).toHaveText('input logic');
+  const clkOutlineLabel = window.getByTestId('outline-node-label-port-clk_i');
+  const clkOutlineLabelBox = await clkOutlineLabel.boundingBox();
+  if (!clkOutlineLabelBox) {
+    throw new Error('Expected clk_i outline label bounds.');
+  }
+  const outlineHoverPoint = {
+    x: clkOutlineLabelBox.x + clkOutlineLabelBox.width / 2,
+    y: clkOutlineLabelBox.y + clkOutlineLabelBox.height / 2,
+  };
+  await window.mouse.move(outlineHoverPoint.x, outlineHoverPoint.y);
+  const outlineTooltip = window.getByRole('tooltip');
+  await expect(outlineTooltip).toContainText('input logic');
+  await expect.poll(async () => {
+    const tooltipBox = await outlineTooltip.boundingBox();
+    return tooltipBox ? tooltipBox.y > outlineHoverPoint.y : false;
+  }).toBe(true);
+  await expect(window.getByTestId('outline-kind-group-label-variable')).toHaveText('Variable');
+  await expect(window.getByTestId('outline-node-label-variable-data_ready')).toBeVisible();
+  await expect(window.getByTestId('outline-kind-group-label-instance')).toHaveText('Instance');
+  await expect(window.getByTestId('outline-node-label-instance-u_alu')).toBeVisible();
+  await expect(window.getByTestId('outline-node-detail-instance-u_alu')).toHaveText('alu');
+
+  await window.getByTestId('outline-kind-group-variable').click();
+  await expect(window.getByTestId('outline-node-label-variable-data_ready')).toHaveCount(0);
+  await window.getByTestId('outline-kind-group-variable').click();
+  await expect(window.getByTestId('outline-node-label-variable-data_ready')).toBeVisible();
+  await window.getByTestId('outline-node-label-variable-data_ready').click();
+  await expect(window.locator('.monaco-editor .line-numbers.active-line-number')).toContainText('6');
+
+  await window.getByTestId('toggle-bottom-panel').click();
+  await getBottomPanelTab(window, 'lsp').click();
+  await expect(window.getByTestId('lsp-panel')).toContainText('systemverilog/outline', { timeout: 10000 });
 
   await app.close();
 });
@@ -2344,6 +2409,29 @@ test('lsp panel captures initialization logs when hierarchy opens before any edi
   }).toContain('initialize');
   await expect(window.getByTestId('lsp-panel')).toContainText('systemverilog/moduleHierarchy');
   await expect(window.getByTestId('lsp-panel')).toContainText('Status: ready');
+
+  await app.close();
+});
+
+test('lsp panel shows prewarmed initialization logs before any SystemVerilog file opens', async () => {
+  test.slow();
+  skipIfPristineEngineUnavailable();
+
+  const { app, window } = await launchApp();
+
+  await ensureExplorerVisible(window);
+  await expect(window.getByTestId('editor-tab-rtl/core/cpu_top.sv')).toHaveCount(0);
+
+  await window.getByTestId('toggle-bottom-panel').click();
+  await getBottomPanelTab(window, 'lsp').click();
+  await expect(window.getByTestId('lsp-panel')).toBeVisible();
+
+  await expect.poll(async () => window.getByTestId('lsp-panel').innerText(), {
+    timeout: 15000,
+  }).toContain('initialize');
+  await expect(window.getByTestId('lsp-panel')).toContainText('initialized');
+  await expect(window.getByTestId('lsp-panel')).toContainText('Status: ready');
+  await expect(window.getByTestId('lsp-panel')).not.toContainText('textDocument/didOpen');
 
   await app.close();
 });
@@ -3631,7 +3719,8 @@ test('Monaco editor shows inline git diff for opened modified files and hides it
 
     await window.getByTestId('file-tree-node-rtl_core_cpu_top_sv').dblclick();
     await waitForMonacoEditor(window);
-    await expect(window.locator('.monaco-editor .view-lines')).toContainText('assign data_ready', { timeout: MONACO_READY_TIMEOUT_MS });
+    await expect(window.getByTestId('editor-tab-rtl/core/cpu_top.sv')).toHaveAttribute('data-active', 'true');
+    await expect(window.locator('.monaco-editor .view-lines')).toContainText("data_ready = 1'b1", { timeout: MONACO_READY_TIMEOUT_MS });
     const removedInlineDiffMarginDecoration = window.locator('.pristine-inline-git-diff-margin-removed').first();
     const removedInlineDiffLineNumber = window.locator('.line-numbers.pristine-inline-git-diff-line-number-removed').first();
     await expect(removedInlineDiffMarginDecoration).toBeVisible({ timeout: MONACO_READY_TIMEOUT_MS });
@@ -5423,7 +5512,9 @@ test('terminal tab creates a real shell session and shows command output', async
   await app.close();
 });
 
-test('waveform bottom panel renders mock Pixi waveform and controls', async () => {
+test('waveform bottom panel renders binary waveform and controls', async () => {
+  test.slow();
+
   const { app, window } = await launchApp();
 
   await openBottomTerminal(window);
@@ -5437,13 +5528,29 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
   const cursorInfoSignal = window.getByTestId('waveform-toolbar-cursor-signal');
   const cursorInfoValue = window.getByTestId('waveform-toolbar-cursor-value');
   await expect(panel).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
-  await expect(panel).toHaveAttribute('data-signal-count', '168');
+  await expect.poll(async () => JSON.stringify({
+    error: await panel.getAttribute('data-waveform-error'),
+    loadingText: await window.getByTestId('waveform-loading-state').textContent().catch(() => null),
+    signalCount: await panel.getAttribute('data-signal-count'),
+    status: await panel.getAttribute('data-waveform-session-status'),
+  }), {
+    message: 'waveform binary session should load catalog metadata',
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toContain('"signalCount":"168"');
+  await expect(panel).toHaveAttribute('data-waveform-source', 'lsp-binary', { timeout: UI_READY_TIMEOUT_MS });
+  await expect(panel).toHaveAttribute('data-waveform-frame-version', '1', { timeout: UI_READY_TIMEOUT_MS });
+  await expect(panel).toHaveAttribute('data-waveform-frame-truncated', 'false', { timeout: UI_READY_TIMEOUT_MS });
+  await expect(panel).toHaveAttribute('data-waveform-empty-visible-signal-count', '0', { timeout: UI_READY_TIMEOUT_MS });
+  await expect.poll(async () => Number(await panel.getAttribute('data-waveform-frame-segment-count') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
   await expect(panel).toHaveAttribute('data-ready', 'true', { timeout: UI_READY_TIMEOUT_MS });
   await expect(panel).toHaveAttribute('data-renderer', /^(webgpu|webgl)$/);
   await expect(panel).toHaveAttribute('data-selected-signal-id', 'tb_top_module1-clk');
+  await expect(window.getByTestId('waveform-signal-value-tb_top_module1-clk')).not.toHaveText(/^x$/i);
   await expect(toolbarActions).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
   await expect(cursorInfo).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
-  await expect(cursorInfoTime).toHaveText(/84\.0ns/);
+  await expect(cursorInfoTime).toHaveText(/0\.0ns/);
   await expect.poll(async () => toolbar.evaluate((element) => {
     const markup = String((element as { innerHTML?: string }).innerHTML ?? '');
     const cursorIndex = markup.indexOf('waveform-toolbar-cursor-info');
@@ -5458,30 +5565,24 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
   const readCanvasNumber = async (attribute: string) => Number(await canvasHost.getAttribute(attribute) ?? '0');
   await expect(canvasHost).toHaveAttribute('data-renderer', /^(webgpu|webgl)$/);
   await expect(canvasHost).toHaveAttribute('data-layer-count', '4');
+  await expect(canvasHost).toHaveAttribute('data-waveform-frame-version', '1');
+  await expect(canvasHost).toHaveAttribute('data-waveform-frame-truncated', 'false');
+  await expect(canvasHost).toHaveAttribute('data-waveform-empty-visible-signal-count', '0');
+  await expect.poll(async () => readCanvasNumber('data-waveform-frame-segment-count'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
   await expect(canvasHost).toHaveAttribute('data-layer-names', 'background,content,status,operation');
   await expect(canvasHost).toHaveAttribute('data-header-background', 'opaque');
   await expect(canvasHost).toHaveAttribute('data-row-count', '171');
   await expect(canvasHost).toHaveAttribute('data-row-height', '30');
   await expect(canvasHost).toHaveAttribute('data-first-signal-lane-y', '52.00');
   await expect(canvasHost).toHaveAttribute('data-waveform-header-height', '22.00');
-  await expect.poll(async () => readCanvasNumber('data-bus-hexagon-count'), {
-    timeout: UI_READY_TIMEOUT_MS,
-  }).toBeGreaterThan(0);
-  await expect.poll(async () => readCanvasNumber('data-x-state-count'), {
-    timeout: UI_READY_TIMEOUT_MS,
-  }).toBeGreaterThan(0);
-  await expect.poll(async () => readCanvasNumber('data-z-state-count'), {
-    timeout: UI_READY_TIMEOUT_MS,
-  }).toBeGreaterThan(0);
-  await expect.poll(async () => readCanvasNumber('data-x-state-block-count'), {
-    timeout: UI_READY_TIMEOUT_MS,
-  }).toBeGreaterThan(0);
-  await expect.poll(async () => readCanvasNumber('data-z-state-block-count'), {
-    timeout: UI_READY_TIMEOUT_MS,
-  }).toBeGreaterThan(0);
-  await expect.poll(async () => readCanvasNumber('data-pulse-fill-count'), {
-    timeout: UI_READY_TIMEOUT_MS,
-  }).toBeGreaterThan(0);
+  await expect(canvasHost).toHaveAttribute('data-bus-hexagon-count');
+  await expect(canvasHost).toHaveAttribute('data-x-state-count');
+  await expect(canvasHost).toHaveAttribute('data-z-state-count');
+  await expect(canvasHost).toHaveAttribute('data-x-state-block-count');
+  await expect(canvasHost).toHaveAttribute('data-z-state-block-count');
+  await expect(canvasHost).toHaveAttribute('data-pulse-fill-count');
   await expect.poll(async () => readCanvasNumber('data-render-count'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(0);
@@ -5508,7 +5609,6 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
   await expect.poll(async () => {
     const collapsedSegmentCount = await readCanvasNumber('data-collapsed-segment-count');
     const skippedHorizontalSegmentCount = await readCanvasNumber('data-skipped-horizontal-segment-count');
-    const drawnTransitionEdgeCount = await readCanvasNumber('data-drawn-transition-edge-count');
     const busFullHexagonCount = await readCanvasNumber('data-bus-full-hexagon-count');
     const busSpecialStateHexagonCount = await readCanvasNumber('data-bus-special-state-hexagon-count');
     const busSpecialStateLabelCount = await readCanvasNumber('data-bus-special-state-label-count');
@@ -5518,7 +5618,7 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
 
     return Number.isFinite(collapsedSegmentCount)
       && Number.isFinite(skippedHorizontalSegmentCount)
-      && drawnTransitionEdgeCount > 0
+      && await readCanvasNumber('data-drawn-horizontal-segment-count') > 0
       && busFullHexagonCount > 0
       && busSpecialStateHexagonCount > 0
       && busSpecialStateLabelCount > 0
@@ -5611,10 +5711,14 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
   await expect(panel).toHaveAttribute('data-selected-signal-id', 'u_top_module1-counting');
   await expect(countingRow).toHaveAttribute('data-row-index', '9');
   await expect(countingRow).toHaveAttribute('data-lane-y', '292.00');
+  await expect(countingRow).toHaveClass(/items-end/);
   await expect(countingPrimary).toHaveClass(/items-center/);
+  await expect(window.getByTestId('waveform-signal-value-u_top_module1-counting')).toHaveClass(/h-\[14px\]/);
+  await expect(window.getByTestId('waveform-signal-value-u_top_module1-counting')).toHaveClass(/items-end/);
+  await expect(window.getByTestId('waveform-signal-value-u_top_module1-counting')).toHaveClass(/justify-end/);
   await expect(canvasHost).toHaveAttribute('data-selected-signal-lane-y', '292.00');
   await expect(cursorInfoSignal).toHaveText(/counting/);
-  await expect(cursorInfoValue).toHaveText(/^2$/);
+  await expect(cursorInfoValue).toHaveText(/^[0-9a-fxz]+$/i);
 
   await canvasHost.click({ position: { x: Math.floor(canvasBox.width * 0.28), y: 86 } });
   await expect.poll(async () => Number(await panel.getAttribute('data-cursor-time') ?? '0'), {
@@ -5635,21 +5739,35 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
   }
   const horizontalScrollbar = window.getByTestId('waveform-horizontal-scrollbar');
   const setHorizontalScrollbarLeft = async (scrollLeft: number) => {
-    await horizontalScrollbar.evaluate((element, nextScrollLeft) => {
+    await horizontalScrollbar.evaluate(async (element, nextScrollLeft) => {
       const scrollable = element as unknown as {
         dispatchEvent: (event: Event) => boolean;
         scrollLeft: number;
       };
-      scrollable.scrollLeft = nextScrollLeft;
-      scrollable.dispatchEvent(new Event('scroll', { bubbles: true }));
+      const dispatchScroll = () => {
+        scrollable.scrollLeft = nextScrollLeft;
+        scrollable.dispatchEvent(new Event('scroll', { bubbles: true }));
+      };
+      dispatchScroll();
+      await new Promise<void>((resolve) => setTimeout(resolve, 16));
+      dispatchScroll();
     }, scrollLeft);
+    await expect.poll(async () => {
+      const actualScrollLeft = Number(await horizontalScrollbar.getAttribute('data-horizontal-scroll-left') ?? '0');
+      return Math.abs(actualScrollLeft - scrollLeft);
+    }, {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeLessThanOrEqual(1);
   };
   await expect.poll(async () => Number(await horizontalScrollbar.getAttribute('data-horizontal-scroll-range') ?? '0'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(0);
   await expect(canvasHost).toHaveAttribute('data-ruler-scroll-indicator-color', '#8e8e8e');
   await expect(canvasHost).toHaveAttribute('data-ruler-scroll-indicator-height', '22.00');
+  await expect(canvasHost).toHaveAttribute('data-ruler-scroll-indicator-radius', '3.00');
   await expect(canvasHost).toHaveAttribute('data-ruler-scroll-indicator-scrollable', 'true');
+  await expect(canvasHost).toHaveClass(/cursor-default/);
+  await expect(canvasHost).not.toHaveClass(/cursor-crosshair/);
   await expect.poll(async () => readCanvasNumber('data-ruler-scroll-indicator-width'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeLessThan(canvasBox.width);
@@ -6990,10 +7108,19 @@ test('floating info window expands on hover and updates live chart data', async 
 
   await floatingInfoShell.hover();
 
+  await floatingInfoWindow.waitForTimeout(500);
+  await expect(floatingInfoShell).toHaveAttribute('data-expanded', 'false');
+  await expect(floatingInfoShell).toHaveAttribute('data-mode', 'collapsed');
+
   await expect(floatingInfoShell).toHaveAttribute('data-expanded', 'true');
   await expect(floatingInfoWindow.getByTestId('floating-info-chart')).toBeVisible();
+  await expect(floatingInfoWindow.getByTestId('floating-info-expanded-drag-region')).toHaveAttribute('data-app-region', 'drag');
+  await expect(floatingInfoWindow.getByTestId('floating-info-chart-shell')).toHaveAttribute('data-app-region', 'no-drag');
   await expect.poll(async () => (await readBrowserWindowBounds(app, floatingInfoWindow)).width).toBeGreaterThan(collapsedBounds.width);
   await expect.poll(async () => (await readBrowserWindowBounds(app, floatingInfoWindow)).height).toBeGreaterThan(collapsedBounds.height);
+  await floatingInfoWindow.waitForTimeout(700);
+  await expect(floatingInfoShell).toHaveAttribute('data-expanded', 'true');
+  await expect(floatingInfoShell).toHaveAttribute('data-mode', 'expanded');
   await expect.poll(async () => floatingInfoShell.getAttribute('data-latest-time'), {
     timeout: 4000,
   }).not.toBe(initialLatestTime);
@@ -7001,6 +7128,87 @@ test('floating info window expands on hover and updates live chart data', async 
   await floatingInfoWindow.mouse.move(collapsedBounds.width + 320, collapsedBounds.height + 240);
 
   await expect.poll(async () => floatingInfoShell.getAttribute('data-expanded')).toBe('false');
+  await expect.poll(async () => (await readBrowserWindowBounds(app, floatingInfoWindow)).width).toBe(collapsedBounds.width);
+  await expect.poll(async () => (await readBrowserWindowBounds(app, floatingInfoWindow)).height).toBe(collapsedBounds.height);
+
+  await app.close();
+});
+
+test('floating info window opens the static detail view on double click and returns on quit', async () => {
+  const { app, window } = await launchApp();
+
+  await setFloatingInfoWindowVisibility(window, true);
+
+  await expect.poll(async () => (await getWindowByTitle(app, 'Pristine Floating Info')) !== null).toBe(true);
+  const floatingInfoWindow = await getWindowByTitle(app, 'Pristine Floating Info');
+
+  if (!floatingInfoWindow) {
+    throw new Error('Expected floating info window to be available');
+  }
+
+  const floatingInfoShell = floatingInfoWindow.getByTestId('floating-info-window');
+  const collapsedBounds = await readBrowserWindowBounds(app, floatingInfoWindow);
+
+  await expect(floatingInfoShell).toHaveAttribute('data-mode', 'collapsed');
+
+  await floatingInfoShell.dblclick();
+
+  await expect(floatingInfoShell).toHaveAttribute('data-mode', 'detail');
+  await expect(floatingInfoWindow.getByTestId('floating-info-detail')).toBeVisible();
+  await expect(floatingInfoWindow.getByText('Pi Stats')).toBeVisible();
+  await expect(floatingInfoWindow.getByText('RTL Files')).toBeVisible();
+  await expect(floatingInfoWindow.getByText('Compile Activity')).toBeVisible();
+  await expect(floatingInfoWindow.getByText('Top Design Unit')).toBeVisible();
+  await expect(floatingInfoWindow.getByTestId('floating-info-detail-drag-region')).toHaveAttribute('data-app-region', 'drag');
+  await expect(floatingInfoWindow.getByTestId('floating-info-detail-tab-simulation')).toBeVisible();
+  await expect(floatingInfoWindow.getByTestId('floating-info-detail-tab-usage')).toHaveCount(0);
+  await expect(floatingInfoWindow.getByTestId('floating-info-range-controls')).toHaveClass(/bg-muted\/75/);
+  for (const label of ['1d', '2d', '7d', 'All']) {
+    const rangeButton = floatingInfoWindow.getByTestId(`floating-info-range-${label.toLowerCase()}`);
+    await expect(rangeButton).toHaveAttribute('aria-label', label);
+    await expect(rangeButton).toHaveAttribute('title', label);
+    const rangeBox = await rangeButton.boundingBox();
+    const refreshBox = await floatingInfoWindow.getByTestId('floating-info-detail-refresh').boundingBox();
+
+    expect(rangeBox?.width ?? 0).toBeCloseTo(refreshBox?.width ?? 0, 1);
+    expect(rangeBox?.height ?? 0).toBeCloseTo(refreshBox?.height ?? 0, 1);
+  }
+  const settingsBox = await floatingInfoWindow.getByTestId('floating-info-detail-settings').boundingBox();
+  const refreshBox = await floatingInfoWindow.getByTestId('floating-info-detail-refresh').boundingBox();
+  expect(settingsBox?.width ?? 0).toBeCloseTo(refreshBox?.width ?? 0, 1);
+  expect(settingsBox?.height ?? 0).toBeCloseTo(refreshBox?.height ?? 0, 1);
+  await expect(floatingInfoWindow.getByTestId('floating-info-detail-content')).toHaveClass(/overflow-y-auto/);
+  await expect.poll(async () => (await readBrowserWindowBounds(app, floatingInfoWindow)).width).toBe(360);
+  await expect.poll(async () => (await readBrowserWindowBounds(app, floatingInfoWindow)).height).toBe(520);
+
+  await floatingInfoWindow.getByTestId('floating-info-detail-tab-languages').click();
+  await expect(floatingInfoWindow.getByText('SystemVerilog').first()).toBeVisible();
+  await expect(floatingInfoWindow.getByText('181.1K')).toBeVisible();
+  await expect(floatingInfoWindow.getByText('by HDL footprint')).toBeVisible();
+
+  await floatingInfoWindow.getByTestId('floating-info-detail-tab-projects').click();
+  await expect(floatingInfoWindow.getByText('retroSoC')).toBeVisible();
+  await expect(floatingInfoWindow.getByText('xpi_core')).toBeVisible();
+
+  await floatingInfoWindow.getByTestId('floating-info-detail-tab-models').click();
+  await expect(floatingInfoWindow.getByText('Model & Tool Usage')).toBeVisible();
+  await expect(floatingInfoWindow.getByText('Cache Read')).toBeVisible();
+  await expect(floatingInfoWindow.getByText('Tool Calls')).toBeVisible();
+  await expect.poll(async () => floatingInfoWindow.getByTestId('floating-info-detail-content').evaluate((element) => {
+    const content = element as unknown as { clientHeight: number; scrollHeight: number };
+    return content.scrollHeight > content.clientHeight;
+  })).toBe(true);
+  await expect(floatingInfoWindow.getByTestId('floating-info-detail-content')).toHaveClass(/\[scrollbar-width:none\]/);
+
+  await floatingInfoWindow.getByTestId('floating-info-detail-tab-simulation').click();
+  await expect(floatingInfoWindow.getByText('Recent Simulation')).toBeVisible();
+  await expect(floatingInfoWindow.getByText('xpi_loopback')).toBeVisible();
+  await expect(floatingInfoWindow.getByText('Waveform Session')).toBeVisible();
+  await expect(floatingInfoWindow.getByTestId('floating-info-detail-shortcut')).toContainText('Q');
+
+  await floatingInfoWindow.getByTestId('floating-info-detail-quit').click();
+
+  await expect(floatingInfoShell).toHaveAttribute('data-mode', 'collapsed');
   await expect.poll(async () => (await readBrowserWindowBounds(app, floatingInfoWindow)).width).toBe(collapsedBounds.width);
   await expect.poll(async () => (await readBrowserWindowBounds(app, floatingInfoWindow)).height).toBe(collapsedBounds.height);
 

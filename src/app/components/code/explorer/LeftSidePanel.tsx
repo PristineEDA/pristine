@@ -5,7 +5,6 @@ import { cn } from '@/lib/utils';
 import { useWorkspaceGitStatus } from '../../../git/workspaceGitStatus';
 import { FileTreeNode, type ExplorerContextMenuRequest } from './FileTreeNode';
 import { ExplorerPanelTabs, type ExplorerPanelTab } from './LeftSidePanelChrome';
-import { FileOutlinePanel } from './FileOutlinePanel';
 import { HierarchyPanel } from './HierarchyPanel';
 import { SPLIT_PANEL_CONTENT_TRANSITION_STYLE, useAnimatedSplitPanelPresence } from './useAnimatedSplitPanelPresence';
 import { useCodeViewerLayout } from '../../../context/CodeViewerLayoutContext';
@@ -88,7 +87,6 @@ interface LeftSidePanelProps {
     entryType: WorkspaceEntryType;
   } | null>;
   onRenameWorkspaceEntry: (currentPath: string, nextPath: string, entryType: 'file' | 'folder') => Promise<void>;
-  currentOutlineId: string;
   onSplitPanelVisibleChange?: (isVisible: boolean) => void;
   refreshToken?: number;
   revealRequest?: WorkspaceRevealRequest | null;
@@ -109,7 +107,6 @@ export function LeftSidePanel({
   onLineJump,
   onPasteWorkspaceEntry,
   onRenameWorkspaceEntry,
-  currentOutlineId,
   onSplitPanelVisibleChange,
   refreshToken = 0,
   revealRequest,
@@ -743,11 +740,13 @@ export function LeftSidePanel({
         </div>
       )}
 
-      {tab === 'outline' && (
-        <FileOutlinePanel
-          currentOutlineId={currentOutlineId}
-          onLineJump={onLineJump}
-        />
+      {tab === 'git' && (
+        <div
+          data-testid="left-panel-git-placeholder"
+          className="flex min-h-0 flex-1 items-center justify-center px-3 py-2 text-center text-[12px] text-ide-text-muted"
+        >
+          No source control changes
+        </div>
       )}
     </>
   );

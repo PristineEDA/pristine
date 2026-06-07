@@ -28,7 +28,7 @@ import {
   xToTime,
   zoomWaveformViewport,
 } from './waveformLayout';
-import { mockWaveformData } from './waveformMockData';
+import { waveformTransitionFixtureData as mockWaveformData } from './waveformTestFixtures';
 
 describe('waveformLayout', () => {
   it('maps time and pixels through the current viewport', () => {
@@ -62,6 +62,7 @@ describe('waveformLayout', () => {
 
     expect(fittedMetrics).toEqual(expect.objectContaining({
       color: 0x8e8e8e,
+      cornerRadius: 3,
       height: waveformHeaderHeight,
       left: 0,
       scrollable: false,
@@ -158,7 +159,7 @@ describe('waveformLayout', () => {
     const pulseFillCount = getWaveformDigitalPulseFillCount(mockWaveformData, fitWaveformViewport(mockWaveformData));
     const digitalIntervalCount = mockWaveformData.signals
       .filter((signal) => signal.kind !== 'bus')
-      .reduce((count, signal) => count + Math.max(0, signal.transitions.length - 1), 0);
+      .reduce((count, signal) => count + Math.max(0, (signal.transitions?.length ?? 0) - 1), 0);
 
     expect(pulseFillCount).toBeGreaterThan(0);
     expect(pulseFillCount).toBeLessThan(digitalIntervalCount);

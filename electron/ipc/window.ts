@@ -1,11 +1,13 @@
 import { BrowserWindow, ipcMain } from 'electron';
 import { SyncChannels, AsyncChannels, StreamChannels } from './channels.js';
 import type { WindowCloseDecision } from '../../src/app/window/windowClose.js';
+import { isFloatingInfoWindowMode, type FloatingInfoWindowMode } from '../../src/app/window/floatingInfoWindow.js';
 
 export function registerWindowHandlers(
   getMainWindow: () => BrowserWindow | null,
   setFloatingInfoWindowVisible: (visible: boolean) => boolean = () => false,
   setFloatingInfoWindowExpanded: (expanded: boolean) => boolean = () => false,
+  setFloatingInfoWindowMode: (mode: FloatingInfoWindowMode) => boolean = () => false,
   resolveCloseRequest: (requestId: number, decision: WindowCloseDecision) => boolean = () => false,
 ): void {
   ipcMain.on(SyncChannels.WINDOW_IS_MAXIMIZED, (event) => {
@@ -87,6 +89,14 @@ export function registerWindowHandlers(
     }
 
     return setFloatingInfoWindowExpanded(expanded);
+  });
+
+  ipcMain.handle(AsyncChannels.WINDOW_SET_FLOATING_INFO_MODE, async (_event, mode: unknown) => {
+    if (!isFloatingInfoWindowMode(mode)) {
+      throw new Error('Expected floating info mode to be "collapsed", "expanded", or "detail"');
+    }
+
+    return setFloatingInfoWindowMode(mode);
   });
 }
 

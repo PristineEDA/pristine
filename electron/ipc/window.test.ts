@@ -1,11 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AsyncChannels, StreamChannels, SyncChannels } from './channels.js';
 
-const { mockOn, mockHandle, mockSetFloatingInfoWindowVisible, mockSetFloatingInfoWindowExpanded, mockResolveCloseRequest } = vi.hoisted(() => ({
+const {
+  mockOn,
+  mockHandle,
+  mockSetFloatingInfoWindowVisible,
+  mockSetFloatingInfoWindowExpanded,
+  mockSetFloatingInfoWindowMode,
+  mockResolveCloseRequest,
+} = vi.hoisted(() => ({
   mockOn: vi.fn(),
   mockHandle: vi.fn(),
   mockSetFloatingInfoWindowVisible: vi.fn(),
   mockSetFloatingInfoWindowExpanded: vi.fn(),
+  mockSetFloatingInfoWindowMode: vi.fn(),
   mockResolveCloseRequest: vi.fn(),
 }));
 
@@ -37,6 +45,7 @@ describe('window IPC handlers', () => {
     mockHandle.mockClear();
     mockSetFloatingInfoWindowVisible.mockClear();
     mockSetFloatingInfoWindowExpanded.mockClear();
+    mockSetFloatingInfoWindowMode.mockClear();
     mockResolveCloseRequest.mockClear();
   });
 
@@ -44,7 +53,7 @@ describe('window IPC handlers', () => {
     const event = { returnValue: undefined as boolean | undefined };
     const getMainWindow = () => ({ isMaximized: () => true, isFullScreen: () => false }) as any;
 
-    registerWindowHandlers(getMainWindow, undefined, undefined, mockResolveCloseRequest);
+    registerWindowHandlers(getMainWindow, undefined, undefined, undefined, mockResolveCloseRequest);
     const listener = getOnListener(SyncChannels.WINDOW_IS_MAXIMIZED);
     listener(event);
 
@@ -55,7 +64,7 @@ describe('window IPC handlers', () => {
     const event = { returnValue: undefined as boolean | undefined };
     const getMainWindow = () => ({ isFullScreen: () => true }) as any;
 
-    registerWindowHandlers(getMainWindow, undefined, undefined, mockResolveCloseRequest);
+    registerWindowHandlers(getMainWindow, undefined, undefined, undefined, mockResolveCloseRequest);
     const listener = getOnListener(SyncChannels.WINDOW_IS_FULLSCREEN);
     listener(event);
 
@@ -63,7 +72,7 @@ describe('window IPC handlers', () => {
   });
 
   it('returns false when minimizing without a window', async () => {
-    registerWindowHandlers(() => null, undefined, undefined, mockResolveCloseRequest);
+    registerWindowHandlers(() => null, undefined, undefined, undefined, mockResolveCloseRequest);
     const handler = getHandleListener(AsyncChannels.WINDOW_MINIMIZE);
 
     expect(handler({})).toBe(false);
@@ -92,6 +101,9 @@ describe('window IPC handlers', () => {
     }, (expanded: boolean) => {
       mockSetFloatingInfoWindowExpanded(expanded);
       return expanded;
+    }, (mode) => {
+      mockSetFloatingInfoWindowMode(mode);
+      return mode === 'detail';
     }, (requestId: number, decision: 'proceed' | 'cancel') => {
       mockResolveCloseRequest(requestId, decision);
       return decision === 'proceed';
@@ -105,6 +117,7 @@ describe('window IPC handlers', () => {
     const resolveCloseRequest = getHandleListener(AsyncChannels.WINDOW_RESOLVE_CLOSE_REQUEST);
     const setFloatingInfoVisibility = getHandleListener(AsyncChannels.WINDOW_SET_FLOATING_INFO_VISIBILITY);
     const setFloatingInfoExpanded = getHandleListener(AsyncChannels.WINDOW_SET_FLOATING_INFO_EXPANDED);
+    const setFloatingInfoMode = getHandleListener(AsyncChannels.WINDOW_SET_FLOATING_INFO_MODE);
 
     expect(minimize({})).toBe(true);
     minimized = true;
@@ -116,6 +129,7 @@ describe('window IPC handlers', () => {
     expect(resolveCloseRequest({}, 4, 'proceed')).toBe(true);
     await expect(setFloatingInfoVisibility({}, true)).resolves.toBe(true);
     await expect(setFloatingInfoExpanded({}, true)).resolves.toBe(true);
+    await expect(setFloatingInfoMode({}, 'detail')).resolves.toBe(true);
 
     expect(win.minimize).toHaveBeenCalledTimes(1);
     expect(win.maximize).toHaveBeenCalledTimes(1);
@@ -128,13 +142,21 @@ describe('window IPC handlers', () => {
     expect(mockResolveCloseRequest).toHaveBeenCalledWith(4, 'proceed');
     expect(mockSetFloatingInfoWindowVisible).toHaveBeenCalledWith(true);
     expect(mockSetFloatingInfoWindowExpanded).toHaveBeenCalledWith(true);
+    expect(mockSetFloatingInfoWindowMode).toHaveBeenCalledWith('detail');
   });
 
   it('validates floating info expanded state input', async () => {
-    registerWindowHandlers(() => null, undefined, undefined, mockResolveCloseRequest);
+    registerWindowHandlers(() => null, undefined, undefined, undefined, mockResolveCloseRequest);
     const setFloatingInfoExpanded = getHandleListener(AsyncChannels.WINDOW_SET_FLOATING_INFO_EXPANDED);
 
     await expect(setFloatingInfoExpanded({}, 'yes')).rejects.toThrow('Expected floating info expanded state to be boolean');
+  });
+
+  it('validates floating info mode input', async () => {
+    registerWindowHandlers(() => null, undefined, undefined, undefined, mockResolveCloseRequest);
+    const setFloatingInfoMode = getHandleListener(AsyncChannels.WINDOW_SET_FLOATING_INFO_MODE);
+
+    await expect(setFloatingInfoMode({}, 'fullscreen')).rejects.toThrow('Expected floating info mode to be "collapsed", "expanded", or "detail"');
   });
 
   it('emits focus, maximize, and full-screen stream events separately', () => {

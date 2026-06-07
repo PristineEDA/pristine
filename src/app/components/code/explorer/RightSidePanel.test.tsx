@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   CodeViewerLayoutProvider,
   WORKBENCH_CODE_VIEWER_LAYOUT_MODE_CONFIG_KEY,
@@ -44,6 +44,94 @@ function renderRightSidePanelInLayout(layoutMode: CodeViewerLayoutMode) {
 }
 
 describe('RightSidePanel', () => {
+  beforeEach(() => {
+    vi.mocked(window.electronAPI!.lsp.outline).mockResolvedValue({
+      uri: 'file:///C:/workspace/Pristine/rtl/core/alu.sv',
+      filePath: 'rtl/core/alu.sv',
+      version: 1,
+      generation: 2,
+      partial: false,
+      truncated: false,
+      roots: [{
+        id: 'outline:0',
+        parentId: null,
+        name: 'alu',
+        kind: 'module',
+        symbolKind: 2,
+        range: {
+          start: { line: 7, character: 0 },
+          end: { line: 45, character: 9 },
+        },
+        selectionRange: {
+          start: { line: 7, character: 7 },
+          end: { line: 7, character: 10 },
+        },
+        depth: 0,
+        children: [{
+          id: 'outline:0.0',
+          parentId: 'outline:0',
+          name: 'clk_i',
+          kind: 'port',
+          detail: 'input logic',
+          declaration: 'input logic clk_i',
+          type: 'logic',
+          direction: 'input',
+          symbolKind: 13,
+          range: {
+            start: { line: 10, character: 2 },
+            end: { line: 10, character: 19 },
+          },
+          selectionRange: {
+            start: { line: 10, character: 14 },
+            end: { line: 10, character: 19 },
+          },
+          depth: 1,
+          children: [],
+        }, {
+          id: 'outline:0.1',
+          parentId: 'outline:0',
+          name: 'Width',
+          kind: 'parameter',
+          detail: 'int = 8',
+          declaration: 'parameter int Width = 8',
+          type: 'int',
+          value: '8',
+          symbolKind: 13,
+          range: {
+            start: { line: 12, character: 2 },
+            end: { line: 12, character: 25 },
+          },
+          selectionRange: {
+            start: { line: 12, character: 16 },
+            end: { line: 12, character: 21 },
+          },
+          depth: 1,
+          children: [],
+        }, {
+          id: 'outline:0.2',
+          parentId: 'outline:0',
+          name: 'u_adder',
+          kind: 'instance',
+          detail: 'adder',
+          moduleName: 'adder',
+          symbolKind: 9,
+          range: {
+            start: { line: 41, character: 2 },
+            end: { line: 45, character: 5 },
+          },
+          selectionRange: {
+            start: { line: 41, character: 2 },
+            end: { line: 41, character: 9 },
+          },
+          depth: 1,
+          children: [],
+        }],
+      }],
+      items: [],
+      messages: [],
+    });
+  });
+
   it('shows an assistant skeleton while the AI panel chunk is still loading', () => {
     render(
       <RightSidePanel currentOutlineId="rtl/core/alu.v" onFileOpen={vi.fn()} onLineJump={vi.fn()} />,
@@ -244,18 +332,43 @@ describe('RightSidePanel', () => {
     expect(onLineJump).toHaveBeenCalledWith(40);
   }, PANEL_TEST_TIMEOUT_MS);
 
-  it('renders the current file outline and jumps to the selected symbol line', async () => {
+  it('renders the current file outline from pristine-engine and jumps to selected symbols', async () => {
     const user = userEvent.setup();
     const onLineJump = vi.fn();
 
     render(
-      <RightSidePanel currentOutlineId="rtl/core/alu.v" onFileOpen={vi.fn()} onLineJump={onLineJump} />,
+      <RightSidePanel currentOutlineId="rtl/core/alu.sv" onFileOpen={vi.fn()} onLineJump={onLineJump} />,
     );
 
     await clickButton(user, /outline/i);
-    expect(await screen.findByText(/OUTLINE - alu\.v/i, undefined, { timeout: PANEL_ITEM_TIMEOUT_MS })).toBeInTheDocument();
+    expect(await screen.findByTestId('outline-tree', undefined, { timeout: PANEL_ITEM_TIMEOUT_MS })).toBeInTheDocument();
+    expect(window.electronAPI!.lsp.outline).toHaveBeenCalledWith('rtl/core/alu.sv', {
+      maxDepth: 8,
+      limit: 2000,
+      includeChildren: true,
+      includeFlat: true,
+    });
+    expect(screen.getByTestId('outline-node-label-module-alu')).toBeInTheDocument();
+    expect(screen.getByTestId('outline-kind-group-label-port')).toHaveTextContent('Port');
+    expect(screen.getByTestId('outline-kind-group-count-port')).toHaveTextContent('(1)');
+    expect(screen.getByTestId('outline-kind-group-label-parameter')).toHaveTextContent('Parameter');
+    expect(screen.getByTestId('outline-kind-group-label-instance')).toHaveTextContent('Instance');
+    expect(screen.getByTestId('outline-node-label-port-clk_i')).toBeInTheDocument();
+    expect(screen.getByTestId('outline-node-detail-port-clk_i')).toHaveTextContent('input logic');
+    expect(screen.getByTestId('outline-node-label-parameter-Width')).toBeInTheDocument();
+    expect(screen.getByTestId('outline-node-detail-parameter-Width')).toHaveTextContent('int = 8');
+    expect(screen.getByTestId('outline-node-label-instance-u_adder')).toBeInTheDocument();
+    expect(screen.getByTestId('outline-node-detail-instance-u_adder')).toHaveTextContent('adder');
 
-    await user.click(await screen.findByText('always @(*) [ALU logic]', undefined, { timeout: PANEL_ITEM_TIMEOUT_MS }));
+    await user.hover(screen.getByTestId('outline-node-label-port-clk_i'));
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('input logic');
+
+    await user.click(screen.getByTestId('outline-kind-group-port'));
+    expect(screen.queryByTestId('outline-node-label-port-clk_i')).not.toBeInTheDocument();
+    await user.click(screen.getByTestId('outline-kind-group-port'));
+    expect(screen.getByTestId('outline-node-label-port-clk_i')).toBeInTheDocument();
+
+    await user.click(screen.getByTestId('outline-node-label-instance-u_adder'));
 
     expect(onLineJump).toHaveBeenCalledWith(42);
   }, PANEL_TEST_TIMEOUT_MS);

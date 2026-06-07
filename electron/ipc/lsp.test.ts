@@ -4,6 +4,29 @@ const mockHandle = vi.fn();
 const mockExistsSync = vi.fn((_filePath?: string) => true);
 const mockSpawn = vi.fn();
 const mockCreateMessageConnection = vi.fn();
+const mockCloseAllWaveformPipeSessions = vi.fn<(...args: unknown[]) => Promise<void>>(async () => undefined);
+const mockCloseWaveformPipeSession = vi.fn<(...args: unknown[]) => Promise<void>>(async () => undefined);
+const mockNormalizeWaveformOpenSessionMetadata = vi.fn<(...args: unknown[]) => unknown>((value: unknown) => value);
+const mockOpenWaveformPipeSession = vi.fn<(...args: unknown[]) => Promise<unknown>>(async () => ({
+  cursorTime: 0,
+  duration: 200,
+  groups: [{ id: 'tb', label: 'tb' }],
+  id: '1',
+  messages: [],
+  sessionId: '1',
+  signals: [{
+    color: '#12abef',
+    groupId: 'tb',
+    id: 'tb-count',
+    kind: 'bus',
+    name: 'count',
+    path: 'tb.count',
+    width: 16,
+  }],
+  timescaleUnit: 'ns',
+  title: 'counter_tb',
+}));
+const mockRequestWaveformPipeFrame = vi.fn<(...args: unknown[]) => Promise<ArrayBuffer>>(async () => new ArrayBuffer(8));
 
 vi.mock('electron', () => ({
   ipcMain: {
@@ -35,6 +58,14 @@ vi.mock('vscode-jsonrpc/node.js', () => ({
   StreamMessageWriter: class {
     constructor(_stream: unknown) {}
   },
+}));
+
+vi.mock('./waveformPipeClient.js', () => ({
+  closeAllWaveformPipeSessions: (...args: unknown[]) => mockCloseAllWaveformPipeSessions.apply(null, args),
+  closeWaveformPipeSession: (...args: unknown[]) => mockCloseWaveformPipeSession.apply(null, args),
+  normalizeWaveformOpenSessionMetadata: (...args: unknown[]) => mockNormalizeWaveformOpenSessionMetadata.apply(null, args),
+  openWaveformPipeSession: (...args: unknown[]) => mockOpenWaveformPipeSession.apply(null, args),
+  requestWaveformPipeFrame: (...args: unknown[]) => mockRequestWaveformPipeFrame.apply(null, args),
 }));
 
 import { disposeLspSession, registerLspHandlers, setLspProjectRoot } from './lsp.js';
@@ -105,6 +136,131 @@ function createFakeConnection(): FakeConnection {
             end: { line: 8, character: 12 },
           },
         }];
+      }
+
+      if (method === 'textDocument/typeDefinition') {
+        return [{
+          uri: 'file:///C:/workspace/Pristine/rtl/core/types.sv',
+          range: {
+            start: { line: 2, character: 4 },
+            end: { line: 2, character: 11 },
+          },
+        }];
+      }
+
+      if (method === 'completionItem/resolve') {
+        return {
+          label: 'data_ready',
+          kind: 6,
+          detail: 'logic resolved',
+          documentation: { kind: 'markdown', value: 'Resolved docs' },
+        };
+      }
+
+      if (method === 'textDocument/documentSymbol') {
+        return [{
+          name: 'cpu_top',
+          kind: 2,
+          range: {
+            start: { line: 0, character: 0 },
+            end: { line: 4, character: 9 },
+          },
+          selectionRange: {
+            start: { line: 0, character: 7 },
+            end: { line: 0, character: 14 },
+          },
+        }];
+      }
+
+      if (method === 'textDocument/semanticTokens/full') {
+        return { data: [0, 7, 7, 1, 0] };
+      }
+
+      if (method === 'textDocument/signatureHelp') {
+        return {
+          signatures: [{ label: 'child(input logic clk)', parameters: [{ label: 'clk' }] }],
+          activeSignature: 0,
+          activeParameter: 0,
+        };
+      }
+
+      if (method === 'textDocument/rename') {
+        return {
+          changes: {
+            'file:///C:/workspace/Pristine/rtl/core/cpu_top.sv': [{
+              range: {
+                start: { line: 1, character: 2 },
+                end: { line: 1, character: 7 },
+              },
+              newText: 'valid',
+            }],
+          },
+        };
+      }
+
+      if (method === 'systemverilog/outline') {
+        return {
+          uri: 'file:///C:/workspace/Pristine/rtl/core/cpu_top.sv',
+          version: 3,
+          generation: 7,
+          partial: false,
+          truncated: false,
+          roots: [{
+            id: 'outline:0',
+            parentId: null,
+            name: 'cpu_top',
+            kind: 'module',
+            symbolKind: 2,
+            range: {
+              start: { line: 0, character: 0 },
+              end: { line: 6, character: 9 },
+            },
+            selectionRange: {
+              start: { line: 0, character: 7 },
+              end: { line: 0, character: 14 },
+            },
+            depth: 0,
+            children: [{
+              id: 'outline:0.0',
+              parentId: 'outline:0',
+              name: 'ready',
+              kind: 'port',
+              detail: 'input logic',
+              declaration: 'input logic ready',
+              type: 'logic',
+              direction: 'input',
+              value: '1',
+              moduleName: 'cpu_top',
+              symbolKind: 13,
+              range: {
+                start: { line: 2, character: 2 },
+                end: { line: 2, character: 13 },
+              },
+              selectionRange: {
+                start: { line: 2, character: 8 },
+                end: { line: 2, character: 13 },
+              },
+              depth: 1,
+            }],
+          }],
+          items: [{
+            id: 'outline:0',
+            parentId: null,
+            name: 'cpu_top',
+            kind: 'module',
+            symbolKind: 2,
+            range: {
+              start: { line: 0, character: 0 },
+              end: { line: 6, character: 9 },
+            },
+            selectionRange: {
+              start: { line: 0, character: 7 },
+              end: { line: 0, character: 14 },
+            },
+            depth: 0,
+          }],
+          messages: ['ok'],
+        };
       }
 
       if (method === 'systemverilog/moduleHierarchy') {
@@ -195,6 +351,25 @@ function createFakeConnection(): FakeConnection {
           }],
           messages: ['ok'],
         };
+      }
+
+      if (method === 'systemverilog/waveform/open') {
+        return {
+          duration: 200,
+          endpoint: {
+            kind: 'namedPipe',
+            path: '\\\\.\\pipe\\pristine-engine-waveform-test',
+          },
+          protocol: 'pristine-waveform-columnar-v1',
+          sessionId: '1',
+          signalCount: 1,
+          timescaleUnit: 'ns',
+          title: 'counter_tb',
+        };
+      }
+
+      if (method === 'systemverilog/waveform/close') {
+        return { closed: true };
       }
 
       return null;
@@ -330,6 +505,22 @@ describe('LSP IPC handlers', () => {
     ]));
   });
 
+  it('prewarms the LSP session without opening a document', async () => {
+    const ensureHandler = getHandler('async:lsp:ensure-initialized');
+
+    await ensureHandler({});
+
+    expect(mockSpawn).toHaveBeenCalledTimes(1);
+    expect(fakeConnection.sendRequest).toHaveBeenCalledWith('initialize', expect.any(Object));
+    expect(fakeConnection.sendNotification).toHaveBeenCalledWith('initialized', {});
+    expect(fakeConnection.sendNotification).not.toHaveBeenCalledWith('textDocument/didOpen', expect.anything());
+    expect(send).toHaveBeenCalledWith('stream:lsp:debug', expect.objectContaining({
+      direction: 'session',
+      kind: 'lifecycle',
+      status: 'ready',
+    }));
+  });
+
   it('forwards diagnostics and normalizes definition results to workspace-relative paths', async () => {
     const openHandler = getHandler('async:lsp:open-document');
     const definitionHandler = getHandler('async:lsp:definition');
@@ -432,6 +623,130 @@ describe('LSP IPC handlers', () => {
     }));
   });
 
+  it('uses a 30 second timeout for hierarchy requests', async () => {
+    const hierarchyHandler = getHandler('async:lsp:module-hierarchy');
+
+    fakeConnection.sendRequest.mockImplementation((method: string) => {
+      if (method === 'initialize') {
+        return Promise.resolve({});
+      }
+      if (method === 'systemverilog/moduleHierarchy') {
+        return new Promise(() => undefined);
+      }
+
+      return Promise.resolve(null);
+    });
+
+    vi.useFakeTimers();
+    const hierarchy = hierarchyHandler({}, { maxDepth: 8 });
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(19_999);
+    await Promise.resolve();
+
+    let settled = false;
+    void hierarchy.then(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(1);
+
+    await expect(hierarchy).resolves.toEqual({
+      roots: [],
+      messages: [expect.stringContaining('timed out after 30000ms')],
+    });
+  });
+
+  it('uses a 30 second timeout for outline requests', async () => {
+    const outlineHandler = getHandler('async:lsp:outline');
+
+    fakeConnection.sendRequest.mockImplementation((method: string) => {
+      if (method === 'initialize') {
+        return Promise.resolve({});
+      }
+      if (method === 'systemverilog/outline') {
+        return new Promise(() => undefined);
+      }
+
+      return Promise.resolve(null);
+    });
+
+    vi.useFakeTimers();
+    const outline = outlineHandler({}, 'rtl/core/cpu_top.sv');
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(19_999);
+    await Promise.resolve();
+
+    let settled = false;
+    void outline.then(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(1);
+
+    await expect(outline).resolves.toEqual(expect.objectContaining({
+      uri: 'file:///C:/workspace/Pristine/rtl/core/cpu_top.sv',
+      filePath: 'rtl/core/cpu_top.sv',
+      roots: [],
+      items: [],
+      messages: [expect.stringContaining('timed out after 30000ms')],
+    }));
+  });
+
+  it('forwards and normalizes additional Monaco LSP capability requests', async () => {
+    const resolveHandler = getHandler('async:lsp:completion-resolve');
+    const typeDefinitionHandler = getHandler('async:lsp:type-definition');
+    const documentSymbolsHandler = getHandler('async:lsp:document-symbols');
+    const semanticTokensHandler = getHandler('async:lsp:semantic-tokens-full');
+    const signatureHelpHandler = getHandler('async:lsp:signature-help');
+    const renameHandler = getHandler('async:lsp:rename');
+
+    await expect(resolveHandler({}, { label: 'data_ready', data: { source: 'semanticEngine' } })).resolves.toEqual(
+      expect.objectContaining({
+        label: 'data_ready',
+        detail: 'logic resolved',
+        documentation: { kind: 'markdown', value: 'Resolved docs' },
+      }),
+    );
+    await expect(typeDefinitionHandler({}, 'rtl/core/cpu_top.sv', 2, 4)).resolves.toEqual([{
+      filePath: 'rtl/core/types.sv',
+      range: {
+        start: { line: 2, character: 4 },
+        end: { line: 2, character: 11 },
+      },
+    }]);
+    await expect(documentSymbolsHandler({}, 'rtl/core/cpu_top.sv')).resolves.toEqual([
+      expect.objectContaining({
+        name: 'cpu_top',
+        kind: 2,
+      }),
+    ]);
+    await expect(semanticTokensHandler({}, 'rtl/core/cpu_top.sv')).resolves.toEqual({ data: [0, 7, 7, 1, 0] });
+    await expect(signatureHelpHandler({}, 'rtl/core/cpu_top.sv', 3, 17, '(', 2, false)).resolves.toEqual({
+      signatures: [{ label: 'child(input logic clk)', documentation: undefined, parameters: [{ label: 'clk', documentation: undefined }] }],
+      activeSignature: 0,
+      activeParameter: 0,
+    });
+    await expect(renameHandler({}, 'rtl/core/cpu_top.sv', 1, 2, 'valid')).resolves.toEqual({
+      changes: {
+        'rtl/core/cpu_top.sv': [{
+          range: {
+            start: { line: 1, character: 2 },
+            end: { line: 1, character: 7 },
+          },
+          newText: 'valid',
+        }],
+      },
+    });
+  });
+
   it('emits stderr output as debug events', async () => {
     const openHandler = getHandler('async:lsp:open-document');
 
@@ -444,6 +759,90 @@ describe('LSP IPC handlers', () => {
       direction: 'server->client',
       kind: 'stderr',
       text: 'server warning',
+    }));
+  });
+
+  it('forwards and normalizes SystemVerilog outline results', async () => {
+    const outlineHandler = getHandler('async:lsp:outline');
+
+    const outline = await outlineHandler({}, 'rtl/core/cpu_top.sv');
+
+    expect(fakeConnection.sendRequest).toHaveBeenCalledWith('systemverilog/outline', {
+      textDocument: { uri: 'file:///C:/workspace/Pristine/rtl/core/cpu_top.sv' },
+      maxDepth: 8,
+      limit: 2000,
+      includeChildren: true,
+      includeFlat: true,
+    });
+    expect(outline).toEqual({
+      uri: 'file:///C:/workspace/Pristine/rtl/core/cpu_top.sv',
+      filePath: 'rtl/core/cpu_top.sv',
+      version: 3,
+      generation: 7,
+      partial: false,
+      truncated: false,
+      roots: [{
+        id: 'outline:0',
+        parentId: null,
+        name: 'cpu_top',
+        kind: 'module',
+        symbolKind: 2,
+        range: {
+          start: { line: 0, character: 0 },
+          end: { line: 6, character: 9 },
+        },
+        selectionRange: {
+          start: { line: 0, character: 7 },
+          end: { line: 0, character: 14 },
+        },
+        depth: 0,
+        children: [{
+          id: 'outline:0.0',
+          parentId: 'outline:0',
+          name: 'ready',
+          kind: 'port',
+          detail: 'input logic',
+          declaration: 'input logic ready',
+          type: 'logic',
+          direction: 'input',
+          value: '1',
+          moduleName: 'cpu_top',
+          symbolKind: 13,
+          range: {
+            start: { line: 2, character: 2 },
+            end: { line: 2, character: 13 },
+          },
+          selectionRange: {
+            start: { line: 2, character: 8 },
+            end: { line: 2, character: 13 },
+          },
+          depth: 1,
+          children: [],
+        }],
+      }],
+      items: [{
+        id: 'outline:0',
+        parentId: null,
+        name: 'cpu_top',
+        kind: 'module',
+        symbolKind: 2,
+        range: {
+          start: { line: 0, character: 0 },
+          end: { line: 6, character: 9 },
+        },
+        selectionRange: {
+          start: { line: 0, character: 7 },
+          end: { line: 0, character: 14 },
+        },
+        depth: 0,
+        children: [],
+      }],
+      messages: ['ok'],
+    });
+    expect(send).toHaveBeenCalledWith('stream:lsp:debug', expect.objectContaining({
+      direction: 'client->server',
+      kind: 'request',
+      method: 'systemverilog/outline',
     }));
   });
 
@@ -589,5 +988,62 @@ describe('LSP IPC handlers', () => {
       kind: 'request',
       method: 'systemverilog/schematic',
     }));
+  });
+
+  it('opens waveform sessions through LSP control plane and pipe catalog metadata', async () => {
+    const openHandler = getHandler('async:lsp:waveform-open');
+
+    const result = await openHandler({});
+
+    expect(fakeConnection.sendRequest).toHaveBeenCalledWith('systemverilog/waveform/open', { source: 'mock' });
+    expect(fakeConnection.sendRequest).not.toHaveBeenCalledWith('systemverilog/waveformOpen', expect.anything());
+    expect(mockNormalizeWaveformOpenSessionMetadata).toHaveBeenCalledWith(expect.objectContaining({
+      endpoint: {
+        kind: 'namedPipe',
+        path: '\\\\.\\pipe\\pristine-engine-waveform-test',
+      },
+      protocol: 'pristine-waveform-columnar-v1',
+      sessionId: '1',
+    }));
+    expect(mockOpenWaveformPipeSession).toHaveBeenCalledWith(expect.objectContaining({
+      protocol: 'pristine-waveform-columnar-v1',
+      sessionId: '1',
+    }));
+    expect(result).toEqual(expect.objectContaining({
+      sessionId: '1',
+      title: 'counter_tb',
+    }));
+  });
+
+  it('requests waveform frames from the pipe data plane instead of LSP', async () => {
+    const frameHandler = getHandler('async:lsp:waveform-frame');
+    const frameOptions = {
+      endTime: 100,
+      headerHeight: 22,
+      height: 320,
+      laneHeight: 30,
+      maxSegments: 512,
+      sessionId: '1',
+      signalIds: ['tb-count'],
+      startTime: 0,
+      width: 640,
+    };
+
+    const frame = await frameHandler({}, frameOptions);
+
+    expect(frame).toBeInstanceOf(ArrayBuffer);
+    expect(mockRequestWaveformPipeFrame).toHaveBeenCalledWith(frameOptions);
+    expect(fakeConnection.sendRequest).not.toHaveBeenCalledWith('systemverilog/waveformFrame', expect.anything());
+  });
+
+  it('closes waveform pipe sessions before LSP control-plane close', async () => {
+    const closeHandler = getHandler('async:lsp:waveform-close');
+
+    const result = await closeHandler({}, '1');
+
+    expect(result).toBe(true);
+    expect(mockCloseWaveformPipeSession).toHaveBeenCalledWith('1');
+    expect(fakeConnection.sendRequest).toHaveBeenCalledWith('systemverilog/waveform/close', { sessionId: '1' });
+    expect(fakeConnection.sendRequest).not.toHaveBeenCalledWith('systemverilog/waveformClose', expect.anything());
   });
 });

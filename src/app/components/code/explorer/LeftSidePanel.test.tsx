@@ -39,7 +39,6 @@ function renderLeftSidePanel(
     onLineJump: vi.fn(),
     onPasteWorkspaceEntry: vi.fn().mockResolvedValue(null),
     onRenameWorkspaceEntry: vi.fn().mockResolvedValue(undefined),
-    currentOutlineId: 'cpu_top',
     workspaceClipboard: null,
     ...props,
   };
@@ -113,7 +112,7 @@ describe('LeftSidePanel', () => {
     });
   });
 
-  it('renders only explorer and outline tabs', async () => {
+  it('renders explorer and source control tabs', async () => {
     renderLeftSidePanel({}, { layoutMode: 'compact' });
 
     const header = screen.getByTestId('left-panel-header');
@@ -124,9 +123,9 @@ describe('LeftSidePanel', () => {
     expect(header).not.toHaveClass('border-ide-border');
     expect(header).not.toHaveClass('border-b');
     expect(screen.getByRole('radio', { name: 'Explorer' })).toBeInTheDocument();
-    expect(screen.getByRole('radio', { name: 'Outline' })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'Source Control' })).toBeInTheDocument();
     expectCompactTabButton('left-panel-tab-explorer');
-    expectCompactTabButton('left-panel-tab-outline');
+    expectCompactTabButton('left-panel-tab-git');
     expect(screen.getByTestId('left-panel-split-toggle')).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getByTestId('left-panel-split-toggle')).toHaveClass('size-6', 'text-ide-text-muted');
     expect(screen.getByTestId('left-panel-split-toggle').parentElement).toHaveClass('ml-auto');
@@ -134,7 +133,7 @@ describe('LeftSidePanel', () => {
     expect(screen.getByTestId('left-panel-explorer-content')).toHaveClass('min-h-0', 'flex-1', 'overflow-hidden');
     expect(screen.queryByTestId('left-panel-secondary-panel')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Explorer' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Outline' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Source Control' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /problems/i })).not.toBeInTheDocument();
     expect(await screen.findByTestId('file-tree-node-rtl')).toBeInTheDocument();
     expect(header).not.toHaveTextContent('retroSoC');
@@ -152,7 +151,16 @@ describe('LeftSidePanel', () => {
     expect(header).not.toHaveClass('border-ide-border');
     expect(header).not.toHaveClass('border-b');
     expectCompactTabButton('left-panel-tab-explorer');
-    expectCompactTabButton('left-panel-tab-outline');
+    expectCompactTabButton('left-panel-tab-git');
+  });
+
+  it('shows the source control placeholder from the left panel git tab', async () => {
+    renderLeftSidePanel({}, { layoutMode: 'compact' });
+
+    await testUser.click(screen.getByRole('radio', { name: 'Source Control' }));
+
+    expect(screen.getByTestId('left-panel-git-placeholder')).toHaveTextContent('No source control changes');
+    expect(screen.queryByTestId('left-panel-explorer-content')).not.toBeInTheDocument();
   });
 
   it('defaults the lower stacked panel hidden and toggles two independent panel frames', async () => {
@@ -299,7 +307,6 @@ describe('LeftSidePanel', () => {
   it('keeps a clicked explorer folder highlighted after the pointer leaves the tree', async () => {
     renderLeftSidePanel({
       activeFileId: 'rtl/peripherals/uart_rx.v',
-      currentOutlineId: 'cpu_top',
     });
 
     const folderNode = await screen.findByTestId('file-tree-node-rtl');
@@ -317,7 +324,6 @@ describe('LeftSidePanel', () => {
   it('moves the persistent highlight from folders to files so only one explorer row stays highlighted', async () => {
     renderLeftSidePanel({
       activeFileId: 'rtl/peripherals/uart_rx.v',
-      currentOutlineId: 'uart_rx',
     });
 
     await expandDefaultTree();
@@ -338,7 +344,6 @@ describe('LeftSidePanel', () => {
   it('clears the selected folder highlight when another entry activates a file', async () => {
     const { rerender } = renderLeftSidePanel({
       activeFileId: 'rtl/peripherals/uart_rx.v',
-      currentOutlineId: 'uart_rx',
     });
 
     await expandDefaultTree();
@@ -360,7 +365,6 @@ describe('LeftSidePanel', () => {
         onLineJump={vi.fn()}
         onPasteWorkspaceEntry={vi.fn().mockResolvedValue(null)}
         onRenameWorkspaceEntry={vi.fn().mockResolvedValue(undefined)}
-        currentOutlineId="cpu_top"
         workspaceClipboard={null}
       />,
     );
@@ -386,7 +390,6 @@ describe('LeftSidePanel', () => {
     const onRenameWorkspaceEntry = vi.fn().mockResolvedValue(undefined);
     const { container } = renderLeftSidePanel({
       activeFileId: 'rtl/peripherals/uart_rx.v',
-      currentOutlineId: 'uart_rx',
       onRenameWorkspaceEntry,
     });
 
@@ -414,7 +417,6 @@ describe('LeftSidePanel', () => {
   it('keeps the current explorer tree rendered during a refresh token bump so the scroll container state can persist', async () => {
     const { container, props, rerender } = renderLeftSidePanel({
       activeFileId: 'rtl/peripherals/uart_rx.v',
-      currentOutlineId: 'uart_rx',
       refreshToken: 0,
     });
 
@@ -445,7 +447,6 @@ describe('LeftSidePanel', () => {
     const revealRequest = { path: 'rtl/peripherals/uart_rx.v', token: 7 };
     const { props, rerender } = renderLeftSidePanel({
       activeFileId: 'rtl/peripherals/uart_rx.v',
-      currentOutlineId: 'uart_rx',
       refreshToken: 0,
       revealRequest,
     });
@@ -496,7 +497,6 @@ describe('LeftSidePanel', () => {
 
     const { container, props, rerender } = renderLeftSidePanel({
       activeFileId: 'rtl/peripherals/uart_rx.v',
-      currentOutlineId: 'uart_rx',
       refreshToken: 0,
       onRenameWorkspaceEntry,
     });
@@ -568,7 +568,6 @@ describe('LeftSidePanel', () => {
   it('starts inline rename when F2 is pressed on document after selecting a file in the tree', async () => {
     renderLeftSidePanel({
       activeFileId: 'rtl/peripherals/uart_rx.v',
-      currentOutlineId: 'uart_rx',
     });
 
     await selectDefaultFile();
@@ -582,7 +581,6 @@ describe('LeftSidePanel', () => {
     const onRenameWorkspaceEntry = vi.fn().mockResolvedValue(undefined);
     const { container } = renderLeftSidePanel({
       activeFileId: 'rtl/peripherals/uart_rx.v',
-      currentOutlineId: 'uart_rx',
       onRenameWorkspaceEntry,
     });
 
@@ -609,7 +607,6 @@ describe('LeftSidePanel', () => {
     const onRenameWorkspaceEntry = vi.fn().mockResolvedValue(undefined);
     const { container, props, rerender } = renderLeftSidePanel({
       activeFileId: 'cpu_top',
-      currentOutlineId: 'cpu_top',
       onRenameWorkspaceEntry,
     });
 
@@ -625,7 +622,6 @@ describe('LeftSidePanel', () => {
       <LeftSidePanel
         {...props}
         activeFileId="rtl/peripherals/uart_rx.v"
-        currentOutlineId="uart_rx"
         onRenameWorkspaceEntry={onRenameWorkspaceEntry}
       />,
     );
@@ -673,7 +669,6 @@ describe('LeftSidePanel', () => {
 
     renderLeftSidePanel({
       activeFileId: 'rtl/peripherals/uart_rx.v',
-      currentOutlineId: 'uart_rx',
       onDeleteWorkspaceEntry,
     });
 
@@ -691,7 +686,6 @@ describe('LeftSidePanel', () => {
 
     renderLeftSidePanel({
       activeFileId: 'rtl/peripherals/uart_rx.v',
-      currentOutlineId: 'uart_rx',
       onCopyWorkspaceEntry,
     });
 
@@ -707,7 +701,6 @@ describe('LeftSidePanel', () => {
   it('opens the selected explorer context menu when Shift+F10 is pressed on the tree', async () => {
     const { container } = renderLeftSidePanel({
       activeFileId: 'rtl/peripherals/uart_rx.v',
-      currentOutlineId: 'uart_rx',
     });
 
     await selectDefaultFile();
@@ -722,7 +715,6 @@ describe('LeftSidePanel', () => {
     const onDeleteWorkspaceEntry = vi.fn().mockResolvedValue(false);
     const { container } = renderLeftSidePanel({
       activeFileId: 'rtl/peripherals/uart_rx.v',
-      currentOutlineId: 'uart_rx',
       onDeleteWorkspaceEntry,
     });
 
@@ -740,7 +732,6 @@ describe('LeftSidePanel', () => {
     const onCutWorkspaceEntry = vi.fn().mockResolvedValue(true);
     const { container } = renderLeftSidePanel({
       activeFileId: 'rtl/peripherals/uart_rx.v',
-      currentOutlineId: 'uart_rx',
       onCutWorkspaceEntry,
     });
 
@@ -781,7 +772,6 @@ describe('LeftSidePanel', () => {
 
     renderLeftSidePanel({
       activeFileId: 'rtl/peripherals/uart_rx.v',
-      currentOutlineId: 'uart_rx',
       onPasteWorkspaceEntry,
       workspaceClipboard: {
         sourcePath: 'rtl/peripherals/uart_rx.v',
@@ -812,7 +802,6 @@ describe('LeftSidePanel', () => {
 
     renderLeftSidePanel({
       activeFileId: 'rtl/peripherals/uart_rx.v',
-      currentOutlineId: 'uart_rx',
       onClearWorkspaceClipboard,
       workspaceClipboard: {
         sourcePath: 'rtl/peripherals/uart_rx.v',
@@ -833,7 +822,6 @@ describe('LeftSidePanel', () => {
 
     renderLeftSidePanel({
       activeFileId: 'rtl/peripherals/uart_rx.v',
-      currentOutlineId: 'uart_rx',
       onDeleteWorkspaceEntry,
     });
 
@@ -863,7 +851,6 @@ describe('LeftSidePanel', () => {
 
     renderLeftSidePanel({
       activeFileId: 'rtl/peripherals/uart_rx.v',
-      currentOutlineId: 'uart_rx',
       onDeleteWorkspaceEntry,
     });
 
@@ -881,7 +868,6 @@ describe('LeftSidePanel', () => {
 
     renderLeftSidePanel({
       activeFileId: 'rtl/peripherals/uart_rx.v',
-      currentOutlineId: 'uart_rx',
       onDeleteWorkspaceEntry,
     });
 
@@ -901,7 +887,6 @@ describe('LeftSidePanel', () => {
 
     renderLeftSidePanel({
       activeFileId: 'rtl/peripherals/uart_rx.v',
-      currentOutlineId: 'uart_rx',
       onDeleteWorkspaceEntry,
     });
 
@@ -925,7 +910,6 @@ describe('LeftSidePanel', () => {
 
     renderLeftSidePanel({
       activeFileId: 'rtl/peripherals/uart_rx.v',
-      currentOutlineId: 'uart_rx',
       onCopyWorkspaceEntry,
     });
 
@@ -949,7 +933,6 @@ describe('LeftSidePanel', () => {
 
     renderLeftSidePanel({
       activeFileId: 'rtl/peripherals/uart_rx.v',
-      currentOutlineId: 'uart_rx',
       onDeleteWorkspaceEntry,
     });
 
@@ -987,7 +970,6 @@ describe('LeftSidePanel', () => {
 
     renderLeftSidePanel({
       activeFileId: 'rtl/peripherals/uart_rx.v',
-      currentOutlineId: 'uart_rx',
       onCreateWorkspaceFile,
     });
 
@@ -1009,7 +991,6 @@ describe('LeftSidePanel', () => {
 
     renderLeftSidePanel({
       activeFileId: 'rtl/peripherals/uart_rx.v',
-      currentOutlineId: 'uart_rx',
       onCreateWorkspaceFolder,
     });
 

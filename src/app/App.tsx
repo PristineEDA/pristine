@@ -418,7 +418,6 @@ function AppLayout() {
           onLineJump={jumpTo}
           onPasteWorkspaceEntry={handlePasteWorkspaceEntry}
           onRenameWorkspaceEntry={handleRenameWorkspaceEntry}
-          currentOutlineId={activeTabId}
           refreshToken={workspaceTreeRefreshToken}
           revealRequest={quickOpenState.revealRequest}
           workspaceClipboard={workspaceClipboard}

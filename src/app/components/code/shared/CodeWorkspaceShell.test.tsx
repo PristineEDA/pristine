@@ -18,6 +18,7 @@ const panelResizeCalls: Array<{ id?: string; size: number | `${number}%` }> = []
 const panelSnapHandlers = new Map<string, { onMinSnap?: () => void; onMaxSnap?: () => void }>();
 const panelImperativeHandles = new Map<string, { resize: (size: number | `${number}%`) => void }>();
 const mockedEnsureLspStreamSubscriptions = vi.fn();
+const mockedEnsureLspInitialized = vi.fn().mockResolvedValue(undefined);
 
 function latestPanelRecords(count: number) {
   return panelRecords.slice(-count);
@@ -124,11 +125,12 @@ vi.mock('../../ui/resizable', () => ({
 vi.mock('../../../lsp/systemVerilogLspBridge', () => ({
   systemVerilogLspBridge: {
     ensureStreamSubscriptions: () => mockedEnsureLspStreamSubscriptions(),
+    ensureInitialized: () => mockedEnsureLspInitialized(),
   },
 }));
 
 describe('CodeWorkspaceShell', () => {
-  it('installs LSP stream subscriptions before any editor pane is opened', () => {
+  it('installs LSP stream subscriptions and prewarms the engine before any editor pane is opened', () => {
     render(
       <CodeWorkspaceShell
         shellTestId="workspace-shell"
@@ -149,6 +151,10 @@ describe('CodeWorkspaceShell', () => {
     );
 
     expect(mockedEnsureLspStreamSubscriptions).toHaveBeenCalledTimes(1);
+    expect(mockedEnsureLspInitialized).toHaveBeenCalledTimes(1);
+    expect(mockedEnsureLspStreamSubscriptions.mock.invocationCallOrder[0]).toBeLessThan(
+      mockedEnsureLspInitialized.mock.invocationCallOrder[0] ?? Number.MAX_SAFE_INTEGER,
+    );
   });
 
   it('renders all visible regions with the percentage layout by default', () => {

@@ -1,19 +1,42 @@
 import type {
   LspCompletionResponse,
+  LspCompletionItem,
+  LspCallHierarchyIncomingCall,
+  LspCallHierarchyItem,
+  LspCallHierarchyOutgoingCall,
+  LspCodeAction,
   LspDebugEvent,
+  LspDiagnostic,
   LspDiagnosticsEvent,
+  LspDocumentHighlight,
+  LspDocumentLink,
+  LspDocumentSymbol,
+  LspFoldingRange,
   LspHover,
+  LspInlayHint,
   LspModuleHierarchy,
   LspModuleHierarchyOptions,
+  LspOutlineOptions,
+  LspOutlineResult,
+  LspPrepareRenameResult,
   LspSchematic,
   LspSchematicOptions,
+  LspWaveformFrameOptions,
+  LspWaveformOpenResult,
+  LspSelectionRange,
+  LspSemanticTokens,
+  LspSignatureHelp,
   LspStateEvent,
+  LspWorkspaceEdit,
+  LspWorkspaceSymbol,
+  LspRange,
   WorkspaceLocation,
 } from './systemverilog-lsp';
 import type { WorkspaceGitChangeEvent, WorkspaceGitFileDiffPayload, WorkspaceGitStatusPayload } from './workspace-git';
 import type { OpenThemeDialogResult, SaveDialogResult } from '../electron/ipc/dialog';
 import type { MenuCommandEvent } from '../src/app/menu/applicationMenu';
 import type { WindowCloseDecision, WindowCloseRequest } from '../src/app/window/windowClose';
+import type { FloatingInfoWindowMode } from '../src/app/window/floatingInfoWindow';
 import type { AuthView, DesktopAuthSession } from '../src/app/auth/types';
 import type { ElectronGpuDiagnostics } from './electron-gpu';
 
@@ -36,6 +59,7 @@ export interface ElectronAPI {
   resolveCloseRequest: (requestId: number, decision: WindowCloseDecision) => Promise<boolean>;
   setFloatingInfoWindowVisible: (visible: boolean) => Promise<boolean>;
   setFloatingInfoWindowExpanded: (expanded: boolean) => Promise<boolean>;
+  setFloatingInfoWindowMode: (mode: FloatingInfoWindowMode) => Promise<boolean>;
   isMaximized: () => boolean;
   isFullScreen: () => boolean;
   onMaximizedChange: (callback: (maximized: boolean) => void) => () => void;
@@ -112,6 +136,7 @@ export interface ElectronAPI {
   };
 
   lsp: {
+    ensureInitialized: () => Promise<void>;
     openDocument: (filePath: string, languageId: string, text: string) => Promise<void>;
     changeDocument: (filePath: string, text: string) => Promise<void>;
     closeDocument: (filePath: string) => Promise<void>;
@@ -122,16 +147,45 @@ export interface ElectronAPI {
       triggerCharacter?: string,
       triggerKind?: number,
     ) => Promise<LspCompletionResponse | null>;
+    completionResolve: (item: LspCompletionItem) => Promise<LspCompletionItem | null>;
     hover: (filePath: string, line: number, character: number) => Promise<LspHover | null>;
     definition: (filePath: string, line: number, character: number) => Promise<WorkspaceLocation[]>;
+    typeDefinition: (filePath: string, line: number, character: number) => Promise<WorkspaceLocation[]>;
+    implementation: (filePath: string, line: number, character: number) => Promise<WorkspaceLocation[]>;
+    documentHighlights: (filePath: string, line: number, character: number) => Promise<LspDocumentHighlight[]>;
+    documentLinks: (filePath: string) => Promise<LspDocumentLink[]>;
+    inlayHints: (filePath: string, range: LspRange) => Promise<LspInlayHint[]>;
+    codeActions: (filePath: string, range: LspRange, diagnostics?: LspDiagnostic[]) => Promise<LspCodeAction[]>;
+    foldingRanges: (filePath: string) => Promise<LspFoldingRange[]>;
+    semanticTokensFull: (filePath: string) => Promise<LspSemanticTokens>;
+    selectionRanges: (filePath: string, positions: Array<{ line: number; character: number }>) => Promise<LspSelectionRange[]>;
+    signatureHelp: (
+      filePath: string,
+      line: number,
+      character: number,
+      triggerCharacter?: string,
+      triggerKind?: number,
+      isRetrigger?: boolean,
+    ) => Promise<LspSignatureHelp | null>;
+    documentSymbols: (filePath: string) => Promise<LspDocumentSymbol[]>;
     references: (
       filePath: string,
       line: number,
       character: number,
       includeDeclaration?: boolean,
     ) => Promise<WorkspaceLocation[]>;
+    prepareCallHierarchy: (filePath: string, line: number, character: number) => Promise<LspCallHierarchyItem[]>;
+    callHierarchyIncoming: (item: LspCallHierarchyItem) => Promise<LspCallHierarchyIncomingCall[]>;
+    callHierarchyOutgoing: (item: LspCallHierarchyItem) => Promise<LspCallHierarchyOutgoingCall[]>;
+    workspaceSymbols: (query: string) => Promise<LspWorkspaceSymbol[]>;
+    prepareRename: (filePath: string, line: number, character: number) => Promise<LspPrepareRenameResult | null>;
+    rename: (filePath: string, line: number, character: number, newName: string) => Promise<LspWorkspaceEdit | null>;
+    outline: (filePath: string, options?: LspOutlineOptions) => Promise<LspOutlineResult>;
     moduleHierarchy: (options?: LspModuleHierarchyOptions) => Promise<LspModuleHierarchy>;
     schematic: (options?: LspSchematicOptions) => Promise<LspSchematic>;
+    waveformOpen: () => Promise<LspWaveformOpenResult>;
+    waveformFrame: (options: LspWaveformFrameOptions) => Promise<ArrayBuffer>;
+    waveformClose: (sessionId: string) => Promise<boolean>;
     getDebugEvents: () => Promise<LspDebugEvent[]>;
     onDebug: (callback: (payload: LspDebugEvent) => void) => () => void;
     onDiagnostics: (callback: (payload: LspDiagnosticsEvent) => void) => () => void;

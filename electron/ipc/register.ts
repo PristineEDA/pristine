@@ -12,6 +12,7 @@ import { registerPlatformHandler } from './platform.js';
 import { registerAuthHandlers } from './auth.js';
 import { registerNoticeHandlers } from './notices.js';
 import type { WindowCloseDecision } from '../../src/app/window/windowClose.js';
+import type { FloatingInfoWindowMode } from '../../src/app/window/floatingInfoWindow.js';
 
 export function setProjectRoot(root: string): void {
   const resolved = path.resolve(root);
@@ -27,11 +28,18 @@ export function registerAllHandlers(
   getMainWindow: () => BrowserWindow | null,
   setFloatingInfoWindowVisible: (visible: boolean) => boolean = () => false,
   setFloatingInfoWindowExpanded: (expanded: boolean) => boolean = () => false,
+  setFloatingInfoWindowMode: (mode: FloatingInfoWindowMode) => boolean = () => false,
   resolveCloseRequest: (requestId: number, decision: WindowCloseDecision) => boolean = () => false,
 ): void {
   registerPlatformHandler();
   registerDialogHandlers(getMainWindow);
-  registerWindowHandlers(getMainWindow, setFloatingInfoWindowVisible, setFloatingInfoWindowExpanded, resolveCloseRequest);
+  registerWindowHandlers(
+    getMainWindow,
+    setFloatingInfoWindowVisible,
+    setFloatingInfoWindowExpanded,
+    setFloatingInfoWindowMode,
+    resolveCloseRequest,
+  );
   registerFilesystemHandlers();
   registerGitHandlers(getMainWindow);
   registerLspHandlers(getMainWindow);

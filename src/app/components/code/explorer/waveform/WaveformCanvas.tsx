@@ -40,12 +40,14 @@ import type {
   WaveformSceneUpdateMetrics,
   WaveformViewport,
 } from './waveformTypes';
+import { waveformBinaryFrameSignalTableStride, type ParsedWaveformFrame } from './waveformBinaryFrame';
 
 type PixiRendererPreference = 'webgpu' | 'webgl';
 
 interface WaveformCanvasProps {
   cursorTime: number;
   data: WaveformDataSet;
+  frame?: ParsedWaveformFrame | null;
   selectedSignalId: string | null;
   verticalScrollTop: number;
   viewport: WaveformViewport;
@@ -78,6 +80,7 @@ const waveformMetricSampleWindowSize = 30;
 export function WaveformCanvas({
   cursorTime,
   data,
+  frame,
   selectedSignalId,
   verticalScrollTop,
   viewport,
@@ -194,7 +197,7 @@ export function WaveformCanvas({
 
   useEffect(() => {
     rebuildScene();
-  }, [data]);
+  }, [data, frame]);
 
   useEffect(() => {
     const scene = sceneRef.current;
@@ -437,6 +440,7 @@ export function WaveformCanvas({
     sceneRef.current = createWaveformScene({
       cursorTime: cursorTimeRef.current,
       data: dataRef.current,
+      frame: frame ?? null,
       height,
       renderResolution,
       selectedSignalId: selectedSignalIdRef.current,
@@ -586,6 +590,7 @@ export function WaveformCanvas({
   const selectedSignalVisibleY = selectedSignalLaneY === null ? null : selectedSignalLaneY - verticalScrollTop;
   const stateCounts = getWaveformStateCounts(data);
   const shapeCounts = getWaveformShapeCounts(data, viewport);
+  const emptyVisibleSignalCount = getWaveformEmptyVisibleSignalCount(frame);
   const pulseFillCount = getWaveformDigitalPulseFillCount(data, viewport);
   const rulerIndicatorMetrics = getWaveformRulerScrollIndicatorMetrics(viewport, data.duration, effectiveCanvasWidth);
 
@@ -593,7 +598,7 @@ export function WaveformCanvas({
     <div
       ref={hostRef}
       aria-label="Waveform canvas"
-      className="relative h-full min-h-0 w-full flex-1 cursor-crosshair overflow-hidden bg-[#111111] outline-none"
+      className="relative h-full min-h-0 w-full flex-1 cursor-default overflow-hidden bg-[#111111] outline-none"
       data-cursor-time={cursorTime.toFixed(2)}
       data-cursor-visible={String(cursorVisible)}
       data-cursor-x={cursorX.toFixed(2)}
@@ -645,6 +650,7 @@ export function WaveformCanvas({
       data-ruler-scroll-indicator-color={`#${rulerIndicatorMetrics.color.toString(16).padStart(6, '0')}`}
       data-ruler-scroll-indicator-height={rulerIndicatorMetrics.height.toFixed(2)}
       data-ruler-scroll-indicator-left={rulerIndicatorMetrics.left.toFixed(2)}
+      data-ruler-scroll-indicator-radius={rulerIndicatorMetrics.cornerRadius.toFixed(2)}
       data-ruler-scroll-indicator-scrollable={String(rulerIndicatorMetrics.scrollable)}
       data-ruler-scroll-indicator-width={rulerIndicatorMetrics.width.toFixed(2)}
       data-selected-signal-lane-y={formatOptionalNumber(selectedSignalLaneY)}
@@ -669,6 +675,10 @@ export function WaveformCanvas({
       data-x-state-block-count={shapeCounts.xStateBlockCount}
       data-z-state-block-count={shapeCounts.zStateBlockCount}
       data-z-state-count={stateCounts.zStateCount}
+      data-waveform-empty-visible-signal-count={emptyVisibleSignalCount}
+      data-waveform-frame-segment-count={frame?.segmentCount ?? 0}
+      data-waveform-frame-truncated={String(frame?.truncated ?? false)}
+      data-waveform-frame-version={frame?.version ?? ''}
       data-zoom={zoomLevel.toFixed(2)}
       role="img"
       style={{ minHeight: waveformCanvasMinHeight }}
@@ -814,6 +824,23 @@ function getVisiblePrimitiveCount(scene: WaveformScene | null, renderStats: Wave
     + scene.shapeCounts.xStateBlockCount
     + scene.shapeCounts.zStateBlockCount
     + scene.digitalPulseFillCount;
+}
+
+function getWaveformEmptyVisibleSignalCount(frame: ParsedWaveformFrame | null | undefined) {
+  if (!frame) {
+    return 0;
+  }
+
+  let emptySignalCount = 0;
+
+  for (let tableEntryIndex = 0; tableEntryIndex < frame.signalCount; tableEntryIndex += 1) {
+    const segmentCount = frame.signalTable[tableEntryIndex * waveformBinaryFrameSignalTableStride + 2] ?? 0;
+    if (segmentCount === 0) {
+      emptySignalCount += 1;
+    }
+  }
+
+  return emptySignalCount;
 }
 
 function pushMetricSample(samples: number[], nextValue: number) {

@@ -97,9 +97,10 @@ export function xToTime(x: number, viewport: WaveformViewport, width: number) {
 }
 
 export function getSignalValueAtTime(signal: WaveformSignal, time: number) {
-  let value = normalizeWaveformValue(signal.transitions[0]?.value ?? 'x');
+  const sourceTransitions = signal.transitions ?? [];
+  let value = normalizeWaveformValue(sourceTransitions[0]?.value ?? 'x');
 
-  for (const transition of signal.transitions) {
+  for (const transition of sourceTransitions) {
     if (transition.time > time) {
       break;
     }
@@ -111,12 +112,13 @@ export function getSignalValueAtTime(signal: WaveformSignal, time: number) {
 }
 
 export function getWaveformTransitionsInWindow(signal: WaveformSignal, viewport: WaveformViewport): WaveformTransition[] {
+  const sourceTransitions = signal.transitions ?? [];
   const transitions: WaveformTransition[] = [];
   const initialValue = getSignalValueAtTime(signal, viewport.startTime);
 
   transitions.push({ time: viewport.startTime, value: initialValue });
 
-  for (const transition of signal.transitions) {
+  for (const transition of sourceTransitions) {
     if (transition.time <= viewport.startTime) {
       continue;
     }
@@ -289,7 +291,7 @@ export function getWaveformStateCounts(data: WaveformDataSet): WaveformStateCoun
   let zStateCount = 0;
 
   for (const signal of data.signals) {
-    for (const transition of signal.transitions) {
+    for (const transition of signal.transitions ?? []) {
       if (isUnknownWaveformValue(transition.value)) {
         xStateCount += 1;
       } else if (isHighImpedanceWaveformValue(transition.value)) {
@@ -385,6 +387,7 @@ export function getWaveformRulerScrollIndicatorMetrics(viewport: WaveformViewpor
 
   return {
     color: 0x8e8e8e,
+    cornerRadius: 3,
     height: waveformHeaderHeight,
     left,
     maxLeft,

@@ -1,6 +1,6 @@
 import {
   FolderCodeIcon,
-  ListTree,
+  GitBranch,
   PanelBottomClose,
   PanelBottomOpen,
 } from 'lucide-react';
@@ -14,11 +14,11 @@ import {
 } from '../shared/IconTabToggleGroup';
 import { getPanelHeaderClassName } from '../shared/codeViewerLayoutStyles';
 
-export type ExplorerPanelTab = 'explorer' | 'outline';
+export type ExplorerPanelTab = 'explorer' | 'git';
 
 const explorerPanelTabs = [
   { value: 'explorer', label: 'Explorer', icon: FolderCodeIcon, testId: 'left-panel-tab-explorer' },
-  { value: 'outline', label: 'Outline', icon: ListTree, testId: 'left-panel-tab-outline' },
+  { value: 'git', label: 'Source Control', icon: GitBranch, testId: 'left-panel-tab-git' },
 ] as const;
 
 export function ExplorerPanelTabs({

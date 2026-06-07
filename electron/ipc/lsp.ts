@@ -10,6 +10,10 @@ import {
   type MessageConnection,
 } from 'vscode-jsonrpc/node.js';
 import type {
+  LspCallHierarchyIncomingCall,
+  LspCallHierarchyItem,
+  LspCallHierarchyOutgoingCall,
+  LspCodeAction,
   LspCompletionItem,
   LspCompletionList,
   LspCompletionResponse,
@@ -17,11 +21,21 @@ import type {
   LspDebugValue,
   LspDiagnostic,
   LspDiagnosticsEvent,
+  LspDocumentHighlight,
+  LspDocumentLink,
+  LspDocumentSymbol,
+  LspFoldingRange,
   LspHover,
+  LspInlayHint,
   LspMarkupContent,
   LspModuleHierarchy,
   LspModuleHierarchyNode,
   LspModuleHierarchyOptions,
+  LspOutlineItem,
+  LspOutlineOptions,
+  LspOutlineResult,
+  LspPosition,
+  LspPrepareRenameResult,
   LspRange,
   LspSchematic,
   LspSchematicCell,
@@ -32,13 +46,28 @@ import type {
   LspSchematicOptions,
   LspSchematicPort,
   LspSchematicPortDirection,
+  LspWaveformFrameOptions,
+  LspWaveformOpenResult,
+  LspSelectionRange,
+  LspSemanticTokens,
+  LspSignatureHelp,
+  LspSignatureInformation,
   LspStateEvent,
   LspTextEdit,
+  LspWorkspaceEdit,
+  LspWorkspaceSymbol,
   WorkspaceLocation,
 } from '../../types/systemverilog-lsp.js';
 import { AsyncChannels, StreamChannels } from './channels.js';
 import { assertNumber, assertOptionalString, assertString, validatePathWithinRoot } from './validators.js';
 import { assertPristineEnginePathAvailable, resolvePristineEnginePath } from './pristineEnginePath.js';
+import {
+  closeAllWaveformPipeSessions,
+  closeWaveformPipeSession,
+  normalizeWaveformOpenSessionMetadata,
+  openWaveformPipeSession,
+  requestWaveformPipeFrame,
+} from './waveformPipeClient.js';
 
 interface TrackedDocument {
   filePath: string;
@@ -63,6 +92,9 @@ const CLIENT_NAME = 'Pristine Monaco LSP';
 const CLIENT_VERSION = '0.0.1';
 const LSP_REQUEST_TIMEOUT_MS = 10_000;
 const LSP_INITIALIZE_TIMEOUT_MS = 30_000;
+const LSP_OUTLINE_TIMEOUT_MS = 30_000;
+const LSP_MODULE_HIERARCHY_TIMEOUT_MS = 30_000;
+const LSP_WAVEFORM_TIMEOUT_MS = 30_000;
 const LSP_DEBUG_EVENT_LIMIT = 200;
 
 interface SendDebugRequestOptions {
@@ -404,6 +436,14 @@ function normalizeTextEdit(value: unknown): LspTextEdit | undefined {
   };
 }
 
+function normalizeTextEdits(value: unknown): LspTextEdit[] {
+  return Array.isArray(value)
+    ? value
+      .map((entry) => normalizeTextEdit(entry))
+      .filter((entry): entry is LspTextEdit => Boolean(entry))
+    : [];
+}
+
 function normalizeMarkupContent(value: unknown): LspMarkupContent | undefined {
   if (!value || typeof value !== 'object') {
     return undefined;
@@ -438,6 +478,7 @@ function normalizeCompletionItem(value: unknown): LspCompletionItem | null {
     insertTextFormat?: unknown;
     textEdit?: unknown;
     additionalTextEdits?: unknown;
+    data?: unknown;
   };
   if (typeof candidate.label !== 'string') {
     return null;
@@ -471,6 +512,7 @@ function normalizeCompletionItem(value: unknown): LspCompletionItem | null {
     insertTextFormat: typeof candidate.insertTextFormat === 'number' ? candidate.insertTextFormat : undefined,
     textEdit: normalizeTextEdit(candidate.textEdit),
     additionalTextEdits: normalizedAdditionalTextEdits,
+    data: candidate.data === undefined ? undefined : toDebugValue(candidate.data),
   };
 }
 
@@ -567,6 +609,527 @@ function normalizeWorkspaceLocations(value: unknown): WorkspaceLocation[] {
   return values
     .map((entry) => normalizeWorkspaceLocation(entry))
     .filter((entry): entry is WorkspaceLocation => Boolean(entry));
+}
+
+function normalizeDocumentSymbol(value: unknown): LspDocumentSymbol | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const candidate = value as {
+    name?: unknown;
+    detail?: unknown;
+    kind?: unknown;
+    range?: unknown;
+    selectionRange?: unknown;
+    children?: unknown;
+  };
+  if (typeof candidate.name !== 'string' || typeof candidate.kind !== 'number') {
+    return null;
+  }
+  const range = normalizeOptionalRange(candidate.range);
+  const selectionRange = normalizeOptionalRange(candidate.selectionRange);
+  if (!range || !selectionRange) {
+    return null;
+  }
+
+  return {
+    name: candidate.name,
+    detail: typeof candidate.detail === 'string' ? candidate.detail : undefined,
+    kind: candidate.kind,
+    range,
+    selectionRange,
+    children: Array.isArray(candidate.children)
+      ? candidate.children
+        .map((entry) => normalizeDocumentSymbol(entry))
+        .filter((entry): entry is LspDocumentSymbol => Boolean(entry))
+      : undefined,
+  };
+}
+
+function normalizeDocumentSymbols(value: unknown): LspDocumentSymbol[] {
+  return Array.isArray(value)
+    ? value
+      .map((entry) => normalizeDocumentSymbol(entry))
+      .filter((entry): entry is LspDocumentSymbol => Boolean(entry))
+    : [];
+}
+
+function normalizeDocumentHighlight(value: unknown): LspDocumentHighlight | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const candidate = value as { range?: unknown; kind?: unknown };
+  const range = normalizeOptionalRange(candidate.range);
+  if (!range) {
+    return null;
+  }
+
+  return {
+    range,
+    kind: typeof candidate.kind === 'number' ? candidate.kind : undefined,
+  };
+}
+
+function normalizeDocumentHighlights(value: unknown): LspDocumentHighlight[] {
+  return Array.isArray(value)
+    ? value
+      .map((entry) => normalizeDocumentHighlight(entry))
+      .filter((entry): entry is LspDocumentHighlight => Boolean(entry))
+    : [];
+}
+
+function normalizeDocumentLink(value: unknown): LspDocumentLink | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const candidate = value as { range?: unknown; target?: unknown; tooltip?: unknown };
+  const range = normalizeOptionalRange(candidate.range);
+  if (!range) {
+    return null;
+  }
+
+  return {
+    range,
+    target: typeof candidate.target === 'string' ? candidate.target : undefined,
+    tooltip: typeof candidate.tooltip === 'string' ? candidate.tooltip : undefined,
+  };
+}
+
+function normalizeDocumentLinks(value: unknown): LspDocumentLink[] {
+  return Array.isArray(value)
+    ? value
+      .map((entry) => normalizeDocumentLink(entry))
+      .filter((entry): entry is LspDocumentLink => Boolean(entry))
+    : [];
+}
+
+function normalizeInlayHint(value: unknown): LspInlayHint | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const candidate = value as {
+    position?: Partial<LspPosition>;
+    label?: unknown;
+    kind?: unknown;
+    tooltip?: unknown;
+    textEdits?: unknown;
+  };
+  if (
+    typeof candidate.position?.line !== 'number'
+    || typeof candidate.position.character !== 'number'
+    || typeof candidate.label !== 'string'
+  ) {
+    return null;
+  }
+
+  const tooltip = typeof candidate.tooltip === 'string'
+    ? candidate.tooltip
+    : normalizeMarkupContent(candidate.tooltip);
+
+  return {
+    position: {
+      line: candidate.position.line,
+      character: candidate.position.character,
+    },
+    label: candidate.label,
+    kind: typeof candidate.kind === 'number' ? candidate.kind : undefined,
+    tooltip,
+    textEdits: normalizeTextEdits(candidate.textEdits),
+  };
+}
+
+function normalizeInlayHints(value: unknown): LspInlayHint[] {
+  return Array.isArray(value)
+    ? value
+      .map((entry) => normalizeInlayHint(entry))
+      .filter((entry): entry is LspInlayHint => Boolean(entry))
+    : [];
+}
+
+function normalizeWorkspaceEdit(value: unknown): LspWorkspaceEdit | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const candidate = value as { changes?: unknown; documentChanges?: unknown };
+
+  const changes: Record<string, LspTextEdit[]> = {};
+  if (candidate.changes && typeof candidate.changes === 'object' && !Array.isArray(candidate.changes)) {
+    for (const [uri, edits] of Object.entries(candidate.changes)) {
+      const filePath = getRelativeWorkspaceFilePath(uri);
+      if (!filePath) {
+        continue;
+      }
+
+      const normalizedEdits = normalizeTextEdits(edits);
+      if (normalizedEdits.length > 0) {
+        changes[filePath] = normalizedEdits;
+      }
+    }
+  }
+
+  const documentChanges = Array.isArray(candidate.documentChanges)
+    ? candidate.documentChanges.flatMap((entry) => {
+      if (!entry || typeof entry !== 'object') {
+        return [];
+      }
+      const change = entry as { kind?: unknown; uri?: unknown; options?: { ignoreIfExists?: unknown; overwrite?: unknown } };
+      if (change.kind !== 'create' || typeof change.uri !== 'string') {
+        return [];
+      }
+      const filePath = getRelativeWorkspaceFilePath(change.uri);
+      if (!filePath) {
+        return [];
+      }
+
+      return [{
+        kind: 'create' as const,
+        filePath,
+        uri: change.uri,
+        options: change.options && typeof change.options === 'object'
+          ? {
+            ignoreIfExists: change.options.ignoreIfExists === true,
+            overwrite: change.options.overwrite === true,
+          }
+          : undefined,
+      }];
+    })
+    : undefined;
+
+  if (Object.keys(changes).length === 0 && (!documentChanges || documentChanges.length === 0)) {
+    return null;
+  }
+
+  return {
+    changes,
+    documentChanges: documentChanges && documentChanges.length > 0 ? documentChanges : undefined,
+  };
+}
+
+function normalizeWorkspaceEditOrEmpty(value: unknown): LspWorkspaceEdit {
+  return normalizeWorkspaceEdit(value) ?? { changes: {} };
+}
+
+function normalizeCodeAction(value: unknown): LspCodeAction | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const candidate = value as {
+    title?: unknown;
+    kind?: unknown;
+    diagnostics?: unknown;
+    edit?: unknown;
+    isPreferred?: unknown;
+  };
+  if (typeof candidate.title !== 'string') {
+    return null;
+  }
+
+  return {
+    title: candidate.title,
+    kind: typeof candidate.kind === 'string' ? candidate.kind : undefined,
+    diagnostics: Array.isArray(candidate.diagnostics)
+      ? candidate.diagnostics.filter((entry): entry is LspDiagnostic => Boolean(entry && typeof entry === 'object'))
+      : undefined,
+    edit: candidate.edit === undefined ? undefined : normalizeWorkspaceEditOrEmpty(candidate.edit),
+    isPreferred: candidate.isPreferred === true,
+  };
+}
+
+function normalizeCodeActions(value: unknown): LspCodeAction[] {
+  return Array.isArray(value)
+    ? value
+      .map((entry) => normalizeCodeAction(entry))
+      .filter((entry): entry is LspCodeAction => Boolean(entry))
+    : [];
+}
+
+function normalizeFoldingRange(value: unknown): LspFoldingRange | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const candidate = value as {
+    startLine?: unknown;
+    startCharacter?: unknown;
+    endLine?: unknown;
+    endCharacter?: unknown;
+    kind?: unknown;
+  };
+  if (typeof candidate.startLine !== 'number' || typeof candidate.endLine !== 'number') {
+    return null;
+  }
+
+  return {
+    startLine: candidate.startLine,
+    startCharacter: typeof candidate.startCharacter === 'number' ? candidate.startCharacter : undefined,
+    endLine: candidate.endLine,
+    endCharacter: typeof candidate.endCharacter === 'number' ? candidate.endCharacter : undefined,
+    kind: typeof candidate.kind === 'string' ? candidate.kind : undefined,
+  };
+}
+
+function normalizeFoldingRanges(value: unknown): LspFoldingRange[] {
+  return Array.isArray(value)
+    ? value
+      .map((entry) => normalizeFoldingRange(entry))
+      .filter((entry): entry is LspFoldingRange => Boolean(entry))
+    : [];
+}
+
+function normalizeSemanticTokens(value: unknown): LspSemanticTokens {
+  if (!value || typeof value !== 'object') {
+    return { data: [] };
+  }
+
+  const candidate = value as { resultId?: unknown; data?: unknown };
+  return {
+    resultId: typeof candidate.resultId === 'string' ? candidate.resultId : undefined,
+    data: Array.isArray(candidate.data)
+      ? candidate.data.filter((entry): entry is number => typeof entry === 'number' && Number.isFinite(entry))
+      : [],
+  };
+}
+
+function normalizeSelectionRange(value: unknown): LspSelectionRange | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const candidate = value as { range?: unknown; parent?: unknown };
+  const range = normalizeOptionalRange(candidate.range);
+  if (!range) {
+    return null;
+  }
+
+  const parent = normalizeSelectionRange(candidate.parent);
+  return {
+    range,
+    parent: parent ?? undefined,
+  };
+}
+
+function normalizeSelectionRanges(value: unknown): LspSelectionRange[] {
+  return Array.isArray(value)
+    ? value
+      .map((entry) => normalizeSelectionRange(entry))
+      .filter((entry): entry is LspSelectionRange => Boolean(entry))
+    : [];
+}
+
+function normalizeSignatureInformation(value: unknown): LspSignatureInformation | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const candidate = value as {
+    label?: unknown;
+    documentation?: unknown;
+    parameters?: unknown;
+  };
+  if (typeof candidate.label !== 'string') {
+    return null;
+  }
+
+  return {
+    label: candidate.label,
+    documentation: typeof candidate.documentation === 'string'
+      ? candidate.documentation
+      : normalizeMarkupContent(candidate.documentation),
+    parameters: Array.isArray(candidate.parameters)
+      ? candidate.parameters.flatMap((entry) => {
+        if (!entry || typeof entry !== 'object') {
+          return [];
+        }
+        const parameter = entry as { label?: unknown; documentation?: unknown };
+        const label = typeof parameter.label === 'string'
+          ? parameter.label
+          : Array.isArray(parameter.label)
+            && parameter.label.length === 2
+            && typeof parameter.label[0] === 'number'
+            && typeof parameter.label[1] === 'number'
+          ? [parameter.label[0], parameter.label[1]] as [number, number]
+          : null;
+        if (!label) {
+          return [];
+        }
+        return [{
+          label,
+          documentation: typeof parameter.documentation === 'string'
+            ? parameter.documentation
+            : normalizeMarkupContent(parameter.documentation),
+        }];
+      })
+      : undefined,
+  };
+}
+
+function normalizeSignatureHelp(value: unknown): LspSignatureHelp | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const candidate = value as {
+    signatures?: unknown;
+    activeSignature?: unknown;
+    activeParameter?: unknown;
+  };
+  const signatures = Array.isArray(candidate.signatures)
+    ? candidate.signatures
+      .map((entry) => normalizeSignatureInformation(entry))
+      .filter((entry): entry is LspSignatureInformation => Boolean(entry))
+    : [];
+  if (signatures.length === 0) {
+    return null;
+  }
+
+  return {
+    signatures,
+    activeSignature: typeof candidate.activeSignature === 'number' ? candidate.activeSignature : undefined,
+    activeParameter: typeof candidate.activeParameter === 'number' ? candidate.activeParameter : undefined,
+  };
+}
+
+function normalizeCallHierarchyItem(value: unknown): LspCallHierarchyItem | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const candidate = value as {
+    name?: unknown;
+    kind?: unknown;
+    uri?: unknown;
+    range?: unknown;
+    selectionRange?: unknown;
+    detail?: unknown;
+    data?: unknown;
+  };
+  if (typeof candidate.name !== 'string' || typeof candidate.kind !== 'number' || typeof candidate.uri !== 'string') {
+    return null;
+  }
+  const range = normalizeOptionalRange(candidate.range);
+  const selectionRange = normalizeOptionalRange(candidate.selectionRange);
+  if (!range || !selectionRange) {
+    return null;
+  }
+
+  return {
+    name: candidate.name,
+    kind: candidate.kind,
+    uri: candidate.uri,
+    filePath: getRelativeWorkspaceFilePath(candidate.uri) ?? undefined,
+    range,
+    selectionRange,
+    detail: typeof candidate.detail === 'string' ? candidate.detail : undefined,
+    data: candidate.data === undefined ? undefined : toDebugValue(candidate.data),
+  };
+}
+
+function normalizeCallHierarchyItems(value: unknown): LspCallHierarchyItem[] {
+  return Array.isArray(value)
+    ? value
+      .map((entry) => normalizeCallHierarchyItem(entry))
+      .filter((entry): entry is LspCallHierarchyItem => Boolean(entry))
+    : [];
+}
+
+function normalizeCallHierarchyIncomingCalls(value: unknown): LspCallHierarchyIncomingCall[] {
+  return Array.isArray(value)
+    ? value.flatMap((entry) => {
+      if (!entry || typeof entry !== 'object') {
+        return [];
+      }
+      const candidate = entry as { from?: unknown; fromRanges?: unknown };
+      const from = normalizeCallHierarchyItem(candidate.from);
+      if (!from) {
+        return [];
+      }
+      return [{
+        from,
+        fromRanges: Array.isArray(candidate.fromRanges)
+          ? candidate.fromRanges.map(normalizeOptionalRange).filter((range): range is LspRange => Boolean(range))
+          : [],
+      }];
+    })
+    : [];
+}
+
+function normalizeCallHierarchyOutgoingCalls(value: unknown): LspCallHierarchyOutgoingCall[] {
+  return Array.isArray(value)
+    ? value.flatMap((entry) => {
+      if (!entry || typeof entry !== 'object') {
+        return [];
+      }
+      const candidate = entry as { to?: unknown; fromRanges?: unknown };
+      const to = normalizeCallHierarchyItem(candidate.to);
+      if (!to) {
+        return [];
+      }
+      return [{
+        to,
+        fromRanges: Array.isArray(candidate.fromRanges)
+          ? candidate.fromRanges.map(normalizeOptionalRange).filter((range): range is LspRange => Boolean(range))
+          : [],
+      }];
+    })
+    : [];
+}
+
+function normalizeWorkspaceSymbol(value: unknown): LspWorkspaceSymbol | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const candidate = value as {
+    name?: unknown;
+    kind?: unknown;
+    location?: unknown;
+    containerName?: unknown;
+  };
+  if (typeof candidate.name !== 'string' || typeof candidate.kind !== 'number') {
+    return null;
+  }
+  const location = normalizeWorkspaceLocation(candidate.location);
+  if (!location) {
+    return null;
+  }
+
+  return {
+    name: candidate.name,
+    kind: candidate.kind,
+    location,
+    containerName: typeof candidate.containerName === 'string' ? candidate.containerName : undefined,
+  };
+}
+
+function normalizeWorkspaceSymbols(value: unknown): LspWorkspaceSymbol[] {
+  return Array.isArray(value)
+    ? value
+      .map((entry) => normalizeWorkspaceSymbol(entry))
+      .filter((entry): entry is LspWorkspaceSymbol => Boolean(entry))
+    : [];
+}
+
+function normalizePrepareRenameResult(value: unknown): LspPrepareRenameResult | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const candidate = value as { range?: unknown; placeholder?: unknown };
+  const range = normalizeOptionalRange(candidate.range);
+  if (!range || typeof candidate.placeholder !== 'string') {
+    return null;
+  }
+
+  return {
+    range,
+    placeholder: candidate.placeholder,
+  };
 }
 
 function isLspRange(value: unknown): value is LspRange {
@@ -669,6 +1232,149 @@ function normalizeModuleHierarchyOptions(value: unknown): LspModuleHierarchyOpti
   return {
     moduleName: typeof candidate.moduleName === 'string' ? candidate.moduleName : undefined,
     maxDepth: typeof candidate.maxDepth === 'number' ? candidate.maxDepth : undefined,
+  };
+}
+
+function normalizeOutlineItem(value: unknown): LspOutlineItem | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const candidate = value as {
+    id?: unknown;
+    parentId?: unknown;
+    name?: unknown;
+    kind?: unknown;
+    detail?: unknown;
+    declaration?: unknown;
+    type?: unknown;
+    direction?: unknown;
+    value?: unknown;
+    moduleName?: unknown;
+    symbolKind?: unknown;
+    range?: unknown;
+    selectionRange?: unknown;
+    depth?: unknown;
+    children?: unknown;
+  };
+  const range = normalizeOptionalRange(candidate.range);
+  const selectionRange = normalizeOptionalRange(candidate.selectionRange);
+  if (
+    typeof candidate.id !== 'string'
+    || typeof candidate.name !== 'string'
+    || typeof candidate.kind !== 'string'
+    || !range
+    || !selectionRange
+  ) {
+    return null;
+  }
+
+  return {
+    id: candidate.id,
+    parentId: typeof candidate.parentId === 'string' ? candidate.parentId : null,
+    name: candidate.name,
+    kind: candidate.kind,
+    detail: typeof candidate.detail === 'string' ? candidate.detail : undefined,
+    declaration: typeof candidate.declaration === 'string' ? candidate.declaration : undefined,
+    type: typeof candidate.type === 'string' ? candidate.type : undefined,
+    direction: typeof candidate.direction === 'string' ? candidate.direction : undefined,
+    value: typeof candidate.value === 'string' ? candidate.value : undefined,
+    moduleName: typeof candidate.moduleName === 'string' ? candidate.moduleName : undefined,
+    symbolKind: typeof candidate.symbolKind === 'number' ? candidate.symbolKind : 0,
+    range,
+    selectionRange,
+    depth: typeof candidate.depth === 'number' ? candidate.depth : 0,
+    children: Array.isArray(candidate.children)
+      ? candidate.children
+        .map((entry) => normalizeOutlineItem(entry))
+        .filter((entry): entry is LspOutlineItem => Boolean(entry))
+      : [],
+  };
+}
+
+function normalizeOutlineItems(value: unknown): LspOutlineItem[] {
+  return Array.isArray(value)
+    ? value
+      .map((entry) => normalizeOutlineItem(entry))
+      .filter((entry): entry is LspOutlineItem => Boolean(entry))
+    : [];
+}
+
+function createEmptyOutlineResult(uri = '', messages: string[] = []): LspOutlineResult {
+  return {
+    uri,
+    filePath: uri ? getRelativeWorkspaceFilePath(uri) ?? undefined : undefined,
+    version: 0,
+    generation: 0,
+    roots: [],
+    items: [],
+    partial: false,
+    truncated: false,
+    messages,
+  };
+}
+
+function normalizeOutlineResult(value: unknown): LspOutlineResult {
+  if (!value || typeof value !== 'object') {
+    return createEmptyOutlineResult();
+  }
+
+  const candidate = value as {
+    uri?: unknown;
+    version?: unknown;
+    generation?: unknown;
+    roots?: unknown;
+    items?: unknown;
+    partial?: unknown;
+    truncated?: unknown;
+    messages?: unknown;
+  };
+  const uri = typeof candidate.uri === 'string' ? candidate.uri : '';
+
+  return {
+    uri,
+    filePath: uri ? getRelativeWorkspaceFilePath(uri) ?? undefined : undefined,
+    version: typeof candidate.version === 'number' ? candidate.version : 0,
+    generation: typeof candidate.generation === 'number' ? candidate.generation : 0,
+    roots: normalizeOutlineItems(candidate.roots),
+    items: normalizeOutlineItems(candidate.items),
+    partial: candidate.partial === true,
+    truncated: candidate.truncated === true,
+    messages: Array.isArray(candidate.messages)
+      ? candidate.messages.filter((entry): entry is string => typeof entry === 'string')
+      : [],
+  };
+}
+
+function normalizeOutlineOptions(value: unknown): Required<LspOutlineOptions> {
+  if (value !== undefined && value !== null && (typeof value !== 'object' || Array.isArray(value))) {
+    throw new Error(`Expected object or undefined for "options", got ${typeof value}`);
+  }
+
+  const candidate = (value ?? {}) as {
+    maxDepth?: unknown;
+    limit?: unknown;
+    includeChildren?: unknown;
+    includeFlat?: unknown;
+  };
+  if (candidate.maxDepth !== undefined) {
+    assertNumber(candidate.maxDepth, 'maxDepth');
+  }
+  if (candidate.limit !== undefined) {
+    assertNumber(candidate.limit, 'limit');
+  }
+  if (candidate.includeChildren !== undefined && typeof candidate.includeChildren !== 'boolean') {
+    throw new Error(`Expected boolean for "includeChildren", got ${typeof candidate.includeChildren}`);
+  }
+  if (candidate.includeFlat !== undefined && typeof candidate.includeFlat !== 'boolean') {
+    throw new Error(`Expected boolean for "includeFlat", got ${typeof candidate.includeFlat}`);
+  }
+
+  return {
+    maxDepth: typeof candidate.maxDepth === 'number' ? candidate.maxDepth : 8,
+    limit: typeof candidate.limit === 'number' ? candidate.limit : 2000,
+    includeChildren: typeof candidate.includeChildren === 'boolean' ? candidate.includeChildren : true,
+    includeFlat: typeof candidate.includeFlat === 'boolean' ? candidate.includeFlat : true,
   };
 }
 
@@ -852,8 +1558,108 @@ function normalizeSchematic(value: unknown): LspSchematic {
   };
 }
 
+function createEmptyWaveformOpenResult(message: string): LspWaveformOpenResult {
+  return {
+    sessionId: '',
+    title: 'Waveform',
+    timescaleUnit: 'ns',
+    duration: 0,
+    cursorTime: 0,
+    groups: [],
+    signals: [],
+    messages: [message],
+  };
+}
+
+function normalizeWaveformFrameOptions(value: unknown): LspWaveformFrameOptions {
+  if (!value || typeof value !== 'object') {
+    throw new Error('Expected waveform frame options.');
+  }
+
+  const candidate = value as {
+    endTime?: unknown;
+    headerHeight?: unknown;
+    height?: unknown;
+    laneHeight?: unknown;
+    maxSegments?: unknown;
+    sessionId?: unknown;
+    signalIds?: unknown;
+    startTime?: unknown;
+    width?: unknown;
+  };
+  const sessionId = candidate.sessionId;
+  const startTime = candidate.startTime;
+  const endTime = candidate.endTime;
+  const width = candidate.width;
+  const height = candidate.height;
+  const laneHeight = candidate.laneHeight;
+  const headerHeight = candidate.headerHeight;
+
+  assertString(sessionId, 'sessionId');
+  assertNumber(startTime, 'startTime');
+  assertNumber(endTime, 'endTime');
+  assertNumber(width, 'width');
+  assertNumber(height, 'height');
+  assertNumber(laneHeight, 'laneHeight');
+  assertNumber(headerHeight, 'headerHeight');
+
+  return {
+    sessionId,
+    startTime,
+    endTime,
+    width,
+    height,
+    laneHeight,
+    headerHeight,
+    maxSegments: typeof candidate.maxSegments === 'number' && Number.isInteger(candidate.maxSegments) && candidate.maxSegments >= 0
+      ? candidate.maxSegments
+      : undefined,
+    signalIds: Array.isArray(candidate.signalIds)
+      ? candidate.signalIds.filter((entry): entry is string => typeof entry === 'string')
+      : undefined,
+  };
+}
+
 function normalizeSchematicOptions(value: unknown): LspSchematicOptions {
   return normalizeModuleHierarchyOptions(value);
+}
+
+function assertLspRange(value: unknown, name: string): asserts value is LspRange {
+  if (!isLspRange(value)) {
+    throw new Error(`Expected LSP range for "${name}"`);
+  }
+}
+
+function normalizePositions(value: unknown): LspPosition[] {
+  if (!Array.isArray(value)) {
+    throw new Error(`Expected array for "positions", got ${typeof value}`);
+  }
+
+  return value.map((entry, index) => {
+    if (!entry || typeof entry !== 'object') {
+      throw new Error(`Expected object for "positions[${index}]", got ${typeof entry}`);
+    }
+    const candidate = entry as Partial<LspPosition>;
+    if (typeof candidate.line !== 'number' || typeof candidate.character !== 'number') {
+      throw new Error(`Expected LSP position for "positions[${index}]"`);
+    }
+
+    return {
+      line: candidate.line,
+      character: candidate.character,
+    };
+  });
+}
+
+function normalizeDiagnostics(value: unknown): LspDiagnostic[] {
+  if (value === undefined || value === null) {
+    return [];
+  }
+  if (!Array.isArray(value)) {
+    throw new Error(`Expected array or undefined for "diagnostics", got ${typeof value}`);
+  }
+
+  return value.filter((entry): entry is LspDiagnostic => Boolean(entry && typeof entry === 'object'));
 }
 
 function createInitializeParams() {
@@ -875,7 +1681,11 @@ function createInitializeParams() {
           completionItem: {
             documentationFormat: ['markdown', 'plaintext'],
             snippetSupport: true,
+            resolveSupport: {
+              properties: ['documentation', 'detail', 'additionalTextEdits', 'insertText', 'insertTextFormat'],
+            },
           },
+          contextSupport: true,
         },
         hover: {
           contentFormat: ['markdown', 'plaintext'],
@@ -883,11 +1693,52 @@ function createInitializeParams() {
         definition: {
           linkSupport: true,
         },
+        typeDefinition: {
+          linkSupport: true,
+        },
+        implementation: {
+          linkSupport: true,
+        },
+        documentSymbol: {
+          hierarchicalDocumentSymbolSupport: true,
+        },
+        documentHighlight: {},
+        documentLink: {},
+        inlayHint: {},
+        codeAction: {
+          codeActionLiteralSupport: {
+            codeActionKind: {
+              valueSet: ['quickfix'],
+            },
+          },
+        },
+        foldingRange: {},
+        semanticTokens: {
+          tokenTypes: ['namespace', 'type', 'class', 'enum', 'interface', 'function', 'variable', 'parameter', 'enumMember'],
+          tokenModifiers: [],
+          formats: ['relative'],
+          requests: { full: true, range: false },
+        },
+        selectionRange: {},
+        signatureHelp: {
+          signatureInformation: {
+            documentationFormat: ['markdown', 'plaintext'],
+            parameterInformation: {
+              labelOffsetSupport: true,
+            },
+          },
+        },
+        callHierarchy: {},
+        rename: {
+          prepareSupport: true,
+        },
         references: {},
         publishDiagnostics: {},
       },
       workspace: {
         workspaceFolders: true,
+        symbol: {},
+        applyEdit: true,
       },
     },
   };
@@ -1076,6 +1927,8 @@ export function setLspProjectRoot(root: string): void {
 }
 
 export function disposeLspSession(): void {
+  void closeAllWaveformPipeSessions();
+
   if (activeSession) {
     cleanupSession(activeSession);
   }
@@ -1083,6 +1936,10 @@ export function disposeLspSession(): void {
 
 export function registerLspHandlers(getMainWindow: () => BrowserWindow | null): void {
   ipcMain.handle(AsyncChannels.LSP_GET_DEBUG_EVENTS, async () => lspDebugEvents);
+
+  ipcMain.handle(AsyncChannels.LSP_ENSURE_INITIALIZED, async () => {
+    await withInitializedSession(getMainWindow, async () => undefined);
+  });
 
   ipcMain.handle(AsyncChannels.LSP_OPEN_DOCUMENT, async (_event, filePath: unknown, languageId: unknown, text: unknown) => {
     assertString(filePath, 'filePath');
@@ -1172,6 +2029,60 @@ export function registerLspHandlers(getMainWindow: () => BrowserWindow | null): 
     });
   });
 
+  const registerPositionLocationsHandler = (
+    channel: string,
+    method: string,
+  ) => {
+    ipcMain.handle(channel, async (_event, filePath: unknown, line: unknown, character: unknown) => {
+      assertString(filePath, 'filePath');
+      assertNumber(line, 'line');
+      assertNumber(character, 'character');
+
+      return withInitializedSession(getMainWindow, async (session) => {
+        try {
+          const result = await sendDebugRequest(session, getMainWindow, method, {
+            textDocument: { uri: getDocumentUri(filePath) },
+            position: { line, character },
+          });
+
+          return normalizeWorkspaceLocations(result);
+        } catch (error) {
+          if (isLspRequestTimeoutError(error)) {
+            return [];
+          }
+
+          throw error;
+        }
+      });
+    });
+  };
+
+  const registerDocumentArrayHandler = <T>(
+    channel: string,
+    method: string,
+    normalize: (value: unknown) => T[],
+  ) => {
+    ipcMain.handle(channel, async (_event, filePath: unknown) => {
+      assertString(filePath, 'filePath');
+
+      return withInitializedSession(getMainWindow, async (session) => {
+        try {
+          const result = await sendDebugRequest(session, getMainWindow, method, {
+            textDocument: { uri: getDocumentUri(filePath) },
+          });
+
+          return normalize(result);
+        } catch (error) {
+          if (isLspRequestTimeoutError(error)) {
+            return [];
+          }
+
+          throw error;
+        }
+      });
+    });
+  };
+
   ipcMain.handle(
     AsyncChannels.LSP_COMPLETION,
     async (
@@ -1214,6 +2125,27 @@ export function registerLspHandlers(getMainWindow: () => BrowserWindow | null): 
       });
     },
   );
+
+  ipcMain.handle(AsyncChannels.LSP_COMPLETION_RESOLVE, async (_event, item: unknown) => {
+    const normalizedItem = normalizeCompletionItem(item);
+    if (!normalizedItem) {
+      throw new Error('Expected completion item for "item"');
+    }
+
+    return withInitializedSession(getMainWindow, async (session) => {
+      try {
+        const result = await sendDebugRequest(session, getMainWindow, 'completionItem/resolve', normalizedItem);
+
+        return normalizeCompletionItem(result);
+      } catch (error) {
+        if (isLspRequestTimeoutError(error)) {
+          return normalizedItem;
+        }
+
+        throw error;
+      }
+    });
+  });
 
   ipcMain.handle(AsyncChannels.LSP_HOVER, async (_event, filePath: unknown, line: unknown, character: unknown) => {
     assertString(filePath, 'filePath');
@@ -1261,6 +2193,174 @@ export function registerLspHandlers(getMainWindow: () => BrowserWindow | null): 
     });
   });
 
+  registerPositionLocationsHandler(AsyncChannels.LSP_TYPE_DEFINITION, 'textDocument/typeDefinition');
+  registerPositionLocationsHandler(AsyncChannels.LSP_IMPLEMENTATION, 'textDocument/implementation');
+
+  ipcMain.handle(AsyncChannels.LSP_DOCUMENT_HIGHLIGHTS, async (_event, filePath: unknown, line: unknown, character: unknown) => {
+    assertString(filePath, 'filePath');
+    assertNumber(line, 'line');
+    assertNumber(character, 'character');
+
+    return withInitializedSession(getMainWindow, async (session) => {
+      try {
+        const result = await sendDebugRequest(session, getMainWindow, 'textDocument/documentHighlight', {
+          textDocument: { uri: getDocumentUri(filePath) },
+          position: { line, character },
+        });
+
+        return normalizeDocumentHighlights(result);
+      } catch (error) {
+        if (isLspRequestTimeoutError(error)) {
+          return [];
+        }
+
+        throw error;
+      }
+    });
+  });
+
+  registerDocumentArrayHandler(AsyncChannels.LSP_DOCUMENT_LINKS, 'textDocument/documentLink', normalizeDocumentLinks);
+
+  ipcMain.handle(AsyncChannels.LSP_INLAY_HINTS, async (_event, filePath: unknown, range: unknown) => {
+    assertString(filePath, 'filePath');
+    assertLspRange(range, 'range');
+
+    return withInitializedSession(getMainWindow, async (session) => {
+      try {
+        const result = await sendDebugRequest(session, getMainWindow, 'textDocument/inlayHint', {
+          textDocument: { uri: getDocumentUri(filePath) },
+          range,
+        });
+
+        return normalizeInlayHints(result);
+      } catch (error) {
+        if (isLspRequestTimeoutError(error)) {
+          return [];
+        }
+
+        throw error;
+      }
+    });
+  });
+
+  ipcMain.handle(AsyncChannels.LSP_CODE_ACTIONS, async (_event, filePath: unknown, range: unknown, diagnostics: unknown) => {
+    assertString(filePath, 'filePath');
+    assertLspRange(range, 'range');
+    const normalizedDiagnostics = normalizeDiagnostics(diagnostics);
+
+    return withInitializedSession(getMainWindow, async (session) => {
+      try {
+        const result = await sendDebugRequest(session, getMainWindow, 'textDocument/codeAction', {
+          textDocument: { uri: getDocumentUri(filePath) },
+          range,
+          context: { diagnostics: normalizedDiagnostics },
+        });
+
+        return normalizeCodeActions(result);
+      } catch (error) {
+        if (isLspRequestTimeoutError(error)) {
+          return [];
+        }
+
+        throw error;
+      }
+    });
+  });
+
+  registerDocumentArrayHandler(AsyncChannels.LSP_FOLDING_RANGES, 'textDocument/foldingRange', normalizeFoldingRanges);
+
+  ipcMain.handle(AsyncChannels.LSP_SEMANTIC_TOKENS_FULL, async (_event, filePath: unknown) => {
+    assertString(filePath, 'filePath');
+
+    return withInitializedSession(getMainWindow, async (session) => {
+      try {
+        const result = await sendDebugRequest(session, getMainWindow, 'textDocument/semanticTokens/full', {
+          textDocument: { uri: getDocumentUri(filePath) },
+        });
+
+        return normalizeSemanticTokens(result);
+      } catch (error) {
+        if (isLspRequestTimeoutError(error)) {
+          return { data: [] };
+        }
+
+        throw error;
+      }
+    });
+  });
+
+  ipcMain.handle(AsyncChannels.LSP_SELECTION_RANGES, async (_event, filePath: unknown, positions: unknown) => {
+    assertString(filePath, 'filePath');
+    const normalizedPositions = normalizePositions(positions);
+
+    return withInitializedSession(getMainWindow, async (session) => {
+      try {
+        const result = await sendDebugRequest(session, getMainWindow, 'textDocument/selectionRange', {
+          textDocument: { uri: getDocumentUri(filePath) },
+          positions: normalizedPositions,
+        });
+
+        return normalizeSelectionRanges(result);
+      } catch (error) {
+        if (isLspRequestTimeoutError(error)) {
+          return [];
+        }
+
+        throw error;
+      }
+    });
+  });
+
+  ipcMain.handle(
+    AsyncChannels.LSP_SIGNATURE_HELP,
+    async (
+      _event,
+      filePath: unknown,
+      line: unknown,
+      character: unknown,
+      triggerCharacter?: unknown,
+      triggerKind?: unknown,
+      isRetrigger?: unknown,
+    ) => {
+      assertString(filePath, 'filePath');
+      assertNumber(line, 'line');
+      assertNumber(character, 'character');
+      assertOptionalString(triggerCharacter, 'triggerCharacter');
+      if (triggerKind !== undefined) {
+        assertNumber(triggerKind, 'triggerKind');
+      }
+      if (isRetrigger !== undefined && typeof isRetrigger !== 'boolean') {
+        throw new Error(`Expected boolean or undefined for "isRetrigger", got ${typeof isRetrigger}`);
+      }
+
+      return withInitializedSession(getMainWindow, async (session) => {
+        try {
+          const result = await sendDebugRequest(session, getMainWindow, 'textDocument/signatureHelp', {
+            textDocument: { uri: getDocumentUri(filePath) },
+            position: { line, character },
+            context: triggerKind === undefined
+              ? undefined
+              : {
+                triggerKind,
+                triggerCharacter,
+                isRetrigger: isRetrigger === true,
+              },
+          });
+
+          return normalizeSignatureHelp(result);
+        } catch (error) {
+          if (isLspRequestTimeoutError(error)) {
+            return null;
+          }
+
+          throw error;
+        }
+      });
+    },
+  );
+
+  registerDocumentArrayHandler(AsyncChannels.LSP_DOCUMENT_SYMBOLS, 'textDocument/documentSymbol', normalizeDocumentSymbols);
+
   ipcMain.handle(
     AsyncChannels.LSP_REFERENCES,
     async (_event, filePath: unknown, line: unknown, character: unknown, includeDeclaration?: unknown) => {
@@ -1291,12 +2391,174 @@ export function registerLspHandlers(getMainWindow: () => BrowserWindow | null): 
     },
   );
 
+  ipcMain.handle(AsyncChannels.LSP_PREPARE_CALL_HIERARCHY, async (_event, filePath: unknown, line: unknown, character: unknown) => {
+    assertString(filePath, 'filePath');
+    assertNumber(line, 'line');
+    assertNumber(character, 'character');
+
+    return withInitializedSession(getMainWindow, async (session) => {
+      try {
+        const result = await sendDebugRequest(session, getMainWindow, 'textDocument/prepareCallHierarchy', {
+          textDocument: { uri: getDocumentUri(filePath) },
+          position: { line, character },
+        });
+
+        return normalizeCallHierarchyItems(result);
+      } catch (error) {
+        if (isLspRequestTimeoutError(error)) {
+          return [];
+        }
+
+        throw error;
+      }
+    });
+  });
+
+  ipcMain.handle(AsyncChannels.LSP_CALL_HIERARCHY_INCOMING, async (_event, item: unknown) => {
+    const normalizedItem = normalizeCallHierarchyItem(item);
+    if (!normalizedItem) {
+      throw new Error('Expected call hierarchy item for "item"');
+    }
+
+    return withInitializedSession(getMainWindow, async (session) => {
+      try {
+        const result = await sendDebugRequest(session, getMainWindow, 'callHierarchy/incomingCalls', {
+          item: normalizedItem,
+        });
+
+        return normalizeCallHierarchyIncomingCalls(result);
+      } catch (error) {
+        if (isLspRequestTimeoutError(error)) {
+          return [];
+        }
+
+        throw error;
+      }
+    });
+  });
+
+  ipcMain.handle(AsyncChannels.LSP_CALL_HIERARCHY_OUTGOING, async (_event, item: unknown) => {
+    const normalizedItem = normalizeCallHierarchyItem(item);
+    if (!normalizedItem) {
+      throw new Error('Expected call hierarchy item for "item"');
+    }
+
+    return withInitializedSession(getMainWindow, async (session) => {
+      try {
+        const result = await sendDebugRequest(session, getMainWindow, 'callHierarchy/outgoingCalls', {
+          item: normalizedItem,
+        });
+
+        return normalizeCallHierarchyOutgoingCalls(result);
+      } catch (error) {
+        if (isLspRequestTimeoutError(error)) {
+          return [];
+        }
+
+        throw error;
+      }
+    });
+  });
+
+  ipcMain.handle(AsyncChannels.LSP_WORKSPACE_SYMBOLS, async (_event, query: unknown) => {
+    assertString(query, 'query');
+
+    return withInitializedSession(getMainWindow, async (session) => {
+      try {
+        const result = await sendDebugRequest(session, getMainWindow, 'workspace/symbol', { query });
+
+        return normalizeWorkspaceSymbols(result);
+      } catch (error) {
+        if (isLspRequestTimeoutError(error)) {
+          return [];
+        }
+
+        throw error;
+      }
+    });
+  });
+
+  ipcMain.handle(AsyncChannels.LSP_PREPARE_RENAME, async (_event, filePath: unknown, line: unknown, character: unknown) => {
+    assertString(filePath, 'filePath');
+    assertNumber(line, 'line');
+    assertNumber(character, 'character');
+
+    return withInitializedSession(getMainWindow, async (session) => {
+      try {
+        const result = await sendDebugRequest(session, getMainWindow, 'textDocument/prepareRename', {
+          textDocument: { uri: getDocumentUri(filePath) },
+          position: { line, character },
+        });
+
+        return normalizePrepareRenameResult(result);
+      } catch (error) {
+        if (isLspRequestTimeoutError(error)) {
+          return null;
+        }
+
+        throw error;
+      }
+    });
+  });
+
+  ipcMain.handle(AsyncChannels.LSP_RENAME, async (_event, filePath: unknown, line: unknown, character: unknown, newName: unknown) => {
+    assertString(filePath, 'filePath');
+    assertNumber(line, 'line');
+    assertNumber(character, 'character');
+    assertString(newName, 'newName');
+
+    return withInitializedSession(getMainWindow, async (session) => {
+      try {
+        const result = await sendDebugRequest(session, getMainWindow, 'textDocument/rename', {
+          textDocument: { uri: getDocumentUri(filePath) },
+          position: { line, character },
+          newName,
+        });
+
+        return normalizeWorkspaceEdit(result);
+      } catch (error) {
+        if (isLspRequestTimeoutError(error)) {
+          return null;
+        }
+
+        throw error;
+      }
+    });
+  });
+
+  ipcMain.handle(AsyncChannels.LSP_OUTLINE, async (_event, filePath: unknown, options?: unknown) => {
+    assertString(filePath, 'filePath');
+    const normalizedOptions = normalizeOutlineOptions(options);
+    const uri = getDocumentUri(filePath);
+
+    return withInitializedSession(getMainWindow, async (session) => {
+      try {
+        const result = await sendDebugRequest(session, getMainWindow, 'systemverilog/outline', {
+          textDocument: { uri },
+          ...normalizedOptions,
+        }, {
+          timeoutMs: LSP_OUTLINE_TIMEOUT_MS,
+        });
+
+        return normalizeOutlineResult(result);
+      } catch (error) {
+        if (isLspRequestTimeoutError(error)) {
+          return createEmptyOutlineResult(uri, [getLspRequestErrorMessage(error)]);
+        }
+
+        throw error;
+      }
+    });
+  });
+
   ipcMain.handle(AsyncChannels.LSP_MODULE_HIERARCHY, async (_event, options?: unknown) => {
     const normalizedOptions = normalizeModuleHierarchyOptions(options);
 
     return withInitializedSession(getMainWindow, async (session) => {
       try {
-        const result = await sendDebugRequest(session, getMainWindow, 'systemverilog/moduleHierarchy', normalizedOptions);
+        const result = await sendDebugRequest(session, getMainWindow, 'systemverilog/moduleHierarchy', normalizedOptions, {
+          timeoutMs: LSP_MODULE_HIERARCHY_TIMEOUT_MS,
+        });
 
         return normalizeModuleHierarchy(result);
       } catch (error) {
@@ -1324,6 +2586,43 @@ export function registerLspHandlers(getMainWindow: () => BrowserWindow | null): 
 
         throw error;
       }
+    });
+  });
+
+  ipcMain.handle(AsyncChannels.LSP_WAVEFORM_OPEN, async () => {
+    return withInitializedSession(getMainWindow, async (session) => {
+      try {
+        const result = await sendDebugRequest(session, getMainWindow, 'systemverilog/waveform/open', { source: 'mock' }, {
+          timeoutMs: LSP_WAVEFORM_TIMEOUT_MS,
+        });
+
+        return openWaveformPipeSession(normalizeWaveformOpenSessionMetadata(result));
+      } catch (error) {
+        if (isLspRequestTimeoutError(error)) {
+          return createEmptyWaveformOpenResult(getLspRequestErrorMessage(error));
+        }
+
+        throw error;
+      }
+    });
+  });
+
+  ipcMain.handle(AsyncChannels.LSP_WAVEFORM_FRAME, async (_event, options?: unknown) => {
+    const normalizedOptions = normalizeWaveformFrameOptions(options);
+
+    return requestWaveformPipeFrame(normalizedOptions);
+  });
+
+  ipcMain.handle(AsyncChannels.LSP_WAVEFORM_CLOSE, async (_event, sessionId: unknown) => {
+    assertString(sessionId, 'sessionId');
+    await closeWaveformPipeSession(sessionId);
+
+    return withInitializedSession(getMainWindow, async (session) => {
+      await sendDebugRequest(session, getMainWindow, 'systemverilog/waveform/close', { sessionId }, {
+        timeoutMs: LSP_WAVEFORM_TIMEOUT_MS,
+      });
+
+      return true;
     });
   });
 }
