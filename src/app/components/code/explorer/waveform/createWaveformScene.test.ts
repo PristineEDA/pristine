@@ -196,12 +196,56 @@ describe('createWaveformScene', () => {
     expect(scene.renderStats.drawnHorizontalSegmentCount).toBeGreaterThan(0);
     expect(scene.renderStats.busSpecialStateHexagonCount).toBeGreaterThan(0);
     expect(scene.renderStats.busSpecialStateLabelCount).toBeGreaterThan(0);
+    expect(scene.renderStats.gpuBufferUpdateCount).toBeGreaterThan(0);
+    expect(scene.renderStats.gpuLayerCount).toBeGreaterThan(0);
+    expect(scene.renderStats.gpuVertexCount).toBeGreaterThan(0);
+    expect(scene.renderStats.meshVertexCount).toBe(scene.renderStats.gpuVertexCount);
     expect(scene.state.frame).toBe(frame);
 
     expect(updateWaveformScenePan(scene, { startTime: 50, endTime: 150 })).toBe(false);
     expect(scene.renderStats.panBufferMissCount).toBe(1);
     expect(scene.nodes.contentRows.x).toBe(0);
     expect(scene.nodes.statusHeader.x).toBe(0);
+
+    scene.world.destroy({ children: true });
+  });
+
+  it('updates GPU buffers without row content redraw when panning inside a prepared binary frame', () => {
+    const preparedViewport = { startTime: 0, endTime: 200 };
+    const viewport = { startTime: 40, endTime: 140 };
+    const frame = parseWaveformBinaryFrame(createWaveformFixtureFrame(preparedViewport, 900));
+    const scene = createWaveformScene({
+      cursorTime: waveformFixtureData.cursorTime,
+      data: waveformFixtureData,
+      frame,
+      height: 320,
+      selectedSignalId: null,
+      viewport,
+      width: 900,
+    });
+    const initialGpuUpdateCount = scene.renderStats.gpuBufferUpdateCount;
+    const initialGpuVertexCount = scene.renderStats.gpuVertexCount;
+    const initialRowContentRedrawCount = scene.renderStats.rowContentRedrawCount;
+    const firstSignalNode = scene.rowRegistry.activeRows.get('signal:u_top_module1-clk');
+    const firstMeshContainer = firstSignalNode?.contentContainer.children[0] ?? null;
+
+    expect(initialGpuUpdateCount).toBeGreaterThan(0);
+    expect(initialGpuVertexCount).toBeGreaterThan(0);
+
+    expect(updateWaveformScenePan(scene, { startTime: 50, endTime: 150 })).toBe(true);
+
+    const nextSignalNode = scene.rowRegistry.activeRows.get('signal:u_top_module1-clk');
+    const nextMeshContainer = nextSignalNode?.contentContainer.children[0] ?? null;
+
+    expect(nextMeshContainer).toBe(firstMeshContainer);
+    expect(scene.renderStats.panBufferHitCount).toBe(1);
+    expect(scene.renderStats.panBufferMissCount).toBe(0);
+    expect(scene.renderStats.rowContentRedrawCount).toBe(0);
+    expect(scene.renderStats.rowContentSkipCount).toBeGreaterThan(0);
+    expect(scene.renderStats.gpuBufferUpdateCount).toBeGreaterThanOrEqual(initialGpuUpdateCount);
+    expect(scene.renderStats.gpuVertexCount).toBeGreaterThan(0);
+    expect(scene.renderStats.meshVertexCount).toBe(scene.renderStats.gpuVertexCount);
+    expect(initialRowContentRedrawCount).toBeGreaterThan(0);
 
     scene.world.destroy({ children: true });
   });

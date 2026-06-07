@@ -43,6 +43,10 @@ export interface WaveformRenderStats {
   panBufferHitCount: number;
   panBufferMissCount: number;
   panPixelShiftCount: number;
+  gpuBufferUpdateCount: number;
+  gpuBufferUpdateMs: number;
+  gpuLayerCount: number;
+  gpuVertexCount: number;
   meshBufferUpdateMs: number;
   meshVertexCount: number;
   labelPoolSize: number;
@@ -99,6 +103,10 @@ export interface WaveformSceneUpdateMetrics {
   panBufferHitCount: number;
   panBufferMissCount: number;
   panPixelShiftCount: number;
+  gpuBufferUpdateCount: number;
+  gpuBufferUpdateMs: number;
+  gpuLayerCount: number;
+  gpuVertexCount: number;
   meshBufferUpdateMs: number;
   meshVertexCount: number;
   labelPoolSize: number;

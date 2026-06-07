@@ -5592,6 +5592,19 @@ test('waveform bottom panel renders binary waveform and controls', async () => {
   await expect.poll(async () => readCanvasNumber('data-mesh-vertex-count'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThanOrEqual(0);
+  await expect.poll(async () => readCanvasNumber('data-gpu-buffer-update-count'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
+  await expect.poll(async () => readCanvasNumber('data-gpu-layer-count'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
+  await expect.poll(async () => readCanvasNumber('data-gpu-vertex-count'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
+  const initialGpuVertexCount = await readCanvasNumber('data-gpu-vertex-count');
+  const initialGpuBufferUpdateCount = await readCanvasNumber('data-gpu-buffer-update-count');
+  const initialRowContentRedrawCount = await readCanvasNumber('data-row-content-redraw-count');
+  const initialInteractionFrameRequestCount = await readCanvasNumber('data-interaction-frame-request-count');
   await expect.poll(async () => readCanvasNumber('data-label-pool-size'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThanOrEqual(0);
@@ -5806,6 +5819,16 @@ test('waveform bottom panel renders binary waveform and controls', async () => {
   await expect.poll(async () => Number(await panel.getAttribute('data-visible-window-start') ?? '0'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(startBeforeShiftWheel);
+  await expect.poll(async () => readCanvasNumber('data-gpu-buffer-update-count'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(initialGpuBufferUpdateCount);
+  expect(await readCanvasNumber('data-row-content-skip-count')).toBeGreaterThan(0);
+  expect(await readCanvasNumber('data-row-content-redraw-count')).toBeGreaterThanOrEqual(initialRowContentRedrawCount);
+  expect(await readCanvasNumber('data-interaction-frame-request-count')).toBeLessThanOrEqual(initialInteractionFrameRequestCount + 2);
+  expect(await readCanvasNumber('data-gpu-vertex-count')).toBeGreaterThan(0);
+  expect(await readCanvasNumber('data-gpu-vertex-count')).toBeLessThanOrEqual(initialGpuVertexCount * 4);
+  await expect(canvasHost).toHaveAttribute('data-waveform-frame-truncated', 'false');
+  await expect(canvasHost).toHaveAttribute('data-waveform-empty-visible-signal-count', '0');
   await expect.poll(async () => Number(await canvasHost.getAttribute('data-ruler-scroll-indicator-left') ?? '0'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(rulerLeftBeforeShiftWheel);

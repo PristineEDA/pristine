@@ -501,6 +501,12 @@ export function WaveformCanvas({
     sceneUpdateMetricsRef.current.panBufferHitCount += baseStats.panBufferHitCount;
     sceneUpdateMetricsRef.current.panBufferMissCount += baseStats.panBufferMissCount;
     sceneUpdateMetricsRef.current.panPixelShiftCount += baseStats.panPixelShiftCount;
+    sceneUpdateMetricsRef.current.gpuBufferUpdateCount += baseStats.gpuBufferUpdateCount;
+    sceneUpdateMetricsRef.current.gpuBufferUpdateMs += baseStats.gpuBufferUpdateMs;
+    sceneUpdateMetricsRef.current.gpuLayerCount = baseStats.gpuLayerCount;
+    sceneUpdateMetricsRef.current.gpuVertexCount = baseStats.gpuVertexCount;
+    sceneUpdateMetricsRef.current.meshBufferUpdateMs = sceneUpdateMetricsRef.current.gpuBufferUpdateMs;
+    sceneUpdateMetricsRef.current.meshVertexCount = sceneUpdateMetricsRef.current.gpuVertexCount;
   }
 
   function applyRenderStats(baseStats: WaveformRenderStats) {
@@ -663,6 +669,10 @@ export function WaveformCanvas({
       data-last-fps={formatOptionalNumber(renderMetrics.lastFps)}
       data-last-render-ms={formatOptionalNumber(renderMetrics.lastRenderDurationMs)}
       data-interaction-frame-request-count={interactionFrameRequestCount}
+      data-gpu-buffer-update-count={renderStats.gpuBufferUpdateCount}
+      data-gpu-buffer-update-ms={renderStats.gpuBufferUpdateMs.toFixed(3)}
+      data-gpu-layer-count={renderStats.gpuLayerCount}
+      data-gpu-vertex-count={renderStats.gpuVertexCount}
       data-label-pool-size={renderStats.labelPoolSize}
       data-mesh-buffer-update-ms={renderStats.meshBufferUpdateMs.toFixed(3)}
       data-mesh-vertex-count={renderStats.meshVertexCount}
@@ -786,6 +796,10 @@ function createEmptyRenderStats(): WaveformRenderStats {
     panBufferHitCount: 0,
     panBufferMissCount: 0,
     panPixelShiftCount: 0,
+    gpuBufferUpdateCount: 0,
+    gpuBufferUpdateMs: 0,
+    gpuLayerCount: 0,
+    gpuVertexCount: 0,
     meshBufferUpdateMs: 0,
     meshVertexCount: 0,
     labelPoolSize: 0,
@@ -836,6 +850,10 @@ function createEmptySceneUpdateMetrics(): WaveformSceneUpdateMetrics {
     panBufferHitCount: 0,
     panBufferMissCount: 0,
     panPixelShiftCount: 0,
+    gpuBufferUpdateCount: 0,
+    gpuBufferUpdateMs: 0,
+    gpuLayerCount: 0,
+    gpuVertexCount: 0,
     meshBufferUpdateMs: 0,
     meshVertexCount: 0,
     labelPoolSize: 0,

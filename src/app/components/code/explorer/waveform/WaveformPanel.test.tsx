@@ -81,6 +81,10 @@ vi.mock('./WaveformCanvas', () => ({
         data-layer-count={waveformLayerNames.length}
         data-layer-names={waveformLayerNames.join(',')}
         data-interaction-frame-request-count={interactionFrameRequestCount ?? 0}
+        data-gpu-buffer-update-count="6"
+        data-gpu-buffer-update-ms="1.250"
+        data-gpu-layer-count="4"
+        data-gpu-vertex-count="512"
         data-label-pool-size="8"
         data-mesh-buffer-update-ms="1.250"
         data-mesh-vertex-count="512"
@@ -206,6 +210,10 @@ describe('WaveformPanel', () => {
     expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-waveform-empty-visible-signal-count', '0');
     expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-prepared-range-start', '0.00');
     expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-prepared-range-end', '200.00');
+    expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-gpu-buffer-update-count'))).toBeGreaterThan(0);
+    expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-gpu-buffer-update-ms'))).toBeGreaterThanOrEqual(0);
+    expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-gpu-layer-count'))).toBeGreaterThan(0);
+    expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-gpu-vertex-count'))).toBeGreaterThan(0);
     expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-mesh-buffer-update-ms'))).toBeGreaterThanOrEqual(0);
     expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-mesh-vertex-count'))).toBeGreaterThan(0);
     expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-label-pool-size'))).toBeGreaterThan(0);
