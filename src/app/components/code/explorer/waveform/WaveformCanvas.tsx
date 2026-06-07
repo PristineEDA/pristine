@@ -40,7 +40,7 @@ import type {
   WaveformSceneUpdateMetrics,
   WaveformViewport,
 } from './waveformTypes';
-import type { ParsedWaveformFrame } from './waveformBinaryFrame';
+import { waveformBinaryFrameSignalTableStride, type ParsedWaveformFrame } from './waveformBinaryFrame';
 
 type PixiRendererPreference = 'webgpu' | 'webgl';
 
@@ -590,6 +590,7 @@ export function WaveformCanvas({
   const selectedSignalVisibleY = selectedSignalLaneY === null ? null : selectedSignalLaneY - verticalScrollTop;
   const stateCounts = getWaveformStateCounts(data);
   const shapeCounts = getWaveformShapeCounts(data, viewport);
+  const emptyVisibleSignalCount = getWaveformEmptyVisibleSignalCount(frame);
   const pulseFillCount = getWaveformDigitalPulseFillCount(data, viewport);
   const rulerIndicatorMetrics = getWaveformRulerScrollIndicatorMetrics(viewport, data.duration, effectiveCanvasWidth);
 
@@ -674,7 +675,9 @@ export function WaveformCanvas({
       data-x-state-block-count={shapeCounts.xStateBlockCount}
       data-z-state-block-count={shapeCounts.zStateBlockCount}
       data-z-state-count={stateCounts.zStateCount}
+      data-waveform-empty-visible-signal-count={emptyVisibleSignalCount}
       data-waveform-frame-segment-count={frame?.segmentCount ?? 0}
+      data-waveform-frame-truncated={String(frame?.truncated ?? false)}
       data-waveform-frame-version={frame?.version ?? ''}
       data-zoom={zoomLevel.toFixed(2)}
       role="img"
@@ -821,6 +824,23 @@ function getVisiblePrimitiveCount(scene: WaveformScene | null, renderStats: Wave
     + scene.shapeCounts.xStateBlockCount
     + scene.shapeCounts.zStateBlockCount
     + scene.digitalPulseFillCount;
+}
+
+function getWaveformEmptyVisibleSignalCount(frame: ParsedWaveformFrame | null | undefined) {
+  if (!frame) {
+    return 0;
+  }
+
+  let emptySignalCount = 0;
+
+  for (let tableEntryIndex = 0; tableEntryIndex < frame.signalCount; tableEntryIndex += 1) {
+    const segmentCount = frame.signalTable[tableEntryIndex * waveformBinaryFrameSignalTableStride + 2] ?? 0;
+    if (segmentCount === 0) {
+      emptySignalCount += 1;
+    }
+  }
+
+  return emptySignalCount;
 }
 
 function pushMetricSample(samples: number[], nextValue: number) {

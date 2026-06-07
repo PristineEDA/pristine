@@ -24,7 +24,7 @@ import type { WaveformSignalDisplayRow } from './waveformLayout';
 import type { ElectronGpuDiagnostics, RendererGpuSupportDiagnostics } from '../../../../../../types/electron-gpu';
 import { WaveformCanvas } from './WaveformCanvas';
 import { useWaveformSession } from './waveformSession';
-import { WaveformBinaryValueKind, waveformBinaryFrameSignalTableStride } from './waveformBinaryFrame';
+import { WaveformBinaryValueKind, waveformBinaryFrameSignalTableStride, type ParsedWaveformFrame } from './waveformBinaryFrame';
 
 const zoomButtonFactor = 1.35;
 const initialWaveformViewportWidth = 900;
@@ -64,6 +64,7 @@ export function WaveformPanel() {
   const selectedValue = selectedSignal
     ? getSignalDisplayValue(session.frame, data, selectedSignal, cursorTime, activeViewport)
     : '-';
+  const emptyVisibleSignalCount = getWaveformEmptyVisibleSignalCount(session.frame);
   const waitForInitialBinaryFrame = data?.source === 'lsp-binary' && !session.frame;
   const canRenderWaveformCanvas = Boolean(data) && !waitForInitialBinaryFrame;
   const loadingMessage = session.status === 'error' || session.status === 'unavailable'
@@ -292,8 +293,10 @@ export function WaveformPanel() {
       data-selected-signal-id={selectedSignalId ?? ''}
       data-signal-count={data?.signals.length ?? 0}
       data-waveform-error={session.error ?? ''}
+      data-waveform-empty-visible-signal-count={emptyVisibleSignalCount}
       data-waveform-frame-request-count={session.frameRequestCount}
       data-waveform-frame-segment-count={session.frame?.segmentCount ?? 0}
+      data-waveform-frame-truncated={String(session.frame?.truncated ?? false)}
       data-waveform-frame-version={session.frame?.version ?? ''}
       data-waveform-session-status={session.status}
       data-waveform-source={data?.source ?? ''}
@@ -722,6 +725,23 @@ function getSignalDisplayValue(
   }
 
   return data?.source === 'lsp-binary' ? '-' : getSignalValueAtTime(signal, cursorTime);
+}
+
+function getWaveformEmptyVisibleSignalCount(frame: ParsedWaveformFrame | null) {
+  if (!frame) {
+    return 0;
+  }
+
+  let emptySignalCount = 0;
+
+  for (let tableEntryIndex = 0; tableEntryIndex < frame.signalCount; tableEntryIndex += 1) {
+    const segmentCount = frame.signalTable[tableEntryIndex * waveformBinaryFrameSignalTableStride + 2] ?? 0;
+    if (segmentCount === 0) {
+      emptySignalCount += 1;
+    }
+  }
+
+  return emptySignalCount;
 }
 
 function getFrameSignalTableEntry(frame: NonNullable<ReturnType<typeof useWaveformSession>['frame']>, signalIndex: number) {

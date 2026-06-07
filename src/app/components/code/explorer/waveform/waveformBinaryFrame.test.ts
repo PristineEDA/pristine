@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   createWaveformBinaryFrameFromDataset,
   parseWaveformBinaryFrame,
+  waveformBinaryFrameFlagTruncated,
   WaveformBinaryValueKind,
   waveformBinaryFrameVersion,
 } from './waveformBinaryFrame';
@@ -18,6 +19,8 @@ describe('waveformBinaryFrame', () => {
     expect(frame.version).toBe(waveformBinaryFrameVersion);
     expect(frame.signalCount).toBe(2);
     expect(frame.segmentCount).toBe(3);
+    expect(frame.flags).toBe(0);
+    expect(frame.truncated).toBe(false);
     expect(frame.signalTable.buffer).toBe(buffer);
     expect(frame.x0.buffer).toBe(buffer);
     expect(frame.x1.buffer).toBe(buffer);
@@ -34,6 +37,36 @@ describe('waveformBinaryFrame', () => {
     expect(frame.getLabel(1)).toBe('a5');
     expect(frame.getLabel(0)).toBeNull();
     expect(frame.getLabel(99)).toBeNull();
+  });
+
+  it('parses frame truncation flags', () => {
+    const buffer = createFrameBuffer();
+    new DataView(buffer).setUint32(48, waveformBinaryFrameFlagTruncated, true);
+
+    const frame = parseWaveformBinaryFrame(buffer);
+
+    expect(frame.flags).toBe(waveformBinaryFrameFlagTruncated);
+    expect(frame.truncated).toBe(true);
+  });
+
+  it('can build a frame table for only the requested signals', () => {
+    const buffer = createWaveformBinaryFrameFromDataset(createDataSet(), [
+      {
+        label: 'a5',
+        laneY: 82,
+        signalIndex: 1,
+        valueKind: WaveformBinaryValueKind.Bus,
+        x0: 40,
+        x1: 80,
+      },
+    ], {
+      signalIndices: [1],
+    });
+
+    const frame = parseWaveformBinaryFrame(buffer);
+
+    expect(frame.signalCount).toBe(1);
+    expect(Array.from(frame.signalTable)).toEqual([1, 0, 1, 1]);
   });
 
   it('rejects bad magic and unsupported versions', () => {

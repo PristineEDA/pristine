@@ -4,6 +4,7 @@ export const waveformBinaryFrameMagic = 0x46565750; // PWVF, little-endian.
 export const waveformBinaryFrameVersion = 1;
 export const waveformBinaryFrameSignalTableStride = 4;
 export const waveformBinaryFrameNoLabel = 0xffffffff;
+export const waveformBinaryFrameFlagTruncated = 1;
 
 const waveformBinaryFrameHeaderByteLength = 56;
 const textDecoder = new TextDecoder();
@@ -21,6 +22,8 @@ export interface ParsedWaveformFrame {
   version: number;
   signalCount: number;
   segmentCount: number;
+  flags: number;
+  truncated: boolean;
   signalTable: Uint32Array;
   x0: Float32Array;
   x1: Float32Array;
@@ -34,6 +37,7 @@ export interface ParsedWaveformFrame {
 interface WaveformFrameHeader {
   labelBytesLength: number;
   labelBytesOffset: number;
+  flags: number;
   labelIndexOffset: number;
   laneYOffset: number;
   segmentCount: number;
@@ -53,6 +57,10 @@ export interface WaveformBinaryFrameSegmentInput {
   valueKind: WaveformBinaryValueKind;
   x0: number;
   x1: number;
+}
+
+export interface WaveformBinaryFrameBuildOptions {
+  signalIndices?: readonly number[];
 }
 
 export function parseWaveformBinaryFrame(buffer: ArrayBuffer): ParsedWaveformFrame {
@@ -95,6 +103,8 @@ export function parseWaveformBinaryFrame(buffer: ArrayBuffer): ParsedWaveformFra
     version: header.version,
     signalCount: header.signalCount,
     segmentCount: header.segmentCount,
+    flags: header.flags,
+    truncated: (header.flags & waveformBinaryFrameFlagTruncated) !== 0,
     signalTable,
     x0,
     x1,
@@ -143,6 +153,7 @@ export function parseWaveformBinaryFrame(buffer: ArrayBuffer): ParsedWaveformFra
 export function createWaveformBinaryFrameFromDataset(
   data: WaveformDataSet,
   segments: readonly WaveformBinaryFrameSegmentInput[],
+  options: WaveformBinaryFrameBuildOptions = {},
 ): ArrayBuffer {
   const signalStarts = new Array<number>(data.signals.length).fill(0);
   const signalCounts = new Array<number>(data.signals.length).fill(0);
@@ -179,7 +190,16 @@ export function createWaveformBinaryFrameFromDataset(
     labelBytesLength += encoded.byteLength + 4;
   }
 
-  const signalCount = data.signals.length;
+  const tableSignalIndices = options.signalIndices && options.signalIndices.length > 0
+    ? [...options.signalIndices]
+    : data.signals.map((_, signalIndex) => signalIndex);
+  for (const signalIndex of tableSignalIndices) {
+    if (!Number.isInteger(signalIndex) || signalIndex < 0 || signalIndex >= data.signals.length) {
+      throw new Error(`Invalid waveform frame signal table index: ${signalIndex}.`);
+    }
+  }
+
+  const signalCount = tableSignalIndices.length;
   const segmentCount = sortedSegments.length;
   const signalTableOffset = alignOffset(waveformBinaryFrameHeaderByteLength, 4);
   const x0Offset = alignOffset(signalTableOffset + signalCount * waveformBinaryFrameSignalTableStride * Uint32Array.BYTES_PER_ELEMENT, 4);
@@ -208,8 +228,9 @@ export function createWaveformBinaryFrameFromDataset(
   view.setUint32(52, segmentCount, true);
 
   const signalTable = new Uint32Array(buffer, signalTableOffset, signalCount * waveformBinaryFrameSignalTableStride);
-  for (let signalIndex = 0; signalIndex < signalCount; signalIndex += 1) {
-    const base = signalIndex * waveformBinaryFrameSignalTableStride;
+  for (let tableIndex = 0; tableIndex < tableSignalIndices.length; tableIndex += 1) {
+    const signalIndex = tableSignalIndices[tableIndex]!;
+    const base = tableIndex * waveformBinaryFrameSignalTableStride;
     signalTable[base] = signalIndex;
     signalTable[base + 1] = signalStarts[signalIndex] ?? 0;
     signalTable[base + 2] = signalCounts[signalIndex] ?? 0;
@@ -255,6 +276,7 @@ function readHeader(view: DataView): WaveformFrameHeader {
     labelIndexOffset: view.getUint32(36, true),
     labelBytesOffset: view.getUint32(40, true),
     labelBytesLength: view.getUint32(44, true),
+    flags: view.getUint32(48, true),
   };
 }
 

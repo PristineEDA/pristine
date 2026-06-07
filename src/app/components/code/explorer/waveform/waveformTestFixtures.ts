@@ -54,7 +54,9 @@ export function createWaveformFixtureFrame(
     segments.push(...createSignalFrameSegments(row, viewport, width));
   }
 
-  return createWaveformBinaryFrameFromDataset(waveformFixtureData, segments);
+  return createWaveformBinaryFrameFromDataset(waveformFixtureData, segments, {
+    signalIndices: rows.map((row) => row.signalIndex),
+  });
 }
 
 function createFixtureSignals(): WaveformSignal[] {

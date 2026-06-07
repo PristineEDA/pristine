@@ -87,7 +87,9 @@ vi.mock('./WaveformCanvas', () => ({
         data-selected-signal-lane-y={selectedSignalLaneY?.toFixed(2) ?? ''}
         data-selected-signal-visible-y={selectedSignalLaneY === null ? '' : (selectedSignalLaneY - verticalScrollTop).toFixed(2)}
         data-signal-count={data.signals.length}
+        data-waveform-empty-visible-signal-count="0"
         data-waveform-frame-segment-count={frame?.segmentCount ?? 0}
+        data-waveform-frame-truncated={String(frame?.truncated ?? false)}
         data-waveform-frame-version={frame?.version ?? ''}
         data-skipped-horizontal-segment-count="12"
         data-testid="waveform-canvas"
@@ -136,6 +138,7 @@ describe('WaveformPanel', () => {
     expect(waveformFrame.mock.calls[0]?.[0]).toMatchObject({
       startTime: 0,
       endTime: 200,
+      maxSegments: 0,
       width: 900,
     });
     expect(screen.queryByTestId('waveform-canvas')).not.toBeInTheDocument();
@@ -147,6 +150,8 @@ describe('WaveformPanel', () => {
 
     await waitFor(() => expect(screen.getByTestId('waveform-canvas')).toBeInTheDocument());
     expect(panel).toHaveAttribute('data-waveform-frame-version', '1');
+    expect(panel).toHaveAttribute('data-waveform-frame-truncated', 'false');
+    expect(panel).toHaveAttribute('data-waveform-empty-visible-signal-count', '0');
     expect(Number(panel.getAttribute('data-waveform-frame-segment-count'))).toBeGreaterThan(0);
     expect(screen.getByTestId('waveform-signal-value-tb_top_module1-clk')).not.toHaveTextContent(/^x$/i);
   }, 20000);
@@ -162,6 +167,8 @@ describe('WaveformPanel', () => {
     expect(panel).toHaveAttribute('data-signal-count', '168');
     expect(panel).toHaveAttribute('data-waveform-source', 'lsp-binary');
     expect(panel).toHaveAttribute('data-waveform-frame-version', '1');
+    expect(panel).toHaveAttribute('data-waveform-frame-truncated', 'false');
+    expect(panel).toHaveAttribute('data-waveform-empty-visible-signal-count', '0');
     expect(Number(panel.getAttribute('data-waveform-frame-request-count'))).toBeGreaterThan(0);
     expect(Number(panel.getAttribute('data-waveform-frame-segment-count'))).toBeGreaterThan(0);
     expect(screen.getByText('tb_top_module1')).toBeInTheDocument();
@@ -169,6 +176,8 @@ describe('WaveformPanel', () => {
     expect(screen.getByText('dense_test_signals')).toBeInTheDocument();
     expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-layer-names', 'background,content,status,operation');
     expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-waveform-frame-version', '1');
+    expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-waveform-frame-truncated', 'false');
+    expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-waveform-empty-visible-signal-count', '0');
     expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-waveform-frame-segment-count'))).toBeGreaterThan(0);
     const toolbar = screen.getByTestId('waveform-toolbar');
     expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-row-count', '171');

@@ -137,7 +137,7 @@ export function useWaveformSession({
       headerHeight: waveformHeaderHeight,
       height: canvasHeight,
       laneHeight: waveformLaneHeight,
-      maxSegments: Math.max(512, visibleRows.length * 96),
+      maxSegments: 0,
       sessionId: state.sessionId,
       signalIds: visibleRows,
       startTime: requestViewport.startTime,
