@@ -79,6 +79,9 @@ export const AsyncChannels = {
   LSP_OUTLINE: 'async:lsp:outline',
   LSP_MODULE_HIERARCHY: 'async:lsp:module-hierarchy',
   LSP_SCHEMATIC: 'async:lsp:schematic',
+  LSP_WAVEFORM_OPEN: 'async:lsp:waveform-open',
+  LSP_WAVEFORM_FRAME: 'async:lsp:waveform-frame',
+  LSP_WAVEFORM_CLOSE: 'async:lsp:waveform-close',
   LSP_GET_DEBUG_EVENTS: 'async:lsp:get-debug-events',
   CONFIG_SET: 'async:config:set',
 } as const;

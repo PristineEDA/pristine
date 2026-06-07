@@ -4,6 +4,29 @@ const mockHandle = vi.fn();
 const mockExistsSync = vi.fn((_filePath?: string) => true);
 const mockSpawn = vi.fn();
 const mockCreateMessageConnection = vi.fn();
+const mockCloseAllWaveformPipeSessions = vi.fn<(...args: unknown[]) => Promise<void>>(async () => undefined);
+const mockCloseWaveformPipeSession = vi.fn<(...args: unknown[]) => Promise<void>>(async () => undefined);
+const mockNormalizeWaveformOpenSessionMetadata = vi.fn<(...args: unknown[]) => unknown>((value: unknown) => value);
+const mockOpenWaveformPipeSession = vi.fn<(...args: unknown[]) => Promise<unknown>>(async () => ({
+  cursorTime: 0,
+  duration: 200,
+  groups: [{ id: 'tb', label: 'tb' }],
+  id: '1',
+  messages: [],
+  sessionId: '1',
+  signals: [{
+    color: '#12abef',
+    groupId: 'tb',
+    id: 'tb-count',
+    kind: 'bus',
+    name: 'count',
+    path: 'tb.count',
+    width: 16,
+  }],
+  timescaleUnit: 'ns',
+  title: 'counter_tb',
+}));
+const mockRequestWaveformPipeFrame = vi.fn<(...args: unknown[]) => Promise<ArrayBuffer>>(async () => new ArrayBuffer(8));
 
 vi.mock('electron', () => ({
   ipcMain: {
@@ -35,6 +58,14 @@ vi.mock('vscode-jsonrpc/node.js', () => ({
   StreamMessageWriter: class {
     constructor(_stream: unknown) {}
   },
+}));
+
+vi.mock('./waveformPipeClient.js', () => ({
+  closeAllWaveformPipeSessions: (...args: unknown[]) => mockCloseAllWaveformPipeSessions.apply(null, args),
+  closeWaveformPipeSession: (...args: unknown[]) => mockCloseWaveformPipeSession.apply(null, args),
+  normalizeWaveformOpenSessionMetadata: (...args: unknown[]) => mockNormalizeWaveformOpenSessionMetadata.apply(null, args),
+  openWaveformPipeSession: (...args: unknown[]) => mockOpenWaveformPipeSession.apply(null, args),
+  requestWaveformPipeFrame: (...args: unknown[]) => mockRequestWaveformPipeFrame.apply(null, args),
 }));
 
 import { disposeLspSession, registerLspHandlers, setLspProjectRoot } from './lsp.js';
@@ -320,6 +351,25 @@ function createFakeConnection(): FakeConnection {
           }],
           messages: ['ok'],
         };
+      }
+
+      if (method === 'systemverilog/waveform/open') {
+        return {
+          duration: 200,
+          endpoint: {
+            kind: 'namedPipe',
+            path: '\\\\.\\pipe\\pristine-engine-waveform-test',
+          },
+          protocol: 'pristine-waveform-columnar-v1',
+          sessionId: '1',
+          signalCount: 1,
+          timescaleUnit: 'ns',
+          title: 'counter_tb',
+        };
+      }
+
+      if (method === 'systemverilog/waveform/close') {
+        return { closed: true };
       }
 
       return null;
@@ -938,5 +988,62 @@ describe('LSP IPC handlers', () => {
       kind: 'request',
       method: 'systemverilog/schematic',
     }));
+  });
+
+  it('opens waveform sessions through LSP control plane and pipe catalog metadata', async () => {
+    const openHandler = getHandler('async:lsp:waveform-open');
+
+    const result = await openHandler({});
+
+    expect(fakeConnection.sendRequest).toHaveBeenCalledWith('systemverilog/waveform/open', { source: 'mock' });
+    expect(fakeConnection.sendRequest).not.toHaveBeenCalledWith('systemverilog/waveformOpen', expect.anything());
+    expect(mockNormalizeWaveformOpenSessionMetadata).toHaveBeenCalledWith(expect.objectContaining({
+      endpoint: {
+        kind: 'namedPipe',
+        path: '\\\\.\\pipe\\pristine-engine-waveform-test',
+      },
+      protocol: 'pristine-waveform-columnar-v1',
+      sessionId: '1',
+    }));
+    expect(mockOpenWaveformPipeSession).toHaveBeenCalledWith(expect.objectContaining({
+      protocol: 'pristine-waveform-columnar-v1',
+      sessionId: '1',
+    }));
+    expect(result).toEqual(expect.objectContaining({
+      sessionId: '1',
+      title: 'counter_tb',
+    }));
+  });
+
+  it('requests waveform frames from the pipe data plane instead of LSP', async () => {
+    const frameHandler = getHandler('async:lsp:waveform-frame');
+    const frameOptions = {
+      endTime: 100,
+      headerHeight: 22,
+      height: 320,
+      laneHeight: 30,
+      maxSegments: 512,
+      sessionId: '1',
+      signalIds: ['tb-count'],
+      startTime: 0,
+      width: 640,
+    };
+
+    const frame = await frameHandler({}, frameOptions);
+
+    expect(frame).toBeInstanceOf(ArrayBuffer);
+    expect(mockRequestWaveformPipeFrame).toHaveBeenCalledWith(frameOptions);
+    expect(fakeConnection.sendRequest).not.toHaveBeenCalledWith('systemverilog/waveformFrame', expect.anything());
+  });
+
+  it('closes waveform pipe sessions before LSP control-plane close', async () => {
+    const closeHandler = getHandler('async:lsp:waveform-close');
+
+    const result = await closeHandler({}, '1');
+
+    expect(result).toBe(true);
+    expect(mockCloseWaveformPipeSession).toHaveBeenCalledWith('1');
+    expect(fakeConnection.sendRequest).toHaveBeenCalledWith('systemverilog/waveform/close', { sessionId: '1' });
+    expect(fakeConnection.sendRequest).not.toHaveBeenCalledWith('systemverilog/waveformClose', expect.anything());
   });
 });

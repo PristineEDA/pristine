@@ -338,6 +338,47 @@ export interface LspSchematic {
   messages: string[];
 }
 
+export interface LspWaveformGroup {
+  id: string;
+  label: string;
+}
+
+export type LspWaveformSignalKind = 'clock' | 'logic' | 'bus';
+
+export interface LspWaveformSignal {
+  id: string;
+  groupId: string;
+  name: string;
+  path: string;
+  kind: LspWaveformSignalKind;
+  color: string;
+  width?: number;
+}
+
+export interface LspWaveformOpenResult {
+  sessionId: string;
+  id?: string;
+  title: string;
+  timescaleUnit: string;
+  duration: number;
+  cursorTime: number;
+  groups: LspWaveformGroup[];
+  signals: LspWaveformSignal[];
+  messages: string[];
+}
+
+export interface LspWaveformFrameOptions {
+  sessionId: string;
+  startTime: number;
+  endTime: number;
+  width: number;
+  height: number;
+  laneHeight: number;
+  headerHeight: number;
+  maxSegments?: number;
+  signalIds?: string[];
+}
+
 export interface LspStateEvent {
   status: 'starting' | 'ready' | 'stopped' | 'error';
   message?: string;

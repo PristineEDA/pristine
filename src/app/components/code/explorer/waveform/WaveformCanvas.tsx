@@ -40,12 +40,14 @@ import type {
   WaveformSceneUpdateMetrics,
   WaveformViewport,
 } from './waveformTypes';
+import type { ParsedWaveformFrame } from './waveformBinaryFrame';
 
 type PixiRendererPreference = 'webgpu' | 'webgl';
 
 interface WaveformCanvasProps {
   cursorTime: number;
   data: WaveformDataSet;
+  frame?: ParsedWaveformFrame | null;
   selectedSignalId: string | null;
   verticalScrollTop: number;
   viewport: WaveformViewport;
@@ -78,6 +80,7 @@ const waveformMetricSampleWindowSize = 30;
 export function WaveformCanvas({
   cursorTime,
   data,
+  frame,
   selectedSignalId,
   verticalScrollTop,
   viewport,
@@ -194,7 +197,7 @@ export function WaveformCanvas({
 
   useEffect(() => {
     rebuildScene();
-  }, [data]);
+  }, [data, frame]);
 
   useEffect(() => {
     const scene = sceneRef.current;
@@ -437,6 +440,7 @@ export function WaveformCanvas({
     sceneRef.current = createWaveformScene({
       cursorTime: cursorTimeRef.current,
       data: dataRef.current,
+      frame: frame ?? null,
       height,
       renderResolution,
       selectedSignalId: selectedSignalIdRef.current,
@@ -670,6 +674,8 @@ export function WaveformCanvas({
       data-x-state-block-count={shapeCounts.xStateBlockCount}
       data-z-state-block-count={shapeCounts.zStateBlockCount}
       data-z-state-count={stateCounts.zStateCount}
+      data-waveform-frame-segment-count={frame?.segmentCount ?? 0}
+      data-waveform-frame-version={frame?.version ?? ''}
       data-zoom={zoomLevel.toFixed(2)}
       role="img"
       style={{ minHeight: waveformCanvasMinHeight }}

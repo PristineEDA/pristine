@@ -25,6 +25,8 @@ import type {
   LspRange,
   LspSchematic,
   LspSchematicOptions,
+  LspWaveformFrameOptions,
+  LspWaveformOpenResult,
   LspSelectionRange,
   LspSemanticTokens,
   LspSignatureHelp,
@@ -316,6 +318,12 @@ const electronAPI = {
       ipcRenderer.invoke(AsyncChannels.LSP_MODULE_HIERARCHY, options) as Promise<LspModuleHierarchy>,
     schematic: (options?: LspSchematicOptions) =>
       ipcRenderer.invoke(AsyncChannels.LSP_SCHEMATIC, options) as Promise<LspSchematic>,
+    waveformOpen: () =>
+      ipcRenderer.invoke(AsyncChannels.LSP_WAVEFORM_OPEN) as Promise<LspWaveformOpenResult>,
+    waveformFrame: (options: LspWaveformFrameOptions) =>
+      ipcRenderer.invoke(AsyncChannels.LSP_WAVEFORM_FRAME, options) as Promise<ArrayBuffer>,
+    waveformClose: (sessionId: string) =>
+      ipcRenderer.invoke(AsyncChannels.LSP_WAVEFORM_CLOSE, sessionId) as Promise<boolean>,
     getDebugEvents: () =>
       ipcRenderer.invoke(AsyncChannels.LSP_GET_DEBUG_EVENTS) as Promise<LspDebugEvent[]>,
     onDiagnostics: (callback: (payload: LspDiagnosticsEvent) => void) => {

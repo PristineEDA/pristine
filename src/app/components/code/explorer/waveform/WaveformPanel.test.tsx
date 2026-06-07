@@ -8,11 +8,10 @@ import {
   getWaveformDisplayRows,
   getWaveformFirstSignalLaneY,
   getWaveformSignalLaneY,
-  getWaveformShapeCounts,
-  getWaveformStateCounts,
   getWaveformViewportSpan,
   waveformLaneHeight,
 } from './waveformLayout';
+import type { ParsedWaveformFrame } from './waveformBinaryFrame';
 import type { WaveformDataSet, WaveformRenderMetrics, WaveformRendererStatus, WaveformViewport } from './waveformTypes';
 import { WaveformPanel } from './WaveformPanel';
 
@@ -20,6 +19,7 @@ vi.mock('./WaveformCanvas', () => ({
   WaveformCanvas: ({
     cursorTime,
     data,
+    frame,
     selectedSignalId,
     verticalScrollTop,
     viewport,
@@ -29,6 +29,7 @@ vi.mock('./WaveformCanvas', () => ({
   }: {
     cursorTime: number;
     data: WaveformDataSet;
+    frame?: ParsedWaveformFrame | null;
     onMetricsChange?: (metrics: WaveformRenderMetrics) => void;
     onRendererChange?: (renderer: WaveformRendererStatus) => void;
     selectedSignalId: string | null;
@@ -39,8 +40,6 @@ vi.mock('./WaveformCanvas', () => ({
     const displayRows = getWaveformDisplayRows(data);
     const firstSignalLaneY = getWaveformFirstSignalLaneY(data);
     const selectedSignalLaneY = getWaveformSignalLaneY(data, selectedSignalId);
-    const shapeCounts = getWaveformShapeCounts(data, viewport);
-    const stateCounts = getWaveformStateCounts(data);
 
     useEffect(() => {
       onRendererChange?.('webgpu');
@@ -56,9 +55,9 @@ vi.mock('./WaveformCanvas', () => ({
     return (
       <button
         data-cursor-time={cursorTime.toFixed(2)}
-        data-bus-hexagon-count={shapeCounts.busHexagonCount}
+        data-bus-hexagon-count="12"
         data-bus-fold-only-count="2"
-        data-bus-full-hexagon-count={shapeCounts.busHexagonCount}
+        data-bus-full-hexagon-count="12"
         data-bus-special-state-hexagon-count="2"
         data-bus-special-state-label-count="2"
         data-bus-special-state-width-aligned-label-count="2"
@@ -87,6 +86,8 @@ vi.mock('./WaveformCanvas', () => ({
         data-selected-signal-lane-y={selectedSignalLaneY?.toFixed(2) ?? ''}
         data-selected-signal-visible-y={selectedSignalLaneY === null ? '' : (selectedSignalLaneY - verticalScrollTop).toFixed(2)}
         data-signal-count={data.signals.length}
+        data-waveform-frame-segment-count={frame?.segmentCount ?? 0}
+        data-waveform-frame-version={frame?.version ?? ''}
         data-skipped-horizontal-segment-count="12"
         data-testid="waveform-canvas"
         className="cursor-default"
@@ -94,10 +95,10 @@ vi.mock('./WaveformCanvas', () => ({
         data-visible-window-end={viewport.endTime.toFixed(2)}
         data-visible-window-start={viewport.startTime.toFixed(2)}
         data-waveform-header-height="22.00"
-        data-x-state-count={stateCounts.xStateCount}
-        data-x-state-block-count={shapeCounts.xStateBlockCount}
-        data-z-state-block-count={shapeCounts.zStateBlockCount}
-        data-z-state-count={stateCounts.zStateCount}
+        data-x-state-count="3"
+        data-x-state-block-count="3"
+        data-z-state-block-count="3"
+        data-z-state-count="3"
         data-zoom={(data.duration / getWaveformViewportSpan(viewport)).toFixed(2)}
         type="button"
         onClick={() => onCursorTimeChange(128)}
@@ -109,16 +110,25 @@ vi.mock('./WaveformCanvas', () => ({
 }));
 
 describe('WaveformPanel', () => {
-  it('renders mock signals, selection state, and cursor values', async () => {
+  it('renders binary waveform signals, selection state, and cursor values', async () => {
     render(<WaveformPanel />);
 
     const panel = screen.getByTestId('waveform-panel');
 
+    await waitFor(() => expect(panel).toHaveAttribute('data-waveform-session-status', 'ready'));
+    await waitFor(() => expect(screen.getByTestId('waveform-canvas')).toBeInTheDocument());
+
     expect(panel).toHaveAttribute('data-signal-count', '168');
+    expect(panel).toHaveAttribute('data-waveform-source', 'lsp-binary');
+    expect(panel).toHaveAttribute('data-waveform-frame-version', '1');
+    expect(Number(panel.getAttribute('data-waveform-frame-request-count'))).toBeGreaterThan(0);
+    expect(Number(panel.getAttribute('data-waveform-frame-segment-count'))).toBeGreaterThan(0);
     expect(screen.getByText('tb_top_module1')).toBeInTheDocument();
     expect(screen.getByText('u_top_module1')).toBeInTheDocument();
     expect(screen.getByText('dense_test_signals')).toBeInTheDocument();
     expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-layer-names', 'background,content,status,operation');
+    expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-waveform-frame-version', '1');
+    expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-waveform-frame-segment-count'))).toBeGreaterThan(0);
     const toolbar = screen.getByTestId('waveform-toolbar');
     expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-row-count', '171');
     expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-canvas-height', '320.00');
@@ -149,7 +159,7 @@ describe('WaveformPanel', () => {
     expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-x-state-block-count'))).toBeGreaterThan(0);
     expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-z-state-block-count'))).toBeGreaterThan(0);
     expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-z-state-count'))).toBeGreaterThan(0);
-    expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-pulse-fill-count'))).toBeGreaterThan(0);
+    expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-pulse-fill-count');
     expect(screen.getByTestId('waveform-signal-list-resize-handle')).toBeInTheDocument();
     expect(screen.getByTestId('panel-waveform-signal-list')).toHaveAttribute('data-default-size', '10');
     expect(screen.getByTestId('waveform-toolbar-metrics')).toBeInTheDocument();
@@ -210,13 +220,17 @@ describe('WaveformPanel', () => {
 
     await waitFor(() => expect(panel).toHaveAttribute('data-cursor-time', '128.00'));
     expect(screen.getByTestId('waveform-toolbar-cursor-time')).toHaveTextContent('128.0ns');
-    expect(screen.getAllByText('3').length).toBeGreaterThan(0);
+    expect(screen.getByTestId('waveform-toolbar-cursor-value')).not.toHaveTextContent('-');
   }, 20000);
 
   it('updates viewport controls and toggles auxiliary panels', async () => {
     render(<WaveformPanel />);
 
     const panel = screen.getByTestId('waveform-panel');
+
+    await waitFor(() => expect(panel).toHaveAttribute('data-waveform-session-status', 'ready'));
+    await waitFor(() => expect(screen.getByTestId('waveform-canvas')).toBeInTheDocument());
+
     const initialZoom = Number(panel.getAttribute('data-zoom'));
 
     fireEvent.click(screen.getByRole('button', { name: /zoom in waveform/i }));

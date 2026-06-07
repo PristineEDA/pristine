@@ -46,6 +46,8 @@ import type {
   LspSchematicOptions,
   LspSchematicPort,
   LspSchematicPortDirection,
+  LspWaveformFrameOptions,
+  LspWaveformOpenResult,
   LspSelectionRange,
   LspSemanticTokens,
   LspSignatureHelp,
@@ -59,6 +61,13 @@ import type {
 import { AsyncChannels, StreamChannels } from './channels.js';
 import { assertNumber, assertOptionalString, assertString, validatePathWithinRoot } from './validators.js';
 import { assertPristineEnginePathAvailable, resolvePristineEnginePath } from './pristineEnginePath.js';
+import {
+  closeAllWaveformPipeSessions,
+  closeWaveformPipeSession,
+  normalizeWaveformOpenSessionMetadata,
+  openWaveformPipeSession,
+  requestWaveformPipeFrame,
+} from './waveformPipeClient.js';
 
 interface TrackedDocument {
   filePath: string;
@@ -85,6 +94,7 @@ const LSP_REQUEST_TIMEOUT_MS = 10_000;
 const LSP_INITIALIZE_TIMEOUT_MS = 30_000;
 const LSP_OUTLINE_TIMEOUT_MS = 30_000;
 const LSP_MODULE_HIERARCHY_TIMEOUT_MS = 30_000;
+const LSP_WAVEFORM_TIMEOUT_MS = 30_000;
 const LSP_DEBUG_EVENT_LIMIT = 200;
 
 interface SendDebugRequestOptions {
@@ -1548,6 +1558,68 @@ function normalizeSchematic(value: unknown): LspSchematic {
   };
 }
 
+function createEmptyWaveformOpenResult(message: string): LspWaveformOpenResult {
+  return {
+    sessionId: '',
+    title: 'Waveform',
+    timescaleUnit: 'ns',
+    duration: 0,
+    cursorTime: 0,
+    groups: [],
+    signals: [],
+    messages: [message],
+  };
+}
+
+function normalizeWaveformFrameOptions(value: unknown): LspWaveformFrameOptions {
+  if (!value || typeof value !== 'object') {
+    throw new Error('Expected waveform frame options.');
+  }
+
+  const candidate = value as {
+    endTime?: unknown;
+    headerHeight?: unknown;
+    height?: unknown;
+    laneHeight?: unknown;
+    maxSegments?: unknown;
+    sessionId?: unknown;
+    signalIds?: unknown;
+    startTime?: unknown;
+    width?: unknown;
+  };
+  const sessionId = candidate.sessionId;
+  const startTime = candidate.startTime;
+  const endTime = candidate.endTime;
+  const width = candidate.width;
+  const height = candidate.height;
+  const laneHeight = candidate.laneHeight;
+  const headerHeight = candidate.headerHeight;
+
+  assertString(sessionId, 'sessionId');
+  assertNumber(startTime, 'startTime');
+  assertNumber(endTime, 'endTime');
+  assertNumber(width, 'width');
+  assertNumber(height, 'height');
+  assertNumber(laneHeight, 'laneHeight');
+  assertNumber(headerHeight, 'headerHeight');
+
+  return {
+    sessionId,
+    startTime,
+    endTime,
+    width,
+    height,
+    laneHeight,
+    headerHeight,
+    maxSegments: typeof candidate.maxSegments === 'number' && Number.isInteger(candidate.maxSegments) && candidate.maxSegments >= 0
+      ? candidate.maxSegments
+      : undefined,
+    signalIds: Array.isArray(candidate.signalIds)
+      ? candidate.signalIds.filter((entry): entry is string => typeof entry === 'string')
+      : undefined,
+  };
+}
+
 function normalizeSchematicOptions(value: unknown): LspSchematicOptions {
   return normalizeModuleHierarchyOptions(value);
 }
@@ -1855,6 +1927,8 @@ export function setLspProjectRoot(root: string): void {
 }
 
 export function disposeLspSession(): void {
+  void closeAllWaveformPipeSessions();
+
   if (activeSession) {
     cleanupSession(activeSession);
   }
@@ -2512,6 +2586,43 @@ export function registerLspHandlers(getMainWindow: () => BrowserWindow | null): 
 
         throw error;
       }
+    });
+  });
+
+  ipcMain.handle(AsyncChannels.LSP_WAVEFORM_OPEN, async () => {
+    return withInitializedSession(getMainWindow, async (session) => {
+      try {
+        const result = await sendDebugRequest(session, getMainWindow, 'systemverilog/waveform/open', { source: 'mock' }, {
+          timeoutMs: LSP_WAVEFORM_TIMEOUT_MS,
+        });
+
+        return openWaveformPipeSession(normalizeWaveformOpenSessionMetadata(result));
+      } catch (error) {
+        if (isLspRequestTimeoutError(error)) {
+          return createEmptyWaveformOpenResult(getLspRequestErrorMessage(error));
+        }
+
+        throw error;
+      }
+    });
+  });
+
+  ipcMain.handle(AsyncChannels.LSP_WAVEFORM_FRAME, async (_event, options?: unknown) => {
+    const normalizedOptions = normalizeWaveformFrameOptions(options);
+
+    return requestWaveformPipeFrame(normalizedOptions);
+  });
+
+  ipcMain.handle(AsyncChannels.LSP_WAVEFORM_CLOSE, async (_event, sessionId: unknown) => {
+    assertString(sessionId, 'sessionId');
+    await closeWaveformPipeSession(sessionId);
+
+    return withInitializedSession(getMainWindow, async (session) => {
+      await sendDebugRequest(session, getMainWindow, 'systemverilog/waveform/close', { sessionId }, {
+        timeoutMs: LSP_WAVEFORM_TIMEOUT_MS,
+      });
+
+      return true;
     });
   });
 }

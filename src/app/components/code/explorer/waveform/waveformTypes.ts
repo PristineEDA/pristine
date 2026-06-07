@@ -1,6 +1,7 @@
 export type WaveformSignalKind = 'clock' | 'logic' | 'bus';
 export type WaveformLayerName = 'background' | 'content' | 'status' | 'operation';
 export type WaveformLogicState = '0' | '1' | 'x' | 'z';
+export type WaveformDataSource = 'json' | 'lsp-binary';
 
 export interface WaveformStateCounts {
   xStateCount: number;
@@ -110,7 +111,7 @@ export interface WaveformSignal {
   kind: WaveformSignalKind;
   color: string;
   width?: number;
-  transitions: readonly WaveformTransition[];
+  transitions?: readonly WaveformTransition[];
 }
 
 export interface WaveformSignalGroup {
@@ -124,6 +125,7 @@ export interface WaveformDataSet {
   timescaleUnit: string;
   duration: number;
   cursorTime: number;
+  source?: WaveformDataSource;
   groups: readonly WaveformSignalGroup[];
   signals: readonly WaveformSignal[];
 }

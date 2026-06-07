@@ -19,23 +19,25 @@ import {
   waveformHeaderHeight,
   zoomWaveformViewport,
 } from './waveformLayout';
-import { mockWaveformData } from './waveformMockData';
 import type { WaveformRenderMetrics, WaveformRendererStatus, WaveformViewport } from './waveformTypes';
 import type { WaveformSignalDisplayRow } from './waveformLayout';
 import type { ElectronGpuDiagnostics, RendererGpuSupportDiagnostics } from '../../../../../../types/electron-gpu';
 import { WaveformCanvas } from './WaveformCanvas';
+import { useWaveformSession } from './waveformSession';
+import { WaveformBinaryValueKind, waveformBinaryFrameSignalTableStride } from './waveformBinaryFrame';
 
 const zoomButtonFactor = 1.35;
+const initialWaveformViewportWidth = 900;
+const initialWaveformViewportHeight = 320;
 
 export function WaveformPanel() {
-  const data = mockWaveformData;
-  const [viewport, setViewport] = useState<WaveformViewport>(() => getInitialWaveformViewport(data));
-  const [cursorTime, setCursorTime] = useState(data.cursorTime);
+  const [viewport, setViewport] = useState<WaveformViewport | null>(null);
+  const [cursorTime, setCursorTime] = useState(0);
   const [renderMetrics, setRenderMetrics] = useState<WaveformRenderMetrics>(() => createEmptyWaveformRenderMetrics());
   const [gpuDiagnostics, setGpuDiagnostics] = useState<ElectronGpuDiagnostics | null>(null);
   const [gpuDiagnosticsStatus, setGpuDiagnosticsStatus] = useState<'pending' | 'ready' | 'unavailable'>('pending');
   const [renderer, setRenderer] = useState<WaveformRendererStatus>('initializing');
-  const [selectedSignalId, setSelectedSignalId] = useState<string | null>(data.signals[0]?.id ?? null);
+  const [selectedSignalId, setSelectedSignalId] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [rendererGpuSupport] = useState<RendererGpuSupportDiagnostics>(() => detectRendererGpuSupport());
   const signalScrollRef = useRef<HTMLDivElement | null>(null);
@@ -44,16 +46,43 @@ export function WaveformPanel() {
   const syncingScrollRef = useRef(false);
   const syncingHorizontalScrollRef = useRef(false);
   const [verticalScrollTop, setVerticalScrollTop] = useState(0);
-  const [waveformViewportWidth, setWaveformViewportWidth] = useState(0);
+  const [waveformViewportWidth, setWaveformViewportWidth] = useState(initialWaveformViewportWidth);
+  const [waveformViewportHeight, setWaveformViewportHeight] = useState(initialWaveformViewportHeight);
+  const session = useWaveformSession({
+    canvasHeight: waveformViewportHeight,
+    canvasWidth: waveformViewportWidth,
+    verticalScrollTop,
+    viewport,
+  });
+  const data = session.data;
   const selectedSignal = useMemo(
-    () => data.signals.find((signal) => signal.id === selectedSignalId) ?? data.signals[0] ?? null,
-    [data.signals, selectedSignalId],
+    () => data?.signals.find((signal) => signal.id === selectedSignalId) ?? data?.signals[0] ?? null,
+    [data, selectedSignalId],
   );
-  const displayRows = useMemo(() => getWaveformDisplayRows(data), [data]);
-  const selectedValue = selectedSignal ? getSignalValueAtTime(selectedSignal, cursorTime) : '-';
-  const zoomLevel = data.duration / getWaveformViewportSpan(viewport);
-  const waveformCanvasHeight = getWaveformCanvasHeightForData(data);
-  const horizontalMetrics = getWaveformHorizontalScrollMetrics(viewport, data.duration, waveformViewportWidth);
+  const displayRows = useMemo(() => data ? getWaveformDisplayRows(data) : [], [data]);
+  const activeViewport = viewport ?? (data ? getInitialWaveformViewport(data) : { startTime: 0, endTime: 8 });
+  const selectedValue = selectedSignal
+    ? getSignalValueFromFrame(session.frame, data, selectedSignal.id, cursorTime, activeViewport) ?? getSignalValueAtTime(selectedSignal, cursorTime)
+    : '-';
+  const zoomLevel = data ? data.duration / getWaveformViewportSpan(activeViewport) : 1;
+  const waveformCanvasHeight = data ? getWaveformCanvasHeightForData(data) : 0;
+  const horizontalMetrics = data ? getWaveformHorizontalScrollMetrics(activeViewport, data.duration, waveformViewportWidth) : {
+    contentWidth: waveformViewportWidth,
+    maxScrollLeft: 0,
+    maxStartTime: 0,
+    scrollLeft: 0,
+  };
+
+  useEffect(() => {
+    if (!data) {
+      return;
+    }
+
+    setViewport(getInitialWaveformViewport(data));
+    setCursorTime(data.cursorTime);
+    setSelectedSignalId(data.signals[0]?.id ?? null);
+    setVerticalScrollTop(0);
+  }, [data]);
 
   useEffect(() => {
     let cancelled = false;
@@ -89,17 +118,26 @@ export function WaveformPanel() {
       return;
     }
 
-    function updateWidth() {
-      setWaveformViewportWidth(Math.max(0, Math.floor(viewportElement?.clientWidth ?? 0)));
+    function updateSize() {
+      const nextWidth = Math.floor(viewportElement?.clientWidth ?? 0);
+      const nextHeight = Math.floor(viewportElement?.clientHeight ?? 0);
+
+      if (nextWidth > 0) {
+        setWaveformViewportWidth(nextWidth);
+      }
+
+      if (nextHeight > 0) {
+        setWaveformViewportHeight(nextHeight);
+      }
     }
 
-    updateWidth();
+    updateSize();
 
     if (typeof ResizeObserver === 'undefined') {
       return;
     }
 
-    const resizeObserver = new ResizeObserver(updateWidth);
+    const resizeObserver = new ResizeObserver(updateSize);
     resizeObserver.observe(viewportElement);
 
     return () => resizeObserver.disconnect();
@@ -120,27 +158,57 @@ export function WaveformPanel() {
   }, [horizontalMetrics.contentWidth, horizontalMetrics.scrollLeft]);
 
   function handleZoomIn() {
-    setViewport((currentViewport) => zoomWaveformViewport(currentViewport, cursorTime, zoomButtonFactor, data.duration));
+    if (!data) {
+      return;
+    }
+
+    setViewport((currentViewport) => zoomWaveformViewport(currentViewport ?? getInitialWaveformViewport(data), cursorTime, zoomButtonFactor, data.duration));
   }
 
   function handleZoomOut() {
-    setViewport((currentViewport) => zoomWaveformViewport(currentViewport, cursorTime, 1 / zoomButtonFactor, data.duration));
+    if (!data) {
+      return;
+    }
+
+    setViewport((currentViewport) => zoomWaveformViewport(currentViewport ?? getInitialWaveformViewport(data), cursorTime, 1 / zoomButtonFactor, data.duration));
   }
 
   function handlePanLeft() {
-    setViewport((currentViewport) => panWaveformViewport(currentViewport, -getWaveformViewportSpan(currentViewport) * 0.18, data.duration));
+    if (!data) {
+      return;
+    }
+
+    setViewport((currentViewport) => {
+      const safeViewport = currentViewport ?? getInitialWaveformViewport(data);
+      return panWaveformViewport(safeViewport, -getWaveformViewportSpan(safeViewport) * 0.18, data.duration);
+    });
   }
 
   function handlePanRight() {
-    setViewport((currentViewport) => panWaveformViewport(currentViewport, getWaveformViewportSpan(currentViewport) * 0.18, data.duration));
+    if (!data) {
+      return;
+    }
+
+    setViewport((currentViewport) => {
+      const safeViewport = currentViewport ?? getInitialWaveformViewport(data);
+      return panWaveformViewport(safeViewport, getWaveformViewportSpan(safeViewport) * 0.18, data.duration);
+    });
   }
 
   function handleFit() {
+    if (!data) {
+      return;
+    }
+
     setViewport(fitWaveformViewport(data));
     setCursorTime(data.cursorTime);
   }
 
   function handleReset() {
+    if (!data) {
+      return;
+    }
+
     setViewport(getInitialWaveformViewport(data));
     setCursorTime(data.cursorTime);
     setSelectedSignalId(data.signals[0]?.id ?? null);
@@ -180,7 +248,11 @@ export function WaveformPanel() {
       return;
     }
 
-    setViewport(getWaveformViewportForHorizontalScroll(viewport, data.duration, waveformViewportWidth, horizontalScrollElement.scrollLeft));
+    if (!data) {
+      return;
+    }
+
+    setViewport(getWaveformViewportForHorizontalScroll(activeViewport, data.duration, waveformViewportWidth, horizontalScrollElement.scrollLeft));
   }
 
   function clampVerticalScrollTop(scrollTop: number) {
@@ -211,11 +283,17 @@ export function WaveformPanel() {
       data-ready={renderer !== 'initializing' ? 'true' : 'false'}
       data-renderer={renderer}
       data-selected-signal-id={selectedSignalId ?? ''}
-      data-signal-count={data.signals.length}
+      data-signal-count={data?.signals.length ?? 0}
+      data-waveform-error={session.error ?? ''}
+      data-waveform-frame-request-count={session.frameRequestCount}
+      data-waveform-frame-segment-count={session.frame?.segmentCount ?? 0}
+      data-waveform-frame-version={session.frame?.version ?? ''}
+      data-waveform-session-status={session.status}
+      data-waveform-source={data?.source ?? ''}
       data-testid="waveform-panel"
-      data-visible-window-end={viewport.endTime.toFixed(2)}
+      data-visible-window-end={activeViewport.endTime.toFixed(2)}
       data-visible-primitive-count={renderMetrics.visiblePrimitiveCount}
-      data-visible-window-start={viewport.startTime.toFixed(2)}
+      data-visible-window-start={activeViewport.startTime.toFixed(2)}
       data-zoom={zoomLevel.toFixed(2)}
     >
       <div className="flex min-h-8 shrink-0 items-center gap-2 border-b border-ide-border bg-ide-tab-bg px-3 py-1.5" data-testid="waveform-toolbar">
@@ -223,7 +301,7 @@ export function WaveformPanel() {
           <SlidersHorizontal size={13} className="text-ide-accent" />
           <span className="truncate text-[12px] font-medium text-ide-text">Waveform</span>
           <span className="hidden rounded border border-ide-border bg-ide-bg px-1.5 py-0.5 text-[10px] text-ide-text-muted sm:inline-flex">
-            {data.title}
+            {data?.title ?? 'Loading'}
           </span>
         </div>
 
@@ -232,7 +310,7 @@ export function WaveformPanel() {
           <WaveformCursorInfo
             cursorTime={cursorTime}
             signalName={selectedSignal?.name ?? '-'}
-            timescaleUnit={data.timescaleUnit}
+            timescaleUnit={data?.timescaleUnit ?? ''}
             value={formatWaveformValue(selectedValue)}
           />
           <div className="flex shrink-0 items-center gap-1" data-testid="waveform-toolbar-actions">
@@ -313,9 +391,9 @@ export function WaveformPanel() {
               <div className="absolute right-3 top-10 z-20 w-52 rounded border border-ide-border bg-ide-bg p-2 text-[11px] text-ide-text shadow-xl" data-testid="waveform-settings-popover">
                 <div className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-2">
                   <span className="text-ide-text-muted">Timescale</span>
-                  <span>{data.timescaleUnit}</span>
+                  <span>{data?.timescaleUnit ?? '-'}</span>
                   <span className="text-ide-text-muted">Window</span>
-                  <span>{getWaveformViewportSpan(viewport).toFixed(0)}{data.timescaleUnit}</span>
+                  <span>{getWaveformViewportSpan(activeViewport).toFixed(0)}{data?.timescaleUnit ?? ''}</span>
                   <span className="text-ide-text-muted">Renderer</span>
                   <span className="uppercase">{renderer}</span>
                   <span className="text-ide-text-muted">HW accel</span>
@@ -342,18 +420,25 @@ export function WaveformPanel() {
               </div>
             )}
             <div ref={waveformViewportRef} className="relative min-h-0 w-full flex-1 overflow-hidden" data-testid="waveform-viewport">
-              <WaveformCanvas
-                cursorTime={cursorTime}
-                data={data}
-                selectedSignalId={selectedSignalId}
-                verticalScrollTop={verticalScrollTop}
-                viewport={viewport}
-                onCursorTimeChange={setCursorTime}
-                onMetricsChange={setRenderMetrics}
-                onRendererChange={setRenderer}
-                onVerticalScrollDelta={handleCanvasVerticalScrollDelta}
-                onViewportChange={setViewport}
-              />
+              {data ? (
+                <WaveformCanvas
+                  cursorTime={cursorTime}
+                  data={data}
+                  frame={session.frame}
+                  selectedSignalId={selectedSignalId}
+                  verticalScrollTop={verticalScrollTop}
+                  viewport={activeViewport}
+                  onCursorTimeChange={setCursorTime}
+                  onMetricsChange={setRenderMetrics}
+                  onRendererChange={setRenderer}
+                  onVerticalScrollDelta={handleCanvasVerticalScrollDelta}
+                  onViewportChange={(nextViewport) => setViewport(nextViewport)}
+                />
+              ) : (
+                <div className="flex h-full items-center justify-center text-[12px] text-ide-text-muted" data-testid="waveform-loading-state">
+                  {session.status === 'error' || session.status === 'unavailable' ? session.error ?? 'Waveform unavailable.' : 'Loading waveform...'}
+                </div>
+              )}
             </div>
             <div
               ref={horizontalScrollRef}
@@ -566,4 +651,103 @@ function getElectronGpuDeviceCount(gpuDiagnostics: ElectronGpuDiagnostics | null
     : null;
 
   return Array.isArray(gpuDevice) ? gpuDevice.length : 0;
+}
+
+function getSignalValueFromFrame(
+  frame: ReturnType<typeof useWaveformSession>['frame'],
+  data: ReturnType<typeof useWaveformSession>['data'],
+  signalId: string,
+  cursorTime: number,
+  viewport: WaveformViewport,
+) {
+  if (!frame || !data) {
+    return null;
+  }
+
+  const signalIndex = data.signals.findIndex((signal) => signal.id === signalId);
+  if (signalIndex < 0) {
+    return null;
+  }
+
+  const tableEntry = getFrameSignalTableEntry(frame, signalIndex);
+  if (!tableEntry || tableEntry.segmentCount === 0) {
+    return null;
+  }
+
+  const xRange = getFrameSignalXRange(frame, tableEntry.firstSegment, tableEntry.segmentCount);
+  const viewportSpan = Math.max(1, getWaveformViewportSpan(viewport));
+  const relativeTime = Math.min(1, Math.max(0, (cursorTime - viewport.startTime) / viewportSpan));
+  const cursorX = xRange.minX + relativeTime * Math.max(1, xRange.maxX - xRange.minX);
+  const end = Math.min(frame.segmentCount, tableEntry.firstSegment + tableEntry.segmentCount);
+
+  for (let index = tableEntry.firstSegment; index < end; index += 1) {
+    const x0 = frame.x0[index] ?? 0;
+    const x1 = frame.x1[index] ?? x0;
+    const left = Math.min(x0, x1);
+    const right = Math.max(x0, x1);
+    const isLastSegment = index === end - 1;
+
+    if (cursorX >= left && (cursorX < right || isLastSegment)) {
+      return getFrameValue(frame, index);
+    }
+  }
+
+  return null;
+}
+
+function getFrameSignalTableEntry(frame: NonNullable<ReturnType<typeof useWaveformSession>['frame']>, signalIndex: number) {
+  for (let tableEntryIndex = 0; tableEntryIndex < frame.signalCount; tableEntryIndex += 1) {
+    const tableIndex = tableEntryIndex * waveformBinaryFrameSignalTableStride;
+    if (frame.signalTable[tableIndex] !== signalIndex) {
+      continue;
+    }
+
+    const firstSegment = frame.signalTable[tableIndex + 1];
+    const segmentCount = frame.signalTable[tableIndex + 2];
+    if (firstSegment === undefined || segmentCount === undefined) {
+      return null;
+    }
+
+    return { firstSegment, segmentCount };
+  }
+
+  return null;
+}
+
+function getFrameSignalXRange(frame: NonNullable<ReturnType<typeof useWaveformSession>['frame']>, firstSegment: number, segmentCount: number) {
+  const end = Math.min(frame.segmentCount, firstSegment + segmentCount);
+  let minX = Number.POSITIVE_INFINITY;
+  let maxX = 0;
+
+  for (let index = firstSegment; index < end; index += 1) {
+    minX = Math.min(minX, frame.x0[index] ?? 0);
+    maxX = Math.max(maxX, frame.x1[index] ?? 0);
+  }
+
+  return {
+    maxX: Math.max(1, maxX),
+    minX: Number.isFinite(minX) ? minX : 0,
+  };
+}
+
+function getFrameValue(frame: NonNullable<ReturnType<typeof useWaveformSession>['frame']>, segmentIndex: number) {
+  const valueKind = frame.valueKind[segmentIndex];
+
+  if (valueKind === WaveformBinaryValueKind.Low) {
+    return '0';
+  }
+
+  if (valueKind === WaveformBinaryValueKind.High) {
+    return '1';
+  }
+
+  if (valueKind === WaveformBinaryValueKind.Unknown) {
+    return 'x';
+  }
+
+  if (valueKind === WaveformBinaryValueKind.HighImpedance) {
+    return 'z';
+  }
+
+  return frame.getLabel(segmentIndex) ?? '0';
 }

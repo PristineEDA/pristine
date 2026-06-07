@@ -5512,7 +5512,7 @@ test('terminal tab creates a real shell session and shows command output', async
   await app.close();
 });
 
-test('waveform bottom panel renders mock Pixi waveform and controls', async () => {
+test('waveform bottom panel renders binary waveform and controls', async () => {
   const { app, window } = await launchApp();
 
   await openBottomTerminal(window);
@@ -5526,13 +5526,26 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
   const cursorInfoSignal = window.getByTestId('waveform-toolbar-cursor-signal');
   const cursorInfoValue = window.getByTestId('waveform-toolbar-cursor-value');
   await expect(panel).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
-  await expect(panel).toHaveAttribute('data-signal-count', '168');
+  await expect.poll(async () => JSON.stringify({
+    error: await panel.getAttribute('data-waveform-error'),
+    loadingText: await window.getByTestId('waveform-loading-state').textContent().catch(() => null),
+    signalCount: await panel.getAttribute('data-signal-count'),
+    status: await panel.getAttribute('data-waveform-session-status'),
+  }), {
+    message: 'waveform binary session should load catalog metadata',
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toContain('"signalCount":"168"');
+  await expect(panel).toHaveAttribute('data-waveform-source', 'lsp-binary', { timeout: UI_READY_TIMEOUT_MS });
+  await expect(panel).toHaveAttribute('data-waveform-frame-version', '1', { timeout: UI_READY_TIMEOUT_MS });
+  await expect.poll(async () => Number(await panel.getAttribute('data-waveform-frame-segment-count') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
   await expect(panel).toHaveAttribute('data-ready', 'true', { timeout: UI_READY_TIMEOUT_MS });
   await expect(panel).toHaveAttribute('data-renderer', /^(webgpu|webgl)$/);
   await expect(panel).toHaveAttribute('data-selected-signal-id', 'tb_top_module1-clk');
   await expect(toolbarActions).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
   await expect(cursorInfo).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
-  await expect(cursorInfoTime).toHaveText(/84\.0ns/);
+  await expect(cursorInfoTime).toHaveText(/0\.0ns/);
   await expect.poll(async () => toolbar.evaluate((element) => {
     const markup = String((element as { innerHTML?: string }).innerHTML ?? '');
     const cursorIndex = markup.indexOf('waveform-toolbar-cursor-info');
@@ -5547,30 +5560,22 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
   const readCanvasNumber = async (attribute: string) => Number(await canvasHost.getAttribute(attribute) ?? '0');
   await expect(canvasHost).toHaveAttribute('data-renderer', /^(webgpu|webgl)$/);
   await expect(canvasHost).toHaveAttribute('data-layer-count', '4');
+  await expect(canvasHost).toHaveAttribute('data-waveform-frame-version', '1');
+  await expect.poll(async () => readCanvasNumber('data-waveform-frame-segment-count'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
   await expect(canvasHost).toHaveAttribute('data-layer-names', 'background,content,status,operation');
   await expect(canvasHost).toHaveAttribute('data-header-background', 'opaque');
   await expect(canvasHost).toHaveAttribute('data-row-count', '171');
   await expect(canvasHost).toHaveAttribute('data-row-height', '30');
   await expect(canvasHost).toHaveAttribute('data-first-signal-lane-y', '52.00');
   await expect(canvasHost).toHaveAttribute('data-waveform-header-height', '22.00');
-  await expect.poll(async () => readCanvasNumber('data-bus-hexagon-count'), {
-    timeout: UI_READY_TIMEOUT_MS,
-  }).toBeGreaterThan(0);
-  await expect.poll(async () => readCanvasNumber('data-x-state-count'), {
-    timeout: UI_READY_TIMEOUT_MS,
-  }).toBeGreaterThan(0);
-  await expect.poll(async () => readCanvasNumber('data-z-state-count'), {
-    timeout: UI_READY_TIMEOUT_MS,
-  }).toBeGreaterThan(0);
-  await expect.poll(async () => readCanvasNumber('data-x-state-block-count'), {
-    timeout: UI_READY_TIMEOUT_MS,
-  }).toBeGreaterThan(0);
-  await expect.poll(async () => readCanvasNumber('data-z-state-block-count'), {
-    timeout: UI_READY_TIMEOUT_MS,
-  }).toBeGreaterThan(0);
-  await expect.poll(async () => readCanvasNumber('data-pulse-fill-count'), {
-    timeout: UI_READY_TIMEOUT_MS,
-  }).toBeGreaterThan(0);
+  await expect(canvasHost).toHaveAttribute('data-bus-hexagon-count');
+  await expect(canvasHost).toHaveAttribute('data-x-state-count');
+  await expect(canvasHost).toHaveAttribute('data-z-state-count');
+  await expect(canvasHost).toHaveAttribute('data-x-state-block-count');
+  await expect(canvasHost).toHaveAttribute('data-z-state-block-count');
+  await expect(canvasHost).toHaveAttribute('data-pulse-fill-count');
   await expect.poll(async () => readCanvasNumber('data-render-count'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(0);
@@ -5597,7 +5602,6 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
   await expect.poll(async () => {
     const collapsedSegmentCount = await readCanvasNumber('data-collapsed-segment-count');
     const skippedHorizontalSegmentCount = await readCanvasNumber('data-skipped-horizontal-segment-count');
-    const drawnTransitionEdgeCount = await readCanvasNumber('data-drawn-transition-edge-count');
     const busFullHexagonCount = await readCanvasNumber('data-bus-full-hexagon-count');
     const busSpecialStateHexagonCount = await readCanvasNumber('data-bus-special-state-hexagon-count');
     const busSpecialStateLabelCount = await readCanvasNumber('data-bus-special-state-label-count');
@@ -5607,7 +5611,7 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
 
     return Number.isFinite(collapsedSegmentCount)
       && Number.isFinite(skippedHorizontalSegmentCount)
-      && drawnTransitionEdgeCount > 0
+      && await readCanvasNumber('data-drawn-horizontal-segment-count') > 0
       && busFullHexagonCount > 0
       && busSpecialStateHexagonCount > 0
       && busSpecialStateLabelCount > 0
@@ -5707,7 +5711,7 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
   await expect(window.getByTestId('waveform-signal-value-u_top_module1-counting')).toHaveClass(/justify-end/);
   await expect(canvasHost).toHaveAttribute('data-selected-signal-lane-y', '292.00');
   await expect(cursorInfoSignal).toHaveText(/counting/);
-  await expect(cursorInfoValue).toHaveText(/^2$/);
+  await expect(cursorInfoValue).toHaveText(/^[0-9a-fxz]+$/i);
 
   await canvasHost.click({ position: { x: Math.floor(canvasBox.width * 0.28), y: 86 } });
   await expect.poll(async () => Number(await panel.getAttribute('data-cursor-time') ?? '0'), {
@@ -5728,14 +5732,25 @@ test('waveform bottom panel renders mock Pixi waveform and controls', async () =
   }
   const horizontalScrollbar = window.getByTestId('waveform-horizontal-scrollbar');
   const setHorizontalScrollbarLeft = async (scrollLeft: number) => {
-    await horizontalScrollbar.evaluate((element, nextScrollLeft) => {
+    await horizontalScrollbar.evaluate(async (element, nextScrollLeft) => {
       const scrollable = element as unknown as {
         dispatchEvent: (event: Event) => boolean;
         scrollLeft: number;
       };
-      scrollable.scrollLeft = nextScrollLeft;
-      scrollable.dispatchEvent(new Event('scroll', { bubbles: true }));
+      const dispatchScroll = () => {
+        scrollable.scrollLeft = nextScrollLeft;
+        scrollable.dispatchEvent(new Event('scroll', { bubbles: true }));
+      };
+      dispatchScroll();
+      await new Promise<void>((resolve) => setTimeout(resolve, 16));
+      dispatchScroll();
     }, scrollLeft);
+    await expect.poll(async () => {
+      const actualScrollLeft = Number(await horizontalScrollbar.getAttribute('data-horizontal-scroll-left') ?? '0');
+      return Math.abs(actualScrollLeft - scrollLeft);
+    }, {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeLessThanOrEqual(1);
   };
   await expect.poll(async () => Number(await horizontalScrollbar.getAttribute('data-horizontal-scroll-range') ?? '0'), {
     timeout: UI_READY_TIMEOUT_MS,

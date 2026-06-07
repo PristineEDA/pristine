@@ -1,5 +1,6 @@
 import { vi } from 'vitest';
 import type { ElectronAPI } from '../../types/electron-api';
+import { createWaveformFixtureFrame, waveformFixtureData } from '../app/components/code/explorer/waveform/waveformTestFixtures';
 
 const defaultGpuDiagnostics = {
   hardwareAccelerationEnabled: true,
@@ -139,6 +140,25 @@ export function createElectronApiMock(): ElectronAPI {
       }),
       moduleHierarchy: vi.fn().mockResolvedValue({ roots: [], messages: [] }),
       schematic: vi.fn().mockResolvedValue({ rootModuleId: null, modules: [], messages: [] }),
+      waveformOpen: vi.fn().mockResolvedValue({
+        cursorTime: waveformFixtureData.cursorTime,
+        duration: waveformFixtureData.duration,
+        groups: waveformFixtureData.groups,
+        id: waveformFixtureData.id,
+        sessionId: 'waveform-test-session',
+        signals: waveformFixtureData.signals,
+        timescaleUnit: waveformFixtureData.timescaleUnit,
+        title: waveformFixtureData.title,
+      }),
+      waveformFrame: vi.fn().mockImplementation(async (options) => createWaveformFixtureFrame(
+        {
+          startTime: options.startTime,
+          endTime: options.endTime,
+        },
+        options.width,
+        options.signalIds,
+      )),
+      waveformClose: vi.fn().mockResolvedValue(true),
       getDebugEvents: vi.fn().mockResolvedValue([]),
       onDebug: vi.fn(() => vi.fn()),
       onDiagnostics: vi.fn(() => vi.fn()),

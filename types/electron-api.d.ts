@@ -21,6 +21,8 @@ import type {
   LspPrepareRenameResult,
   LspSchematic,
   LspSchematicOptions,
+  LspWaveformFrameOptions,
+  LspWaveformOpenResult,
   LspSelectionRange,
   LspSemanticTokens,
   LspSignatureHelp,
@@ -179,6 +181,9 @@ export interface ElectronAPI {
     outline: (filePath: string, options?: LspOutlineOptions) => Promise<LspOutlineResult>;
     moduleHierarchy: (options?: LspModuleHierarchyOptions) => Promise<LspModuleHierarchy>;
     schematic: (options?: LspSchematicOptions) => Promise<LspSchematic>;
+    waveformOpen: () => Promise<LspWaveformOpenResult>;
+    waveformFrame: (options: LspWaveformFrameOptions) => Promise<ArrayBuffer>;
+    waveformClose: (sessionId: string) => Promise<boolean>;
     getDebugEvents: () => Promise<LspDebugEvent[]>;
     onDebug: (callback: (payload: LspDebugEvent) => void) => () => void;
     onDiagnostics: (callback: (payload: LspDiagnosticsEvent) => void) => () => void;
