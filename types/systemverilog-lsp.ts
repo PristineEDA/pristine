@@ -371,6 +371,11 @@ export interface LspWaveformFrameOptions {
   sessionId: string;
   startTime: number;
   endTime: number;
+  protocolVersion?: 1 | 2;
+  preparedStartTime?: number;
+  preparedEndTime?: number;
+  viewportStartTime?: number;
+  viewportEndTime?: number;
   width: number;
   height: number;
   laneHeight: number;

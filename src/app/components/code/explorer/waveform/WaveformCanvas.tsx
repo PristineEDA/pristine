@@ -48,6 +48,9 @@ interface WaveformCanvasProps {
   cursorTime: number;
   data: WaveformDataSet;
   frame?: ParsedWaveformFrame | null;
+  interactionFrameRequestCount?: number;
+  preparedRangeHitCount?: number;
+  preparedRangeMissCount?: number;
   selectedSignalId: string | null;
   verticalScrollTop: number;
   viewport: WaveformViewport;
@@ -81,6 +84,9 @@ export function WaveformCanvas({
   cursorTime,
   data,
   frame,
+  interactionFrameRequestCount = 0,
+  preparedRangeHitCount = 0,
+  preparedRangeMissCount = 0,
   selectedSignalId,
   verticalScrollTop,
   viewport,
@@ -96,6 +102,8 @@ export function WaveformCanvas({
   const renderFrameRef = useRef<number | null>(null);
   const dragRef = useRef<DragState | null>(null);
   const rulerScrollDragRef = useRef<RulerScrollDragState | null>(null);
+  const viewportChangeFrameRef = useRef<number | null>(null);
+  const pendingViewportRef = useRef<WaveformViewport | null>(null);
   const signalTextureCacheRef = useRef(new Map<string, WaveformSignalTextureCacheEntry>());
   const signalTextureCacheBytesRef = useRef(0);
   const textureCacheDataIdRef = useRef(data.id);
@@ -180,6 +188,11 @@ export function WaveformCanvas({
         window.cancelAnimationFrame(renderFrameRef.current);
         renderFrameRef.current = null;
       }
+      if (viewportChangeFrameRef.current !== null) {
+        window.cancelAnimationFrame(viewportChangeFrameRef.current);
+        viewportChangeFrameRef.current = null;
+      }
+      pendingViewportRef.current = null;
 
       clearSignalTextureCache();
       sceneRef.current?.world.destroy({ children: true });
@@ -276,7 +289,7 @@ export function WaveformCanvas({
         event.preventDefault();
         const centerTime = clampTime(getPointerTime(event.clientX), currentData.duration);
         const zoomFactor = event.deltaY > 0 ? 1 / zoomWheelFactor : zoomWheelFactor;
-        onViewportChangeRef.current(zoomWaveformViewport(currentViewport, centerTime, zoomFactor, currentData.duration));
+        scheduleViewportChange(zoomWaveformViewport(currentViewport, centerTime, zoomFactor, currentData.duration));
         return;
       }
 
@@ -284,7 +297,7 @@ export function WaveformCanvas({
         event.preventDefault();
         const deltaPixels = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
         const deltaTime = deltaPixels * getWaveformViewportSpan(currentViewport) / Math.max(1, width);
-        onViewportChangeRef.current(panWaveformViewport(currentViewport, deltaTime, currentData.duration));
+        scheduleViewportChange(panWaveformViewport(currentViewport, deltaTime, currentData.duration));
         return;
       }
 
@@ -356,7 +369,7 @@ export function WaveformCanvas({
       drag.moved = true;
       const width = Math.max(waveformCanvasMinWidth, host.clientWidth);
       const deltaTime = -dx * getWaveformViewportSpan(drag.startViewport) / Math.max(1, width);
-      onViewportChangeRef.current(panWaveformViewport(drag.startViewport, deltaTime, dataRef.current.duration));
+      scheduleViewportChange(panWaveformViewport(drag.startViewport, deltaTime, dataRef.current.duration));
     }
 
     function handlePointerUp(event: PointerEvent) {
@@ -390,7 +403,7 @@ export function WaveformCanvas({
 
     function updateViewportFromRulerPointer(pointerX: number, indicatorOffsetX: number, width: number) {
       const nextLeft = pointerX - indicatorOffsetX;
-      onViewportChangeRef.current(getWaveformViewportForRulerScrollIndicator(viewportRef.current, dataRef.current.duration, width, nextLeft));
+      scheduleViewportChange(getWaveformViewportForRulerScrollIndicator(viewportRef.current, dataRef.current.duration, width, nextLeft));
     }
 
     host.addEventListener('wheel', handleWheel, { passive: false });
@@ -407,6 +420,25 @@ export function WaveformCanvas({
       host.removeEventListener('pointercancel', handlePointerUp);
     };
   }, []);
+
+  function scheduleViewportChange(nextViewport: WaveformViewport) {
+    pendingViewportRef.current = nextViewport;
+    viewportRef.current = nextViewport;
+
+    if (viewportChangeFrameRef.current !== null) {
+      return;
+    }
+
+    viewportChangeFrameRef.current = window.requestAnimationFrame(() => {
+      viewportChangeFrameRef.current = null;
+      const pendingViewport = pendingViewportRef.current;
+      pendingViewportRef.current = null;
+
+      if (pendingViewport) {
+        onViewportChangeRef.current(pendingViewport);
+      }
+    });
+  }
 
   function rebuildScene() {
     const app = appRef.current;
@@ -630,6 +662,10 @@ export function WaveformCanvas({
       data-average-render-ms={formatOptionalNumber(renderMetrics.averageRenderDurationMs)}
       data-last-fps={formatOptionalNumber(renderMetrics.lastFps)}
       data-last-render-ms={formatOptionalNumber(renderMetrics.lastRenderDurationMs)}
+      data-interaction-frame-request-count={interactionFrameRequestCount}
+      data-label-pool-size={renderStats.labelPoolSize}
+      data-mesh-buffer-update-ms={renderStats.meshBufferUpdateMs.toFixed(3)}
+      data-mesh-vertex-count={renderStats.meshVertexCount}
       data-pulse-fill-count={pulseFillCount}
       data-render-count={renderCount}
       data-render-resolution={renderStats.renderResolution.toFixed(2)}
@@ -641,6 +677,10 @@ export function WaveformCanvas({
       data-row-content-skip-count={renderStats.rowContentSkipCount}
       data-row-recycle-count={renderStats.rowRecycleCount}
       data-row-reuse-count={renderStats.rowReuseCount}
+      data-prepared-range-end={frame?.preparedRange?.endTime.toFixed(2) ?? ''}
+      data-prepared-range-hit-count={preparedRangeHitCount}
+      data-prepared-range-miss-count={preparedRangeMissCount}
+      data-prepared-range-start={frame?.preparedRange?.startTime.toFixed(2) ?? ''}
       data-rendered-label-count={renderStats.renderedLabelCount}
       data-rendered-segment-count={renderStats.renderedSegmentCount}
       data-rendered-signal-count={renderStats.renderedSignalCount}
@@ -676,6 +716,7 @@ export function WaveformCanvas({
       data-z-state-block-count={shapeCounts.zStateBlockCount}
       data-z-state-count={stateCounts.zStateCount}
       data-waveform-empty-visible-signal-count={emptyVisibleSignalCount}
+      data-waveform-frame-protocol-version={frame?.version ?? ''}
       data-waveform-frame-segment-count={frame?.segmentCount ?? 0}
       data-waveform-frame-truncated={String(frame?.truncated ?? false)}
       data-waveform-frame-version={frame?.version ?? ''}
@@ -745,6 +786,9 @@ function createEmptyRenderStats(): WaveformRenderStats {
     panBufferHitCount: 0,
     panBufferMissCount: 0,
     panPixelShiftCount: 0,
+    meshBufferUpdateMs: 0,
+    meshVertexCount: 0,
+    labelPoolSize: 0,
     renderedSignalCount: 0,
     sourceSegmentCount: 0,
     renderedSegmentCount: 0,
@@ -792,6 +836,9 @@ function createEmptySceneUpdateMetrics(): WaveformSceneUpdateMetrics {
     panBufferHitCount: 0,
     panBufferMissCount: 0,
     panPixelShiftCount: 0,
+    meshBufferUpdateMs: 0,
+    meshVertexCount: 0,
+    labelPoolSize: 0,
   };
 }
 

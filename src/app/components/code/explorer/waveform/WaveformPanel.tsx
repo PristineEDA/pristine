@@ -294,7 +294,13 @@ export function WaveformPanel() {
       data-signal-count={data?.signals.length ?? 0}
       data-waveform-error={session.error ?? ''}
       data-waveform-empty-visible-signal-count={emptyVisibleSignalCount}
+      data-interaction-frame-request-count={session.interactionFrameRequestCount}
+      data-prepared-range-end={session.frame?.preparedRange?.endTime.toFixed(2) ?? ''}
+      data-prepared-range-hit-count={session.preparedRangeHitCount}
+      data-prepared-range-miss-count={session.preparedRangeMissCount}
+      data-prepared-range-start={session.frame?.preparedRange?.startTime.toFixed(2) ?? ''}
       data-waveform-frame-request-count={session.frameRequestCount}
+      data-waveform-frame-protocol-version={session.frame?.version ?? ''}
       data-waveform-frame-segment-count={session.frame?.segmentCount ?? 0}
       data-waveform-frame-truncated={String(session.frame?.truncated ?? false)}
       data-waveform-frame-version={session.frame?.version ?? ''}
@@ -438,6 +444,9 @@ export function WaveformPanel() {
                   cursorTime={cursorTime}
                   data={data}
                   frame={session.frame}
+                  interactionFrameRequestCount={session.interactionFrameRequestCount}
+                  preparedRangeHitCount={session.preparedRangeHitCount}
+                  preparedRangeMissCount={session.preparedRangeMissCount}
                   selectedSignalId={selectedSignalId}
                   verticalScrollTop={verticalScrollTop}
                   viewport={activeViewport}

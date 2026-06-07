@@ -8,6 +8,7 @@ import {
   closeAllWaveformPipeSessions,
   decodeWaveformEnvelope,
   encodeViewportFrameRequestPayload,
+  encodeViewportFrameRequestPayloadV2,
   encodeWaveformEnvelope,
   getOpenWaveformPipeSessionCount,
   normalizeWaveformOpenSessionMetadata,
@@ -69,6 +70,55 @@ describe('waveformPipeClient', () => {
     expect(view.getFloat32(offset, true)).toBe(22);
     offset += 4;
     expect(view.getUint32(offset, true)).toBe(512);
+    offset += 4;
+    expect(view.getUint32(offset, true)).toBe(2);
+    offset += 4;
+
+    const firstLength = view.getUint32(offset, true);
+    offset += 4;
+    expect(new TextDecoder().decode(payload.subarray(offset, offset + firstLength))).toBe('clk');
+    offset += firstLength;
+    const secondLength = view.getUint32(offset, true);
+    offset += 4;
+    expect(new TextDecoder().decode(payload.subarray(offset, offset + secondLength))).toBe('u_top.counting');
+  });
+
+  it('encodes v2 viewport frame requests with prepared and visible ranges', () => {
+    const options: LspWaveformFrameOptions = {
+      sessionId: 'session-1',
+      protocolVersion: 2,
+      startTime: 0,
+      endTime: 200,
+      preparedStartTime: -40,
+      preparedEndTime: 240,
+      viewportStartTime: 20,
+      viewportEndTime: 80,
+      width: 640,
+      height: 360,
+      laneHeight: 30,
+      headerHeight: 22,
+      maxSegments: 0,
+      signalIds: ['clk', 'u_top.counting'],
+    };
+    const payload = encodeViewportFrameRequestPayloadV2(options);
+    const view = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
+    let offset = 0;
+
+    expect(view.getFloat64(offset, true)).toBe(-40);
+    offset += 8;
+    expect(view.getFloat64(offset, true)).toBe(240);
+    offset += 8;
+    expect(view.getFloat64(offset, true)).toBe(20);
+    offset += 8;
+    expect(view.getFloat64(offset, true)).toBe(80);
+    offset += 8;
+    expect(view.getFloat32(offset, true)).toBe(640);
+    offset += 4;
+    expect(view.getFloat32(offset, true)).toBe(30);
+    offset += 4;
+    expect(view.getFloat32(offset, true)).toBe(22);
+    offset += 4;
+    expect(view.getUint32(offset, true)).toBe(0);
     offset += 4;
     expect(view.getUint32(offset, true)).toBe(2);
     offset += 4;

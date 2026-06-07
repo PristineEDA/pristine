@@ -43,6 +43,9 @@ export interface WaveformRenderStats {
   panBufferHitCount: number;
   panBufferMissCount: number;
   panPixelShiftCount: number;
+  meshBufferUpdateMs: number;
+  meshVertexCount: number;
+  labelPoolSize: number;
   renderedSignalCount: number;
   sourceSegmentCount: number;
   renderedSegmentCount: number;
@@ -96,6 +99,9 @@ export interface WaveformSceneUpdateMetrics {
   panBufferHitCount: number;
   panBufferMissCount: number;
   panPixelShiftCount: number;
+  meshBufferUpdateMs: number;
+  meshVertexCount: number;
+  labelPoolSize: number;
 }
 
 export interface WaveformTransition {

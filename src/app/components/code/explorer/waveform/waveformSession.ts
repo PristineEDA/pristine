@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { parseWaveformBinaryFrame, type ParsedWaveformFrame } from './waveformBinaryFrame';
+import {
+  parseWaveformBinaryFrame,
+  waveformBinaryFrameSignalTableStride,
+  waveformBinaryFrameVersionV2,
+  type ParsedWaveformFrame,
+} from './waveformBinaryFrame';
 import {
   getInitialWaveformViewport,
   getWaveformDisplayRows,
@@ -17,10 +22,33 @@ export interface WaveformSessionState {
   error: string | null;
   frame: ParsedWaveformFrame | null;
   frameRequestCount: number;
+  interactionFrameRequestCount: number;
   loading: boolean;
+  preparedRangeHitCount: number;
+  preparedRangeMissCount: number;
   sessionId: string | null;
   status: 'loading' | 'ready' | 'error' | 'unavailable';
 }
+
+type WaveformFrameRequest =
+  | { covered: true; key: string }
+  | {
+    covered: false;
+    endTime: number;
+    headerHeight: number;
+    height: number;
+    laneHeight: number;
+    maxSegments: number;
+    preparedEndTime: number;
+    preparedStartTime: number;
+    protocolVersion: 2;
+    sessionId: string;
+    signalIds: string[];
+    startTime: number;
+    viewportEndTime: number;
+    viewportStartTime: number;
+    width: number;
+  };
 
 interface UseWaveformSessionOptions {
   canvasHeight: number;
@@ -40,7 +68,10 @@ export function useWaveformSession({
     error: null,
     frame: null,
     frameRequestCount: 0,
+    interactionFrameRequestCount: 0,
     loading: true,
+    preparedRangeHitCount: 0,
+    preparedRangeMissCount: 0,
     sessionId: null,
     status: 'loading',
   });
@@ -55,7 +86,10 @@ export function useWaveformSession({
         error: 'Waveform LSP client is unavailable.',
         frame: null,
         frameRequestCount: 0,
+        interactionFrameRequestCount: 0,
         loading: false,
+        preparedRangeHitCount: 0,
+        preparedRangeMissCount: 0,
         sessionId: null,
         status: 'unavailable',
       });
@@ -83,7 +117,12 @@ export function useWaveformSession({
         ...current,
         data,
         error: null,
+        frame: null,
+        frameRequestCount: 0,
+        interactionFrameRequestCount: 0,
         loading: false,
+        preparedRangeHitCount: 0,
+        preparedRangeMissCount: 0,
         sessionId: result.sessionId,
         status: 'ready',
       }));
@@ -97,7 +136,10 @@ export function useWaveformSession({
         error: error instanceof Error ? error.message : String(error),
         frame: null,
         frameRequestCount: 0,
+        interactionFrameRequestCount: 0,
         loading: false,
+        preparedRangeHitCount: 0,
+        preparedRangeMissCount: 0,
         sessionId: null,
         status: 'error',
       });
@@ -122,25 +164,54 @@ export function useWaveformSession({
     return viewport ?? getInitialWaveformViewport(state.data);
   }, [state.data, viewport]);
 
-  const frameRequest = useMemo(() => {
+  const frameRequest = useMemo<WaveformFrameRequest | null>(() => {
     if (!state.data || !state.sessionId || !requestViewport || canvasWidth <= 0 || canvasHeight <= 0) {
       return null;
     }
 
     const rows = getWaveformDisplayRows(state.data);
-    const visibleRows = getVisibleWaveformRows(rows, verticalScrollTop, canvasHeight).rows
+    const visibleSignalRows = getVisibleWaveformRows(rows, verticalScrollTop, canvasHeight).rows
       .filter((row) => row.kind === 'signal')
-      .map((row) => row.signal.id);
+      .map((row) => ({ id: row.signal.id, signalIndex: row.signalIndex }));
+    const visibleSignalIds = visibleSignalRows.map((row) => row.id);
+
+    if (
+      state.frame?.version === waveformBinaryFrameVersionV2
+      && state.frame.preparedRange
+      && isViewportInsidePreparedRange(requestViewport, state.frame.preparedRange)
+      && doesFrameCoverVisibleRows(state.frame, visibleSignalRows.map((row) => row.signalIndex))
+    ) {
+      return {
+        covered: true,
+        key: [
+          state.sessionId,
+          requestViewport.startTime.toFixed(6),
+          requestViewport.endTime.toFixed(6),
+          canvasWidth,
+          canvasHeight,
+          verticalScrollTop.toFixed(2),
+          visibleSignalIds.join(','),
+        ].join('|'),
+      };
+    }
+
+    const preparedRange = getPreparedWaveformRange(state.data, requestViewport);
 
     return {
-      endTime: requestViewport.endTime,
+      covered: false,
+      endTime: preparedRange.endTime,
       headerHeight: waveformHeaderHeight,
       height: canvasHeight,
       laneHeight: waveformLaneHeight,
       maxSegments: 0,
+      preparedEndTime: preparedRange.endTime,
+      preparedStartTime: preparedRange.startTime,
+      protocolVersion: 2,
       sessionId: state.sessionId,
-      signalIds: visibleRows,
-      startTime: requestViewport.startTime,
+      signalIds: visibleSignalIds,
+      startTime: preparedRange.startTime,
+      viewportEndTime: requestViewport.endTime,
+      viewportStartTime: requestViewport.startTime,
       width: canvasWidth,
     };
   }, [
@@ -149,13 +220,25 @@ export function useWaveformSession({
     requestViewport?.endTime,
     requestViewport?.startTime,
     state.data,
+    state.frame,
     state.sessionId,
     verticalScrollTop,
   ]);
 
+  const coveredFrameRequestKey = frameRequest?.covered ? frameRequest.key : null;
+
+  useEffect(() => {
+    if (coveredFrameRequestKey) {
+      setState((current) => ({
+        ...current,
+        preparedRangeHitCount: current.preparedRangeHitCount + 1,
+      }));
+    }
+  }, [coveredFrameRequestKey]);
+
   useEffect(() => {
     const lsp = window.electronAPI?.lsp;
-    if (!frameRequest || !lsp?.waveformFrame) {
+    if (!frameRequest || frameRequest.covered || !lsp?.waveformFrame) {
       return;
     }
 
@@ -173,6 +256,8 @@ export function useWaveformSession({
         ...current,
         frame,
         frameRequestCount: current.frameRequestCount + 1,
+        interactionFrameRequestCount: current.interactionFrameRequestCount + 1,
+        preparedRangeMissCount: current.preparedRangeMissCount + 1,
       }));
     }).catch((error: unknown) => {
       if (cancelled || requestId !== requestIdRef.current) {
@@ -182,7 +267,6 @@ export function useWaveformSession({
       setState((current) => ({
         ...current,
         error: error instanceof Error ? error.message : String(error),
-        frame: null,
         status: 'error',
       }));
     });
@@ -193,6 +277,48 @@ export function useWaveformSession({
   }, [frameRequest]);
 
   return state;
+}
+
+function getPreparedWaveformRange(data: WaveformDataSet, viewport: WaveformViewport): WaveformViewport {
+  const span = Math.max(1, viewport.endTime - viewport.startTime);
+  const duration = Math.max(span, data.duration);
+  const requestedSpan = Math.min(duration, span * 6);
+
+  if (requestedSpan >= duration) {
+    return { startTime: 0, endTime: duration };
+  }
+
+  const centerTime = viewport.startTime + span / 2;
+  const startTime = Math.max(0, Math.min(duration - requestedSpan, centerTime - requestedSpan / 2));
+
+  return {
+    startTime,
+    endTime: startTime + requestedSpan,
+  };
+}
+
+function isViewportInsidePreparedRange(viewport: WaveformViewport, preparedRange: WaveformViewport) {
+  const epsilon = 0.000001;
+  return viewport.startTime >= preparedRange.startTime - epsilon && viewport.endTime <= preparedRange.endTime + epsilon;
+}
+
+function doesFrameCoverVisibleRows(frame: ParsedWaveformFrame, signalIndices: readonly number[]) {
+  if (signalIndices.length === 0) {
+    return true;
+  }
+
+  const coveredSignalIndices = new Set<number>();
+  for (let tableEntryIndex = 0; tableEntryIndex < frame.signalCount; tableEntryIndex += 1) {
+    const tableIndex = tableEntryIndex * waveformBinaryFrameSignalTableStride;
+    const signalIndex = frame.signalTable[tableIndex];
+    const segmentCount = frame.signalTable[tableIndex + 2] ?? 0;
+
+    if (signalIndex !== undefined && segmentCount > 0) {
+      coveredSignalIndices.add(signalIndex);
+    }
+  }
+
+  return signalIndices.every((signalIndex) => coveredSignalIndices.has(signalIndex));
 }
 
 function mapWaveformOpenResult(result: Awaited<ReturnType<WaveformLspApi['waveformOpen']>>): WaveformDataSet {

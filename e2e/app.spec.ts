@@ -5538,10 +5538,16 @@ test('waveform bottom panel renders binary waveform and controls', async () => {
     timeout: UI_READY_TIMEOUT_MS,
   }).toContain('"signalCount":"168"');
   await expect(panel).toHaveAttribute('data-waveform-source', 'lsp-binary', { timeout: UI_READY_TIMEOUT_MS });
-  await expect(panel).toHaveAttribute('data-waveform-frame-version', '1', { timeout: UI_READY_TIMEOUT_MS });
+  await expect(panel).toHaveAttribute('data-waveform-frame-version', '2', { timeout: UI_READY_TIMEOUT_MS });
+  await expect(panel).toHaveAttribute('data-waveform-frame-protocol-version', '2', { timeout: UI_READY_TIMEOUT_MS });
   await expect(panel).toHaveAttribute('data-waveform-frame-truncated', 'false', { timeout: UI_READY_TIMEOUT_MS });
   await expect(panel).toHaveAttribute('data-waveform-empty-visible-signal-count', '0', { timeout: UI_READY_TIMEOUT_MS });
+  await expect(panel).toHaveAttribute('data-prepared-range-start', '0.00', { timeout: UI_READY_TIMEOUT_MS });
+  await expect(panel).toHaveAttribute('data-prepared-range-end', '200.00', { timeout: UI_READY_TIMEOUT_MS });
   await expect.poll(async () => Number(await panel.getAttribute('data-waveform-frame-segment-count') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
+  await expect.poll(async () => Number(await panel.getAttribute('data-interaction-frame-request-count') ?? '0'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(0);
   await expect(panel).toHaveAttribute('data-ready', 'true', { timeout: UI_READY_TIMEOUT_MS });
@@ -5565,12 +5571,30 @@ test('waveform bottom panel renders binary waveform and controls', async () => {
   const readCanvasNumber = async (attribute: string) => Number(await canvasHost.getAttribute(attribute) ?? '0');
   await expect(canvasHost).toHaveAttribute('data-renderer', /^(webgpu|webgl)$/);
   await expect(canvasHost).toHaveAttribute('data-layer-count', '4');
-  await expect(canvasHost).toHaveAttribute('data-waveform-frame-version', '1');
+  await expect(canvasHost).toHaveAttribute('data-waveform-frame-version', '2');
+  await expect(canvasHost).toHaveAttribute('data-waveform-frame-protocol-version', '2');
   await expect(canvasHost).toHaveAttribute('data-waveform-frame-truncated', 'false');
   await expect(canvasHost).toHaveAttribute('data-waveform-empty-visible-signal-count', '0');
+  await expect(canvasHost).toHaveAttribute('data-prepared-range-start', '0.00');
+  await expect(canvasHost).toHaveAttribute('data-prepared-range-end', '200.00');
+  await expect.poll(async () => readCanvasNumber('data-interaction-frame-request-count'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
   await expect.poll(async () => readCanvasNumber('data-waveform-frame-segment-count'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(0);
+  await expect.poll(async () => readCanvasNumber('data-source-segment-count'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
+  await expect.poll(async () => readCanvasNumber('data-rendered-segment-count'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
+  await expect.poll(async () => readCanvasNumber('data-mesh-vertex-count'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThanOrEqual(0);
+  await expect.poll(async () => readCanvasNumber('data-label-pool-size'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThanOrEqual(0);
   await expect(canvasHost).toHaveAttribute('data-layer-names', 'background,content,status,operation');
   await expect(canvasHost).toHaveAttribute('data-header-background', 'opaque');
   await expect(canvasHost).toHaveAttribute('data-row-count', '171');

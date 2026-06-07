@@ -3,9 +3,11 @@ import { describe, expect, it } from 'vitest';
 import {
   createWaveformBinaryFrameFromDataset,
   parseWaveformBinaryFrame,
+  parseWaveformBinaryFrameV2,
   waveformBinaryFrameFlagTruncated,
   WaveformBinaryValueKind,
   waveformBinaryFrameVersion,
+  waveformBinaryFrameVersionV2,
 } from './waveformBinaryFrame';
 import type { WaveformDataSet } from './waveformTypes';
 
@@ -69,6 +71,46 @@ describe('waveformBinaryFrame', () => {
     expect(Array.from(frame.signalTable)).toEqual([1, 0, 1, 1]);
   });
 
+  it('parses v2 prepared-range frames with time columns as typed array views', () => {
+    const buffer = createWaveformBinaryFrameFromDataset(createDataSet(), [
+      {
+        laneY: 52,
+        signalIndex: 0,
+        time0: 10,
+        time1: 20,
+        valueKind: WaveformBinaryValueKind.Low,
+        x0: 0,
+        x1: 40,
+      },
+      {
+        label: 'a5',
+        laneY: 82,
+        signalIndex: 1,
+        time0: 20,
+        time1: 30,
+        valueKind: WaveformBinaryValueKind.Bus,
+        x0: 40,
+        x1: 80,
+      },
+    ], {
+      preparedRange: { startTime: 0, endTime: 100 },
+      version: waveformBinaryFrameVersionV2,
+      viewportRange: { startTime: 10, endTime: 40 },
+    });
+    expect(new DataView(buffer).getUint16(6, true)).toBe(96);
+
+    const frame = parseWaveformBinaryFrameV2(buffer);
+
+    expect(frame.version).toBe(waveformBinaryFrameVersionV2);
+    expect(frame.preparedRange).toEqual({ startTime: 0, endTime: 100 });
+    expect(frame.viewportRange).toEqual({ startTime: 10, endTime: 40 });
+    expect(frame.time0?.buffer).toBe(buffer);
+    expect(frame.time1?.buffer).toBe(buffer);
+    expect(Array.from(frame.time0 ?? [])).toEqual([10, 20]);
+    expect(Array.from(frame.time1 ?? [])).toEqual([20, 30]);
+    expect(frame.getLabel(1)).toBe('a5');
+  });
+
   it('rejects bad magic and unsupported versions', () => {
     const badMagic = createFrameBuffer();
     new DataView(badMagic).setUint32(0, 0x12345678, true);
@@ -76,7 +118,7 @@ describe('waveformBinaryFrame', () => {
     expect(() => parseWaveformBinaryFrame(badMagic)).toThrow('Invalid waveform binary frame magic.');
 
     const unsupported = createFrameBuffer();
-    new DataView(unsupported).setUint16(4, waveformBinaryFrameVersion + 1, true);
+    new DataView(unsupported).setUint16(4, 99, true);
 
     expect(() => parseWaveformBinaryFrame(unsupported)).toThrow('Unsupported waveform frame version');
 
@@ -97,6 +139,19 @@ describe('waveformBinaryFrame', () => {
     new DataView(unaligned).setUint32(20, 49, true);
 
     expect(() => parseWaveformBinaryFrame(unaligned)).toThrow('x0 offset must be 4-byte aligned.');
+
+    const unalignedTime = createWaveformBinaryFrameFromDataset(createDataSet(), [
+      {
+        laneY: 52,
+        signalIndex: 0,
+        valueKind: WaveformBinaryValueKind.Low,
+        x0: 0,
+        x1: 40,
+      },
+    ], { version: waveformBinaryFrameVersionV2 });
+    new DataView(unalignedTime).setUint32(56, 98, true);
+
+    expect(() => parseWaveformBinaryFrame(unalignedTime)).toThrow('time0 offset must be 8-byte aligned.');
   });
 });
 

@@ -21,6 +21,9 @@ vi.mock('./WaveformCanvas', () => ({
     cursorTime,
     data,
     frame,
+    interactionFrameRequestCount,
+    preparedRangeHitCount,
+    preparedRangeMissCount,
     selectedSignalId,
     verticalScrollTop,
     viewport,
@@ -31,9 +34,12 @@ vi.mock('./WaveformCanvas', () => ({
     cursorTime: number;
     data: WaveformDataSet;
     frame?: ParsedWaveformFrame | null;
+    interactionFrameRequestCount?: number;
     onMetricsChange?: (metrics: WaveformRenderMetrics) => void;
     onRendererChange?: (renderer: WaveformRendererStatus) => void;
     selectedSignalId: string | null;
+    preparedRangeHitCount?: number;
+    preparedRangeMissCount?: number;
     viewport: WaveformViewport;
     onCursorTimeChange: (time: number) => void;
     verticalScrollTop: number;
@@ -74,9 +80,17 @@ vi.mock('./WaveformCanvas', () => ({
         data-header-background="opaque"
         data-layer-count={waveformLayerNames.length}
         data-layer-names={waveformLayerNames.join(',')}
+        data-interaction-frame-request-count={interactionFrameRequestCount ?? 0}
+        data-label-pool-size="8"
+        data-mesh-buffer-update-ms="1.250"
+        data-mesh-vertex-count="512"
         data-pulse-fill-count={getWaveformDigitalPulseFillCount(data, viewport)}
         data-row-count={displayRows.length}
         data-row-height={waveformLaneHeight}
+        data-prepared-range-end={frame?.preparedRange?.endTime.toFixed(2) ?? ''}
+        data-prepared-range-hit-count={preparedRangeHitCount ?? 0}
+        data-prepared-range-miss-count={preparedRangeMissCount ?? 0}
+        data-prepared-range-start={frame?.preparedRange?.startTime.toFixed(2) ?? ''}
         data-ruler-scroll-indicator-color="#8e8e8e"
         data-ruler-scroll-indicator-height="22.00"
         data-ruler-scroll-indicator-left="0.00"
@@ -88,6 +102,7 @@ vi.mock('./WaveformCanvas', () => ({
         data-selected-signal-visible-y={selectedSignalLaneY === null ? '' : (selectedSignalLaneY - verticalScrollTop).toFixed(2)}
         data-signal-count={data.signals.length}
         data-waveform-empty-visible-signal-count="0"
+        data-waveform-frame-protocol-version={frame?.version ?? ''}
         data-waveform-frame-segment-count={frame?.segmentCount ?? 0}
         data-waveform-frame-truncated={String(frame?.truncated ?? false)}
         data-waveform-frame-version={frame?.version ?? ''}
@@ -139,6 +154,11 @@ describe('WaveformPanel', () => {
       startTime: 0,
       endTime: 200,
       maxSegments: 0,
+      preparedEndTime: 200,
+      preparedStartTime: 0,
+      protocolVersion: 2,
+      viewportEndTime: 200,
+      viewportStartTime: 0,
       width: 900,
     });
     expect(screen.queryByTestId('waveform-canvas')).not.toBeInTheDocument();
@@ -149,7 +169,7 @@ describe('WaveformPanel', () => {
     resolveFrame();
 
     await waitFor(() => expect(screen.getByTestId('waveform-canvas')).toBeInTheDocument());
-    expect(panel).toHaveAttribute('data-waveform-frame-version', '1');
+    expect(panel).toHaveAttribute('data-waveform-frame-version', '2');
     expect(panel).toHaveAttribute('data-waveform-frame-truncated', 'false');
     expect(panel).toHaveAttribute('data-waveform-empty-visible-signal-count', '0');
     expect(Number(panel.getAttribute('data-waveform-frame-segment-count'))).toBeGreaterThan(0);
@@ -166,18 +186,29 @@ describe('WaveformPanel', () => {
 
     expect(panel).toHaveAttribute('data-signal-count', '168');
     expect(panel).toHaveAttribute('data-waveform-source', 'lsp-binary');
-    expect(panel).toHaveAttribute('data-waveform-frame-version', '1');
+    expect(panel).toHaveAttribute('data-waveform-frame-version', '2');
+    expect(panel).toHaveAttribute('data-waveform-frame-protocol-version', '2');
     expect(panel).toHaveAttribute('data-waveform-frame-truncated', 'false');
     expect(panel).toHaveAttribute('data-waveform-empty-visible-signal-count', '0');
+    expect(panel).toHaveAttribute('data-prepared-range-start', '0.00');
+    expect(panel).toHaveAttribute('data-prepared-range-end', '200.00');
+    expect(Number(panel.getAttribute('data-interaction-frame-request-count'))).toBeGreaterThan(0);
+    expect(Number(panel.getAttribute('data-prepared-range-miss-count'))).toBeGreaterThan(0);
     expect(Number(panel.getAttribute('data-waveform-frame-request-count'))).toBeGreaterThan(0);
     expect(Number(panel.getAttribute('data-waveform-frame-segment-count'))).toBeGreaterThan(0);
     expect(screen.getByText('tb_top_module1')).toBeInTheDocument();
     expect(screen.getByText('u_top_module1')).toBeInTheDocument();
     expect(screen.getByText('dense_test_signals')).toBeInTheDocument();
     expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-layer-names', 'background,content,status,operation');
-    expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-waveform-frame-version', '1');
+    expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-waveform-frame-version', '2');
+    expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-waveform-frame-protocol-version', '2');
     expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-waveform-frame-truncated', 'false');
     expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-waveform-empty-visible-signal-count', '0');
+    expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-prepared-range-start', '0.00');
+    expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-prepared-range-end', '200.00');
+    expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-mesh-buffer-update-ms'))).toBeGreaterThanOrEqual(0);
+    expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-mesh-vertex-count'))).toBeGreaterThan(0);
+    expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-label-pool-size'))).toBeGreaterThan(0);
     expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-waveform-frame-segment-count'))).toBeGreaterThan(0);
     const toolbar = screen.getByTestId('waveform-toolbar');
     expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-row-count', '171');
