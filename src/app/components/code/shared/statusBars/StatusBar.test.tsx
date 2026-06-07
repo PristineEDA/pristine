@@ -1,8 +1,30 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LspProblem } from '../../../../lsp/lspProblems';
 import { StatusBar } from './StatusBar';
+
+const HOVER_CARD_TEST_OPEN_DELAY_MS = 200;
+
+function useHoverCardFakeTimers() {
+  vi.useFakeTimers();
+}
+
+async function advanceHoverCardOpenDelay() {
+  await act(async () => {
+    vi.advanceTimersByTime(HOVER_CARD_TEST_OPEN_DELAY_MS);
+  });
+}
+
+async function cleanupHoverCardTimers() {
+  await act(async () => {
+    vi.runOnlyPendingTimers();
+  });
+
+  cleanup();
+  vi.clearAllTimers();
+  vi.useRealTimers();
+}
 
 const mockedGitStatus = {
   branchName: 'feature/git-ui',
@@ -137,20 +159,25 @@ describe('StatusBar', () => {
   });
 
   it('shows the inferred language label in the file icon hover card description', async () => {
-    const user = userEvent.setup();
+    useHoverCardFakeTimers();
 
-    render(
-      <StatusBar activeFileId="rtl/tb/tb_cpu_top.sv" cursorLine={18} cursorCol={4} />,
-    );
+    try {
+      render(
+        <StatusBar activeFileId="rtl/tb/tb_cpu_top.sv" cursorLine={18} cursorCol={4} />,
+      );
 
-    const languageIconTrigger = screen.getByTestId('status-bar-language-icon').closest('[data-slot="hover-card-trigger"]');
+      const languageIconTrigger = screen.getByTestId('status-bar-language-icon').closest('[data-slot="hover-card-trigger"]');
 
-    expect(languageIconTrigger).not.toBeNull();
+      expect(languageIconTrigger).not.toBeNull();
 
-    await user.hover(languageIconTrigger as HTMLElement);
+      fireEvent.pointerEnter(languageIconTrigger as HTMLElement, { pointerType: 'mouse' });
+      await advanceHoverCardOpenDelay();
 
-    expect(await screen.findByText('Language Mode')).toBeInTheDocument();
-    expect(screen.getByText('SystemVerilog')).toBeInTheDocument();
+      expect(screen.getByText('Language Mode')).toBeInTheDocument();
+      expect(screen.getByText('SystemVerilog')).toBeInTheDocument();
+    } finally {
+      await cleanupHoverCardTimers();
+    }
   });
 
   it('falls back to the generic git label when no project files are open or the workspace is not a git repo', () => {
@@ -194,58 +221,74 @@ describe('StatusBar', () => {
   });
 
   it('adds stronger hover highlights, delays hover card open, and closes it immediately on leave', async () => {
-    const user = userEvent.setup();
+    useHoverCardFakeTimers();
 
-    render(
-      <StatusBar
-        activeFileId="rtl/tb/tb_cpu_top.sv"
-        cursorLine={18}
-        cursorCol={4}
-        dirtyFileCount={2}
-        savingFileCount={1}
-        onSaveAll={vi.fn()}
-      />,
-    );
+    try {
+      render(
+        <StatusBar
+          activeFileId="rtl/tb/tb_cpu_top.sv"
+          cursorLine={18}
+          cursorCol={4}
+          dirtyFileCount={2}
+          savingFileCount={1}
+          onSaveAll={vi.fn()}
+        />,
+      );
 
-    const branchTrigger = screen.getByTestId('status-bar-branch-label').closest('[data-slot="hover-card-trigger"]');
-    const savingTrigger = screen.getByTestId('status-bar-saving-summary').closest('[data-slot="hover-card-trigger"]');
+      const branchTrigger = screen.getByTestId('status-bar-branch-label').closest('[data-slot="hover-card-trigger"]');
+      const savingTrigger = screen.getByTestId('status-bar-saving-summary').closest('[data-slot="hover-card-trigger"]');
 
-    expect(branchTrigger).not.toBeNull();
-    expect(branchTrigger).toHaveClass('hover:bg-[var(--status-bar-item-hover)]');
-    expect(savingTrigger).not.toBeNull();
-    expect(savingTrigger).toHaveClass('hover:bg-[var(--status-bar-item-hover)]');
+      expect(branchTrigger).not.toBeNull();
+      expect(branchTrigger).toHaveClass('hover:bg-[var(--status-bar-item-hover)]');
+      expect(savingTrigger).not.toBeNull();
+      expect(savingTrigger).toHaveClass('hover:bg-[var(--status-bar-item-hover)]');
 
-    await user.hover(branchTrigger as HTMLElement);
+      fireEvent.pointerEnter(branchTrigger as HTMLElement, { pointerType: 'mouse' });
 
-    expect(screen.queryByText('Git Branch')).not.toBeInTheDocument();
-
-    expect(await screen.findByText('Git Branch')).toBeInTheDocument();
-    expect(screen.getByText('Placeholder details about the current workspace branch.')).toBeInTheDocument();
-
-    await user.unhover(branchTrigger as HTMLElement);
-
-    await waitFor(() => {
       expect(screen.queryByText('Git Branch')).not.toBeInTheDocument();
-    });
 
-    await user.hover(savingTrigger as HTMLElement);
+      await advanceHoverCardOpenDelay();
 
-    expect(screen.queryByText('Save Progress')).not.toBeInTheDocument();
-    expect(await screen.findByText('Save Progress')).toBeInTheDocument();
+      expect(screen.getByText('Git Branch')).toBeInTheDocument();
+      expect(screen.getByText('Placeholder details about the current workspace branch.')).toBeInTheDocument();
+
+      fireEvent.pointerLeave(branchTrigger as HTMLElement, { pointerType: 'mouse' });
+      await act(async () => {
+        vi.runOnlyPendingTimers();
+      });
+      expect(screen.queryByText('Git Branch')).not.toBeInTheDocument();
+
+      fireEvent.pointerEnter(savingTrigger as HTMLElement, { pointerType: 'mouse' });
+
+      expect(screen.queryByText('Save Progress')).not.toBeInTheDocument();
+
+      await advanceHoverCardOpenDelay();
+
+      expect(screen.getByText('Save Progress')).toBeInTheDocument();
+    } finally {
+      await cleanupHoverCardTimers();
+    }
   });
 
   it('opens hover details when a status bar item receives keyboard focus', async () => {
-    render(
-      <StatusBar activeFileId="rtl/tb/tb_cpu_top.sv" cursorLine={18} cursorCol={4} />,
-    );
+    vi.useFakeTimers();
 
-    const branchTrigger = screen.getByTestId('status-bar-branch-label').closest('[data-slot="hover-card-trigger"]');
+    try {
+      render(
+        <StatusBar activeFileId="rtl/tb/tb_cpu_top.sv" cursorLine={18} cursorCol={4} />,
+      );
 
-    expect(branchTrigger).not.toBeNull();
+      const branchTrigger = screen.getByTestId('status-bar-branch-label').closest('[data-slot="hover-card-trigger"]');
 
-    (branchTrigger as HTMLElement).focus();
+      expect(branchTrigger).not.toBeNull();
 
-    expect(await screen.findByText('Git Branch')).toBeInTheDocument();
+      (branchTrigger as HTMLElement).focus();
+      await advanceHoverCardOpenDelay();
+
+      expect(screen.getByText('Git Branch')).toBeInTheDocument();
+    } finally {
+      await cleanupHoverCardTimers();
+    }
   });
 
   it('shows unsaved summaries and exposes Save All and review actions', async () => {

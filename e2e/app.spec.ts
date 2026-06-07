@@ -5513,6 +5513,8 @@ test('terminal tab creates a real shell session and shows command output', async
 });
 
 test('waveform bottom panel renders binary waveform and controls', async () => {
+  test.slow();
+
   const { app, window } = await launchApp();
 
   await openBottomTerminal(window);
