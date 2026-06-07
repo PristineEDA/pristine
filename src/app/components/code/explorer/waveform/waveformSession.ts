@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { parseWaveformBinaryFrame, type ParsedWaveformFrame } from './waveformBinaryFrame';
 import {
+  getInitialWaveformViewport,
   getWaveformDisplayRows,
   getVisibleWaveformRows,
   waveformHeaderHeight,
@@ -113,8 +114,16 @@ export function useWaveformSession({
     };
   }, []);
 
+  const requestViewport = useMemo(() => {
+    if (!state.data) {
+      return null;
+    }
+
+    return viewport ?? getInitialWaveformViewport(state.data);
+  }, [state.data, viewport]);
+
   const frameRequest = useMemo(() => {
-    if (!state.data || !state.sessionId || !viewport || canvasWidth <= 0 || canvasHeight <= 0) {
+    if (!state.data || !state.sessionId || !requestViewport || canvasWidth <= 0 || canvasHeight <= 0) {
       return null;
     }
 
@@ -124,17 +133,25 @@ export function useWaveformSession({
       .map((row) => row.signal.id);
 
     return {
-      endTime: viewport.endTime,
+      endTime: requestViewport.endTime,
       headerHeight: waveformHeaderHeight,
       height: canvasHeight,
       laneHeight: waveformLaneHeight,
       maxSegments: Math.max(512, visibleRows.length * 96),
       sessionId: state.sessionId,
       signalIds: visibleRows,
-      startTime: viewport.startTime,
+      startTime: requestViewport.startTime,
       width: canvasWidth,
     };
-  }, [canvasHeight, canvasWidth, state.data, state.sessionId, verticalScrollTop, viewport]);
+  }, [
+    canvasHeight,
+    canvasWidth,
+    requestViewport?.endTime,
+    requestViewport?.startTime,
+    state.data,
+    state.sessionId,
+    verticalScrollTop,
+  ]);
 
   useEffect(() => {
     const lsp = window.electronAPI?.lsp;

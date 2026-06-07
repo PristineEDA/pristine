@@ -19,7 +19,7 @@ import {
   waveformHeaderHeight,
   zoomWaveformViewport,
 } from './waveformLayout';
-import type { WaveformRenderMetrics, WaveformRendererStatus, WaveformViewport } from './waveformTypes';
+import type { WaveformDataSet, WaveformRenderMetrics, WaveformRendererStatus, WaveformSignal, WaveformViewport } from './waveformTypes';
 import type { WaveformSignalDisplayRow } from './waveformLayout';
 import type { ElectronGpuDiagnostics, RendererGpuSupportDiagnostics } from '../../../../../../types/electron-gpu';
 import { WaveformCanvas } from './WaveformCanvas';
@@ -62,8 +62,15 @@ export function WaveformPanel() {
   const displayRows = useMemo(() => data ? getWaveformDisplayRows(data) : [], [data]);
   const activeViewport = viewport ?? (data ? getInitialWaveformViewport(data) : { startTime: 0, endTime: 8 });
   const selectedValue = selectedSignal
-    ? getSignalValueFromFrame(session.frame, data, selectedSignal.id, cursorTime, activeViewport) ?? getSignalValueAtTime(selectedSignal, cursorTime)
+    ? getSignalDisplayValue(session.frame, data, selectedSignal, cursorTime, activeViewport)
     : '-';
+  const waitForInitialBinaryFrame = data?.source === 'lsp-binary' && !session.frame;
+  const canRenderWaveformCanvas = Boolean(data) && !waitForInitialBinaryFrame;
+  const loadingMessage = session.status === 'error' || session.status === 'unavailable'
+    ? session.error ?? 'Waveform unavailable.'
+    : data?.source === 'lsp-binary'
+      ? 'Loading waveform data...'
+      : 'Loading waveform...';
   const zoomLevel = data ? data.duration / getWaveformViewportSpan(activeViewport) : 1;
   const waveformCanvasHeight = data ? getWaveformCanvasHeightForData(data) : 0;
   const horizontalMetrics = data ? getWaveformHorizontalScrollMetrics(activeViewport, data.duration, waveformViewportWidth) : {
@@ -368,9 +375,12 @@ export function WaveformPanel() {
                 ) : (
                   <SignalRow
                     cursorTime={cursorTime}
+                    data={data}
+                    frame={session.frame}
                     key={row.id}
                     row={row}
                     selected={row.signal.id === selectedSignalId}
+                    viewport={activeViewport}
                     onSelect={() => setSelectedSignalId(row.signal.id)}
                   />
                 )
@@ -420,7 +430,7 @@ export function WaveformPanel() {
               </div>
             )}
             <div ref={waveformViewportRef} className="relative min-h-0 w-full flex-1 overflow-hidden" data-testid="waveform-viewport">
-              {data ? (
+              {canRenderWaveformCanvas && data ? (
                 <WaveformCanvas
                   cursorTime={cursorTime}
                   data={data}
@@ -436,7 +446,7 @@ export function WaveformPanel() {
                 />
               ) : (
                 <div className="flex h-full items-center justify-center text-[12px] text-ide-text-muted" data-testid="waveform-loading-state">
-                  {session.status === 'error' || session.status === 'unavailable' ? session.error ?? 'Waveform unavailable.' : 'Loading waveform...'}
+                  {loadingMessage}
                 </div>
               )}
             </div>
@@ -460,14 +470,17 @@ export function WaveformPanel() {
 
 interface SignalRowProps {
   cursorTime: number;
+  data: ReturnType<typeof useWaveformSession>['data'];
+  frame: ReturnType<typeof useWaveformSession>['frame'];
   row: WaveformSignalDisplayRow;
   selected: boolean;
+  viewport: WaveformViewport;
   onSelect: () => void;
 }
 
-function SignalRow({ cursorTime, selected, row, onSelect }: SignalRowProps) {
+function SignalRow({ cursorTime, data, frame, selected, row, viewport, onSelect }: SignalRowProps) {
   const signal = row.signal;
-  const value = getSignalValueAtTime(signal, cursorTime);
+  const value = getSignalDisplayValue(frame, data, signal, cursorTime, viewport);
 
   return (
     <button
@@ -693,6 +706,22 @@ function getSignalValueFromFrame(
   }
 
   return null;
+}
+
+function getSignalDisplayValue(
+  frame: ReturnType<typeof useWaveformSession>['frame'],
+  data: WaveformDataSet | null,
+  signal: WaveformSignal,
+  cursorTime: number,
+  viewport: WaveformViewport,
+) {
+  const frameValue = getSignalValueFromFrame(frame, data, signal.id, cursorTime, viewport);
+
+  if (frameValue !== null) {
+    return frameValue;
+  }
+
+  return data?.source === 'lsp-binary' ? '-' : getSignalValueAtTime(signal, cursorTime);
 }
 
 function getFrameSignalTableEntry(frame: NonNullable<ReturnType<typeof useWaveformSession>['frame']>, signalIndex: number) {

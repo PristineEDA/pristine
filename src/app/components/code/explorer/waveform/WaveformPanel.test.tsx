@@ -14,6 +14,7 @@ import {
 import type { ParsedWaveformFrame } from './waveformBinaryFrame';
 import type { WaveformDataSet, WaveformRenderMetrics, WaveformRendererStatus, WaveformViewport } from './waveformTypes';
 import { WaveformPanel } from './WaveformPanel';
+import { createWaveformFixtureFrame } from './waveformTestFixtures';
 
 vi.mock('./WaveformCanvas', () => ({
   WaveformCanvas: ({
@@ -110,6 +111,46 @@ vi.mock('./WaveformCanvas', () => ({
 }));
 
 describe('WaveformPanel', () => {
+  it('waits for the first binary frame before mounting the Pixi canvas', async () => {
+    const waveformFrame = vi.mocked(window.electronAPI!.lsp.waveformFrame);
+    let resolveFrame: () => void = () => undefined;
+
+    waveformFrame.mockImplementationOnce((options) => new Promise<ArrayBuffer>((resolve) => {
+      resolveFrame = () => resolve(createWaveformFixtureFrame(
+        {
+          startTime: options.startTime,
+          endTime: options.endTime,
+        },
+        options.width,
+        options.signalIds,
+      ));
+    }));
+
+    render(<WaveformPanel />);
+
+    const panel = screen.getByTestId('waveform-panel');
+
+    await waitFor(() => expect(panel).toHaveAttribute('data-waveform-session-status', 'ready'));
+    await waitFor(() => expect(waveformFrame).toHaveBeenCalled());
+
+    expect(waveformFrame.mock.calls[0]?.[0]).toMatchObject({
+      startTime: 0,
+      endTime: 200,
+      width: 900,
+    });
+    expect(screen.queryByTestId('waveform-canvas')).not.toBeInTheDocument();
+    expect(screen.getByTestId('waveform-loading-state')).toHaveTextContent('Loading waveform data...');
+    expect(screen.getByTestId('waveform-signal-value-tb_top_module1-clk')).toHaveTextContent('-');
+    expect(screen.getByTestId('waveform-toolbar-cursor-value')).toHaveTextContent('-');
+
+    resolveFrame();
+
+    await waitFor(() => expect(screen.getByTestId('waveform-canvas')).toBeInTheDocument());
+    expect(panel).toHaveAttribute('data-waveform-frame-version', '1');
+    expect(Number(panel.getAttribute('data-waveform-frame-segment-count'))).toBeGreaterThan(0);
+    expect(screen.getByTestId('waveform-signal-value-tb_top_module1-clk')).not.toHaveTextContent(/^x$/i);
+  }, 20000);
+
   it('renders binary waveform signals, selection state, and cursor values', async () => {
     render(<WaveformPanel />);
 
@@ -220,7 +261,7 @@ describe('WaveformPanel', () => {
 
     await waitFor(() => expect(panel).toHaveAttribute('data-cursor-time', '128.00'));
     expect(screen.getByTestId('waveform-toolbar-cursor-time')).toHaveTextContent('128.0ns');
-    expect(screen.getByTestId('waveform-toolbar-cursor-value')).not.toHaveTextContent('-');
+    expect(screen.getByTestId('waveform-toolbar-cursor-value')).toHaveTextContent('-');
   }, 20000);
 
   it('updates viewport controls and toggles auxiliary panels', async () => {

@@ -5543,6 +5543,7 @@ test('waveform bottom panel renders binary waveform and controls', async () => {
   await expect(panel).toHaveAttribute('data-ready', 'true', { timeout: UI_READY_TIMEOUT_MS });
   await expect(panel).toHaveAttribute('data-renderer', /^(webgpu|webgl)$/);
   await expect(panel).toHaveAttribute('data-selected-signal-id', 'tb_top_module1-clk');
+  await expect(window.getByTestId('waveform-signal-value-tb_top_module1-clk')).not.toHaveText(/^x$/i);
   await expect(toolbarActions).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
   await expect(cursorInfo).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
   await expect(cursorInfoTime).toHaveText(/0\.0ns/);
