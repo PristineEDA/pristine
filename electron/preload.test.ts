@@ -84,6 +84,7 @@ describe('preload bridge', () => {
     api.resolveCloseRequest(3, 'proceed');
     api.setFloatingInfoWindowVisible(true);
     api.setFloatingInfoWindowExpanded(true);
+    api.setFloatingInfoWindowMode('detail');
     api.gpu.getDiagnostics();
     api.dialog.showSaveDialog('untitled-1');
     api.fs.readFile('src/main.v', 'utf-8');
@@ -189,6 +190,7 @@ describe('preload bridge', () => {
     expect(mockInvoke).toHaveBeenCalledWith('async:window:resolve-close-request', 3, 'proceed');
     expect(mockInvoke).toHaveBeenCalledWith('async:window:set-floating-info-visibility', true);
     expect(mockInvoke).toHaveBeenCalledWith('async:window:set-floating-info-expanded', true);
+    expect(mockInvoke).toHaveBeenCalledWith('async:window:set-floating-info-mode', 'detail');
     expect(mockInvoke).toHaveBeenCalledWith('async:platform:get-gpu-diagnostics');
     expect(mockInvoke).toHaveBeenCalledWith('async:dialog:show-save', 'untitled-1');
     expect(mockInvoke).toHaveBeenCalledWith('async:fs:read-file', 'src/main.v', 'utf-8');

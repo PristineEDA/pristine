@@ -36,6 +36,7 @@ import type { WorkspaceGitChangeEvent, WorkspaceGitFileDiffPayload, WorkspaceGit
 import type { OpenThemeDialogResult, SaveDialogResult } from '../electron/ipc/dialog';
 import type { MenuCommandEvent } from '../src/app/menu/applicationMenu';
 import type { WindowCloseDecision, WindowCloseRequest } from '../src/app/window/windowClose';
+import type { FloatingInfoWindowMode } from '../src/app/window/floatingInfoWindow';
 import type { AuthView, DesktopAuthSession } from '../src/app/auth/types';
 import type { ElectronGpuDiagnostics } from './electron-gpu';
 
@@ -58,6 +59,7 @@ export interface ElectronAPI {
   resolveCloseRequest: (requestId: number, decision: WindowCloseDecision) => Promise<boolean>;
   setFloatingInfoWindowVisible: (visible: boolean) => Promise<boolean>;
   setFloatingInfoWindowExpanded: (expanded: boolean) => Promise<boolean>;
+  setFloatingInfoWindowMode: (mode: FloatingInfoWindowMode) => Promise<boolean>;
   isMaximized: () => boolean;
   isFullScreen: () => boolean;
   onMaximizedChange: (callback: (maximized: boolean) => void) => () => void;

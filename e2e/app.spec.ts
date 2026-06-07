@@ -7106,10 +7106,19 @@ test('floating info window expands on hover and updates live chart data', async 
 
   await floatingInfoShell.hover();
 
+  await floatingInfoWindow.waitForTimeout(500);
+  await expect(floatingInfoShell).toHaveAttribute('data-expanded', 'false');
+  await expect(floatingInfoShell).toHaveAttribute('data-mode', 'collapsed');
+
   await expect(floatingInfoShell).toHaveAttribute('data-expanded', 'true');
   await expect(floatingInfoWindow.getByTestId('floating-info-chart')).toBeVisible();
+  await expect(floatingInfoWindow.getByTestId('floating-info-expanded-drag-region')).toHaveAttribute('data-app-region', 'drag');
+  await expect(floatingInfoWindow.getByTestId('floating-info-chart-shell')).toHaveAttribute('data-app-region', 'no-drag');
   await expect.poll(async () => (await readBrowserWindowBounds(app, floatingInfoWindow)).width).toBeGreaterThan(collapsedBounds.width);
   await expect.poll(async () => (await readBrowserWindowBounds(app, floatingInfoWindow)).height).toBeGreaterThan(collapsedBounds.height);
+  await floatingInfoWindow.waitForTimeout(700);
+  await expect(floatingInfoShell).toHaveAttribute('data-expanded', 'true');
+  await expect(floatingInfoShell).toHaveAttribute('data-mode', 'expanded');
   await expect.poll(async () => floatingInfoShell.getAttribute('data-latest-time'), {
     timeout: 4000,
   }).not.toBe(initialLatestTime);
@@ -7117,6 +7126,87 @@ test('floating info window expands on hover and updates live chart data', async 
   await floatingInfoWindow.mouse.move(collapsedBounds.width + 320, collapsedBounds.height + 240);
 
   await expect.poll(async () => floatingInfoShell.getAttribute('data-expanded')).toBe('false');
+  await expect.poll(async () => (await readBrowserWindowBounds(app, floatingInfoWindow)).width).toBe(collapsedBounds.width);
+  await expect.poll(async () => (await readBrowserWindowBounds(app, floatingInfoWindow)).height).toBe(collapsedBounds.height);
+
+  await app.close();
+});
+
+test('floating info window opens the static detail view on double click and returns on quit', async () => {
+  const { app, window } = await launchApp();
+
+  await setFloatingInfoWindowVisibility(window, true);
+
+  await expect.poll(async () => (await getWindowByTitle(app, 'Pristine Floating Info')) !== null).toBe(true);
+  const floatingInfoWindow = await getWindowByTitle(app, 'Pristine Floating Info');
+
+  if (!floatingInfoWindow) {
+    throw new Error('Expected floating info window to be available');
+  }
+
+  const floatingInfoShell = floatingInfoWindow.getByTestId('floating-info-window');
+  const collapsedBounds = await readBrowserWindowBounds(app, floatingInfoWindow);
+
+  await expect(floatingInfoShell).toHaveAttribute('data-mode', 'collapsed');
+
+  await floatingInfoShell.dblclick();
+
+  await expect(floatingInfoShell).toHaveAttribute('data-mode', 'detail');
+  await expect(floatingInfoWindow.getByTestId('floating-info-detail')).toBeVisible();
+  await expect(floatingInfoWindow.getByText('Pi Stats')).toBeVisible();
+  await expect(floatingInfoWindow.getByText('RTL Files')).toBeVisible();
+  await expect(floatingInfoWindow.getByText('Compile Activity')).toBeVisible();
+  await expect(floatingInfoWindow.getByText('Top Design Unit')).toBeVisible();
+  await expect(floatingInfoWindow.getByTestId('floating-info-detail-drag-region')).toHaveAttribute('data-app-region', 'drag');
+  await expect(floatingInfoWindow.getByTestId('floating-info-detail-tab-simulation')).toBeVisible();
+  await expect(floatingInfoWindow.getByTestId('floating-info-detail-tab-usage')).toHaveCount(0);
+  await expect(floatingInfoWindow.getByTestId('floating-info-range-controls')).toHaveClass(/bg-muted\/75/);
+  for (const label of ['1d', '2d', '7d', 'All']) {
+    const rangeButton = floatingInfoWindow.getByTestId(`floating-info-range-${label.toLowerCase()}`);
+    await expect(rangeButton).toHaveAttribute('aria-label', label);
+    await expect(rangeButton).toHaveAttribute('title', label);
+    const rangeBox = await rangeButton.boundingBox();
+    const refreshBox = await floatingInfoWindow.getByTestId('floating-info-detail-refresh').boundingBox();
+
+    expect(rangeBox?.width ?? 0).toBeCloseTo(refreshBox?.width ?? 0, 1);
+    expect(rangeBox?.height ?? 0).toBeCloseTo(refreshBox?.height ?? 0, 1);
+  }
+  const settingsBox = await floatingInfoWindow.getByTestId('floating-info-detail-settings').boundingBox();
+  const refreshBox = await floatingInfoWindow.getByTestId('floating-info-detail-refresh').boundingBox();
+  expect(settingsBox?.width ?? 0).toBeCloseTo(refreshBox?.width ?? 0, 1);
+  expect(settingsBox?.height ?? 0).toBeCloseTo(refreshBox?.height ?? 0, 1);
+  await expect(floatingInfoWindow.getByTestId('floating-info-detail-content')).toHaveClass(/overflow-y-auto/);
+  await expect.poll(async () => (await readBrowserWindowBounds(app, floatingInfoWindow)).width).toBe(360);
+  await expect.poll(async () => (await readBrowserWindowBounds(app, floatingInfoWindow)).height).toBe(520);
+
+  await floatingInfoWindow.getByTestId('floating-info-detail-tab-languages').click();
+  await expect(floatingInfoWindow.getByText('SystemVerilog').first()).toBeVisible();
+  await expect(floatingInfoWindow.getByText('181.1K')).toBeVisible();
+  await expect(floatingInfoWindow.getByText('by HDL footprint')).toBeVisible();
+
+  await floatingInfoWindow.getByTestId('floating-info-detail-tab-projects').click();
+  await expect(floatingInfoWindow.getByText('retroSoC')).toBeVisible();
+  await expect(floatingInfoWindow.getByText('xpi_core')).toBeVisible();
+
+  await floatingInfoWindow.getByTestId('floating-info-detail-tab-models').click();
+  await expect(floatingInfoWindow.getByText('Model & Tool Usage')).toBeVisible();
+  await expect(floatingInfoWindow.getByText('Cache Read')).toBeVisible();
+  await expect(floatingInfoWindow.getByText('Tool Calls')).toBeVisible();
+  await expect.poll(async () => floatingInfoWindow.getByTestId('floating-info-detail-content').evaluate((element) => {
+    const content = element as unknown as { clientHeight: number; scrollHeight: number };
+    return content.scrollHeight > content.clientHeight;
+  })).toBe(true);
+  await expect(floatingInfoWindow.getByTestId('floating-info-detail-content')).toHaveClass(/\[scrollbar-width:none\]/);
+
+  await floatingInfoWindow.getByTestId('floating-info-detail-tab-simulation').click();
+  await expect(floatingInfoWindow.getByText('Recent Simulation')).toBeVisible();
+  await expect(floatingInfoWindow.getByText('xpi_loopback')).toBeVisible();
+  await expect(floatingInfoWindow.getByText('Waveform Session')).toBeVisible();
+  await expect(floatingInfoWindow.getByTestId('floating-info-detail-shortcut')).toContainText('Q');
+
+  await floatingInfoWindow.getByTestId('floating-info-detail-quit').click();
+
+  await expect(floatingInfoShell).toHaveAttribute('data-mode', 'collapsed');
   await expect.poll(async () => (await readBrowserWindowBounds(app, floatingInfoWindow)).width).toBe(collapsedBounds.width);
   await expect.poll(async () => (await readBrowserWindowBounds(app, floatingInfoWindow)).height).toBe(collapsedBounds.height);
 

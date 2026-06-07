@@ -38,6 +38,7 @@ import type {
 import type { WorkspaceGitChangeEvent, WorkspaceGitFileDiffPayload, WorkspaceGitStatusPayload } from '../types/workspace-git.js';
 import type { MenuCommandEvent } from '../src/app/menu/applicationMenu.js';
 import type { WindowCloseDecision, WindowCloseRequest } from '../src/app/window/windowClose.js';
+import type { FloatingInfoWindowMode } from '../src/app/window/floatingInfoWindow.js';
 import type { AuthView, DesktopAuthSession } from '../src/app/auth/types.js';
 import type { ElectronGpuDiagnostics } from '../types/electron-gpu.js';
 
@@ -80,6 +81,8 @@ const electronAPI = {
     ipcRenderer.invoke(AsyncChannels.WINDOW_SET_FLOATING_INFO_VISIBILITY, visible),
   setFloatingInfoWindowExpanded: (expanded: boolean) =>
     ipcRenderer.invoke(AsyncChannels.WINDOW_SET_FLOATING_INFO_EXPANDED, expanded),
+  setFloatingInfoWindowMode: (mode: FloatingInfoWindowMode) =>
+    ipcRenderer.invoke(AsyncChannels.WINDOW_SET_FLOATING_INFO_MODE, mode),
   isMaximized: (): boolean => syncSend(SyncChannels.WINDOW_IS_MAXIMIZED),
   isFullScreen: (): boolean => syncSend(SyncChannels.WINDOW_IS_FULLSCREEN),
   onMaximizedChange: (callback: (maximized: boolean) => void) => {

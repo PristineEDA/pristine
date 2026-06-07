@@ -36,6 +36,7 @@ export function createElectronApiMock(): ElectronAPI {
     resolveCloseRequest: vi.fn(),
     setFloatingInfoWindowVisible: vi.fn(),
     setFloatingInfoWindowExpanded: vi.fn(),
+    setFloatingInfoWindowMode: vi.fn(),
     isMaximized: vi.fn(() => false),
     isFullScreen: vi.fn(() => false),
     onMaximizedChange: vi.fn(() => vi.fn()),

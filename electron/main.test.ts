@@ -322,7 +322,8 @@ async function importMain(options?: {
     trayInstances: mocks.trayInstances,
     getMainWindow: mocks.mockRegisterAllHandlers.mock.calls[0]?.[0] as (() => BrowserWindowInstance | null) | undefined,
     setFloatingInfoExpanded: mocks.mockRegisterAllHandlers.mock.calls[0]?.[2] as ((expanded: boolean) => boolean) | undefined,
-    resolveCloseRequest: mocks.mockRegisterAllHandlers.mock.calls[0]?.[3] as ((requestId: number, decision: 'proceed' | 'cancel') => boolean) | undefined,
+    setFloatingInfoMode: mocks.mockRegisterAllHandlers.mock.calls[0]?.[3] as ((mode: 'collapsed' | 'expanded' | 'detail') => boolean) | undefined,
+    resolveCloseRequest: mocks.mockRegisterAllHandlers.mock.calls[0]?.[4] as ((requestId: number, decision: 'proceed' | 'cancel') => boolean) | undefined,
   };
 }
 
@@ -652,6 +653,8 @@ describe('electron main entry', () => {
       frame: false,
       skipTaskbar: true,
       alwaysOnTop: true,
+      maxWidth: 360,
+      maxHeight: 520,
       title: 'Pristine Floating Info',
       backgroundColor: '#334455',
     });
@@ -665,8 +668,8 @@ describe('electron main entry', () => {
     });
   });
 
-  it('expands the floating info window using the registered handler while keeping the top-right anchor', async () => {
-    const { browserWindowInstances, setFloatingInfoExpanded } = await importMain({
+  it('changes the floating info window mode using the registered handlers while keeping the top-right anchor', async () => {
+    const { browserWindowInstances, setFloatingInfoExpanded, setFloatingInfoMode } = await importMain({
       platform: 'win32',
       configValues: {
         'workbench.colorThemeKind': 'dark',
@@ -676,12 +679,21 @@ describe('electron main entry', () => {
 
     const floatingInfoWindow = browserWindowInstances[2];
     expect(setFloatingInfoExpanded).toBeTypeOf('function');
+    expect(setFloatingInfoMode).toBeTypeOf('function');
 
     expect(setFloatingInfoExpanded?.(true)).toBe(true);
     expect(floatingInfoWindow.setBounds).toHaveBeenCalledWith({
       width: 220,
       height: 96,
       x: 1920 - 220 - 24,
+      y: 24,
+    }, false);
+
+    expect(setFloatingInfoMode?.('detail')).toBe(true);
+    expect(floatingInfoWindow.setBounds).toHaveBeenLastCalledWith({
+      width: 360,
+      height: 520,
+      x: 1920 - 360 - 24,
       y: 24,
     }, false);
 

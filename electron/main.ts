@@ -17,6 +17,7 @@ import { disposeLspSession } from './ipc/lsp.js';
 import { disposeAllTerminalSessions } from './ipc/terminal.js';
 import { DEFAULT_STARTUP_PROJECT_ROOT } from '../src/app/workspace/workspaceFiles.js';
 import type { WindowCloseDecision, WindowCloseRequest } from '../src/app/window/windowClose.js';
+import type { FloatingInfoWindowMode } from '../src/app/window/floatingInfoWindow.js';
 import { handleAuthCallbackUrl, isAuthProtocolUrl } from './ipc/auth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -33,6 +34,8 @@ const FLOATING_INFO_COLLAPSED_WIDTH = 60;
 const FLOATING_INFO_COLLAPSED_HEIGHT = 24;
 const FLOATING_INFO_EXPANDED_WIDTH = 220;
 const FLOATING_INFO_EXPANDED_HEIGHT = 96;
+const FLOATING_INFO_DETAIL_WIDTH = 360;
+const FLOATING_INFO_DETAIL_HEIGHT = 520;
 const DEFAULT_STARTUP_BACKGROUND_COLOR = '#121314';
 const DEFAULT_SPLASH_BACKGROUND_COLOR = '#191A1B';
 const DEFAULT_FLOATING_INFO_BACKGROUND_COLOR = '#121314';
@@ -42,7 +45,7 @@ type ThemeKind = 'light' | 'dark';
 let mainWindow: BrowserWindow | null = null;
 let splashWindow: BrowserWindow | null = null;
 let floatingInfoWindow: BrowserWindow | null = null;
-let floatingInfoWindowExpanded = false;
+let floatingInfoWindowMode: FloatingInfoWindowMode = 'collapsed';
 let tray: Tray | null = null;
 let isQuitting = false;
 let nextWindowCloseRequestId = 1;
@@ -315,10 +318,30 @@ function shouldShowFloatingInfoWindow(): boolean {
   return getConfigValue(FLOATING_INFO_VISIBLE_CONFIG_KEY) === true;
 }
 
-function getFloatingInfoWindowBounds(expanded: boolean) {
+function getFloatingInfoWindowDimensions(mode: FloatingInfoWindowMode): { width: number; height: number } {
+  if (mode === 'detail') {
+    return {
+      width: FLOATING_INFO_DETAIL_WIDTH,
+      height: FLOATING_INFO_DETAIL_HEIGHT,
+    };
+  }
+
+  if (mode === 'expanded') {
+    return {
+      width: FLOATING_INFO_EXPANDED_WIDTH,
+      height: FLOATING_INFO_EXPANDED_HEIGHT,
+    };
+  }
+
+  return {
+    width: FLOATING_INFO_COLLAPSED_WIDTH,
+    height: FLOATING_INFO_COLLAPSED_HEIGHT,
+  };
+}
+
+function getFloatingInfoWindowBounds(mode: FloatingInfoWindowMode) {
   const { workArea } = screen.getPrimaryDisplay();
-  const width = expanded ? FLOATING_INFO_EXPANDED_WIDTH : FLOATING_INFO_COLLAPSED_WIDTH;
-  const height = expanded ? FLOATING_INFO_EXPANDED_HEIGHT : FLOATING_INFO_COLLAPSED_HEIGHT;
+  const { width, height } = getFloatingInfoWindowDimensions(mode);
 
   return {
     width,
@@ -328,8 +351,8 @@ function getFloatingInfoWindowBounds(expanded: boolean) {
   };
 }
 
-function applyFloatingInfoWindowBounds(window: BrowserWindow, expanded: boolean): void {
-  const bounds = getFloatingInfoWindowBounds(expanded);
+function applyFloatingInfoWindowBounds(window: BrowserWindow, mode: FloatingInfoWindowMode): void {
+  const bounds = getFloatingInfoWindowBounds(mode);
   window.setBounds(bounds, false);
 }
 
@@ -338,7 +361,7 @@ function createFloatingInfoWindow(): BrowserWindow {
     return floatingInfoWindow;
   }
 
-  const bounds = getFloatingInfoWindowBounds(floatingInfoWindowExpanded);
+  const bounds = getFloatingInfoWindowBounds(floatingInfoWindowMode);
   const preloadFile = getPreloadPath();
   const backgroundColor = getConfiguredWindowBackgroundColor(
     WORKBENCH_FLOATING_INFO_BACKGROUND_COLOR_CONFIG_KEY,
@@ -349,8 +372,8 @@ function createFloatingInfoWindow(): BrowserWindow {
     height: bounds.height,
     minWidth: FLOATING_INFO_COLLAPSED_WIDTH,
     minHeight: FLOATING_INFO_COLLAPSED_HEIGHT,
-    maxWidth: FLOATING_INFO_EXPANDED_WIDTH,
-    maxHeight: FLOATING_INFO_EXPANDED_HEIGHT,
+    maxWidth: FLOATING_INFO_DETAIL_WIDTH,
+    maxHeight: FLOATING_INFO_DETAIL_HEIGHT,
     x: bounds.x,
     y: bounds.y,
     frame: false,
@@ -395,7 +418,7 @@ function createFloatingInfoWindow(): BrowserWindow {
 function setFloatingInfoWindowVisible(visible: boolean): boolean {
   if (visible) {
     const window = createFloatingInfoWindow();
-    applyFloatingInfoWindowBounds(window, floatingInfoWindowExpanded);
+    applyFloatingInfoWindowBounds(window, floatingInfoWindowMode);
     window.show();
     return true;
   }
@@ -409,13 +432,17 @@ function setFloatingInfoWindowVisible(visible: boolean): boolean {
 }
 
 function setFloatingInfoWindowExpanded(expanded: boolean): boolean {
-  floatingInfoWindowExpanded = expanded;
+  return setFloatingInfoWindowMode(expanded ? 'expanded' : 'collapsed');
+}
+
+function setFloatingInfoWindowMode(mode: FloatingInfoWindowMode): boolean {
+  floatingInfoWindowMode = mode;
 
   if (!floatingInfoWindow || floatingInfoWindow.isDestroyed()) {
     return false;
   }
 
-  applyFloatingInfoWindowBounds(floatingInfoWindow, expanded);
+  applyFloatingInfoWindowBounds(floatingInfoWindow, mode);
   return true;
 }
 
@@ -652,7 +679,13 @@ if (!singleInstanceLock) {
   });
 
   // Register all IPC handlers before window creation
-  registerAllHandlers(getMainWindow, setFloatingInfoWindowVisible, setFloatingInfoWindowExpanded, resolveWindowCloseRequest);
+  registerAllHandlers(
+    getMainWindow,
+    setFloatingInfoWindowVisible,
+    setFloatingInfoWindowExpanded,
+    setFloatingInfoWindowMode,
+    resolveWindowCloseRequest,
+  );
 
   app.whenReady().then(() => {
     installApplicationMenu();
