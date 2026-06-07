@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { Container, Text, Texture } from 'pixi.js';
 
 import { clipWaveformLineToBounds, createWaveformScene, getWaveformBusHexagonBevel, getWaveformBusLabelBounds, getWaveformBusSpecialStateHexDigitWidth, getWaveformDigitalSegmentStrokeWidth, getWaveformDigitalSpecialStateBounds, getWaveformFittedBusLabelText, updateWaveformSceneCursor, updateWaveformScenePan, updateWaveformSceneSelection, updateWaveformSceneVerticalScroll, updateWaveformSceneViewport, waveformHighImpedanceStripeSpacing, waveformLayerNames, waveformUnknownStripeSpacing, type WaveformSignalTextureCacheEntry } from './createWaveformScene';
-import { fitWaveformViewport, getWaveformCanvasHeightForData, getWaveformDigitalPulseFillCount, getWaveformDisplayRows, getWaveformRulerScrollIndicatorMetrics, getWaveformShapeCounts, getWaveformSignalLaneY, timeToX, waveformHeaderHeight } from './waveformLayout';
+import { fitWaveformViewport, getInitialWaveformViewport, getWaveformCanvasHeightForData, getWaveformDigitalPulseFillCount, getWaveformDisplayRows, getWaveformRulerScrollIndicatorMetrics, getWaveformShapeCounts, getWaveformSignalLaneY, timeToX, waveformHeaderHeight } from './waveformLayout';
 import { parseWaveformBinaryFrame } from './waveformBinaryFrame';
 import { createWaveformFixtureFrame, waveformFixtureData, waveformTransitionFixtureData as mockWaveformData } from './waveformTestFixtures';
 import type { WaveformDataSet } from './waveformTypes';
@@ -178,7 +178,7 @@ describe('createWaveformScene', () => {
   });
 
   it('renders viewport-ready binary waveform frames from typed arrays', () => {
-    const viewport = { startTime: 40, endTime: 140 };
+    const viewport = getInitialWaveformViewport(waveformFixtureData);
     const frame = parseWaveformBinaryFrame(createWaveformFixtureFrame(viewport, 900));
     const scene = createWaveformScene({
       cursorTime: waveformFixtureData.cursorTime,
@@ -201,8 +201,14 @@ describe('createWaveformScene', () => {
     expect(scene.renderStats.gpuVertexCount).toBeGreaterThan(0);
     expect(scene.renderStats.meshVertexCount).toBe(scene.renderStats.gpuVertexCount);
     expect(scene.state.frame).toBe(frame);
+    expect(scene.state.viewport).toEqual({ startTime: 0, endTime: waveformFixtureData.duration });
+    expect(scene.state.horizontalBuffer.viewport.startTime).toBeLessThan(0);
 
-    expect(updateWaveformScenePan(scene, { startTime: 50, endTime: 150 })).toBe(false);
+    const headerLabels = collectText(scene.nodes.statusHeader);
+    expect(headerLabels).toContain(`0${waveformFixtureData.timescaleUnit}`);
+    expect(headerLabels.some((label) => label.startsWith('-'))).toBe(false);
+
+    expect(updateWaveformScenePan(scene, { startTime: waveformFixtureData.duration + 50, endTime: waveformFixtureData.duration + 150 })).toBe(false);
     expect(scene.renderStats.panBufferMissCount).toBe(1);
     expect(scene.nodes.contentRows.x).toBe(0);
     expect(scene.nodes.statusHeader.x).toBe(0);

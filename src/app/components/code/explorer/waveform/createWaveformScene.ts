@@ -735,6 +735,10 @@ function getSceneOptions(scene: WaveformScene): WaveformSceneOptions {
 }
 
 function getHorizontalBufferSceneOptions(scene: WaveformScene): WaveformSceneOptions {
+  if (scene.state.frame) {
+    return getSceneOptions(scene);
+  }
+
   return {
     ...getSceneOptions(scene),
     viewport: scene.state.horizontalBuffer.viewport,

@@ -5544,6 +5544,8 @@ test('waveform bottom panel renders binary waveform and controls', async () => {
   await expect(panel).toHaveAttribute('data-waveform-empty-visible-signal-count', '0', { timeout: UI_READY_TIMEOUT_MS });
   await expect(panel).toHaveAttribute('data-prepared-range-start', '0.00', { timeout: UI_READY_TIMEOUT_MS });
   await expect(panel).toHaveAttribute('data-prepared-range-end', '200.00', { timeout: UI_READY_TIMEOUT_MS });
+  await expect(panel).toHaveAttribute('data-visible-window-start', '0.00', { timeout: UI_READY_TIMEOUT_MS });
+  await expect(panel).toHaveAttribute('data-visible-window-end', '200.00', { timeout: UI_READY_TIMEOUT_MS });
   await expect.poll(async () => Number(await panel.getAttribute('data-waveform-frame-segment-count') ?? '0'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(0);
