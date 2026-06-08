@@ -557,6 +557,7 @@ export function WaveformCanvas({
     sceneUpdateMetricsRef.current.gpuDrawLayerCount = baseStats.gpuDrawLayerCount;
     sceneUpdateMetricsRef.current.gpuLayerCount = baseStats.gpuLayerCount;
     sceneUpdateMetricsRef.current.gpuVertexCount = baseStats.gpuVertexCount;
+    sceneUpdateMetricsRef.current.labelPoolSize = baseStats.labelPoolSize;
     sceneUpdateMetricsRef.current.labelTextureUpdateCount += baseStats.labelTextureUpdateCount;
     sceneUpdateMetricsRef.current.meshBufferUpdateMs = sceneUpdateMetricsRef.current.gpuBufferUpdateMs;
     sceneUpdateMetricsRef.current.meshVertexCount = sceneUpdateMetricsRef.current.gpuVertexCount;

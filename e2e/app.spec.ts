@@ -5600,6 +5600,10 @@ test('waveform bottom panel renders binary waveform and controls', async () => {
   await expect.poll(async () => readCanvasNumber('data-gpu-layer-count'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(0);
+  await expect.poll(async () => readCanvasNumber('data-gpu-draw-layer-count'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
+  expect(await readCanvasNumber('data-gpu-draw-layer-count')).toBeLessThanOrEqual(8);
   await expect.poll(async () => readCanvasNumber('data-gpu-vertex-count'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(0);

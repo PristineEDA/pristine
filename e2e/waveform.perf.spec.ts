@@ -470,6 +470,7 @@ test('waveform dense render opt-in baseline', async () => {
     expect(finalStats.renderResolution).toBeGreaterThanOrEqual(1);
     expect(finalStats.gpuVertexCount).toBeGreaterThan(0);
     expect(finalStats.gpuDrawLayerCount).toBeGreaterThan(0);
+    expect(finalStats.gpuDrawLayerCount).toBeLessThanOrEqual(8);
     expect(finalStats.gpuBufferCapacityVertexCount).toBeGreaterThan(0);
     expect(finalStats.textureCacheBytes).toBeLessThanOrEqual(32 * 1024 * 1024);
 
@@ -605,6 +606,7 @@ test('packaged waveform sustained 10s viewport and interaction perf', async () =
     expect(panDelta.rowReuseCount).toBeGreaterThanOrEqual(panDelta.viewportContentUpdateCount * panVisibleRowCount);
     expect(panDelta.rowContentSkipCount).toBeGreaterThanOrEqual(panDelta.viewportContentUpdateCount);
     expect(panDelta.rowContentRedrawCount).toBe(0);
+    expect(finalStats.gpuDrawLayerCount).toBeLessThanOrEqual(8);
     expect(panDelta.reactViewportCommitCount).toBeLessThanOrEqual(panDelta.viewportContentUpdateCount + panDelta.displayViewportUpdateCount);
     expect(zoomDelta.fullSceneRebuildCount).toBe(0);
     expect(zoomDelta.viewportContentUpdateCount).toBeGreaterThan(0);

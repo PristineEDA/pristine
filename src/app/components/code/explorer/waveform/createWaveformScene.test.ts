@@ -198,8 +198,12 @@ describe('createWaveformScene', () => {
     expect(scene.renderStats.busSpecialStateLabelCount).toBeGreaterThan(0);
     expect(scene.renderStats.gpuBufferUpdateCount).toBeGreaterThan(0);
     expect(scene.renderStats.gpuLayerCount).toBeGreaterThan(0);
+    expect(scene.renderStats.gpuDrawLayerCount).toBeLessThanOrEqual(8);
+    expect(scene.renderStats.gpuLayerCount).toBeLessThanOrEqual(8);
     expect(scene.renderStats.gpuVertexCount).toBeGreaterThan(0);
     expect(scene.renderStats.meshVertexCount).toBe(scene.renderStats.gpuVertexCount);
+    expect(scene.nodes.contentRows.visible).toBe(false);
+    expect(scene.nodes.contentBatch.visible).toBe(true);
     expect(scene.state.frame).toBe(frame);
     expect(scene.state.viewport).toEqual({ startTime: 0, endTime: waveformFixtureData.duration });
     expect(scene.state.horizontalBuffer.viewport.startTime).toBe(0);
@@ -249,6 +253,7 @@ describe('createWaveformScene', () => {
     expect(scene.renderStats.rowContentRedrawCount).toBe(0);
     expect(scene.renderStats.rowContentSkipCount).toBeGreaterThan(0);
     expect(scene.renderStats.gpuBufferUpdateCount).toBe(0);
+    expect(scene.renderStats.gpuDrawLayerCount).toBeLessThanOrEqual(8);
     expect(scene.renderStats.gpuVertexCount).toBeGreaterThan(0);
     expect(scene.renderStats.meshVertexCount).toBe(scene.renderStats.gpuVertexCount);
     expect(initialRowContentRedrawCount).toBeGreaterThan(0);

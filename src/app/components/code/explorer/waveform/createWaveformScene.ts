@@ -27,15 +27,7 @@ import {
 } from './waveformLayout';
 import type { WaveformDataSet, WaveformLayerName, WaveformRenderSegment, WaveformRenderSegmentResult, WaveformRenderStats, WaveformShapeCounts, WaveformSignal, WaveformStateCounts, WaveformViewport } from './waveformTypes';
 import { type ParsedWaveformFrame, WaveformBinaryValueKind } from './waveformBinaryFrame';
-import {
-  addWaveformGpuLine,
-  addWaveformGpuPolygon,
-  addWaveformGpuRect,
-  commitWaveformGpuPrimitiveGroups,
-  createWaveformGpuPrimitiveGroup,
-  resetWaveformGpuPrimitiveGroup,
-  type WaveformGpuPrimitiveGroup,
-} from './waveformGpuPrimitives';
+import { WaveformGpuBatchRenderer, type WaveformGpuBatchLayerKind } from './waveformGpuBatchRenderer';
 
 export const waveformLayerNames: readonly WaveformLayerName[] = ['background', 'content', 'status', 'operation'];
 export const waveformUnknownStripeSpacing = 8;
@@ -87,6 +79,7 @@ interface WaveformSceneNodes {
   backgroundGrid: Container;
   backgroundLanes: Container;
   backgroundLanePool: Container;
+  contentBatch: Container;
   contentRows: Container;
   contentRowPool: Container;
   statusCursor: Container;
@@ -106,23 +99,11 @@ interface WaveformSceneRowNode {
   contentContainer: Container;
   contentMetrics: WaveformRowContentMetrics;
   contentSignature: string | null;
-  gpuContent: WaveformRowGpuContent | null;
   retainedContentGraphics: Graphics | null;
   retainedLabelContainer: Container | null;
   retainedTextPool: Text[];
   retainedTextUsed: number;
   rowId: string | null;
-}
-
-interface WaveformRowGpuContent {
-  bus: WaveformGpuPrimitiveGroup;
-  highImpedanceHatch: WaveformGpuPrimitiveGroup;
-  highImpedance: WaveformGpuPrimitiveGroup;
-  line: WaveformGpuPrimitiveGroup;
-  midline: WaveformGpuPrimitiveGroup;
-  pulse: WaveformGpuPrimitiveGroup;
-  unknownHatch: WaveformGpuPrimitiveGroup;
-  unknown: WaveformGpuPrimitiveGroup;
 }
 
 interface WaveformRowContentMetrics {
@@ -175,6 +156,7 @@ interface WaveformSceneState {
   cursorTime: number;
   data: WaveformDataSet;
   frame?: ParsedWaveformFrame | null;
+  gpuBatchRenderer: WaveformGpuBatchRenderer;
   height: number;
   renderResolution: number;
   rows: WaveformDisplayRow[];
@@ -235,6 +217,7 @@ export function createWaveformScene(options: WaveformSceneOptions): WaveformScen
   const rowRegistry = createRowRegistry();
   const horizontalBuffer = createHorizontalBufferState(options.viewport, options.width, getRenderResolution(options), getHorizontalBufferBounds(options));
   const renderStats = createRenderStats(visibleRows.visibleRowCount, visibleRows.culledRowCount, getRenderResolution(options));
+  const gpuBatchRenderer = new WaveformGpuBatchRenderer();
   const scene: WaveformScene = {
     world,
     layers,
@@ -245,6 +228,7 @@ export function createWaveformScene(options: WaveformSceneOptions): WaveformScen
       cursorTime: options.cursorTime,
       data: options.data,
       frame: options.frame ?? null,
+      gpuBatchRenderer,
       height: options.height,
       renderResolution: getRenderResolution(options),
       rows,
@@ -266,7 +250,8 @@ export function createWaveformScene(options: WaveformSceneOptions): WaveformScen
   };
 
   layers.background.addChild(nodes.backgroundBase, nodes.backgroundGrid, nodes.backgroundLanes, nodes.backgroundLanePool);
-  layers.content.addChild(nodes.contentRows, nodes.contentRowPool);
+  nodes.contentBatch.addChild(gpuBatchRenderer.container);
+  layers.content.addChild(nodes.contentBatch, nodes.contentRows, nodes.contentRowPool);
   layers.status.addChild(nodes.statusHeaderBackground, nodes.statusRulerIndicator, nodes.statusHeader, nodes.statusCursor);
   layers.operation.addChild(nodes.operationCursor);
   world.addChild(layers.background, layers.content, layers.status, layers.operation);
@@ -336,7 +321,7 @@ export function updateWaveformScenePan(scene: WaveformScene, viewport: WaveformV
       scene.renderStats.panBufferHitCount = 1;
       scene.renderStats.panPixelShiftCount = Math.abs(scene.state.horizontalBuffer.offsetX - previousOffsetX);
       scene.renderStats.rowContentSkipCount = scene.state.visibleRows.rows.filter((row) => row.kind === 'signal').length;
-      accumulateVisibleRowContentMetrics(scene, scene.renderStats);
+      accumulateFrameBatchStaticMetrics(scene, scene.renderStats);
       return true;
     }
 
@@ -392,6 +377,18 @@ export function updateWaveformScenePan(scene: WaveformScene, viewport: WaveformV
   scene.renderStats.rowContentSkipCount = scene.state.visibleRows.rows.filter((row) => row.kind === 'signal').length;
   accumulateVisibleRowContentMetrics(scene, scene.renderStats);
   return true;
+}
+
+function accumulateFrameBatchStaticMetrics(scene: WaveformScene, target: WaveformRenderStats) {
+  const gpuMetrics = scene.state.gpuBatchRenderer.getMetrics();
+
+  target.renderedSignalCount = scene.state.visibleRows.rows.filter((row) => row.kind === 'signal').length;
+  target.gpuDrawLayerCount = gpuMetrics.drawLayerCount;
+  target.gpuLayerCount = gpuMetrics.drawLayerCount;
+  target.gpuVertexCount = gpuMetrics.vertexCount;
+  target.meshVertexCount = gpuMetrics.vertexCount;
+  target.gpuBufferCapacityVertexCount = gpuMetrics.bufferCapacityVertexCount;
+  target.labelPoolSize = gpuMetrics.labelPoolSize;
 }
 
 export function updateWaveformSceneViewport(scene: WaveformScene, viewport: WaveformViewport) {
@@ -528,6 +525,7 @@ function createSceneNodes(): WaveformSceneNodes {
     backgroundGrid: new Container({ label: 'waveform-background-grid' }),
     backgroundLanes: new Container({ label: 'waveform-background-lanes' }),
     backgroundLanePool: new Container({ label: 'waveform-background-lane-pool', visible: false }),
+    contentBatch: new Container({ label: 'waveform-content-batch' }),
     contentRows: new Container({ label: 'waveform-content-rows' }),
     contentRowPool: new Container({ label: 'waveform-content-row-pool', visible: false }),
     statusCursor: new Container({ label: 'waveform-status-cursor' }),
@@ -551,7 +549,6 @@ function createRowNode(): WaveformSceneRowNode {
     contentContainer: new Container({ label: 'waveform-row-content' }),
     contentMetrics: createEmptyRowContentMetrics(),
     contentSignature: null,
-    gpuContent: null,
     retainedContentGraphics: null,
     retainedLabelContainer: null,
     retainedTextPool: [],
@@ -678,6 +675,17 @@ function redrawWaveformSceneLanes(scene: WaveformScene) {
 function redrawWaveformSceneContent(scene: WaveformScene, reuseContentSignature: boolean, renderStats: WaveformRenderStats) {
   const sceneOptions = getHorizontalBufferSceneOptions(scene);
 
+  if (sceneOptions.frame) {
+    scene.nodes.contentRows.visible = false;
+    scene.nodes.contentBatch.visible = true;
+    redrawWaveformSceneFrameBatchContent(scene, sceneOptions, renderStats);
+    return;
+  }
+
+  scene.nodes.contentRows.visible = true;
+  scene.nodes.contentBatch.visible = false;
+  scene.state.gpuBatchRenderer.clear();
+
   scene.state.visibleRows.rows.forEach((row) => {
     const rowNode = scene.rowRegistry.activeRows.get(row.id);
 
@@ -685,35 +693,75 @@ function redrawWaveformSceneContent(scene: WaveformScene, reuseContentSignature:
       return;
     }
 
-    const segmentResult = sceneOptions.frame
-      ? null
-      : getWaveformRenderSegments(row.signal, sceneOptions.viewport, sceneOptions.width, undefined, getRenderResolution(sceneOptions));
-    const contentSignature = sceneOptions.frame
-      ? getFrameSignalRenderSignature(sceneOptions.frame, row.signal, row.signalIndex, sceneOptions, true)
-      : getSignalRenderSignature(row.signal, sceneOptions, segmentResult!);
-
-    if (sceneOptions.frame && reuseContentSignature && rowNode.contentSignature === contentSignature) {
-      renderStats.rowContentSkipCount += 1;
-      return;
-    }
+    const segmentResult = getWaveformRenderSegments(row.signal, sceneOptions.viewport, sceneOptions.width, undefined, getRenderResolution(sceneOptions));
+    const contentSignature = getSignalRenderSignature(row.signal, sceneOptions, segmentResult);
 
     if (reuseContentSignature && rowNode.contentSignature === contentSignature) {
       renderStats.rowContentSkipCount += 1;
       return;
     }
 
-    if (sceneOptions.frame) {
-      rowNode.contentMetrics = drawFrameSignalRow(rowNode, row, sceneOptions, sceneOptions.frame);
-    } else {
-      releaseRetainedRowContent(rowNode);
-      clearContainer(rowNode.contentContainer);
-      discardRetainedRowContent(rowNode);
-      rowNode.contentMetrics = drawSignalRow(rowNode.contentContainer, row, sceneOptions, segmentResult!);
-    }
+    releaseRetainedRowContent(rowNode);
+    clearContainer(rowNode.contentContainer);
+    discardRetainedRowContent(rowNode);
+    rowNode.contentMetrics = drawSignalRow(rowNode.contentContainer, row, sceneOptions, segmentResult);
     rowNode.contentSignature = contentSignature;
     renderStats.rowContentRedrawCount += 1;
     accumulateRowContentUpdateMetrics(renderStats, rowNode.contentMetrics);
   });
+}
+
+function redrawWaveformSceneFrameBatchContent(scene: WaveformScene, options: WaveformSceneOptions, renderStats: WaveformRenderStats) {
+  if (!options.frame) {
+    return;
+  }
+
+  const batchRenderer = scene.state.gpuBatchRenderer;
+  const metrics = createEmptyRowContentMetrics();
+
+  batchRenderer.reset();
+
+  for (const rowNode of scene.rowRegistry.activeRows.values()) {
+    rowNode.contentMetrics = createEmptyRowContentMetrics();
+    rowNode.contentSignature = null;
+  }
+
+  scene.state.visibleRows.rows.forEach((row) => {
+    if (row.kind !== 'signal') {
+      return;
+    }
+
+    const tableEntry = getFrameSignalTableEntry(options.frame!, row.signalIndex);
+    if (!tableEntry || tableEntry.segmentCount === 0) {
+      return;
+    }
+
+    const laneY = getScrolledY(row.y, options);
+    const signalResult = row.signal.kind === 'bus'
+      ? drawFrameBusWaveformBatch(batchRenderer, row.signal, options, options.frame!, tableEntry.firstSegment, tableEntry.segmentCount, laneY)
+      : drawFrameDigitalWaveformBatch(batchRenderer, row.signal, options, options.frame!, tableEntry.firstSegment, tableEntry.segmentCount, laneY);
+
+    metrics.renderedSignalCount += 1;
+    metrics.sourceSegmentCount += tableEntry.segmentCount;
+    metrics.renderedSegmentCount += tableEntry.segmentCount;
+    mergeBatchDrawResult(metrics, signalResult);
+  });
+
+  const gpuMetrics = batchRenderer.commit();
+
+  metrics.gpuBufferUpdateCount += gpuMetrics.bufferUpdateCount;
+  metrics.gpuBufferUpdateMs += gpuMetrics.bufferUpdateMs;
+  metrics.gpuBufferCapacityVertexCount += gpuMetrics.bufferCapacityVertexCount;
+  metrics.gpuBufferReallocCount += gpuMetrics.bufferReallocCount;
+  metrics.gpuDrawLayerCount += gpuMetrics.drawLayerCount;
+  metrics.gpuLayerCount += gpuMetrics.drawLayerCount;
+  metrics.gpuVertexCount += gpuMetrics.vertexCount;
+  metrics.labelPoolSize = gpuMetrics.labelPoolSize;
+  metrics.labelTextureUpdateCount += gpuMetrics.labelTextureUpdateCount;
+
+  renderStats.rowContentRedrawCount += metrics.renderedSignalCount > 0 ? 1 : 0;
+  accumulateRowContentMetrics(renderStats, metrics);
+  accumulateRowContentUpdateMetrics(renderStats, metrics);
 }
 
 function accumulateVisibleRowContentMetrics(scene: WaveformScene, target: WaveformRenderStats) {
@@ -769,6 +817,23 @@ function accumulateRowContentUpdateMetrics(target: WaveformRenderStats, source: 
   target.gpuBufferReallocCount += source.gpuBufferReallocCount;
   target.labelTextureUpdateCount += source.labelTextureUpdateCount;
   target.meshBufferUpdateMs = target.gpuBufferUpdateMs;
+}
+
+function mergeBatchDrawResult(target: WaveformRowContentMetrics, source: DrawSignalResult) {
+  target.renderedLabelCount += source.renderedLabelCount;
+  target.suppressedLabelCount += source.suppressedLabelCount;
+  target.collapsedSegmentCount += source.collapsedSegmentCount;
+  target.drawnHorizontalSegmentCount += source.drawnHorizontalSegmentCount;
+  target.skippedHorizontalSegmentCount += source.skippedHorizontalSegmentCount;
+  target.drawnTransitionEdgeCount += source.drawnTransitionEdgeCount;
+  target.busFullHexagonCount += source.busFullHexagonCount;
+  target.busFoldOnlyCount += source.busFoldOnlyCount;
+  target.busSpecialStateHexagonCount += source.busSpecialStateHexagonCount;
+  target.busSpecialStateLabelCount += source.busSpecialStateLabelCount;
+  target.busSpecialStateWidthAlignedLabelCount += source.busSpecialStateWidthAlignedLabelCount;
+  target.busTruncatedLabelCount += source.busTruncatedLabelCount;
+  target.busLabelDotReplacementCount += source.busLabelDotReplacementCount;
+  target.busVerticalFallbackCount += source.busVerticalFallbackCount;
 }
 
 function redrawWaveformSceneCursor(scene: WaveformScene) {
@@ -855,14 +920,6 @@ function canShiftHorizontalBuffer(scene: WaveformScene, viewport: WaveformViewpo
 }
 
 function applyHorizontalBufferOffset(scene: WaveformScene) {
-  if (scene.state.frame) {
-    scene.state.horizontalBuffer.offsetX = 0;
-    scene.nodes.backgroundGrid.x = 0;
-    scene.nodes.contentRows.x = 0;
-    scene.nodes.statusHeader.x = 0;
-    return;
-  }
-
   const offsetX = getHorizontalBufferOffset(
     scene.state.horizontalBuffer.viewport,
     scene.state.viewport,
@@ -873,6 +930,7 @@ function applyHorizontalBufferOffset(scene: WaveformScene) {
 
   scene.state.horizontalBuffer.offsetX = offsetX;
   scene.nodes.backgroundGrid.x = offsetX;
+  scene.nodes.contentBatch.x = offsetX;
   scene.nodes.contentRows.x = offsetX;
   scene.nodes.statusHeader.x = offsetX;
 }
@@ -1151,220 +1209,8 @@ function drawSignalRow(target: Container, row: WaveformDisplayRow, options: Wave
   return contentMetrics;
 }
 
-function drawFrameSignalRow(rowNode: WaveformSceneRowNode, row: WaveformDisplayRow, options: WaveformSceneOptions, frame: ParsedWaveformFrame): WaveformRowContentMetrics {
-  const contentMetrics = createEmptyRowContentMetrics();
-
-  if (row.kind !== 'signal') {
-    return contentMetrics;
-  }
-
-  const signal = row.signal;
-  const tableEntry = getFrameSignalTableEntry(frame, row.signalIndex);
-  if (!tableEntry || tableEntry.segmentCount === 0) {
-    releaseRetainedFrameRowContent(rowNode);
-    return contentMetrics;
-  }
-
-  const signalLayer = prepareRetainedFrameRowContent(rowNode, `waveform-signal-${signal.id}`, parseHexColor(signal.color));
-  const drawResult = signal.kind === 'bus'
-    ? drawFrameBusWaveform(signalLayer, signal, options, frame, tableEntry.firstSegment, tableEntry.segmentCount, 0)
-    : drawFrameDigitalWaveform(signalLayer, signal, options, frame, tableEntry.firstSegment, tableEntry.segmentCount, 0);
-  const gpuMetrics = finishRetainedFrameRowContent(signalLayer);
-
-  contentMetrics.renderedSignalCount += 1;
-  contentMetrics.sourceSegmentCount += tableEntry.segmentCount;
-  contentMetrics.renderedSegmentCount += tableEntry.segmentCount;
-  contentMetrics.gpuBufferUpdateCount += gpuMetrics.bufferUpdateCount;
-  contentMetrics.gpuBufferUpdateMs += gpuMetrics.bufferUpdateMs;
-  contentMetrics.gpuBufferCapacityVertexCount += gpuMetrics.bufferCapacityVertexCount;
-  contentMetrics.gpuBufferReallocCount += gpuMetrics.bufferReallocCount;
-  contentMetrics.gpuDrawLayerCount += gpuMetrics.layerCount;
-  contentMetrics.gpuLayerCount += gpuMetrics.layerCount;
-  contentMetrics.gpuVertexCount += gpuMetrics.vertexCount;
-  contentMetrics.labelPoolSize = rowNode.retainedTextPool.length;
-  contentMetrics.renderedLabelCount += drawResult.renderedLabelCount;
-  contentMetrics.suppressedLabelCount += drawResult.suppressedLabelCount;
-  contentMetrics.collapsedSegmentCount += drawResult.collapsedSegmentCount;
-  contentMetrics.drawnHorizontalSegmentCount += drawResult.drawnHorizontalSegmentCount;
-  contentMetrics.skippedHorizontalSegmentCount += drawResult.skippedHorizontalSegmentCount;
-  contentMetrics.drawnTransitionEdgeCount += drawResult.drawnTransitionEdgeCount;
-  contentMetrics.busFullHexagonCount += drawResult.busFullHexagonCount;
-  contentMetrics.busFoldOnlyCount += drawResult.busFoldOnlyCount;
-  contentMetrics.busSpecialStateHexagonCount += drawResult.busSpecialStateHexagonCount;
-  contentMetrics.busSpecialStateLabelCount += drawResult.busSpecialStateLabelCount;
-  contentMetrics.busSpecialStateWidthAlignedLabelCount += drawResult.busSpecialStateWidthAlignedLabelCount;
-  contentMetrics.busTruncatedLabelCount += drawResult.busTruncatedLabelCount;
-  contentMetrics.busLabelDotReplacementCount += drawResult.busLabelDotReplacementCount;
-  contentMetrics.busVerticalFallbackCount += drawResult.busVerticalFallbackCount;
-
-  rowNode.contentContainer.y = row.y - (options.verticalScrollTop ?? 0);
-  return contentMetrics;
-}
-
-interface RetainedRowContent {
-  graphics: Graphics;
-  labels: Text[];
-  labelContainer: Container;
-  rowNode: WaveformSceneRowNode;
-  usedLabels: Text[];
-}
-
-interface RetainedFrameRowContent {
-  gpuContent: WaveformRowGpuContent;
-  labelContainer: Container;
-  rowNode: WaveformSceneRowNode;
-  usedLabels: Text[];
-}
-
-function prepareRetainedFrameRowContent(rowNode: WaveformSceneRowNode, label: string, signalColor: number): RetainedFrameRowContent {
-  if (rowNode.retainedContentGraphics) {
-    rowNode.retainedContentGraphics.clear();
-    rowNode.retainedContentGraphics.visible = false;
-  }
-
-  if (!rowNode.gpuContent) {
-    rowNode.gpuContent = createWaveformRowGpuContent(label, signalColor);
-    rowNode.contentContainer.addChild(
-      rowNode.gpuContent.pulse.fill.container,
-      rowNode.gpuContent.bus.fill.container,
-      rowNode.gpuContent.bus.stroke.container,
-      rowNode.gpuContent.unknown.fill.container,
-      rowNode.gpuContent.unknown.stroke.container,
-      rowNode.gpuContent.unknownHatch.stroke.container,
-      rowNode.gpuContent.highImpedance.fill.container,
-      rowNode.gpuContent.highImpedance.stroke.container,
-      rowNode.gpuContent.highImpedanceHatch.stroke.container,
-      rowNode.gpuContent.line.fill.container,
-      rowNode.gpuContent.midline.fill.container,
-    );
-  }
-
-  updateWaveformRowGpuContentColor(rowNode.gpuContent, signalColor);
-  resetWaveformRowGpuContent(rowNode.gpuContent);
-
-  if (!rowNode.retainedLabelContainer) {
-    rowNode.retainedLabelContainer = new Container({ label: `${label}-labels` });
-    rowNode.contentContainer.addChild(rowNode.retainedLabelContainer);
-  }
-
-  rowNode.retainedLabelContainer.label = `${label}-labels`;
-  rowNode.retainedTextUsed = 0;
-
-  return {
-    gpuContent: rowNode.gpuContent,
-    labelContainer: rowNode.retainedLabelContainer,
-    rowNode,
-    usedLabels: [],
-  };
-}
-
-function finishRetainedFrameRowContent(content: RetainedFrameRowContent) {
-  finishRetainedFrameLabels(content);
-  return commitWaveformGpuPrimitiveGroups(getWaveformRowGpuGroups(content.gpuContent));
-}
-
-function finishRetainedFrameLabels(content: RetainedFrameRowContent) {
-  content.rowNode.retainedTextUsed = content.usedLabels.length;
-  for (let index = 0; index < content.rowNode.retainedTextPool.length; index += 1) {
-    const label = content.rowNode.retainedTextPool[index];
-    if (!label) {
-      continue;
-    }
-
-    if (index >= content.usedLabels.length) {
-      label.visible = false;
-    }
-  }
-}
-
-function releaseRetainedFrameRowContent(rowNode: WaveformSceneRowNode) {
-  if (rowNode.gpuContent) {
-    resetWaveformRowGpuContent(rowNode.gpuContent);
-    commitWaveformGpuPrimitiveGroups(getWaveformRowGpuGroups(rowNode.gpuContent));
-  }
-
-  for (const label of rowNode.retainedTextPool) {
-    label.visible = false;
-  }
-  rowNode.retainedTextUsed = 0;
-}
-
-function createWaveformRowGpuContent(label: string, signalColor: number): WaveformRowGpuContent {
-  return {
-    bus: createWaveformGpuPrimitiveGroup(`${label}-bus`, signalColor, busWaveformStyle.fillAlpha, busWaveformStyle.strokeAlpha),
-    highImpedance: createWaveformGpuPrimitiveGroup(`${label}-z`, palette.highImpedance, 0.18, 0.88),
-    highImpedanceHatch: createWaveformGpuPrimitiveGroup(`${label}-z-hatch`, palette.highImpedance, 0, 0.62),
-    line: createWaveformGpuPrimitiveGroup(`${label}-line`, signalColor, 0.96, 0.96),
-    midline: createWaveformGpuPrimitiveGroup(`${label}-midline`, 0xffffff, 0.04, 0.04),
-    pulse: createWaveformGpuPrimitiveGroup(`${label}-pulse`, signalColor, 0.18, 0.18),
-    unknown: createWaveformGpuPrimitiveGroup(`${label}-x`, palette.unknown, 0.22, 0.86),
-    unknownHatch: createWaveformGpuPrimitiveGroup(`${label}-x-hatch`, palette.unknown, 0, 0.54),
-  };
-}
-
-function updateWaveformRowGpuContentColor(content: WaveformRowGpuContent, signalColor: number) {
-  setWaveformGpuPrimitiveGroupTint(content.bus, signalColor);
-  setWaveformGpuPrimitiveGroupTint(content.line, signalColor);
-  setWaveformGpuPrimitiveGroupTint(content.pulse, signalColor);
-}
-
-function setWaveformGpuPrimitiveGroupTint(group: WaveformGpuPrimitiveGroup, tint: number) {
-  group.fill.mesh.tint = tint;
-  group.stroke.mesh.tint = tint;
-}
-
-function resetWaveformRowGpuContent(content: WaveformRowGpuContent) {
-  for (const group of getWaveformRowGpuGroups(content)) {
-    resetWaveformGpuPrimitiveGroup(group);
-  }
-}
-
-function getWaveformRowGpuGroups(content: WaveformRowGpuContent) {
-  return [
-    content.bus,
-    content.highImpedance,
-    content.highImpedanceHatch,
-    content.line,
-    content.midline,
-    content.pulse,
-    content.unknown,
-    content.unknownHatch,
-  ];
-}
-
-function releaseRetainedRowContent(rowNode: WaveformSceneRowNode) {
-  rowNode.retainedContentGraphics?.clear();
-  for (const label of rowNode.retainedTextPool) {
-    label.visible = false;
-  }
-  rowNode.retainedTextUsed = 0;
-}
-
-function discardRetainedRowContent(rowNode: WaveformSceneRowNode) {
-  rowNode.gpuContent = null;
-  rowNode.retainedContentGraphics = null;
-  rowNode.retainedLabelContainer = null;
-  rowNode.retainedTextPool = [];
-  rowNode.retainedTextUsed = 0;
-}
-
-function acquireRetainedText(content: RetainedRowContent | RetainedFrameRowContent, text: string, fill: number, fontSize: number, x: number, y: number) {
-  const index = content.rowNode.retainedTextUsed;
-  let label = content.rowNode.retainedTextPool[index];
-  if (!label) {
-    label = createText('', fill, fontSize, 0, 0);
-    content.rowNode.retainedTextPool.push(label);
-    content.labelContainer.addChild(label);
-  }
-
-  content.rowNode.retainedTextUsed += 1;
-  updateText(label, text, fill, fontSize, x, y);
-  label.visible = true;
-  return label;
-}
-
-function drawFrameDigitalWaveform(
-  content: RetainedFrameRowContent,
+function drawFrameDigitalWaveformBatch(
+  batchRenderer: WaveformGpuBatchRenderer,
   signal: WaveformSignal,
   options: WaveformSceneOptions,
   frame: ParsedWaveformFrame,
@@ -1374,6 +1220,7 @@ function drawFrameDigitalWaveform(
 ): DrawSignalResult {
   const labelCounts = createDrawSignalResult();
   const renderResolution = getRenderResolution(options);
+  const signalColor = parseHexColor(signal.color);
   const topY = laneY + waveformLanePaddingY + 2;
   const bottomY = laneY + waveformLaneHeight - waveformLanePaddingY - 2;
   const midY = laneY + waveformLaneHeight / 2;
@@ -1400,25 +1247,29 @@ function drawFrameDigitalWaveform(
     labelCounts.drawnHorizontalSegmentCount += 1;
 
     if (segment.hasUnknown || isUnknownWaveformValue(currentValue)) {
-      drawGpuSpecialStateBlock(content.gpuContent.unknown, segment.x1, specialStateBounds.y, segment.width, specialStateBounds.height, {
-        hatchGroup: content.gpuContent.unknownHatch,
+      drawBatchSpecialStateBlock(batchRenderer, segment.x1, specialStateBounds.y, segment.width, specialStateBounds.height, {
+        color: palette.unknown,
+        fillAlpha: 0.22,
         pattern: 'backslash',
+        strokeAlpha: 0.86,
         strokeWidth: segmentStrokeWidth,
       });
-      mergeDrawSignalResult(labelCounts, addSpecialStateCharacters(content.usedLabels, 'x', palette.unknown, segment.x1, specialStateBounds.y, segment.width, specialStateBounds.height, shouldShowSpecialStateText(segment), {
-        textFactory: (text, fill, fontSize, x, y) => acquireRetainedText(content, text, fill, fontSize, x, y),
+      mergeDrawSignalResult(labelCounts, addSpecialStateCharacters([], 'x', palette.unknown, segment.x1, specialStateBounds.y, segment.width, specialStateBounds.height, shouldShowSpecialStateText(segment), {
+        textFactory: (text, fill, fontSize, x, y) => batchRenderer.acquireLabel(text, fill, fontSize, x, y),
       }));
       continue;
     }
 
     if (segment.hasHighImpedance || isHighImpedanceWaveformValue(currentValue)) {
-      drawGpuSpecialStateBlock(content.gpuContent.highImpedance, segment.x1, specialStateBounds.y, segment.width, specialStateBounds.height, {
-        hatchGroup: content.gpuContent.highImpedanceHatch,
+      drawBatchSpecialStateBlock(batchRenderer, segment.x1, specialStateBounds.y, segment.width, specialStateBounds.height, {
+        color: palette.highImpedance,
+        fillAlpha: 0.18,
         pattern: 'chevron',
+        strokeAlpha: 0.88,
         strokeWidth: segmentStrokeWidth,
       });
-      mergeDrawSignalResult(labelCounts, addSpecialStateCharacters(content.usedLabels, 'z', palette.highImpedance, segment.x1, specialStateBounds.y, segment.width, specialStateBounds.height, shouldShowSpecialStateText(segment), {
-        textFactory: (text, fill, fontSize, x, y) => acquireRetainedText(content, text, fill, fontSize, x, y),
+      mergeDrawSignalResult(labelCounts, addSpecialStateCharacters([], 'z', palette.highImpedance, segment.x1, specialStateBounds.y, segment.width, specialStateBounds.height, shouldShowSpecialStateText(segment), {
+        textFactory: (text, fill, fontSize, x, y) => batchRenderer.acquireLabel(text, fill, fontSize, x, y),
       }));
       continue;
     }
@@ -1427,25 +1278,25 @@ function drawFrameDigitalWaveform(
     const y = isHigh ? topY : bottomY;
 
     if (isHigh) {
-      addWaveformGpuRect(content.gpuContent.pulse.fill, segment.x1, topY, segment.width, Math.max(1, bottomY - topY));
+      batchRenderer.addRect('pulseFill', segment.x1, topY, segment.width, Math.max(1, bottomY - topY), signalColor, signal.kind === 'clock' ? 0.12 : 0.18);
     }
 
-    addWaveformGpuLine(content.gpuContent.line.fill, segment.x1, y, segment.x2, y, segmentStrokeWidth);
+    batchRenderer.addLine('digitalStroke', segment.x1, y, segment.x2, y, segmentStrokeWidth, signalColor, 0.96);
 
     if (nextSegment && nextValue !== currentValue && !isSpecialWaveformValue(nextValue)) {
       const nextY = nextValue === '1' ? topY : bottomY;
-      addWaveformGpuLine(content.gpuContent.line.fill, segment.x2, y, segment.x2, nextY, 1.7);
+      batchRenderer.addLine('digitalStroke', segment.x2, y, segment.x2, nextY, 1.7, signalColor, 0.9);
       labelCounts.drawnTransitionEdgeCount += 1;
     }
   }
 
-  addWaveformGpuLine(content.gpuContent.midline.fill, waveformTimeAxisInset, midY, options.width - waveformTimeAxisInset, midY, 1);
+  batchRenderer.addLine('midline', waveformTimeAxisInset, midY, options.width - waveformTimeAxisInset, midY, 1, 0xffffff, 0.04);
 
   return labelCounts;
 }
 
-function drawFrameBusWaveform(
-  content: RetainedFrameRowContent,
+function drawFrameBusWaveformBatch(
+  batchRenderer: WaveformGpuBatchRenderer,
   signal: WaveformSignal,
   options: WaveformSceneOptions,
   frame: ParsedWaveformFrame,
@@ -1455,6 +1306,7 @@ function drawFrameBusWaveform(
 ): DrawSignalResult {
   const labelCounts = createDrawSignalResult();
   const renderResolution = getRenderResolution(options);
+  const busColor = parseHexColor(signal.color);
   const y = laneY + waveformLanePaddingY;
   const height = waveformLaneHeight - waveformLanePaddingY * 2;
   const end = Math.min(frame.segmentCount, firstSegment + segmentCount);
@@ -1468,8 +1320,7 @@ function drawFrameBusWaveform(
     const segmentShape = getBusSegmentShape(segment, height, renderResolution);
 
     if (segment.hasUnknown || isUnknownWaveformValue(currentValue)) {
-      mergeDrawSignalResult(labelCounts, drawGpuBusSpecialStateSegment(content, signal, segment, segmentShape, y, height, {
-        group: content.gpuContent.unknown,
+      mergeDrawSignalResult(labelCounts, drawBatchBusSpecialStateSegment(batchRenderer, signal, segment, segmentShape, y, height, {
         color: palette.unknown,
         fillAlpha: 0.22,
         labelColor: palette.unknown,
@@ -1478,8 +1329,7 @@ function drawFrameBusWaveform(
         strokeWidth: 1,
       }));
     } else if (segment.hasHighImpedance || isHighImpedanceWaveformValue(currentValue)) {
-      mergeDrawSignalResult(labelCounts, drawGpuBusSpecialStateSegment(content, signal, segment, segmentShape, y, height, {
-        group: content.gpuContent.highImpedance,
+      mergeDrawSignalResult(labelCounts, drawBatchBusSpecialStateSegment(batchRenderer, signal, segment, segmentShape, y, height, {
         color: palette.highImpedance,
         fillAlpha: 0.18,
         labelColor: palette.highImpedance,
@@ -1487,32 +1337,45 @@ function drawFrameBusWaveform(
         strokeAlpha: 0.88,
         strokeWidth: 1,
       }));
+    } else if (segmentShape.kind === 'full') {
+      drawBatchElongatedHexagon(batchRenderer, segment.x1, y, segment.width, height, busColor);
+      labelCounts.busFullHexagonCount += 1;
+      labelCounts.drawnHorizontalSegmentCount += 1;
+    } else if (segmentShape.kind === 'fold') {
+      drawBatchBusFoldOnly(batchRenderer, segmentShape.x, y, segmentShape.foldProjection, height, busColor);
+      labelCounts.collapsedSegmentCount += 1;
+      labelCounts.busFoldOnlyCount += 1;
+      labelCounts.skippedHorizontalSegmentCount += 1;
     } else {
-      if (segmentShape.kind === 'full') {
-        drawGpuElongatedHexagon(content.gpuContent.bus, segment.x1, y, segment.width, height);
-        labelCounts.busFullHexagonCount += 1;
-        labelCounts.drawnHorizontalSegmentCount += 1;
-      } else if (segmentShape.kind === 'fold') {
-        drawGpuBusFoldOnly(content.gpuContent.bus, segmentShape.x, y, segmentShape.foldProjection, height);
-        labelCounts.collapsedSegmentCount += 1;
-        labelCounts.busFoldOnlyCount += 1;
-        labelCounts.skippedHorizontalSegmentCount += 1;
-      } else {
-        drawGpuBusVerticalFallback(content.gpuContent.bus, segmentShape.x, y, height, busWaveformStyle.strokeWidth);
-        labelCounts.collapsedSegmentCount += 1;
-        labelCounts.busVerticalFallbackCount += 1;
-        labelCounts.skippedHorizontalSegmentCount += 1;
-      }
+      batchRenderer.addLine('busOutline', segmentShape.x, y, segmentShape.x, y + height, busWaveformStyle.strokeWidth, busColor, busWaveformStyle.strokeAlpha);
+      labelCounts.collapsedSegmentCount += 1;
+      labelCounts.busVerticalFallbackCount += 1;
+      labelCounts.skippedHorizontalSegmentCount += 1;
     }
 
     if (segmentShape.kind === 'full' && !segment.hasUnknown && !segment.hasHighImpedance && !isSpecialWaveformValue(currentValue)) {
-      mergeDrawSignalResult(labelCounts, addBusLabel(content.usedLabels, formatWaveformValue(currentValue), palette.text, segment.x1, y, segment.width, height, {
-        textFactory: (text, fill, fontSize, x, y) => acquireRetainedText(content, text, fill, fontSize, x, y),
+      mergeDrawSignalResult(labelCounts, addBusLabel([], formatWaveformValue(currentValue), palette.text, segment.x1, y, segment.width, height, {
+        textFactory: (text, fill, fontSize, x, textY) => batchRenderer.acquireLabel(text, fill, fontSize, x, textY),
       }));
     }
   }
 
   return labelCounts;
+}
+
+function releaseRetainedRowContent(rowNode: WaveformSceneRowNode) {
+  rowNode.retainedContentGraphics?.clear();
+  for (const label of rowNode.retainedTextPool) {
+    label.visible = false;
+  }
+  rowNode.retainedTextUsed = 0;
+}
+
+function discardRetainedRowContent(rowNode: WaveformSceneRowNode) {
+  rowNode.retainedContentGraphics = null;
+  rowNode.retainedLabelContainer = null;
+  rowNode.retainedTextPool = [];
+  rowNode.retainedTextUsed = 0;
 }
 
 function getFrameRenderSegment(frame: ParsedWaveformFrame, segmentIndex: number, options: WaveformSceneOptions): WaveformRenderSegment | null {
@@ -1605,58 +1468,6 @@ function getFrameSignalTableEntry(frame: ParsedWaveformFrame, signalIndex: numbe
   }
 
   return null;
-}
-
-function getFrameSignalRenderSignature(frame: ParsedWaveformFrame, signal: WaveformSignal, signalIndex: number, options: WaveformSceneOptions, lightweight = false) {
-  const tableEntry = getFrameSignalTableEntry(frame, signalIndex);
-  if (!tableEntry) {
-    return [options.data.id, signal.id, 'frame', frame.version, 'empty'].join(':');
-  }
-
-  if (lightweight && frame.time0 && frame.time1) {
-    return [
-      options.data.id,
-      signal.id,
-      'frame',
-      frame.frameId,
-      frame.version,
-      signal.kind,
-      signal.color,
-      signal.width ?? '',
-      getRenderResolution(options).toFixed(2),
-      options.width,
-      tableEntry.firstSegment,
-      tableEntry.segmentCount,
-    ].join(':');
-  }
-
-  const parts = [
-    options.data.id,
-    signal.id,
-    'frame',
-    frame.version,
-    signal.kind,
-    signal.color,
-    signal.width ?? '',
-    getRenderResolution(options).toFixed(2),
-    options.width,
-    options.viewport.startTime.toFixed(3),
-    options.viewport.endTime.toFixed(3),
-    tableEntry.firstSegment,
-    tableEntry.segmentCount,
-  ];
-
-  const end = Math.min(frame.segmentCount, tableEntry.firstSegment + tableEntry.segmentCount);
-  for (let index = tableEntry.firstSegment; index < end; index += 1) {
-    parts.push([
-      frame.x0[index]?.toFixed(4) ?? '',
-      frame.x1[index]?.toFixed(4) ?? '',
-      frame.valueKind[index] ?? '',
-      frame.labelIndex[index] ?? '',
-    ].join(','));
-  }
-
-  return parts.join(':');
 }
 
 function getSignalRenderSignature(signal: WaveformSignal, options: WaveformSceneOptions, segmentResult: WaveformRenderSegmentResult) {
@@ -1932,54 +1743,6 @@ function drawBusSpecialStateSegment(
   return result;
 }
 
-interface GpuBusSpecialStateStyle extends BusSpecialStateStyle {
-  group: WaveformGpuPrimitiveGroup;
-}
-
-function drawGpuBusSpecialStateSegment(
-  content: RetainedFrameRowContent,
-  signal: WaveformSignal,
-  segment: WaveformRenderSegment,
-  segmentShape: BusSegmentShape,
-  y: number,
-  height: number,
-  style: GpuBusSpecialStateStyle,
-): DrawSignalResult {
-  const result = createDrawSignalResult();
-
-  if (segmentShape.kind === 'full') {
-    drawGpuElongatedHexagon(style.group, segment.x1, y, segment.width, height);
-    result.busFullHexagonCount += 1;
-    result.busSpecialStateHexagonCount += 1;
-    result.drawnHorizontalSegmentCount += 1;
-
-    const labelResult = addBusSpecialStateLabel(content.usedLabels, signal, style.state, style.labelColor, segment.x1, y, segment.width, height, {
-      textFactory: (text, fill, fontSize, x, y) => acquireRetainedText(content, text, fill, fontSize, x, y),
-    });
-    result.renderedLabelCount += labelResult.renderedLabelCount;
-    result.suppressedLabelCount += labelResult.suppressedLabelCount;
-    result.busSpecialStateLabelCount += labelResult.renderedLabelCount;
-    result.busSpecialStateWidthAlignedLabelCount += labelResult.widthAlignedLabelCount;
-    result.busTruncatedLabelCount += labelResult.busTruncatedLabelCount ?? 0;
-    result.busLabelDotReplacementCount += labelResult.busLabelDotReplacementCount ?? 0;
-    return result;
-  }
-
-  if (segmentShape.kind === 'fold') {
-    drawGpuBusFoldOnly(style.group, segmentShape.x, y, segmentShape.foldProjection, height);
-    result.collapsedSegmentCount += 1;
-    result.busFoldOnlyCount += 1;
-    result.skippedHorizontalSegmentCount += 1;
-    return result;
-  }
-
-  drawGpuBusVerticalFallback(style.group, segmentShape.x, y, height, style.strokeWidth);
-  result.collapsedSegmentCount += 1;
-  result.busVerticalFallbackCount += 1;
-  result.skippedHorizontalSegmentCount += 1;
-  return result;
-}
-
 interface BusSpecialStateLabelResult extends SpecialStateLabelResult {
   widthAlignedLabelCount: number;
 }
@@ -2135,48 +1898,105 @@ function drawBusVerticalFallback(target: Graphics, x: number, y: number, height:
     .stroke({ color: style.color, width: style.strokeWidth, alpha: style.strokeAlpha });
 }
 
-function drawGpuElongatedHexagon(group: WaveformGpuPrimitiveGroup, x: number, y: number, width: number, height: number) {
+function drawBatchElongatedHexagon(batchRenderer: WaveformGpuBatchRenderer, x: number, y: number, width: number, height: number, color: number) {
   const points = getElongatedHexagonPoints(x, y, width, height);
-  addWaveformGpuPolygon(group.fill, points);
-  addGpuPolyline(group.stroke, points, busWaveformStyle.strokeWidth, true);
+  batchRenderer.addPolygon('busFill', points, color, busWaveformStyle.fillAlpha);
+  addBatchPolyline(batchRenderer, 'busOutline', points, busWaveformStyle.strokeWidth, true, color, busWaveformStyle.strokeAlpha);
 }
 
-function drawGpuBusFoldOnly(group: WaveformGpuPrimitiveGroup, x: number, y: number, foldProjection: number, height: number) {
+function drawBatchBusFoldOnly(batchRenderer: WaveformGpuBatchRenderer, x: number, y: number, foldProjection: number, height: number, color: number) {
   const points = getBusFoldOnlyPoints(x, y, foldProjection, height);
-  addWaveformGpuPolygon(group.fill, [
+  batchRenderer.addPolygon('busFill', [
     points[0] ?? { x, y },
     points[1] ?? { x, y },
     points[2] ?? { x, y },
     points[3] ?? { x, y },
-  ]);
-  addGpuPolyline(group.stroke, points, busWaveformStyle.strokeWidth, true);
+  ], color, busWaveformStyle.fillAlpha);
+  addBatchPolyline(batchRenderer, 'busOutline', points, busWaveformStyle.strokeWidth, true, color, busWaveformStyle.strokeAlpha);
 }
 
-function drawGpuBusVerticalFallback(group: WaveformGpuPrimitiveGroup, x: number, y: number, height: number, strokeWidth: number) {
-  addWaveformGpuLine(group.stroke, x, y, x, y + height, strokeWidth);
+function drawBatchBusSpecialStateSegment(
+  batchRenderer: WaveformGpuBatchRenderer,
+  signal: WaveformSignal,
+  segment: WaveformRenderSegment,
+  segmentShape: BusSegmentShape,
+  y: number,
+  height: number,
+  style: BusSpecialStateStyle,
+): DrawSignalResult {
+  const result = createDrawSignalResult();
+
+  if (segmentShape.kind === 'full') {
+    const points = getElongatedHexagonPoints(segment.x1, y, segment.width, height);
+    batchRenderer.addPolygon('specialFill', points, style.color, style.fillAlpha);
+    addBatchPolyline(batchRenderer, 'specialOutline', points, style.strokeWidth, true, style.color, style.strokeAlpha);
+    result.busFullHexagonCount += 1;
+    result.busSpecialStateHexagonCount += 1;
+    result.drawnHorizontalSegmentCount += 1;
+
+    const labelResult = addBusSpecialStateLabel([], signal, style.state, style.labelColor, segment.x1, y, segment.width, height, {
+      textFactory: (text, fill, fontSize, x, textY) => batchRenderer.acquireLabel(text, fill, fontSize, x, textY),
+    });
+    result.renderedLabelCount += labelResult.renderedLabelCount;
+    result.suppressedLabelCount += labelResult.suppressedLabelCount;
+    result.busSpecialStateLabelCount += labelResult.renderedLabelCount;
+    result.busSpecialStateWidthAlignedLabelCount += labelResult.widthAlignedLabelCount;
+    result.busTruncatedLabelCount += labelResult.busTruncatedLabelCount ?? 0;
+    result.busLabelDotReplacementCount += labelResult.busLabelDotReplacementCount ?? 0;
+    return result;
+  }
+
+  if (segmentShape.kind === 'fold') {
+    const points = getBusFoldOnlyPoints(segmentShape.x, y, segmentShape.foldProjection, height);
+    batchRenderer.addPolygon('specialFill', [
+      points[0] ?? { x: segmentShape.x, y },
+      points[1] ?? { x: segmentShape.x, y },
+      points[2] ?? { x: segmentShape.x, y },
+      points[3] ?? { x: segmentShape.x, y },
+    ], style.color, style.fillAlpha);
+    addBatchPolyline(batchRenderer, 'specialOutline', points, style.strokeWidth, true, style.color, style.strokeAlpha);
+    result.collapsedSegmentCount += 1;
+    result.busFoldOnlyCount += 1;
+    result.skippedHorizontalSegmentCount += 1;
+    return result;
+  }
+
+  batchRenderer.addLine('specialOutline', segmentShape.x, y, segmentShape.x, y + height, style.strokeWidth, style.color, style.strokeAlpha);
+  result.collapsedSegmentCount += 1;
+  result.busVerticalFallbackCount += 1;
+  result.skippedHorizontalSegmentCount += 1;
+  return result;
 }
 
-function drawGpuSpecialStateBlock(
-  group: WaveformGpuPrimitiveGroup,
+function drawBatchSpecialStateBlock(
+  batchRenderer: WaveformGpuBatchRenderer,
   x: number,
   y: number,
   width: number,
   height: number,
-  style: Pick<SpecialStateBlockStyle, 'pattern' | 'strokeWidth'> & { hatchGroup: WaveformGpuPrimitiveGroup },
+  style: Pick<SpecialStateBlockStyle, 'color' | 'fillAlpha' | 'pattern' | 'strokeAlpha' | 'strokeWidth'>,
 ) {
   const radius = Math.min(2, Math.max(0, width / 2), Math.max(0, height / 2));
   const points = getRoundedRectPolygonPoints(x, y, width, height, radius);
-  addWaveformGpuPolygon(group.fill, points);
-  addGpuPolyline(group.stroke, points, style.strokeWidth, true);
+  batchRenderer.addPolygon('specialFill', points, style.color, style.fillAlpha);
+  addBatchPolyline(batchRenderer, 'specialOutline', points, style.strokeWidth, true, style.color, style.strokeAlpha);
 
   if (style.pattern === 'chevron') {
-    addGpuChevronHatch(style.hatchGroup, x, y, width, height);
+    addBatchChevronHatch(batchRenderer, x, y, width, height, style.color);
   } else {
-    addGpuBackslashHatch(style.hatchGroup, x, y, width, height);
+    addBatchBackslashHatch(batchRenderer, x, y, width, height, style.color);
   }
 }
 
-function addGpuPolyline(layer: WaveformGpuPrimitiveGroup['stroke'], points: readonly WaveformPoint[], width: number, closed: boolean) {
+function addBatchPolyline(
+  batchRenderer: WaveformGpuBatchRenderer,
+  layer: WaveformGpuBatchLayerKind,
+  points: readonly WaveformPoint[],
+  width: number,
+  closed: boolean,
+  color: number,
+  alpha: number,
+) {
   for (let index = 0; index < points.length - 1; index += 1) {
     const current = points[index];
     const next = points[index + 1];
@@ -2185,7 +2005,7 @@ function addGpuPolyline(layer: WaveformGpuPrimitiveGroup['stroke'], points: read
       continue;
     }
 
-    addWaveformGpuLine(layer, current.x, current.y, next.x, next.y, width);
+    batchRenderer.addLine(layer, current.x, current.y, next.x, next.y, width, color, alpha);
   }
 
   if (closed && points.length > 1) {
@@ -2193,9 +2013,64 @@ function addGpuPolyline(layer: WaveformGpuPrimitiveGroup['stroke'], points: read
     const last = points[points.length - 1];
 
     if (first && last) {
-      addWaveformGpuLine(layer, last.x, last.y, first.x, first.y, width);
+      batchRenderer.addLine(layer, last.x, last.y, first.x, first.y, width, color, alpha);
     }
   }
+}
+
+function addBatchBackslashHatch(batchRenderer: WaveformGpuBatchRenderer, x: number, y: number, width: number, height: number, color: number) {
+  const left = x + 1;
+  const right = x + width - 1;
+  const bottom = y + height - 1;
+
+  for (let start = x - height; start < x + width; start += waveformUnknownStripeSpacing) {
+    const segmentStartX = Math.max(left, start);
+    const segmentEndX = Math.min(right, start + height);
+
+    if (segmentEndX <= segmentStartX) {
+      continue;
+    }
+
+    batchRenderer.addLine(
+      'hatch',
+      segmentStartX,
+      y + segmentStartX - start + 1,
+      segmentEndX,
+      Math.min(bottom, y + segmentEndX - start + 1),
+      1,
+      color,
+      0.54,
+    );
+  }
+}
+
+function addBatchChevronHatch(batchRenderer: WaveformGpuBatchRenderer, x: number, y: number, width: number, height: number, color: number) {
+  const top = y + 2;
+  const bottom = y + height - 2;
+  const centerY = y + height / 2;
+  const left = x + 1;
+  const right = x + width - 2;
+
+  for (let start = x + 2; start < right; start += waveformHighImpedanceStripeSpacing) {
+    const tipX = start + 5;
+
+    if (tipX <= start + 1 || start >= right) {
+      continue;
+    }
+
+    addBatchClippedLine(batchRenderer, start, top, tipX, centerY, { left, right, top, bottom }, color, 0.62);
+    addBatchClippedLine(batchRenderer, tipX, centerY, start, bottom, { left, right, top, bottom }, color, 0.62);
+  }
+}
+
+function addBatchClippedLine(batchRenderer: WaveformGpuBatchRenderer, x1: number, y1: number, x2: number, y2: number, bounds: WaveformClipBounds, color: number, alpha: number) {
+  const clipped = clipWaveformLineToBounds(x1, y1, x2, y2, bounds);
+
+  if (!clipped) {
+    return;
+  }
+
+  batchRenderer.addLine('hatch', clipped.x1, clipped.y1, clipped.x2, clipped.y2, 1, color, alpha);
 }
 
 function getRoundedRectPolygonPoints(x: number, y: number, width: number, height: number, radius: number): WaveformPoint[] {
@@ -2221,59 +2096,6 @@ function getRoundedRectPolygonPoints(x: number, y: number, width: number, height
     { x, y: bottom - radius },
     { x, y: y + radius },
   ];
-}
-
-function addGpuBackslashHatch(group: WaveformGpuPrimitiveGroup, x: number, y: number, width: number, height: number) {
-  const left = x + 1;
-  const right = x + width - 1;
-  const bottom = y + height - 1;
-
-  for (let start = x - height; start < x + width; start += waveformUnknownStripeSpacing) {
-    const segmentStartX = Math.max(left, start);
-    const segmentEndX = Math.min(right, start + height);
-
-    if (segmentEndX <= segmentStartX) {
-      continue;
-    }
-
-    addWaveformGpuLine(
-      group.stroke,
-      segmentStartX,
-      y + segmentStartX - start + 1,
-      segmentEndX,
-      Math.min(bottom, y + segmentEndX - start + 1),
-      1,
-    );
-  }
-}
-
-function addGpuChevronHatch(group: WaveformGpuPrimitiveGroup, x: number, y: number, width: number, height: number) {
-  const top = y + 2;
-  const bottom = y + height - 2;
-  const centerY = y + height / 2;
-  const left = x + 1;
-  const right = x + width - 2;
-
-  for (let start = x + 2; start < right; start += waveformHighImpedanceStripeSpacing) {
-    const tipX = start + 5;
-
-    if (tipX <= start + 1 || start >= right) {
-      continue;
-    }
-
-    addGpuClippedLine(group.stroke, start, top, tipX, centerY, { left, right, top, bottom });
-    addGpuClippedLine(group.stroke, tipX, centerY, start, bottom, { left, right, top, bottom });
-  }
-}
-
-function addGpuClippedLine(layer: WaveformGpuPrimitiveGroup['stroke'], x1: number, y1: number, x2: number, y2: number, bounds: WaveformClipBounds) {
-  const clipped = clipWaveformLineToBounds(x1, y1, x2, y2, bounds);
-
-  if (!clipped) {
-    return;
-  }
-
-  addWaveformGpuLine(layer, clipped.x1, clipped.y1, clipped.x2, clipped.y2, 1);
 }
 
 function getElongatedHexagonBevel(width: number, height: number) {
@@ -2752,18 +2574,6 @@ function createText(text: string, fill: number, fontSize: number, x: number, y: 
     x,
     y,
   });
-}
-
-function updateText(label: Text, text: string, fill: number, fontSize: number, x: number, y: number) {
-  label.text = text;
-  label.x = x;
-  label.y = y;
-  label.style = {
-    fill,
-    fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
-    fontSize,
-    fontWeight: '500',
-  };
 }
 
 function parseHexColor(color: string) {
