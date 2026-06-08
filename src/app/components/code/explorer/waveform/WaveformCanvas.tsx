@@ -453,6 +453,7 @@ export function WaveformCanvas({
     pendingViewportRef.current = null;
 
     if (pendingViewport && !areViewportsEqual(pendingViewport, viewport)) {
+      sceneUpdateMetricsRef.current.idleViewportCommitCount += 1;
       onViewportChangeRef.current(pendingViewport);
     }
   }
@@ -476,6 +477,9 @@ export function WaveformCanvas({
     sceneUpdateMetricsRef.current.viewportContentUpdateCount += 1;
     if (options.countDisplayUpdate) {
       sceneUpdateMetricsRef.current.displayViewportUpdateCount += 1;
+      if (handledAsPan && scene.renderStats.gpuBufferUpdateCount === 0) {
+        sceneUpdateMetricsRef.current.displayViewportOnlyUpdateCount += 1;
+      }
     }
     accumulateRowLifecycleMetrics(scene.renderStats);
     applyRenderStats(scene.renderStats);
@@ -538,6 +542,8 @@ export function WaveformCanvas({
     sceneUpdateMetricsRef.current.gpuDrawLayerCount = baseStats.gpuDrawLayerCount;
     sceneUpdateMetricsRef.current.gpuLayerCount = baseStats.gpuLayerCount;
     sceneUpdateMetricsRef.current.gpuVertexCount = baseStats.gpuVertexCount;
+    sceneUpdateMetricsRef.current.labelLayoutCacheHitCount += baseStats.labelLayoutCacheHitCount;
+    sceneUpdateMetricsRef.current.labelLayoutCacheMissCount += baseStats.labelLayoutCacheMissCount;
     sceneUpdateMetricsRef.current.labelPoolSize = baseStats.labelPoolSize;
     sceneUpdateMetricsRef.current.labelTextureUpdateCount += baseStats.labelTextureUpdateCount;
     sceneUpdateMetricsRef.current.meshBufferUpdateMs = sceneUpdateMetricsRef.current.gpuBufferUpdateMs;
@@ -628,6 +634,7 @@ export function WaveformCanvas({
 
     host.dataset.averageFps = formatOptionalNumber(nextMetrics.averageFps);
     host.dataset.averageRenderMs = formatOptionalNumber(nextMetrics.averageRenderDurationMs);
+    host.dataset.displayViewportOnlyUpdateCount = String(latestStats.displayViewportOnlyUpdateCount);
     host.dataset.displayViewportUpdateCount = String(latestStats.displayViewportUpdateCount);
     host.dataset.droppedFrameCount = String(latestStats.droppedFrameCount);
     host.dataset.frameIntervalP95Ms = latestStats.frameIntervalP95Ms.toFixed(3);
@@ -638,6 +645,9 @@ export function WaveformCanvas({
     host.dataset.gpuDrawLayerCount = String(latestStats.gpuDrawLayerCount);
     host.dataset.gpuLayerCount = String(latestStats.gpuLayerCount);
     host.dataset.gpuVertexCount = String(latestStats.gpuVertexCount);
+    host.dataset.idleViewportCommitCount = String(latestStats.idleViewportCommitCount);
+    host.dataset.labelLayoutCacheHitCount = String(latestStats.labelLayoutCacheHitCount);
+    host.dataset.labelLayoutCacheMissCount = String(latestStats.labelLayoutCacheMissCount);
     host.dataset.labelTextureUpdateCount = String(latestStats.labelTextureUpdateCount);
     host.dataset.lastFps = formatOptionalNumber(nextMetrics.lastFps);
     host.dataset.lastRenderMs = formatOptionalNumber(nextMetrics.lastRenderDurationMs);
@@ -692,6 +702,7 @@ export function WaveformCanvas({
       data-header-background="opaque"
       data-average-fps={formatOptionalNumber(renderMetrics.averageFps)}
       data-average-render-ms={formatOptionalNumber(renderMetrics.averageRenderDurationMs)}
+      data-display-viewport-only-update-count={renderStats.displayViewportOnlyUpdateCount}
       data-display-viewport-update-count={renderStats.displayViewportUpdateCount}
       data-dropped-frame-count={renderStats.droppedFrameCount}
       data-frame-interval-p95-ms={renderStats.frameIntervalP95Ms.toFixed(3)}
@@ -706,6 +717,9 @@ export function WaveformCanvas({
       data-gpu-draw-layer-count={renderStats.gpuDrawLayerCount}
       data-gpu-layer-count={renderStats.gpuLayerCount}
       data-gpu-vertex-count={renderStats.gpuVertexCount}
+      data-idle-viewport-commit-count={renderStats.idleViewportCommitCount}
+      data-label-layout-cache-hit-count={renderStats.labelLayoutCacheHitCount}
+      data-label-layout-cache-miss-count={renderStats.labelLayoutCacheMissCount}
       data-label-pool-size={renderStats.labelPoolSize}
       data-label-texture-update-count={renderStats.labelTextureUpdateCount}
       data-mesh-buffer-update-ms={renderStats.meshBufferUpdateMs.toFixed(3)}
@@ -835,6 +849,8 @@ function createEmptyRenderStats(): WaveformRenderStats {
     gpuDrawLayerCount: 0,
     gpuLayerCount: 0,
     gpuVertexCount: 0,
+    labelLayoutCacheHitCount: 0,
+    labelLayoutCacheMissCount: 0,
     labelTextureUpdateCount: 0,
     meshBufferUpdateMs: 0,
     meshVertexCount: 0,
@@ -863,11 +879,13 @@ function createEmptyRenderStats(): WaveformRenderStats {
     cursorUpdateCount: 0,
     selectionUpdateCount: 0,
     displayViewportUpdateCount: 0,
+    displayViewportOnlyUpdateCount: 0,
     droppedFrameCount: 0,
     frameIntervalP95Ms: 0,
     frameParseMs: 0,
     pipeRoundtripMs: 0,
     pixiRenderMs: 0,
+    idleViewportCommitCount: 0,
     reactViewportCommitCount: 0,
     sceneUpdateMs: 0,
   };
@@ -893,16 +911,20 @@ function createEmptySceneUpdateMetrics(): WaveformSceneUpdateMetrics {
     gpuDrawLayerCount: 0,
     gpuLayerCount: 0,
     gpuVertexCount: 0,
+    labelLayoutCacheHitCount: 0,
+    labelLayoutCacheMissCount: 0,
     labelTextureUpdateCount: 0,
     meshBufferUpdateMs: 0,
     meshVertexCount: 0,
     labelPoolSize: 0,
     displayViewportUpdateCount: 0,
+    displayViewportOnlyUpdateCount: 0,
     droppedFrameCount: 0,
     frameIntervalP95Ms: 0,
     frameParseMs: 0,
     pipeRoundtripMs: 0,
     pixiRenderMs: 0,
+    idleViewportCommitCount: 0,
     reactViewportCommitCount: 0,
     sceneUpdateMs: 0,
   };

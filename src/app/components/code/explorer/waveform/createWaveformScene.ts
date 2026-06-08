@@ -100,6 +100,8 @@ interface WaveformRowContentMetrics {
   gpuDrawLayerCount: number;
   gpuLayerCount: number;
   gpuVertexCount: number;
+  labelLayoutCacheHitCount: number;
+  labelLayoutCacheMissCount: number;
   labelTextureUpdateCount: number;
   labelPoolSize: number;
   suppressedLabelCount: number;
@@ -382,6 +384,8 @@ function createRenderStats(visibleRowCount: number, culledRowCount: number, rend
     gpuDrawLayerCount: 0,
     gpuLayerCount: 0,
     gpuVertexCount: 0,
+    labelLayoutCacheHitCount: 0,
+    labelLayoutCacheMissCount: 0,
     labelTextureUpdateCount: 0,
     meshBufferUpdateMs: 0,
     meshVertexCount: 0,
@@ -410,11 +414,13 @@ function createRenderStats(visibleRowCount: number, culledRowCount: number, rend
     cursorUpdateCount: 0,
     selectionUpdateCount: 0,
     displayViewportUpdateCount: 0,
+    displayViewportOnlyUpdateCount: 0,
     droppedFrameCount: 0,
     frameIntervalP95Ms: 0,
     frameParseMs: 0,
     pipeRoundtripMs: 0,
     pixiRenderMs: 0,
+    idleViewportCommitCount: 0,
     reactViewportCommitCount: 0,
     sceneUpdateMs: 0,
   };
@@ -453,9 +459,10 @@ interface SpecialStateLabelResult {
   suppressedLabelCount: number;
 }
 
-type WaveformTextFactory = (text: string, fill: number, fontSize: number, x: number, y: number) => Container;
+type WaveformTextFactory = (text: string, fill: number, fontSize: number, x: number, y: number, cacheKey?: string) => Container;
 
 interface WaveformLabelDrawOptions {
+  labelCacheKey?: string;
   textFactory?: WaveformTextFactory;
 }
 
@@ -526,6 +533,8 @@ function createEmptyRowContentMetrics(): WaveformRowContentMetrics {
     gpuDrawLayerCount: 0,
     gpuLayerCount: 0,
     gpuVertexCount: 0,
+    labelLayoutCacheHitCount: 0,
+    labelLayoutCacheMissCount: 0,
     labelTextureUpdateCount: 0,
     labelPoolSize: 0,
     suppressedLabelCount: 0,
@@ -682,6 +691,8 @@ function redrawWaveformSceneFrameBatchContent(scene: WaveformScene, options: Wav
   metrics.gpuDrawLayerCount += gpuMetrics.drawLayerCount;
   metrics.gpuLayerCount += gpuMetrics.drawLayerCount;
   metrics.gpuVertexCount += gpuMetrics.vertexCount;
+  metrics.labelLayoutCacheHitCount += gpuMetrics.labelLayoutCacheHitCount;
+  metrics.labelLayoutCacheMissCount += gpuMetrics.labelLayoutCacheMissCount;
   metrics.labelPoolSize = gpuMetrics.labelPoolSize;
   metrics.labelTextureUpdateCount += gpuMetrics.labelTextureUpdateCount;
 
@@ -714,6 +725,8 @@ function accumulateRowContentMetrics(target: WaveformRenderStats, source: Wavefo
   target.gpuVertexCount += source.gpuVertexCount;
   target.gpuBufferCapacityVertexCount += source.gpuBufferCapacityVertexCount;
   target.meshVertexCount = target.gpuVertexCount;
+  target.labelLayoutCacheHitCount += source.labelLayoutCacheHitCount;
+  target.labelLayoutCacheMissCount += source.labelLayoutCacheMissCount;
   target.collapsedSegmentCount += source.collapsedSegmentCount;
   target.drawnHorizontalSegmentCount += source.drawnHorizontalSegmentCount;
   target.skippedHorizontalSegmentCount += source.skippedHorizontalSegmentCount;
@@ -728,6 +741,8 @@ function accumulateRowContentMetrics(target: WaveformRenderStats, source: Wavefo
   target.busVerticalFallbackCount += source.busVerticalFallbackCount;
   target.renderedLabelCount += source.renderedLabelCount;
   target.labelPoolSize += source.labelPoolSize;
+  target.labelLayoutCacheHitCount += source.labelLayoutCacheHitCount;
+  target.labelLayoutCacheMissCount += source.labelLayoutCacheMissCount;
   target.labelTextureUpdateCount += source.labelTextureUpdateCount;
   target.suppressedLabelCount += source.suppressedLabelCount;
 }
@@ -736,6 +751,8 @@ function accumulateRowContentUpdateMetrics(target: WaveformRenderStats, source: 
   target.gpuBufferUpdateCount += source.gpuBufferUpdateCount;
   target.gpuBufferUpdateMs += source.gpuBufferUpdateMs;
   target.gpuBufferReallocCount += source.gpuBufferReallocCount;
+  target.labelLayoutCacheHitCount += source.labelLayoutCacheHitCount;
+  target.labelLayoutCacheMissCount += source.labelLayoutCacheMissCount;
   target.labelTextureUpdateCount += source.labelTextureUpdateCount;
   target.meshBufferUpdateMs = target.gpuBufferUpdateMs;
 }
@@ -1065,7 +1082,8 @@ function drawFrameDigitalWaveformBatch(
         strokeWidth: segmentStrokeWidth,
       });
       mergeDrawSignalResult(labelCounts, addSpecialStateCharacters([], 'x', palette.unknown, segmentBounds.x1, specialStateBounds.y, segmentBounds.width, specialStateBounds.height, shouldShowSpecialStateTextForWidth(segmentBounds.width), {
-        textFactory: (text, fill, fontSize, x, y) => batchRenderer.acquireLabel(text, fill, fontSize, x, y),
+        labelCacheKey: getWaveformSegmentLabelCacheKey(signal.id, index, 'x'),
+        textFactory: (text, fill, fontSize, x, y, cacheKey) => batchRenderer.acquireLabel(text, fill, fontSize, x, y, cacheKey),
       }));
       continue;
     }
@@ -1079,7 +1097,8 @@ function drawFrameDigitalWaveformBatch(
         strokeWidth: segmentStrokeWidth,
       });
       mergeDrawSignalResult(labelCounts, addSpecialStateCharacters([], 'z', palette.highImpedance, segmentBounds.x1, specialStateBounds.y, segmentBounds.width, specialStateBounds.height, shouldShowSpecialStateTextForWidth(segmentBounds.width), {
-        textFactory: (text, fill, fontSize, x, y) => batchRenderer.acquireLabel(text, fill, fontSize, x, y),
+        labelCacheKey: getWaveformSegmentLabelCacheKey(signal.id, index, 'z'),
+        textFactory: (text, fill, fontSize, x, y, cacheKey) => batchRenderer.acquireLabel(text, fill, fontSize, x, y, cacheKey),
       }));
       continue;
     }
@@ -1136,6 +1155,7 @@ function drawFrameBusWaveformBatch(
       mergeDrawSignalResult(labelCounts, drawBatchBusSpecialStateSegment(batchRenderer, signal, segmentBounds.x1, segmentBounds.width, segmentShape, y, height, {
         color: palette.unknown,
         fillAlpha: 0.22,
+        labelCacheKey: getWaveformSegmentLabelCacheKey(signal.id, index, 'x'),
         labelColor: palette.unknown,
         state: 'x',
         strokeAlpha: 0.86,
@@ -1145,6 +1165,7 @@ function drawFrameBusWaveformBatch(
       mergeDrawSignalResult(labelCounts, drawBatchBusSpecialStateSegment(batchRenderer, signal, segmentBounds.x1, segmentBounds.width, segmentShape, y, height, {
         color: palette.highImpedance,
         fillAlpha: 0.18,
+        labelCacheKey: getWaveformSegmentLabelCacheKey(signal.id, index, 'z'),
         labelColor: palette.highImpedance,
         state: 'z',
         strokeAlpha: 0.88,
@@ -1168,7 +1189,8 @@ function drawFrameBusWaveformBatch(
 
     if (segmentShape.kind === 'full' && !hasUnknown && !hasHighImpedance && !isSpecialWaveformValue(currentValue)) {
       mergeDrawSignalResult(labelCounts, addBusLabel([], formatWaveformValue(currentValue), palette.text, segmentBounds.x1, y, segmentBounds.width, height, {
-        textFactory: (text, fill, fontSize, x, textY) => batchRenderer.acquireLabel(text, fill, fontSize, x, textY),
+        labelCacheKey: getWaveformSegmentLabelCacheKey(signal.id, index, 'value'),
+        textFactory: (text, fill, fontSize, x, textY, cacheKey) => batchRenderer.acquireLabel(text, fill, fontSize, x, textY, cacheKey),
       }));
     }
   }
@@ -1307,6 +1329,7 @@ const busWaveformStyle = {
 interface BusSpecialStateStyle {
   color: number;
   fillAlpha: number;
+  labelCacheKey?: string;
   labelColor: number;
   state: 'x' | 'z';
   strokeAlpha: number;
@@ -1415,7 +1438,8 @@ function drawBatchBusSpecialStateSegment(
     result.drawnHorizontalSegmentCount += 1;
 
     const labelResult = addBusSpecialStateLabel([], signal, style.state, style.labelColor, x, y, width, height, {
-      textFactory: (text, fill, fontSize, x, textY) => batchRenderer.acquireLabel(text, fill, fontSize, x, textY),
+      labelCacheKey: style.labelCacheKey,
+      textFactory: (text, fill, fontSize, x, textY, cacheKey) => batchRenderer.acquireLabel(text, fill, fontSize, x, textY, cacheKey),
     });
     result.renderedLabelCount += labelResult.renderedLabelCount;
     result.suppressedLabelCount += labelResult.suppressedLabelCount;
@@ -1689,7 +1713,7 @@ function addBusLabel(labels: Container[], labelText: string, labelColor: number,
     };
   }
 
-  labels.push((options.textFactory ?? createText)(fittedLabel.text, labelColor, fontSize, bounds.left, y + 4));
+  labels.push((options.textFactory ?? createText)(fittedLabel.text, labelColor, fontSize, bounds.left, y + 4, options.labelCacheKey));
   return {
     busLabelDotReplacementCount: fittedLabel.replacementCount,
     busTruncatedLabelCount: fittedLabel.truncated ? 1 : 0,
@@ -1711,8 +1735,12 @@ function addSpecialStateCharacters(labels: Container[], state: 'x' | 'z', color:
   const textX = x + width / 2 - fontSize * 0.28;
   const textY = y + Math.max(1, (height - fontSize) / 2 - 1);
 
-  labels.push((options.textFactory ?? createText)(state, color, fontSize, textX, textY));
+  labels.push((options.textFactory ?? createText)(state, color, fontSize, textX, textY, options.labelCacheKey));
   return { renderedLabelCount: 1, suppressedLabelCount: 0 };
+}
+
+function getWaveformSegmentLabelCacheKey(signalId: string, segmentIndex: number, labelKind: string) {
+  return `${signalId}:${segmentIndex}:${labelKind}`;
 }
 
 export interface WaveformClipBounds {

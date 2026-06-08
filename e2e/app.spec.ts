@@ -5613,6 +5613,12 @@ test('waveform bottom panel renders binary waveform and controls', async () => {
   await expect.poll(async () => readCanvasNumber('data-label-pool-size'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThanOrEqual(0);
+  await expect.poll(async () => readCanvasNumber('data-label-layout-cache-miss-count'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThanOrEqual(0);
+  await expect.poll(async () => readCanvasNumber('data-label-layout-cache-hit-count'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThanOrEqual(0);
   await expect(canvasHost).toHaveAttribute('data-layer-names', 'background,content,status,operation');
   await expect(canvasHost).toHaveAttribute('data-header-background', 'opaque');
   await expect(canvasHost).toHaveAttribute('data-row-count', '171');
@@ -5823,6 +5829,9 @@ test('waveform bottom panel renders binary waveform and controls', async () => {
   await expect.poll(async () => Number(await panel.getAttribute('data-visible-window-start') ?? '0'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(startBeforeShiftWheel);
+  await expect.poll(async () => readCanvasNumber('data-display-viewport-update-count'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
   await expect.poll(async () => readCanvasNumber('data-gpu-buffer-update-count'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(initialGpuBufferUpdateCount);

@@ -48,6 +48,8 @@ export interface WaveformRenderStats {
   gpuDrawLayerCount: number;
   gpuLayerCount: number;
   gpuVertexCount: number;
+  labelLayoutCacheHitCount: number;
+  labelLayoutCacheMissCount: number;
   labelTextureUpdateCount: number;
   meshBufferUpdateMs: number;
   meshVertexCount: number;
@@ -76,11 +78,13 @@ export interface WaveformRenderStats {
   cursorUpdateCount: number;
   selectionUpdateCount: number;
   displayViewportUpdateCount: number;
+  displayViewportOnlyUpdateCount: number;
   droppedFrameCount: number;
   frameIntervalP95Ms: number;
   frameParseMs: number;
   pipeRoundtripMs: number;
   pixiRenderMs: number;
+  idleViewportCommitCount: number;
   reactViewportCommitCount: number;
   sceneUpdateMs: number;
 }
@@ -112,16 +116,20 @@ export interface WaveformSceneUpdateMetrics {
   gpuDrawLayerCount: number;
   gpuLayerCount: number;
   gpuVertexCount: number;
+  labelLayoutCacheHitCount: number;
+  labelLayoutCacheMissCount: number;
   labelTextureUpdateCount: number;
   meshBufferUpdateMs: number;
   meshVertexCount: number;
   labelPoolSize: number;
   displayViewportUpdateCount: number;
+  displayViewportOnlyUpdateCount: number;
   droppedFrameCount: number;
   frameIntervalP95Ms: number;
   frameParseMs: number;
   pipeRoundtripMs: number;
   pixiRenderMs: number;
+  idleViewportCommitCount: number;
   reactViewportCommitCount: number;
   sceneUpdateMs: number;
 }

@@ -7,7 +7,6 @@ import {
   compileHighShaderGpuProgram,
   Container,
   Geometry,
-  BitmapText,
   localUniformBit,
   localUniformBitGl,
   Mesh,
@@ -15,6 +14,8 @@ import {
   roundPixelsBitGl,
   Shader,
 } from 'pixi.js';
+
+import { WaveformGlyphAtlas } from './waveformGlyphAtlas';
 
 export type WaveformGpuBatchLayerKind =
   | 'busFill'
@@ -32,6 +33,8 @@ export interface WaveformGpuBatchMetrics {
   bufferUpdateCount: number;
   bufferUpdateMs: number;
   drawLayerCount: number;
+  labelLayoutCacheHitCount: number;
+  labelLayoutCacheMissCount: number;
   labelPoolSize: number;
   labelTextureUpdateCount: number;
   vertexCount: number;
@@ -69,13 +72,9 @@ let sharedSolidColorShader: Shader | null = null;
 export class WaveformGpuBatchRenderer {
   public readonly container: Container;
 
-  private readonly labelContainer: Container;
-  private readonly labelBuckets = new Map<string, BitmapText[]>();
-  private readonly labels: BitmapText[] = [];
+  private readonly glyphAtlas: WaveformGlyphAtlas;
   private readonly layers = new Map<WaveformGpuBatchLayerKind, WaveformGpuBatchLayer>();
-  private readonly usedLabelCounts = new Map<string, number>();
   private lastMetrics: WaveformGpuBatchMetrics = createEmptyBatchMetrics();
-  private labelTextureUpdateCount = 0;
 
   public constructor(label = 'waveform-gpu-batch-renderer') {
     this.container = new Container({ label });
@@ -87,16 +86,15 @@ export class WaveformGpuBatchRenderer {
       this.container.addChild(layer.mesh);
     }
 
-    this.labelContainer = new Container({ label: `${label}-labels` });
-    this.container.addChild(this.labelContainer);
+    this.glyphAtlas = new WaveformGlyphAtlas(`${label}-glyph-atlas`);
+    this.container.addChild(this.glyphAtlas.container);
   }
 
   public reset() {
     for (const layer of this.layers.values()) {
       layer.builder.reset();
     }
-    this.usedLabelCounts.clear();
-    this.labelTextureUpdateCount = 0;
+    this.glyphAtlas.beginFrame();
   }
 
   public clear() {
@@ -120,30 +118,8 @@ export class WaveformGpuBatchRenderer {
     this.layers.get(kind)?.builder.addLineQuad(x1, y1, x2, y2, width, color, alpha);
   }
 
-  public acquireLabel(text: string, fill: number, fontSize: number, x: number, y: number) {
-    const key = getLabelPoolKey(text, fill, fontSize);
-    const usedCount = this.usedLabelCounts.get(key) ?? 0;
-    let bucket = this.labelBuckets.get(key);
-
-    if (!bucket) {
-      bucket = [];
-      this.labelBuckets.set(key, bucket);
-    }
-
-    let label = bucket[usedCount];
-    if (!label) {
-      label = createBatchText(text, fill, fontSize, 0, 0);
-      bucket.push(label);
-      this.labels.push(label);
-      this.labelContainer.addChild(label);
-      this.labelTextureUpdateCount += 1;
-    }
-
-    label.x = x;
-    label.y = y;
-    label.visible = true;
-    this.usedLabelCounts.set(key, usedCount + 1);
-    return label;
+  public acquireLabel(text: string, fill: number, fontSize: number, x: number, y: number, cacheKey?: string) {
+    return this.glyphAtlas.acquireLabel({ cacheKey, fill, fontSize, text, x, y });
   }
 
   public commit(): WaveformGpuBatchMetrics {
@@ -173,15 +149,7 @@ export class WaveformGpuBatchRenderer {
       vertexCount += layer.builder.vertexCount;
     }
 
-    for (const [key, bucket] of this.labelBuckets) {
-      const usedCount = this.usedLabelCounts.get(key) ?? 0;
-      for (let index = 0; index < bucket.length; index += 1) {
-        const label = bucket[index];
-        if (label) {
-          label.visible = index < usedCount;
-        }
-      }
-    }
+    const glyphMetrics = this.glyphAtlas.commit();
 
     this.lastMetrics = {
       bufferCapacityVertexCount,
@@ -189,8 +157,10 @@ export class WaveformGpuBatchRenderer {
       bufferUpdateCount,
       bufferUpdateMs: Math.max(0, performance.now() - startedAt),
       drawLayerCount,
-      labelPoolSize: this.labels.length,
-      labelTextureUpdateCount: this.labelTextureUpdateCount,
+      labelLayoutCacheHitCount: glyphMetrics.labelLayoutCacheHitCount,
+      labelLayoutCacheMissCount: glyphMetrics.labelLayoutCacheMissCount,
+      labelPoolSize: glyphMetrics.labelPoolSize,
+      labelTextureUpdateCount: glyphMetrics.labelTextureUpdateCount,
       vertexCount,
     };
 
@@ -205,14 +175,12 @@ function createEmptyBatchMetrics(): WaveformGpuBatchMetrics {
     bufferUpdateCount: 0,
     bufferUpdateMs: 0,
     drawLayerCount: 0,
+    labelLayoutCacheHitCount: 0,
+    labelLayoutCacheMissCount: 0,
     labelPoolSize: 0,
     labelTextureUpdateCount: 0,
     vertexCount: 0,
   };
-}
-
-function getLabelPoolKey(text: string, fill: number, fontSize: number) {
-  return `${fontSize}:${fill}:${text}`;
 }
 
 class WaveformGpuBatchBuilder {
@@ -453,24 +421,6 @@ function getWaveformSolidColorShader() {
   }
 
   return sharedSolidColorShader;
-}
-
-function createBatchText(text: string, fill: number, fontSize: number, x: number, y: number) {
-  return new BitmapText({
-    text,
-    style: createBatchTextStyle(fill, fontSize),
-    x,
-    y,
-  });
-}
-
-function createBatchTextStyle(fill: number, fontSize: number) {
-  return {
-    fill,
-    fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
-    fontSize,
-    fontWeight: '500',
-  } as const;
 }
 
 function colorToRgba(color: number, alpha: number) {

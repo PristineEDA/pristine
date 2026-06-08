@@ -1,15 +1,19 @@
 export interface WaveformPerfSample {
   averageFps: number;
   averageRenderMs: number;
+  displayViewportOnlyUpdateCount: number;
   displayViewportUpdateCount: number;
   droppedFrameCount: number;
   frameIntervalMs: number;
   frameParseMs: number;
   gpuBufferUpdateMs: number;
+  labelLayoutCacheHitCount: number;
+  labelLayoutCacheMissCount: number;
   labelTextureUpdateCount: number;
   phase: string;
   pipeRoundtripMs: number;
   pixiRenderMs: number;
+  idleViewportCommitCount: number;
   reactViewportCommitCount: number;
   renderCount: number;
   sceneUpdateMs: number;
@@ -24,6 +28,14 @@ export interface WaveformPerfSummary {
   sampleCount: number;
   stages: Record<WaveformPerfStageName, WaveformPerfStageSummary>;
   stageShare: Record<WaveformPerfStageName, number>;
+}
+
+export interface WaveformPerfComparisonRow {
+  after: number;
+  before: number;
+  delta: number;
+  deltaPercent: number;
+  metric: string;
 }
 
 export interface WaveformPerfPhaseSummary {
@@ -43,10 +55,14 @@ export interface WaveformPerfStageSummary {
 }
 
 export type WaveformPerfStageName =
+  | 'displayViewportOnlyUpdateDelta'
   | 'frameIntervalMs'
   | 'frameParseMs'
   | 'gpuBufferUpdateMs'
   | 'inputToRenderDelta'
+  | 'idleViewportCommitDelta'
+  | 'labelLayoutCacheHitDelta'
+  | 'labelLayoutCacheMissDelta'
   | 'labelTextureUpdateDelta'
   | 'pipeRoundtripMs'
   | 'pixiRenderMs'
@@ -85,17 +101,38 @@ export class WaveformPerfRecorder {
       phases,
     };
   }
+
+  public compare(before: WaveformPerfSummary): WaveformPerfComparisonRow[] {
+    return compareWaveformPerfSummaries(before, this.summarize());
+  }
+}
+
+export function compareWaveformPerfSummaries(before: WaveformPerfSummary, after: WaveformPerfSummary): WaveformPerfComparisonRow[] {
+  return [
+    createComparisonRow('averageFps', before.averageFps, after.averageFps),
+    createComparisonRow('averageRenderMs', before.averageRenderMs, after.averageRenderMs),
+    createComparisonRow('droppedFrameCount', before.droppedFrameCount, after.droppedFrameCount),
+    createComparisonRow('p95FrameIntervalMs', before.stages.frameIntervalMs.p95, after.stages.frameIntervalMs.p95),
+    createComparisonRow('avgGpuBufferUpdateMs', before.stages.gpuBufferUpdateMs.average, after.stages.gpuBufferUpdateMs.average),
+    createComparisonRow('avgPixiRenderMs', before.stages.pixiRenderMs.average, after.stages.pixiRenderMs.average),
+    createComparisonRow('avgReactCommitDelta', before.stages.reactCommitDelta.average, after.stages.reactCommitDelta.average),
+    createComparisonRow('avgLabelTextureUpdateDelta', before.stages.labelTextureUpdateDelta.average, after.stages.labelTextureUpdateDelta.average),
+  ];
 }
 
 function summarizeSamples(samples: readonly WaveformPerfSample[]): Omit<WaveformPerfSummary, 'phases'> {
   const frameIntervals = samples.map((sample) => sample.frameIntervalMs);
   const pixiRenderMs = samples.map((sample) => sample.pixiRenderMs);
   const stageValues: Record<WaveformPerfStageName, number[]> = {
+    displayViewportOnlyUpdateDelta: getDeltaSeries(samples, (sample) => sample.displayViewportOnlyUpdateCount),
     displayViewportUpdateDelta: getDeltaSeries(samples, (sample) => sample.displayViewportUpdateCount),
     frameIntervalMs: frameIntervals,
     frameParseMs: samples.map((sample) => sample.frameParseMs),
     gpuBufferUpdateMs: getDeltaSeries(samples, (sample) => sample.gpuBufferUpdateMs),
     inputToRenderDelta: getDeltaSeries(samples, (sample) => sample.timestampMs),
+    idleViewportCommitDelta: getDeltaSeries(samples, (sample) => sample.idleViewportCommitCount),
+    labelLayoutCacheHitDelta: getDeltaSeries(samples, (sample) => sample.labelLayoutCacheHitCount),
+    labelLayoutCacheMissDelta: getDeltaSeries(samples, (sample) => sample.labelLayoutCacheMissCount),
     labelTextureUpdateDelta: getDeltaSeries(samples, (sample) => sample.labelTextureUpdateCount),
     pipeRoundtripMs: samples.map((sample) => sample.pipeRoundtripMs),
     pixiRenderMs,
@@ -123,11 +160,15 @@ function summarizeSamples(samples: readonly WaveformPerfSample[]): Omit<Waveform
       sampleCount: samples.length,
       stages,
       stageShare: {
+        displayViewportOnlyUpdateDelta: 0,
         displayViewportUpdateDelta: 0,
         frameIntervalMs: 0,
         frameParseMs: stages.frameParseMs.average / stageTotal,
         gpuBufferUpdateMs: stages.gpuBufferUpdateMs.average / stageTotal,
         inputToRenderDelta: 0,
+        idleViewportCommitDelta: 0,
+        labelLayoutCacheHitDelta: 0,
+        labelLayoutCacheMissDelta: 0,
         labelTextureUpdateDelta: 0,
         pipeRoundtripMs: stages.pipeRoundtripMs.average / stageTotal,
         pixiRenderMs: stages.pixiRenderMs.average / stageTotal,
@@ -136,6 +177,17 @@ function summarizeSamples(samples: readonly WaveformPerfSample[]): Omit<Waveform
         sceneUpdateMs: stages.sceneUpdateMs.average / stageTotal,
       },
     };
+}
+
+function createComparisonRow(metric: string, before: number, after: number): WaveformPerfComparisonRow {
+  const delta = after - before;
+  return {
+    after,
+    before,
+    delta,
+    deltaPercent: before === 0 ? 0 : delta / before,
+    metric,
+  };
 }
 
 function getDeltaSeries(samples: readonly WaveformPerfSample[], readValue: (sample: WaveformPerfSample) => number) {

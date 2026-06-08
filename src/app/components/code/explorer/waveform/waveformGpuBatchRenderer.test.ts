@@ -17,6 +17,8 @@ describe('WaveformGpuBatchRenderer', () => {
     expect(warmup.bufferReallocCount).toBeGreaterThan(0);
     expect(warmup.labelPoolSize).toBe(1);
     expect(warmup.labelTextureUpdateCount).toBe(1);
+    expect(warmup.labelLayoutCacheHitCount).toBe(0);
+    expect(warmup.labelLayoutCacheMissCount).toBe(1);
 
     renderer.reset();
     addRepresentativeWaveformGeometry(renderer);
@@ -29,6 +31,8 @@ describe('WaveformGpuBatchRenderer', () => {
     expect(preparedHitUpdate.bufferReallocCount).toBe(0);
     expect(preparedHitUpdate.labelPoolSize).toBe(1);
     expect(preparedHitUpdate.labelTextureUpdateCount).toBe(0);
+    expect(preparedHitUpdate.labelLayoutCacheHitCount).toBe(1);
+    expect(preparedHitUpdate.labelLayoutCacheMissCount).toBe(0);
   });
 });
 
