@@ -1,11 +1,11 @@
-import { describe, expect, it, vi } from 'vitest';
-import { BitmapText, Container, Text, Texture } from 'pixi.js';
+import { describe, expect, it } from 'vitest';
+import { BitmapText, Container, Text } from 'pixi.js';
 
-import { clipWaveformLineToBounds, createWaveformScene, getWaveformBusHexagonBevel, getWaveformBusLabelBounds, getWaveformBusSpecialStateHexDigitWidth, getWaveformDigitalSegmentStrokeWidth, getWaveformDigitalSpecialStateBounds, getWaveformFittedBusLabelText, updateWaveformSceneCursor, updateWaveformScenePan, updateWaveformSceneSelection, updateWaveformSceneVerticalScroll, updateWaveformSceneViewport, waveformHighImpedanceStripeSpacing, waveformLayerNames, waveformUnknownStripeSpacing, type WaveformSignalTextureCacheEntry } from './createWaveformScene';
+import { clipWaveformLineToBounds, createWaveformScene, getWaveformBusHexagonBevel, getWaveformBusLabelBounds, getWaveformBusSpecialStateHexDigitWidth, getWaveformDigitalSegmentStrokeWidth, getWaveformDigitalSpecialStateBounds, getWaveformFittedBusLabelText, updateWaveformSceneCursor, updateWaveformScenePan, updateWaveformSceneSelection, updateWaveformSceneVerticalScroll, updateWaveformSceneViewport, waveformHighImpedanceStripeSpacing, waveformLayerNames, waveformUnknownStripeSpacing } from './createWaveformScene';
 import { fitWaveformViewport, getInitialWaveformViewport, getWaveformCanvasHeightForData, getWaveformDigitalPulseFillCount, getWaveformDisplayRows, getWaveformRulerScrollIndicatorMetrics, getWaveformShapeCounts, getWaveformSignalLaneY, timeToX, waveformHeaderHeight } from './waveformLayout';
-import { parseWaveformBinaryFrame } from './waveformBinaryFrame';
+import { createWaveformBinaryFrameFromDataset, parseWaveformBinaryFrame, WaveformBinaryValueKind, waveformBinaryFrameVersionV2, type WaveformBinaryFrameSegmentInput } from './waveformBinaryFrame';
 import { createWaveformFixtureFrame, waveformFixtureData, waveformTransitionFixtureData as mockWaveformData } from './waveformTestFixtures';
-import type { WaveformDataSet } from './waveformTypes';
+import type { WaveformDataSet, WaveformViewport } from './waveformTypes';
 
 describe('createWaveformScene', () => {
   it('builds explicit render layers and reports X/Z state coverage', () => {
@@ -47,127 +47,75 @@ describe('createWaveformScene', () => {
     expect(scene.stateCounts.zStateCount).toBeGreaterThan(0);
     expect(scene.renderStats.visibleRowCount).toBeGreaterThan(0);
     expect(scene.renderStats.culledRowCount).toBeGreaterThan(0);
-    expect(scene.renderStats.renderedSignalCount).toBeGreaterThan(0);
-    expect(scene.renderStats.renderedSignalCount).toBeLessThan(mockWaveformData.signals.length);
-    expect(scene.renderStats.renderedSegmentCount).toBeGreaterThan(0);
-    expect(scene.renderStats.drawnHorizontalSegmentCount).toBeGreaterThan(0);
+    expect(scene.renderStats.renderedSignalCount).toBe(0);
+    expect(scene.renderStats.renderedSegmentCount).toBe(0);
+    expect(scene.renderStats.drawnHorizontalSegmentCount).toBe(0);
     expect(scene.renderStats.collapsedSegmentCount).toBe(scene.renderStats.skippedHorizontalSegmentCount);
-    expect(scene.renderStats.busFullHexagonCount).toBeGreaterThan(0);
+    expect(scene.renderStats.busFullHexagonCount).toBe(0);
 
     scene.world.destroy({ children: true });
   });
 
-  it('records cache misses and hits for cacheable signal textures outside dense mode', () => {
-    const cache = new Map<string, WaveformSignalTextureCacheEntry>();
-    const signalTextureCache = {
-      get: (key: string) => cache.get(key),
-      set: (key: string, entry: WaveformSignalTextureCacheEntry) => cache.set(key, entry),
-    };
-    const textureRenderer = {
-      generateTexture: () => Texture.EMPTY,
-    };
-    const baseOptions = {
-      cursorTime: mockWaveformData.cursorTime,
-      data: mockWaveformData,
-      height: 420,
-      selectedSignalId: null,
-      signalTextureCache,
-      textureRenderer,
-      viewport: { startTime: 0, endTime: 80 },
-      width: 900,
-    };
-
-    const firstScene = createWaveformScene(baseOptions);
-    firstScene.world.destroy({ children: true });
-    const secondScene = createWaveformScene(baseOptions);
-
-    expect(firstScene.renderStats.cacheableSignalCount).toBeGreaterThan(0);
-    expect(firstScene.renderStats.cacheMissCount).toBeGreaterThan(0);
-    expect(firstScene.renderStats.cachedSignalCount).toBeGreaterThan(0);
-    expect(secondScene.renderStats.cacheHitCount).toBeGreaterThan(0);
-
-    secondScene.world.destroy({ children: true });
-  });
-
-  it('does not reuse cached bus X/Z labels across different signal widths', () => {
-    const cache = new Map<string, WaveformSignalTextureCacheEntry>();
-    const signalTextureCache = {
-      get: (key: string) => cache.get(key),
-      set: (key: string, entry: WaveformSignalTextureCacheEntry) => cache.set(key, entry),
-    };
-    const textureRenderer = {
-      generateTexture: () => Texture.EMPTY,
-    };
-
-    const width4Scene = createWaveformScene({
-      cursorTime: 0,
-      data: createBusSpecialStateDataSet(4, 80),
-      height: 120,
-      selectedSignalId: null,
-      signalTextureCache,
-      textureRenderer,
-      viewport: { startTime: 0, endTime: 3200 },
-      width: 900,
-    });
-    const width8Scene = createWaveformScene({
-      cursorTime: 0,
-      data: createBusSpecialStateDataSet(8, 80),
-      height: 120,
-      selectedSignalId: null,
-      signalTextureCache,
-      textureRenderer,
-      viewport: { startTime: 0, endTime: 3200 },
-      width: 900,
-    });
-
-    expect(width4Scene.renderStats.cacheMissCount).toBeGreaterThan(0);
-    expect(width8Scene.renderStats.cacheMissCount).toBeGreaterThan(0);
-    expect(width8Scene.renderStats.cacheHitCount).toBe(0);
-    expect(cache.size).toBeGreaterThanOrEqual(2);
-
-    width4Scene.world.destroy({ children: true });
-    width8Scene.world.destroy({ children: true });
-  });
-
-  it('generates cache textures at the renderer resolution for crisp cached rows', () => {
-    const cache = new Map<string, WaveformSignalTextureCacheEntry>();
-    const signalTextureCache = {
-      get: (key: string) => cache.get(key),
-      set: (key: string, entry: WaveformSignalTextureCacheEntry) => cache.set(key, entry),
-    };
-    const generateTexture = vi.fn(() => Texture.EMPTY);
+  it('does not render legacy signal content before a binary frame is available', () => {
     const scene = createWaveformScene({
       cursorTime: mockWaveformData.cursorTime,
       data: mockWaveformData,
       height: 420,
-      renderResolution: 2,
       selectedSignalId: null,
-      signalTextureCache,
-      textureRenderer: { generateTexture },
       viewport: { startTime: 0, endTime: 80 },
       width: 900,
     });
 
-    expect(generateTexture).toHaveBeenCalledWith(expect.objectContaining({
-      antialias: false,
-      resolution: 2,
-    }));
+    expect(scene.renderStats.renderedSignalCount).toBe(0);
+    expect(scene.renderStats.renderedSegmentCount).toBe(0);
+    expect(scene.nodes.contentBatch.visible).toBe(false);
+    expect(scene.nodes.contentRows.visible).toBe(true);
 
     scene.world.destroy({ children: true });
   });
 
   it('skips invisible digital segments while preserving visible special-state labels', () => {
-    const viewport = fitWaveformViewport(mockWaveformData);
+    const data: WaveformDataSet = {
+      id: 'digital-zero-width-fixture',
+      title: 'digital-zero-width-fixture',
+      timescaleUnit: 'ns',
+      duration: 1000,
+      cursorTime: 0,
+      groups: [{ id: 'g0', label: 'g0' }],
+      signals: [
+        {
+          id: 'logic',
+          groupId: 'g0',
+          name: 'logic',
+          path: 'g0.logic',
+          kind: 'logic',
+          color: '#38d8ff',
+          transitions: [
+            { time: 0, value: 'x' },
+            { time: 100, value: 'z' },
+            { time: 200, value: '0' },
+            { time: 200.1, value: '1' },
+            { time: 200.2, value: '0' },
+            { time: 200.3, value: '1' },
+            { time: 300, value: 'x' },
+            { time: 340, value: '0' },
+          ],
+        },
+      ],
+    };
+    const viewport = { startTime: 0, endTime: data.duration };
+    const frame = createBinaryFrameFromTransitions(data, viewport, 100);
     const scene = createWaveformScene({
-      cursorTime: mockWaveformData.cursorTime,
-      data: mockWaveformData,
-      height: getWaveformCanvasHeightForData(mockWaveformData),
+      cursorTime: data.cursorTime,
+      data,
+      frame,
+      height: getWaveformCanvasHeightForData(data),
       selectedSignalId: null,
       viewport,
-      width: 360,
+      width: 100,
     });
     const stateLabels = collectText(scene.layers.content).filter((text) => text === 'x' || text === 'z');
-    const shapeCounts = getWaveformShapeCounts(mockWaveformData, viewport);
+    const shapeCounts = getWaveformShapeCounts(data, viewport);
 
     expect(scene.renderStats.skippedHorizontalSegmentCount).toBeGreaterThan(0);
     expect(scene.renderStats.collapsedSegmentCount).toBeGreaterThan(0);
@@ -235,12 +183,12 @@ describe('createWaveformScene', () => {
     });
     const initialGpuUpdateCount = scene.renderStats.gpuBufferUpdateCount;
     const initialGpuVertexCount = scene.renderStats.gpuVertexCount;
-    const initialRowContentRedrawCount = scene.renderStats.rowContentRedrawCount;
     const firstSignalNode = scene.rowRegistry.activeRows.get('signal:u_top_module1-clk');
     const firstMeshContainer = firstSignalNode?.contentContainer.children[0] ?? null;
 
     expect(initialGpuUpdateCount).toBeGreaterThan(0);
     expect(initialGpuVertexCount).toBeGreaterThan(0);
+    expect(scene.renderStats.gpuDrawLayerCount).toBeLessThanOrEqual(8);
 
     expect(updateWaveformScenePan(scene, { startTime: 50, endTime: 150 })).toBe(true);
 
@@ -250,13 +198,10 @@ describe('createWaveformScene', () => {
     expect(nextMeshContainer).toBe(firstMeshContainer);
     expect(scene.renderStats.panBufferHitCount).toBe(1);
     expect(scene.renderStats.panBufferMissCount).toBe(0);
-    expect(scene.renderStats.rowContentRedrawCount).toBe(0);
-    expect(scene.renderStats.rowContentSkipCount).toBeGreaterThan(0);
     expect(scene.renderStats.gpuBufferUpdateCount).toBe(0);
     expect(scene.renderStats.gpuDrawLayerCount).toBeLessThanOrEqual(8);
     expect(scene.renderStats.gpuVertexCount).toBeGreaterThan(0);
     expect(scene.renderStats.meshVertexCount).toBe(scene.renderStats.gpuVertexCount);
-    expect(initialRowContentRedrawCount).toBeGreaterThan(0);
 
     scene.world.destroy({ children: true });
   });
@@ -292,6 +237,7 @@ describe('createWaveformScene', () => {
     const scene = createWaveformScene({
       cursorTime: 0,
       data,
+      frame: createBinaryFrameFromTransitions(data, { startTime: 0, endTime: 1000 }, 360),
       height: 120,
       renderResolution: 1,
       selectedSignalId: null,
@@ -308,11 +254,36 @@ describe('createWaveformScene', () => {
   });
 
   it('keeps single-bit X/Z text labels as single characters', () => {
-    const viewport = fitWaveformViewport(mockWaveformData);
+    const data: WaveformDataSet = {
+      id: 'single-bit-special-state-fixture',
+      title: 'single-bit-special-state-fixture',
+      timescaleUnit: 'ns',
+      duration: 120,
+      cursorTime: 0,
+      groups: [{ id: 'g0', label: 'g0' }],
+      signals: [
+        {
+          id: 'logic',
+          groupId: 'g0',
+          name: 'logic',
+          path: 'g0.logic',
+          kind: 'logic',
+          color: '#38d8ff',
+          transitions: [
+            { time: 0, value: 'x' },
+            { time: 40, value: 'z' },
+            { time: 80, value: '0' },
+            { time: 120, value: '1' },
+          ],
+        },
+      ],
+    };
+    const viewport = { startTime: 0, endTime: data.duration };
     const scene = createWaveformScene({
-      cursorTime: mockWaveformData.cursorTime,
-      data: mockWaveformData,
-      height: getWaveformCanvasHeightForData(mockWaveformData),
+      cursorTime: data.cursorTime,
+      data,
+      frame: createBinaryFrameFromTransitions(data, viewport, 900),
+      height: getWaveformCanvasHeightForData(data),
       selectedSignalId: null,
       viewport,
       width: 900,
@@ -320,7 +291,7 @@ describe('createWaveformScene', () => {
     const stateLabels = collectText(scene.layers.content).filter((text) => text === 'x' || text === 'z');
     const xLabels = stateLabels.filter((text) => text === 'x');
     const zLabels = stateLabels.filter((text) => text === 'z');
-    const shapeCounts = getWaveformShapeCounts(mockWaveformData, viewport);
+    const shapeCounts = getWaveformShapeCounts(data, viewport);
 
     expect(xLabels.length).toBeGreaterThan(0);
     expect(zLabels.length).toBeGreaterThan(0);
@@ -339,12 +310,15 @@ describe('createWaveformScene', () => {
     ];
 
     for (const { expectedX, expectedZ, signalWidth } of cases) {
+      const data = createBusSpecialStateDataSet(signalWidth);
+      const viewport = { startTime: 0, endTime: 120 };
       const scene = createWaveformScene({
         cursorTime: 0,
-        data: createBusSpecialStateDataSet(signalWidth),
+        data,
+        frame: createBinaryFrameFromTransitions(data, viewport, 900),
         height: 120,
         selectedSignalId: null,
-        viewport: { startTime: 0, endTime: 120 },
+        viewport,
         width: 900,
       });
       const labels = collectText(scene.layers.content);
@@ -361,12 +335,15 @@ describe('createWaveformScene', () => {
   });
 
   it('truncates bus value and X/Z labels with trailing dots when hexagons shrink', () => {
+    const data = createBusSpecialStateDataSet(8, 6);
+    const viewport = { startTime: 0, endTime: 520 };
     const scene = createWaveformScene({
       cursorTime: 0,
-      data: createBusSpecialStateDataSet(8, 6),
+      data,
+      frame: createBinaryFrameFromTransitions(data, viewport, 220),
       height: 120,
       selectedSignalId: null,
-      viewport: { startTime: 0, endTime: 520 },
+      viewport,
       width: 220,
     });
     const labels = collectText(scene.layers.content);
@@ -549,7 +526,7 @@ describe('createWaveformScene', () => {
     scene.world.destroy({ children: true });
   });
 
-  it('reuses unchanged row content across viewport updates when a row signature stays stable', () => {
+  it('keeps row containers stable across viewport updates before a binary frame arrives', () => {
     const data: WaveformDataSet = {
       id: 'row-signature-data',
       title: 'row-signature',
@@ -600,21 +577,20 @@ describe('createWaveformScene', () => {
     });
     const staticRowNode = scene.rowRegistry.activeRows.get('signal:static-low');
     const toggledRowNode = scene.rowRegistry.activeRows.get('signal:toggle');
-    const staticSignatureBefore = staticRowNode?.contentSignature ?? null;
-    const toggledSignatureBefore = toggledRowNode?.contentSignature ?? null;
-
-    expect(staticSignatureBefore).not.toBeNull();
-    expect(toggledSignatureBefore).not.toBeNull();
+    expect(staticRowNode?.contentMetrics.renderedSegmentCount ?? -1).toBe(0);
+    expect(toggledRowNode?.contentMetrics.renderedSegmentCount ?? -1).toBe(0);
 
     updateWaveformSceneViewport(scene, { startTime: 80, endTime: 180 });
 
-    const staticSignatureAfter = scene.rowRegistry.activeRows.get('signal:static-low')?.contentSignature ?? null;
-    const toggledSignatureAfter = scene.rowRegistry.activeRows.get('signal:toggle')?.contentSignature ?? null;
+    const staticRowAfter = scene.rowRegistry.activeRows.get('signal:static-low');
+    const toggledRowAfter = scene.rowRegistry.activeRows.get('signal:toggle');
 
-    expect(staticSignatureAfter).not.toBe(staticSignatureBefore);
-    expect(toggledSignatureAfter).not.toBe(toggledSignatureBefore);
-    expect(scene.renderStats.rowContentSkipCount).toBe(0);
-    expect(scene.renderStats.rowContentRedrawCount).toBe(2);
+    expect(staticRowAfter).toBe(staticRowNode);
+    expect(toggledRowAfter).toBe(toggledRowNode);
+    expect(staticRowAfter?.contentMetrics.renderedSegmentCount ?? -1).toBe(0);
+    expect(toggledRowAfter?.contentMetrics.renderedSegmentCount ?? -1).toBe(0);
+    expect(scene.renderStats.renderedSignalCount).toBe(0);
+    expect(scene.renderStats.renderedSegmentCount).toBe(0);
 
     scene.world.destroy({ children: true });
   });
@@ -649,8 +625,7 @@ describe('createWaveformScene', () => {
     expect(scene.renderStats.panBufferHitCount).toBe(1);
     expect(scene.renderStats.panBufferMissCount).toBe(0);
     expect(scene.renderStats.panPixelShiftCount).toBeGreaterThan(0);
-    expect(scene.renderStats.rowContentRedrawCount).toBe(0);
-    expect(scene.renderStats.rowContentSkipCount).toBeGreaterThan(0);
+    expect(scene.renderStats.gpuBufferUpdateCount).toBe(0);
 
     scene.world.destroy({ children: true });
   });
@@ -684,6 +659,68 @@ function createBusSpecialStateDataSet(width: number, segmentCount = 3): Waveform
       },
     ],
   };
+}
+
+function createBinaryFrameFromTransitions(data: WaveformDataSet, viewport: WaveformViewport, width: number) {
+  const rows = getWaveformDisplayRows(data).filter((row) => row.kind === 'signal');
+  const segments: WaveformBinaryFrameSegmentInput[] = [];
+
+  for (const row of rows) {
+    const signal = row.signal;
+    const transitions = signal.transitions ?? [];
+    if (transitions.length === 0) {
+      continue;
+    }
+
+    for (let index = 0; index < transitions.length; index += 1) {
+      const transition = transitions[index];
+      const nextTransition = transitions[index + 1];
+      if (!transition) {
+        continue;
+      }
+
+      const time0 = Math.max(transition.time, viewport.startTime);
+      const time1 = Math.min(nextTransition?.time ?? data.duration, viewport.endTime);
+      if (time1 <= time0) {
+        continue;
+      }
+
+      const value = String(transition.value);
+      segments.push({
+        label: signal.kind === 'bus' && value !== 'x' && value !== 'z' ? value : null,
+        laneY: row.y,
+        signalIndex: row.signalIndex,
+        time0,
+        time1,
+        valueKind: getBinaryValueKind(signal.kind, value),
+        x0: timeToX(time0, viewport, width),
+        x1: timeToX(time1, viewport, width),
+      });
+    }
+  }
+
+  return parseWaveformBinaryFrame(createWaveformBinaryFrameFromDataset(data, segments, {
+    preparedRange: viewport,
+    signalIndices: rows.map((row) => row.signalIndex),
+    version: waveformBinaryFrameVersionV2,
+    viewportRange: viewport,
+  }));
+}
+
+function getBinaryValueKind(kind: WaveformDataSet['signals'][number]['kind'], value: string) {
+  if (value === 'x') {
+    return WaveformBinaryValueKind.Unknown;
+  }
+
+  if (value === 'z') {
+    return WaveformBinaryValueKind.HighImpedance;
+  }
+
+  if (kind === 'bus') {
+    return WaveformBinaryValueKind.Bus;
+  }
+
+  return value === '1' ? WaveformBinaryValueKind.High : WaveformBinaryValueKind.Low;
 }
 
 function collectText(container: Container): string[] {

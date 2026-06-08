@@ -157,10 +157,6 @@ async function readCanvasStats(canvasHost: ReturnType<Page['getByTestId']>) {
   const readNumber = async (attribute: string) => Number(await canvasHost.getAttribute(attribute) ?? '0');
 
   return {
-    cacheHitCount: await readNumber('data-cache-hit-count'),
-    cacheMissCount: await readNumber('data-cache-miss-count'),
-    cacheableSignalCount: await readNumber('data-cacheable-signal-count'),
-    cachedSignalCount: await readNumber('data-cached-signal-count'),
     culledRowCount: await readNumber('data-culled-row-count'),
     displayViewportUpdateCount: await readNumber('data-display-viewport-update-count'),
     droppedFrameCount: await readNumber('data-dropped-frame-count'),
@@ -182,8 +178,6 @@ async function readCanvasStats(canvasHost: ReturnType<Page['getByTestId']>) {
     pixiRenderMs: await readNumber('data-pixi-render-ms'),
     reactViewportCommitCount: await readNumber('data-react-viewport-commit-count'),
     rowAttachCount: await readNumber('data-row-attach-count'),
-    rowContentRedrawCount: await readNumber('data-row-content-redraw-count'),
-    rowContentSkipCount: await readNumber('data-row-content-skip-count'),
     rowRecycleCount: await readNumber('data-row-recycle-count'),
     rowReuseCount: await readNumber('data-row-reuse-count'),
     renderResolution: await readNumber('data-render-resolution'),
@@ -191,8 +185,6 @@ async function readCanvasStats(canvasHost: ReturnType<Page['getByTestId']>) {
     renderedSignalCount: await readNumber('data-rendered-signal-count'),
     sourceSegmentCount: await readNumber('data-source-segment-count'),
     suppressedLabelCount: await readNumber('data-suppressed-label-count'),
-    textureCacheBytes: await readNumber('data-texture-cache-bytes'),
-    textureCacheSize: await readNumber('data-texture-cache-size'),
     cursorUpdateCount: await readNumber('data-cursor-update-count'),
     selectionUpdateCount: await readNumber('data-selection-update-count'),
     sceneUpdateMs: await readNumber('data-scene-update-ms'),
@@ -241,6 +233,52 @@ async function waitForNextRender(canvasHost: ReturnType<Page['getByTestId']>, ac
   }).toBeGreaterThan(beforeRenderCount);
 }
 
+async function readInteractionCounters(canvasHost: ReturnType<Page['getByTestId']>) {
+  const readNumber = async (attribute: string) => Number(await canvasHost.getAttribute(attribute) ?? '0');
+
+  return {
+    cursorUpdateCount: await readNumber('data-cursor-update-count'),
+    displayViewportUpdateCount: await readNumber('data-display-viewport-update-count'),
+    gpuBufferUpdateCount: await readNumber('data-gpu-buffer-update-count'),
+    panBufferHitCount: await readNumber('data-pan-buffer-hit-count'),
+    panBufferMissCount: await readNumber('data-pan-buffer-miss-count'),
+    renderCount: await readNumber('data-render-count'),
+    selectionUpdateCount: await readNumber('data-selection-update-count'),
+    verticalScrollUpdateCount: await readNumber('data-vertical-scroll-update-count'),
+    viewportContentUpdateCount: await readNumber('data-viewport-content-update-count'),
+  };
+}
+
+function hasInteractionProgress(
+  before: Awaited<ReturnType<typeof readInteractionCounters>>,
+  after: Awaited<ReturnType<typeof readInteractionCounters>>,
+) {
+  return Object.entries(after).some(([key, value]) => value > before[key as keyof typeof before]);
+}
+
+async function runStressInteraction(
+  window: Page,
+  canvasHost: ReturnType<Page['getByTestId']>,
+  action: () => Promise<void>,
+) {
+  const before = await readInteractionCounters(canvasHost);
+  const deadline = Date.now() + 2000;
+
+  await action();
+
+  while (Date.now() < deadline) {
+    const after = await readInteractionCounters(canvasHost);
+
+    if (hasInteractionProgress(before, after)) {
+      return true;
+    }
+
+    await window.waitForTimeout(40);
+  }
+
+  return false;
+}
+
 async function capturePerfSample(
   window: Page,
   panel: ReturnType<Page['getByTestId']>,
@@ -279,8 +317,6 @@ function diffInteractionMetrics(
     panBufferMissCount: end.panBufferMissCount - start.panBufferMissCount,
     reactViewportCommitCount: end.reactViewportCommitCount - start.reactViewportCommitCount,
     rowAttachCount: end.rowAttachCount - start.rowAttachCount,
-    rowContentRedrawCount: end.rowContentRedrawCount - start.rowContentRedrawCount,
-    rowContentSkipCount: end.rowContentSkipCount - start.rowContentSkipCount,
     rowRecycleCount: end.rowRecycleCount - start.rowRecycleCount,
     rowReuseCount: end.rowReuseCount - start.rowReuseCount,
     cursorUpdateCount: end.cursorUpdateCount - start.cursorUpdateCount,
@@ -349,13 +385,17 @@ function recordWaveformPerfSample(recorder: WaveformPerfRecorder, sample: Awaite
   recorder.record({
     averageFps: sample.panelMetrics.averageFps,
     averageRenderMs: sample.panelMetrics.averageRenderMs,
+    displayViewportUpdateCount: sample.canvasStats.displayViewportUpdateCount,
     droppedFrameCount: sample.canvasStats.droppedFrameCount,
     frameIntervalMs: sample.canvasStats.frameIntervalP95Ms,
     frameParseMs: sample.canvasStats.frameParseMs,
     gpuBufferUpdateMs: sample.canvasStats.gpuBufferUpdateMs,
+    labelTextureUpdateCount: sample.canvasStats.labelTextureUpdateCount,
+    phase: sample.phase,
     pipeRoundtripMs: sample.canvasStats.pipeRoundtripMs,
     pixiRenderMs: sample.canvasStats.pixiRenderMs,
     reactViewportCommitCount: sample.canvasStats.reactViewportCommitCount,
+    renderCount: sample.renderCount,
     sceneUpdateMs: sample.canvasStats.sceneUpdateMs,
     timestampMs: sample.elapsedMs,
   });
@@ -538,8 +578,7 @@ test('waveform dense render opt-in baseline', async () => {
     expect(finalStats.gpuDrawLayerCount).toBeGreaterThan(0);
     expect(finalStats.gpuDrawLayerCount).toBeLessThanOrEqual(8);
     expect(finalStats.gpuBufferCapacityVertexCount).toBeGreaterThan(0);
-    expect(finalStats.textureCacheBytes).toBeLessThanOrEqual(32 * 1024 * 1024);
-    expect(finalStats.gpuDrawLayerCount).toBeLessThanOrEqual(8);
+    expect(finalStats.gpuBufferUpdateCount).toBeGreaterThan(0);
     expect(samples.length).toBeGreaterThanOrEqual(10);
 
     await attachPerfArtifact('waveform-binary-render-baseline.json', baselinePerfArtifact);
@@ -562,6 +601,7 @@ test('packaged waveform sustained 10s viewport and interaction perf', async () =
     const panLeftButton = window.getByRole('button', { name: /pan waveform left/i });
     const zoomInButton = window.getByTestId('waveform-zoom-in');
     const zoomOutButton = window.getByTestId('waveform-zoom-out');
+    const fitButton = window.getByTestId('waveform-fit');
     const signalRowIds = [
       'waveform-signal-row-u_top_module1-counting',
       'waveform-signal-row-dense-signal-40',
@@ -585,6 +625,14 @@ test('packaged waveform sustained 10s viewport and interaction perf', async () =
       cursorEnd: null as Awaited<ReturnType<typeof readCanvasStats>> | null,
       selectionStart: null as Awaited<ReturnType<typeof readCanvasStats>> | null,
       selectionEnd: null as Awaited<ReturnType<typeof readCanvasStats>> | null,
+      rapidMixedStart: null as Awaited<ReturnType<typeof readCanvasStats>> | null,
+      rapidMixedEnd: null as Awaited<ReturnType<typeof readCanvasStats>> | null,
+      largeRangeStart: null as Awaited<ReturnType<typeof readCanvasStats>> | null,
+      largeRangeEnd: null as Awaited<ReturnType<typeof readCanvasStats>> | null,
+      extremeZoomStart: null as Awaited<ReturnType<typeof readCanvasStats>> | null,
+      extremeZoomEnd: null as Awaited<ReturnType<typeof readCanvasStats>> | null,
+      verticalThenInteractStart: null as Awaited<ReturnType<typeof readCanvasStats>> | null,
+      verticalThenInteractEnd: null as Awaited<ReturnType<typeof readCanvasStats>> | null,
     };
     const phaseStartedAt = Date.now();
 
@@ -639,6 +687,84 @@ test('packaged waveform sustained 10s viewport and interaction perf', async () =
     }
 
     phaseSnapshots.selectionEnd = await readCanvasStats(canvasHost);
+    phaseSnapshots.rapidMixedStart = phaseSnapshots.selectionEnd;
+
+    for (let index = 0; index < 12; index += 1) {
+      await runStressInteraction(window, canvasHost, async () => {
+        if (index % 3 === 0) {
+          await canvasHost.hover();
+          await window.keyboard.down('Shift');
+          await window.mouse.wheel(index % 2 === 0 ? 900 : -900, 0);
+          await window.keyboard.up('Shift');
+        } else {
+          await (index % 2 === 0 ? zoomInButton : zoomOutButton).click();
+        }
+      });
+      samples.push(await captureAndRecordPerfSample(perfRecorder, window, panel, canvasHost, 'rapid-pan-zoom', Date.now() - phaseStartedAt));
+      await window.waitForTimeout(80);
+    }
+
+    phaseSnapshots.rapidMixedEnd = await readCanvasStats(canvasHost);
+    phaseSnapshots.largeRangeStart = phaseSnapshots.rapidMixedEnd;
+
+    for (let index = 0; index < 8; index += 1) {
+      await runStressInteraction(window, canvasHost, async () => {
+        await panRightButton.click();
+      });
+      samples.push(await captureAndRecordPerfSample(perfRecorder, window, panel, canvasHost, 'large-pan-right', Date.now() - phaseStartedAt));
+      await window.waitForTimeout(80);
+    }
+    for (let index = 0; index < 8; index += 1) {
+      await runStressInteraction(window, canvasHost, async () => {
+        await panLeftButton.click();
+      });
+      samples.push(await captureAndRecordPerfSample(perfRecorder, window, panel, canvasHost, 'large-pan-left', Date.now() - phaseStartedAt));
+      await window.waitForTimeout(80);
+    }
+
+    phaseSnapshots.largeRangeEnd = await readCanvasStats(canvasHost);
+    phaseSnapshots.extremeZoomStart = phaseSnapshots.largeRangeEnd;
+
+    await runStressInteraction(window, canvasHost, async () => {
+      await fitButton.click();
+    });
+    samples.push(await captureAndRecordPerfSample(perfRecorder, window, panel, canvasHost, 'extreme-zoom-fit', Date.now() - phaseStartedAt));
+    for (let index = 0; index < 8; index += 1) {
+      await runStressInteraction(window, canvasHost, async () => {
+        await zoomInButton.click();
+      });
+      samples.push(await captureAndRecordPerfSample(perfRecorder, window, panel, canvasHost, 'extreme-zoom-in', Date.now() - phaseStartedAt));
+      await window.waitForTimeout(80);
+    }
+    for (let index = 0; index < 8; index += 1) {
+      await runStressInteraction(window, canvasHost, async () => {
+        await zoomOutButton.click();
+      });
+      samples.push(await captureAndRecordPerfSample(perfRecorder, window, panel, canvasHost, 'extreme-zoom-out', Date.now() - phaseStartedAt));
+      await window.waitForTimeout(80);
+    }
+
+    phaseSnapshots.extremeZoomEnd = await readCanvasStats(canvasHost);
+    phaseSnapshots.verticalThenInteractStart = phaseSnapshots.extremeZoomEnd;
+
+    await runStressInteraction(window, canvasHost, async () => {
+      await canvasHost.hover();
+      await window.mouse.wheel(0, 2400);
+    });
+    samples.push(await captureAndRecordPerfSample(perfRecorder, window, panel, canvasHost, 'vertical-scroll-before-interaction', Date.now() - phaseStartedAt));
+    for (let index = 0; index < 6; index += 1) {
+      await runStressInteraction(window, canvasHost, async () => {
+        if (index % 2 === 0) {
+          await panRightButton.click();
+        } else {
+          await zoomInButton.click();
+        }
+      });
+      samples.push(await captureAndRecordPerfSample(perfRecorder, window, panel, canvasHost, 'post-vertical-pan-zoom', Date.now() - phaseStartedAt));
+      await window.waitForTimeout(80);
+    }
+
+    phaseSnapshots.verticalThenInteractEnd = await readCanvasStats(canvasHost);
 
     const totalElapsedMs = Date.now() - phaseStartedAt;
     const jsHeapAfter = await readJsHeapBytes(window);
@@ -648,6 +774,10 @@ test('packaged waveform sustained 10s viewport and interaction perf', async () =
     const zoomDelta = diffInteractionMetrics(phaseSnapshots.zoomStart, phaseSnapshots.zoomEnd);
     const cursorDelta = diffInteractionMetrics(phaseSnapshots.cursorStart, phaseSnapshots.cursorEnd);
     const selectionDelta = diffInteractionMetrics(phaseSnapshots.selectionStart, phaseSnapshots.selectionEnd);
+    const rapidMixedDelta = diffInteractionMetrics(phaseSnapshots.rapidMixedStart, phaseSnapshots.rapidMixedEnd);
+    const largeRangeDelta = diffInteractionMetrics(phaseSnapshots.largeRangeStart, phaseSnapshots.largeRangeEnd);
+    const extremeZoomDelta = diffInteractionMetrics(phaseSnapshots.extremeZoomStart, phaseSnapshots.extremeZoomEnd);
+    const verticalThenInteractDelta = diffInteractionMetrics(phaseSnapshots.verticalThenInteractStart, phaseSnapshots.verticalThenInteractEnd);
     const panSamples = samples.filter((sample) => sample.phase === 'pan');
     const zoomSamples = samples.filter((sample) => sample.phase === 'zoom');
     const panVisibleRowCounts = [...new Set(panSamples.map((sample) => sample.canvasStats.visibleRowCount))];
@@ -664,7 +794,7 @@ test('packaged waveform sustained 10s viewport and interaction perf', async () =
       : 0;
 
     expect(totalElapsedMs).toBeGreaterThanOrEqual(9000);
-    expect(samples.length).toBe(40);
+    expect(samples.length).toBeGreaterThanOrEqual(91);
     expect(panDelta.fullSceneRebuildCount).toBe(0);
     expect(panDelta.viewportContentUpdateCount).toBeGreaterThan(0);
     expect(panDelta.panBufferHitCount).toBeGreaterThan(0);
@@ -673,14 +803,13 @@ test('packaged waveform sustained 10s viewport and interaction perf', async () =
       expect(panDelta.gpuBufferReallocCount).toBe(0);
     }
     expect(panDelta.rowReuseCount).toBeGreaterThanOrEqual(panDelta.viewportContentUpdateCount * panVisibleRowCount);
-    expect(panDelta.rowContentSkipCount).toBeGreaterThanOrEqual(panDelta.viewportContentUpdateCount);
-    expect(panDelta.rowContentRedrawCount).toBe(0);
     expect(finalStats.gpuDrawLayerCount).toBeLessThanOrEqual(8);
+    expect(panDelta.labelTextureUpdateCount).toBe(0);
     expect(panDelta.reactViewportCommitCount).toBeLessThanOrEqual(panDelta.viewportContentUpdateCount + panDelta.displayViewportUpdateCount);
     expect(zoomDelta.fullSceneRebuildCount).toBe(0);
     expect(zoomDelta.viewportContentUpdateCount).toBeGreaterThan(0);
     expect(zoomDelta.rowReuseCount).toBeGreaterThanOrEqual(zoomDelta.viewportContentUpdateCount * zoomVisibleRowCount);
-    expect(zoomDelta.rowContentRedrawCount).toBeLessThan(zoomDelta.rowReuseCount);
+    expect(zoomDelta.gpuBufferUpdateCount).toBeGreaterThan(0);
     if (strictPackagedHotPathMetrics) {
       expect(zoomDelta.gpuBufferReallocCount).toBeLessThanOrEqual(zoomDelta.viewportContentUpdateCount);
     }
@@ -692,9 +821,17 @@ test('packaged waveform sustained 10s viewport and interaction perf', async () =
     }
     expect(selectionDelta.selectionUpdateCount).toBeGreaterThan(0);
     expect(selectionDelta.viewportContentUpdateCount).toBe(0);
+    expect(rapidMixedDelta.fullSceneRebuildCount).toBe(0);
+    expect(rapidMixedDelta.viewportContentUpdateCount).toBeGreaterThan(0);
+    expect(largeRangeDelta.fullSceneRebuildCount).toBe(0);
+    expect(largeRangeDelta.viewportContentUpdateCount).toBeGreaterThan(0);
+    expect(extremeZoomDelta.fullSceneRebuildCount).toBe(0);
+    expect(extremeZoomDelta.viewportContentUpdateCount).toBeGreaterThan(0);
+    expect(verticalThenInteractDelta.fullSceneRebuildCount).toBeLessThanOrEqual(1);
+    expect(verticalThenInteractDelta.verticalScrollUpdateCount).toBeGreaterThan(0);
+    expect(verticalThenInteractDelta.viewportContentUpdateCount).toBeGreaterThan(0);
     expect(panVisibleRowCounts).toHaveLength(1);
     expect(zoomVisibleRowCounts).toHaveLength(1);
-    expect(finalStats.textureCacheBytes).toBeLessThanOrEqual(32 * 1024 * 1024);
     expect(jsHeapAfter - jsHeapBefore).toBeLessThan(64 * 1024 * 1024);
     expect(jsHeapRange).toBeLessThan(64 * 1024 * 1024);
 
@@ -710,10 +847,14 @@ test('packaged waveform sustained 10s viewport and interaction perf', async () =
         range: jsHeapRange,
       },
       phaseDeltas: {
-        pan: panDelta,
         zoom: zoomDelta,
+        pan: panDelta,
         cursor: cursorDelta,
+        extremeZoom: extremeZoomDelta,
+        largeRange: largeRangeDelta,
+        rapidMixed: rapidMixedDelta,
         selection: selectionDelta,
+        verticalThenInteract: verticalThenInteractDelta,
       },
       phaseVisibleRowCounts: {
         pan: panVisibleRowCounts,

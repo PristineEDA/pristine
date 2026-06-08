@@ -38,8 +38,6 @@ export interface WaveformRenderStats {
   rowAttachCount: number;
   rowReuseCount: number;
   rowRecycleCount: number;
-  rowContentRedrawCount: number;
-  rowContentSkipCount: number;
   panBufferHitCount: number;
   panBufferMissCount: number;
   panPixelShiftCount: number;
@@ -70,14 +68,8 @@ export interface WaveformRenderStats {
   busTruncatedLabelCount: number;
   busLabelDotReplacementCount: number;
   renderedLabelCount: number;
-  cacheableSignalCount: number;
-  cacheHitCount: number;
-  cacheMissCount: number;
-  cachedSignalCount: number;
   renderResolution: number;
   suppressedLabelCount: number;
-  textureCacheBytes: number;
-  textureCacheSize: number;
   fullSceneRebuildCount: number;
   viewportContentUpdateCount: number;
   verticalScrollUpdateCount: number;
@@ -110,8 +102,6 @@ export interface WaveformSceneUpdateMetrics {
   rowAttachCount: number;
   rowReuseCount: number;
   rowRecycleCount: number;
-  rowContentRedrawCount: number;
-  rowContentSkipCount: number;
   panBufferHitCount: number;
   panBufferMissCount: number;
   panPixelShiftCount: number;

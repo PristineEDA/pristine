@@ -5609,7 +5609,6 @@ test('waveform bottom panel renders binary waveform and controls', async () => {
   }).toBeGreaterThan(0);
   const initialGpuVertexCount = await readCanvasNumber('data-gpu-vertex-count');
   const initialGpuBufferUpdateCount = await readCanvasNumber('data-gpu-buffer-update-count');
-  const initialRowContentRedrawCount = await readCanvasNumber('data-row-content-redraw-count');
   const initialInteractionFrameRequestCount = await readCanvasNumber('data-interaction-frame-request-count');
   await expect.poll(async () => readCanvasNumber('data-label-pool-size'), {
     timeout: UI_READY_TIMEOUT_MS,
@@ -5676,10 +5675,9 @@ test('waveform bottom panel renders binary waveform and controls', async () => {
   await expect.poll(async () => {
     const sourceSegmentCount = await readCanvasNumber('data-source-segment-count');
     const renderedSegmentCount = await readCanvasNumber('data-rendered-segment-count');
-    const textureCacheBytes = await readCanvasNumber('data-texture-cache-bytes');
     const renderResolution = await readCanvasNumber('data-render-resolution');
 
-    return sourceSegmentCount > 0 && renderedSegmentCount > 0 && renderResolution >= 1 && textureCacheBytes <= 32 * 1024 * 1024;
+    return sourceSegmentCount > 0 && renderedSegmentCount > 0 && renderResolution >= 1;
   }, {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBe(true);
@@ -5828,8 +5826,6 @@ test('waveform bottom panel renders binary waveform and controls', async () => {
   await expect.poll(async () => readCanvasNumber('data-gpu-buffer-update-count'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(initialGpuBufferUpdateCount);
-  expect(await readCanvasNumber('data-row-content-skip-count')).toBeGreaterThan(0);
-  expect(await readCanvasNumber('data-row-content-redraw-count')).toBeGreaterThanOrEqual(initialRowContentRedrawCount);
   expect(await readCanvasNumber('data-interaction-frame-request-count')).toBeLessThanOrEqual(initialInteractionFrameRequestCount + 2);
   expect(await readCanvasNumber('data-gpu-vertex-count')).toBeGreaterThan(0);
   expect(await readCanvasNumber('data-gpu-vertex-count')).toBeLessThanOrEqual(initialGpuVertexCount * 4);

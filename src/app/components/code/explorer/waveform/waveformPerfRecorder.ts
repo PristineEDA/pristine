@@ -1,18 +1,32 @@
 export interface WaveformPerfSample {
   averageFps: number;
   averageRenderMs: number;
+  displayViewportUpdateCount: number;
   droppedFrameCount: number;
   frameIntervalMs: number;
   frameParseMs: number;
   gpuBufferUpdateMs: number;
+  labelTextureUpdateCount: number;
+  phase: string;
   pipeRoundtripMs: number;
   pixiRenderMs: number;
   reactViewportCommitCount: number;
+  renderCount: number;
   sceneUpdateMs: number;
   timestampMs: number;
 }
 
 export interface WaveformPerfSummary {
+  averageFps: number;
+  averageRenderMs: number;
+  droppedFrameCount: number;
+  phases: Record<string, WaveformPerfPhaseSummary>;
+  sampleCount: number;
+  stages: Record<WaveformPerfStageName, WaveformPerfStageSummary>;
+  stageShare: Record<WaveformPerfStageName, number>;
+}
+
+export interface WaveformPerfPhaseSummary {
   averageFps: number;
   averageRenderMs: number;
   droppedFrameCount: number;
@@ -32,9 +46,13 @@ export type WaveformPerfStageName =
   | 'frameIntervalMs'
   | 'frameParseMs'
   | 'gpuBufferUpdateMs'
+  | 'inputToRenderDelta'
+  | 'labelTextureUpdateDelta'
   | 'pipeRoundtripMs'
   | 'pixiRenderMs'
+  | 'renderDelta'
   | 'reactCommitDelta'
+  | 'displayViewportUpdateDelta'
   | 'sceneUpdateMs';
 
 export class WaveformPerfRecorder {
@@ -49,57 +67,92 @@ export class WaveformPerfRecorder {
   }
 
   public summarize(): WaveformPerfSummary {
-    const frameIntervals = this.samples.map((sample) => sample.frameIntervalMs);
-    const pixiRenderMs = this.samples.map((sample) => sample.pixiRenderMs);
-    let previousGpuBufferUpdateMs = 0;
-    let previousReactViewportCommitCount = 0;
-    const stageValues: Record<WaveformPerfStageName, number[]> = {
-      frameIntervalMs: frameIntervals,
-      frameParseMs: this.samples.map((sample) => sample.frameParseMs),
-      gpuBufferUpdateMs: this.samples.map((sample) => {
-        const delta = Math.max(0, sample.gpuBufferUpdateMs - previousGpuBufferUpdateMs);
-        previousGpuBufferUpdateMs = sample.gpuBufferUpdateMs;
-        return delta;
-      }),
-      pipeRoundtripMs: this.samples.map((sample) => sample.pipeRoundtripMs),
-      pixiRenderMs,
-      reactCommitDelta: this.samples.map((sample) => {
-        const delta = Math.max(0, sample.reactViewportCommitCount - previousReactViewportCommitCount);
-        previousReactViewportCommitCount = sample.reactViewportCommitCount;
-        return delta;
-      }),
-      sceneUpdateMs: this.samples.map((sample) => sample.sceneUpdateMs),
-    };
-    const stages = Object.fromEntries(
-      Object.entries(stageValues).map(([name, values]) => [name, summarizeNumbers(values)]),
-    ) as Record<WaveformPerfStageName, WaveformPerfStageSummary>;
-    const stageTotal = Math.max(
-      0.001,
-      stages.frameParseMs.average
-        + stages.gpuBufferUpdateMs.average
-        + stages.pipeRoundtripMs.average
-        + stages.pixiRenderMs.average
-        + stages.reactCommitDelta.average
-        + stages.sceneUpdateMs.average,
+    const globalSummary = summarizeSamples(this.samples);
+    const phaseSamples = new Map<string, WaveformPerfSample[]>();
+
+    for (const sample of this.samples) {
+      const samples = phaseSamples.get(sample.phase) ?? [];
+      samples.push(sample);
+      phaseSamples.set(sample.phase, samples);
+    }
+
+    const phases = Object.fromEntries(
+      [...phaseSamples.entries()].map(([phase, samples]) => [phase, summarizeSamples(samples)]),
     );
 
     return {
-      averageFps: average(this.samples.map((sample) => sample.averageFps)),
-      averageRenderMs: average(this.samples.map((sample) => sample.averageRenderMs)),
-      droppedFrameCount: this.samples.reduce((max, sample) => Math.max(max, sample.droppedFrameCount), 0),
-      sampleCount: this.samples.length,
+      ...globalSummary,
+      phases,
+    };
+  }
+}
+
+function summarizeSamples(samples: readonly WaveformPerfSample[]): Omit<WaveformPerfSummary, 'phases'> {
+  const frameIntervals = samples.map((sample) => sample.frameIntervalMs);
+  const pixiRenderMs = samples.map((sample) => sample.pixiRenderMs);
+  const stageValues: Record<WaveformPerfStageName, number[]> = {
+    displayViewportUpdateDelta: getDeltaSeries(samples, (sample) => sample.displayViewportUpdateCount),
+    frameIntervalMs: frameIntervals,
+    frameParseMs: samples.map((sample) => sample.frameParseMs),
+    gpuBufferUpdateMs: getDeltaSeries(samples, (sample) => sample.gpuBufferUpdateMs),
+    inputToRenderDelta: getDeltaSeries(samples, (sample) => sample.timestampMs),
+    labelTextureUpdateDelta: getDeltaSeries(samples, (sample) => sample.labelTextureUpdateCount),
+    pipeRoundtripMs: samples.map((sample) => sample.pipeRoundtripMs),
+    pixiRenderMs,
+    renderDelta: getDeltaSeries(samples, (sample) => sample.renderCount),
+    reactCommitDelta: getDeltaSeries(samples, (sample) => sample.reactViewportCommitCount),
+    sceneUpdateMs: samples.map((sample) => sample.sceneUpdateMs),
+  };
+  const stages = Object.fromEntries(
+    Object.entries(stageValues).map(([name, values]) => [name, summarizeNumbers(values)]),
+  ) as Record<WaveformPerfStageName, WaveformPerfStageSummary>;
+  const stageTotal = Math.max(
+    0.001,
+    stages.frameParseMs.average
+      + stages.gpuBufferUpdateMs.average
+      + stages.pipeRoundtripMs.average
+      + stages.pixiRenderMs.average
+      + stages.reactCommitDelta.average
+      + stages.sceneUpdateMs.average,
+  );
+
+    return {
+      averageFps: average(samples.map((sample) => sample.averageFps)),
+      averageRenderMs: average(samples.map((sample) => sample.averageRenderMs)),
+      droppedFrameCount: samples.reduce((max, sample) => Math.max(max, sample.droppedFrameCount), 0),
+      sampleCount: samples.length,
       stages,
       stageShare: {
+        displayViewportUpdateDelta: 0,
         frameIntervalMs: 0,
         frameParseMs: stages.frameParseMs.average / stageTotal,
         gpuBufferUpdateMs: stages.gpuBufferUpdateMs.average / stageTotal,
+        inputToRenderDelta: 0,
+        labelTextureUpdateDelta: 0,
         pipeRoundtripMs: stages.pipeRoundtripMs.average / stageTotal,
         pixiRenderMs: stages.pixiRenderMs.average / stageTotal,
+        renderDelta: 0,
         reactCommitDelta: stages.reactCommitDelta.average / stageTotal,
         sceneUpdateMs: stages.sceneUpdateMs.average / stageTotal,
       },
     };
-  }
+}
+
+function getDeltaSeries(samples: readonly WaveformPerfSample[], readValue: (sample: WaveformPerfSample) => number) {
+  let previousValue: number | null = null;
+
+  return samples.map((sample) => {
+    const nextValue = readValue(sample);
+
+    if (previousValue === null) {
+      previousValue = nextValue;
+      return 0;
+    }
+
+    const delta = Math.max(0, nextValue - previousValue);
+    previousValue = nextValue;
+    return delta;
+  });
 }
 
 function summarizeNumbers(values: readonly number[]): WaveformPerfStageSummary {
