@@ -21,9 +21,11 @@ export interface WaveformSessionState {
   data: WaveformDataSet | null;
   error: string | null;
   frame: ParsedWaveformFrame | null;
+  frameParseMs: number;
   frameRequestCount: number;
   interactionFrameRequestCount: number;
   loading: boolean;
+  pipeRoundtripMs: number;
   preparedRangeHitCount: number;
   preparedRangeMissCount: number;
   sessionId: string | null;
@@ -67,9 +69,11 @@ export function useWaveformSession({
     data: null,
     error: null,
     frame: null,
+    frameParseMs: 0,
     frameRequestCount: 0,
     interactionFrameRequestCount: 0,
     loading: true,
+    pipeRoundtripMs: 0,
     preparedRangeHitCount: 0,
     preparedRangeMissCount: 0,
     sessionId: null,
@@ -85,9 +89,11 @@ export function useWaveformSession({
         data: null,
         error: 'Waveform LSP client is unavailable.',
         frame: null,
+        frameParseMs: 0,
         frameRequestCount: 0,
         interactionFrameRequestCount: 0,
         loading: false,
+        pipeRoundtripMs: 0,
         preparedRangeHitCount: 0,
         preparedRangeMissCount: 0,
         sessionId: null,
@@ -118,9 +124,11 @@ export function useWaveformSession({
         data,
         error: null,
         frame: null,
+        frameParseMs: 0,
         frameRequestCount: 0,
         interactionFrameRequestCount: 0,
         loading: false,
+        pipeRoundtripMs: 0,
         preparedRangeHitCount: 0,
         preparedRangeMissCount: 0,
         sessionId: result.sessionId,
@@ -135,9 +143,11 @@ export function useWaveformSession({
         data: null,
         error: error instanceof Error ? error.message : String(error),
         frame: null,
+        frameParseMs: 0,
         frameRequestCount: 0,
         interactionFrameRequestCount: 0,
         loading: false,
+        pipeRoundtripMs: 0,
         preparedRangeHitCount: 0,
         preparedRangeMissCount: 0,
         sessionId: null,
@@ -245,18 +255,24 @@ export function useWaveformSession({
     let cancelled = false;
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
+    const requestStartedAt = performance.now();
 
     void lsp.waveformFrame(frameRequest).then((buffer) => {
       if (cancelled || requestId !== requestIdRef.current) {
         return;
       }
 
+      const pipeRoundtripMs = Math.max(0, performance.now() - requestStartedAt);
+      const parseStartedAt = performance.now();
       const frame = parseWaveformBinaryFrame(buffer);
+      const frameParseMs = Math.max(0, performance.now() - parseStartedAt);
       setState((current) => ({
         ...current,
         frame,
+        frameParseMs,
         frameRequestCount: current.frameRequestCount + 1,
         interactionFrameRequestCount: current.interactionFrameRequestCount + 1,
+        pipeRoundtripMs,
         preparedRangeMissCount: current.preparedRangeMissCount + 1,
       }));
     }).catch((error: unknown) => {

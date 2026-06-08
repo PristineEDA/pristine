@@ -202,7 +202,7 @@ describe('createWaveformScene', () => {
     expect(scene.renderStats.meshVertexCount).toBe(scene.renderStats.gpuVertexCount);
     expect(scene.state.frame).toBe(frame);
     expect(scene.state.viewport).toEqual({ startTime: 0, endTime: waveformFixtureData.duration });
-    expect(scene.state.horizontalBuffer.viewport.startTime).toBeLessThan(0);
+    expect(scene.state.horizontalBuffer.viewport.startTime).toBe(0);
 
     const headerLabels = collectText(scene.nodes.statusHeader);
     expect(headerLabels).toContain(`0${waveformFixtureData.timescaleUnit}`);
@@ -216,7 +216,7 @@ describe('createWaveformScene', () => {
     scene.world.destroy({ children: true });
   });
 
-  it('updates GPU buffers without row content redraw when panning inside a prepared binary frame', () => {
+  it('pans inside a prepared binary frame without rewriting GPU buffers', () => {
     const preparedViewport = { startTime: 0, endTime: 200 };
     const viewport = { startTime: 40, endTime: 140 };
     const frame = parseWaveformBinaryFrame(createWaveformFixtureFrame(preparedViewport, 900));
@@ -248,7 +248,7 @@ describe('createWaveformScene', () => {
     expect(scene.renderStats.panBufferMissCount).toBe(0);
     expect(scene.renderStats.rowContentRedrawCount).toBe(0);
     expect(scene.renderStats.rowContentSkipCount).toBeGreaterThan(0);
-    expect(scene.renderStats.gpuBufferUpdateCount).toBeGreaterThanOrEqual(initialGpuUpdateCount);
+    expect(scene.renderStats.gpuBufferUpdateCount).toBe(0);
     expect(scene.renderStats.gpuVertexCount).toBeGreaterThan(0);
     expect(scene.renderStats.meshVertexCount).toBe(scene.renderStats.gpuVertexCount);
     expect(initialRowContentRedrawCount).toBeGreaterThan(0);
@@ -595,21 +595,21 @@ describe('createWaveformScene', () => {
     });
     const staticRowNode = scene.rowRegistry.activeRows.get('signal:static-low');
     const toggledRowNode = scene.rowRegistry.activeRows.get('signal:toggle');
-    const staticContentBefore = staticRowNode?.contentContainer.children[0] ?? null;
-    const toggledContentBefore = toggledRowNode?.contentContainer.children[0] ?? null;
+    const staticSignatureBefore = staticRowNode?.contentSignature ?? null;
+    const toggledSignatureBefore = toggledRowNode?.contentSignature ?? null;
 
-    expect(staticContentBefore).not.toBeNull();
-    expect(toggledContentBefore).not.toBeNull();
+    expect(staticSignatureBefore).not.toBeNull();
+    expect(toggledSignatureBefore).not.toBeNull();
 
     updateWaveformSceneViewport(scene, { startTime: 80, endTime: 180 });
 
-    const staticContentAfter = scene.rowRegistry.activeRows.get('signal:static-low')?.contentContainer.children[0] ?? null;
-    const toggledContentAfter = scene.rowRegistry.activeRows.get('signal:toggle')?.contentContainer.children[0] ?? null;
+    const staticSignatureAfter = scene.rowRegistry.activeRows.get('signal:static-low')?.contentSignature ?? null;
+    const toggledSignatureAfter = scene.rowRegistry.activeRows.get('signal:toggle')?.contentSignature ?? null;
 
-    expect(staticContentAfter).toBe(staticContentBefore);
-    expect(toggledContentAfter).not.toBe(toggledContentBefore);
-    expect(scene.renderStats.rowContentSkipCount).toBe(1);
-    expect(scene.renderStats.rowContentRedrawCount).toBe(1);
+    expect(staticSignatureAfter).not.toBe(staticSignatureBefore);
+    expect(toggledSignatureAfter).not.toBe(toggledSignatureBefore);
+    expect(scene.renderStats.rowContentSkipCount).toBe(0);
+    expect(scene.renderStats.rowContentRedrawCount).toBe(2);
 
     scene.world.destroy({ children: true });
   });

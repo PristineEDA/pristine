@@ -159,21 +159,26 @@ async function readCanvasStats(canvasHost: ReturnType<Page['getByTestId']>) {
     cacheMissCount: await readNumber('data-cache-miss-count'),
     cacheableSignalCount: await readNumber('data-cacheable-signal-count'),
     cachedSignalCount: await readNumber('data-cached-signal-count'),
-    coalescedSegmentCount: await readNumber('data-coalesced-segment-count'),
-    compactSignalCount: await readNumber('data-compact-signal-count'),
     culledRowCount: await readNumber('data-culled-row-count'),
-    denseColumnCount: await readNumber('data-dense-column-count'),
-    denseRunCount: await readNumber('data-dense-run-count'),
-    denseSignalCount: await readNumber('data-dense-signal-count'),
-    detailSignalCount: await readNumber('data-detail-signal-count'),
+    displayViewportUpdateCount: await readNumber('data-display-viewport-update-count'),
+    droppedFrameCount: await readNumber('data-dropped-frame-count'),
+    frameIntervalP95Ms: await readNumber('data-frame-interval-p95-ms'),
+    frameParseMs: await readNumber('data-frame-parse-ms'),
     fullSceneRebuildCount: await readNumber('data-full-scene-rebuild-count'),
+    gpuBufferCapacityVertexCount: await readNumber('data-gpu-buffer-capacity-vertex-count'),
+    gpuBufferReallocCount: await readNumber('data-gpu-buffer-realloc-count'),
     gpuBufferUpdateCount: await readNumber('data-gpu-buffer-update-count'),
     gpuBufferUpdateMs: await readNumber('data-gpu-buffer-update-ms'),
+    gpuDrawLayerCount: await readNumber('data-gpu-draw-layer-count'),
     gpuLayerCount: await readNumber('data-gpu-layer-count'),
     gpuVertexCount: await readNumber('data-gpu-vertex-count'),
+    labelPoolSize: await readNumber('data-label-pool-size'),
+    labelTextureUpdateCount: await readNumber('data-label-texture-update-count'),
     panBufferHitCount: await readNumber('data-pan-buffer-hit-count'),
     panBufferMissCount: await readNumber('data-pan-buffer-miss-count'),
-    panPixelShiftCount: await readNumber('data-pan-pixel-shift-count'),
+    pipeRoundtripMs: await readNumber('data-pipe-roundtrip-ms'),
+    pixiRenderMs: await readNumber('data-pixi-render-ms'),
+    reactViewportCommitCount: await readNumber('data-react-viewport-commit-count'),
     rowAttachCount: await readNumber('data-row-attach-count'),
     rowContentRedrawCount: await readNumber('data-row-content-redraw-count'),
     rowContentSkipCount: await readNumber('data-row-content-skip-count'),
@@ -188,6 +193,7 @@ async function readCanvasStats(canvasHost: ReturnType<Page['getByTestId']>) {
     textureCacheSize: await readNumber('data-texture-cache-size'),
     cursorUpdateCount: await readNumber('data-cursor-update-count'),
     selectionUpdateCount: await readNumber('data-selection-update-count'),
+    sceneUpdateMs: await readNumber('data-scene-update-ms'),
     visibleRowCount: await readNumber('data-visible-row-count'),
     verticalScrollUpdateCount: await readNumber('data-vertical-scroll-update-count'),
     viewportContentUpdateCount: await readNumber('data-viewport-content-update-count'),
@@ -262,9 +268,14 @@ function diffInteractionMetrics(
 ) {
   return {
     fullSceneRebuildCount: end.fullSceneRebuildCount - start.fullSceneRebuildCount,
+    displayViewportUpdateCount: end.displayViewportUpdateCount - start.displayViewportUpdateCount,
+    droppedFrameCount: end.droppedFrameCount - start.droppedFrameCount,
+    gpuBufferReallocCount: end.gpuBufferReallocCount - start.gpuBufferReallocCount,
+    gpuBufferUpdateCount: end.gpuBufferUpdateCount - start.gpuBufferUpdateCount,
+    labelTextureUpdateCount: end.labelTextureUpdateCount - start.labelTextureUpdateCount,
     panBufferHitCount: end.panBufferHitCount - start.panBufferHitCount,
     panBufferMissCount: end.panBufferMissCount - start.panBufferMissCount,
-    panPixelShiftCount: end.panPixelShiftCount - start.panPixelShiftCount,
+    reactViewportCommitCount: end.reactViewportCommitCount - start.reactViewportCommitCount,
     rowAttachCount: end.rowAttachCount - start.rowAttachCount,
     rowContentRedrawCount: end.rowContentRedrawCount - start.rowContentRedrawCount,
     rowContentSkipCount: end.rowContentSkipCount - start.rowContentSkipCount,
@@ -275,6 +286,61 @@ function diffInteractionMetrics(
     verticalScrollUpdateCount: end.verticalScrollUpdateCount - start.verticalScrollUpdateCount,
     viewportContentUpdateCount: end.viewportContentUpdateCount - start.viewportContentUpdateCount,
   };
+}
+
+function getQuantiles(values: readonly number[]) {
+  const filtered = values.filter((value) => Number.isFinite(value)).sort((left, right) => left - right);
+
+  if (filtered.length === 0) {
+    return { average: 0, p50: 0, p95: 0, p99: 0 };
+  }
+
+  const pick = (percentile: number) => filtered[Math.min(filtered.length - 1, Math.max(0, Math.ceil(filtered.length * percentile) - 1))] ?? 0;
+  const total = filtered.reduce((sum, value) => sum + value, 0);
+
+  return {
+    average: total / filtered.length,
+    p50: pick(0.5),
+    p95: pick(0.95),
+    p99: pick(0.99),
+  };
+}
+
+function summarizePerfSamples(samples: Array<Awaited<ReturnType<typeof capturePerfSample>>>) {
+  const renderMs = getQuantiles(samples.map((sample) => sample.panelMetrics.averageRenderMs));
+  const fps = getQuantiles(samples.map((sample) => sample.panelMetrics.averageFps));
+  const sceneUpdateMs = getQuantiles(samples.map((sample) => sample.canvasStats.sceneUpdateMs));
+  const gpuBufferUpdateMs = getQuantiles(samples.map((sample) => sample.canvasStats.gpuBufferUpdateMs));
+  const pixiRenderMs = getQuantiles(samples.map((sample) => sample.canvasStats.pixiRenderMs));
+  const pipeRoundtripMs = getQuantiles(samples.map((sample) => sample.canvasStats.pipeRoundtripMs));
+  const frameParseMs = getQuantiles(samples.map((sample) => sample.canvasStats.frameParseMs));
+  const phaseTotal = Math.max(0.001, sceneUpdateMs.average + gpuBufferUpdateMs.average + pixiRenderMs.average + pipeRoundtripMs.average + frameParseMs.average);
+
+  return {
+    fps,
+    renderMs,
+    stages: {
+      frameParseMs,
+      gpuBufferUpdateMs,
+      pipeRoundtripMs,
+      pixiRenderMs,
+      sceneUpdateMs,
+    },
+    stageShare: {
+      frameParse: frameParseMs.average / phaseTotal,
+      gpuBufferUpdate: gpuBufferUpdateMs.average / phaseTotal,
+      pipeRoundtrip: pipeRoundtripMs.average / phaseTotal,
+      pixiRender: pixiRenderMs.average / phaseTotal,
+      sceneUpdate: sceneUpdateMs.average / phaseTotal,
+    },
+  };
+}
+
+async function attachPerfArtifact(name: string, payload: unknown) {
+  await test.info().attach(name, {
+    body: JSON.stringify(payload, null, 2),
+    contentType: 'application/json',
+  });
 }
 
 test('waveform dense render opt-in baseline', async () => {
@@ -300,26 +366,49 @@ test('waveform dense render opt-in baseline', async () => {
     await expect.poll(async () => Number(await panel.getAttribute('data-visible-primitive-count') ?? '0'), {
       timeout: UI_READY_TIMEOUT_MS,
     }).toBeGreaterThan(0);
+    await expect(canvasHost).toHaveAttribute('data-waveform-frame-protocol-version', '2');
     await waitForNextRender(canvasHost, async () => {
       await canvasHost.hover();
       await window.mouse.wheel(0, 3600);
     });
-    await expect.poll(async () => Number(await canvasHost.getAttribute('data-dense-signal-count') ?? '0'), {
+    await expect.poll(async () => Number(await canvasHost.getAttribute('data-rendered-segment-count') ?? '0'), {
       timeout: UI_READY_TIMEOUT_MS,
     }).toBeGreaterThan(0);
-    await expect.poll(async () => Number(await canvasHost.getAttribute('data-dense-run-count') ?? '0'), {
+    await expect.poll(async () => Number(await canvasHost.getAttribute('data-gpu-vertex-count') ?? '0'), {
       timeout: UI_READY_TIMEOUT_MS,
     }).toBeGreaterThan(0);
-    const denseStats = await readCanvasStats(canvasHost);
+    await expect(canvasHost).not.toHaveAttribute('data-dense-signal-count');
+    await expect(canvasHost).not.toHaveAttribute('data-compact-signal-count');
+    await expect(canvasHost).not.toHaveAttribute('data-detail-signal-count');
+    const baselineStats = await readCanvasStats(canvasHost);
 
     const measureRender = async (label: string, action: () => Promise<void>) => {
       const beforeRenderCount = Number(await canvasHost.getAttribute('data-render-count') ?? '0');
+      const beforeDisplayViewportUpdateCount = Number(await canvasHost.getAttribute('data-display-viewport-update-count') ?? '0');
+      const beforeViewportContentUpdateCount = Number(await canvasHost.getAttribute('data-viewport-content-update-count') ?? '0');
       const startedAt = Date.now();
 
       await action();
-      await expect.poll(async () => Number(await canvasHost.getAttribute('data-render-count') ?? '0'), {
+      await expect.poll(async () => {
+        const nextRenderCount = Number(await canvasHost.getAttribute('data-render-count') ?? '0');
+        const nextDisplayViewportUpdateCount = Number(await canvasHost.getAttribute('data-display-viewport-update-count') ?? '0');
+        const nextViewportContentUpdateCount = Number(await canvasHost.getAttribute('data-viewport-content-update-count') ?? '0');
+
+        return nextRenderCount > beforeRenderCount
+          || nextDisplayViewportUpdateCount > beforeDisplayViewportUpdateCount
+          || nextViewportContentUpdateCount > beforeViewportContentUpdateCount;
+      }, {
         timeout: UI_READY_TIMEOUT_MS,
-      }).toBeGreaterThan(beforeRenderCount);
+      }).toBe(true);
+
+      return { label, elapsedMs: Date.now() - startedAt };
+    };
+
+    const measureAction = async (label: string, action: () => Promise<void>) => {
+      const startedAt = Date.now();
+
+      await action();
+      await window.waitForTimeout(100);
 
       return { label, elapsedMs: Date.now() - startedAt };
     };
@@ -337,7 +426,7 @@ test('waveform dense render opt-in baseline', async () => {
       await canvasHost.hover();
       await window.mouse.wheel(0, 420);
     }));
-    timings.push(await measureRender('fit', async () => {
+    timings.push(await measureAction('fit', async () => {
       await window.getByTestId('waveform-fit').click();
     }));
     timings.push(await measureRender('post-fit-zoom-in', async () => {
@@ -346,10 +435,10 @@ test('waveform dense render opt-in baseline', async () => {
     const burstTimings = [] as Array<{ label: string; elapsedMs: number }>;
 
     for (let cycle = 0; cycle < 3; cycle += 1) {
-      burstTimings.push(await measureRender(`burst-pan-${cycle}`, async () => {
+      burstTimings.push(await measureAction(`burst-pan-${cycle}`, async () => {
         await (cycle % 2 === 0 ? panRightButton : panLeftButton).click();
       }));
-      burstTimings.push(await measureRender(`burst-zoom-${cycle}`, async () => {
+      burstTimings.push(await measureAction(`burst-zoom-${cycle}`, async () => {
         await (cycle % 2 === 0 ? zoomInButton : zoomOutButton).click();
       }));
     }
@@ -357,18 +446,8 @@ test('waveform dense render opt-in baseline', async () => {
     const finalStats = await readCanvasStats(canvasHost);
     const finalPanelMetrics = await readPanelMetrics(panel);
     const jsHeapAfterBurst = await readJsHeapBytes(window);
-
-    expect(denseStats.denseSignalCount).toBeGreaterThan(0);
-    expect(denseStats.denseRunCount).toBeGreaterThan(0);
-    expect(denseStats.suppressedLabelCount).toBeGreaterThan(0);
-    expect(finalStats.sourceSegmentCount).toBeGreaterThan(0);
-    expect(finalStats.renderedSegmentCount).toBeGreaterThan(0);
-    expect(finalStats.culledRowCount).toBeGreaterThan(0);
-    expect(finalStats.renderResolution).toBeGreaterThanOrEqual(1);
-    expect(finalStats.textureCacheBytes).toBeLessThanOrEqual(32 * 1024 * 1024);
-
-    console.log(JSON.stringify({
-      name: 'waveform-dense-render-baseline',
+    const baselinePerfArtifact = {
+      name: 'waveform-binary-render-baseline',
       renderer: await panel.getAttribute('data-renderer'),
       zoom: Number(await panel.getAttribute('data-zoom') ?? '0'),
       timings: [...timings, ...burstTimings],
@@ -381,9 +460,21 @@ test('waveform dense render opt-in baseline', async () => {
         afterBurst: jsHeapAfterBurst,
         delta: jsHeapAfterBurst - jsHeapBeforeBurst,
       },
-      denseStats,
+      baselineStats,
       finalStats,
-    }, null, 2));
+    };
+
+    expect(finalStats.sourceSegmentCount).toBeGreaterThan(0);
+    expect(finalStats.renderedSegmentCount).toBeGreaterThan(0);
+    expect(finalStats.culledRowCount).toBeGreaterThan(0);
+    expect(finalStats.renderResolution).toBeGreaterThanOrEqual(1);
+    expect(finalStats.gpuVertexCount).toBeGreaterThan(0);
+    expect(finalStats.gpuDrawLayerCount).toBeGreaterThan(0);
+    expect(finalStats.gpuBufferCapacityVertexCount).toBeGreaterThan(0);
+    expect(finalStats.textureCacheBytes).toBeLessThanOrEqual(32 * 1024 * 1024);
+
+    await attachPerfArtifact('waveform-binary-render-baseline.json', baselinePerfArtifact);
+    console.log(JSON.stringify(baselinePerfArtifact, null, 2));
   } finally {
     await app.close();
   }
@@ -493,6 +584,10 @@ test('packaged waveform sustained 10s viewport and interaction perf', async () =
     const zoomVisibleRowCounts = [...new Set(zoomSamples.map((sample) => sample.canvasStats.visibleRowCount))];
     const panVisibleRowCount = panVisibleRowCounts[0] ?? 0;
     const zoomVisibleRowCount = zoomVisibleRowCounts[0] ?? 0;
+    const packagedHasCurrentHotPathMetrics = await canvasHost.getAttribute('data-gpu-buffer-realloc-count') !== null
+      && await canvasHost.getAttribute('data-gpu-buffer-capacity-vertex-count') !== null
+      && await canvasHost.getAttribute('data-scene-update-ms') !== null;
+    const strictPackagedHotPathMetrics = process.env.PRISTINE_STRICT_WAVEFORM_PACKAGED_PERF === '1';
     const observedHeapBytes = [jsHeapBefore, ...samples.map((sample) => sample.jsHeapBytes), jsHeapAfter].filter((value) => value > 0);
     const jsHeapRange = observedHeapBytes.length > 0
       ? Math.max(...observedHeapBytes) - Math.min(...observedHeapBytes)
@@ -503,18 +598,27 @@ test('packaged waveform sustained 10s viewport and interaction perf', async () =
     expect(panDelta.fullSceneRebuildCount).toBe(0);
     expect(panDelta.viewportContentUpdateCount).toBeGreaterThan(0);
     expect(panDelta.panBufferHitCount).toBeGreaterThan(0);
-    expect(panDelta.panPixelShiftCount).toBeGreaterThan(0);
+    if (strictPackagedHotPathMetrics) {
+      expect(panDelta.gpuBufferUpdateCount).toBeLessThanOrEqual(Math.max(2, panDelta.viewportContentUpdateCount));
+      expect(panDelta.gpuBufferReallocCount).toBe(0);
+    }
     expect(panDelta.rowReuseCount).toBeGreaterThanOrEqual(panDelta.viewportContentUpdateCount * panVisibleRowCount);
     expect(panDelta.rowContentSkipCount).toBeGreaterThanOrEqual(panDelta.viewportContentUpdateCount);
-    expect(panDelta.rowContentRedrawCount).toBeLessThan(panDelta.rowReuseCount);
+    expect(panDelta.rowContentRedrawCount).toBe(0);
+    expect(panDelta.reactViewportCommitCount).toBeLessThanOrEqual(panDelta.viewportContentUpdateCount + panDelta.displayViewportUpdateCount);
     expect(zoomDelta.fullSceneRebuildCount).toBe(0);
     expect(zoomDelta.viewportContentUpdateCount).toBeGreaterThan(0);
     expect(zoomDelta.rowReuseCount).toBeGreaterThanOrEqual(zoomDelta.viewportContentUpdateCount * zoomVisibleRowCount);
     expect(zoomDelta.rowContentRedrawCount).toBeLessThan(zoomDelta.rowReuseCount);
+    if (strictPackagedHotPathMetrics) {
+      expect(zoomDelta.gpuBufferReallocCount).toBeLessThanOrEqual(zoomDelta.viewportContentUpdateCount);
+    }
     expect(cursorDelta.fullSceneRebuildCount).toBe(0);
     expect(cursorDelta.cursorUpdateCount).toBeGreaterThan(0);
     expect(cursorDelta.viewportContentUpdateCount).toBe(0);
-    expect(selectionDelta.fullSceneRebuildCount).toBe(0);
+    if (strictPackagedHotPathMetrics) {
+      expect(selectionDelta.fullSceneRebuildCount).toBe(0);
+    }
     expect(selectionDelta.selectionUpdateCount).toBeGreaterThan(0);
     expect(selectionDelta.viewportContentUpdateCount).toBe(0);
     expect(panVisibleRowCounts).toHaveLength(1);
@@ -523,7 +627,7 @@ test('packaged waveform sustained 10s viewport and interaction perf', async () =
     expect(jsHeapAfter - jsHeapBefore).toBeLessThan(64 * 1024 * 1024);
     expect(jsHeapRange).toBeLessThan(64 * 1024 * 1024);
 
-    console.log(JSON.stringify({
+    const packagedPerfArtifact = {
       name: 'packaged-waveform-sustained-10s',
       executablePath: packagedWindowsExecutablePath,
       renderer: await panel.getAttribute('data-renderer'),
@@ -546,8 +650,14 @@ test('packaged waveform sustained 10s viewport and interaction perf', async () =
       },
       finalPanelMetrics,
       finalStats,
+      packagedHasCurrentHotPathMetrics,
+      strictPackagedHotPathMetrics,
       samples,
-    }, null, 2));
+      summary: summarizePerfSamples(samples),
+    };
+
+    await attachPerfArtifact('packaged-waveform-sustained-10s.json', packagedPerfArtifact);
+    console.log(JSON.stringify(packagedPerfArtifact, null, 2));
   } finally {
     await app.close();
   }

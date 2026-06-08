@@ -48,7 +48,9 @@ interface WaveformCanvasProps {
   cursorTime: number;
   data: WaveformDataSet;
   frame?: ParsedWaveformFrame | null;
+  frameParseMs?: number;
   interactionFrameRequestCount?: number;
+  pipeRoundtripMs?: number;
   preparedRangeHitCount?: number;
   preparedRangeMissCount?: number;
   selectedSignalId: string | null;
@@ -79,12 +81,17 @@ const zoomWheelFactor = 1.18;
 const waveformSignalTextureCacheLimit = 48;
 const waveformSignalTextureCacheByteLimit = 32 * 1024 * 1024;
 const waveformMetricSampleWindowSize = 30;
+const waveformViewportCommitDelayMs = 120;
+const waveformReactMetricPublishIntervalMs = 250;
+const waveformDroppedFrameThresholdMs = 24;
 
 export function WaveformCanvas({
   cursorTime,
   data,
   frame,
+  frameParseMs = 0,
   interactionFrameRequestCount = 0,
+  pipeRoundtripMs = 0,
   preparedRangeHitCount = 0,
   preparedRangeMissCount = 0,
   selectedSignalId,
@@ -103,6 +110,7 @@ export function WaveformCanvas({
   const dragRef = useRef<DragState | null>(null);
   const rulerScrollDragRef = useRef<RulerScrollDragState | null>(null);
   const viewportChangeFrameRef = useRef<number | null>(null);
+  const viewportCommitTimeoutRef = useRef<number | null>(null);
   const pendingViewportRef = useRef<WaveformViewport | null>(null);
   const signalTextureCacheRef = useRef(new Map<string, WaveformSignalTextureCacheEntry>());
   const signalTextureCacheBytesRef = useRef(0);
@@ -111,10 +119,13 @@ export function WaveformCanvas({
   const renderStatsRef = useRef<WaveformRenderStats>(createEmptyRenderStats());
   const renderMetricHistoryRef = useRef<{
     durations: number[];
+    frameIntervals: number[];
     fps: number[];
     previousCompletedAt: number | null;
-  }>({ durations: [], fps: [], previousCompletedAt: null });
+  }>({ durations: [], frameIntervals: [], fps: [], previousCompletedAt: null });
   const sceneUpdateMetricsRef = useRef<WaveformSceneUpdateMetrics>(createEmptySceneUpdateMetrics());
+  const renderCountRef = useRef(0);
+  const lastReactMetricPublishAtRef = useRef(0);
   const viewportRef = useRef(viewport);
   const cursorTimeRef = useRef(cursorTime);
   const selectedSignalIdRef = useRef(selectedSignalId);
@@ -130,7 +141,8 @@ export function WaveformCanvas({
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
 
   dataRef.current = data;
-  renderStatsRef.current = renderStats;
+  sceneUpdateMetricsRef.current.frameParseMs = frameParseMs;
+  sceneUpdateMetricsRef.current.pipeRoundtripMs = pipeRoundtripMs;
   viewportRef.current = viewport;
   cursorTimeRef.current = cursorTime;
   selectedSignalIdRef.current = selectedSignalId;
@@ -192,6 +204,10 @@ export function WaveformCanvas({
         window.cancelAnimationFrame(viewportChangeFrameRef.current);
         viewportChangeFrameRef.current = null;
       }
+      if (viewportCommitTimeoutRef.current !== null) {
+        window.clearTimeout(viewportCommitTimeoutRef.current);
+        viewportCommitTimeoutRef.current = null;
+      }
       pendingViewportRef.current = null;
 
       clearSignalTextureCache();
@@ -200,6 +216,7 @@ export function WaveformCanvas({
       appRef.current = null;
       renderMetricHistoryRef.current = {
         durations: [],
+        frameIntervals: [],
         fps: [],
         previousCompletedAt: null,
       };
@@ -213,22 +230,8 @@ export function WaveformCanvas({
   }, [data, frame]);
 
   useEffect(() => {
-    const scene = sceneRef.current;
-
-    if (!scene || areViewportsEqual(scene.state.viewport, viewport)) {
-      return;
-    }
-
-    const handledAsPan = updateWaveformScenePan(scene, viewport);
-
-    if (!handledAsPan) {
-      updateWaveformSceneViewport(scene, viewport);
-    }
-
-    sceneUpdateMetricsRef.current.viewportContentUpdateCount += 1;
-    accumulateRowLifecycleMetrics(scene.renderStats);
-    applyRenderStats(scene.renderStats);
-    requestRender();
+    sceneUpdateMetricsRef.current.reactViewportCommitCount += 1;
+    applyViewportToScene(viewport, { countDisplayUpdate: false });
   }, [viewport]);
 
   useEffect(() => {
@@ -426,18 +429,64 @@ export function WaveformCanvas({
     viewportRef.current = nextViewport;
 
     if (viewportChangeFrameRef.current !== null) {
+      scheduleReactViewportCommit();
       return;
     }
 
     viewportChangeFrameRef.current = window.requestAnimationFrame(() => {
       viewportChangeFrameRef.current = null;
       const pendingViewport = pendingViewportRef.current;
-      pendingViewportRef.current = null;
 
       if (pendingViewport) {
-        onViewportChangeRef.current(pendingViewport);
+        applyViewportToScene(pendingViewport, { countDisplayUpdate: true });
+        scheduleReactViewportCommit();
       }
     });
+  }
+
+  function scheduleReactViewportCommit() {
+    if (viewportCommitTimeoutRef.current !== null) {
+      window.clearTimeout(viewportCommitTimeoutRef.current);
+    }
+
+    viewportCommitTimeoutRef.current = window.setTimeout(() => {
+      viewportCommitTimeoutRef.current = null;
+      flushPendingViewportCommit();
+    }, waveformViewportCommitDelayMs);
+  }
+
+  function flushPendingViewportCommit() {
+    const pendingViewport = pendingViewportRef.current;
+    pendingViewportRef.current = null;
+
+    if (pendingViewport && !areViewportsEqual(pendingViewport, viewport)) {
+      onViewportChangeRef.current(pendingViewport);
+    }
+  }
+
+  function applyViewportToScene(nextViewport: WaveformViewport, options: { countDisplayUpdate: boolean }) {
+    const scene = sceneRef.current;
+
+    if (!scene || areViewportsEqual(scene.state.viewport, nextViewport)) {
+      return;
+    }
+
+    const sceneUpdateStartedAt = performance.now();
+    const handledAsPan = updateWaveformScenePan(scene, nextViewport);
+
+    if (!handledAsPan) {
+      updateWaveformSceneViewport(scene, nextViewport);
+      flushPendingViewportCommit();
+    }
+
+    sceneUpdateMetricsRef.current.sceneUpdateMs = Math.max(0, performance.now() - sceneUpdateStartedAt);
+    sceneUpdateMetricsRef.current.viewportContentUpdateCount += 1;
+    if (options.countDisplayUpdate) {
+      sceneUpdateMetricsRef.current.displayViewportUpdateCount += 1;
+    }
+    accumulateRowLifecycleMetrics(scene.renderStats);
+    applyRenderStats(scene.renderStats);
+    requestRender();
   }
 
   function rebuildScene() {
@@ -503,8 +552,12 @@ export function WaveformCanvas({
     sceneUpdateMetricsRef.current.panPixelShiftCount += baseStats.panPixelShiftCount;
     sceneUpdateMetricsRef.current.gpuBufferUpdateCount += baseStats.gpuBufferUpdateCount;
     sceneUpdateMetricsRef.current.gpuBufferUpdateMs += baseStats.gpuBufferUpdateMs;
+    sceneUpdateMetricsRef.current.gpuBufferCapacityVertexCount = baseStats.gpuBufferCapacityVertexCount;
+    sceneUpdateMetricsRef.current.gpuBufferReallocCount += baseStats.gpuBufferReallocCount;
+    sceneUpdateMetricsRef.current.gpuDrawLayerCount = baseStats.gpuDrawLayerCount;
     sceneUpdateMetricsRef.current.gpuLayerCount = baseStats.gpuLayerCount;
     sceneUpdateMetricsRef.current.gpuVertexCount = baseStats.gpuVertexCount;
+    sceneUpdateMetricsRef.current.labelTextureUpdateCount += baseStats.labelTextureUpdateCount;
     sceneUpdateMetricsRef.current.meshBufferUpdateMs = sceneUpdateMetricsRef.current.gpuBufferUpdateMs;
     sceneUpdateMetricsRef.current.meshVertexCount = sceneUpdateMetricsRef.current.gpuVertexCount;
   }
@@ -587,23 +640,34 @@ export function WaveformCanvas({
       renderFrameRef.current = null;
       const renderStartedAt = performance.now();
       app.render();
-      publishRenderMetrics(performance.now() - renderStartedAt);
-      setRenderCount((currentRenderCount) => currentRenderCount + 1);
+      const renderDurationMs = performance.now() - renderStartedAt;
+      renderCountRef.current += 1;
+      sceneUpdateMetricsRef.current.pixiRenderMs = renderDurationMs;
+      publishRenderMetrics(renderDurationMs);
     });
   }
 
   function publishRenderMetrics(renderDurationMs: number) {
     const history = renderMetricHistoryRef.current;
     const completedAt = performance.now();
-    const lastFps = history.previousCompletedAt === null
+    const frameIntervalMs = history.previousCompletedAt === null
       ? null
-      : 1000 / Math.max(1, completedAt - history.previousCompletedAt);
+      : completedAt - history.previousCompletedAt;
+    const lastFps = frameIntervalMs === null
+      ? null
+      : 1000 / Math.max(1, frameIntervalMs);
 
     history.previousCompletedAt = completedAt;
     pushMetricSample(history.durations, renderDurationMs);
 
     if (lastFps !== null) {
       pushMetricSample(history.fps, lastFps);
+    }
+    if (frameIntervalMs !== null) {
+      pushMetricSample(history.frameIntervals, frameIntervalMs);
+      if (frameIntervalMs > waveformDroppedFrameThresholdMs) {
+        sceneUpdateMetricsRef.current.droppedFrameCount += 1;
+      }
     }
 
     const nextMetrics: WaveformRenderMetrics = {
@@ -614,8 +678,49 @@ export function WaveformCanvas({
       visiblePrimitiveCount: getVisiblePrimitiveCount(sceneRef.current, renderStatsRef.current),
     };
 
-    setRenderMetrics(nextMetrics);
-    onMetricsChangeRef.current?.(nextMetrics);
+    sceneUpdateMetricsRef.current.frameIntervalP95Ms = getPercentileMetric(history.frameIntervals, 0.95);
+    writeHotRenderDataset(nextMetrics);
+
+    if (completedAt - lastReactMetricPublishAtRef.current >= waveformReactMetricPublishIntervalMs) {
+      lastReactMetricPublishAtRef.current = completedAt;
+      setRenderCount(renderCountRef.current);
+      setRenderMetrics(nextMetrics);
+      onMetricsChangeRef.current?.(nextMetrics);
+    }
+  }
+
+  function writeHotRenderDataset(nextMetrics: WaveformRenderMetrics) {
+    const host = hostRef.current;
+
+    if (!host) {
+      return;
+    }
+
+    const latestStats = {
+      ...renderStatsRef.current,
+      ...sceneUpdateMetricsRef.current,
+    };
+
+    host.dataset.averageFps = formatOptionalNumber(nextMetrics.averageFps);
+    host.dataset.averageRenderMs = formatOptionalNumber(nextMetrics.averageRenderDurationMs);
+    host.dataset.displayViewportUpdateCount = String(latestStats.displayViewportUpdateCount);
+    host.dataset.droppedFrameCount = String(latestStats.droppedFrameCount);
+    host.dataset.frameIntervalP95Ms = latestStats.frameIntervalP95Ms.toFixed(3);
+    host.dataset.gpuBufferCapacityVertexCount = String(latestStats.gpuBufferCapacityVertexCount);
+    host.dataset.gpuBufferReallocCount = String(latestStats.gpuBufferReallocCount);
+    host.dataset.gpuBufferUpdateCount = String(latestStats.gpuBufferUpdateCount);
+    host.dataset.gpuBufferUpdateMs = latestStats.gpuBufferUpdateMs.toFixed(3);
+    host.dataset.gpuDrawLayerCount = String(latestStats.gpuDrawLayerCount);
+    host.dataset.gpuLayerCount = String(latestStats.gpuLayerCount);
+    host.dataset.gpuVertexCount = String(latestStats.gpuVertexCount);
+    host.dataset.labelTextureUpdateCount = String(latestStats.labelTextureUpdateCount);
+    host.dataset.lastFps = formatOptionalNumber(nextMetrics.lastFps);
+    host.dataset.lastRenderMs = formatOptionalNumber(nextMetrics.lastRenderDurationMs);
+    host.dataset.pixiRenderMs = latestStats.pixiRenderMs.toFixed(3);
+    host.dataset.reactViewportCommitCount = String(latestStats.reactViewportCommitCount);
+    host.dataset.renderCount = String(renderCountRef.current);
+    host.dataset.sceneUpdateMs = latestStats.sceneUpdateMs.toFixed(3);
+    host.dataset.visiblePrimitiveCount = String(nextMetrics.visiblePrimitiveCount);
   }
 
   const zoomLevel = data.duration / getWaveformViewportSpan(viewport);
@@ -666,18 +771,29 @@ export function WaveformCanvas({
       data-header-background="opaque"
       data-average-fps={formatOptionalNumber(renderMetrics.averageFps)}
       data-average-render-ms={formatOptionalNumber(renderMetrics.averageRenderDurationMs)}
+      data-display-viewport-update-count={renderStats.displayViewportUpdateCount}
+      data-dropped-frame-count={renderStats.droppedFrameCount}
+      data-frame-interval-p95-ms={renderStats.frameIntervalP95Ms.toFixed(3)}
+      data-frame-parse-ms={renderStats.frameParseMs.toFixed(3)}
       data-last-fps={formatOptionalNumber(renderMetrics.lastFps)}
       data-last-render-ms={formatOptionalNumber(renderMetrics.lastRenderDurationMs)}
       data-interaction-frame-request-count={interactionFrameRequestCount}
+      data-gpu-buffer-capacity-vertex-count={renderStats.gpuBufferCapacityVertexCount}
+      data-gpu-buffer-realloc-count={renderStats.gpuBufferReallocCount}
       data-gpu-buffer-update-count={renderStats.gpuBufferUpdateCount}
       data-gpu-buffer-update-ms={renderStats.gpuBufferUpdateMs.toFixed(3)}
+      data-gpu-draw-layer-count={renderStats.gpuDrawLayerCount}
       data-gpu-layer-count={renderStats.gpuLayerCount}
       data-gpu-vertex-count={renderStats.gpuVertexCount}
       data-label-pool-size={renderStats.labelPoolSize}
+      data-label-texture-update-count={renderStats.labelTextureUpdateCount}
       data-mesh-buffer-update-ms={renderStats.meshBufferUpdateMs.toFixed(3)}
       data-mesh-vertex-count={renderStats.meshVertexCount}
+      data-pipe-roundtrip-ms={renderStats.pipeRoundtripMs.toFixed(3)}
+      data-pixi-render-ms={renderStats.pixiRenderMs.toFixed(3)}
       data-pulse-fill-count={pulseFillCount}
       data-render-count={renderCount}
+      data-react-viewport-commit-count={renderStats.reactViewportCommitCount}
       data-render-resolution={renderStats.renderResolution.toFixed(2)}
       data-pan-buffer-hit-count={renderStats.panBufferHitCount}
       data-pan-buffer-miss-count={renderStats.panBufferMissCount}
@@ -713,6 +829,7 @@ export function WaveformCanvas({
       data-source-segment-count={renderStats.sourceSegmentCount}
       data-selected-signal-visible-y={formatOptionalNumber(selectedSignalVisibleY)}
       data-selection-update-count={renderStats.selectionUpdateCount}
+      data-scene-update-ms={renderStats.sceneUpdateMs.toFixed(3)}
       data-skipped-horizontal-segment-count={renderStats.skippedHorizontalSegmentCount}
       data-suppressed-label-count={renderStats.suppressedLabelCount}
       data-texture-cache-bytes={renderStats.textureCacheBytes}
@@ -798,8 +915,12 @@ function createEmptyRenderStats(): WaveformRenderStats {
     panPixelShiftCount: 0,
     gpuBufferUpdateCount: 0,
     gpuBufferUpdateMs: 0,
+    gpuBufferCapacityVertexCount: 0,
+    gpuBufferReallocCount: 0,
+    gpuDrawLayerCount: 0,
     gpuLayerCount: 0,
     gpuVertexCount: 0,
+    labelTextureUpdateCount: 0,
     meshBufferUpdateMs: 0,
     meshVertexCount: 0,
     labelPoolSize: 0,
@@ -832,6 +953,14 @@ function createEmptyRenderStats(): WaveformRenderStats {
     verticalScrollUpdateCount: 0,
     cursorUpdateCount: 0,
     selectionUpdateCount: 0,
+    displayViewportUpdateCount: 0,
+    droppedFrameCount: 0,
+    frameIntervalP95Ms: 0,
+    frameParseMs: 0,
+    pipeRoundtripMs: 0,
+    pixiRenderMs: 0,
+    reactViewportCommitCount: 0,
+    sceneUpdateMs: 0,
   };
 }
 
@@ -852,11 +981,23 @@ function createEmptySceneUpdateMetrics(): WaveformSceneUpdateMetrics {
     panPixelShiftCount: 0,
     gpuBufferUpdateCount: 0,
     gpuBufferUpdateMs: 0,
+    gpuBufferCapacityVertexCount: 0,
+    gpuBufferReallocCount: 0,
+    gpuDrawLayerCount: 0,
     gpuLayerCount: 0,
     gpuVertexCount: 0,
+    labelTextureUpdateCount: 0,
     meshBufferUpdateMs: 0,
     meshVertexCount: 0,
     labelPoolSize: 0,
+    displayViewportUpdateCount: 0,
+    droppedFrameCount: 0,
+    frameIntervalP95Ms: 0,
+    frameParseMs: 0,
+    pipeRoundtripMs: 0,
+    pixiRenderMs: 0,
+    reactViewportCommitCount: 0,
+    sceneUpdateMs: 0,
   };
 }
 
@@ -924,6 +1065,17 @@ function getAverageMetric(samples: number[]) {
   const total = samples.reduce((sum, sample) => sum + sample, 0);
 
   return total / samples.length;
+}
+
+function getPercentileMetric(samples: number[], percentile: number) {
+  if (samples.length === 0) {
+    return 0;
+  }
+
+  const sorted = [...samples].sort((left, right) => left - right);
+  const index = Math.min(sorted.length - 1, Math.max(0, Math.ceil(sorted.length * percentile) - 1));
+
+  return sorted[index] ?? 0;
 }
 
 function destroyCachedTexture(entry: WaveformSignalTextureCacheEntry) {

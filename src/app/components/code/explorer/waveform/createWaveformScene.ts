@@ -144,8 +144,12 @@ interface WaveformRowContentMetrics {
   renderedLabelCount: number;
   gpuBufferUpdateCount: number;
   gpuBufferUpdateMs: number;
+  gpuBufferCapacityVertexCount: number;
+  gpuBufferReallocCount: number;
+  gpuDrawLayerCount: number;
   gpuLayerCount: number;
   gpuVertexCount: number;
+  labelTextureUpdateCount: number;
   labelPoolSize: number;
   cacheableSignalCount: number;
   cacheHitCount: number;
@@ -229,7 +233,7 @@ export function createWaveformScene(options: WaveformSceneOptions): WaveformScen
   const visibleRows = getVisibleWaveformRows(rows, options.verticalScrollTop ?? 0, options.height);
   const nodes = createSceneNodes();
   const rowRegistry = createRowRegistry();
-  const horizontalBuffer = createHorizontalBufferState(options.viewport, options.width, getRenderResolution(options));
+  const horizontalBuffer = createHorizontalBufferState(options.viewport, options.width, getRenderResolution(options), getHorizontalBufferBounds(options));
   const renderStats = createRenderStats(visibleRows.visibleRowCount, visibleRows.culledRowCount, getRenderResolution(options));
   const scene: WaveformScene = {
     world,
@@ -306,13 +310,44 @@ export function updateWaveformScenePan(scene: WaveformScene, viewport: WaveformV
       return false;
     }
 
+    const previousOffsetX = getHorizontalBufferOffset(
+      scene.state.horizontalBuffer.viewport,
+      scene.state.viewport,
+      getWaveformViewportSpan(scene.state.viewport),
+      scene.state.width,
+      scene.state.renderResolution,
+    );
+    const currentSpan = getWaveformViewportSpan(scene.state.viewport);
+    const nextSpan = getWaveformViewportSpan(viewport);
+
+    if (Math.abs(currentSpan - nextSpan) <= viewportSpanEpsilon && canShiftHorizontalBuffer(scene, viewport)) {
+      scene.state.viewport = viewport;
+      scene.shapeCounts = getWaveformShapeCounts(scene.state.data, viewport);
+      scene.digitalPulseFillCount = getWaveformDigitalPulseFillCount(scene.state.data, viewport);
+      redrawWaveformSceneRulerIndicator(scene);
+      redrawWaveformSceneCursor(scene);
+      applyHorizontalBufferOffset(scene);
+      scene.renderStats = createRenderStats(
+        scene.state.visibleRows.visibleRowCount,
+        scene.state.visibleRows.culledRowCount,
+        scene.state.renderResolution,
+      );
+      scene.renderStats.rowReuseCount = scene.state.visibleRows.rows.length;
+      scene.renderStats.panBufferHitCount = 1;
+      scene.renderStats.panPixelShiftCount = Math.abs(scene.state.horizontalBuffer.offsetX - previousOffsetX);
+      scene.renderStats.rowContentSkipCount = scene.state.visibleRows.rows.filter((row) => row.kind === 'signal').length;
+      accumulateVisibleRowContentMetrics(scene, scene.renderStats);
+      return true;
+    }
+
     scene.state.viewport = viewport;
+    scene.state.horizontalBuffer = createHorizontalBufferState(viewport, scene.state.width, scene.state.renderResolution, getHorizontalBufferBounds(getSceneOptions(scene)));
     scene.shapeCounts = getWaveformShapeCounts(scene.state.data, viewport);
     scene.digitalPulseFillCount = getWaveformDigitalPulseFillCount(scene.state.data, viewport);
     redrawWaveformSceneRulerIndicator(scene);
     redrawWaveformSceneGrid(scene);
     const updateStartedAt = performance.now();
-    redrawWaveformSceneRows(scene, { redrawLanes: false, reuseContentSignature: true });
+    redrawWaveformSceneRows(scene, { redrawLanes: false, reuseContentSignature: false });
     scene.renderStats.panBufferHitCount = 1;
     scene.renderStats.gpuBufferUpdateMs = Math.max(scene.renderStats.gpuBufferUpdateMs, performance.now() - updateStartedAt);
     scene.renderStats.meshBufferUpdateMs = scene.renderStats.gpuBufferUpdateMs;
@@ -362,12 +397,12 @@ export function updateWaveformScenePan(scene: WaveformScene, viewport: WaveformV
 export function updateWaveformSceneViewport(scene: WaveformScene, viewport: WaveformViewport) {
   const previousViewport = scene.state.viewport;
   scene.state.viewport = viewport;
-  scene.state.horizontalBuffer = createHorizontalBufferState(viewport, scene.state.width, scene.state.renderResolution);
+  scene.state.horizontalBuffer = createHorizontalBufferState(viewport, scene.state.width, scene.state.renderResolution, getHorizontalBufferBounds(getSceneOptions(scene)));
   scene.shapeCounts = getWaveformShapeCounts(scene.state.data, viewport);
   scene.digitalPulseFillCount = getWaveformDigitalPulseFillCount(scene.state.data, viewport);
   redrawWaveformSceneRulerIndicator(scene);
   redrawWaveformSceneGrid(scene);
-  redrawWaveformSceneRows(scene, { redrawLanes: false, reuseContentSignature: true });
+  redrawWaveformSceneRows(scene, { redrawLanes: false, reuseContentSignature: !scene.state.frame });
   redrawWaveformSceneCursor(scene);
   applyHorizontalBufferOffset(scene);
 
@@ -390,8 +425,12 @@ function createRenderStats(visibleRowCount: number, culledRowCount: number, rend
     panPixelShiftCount: 0,
     gpuBufferUpdateCount: 0,
     gpuBufferUpdateMs: 0,
+    gpuBufferCapacityVertexCount: 0,
+    gpuBufferReallocCount: 0,
+    gpuDrawLayerCount: 0,
     gpuLayerCount: 0,
     gpuVertexCount: 0,
+    labelTextureUpdateCount: 0,
     meshBufferUpdateMs: 0,
     meshVertexCount: 0,
     labelPoolSize: 0,
@@ -424,6 +463,14 @@ function createRenderStats(visibleRowCount: number, culledRowCount: number, rend
     verticalScrollUpdateCount: 0,
     cursorUpdateCount: 0,
     selectionUpdateCount: 0,
+    displayViewportUpdateCount: 0,
+    droppedFrameCount: 0,
+    frameIntervalP95Ms: 0,
+    frameParseMs: 0,
+    pipeRoundtripMs: 0,
+    pixiRenderMs: 0,
+    reactViewportCommitCount: 0,
+    sceneUpdateMs: 0,
   };
 }
 
@@ -533,8 +580,12 @@ function createEmptyRowContentMetrics(): WaveformRowContentMetrics {
     renderedLabelCount: 0,
     gpuBufferUpdateCount: 0,
     gpuBufferUpdateMs: 0,
+    gpuBufferCapacityVertexCount: 0,
+    gpuBufferReallocCount: 0,
+    gpuDrawLayerCount: 0,
     gpuLayerCount: 0,
     gpuVertexCount: 0,
+    labelTextureUpdateCount: 0,
     labelPoolSize: 0,
     cacheableSignalCount: 0,
     cacheHitCount: 0,
@@ -642,7 +693,6 @@ function redrawWaveformSceneContent(scene: WaveformScene, reuseContentSignature:
       : getSignalRenderSignature(row.signal, sceneOptions, segmentResult!);
 
     if (sceneOptions.frame && reuseContentSignature && rowNode.contentSignature === contentSignature) {
-      rowNode.contentMetrics = drawFrameSignalRow(rowNode, row, sceneOptions, sceneOptions.frame);
       renderStats.rowContentSkipCount += 1;
       return;
     }
@@ -662,6 +712,7 @@ function redrawWaveformSceneContent(scene: WaveformScene, reuseContentSignature:
     }
     rowNode.contentSignature = contentSignature;
     renderStats.rowContentRedrawCount += 1;
+    accumulateRowContentUpdateMetrics(renderStats, rowNode.contentMetrics);
   });
 }
 
@@ -685,11 +736,10 @@ function accumulateRowContentMetrics(target: WaveformRenderStats, source: Wavefo
   target.renderedSignalCount += source.renderedSignalCount;
   target.sourceSegmentCount += source.sourceSegmentCount;
   target.renderedSegmentCount += source.renderedSegmentCount;
-  target.gpuBufferUpdateCount += source.gpuBufferUpdateCount;
-  target.gpuBufferUpdateMs += source.gpuBufferUpdateMs;
+  target.gpuDrawLayerCount += source.gpuDrawLayerCount;
   target.gpuLayerCount += source.gpuLayerCount;
   target.gpuVertexCount += source.gpuVertexCount;
-  target.meshBufferUpdateMs = target.gpuBufferUpdateMs;
+  target.gpuBufferCapacityVertexCount += source.gpuBufferCapacityVertexCount;
   target.meshVertexCount = target.gpuVertexCount;
   target.collapsedSegmentCount += source.collapsedSegmentCount;
   target.drawnHorizontalSegmentCount += source.drawnHorizontalSegmentCount;
@@ -705,11 +755,20 @@ function accumulateRowContentMetrics(target: WaveformRenderStats, source: Wavefo
   target.busVerticalFallbackCount += source.busVerticalFallbackCount;
   target.renderedLabelCount += source.renderedLabelCount;
   target.labelPoolSize += source.labelPoolSize;
+  target.labelTextureUpdateCount += source.labelTextureUpdateCount;
   target.cacheableSignalCount += source.cacheableSignalCount;
   target.cacheHitCount += source.cacheHitCount;
   target.cacheMissCount += source.cacheMissCount;
   target.cachedSignalCount += source.cachedSignalCount;
   target.suppressedLabelCount += source.suppressedLabelCount;
+}
+
+function accumulateRowContentUpdateMetrics(target: WaveformRenderStats, source: WaveformRowContentMetrics) {
+  target.gpuBufferUpdateCount += source.gpuBufferUpdateCount;
+  target.gpuBufferUpdateMs += source.gpuBufferUpdateMs;
+  target.gpuBufferReallocCount += source.gpuBufferReallocCount;
+  target.labelTextureUpdateCount += source.labelTextureUpdateCount;
+  target.meshBufferUpdateMs = target.gpuBufferUpdateMs;
 }
 
 function redrawWaveformSceneCursor(scene: WaveformScene) {
@@ -735,10 +794,6 @@ function getSceneOptions(scene: WaveformScene): WaveformSceneOptions {
 }
 
 function getHorizontalBufferSceneOptions(scene: WaveformScene): WaveformSceneOptions {
-  if (scene.state.frame) {
-    return getSceneOptions(scene);
-  }
-
   return {
     ...getSceneOptions(scene),
     viewport: scene.state.horizontalBuffer.viewport,
@@ -746,17 +801,26 @@ function getHorizontalBufferSceneOptions(scene: WaveformScene): WaveformSceneOpt
   };
 }
 
-function createHorizontalBufferState(viewport: WaveformViewport, width: number, renderResolution: number): WaveformHorizontalBufferState {
+function createHorizontalBufferState(
+  viewport: WaveformViewport,
+  width: number,
+  renderResolution: number,
+  bounds: WaveformViewport,
+): WaveformHorizontalBufferState {
   const safeWidth = Math.max(1, width);
   const span = getWaveformViewportSpan(viewport);
   const usableWidth = getWaveformUsableWidth(safeWidth);
   const bufferPixels = Math.min(waveformHorizontalBufferMaxPixels, Math.max(waveformHorizontalBufferMinPixels, Math.round(safeWidth * 0.5)));
-  const bufferTime = bufferPixels * span / usableWidth;
+  const pxPerTime = usableWidth / Math.max(1, span);
+  const leftBufferPixels = Math.min(bufferPixels, Math.max(0, (viewport.startTime - bounds.startTime) * pxPerTime));
+  const rightBufferPixels = Math.min(bufferPixels, Math.max(0, (bounds.endTime - viewport.endTime) * pxPerTime));
+  const leftBufferTime = leftBufferPixels / Math.max(1, pxPerTime);
+  const rightBufferTime = rightBufferPixels / Math.max(1, pxPerTime);
   const bufferViewport = {
-    startTime: viewport.startTime - bufferTime,
-    endTime: viewport.endTime + bufferTime,
+    startTime: viewport.startTime - leftBufferTime,
+    endTime: viewport.endTime + rightBufferTime,
   };
-  const bufferWidth = safeWidth + bufferPixels * 2;
+  const bufferWidth = safeWidth + leftBufferPixels + rightBufferPixels;
   const offsetX = getHorizontalBufferOffset(bufferViewport, viewport, span, safeWidth, renderResolution);
 
   return {
@@ -764,6 +828,20 @@ function createHorizontalBufferState(viewport: WaveformViewport, width: number, 
     offsetX,
     viewport: bufferViewport,
     width: bufferWidth,
+  };
+}
+
+function getHorizontalBufferBounds(options: WaveformSceneOptions): WaveformViewport {
+  if (options.frame?.preparedRange) {
+    return {
+      startTime: options.frame.preparedRange.startTime,
+      endTime: options.frame.preparedRange.endTime,
+    };
+  }
+
+  return {
+    startTime: 0,
+    endTime: Math.max(getWaveformViewportSpan(options.viewport), options.data.duration),
   };
 }
 
@@ -1098,6 +1176,9 @@ function drawFrameSignalRow(rowNode: WaveformSceneRowNode, row: WaveformDisplayR
   contentMetrics.renderedSegmentCount += tableEntry.segmentCount;
   contentMetrics.gpuBufferUpdateCount += gpuMetrics.bufferUpdateCount;
   contentMetrics.gpuBufferUpdateMs += gpuMetrics.bufferUpdateMs;
+  contentMetrics.gpuBufferCapacityVertexCount += gpuMetrics.bufferCapacityVertexCount;
+  contentMetrics.gpuBufferReallocCount += gpuMetrics.bufferReallocCount;
+  contentMetrics.gpuDrawLayerCount += gpuMetrics.layerCount;
   contentMetrics.gpuLayerCount += gpuMetrics.layerCount;
   contentMetrics.gpuVertexCount += gpuMetrics.vertexCount;
   contentMetrics.labelPoolSize = rowNode.retainedTextPool.length;

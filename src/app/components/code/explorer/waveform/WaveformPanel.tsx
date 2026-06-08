@@ -288,6 +288,8 @@ export function WaveformPanel() {
       data-gpu-info-error={gpuDiagnostics?.infoError ?? ''}
       data-last-fps={formatOptionalMetricNumber(renderMetrics.lastFps)}
       data-last-render-ms={formatOptionalMetricNumber(renderMetrics.lastRenderDurationMs)}
+      data-frame-parse-ms={session.frameParseMs.toFixed(3)}
+      data-pipe-roundtrip-ms={session.pipeRoundtripMs.toFixed(3)}
       data-ready={renderer !== 'initializing' ? 'true' : 'false'}
       data-renderer={renderer}
       data-selected-signal-id={selectedSignalId ?? ''}
@@ -444,7 +446,9 @@ export function WaveformPanel() {
                   cursorTime={cursorTime}
                   data={data}
                   frame={session.frame}
+                  frameParseMs={session.frameParseMs}
                   interactionFrameRequestCount={session.interactionFrameRequestCount}
+                  pipeRoundtripMs={session.pipeRoundtripMs}
                   preparedRangeHitCount={session.preparedRangeHitCount}
                   preparedRangeMissCount={session.preparedRangeMissCount}
                   selectedSignalId={selectedSignalId}

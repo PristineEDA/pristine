@@ -3,6 +3,8 @@ import { Container, Mesh, MeshGeometry, Texture } from 'pixi.js';
 export interface WaveformGpuLayerMetrics {
   bufferUpdateCount: number;
   bufferUpdateMs: number;
+  bufferCapacityVertexCount: number;
+  bufferReallocCount: number;
   layerCount: number;
   vertexCount: number;
 }
@@ -27,6 +29,7 @@ export class WaveformGpuPrimitiveBuilder {
   private indices = new Uint32Array(0);
   private positionLength = 0;
   private indexLength = 0;
+  private reallocCount = 0;
 
   public reset() {
     this.positionLength = 0;
@@ -39,6 +42,16 @@ export class WaveformGpuPrimitiveBuilder {
 
   public get indexCount() {
     return this.indexLength;
+  }
+
+  public get capacityVertexCount() {
+    return this.positions.length / 2;
+  }
+
+  public consumeReallocCount() {
+    const value = this.reallocCount;
+    this.reallocCount = 0;
+    return value;
   }
 
   public addQuad(x: number, y: number, width: number, height: number) {
@@ -118,6 +131,7 @@ export class WaveformGpuPrimitiveBuilder {
     const nextUvs = new Float32Array(nextLength);
     nextUvs.set(this.uvs.subarray(0, this.positionLength));
     this.uvs = nextUvs;
+    this.reallocCount += 1;
   }
 
   private ensureIndexCapacity(requiredLength: number) {
@@ -129,6 +143,7 @@ export class WaveformGpuPrimitiveBuilder {
     const nextIndices = new Uint32Array(nextLength);
     nextIndices.set(this.indices.subarray(0, this.indexLength));
     this.indices = nextIndices;
+    this.reallocCount += 1;
   }
 }
 
@@ -151,21 +166,33 @@ export function resetWaveformGpuPrimitiveGroup(group: WaveformGpuPrimitiveGroup)
 
 export function commitWaveformGpuPrimitiveGroups(groups: readonly WaveformGpuPrimitiveGroup[]): WaveformGpuLayerMetrics {
   const startedAt = performance.now();
+  let bufferCapacityVertexCount = 0;
+  let bufferUpdateCount = 0;
   let layerCount = 0;
+  let bufferReallocCount = 0;
   let vertexCount = 0;
 
   for (const group of groups) {
     for (const layer of [group.fill, group.stroke]) {
-      layer.builder.commit(layer.mesh.geometry);
-      layer.mesh.visible = layer.builder.vertexCount > 0 && layer.mesh.alpha > 0;
+      const hasVertices = layer.builder.vertexCount > 0;
+      const shouldCommit = hasVertices || layer.mesh.visible;
+      if (shouldCommit) {
+        layer.builder.commit(layer.mesh.geometry);
+        bufferUpdateCount += 1;
+      }
+      layer.mesh.visible = hasVertices && layer.mesh.alpha > 0;
+      bufferCapacityVertexCount += layer.builder.capacityVertexCount;
+      bufferReallocCount += layer.builder.consumeReallocCount();
       vertexCount += layer.builder.vertexCount;
       layerCount += layer.mesh.visible ? 1 : 0;
     }
   }
 
   return {
-    bufferUpdateCount: groups.length * 2,
+    bufferUpdateCount,
     bufferUpdateMs: Math.max(0, performance.now() - startedAt),
+    bufferCapacityVertexCount,
+    bufferReallocCount,
     layerCount,
     vertexCount,
   };
