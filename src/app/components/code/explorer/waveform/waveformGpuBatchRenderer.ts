@@ -106,6 +106,20 @@ export class WaveformGpuBatchRenderer {
     this.glyphAtlas.prewarm(fontSize, fill, characters);
   }
 
+  public preallocateGlyphCapacity(glyphCount: number) {
+    this.glyphAtlas.preallocateGlyphCapacity(glyphCount);
+  }
+
+  public preallocateLayerCapacity(kind: WaveformGpuBatchLayerKind, vertexCount: number, indexCount: number) {
+    this.layers.get(kind)?.builder.preallocate(vertexCount, indexCount);
+  }
+
+  public preallocateBatchCapacity(vertexCount: number, indexCount: number) {
+    for (const layer of this.layers.values()) {
+      layer.builder.preallocate(vertexCount, indexCount);
+    }
+  }
+
   public clear() {
     this.reset();
     this.commit();
@@ -232,6 +246,11 @@ class WaveformGpuBatchBuilder {
     const value = this.reallocCount;
     this.reallocCount = 0;
     return value;
+  }
+
+  public preallocate(vertexCount: number, indexCount: number) {
+    this.ensureVertexCapacity(Math.max(0, Math.ceil(vertexCount)));
+    this.ensureIndexCapacity(Math.max(0, Math.ceil(indexCount)));
   }
 
   public addQuad(x: number, y: number, width: number, height: number, color: number, alpha: number) {

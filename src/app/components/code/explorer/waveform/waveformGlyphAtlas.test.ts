@@ -107,4 +107,29 @@ describe('WaveformGlyphAtlas', () => {
     expect(zoom.labelLayoutCacheMissCount).toBe(0);
     expect(zoom.glyphBufferUpdateCount).toBe(1);
   });
+
+  it('can preallocate glyph buffers before interaction sampling', () => {
+    const atlas = new WaveformGlyphAtlas();
+
+    atlas.prewarm(10, 0xd6d6d6, 'abcd');
+    atlas.preallocateGlyphCapacity(4);
+    atlas.beginFrame();
+    const preallocation = atlas.commit();
+
+    expect(preallocation.glyphBufferReallocCount).toBeGreaterThan(0);
+
+    atlas.beginFrame();
+    atlas.acquireLabel({
+      fill: 0xd6d6d6,
+      fontSize: 10,
+      text: 'abcd',
+      x: 10,
+      y: 4,
+    });
+    const sampledInteraction = atlas.commit();
+
+    expect(sampledInteraction.glyphVertexCount).toBe(16);
+    expect(sampledInteraction.glyphBufferReallocCount).toBe(0);
+    expect(sampledInteraction.labelTextureUpdateCount).toBe(0);
+  });
 });

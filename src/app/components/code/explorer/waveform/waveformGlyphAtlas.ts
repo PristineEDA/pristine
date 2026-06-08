@@ -139,6 +139,17 @@ export class WaveformGlyphAtlas {
     this.ensureGlyphSet(fontSize, fill, characters);
   }
 
+  public preallocateGlyphCapacity(glyphCount: number) {
+    const safeGlyphCount = Math.max(0, Math.ceil(glyphCount));
+
+    if (safeGlyphCount <= 0) {
+      return;
+    }
+
+    this.ensureVertexCapacity(safeGlyphCount * 4);
+    this.ensureIndexCapacity(safeGlyphCount * 6);
+  }
+
   public acquireLabel({ cacheKey, fill, fontSize, text, x, y }: WaveformGlyphAtlasAcquireOptions) {
     if (!text) {
       return this.container;

@@ -44,6 +44,64 @@ function findPackagedWindowsExecutablePath() {
 
 const packagedWindowsExecutablePath = findPackagedWindowsExecutablePath();
 
+function getNewestMtimeMs(targetPath: string): number | null {
+  if (!fs.existsSync(targetPath)) {
+    return null;
+  }
+
+  const stat = fs.statSync(targetPath);
+
+  if (!stat.isDirectory()) {
+    return stat.mtimeMs;
+  }
+
+  let newestMtimeMs = stat.mtimeMs;
+
+  for (const entry of fs.readdirSync(targetPath, { withFileTypes: true })) {
+    const childMtimeMs = getNewestMtimeMs(path.join(targetPath, entry.name));
+
+    if (childMtimeMs !== null) {
+      newestMtimeMs = Math.max(newestMtimeMs, childMtimeMs);
+    }
+  }
+
+  return newestMtimeMs;
+}
+
+function getSourceBuildMtimeMs() {
+  const buildOutputs = [
+    path.join(__dirname, '..', 'dist'),
+    path.join(__dirname, '..', 'dist-electron'),
+  ];
+  const mtimes = buildOutputs
+    .map((buildOutput) => getNewestMtimeMs(buildOutput))
+    .filter((mtimeMs): mtimeMs is number => mtimeMs !== null);
+
+  if (mtimes.length === 0) {
+    return null;
+  }
+
+  return Math.max(...mtimes);
+}
+
+function getPackagedFreshness(executablePath: string) {
+  const packagedPayloadPath = path.join(path.dirname(executablePath), 'resources', 'app.asar');
+  const sourceBuildMtimeMs = getSourceBuildMtimeMs();
+  const packagedExecutableMtimeMs = getNewestMtimeMs(executablePath);
+  const packagedPayloadMtimeMs = getNewestMtimeMs(packagedPayloadPath);
+  const packagedMtimeMs = Math.max(packagedExecutableMtimeMs ?? 0, packagedPayloadMtimeMs ?? 0);
+  const isFresh = sourceBuildMtimeMs !== null && packagedMtimeMs >= sourceBuildMtimeMs - 1000;
+
+  return {
+    isFresh,
+    packagedExecutableMtimeMs,
+    packagedMtimeMs,
+    packagedPayloadMtimeMs,
+    packagedPayloadPath,
+    sourceBuildMtimeMs,
+  };
+}
+
 async function getPageTitleSafely(page: Page) {
   if (page.isClosed()) {
     return null;
@@ -615,6 +673,12 @@ test('waveform dense render opt-in baseline', async () => {
 test('packaged waveform sustained 10s viewport and interaction perf', async () => {
   test.skip(process.platform !== 'win32', 'Packaged waveform perf runs on Windows only');
   test.skip(!packagedWindowsExecutablePath, 'Run pnpm run package:win before executing packaged waveform perf');
+  const packagedFreshness = getPackagedFreshness(packagedWindowsExecutablePath!);
+
+  expect(
+    packagedFreshness.isFresh,
+    `Packaged waveform perf requires a fresh packaged app. Run "pnpm package:win" after "pnpm build". Source build mtime: ${packagedFreshness.sourceBuildMtimeMs ?? 'missing'}, packaged payload mtime: ${packagedFreshness.packagedPayloadMtimeMs ?? 'missing'}, packaged exe mtime: ${packagedFreshness.packagedExecutableMtimeMs ?? 'missing'}.`,
+  ).toBe(true);
 
   const { app, window } = await launchPackagedWindowsApp();
 
@@ -825,18 +889,25 @@ test('packaged waveform sustained 10s viewport and interaction perf', async () =
     expect(panDelta.fullSceneRebuildCount).toBe(0);
     expect(panDelta.viewportContentUpdateCount).toBeGreaterThan(0);
     expect(panDelta.panBufferHitCount).toBeGreaterThan(0);
+    expect(
+      packagedHasCurrentHotPathMetrics,
+      'Packaged app is missing current GPU hot-path metrics. Re-run pnpm package:win so the perf test does not use a stale executable.',
+    ).toBe(true);
+    expect(
+      packagedHasGlyphBatchMetrics,
+      'Packaged app is missing glyph batch metrics. Re-run pnpm package:win so glyph atlas perf is measured from the current bundle.',
+    ).toBe(true);
+
     if (strictPackagedHotPathMetrics) {
       expect(panDelta.gpuBufferUpdateCount).toBeLessThanOrEqual(Math.max(2, panDelta.viewportContentUpdateCount));
       expect(panDelta.gpuBufferReallocCount).toBe(0);
     }
     expect(panDelta.rowReuseCount).toBeGreaterThanOrEqual(panDelta.viewportContentUpdateCount * panVisibleRowCount);
     expect(finalStats.gpuDrawLayerCount).toBeLessThanOrEqual(8);
-    if (packagedHasGlyphBatchMetrics) {
-      expect(finalStats.glyphAtlasTextureCount).toBeGreaterThanOrEqual(finalStats.glyphVertexCount > 0 ? 1 : 0);
-      expect(finalStats.glyphVertexCount).toBeGreaterThan(0);
-      expect(panDelta.labelTextureUpdateCount).toBe(0);
-      expect(panDelta.glyphBufferReallocCount).toBe(0);
-    }
+    expect(finalStats.glyphAtlasTextureCount).toBeGreaterThanOrEqual(1);
+    expect(finalStats.glyphVertexCount).toBeGreaterThan(0);
+    expect(panDelta.labelTextureUpdateCount).toBe(0);
+    expect(panDelta.glyphBufferReallocCount).toBe(0);
     expect(panDelta.reactViewportCommitCount).toBeLessThanOrEqual(panDelta.viewportContentUpdateCount + panDelta.displayViewportUpdateCount);
     expect(zoomDelta.fullSceneRebuildCount).toBe(0);
     expect(zoomDelta.viewportContentUpdateCount).toBeGreaterThan(0);
@@ -894,7 +965,9 @@ test('packaged waveform sustained 10s viewport and interaction perf', async () =
       },
       finalPanelMetrics,
       finalStats,
+      packagedFreshness,
       packagedHasCurrentHotPathMetrics,
+      packagedHasGlyphBatchMetrics,
       strictPackagedHotPathMetrics,
       samples,
       summary: {

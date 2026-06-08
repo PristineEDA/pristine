@@ -40,6 +40,28 @@ describe('WaveformGpuBatchRenderer', () => {
     expect(preparedHitUpdate.labelLayoutCacheHitCount).toBe(1);
     expect(preparedHitUpdate.labelLayoutCacheMissCount).toBe(0);
   });
+
+  it('preallocates batch and glyph buffers before the measured interaction path', () => {
+    const renderer = new WaveformGpuBatchRenderer();
+
+    renderer.prewarmGlyphs(10, 0xd6d6d6, 'abcd');
+    renderer.preallocateBatchCapacity(8, 12);
+    renderer.preallocateGlyphCapacity(4);
+    const preallocation = renderer.commit();
+
+    expect(preallocation.bufferReallocCount).toBeGreaterThan(0);
+    expect(preallocation.glyphBufferReallocCount).toBeGreaterThan(0);
+
+    renderer.reset();
+    addRepresentativeWaveformGeometry(renderer);
+    renderer.acquireLabel('abcd', 0xd6d6d6, 10, 12, 6);
+    const sampledInteraction = renderer.commit();
+
+    expect(sampledInteraction.bufferReallocCount).toBe(0);
+    expect(sampledInteraction.glyphBufferReallocCount).toBe(0);
+    expect(sampledInteraction.labelTextureUpdateCount).toBe(0);
+    expect(sampledInteraction.drawLayerCount).toBeLessThanOrEqual(8);
+  });
 });
 
 function addRepresentativeWaveformGeometry(renderer: WaveformGpuBatchRenderer) {

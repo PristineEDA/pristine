@@ -353,9 +353,6 @@ function accumulateFrameBatchStaticMetrics(scene: WaveformScene, target: Wavefor
   target.meshVertexCount = gpuMetrics.vertexCount;
   target.gpuBufferCapacityVertexCount = gpuMetrics.bufferCapacityVertexCount;
   target.glyphAtlasTextureCount = gpuMetrics.glyphAtlasTextureCount;
-  target.glyphBufferReallocCount = gpuMetrics.glyphBufferReallocCount;
-  target.glyphBufferUpdateCount = gpuMetrics.glyphBufferUpdateCount;
-  target.glyphBufferUpdateMs = gpuMetrics.glyphBufferUpdateMs;
   target.glyphVertexCount = gpuMetrics.glyphVertexCount;
   target.labelPoolSize = gpuMetrics.labelPoolSize;
 }
