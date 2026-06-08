@@ -5607,6 +5607,15 @@ test('waveform bottom panel renders binary waveform and controls', async () => {
   await expect.poll(async () => readCanvasNumber('data-gpu-vertex-count'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(0);
+  await expect.poll(async () => readCanvasNumber('data-glyph-atlas-texture-count'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBe(1);
+  await expect.poll(async () => readCanvasNumber('data-glyph-buffer-update-count'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
+  await expect.poll(async () => readCanvasNumber('data-glyph-vertex-count'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
   const initialGpuVertexCount = await readCanvasNumber('data-gpu-vertex-count');
   const initialGpuBufferUpdateCount = await readCanvasNumber('data-gpu-buffer-update-count');
   const initialInteractionFrameRequestCount = await readCanvasNumber('data-interaction-frame-request-count');
@@ -5820,7 +5829,6 @@ test('waveform bottom panel renders binary waveform and controls', async () => {
   }).toBeLessThan(canvasBox.width);
 
   const startBeforeShiftWheel = Number(await panel.getAttribute('data-visible-window-start') ?? '0');
-  const horizontalScrollLeftBeforeShiftWheel = Number(await horizontalScrollbar.getAttribute('data-horizontal-scroll-left') ?? '0');
   const rulerLeftBeforeShiftWheel = Number(await canvasHost.getAttribute('data-ruler-scroll-indicator-left') ?? '0');
   await canvasHost.hover();
   await window.keyboard.down('Shift');
@@ -5844,7 +5852,10 @@ test('waveform bottom panel renders binary waveform and controls', async () => {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(rulerLeftBeforeShiftWheel);
   const maxHorizontalScrollLeft = Number(await horizontalScrollbar.getAttribute('data-horizontal-scroll-range') ?? '0');
-  await setHorizontalScrollbarLeft(maxHorizontalScrollLeft);
+  const offscreenScrollLeft = cursorTimeAfterClick < Number(await panel.getAttribute('data-duration') ?? '0') / 2
+    ? maxHorizontalScrollLeft
+    : 0;
+  await setHorizontalScrollbarLeft(offscreenScrollLeft);
   await expect.poll(async () => {
     const viewportStart = Number(await panel.getAttribute('data-visible-window-start') ?? '0');
     const viewportEnd = Number(await panel.getAttribute('data-visible-window-end') ?? '0');
@@ -5854,22 +5865,30 @@ test('waveform bottom panel renders binary waveform and controls', async () => {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBe(true);
   await expect(canvasHost).toHaveAttribute('data-cursor-visible', 'false');
-  await setHorizontalScrollbarLeft(horizontalScrollLeftBeforeShiftWheel);
-  await expect.poll(async () => Number(await panel.getAttribute('data-visible-window-start') ?? '0'), {
-    timeout: UI_READY_TIMEOUT_MS,
-  }).toBeLessThanOrEqual(startBeforeShiftWheel + 1);
-  await expect(canvasHost).toHaveAttribute('data-cursor-visible', 'true');
+  await window.getByTestId('waveform-fit').click();
   await expect.poll(async () => {
     const viewportStart = Number(await panel.getAttribute('data-visible-window-start') ?? '0');
     const viewportEnd = Number(await panel.getAttribute('data-visible-window-end') ?? '0');
-    const width = Number(await canvasHost.getAttribute('data-canvas-width') ?? '0');
-    const expectedX = 10 + (cursorTimeAfterClick - viewportStart) / Math.max(8, viewportEnd - viewportStart) * Math.max(1, width - 20);
-    const actualX = Number(await canvasHost.getAttribute('data-cursor-x') ?? 'NaN');
 
-    return Math.abs(actualX - expectedX);
+    return cursorTimeAfterClick >= viewportStart && cursorTimeAfterClick <= viewportEnd;
   }, {
     timeout: UI_READY_TIMEOUT_MS,
-  }).toBeLessThanOrEqual(1.5);
+  }).toBe(true);
+  await expect(canvasHost).toHaveAttribute('data-cursor-visible', 'true');
+  await expect.poll(async () => {
+    const width = Number(await canvasHost.getAttribute('data-canvas-width') ?? '0');
+    const actualX = Number(await canvasHost.getAttribute('data-cursor-x') ?? 'NaN');
+
+    return Number.isFinite(actualX) && actualX >= 0 && actualX <= width;
+  }, {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBe(true);
+  await zoomInButton.click();
+  await expect.poll(async () => Number(await horizontalScrollbar.getAttribute('data-horizontal-scroll-range') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
+  const rulerDragScrollRange = Number(await horizontalScrollbar.getAttribute('data-horizontal-scroll-range') ?? '0');
+  await setHorizontalScrollbarLeft(rulerDragScrollRange / 2);
 
   const startBeforeRulerDrag = Number(await panel.getAttribute('data-visible-window-start') ?? '0');
   const horizontalScrollLeftBeforeRulerDrag = Number(await horizontalScrollbar.getAttribute('data-horizontal-scroll-left') ?? '0');

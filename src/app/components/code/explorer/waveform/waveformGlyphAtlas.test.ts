@@ -3,11 +3,11 @@ import { describe, expect, it } from 'vitest';
 import { WaveformGlyphAtlas } from './waveformGlyphAtlas';
 
 describe('WaveformGlyphAtlas', () => {
-  it('reuses glyph runs during pan without updating label textures', () => {
+  it('renders labels through one glyph mesh and pans without updating the atlas texture', () => {
     const atlas = new WaveformGlyphAtlas();
 
     atlas.beginFrame();
-    const first = atlas.acquireLabel({
+    const firstContainer = atlas.acquireLabel({
       fill: 0xd6d6d6,
       fontSize: 10,
       text: 'abc.',
@@ -16,13 +16,17 @@ describe('WaveformGlyphAtlas', () => {
     });
     const warmup = atlas.commit();
 
+    expect(firstContainer).toBe(atlas.container);
+    expect(warmup.glyphAtlasTextureCount).toBe(1);
+    expect(warmup.glyphVertexCount).toBe(16);
+    expect(warmup.glyphBufferUpdateCount).toBe(1);
     expect(warmup.labelPoolSize).toBe(1);
     expect(warmup.labelTextureUpdateCount).toBe(1);
     expect(warmup.labelLayoutCacheHitCount).toBe(0);
     expect(warmup.labelLayoutCacheMissCount).toBe(1);
 
     atlas.beginFrame();
-    const reused = atlas.acquireLabel({
+    const reusedContainer = atlas.acquireLabel({
       fill: 0xd6d6d6,
       fontSize: 10,
       text: 'abc.',
@@ -31,16 +35,19 @@ describe('WaveformGlyphAtlas', () => {
     });
     const pan = atlas.commit();
 
-    expect(reused).toBe(first);
-    expect(reused.x).toBe(40);
+    expect(reusedContainer).toBe(atlas.container);
+    expect(pan.glyphAtlasTextureCount).toBe(1);
+    expect(pan.glyphVertexCount).toBe(warmup.glyphVertexCount);
+    expect(pan.glyphBufferUpdateCount).toBe(1);
     expect(pan.labelPoolSize).toBe(1);
     expect(pan.labelTextureUpdateCount).toBe(0);
     expect(pan.labelLayoutCacheHitCount).toBe(1);
     expect(pan.labelLayoutCacheMissCount).toBe(0);
   });
 
-  it('allocates a new glyph run only when fitted text changes during zoom', () => {
+  it('uses layout misses for fitted text changes without requiring a new texture when glyphs already exist', () => {
     const atlas = new WaveformGlyphAtlas();
+    atlas.prewarm(10, 0xd6d6d6, 'abcd.');
 
     atlas.beginFrame();
     atlas.acquireLabel({
@@ -63,16 +70,17 @@ describe('WaveformGlyphAtlas', () => {
     const zoom = atlas.commit();
 
     expect(zoom.labelPoolSize).toBe(2);
-    expect(zoom.labelTextureUpdateCount).toBe(1);
+    expect(zoom.labelTextureUpdateCount).toBe(0);
     expect(zoom.labelLayoutCacheHitCount).toBe(0);
     expect(zoom.labelLayoutCacheMissCount).toBe(1);
   });
 
-  it('keeps a stable keyed glyph run and updates texture only when text changes', () => {
+  it('keeps a stable keyed glyph run while text changes only rewrite glyph vertices', () => {
     const atlas = new WaveformGlyphAtlas();
+    atlas.prewarm(10, 0xd6d6d6, 'abcd.');
 
     atlas.beginFrame();
-    const first = atlas.acquireLabel({
+    atlas.acquireLabel({
       cacheKey: 'signal-a:42:value',
       fill: 0xd6d6d6,
       fontSize: 10,
@@ -83,7 +91,7 @@ describe('WaveformGlyphAtlas', () => {
     atlas.commit();
 
     atlas.beginFrame();
-    const sameSegment = atlas.acquireLabel({
+    atlas.acquireLabel({
       cacheKey: 'signal-a:42:value',
       fill: 0xd6d6d6,
       fontSize: 10,
@@ -93,11 +101,10 @@ describe('WaveformGlyphAtlas', () => {
     });
     const zoom = atlas.commit();
 
-    expect(sameSegment).toBe(first);
-    expect(sameSegment.text).toBe('abc.');
     expect(zoom.labelPoolSize).toBe(1);
-    expect(zoom.labelTextureUpdateCount).toBe(1);
+    expect(zoom.labelTextureUpdateCount).toBe(0);
     expect(zoom.labelLayoutCacheHitCount).toBe(1);
     expect(zoom.labelLayoutCacheMissCount).toBe(0);
+    expect(zoom.glyphBufferUpdateCount).toBe(1);
   });
 });

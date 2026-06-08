@@ -171,6 +171,11 @@ async function readCanvasStats(canvasHost: ReturnType<Page['getByTestId']>) {
     gpuDrawLayerCount: await readNumber('data-gpu-draw-layer-count'),
     gpuLayerCount: await readNumber('data-gpu-layer-count'),
     gpuVertexCount: await readNumber('data-gpu-vertex-count'),
+    glyphAtlasTextureCount: await readNumber('data-glyph-atlas-texture-count'),
+    glyphBufferReallocCount: await readNumber('data-glyph-buffer-realloc-count'),
+    glyphBufferUpdateCount: await readNumber('data-glyph-buffer-update-count'),
+    glyphBufferUpdateMs: await readNumber('data-glyph-buffer-update-ms'),
+    glyphVertexCount: await readNumber('data-glyph-vertex-count'),
     idleViewportCommitCount: await readNumber('data-idle-viewport-commit-count'),
     labelLayoutCacheHitCount: await readNumber('data-label-layout-cache-hit-count'),
     labelLayoutCacheMissCount: await readNumber('data-label-layout-cache-miss-count'),
@@ -317,6 +322,8 @@ function diffInteractionMetrics(
     droppedFrameCount: end.droppedFrameCount - start.droppedFrameCount,
     gpuBufferReallocCount: end.gpuBufferReallocCount - start.gpuBufferReallocCount,
     gpuBufferUpdateCount: end.gpuBufferUpdateCount - start.gpuBufferUpdateCount,
+    glyphBufferReallocCount: end.glyphBufferReallocCount - start.glyphBufferReallocCount,
+    glyphBufferUpdateCount: end.glyphBufferUpdateCount - start.glyphBufferUpdateCount,
     idleViewportCommitCount: end.idleViewportCommitCount - start.idleViewportCommitCount,
     labelLayoutCacheHitCount: end.labelLayoutCacheHitCount - start.labelLayoutCacheHitCount,
     labelLayoutCacheMissCount: end.labelLayoutCacheMissCount - start.labelLayoutCacheMissCount,
@@ -383,9 +390,11 @@ function summarizePerfSamples(samples: Array<Awaited<ReturnType<typeof capturePe
 }
 
 async function attachPerfArtifact(name: string, payload: unknown) {
+  const artifactPath = test.info().outputPath(name);
+  await fs.promises.writeFile(artifactPath, JSON.stringify(payload, null, 2));
   await test.info().attach(name, {
-    body: JSON.stringify(payload, null, 2),
     contentType: 'application/json',
+    path: artifactPath,
   });
 }
 
@@ -591,6 +600,9 @@ test('waveform dense render opt-in baseline', async () => {
     expect(finalStats.gpuDrawLayerCount).toBeLessThanOrEqual(8);
     expect(finalStats.gpuBufferCapacityVertexCount).toBeGreaterThan(0);
     expect(finalStats.gpuBufferUpdateCount).toBeGreaterThan(0);
+    expect(finalStats.glyphAtlasTextureCount).toBe(1);
+    expect(finalStats.glyphBufferUpdateCount).toBeGreaterThan(0);
+    expect(finalStats.glyphVertexCount).toBeGreaterThan(0);
     expect(samples.length).toBeGreaterThanOrEqual(10);
 
     await attachPerfArtifact('waveform-binary-render-baseline.json', baselinePerfArtifact);
@@ -799,6 +811,9 @@ test('packaged waveform sustained 10s viewport and interaction perf', async () =
     const packagedHasCurrentHotPathMetrics = await canvasHost.getAttribute('data-gpu-buffer-realloc-count') !== null
       && await canvasHost.getAttribute('data-gpu-buffer-capacity-vertex-count') !== null
       && await canvasHost.getAttribute('data-scene-update-ms') !== null;
+    const packagedHasGlyphBatchMetrics = await canvasHost.getAttribute('data-glyph-atlas-texture-count') !== null
+      && await canvasHost.getAttribute('data-glyph-buffer-realloc-count') !== null
+      && await canvasHost.getAttribute('data-glyph-vertex-count') !== null;
     const strictPackagedHotPathMetrics = process.env.PRISTINE_STRICT_WAVEFORM_PACKAGED_PERF === '1';
     const observedHeapBytes = [jsHeapBefore, ...samples.map((sample) => sample.jsHeapBytes), jsHeapAfter].filter((value) => value > 0);
     const jsHeapRange = observedHeapBytes.length > 0
@@ -816,7 +831,12 @@ test('packaged waveform sustained 10s viewport and interaction perf', async () =
     }
     expect(panDelta.rowReuseCount).toBeGreaterThanOrEqual(panDelta.viewportContentUpdateCount * panVisibleRowCount);
     expect(finalStats.gpuDrawLayerCount).toBeLessThanOrEqual(8);
-    expect(panDelta.labelTextureUpdateCount).toBe(0);
+    if (packagedHasGlyphBatchMetrics) {
+      expect(finalStats.glyphAtlasTextureCount).toBeGreaterThanOrEqual(finalStats.glyphVertexCount > 0 ? 1 : 0);
+      expect(finalStats.glyphVertexCount).toBeGreaterThan(0);
+      expect(panDelta.labelTextureUpdateCount).toBe(0);
+      expect(panDelta.glyphBufferReallocCount).toBe(0);
+    }
     expect(panDelta.reactViewportCommitCount).toBeLessThanOrEqual(panDelta.viewportContentUpdateCount + panDelta.displayViewportUpdateCount);
     expect(zoomDelta.fullSceneRebuildCount).toBe(0);
     expect(zoomDelta.viewportContentUpdateCount).toBeGreaterThan(0);

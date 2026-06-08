@@ -22,7 +22,7 @@ import {
 import type { WaveformDataSet, WaveformRenderMetrics, WaveformRendererStatus, WaveformSignal, WaveformViewport } from './waveformTypes';
 import type { WaveformSignalDisplayRow } from './waveformLayout';
 import type { ElectronGpuDiagnostics, RendererGpuSupportDiagnostics } from '../../../../../../types/electron-gpu';
-import { WaveformCanvas } from './WaveformCanvas';
+import { WaveformCanvas, type WaveformCanvasHandle } from './WaveformCanvas';
 import { useWaveformSession } from './waveformSession';
 import { WaveformBinaryValueKind, waveformBinaryFrameSignalTableStride, type ParsedWaveformFrame } from './waveformBinaryFrame';
 
@@ -41,6 +41,8 @@ export function WaveformPanel() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [rendererGpuSupport] = useState<RendererGpuSupportDiagnostics>(() => detectRendererGpuSupport());
   const signalScrollRef = useRef<HTMLDivElement | null>(null);
+  const waveformCanvasRef = useRef<WaveformCanvasHandle | null>(null);
+  const displayViewportRef = useRef<WaveformViewport | null>(null);
   const waveformViewportRef = useRef<HTMLDivElement | null>(null);
   const horizontalScrollRef = useRef<HTMLDivElement | null>(null);
   const syncingScrollRef = useRef(false);
@@ -86,11 +88,17 @@ export function WaveformPanel() {
       return;
     }
 
-    setViewport(getInitialWaveformViewport(data));
+    const initialViewport = getInitialWaveformViewport(data);
+    displayViewportRef.current = initialViewport;
+    setViewport(initialViewport);
     setCursorTime(data.cursorTime);
     setSelectedSignalId(data.signals[0]?.id ?? null);
     setVerticalScrollTop(0);
   }, [data]);
+
+  useEffect(() => {
+    displayViewportRef.current = activeViewport;
+  }, [activeViewport]);
 
   useEffect(() => {
     let cancelled = false;
@@ -170,7 +178,7 @@ export function WaveformPanel() {
       return;
     }
 
-    setViewport((currentViewport) => zoomWaveformViewport(currentViewport ?? getInitialWaveformViewport(data), cursorTime, zoomButtonFactor, data.duration));
+    scheduleDisplayViewport(zoomWaveformViewport(getPanelDisplayViewport(data), cursorTime, zoomButtonFactor, data.duration));
   }
 
   function handleZoomOut() {
@@ -178,7 +186,7 @@ export function WaveformPanel() {
       return;
     }
 
-    setViewport((currentViewport) => zoomWaveformViewport(currentViewport ?? getInitialWaveformViewport(data), cursorTime, 1 / zoomButtonFactor, data.duration));
+    scheduleDisplayViewport(zoomWaveformViewport(getPanelDisplayViewport(data), cursorTime, 1 / zoomButtonFactor, data.duration));
   }
 
   function handlePanLeft() {
@@ -186,10 +194,8 @@ export function WaveformPanel() {
       return;
     }
 
-    setViewport((currentViewport) => {
-      const safeViewport = currentViewport ?? getInitialWaveformViewport(data);
-      return panWaveformViewport(safeViewport, -getWaveformViewportSpan(safeViewport) * 0.18, data.duration);
-    });
+    const safeViewport = getPanelDisplayViewport(data);
+    scheduleDisplayViewport(panWaveformViewport(safeViewport, -getWaveformViewportSpan(safeViewport) * 0.18, data.duration));
   }
 
   function handlePanRight() {
@@ -197,10 +203,8 @@ export function WaveformPanel() {
       return;
     }
 
-    setViewport((currentViewport) => {
-      const safeViewport = currentViewport ?? getInitialWaveformViewport(data);
-      return panWaveformViewport(safeViewport, getWaveformViewportSpan(safeViewport) * 0.18, data.duration);
-    });
+    const safeViewport = getPanelDisplayViewport(data);
+    scheduleDisplayViewport(panWaveformViewport(safeViewport, getWaveformViewportSpan(safeViewport) * 0.18, data.duration));
   }
 
   function handleFit() {
@@ -208,7 +212,7 @@ export function WaveformPanel() {
       return;
     }
 
-    setViewport(fitWaveformViewport(data));
+    scheduleDisplayViewport(fitWaveformViewport(data));
     setCursorTime(data.cursorTime);
   }
 
@@ -217,9 +221,24 @@ export function WaveformPanel() {
       return;
     }
 
-    setViewport(getInitialWaveformViewport(data));
+    scheduleDisplayViewport(getInitialWaveformViewport(data));
     setCursorTime(data.cursorTime);
     setSelectedSignalId(data.signals[0]?.id ?? null);
+  }
+
+  function getPanelDisplayViewport(currentData: NonNullable<typeof data>) {
+    return displayViewportRef.current ?? viewport ?? getInitialWaveformViewport(currentData);
+  }
+
+  function scheduleDisplayViewport(nextViewport: WaveformViewport) {
+    displayViewportRef.current = nextViewport;
+
+    if (waveformCanvasRef.current) {
+      waveformCanvasRef.current.setDisplayViewport(nextViewport);
+      return;
+    }
+
+    setViewport(nextViewport);
   }
 
   function syncVerticalScroll(source: HTMLDivElement | null) {
@@ -260,7 +279,7 @@ export function WaveformPanel() {
       return;
     }
 
-    setViewport(getWaveformViewportForHorizontalScroll(activeViewport, data.duration, waveformViewportWidth, horizontalScrollElement.scrollLeft));
+    scheduleDisplayViewport(getWaveformViewportForHorizontalScroll(getPanelDisplayViewport(data), data.duration, waveformViewportWidth, horizontalScrollElement.scrollLeft));
   }
 
   function clampVerticalScrollTop(scrollTop: number) {
@@ -294,6 +313,7 @@ export function WaveformPanel() {
       data-renderer={renderer}
       data-selected-signal-id={selectedSignalId ?? ''}
       data-signal-count={data?.signals.length ?? 0}
+      data-duration={data?.duration.toFixed(2) ?? '0.00'}
       data-waveform-error={session.error ?? ''}
       data-waveform-empty-visible-signal-count={emptyVisibleSignalCount}
       data-interaction-frame-request-count={session.interactionFrameRequestCount}
@@ -443,6 +463,7 @@ export function WaveformPanel() {
             <div ref={waveformViewportRef} className="relative min-h-0 w-full flex-1 overflow-hidden" data-testid="waveform-viewport">
               {canRenderWaveformCanvas && data ? (
                 <WaveformCanvas
+                  ref={waveformCanvasRef}
                   cursorTime={cursorTime}
                   data={data}
                   frame={session.frame}
@@ -458,7 +479,10 @@ export function WaveformPanel() {
                   onMetricsChange={setRenderMetrics}
                   onRendererChange={setRenderer}
                   onVerticalScrollDelta={handleCanvasVerticalScrollDelta}
-                  onViewportChange={(nextViewport) => setViewport(nextViewport)}
+                  onViewportChange={(nextViewport) => {
+                    displayViewportRef.current = nextViewport;
+                    setViewport(nextViewport);
+                  }}
                 />
               ) : (
                 <div className="flex h-full items-center justify-center text-[12px] text-ide-text-muted" data-testid="waveform-loading-state">

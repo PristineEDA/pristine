@@ -15,6 +15,9 @@ describe('WaveformGpuBatchRenderer', () => {
     expect(warmup.vertexCount).toBeGreaterThan(0);
     expect(warmup.bufferCapacityVertexCount).toBeGreaterThanOrEqual(warmup.vertexCount);
     expect(warmup.bufferReallocCount).toBeGreaterThan(0);
+    expect(warmup.glyphAtlasTextureCount).toBe(1);
+    expect(warmup.glyphVertexCount).toBeGreaterThan(0);
+    expect(warmup.glyphBufferUpdateCount).toBe(1);
     expect(warmup.labelPoolSize).toBe(1);
     expect(warmup.labelTextureUpdateCount).toBe(1);
     expect(warmup.labelLayoutCacheHitCount).toBe(0);
@@ -29,6 +32,9 @@ describe('WaveformGpuBatchRenderer', () => {
     expect(preparedHitUpdate.vertexCount).toBe(warmup.vertexCount);
     expect(preparedHitUpdate.bufferCapacityVertexCount).toBe(warmup.bufferCapacityVertexCount);
     expect(preparedHitUpdate.bufferReallocCount).toBe(0);
+    expect(preparedHitUpdate.glyphAtlasTextureCount).toBe(1);
+    expect(preparedHitUpdate.glyphVertexCount).toBe(warmup.glyphVertexCount);
+    expect(preparedHitUpdate.glyphBufferUpdateCount).toBe(1);
     expect(preparedHitUpdate.labelPoolSize).toBe(1);
     expect(preparedHitUpdate.labelTextureUpdateCount).toBe(0);
     expect(preparedHitUpdate.labelLayoutCacheHitCount).toBe(1);

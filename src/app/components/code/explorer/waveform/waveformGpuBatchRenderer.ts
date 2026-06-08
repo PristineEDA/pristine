@@ -33,6 +33,11 @@ export interface WaveformGpuBatchMetrics {
   bufferUpdateCount: number;
   bufferUpdateMs: number;
   drawLayerCount: number;
+  glyphAtlasTextureCount: number;
+  glyphBufferReallocCount: number;
+  glyphBufferUpdateCount: number;
+  glyphBufferUpdateMs: number;
+  glyphVertexCount: number;
   labelLayoutCacheHitCount: number;
   labelLayoutCacheMissCount: number;
   labelPoolSize: number;
@@ -97,6 +102,10 @@ export class WaveformGpuBatchRenderer {
     this.glyphAtlas.beginFrame();
   }
 
+  public prewarmGlyphs(fontSize: number, fill: number, characters?: string) {
+    this.glyphAtlas.prewarm(fontSize, fill, characters);
+  }
+
   public clear() {
     this.reset();
     this.commit();
@@ -157,6 +166,11 @@ export class WaveformGpuBatchRenderer {
       bufferUpdateCount,
       bufferUpdateMs: Math.max(0, performance.now() - startedAt),
       drawLayerCount,
+      glyphAtlasTextureCount: glyphMetrics.glyphAtlasTextureCount,
+      glyphBufferReallocCount: glyphMetrics.glyphBufferReallocCount,
+      glyphBufferUpdateCount: glyphMetrics.glyphBufferUpdateCount,
+      glyphBufferUpdateMs: glyphMetrics.glyphBufferUpdateMs,
+      glyphVertexCount: glyphMetrics.glyphVertexCount,
       labelLayoutCacheHitCount: glyphMetrics.labelLayoutCacheHitCount,
       labelLayoutCacheMissCount: glyphMetrics.labelLayoutCacheMissCount,
       labelPoolSize: glyphMetrics.labelPoolSize,
@@ -175,6 +189,11 @@ function createEmptyBatchMetrics(): WaveformGpuBatchMetrics {
     bufferUpdateCount: 0,
     bufferUpdateMs: 0,
     drawLayerCount: 0,
+    glyphAtlasTextureCount: 0,
+    glyphBufferReallocCount: 0,
+    glyphBufferUpdateCount: 0,
+    glyphBufferUpdateMs: 0,
+    glyphVertexCount: 0,
     labelLayoutCacheHitCount: 0,
     labelLayoutCacheMissCount: 0,
     labelPoolSize: 0,

@@ -48,6 +48,11 @@ export interface WaveformRenderStats {
   gpuDrawLayerCount: number;
   gpuLayerCount: number;
   gpuVertexCount: number;
+  glyphAtlasTextureCount: number;
+  glyphBufferReallocCount: number;
+  glyphBufferUpdateCount: number;
+  glyphBufferUpdateMs: number;
+  glyphVertexCount: number;
   labelLayoutCacheHitCount: number;
   labelLayoutCacheMissCount: number;
   labelTextureUpdateCount: number;
@@ -116,6 +121,11 @@ export interface WaveformSceneUpdateMetrics {
   gpuDrawLayerCount: number;
   gpuLayerCount: number;
   gpuVertexCount: number;
+  glyphAtlasTextureCount: number;
+  glyphBufferReallocCount: number;
+  glyphBufferUpdateCount: number;
+  glyphBufferUpdateMs: number;
+  glyphVertexCount: number;
   labelLayoutCacheHitCount: number;
   labelLayoutCacheMissCount: number;
   labelTextureUpdateCount: number;

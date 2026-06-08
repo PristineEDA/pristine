@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { Application } from 'pixi.js';
 
 import {
@@ -43,6 +43,11 @@ import { waveformBinaryFrameSignalTableStride, type ParsedWaveformFrame } from '
 
 type PixiRendererPreference = 'webgpu' | 'webgl';
 
+export interface WaveformCanvasHandle {
+  flushViewportCommit: () => void;
+  setDisplayViewport: (viewport: WaveformViewport) => void;
+}
+
 interface WaveformCanvasProps {
   cursorTime: number;
   data: WaveformDataSet;
@@ -82,7 +87,7 @@ const waveformViewportCommitDelayMs = 120;
 const waveformReactMetricPublishIntervalMs = 250;
 const waveformDroppedFrameThresholdMs = 24;
 
-export function WaveformCanvas({
+export const WaveformCanvas = forwardRef<WaveformCanvasHandle, WaveformCanvasProps>(function WaveformCanvas({
   cursorTime,
   data,
   frame,
@@ -99,7 +104,7 @@ export function WaveformCanvas({
   onRendererChange,
   onVerticalScrollDelta,
   onViewportChange,
-}: WaveformCanvasProps) {
+}: WaveformCanvasProps, ref) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const appRef = useRef<Application | null>(null);
   const sceneRef = useRef<WaveformScene | null>(null);
@@ -145,6 +150,11 @@ export function WaveformCanvas({
   onVerticalScrollDeltaRef.current = onVerticalScrollDelta;
   onViewportChangeRef.current = onViewportChange;
   verticalScrollTopRef.current = verticalScrollTop;
+
+  useImperativeHandle(ref, () => ({
+    flushViewportCommit: flushPendingViewportCommit,
+    setDisplayViewport: scheduleViewportChange,
+  }));
 
   useEffect(() => {
     let disposed = false;
@@ -542,6 +552,11 @@ export function WaveformCanvas({
     sceneUpdateMetricsRef.current.gpuDrawLayerCount = baseStats.gpuDrawLayerCount;
     sceneUpdateMetricsRef.current.gpuLayerCount = baseStats.gpuLayerCount;
     sceneUpdateMetricsRef.current.gpuVertexCount = baseStats.gpuVertexCount;
+    sceneUpdateMetricsRef.current.glyphAtlasTextureCount = baseStats.glyphAtlasTextureCount;
+    sceneUpdateMetricsRef.current.glyphBufferReallocCount += baseStats.glyphBufferReallocCount;
+    sceneUpdateMetricsRef.current.glyphBufferUpdateCount += baseStats.glyphBufferUpdateCount;
+    sceneUpdateMetricsRef.current.glyphBufferUpdateMs += baseStats.glyphBufferUpdateMs;
+    sceneUpdateMetricsRef.current.glyphVertexCount = baseStats.glyphVertexCount;
     sceneUpdateMetricsRef.current.labelLayoutCacheHitCount += baseStats.labelLayoutCacheHitCount;
     sceneUpdateMetricsRef.current.labelLayoutCacheMissCount += baseStats.labelLayoutCacheMissCount;
     sceneUpdateMetricsRef.current.labelPoolSize = baseStats.labelPoolSize;
@@ -645,6 +660,11 @@ export function WaveformCanvas({
     host.dataset.gpuDrawLayerCount = String(latestStats.gpuDrawLayerCount);
     host.dataset.gpuLayerCount = String(latestStats.gpuLayerCount);
     host.dataset.gpuVertexCount = String(latestStats.gpuVertexCount);
+    host.dataset.glyphAtlasTextureCount = String(latestStats.glyphAtlasTextureCount);
+    host.dataset.glyphBufferReallocCount = String(latestStats.glyphBufferReallocCount);
+    host.dataset.glyphBufferUpdateCount = String(latestStats.glyphBufferUpdateCount);
+    host.dataset.glyphBufferUpdateMs = latestStats.glyphBufferUpdateMs.toFixed(3);
+    host.dataset.glyphVertexCount = String(latestStats.glyphVertexCount);
     host.dataset.idleViewportCommitCount = String(latestStats.idleViewportCommitCount);
     host.dataset.labelLayoutCacheHitCount = String(latestStats.labelLayoutCacheHitCount);
     host.dataset.labelLayoutCacheMissCount = String(latestStats.labelLayoutCacheMissCount);
@@ -717,6 +737,11 @@ export function WaveformCanvas({
       data-gpu-draw-layer-count={renderStats.gpuDrawLayerCount}
       data-gpu-layer-count={renderStats.gpuLayerCount}
       data-gpu-vertex-count={renderStats.gpuVertexCount}
+      data-glyph-atlas-texture-count={renderStats.glyphAtlasTextureCount}
+      data-glyph-buffer-realloc-count={renderStats.glyphBufferReallocCount}
+      data-glyph-buffer-update-count={renderStats.glyphBufferUpdateCount}
+      data-glyph-buffer-update-ms={renderStats.glyphBufferUpdateMs.toFixed(3)}
+      data-glyph-vertex-count={renderStats.glyphVertexCount}
       data-idle-viewport-commit-count={renderStats.idleViewportCommitCount}
       data-label-layout-cache-hit-count={renderStats.labelLayoutCacheHitCount}
       data-label-layout-cache-miss-count={renderStats.labelLayoutCacheMissCount}
@@ -790,7 +815,7 @@ export function WaveformCanvas({
       )}
     </div>
   );
-}
+});
 
 async function createPixiApp(host: HTMLElement) {
   const width = Math.max(waveformCanvasMinWidth, Math.floor(host.clientWidth));
@@ -849,6 +874,11 @@ function createEmptyRenderStats(): WaveformRenderStats {
     gpuDrawLayerCount: 0,
     gpuLayerCount: 0,
     gpuVertexCount: 0,
+    glyphAtlasTextureCount: 0,
+    glyphBufferReallocCount: 0,
+    glyphBufferUpdateCount: 0,
+    glyphBufferUpdateMs: 0,
+    glyphVertexCount: 0,
     labelLayoutCacheHitCount: 0,
     labelLayoutCacheMissCount: 0,
     labelTextureUpdateCount: 0,
@@ -911,6 +941,11 @@ function createEmptySceneUpdateMetrics(): WaveformSceneUpdateMetrics {
     gpuDrawLayerCount: 0,
     gpuLayerCount: 0,
     gpuVertexCount: 0,
+    glyphAtlasTextureCount: 0,
+    glyphBufferReallocCount: 0,
+    glyphBufferUpdateCount: 0,
+    glyphBufferUpdateMs: 0,
+    glyphVertexCount: 0,
     labelLayoutCacheHitCount: 0,
     labelLayoutCacheMissCount: 0,
     labelTextureUpdateCount: 0,

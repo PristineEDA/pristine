@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { useEffect } from 'react';
+import { forwardRef, useEffect, useImperativeHandle } from 'react';
 
 import { waveformLayerNames } from './createWaveformScene';
 import {
@@ -17,7 +17,7 @@ import { WaveformPanel } from './WaveformPanel';
 import { createWaveformFixtureFrame } from './waveformTestFixtures';
 
 vi.mock('./WaveformCanvas', () => ({
-  WaveformCanvas: ({
+  WaveformCanvas: forwardRef(({
     cursorTime,
     data,
     frame,
@@ -30,6 +30,7 @@ vi.mock('./WaveformCanvas', () => ({
     onMetricsChange,
     onRendererChange,
     onCursorTimeChange,
+    onViewportChange,
   }: {
     cursorTime: number;
     data: WaveformDataSet;
@@ -42,8 +43,9 @@ vi.mock('./WaveformCanvas', () => ({
     preparedRangeMissCount?: number;
     viewport: WaveformViewport;
     onCursorTimeChange: (time: number) => void;
+    onViewportChange: (viewport: WaveformViewport) => void;
     verticalScrollTop: number;
-  }) => {
+  }, ref) => {
     const displayRows = getWaveformDisplayRows(data);
     const firstSignalLaneY = getWaveformFirstSignalLaneY(data);
     const selectedSignalLaneY = getWaveformSignalLaneY(data, selectedSignalId);
@@ -58,6 +60,11 @@ vi.mock('./WaveformCanvas', () => ({
         visiblePrimitiveCount: 1248,
       });
     }, [onMetricsChange, onRendererChange]);
+
+    useImperativeHandle(ref, () => ({
+      flushViewportCommit: () => undefined,
+      setDisplayViewport: (nextViewport: WaveformViewport) => onViewportChange(nextViewport),
+    }), [onViewportChange]);
 
     return (
       <button
@@ -92,6 +99,11 @@ vi.mock('./WaveformCanvas', () => ({
         data-gpu-draw-layer-count="4"
         data-gpu-layer-count="4"
         data-gpu-vertex-count="512"
+        data-glyph-atlas-texture-count="1"
+        data-glyph-buffer-realloc-count="0"
+        data-glyph-buffer-update-count="1"
+        data-glyph-buffer-update-ms="0.125"
+        data-glyph-vertex-count="128"
         data-idle-viewport-commit-count="1"
         data-label-layout-cache-hit-count="6"
         data-label-layout-cache-miss-count="0"
@@ -143,7 +155,7 @@ vi.mock('./WaveformCanvas', () => ({
         Mock waveform canvas
       </button>
     );
-  },
+  }),
 }));
 
 describe('WaveformPanel', () => {
@@ -204,6 +216,7 @@ describe('WaveformPanel', () => {
     await waitFor(() => expect(screen.getByTestId('waveform-canvas')).toBeInTheDocument());
 
     expect(panel).toHaveAttribute('data-signal-count', '168');
+    expect(panel).toHaveAttribute('data-duration', '200.00');
     expect(panel).toHaveAttribute('data-waveform-source', 'lsp-binary');
     expect(panel).toHaveAttribute('data-waveform-frame-version', '2');
     expect(panel).toHaveAttribute('data-waveform-frame-protocol-version', '2');
@@ -232,6 +245,11 @@ describe('WaveformPanel', () => {
     expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-gpu-draw-layer-count'))).toBeGreaterThan(0);
     expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-gpu-layer-count'))).toBeGreaterThan(0);
     expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-gpu-vertex-count'))).toBeGreaterThan(0);
+    expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-glyph-atlas-texture-count'))).toBe(1);
+    expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-glyph-buffer-realloc-count'))).toBeGreaterThanOrEqual(0);
+    expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-glyph-buffer-update-count'))).toBeGreaterThan(0);
+    expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-glyph-buffer-update-ms'))).toBeGreaterThanOrEqual(0);
+    expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-glyph-vertex-count'))).toBeGreaterThan(0);
     expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-label-layout-cache-hit-count'))).toBeGreaterThanOrEqual(0);
     expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-label-layout-cache-miss-count'))).toBeGreaterThanOrEqual(0);
     expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-label-texture-update-count'))).toBeGreaterThanOrEqual(0);

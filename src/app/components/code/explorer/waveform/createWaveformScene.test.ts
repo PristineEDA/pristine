@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BitmapText, Container, Text } from 'pixi.js';
 
-import { clipWaveformLineToBounds, createWaveformScene, getWaveformBusHexagonBevel, getWaveformBusLabelBounds, getWaveformBusSpecialStateHexDigitWidth, getWaveformDigitalSegmentStrokeWidth, getWaveformDigitalSpecialStateBounds, getWaveformFittedBusLabelText, updateWaveformSceneCursor, updateWaveformScenePan, updateWaveformSceneSelection, updateWaveformSceneVerticalScroll, updateWaveformSceneViewport, waveformHighImpedanceStripeSpacing, waveformLayerNames, waveformUnknownStripeSpacing } from './createWaveformScene';
+import { clipWaveformLineToBounds, createWaveformScene, getWaveformBusHexagonBevel, getWaveformBusLabelBounds, getWaveformBusSpecialStateHexDigitWidth, getWaveformBusSpecialStateLabelText, getWaveformDigitalSegmentStrokeWidth, getWaveformDigitalSpecialStateBounds, getWaveformFittedBusLabelText, updateWaveformSceneCursor, updateWaveformScenePan, updateWaveformSceneSelection, updateWaveformSceneVerticalScroll, updateWaveformSceneViewport, waveformHighImpedanceStripeSpacing, waveformLayerNames, waveformUnknownStripeSpacing } from './createWaveformScene';
 import { fitWaveformViewport, getInitialWaveformViewport, getWaveformCanvasHeightForData, getWaveformDigitalPulseFillCount, getWaveformDisplayRows, getWaveformRulerScrollIndicatorMetrics, getWaveformShapeCounts, getWaveformSignalLaneY, timeToX, waveformHeaderHeight } from './waveformLayout';
 import { createWaveformBinaryFrameFromDataset, parseWaveformBinaryFrame, WaveformBinaryValueKind, waveformBinaryFrameVersionV2, type WaveformBinaryFrameSegmentInput } from './waveformBinaryFrame';
 import { createWaveformFixtureFrame, waveformFixtureData, waveformTransitionFixtureData as mockWaveformData } from './waveformTestFixtures';
@@ -288,16 +288,13 @@ describe('createWaveformScene', () => {
       viewport,
       width: 900,
     });
-    const stateLabels = collectText(scene.layers.content).filter((text) => text === 'x' || text === 'z');
-    const xLabels = stateLabels.filter((text) => text === 'x');
-    const zLabels = stateLabels.filter((text) => text === 'z');
     const shapeCounts = getWaveformShapeCounts(data, viewport);
 
-    expect(xLabels.length).toBeGreaterThan(0);
-    expect(zLabels.length).toBeGreaterThan(0);
-    expect(xLabels.length).toBeLessThanOrEqual(shapeCounts.xStateBlockCount);
-    expect(zLabels.length).toBeLessThanOrEqual(shapeCounts.zStateBlockCount);
-    expect(stateLabels.every((text) => text.length === 1)).toBe(true);
+    expect(scene.renderStats.renderedLabelCount).toBeGreaterThanOrEqual(2);
+    expect(scene.renderStats.glyphVertexCount).toBeGreaterThan(0);
+    expect(scene.renderStats.renderedLabelCount).toBeLessThanOrEqual(shapeCounts.xStateBlockCount + shapeCounts.zStateBlockCount);
+    expect(getWaveformBusSpecialStateLabelText(1, 'x')).toBe('x');
+    expect(getWaveformBusSpecialStateLabelText(1, 'z')).toBe('z');
 
     scene.world.destroy({ children: true });
   });
@@ -321,14 +318,13 @@ describe('createWaveformScene', () => {
         viewport,
         width: 900,
       });
-      const labels = collectText(scene.layers.content);
-
-      expect(labels).toContain(expectedX);
-      expect(labels).toContain(expectedZ);
+      expect(getWaveformBusSpecialStateLabelText(signalWidth, 'x')).toBe(expectedX);
+      expect(getWaveformBusSpecialStateLabelText(signalWidth, 'z')).toBe(expectedZ);
       expect(scene.renderStats.busSpecialStateHexagonCount).toBeGreaterThanOrEqual(2);
       expect(scene.renderStats.busSpecialStateLabelCount).toBeGreaterThanOrEqual(2);
       expect(scene.renderStats.busSpecialStateWidthAlignedLabelCount).toBeGreaterThanOrEqual(2);
       expect(scene.renderStats.busFullHexagonCount).toBeGreaterThanOrEqual(scene.renderStats.busSpecialStateHexagonCount);
+      expect(scene.renderStats.glyphVertexCount).toBeGreaterThan(0);
 
       scene.world.destroy({ children: true });
     }
@@ -346,12 +342,10 @@ describe('createWaveformScene', () => {
       viewport,
       width: 220,
     });
-    const labels = collectText(scene.layers.content);
-
-    expect(labels.some((label) => label.includes('.'))).toBe(true);
     expect(scene.renderStats.busTruncatedLabelCount).toBeGreaterThan(0);
     expect(scene.renderStats.busLabelDotReplacementCount).toBeGreaterThan(0);
     expect(scene.renderStats.busSpecialStateLabelCount).toBeGreaterThan(0);
+    expect(scene.renderStats.glyphVertexCount).toBeGreaterThan(0);
 
     scene.world.destroy({ children: true });
   });

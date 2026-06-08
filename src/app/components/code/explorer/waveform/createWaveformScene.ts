@@ -100,6 +100,11 @@ interface WaveformRowContentMetrics {
   gpuDrawLayerCount: number;
   gpuLayerCount: number;
   gpuVertexCount: number;
+  glyphAtlasTextureCount: number;
+  glyphBufferReallocCount: number;
+  glyphBufferUpdateCount: number;
+  glyphBufferUpdateMs: number;
+  glyphVertexCount: number;
   labelLayoutCacheHitCount: number;
   labelLayoutCacheMissCount: number;
   labelTextureUpdateCount: number;
@@ -347,6 +352,11 @@ function accumulateFrameBatchStaticMetrics(scene: WaveformScene, target: Wavefor
   target.gpuVertexCount = gpuMetrics.vertexCount;
   target.meshVertexCount = gpuMetrics.vertexCount;
   target.gpuBufferCapacityVertexCount = gpuMetrics.bufferCapacityVertexCount;
+  target.glyphAtlasTextureCount = gpuMetrics.glyphAtlasTextureCount;
+  target.glyphBufferReallocCount = gpuMetrics.glyphBufferReallocCount;
+  target.glyphBufferUpdateCount = gpuMetrics.glyphBufferUpdateCount;
+  target.glyphBufferUpdateMs = gpuMetrics.glyphBufferUpdateMs;
+  target.glyphVertexCount = gpuMetrics.glyphVertexCount;
   target.labelPoolSize = gpuMetrics.labelPoolSize;
 }
 
@@ -384,6 +394,11 @@ function createRenderStats(visibleRowCount: number, culledRowCount: number, rend
     gpuDrawLayerCount: 0,
     gpuLayerCount: 0,
     gpuVertexCount: 0,
+    glyphAtlasTextureCount: 0,
+    glyphBufferReallocCount: 0,
+    glyphBufferUpdateCount: 0,
+    glyphBufferUpdateMs: 0,
+    glyphVertexCount: 0,
     labelLayoutCacheHitCount: 0,
     labelLayoutCacheMissCount: 0,
     labelTextureUpdateCount: 0,
@@ -533,6 +548,11 @@ function createEmptyRowContentMetrics(): WaveformRowContentMetrics {
     gpuDrawLayerCount: 0,
     gpuLayerCount: 0,
     gpuVertexCount: 0,
+    glyphAtlasTextureCount: 0,
+    glyphBufferReallocCount: 0,
+    glyphBufferUpdateCount: 0,
+    glyphBufferUpdateMs: 0,
+    glyphVertexCount: 0,
     labelLayoutCacheHitCount: 0,
     labelLayoutCacheMissCount: 0,
     labelTextureUpdateCount: 0,
@@ -691,6 +711,11 @@ function redrawWaveformSceneFrameBatchContent(scene: WaveformScene, options: Wav
   metrics.gpuDrawLayerCount += gpuMetrics.drawLayerCount;
   metrics.gpuLayerCount += gpuMetrics.drawLayerCount;
   metrics.gpuVertexCount += gpuMetrics.vertexCount;
+  metrics.glyphAtlasTextureCount += gpuMetrics.glyphAtlasTextureCount;
+  metrics.glyphBufferReallocCount += gpuMetrics.glyphBufferReallocCount;
+  metrics.glyphBufferUpdateCount += gpuMetrics.glyphBufferUpdateCount;
+  metrics.glyphBufferUpdateMs += gpuMetrics.glyphBufferUpdateMs;
+  metrics.glyphVertexCount += gpuMetrics.glyphVertexCount;
   metrics.labelLayoutCacheHitCount += gpuMetrics.labelLayoutCacheHitCount;
   metrics.labelLayoutCacheMissCount += gpuMetrics.labelLayoutCacheMissCount;
   metrics.labelPoolSize = gpuMetrics.labelPoolSize;
@@ -724,6 +749,11 @@ function accumulateRowContentMetrics(target: WaveformRenderStats, source: Wavefo
   target.gpuLayerCount += source.gpuLayerCount;
   target.gpuVertexCount += source.gpuVertexCount;
   target.gpuBufferCapacityVertexCount += source.gpuBufferCapacityVertexCount;
+  target.glyphAtlasTextureCount += source.glyphAtlasTextureCount;
+  target.glyphBufferReallocCount += source.glyphBufferReallocCount;
+  target.glyphBufferUpdateCount += source.glyphBufferUpdateCount;
+  target.glyphBufferUpdateMs += source.glyphBufferUpdateMs;
+  target.glyphVertexCount += source.glyphVertexCount;
   target.meshVertexCount = target.gpuVertexCount;
   target.labelLayoutCacheHitCount += source.labelLayoutCacheHitCount;
   target.labelLayoutCacheMissCount += source.labelLayoutCacheMissCount;
@@ -1343,7 +1373,7 @@ interface BusSpecialStateLabelResult extends SpecialStateLabelResult {
 
 function addBusSpecialStateLabel(labels: Container[], signal: WaveformSignal, state: 'x' | 'z', labelColor: number, x: number, y: number, width: number, height: number, options: WaveformLabelDrawOptions = {}): BusSpecialStateLabelResult {
   const hexDigitWidth = getWaveformBusSpecialStateHexDigitWidth(signal.width);
-  const labelText = state.repeat(hexDigitWidth);
+  const labelText = getWaveformBusSpecialStateLabelText(signal.width, state);
   const result = addBusLabel(labels, labelText, labelColor, x, y, width, height, options);
 
   return {
@@ -1355,6 +1385,10 @@ function addBusSpecialStateLabel(labels: Container[], signal: WaveformSignal, st
 export function getWaveformBusSpecialStateHexDigitWidth(signalWidth: number | undefined) {
   const bitWidth = Number.isFinite(signalWidth) ? Math.floor(signalWidth ?? 1) : 1;
   return Math.max(1, Math.ceil(bitWidth / 4));
+}
+
+export function getWaveformBusSpecialStateLabelText(signalWidth: number | undefined, state: 'x' | 'z') {
+  return state.repeat(getWaveformBusSpecialStateHexDigitWidth(signalWidth));
 }
 
 interface SpecialStateBlockStyle {
