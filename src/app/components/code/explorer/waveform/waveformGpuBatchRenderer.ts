@@ -7,13 +7,13 @@ import {
   compileHighShaderGpuProgram,
   Container,
   Geometry,
+  BitmapText,
   localUniformBit,
   localUniformBitGl,
   Mesh,
   roundPixelsBit,
   roundPixelsBitGl,
   Shader,
-  Text,
 } from 'pixi.js';
 
 export type WaveformGpuBatchLayerKind =
@@ -70,8 +70,8 @@ export class WaveformGpuBatchRenderer {
   public readonly container: Container;
 
   private readonly labelContainer: Container;
-  private readonly labelBuckets = new Map<string, Text[]>();
-  private readonly labels: Text[] = [];
+  private readonly labelBuckets = new Map<string, BitmapText[]>();
+  private readonly labels: BitmapText[] = [];
   private readonly layers = new Map<WaveformGpuBatchLayerKind, WaveformGpuBatchLayer>();
   private readonly usedLabelCounts = new Map<string, number>();
   private lastMetrics: WaveformGpuBatchMetrics = createEmptyBatchMetrics();
@@ -456,7 +456,7 @@ function getWaveformSolidColorShader() {
 }
 
 function createBatchText(text: string, fill: number, fontSize: number, x: number, y: number) {
-  return new Text({
+  return new BitmapText({
     text,
     style: createBatchTextStyle(fill, fontSize),
     x,

@@ -3,6 +3,8 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
+import { WaveformPerfRecorder } from '../src/app/components/code/explorer/waveform/waveformPerfRecorder';
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const fixtureWorkspace = path.join(__dirname, '..', 'test', 'fixtures', 'workspace');
 const releaseRoot = path.join(__dirname, '..', 'release');
@@ -343,6 +345,36 @@ async function attachPerfArtifact(name: string, payload: unknown) {
   });
 }
 
+function recordWaveformPerfSample(recorder: WaveformPerfRecorder, sample: Awaited<ReturnType<typeof capturePerfSample>>) {
+  recorder.record({
+    averageFps: sample.panelMetrics.averageFps,
+    averageRenderMs: sample.panelMetrics.averageRenderMs,
+    droppedFrameCount: sample.canvasStats.droppedFrameCount,
+    frameIntervalMs: sample.canvasStats.frameIntervalP95Ms,
+    frameParseMs: sample.canvasStats.frameParseMs,
+    gpuBufferUpdateMs: sample.canvasStats.gpuBufferUpdateMs,
+    pipeRoundtripMs: sample.canvasStats.pipeRoundtripMs,
+    pixiRenderMs: sample.canvasStats.pixiRenderMs,
+    reactViewportCommitCount: sample.canvasStats.reactViewportCommitCount,
+    sceneUpdateMs: sample.canvasStats.sceneUpdateMs,
+    timestampMs: sample.elapsedMs,
+  });
+}
+
+async function captureAndRecordPerfSample(
+  recorder: WaveformPerfRecorder,
+  window: Page,
+  panel: ReturnType<Page['getByTestId']>,
+  canvasHost: ReturnType<Page['getByTestId']>,
+  phase: string,
+  elapsedMs: number,
+) {
+  const sample = await capturePerfSample(window, panel, canvasHost, phase, elapsedMs);
+
+  recordWaveformPerfSample(recorder, sample);
+  return sample;
+}
+
 test('waveform dense render opt-in baseline', async () => {
   const { app, window } = await launchApp();
 
@@ -415,6 +447,9 @@ test('waveform dense render opt-in baseline', async () => {
 
     const initialPanelMetrics = await readPanelMetrics(panel);
     const jsHeapBeforeBurst = await readJsHeapBytes(window);
+    const perfRecorder = new WaveformPerfRecorder();
+    const samples: Array<Awaited<ReturnType<typeof capturePerfSample>>> = [];
+    const burstStartedAt = Date.now();
 
     const timings = [
       await measureRender('zoom-in', async () => {
@@ -438,9 +473,35 @@ test('waveform dense render opt-in baseline', async () => {
       burstTimings.push(await measureAction(`burst-pan-${cycle}`, async () => {
         await (cycle % 2 === 0 ? panRightButton : panLeftButton).click();
       }));
+      samples.push(await captureAndRecordPerfSample(perfRecorder, window, panel, canvasHost, 'rapid-pan', Date.now() - burstStartedAt));
       burstTimings.push(await measureAction(`burst-zoom-${cycle}`, async () => {
         await (cycle % 2 === 0 ? zoomInButton : zoomOutButton).click();
       }));
+      samples.push(await captureAndRecordPerfSample(perfRecorder, window, panel, canvasHost, 'rapid-zoom', Date.now() - burstStartedAt));
+    }
+
+    const boundaryStartedAt = Date.now();
+    for (let index = 0; index < 4; index += 1) {
+      await waitForNextRender(canvasHost, async () => {
+        await panRightButton.click();
+      });
+      samples.push(await captureAndRecordPerfSample(perfRecorder, window, panel, canvasHost, 'large-pan-right', Date.now() - boundaryStartedAt));
+    }
+    for (let index = 0; index < 4; index += 1) {
+      await waitForNextRender(canvasHost, async () => {
+        await panLeftButton.click();
+      });
+      samples.push(await captureAndRecordPerfSample(perfRecorder, window, panel, canvasHost, 'large-pan-left', Date.now() - boundaryStartedAt));
+    }
+    for (let index = 0; index < 3; index += 1) {
+      await waitForNextRender(canvasHost, async () => {
+        await canvasHost.hover();
+        await window.keyboard.down('Shift');
+        await window.mouse.wheel(index % 2 === 0 ? 720 : -720, 0);
+        await window.keyboard.up('Shift');
+        await (index % 2 === 0 ? zoomInButton : zoomOutButton).click();
+      });
+      samples.push(await captureAndRecordPerfSample(perfRecorder, window, panel, canvasHost, 'mixed-wheel-pan-zoom', Date.now() - boundaryStartedAt));
     }
 
     const finalStats = await readCanvasStats(canvasHost);
@@ -462,6 +523,11 @@ test('waveform dense render opt-in baseline', async () => {
       },
       baselineStats,
       finalStats,
+      samples,
+      summary: {
+        legacy: summarizePerfSamples(samples),
+        recorder: perfRecorder.summarize(),
+      },
     };
 
     expect(finalStats.sourceSegmentCount).toBeGreaterThan(0);
@@ -473,6 +539,8 @@ test('waveform dense render opt-in baseline', async () => {
     expect(finalStats.gpuDrawLayerCount).toBeLessThanOrEqual(8);
     expect(finalStats.gpuBufferCapacityVertexCount).toBeGreaterThan(0);
     expect(finalStats.textureCacheBytes).toBeLessThanOrEqual(32 * 1024 * 1024);
+    expect(finalStats.gpuDrawLayerCount).toBeLessThanOrEqual(8);
+    expect(samples.length).toBeGreaterThanOrEqual(10);
 
     await attachPerfArtifact('waveform-binary-render-baseline.json', baselinePerfArtifact);
     console.log(JSON.stringify(baselinePerfArtifact, null, 2));
@@ -507,6 +575,7 @@ test('packaged waveform sustained 10s viewport and interaction perf', async () =
 
     const jsHeapBefore = await readJsHeapBytes(window);
     const samples: Array<Awaited<ReturnType<typeof capturePerfSample>>> = [];
+    const perfRecorder = new WaveformPerfRecorder();
     const phaseSnapshots = {
       panStart: await readCanvasStats(canvasHost),
       panEnd: null as Awaited<ReturnType<typeof readCanvasStats>> | null,
@@ -523,7 +592,7 @@ test('packaged waveform sustained 10s viewport and interaction perf', async () =
       await waitForNextRender(canvasHost, async () => {
         await (index % 2 === 0 ? panRightButton : panLeftButton).click();
       });
-      samples.push(await capturePerfSample(window, panel, canvasHost, 'pan', Date.now() - phaseStartedAt));
+      samples.push(await captureAndRecordPerfSample(perfRecorder, window, panel, canvasHost, 'pan', Date.now() - phaseStartedAt));
       await window.waitForTimeout(250);
     }
 
@@ -534,7 +603,7 @@ test('packaged waveform sustained 10s viewport and interaction perf', async () =
       await waitForNextRender(canvasHost, async () => {
         await (index % 2 === 0 ? zoomInButton : zoomOutButton).click();
       });
-      samples.push(await capturePerfSample(window, panel, canvasHost, 'zoom', Date.now() - phaseStartedAt));
+      samples.push(await captureAndRecordPerfSample(perfRecorder, window, panel, canvasHost, 'zoom', Date.now() - phaseStartedAt));
       await window.waitForTimeout(250);
     }
 
@@ -554,7 +623,7 @@ test('packaged waveform sustained 10s viewport and interaction perf', async () =
       await waitForNextRender(canvasHost, async () => {
         await canvasHost.click({ position: { x, y } });
       });
-      samples.push(await capturePerfSample(window, panel, canvasHost, 'cursor', Date.now() - phaseStartedAt));
+      samples.push(await captureAndRecordPerfSample(perfRecorder, window, panel, canvasHost, 'cursor', Date.now() - phaseStartedAt));
       await window.waitForTimeout(250);
     }
 
@@ -565,7 +634,7 @@ test('packaged waveform sustained 10s viewport and interaction perf', async () =
       await waitForNextRender(canvasHost, async () => {
         await window.getByTestId(signalRowIds[index % signalRowIds.length]).click();
       });
-      samples.push(await capturePerfSample(window, panel, canvasHost, 'selection', Date.now() - phaseStartedAt));
+      samples.push(await captureAndRecordPerfSample(perfRecorder, window, panel, canvasHost, 'selection', Date.now() - phaseStartedAt));
       await window.waitForTimeout(250);
     }
 
@@ -655,7 +724,10 @@ test('packaged waveform sustained 10s viewport and interaction perf', async () =
       packagedHasCurrentHotPathMetrics,
       strictPackagedHotPathMetrics,
       samples,
-      summary: summarizePerfSamples(samples),
+      summary: {
+        legacy: summarizePerfSamples(samples),
+        recorder: perfRecorder.summarize(),
+      },
     };
 
     await attachPerfArtifact('packaged-waveform-sustained-10s.json', packagedPerfArtifact);

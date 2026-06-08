@@ -504,7 +504,7 @@ interface SpecialStateLabelResult {
   suppressedLabelCount: number;
 }
 
-type WaveformTextFactory = (text: string, fill: number, fontSize: number, x: number, y: number) => Text;
+type WaveformTextFactory = (text: string, fill: number, fontSize: number, x: number, y: number) => Container;
 
 interface WaveformLabelDrawOptions {
   textFactory?: WaveformTextFactory;
@@ -1227,16 +1227,20 @@ function drawFrameDigitalWaveformBatch(
   const segmentStrokeWidth = getWaveformDigitalSegmentStrokeWidth(signal.kind);
   const specialStateBounds = getWaveformDigitalSpecialStateBounds(laneY);
   const end = Math.min(frame.segmentCount, firstSegment + segmentCount);
+  const segmentBounds = createFrameSegmentPixelBounds();
+  const nextSegment = createFrameSegmentValueBounds();
 
   for (let index = firstSegment; index < end; index += 1) {
-    const segment = getFrameRenderSegment(frame, index, options);
-    if (!segment) {
+    if (!readFrameSegmentPixelBounds(frame, index, options, segmentBounds)) {
       continue;
     }
-    const nextSegment = getNextFrameRenderSegment(frame, index + 1, end, options);
-    const currentValue = normalizeWaveformValue(segment.value);
-    const nextValue = nextSegment ? normalizeWaveformValue(nextSegment.value) : currentValue;
-    const isVisible = isSegmentHorizontallyVisible(segment, renderResolution);
+    const hasNextSegment = readNextFrameSegmentPixelBounds(frame, index + 1, end, options, nextSegment);
+    const valueKind = frame.valueKind[index] ?? WaveformBinaryValueKind.Unknown;
+    const currentValue = normalizeWaveformValue(getFrameSegmentValue(frame, index, valueKind));
+    const nextValue = hasNextSegment ? normalizeWaveformValue(nextSegment.value) : currentValue;
+    const hasUnknown = valueKind === WaveformBinaryValueKind.Unknown;
+    const hasHighImpedance = valueKind === WaveformBinaryValueKind.HighImpedance;
+    const isVisible = isSegmentBoundsHorizontallyVisible(segmentBounds.x1, segmentBounds.x2, renderResolution);
 
     if (!isVisible) {
       labelCounts.skippedHorizontalSegmentCount += 1;
@@ -1246,29 +1250,29 @@ function drawFrameDigitalWaveformBatch(
 
     labelCounts.drawnHorizontalSegmentCount += 1;
 
-    if (segment.hasUnknown || isUnknownWaveformValue(currentValue)) {
-      drawBatchSpecialStateBlock(batchRenderer, segment.x1, specialStateBounds.y, segment.width, specialStateBounds.height, {
+    if (hasUnknown || isUnknownWaveformValue(currentValue)) {
+      drawBatchSpecialStateBlock(batchRenderer, segmentBounds.x1, specialStateBounds.y, segmentBounds.width, specialStateBounds.height, {
         color: palette.unknown,
         fillAlpha: 0.22,
         pattern: 'backslash',
         strokeAlpha: 0.86,
         strokeWidth: segmentStrokeWidth,
       });
-      mergeDrawSignalResult(labelCounts, addSpecialStateCharacters([], 'x', palette.unknown, segment.x1, specialStateBounds.y, segment.width, specialStateBounds.height, shouldShowSpecialStateText(segment), {
+      mergeDrawSignalResult(labelCounts, addSpecialStateCharacters([], 'x', palette.unknown, segmentBounds.x1, specialStateBounds.y, segmentBounds.width, specialStateBounds.height, shouldShowSpecialStateTextForWidth(segmentBounds.width), {
         textFactory: (text, fill, fontSize, x, y) => batchRenderer.acquireLabel(text, fill, fontSize, x, y),
       }));
       continue;
     }
 
-    if (segment.hasHighImpedance || isHighImpedanceWaveformValue(currentValue)) {
-      drawBatchSpecialStateBlock(batchRenderer, segment.x1, specialStateBounds.y, segment.width, specialStateBounds.height, {
+    if (hasHighImpedance || isHighImpedanceWaveformValue(currentValue)) {
+      drawBatchSpecialStateBlock(batchRenderer, segmentBounds.x1, specialStateBounds.y, segmentBounds.width, specialStateBounds.height, {
         color: palette.highImpedance,
         fillAlpha: 0.18,
         pattern: 'chevron',
         strokeAlpha: 0.88,
         strokeWidth: segmentStrokeWidth,
       });
-      mergeDrawSignalResult(labelCounts, addSpecialStateCharacters([], 'z', palette.highImpedance, segment.x1, specialStateBounds.y, segment.width, specialStateBounds.height, shouldShowSpecialStateText(segment), {
+      mergeDrawSignalResult(labelCounts, addSpecialStateCharacters([], 'z', palette.highImpedance, segmentBounds.x1, specialStateBounds.y, segmentBounds.width, specialStateBounds.height, shouldShowSpecialStateTextForWidth(segmentBounds.width), {
         textFactory: (text, fill, fontSize, x, y) => batchRenderer.acquireLabel(text, fill, fontSize, x, y),
       }));
       continue;
@@ -1278,14 +1282,14 @@ function drawFrameDigitalWaveformBatch(
     const y = isHigh ? topY : bottomY;
 
     if (isHigh) {
-      batchRenderer.addRect('pulseFill', segment.x1, topY, segment.width, Math.max(1, bottomY - topY), signalColor, signal.kind === 'clock' ? 0.12 : 0.18);
+      batchRenderer.addRect('pulseFill', segmentBounds.x1, topY, segmentBounds.width, Math.max(1, bottomY - topY), signalColor, signal.kind === 'clock' ? 0.12 : 0.18);
     }
 
-    batchRenderer.addLine('digitalStroke', segment.x1, y, segment.x2, y, segmentStrokeWidth, signalColor, 0.96);
+    batchRenderer.addLine('digitalStroke', segmentBounds.x1, y, segmentBounds.x2, y, segmentStrokeWidth, signalColor, 0.96);
 
-    if (nextSegment && nextValue !== currentValue && !isSpecialWaveformValue(nextValue)) {
+    if (hasNextSegment && nextValue !== currentValue && !isSpecialWaveformValue(nextValue)) {
       const nextY = nextValue === '1' ? topY : bottomY;
-      batchRenderer.addLine('digitalStroke', segment.x2, y, segment.x2, nextY, 1.7, signalColor, 0.9);
+      batchRenderer.addLine('digitalStroke', segmentBounds.x2, y, segmentBounds.x2, nextY, 1.7, signalColor, 0.9);
       labelCounts.drawnTransitionEdgeCount += 1;
     }
   }
@@ -1310,17 +1314,20 @@ function drawFrameBusWaveformBatch(
   const y = laneY + waveformLanePaddingY;
   const height = waveformLaneHeight - waveformLanePaddingY * 2;
   const end = Math.min(frame.segmentCount, firstSegment + segmentCount);
+  const segmentBounds = createFrameSegmentPixelBounds();
 
   for (let index = firstSegment; index < end; index += 1) {
-    const segment = getFrameRenderSegment(frame, index, options);
-    if (!segment) {
+    if (!readFrameSegmentPixelBounds(frame, index, options, segmentBounds)) {
       continue;
     }
-    const currentValue = normalizeWaveformValue(segment.value);
-    const segmentShape = getBusSegmentShape(segment, height, renderResolution);
+    const valueKind = frame.valueKind[index] ?? WaveformBinaryValueKind.Unknown;
+    const currentValue = normalizeWaveformValue(getFrameSegmentValue(frame, index, valueKind));
+    const hasUnknown = valueKind === WaveformBinaryValueKind.Unknown;
+    const hasHighImpedance = valueKind === WaveformBinaryValueKind.HighImpedance;
+    const segmentShape = getBusSegmentShapeForBounds(segmentBounds.x1, segmentBounds.x2, segmentBounds.width, height, renderResolution);
 
-    if (segment.hasUnknown || isUnknownWaveformValue(currentValue)) {
-      mergeDrawSignalResult(labelCounts, drawBatchBusSpecialStateSegment(batchRenderer, signal, segment, segmentShape, y, height, {
+    if (hasUnknown || isUnknownWaveformValue(currentValue)) {
+      mergeDrawSignalResult(labelCounts, drawBatchBusSpecialStateSegment(batchRenderer, signal, segmentBounds.x1, segmentBounds.width, segmentShape, y, height, {
         color: palette.unknown,
         fillAlpha: 0.22,
         labelColor: palette.unknown,
@@ -1328,8 +1335,8 @@ function drawFrameBusWaveformBatch(
         strokeAlpha: 0.86,
         strokeWidth: 1,
       }));
-    } else if (segment.hasHighImpedance || isHighImpedanceWaveformValue(currentValue)) {
-      mergeDrawSignalResult(labelCounts, drawBatchBusSpecialStateSegment(batchRenderer, signal, segment, segmentShape, y, height, {
+    } else if (hasHighImpedance || isHighImpedanceWaveformValue(currentValue)) {
+      mergeDrawSignalResult(labelCounts, drawBatchBusSpecialStateSegment(batchRenderer, signal, segmentBounds.x1, segmentBounds.width, segmentShape, y, height, {
         color: palette.highImpedance,
         fillAlpha: 0.18,
         labelColor: palette.highImpedance,
@@ -1338,7 +1345,7 @@ function drawFrameBusWaveformBatch(
         strokeWidth: 1,
       }));
     } else if (segmentShape.kind === 'full') {
-      drawBatchElongatedHexagon(batchRenderer, segment.x1, y, segment.width, height, busColor);
+      drawBatchElongatedHexagon(batchRenderer, segmentBounds.x1, y, segmentBounds.width, height, busColor);
       labelCounts.busFullHexagonCount += 1;
       labelCounts.drawnHorizontalSegmentCount += 1;
     } else if (segmentShape.kind === 'fold') {
@@ -1353,14 +1360,39 @@ function drawFrameBusWaveformBatch(
       labelCounts.skippedHorizontalSegmentCount += 1;
     }
 
-    if (segmentShape.kind === 'full' && !segment.hasUnknown && !segment.hasHighImpedance && !isSpecialWaveformValue(currentValue)) {
-      mergeDrawSignalResult(labelCounts, addBusLabel([], formatWaveformValue(currentValue), palette.text, segment.x1, y, segment.width, height, {
+    if (segmentShape.kind === 'full' && !hasUnknown && !hasHighImpedance && !isSpecialWaveformValue(currentValue)) {
+      mergeDrawSignalResult(labelCounts, addBusLabel([], formatWaveformValue(currentValue), palette.text, segmentBounds.x1, y, segmentBounds.width, height, {
         textFactory: (text, fill, fontSize, x, textY) => batchRenderer.acquireLabel(text, fill, fontSize, x, textY),
       }));
     }
   }
 
   return labelCounts;
+}
+
+interface FrameSegmentPixelBounds {
+  x1: number;
+  x2: number;
+  width: number;
+}
+
+interface FrameSegmentValueBounds extends FrameSegmentPixelBounds {
+  value: string;
+}
+
+function createFrameSegmentPixelBounds(): FrameSegmentPixelBounds {
+  return {
+    x1: 0,
+    x2: 0,
+    width: 0,
+  };
+}
+
+function createFrameSegmentValueBounds(): FrameSegmentValueBounds {
+  return {
+    ...createFrameSegmentPixelBounds(),
+    value: '',
+  };
 }
 
 function releaseRetainedRowContent(rowNode: WaveformSceneRowNode) {
@@ -1378,48 +1410,40 @@ function discardRetainedRowContent(rowNode: WaveformSceneRowNode) {
   rowNode.retainedTextUsed = 0;
 }
 
-function getFrameRenderSegment(frame: ParsedWaveformFrame, segmentIndex: number, options: WaveformSceneOptions): WaveformRenderSegment | null {
+function readFrameSegmentPixelBounds(frame: ParsedWaveformFrame, segmentIndex: number, options: WaveformSceneOptions, target: FrameSegmentPixelBounds) {
   let x1 = frame.x0[segmentIndex] ?? 0;
   let x2 = frame.x1[segmentIndex] ?? x1;
-  let startTime = 0;
-  let endTime = 0;
 
   if (frame.time0 && frame.time1) {
-    startTime = frame.time0[segmentIndex] ?? 0;
-    endTime = frame.time1[segmentIndex] ?? startTime;
+    const startTime = frame.time0[segmentIndex] ?? 0;
+    const endTime = frame.time1[segmentIndex] ?? startTime;
+
     if (endTime < options.viewport.startTime || startTime > options.viewport.endTime) {
-      return null;
+      return false;
     }
 
     x1 = timeToX(startTime, options.viewport, options.width);
     x2 = timeToX(endTime, options.viewport, options.width);
   }
-  const valueKind = frame.valueKind[segmentIndex] ?? WaveformBinaryValueKind.Unknown;
-  const value = getFrameSegmentValue(frame, segmentIndex, valueKind);
 
-  return {
-    startTime,
-    endTime,
-    x1,
-    x2,
-    width: Math.max(1, x2 - x1),
-    value,
-    sourceSegmentCount: 1,
-    hasUnknown: valueKind === WaveformBinaryValueKind.Unknown,
-    hasHighImpedance: valueKind === WaveformBinaryValueKind.HighImpedance,
-  };
+  target.x1 = x1;
+  target.x2 = x2;
+  target.width = Math.max(1, x2 - x1);
+  return true;
 }
 
-function getNextFrameRenderSegment(frame: ParsedWaveformFrame, startIndex: number, endIndex: number, options: WaveformSceneOptions) {
+function readNextFrameSegmentPixelBounds(frame: ParsedWaveformFrame, startIndex: number, endIndex: number, options: WaveformSceneOptions, target: FrameSegmentValueBounds) {
   for (let index = startIndex; index < endIndex; index += 1) {
-    const segment = getFrameRenderSegment(frame, index, options);
-
-    if (segment) {
-      return segment;
+    if (!readFrameSegmentPixelBounds(frame, index, options, target)) {
+      continue;
     }
+
+    const valueKind = frame.valueKind[index] ?? WaveformBinaryValueKind.Unknown;
+    target.value = getFrameSegmentValue(frame, index, valueKind);
+    return true;
   }
 
-  return null;
+  return false;
 }
 
 function getFrameSegmentValue(frame: ParsedWaveformFrame, segmentIndex: number, valueKind: number) {
@@ -1489,7 +1513,7 @@ function getSignalRenderSignature(signal: WaveformSignal, options: WaveformScene
 
 function drawDigitalWaveform(target: Container, signal: WaveformSignal, options: WaveformSceneOptions, segmentResult: WaveformRenderSegmentResult, laneY: number): DrawSignalResult {
   const line = new Graphics();
-  const stateLabels: Text[] = [];
+  const stateLabels: Container[] = [];
   const labelCounts = createDrawSignalResult();
   const lineColor = parseHexColor(signal.color);
   const renderResolution = getRenderResolution(options);
@@ -1591,7 +1615,7 @@ function drawDigitalPulseFill(target: Graphics, x: number, y: number, width: num
 
 function drawBusWaveform(target: Container, signal: WaveformSignal, options: WaveformSceneOptions, segmentResult: WaveformRenderSegmentResult, laneY: number): DrawSignalResult {
   const bus = new Graphics();
-  const valueLabels: Text[] = [];
+  const valueLabels: Container[] = [];
   const labelCounts = createDrawSignalResult();
   const busColor = parseHexColor(signal.color);
   const renderResolution = getRenderResolution(options);
@@ -1686,7 +1710,7 @@ interface BusSpecialStateStyle {
 
 function drawBusSpecialStateSegment(
   target: Graphics,
-  labels: Text[],
+  labels: Container[],
   signal: WaveformSignal,
   segment: WaveformRenderSegment,
   segmentShape: BusSegmentShape,
@@ -1747,7 +1771,7 @@ interface BusSpecialStateLabelResult extends SpecialStateLabelResult {
   widthAlignedLabelCount: number;
 }
 
-function addBusSpecialStateLabel(labels: Text[], signal: WaveformSignal, state: 'x' | 'z', labelColor: number, x: number, y: number, width: number, height: number, options: WaveformLabelDrawOptions = {}): BusSpecialStateLabelResult {
+function addBusSpecialStateLabel(labels: Container[], signal: WaveformSignal, state: 'x' | 'z', labelColor: number, x: number, y: number, width: number, height: number, options: WaveformLabelDrawOptions = {}): BusSpecialStateLabelResult {
   const hexDigitWidth = getWaveformBusSpecialStateHexDigitWidth(signal.width);
   const labelText = state.repeat(hexDigitWidth);
   const result = addBusLabel(labels, labelText, labelColor, x, y, width, height, options);
@@ -1769,7 +1793,7 @@ interface SpecialStateDrawOptions {
   textFactory?: WaveformTextFactory;
 }
 
-function drawUnknownStateBlock(target: Graphics, labels: Text[], x: number, y: number, width: number, height: number, options: SpecialStateDrawOptions): SpecialStateLabelResult {
+function drawUnknownStateBlock(target: Graphics, labels: Container[], x: number, y: number, width: number, height: number, options: SpecialStateDrawOptions): SpecialStateLabelResult {
   drawSpecialStateBlock(target, x, y, width, height, {
     color: palette.unknown,
     fillAlpha: 0.22,
@@ -1783,7 +1807,7 @@ function drawUnknownStateBlock(target: Graphics, labels: Text[], x: number, y: n
   });
 }
 
-function drawHighImpedanceStateBlock(target: Graphics, labels: Text[], x: number, y: number, width: number, height: number, options: SpecialStateDrawOptions): SpecialStateLabelResult {
+function drawHighImpedanceStateBlock(target: Graphics, labels: Container[], x: number, y: number, width: number, height: number, options: SpecialStateDrawOptions): SpecialStateLabelResult {
   drawSpecialStateBlock(target, x, y, width, height, {
     color: palette.highImpedance,
     fillAlpha: 0.18,
@@ -1918,7 +1942,8 @@ function drawBatchBusFoldOnly(batchRenderer: WaveformGpuBatchRenderer, x: number
 function drawBatchBusSpecialStateSegment(
   batchRenderer: WaveformGpuBatchRenderer,
   signal: WaveformSignal,
-  segment: WaveformRenderSegment,
+  x: number,
+  width: number,
   segmentShape: BusSegmentShape,
   y: number,
   height: number,
@@ -1927,14 +1952,14 @@ function drawBatchBusSpecialStateSegment(
   const result = createDrawSignalResult();
 
   if (segmentShape.kind === 'full') {
-    const points = getElongatedHexagonPoints(segment.x1, y, segment.width, height);
+    const points = getElongatedHexagonPoints(x, y, width, height);
     batchRenderer.addPolygon('specialFill', points, style.color, style.fillAlpha);
     addBatchPolyline(batchRenderer, 'specialOutline', points, style.strokeWidth, true, style.color, style.strokeAlpha);
     result.busFullHexagonCount += 1;
     result.busSpecialStateHexagonCount += 1;
     result.drawnHorizontalSegmentCount += 1;
 
-    const labelResult = addBusSpecialStateLabel([], signal, style.state, style.labelColor, segment.x1, y, segment.width, height, {
+    const labelResult = addBusSpecialStateLabel([], signal, style.state, style.labelColor, x, y, width, height, {
       textFactory: (text, fill, fontSize, x, textY) => batchRenderer.acquireLabel(text, fill, fontSize, x, textY),
     });
     result.renderedLabelCount += labelResult.renderedLabelCount;
@@ -2191,7 +2216,7 @@ export function getWaveformFittedBusLabelText(text: string, maxWidth: number, fo
   };
 }
 
-function addBusLabel(labels: Text[], labelText: string, labelColor: number, x: number, y: number, width: number, height: number, options: WaveformLabelDrawOptions = {}): SpecialStateLabelResult {
+function addBusLabel(labels: Container[], labelText: string, labelColor: number, x: number, y: number, width: number, height: number, options: WaveformLabelDrawOptions = {}): SpecialStateLabelResult {
   if (height < 10) {
     return { renderedLabelCount: 0, suppressedLabelCount: 1 };
   }
@@ -2218,7 +2243,7 @@ function addBusLabel(labels: Text[], labelText: string, labelColor: number, x: n
   };
 }
 
-function addSpecialStateCharacters(labels: Text[], state: 'x' | 'z', color: number, x: number, y: number, width: number, height: number, showText: boolean, options: WaveformLabelDrawOptions = {}): SpecialStateLabelResult {
+function addSpecialStateCharacters(labels: Container[], state: 'x' | 'z', color: number, x: number, y: number, width: number, height: number, showText: boolean, options: WaveformLabelDrawOptions = {}): SpecialStateLabelResult {
   if (!showText) {
     return { renderedLabelCount: 0, suppressedLabelCount: 1 };
   }
@@ -2396,7 +2421,11 @@ function mergeDrawSignalResult(target: DrawSignalResult, source: SpecialStateLab
 }
 
 function shouldShowSpecialStateText(segment: WaveformRenderSegment) {
-  return segment.width >= 8;
+  return shouldShowSpecialStateTextForWidth(segment.width);
+}
+
+function shouldShowSpecialStateTextForWidth(width: number) {
+  return width >= 8;
 }
 
 function shouldCacheSignalTexture(segmentResult: WaveformRenderSegmentResult, options: WaveformSceneOptions) {
@@ -2480,7 +2509,11 @@ function getBusLabelTextureCacheSignature(signal: WaveformSignal, segmentResult:
 }
 
 function isSegmentHorizontallyVisible(segment: WaveformRenderSegment, renderResolution: number) {
-  return Math.floor(segment.x1 * renderResolution) !== Math.floor(segment.x2 * renderResolution);
+  return isSegmentBoundsHorizontallyVisible(segment.x1, segment.x2, renderResolution);
+}
+
+function isSegmentBoundsHorizontallyVisible(x1: number, x2: number, renderResolution: number) {
+  return Math.floor(x1 * renderResolution) !== Math.floor(x2 * renderResolution);
 }
 
 type BusSegmentShape =
@@ -2489,11 +2522,15 @@ type BusSegmentShape =
   | { kind: 'vertical'; x: number };
 
 function getBusSegmentShape(segment: WaveformRenderSegment, height: number, renderResolution: number): BusSegmentShape {
+  return getBusSegmentShapeForBounds(segment.x1, segment.x2, segment.width, height, renderResolution);
+}
+
+function getBusSegmentShapeForBounds(x1: number, x2: number, width: number, height: number, renderResolution: number): BusSegmentShape {
   const normalBevel = getElongatedHexagonBevel(32, height);
-  const centralStart = segment.x1 + normalBevel;
-  const centralEnd = segment.x2 - normalBevel;
-  const x1Column = Math.floor(segment.x1 * renderResolution);
-  const x2Column = Math.floor(segment.x2 * renderResolution);
+  const centralStart = x1 + normalBevel;
+  const centralEnd = x2 - normalBevel;
+  const x1Column = Math.floor(x1 * renderResolution);
+  const x2Column = Math.floor(x2 * renderResolution);
   const leftInnerColumn = Math.floor(centralStart * renderResolution);
   const rightInnerColumn = Math.floor(centralEnd * renderResolution);
 
@@ -2503,15 +2540,15 @@ function getBusSegmentShape(segment: WaveformRenderSegment, height: number, rend
 
   if (x1Column !== x2Column) {
     return {
-      foldProjection: Math.max(1 / renderResolution, Math.min(normalBevel, Math.max(0, segment.width / 2))),
+      foldProjection: Math.max(1 / renderResolution, Math.min(normalBevel, Math.max(0, width / 2))),
       kind: 'fold',
-      x: segment.x1,
+      x: x1,
     };
   }
 
   return {
     kind: 'vertical',
-    x: snapToDevicePixel(segment.x1, renderResolution),
+    x: snapToDevicePixel(x1, renderResolution),
   };
 }
 

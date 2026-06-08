@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { Container, Text, Texture } from 'pixi.js';
+import { BitmapText, Container, Text, Texture } from 'pixi.js';
 
 import { clipWaveformLineToBounds, createWaveformScene, getWaveformBusHexagonBevel, getWaveformBusLabelBounds, getWaveformBusSpecialStateHexDigitWidth, getWaveformDigitalSegmentStrokeWidth, getWaveformDigitalSpecialStateBounds, getWaveformFittedBusLabelText, updateWaveformSceneCursor, updateWaveformScenePan, updateWaveformSceneSelection, updateWaveformSceneVerticalScroll, updateWaveformSceneViewport, waveformHighImpedanceStripeSpacing, waveformLayerNames, waveformUnknownStripeSpacing, type WaveformSignalTextureCacheEntry } from './createWaveformScene';
 import { fitWaveformViewport, getInitialWaveformViewport, getWaveformCanvasHeightForData, getWaveformDigitalPulseFillCount, getWaveformDisplayRows, getWaveformRulerScrollIndicatorMetrics, getWaveformShapeCounts, getWaveformSignalLaneY, timeToX, waveformHeaderHeight } from './waveformLayout';
@@ -690,7 +690,7 @@ function collectText(container: Container): string[] {
   const texts: string[] = [];
 
   for (const child of container.children) {
-    if (child instanceof Text) {
+    if (child instanceof Text || child instanceof BitmapText) {
       texts.push(String(child.text));
     }
 
