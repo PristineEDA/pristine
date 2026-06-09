@@ -5604,6 +5604,10 @@ test('waveform bottom panel renders binary waveform and controls', async () => {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(0);
   expect(await readCanvasNumber('data-gpu-draw-layer-count')).toBeLessThanOrEqual(8);
+  await expect(canvasHost).toHaveAttribute('data-explicit-draw-count-enabled', 'true');
+  await expect.poll(async () => readCanvasNumber('data-gpu-active-index-count'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
   await expect.poll(async () => readCanvasNumber('data-gpu-vertex-count'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(0);
@@ -5611,6 +5615,9 @@ test('waveform bottom panel renders binary waveform and controls', async () => {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBe(1);
   await expect.poll(async () => readCanvasNumber('data-glyph-buffer-update-count'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
+  await expect.poll(async () => readCanvasNumber('data-glyph-active-index-count'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(0);
   await expect.poll(async () => readCanvasNumber('data-glyph-vertex-count'), {

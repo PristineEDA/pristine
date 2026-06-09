@@ -93,6 +93,8 @@ interface WaveformRowContentMetrics {
   busLabelDotReplacementCount: number;
   busVerticalFallbackCount: number;
   renderedLabelCount: number;
+  explicitDrawCountEnabled: number;
+  gpuActiveIndexCount: number;
   gpuBufferUpdateCount: number;
   gpuBufferUpdateMs: number;
   gpuBufferCapacityVertexCount: number;
@@ -103,6 +105,7 @@ interface WaveformRowContentMetrics {
   gpuLayerCount: number;
   gpuVertexCount: number;
   glyphAtlasTextureCount: number;
+  glyphActiveIndexCount: number;
   glyphBufferDataReplaceCount: number;
   glyphBufferReallocCount: number;
   glyphBufferSubarrayCommitCount: number;
@@ -353,12 +356,15 @@ function accumulateFrameBatchStaticMetrics(scene: WaveformScene, target: Wavefor
   const gpuMetrics = scene.state.gpuBatchRenderer.getMetrics();
 
   target.renderedSignalCount = scene.state.visibleRows.rows.filter((row) => row.kind === 'signal').length;
+  target.explicitDrawCountEnabled = Math.max(target.explicitDrawCountEnabled, 1);
+  target.gpuActiveIndexCount = gpuMetrics.activeIndexCount;
   target.gpuDrawLayerCount = gpuMetrics.drawLayerCount;
   target.gpuLayerCount = gpuMetrics.drawLayerCount;
   target.gpuVertexCount = gpuMetrics.vertexCount;
   target.meshVertexCount = gpuMetrics.vertexCount;
   target.gpuBufferCapacityVertexCount = gpuMetrics.bufferCapacityVertexCount;
   target.glyphAtlasTextureCount = gpuMetrics.glyphAtlasTextureCount;
+  target.glyphActiveIndexCount = gpuMetrics.glyphActiveIndexCount;
   target.glyphVertexCount = gpuMetrics.glyphVertexCount;
   target.labelPoolSize = gpuMetrics.labelPoolSize;
 }
@@ -391,6 +397,8 @@ function createRenderStats(visibleRowCount: number, culledRowCount: number, rend
     panBufferMissCount: 0,
     panPixelShiftCount: 0,
     transformOnlyPanCount: 0,
+    explicitDrawCountEnabled: 0,
+    gpuActiveIndexCount: 0,
     gpuBufferUpdateCount: 0,
     gpuBufferUpdateMs: 0,
     gpuBufferCapacityVertexCount: 0,
@@ -401,6 +409,7 @@ function createRenderStats(visibleRowCount: number, culledRowCount: number, rend
     gpuLayerCount: 0,
     gpuVertexCount: 0,
     glyphAtlasTextureCount: 0,
+    glyphActiveIndexCount: 0,
     glyphBufferDataReplaceCount: 0,
     glyphBufferReallocCount: 0,
     glyphBufferSubarrayCommitCount: 0,
@@ -549,6 +558,8 @@ function createEmptyRowContentMetrics(): WaveformRowContentMetrics {
     busLabelDotReplacementCount: 0,
     busVerticalFallbackCount: 0,
     renderedLabelCount: 0,
+    explicitDrawCountEnabled: 0,
+    gpuActiveIndexCount: 0,
     gpuBufferUpdateCount: 0,
     gpuBufferUpdateMs: 0,
     gpuBufferCapacityVertexCount: 0,
@@ -559,6 +570,7 @@ function createEmptyRowContentMetrics(): WaveformRowContentMetrics {
     gpuLayerCount: 0,
     gpuVertexCount: 0,
     glyphAtlasTextureCount: 0,
+    glyphActiveIndexCount: 0,
     glyphBufferDataReplaceCount: 0,
     glyphBufferReallocCount: 0,
     glyphBufferSubarrayCommitCount: 0,
@@ -716,6 +728,8 @@ function redrawWaveformSceneFrameBatchContent(scene: WaveformScene, options: Wav
 
   const gpuMetrics = batchRenderer.commit();
 
+  metrics.explicitDrawCountEnabled = Math.max(metrics.explicitDrawCountEnabled, 1);
+  metrics.gpuActiveIndexCount += gpuMetrics.activeIndexCount;
   metrics.gpuBufferUpdateCount += gpuMetrics.bufferUpdateCount;
   metrics.gpuBufferUpdateMs += gpuMetrics.bufferUpdateMs;
   metrics.gpuBufferCapacityVertexCount += gpuMetrics.bufferCapacityVertexCount;
@@ -726,6 +740,7 @@ function redrawWaveformSceneFrameBatchContent(scene: WaveformScene, options: Wav
   metrics.gpuLayerCount += gpuMetrics.drawLayerCount;
   metrics.gpuVertexCount += gpuMetrics.vertexCount;
   metrics.glyphAtlasTextureCount += gpuMetrics.glyphAtlasTextureCount;
+  metrics.glyphActiveIndexCount += gpuMetrics.glyphActiveIndexCount;
   metrics.glyphBufferDataReplaceCount += gpuMetrics.glyphBufferDataReplaceCount;
   metrics.glyphBufferReallocCount += gpuMetrics.glyphBufferReallocCount;
   metrics.glyphBufferSubarrayCommitCount += gpuMetrics.glyphBufferSubarrayCommitCount;
@@ -761,11 +776,14 @@ function accumulateRowContentMetrics(target: WaveformRenderStats, source: Wavefo
   target.renderedSignalCount += source.renderedSignalCount;
   target.sourceSegmentCount += source.sourceSegmentCount;
   target.renderedSegmentCount += source.renderedSegmentCount;
+  target.explicitDrawCountEnabled = Math.max(target.explicitDrawCountEnabled, source.explicitDrawCountEnabled);
+  target.gpuActiveIndexCount += source.gpuActiveIndexCount;
   target.gpuDrawLayerCount += source.gpuDrawLayerCount;
   target.gpuLayerCount += source.gpuLayerCount;
   target.gpuVertexCount += source.gpuVertexCount;
   target.gpuBufferCapacityVertexCount += source.gpuBufferCapacityVertexCount;
   target.glyphAtlasTextureCount += source.glyphAtlasTextureCount;
+  target.glyphActiveIndexCount += source.glyphActiveIndexCount;
   target.glyphBufferReallocCount += source.glyphBufferReallocCount;
   target.glyphBufferUpdateCount += source.glyphBufferUpdateCount;
   target.glyphBufferUpdateMs += source.glyphBufferUpdateMs;
@@ -787,8 +805,6 @@ function accumulateRowContentMetrics(target: WaveformRenderStats, source: Wavefo
   target.busVerticalFallbackCount += source.busVerticalFallbackCount;
   target.renderedLabelCount += source.renderedLabelCount;
   target.labelPoolSize += source.labelPoolSize;
-  target.labelLayoutCacheHitCount += source.labelLayoutCacheHitCount;
-  target.labelLayoutCacheMissCount += source.labelLayoutCacheMissCount;
   target.labelTextureUpdateCount += source.labelTextureUpdateCount;
   target.suppressedLabelCount += source.suppressedLabelCount;
 }

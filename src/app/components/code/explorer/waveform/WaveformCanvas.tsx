@@ -554,6 +554,8 @@ export const WaveformCanvas = forwardRef<WaveformCanvasHandle, WaveformCanvasPro
     sceneUpdateMetricsRef.current.panBufferMissCount += baseStats.panBufferMissCount;
     sceneUpdateMetricsRef.current.panPixelShiftCount += baseStats.panPixelShiftCount;
     sceneUpdateMetricsRef.current.transformOnlyPanCount += baseStats.transformOnlyPanCount;
+    sceneUpdateMetricsRef.current.explicitDrawCountEnabled = Math.max(sceneUpdateMetricsRef.current.explicitDrawCountEnabled, baseStats.explicitDrawCountEnabled);
+    sceneUpdateMetricsRef.current.gpuActiveIndexCount = baseStats.gpuActiveIndexCount;
     sceneUpdateMetricsRef.current.gpuBufferDataReplaceCount += baseStats.gpuBufferDataReplaceCount;
     sceneUpdateMetricsRef.current.gpuBufferSubarrayCommitCount += baseStats.gpuBufferSubarrayCommitCount;
     sceneUpdateMetricsRef.current.gpuBufferUpdateCount += baseStats.gpuBufferUpdateCount;
@@ -564,6 +566,7 @@ export const WaveformCanvas = forwardRef<WaveformCanvasHandle, WaveformCanvasPro
     sceneUpdateMetricsRef.current.gpuLayerCount = baseStats.gpuLayerCount;
     sceneUpdateMetricsRef.current.gpuVertexCount = baseStats.gpuVertexCount;
     sceneUpdateMetricsRef.current.glyphAtlasTextureCount = baseStats.glyphAtlasTextureCount;
+    sceneUpdateMetricsRef.current.glyphActiveIndexCount = baseStats.glyphActiveIndexCount;
     sceneUpdateMetricsRef.current.glyphBufferDataReplaceCount += baseStats.glyphBufferDataReplaceCount;
     sceneUpdateMetricsRef.current.glyphBufferReallocCount += baseStats.glyphBufferReallocCount;
     sceneUpdateMetricsRef.current.glyphBufferSubarrayCommitCount += baseStats.glyphBufferSubarrayCommitCount;
@@ -665,6 +668,7 @@ export const WaveformCanvas = forwardRef<WaveformCanvasHandle, WaveformCanvasPro
     host.dataset.displayViewportOnlyUpdateCount = String(latestStats.displayViewportOnlyUpdateCount);
     host.dataset.displayViewportUpdateCount = String(latestStats.displayViewportUpdateCount);
     host.dataset.droppedFrameCount = String(latestStats.droppedFrameCount);
+    host.dataset.explicitDrawCountEnabled = String(latestStats.explicitDrawCountEnabled > 0);
     host.dataset.frameIntervalP95Ms = latestStats.frameIntervalP95Ms.toFixed(3);
     host.dataset.gpuBufferCapacityVertexCount = String(latestStats.gpuBufferCapacityVertexCount);
     host.dataset.gpuBufferDataReplaceCount = String(latestStats.gpuBufferDataReplaceCount);
@@ -672,10 +676,12 @@ export const WaveformCanvas = forwardRef<WaveformCanvasHandle, WaveformCanvasPro
     host.dataset.gpuBufferSubarrayCommitCount = String(latestStats.gpuBufferSubarrayCommitCount);
     host.dataset.gpuBufferUpdateCount = String(latestStats.gpuBufferUpdateCount);
     host.dataset.gpuBufferUpdateMs = latestStats.gpuBufferUpdateMs.toFixed(3);
+    host.dataset.gpuActiveIndexCount = String(latestStats.gpuActiveIndexCount);
     host.dataset.gpuDrawLayerCount = String(latestStats.gpuDrawLayerCount);
     host.dataset.gpuLayerCount = String(latestStats.gpuLayerCount);
     host.dataset.gpuVertexCount = String(latestStats.gpuVertexCount);
     host.dataset.glyphAtlasTextureCount = String(latestStats.glyphAtlasTextureCount);
+    host.dataset.glyphActiveIndexCount = String(latestStats.glyphActiveIndexCount);
     host.dataset.glyphBufferDataReplaceCount = String(latestStats.glyphBufferDataReplaceCount);
     host.dataset.glyphBufferReallocCount = String(latestStats.glyphBufferReallocCount);
     host.dataset.glyphBufferSubarrayCommitCount = String(latestStats.glyphBufferSubarrayCommitCount);
@@ -768,6 +774,7 @@ export const WaveformCanvas = forwardRef<WaveformCanvasHandle, WaveformCanvasPro
       data-display-window-end={displayViewport.endTime.toFixed(2)}
       data-display-window-start={displayViewport.startTime.toFixed(2)}
       data-dropped-frame-count={renderStats.droppedFrameCount}
+      data-explicit-draw-count-enabled={renderStats.explicitDrawCountEnabled > 0 ? 'true' : 'false'}
       data-frame-interval-p95-ms={renderStats.frameIntervalP95Ms.toFixed(3)}
       data-frame-parse-ms={renderStats.frameParseMs.toFixed(3)}
       data-last-fps={formatOptionalNumber(renderMetrics.lastFps)}
@@ -779,10 +786,12 @@ export const WaveformCanvas = forwardRef<WaveformCanvasHandle, WaveformCanvasPro
       data-gpu-buffer-subarray-commit-count={renderStats.gpuBufferSubarrayCommitCount}
       data-gpu-buffer-update-count={renderStats.gpuBufferUpdateCount}
       data-gpu-buffer-update-ms={renderStats.gpuBufferUpdateMs.toFixed(3)}
+      data-gpu-active-index-count={renderStats.gpuActiveIndexCount}
       data-gpu-draw-layer-count={renderStats.gpuDrawLayerCount}
       data-gpu-layer-count={renderStats.gpuLayerCount}
       data-gpu-vertex-count={renderStats.gpuVertexCount}
       data-glyph-atlas-texture-count={renderStats.glyphAtlasTextureCount}
+      data-glyph-active-index-count={renderStats.glyphActiveIndexCount}
       data-glyph-buffer-data-replace-count={renderStats.glyphBufferDataReplaceCount}
       data-glyph-buffer-realloc-count={renderStats.glyphBufferReallocCount}
       data-glyph-buffer-subarray-commit-count={renderStats.glyphBufferSubarrayCommitCount}
@@ -916,6 +925,8 @@ function createEmptyRenderStats(): WaveformRenderStats {
     panBufferMissCount: 0,
     panPixelShiftCount: 0,
     transformOnlyPanCount: 0,
+    explicitDrawCountEnabled: 0,
+    gpuActiveIndexCount: 0,
     gpuBufferUpdateCount: 0,
     gpuBufferUpdateMs: 0,
     gpuBufferCapacityVertexCount: 0,
@@ -926,6 +937,7 @@ function createEmptyRenderStats(): WaveformRenderStats {
     gpuLayerCount: 0,
     gpuVertexCount: 0,
     glyphAtlasTextureCount: 0,
+    glyphActiveIndexCount: 0,
     glyphBufferDataReplaceCount: 0,
     glyphBufferReallocCount: 0,
     glyphBufferSubarrayCommitCount: 0,
@@ -988,6 +1000,8 @@ function createEmptySceneUpdateMetrics(): WaveformSceneUpdateMetrics {
     panBufferMissCount: 0,
     panPixelShiftCount: 0,
     transformOnlyPanCount: 0,
+    explicitDrawCountEnabled: 0,
+    gpuActiveIndexCount: 0,
     gpuBufferUpdateCount: 0,
     gpuBufferUpdateMs: 0,
     gpuBufferCapacityVertexCount: 0,
@@ -998,6 +1012,7 @@ function createEmptySceneUpdateMetrics(): WaveformSceneUpdateMetrics {
     gpuLayerCount: 0,
     gpuVertexCount: 0,
     glyphAtlasTextureCount: 0,
+    glyphActiveIndexCount: 0,
     glyphBufferDataReplaceCount: 0,
     glyphBufferReallocCount: 0,
     glyphBufferSubarrayCommitCount: 0,

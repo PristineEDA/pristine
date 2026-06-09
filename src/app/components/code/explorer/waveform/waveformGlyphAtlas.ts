@@ -9,6 +9,7 @@ import {
 
 export interface WaveformGlyphAtlasMetrics {
   glyphAtlasTextureCount: number;
+  glyphActiveIndexCount: number;
   glyphBufferReallocCount: number;
   glyphBufferDataReplaceCount: number;
   glyphBufferSubarrayCommitCount: number;
@@ -157,6 +158,20 @@ export class WaveformGlyphAtlas {
     this.ensureIndexCapacity(safeGlyphCount * 6);
   }
 
+  public bindPreallocatedBuffers() {
+    const positionBuffer = this.geometry.getBuffer('aPosition');
+    const uvBuffer = this.geometry.getBuffer('aUV');
+    const indexBuffer = this.geometry.indexBuffer;
+    const recordCommit = () => {};
+
+    clearInactiveIndexTail(this.indices, 0);
+
+    this.activePositionView = commitStableBufferView(positionBuffer, this.activePositionView, this.positions, 0, recordCommit);
+    this.activeUvView = commitStableBufferView(uvBuffer, this.activeUvView, this.uvs, 0, recordCommit);
+    this.activeIndexView = commitStableBufferView(indexBuffer, this.activeIndexView, this.indices, 0, recordCommit, this.indices.length);
+    this.mesh.visible = false;
+  }
+
   public acquireLabel({ cacheKey, fill, fontSize, text, x, y }: WaveformGlyphAtlasAcquireOptions) {
     if (!text) {
       return this.container;
@@ -187,21 +202,24 @@ export class WaveformGlyphAtlas {
     const uvBuffer = this.geometry.getBuffer('aUV');
     const indexBuffer = this.geometry.indexBuffer;
 
-    this.activePositionView = commitActiveBufferView(positionBuffer, this.activePositionView, hasGlyphs ? this.positions : emptyPositions, this.positionLength, (delta) => {
+    clearInactiveIndexTail(this.indices, this.indexLength);
+
+    this.activePositionView = commitStableBufferView(positionBuffer, this.activePositionView, hasGlyphs ? this.positions : emptyPositions, this.positionLength, (delta) => {
       this.glyphBufferDataReplaceCount += delta.dataReplaceCount;
       this.glyphBufferSubarrayCommitCount += delta.subarrayCommitCount;
     });
-    this.activeUvView = commitActiveBufferView(uvBuffer, this.activeUvView, hasGlyphs ? this.uvs : emptyUvs, this.uvLength, (delta) => {
+    this.activeUvView = commitStableBufferView(uvBuffer, this.activeUvView, hasGlyphs ? this.uvs : emptyUvs, this.uvLength, (delta) => {
       this.glyphBufferDataReplaceCount += delta.dataReplaceCount;
       this.glyphBufferSubarrayCommitCount += delta.subarrayCommitCount;
     });
-    this.activeIndexView = commitActiveBufferView(indexBuffer, this.activeIndexView, hasGlyphs ? this.indices : emptyIndices, this.indexLength, (delta) => {
+    this.activeIndexView = commitStableBufferView(indexBuffer, this.activeIndexView, hasGlyphs ? this.indices : emptyIndices, this.indexLength, (delta) => {
       this.glyphBufferDataReplaceCount += delta.dataReplaceCount;
       this.glyphBufferSubarrayCommitCount += delta.subarrayCommitCount;
-    });
+    }, hasGlyphs ? this.indices.length : emptyIndices.length);
     this.mesh.visible = hasGlyphs;
     const metrics = {
       glyphAtlasTextureCount: this.texture.destroyed ? 0 : 1,
+      glyphActiveIndexCount: this.indexLength,
       glyphBufferReallocCount: this.glyphBufferReallocCount,
       glyphBufferDataReplaceCount: this.glyphBufferDataReplaceCount,
       glyphBufferSubarrayCommitCount: this.glyphBufferSubarrayCommitCount,
@@ -438,31 +456,39 @@ interface BufferViewCommitDelta {
   subarrayCommitCount: number;
 }
 
-function commitActiveBufferView<T extends Float32Array | Uint32Array>(
+function clearInactiveIndexTail(indices: Uint32Array, activeLength: number) {
+  if (activeLength >= indices.length) {
+    return;
+  }
+
+  indices.fill(0, Math.max(0, activeLength));
+}
+
+function commitStableBufferView<T extends Float32Array | Uint32Array>(
   buffer: PixiBuffer,
   previousView: T,
   source: T,
   activeLength: number,
   onCommit: (delta: BufferViewCommitDelta) => void,
+  updateLength = activeLength,
 ) {
-  if (activeLength <= 0) {
+  if (source.length === 0) {
     if (previousView.length === 0 && buffer.data === previousView) {
       buffer.update(0);
       return previousView;
     }
 
-    buffer.data = source.subarray(0, 0) as T;
-    onCommit({ dataReplaceCount: 1, subarrayCommitCount: 1 });
-    return buffer.data as T;
+    buffer.data = source;
+    onCommit({ dataReplaceCount: 1, subarrayCommitCount: 0 });
+    return source;
   }
 
-  if (previousView.buffer === source.buffer && previousView.byteOffset === source.byteOffset && previousView.length === activeLength) {
-    buffer.update(activeLength * source.BYTES_PER_ELEMENT);
+  if (previousView === source && buffer.data === source) {
+    buffer.update(Math.max(0, updateLength) * source.BYTES_PER_ELEMENT);
     return previousView;
   }
 
-  const nextView = source.subarray(0, activeLength) as T;
-  buffer.data = nextView;
-  onCommit({ dataReplaceCount: 1, subarrayCommitCount: 1 });
-  return nextView;
+  buffer.data = source;
+  onCommit({ dataReplaceCount: 1, subarrayCommitCount: 0 });
+  return source;
 }

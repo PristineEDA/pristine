@@ -219,9 +219,11 @@ async function readCanvasStats(canvasHost: ReturnType<Page['getByTestId']>) {
     displayViewportOnlyUpdateCount: await readNumber('data-display-viewport-only-update-count'),
     displayViewportUpdateCount: await readNumber('data-display-viewport-update-count'),
     droppedFrameCount: await readNumber('data-dropped-frame-count'),
+    explicitDrawCountEnabled: await canvasHost.getAttribute('data-explicit-draw-count-enabled'),
     frameIntervalP95Ms: await readNumber('data-frame-interval-p95-ms'),
     frameParseMs: await readNumber('data-frame-parse-ms'),
     fullSceneRebuildCount: await readNumber('data-full-scene-rebuild-count'),
+    gpuActiveIndexCount: await readNumber('data-gpu-active-index-count'),
     gpuBufferCapacityVertexCount: await readNumber('data-gpu-buffer-capacity-vertex-count'),
     gpuBufferDataReplaceCount: await readNumber('data-gpu-buffer-data-replace-count'),
     gpuBufferReallocCount: await readNumber('data-gpu-buffer-realloc-count'),
@@ -231,6 +233,7 @@ async function readCanvasStats(canvasHost: ReturnType<Page['getByTestId']>) {
     gpuDrawLayerCount: await readNumber('data-gpu-draw-layer-count'),
     gpuLayerCount: await readNumber('data-gpu-layer-count'),
     gpuVertexCount: await readNumber('data-gpu-vertex-count'),
+    glyphActiveIndexCount: await readNumber('data-glyph-active-index-count'),
     glyphAtlasTextureCount: await readNumber('data-glyph-atlas-texture-count'),
     glyphBufferDataReplaceCount: await readNumber('data-glyph-buffer-data-replace-count'),
     glyphBufferReallocCount: await readNumber('data-glyph-buffer-realloc-count'),
@@ -384,10 +387,12 @@ function diffInteractionMetrics(
     displayViewportUpdateCount: end.displayViewportUpdateCount - start.displayViewportUpdateCount,
     droppedFrameCount: end.droppedFrameCount - start.droppedFrameCount,
     gpuBufferDataReplaceCount: end.gpuBufferDataReplaceCount - start.gpuBufferDataReplaceCount,
+    gpuActiveIndexCount: end.gpuActiveIndexCount,
     gpuBufferReallocCount: end.gpuBufferReallocCount - start.gpuBufferReallocCount,
     gpuBufferSubarrayCommitCount: end.gpuBufferSubarrayCommitCount - start.gpuBufferSubarrayCommitCount,
     gpuBufferUpdateCount: end.gpuBufferUpdateCount - start.gpuBufferUpdateCount,
     glyphBufferDataReplaceCount: end.glyphBufferDataReplaceCount - start.glyphBufferDataReplaceCount,
+    glyphActiveIndexCount: end.glyphActiveIndexCount,
     glyphBufferReallocCount: end.glyphBufferReallocCount - start.glyphBufferReallocCount,
     glyphBufferSubarrayCommitCount: end.glyphBufferSubarrayCommitCount - start.glyphBufferSubarrayCommitCount,
     glyphBufferUpdateCount: end.glyphBufferUpdateCount - start.glyphBufferUpdateCount,
@@ -666,9 +671,12 @@ test('waveform dense render opt-in baseline', async () => {
     expect(finalStats.gpuVertexCount).toBeGreaterThan(0);
     expect(finalStats.gpuDrawLayerCount).toBeGreaterThan(0);
     expect(finalStats.gpuDrawLayerCount).toBeLessThanOrEqual(8);
+    expect(finalStats.explicitDrawCountEnabled).toBe('true');
+    expect(finalStats.gpuActiveIndexCount).toBeGreaterThan(0);
     expect(finalStats.gpuBufferCapacityVertexCount).toBeGreaterThan(0);
     expect(finalStats.gpuBufferUpdateCount).toBeGreaterThan(0);
     expect(finalStats.glyphAtlasTextureCount).toBe(1);
+    expect(finalStats.glyphActiveIndexCount).toBeGreaterThan(0);
     expect(finalStats.glyphBufferUpdateCount).toBeGreaterThan(0);
     expect(finalStats.glyphVertexCount).toBeGreaterThan(0);
     expect(samples.length).toBeGreaterThanOrEqual(10);
@@ -886,11 +894,14 @@ test('packaged waveform sustained 10s viewport and interaction perf', async () =
       && await canvasHost.getAttribute('data-gpu-buffer-capacity-vertex-count') !== null
       && await canvasHost.getAttribute('data-gpu-buffer-data-replace-count') !== null
       && await canvasHost.getAttribute('data-gpu-buffer-subarray-commit-count') !== null
+      && await canvasHost.getAttribute('data-explicit-draw-count-enabled') !== null
+      && await canvasHost.getAttribute('data-gpu-active-index-count') !== null
       && await canvasHost.getAttribute('data-scene-update-ms') !== null;
     const packagedHasGlyphBatchMetrics = await canvasHost.getAttribute('data-glyph-atlas-texture-count') !== null
       && await canvasHost.getAttribute('data-glyph-buffer-data-replace-count') !== null
       && await canvasHost.getAttribute('data-glyph-buffer-realloc-count') !== null
       && await canvasHost.getAttribute('data-glyph-buffer-subarray-commit-count') !== null
+      && await canvasHost.getAttribute('data-glyph-active-index-count') !== null
       && await canvasHost.getAttribute('data-glyph-vertex-count') !== null;
     const strictPackagedHotPathMetrics = process.env.PRISTINE_STRICT_WAVEFORM_PACKAGED_PERF === '1';
     const observedHeapBytes = [jsHeapBefore, ...samples.map((sample) => sample.jsHeapBytes), jsHeapAfter].filter((value) => value > 0);
@@ -919,12 +930,17 @@ test('packaged waveform sustained 10s viewport and interaction perf', async () =
     }
     expect(panDelta.rowReuseCount).toBeGreaterThanOrEqual(panDelta.viewportContentUpdateCount * panVisibleRowCount);
     expect(finalStats.gpuDrawLayerCount).toBeLessThanOrEqual(8);
+    expect(finalStats.explicitDrawCountEnabled).toBe('true');
+    expect(finalStats.gpuActiveIndexCount).toBeGreaterThan(0);
     expect(finalStats.glyphAtlasTextureCount).toBeGreaterThanOrEqual(1);
+    expect(finalStats.glyphActiveIndexCount).toBeGreaterThan(0);
     expect(finalStats.glyphVertexCount).toBeGreaterThan(0);
     expect(panDelta.labelTextureUpdateCount).toBe(0);
     expect(panDelta.glyphBufferReallocCount).toBe(0);
     expect(panDelta.gpuBufferDataReplaceCount).toBe(0);
+    expect(panDelta.gpuBufferSubarrayCommitCount).toBe(0);
     expect(panDelta.glyphBufferDataReplaceCount).toBe(0);
+    expect(panDelta.glyphBufferSubarrayCommitCount).toBe(0);
     expect(panDelta.reactViewportCommitCount).toBeLessThanOrEqual(panDelta.viewportContentUpdateCount + panDelta.displayViewportUpdateCount);
     expect(zoomDelta.fullSceneRebuildCount).toBe(0);
     expect(zoomDelta.viewportContentUpdateCount).toBeGreaterThan(0);

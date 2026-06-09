@@ -18,6 +18,7 @@ describe('WaveformGlyphAtlas', () => {
 
     expect(firstContainer).toBe(atlas.container);
     expect(warmup.glyphAtlasTextureCount).toBe(1);
+    expect(warmup.glyphActiveIndexCount).toBe(24);
     expect(warmup.glyphVertexCount).toBe(16);
     expect(warmup.glyphBufferUpdateCount).toBe(1);
     expect(warmup.labelPoolSize).toBe(1);
@@ -37,6 +38,7 @@ describe('WaveformGlyphAtlas', () => {
 
     expect(reusedContainer).toBe(atlas.container);
     expect(pan.glyphAtlasTextureCount).toBe(1);
+    expect(pan.glyphActiveIndexCount).toBe(warmup.glyphActiveIndexCount);
     expect(pan.glyphVertexCount).toBe(warmup.glyphVertexCount);
     expect(pan.glyphBufferUpdateCount).toBe(1);
     expect(pan.glyphBufferDataReplaceCount).toBe(0);
@@ -120,6 +122,7 @@ describe('WaveformGlyphAtlas', () => {
 
     expect(preallocation.glyphBufferReallocCount).toBeGreaterThan(0);
 
+    atlas.bindPreallocatedBuffers();
     atlas.beginFrame();
     atlas.acquireLabel({
       fill: 0xd6d6d6,
@@ -132,7 +135,8 @@ describe('WaveformGlyphAtlas', () => {
 
     expect(sampledInteraction.glyphVertexCount).toBe(16);
     expect(sampledInteraction.glyphBufferReallocCount).toBe(0);
-    expect(sampledInteraction.glyphBufferDataReplaceCount).toBeGreaterThan(0);
+    expect(sampledInteraction.glyphBufferDataReplaceCount).toBe(0);
+    expect(sampledInteraction.glyphBufferSubarrayCommitCount).toBe(0);
     expect(sampledInteraction.labelTextureUpdateCount).toBe(0);
 
     atlas.beginFrame();
