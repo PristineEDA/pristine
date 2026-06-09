@@ -96,12 +96,16 @@ interface WaveformRowContentMetrics {
   gpuBufferUpdateCount: number;
   gpuBufferUpdateMs: number;
   gpuBufferCapacityVertexCount: number;
+  gpuBufferDataReplaceCount: number;
   gpuBufferReallocCount: number;
+  gpuBufferSubarrayCommitCount: number;
   gpuDrawLayerCount: number;
   gpuLayerCount: number;
   gpuVertexCount: number;
   glyphAtlasTextureCount: number;
+  glyphBufferDataReplaceCount: number;
   glyphBufferReallocCount: number;
+  glyphBufferSubarrayCommitCount: number;
   glyphBufferUpdateCount: number;
   glyphBufferUpdateMs: number;
   glyphVertexCount: number;
@@ -286,6 +290,7 @@ export function updateWaveformScenePan(scene: WaveformScene, viewport: WaveformV
       scene.renderStats.rowReuseCount = scene.state.visibleRows.rows.length;
       scene.renderStats.panBufferHitCount = 1;
       scene.renderStats.panPixelShiftCount = Math.abs(scene.state.horizontalBuffer.offsetX - previousOffsetX);
+      scene.renderStats.transformOnlyPanCount = 1;
       accumulateFrameBatchStaticMetrics(scene, scene.renderStats);
       return true;
     }
@@ -339,6 +344,7 @@ export function updateWaveformScenePan(scene: WaveformScene, viewport: WaveformV
   scene.renderStats.rowReuseCount = scene.state.visibleRows.rows.length;
   scene.renderStats.panBufferHitCount = 1;
   scene.renderStats.panPixelShiftCount = Math.abs(scene.state.horizontalBuffer.offsetX - previousOffsetX);
+  scene.renderStats.transformOnlyPanCount = 1;
   accumulateVisibleRowContentMetrics(scene, scene.renderStats);
   return true;
 }
@@ -384,15 +390,20 @@ function createRenderStats(visibleRowCount: number, culledRowCount: number, rend
     panBufferHitCount: 0,
     panBufferMissCount: 0,
     panPixelShiftCount: 0,
+    transformOnlyPanCount: 0,
     gpuBufferUpdateCount: 0,
     gpuBufferUpdateMs: 0,
     gpuBufferCapacityVertexCount: 0,
+    gpuBufferDataReplaceCount: 0,
     gpuBufferReallocCount: 0,
+    gpuBufferSubarrayCommitCount: 0,
     gpuDrawLayerCount: 0,
     gpuLayerCount: 0,
     gpuVertexCount: 0,
     glyphAtlasTextureCount: 0,
+    glyphBufferDataReplaceCount: 0,
     glyphBufferReallocCount: 0,
+    glyphBufferSubarrayCommitCount: 0,
     glyphBufferUpdateCount: 0,
     glyphBufferUpdateMs: 0,
     glyphVertexCount: 0,
@@ -541,12 +552,16 @@ function createEmptyRowContentMetrics(): WaveformRowContentMetrics {
     gpuBufferUpdateCount: 0,
     gpuBufferUpdateMs: 0,
     gpuBufferCapacityVertexCount: 0,
+    gpuBufferDataReplaceCount: 0,
     gpuBufferReallocCount: 0,
+    gpuBufferSubarrayCommitCount: 0,
     gpuDrawLayerCount: 0,
     gpuLayerCount: 0,
     gpuVertexCount: 0,
     glyphAtlasTextureCount: 0,
+    glyphBufferDataReplaceCount: 0,
     glyphBufferReallocCount: 0,
+    glyphBufferSubarrayCommitCount: 0,
     glyphBufferUpdateCount: 0,
     glyphBufferUpdateMs: 0,
     glyphVertexCount: 0,
@@ -704,12 +719,16 @@ function redrawWaveformSceneFrameBatchContent(scene: WaveformScene, options: Wav
   metrics.gpuBufferUpdateCount += gpuMetrics.bufferUpdateCount;
   metrics.gpuBufferUpdateMs += gpuMetrics.bufferUpdateMs;
   metrics.gpuBufferCapacityVertexCount += gpuMetrics.bufferCapacityVertexCount;
+  metrics.gpuBufferDataReplaceCount += gpuMetrics.bufferDataReplaceCount;
   metrics.gpuBufferReallocCount += gpuMetrics.bufferReallocCount;
+  metrics.gpuBufferSubarrayCommitCount += gpuMetrics.bufferSubarrayCommitCount;
   metrics.gpuDrawLayerCount += gpuMetrics.drawLayerCount;
   metrics.gpuLayerCount += gpuMetrics.drawLayerCount;
   metrics.gpuVertexCount += gpuMetrics.vertexCount;
   metrics.glyphAtlasTextureCount += gpuMetrics.glyphAtlasTextureCount;
+  metrics.glyphBufferDataReplaceCount += gpuMetrics.glyphBufferDataReplaceCount;
   metrics.glyphBufferReallocCount += gpuMetrics.glyphBufferReallocCount;
+  metrics.glyphBufferSubarrayCommitCount += gpuMetrics.glyphBufferSubarrayCommitCount;
   metrics.glyphBufferUpdateCount += gpuMetrics.glyphBufferUpdateCount;
   metrics.glyphBufferUpdateMs += gpuMetrics.glyphBufferUpdateMs;
   metrics.glyphVertexCount += gpuMetrics.glyphVertexCount;
@@ -777,7 +796,11 @@ function accumulateRowContentMetrics(target: WaveformRenderStats, source: Wavefo
 function accumulateRowContentUpdateMetrics(target: WaveformRenderStats, source: WaveformRowContentMetrics) {
   target.gpuBufferUpdateCount += source.gpuBufferUpdateCount;
   target.gpuBufferUpdateMs += source.gpuBufferUpdateMs;
+  target.gpuBufferDataReplaceCount += source.gpuBufferDataReplaceCount;
   target.gpuBufferReallocCount += source.gpuBufferReallocCount;
+  target.gpuBufferSubarrayCommitCount += source.gpuBufferSubarrayCommitCount;
+  target.glyphBufferDataReplaceCount += source.glyphBufferDataReplaceCount;
+  target.glyphBufferSubarrayCommitCount += source.glyphBufferSubarrayCommitCount;
   target.labelLayoutCacheHitCount += source.labelLayoutCacheHitCount;
   target.labelLayoutCacheMissCount += source.labelLayoutCacheMissCount;
   target.labelTextureUpdateCount += source.labelTextureUpdateCount;

@@ -223,14 +223,18 @@ async function readCanvasStats(canvasHost: ReturnType<Page['getByTestId']>) {
     frameParseMs: await readNumber('data-frame-parse-ms'),
     fullSceneRebuildCount: await readNumber('data-full-scene-rebuild-count'),
     gpuBufferCapacityVertexCount: await readNumber('data-gpu-buffer-capacity-vertex-count'),
+    gpuBufferDataReplaceCount: await readNumber('data-gpu-buffer-data-replace-count'),
     gpuBufferReallocCount: await readNumber('data-gpu-buffer-realloc-count'),
+    gpuBufferSubarrayCommitCount: await readNumber('data-gpu-buffer-subarray-commit-count'),
     gpuBufferUpdateCount: await readNumber('data-gpu-buffer-update-count'),
     gpuBufferUpdateMs: await readNumber('data-gpu-buffer-update-ms'),
     gpuDrawLayerCount: await readNumber('data-gpu-draw-layer-count'),
     gpuLayerCount: await readNumber('data-gpu-layer-count'),
     gpuVertexCount: await readNumber('data-gpu-vertex-count'),
     glyphAtlasTextureCount: await readNumber('data-glyph-atlas-texture-count'),
+    glyphBufferDataReplaceCount: await readNumber('data-glyph-buffer-data-replace-count'),
     glyphBufferReallocCount: await readNumber('data-glyph-buffer-realloc-count'),
+    glyphBufferSubarrayCommitCount: await readNumber('data-glyph-buffer-subarray-commit-count'),
     glyphBufferUpdateCount: await readNumber('data-glyph-buffer-update-count'),
     glyphBufferUpdateMs: await readNumber('data-glyph-buffer-update-ms'),
     glyphVertexCount: await readNumber('data-glyph-vertex-count'),
@@ -252,6 +256,7 @@ async function readCanvasStats(canvasHost: ReturnType<Page['getByTestId']>) {
     renderedSignalCount: await readNumber('data-rendered-signal-count'),
     sourceSegmentCount: await readNumber('data-source-segment-count'),
     suppressedLabelCount: await readNumber('data-suppressed-label-count'),
+    transformOnlyPanCount: await readNumber('data-transform-only-pan-count'),
     cursorUpdateCount: await readNumber('data-cursor-update-count'),
     selectionUpdateCount: await readNumber('data-selection-update-count'),
     sceneUpdateMs: await readNumber('data-scene-update-ms'),
@@ -378,9 +383,13 @@ function diffInteractionMetrics(
     displayViewportOnlyUpdateCount: end.displayViewportOnlyUpdateCount - start.displayViewportOnlyUpdateCount,
     displayViewportUpdateCount: end.displayViewportUpdateCount - start.displayViewportUpdateCount,
     droppedFrameCount: end.droppedFrameCount - start.droppedFrameCount,
+    gpuBufferDataReplaceCount: end.gpuBufferDataReplaceCount - start.gpuBufferDataReplaceCount,
     gpuBufferReallocCount: end.gpuBufferReallocCount - start.gpuBufferReallocCount,
+    gpuBufferSubarrayCommitCount: end.gpuBufferSubarrayCommitCount - start.gpuBufferSubarrayCommitCount,
     gpuBufferUpdateCount: end.gpuBufferUpdateCount - start.gpuBufferUpdateCount,
+    glyphBufferDataReplaceCount: end.glyphBufferDataReplaceCount - start.glyphBufferDataReplaceCount,
     glyphBufferReallocCount: end.glyphBufferReallocCount - start.glyphBufferReallocCount,
+    glyphBufferSubarrayCommitCount: end.glyphBufferSubarrayCommitCount - start.glyphBufferSubarrayCommitCount,
     glyphBufferUpdateCount: end.glyphBufferUpdateCount - start.glyphBufferUpdateCount,
     idleViewportCommitCount: end.idleViewportCommitCount - start.idleViewportCommitCount,
     labelLayoutCacheHitCount: end.labelLayoutCacheHitCount - start.labelLayoutCacheHitCount,
@@ -394,6 +403,7 @@ function diffInteractionMetrics(
     rowReuseCount: end.rowReuseCount - start.rowReuseCount,
     cursorUpdateCount: end.cursorUpdateCount - start.cursorUpdateCount,
     selectionUpdateCount: end.selectionUpdateCount - start.selectionUpdateCount,
+    transformOnlyPanCount: end.transformOnlyPanCount - start.transformOnlyPanCount,
     verticalScrollUpdateCount: end.verticalScrollUpdateCount - start.verticalScrollUpdateCount,
     viewportContentUpdateCount: end.viewportContentUpdateCount - start.viewportContentUpdateCount,
   };
@@ -874,9 +884,13 @@ test('packaged waveform sustained 10s viewport and interaction perf', async () =
     const zoomVisibleRowCount = zoomVisibleRowCounts[0] ?? 0;
     const packagedHasCurrentHotPathMetrics = await canvasHost.getAttribute('data-gpu-buffer-realloc-count') !== null
       && await canvasHost.getAttribute('data-gpu-buffer-capacity-vertex-count') !== null
+      && await canvasHost.getAttribute('data-gpu-buffer-data-replace-count') !== null
+      && await canvasHost.getAttribute('data-gpu-buffer-subarray-commit-count') !== null
       && await canvasHost.getAttribute('data-scene-update-ms') !== null;
     const packagedHasGlyphBatchMetrics = await canvasHost.getAttribute('data-glyph-atlas-texture-count') !== null
+      && await canvasHost.getAttribute('data-glyph-buffer-data-replace-count') !== null
       && await canvasHost.getAttribute('data-glyph-buffer-realloc-count') !== null
+      && await canvasHost.getAttribute('data-glyph-buffer-subarray-commit-count') !== null
       && await canvasHost.getAttribute('data-glyph-vertex-count') !== null;
     const strictPackagedHotPathMetrics = process.env.PRISTINE_STRICT_WAVEFORM_PACKAGED_PERF === '1';
     const observedHeapBytes = [jsHeapBefore, ...samples.map((sample) => sample.jsHeapBytes), jsHeapAfter].filter((value) => value > 0);
@@ -889,6 +903,7 @@ test('packaged waveform sustained 10s viewport and interaction perf', async () =
     expect(panDelta.fullSceneRebuildCount).toBe(0);
     expect(panDelta.viewportContentUpdateCount).toBeGreaterThan(0);
     expect(panDelta.panBufferHitCount).toBeGreaterThan(0);
+    expect(panDelta.transformOnlyPanCount).toBeGreaterThan(0);
     expect(
       packagedHasCurrentHotPathMetrics,
       'Packaged app is missing current GPU hot-path metrics. Re-run pnpm package:win so the perf test does not use a stale executable.',
@@ -908,6 +923,8 @@ test('packaged waveform sustained 10s viewport and interaction perf', async () =
     expect(finalStats.glyphVertexCount).toBeGreaterThan(0);
     expect(panDelta.labelTextureUpdateCount).toBe(0);
     expect(panDelta.glyphBufferReallocCount).toBe(0);
+    expect(panDelta.gpuBufferDataReplaceCount).toBe(0);
+    expect(panDelta.glyphBufferDataReplaceCount).toBe(0);
     expect(panDelta.reactViewportCommitCount).toBeLessThanOrEqual(panDelta.viewportContentUpdateCount + panDelta.displayViewportUpdateCount);
     expect(zoomDelta.fullSceneRebuildCount).toBe(0);
     expect(zoomDelta.viewportContentUpdateCount).toBeGreaterThan(0);

@@ -41,6 +41,9 @@ export interface WaveformRenderStats {
   panBufferHitCount: number;
   panBufferMissCount: number;
   panPixelShiftCount: number;
+  transformOnlyPanCount: number;
+  gpuBufferDataReplaceCount: number;
+  gpuBufferSubarrayCommitCount: number;
   gpuBufferUpdateCount: number;
   gpuBufferUpdateMs: number;
   gpuBufferCapacityVertexCount: number;
@@ -49,7 +52,9 @@ export interface WaveformRenderStats {
   gpuLayerCount: number;
   gpuVertexCount: number;
   glyphAtlasTextureCount: number;
+  glyphBufferDataReplaceCount: number;
   glyphBufferReallocCount: number;
+  glyphBufferSubarrayCommitCount: number;
   glyphBufferUpdateCount: number;
   glyphBufferUpdateMs: number;
   glyphVertexCount: number;
@@ -114,6 +119,9 @@ export interface WaveformSceneUpdateMetrics {
   panBufferHitCount: number;
   panBufferMissCount: number;
   panPixelShiftCount: number;
+  transformOnlyPanCount: number;
+  gpuBufferDataReplaceCount: number;
+  gpuBufferSubarrayCommitCount: number;
   gpuBufferUpdateCount: number;
   gpuBufferUpdateMs: number;
   gpuBufferCapacityVertexCount: number;
@@ -122,7 +130,9 @@ export interface WaveformSceneUpdateMetrics {
   gpuLayerCount: number;
   gpuVertexCount: number;
   glyphAtlasTextureCount: number;
+  glyphBufferDataReplaceCount: number;
   glyphBufferReallocCount: number;
+  glyphBufferSubarrayCommitCount: number;
   glyphBufferUpdateCount: number;
   glyphBufferUpdateMs: number;
   glyphVertexCount: number;

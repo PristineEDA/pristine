@@ -32,9 +32,13 @@ describe('WaveformGpuBatchRenderer', () => {
     expect(preparedHitUpdate.vertexCount).toBe(warmup.vertexCount);
     expect(preparedHitUpdate.bufferCapacityVertexCount).toBe(warmup.bufferCapacityVertexCount);
     expect(preparedHitUpdate.bufferReallocCount).toBe(0);
+    expect(preparedHitUpdate.bufferDataReplaceCount).toBe(0);
+    expect(preparedHitUpdate.bufferSubarrayCommitCount).toBe(0);
     expect(preparedHitUpdate.glyphAtlasTextureCount).toBe(1);
     expect(preparedHitUpdate.glyphVertexCount).toBe(warmup.glyphVertexCount);
     expect(preparedHitUpdate.glyphBufferUpdateCount).toBe(1);
+    expect(preparedHitUpdate.glyphBufferDataReplaceCount).toBe(0);
+    expect(preparedHitUpdate.glyphBufferSubarrayCommitCount).toBe(0);
     expect(preparedHitUpdate.labelPoolSize).toBe(1);
     expect(preparedHitUpdate.labelTextureUpdateCount).toBe(0);
     expect(preparedHitUpdate.labelLayoutCacheHitCount).toBe(1);
@@ -61,6 +65,18 @@ describe('WaveformGpuBatchRenderer', () => {
     expect(sampledInteraction.glyphBufferReallocCount).toBe(0);
     expect(sampledInteraction.labelTextureUpdateCount).toBe(0);
     expect(sampledInteraction.drawLayerCount).toBeLessThanOrEqual(8);
+
+    renderer.reset();
+    addRepresentativeWaveformGeometry(renderer);
+    renderer.acquireLabel('abcd', 0xd6d6d6, 10, 24, 6);
+    const repeatedInteraction = renderer.commit();
+
+    expect(repeatedInteraction.bufferReallocCount).toBe(0);
+    expect(repeatedInteraction.bufferDataReplaceCount).toBe(0);
+    expect(repeatedInteraction.bufferSubarrayCommitCount).toBe(0);
+    expect(repeatedInteraction.glyphBufferReallocCount).toBe(0);
+    expect(repeatedInteraction.glyphBufferDataReplaceCount).toBe(0);
+    expect(repeatedInteraction.glyphBufferSubarrayCommitCount).toBe(0);
   });
 });
 

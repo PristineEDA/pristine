@@ -198,7 +198,12 @@ describe('createWaveformScene', () => {
     expect(nextMeshContainer).toBe(firstMeshContainer);
     expect(scene.renderStats.panBufferHitCount).toBe(1);
     expect(scene.renderStats.panBufferMissCount).toBe(0);
+    expect(scene.renderStats.transformOnlyPanCount).toBe(1);
     expect(scene.renderStats.gpuBufferUpdateCount).toBe(0);
+    expect(scene.renderStats.gpuBufferDataReplaceCount).toBe(0);
+    expect(scene.renderStats.gpuBufferSubarrayCommitCount).toBe(0);
+    expect(scene.renderStats.glyphBufferDataReplaceCount).toBe(0);
+    expect(scene.renderStats.glyphBufferSubarrayCommitCount).toBe(0);
     expect(scene.renderStats.gpuDrawLayerCount).toBeLessThanOrEqual(8);
     expect(scene.renderStats.gpuVertexCount).toBeGreaterThan(0);
     expect(scene.renderStats.meshVertexCount).toBe(scene.renderStats.gpuVertexCount);

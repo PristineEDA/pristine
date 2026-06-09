@@ -247,6 +247,7 @@ export const WaveformCanvas = forwardRef<WaveformCanvasHandle, WaveformCanvasPro
     updateWaveformSceneCursor(scene, cursorTime);
     sceneUpdateMetricsRef.current.cursorUpdateCount += 1;
     applyRenderStats(scene.renderStats);
+    writeDisplayViewportDataset(scene.state.viewport);
     requestRender();
   }, [cursorTime]);
 
@@ -471,7 +472,12 @@ export const WaveformCanvas = forwardRef<WaveformCanvasHandle, WaveformCanvasPro
   function applyViewportToScene(nextViewport: WaveformViewport, options: { countDisplayUpdate: boolean }) {
     const scene = sceneRef.current;
 
-    if (!scene || areViewportsEqual(scene.state.viewport, nextViewport)) {
+    if (!scene) {
+      return;
+    }
+
+    if (areViewportsEqual(scene.state.viewport, nextViewport)) {
+      writeDisplayViewportDataset(nextViewport);
       return;
     }
 
@@ -493,6 +499,7 @@ export const WaveformCanvas = forwardRef<WaveformCanvasHandle, WaveformCanvasPro
     }
     accumulateRowLifecycleMetrics(scene.renderStats);
     applyRenderStats(scene.renderStats);
+    writeDisplayViewportDataset(scene.state.viewport);
     requestRender();
   }
 
@@ -534,6 +541,7 @@ export const WaveformCanvas = forwardRef<WaveformCanvasHandle, WaveformCanvasPro
     sceneUpdateMetricsRef.current.fullSceneRebuildCount += 1;
     accumulateRowLifecycleMetrics(sceneRef.current.renderStats);
     applyRenderStats(sceneRef.current.renderStats);
+    writeDisplayViewportDataset(sceneRef.current.state.viewport);
     app.stage.addChild(sceneRef.current.world);
     requestRender();
   }
@@ -545,6 +553,9 @@ export const WaveformCanvas = forwardRef<WaveformCanvasHandle, WaveformCanvasPro
     sceneUpdateMetricsRef.current.panBufferHitCount += baseStats.panBufferHitCount;
     sceneUpdateMetricsRef.current.panBufferMissCount += baseStats.panBufferMissCount;
     sceneUpdateMetricsRef.current.panPixelShiftCount += baseStats.panPixelShiftCount;
+    sceneUpdateMetricsRef.current.transformOnlyPanCount += baseStats.transformOnlyPanCount;
+    sceneUpdateMetricsRef.current.gpuBufferDataReplaceCount += baseStats.gpuBufferDataReplaceCount;
+    sceneUpdateMetricsRef.current.gpuBufferSubarrayCommitCount += baseStats.gpuBufferSubarrayCommitCount;
     sceneUpdateMetricsRef.current.gpuBufferUpdateCount += baseStats.gpuBufferUpdateCount;
     sceneUpdateMetricsRef.current.gpuBufferUpdateMs += baseStats.gpuBufferUpdateMs;
     sceneUpdateMetricsRef.current.gpuBufferCapacityVertexCount = baseStats.gpuBufferCapacityVertexCount;
@@ -553,7 +564,9 @@ export const WaveformCanvas = forwardRef<WaveformCanvasHandle, WaveformCanvasPro
     sceneUpdateMetricsRef.current.gpuLayerCount = baseStats.gpuLayerCount;
     sceneUpdateMetricsRef.current.gpuVertexCount = baseStats.gpuVertexCount;
     sceneUpdateMetricsRef.current.glyphAtlasTextureCount = baseStats.glyphAtlasTextureCount;
+    sceneUpdateMetricsRef.current.glyphBufferDataReplaceCount += baseStats.glyphBufferDataReplaceCount;
     sceneUpdateMetricsRef.current.glyphBufferReallocCount += baseStats.glyphBufferReallocCount;
+    sceneUpdateMetricsRef.current.glyphBufferSubarrayCommitCount += baseStats.glyphBufferSubarrayCommitCount;
     sceneUpdateMetricsRef.current.glyphBufferUpdateCount += baseStats.glyphBufferUpdateCount;
     sceneUpdateMetricsRef.current.glyphBufferUpdateMs += baseStats.glyphBufferUpdateMs;
     sceneUpdateMetricsRef.current.glyphVertexCount = baseStats.glyphVertexCount;
@@ -654,14 +667,18 @@ export const WaveformCanvas = forwardRef<WaveformCanvasHandle, WaveformCanvasPro
     host.dataset.droppedFrameCount = String(latestStats.droppedFrameCount);
     host.dataset.frameIntervalP95Ms = latestStats.frameIntervalP95Ms.toFixed(3);
     host.dataset.gpuBufferCapacityVertexCount = String(latestStats.gpuBufferCapacityVertexCount);
+    host.dataset.gpuBufferDataReplaceCount = String(latestStats.gpuBufferDataReplaceCount);
     host.dataset.gpuBufferReallocCount = String(latestStats.gpuBufferReallocCount);
+    host.dataset.gpuBufferSubarrayCommitCount = String(latestStats.gpuBufferSubarrayCommitCount);
     host.dataset.gpuBufferUpdateCount = String(latestStats.gpuBufferUpdateCount);
     host.dataset.gpuBufferUpdateMs = latestStats.gpuBufferUpdateMs.toFixed(3);
     host.dataset.gpuDrawLayerCount = String(latestStats.gpuDrawLayerCount);
     host.dataset.gpuLayerCount = String(latestStats.gpuLayerCount);
     host.dataset.gpuVertexCount = String(latestStats.gpuVertexCount);
     host.dataset.glyphAtlasTextureCount = String(latestStats.glyphAtlasTextureCount);
+    host.dataset.glyphBufferDataReplaceCount = String(latestStats.glyphBufferDataReplaceCount);
     host.dataset.glyphBufferReallocCount = String(latestStats.glyphBufferReallocCount);
+    host.dataset.glyphBufferSubarrayCommitCount = String(latestStats.glyphBufferSubarrayCommitCount);
     host.dataset.glyphBufferUpdateCount = String(latestStats.glyphBufferUpdateCount);
     host.dataset.glyphBufferUpdateMs = latestStats.glyphBufferUpdateMs.toFixed(3);
     host.dataset.glyphVertexCount = String(latestStats.glyphVertexCount);
@@ -675,22 +692,46 @@ export const WaveformCanvas = forwardRef<WaveformCanvasHandle, WaveformCanvasPro
     host.dataset.reactViewportCommitCount = String(latestStats.reactViewportCommitCount);
     host.dataset.renderCount = String(renderCountRef.current);
     host.dataset.sceneUpdateMs = latestStats.sceneUpdateMs.toFixed(3);
+    host.dataset.transformOnlyPanCount = String(latestStats.transformOnlyPanCount);
     host.dataset.visiblePrimitiveCount = String(nextMetrics.visiblePrimitiveCount);
+    writeDisplayViewportDataset();
+  }
+
+  function writeDisplayViewportDataset(nextViewport?: WaveformViewport) {
+    const host = hostRef.current;
+
+    if (!host) {
+      return;
+    }
+
+    const displayViewport = nextViewport ?? sceneRef.current?.state.viewport ?? viewportRef.current;
+    const width = Math.max(
+      waveformCanvasMinWidth,
+      Math.floor(host.clientWidth || canvasSize.width || waveformCanvasMinWidth),
+    );
+    const currentCursorTime = cursorTimeRef.current;
+    const cursorVisible = currentCursorTime >= displayViewport.startTime && currentCursorTime <= displayViewport.endTime;
+
+    host.dataset.cursorVisible = String(cursorVisible);
+    host.dataset.cursorX = timeToX(currentCursorTime, displayViewport, width).toFixed(2);
+    host.dataset.displayWindowEnd = displayViewport.endTime.toFixed(2);
+    host.dataset.displayWindowStart = displayViewport.startTime.toFixed(2);
   }
 
   const zoomLevel = data.duration / getWaveformViewportSpan(viewport);
   const effectiveCanvasWidth = Math.max(waveformCanvasMinWidth, canvasSize.width || waveformCanvasMinWidth);
-  const cursorX = timeToX(cursorTime, viewport, effectiveCanvasWidth);
-  const cursorVisible = cursorTime >= viewport.startTime && cursorTime <= viewport.endTime;
+  const displayViewport = sceneRef.current?.state.viewport ?? viewport;
+  const cursorX = timeToX(cursorTime, displayViewport, effectiveCanvasWidth);
+  const cursorVisible = cursorTime >= displayViewport.startTime && cursorTime <= displayViewport.endTime;
   const displayRows = getWaveformDisplayRows(data);
   const firstSignalLaneY = getWaveformFirstSignalLaneY(data);
   const selectedSignalLaneY = getWaveformSignalLaneY(data, selectedSignalId);
   const selectedSignalVisibleY = selectedSignalLaneY === null ? null : selectedSignalLaneY - verticalScrollTop;
   const stateCounts = getWaveformStateCounts(data);
-  const shapeCounts = getWaveformShapeCounts(data, viewport);
+  const shapeCounts = getWaveformShapeCounts(data, displayViewport);
   const emptyVisibleSignalCount = getWaveformEmptyVisibleSignalCount(frame);
-  const pulseFillCount = getWaveformDigitalPulseFillCount(data, viewport);
-  const rulerIndicatorMetrics = getWaveformRulerScrollIndicatorMetrics(viewport, data.duration, effectiveCanvasWidth);
+  const pulseFillCount = getWaveformDigitalPulseFillCount(data, displayViewport);
+  const rulerIndicatorMetrics = getWaveformRulerScrollIndicatorMetrics(displayViewport, data.duration, effectiveCanvasWidth);
 
   return (
     <div
@@ -724,6 +765,8 @@ export const WaveformCanvas = forwardRef<WaveformCanvasHandle, WaveformCanvasPro
       data-average-render-ms={formatOptionalNumber(renderMetrics.averageRenderDurationMs)}
       data-display-viewport-only-update-count={renderStats.displayViewportOnlyUpdateCount}
       data-display-viewport-update-count={renderStats.displayViewportUpdateCount}
+      data-display-window-end={displayViewport.endTime.toFixed(2)}
+      data-display-window-start={displayViewport.startTime.toFixed(2)}
       data-dropped-frame-count={renderStats.droppedFrameCount}
       data-frame-interval-p95-ms={renderStats.frameIntervalP95Ms.toFixed(3)}
       data-frame-parse-ms={renderStats.frameParseMs.toFixed(3)}
@@ -731,14 +774,18 @@ export const WaveformCanvas = forwardRef<WaveformCanvasHandle, WaveformCanvasPro
       data-last-render-ms={formatOptionalNumber(renderMetrics.lastRenderDurationMs)}
       data-interaction-frame-request-count={interactionFrameRequestCount}
       data-gpu-buffer-capacity-vertex-count={renderStats.gpuBufferCapacityVertexCount}
+      data-gpu-buffer-data-replace-count={renderStats.gpuBufferDataReplaceCount}
       data-gpu-buffer-realloc-count={renderStats.gpuBufferReallocCount}
+      data-gpu-buffer-subarray-commit-count={renderStats.gpuBufferSubarrayCommitCount}
       data-gpu-buffer-update-count={renderStats.gpuBufferUpdateCount}
       data-gpu-buffer-update-ms={renderStats.gpuBufferUpdateMs.toFixed(3)}
       data-gpu-draw-layer-count={renderStats.gpuDrawLayerCount}
       data-gpu-layer-count={renderStats.gpuLayerCount}
       data-gpu-vertex-count={renderStats.gpuVertexCount}
       data-glyph-atlas-texture-count={renderStats.glyphAtlasTextureCount}
+      data-glyph-buffer-data-replace-count={renderStats.glyphBufferDataReplaceCount}
       data-glyph-buffer-realloc-count={renderStats.glyphBufferReallocCount}
+      data-glyph-buffer-subarray-commit-count={renderStats.glyphBufferSubarrayCommitCount}
       data-glyph-buffer-update-count={renderStats.glyphBufferUpdateCount}
       data-glyph-buffer-update-ms={renderStats.glyphBufferUpdateMs.toFixed(3)}
       data-glyph-vertex-count={renderStats.glyphVertexCount}
@@ -761,6 +808,7 @@ export const WaveformCanvas = forwardRef<WaveformCanvasHandle, WaveformCanvasPro
       data-row-attach-count={renderStats.rowAttachCount}
       data-row-recycle-count={renderStats.rowRecycleCount}
       data-row-reuse-count={renderStats.rowReuseCount}
+      data-transform-only-pan-count={renderStats.transformOnlyPanCount}
       data-prepared-range-end={frame?.preparedRange?.endTime.toFixed(2) ?? ''}
       data-prepared-range-hit-count={preparedRangeHitCount}
       data-prepared-range-miss-count={preparedRangeMissCount}
@@ -867,15 +915,20 @@ function createEmptyRenderStats(): WaveformRenderStats {
     panBufferHitCount: 0,
     panBufferMissCount: 0,
     panPixelShiftCount: 0,
+    transformOnlyPanCount: 0,
     gpuBufferUpdateCount: 0,
     gpuBufferUpdateMs: 0,
     gpuBufferCapacityVertexCount: 0,
+    gpuBufferDataReplaceCount: 0,
     gpuBufferReallocCount: 0,
+    gpuBufferSubarrayCommitCount: 0,
     gpuDrawLayerCount: 0,
     gpuLayerCount: 0,
     gpuVertexCount: 0,
     glyphAtlasTextureCount: 0,
+    glyphBufferDataReplaceCount: 0,
     glyphBufferReallocCount: 0,
+    glyphBufferSubarrayCommitCount: 0,
     glyphBufferUpdateCount: 0,
     glyphBufferUpdateMs: 0,
     glyphVertexCount: 0,
@@ -934,15 +987,20 @@ function createEmptySceneUpdateMetrics(): WaveformSceneUpdateMetrics {
     panBufferHitCount: 0,
     panBufferMissCount: 0,
     panPixelShiftCount: 0,
+    transformOnlyPanCount: 0,
     gpuBufferUpdateCount: 0,
     gpuBufferUpdateMs: 0,
     gpuBufferCapacityVertexCount: 0,
+    gpuBufferDataReplaceCount: 0,
     gpuBufferReallocCount: 0,
+    gpuBufferSubarrayCommitCount: 0,
     gpuDrawLayerCount: 0,
     gpuLayerCount: 0,
     gpuVertexCount: 0,
     glyphAtlasTextureCount: 0,
+    glyphBufferDataReplaceCount: 0,
     glyphBufferReallocCount: 0,
+    glyphBufferSubarrayCommitCount: 0,
     glyphBufferUpdateCount: 0,
     glyphBufferUpdateMs: 0,
     glyphVertexCount: 0,

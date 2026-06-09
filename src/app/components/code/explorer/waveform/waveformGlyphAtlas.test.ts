@@ -39,6 +39,8 @@ describe('WaveformGlyphAtlas', () => {
     expect(pan.glyphAtlasTextureCount).toBe(1);
     expect(pan.glyphVertexCount).toBe(warmup.glyphVertexCount);
     expect(pan.glyphBufferUpdateCount).toBe(1);
+    expect(pan.glyphBufferDataReplaceCount).toBe(0);
+    expect(pan.glyphBufferSubarrayCommitCount).toBe(0);
     expect(pan.labelPoolSize).toBe(1);
     expect(pan.labelTextureUpdateCount).toBe(0);
     expect(pan.labelLayoutCacheHitCount).toBe(1);
@@ -130,6 +132,21 @@ describe('WaveformGlyphAtlas', () => {
 
     expect(sampledInteraction.glyphVertexCount).toBe(16);
     expect(sampledInteraction.glyphBufferReallocCount).toBe(0);
+    expect(sampledInteraction.glyphBufferDataReplaceCount).toBeGreaterThan(0);
     expect(sampledInteraction.labelTextureUpdateCount).toBe(0);
+
+    atlas.beginFrame();
+    atlas.acquireLabel({
+      fill: 0xd6d6d6,
+      fontSize: 10,
+      text: 'abcd',
+      x: 40,
+      y: 4,
+    });
+    const repeatedInteraction = atlas.commit();
+
+    expect(repeatedInteraction.glyphBufferReallocCount).toBe(0);
+    expect(repeatedInteraction.glyphBufferDataReplaceCount).toBe(0);
+    expect(repeatedInteraction.glyphBufferSubarrayCommitCount).toBe(0);
   });
 });

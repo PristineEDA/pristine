@@ -29,12 +29,16 @@ export type WaveformGpuBatchLayerKind =
 
 export interface WaveformGpuBatchMetrics {
   bufferCapacityVertexCount: number;
+  bufferDataReplaceCount: number;
   bufferReallocCount: number;
+  bufferSubarrayCommitCount: number;
   bufferUpdateCount: number;
   bufferUpdateMs: number;
   drawLayerCount: number;
   glyphAtlasTextureCount: number;
+  glyphBufferDataReplaceCount: number;
   glyphBufferReallocCount: number;
+  glyphBufferSubarrayCommitCount: number;
   glyphBufferUpdateCount: number;
   glyphBufferUpdateMs: number;
   glyphVertexCount: number;
@@ -148,7 +152,9 @@ export class WaveformGpuBatchRenderer {
   public commit(): WaveformGpuBatchMetrics {
     const startedAt = performance.now();
     let bufferCapacityVertexCount = 0;
+    let bufferDataReplaceCount = 0;
     let bufferReallocCount = 0;
+    let bufferSubarrayCommitCount = 0;
     let bufferUpdateCount = 0;
     let drawLayerCount = 0;
     let vertexCount = 0;
@@ -158,7 +164,9 @@ export class WaveformGpuBatchRenderer {
       const hasVertices = layer.builder.vertexCount > 0;
 
       if (hasVertices || hadVisibleMesh) {
-        layer.builder.commit(layer.geometry);
+        const commitMetrics = layer.builder.commit(layer.geometry);
+        bufferDataReplaceCount += commitMetrics.dataReplaceCount;
+        bufferSubarrayCommitCount += commitMetrics.subarrayCommitCount;
         bufferUpdateCount += 1;
       }
 
@@ -176,12 +184,16 @@ export class WaveformGpuBatchRenderer {
 
     this.lastMetrics = {
       bufferCapacityVertexCount,
+      bufferDataReplaceCount,
       bufferReallocCount,
+      bufferSubarrayCommitCount,
       bufferUpdateCount,
       bufferUpdateMs: Math.max(0, performance.now() - startedAt),
       drawLayerCount,
       glyphAtlasTextureCount: glyphMetrics.glyphAtlasTextureCount,
+      glyphBufferDataReplaceCount: glyphMetrics.glyphBufferDataReplaceCount,
       glyphBufferReallocCount: glyphMetrics.glyphBufferReallocCount,
+      glyphBufferSubarrayCommitCount: glyphMetrics.glyphBufferSubarrayCommitCount,
       glyphBufferUpdateCount: glyphMetrics.glyphBufferUpdateCount,
       glyphBufferUpdateMs: glyphMetrics.glyphBufferUpdateMs,
       glyphVertexCount: glyphMetrics.glyphVertexCount,
@@ -199,12 +211,16 @@ export class WaveformGpuBatchRenderer {
 function createEmptyBatchMetrics(): WaveformGpuBatchMetrics {
   return {
     bufferCapacityVertexCount: 0,
+    bufferDataReplaceCount: 0,
     bufferReallocCount: 0,
+    bufferSubarrayCommitCount: 0,
     bufferUpdateCount: 0,
     bufferUpdateMs: 0,
     drawLayerCount: 0,
     glyphAtlasTextureCount: 0,
+    glyphBufferDataReplaceCount: 0,
     glyphBufferReallocCount: 0,
+    glyphBufferSubarrayCommitCount: 0,
     glyphBufferUpdateCount: 0,
     glyphBufferUpdateMs: 0,
     glyphVertexCount: 0,
@@ -221,6 +237,10 @@ class WaveformGpuBatchBuilder {
   private indices = new Uint32Array(0);
   private positions = new Float32Array(0);
   private uvs = new Float32Array(0);
+  private activeColorView = emptyColors;
+  private activeIndexView = emptyIndices;
+  private activePositionView = emptyPositions;
+  private activeUvView = emptyUvs;
   private colorLength = 0;
   private indexLength = 0;
   private positionLength = 0;
@@ -323,10 +343,21 @@ class WaveformGpuBatchBuilder {
   }
 
   public commit(geometry: Geometry) {
-    geometry.getBuffer('aPosition').data = this.positionLength > 0 ? this.positions.subarray(0, this.positionLength) : emptyPositions;
-    geometry.getBuffer('aUV').data = this.uvLength > 0 ? this.uvs.subarray(0, this.uvLength) : emptyUvs;
-    geometry.getBuffer('aColor').data = this.colorLength > 0 ? this.colors.subarray(0, this.colorLength) : emptyColors;
-    geometry.indexBuffer.data = this.indexLength > 0 ? this.indices.subarray(0, this.indexLength) : emptyIndices;
+    const metrics = {
+      dataReplaceCount: 0,
+      subarrayCommitCount: 0,
+    };
+    const recordCommit = (delta: BufferViewCommitDelta) => {
+      metrics.dataReplaceCount += delta.dataReplaceCount;
+      metrics.subarrayCommitCount += delta.subarrayCommitCount;
+    };
+
+    this.activePositionView = commitActiveBufferView(geometry.getBuffer('aPosition'), this.activePositionView, this.positions, this.positionLength, recordCommit);
+    this.activeUvView = commitActiveBufferView(geometry.getBuffer('aUV'), this.activeUvView, this.uvs, this.uvLength, recordCommit);
+    this.activeColorView = commitActiveBufferView(geometry.getBuffer('aColor'), this.activeColorView, this.colors, this.colorLength, recordCommit);
+    this.activeIndexView = commitActiveBufferView(geometry.indexBuffer, this.activeIndexView, this.indices, this.indexLength, recordCommit);
+
+    return metrics;
   }
 
   private ensureVertexCapacity(requiredVertexCount: number) {
@@ -479,4 +510,39 @@ function getNextPowerOfTwo(value: number) {
   }
 
   return result;
+}
+
+interface BufferViewCommitDelta {
+  dataReplaceCount: number;
+  subarrayCommitCount: number;
+}
+
+function commitActiveBufferView<T extends Float32Array | Uint32Array>(
+  buffer: PixiBuffer,
+  previousView: T,
+  source: T,
+  activeLength: number,
+  onCommit: (delta: BufferViewCommitDelta) => void,
+) {
+  if (activeLength <= 0) {
+    if (previousView.length === 0 && buffer.data === previousView) {
+      buffer.update(0);
+      return previousView;
+    }
+
+    const nextEmptyView = source.subarray(0, 0) as T;
+    buffer.data = nextEmptyView;
+    onCommit({ dataReplaceCount: 1, subarrayCommitCount: 1 });
+    return nextEmptyView;
+  }
+
+  if (previousView.buffer === source.buffer && previousView.byteOffset === source.byteOffset && previousView.length === activeLength) {
+    buffer.update(activeLength * source.BYTES_PER_ELEMENT);
+    return previousView;
+  }
+
+  const nextView = source.subarray(0, activeLength) as T;
+  buffer.data = nextView;
+  onCommit({ dataReplaceCount: 1, subarrayCommitCount: 1 });
+  return nextView;
 }

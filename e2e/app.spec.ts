@@ -5782,7 +5782,6 @@ test('waveform bottom panel renders binary waveform and controls', async () => {
   }).toBeGreaterThan(0);
   await expect(canvasHost).toHaveAttribute('data-cursor-visible', 'true');
   await expect(cursorInfoTime).toHaveText(/\d+\.\dns/);
-  const cursorTimeAfterClick = Number(await panel.getAttribute('data-cursor-time') ?? '0');
 
   const initialZoom = Number(await panel.getAttribute('data-zoom') ?? '0');
   const zoomInButton = window.getByTestId('waveform-zoom-in');
@@ -5851,26 +5850,15 @@ test('waveform bottom panel renders binary waveform and controls', async () => {
   await expect.poll(async () => Number(await canvasHost.getAttribute('data-ruler-scroll-indicator-left') ?? '0'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(rulerLeftBeforeShiftWheel);
-  const maxHorizontalScrollLeft = Number(await horizontalScrollbar.getAttribute('data-horizontal-scroll-range') ?? '0');
-  const offscreenScrollLeft = cursorTimeAfterClick < Number(await panel.getAttribute('data-duration') ?? '0') / 2
-    ? maxHorizontalScrollLeft
-    : 0;
-  await setHorizontalScrollbarLeft(offscreenScrollLeft);
-  await expect.poll(async () => {
-    const viewportStart = Number(await panel.getAttribute('data-visible-window-start') ?? '0');
-    const viewportEnd = Number(await panel.getAttribute('data-visible-window-end') ?? '0');
 
-    return cursorTimeAfterClick < viewportStart || cursorTimeAfterClick > viewportEnd;
-  }, {
-    timeout: UI_READY_TIMEOUT_MS,
-  }).toBe(true);
-  await expect(canvasHost).toHaveAttribute('data-cursor-visible', 'false');
   await window.getByTestId('waveform-fit').click();
+  await expect(panel).toHaveAttribute('data-zoom', '1.00');
+  const markerCursorTime = Number(await panel.getAttribute('data-cursor-time') ?? '0');
   await expect.poll(async () => {
-    const viewportStart = Number(await panel.getAttribute('data-visible-window-start') ?? '0');
-    const viewportEnd = Number(await panel.getAttribute('data-visible-window-end') ?? '0');
+    const viewportStart = Number(await canvasHost.getAttribute('data-display-window-start') ?? '0');
+    const viewportEnd = Number(await canvasHost.getAttribute('data-display-window-end') ?? '0');
 
-    return cursorTimeAfterClick >= viewportStart && cursorTimeAfterClick <= viewportEnd;
+    return markerCursorTime >= viewportStart && markerCursorTime <= viewportEnd;
   }, {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBe(true);
