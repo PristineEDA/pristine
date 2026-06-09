@@ -221,6 +221,7 @@ Zod（https://github.com/colinhacks/zod）Colin McDonnell MIT
 ## Content Rendering, Diagrams & State
 
 Mermaid（https://github.com/mermaid-js/mermaid）Knut Sveidqvist MIT
+Apache ECharts（https://github.com/apache/echarts）The Apache Software Foundation Apache-2.0
 PixiJS（https://github.com/pixijs/pixijs）PixiJS Team MIT
 elkjs（https://github.com/kieler/elkjs）Ulf Rüegg EPL-2.0
 Liveline（https://github.com/benjitaylor/liveline）Benji Taylor MIT

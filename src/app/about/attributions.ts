@@ -306,6 +306,13 @@ export const openSourceAttributionSections: AttributionSection[] = [
         license: 'MIT',
       },
       {
+        id: 'echarts',
+        name: 'Apache ECharts',
+        url: 'https://github.com/apache/echarts',
+        author: 'The Apache Software Foundation',
+        license: 'Apache-2.0',
+      },
+      {
         id: 'pixi-js',
         name: 'PixiJS',
         url: 'https://github.com/pixijs/pixijs',

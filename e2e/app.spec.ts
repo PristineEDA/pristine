@@ -1021,7 +1021,7 @@ async function writeTerminalCommand(window: Awaited<ReturnType<typeof launchApp>
 
 function getBottomPanelTab(
   window: Awaited<ReturnType<typeof launchApp>>['window'],
-  tabId: 'terminal' | 'output' | 'problems' | 'debug' | 'lsp' | 'schematic' | 'waveform',
+  tabId: 'terminal' | 'output' | 'problems' | 'debug' | 'lsp' | 'schematic' | 'waveform' | 'synthesis',
 ) {
   return window.getByTestId(`bottom-panel-tab-${tabId}`);
 }
@@ -5498,6 +5498,7 @@ test('terminal tab creates a real shell session and shows command output', async
   await expectCompactPanelTabButton(getBottomPanelTab(window, 'output'));
   await expectCompactPanelTabButton(getBottomPanelTab(window, 'schematic'));
   await expectCompactPanelTabButton(getBottomPanelTab(window, 'waveform'));
+  await expectCompactPanelTabButton(getBottomPanelTab(window, 'synthesis'));
 
   const terminalInput = window.locator('[data-testid="terminal-host"] .xterm-helper-textarea');
   await expect(terminalInput).toHaveCount(1);
@@ -5508,6 +5509,73 @@ test('terminal tab creates a real shell session and shows command output', async
   await expect.poll(async () => readTerminalText(window), {
     timeout: 15000,
   }).toContain(marker);
+
+  await app.close();
+});
+
+test('synthesis bottom panel renders mock treemap sankey and timing table', async () => {
+  const { app, window } = await launchApp();
+
+  await openBottomTerminal(window);
+  await getBottomPanelTab(window, 'synthesis').click();
+
+  const panel = window.getByTestId('synthesis-panel');
+  await expect(panel).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect(window.getByText('Module Cell Treemap')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect(window.getByText('Timing Path Sankey')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect(window.getByTestId('synthesis-timing-table')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect(window.getByText('Path 1', { exact: true })).toBeVisible();
+  await expect(window.getByText('Slack')).toBeVisible();
+  await expect(window.getByText('Clock Uncertainty')).toBeVisible();
+
+  const treemapChart = window.getByTestId('synthesis-treemap-chart');
+  const sankeyChart = window.getByTestId('synthesis-sankey-chart');
+  await expect(treemapChart.locator('canvas')).toHaveCount(1, { timeout: UI_READY_TIMEOUT_MS });
+  await expect(sankeyChart.locator('canvas')).toHaveCount(1, { timeout: UI_READY_TIMEOUT_MS });
+  await expect.poll(async () => treemapChart.boundingBox().then((box) => box?.width ?? 0), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(120);
+  await expect.poll(async () => sankeyChart.boundingBox().then((box) => box?.height ?? 0), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(80);
+
+  const chartsPanel = window.getByTestId('panel-synthesis-charts');
+  const tablePanel = window.getByTestId('panel-synthesis-table');
+  const initialChartsWidth = await readElementPixelWidth(chartsPanel);
+  const initialTableWidth = await readElementPixelWidth(tablePanel);
+  const mainHandleBox = await window.getByTestId('synthesis-main-split-handle').boundingBox();
+  if (!mainHandleBox) {
+    throw new Error('Expected synthesis main split handle geometry to be measurable');
+  }
+
+  await window.mouse.move(mainHandleBox.x + mainHandleBox.width / 2, mainHandleBox.y + mainHandleBox.height / 2);
+  await window.mouse.down();
+  await window.mouse.move(mainHandleBox.x + mainHandleBox.width / 2 + 90, mainHandleBox.y + mainHandleBox.height / 2, { steps: 8 });
+  await window.mouse.up();
+
+  await expect.poll(() => readElementPixelWidth(chartsPanel), { timeout: UI_READY_TIMEOUT_MS }).toBeGreaterThan(initialChartsWidth + 45);
+  await expect.poll(() => readElementPixelWidth(tablePanel), { timeout: UI_READY_TIMEOUT_MS }).toBeLessThan(initialTableWidth - 45);
+
+  const treemapPanel = window.getByTestId('panel-synthesis-treemap');
+  const sankeyPanel = window.getByTestId('panel-synthesis-sankey');
+  const initialTreemapHeight = await readElementPixelHeight(treemapPanel);
+  const initialSankeyHeight = await readElementPixelHeight(sankeyPanel);
+  const leftHandleBox = await window.getByTestId('synthesis-left-split-handle').boundingBox();
+  if (!leftHandleBox) {
+    throw new Error('Expected synthesis left split handle geometry to be measurable');
+  }
+
+  await window.mouse.move(leftHandleBox.x + leftHandleBox.width / 2, leftHandleBox.y + leftHandleBox.height / 2);
+  await window.mouse.down();
+  await window.mouse.move(leftHandleBox.x + leftHandleBox.width / 2, leftHandleBox.y + leftHandleBox.height / 2 + 55, { steps: 8 });
+  await window.mouse.up();
+
+  await expect.poll(async () => {
+    const nextTreemapHeight = await readElementPixelHeight(treemapPanel);
+    const nextSankeyHeight = await readElementPixelHeight(sankeyPanel);
+
+    return Math.abs(nextTreemapHeight - initialTreemapHeight) + Math.abs(nextSankeyHeight - initialSankeyHeight);
+  }, { timeout: UI_READY_TIMEOUT_MS }).toBeGreaterThan(45);
 
   await app.close();
 });

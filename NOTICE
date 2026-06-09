@@ -47,6 +47,7 @@ Covered components:
 - Mastra (AI Agent Frameworks; declared as Apache-2.0)
 - AI SDK (AI Agent Frameworks; declared as Apache-2.0)
 - @ai-sdk/react (AI Agent Frameworks; declared as Apache-2.0)
+- Apache ECharts (Content Rendering, Diagrams & State; declared as Apache-2.0)
 - streamdown (Content Rendering, Diagrams & State; declared as Apache-2.0)
 - Meslo Font (Bundled Font Assets; declared as Apache-2.0)
 - pristine-engine (Bundled Binaries & Extra Resources; declared as Apache-2.0)

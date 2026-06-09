@@ -2,7 +2,7 @@ import { Suspense, lazy, useMemo, useState, type ReactNode } from 'react';
 import {
   Terminal, X, Plus,
   AlertCircle, AlertTriangle, Info, Lightbulb,
-  Bug, Square, Logs, Workflow, CircuitBoard, Activity, Maximize, Minimize2,
+  Bug, Square, Logs, Workflow, CircuitBoard, Activity, Maximize, Minimize2, Network,
 } from 'lucide-react';
 import { summarizeLspProblems, useLspProblems } from '../../../lsp/lspProblems';
 import { TerminalPanel } from './TerminalPanel';
@@ -24,8 +24,9 @@ const ProblemsTabPanel = lazy(() => import('./ProblemsTabPanel').then((module) =
 const LspPanel = lazy(() => import('./LspPanel').then((module) => ({ default: module.LspPanel })));
 const AsicSchematicPanel = lazy(() => import('./schematic/AsicSchematicPanel').then((module) => ({ default: module.AsicSchematicPanel })));
 const WaveformPanel = lazy(() => import('./waveform/WaveformPanel').then((module) => ({ default: module.WaveformPanel })));
+const SynthesisPanel = lazy(() => import('./SynthesisPanel').then((module) => ({ default: module.SynthesisPanel })));
 
-type BottomPanelTabId = 'terminal' | 'output' | 'problems' | 'debug' | 'lsp' | 'schematic' | 'waveform';
+type BottomPanelTabId = 'terminal' | 'output' | 'problems' | 'debug' | 'lsp' | 'schematic' | 'waveform' | 'synthesis';
 
 const BOTTOM_PANEL_TAB_ITEMS = [
   { value: 'terminal', label: 'Terminal', icon: Terminal, testId: 'bottom-panel-tab-terminal' },
@@ -35,6 +36,7 @@ const BOTTOM_PANEL_TAB_ITEMS = [
   { value: 'lsp', label: 'LSP', icon: Workflow, testId: 'bottom-panel-tab-lsp' },
   { value: 'schematic', label: 'Schematic', icon: CircuitBoard, testId: 'bottom-panel-tab-schematic' },
   { value: 'waveform', label: 'Waveform', icon: Activity, testId: 'bottom-panel-tab-waveform' },
+  { value: 'synthesis', label: 'Synthesis', icon: Network, testId: 'bottom-panel-tab-synthesis' },
 ] as const satisfies readonly IconTabToggleGroupItem[];
 
 interface BottomPanelProps {
@@ -110,6 +112,11 @@ export function BottomPanel({ isMaximized = false, layoutVersion, onClose, onMax
     waveform: (
       <Suspense fallback={<div className="flex h-full items-center justify-center text-ide-text-muted text-[12px]">Loading waveform...</div>}>
         <WaveformPanel />
+      </Suspense>
+    ),
+    synthesis: (
+      <Suspense fallback={<div className="flex h-full items-center justify-center text-ide-text-muted text-[12px]">Loading synthesis data...</div>}>
+        <SynthesisPanel />
       </Suspense>
     ),
   }), [layoutVersion, problemCounts.errorCount, problemCounts.hintCount, problemCounts.infoCount, problemCounts.warningCount, problemsList]);
