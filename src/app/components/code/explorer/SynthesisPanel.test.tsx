@@ -119,6 +119,27 @@ describe('SynthesisPanel', () => {
               color: expect.arrayContaining(['#2f55d4', '#5b5b5b', '#ff8128']),
             }),
           ]),
+          breadcrumb: expect.objectContaining({
+            show: true,
+            itemStyle: expect.objectContaining({
+              textStyle: expect.objectContaining({ color: '#ffffff' }),
+            }),
+          }),
+          label: expect.objectContaining({
+            color: '#ffffff',
+            textBorderColor: 'rgba(0, 0, 0, 0.58)',
+            textBorderWidth: 2,
+          }),
+          leafDepth: 1,
+          nodeClick: 'zoomToNode',
+          roam: true,
+          scaleLimit: { min: 0.72, max: 4 },
+          upperLabel: expect.objectContaining({
+            show: true,
+            color: '#ffffff',
+            textBorderColor: 'rgba(0, 0, 0, 0.58)',
+            textBorderWidth: 2,
+          }),
         }),
       ]),
     }));
@@ -127,18 +148,21 @@ describe('SynthesisPanel', () => {
         expect.objectContaining({
           type: 'sankey',
           data: expect.arrayContaining([
-            expect.objectContaining({ name: 'launch_reg[0]' }),
-            expect.objectContaining({ name: 'issue_mux' }),
-            expect.objectContaining({ name: 'xpi_dma' }),
-            expect.objectContaining({ name: 'capture_reg[1]' }),
+            expect.objectContaining({ name: 'core_launch_regs' }),
+            expect.objectContaining({ name: 'execute_cluster' }),
+            expect.objectContaining({ name: 'interconnect_grid' }),
+            expect.objectContaining({ name: 'Timing Losses' }),
+            expect.objectContaining({ name: 'debug_trace_q' }),
           ]),
           links: expect.arrayContaining([
-            expect.objectContaining({ source: 'operand_mux', target: 'alu', value: 31 }),
-            expect.objectContaining({ source: 'arbiter', target: 'xpi_core', value: 11 }),
-            expect.objectContaining({ source: 'sram_ctrl', target: 'capture_reg[1]', value: 13 }),
+            expect.objectContaining({ source: 'core_launch_regs', target: 'decode_unit', value: 112 }),
+            expect.objectContaining({ source: 'interconnect_grid', target: 'Timing Losses', value: 96 }),
+            expect.objectContaining({ source: 'memory_path', target: 'Timing Losses', value: 64 }),
+            expect.objectContaining({ source: 'sram_ctrl', target: 'mbist_done_q', value: 7 }),
           ]),
           nodeGap: 6,
           nodeWidth: 10,
+          right: 44,
         }),
       ]),
     }));
@@ -172,8 +196,8 @@ describe('SynthesisPanel', () => {
 
     expect(screen.getByText('Path 1')).toBeInTheDocument();
     expect(screen.getByText('Path 32')).toBeInTheDocument();
-    expect(screen.getByText('Path 36')).toBeInTheDocument();
-    expect(screen.getAllByText(/Path \d+/)).toHaveLength(36);
+    expect(screen.getByText('Path 100')).toBeInTheDocument();
+    expect(screen.getAllByText(/Path \d+/)).toHaveLength(100);
     expect(table).toHaveClass('min-w-[1506px]', 'text-[10.5px]');
     expect(tableQueries.getByRole('columnheader', { name: 'From' })).toHaveClass('min-w-[240px]', 'px-1.5');
     expect(tableQueries.getByRole('columnheader', { name: 'To' })).toHaveClass('min-w-[220px]', 'px-1.5');

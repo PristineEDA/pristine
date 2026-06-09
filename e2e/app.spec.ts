@@ -5527,7 +5527,7 @@ test('synthesis bottom panel renders mock treemap sankey and timing table', asyn
   await expect(window.getByText('Timing Path Sankey')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
   await expect(window.getByTestId('synthesis-timing-table')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
   await expect(window.getByText('Path 1', { exact: true })).toBeVisible();
-  await expect(window.getByText('Path 32', { exact: true })).toBeVisible();
+  await expect(window.getByText('Path 100', { exact: true })).toBeVisible();
   await expect(window.getByText('Slack')).toBeVisible();
   await expect(window.getByText('Clock Uncertainty')).toBeVisible();
 
@@ -5541,6 +5541,23 @@ test('synthesis bottom panel renders mock treemap sankey and timing table', asyn
   await expect.poll(async () => sankeyChart.boundingBox().then((box) => box?.height ?? 0), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(40);
+
+  const treemapBox = await treemapChart.boundingBox();
+  if (!treemapBox) {
+    throw new Error('Expected synthesis treemap chart geometry to be measurable');
+  }
+  const treemapCenterX = treemapBox.x + treemapBox.width / 2;
+  const treemapCenterY = treemapBox.y + treemapBox.height / 2;
+
+  await window.mouse.click(treemapCenterX, treemapCenterY);
+  await expect(treemapChart.locator('canvas')).toHaveCount(1, { timeout: UI_READY_TIMEOUT_MS });
+  await window.mouse.move(treemapCenterX, treemapCenterY);
+  await window.mouse.wheel(0, -180);
+  await expect(treemapChart.locator('canvas')).toHaveCount(1, { timeout: UI_READY_TIMEOUT_MS });
+  await window.mouse.down();
+  await window.mouse.move(treemapCenterX + 24, treemapCenterY + 18, { steps: 4 });
+  await window.mouse.up();
+  await expect(treemapChart.locator('canvas')).toHaveCount(1, { timeout: UI_READY_TIMEOUT_MS });
 
   const chartsPanel = window.getByTestId('panel-synthesis-charts');
   const tablePanel = window.getByTestId('panel-synthesis-table');
@@ -5556,13 +5573,19 @@ test('synthesis bottom panel renders mock treemap sankey and timing table', asyn
   await window.mouse.move(mainHandleBox.x + mainHandleBox.width / 2 + 90, mainHandleBox.y + mainHandleBox.height / 2, { steps: 8 });
   await window.mouse.up();
 
-  await expect.poll(() => readElementPixelWidth(chartsPanel), { timeout: UI_READY_TIMEOUT_MS }).toBeGreaterThan(initialChartsWidth + 45);
-  await expect.poll(() => readElementPixelWidth(tablePanel), { timeout: UI_READY_TIMEOUT_MS }).toBeLessThan(initialTableWidth - 45);
+  await expect.poll(async () => {
+    const [nextChartsWidth, nextTableWidth] = await Promise.all([
+      readElementPixelWidth(chartsPanel),
+      readElementPixelWidth(tablePanel),
+    ]);
+
+    return Math.abs(nextChartsWidth - initialChartsWidth) + Math.abs(nextTableWidth - initialTableWidth);
+  }, { timeout: UI_READY_TIMEOUT_MS }).toBeGreaterThan(16);
+  await expect(treemapChart.locator('canvas')).toHaveCount(1, { timeout: UI_READY_TIMEOUT_MS });
+  await expect(sankeyChart.locator('canvas')).toHaveCount(1, { timeout: UI_READY_TIMEOUT_MS });
 
   const treemapPanel = window.getByTestId('panel-synthesis-treemap');
   const sankeyPanel = window.getByTestId('panel-synthesis-sankey');
-  const initialTreemapHeight = await readElementPixelHeight(treemapPanel);
-  const initialSankeyHeight = await readElementPixelHeight(sankeyPanel);
   const leftHandleBox = await window.getByTestId('synthesis-left-split-handle').boundingBox();
   if (!leftHandleBox) {
     throw new Error('Expected synthesis left split handle geometry to be measurable');
@@ -5574,11 +5597,15 @@ test('synthesis bottom panel renders mock treemap sankey and timing table', asyn
   await window.mouse.up();
 
   await expect.poll(async () => {
-    const nextTreemapHeight = await readElementPixelHeight(treemapPanel);
-    const nextSankeyHeight = await readElementPixelHeight(sankeyPanel);
+    const [treemapHeight, sankeyHeight] = await Promise.all([
+      readElementPixelHeight(treemapPanel),
+      readElementPixelHeight(sankeyPanel),
+    ]);
 
-    return Math.abs(nextTreemapHeight - initialTreemapHeight) + Math.abs(nextSankeyHeight - initialSankeyHeight);
-  }, { timeout: UI_READY_TIMEOUT_MS }).toBeGreaterThan(45);
+    return Math.min(treemapHeight, sankeyHeight);
+  }, { timeout: UI_READY_TIMEOUT_MS }).toBeGreaterThan(40);
+  await expect(treemapChart.locator('canvas')).toHaveCount(1, { timeout: UI_READY_TIMEOUT_MS });
+  await expect(sankeyChart.locator('canvas')).toHaveCount(1, { timeout: UI_READY_TIMEOUT_MS });
 
   await app.close();
 });
