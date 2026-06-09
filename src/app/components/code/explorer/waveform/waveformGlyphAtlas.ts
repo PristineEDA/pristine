@@ -7,6 +7,11 @@ import {
   Texture,
 } from 'pixi.js';
 
+import {
+  markWaveformExplicitDrawCountGeometry,
+  setWaveformExplicitDrawCount,
+} from './waveformExplicitDrawCount';
+
 export interface WaveformGlyphAtlasMetrics {
   glyphAtlasTextureCount: number;
   glyphActiveIndexCount: number;
@@ -124,6 +129,7 @@ export class WaveformGlyphAtlas {
       label: `${label}-geometry`,
       topology: 'triangle-list',
     });
+    markWaveformExplicitDrawCountGeometry(this.geometry);
     this.mesh = new Mesh({
       geometry: this.geometry,
       label: `${label}-mesh`,
@@ -164,11 +170,10 @@ export class WaveformGlyphAtlas {
     const indexBuffer = this.geometry.indexBuffer;
     const recordCommit = () => {};
 
-    clearInactiveIndexTail(this.indices, 0);
-
     this.activePositionView = commitStableBufferView(positionBuffer, this.activePositionView, this.positions, 0, recordCommit);
     this.activeUvView = commitStableBufferView(uvBuffer, this.activeUvView, this.uvs, 0, recordCommit);
-    this.activeIndexView = commitStableBufferView(indexBuffer, this.activeIndexView, this.indices, 0, recordCommit, this.indices.length);
+    this.activeIndexView = commitStableBufferView(indexBuffer, this.activeIndexView, this.indices, 0, recordCommit);
+    setWaveformExplicitDrawCount(this.geometry, 0);
     this.mesh.visible = false;
   }
 
@@ -202,8 +207,6 @@ export class WaveformGlyphAtlas {
     const uvBuffer = this.geometry.getBuffer('aUV');
     const indexBuffer = this.geometry.indexBuffer;
 
-    clearInactiveIndexTail(this.indices, this.indexLength);
-
     this.activePositionView = commitStableBufferView(positionBuffer, this.activePositionView, hasGlyphs ? this.positions : emptyPositions, this.positionLength, (delta) => {
       this.glyphBufferDataReplaceCount += delta.dataReplaceCount;
       this.glyphBufferSubarrayCommitCount += delta.subarrayCommitCount;
@@ -215,7 +218,8 @@ export class WaveformGlyphAtlas {
     this.activeIndexView = commitStableBufferView(indexBuffer, this.activeIndexView, hasGlyphs ? this.indices : emptyIndices, this.indexLength, (delta) => {
       this.glyphBufferDataReplaceCount += delta.dataReplaceCount;
       this.glyphBufferSubarrayCommitCount += delta.subarrayCommitCount;
-    }, hasGlyphs ? this.indices.length : emptyIndices.length);
+    });
+    setWaveformExplicitDrawCount(this.geometry, hasGlyphs ? this.indexLength : 0);
     this.mesh.visible = hasGlyphs;
     const metrics = {
       glyphAtlasTextureCount: this.texture.destroyed ? 0 : 1,
@@ -456,21 +460,12 @@ interface BufferViewCommitDelta {
   subarrayCommitCount: number;
 }
 
-function clearInactiveIndexTail(indices: Uint32Array, activeLength: number) {
-  if (activeLength >= indices.length) {
-    return;
-  }
-
-  indices.fill(0, Math.max(0, activeLength));
-}
-
 function commitStableBufferView<T extends Float32Array | Uint32Array>(
   buffer: PixiBuffer,
   previousView: T,
   source: T,
   activeLength: number,
   onCommit: (delta: BufferViewCommitDelta) => void,
-  updateLength = activeLength,
 ) {
   if (source.length === 0) {
     if (previousView.length === 0 && buffer.data === previousView) {
@@ -484,7 +479,7 @@ function commitStableBufferView<T extends Float32Array | Uint32Array>(
   }
 
   if (previousView === source && buffer.data === source) {
-    buffer.update(Math.max(0, updateLength) * source.BYTES_PER_ELEMENT);
+    buffer.update(Math.max(0, activeLength) * source.BYTES_PER_ELEMENT);
     return previousView;
   }
 

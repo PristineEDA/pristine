@@ -40,6 +40,7 @@ import type {
   WaveformViewport,
 } from './waveformTypes';
 import { waveformBinaryFrameSignalTableStride, type ParsedWaveformFrame } from './waveformBinaryFrame';
+import { installWaveformExplicitDrawCountPatch } from './waveformExplicitDrawCount';
 
 type PixiRendererPreference = 'webgpu' | 'webgl';
 
@@ -894,6 +895,7 @@ async function createPixiApp(host: HTMLElement) {
         preference,
         resolution: Math.min(window.devicePixelRatio || 1, 2),
       });
+      installWaveformExplicitDrawCountPatch(app.renderer);
       app.stop();
       host.appendChild(app.canvas);
       return { app, renderer: preference };

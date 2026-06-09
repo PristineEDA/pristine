@@ -16,6 +16,10 @@ import {
 } from 'pixi.js';
 
 import { WaveformGlyphAtlas } from './waveformGlyphAtlas';
+import {
+  markWaveformExplicitDrawCountGeometry,
+  setWaveformExplicitDrawCount,
+} from './waveformExplicitDrawCount';
 
 export type WaveformGpuBatchLayerKind =
   | 'busFill'
@@ -303,12 +307,11 @@ class WaveformGpuBatchBuilder {
       metrics.subarrayCommitCount += delta.subarrayCommitCount;
     };
 
-    clearInactiveIndexTail(this.indices, 0);
-
     this.activePositionView = commitStableBufferView(geometry.getBuffer('aPosition'), this.activePositionView, this.positions, 0, recordCommit);
     this.activeUvView = commitStableBufferView(geometry.getBuffer('aUV'), this.activeUvView, this.uvs, 0, recordCommit);
     this.activeColorView = commitStableBufferView(geometry.getBuffer('aColor'), this.activeColorView, this.colors, 0, recordCommit);
-    this.activeIndexView = commitStableBufferView(geometry.indexBuffer, this.activeIndexView, this.indices, 0, recordCommit, this.indices.length);
+    this.activeIndexView = commitStableBufferView(geometry.indexBuffer, this.activeIndexView, this.indices, 0, recordCommit);
+    setWaveformExplicitDrawCount(geometry, 0);
 
     return metrics;
   }
@@ -392,12 +395,11 @@ class WaveformGpuBatchBuilder {
       metrics.subarrayCommitCount += delta.subarrayCommitCount;
     };
 
-    clearInactiveIndexTail(this.indices, this.indexLength);
-
     this.activePositionView = commitStableBufferView(geometry.getBuffer('aPosition'), this.activePositionView, this.positions, this.positionLength, recordCommit);
     this.activeUvView = commitStableBufferView(geometry.getBuffer('aUV'), this.activeUvView, this.uvs, this.uvLength, recordCommit);
     this.activeColorView = commitStableBufferView(geometry.getBuffer('aColor'), this.activeColorView, this.colors, this.colorLength, recordCommit);
-    this.activeIndexView = commitStableBufferView(geometry.indexBuffer, this.activeIndexView, this.indices, this.indexLength, recordCommit, this.indices.length);
+    this.activeIndexView = commitStableBufferView(geometry.indexBuffer, this.activeIndexView, this.indices, this.indexLength, recordCommit);
+    setWaveformExplicitDrawCount(geometry, this.indexLength);
 
     return metrics;
   }
@@ -478,6 +480,7 @@ function createBatchLayer(kind: WaveformGpuBatchLayerKind, shader: Shader): Wave
     label: `waveform-gpu-batch-${kind}`,
     topology: 'triangle-list',
   });
+  markWaveformExplicitDrawCountGeometry(geometry);
   const mesh = new Mesh({
     geometry,
     label: `waveform-gpu-batch-${kind}-mesh`,
@@ -559,21 +562,12 @@ interface BufferViewCommitDelta {
   subarrayCommitCount: number;
 }
 
-function clearInactiveIndexTail(indices: Uint32Array, activeLength: number) {
-  if (activeLength >= indices.length) {
-    return;
-  }
-
-  indices.fill(0, Math.max(0, activeLength));
-}
-
 function commitStableBufferView<T extends Float32Array | Uint32Array>(
   buffer: PixiBuffer,
   previousView: T,
   source: T,
   activeLength: number,
   onCommit: (delta: BufferViewCommitDelta) => void,
-  updateLength = activeLength,
 ) {
   if (source.length === 0) {
     if (previousView.length === 0 && buffer.data === previousView) {
@@ -587,7 +581,7 @@ function commitStableBufferView<T extends Float32Array | Uint32Array>(
   }
 
   if (previousView === source && buffer.data === source) {
-    buffer.update(Math.max(0, updateLength) * source.BYTES_PER_ELEMENT);
+    buffer.update(Math.max(0, activeLength) * source.BYTES_PER_ELEMENT);
     return previousView;
   }
 
