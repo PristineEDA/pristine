@@ -1582,9 +1582,14 @@ function normalizeWaveformFrameOptions(value: unknown): LspWaveformFrameOptions 
     height?: unknown;
     laneHeight?: unknown;
     maxSegments?: unknown;
+    preparedEndTime?: unknown;
+    preparedStartTime?: unknown;
+    protocolVersion?: unknown;
     sessionId?: unknown;
     signalIds?: unknown;
     startTime?: unknown;
+    viewportEndTime?: unknown;
+    viewportStartTime?: unknown;
     width?: unknown;
   };
   const sessionId = candidate.sessionId;
@@ -1614,9 +1619,14 @@ function normalizeWaveformFrameOptions(value: unknown): LspWaveformFrameOptions 
     maxSegments: typeof candidate.maxSegments === 'number' && Number.isInteger(candidate.maxSegments) && candidate.maxSegments >= 0
       ? candidate.maxSegments
       : undefined,
+    preparedEndTime: typeof candidate.preparedEndTime === 'number' ? candidate.preparedEndTime : undefined,
+    preparedStartTime: typeof candidate.preparedStartTime === 'number' ? candidate.preparedStartTime : undefined,
+    protocolVersion: candidate.protocolVersion === 2 ? 2 : undefined,
     signalIds: Array.isArray(candidate.signalIds)
       ? candidate.signalIds.filter((entry): entry is string => typeof entry === 'string')
       : undefined,
+    viewportEndTime: typeof candidate.viewportEndTime === 'number' ? candidate.viewportEndTime : undefined,
+    viewportStartTime: typeof candidate.viewportStartTime === 'number' ? candidate.viewportStartTime : undefined,
   };
 }
 

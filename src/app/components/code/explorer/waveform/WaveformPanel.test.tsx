@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { useEffect } from 'react';
+import { forwardRef, useEffect, useImperativeHandle } from 'react';
 
 import { waveformLayerNames } from './createWaveformScene';
 import {
@@ -17,27 +17,35 @@ import { WaveformPanel } from './WaveformPanel';
 import { createWaveformFixtureFrame } from './waveformTestFixtures';
 
 vi.mock('./WaveformCanvas', () => ({
-  WaveformCanvas: ({
+  WaveformCanvas: forwardRef(({
     cursorTime,
     data,
     frame,
+    interactionFrameRequestCount,
+    preparedRangeHitCount,
+    preparedRangeMissCount,
     selectedSignalId,
     verticalScrollTop,
     viewport,
     onMetricsChange,
     onRendererChange,
     onCursorTimeChange,
+    onViewportChange,
   }: {
     cursorTime: number;
     data: WaveformDataSet;
     frame?: ParsedWaveformFrame | null;
+    interactionFrameRequestCount?: number;
     onMetricsChange?: (metrics: WaveformRenderMetrics) => void;
     onRendererChange?: (renderer: WaveformRendererStatus) => void;
     selectedSignalId: string | null;
+    preparedRangeHitCount?: number;
+    preparedRangeMissCount?: number;
     viewport: WaveformViewport;
     onCursorTimeChange: (time: number) => void;
+    onViewportChange: (viewport: WaveformViewport) => void;
     verticalScrollTop: number;
-  }) => {
+  }, ref) => {
     const displayRows = getWaveformDisplayRows(data);
     const firstSignalLaneY = getWaveformFirstSignalLaneY(data);
     const selectedSignalLaneY = getWaveformSignalLaneY(data, selectedSignalId);
@@ -52,6 +60,11 @@ vi.mock('./WaveformCanvas', () => ({
         visiblePrimitiveCount: 1248,
       });
     }, [onMetricsChange, onRendererChange]);
+
+    useImperativeHandle(ref, () => ({
+      flushViewportCommit: () => undefined,
+      setDisplayViewport: (nextViewport: WaveformViewport) => onViewportChange(nextViewport),
+    }), [onViewportChange]);
 
     return (
       <button
@@ -74,9 +87,48 @@ vi.mock('./WaveformCanvas', () => ({
         data-header-background="opaque"
         data-layer-count={waveformLayerNames.length}
         data-layer-names={waveformLayerNames.join(',')}
+        data-interaction-frame-request-count={interactionFrameRequestCount ?? 0}
+        data-display-viewport-only-update-count="2"
+        data-display-viewport-update-count="3"
+        data-explicit-draw-count-enabled="true"
+        data-frame-interval-p95-ms="16.000"
+        data-frame-parse-ms="0.125"
+        data-gpu-active-index-count="768"
+        data-gpu-buffer-capacity-vertex-count="1024"
+        data-gpu-buffer-data-replace-count="0"
+        data-gpu-buffer-realloc-count="0"
+        data-gpu-buffer-subarray-commit-count="0"
+        data-gpu-buffer-update-count="6"
+        data-gpu-buffer-update-ms="1.250"
+        data-gpu-draw-layer-count="4"
+        data-gpu-layer-count="4"
+        data-gpu-vertex-count="512"
+        data-glyph-atlas-texture-count="1"
+        data-glyph-active-index-count="192"
+        data-glyph-buffer-data-replace-count="0"
+        data-glyph-buffer-realloc-count="0"
+        data-glyph-buffer-subarray-commit-count="0"
+        data-glyph-buffer-update-count="1"
+        data-glyph-buffer-update-ms="0.125"
+        data-glyph-vertex-count="128"
+        data-idle-viewport-commit-count="1"
+        data-label-layout-cache-hit-count="6"
+        data-label-layout-cache-miss-count="0"
+        data-label-pool-size="8"
+        data-label-texture-update-count="0"
+        data-mesh-buffer-update-ms="1.250"
+        data-mesh-vertex-count="512"
+        data-pipe-roundtrip-ms="1.500"
+        data-pixi-render-ms="2.000"
+        data-react-viewport-commit-count="1"
+        data-scene-update-ms="0.750"
         data-pulse-fill-count={getWaveformDigitalPulseFillCount(data, viewport)}
         data-row-count={displayRows.length}
         data-row-height={waveformLaneHeight}
+        data-prepared-range-end={frame?.preparedRange?.endTime.toFixed(2) ?? ''}
+        data-prepared-range-hit-count={preparedRangeHitCount ?? 0}
+        data-prepared-range-miss-count={preparedRangeMissCount ?? 0}
+        data-prepared-range-start={frame?.preparedRange?.startTime.toFixed(2) ?? ''}
         data-ruler-scroll-indicator-color="#8e8e8e"
         data-ruler-scroll-indicator-height="22.00"
         data-ruler-scroll-indicator-left="0.00"
@@ -88,6 +140,7 @@ vi.mock('./WaveformCanvas', () => ({
         data-selected-signal-visible-y={selectedSignalLaneY === null ? '' : (selectedSignalLaneY - verticalScrollTop).toFixed(2)}
         data-signal-count={data.signals.length}
         data-waveform-empty-visible-signal-count="0"
+        data-waveform-frame-protocol-version={frame?.version ?? ''}
         data-waveform-frame-segment-count={frame?.segmentCount ?? 0}
         data-waveform-frame-truncated={String(frame?.truncated ?? false)}
         data-waveform-frame-version={frame?.version ?? ''}
@@ -109,7 +162,7 @@ vi.mock('./WaveformCanvas', () => ({
         Mock waveform canvas
       </button>
     );
-  },
+  }),
 }));
 
 describe('WaveformPanel', () => {
@@ -139,6 +192,11 @@ describe('WaveformPanel', () => {
       startTime: 0,
       endTime: 200,
       maxSegments: 0,
+      preparedEndTime: 200,
+      preparedStartTime: 0,
+      protocolVersion: 2,
+      viewportEndTime: 200,
+      viewportStartTime: 0,
       width: 900,
     });
     expect(screen.queryByTestId('waveform-canvas')).not.toBeInTheDocument();
@@ -149,7 +207,7 @@ describe('WaveformPanel', () => {
     resolveFrame();
 
     await waitFor(() => expect(screen.getByTestId('waveform-canvas')).toBeInTheDocument());
-    expect(panel).toHaveAttribute('data-waveform-frame-version', '1');
+    expect(panel).toHaveAttribute('data-waveform-frame-version', '2');
     expect(panel).toHaveAttribute('data-waveform-frame-truncated', 'false');
     expect(panel).toHaveAttribute('data-waveform-empty-visible-signal-count', '0');
     expect(Number(panel.getAttribute('data-waveform-frame-segment-count'))).toBeGreaterThan(0);
@@ -165,19 +223,48 @@ describe('WaveformPanel', () => {
     await waitFor(() => expect(screen.getByTestId('waveform-canvas')).toBeInTheDocument());
 
     expect(panel).toHaveAttribute('data-signal-count', '168');
+    expect(panel).toHaveAttribute('data-duration', '200.00');
     expect(panel).toHaveAttribute('data-waveform-source', 'lsp-binary');
-    expect(panel).toHaveAttribute('data-waveform-frame-version', '1');
+    expect(panel).toHaveAttribute('data-waveform-frame-version', '2');
+    expect(panel).toHaveAttribute('data-waveform-frame-protocol-version', '2');
     expect(panel).toHaveAttribute('data-waveform-frame-truncated', 'false');
     expect(panel).toHaveAttribute('data-waveform-empty-visible-signal-count', '0');
+    expect(panel).toHaveAttribute('data-prepared-range-start', '0.00');
+    expect(panel).toHaveAttribute('data-prepared-range-end', '200.00');
+    expect(Number(panel.getAttribute('data-interaction-frame-request-count'))).toBeGreaterThan(0);
+    expect(Number(panel.getAttribute('data-prepared-range-miss-count'))).toBeGreaterThan(0);
     expect(Number(panel.getAttribute('data-waveform-frame-request-count'))).toBeGreaterThan(0);
     expect(Number(panel.getAttribute('data-waveform-frame-segment-count'))).toBeGreaterThan(0);
     expect(screen.getByText('tb_top_module1')).toBeInTheDocument();
     expect(screen.getByText('u_top_module1')).toBeInTheDocument();
     expect(screen.getByText('dense_test_signals')).toBeInTheDocument();
     expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-layer-names', 'background,content,status,operation');
-    expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-waveform-frame-version', '1');
+    expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-waveform-frame-version', '2');
+    expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-waveform-frame-protocol-version', '2');
     expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-waveform-frame-truncated', 'false');
     expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-waveform-empty-visible-signal-count', '0');
+    expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-prepared-range-start', '0.00');
+    expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-prepared-range-end', '200.00');
+    expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-gpu-buffer-update-count'))).toBeGreaterThan(0);
+    expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-gpu-buffer-update-ms'))).toBeGreaterThanOrEqual(0);
+    expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-gpu-buffer-capacity-vertex-count'))).toBeGreaterThan(0);
+    expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-gpu-buffer-realloc-count'))).toBeGreaterThanOrEqual(0);
+    expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-gpu-draw-layer-count'))).toBeGreaterThan(0);
+    expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-gpu-layer-count'))).toBeGreaterThan(0);
+    expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-gpu-vertex-count'))).toBeGreaterThan(0);
+    expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-glyph-atlas-texture-count'))).toBe(1);
+    expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-glyph-buffer-realloc-count'))).toBeGreaterThanOrEqual(0);
+    expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-glyph-buffer-update-count'))).toBeGreaterThan(0);
+    expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-glyph-buffer-update-ms'))).toBeGreaterThanOrEqual(0);
+    expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-glyph-vertex-count'))).toBeGreaterThan(0);
+    expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-label-layout-cache-hit-count'))).toBeGreaterThanOrEqual(0);
+    expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-label-layout-cache-miss-count'))).toBeGreaterThanOrEqual(0);
+    expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-label-texture-update-count'))).toBeGreaterThanOrEqual(0);
+    expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-mesh-buffer-update-ms'))).toBeGreaterThanOrEqual(0);
+    expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-mesh-vertex-count'))).toBeGreaterThan(0);
+    expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-pixi-render-ms'))).toBeGreaterThanOrEqual(0);
+    expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-scene-update-ms'))).toBeGreaterThanOrEqual(0);
+    expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-label-pool-size'))).toBeGreaterThan(0);
     expect(Number(screen.getByTestId('waveform-canvas').getAttribute('data-waveform-frame-segment-count'))).toBeGreaterThan(0);
     const toolbar = screen.getByTestId('waveform-toolbar');
     expect(screen.getByTestId('waveform-canvas')).toHaveAttribute('data-row-count', '171');

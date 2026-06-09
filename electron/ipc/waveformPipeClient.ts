@@ -23,6 +23,8 @@ const waveformMessageType = {
   viewportFrameResponse: 6,
   errorResponse: 7,
   close: 8,
+  viewportFrameRequestV2: 9,
+  viewportFrameResponseV2: 10,
 } as const;
 
 interface WaveformEndpoint {
@@ -153,13 +155,15 @@ export async function requestWaveformPipeFrame(options: LspWaveformFrameOptions)
     throw new Error(`Waveform session is not open: ${options.sessionId}`);
   }
 
+  const useV2 = options.protocolVersion === 2;
   const response = await runExclusiveWaveformPipeRequest(session, () => sendWaveformPipeRequest(
     session,
-    waveformMessageType.viewportFrameRequest,
-    encodeViewportFrameRequestPayload(options),
+    useV2 ? waveformMessageType.viewportFrameRequestV2 : waveformMessageType.viewportFrameRequest,
+    useV2 ? encodeViewportFrameRequestPayloadV2(options) : encodeViewportFrameRequestPayload(options),
   ));
 
-  if (response.messageType !== waveformMessageType.viewportFrameResponse) {
+  const expectedResponseType = useV2 ? waveformMessageType.viewportFrameResponseV2 : waveformMessageType.viewportFrameResponse;
+  if (response.messageType !== expectedResponseType) {
     throw new Error(`Unexpected waveform frame response type: ${response.messageType}`);
   }
 
@@ -263,6 +267,49 @@ export function encodeViewportFrameRequestPayload(options: LspWaveformFrameOptio
   view.setFloat64(offset, options.startTime, true);
   offset += 8;
   view.setFloat64(offset, options.endTime, true);
+  offset += 8;
+  view.setFloat32(offset, options.width, true);
+  offset += 4;
+  view.setFloat32(offset, options.laneHeight, true);
+  offset += 4;
+  view.setFloat32(offset, options.headerHeight, true);
+  offset += 4;
+  view.setUint32(offset, options.maxSegments ?? 0, true);
+  offset += 4;
+  view.setUint32(offset, encodedSignalIds.length, true);
+  offset += 4;
+
+  for (const encoded of encodedSignalIds) {
+    view.setUint32(offset, encoded.byteLength, true);
+    offset += 4;
+    output.set(encoded, offset);
+    offset += encoded.byteLength;
+  }
+
+  return output;
+}
+
+export function encodeViewportFrameRequestPayloadV2(options: LspWaveformFrameOptions): Uint8Array {
+  const signalIds = options.signalIds ?? [];
+  const encodedSignalIds = signalIds.map((signalId) => new TextEncoder().encode(signalId));
+  const byteLength = 8 + 8 + 8 + 8 + 4 + 4 + 4 + 4 + 4
+    + encodedSignalIds.reduce((sum, encoded) => sum + 4 + encoded.byteLength, 0);
+  const buffer = new ArrayBuffer(byteLength);
+  const view = new DataView(buffer);
+  const output = new Uint8Array(buffer);
+  const preparedStartTime = options.preparedStartTime ?? options.startTime;
+  const preparedEndTime = options.preparedEndTime ?? options.endTime;
+  const viewportStartTime = options.viewportStartTime ?? options.startTime;
+  const viewportEndTime = options.viewportEndTime ?? options.endTime;
+  let offset = 0;
+
+  view.setFloat64(offset, preparedStartTime, true);
+  offset += 8;
+  view.setFloat64(offset, preparedEndTime, true);
+  offset += 8;
+  view.setFloat64(offset, viewportStartTime, true);
+  offset += 8;
+  view.setFloat64(offset, viewportEndTime, true);
   offset += 8;
   view.setFloat32(offset, options.width, true);
   offset += 4;

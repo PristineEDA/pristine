@@ -2,13 +2,16 @@ import type { WaveformDataSet } from './waveformTypes';
 
 export const waveformBinaryFrameMagic = 0x46565750; // PWVF, little-endian.
 export const waveformBinaryFrameVersion = 1;
+export const waveformBinaryFrameVersionV2 = 2;
 export const waveformBinaryFrameSignalTableStride = 4;
 export const waveformBinaryFrameNoLabel = 0xffffffff;
 export const waveformBinaryFrameFlagTruncated = 1;
 
 const waveformBinaryFrameHeaderByteLength = 56;
+const waveformBinaryFrameHeaderByteLengthV2 = 96;
 const textDecoder = new TextDecoder();
 const textEncoder = new TextEncoder();
+let nextWaveformFrameId = 1;
 
 export enum WaveformBinaryValueKind {
   Low = 0,
@@ -19,12 +22,17 @@ export enum WaveformBinaryValueKind {
 }
 
 export interface ParsedWaveformFrame {
+  frameId: number;
   version: number;
   signalCount: number;
   segmentCount: number;
   flags: number;
   truncated: boolean;
+  preparedRange: WaveformFrameRange | null;
   signalTable: Uint32Array;
+  time0: Float64Array | null;
+  time1: Float64Array | null;
+  viewportRange: WaveformFrameRange | null;
   x0: Float32Array;
   x1: Float32Array;
   laneY: Float32Array;
@@ -40,27 +48,43 @@ interface WaveformFrameHeader {
   flags: number;
   labelIndexOffset: number;
   laneYOffset: number;
+  preparedEndTime: number | null;
+  preparedStartTime: number | null;
   segmentCount: number;
   headerByteLength: number;
   signalCount: number;
   signalTableOffset: number;
+  time0Offset: number | null;
+  time1Offset: number | null;
   valueKindOffset: number;
   version: number;
+  viewportEndTime: number | null;
+  viewportStartTime: number | null;
   x0Offset: number;
   x1Offset: number;
+}
+
+export interface WaveformFrameRange {
+  endTime: number;
+  startTime: number;
 }
 
 export interface WaveformBinaryFrameSegmentInput {
   label?: string | null;
   laneY: number;
   signalIndex: number;
+  time0?: number;
+  time1?: number;
   valueKind: WaveformBinaryValueKind;
   x0: number;
   x1: number;
 }
 
 export interface WaveformBinaryFrameBuildOptions {
+  preparedRange?: WaveformFrameRange;
   signalIndices?: readonly number[];
+  version?: 1 | 2;
+  viewportRange?: WaveformFrameRange;
 }
 
 export function parseWaveformBinaryFrame(buffer: ArrayBuffer): ParsedWaveformFrame {
@@ -75,10 +99,13 @@ export function parseWaveformBinaryFrame(buffer: ArrayBuffer): ParsedWaveformFra
   }
 
   const header = readHeader(view);
-  if (header.version !== waveformBinaryFrameVersion) {
+  if (header.version !== waveformBinaryFrameVersion && header.version !== waveformBinaryFrameVersionV2) {
     throw new Error(`Unsupported waveform frame version: ${header.version}`);
   }
-  if (header.headerByteLength < waveformBinaryFrameHeaderByteLength || header.headerByteLength > buffer.byteLength) {
+  const minimumHeaderByteLength = header.version === waveformBinaryFrameVersionV2
+    ? waveformBinaryFrameHeaderByteLengthV2
+    : waveformBinaryFrameHeaderByteLength;
+  if (header.headerByteLength < minimumHeaderByteLength || header.headerByteLength > buffer.byteLength) {
     throw new Error(`Unsupported waveform frame header length: ${header.headerByteLength}`);
   }
 
@@ -89,6 +116,14 @@ export function parseWaveformBinaryFrame(buffer: ArrayBuffer): ParsedWaveformFra
   assertArrayRegion(buffer, header.valueKindOffset, header.segmentCount, Uint8Array.BYTES_PER_ELEMENT, 'valueKind');
   assertArrayRegion(buffer, header.labelIndexOffset, header.segmentCount, Uint32Array.BYTES_PER_ELEMENT, 'labelIndex');
   assertByteRegion(buffer, header.labelBytesOffset, header.labelBytesLength, 'labelBytes');
+  if (header.version === waveformBinaryFrameVersionV2) {
+    if (header.time0Offset === null || header.time1Offset === null) {
+      throw new Error('Waveform frame v2 must include time0 and time1 offsets.');
+    }
+
+    assertArrayRegion(buffer, header.time0Offset, header.segmentCount, Float64Array.BYTES_PER_ELEMENT, 'time0');
+    assertArrayRegion(buffer, header.time1Offset, header.segmentCount, Float64Array.BYTES_PER_ELEMENT, 'time1');
+  }
 
   const signalTable = new Uint32Array(buffer, header.signalTableOffset, header.signalCount * waveformBinaryFrameSignalTableStride);
   const x0 = new Float32Array(buffer, header.x0Offset, header.segmentCount);
@@ -97,15 +132,26 @@ export function parseWaveformBinaryFrame(buffer: ArrayBuffer): ParsedWaveformFra
   const valueKind = new Uint8Array(buffer, header.valueKindOffset, header.segmentCount);
   const labelIndex = new Uint32Array(buffer, header.labelIndexOffset, header.segmentCount);
   const labelBytes = new Uint8Array(buffer, header.labelBytesOffset, header.labelBytesLength);
+  const time0 = header.time0Offset === null ? null : new Float64Array(buffer, header.time0Offset, header.segmentCount);
+  const time1 = header.time1Offset === null ? null : new Float64Array(buffer, header.time1Offset, header.segmentCount);
   const labelCache = new Map<number, string>();
 
   return {
+    frameId: nextWaveformFrameId++,
     version: header.version,
     signalCount: header.signalCount,
     segmentCount: header.segmentCount,
     flags: header.flags,
     truncated: (header.flags & waveformBinaryFrameFlagTruncated) !== 0,
+    preparedRange: header.preparedStartTime === null || header.preparedEndTime === null
+      ? null
+      : { startTime: header.preparedStartTime, endTime: header.preparedEndTime },
     signalTable,
+    time0,
+    time1,
+    viewportRange: header.viewportStartTime === null || header.viewportEndTime === null
+      ? null
+      : { startTime: header.viewportStartTime, endTime: header.viewportEndTime },
     x0,
     x1,
     laneY,
@@ -150,11 +196,24 @@ export function parseWaveformBinaryFrame(buffer: ArrayBuffer): ParsedWaveformFra
   };
 }
 
+export function parseWaveformBinaryFrameV2(buffer: ArrayBuffer): ParsedWaveformFrame {
+  const frame = parseWaveformBinaryFrame(buffer);
+  if (frame.version !== waveformBinaryFrameVersionV2 || !frame.time0 || !frame.time1 || !frame.preparedRange) {
+    throw new Error('Expected waveform binary frame version 2.');
+  }
+
+  return frame;
+}
+
 export function createWaveformBinaryFrameFromDataset(
   data: WaveformDataSet,
   segments: readonly WaveformBinaryFrameSegmentInput[],
   options: WaveformBinaryFrameBuildOptions = {},
 ): ArrayBuffer {
+  const version = options.version ?? waveformBinaryFrameVersion;
+  const headerByteLength = version === waveformBinaryFrameVersionV2
+    ? waveformBinaryFrameHeaderByteLengthV2
+    : waveformBinaryFrameHeaderByteLength;
   const signalStarts = new Array<number>(data.signals.length).fill(0);
   const signalCounts = new Array<number>(data.signals.length).fill(0);
   const sortedSegments = [...segments].sort((left, right) => left.signalIndex - right.signalIndex || left.x0 - right.x0);
@@ -201,19 +260,27 @@ export function createWaveformBinaryFrameFromDataset(
 
   const signalCount = tableSignalIndices.length;
   const segmentCount = sortedSegments.length;
-  const signalTableOffset = alignOffset(waveformBinaryFrameHeaderByteLength, 4);
+  const signalTableOffset = alignOffset(headerByteLength, 4);
   const x0Offset = alignOffset(signalTableOffset + signalCount * waveformBinaryFrameSignalTableStride * Uint32Array.BYTES_PER_ELEMENT, 4);
   const x1Offset = alignOffset(x0Offset + segmentCount * Float32Array.BYTES_PER_ELEMENT, 4);
   const laneYOffset = alignOffset(x1Offset + segmentCount * Float32Array.BYTES_PER_ELEMENT, 4);
   const valueKindOffset = laneYOffset + segmentCount * Float32Array.BYTES_PER_ELEMENT;
   const labelIndexOffset = alignOffset(valueKindOffset + segmentCount * Uint8Array.BYTES_PER_ELEMENT, 4);
-  const labelBytesOffset = labelIndexOffset + segmentCount * Uint32Array.BYTES_PER_ELEMENT;
+  const time0Offset = version === waveformBinaryFrameVersionV2
+    ? alignOffset(labelIndexOffset + segmentCount * Uint32Array.BYTES_PER_ELEMENT, 8)
+    : null;
+  const time1Offset = time0Offset === null
+    ? null
+    : alignOffset(time0Offset + segmentCount * Float64Array.BYTES_PER_ELEMENT, 8);
+  const labelBytesOffset = time1Offset === null
+    ? labelIndexOffset + segmentCount * Uint32Array.BYTES_PER_ELEMENT
+    : alignOffset(time1Offset + segmentCount * Float64Array.BYTES_PER_ELEMENT, 4);
   const buffer = new ArrayBuffer(labelBytesOffset + labelBytesLength);
   const view = new DataView(buffer);
 
   view.setUint32(0, waveformBinaryFrameMagic, true);
-  view.setUint16(4, waveformBinaryFrameVersion, true);
-  view.setUint16(6, waveformBinaryFrameHeaderByteLength, true);
+  view.setUint16(4, version, true);
+  view.setUint16(6, headerByteLength, true);
   view.setUint32(8, signalCount, true);
   view.setUint32(12, segmentCount, true);
   view.setUint32(16, signalTableOffset, true);
@@ -226,6 +293,17 @@ export function createWaveformBinaryFrameFromDataset(
   view.setUint32(44, labelBytesLength, true);
   view.setUint32(48, 0, true);
   view.setUint32(52, segmentCount, true);
+  if (version === waveformBinaryFrameVersionV2) {
+    const preparedRange = options.preparedRange ?? { startTime: 0, endTime: data.duration };
+    const viewportRange = options.viewportRange ?? preparedRange;
+
+    view.setUint32(56, time0Offset ?? 0, true);
+    view.setUint32(60, time1Offset ?? 0, true);
+    view.setFloat64(64, preparedRange.startTime, true);
+    view.setFloat64(72, preparedRange.endTime, true);
+    view.setFloat64(80, viewportRange.startTime, true);
+    view.setFloat64(88, viewportRange.endTime, true);
+  }
 
   const signalTable = new Uint32Array(buffer, signalTableOffset, signalCount * waveformBinaryFrameSignalTableStride);
   for (let tableIndex = 0; tableIndex < tableSignalIndices.length; tableIndex += 1) {
@@ -243,6 +321,8 @@ export function createWaveformBinaryFrameFromDataset(
   const valueKind = new Uint8Array(buffer, valueKindOffset, segmentCount);
   const labelIndex = new Uint32Array(buffer, labelIndexOffset, segmentCount);
   const labelBytes = new Uint8Array(buffer, labelBytesOffset, labelBytesLength);
+  const time0 = time0Offset === null ? null : new Float64Array(buffer, time0Offset, segmentCount);
+  const time1 = time1Offset === null ? null : new Float64Array(buffer, time1Offset, segmentCount);
 
   for (let index = 0; index < sortedSegments.length; index += 1) {
     const segment = sortedSegments[index]!;
@@ -251,6 +331,10 @@ export function createWaveformBinaryFrameFromDataset(
     laneY[index] = segment.laneY;
     valueKind[index] = segment.valueKind;
     labelIndex[index] = labelOffsets[index] ?? waveformBinaryFrameNoLabel;
+    if (time0 && time1) {
+      time0[index] = segment.time0 ?? segment.x0;
+      time1[index] = segment.time1 ?? segment.x1;
+    }
   }
 
   let labelCursor = 0;
@@ -263,9 +347,12 @@ export function createWaveformBinaryFrameFromDataset(
 }
 
 function readHeader(view: DataView): WaveformFrameHeader {
+  const version = view.getUint16(4, true);
+  const headerByteLength = view.getUint16(6, true);
+
   return {
-    version: view.getUint16(4, true),
-    headerByteLength: view.getUint16(6, true),
+    version,
+    headerByteLength,
     signalCount: view.getUint32(8, true),
     segmentCount: view.getUint32(12, true),
     signalTableOffset: view.getUint32(16, true),
@@ -277,6 +364,12 @@ function readHeader(view: DataView): WaveformFrameHeader {
     labelBytesOffset: view.getUint32(40, true),
     labelBytesLength: view.getUint32(44, true),
     flags: view.getUint32(48, true),
+    time0Offset: version === waveformBinaryFrameVersionV2 && headerByteLength >= waveformBinaryFrameHeaderByteLengthV2 ? view.getUint32(56, true) : null,
+    time1Offset: version === waveformBinaryFrameVersionV2 && headerByteLength >= waveformBinaryFrameHeaderByteLengthV2 ? view.getUint32(60, true) : null,
+    preparedStartTime: version === waveformBinaryFrameVersionV2 && headerByteLength >= waveformBinaryFrameHeaderByteLengthV2 ? view.getFloat64(64, true) : null,
+    preparedEndTime: version === waveformBinaryFrameVersionV2 && headerByteLength >= waveformBinaryFrameHeaderByteLengthV2 ? view.getFloat64(72, true) : null,
+    viewportStartTime: version === waveformBinaryFrameVersionV2 && headerByteLength >= waveformBinaryFrameHeaderByteLengthV2 ? view.getFloat64(80, true) : null,
+    viewportEndTime: version === waveformBinaryFrameVersionV2 && headerByteLength >= waveformBinaryFrameHeaderByteLengthV2 ? view.getFloat64(88, true) : null,
   };
 }
 

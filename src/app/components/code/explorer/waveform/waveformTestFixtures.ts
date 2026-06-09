@@ -1,4 +1,4 @@
-import { createWaveformBinaryFrameFromDataset, WaveformBinaryValueKind, type WaveformBinaryFrameSegmentInput } from './waveformBinaryFrame';
+import { createWaveformBinaryFrameFromDataset, WaveformBinaryValueKind, waveformBinaryFrameVersionV2, type WaveformBinaryFrameSegmentInput } from './waveformBinaryFrame';
 import { getWaveformDisplayRows, timeToX, type WaveformSignalDisplayRow } from './waveformLayout';
 import type { WaveformDataSet, WaveformSignal, WaveformViewport } from './waveformTypes';
 
@@ -55,7 +55,10 @@ export function createWaveformFixtureFrame(
   }
 
   return createWaveformBinaryFrameFromDataset(waveformFixtureData, segments, {
+    preparedRange: viewport,
     signalIndices: rows.map((row) => row.signalIndex),
+    version: waveformBinaryFrameVersionV2,
+    viewportRange: viewport,
   });
 }
 
@@ -177,6 +180,8 @@ function createSignalFrameSegments(row: WaveformSignalDisplayRow, viewport: Wave
         label: getSegmentLabel(signal, segmentIndex),
         laneY: row.y,
         signalIndex: row.signalIndex,
+        time0: Math.max(time, viewport.startTime),
+        time1: nextTime,
         valueKind: getSegmentValueKind(signal, segmentIndex),
         x0: timeToX(Math.max(time, viewport.startTime), viewport, width),
         x1: timeToX(nextTime, viewport, width),

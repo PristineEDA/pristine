@@ -1022,10 +1022,15 @@ describe('LSP IPC handlers', () => {
       headerHeight: 22,
       height: 320,
       laneHeight: 30,
-      maxSegments: 512,
+      maxSegments: 0,
+      preparedEndTime: 120,
+      preparedStartTime: -20,
+      protocolVersion: 2,
       sessionId: '1',
       signalIds: ['tb-count'],
       startTime: 0,
+      viewportEndTime: 100,
+      viewportStartTime: 0,
       width: 640,
     };
 
