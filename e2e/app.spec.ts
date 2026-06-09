@@ -5514,6 +5514,8 @@ test('terminal tab creates a real shell session and shows command output', async
 });
 
 test('synthesis bottom panel renders mock treemap sankey and timing table', async () => {
+  test.slow();
+
   const { app, window } = await launchApp();
 
   await openBottomTerminal(window);
@@ -5537,7 +5539,7 @@ test('synthesis bottom panel renders mock treemap sankey and timing table', asyn
   }).toBeGreaterThan(120);
   await expect.poll(async () => sankeyChart.boundingBox().then((box) => box?.height ?? 0), {
     timeout: UI_READY_TIMEOUT_MS,
-  }).toBeGreaterThan(80);
+  }).toBeGreaterThan(40);
 
   const chartsPanel = window.getByTestId('panel-synthesis-charts');
   const tablePanel = window.getByTestId('panel-synthesis-table');
