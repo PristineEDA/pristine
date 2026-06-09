@@ -82,6 +82,7 @@ describe('SynthesisPanel', () => {
 
     const [treemapChart, sankeyChart] = chartInstances.getAll();
     expect(treemapChart?.setOption).toHaveBeenCalledWith(expect.objectContaining({
+      color: expect.arrayContaining(['#2f55d4', '#5b5b5b', '#ff8128']),
       series: expect.arrayContaining([
         expect.objectContaining({
           type: 'treemap',
@@ -89,9 +90,33 @@ describe('SynthesisPanel', () => {
             expect.objectContaining({
               name: 'retroSoC',
               children: expect.arrayContaining([
-                expect.objectContaining({ name: 'cpu_top', value: 7180 }),
-                expect.objectContaining({ name: 'xpi_core', value: 5460 }),
+                expect.objectContaining({
+                  name: 'Compute',
+                  itemStyle: { color: '#2f55d4' },
+                  children: expect.arrayContaining([
+                    expect.objectContaining({
+                      name: 'cpu_top',
+                      children: expect.arrayContaining([
+                        expect.objectContaining({
+                          name: 'execute_cluster',
+                          children: expect.arrayContaining([
+                            expect.objectContaining({ name: 'alu_datapath', value: 1120 }),
+                          ]),
+                        }),
+                      ]),
+                    }),
+                  ]),
+                }),
+                expect.objectContaining({
+                  name: 'Interconnect',
+                  itemStyle: { color: '#5b5b5b' },
+                }),
               ]),
+            }),
+          ]),
+          levels: expect.arrayContaining([
+            expect.objectContaining({
+              color: expect.arrayContaining(['#2f55d4', '#5b5b5b', '#ff8128']),
             }),
           ]),
         }),
@@ -102,12 +127,18 @@ describe('SynthesisPanel', () => {
         expect.objectContaining({
           type: 'sankey',
           data: expect.arrayContaining([
-            expect.objectContaining({ name: 'launch_reg' }),
-            expect.objectContaining({ name: 'capture_reg' }),
+            expect.objectContaining({ name: 'launch_reg[0]' }),
+            expect.objectContaining({ name: 'issue_mux' }),
+            expect.objectContaining({ name: 'xpi_dma' }),
+            expect.objectContaining({ name: 'capture_reg[1]' }),
           ]),
           links: expect.arrayContaining([
-            expect.objectContaining({ source: 'cpu_top', target: 'alu', value: 36 }),
+            expect.objectContaining({ source: 'operand_mux', target: 'alu', value: 31 }),
+            expect.objectContaining({ source: 'arbiter', target: 'xpi_core', value: 11 }),
+            expect.objectContaining({ source: 'sram_ctrl', target: 'capture_reg[1]', value: 13 }),
           ]),
+          nodeGap: 6,
+          nodeWidth: 10,
         }),
       ]),
     }));
@@ -140,9 +171,14 @@ describe('SynthesisPanel', () => {
     });
 
     expect(screen.getByText('Path 1')).toBeInTheDocument();
-    expect(screen.getByText('Path 10')).toBeInTheDocument();
-    expect(screen.getAllByText('5.008')).toHaveLength(10);
-    expect(screen.getAllByText('clk_out1_clk_wiz_0')).toHaveLength(20);
+    expect(screen.getByText('Path 32')).toBeInTheDocument();
+    expect(screen.getByText('Path 36')).toBeInTheDocument();
+    expect(screen.getAllByText(/Path \d+/)).toHaveLength(36);
+    expect(table).toHaveClass('min-w-[1506px]', 'text-[10.5px]');
+    expect(tableQueries.getByRole('columnheader', { name: 'From' })).toHaveClass('min-w-[240px]', 'px-1.5');
+    expect(tableQueries.getByRole('columnheader', { name: 'To' })).toHaveClass('min-w-[220px]', 'px-1.5');
+    expect(screen.getAllByText('u_retrosoc/u_xpi_core/u_cmd/cmd_valid_q/C').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('clk_core').length).toBeGreaterThan(10);
     expect(screen.getByText('Slack').closest('th')).toHaveClass('bg-ide-hover');
   });
 

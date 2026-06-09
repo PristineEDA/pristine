@@ -5492,8 +5492,8 @@ test('terminal tab creates a real shell session and shows command output', async
   const bottomPanelTabBar = window.getByTestId('bottom-panel-tab-bar');
   await expect(bottomPanelTabBar).not.toHaveClass(/(?:^|\s)bg-muted\/40(?:\s|$)/);
   await expect(bottomPanelTabBar).toHaveClass(/(?:^|\s)bg-ide-tab-bg(?:\s|$)/);
-  await expect(bottomPanelTabBar).toHaveClass(/(?:^|\s)border-b(?:\s|$)/);
-  await expect(bottomPanelTabBar).toHaveClass(/(?:^|\s)border-ide-border(?:\s|$)/);
+  await expect(bottomPanelTabBar).not.toHaveClass(/(?:^|\s)border-b(?:\s|$)/);
+  await expect(bottomPanelTabBar).not.toHaveClass(/(?:^|\s)border-ide-border(?:\s|$)/);
   await expectCompactPanelTabButton(getBottomPanelTab(window, 'terminal'));
   await expectCompactPanelTabButton(getBottomPanelTab(window, 'output'));
   await expectCompactPanelTabButton(getBottomPanelTab(window, 'schematic'));
@@ -5527,6 +5527,7 @@ test('synthesis bottom panel renders mock treemap sankey and timing table', asyn
   await expect(window.getByText('Timing Path Sankey')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
   await expect(window.getByTestId('synthesis-timing-table')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
   await expect(window.getByText('Path 1', { exact: true })).toBeVisible();
+  await expect(window.getByText('Path 32', { exact: true })).toBeVisible();
   await expect(window.getByText('Slack')).toBeVisible();
   await expect(window.getByText('Clock Uncertainty')).toBeVisible();
 

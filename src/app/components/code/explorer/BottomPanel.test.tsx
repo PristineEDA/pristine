@@ -291,7 +291,8 @@ describe('BottomPanel', () => {
 
     render(<BottomPanel onClose={onClose} />);
 
-    expect(screen.getByTestId('bottom-panel-tab-bar')).toHaveClass('bg-ide-tab-bg', 'border-b', 'border-ide-border');
+    expect(screen.getByTestId('bottom-panel-tab-bar')).toHaveClass('bg-ide-tab-bg');
+    expect(screen.getByTestId('bottom-panel-tab-bar')).not.toHaveClass('border-b', 'border-ide-border');
     expect(screen.getByTestId('bottom-panel-tab-problems')).toHaveAccessibleName('Problems');
 
     await clickBottomTab(user, 'problems');
@@ -364,7 +365,8 @@ describe('BottomPanel', () => {
     expect(container.firstChild).not.toHaveClass('border');
     expect(container.firstChild).not.toHaveClass('border-t');
     expect(screen.getByTestId('bottom-panel-tab-bar')).toHaveClass('h-9', 'gap-1.5', 'px-1.5');
-    expect(screen.getByTestId('bottom-panel-tab-bar')).toHaveClass('bg-ide-tab-bg', 'border-b', 'border-ide-border');
+    expect(screen.getByTestId('bottom-panel-tab-bar')).toHaveClass('bg-ide-tab-bg');
+    expect(screen.getByTestId('bottom-panel-tab-bar')).not.toHaveClass('border-b', 'border-ide-border');
     expect(screen.getByTestId('bottom-panel-tab-group')).toHaveAttribute('aria-label', 'Bottom panel tabs');
     expectCompactTabButton('bottom-panel-tab-terminal');
     expectCompactTabButton('bottom-panel-tab-output');
