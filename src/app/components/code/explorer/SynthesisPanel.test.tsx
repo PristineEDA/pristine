@@ -75,48 +75,79 @@ describe('SynthesisPanel', () => {
     expect(screen.getByTestId('synthesis-main-split-handle')).toHaveAttribute('role', 'separator');
     expect(screen.getByTestId('synthesis-left-split-handle')).toHaveAttribute('role', 'separator');
     expect(screen.getByText('Module Cell Treemap')).toBeInTheDocument();
+    expect(screen.getByText('retroSoC')).toBeInTheDocument();
     expect(screen.getByText('Timing Path Sankey')).toBeInTheDocument();
     expect(screen.getByText('Timing Paths')).toBeInTheDocument();
 
     await waitFor(() => expect(chartInstances.getAll()).toHaveLength(2));
 
     const [treemapChart, sankeyChart] = chartInstances.getAll();
+    const treemapOption = treemapChart?.setOption.mock.calls[0]?.[0] as {
+      series?: Array<{
+        data?: Array<{
+          children?: Array<{
+            children?: Array<{
+              itemStyle?: { color?: string };
+              name: string;
+            }>;
+            itemStyle?: { color?: string };
+            name: string;
+          }>;
+          itemStyle?: { color?: string };
+          name: string;
+          value?: number;
+        }>;
+        itemStyle?: Record<string, unknown>;
+        levels?: Array<Record<string, unknown>>;
+        name?: string;
+        visibleMin?: number;
+      }>;
+    };
+    const sankeyOption = sankeyChart?.setOption.mock.calls[0]?.[0] as {
+      color?: string[];
+      series?: Array<{ data?: unknown[]; links?: unknown[] }>;
+    };
+
     expect(treemapChart?.setOption).toHaveBeenCalledWith(expect.objectContaining({
-      color: expect.arrayContaining(['#2f55d4', '#5b5b5b', '#ff8128']),
+      color: expect.arrayContaining(['#2f55d4', '#5f627f', '#ff8128']),
       series: expect.arrayContaining([
         expect.objectContaining({
+          name: 'retroSoC',
           type: 'treemap',
           data: expect.arrayContaining([
             expect.objectContaining({
-              name: 'retroSoC',
+              name: 'Compute',
+              value: 28400,
+              itemStyle: { color: '#2f55d4' },
               children: expect.arrayContaining([
                 expect.objectContaining({
-                  name: 'Compute',
-                  itemStyle: { color: '#2f55d4' },
+                  name: 'cpu_top',
                   children: expect.arrayContaining([
                     expect.objectContaining({
-                      name: 'cpu_top',
+                      name: 'execute_cluster',
                       children: expect.arrayContaining([
-                        expect.objectContaining({
-                          name: 'execute_cluster',
-                          children: expect.arrayContaining([
-                            expect.objectContaining({ name: 'alu_datapath', value: 1120 }),
-                          ]),
-                        }),
+                        expect.objectContaining({ name: 'alu_datapath', value: 1120 }),
                       ]),
                     }),
                   ]),
                 }),
-                expect.objectContaining({
-                  name: 'Interconnect',
-                  itemStyle: { color: '#5b5b5b' },
-                }),
               ]),
+            }),
+            expect.objectContaining({
+              name: 'Interconnect',
+              value: 14200,
+              itemStyle: { color: '#5f627f' },
+            }),
+            expect.objectContaining({
+              name: 'Memory',
+              value: 10900,
+              itemStyle: { color: '#ff8128' },
             }),
           ]),
           levels: expect.arrayContaining([
             expect.objectContaining({
-              color: expect.arrayContaining(['#2f55d4', '#5b5b5b', '#ff8128']),
+              color: expect.arrayContaining(['#2f55d4', '#5f627f', '#ff8128']),
+              colorSaturation: [0.3, 0.6],
             }),
           ]),
           breadcrumb: expect.objectContaining({
@@ -130,7 +161,13 @@ describe('SynthesisPanel', () => {
             textBorderColor: 'rgba(0, 0, 0, 0.58)',
             textBorderWidth: 2,
           }),
-          leafDepth: 1,
+          colorMappingBy: 'index',
+          itemStyle: expect.objectContaining({
+            borderColor: '#555',
+            borderWidth: 4,
+            gapWidth: 4,
+          }),
+          leafDepth: 2,
           nodeClick: 'zoomToNode',
           roam: true,
           scaleLimit: { min: 0.72, max: 4 },
@@ -140,10 +177,71 @@ describe('SynthesisPanel', () => {
             textBorderColor: 'rgba(0, 0, 0, 0.58)',
             textBorderWidth: 2,
           }),
+          visibleMin: 300,
         }),
       ]),
     }));
+    const computeGroup = treemapOption.series?.[0]?.data?.find((item) => item.name === 'Compute');
+    const computeChildren = computeGroup?.children ?? [];
+    const cpuTop = computeChildren.find((item) => item.name === 'cpu_top');
+    const vectorAccel = computeChildren.find((item) => item.name === 'vector_accel');
+    const cpuTopChildren = cpuTop?.children ?? [];
+    expect(treemapOption.series?.[0]?.name).toBe('retroSoC');
+    expect(computeGroup?.itemStyle?.color).toBe('#2f55d4');
+    expect(cpuTop?.itemStyle?.color).toBe('#2c4fc5');
+    expect(vectorAccel?.itemStyle?.color).toBe('#2543a7');
+    expect(cpuTopChildren.find((item) => item.name === 'execute_cluster')?.itemStyle?.color).toBe('#2441a1');
+    expect(treemapOption.series?.[0]?.data?.map((item) => item.name)).toEqual([
+      'Compute',
+      'Interconnect',
+      'Memory',
+      'IO',
+      'Clock Reset',
+      'DFT',
+      'Verification',
+      'Packages',
+    ]);
+    expect(treemapOption.series?.[0]?.levels).toEqual([
+      {
+        itemStyle: {
+          borderColor: '#555',
+          borderWidth: 4,
+          gapWidth: 4,
+        },
+      },
+      {
+        color: ['#2f55d4', '#5f627f', '#ff8128', '#18a6c8', '#f6cc19', '#62c7a8', '#5875d9', '#b9d73a', '#f2366d', '#8a70bd'],
+        colorSaturation: [0.3, 0.6],
+        itemStyle: {
+          borderColorSaturation: 0.7,
+          borderWidth: 2,
+          gapWidth: 2,
+        },
+        upperLabel: { show: true },
+      },
+      {
+        colorSaturation: [0.3, 0.5],
+        itemStyle: {
+          borderColorSaturation: 0.6,
+          borderWidth: 1,
+          gapWidth: 1,
+        },
+      },
+      {
+        colorSaturation: [0.3, 0.5],
+        itemStyle: { borderWidth: 1, gapWidth: 1 },
+      },
+    ]);
+    expect(treemapOption.series?.[0]?.visibleMin).toBe(300);
     expect(sankeyChart?.setOption).toHaveBeenCalledWith(expect.objectContaining({
+      color: expect.arrayContaining([
+        '#d8cf23',
+        '#a8db2d',
+        '#35c18f',
+        '#ffc400',
+        '#2f79d6',
+        '#ef4e86',
+      ]),
       series: expect.arrayContaining([
         expect.objectContaining({
           type: 'sankey',
@@ -166,6 +264,9 @@ describe('SynthesisPanel', () => {
         }),
       ]),
     }));
+    expect(sankeyOption.color).toHaveLength(24);
+    expect(sankeyOption.series?.[0]?.data).toHaveLength(33);
+    expect(sankeyOption.series?.[0]?.links).toHaveLength(55);
   });
 
   it('renders dense timing path table columns and mock rows', () => {

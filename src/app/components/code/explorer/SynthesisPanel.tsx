@@ -28,25 +28,107 @@ echarts.use([
 
 const diskUsageTreemapPalette = [
   '#2f55d4',
-  '#5b5b5b',
+  '#5f627f',
   '#ff8128',
   '#18a6c8',
-  '#f35a84',
-  '#7e5ab8',
-  '#b9d73a',
-  '#e5b700',
-  '#45b890',
+  '#f6cc19',
+  '#62c7a8',
   '#5875d9',
+  '#b9d73a',
+  '#f2366d',
+  '#8a70bd',
 ];
 
-const moduleCellTree = [
+const timingSankeyPalette = [
+  '#d8cf23',
+  '#a8db2d',
+  '#8aa662',
+  '#7f93bd',
+  '#6c5a70',
+  '#b47a57',
+  '#35c18f',
+  '#ffc400',
+  '#8aa279',
+  '#2f79d6',
+  '#ff8b32',
+  '#5bbfcd',
+  '#a2bf2e',
+  '#716179',
+  '#9f6b48',
+  '#4f77d5',
+  '#2db8a4',
+  '#f2d33b',
+  '#8b79c8',
+  '#ef4e86',
+  '#6f8f62',
+  '#d56a2b',
+  '#64c8e6',
+  '#9a8fdb',
+];
+
+interface TreemapNode {
+  children?: TreemapNode[];
+  itemStyle?: {
+    color?: string;
+  };
+  name: string;
+  value?: number;
+}
+
+function normalizeHexChannel(value: number) {
+  return Math.max(0, Math.min(255, Math.round(value)));
+}
+
+function mixHexColor(hexColor: string, target: [number, number, number], amount: number) {
+  const normalizedHex = hexColor.replace('#', '');
+  const red = Number.parseInt(normalizedHex.slice(0, 2), 16);
+  const green = Number.parseInt(normalizedHex.slice(2, 4), 16);
+  const blue = Number.parseInt(normalizedHex.slice(4, 6), 16);
+  const nextRed = normalizeHexChannel(red + ((target[0] - red) * amount));
+  const nextGreen = normalizeHexChannel(green + ((target[1] - green) * amount));
+  const nextBlue = normalizeHexChannel(blue + ((target[2] - blue) * amount));
+
+  return `#${[nextRed, nextGreen, nextBlue]
+    .map((channel) => channel.toString(16).padStart(2, '0'))
+    .join('')}`;
+}
+
+function createTreemapFamilyColor(baseColor: string, depth: number, index: number) {
+  const familySteps = [-0.04, -0.18, 0.12, -0.28, 0.04, -0.12, 0.18, -0.22];
+  const step = (familySteps[index % familySteps.length] ?? 0) - (depth * 0.03);
+
+  if (step >= 0) {
+    return mixHexColor(baseColor, [255, 255, 255], Math.min(0.34, step));
+  }
+
+  return mixHexColor(baseColor, [0, 0, 0], Math.min(0.42, Math.abs(step)));
+}
+
+function applyTreemapColorFamilies(nodes: TreemapNode[], familyColor?: string, depth = 0): TreemapNode[] {
+  return nodes.map((node, index) => {
+    const baseColor = familyColor ?? node.itemStyle?.color ?? diskUsageTreemapPalette[index % diskUsageTreemapPalette.length]!;
+    const color = depth === 0 ? baseColor : createTreemapFamilyColor(baseColor, depth, index);
+    const children = node.children ? applyTreemapColorFamilies(node.children, baseColor, depth + 1) : undefined;
+
+    return {
+      ...node,
+      itemStyle: {
+        ...node.itemStyle,
+        color,
+      },
+      ...(children ? { children } : {}),
+    };
+  });
+}
+
+const moduleCellTree: TreemapNode[] = [
   {
     name: 'retroSoC',
-    value: 61_980,
+    value: 72_900,
     children: [
       {
         name: 'Compute',
-        value: 18_560,
+        value: 28_400,
         itemStyle: { color: diskUsageTreemapPalette[0] },
         children: [
           {
@@ -128,7 +210,7 @@ const moduleCellTree = [
       },
       {
         name: 'Interconnect',
-        value: 11_880,
+        value: 14_200,
         itemStyle: { color: diskUsageTreemapPalette[1] },
         children: [
           {
@@ -175,7 +257,7 @@ const moduleCellTree = [
       },
       {
         name: 'Memory',
-        value: 9_640,
+        value: 10_900,
         itemStyle: { color: diskUsageTreemapPalette[2] },
         children: [
           {
@@ -221,7 +303,7 @@ const moduleCellTree = [
       },
       {
         name: 'IO',
-        value: 8_820,
+        value: 8_600,
         itemStyle: { color: diskUsageTreemapPalette[3] },
         children: [
           {
@@ -269,7 +351,7 @@ const moduleCellTree = [
       },
       {
         name: 'Clock Reset',
-        value: 4_880,
+        value: 4_100,
         itemStyle: { color: diskUsageTreemapPalette[4] },
         children: [
           { name: 'pll_adapter', value: 920 },
@@ -280,7 +362,7 @@ const moduleCellTree = [
       },
       {
         name: 'DFT',
-        value: 3_460,
+        value: 3_000,
         itemStyle: { color: diskUsageTreemapPalette[5] },
         children: [
           { name: 'scan_chain', value: 1_180 },
@@ -291,7 +373,7 @@ const moduleCellTree = [
       },
       {
         name: 'Verification',
-        value: 2_780,
+        value: 2_000,
         itemStyle: { color: diskUsageTreemapPalette[6] },
         children: [
           { name: 'assertion_taps', value: 720 },
@@ -302,7 +384,7 @@ const moduleCellTree = [
       },
       {
         name: 'Packages',
-        value: 1_960,
+        value: 1_700,
         itemStyle: { color: diskUsageTreemapPalette[7] },
         children: [
           { name: 'retrosoc_pkg', value: 620 },
@@ -314,6 +396,9 @@ const moduleCellTree = [
     ],
   },
 ];
+
+const moduleCellTreemapData = moduleCellTree[0]?.children ?? moduleCellTree;
+const coloredModuleCellTreemapData = applyTreemapColorFamilies(moduleCellTreemapData);
 
 const timingSankeyNodes = [
   { name: 'core_launch_regs' },
@@ -582,6 +667,7 @@ interface ThemePalette {
   info: string;
   muted: string;
   panel: string;
+  sankeyPalette: string[];
   success: string;
   text: string;
   warning: string;
@@ -603,6 +689,7 @@ function readThemePalette(): ThemePalette {
       info: '#38bdf8',
       muted: '#94a3b8',
       panel: '#0f172a',
+      sankeyPalette: timingSankeyPalette,
       success: '#22c55e',
       text: '#e5e7eb',
       warning: '#f59e0b',
@@ -623,6 +710,7 @@ function readThemePalette(): ThemePalette {
     info,
     muted: readCssColor(styles, '--ide-text-muted', '#94a3b8'),
     panel: readCssColor(styles, '--ide-panel-bg', '#0f172a'),
+    sankeyPalette: timingSankeyPalette,
     success,
     text: readCssColor(styles, '--ide-text', '#e5e7eb'),
     warning,
@@ -649,14 +737,14 @@ function createTreemapOption(palette: ThemePalette): EChartsCoreOption {
     series: [
       {
         type: 'treemap',
-        name: 'Cells',
-        data: moduleCellTree,
+        name: 'retroSoC',
+        data: coloredModuleCellTreemapData,
         roam: true,
         scaleLimit: {
           min: 0.72,
           max: 4,
         },
-        leafDepth: 1,
+        leafDepth: 2,
         nodeClick: 'zoomToNode',
         breadcrumb: {
           show: true,
@@ -682,26 +770,40 @@ function createTreemapOption(palette: ThemePalette): EChartsCoreOption {
           ...treemapLabelTextStyle,
         },
         itemStyle: {
-          borderColor: palette.background,
-          borderWidth: 2,
-          gapWidth: 2,
+          borderColor: '#555',
+          borderWidth: 4,
+          gapWidth: 4,
         },
-        colorMappingBy: 'id',
-        visibleMin: 8,
+        colorMappingBy: 'index',
+        visibleMin: 300,
         levels: [
-          { itemStyle: { borderWidth: 0, gapWidth: 3 } },
+          {
+            itemStyle: {
+              borderColor: '#555',
+              borderWidth: 4,
+              gapWidth: 4,
+            },
+          },
           {
             color: palette.chartPalette,
-            colorSaturation: [0.55, 0.95],
-            itemStyle: { borderWidth: 2, gapWidth: 2 },
+            colorSaturation: [0.3, 0.6],
+            itemStyle: {
+              borderColorSaturation: 0.7,
+              borderWidth: 2,
+              gapWidth: 2,
+            },
             upperLabel: { show: true },
           },
           {
-            colorSaturation: [0.38, 0.72],
-            itemStyle: { borderWidth: 1, gapWidth: 1 },
+            colorSaturation: [0.3, 0.5],
+            itemStyle: {
+              borderColorSaturation: 0.6,
+              borderWidth: 1,
+              gapWidth: 1,
+            },
           },
           {
-            colorSaturation: [0.25, 0.58],
+            colorSaturation: [0.3, 0.5],
             itemStyle: { borderWidth: 1, gapWidth: 1 },
           },
         ],
@@ -712,7 +814,7 @@ function createTreemapOption(palette: ThemePalette): EChartsCoreOption {
 
 function createSankeyOption(palette: ThemePalette): EChartsCoreOption {
   return {
-    color: palette.chartPalette,
+    color: palette.sankeyPalette,
     backgroundColor: 'transparent',
     tooltip: {
       confine: true,
@@ -922,7 +1024,7 @@ export function SynthesisPanel() {
           <ResizablePanelGroup orientation="vertical" className="h-full min-h-0 min-w-0" layoutGapPx={8}>
             <ResizablePanel id="synthesis-treemap" defaultSize={50} minSize={24} minSizePx={96}>
               <EchartsPanel
-                description="cells"
+                description="retroSoC"
                 icon={<Network size={12} />}
                 optionFactory={treemapOptionFactory}
                 subtitle="hierarchy module cell count"
