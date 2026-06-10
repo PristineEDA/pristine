@@ -500,7 +500,7 @@ describe('MenuBar', () => {
     expect(onShowRightPanelChange).toHaveBeenCalledWith(true);
   });
 
-  it('disables layout icons on unsupported pages and only disables the activity bar toggle outside code', async () => {
+  it('disables layout icons on unsupported code pages and only disables the activity bar toggle outside code', async () => {
     const user = userEvent.setup();
     const onShowLeftPanelChange = vi.fn();
     const onShowBottomPanelChange = vi.fn();
@@ -513,6 +513,20 @@ describe('MenuBar', () => {
     });
 
     await clickByText(user, 'set-synthesis');
+
+    expect(screen.getByTestId('toggle-left-panel')).not.toBeDisabled();
+    expect(screen.getByTestId('toggle-bottom-panel')).not.toBeDisabled();
+    expect(screen.getByTestId('toggle-right-panel')).not.toBeDisabled();
+    expect(screen.getByTestId('toggle-activity-bar')).not.toBeDisabled();
+
+    await clickByText(user, 'set-physical');
+
+    expect(screen.getByTestId('toggle-left-panel')).not.toBeDisabled();
+    expect(screen.getByTestId('toggle-bottom-panel')).not.toBeDisabled();
+    expect(screen.getByTestId('toggle-right-panel')).not.toBeDisabled();
+    expect(screen.getByTestId('toggle-activity-bar')).not.toBeDisabled();
+
+    await clickByText(user, 'set-factory');
 
     expect(screen.getByTestId('toggle-left-panel')).toBeDisabled();
     expect(screen.getByTestId('toggle-bottom-panel')).toBeDisabled();

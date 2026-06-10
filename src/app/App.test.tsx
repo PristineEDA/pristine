@@ -224,6 +224,22 @@ async function waitForPanelWidth(testId: string, width: string) {
   });
 }
 
+function expectPlaceholderWorkspace(viewId: 'simulation' | 'synthesis' | 'physical', mainTitle: string) {
+  expect(screen.getByTestId(`code-view-${viewId}`)).toBeInTheDocument();
+  expect(screen.getByTestId(`panel-${viewId}-left-panel`)).toBeInTheDocument();
+  expect(screen.getByTestId(`panel-${viewId}-center-panel`)).toBeInTheDocument();
+  expect(screen.getByTestId(`panel-${viewId}-bottom-panel`)).toBeInTheDocument();
+  expect(screen.getByTestId(`panel-${viewId}-right-panel`)).toBeInTheDocument();
+  expect(screen.getByTestId(`${viewId}-left-panel-content`)).toHaveTextContent('Left Panel');
+  expect(screen.getByTestId(`${viewId}-left-panel-content`)).toHaveTextContent('Coming soon');
+  expect(screen.getByTestId(`${viewId}-main-panel-content`)).toHaveTextContent(mainTitle);
+  expect(screen.getByTestId(`${viewId}-main-panel-content`)).toHaveTextContent('Coming soon');
+  expect(screen.getByTestId(`${viewId}-bottom-panel-content`)).toHaveTextContent('Bottom Panel');
+  expect(screen.getByTestId(`${viewId}-bottom-panel-content`)).toHaveTextContent('Coming soon');
+  expect(screen.getByTestId(`${viewId}-right-panel-content`)).toHaveTextContent('Right Panel');
+  expect(screen.getByTestId(`${viewId}-right-panel-content`)).toHaveTextContent('Coming soon');
+}
+
 function triggerDeferredWorkflowMount() {
   mainContentViewPreloadMock.requestWorkflowMount?.();
 }
@@ -335,17 +351,17 @@ describe('App', () => {
     });
     expect(screen.getByTestId('status-bar-main-view')).toHaveTextContent('code');
     expect(screen.getByTestId('status-bar-code-view')).toHaveTextContent('simulation');
-    expect(screen.getByTestId('panel-simulation-left-panel')).toBeInTheDocument();
-    expect(screen.getByTestId('panel-simulation-bottom-panel')).toBeInTheDocument();
-    expect(screen.getByTestId('panel-simulation-right-panel')).toBeInTheDocument();
-    expect(screen.getByTestId('simulation-left-panel-content')).toHaveTextContent('Left Panel');
-    expect(screen.getByTestId('simulation-left-panel-content')).toHaveTextContent('Coming soon');
-    expect(screen.getByTestId('simulation-main-panel-content')).toHaveTextContent('Simulation Workspace');
-    expect(screen.getByTestId('simulation-main-panel-content')).toHaveTextContent('Coming soon');
-    expect(screen.getByTestId('simulation-bottom-panel-content')).toHaveTextContent('Bottom Panel');
-    expect(screen.getByTestId('simulation-bottom-panel-content')).toHaveTextContent('Coming soon');
-    expect(screen.getByTestId('simulation-right-panel-content')).toHaveTextContent('Right Panel');
-    expect(screen.getByTestId('simulation-right-panel-content')).toHaveTextContent('Coming soon');
+    expectPlaceholderWorkspace('simulation', 'Simulation Workspace');
+
+    await clickText('select-synthesis');
+    expect(await screen.findByTestId('code-view-synthesis')).toBeInTheDocument();
+    expect(screen.getByTestId('status-bar-code-view')).toHaveTextContent('synthesis');
+    expectPlaceholderWorkspace('synthesis', 'Synthesis');
+
+    await clickText('select-physical');
+    expect(await screen.findByTestId('code-view-physical')).toBeInTheDocument();
+    expect(screen.getByTestId('status-bar-code-view')).toHaveTextContent('physical');
+    expectPlaceholderWorkspace('physical', 'Physical');
 
     await clickText('select-explorer');
     expect(screen.getByTestId('activity-view')).toHaveTextContent('explorer');
@@ -359,8 +375,8 @@ describe('App', () => {
     render(<App />);
 
     await clickText('select-synthesis');
-    expect(await screen.findByTestId('code-view-synthesis')).toHaveTextContent('Synthesis');
-    expect(screen.getByTestId('code-view-synthesis')).toHaveTextContent('Coming soon');
+    expect(await screen.findByTestId('code-view-synthesis')).toBeInTheDocument();
+    expectPlaceholderWorkspace('synthesis', 'Synthesis');
 
     await clickText('switch-whiteboard');
     expect(screen.getByTestId('main-content-view')).toHaveTextContent('whiteboard');
@@ -381,8 +397,8 @@ describe('App', () => {
     expect(screen.getByTestId('activity-view')).toHaveTextContent('synthesis');
     expect(screen.getByTestId('status-bar-main-view')).toHaveTextContent('code');
     expect(screen.getByTestId('status-bar-code-view')).toHaveTextContent('synthesis');
-    expect(await screen.findByTestId('code-view-synthesis')).toHaveTextContent('Synthesis');
-    expect(screen.getByTestId('code-view-synthesis')).toHaveTextContent('Coming soon');
+    expect(await screen.findByTestId('code-view-synthesis')).toBeInTheDocument();
+    expectPlaceholderWorkspace('synthesis', 'Synthesis');
   });
 
   it('mounts deferred workflow and whiteboard views into hidden layers when prewarm requests fire', async () => {
@@ -483,10 +499,20 @@ describe('App', () => {
       expect(await screen.findByTestId('code-view-simulation')).toBeInTheDocument();
       expect(screen.getByTestId('simulation-main-panel-content')).toHaveTextContent('Simulation Workspace');
 
+      await clickTestId('activity-item-synthesis');
+
+      expect(await screen.findByTestId('code-view-synthesis')).toBeInTheDocument();
+      expectPlaceholderWorkspace('synthesis', 'Synthesis');
+
       await clickTestId('activity-item-physical');
 
-      expect(await screen.findByTestId('code-view-physical')).toHaveTextContent('Physical Design');
-      expect(screen.getByTestId('code-view-physical')).toHaveTextContent('Coming soon');
+      expect(await screen.findByTestId('code-view-physical')).toBeInTheDocument();
+      expectPlaceholderWorkspace('physical', 'Physical');
+
+      await clickTestId('activity-item-factory');
+
+      expect(await screen.findByTestId('code-view-factory')).toHaveTextContent('Factory');
+      expect(screen.getByTestId('code-view-factory')).toHaveTextContent('Coming soon');
     } finally {
       renderRealActivityBar = false;
     }
@@ -551,13 +577,14 @@ describe('App', () => {
     expect(screen.queryByTestId('panel-simulation-bottom-panel')).not.toBeInTheDocument();
 
     await clickText('select-synthesis');
-    expect(await screen.findByTestId('menu-layout-enabled')).toHaveTextContent('false');
-    expect(screen.getByText('toggle-left-panel')).toBeDisabled();
-    expect(screen.getByText('toggle-bottom-panel')).toBeDisabled();
-    expect(screen.getByText('toggle-right-panel')).toBeDisabled();
-    expect(screen.getByTestId('menu-left-state')).toHaveTextContent('false');
-    expect(screen.getByTestId('menu-bottom-state')).toHaveTextContent('false');
-    expect(screen.getByTestId('menu-right-state')).toHaveTextContent('false');
+    expect(await screen.findByTestId('menu-layout-enabled')).toHaveTextContent('true');
+    expect(screen.getByText('toggle-left-panel')).toBeEnabled();
+    expect(screen.getByText('toggle-bottom-panel')).toBeEnabled();
+    expect(screen.getByText('toggle-right-panel')).toBeEnabled();
+    expect(screen.getByTestId('menu-left-state')).toHaveTextContent('true');
+    expect(screen.getByTestId('menu-bottom-state')).toHaveTextContent('true');
+    expect(screen.getByTestId('menu-right-state')).toHaveTextContent('true');
+    expectPlaceholderWorkspace('synthesis', 'Synthesis');
 
     fireEvent.keyDown(document, { key: 'b', ctrlKey: true });
     fireEvent.keyDown(document, { key: 'j', ctrlKey: true });
@@ -571,7 +598,7 @@ describe('App', () => {
 
     await clickText('switch-code');
     expect(screen.getByTestId('activity-view')).toHaveTextContent('synthesis');
-    expect(screen.getByTestId('menu-layout-enabled')).toHaveTextContent('false');
+    expect(screen.getByTestId('menu-layout-enabled')).toHaveTextContent('true');
 
     await clickText('select-simulation');
     expect(await screen.findByTestId('menu-left-state')).toHaveTextContent('false');
@@ -597,7 +624,7 @@ describe('App', () => {
     expect(screen.getByTestId('menu-right-state')).toHaveTextContent('true');
 
     await clickText('select-synthesis');
-    expect(await screen.findByTestId('menu-layout-enabled')).toHaveTextContent('false');
+    expect(await screen.findByTestId('menu-layout-enabled')).toHaveTextContent('true');
 
     await clickText('switch-whiteboard');
     expect(screen.getByTestId('main-content-view')).toHaveTextContent('whiteboard');
@@ -607,7 +634,7 @@ describe('App', () => {
 
     await clickText('switch-code');
     expect(screen.getByTestId('activity-view')).toHaveTextContent('synthesis');
-    expect(screen.getByTestId('menu-layout-enabled')).toHaveTextContent('false');
+    expect(screen.getByTestId('menu-layout-enabled')).toHaveTextContent('true');
 
     await clickText('select-simulation');
     expect(await screen.findByTestId('menu-right-state')).toHaveTextContent('true');
@@ -615,7 +642,8 @@ describe('App', () => {
     await clickText('select-explorer');
     expect(screen.getByTestId('menu-left-state')).toHaveTextContent('false');
     expect(screen.getByTestId('menu-right-state')).toHaveTextContent('false');
-    expect(screen.queryByTestId('panel-left-panel')).not.toBeInTheDocument();
+    expect(screen.getByTestId('panel-left-panel')).toHaveAttribute('aria-hidden', 'true');
+    expect(screen.getByTestId('panel-left-panel')).toHaveStyle({ width: '0px' });
     expect(screen.queryByTestId('panel-right-panel')).not.toBeInTheDocument();
   });
 

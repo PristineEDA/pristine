@@ -4539,9 +4539,17 @@ test('activity bar switches code subpages and menu bar keeps higher-priority pag
 
   await window.getByTestId('activity-item-synthesis').click();
   await expect(window.getByTestId('code-view-synthesis')).toBeVisible();
-  await expect(window.getByTestId('toggle-left-panel')).toBeDisabled();
-  await expect(window.getByTestId('toggle-bottom-panel')).toBeDisabled();
-  await expect(window.getByTestId('toggle-right-panel')).toBeDisabled();
+  await expect(window.getByTestId('panel-synthesis-center-panel')).toBeVisible();
+  await expect(window.getByTestId('panel-synthesis-left-panel')).toBeVisible();
+  await expect(window.getByTestId('panel-synthesis-bottom-panel')).toBeVisible();
+  await expect(window.getByTestId('panel-synthesis-right-panel')).toBeVisible();
+  await expect(window.getByTestId('synthesis-left-panel-content')).toContainText('Left Panel');
+  await expect(window.getByTestId('synthesis-main-panel-content')).toContainText('Synthesis');
+  await expect(window.getByTestId('synthesis-bottom-panel-content')).toContainText('Bottom Panel');
+  await expect(window.getByTestId('synthesis-right-panel-content')).toContainText('Right Panel');
+  await expect(window.getByTestId('toggle-left-panel')).toBeEnabled();
+  await expect(window.getByTestId('toggle-bottom-panel')).toBeEnabled();
+  await expect(window.getByTestId('toggle-right-panel')).toBeEnabled();
   await expect(window.getByTestId('toggle-activity-bar')).toBeEnabled();
   await window.getByTestId('toggle-activity-bar').click();
   await expect(window.getByTestId('activity-item-physical').getByText('Physical')).toBeVisible();
@@ -4550,6 +4558,14 @@ test('activity bar switches code subpages and menu bar keeps higher-priority pag
 
   await window.getByTestId('activity-item-physical').click();
   await expect(window.getByTestId('code-view-physical')).toBeVisible();
+  await expect(window.getByTestId('panel-physical-center-panel')).toBeVisible();
+  await expect(window.getByTestId('panel-physical-left-panel')).toBeVisible();
+  await expect(window.getByTestId('panel-physical-bottom-panel')).toBeVisible();
+  await expect(window.getByTestId('panel-physical-right-panel')).toBeVisible();
+  await expect(window.getByTestId('physical-main-panel-content')).toContainText('Physical');
+  await expect(window.getByTestId('toggle-left-panel')).toBeEnabled();
+  await expect(window.getByTestId('toggle-bottom-panel')).toBeEnabled();
+  await expect(window.getByTestId('toggle-right-panel')).toBeEnabled();
 
   await window.getByTestId('activity-item-factory').click();
   await expect(window.getByTestId('code-view-factory')).toBeVisible();

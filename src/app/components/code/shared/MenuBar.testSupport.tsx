@@ -1100,6 +1100,8 @@ function WorkspaceControls() {
     <div>
       <button onClick={() => setActiveView('simulation')}>set-simulation</button>
       <button onClick={() => setActiveView('synthesis')}>set-synthesis</button>
+      <button onClick={() => setActiveView('physical')}>set-physical</button>
+      <button onClick={() => setActiveView('factory')}>set-factory</button>
       <button onClick={() => setMainContentView('whiteboard')}>set-whiteboard</button>
       <button onClick={() => setMainContentView('code')}>set-code</button>
       <button onClick={() => openFile('rtl/core/reg_file.v', 'reg_file.v')}>open-reg</button>

@@ -67,23 +67,13 @@ const PlaceholderView = ({
 );
 
 const codeViewPlaceholderConfig = {
-  simulation: {
-    title: 'Simulation',
-    testId: 'code-view-simulation',
-  },
-  synthesis: {
-    title: 'Synthesis',
-    testId: 'code-view-synthesis',
-  },
-  physical: {
-    title: 'Physical Design',
-    testId: 'code-view-physical',
-  },
   factory: {
     title: 'Factory',
     testId: 'code-view-factory',
   },
 } as const;
+
+type PlaceholderWorkspaceView = 'simulation' | 'synthesis' | 'physical';
 
 // ─── AppLayout (consumes context) ────────────────────────────────────────────
 function AppLayout() {
@@ -463,18 +453,18 @@ function AppLayout() {
     })
   );
 
-  const renderSimulationWorkspace = () => (
+  const renderPlaceholderWorkspace = (viewId: PlaceholderWorkspaceView, mainTitle: string) => (
     renderWorkspaceShell({
-      shellTestId: 'code-view-simulation',
-      leftPanelId: 'simulation-left-panel',
-      centerPanelId: 'simulation-center-panel',
-      topPanelId: 'simulation-main-panel',
-      bottomPanelId: 'simulation-bottom-panel',
-      rightPanelId: 'simulation-right-panel',
-      leftContent: renderPanelPlaceholder('Left Panel', 'simulation-left-panel-content'),
-      topContent: renderPanelPlaceholder('Simulation Workspace', 'simulation-main-panel-content'),
-      bottomContent: renderPanelPlaceholder('Bottom Panel', 'simulation-bottom-panel-content'),
-      rightContent: renderPanelPlaceholder('Right Panel', 'simulation-right-panel-content'),
+      shellTestId: `code-view-${viewId}`,
+      leftPanelId: `${viewId}-left-panel`,
+      centerPanelId: `${viewId}-center-panel`,
+      topPanelId: `${viewId}-main-panel`,
+      bottomPanelId: `${viewId}-bottom-panel`,
+      rightPanelId: `${viewId}-right-panel`,
+      leftContent: renderPanelPlaceholder('Left Panel', `${viewId}-left-panel-content`),
+      topContent: renderPanelPlaceholder(mainTitle, `${viewId}-main-panel-content`),
+      bottomContent: renderPanelPlaceholder('Bottom Panel', `${viewId}-bottom-panel-content`),
+      rightContent: renderPanelPlaceholder('Right Panel', `${viewId}-right-panel-content`),
     })
   );
 
@@ -539,8 +529,12 @@ function AppLayout() {
           ? (activeView === 'explorer'
             ? renderExplorerWorkspace()
             : activeView === 'simulation'
-              ? renderSimulationWorkspace()
-              : renderCodePlaceholder())
+              ? renderPlaceholderWorkspace('simulation', 'Simulation Workspace')
+              : activeView === 'synthesis'
+                ? renderPlaceholderWorkspace('synthesis', 'Synthesis')
+                : activeView === 'physical'
+                  ? renderPlaceholderWorkspace('physical', 'Physical')
+                  : renderCodePlaceholder())
           : null}
 
         {renderDeferredMainContentLayer({
