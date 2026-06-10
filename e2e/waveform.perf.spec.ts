@@ -262,6 +262,8 @@ async function readCanvasStats(canvasHost: ReturnType<Page['getByTestId']>) {
     suppressedLabelCount: await readNumber('data-suppressed-label-count'),
     transformOnlyPanCount: await readNumber('data-transform-only-pan-count'),
     cursorUpdateCount: await readNumber('data-cursor-update-count'),
+    selectionOverlayUpdateCount: await readNumber('data-selection-overlay-update-count'),
+    selectionSegmentRebuildCount: await readNumber('data-selection-segment-rebuild-count'),
     selectionUpdateCount: await readNumber('data-selection-update-count'),
     sceneUpdateMs: await readNumber('data-scene-update-ms'),
     visibleRowCount: await readNumber('data-visible-row-count'),
@@ -408,6 +410,8 @@ function diffInteractionMetrics(
     rowRecycleCount: end.rowRecycleCount - start.rowRecycleCount,
     rowReuseCount: end.rowReuseCount - start.rowReuseCount,
     cursorUpdateCount: end.cursorUpdateCount - start.cursorUpdateCount,
+    selectionOverlayUpdateCount: end.selectionOverlayUpdateCount - start.selectionOverlayUpdateCount,
+    selectionSegmentRebuildCount: end.selectionSegmentRebuildCount - start.selectionSegmentRebuildCount,
     selectionUpdateCount: end.selectionUpdateCount - start.selectionUpdateCount,
     transformOnlyPanCount: end.transformOnlyPanCount - start.transformOnlyPanCount,
     verticalScrollUpdateCount: end.verticalScrollUpdateCount - start.verticalScrollUpdateCount,
@@ -978,10 +982,10 @@ test('packaged waveform sustained 10s viewport and interaction perf', async () =
     expect(cursorDelta.fullSceneRebuildCount).toBe(0);
     expect(cursorDelta.cursorUpdateCount).toBeGreaterThan(0);
     expect(cursorDelta.viewportContentUpdateCount).toBe(0);
-    if (strictPackagedHotPathMetrics) {
-      expect(selectionDelta.fullSceneRebuildCount).toBe(0);
-    }
+    expect(selectionDelta.fullSceneRebuildCount).toBe(0);
     expect(selectionDelta.selectionUpdateCount).toBeGreaterThan(0);
+    expect(selectionDelta.selectionOverlayUpdateCount).toBeGreaterThan(0);
+    expect(selectionDelta.selectionSegmentRebuildCount).toBe(0);
     expect(selectionDelta.viewportContentUpdateCount).toBe(0);
     expect(rapidMixedDelta.fullSceneRebuildCount).toBe(0);
     expect(rapidMixedDelta.viewportContentUpdateCount).toBeGreaterThan(0);
@@ -989,7 +993,7 @@ test('packaged waveform sustained 10s viewport and interaction perf', async () =
     expect(largeRangeDelta.viewportContentUpdateCount).toBeGreaterThan(0);
     expect(extremeZoomDelta.fullSceneRebuildCount).toBe(0);
     expect(extremeZoomDelta.viewportContentUpdateCount).toBeGreaterThan(0);
-    expect(verticalThenInteractDelta.fullSceneRebuildCount).toBeLessThanOrEqual(1);
+    expect(verticalThenInteractDelta.fullSceneRebuildCount).toBe(0);
     expect(verticalThenInteractDelta.verticalScrollUpdateCount).toBeGreaterThan(0);
     expect(verticalThenInteractDelta.viewportContentUpdateCount).toBeGreaterThan(0);
     expect(panVisibleRowCounts).toHaveLength(1);

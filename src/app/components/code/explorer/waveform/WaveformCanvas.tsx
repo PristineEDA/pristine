@@ -4,6 +4,7 @@ import { Application } from 'pixi.js';
 import {
   createWaveformScene,
   updateWaveformSceneCursor,
+  updateWaveformSceneFrame,
   updateWaveformScenePan,
   updateWaveformSceneSelection,
   updateWaveformSceneVerticalScroll,
@@ -237,7 +238,7 @@ export const WaveformCanvas = forwardRef<WaveformCanvasHandle, WaveformCanvasPro
   }, [onRendererChange]);
 
   useEffect(() => {
-    rebuildScene();
+    updateSceneFrameOrRebuild(data, frame ?? null);
   }, [data, frame]);
 
   useEffect(() => {
@@ -270,6 +271,8 @@ export const WaveformCanvas = forwardRef<WaveformCanvasHandle, WaveformCanvasPro
 
     updateWaveformSceneSelection(scene, selectedSignalId);
     sceneUpdateMetricsRef.current.selectionUpdateCount += 1;
+    sceneUpdateMetricsRef.current.selectionOverlayUpdateCount += scene.renderStats.selectionOverlayUpdateCount;
+    sceneUpdateMetricsRef.current.selectionSegmentRebuildCount += scene.renderStats.selectionSegmentRebuildCount;
     applyRenderStats(scene.renderStats);
     writeRenderStatsDataset();
     requestRender();
@@ -506,6 +509,24 @@ export const WaveformCanvas = forwardRef<WaveformCanvasHandle, WaveformCanvasPro
     }
   }
 
+  function updateSceneFrameOrRebuild(nextData: WaveformDataSet, nextFrame: ParsedWaveformFrame | null) {
+    const scene = sceneRef.current;
+
+    if (!scene) {
+      rebuildScene();
+      return;
+    }
+
+    const sceneUpdateStartedAt = performance.now();
+    updateWaveformSceneFrame(scene, nextData, nextFrame);
+    sceneUpdateMetricsRef.current.sceneUpdateMs = Math.max(0, performance.now() - sceneUpdateStartedAt);
+    accumulateRowLifecycleMetrics(scene.renderStats);
+    applyRenderStats(scene.renderStats);
+    writeDisplayViewportDataset(scene.state.viewport);
+    writeRenderStatsDataset();
+    requestRender();
+  }
+
   function applyViewportToScene(nextViewport: WaveformViewport, options: { countDisplayUpdate: boolean }): ViewportApplyResult {
     const scene = sceneRef.current;
 
@@ -592,6 +613,8 @@ export const WaveformCanvas = forwardRef<WaveformCanvasHandle, WaveformCanvasPro
     sceneUpdateMetricsRef.current.panBufferMissCount += baseStats.panBufferMissCount;
     sceneUpdateMetricsRef.current.panPixelShiftCount += baseStats.panPixelShiftCount;
     sceneUpdateMetricsRef.current.transformOnlyPanCount += baseStats.transformOnlyPanCount;
+    sceneUpdateMetricsRef.current.selectionOverlayUpdateCount += baseStats.selectionOverlayUpdateCount;
+    sceneUpdateMetricsRef.current.selectionSegmentRebuildCount += baseStats.selectionSegmentRebuildCount;
     sceneUpdateMetricsRef.current.explicitDrawCountEnabled = Math.max(sceneUpdateMetricsRef.current.explicitDrawCountEnabled, baseStats.explicitDrawCountEnabled);
     sceneUpdateMetricsRef.current.gpuActiveIndexCount = baseStats.gpuActiveIndexCount;
     sceneUpdateMetricsRef.current.gpuBufferDataReplaceCount += baseStats.gpuBufferDataReplaceCount;
@@ -748,6 +771,8 @@ export const WaveformCanvas = forwardRef<WaveformCanvasHandle, WaveformCanvasPro
     host.dataset.pixiRenderMs = latestStats.pixiRenderMs.toFixed(3);
     host.dataset.reactViewportCommitCount = String(latestStats.reactViewportCommitCount);
     host.dataset.sceneUpdateMs = latestStats.sceneUpdateMs.toFixed(3);
+    host.dataset.selectionOverlayUpdateCount = String(latestStats.selectionOverlayUpdateCount);
+    host.dataset.selectionSegmentRebuildCount = String(latestStats.selectionSegmentRebuildCount);
     host.dataset.transformOnlyPanCount = String(latestStats.transformOnlyPanCount);
   }
 
@@ -891,6 +916,8 @@ export const WaveformCanvas = forwardRef<WaveformCanvasHandle, WaveformCanvasPro
       data-x-state-count={stateCounts.xStateCount}
       data-source-segment-count={renderStats.sourceSegmentCount}
       data-selected-signal-visible-y={formatOptionalNumber(selectedSignalVisibleY)}
+      data-selection-overlay-update-count={renderStats.selectionOverlayUpdateCount}
+      data-selection-segment-rebuild-count={renderStats.selectionSegmentRebuildCount}
       data-selection-update-count={renderStats.selectionUpdateCount}
       data-scene-update-ms={renderStats.sceneUpdateMs.toFixed(3)}
       data-skipped-horizontal-segment-count={renderStats.skippedHorizontalSegmentCount}
@@ -974,6 +1001,8 @@ function createEmptyRenderStats(): WaveformRenderStats {
     panBufferMissCount: 0,
     panPixelShiftCount: 0,
     transformOnlyPanCount: 0,
+    selectionOverlayUpdateCount: 0,
+    selectionSegmentRebuildCount: 0,
     explicitDrawCountEnabled: 0,
     gpuActiveIndexCount: 0,
     gpuBufferUpdateCount: 0,
@@ -1049,6 +1078,8 @@ function createEmptySceneUpdateMetrics(): WaveformSceneUpdateMetrics {
     panBufferMissCount: 0,
     panPixelShiftCount: 0,
     transformOnlyPanCount: 0,
+    selectionOverlayUpdateCount: 0,
+    selectionSegmentRebuildCount: 0,
     explicitDrawCountEnabled: 0,
     gpuActiveIndexCount: 0,
     gpuBufferUpdateCount: 0,

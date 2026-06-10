@@ -232,6 +232,7 @@ export function createWaveformScene(options: WaveformSceneOptions): WaveformScen
   redrawWaveformSceneBase(scene);
   redrawWaveformSceneRulerIndicator(scene);
   redrawWaveformSceneGrid(scene);
+  preallocateWaveformSceneBatchCapacity(scene);
   redrawWaveformSceneRows(scene);
   redrawWaveformSceneCursor(scene);
   applyHorizontalBufferOffset(scene);
@@ -248,12 +249,51 @@ export function updateWaveformSceneSelection(scene: WaveformScene, selectedSigna
   scene.state.selectedSignalId = selectedSignalId;
   scene.selectedSignalLaneY = getWaveformSignalLaneY(scene.state.data, selectedSignalId);
   redrawWaveformSceneLanes(scene);
+  scene.renderStats.selectionOverlayUpdateCount = 1;
 }
 
 export function updateWaveformSceneVerticalScroll(scene: WaveformScene, verticalScrollTop: number) {
   scene.state.verticalScrollTop = verticalScrollTop;
   scene.state.visibleRows = getVisibleWaveformRows(scene.state.rows, verticalScrollTop, scene.state.height);
+  preallocateWaveformSceneBatchCapacity(scene);
   redrawWaveformSceneRows(scene);
+}
+
+export function updateWaveformSceneFrame(scene: WaveformScene, data: WaveformDataSet, frame: ParsedWaveformFrame | null) {
+  const dataChanged = scene.state.data !== data;
+  scene.state.data = data;
+  scene.state.frame = frame;
+
+  if (dataChanged) {
+    scene.state.rows = getWaveformDisplayRows(data);
+    scene.rowCount = scene.state.rows.length;
+    scene.firstSignalLaneY = getWaveformFirstSignalLaneY(data);
+    scene.state.visibleRows = getVisibleWaveformRows(scene.state.rows, scene.state.verticalScrollTop, scene.state.height);
+    scene.state.horizontalBuffer = createHorizontalBufferState(
+      scene.state.viewport,
+      scene.state.width,
+      scene.state.renderResolution,
+      getHorizontalBufferBounds(getSceneOptions(scene)),
+    );
+    scene.shapeCounts = getWaveformShapeCounts(data, scene.state.viewport);
+    scene.digitalPulseFillCount = getWaveformDigitalPulseFillCount(data, scene.state.viewport);
+    scene.stateCounts = getWaveformStateCounts(data);
+  } else {
+    scene.state.horizontalBuffer = createHorizontalBufferState(
+      scene.state.viewport,
+      scene.state.width,
+      scene.state.renderResolution,
+      getHorizontalBufferBounds(getSceneOptions(scene)),
+    );
+  }
+
+  scene.selectedSignalLaneY = getWaveformSignalLaneY(data, scene.state.selectedSignalId);
+  redrawWaveformSceneRulerIndicator(scene);
+  redrawWaveformSceneGrid(scene);
+  preallocateWaveformSceneBatchCapacity(scene);
+  redrawWaveformSceneRows(scene, { redrawLanes: dataChanged });
+  redrawWaveformSceneCursor(scene);
+  applyHorizontalBufferOffset(scene);
 }
 
 export function updateWaveformScenePan(scene: WaveformScene, viewport: WaveformViewport) {
@@ -397,6 +437,8 @@ function createRenderStats(visibleRowCount: number, culledRowCount: number, rend
     panBufferMissCount: 0,
     panPixelShiftCount: 0,
     transformOnlyPanCount: 0,
+    selectionOverlayUpdateCount: 0,
+    selectionSegmentRebuildCount: 0,
     explicitDrawCountEnabled: 0,
     gpuActiveIndexCount: 0,
     gpuBufferUpdateCount: 0,
@@ -496,6 +538,48 @@ type WaveformTextFactory = (text: string, fill: number, fontSize: number, x: num
 interface WaveformLabelDrawOptions {
   labelCacheKey?: string;
   textFactory?: WaveformTextFactory;
+}
+
+function preallocateWaveformSceneBatchCapacity(scene: WaveformScene) {
+  const frame = scene.state.frame;
+  if (!frame) {
+    return;
+  }
+
+  let segmentCount = 0;
+  let busSegmentCount = 0;
+  let labelCharacterCount = 0;
+
+  scene.state.visibleRows.rows.forEach((row) => {
+    if (row.kind !== 'signal') {
+      return;
+    }
+
+    const tableEntry = getFrameSignalTableEntry(frame, row.signalIndex);
+    if (!tableEntry || tableEntry.segmentCount <= 0) {
+      return;
+    }
+
+    segmentCount += tableEntry.segmentCount;
+    if (row.signal.kind === 'bus') {
+      busSegmentCount += tableEntry.segmentCount;
+      labelCharacterCount += tableEntry.segmentCount * Math.max(1, Math.ceil((row.signal.width ?? 1) / 4));
+    }
+  });
+
+  const digitalSegmentCount = Math.max(0, segmentCount - busSegmentCount);
+  const estimatedVertices = Math.max(
+    256,
+    digitalSegmentCount * 8
+      + busSegmentCount * 12
+      + segmentCount * 8,
+  );
+  const estimatedIndices = Math.max(384, estimatedVertices * 3);
+  const estimatedGlyphs = Math.max(64, labelCharacterCount + scene.state.visibleRows.rows.length * 8);
+
+  scene.state.gpuBatchRenderer.preallocateBatchCapacity(estimatedVertices, estimatedIndices);
+  scene.state.gpuBatchRenderer.preallocateGlyphCapacity(estimatedGlyphs);
+  scene.state.gpuBatchRenderer.bindPreallocatedBuffers();
 }
 
 function createLayers(): WaveformSceneLayers {

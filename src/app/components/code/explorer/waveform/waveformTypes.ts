@@ -42,6 +42,8 @@ export interface WaveformRenderStats {
   panBufferMissCount: number;
   panPixelShiftCount: number;
   transformOnlyPanCount: number;
+  selectionOverlayUpdateCount: number;
+  selectionSegmentRebuildCount: number;
   explicitDrawCountEnabled: number;
   gpuActiveIndexCount: number;
   gpuBufferDataReplaceCount: number;
@@ -123,6 +125,8 @@ export interface WaveformSceneUpdateMetrics {
   panBufferMissCount: number;
   panPixelShiftCount: number;
   transformOnlyPanCount: number;
+  selectionOverlayUpdateCount: number;
+  selectionSegmentRebuildCount: number;
   explicitDrawCountEnabled: number;
   gpuActiveIndexCount: number;
   gpuBufferDataReplaceCount: number;
