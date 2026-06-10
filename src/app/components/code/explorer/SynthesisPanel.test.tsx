@@ -74,10 +74,32 @@ describe('SynthesisPanel', () => {
     expect(screen.getByTestId('panel-synthesis-sankey')).toHaveAttribute('data-default-size', '50');
     expect(screen.getByTestId('synthesis-main-split-handle')).toHaveAttribute('role', 'separator');
     expect(screen.getByTestId('synthesis-left-split-handle')).toHaveAttribute('role', 'separator');
+    expect(screen.getByTestId('synthesis-main-split-handle')).toHaveClass('!bg-transparent', 'hover:!bg-transparent');
+    expect(screen.getByTestId('synthesis-left-split-handle')).toHaveClass('!bg-transparent', 'hover:!bg-transparent');
     expect(screen.getByText('Module Cell Treemap')).toBeInTheDocument();
-    expect(screen.getByText('retroSoC')).toBeInTheDocument();
     expect(screen.getByText('Timing Path Sankey')).toBeInTheDocument();
     expect(screen.getByText('Timing Paths')).toBeInTheDocument();
+    expect(screen.getByTestId('synthesis-treemap-header')).not.toHaveTextContent('retroSoC');
+    expect(screen.getByTestId('synthesis-sankey-header')).not.toHaveTextContent(/^timing$/i);
+    expect(screen.getByTestId('synthesis-timing-summary')).toHaveClass('flex', 'flex-nowrap', 'items-stretch');
+
+    const statChips = [
+      ['synthesis-timing-stat-worst', 'Worst', '5.008 ns'],
+      ['synthesis-timing-stat-levels', 'Levels', '11'],
+      ['synthesis-timing-stat-fanout', 'Fanout', '78'],
+    ] as const;
+
+    statChips.forEach(([testId, label, value]) => {
+      const chip = screen.getByTestId(testId);
+
+      expect(chip).toHaveClass('h-8', 'w-[132px]', 'flex-none', 'items-center');
+      expect(chip).toHaveTextContent(label);
+      expect(chip).toHaveTextContent(value);
+      expect(screen.getByTestId(`${testId}-rail`)).toHaveClass('items-end', 'whitespace-nowrap');
+      expect(screen.getByTestId(`${testId}-icon`)).toHaveClass('h-3', 'items-end', 'justify-center');
+      expect(screen.getByTestId(`${testId}-label`)).toHaveClass('h-3', 'items-end', 'leading-none');
+      expect(screen.getByTestId(`${testId}-value`)).toHaveClass('h-3', 'items-end', 'leading-none');
+    });
 
     await waitFor(() => expect(chartInstances.getAll()).toHaveLength(2));
 

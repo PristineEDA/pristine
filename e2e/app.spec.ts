@@ -1036,6 +1036,30 @@ async function expectCompactPanelTabButton(tabButton: Locator) {
   await expect(icon).toHaveAttribute('height', '12');
 }
 
+async function expectTimingStatChipBottomAligned(chip: Locator, testId: string, label: string, value: string) {
+  await expect(chip).toBeVisible();
+  await expect(chip.getByTestId(`${testId}-label`)).toHaveText(label);
+  await expect(chip.getByTestId(`${testId}-value`)).toHaveText(value);
+
+  const [iconBox, labelBox, valueBox] = await Promise.all([
+    chip.getByTestId(`${testId}-icon`).boundingBox(),
+    chip.getByTestId(`${testId}-label`).boundingBox(),
+    chip.getByTestId(`${testId}-value`).boundingBox(),
+  ]);
+
+  if (!iconBox || !labelBox || !valueBox) {
+    throw new Error(`Expected ${testId} geometry to be measurable`);
+  }
+
+  const iconBottom = iconBox.y + iconBox.height;
+  const labelBottom = labelBox.y + labelBox.height;
+  const valueBottom = valueBox.y + valueBox.height;
+
+  expect(Math.abs(iconBottom - labelBottom)).toBeLessThanOrEqual(2);
+  expect(Math.abs(valueBottom - labelBottom)).toBeLessThanOrEqual(2);
+  expect(valueBox.y).toBeGreaterThanOrEqual(labelBox.y - 1);
+}
+
 async function switchToWhiteboard(window: Awaited<ReturnType<typeof launchApp>>['window']) {
   const whiteboardTrigger = window.getByTestId('center-view-whiteboard');
 
@@ -5525,11 +5549,35 @@ test('synthesis bottom panel renders mock treemap sankey and timing table', asyn
   await expect(panel).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
   await expect(window.getByText('Module Cell Treemap')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
   await expect(window.getByText('Timing Path Sankey')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect(window.getByTestId('synthesis-treemap-header')).not.toContainText('retroSoC');
+  await expect(window.getByTestId('synthesis-sankey-header')).not.toContainText(/^timing$/i);
   await expect(window.getByTestId('synthesis-timing-table')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
   await expect(window.getByText('Path 1', { exact: true })).toBeVisible();
   await expect(window.getByText('Path 100', { exact: true })).toBeVisible();
   await expect(window.getByText('Slack')).toBeVisible();
   await expect(window.getByText('Clock Uncertainty')).toBeVisible();
+
+  const statChips = [
+    ['synthesis-timing-stat-worst', 'Worst', '5.008 ns'],
+    ['synthesis-timing-stat-levels', 'Levels', '11'],
+    ['synthesis-timing-stat-fanout', 'Fanout', '78'],
+  ] as const;
+  const timingSummary = window.getByTestId('synthesis-timing-summary');
+  await expect(timingSummary).toHaveClass(/(?:^|\s)flex-nowrap(?:\s|$)/);
+
+  const chipBoxes = await Promise.all(statChips.map(([testId]) => window.getByTestId(testId).boundingBox()));
+  if (chipBoxes.some((box) => !box)) {
+    throw new Error('Expected synthesis timing stat chip geometry to be measurable');
+  }
+
+  const [firstChipBox, ...remainingChipBoxes] = chipBoxes as NonNullable<typeof chipBoxes[number]>[];
+  remainingChipBoxes.forEach((chipBox) => {
+    expect(Math.abs(chipBox.y - firstChipBox.y)).toBeLessThanOrEqual(2);
+  });
+
+  for (const [testId, label, value] of statChips) {
+    await expectTimingStatChipBottomAligned(window.getByTestId(testId), testId, label, value);
+  }
 
   const treemapChart = window.getByTestId('synthesis-treemap-chart');
   const sankeyChart = window.getByTestId('synthesis-sankey-chart');
@@ -5563,10 +5611,13 @@ test('synthesis bottom panel renders mock treemap sankey and timing table', asyn
   const tablePanel = window.getByTestId('panel-synthesis-table');
   const initialChartsWidth = await readElementPixelWidth(chartsPanel);
   const initialTableWidth = await readElementPixelWidth(tablePanel);
-  const mainHandleBox = await window.getByTestId('synthesis-main-split-handle').boundingBox();
+  const mainSplitHandle = window.getByTestId('synthesis-main-split-handle');
+  await expect(mainSplitHandle).toHaveClass(/(?:^|\s)!bg-transparent(?:\s|$)/);
+  const mainHandleBox = await mainSplitHandle.boundingBox();
   if (!mainHandleBox) {
     throw new Error('Expected synthesis main split handle geometry to be measurable');
   }
+  expect(mainHandleBox.width).toBeLessThanOrEqual(3);
 
   await window.mouse.move(mainHandleBox.x + mainHandleBox.width / 2, mainHandleBox.y + mainHandleBox.height / 2);
   await window.mouse.down();
@@ -5586,10 +5637,13 @@ test('synthesis bottom panel renders mock treemap sankey and timing table', asyn
 
   const treemapPanel = window.getByTestId('panel-synthesis-treemap');
   const sankeyPanel = window.getByTestId('panel-synthesis-sankey');
-  const leftHandleBox = await window.getByTestId('synthesis-left-split-handle').boundingBox();
+  const leftSplitHandle = window.getByTestId('synthesis-left-split-handle');
+  await expect(leftSplitHandle).toHaveClass(/(?:^|\s)!bg-transparent(?:\s|$)/);
+  const leftHandleBox = await leftSplitHandle.boundingBox();
   if (!leftHandleBox) {
     throw new Error('Expected synthesis left split handle geometry to be measurable');
   }
+  expect(leftHandleBox.height).toBeLessThanOrEqual(3);
 
   await window.mouse.move(leftHandleBox.x + leftHandleBox.width / 2, leftHandleBox.y + leftHandleBox.height / 2);
   await window.mouse.down();

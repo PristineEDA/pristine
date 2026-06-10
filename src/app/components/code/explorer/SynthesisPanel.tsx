@@ -859,7 +859,6 @@ function createSankeyOption(palette: ThemePalette): EChartsCoreOption {
 }
 
 interface EchartsPanelProps {
-  description: string;
   icon: ReactNode;
   optionFactory: (palette: ThemePalette) => EChartsCoreOption;
   subtitle: string;
@@ -867,7 +866,7 @@ interface EchartsPanelProps {
   title: string;
 }
 
-function EchartsPanel({ description, icon, optionFactory, subtitle, testId, title }: EchartsPanelProps) {
+function EchartsPanel({ icon, optionFactory, subtitle, testId, title }: EchartsPanelProps) {
   const chartElementRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<ECharts | null>(null);
 
@@ -900,7 +899,10 @@ function EchartsPanel({ description, icon, optionFactory, subtitle, testId, titl
       data-testid={testId}
       className="flex h-full min-h-0 flex-col overflow-hidden rounded-md border border-ide-border bg-ide-bg"
     >
-      <div className="flex shrink-0 items-center justify-between border-b border-ide-border bg-ide-tab-bg px-2.5 py-1.5">
+      <div
+        data-testid={`${testId}-header`}
+        className="flex shrink-0 items-center justify-between border-b border-ide-border bg-ide-tab-bg px-2.5 py-1.5"
+      >
         <div className="flex min-w-0 items-center gap-2">
           <div className="flex size-5 items-center justify-center rounded border border-ide-border bg-ide-hover text-ide-info">
             {icon}
@@ -910,7 +912,6 @@ function EchartsPanel({ description, icon, optionFactory, subtitle, testId, titl
             <div className="truncate text-[10px] leading-3 text-ide-text-muted">{subtitle}</div>
           </div>
         </div>
-        <span className="shrink-0 text-[10px] uppercase tracking-[0.08em] text-ide-text-dim">{description}</span>
       </div>
       <div
         ref={chartElementRef}
@@ -921,14 +922,42 @@ function EchartsPanel({ description, icon, optionFactory, subtitle, testId, titl
   );
 }
 
-function StatChip({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
+interface StatChipProps {
+  icon: ReactNode;
+  label: string;
+  testId: string;
+  value: string;
+}
+
+function StatChip({ icon, label, testId, value }: StatChipProps) {
   return (
-    <div className="flex items-center gap-2 rounded border border-ide-border bg-ide-bg px-2 py-1">
-      <span className="text-ide-info">{icon}</span>
-      <div className="min-w-0">
-        <div className="text-[10px] uppercase tracking-[0.06em] text-ide-text-dim">{label}</div>
-        <div className="truncate text-[12px] font-semibold text-ide-text">{value}</div>
-      </div>
+    <div
+      data-testid={testId}
+      className="flex h-8 w-[132px] flex-none items-center rounded border border-ide-border bg-ide-bg px-2 py-1"
+    >
+      <span
+        data-testid={`${testId}-rail`}
+        className="flex min-w-0 items-end gap-1.5 whitespace-nowrap"
+      >
+        <span
+          data-testid={`${testId}-icon`}
+          className="inline-flex h-3 w-4 shrink-0 items-end justify-center text-ide-info [&>svg]:block [&>svg]:shrink-0"
+        >
+          {icon}
+        </span>
+        <span
+          data-testid={`${testId}-label`}
+          className="inline-flex h-3 shrink-0 items-end text-[10px] uppercase leading-none tracking-[0.06em] text-ide-text-dim"
+        >
+          {label}
+        </span>
+        <span
+          data-testid={`${testId}-value`}
+          className="inline-flex h-3 min-w-0 items-end truncate text-[12px] font-semibold leading-none text-ide-text"
+        >
+          {value}
+        </span>
+      </span>
     </div>
   );
 }
@@ -949,10 +978,10 @@ function TimingPathTable() {
             <div className="truncate text-[10px] leading-3 text-ide-text-muted">post-synthesis report mock</div>
           </div>
         </div>
-        <div className="grid grid-cols-3 gap-1">
-          <StatChip icon={<Sigma size={11} />} label="Worst" value="5.008 ns" />
-          <StatChip icon={<GitBranch size={11} />} label="Levels" value="11" />
-          <StatChip icon={<Boxes size={11} />} label="Fanout" value="78" />
+        <div data-testid="synthesis-timing-summary" className="flex flex-none flex-nowrap items-stretch gap-1">
+          <StatChip icon={<Sigma size={12} />} label="Worst" testId="synthesis-timing-stat-worst" value="5.008 ns" />
+          <StatChip icon={<GitBranch size={12} />} label="Levels" testId="synthesis-timing-stat-levels" value="11" />
+          <StatChip icon={<Boxes size={12} />} label="Fanout" testId="synthesis-timing-stat-fanout" value="78" />
         </div>
       </div>
       <div className="bottom-panel-scrollbar min-h-0 flex-1 overflow-auto">
@@ -1019,12 +1048,11 @@ export function SynthesisPanel() {
 
   return (
     <div data-testid="synthesis-panel" className="h-full min-h-0 bg-ide-panel-bg p-2">
-      <ResizablePanelGroup orientation="horizontal" className="h-full min-h-0 min-w-0" layoutGapPx={8}>
+      <ResizablePanelGroup orientation="horizontal" className="h-full min-h-0 min-w-0" layoutGapPx={3}>
         <ResizablePanel id="synthesis-charts" defaultSize={58} minSize={34} minSizePx={360}>
-          <ResizablePanelGroup orientation="vertical" className="h-full min-h-0 min-w-0" layoutGapPx={8}>
+          <ResizablePanelGroup orientation="vertical" className="h-full min-h-0 min-w-0" layoutGapPx={3}>
             <ResizablePanel id="synthesis-treemap" defaultSize={50} minSize={24} minSizePx={96}>
               <EchartsPanel
-                description="retroSoC"
                 icon={<Network size={12} />}
                 optionFactory={treemapOptionFactory}
                 subtitle="hierarchy module cell count"
@@ -1032,10 +1060,12 @@ export function SynthesisPanel() {
                 title="Module Cell Treemap"
               />
             </ResizablePanel>
-            <ResizableHandle data-testid="synthesis-left-split-handle" />
+            <ResizableHandle
+              className="!bg-transparent hover:!bg-transparent focus-visible:ring-ide-accent/50"
+              data-testid="synthesis-left-split-handle"
+            />
             <ResizablePanel id="synthesis-sankey" defaultSize={50} minSize={24} minSizePx={96}>
               <EchartsPanel
-                description="timing"
                 icon={<GitBranch size={12} />}
                 optionFactory={sankeyOptionFactory}
                 subtitle="path module share"
@@ -1045,7 +1075,10 @@ export function SynthesisPanel() {
             </ResizablePanel>
           </ResizablePanelGroup>
         </ResizablePanel>
-        <ResizableHandle data-testid="synthesis-main-split-handle" />
+        <ResizableHandle
+          className="!bg-transparent hover:!bg-transparent focus-visible:ring-ide-accent/50"
+          data-testid="synthesis-main-split-handle"
+        />
         <ResizablePanel id="synthesis-table" defaultSize={42} minSize={28} minSizePx={420}>
           <TimingPathTable />
         </ResizablePanel>
