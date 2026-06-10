@@ -63,7 +63,11 @@ vi.mock('./WaveformCanvas', () => ({
 
     useImperativeHandle(ref, () => ({
       flushViewportCommit: () => undefined,
-      setDisplayViewport: (nextViewport: WaveformViewport) => onViewportChange(nextViewport),
+      setDisplayViewport: (nextViewport: WaveformViewport, options?: { commit?: boolean }) => {
+        if (options?.commit !== false) {
+          onViewportChange(nextViewport);
+        }
+      },
     }), [onViewportChange]);
 
     return (

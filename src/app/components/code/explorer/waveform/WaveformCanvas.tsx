@@ -46,7 +46,7 @@ type PixiRendererPreference = 'webgpu' | 'webgl';
 
 export interface WaveformCanvasHandle {
   flushViewportCommit: () => void;
-  setDisplayViewport: (viewport: WaveformViewport) => void;
+  setDisplayViewport: (viewport: WaveformViewport, options?: { commit?: boolean }) => void;
 }
 
 interface WaveformCanvasProps {
@@ -79,6 +79,12 @@ interface DragState {
 interface RulerScrollDragState {
   indicatorOffsetX: number;
   pointerId: number;
+}
+
+interface ViewportApplyResult {
+  changed: boolean;
+  handledAsPan: boolean;
+  transformOnly: boolean;
 }
 
 const dragThreshold = 4;
@@ -114,6 +120,7 @@ export const WaveformCanvas = forwardRef<WaveformCanvasHandle, WaveformCanvasPro
   const rulerScrollDragRef = useRef<RulerScrollDragState | null>(null);
   const viewportChangeFrameRef = useRef<number | null>(null);
   const viewportCommitTimeoutRef = useRef<number | null>(null);
+  const pendingViewportNeedsCommitRef = useRef(false);
   const pendingViewportRef = useRef<WaveformViewport | null>(null);
   const dataRef = useRef(data);
   const renderStatsRef = useRef<WaveformRenderStats>(createEmptyRenderStats());
@@ -143,7 +150,6 @@ export const WaveformCanvas = forwardRef<WaveformCanvasHandle, WaveformCanvasPro
   dataRef.current = data;
   sceneUpdateMetricsRef.current.frameParseMs = frameParseMs;
   sceneUpdateMetricsRef.current.pipeRoundtripMs = pipeRoundtripMs;
-  viewportRef.current = viewport;
   cursorTimeRef.current = cursorTime;
   selectedSignalIdRef.current = selectedSignalId;
   onCursorTimeChangeRef.current = onCursorTimeChange;
@@ -213,6 +219,7 @@ export const WaveformCanvas = forwardRef<WaveformCanvasHandle, WaveformCanvasPro
         window.clearTimeout(viewportCommitTimeoutRef.current);
         viewportCommitTimeoutRef.current = null;
       }
+      pendingViewportNeedsCommitRef.current = false;
       pendingViewportRef.current = null;
 
       sceneRef.current?.world.destroy({ children: true });
@@ -234,6 +241,7 @@ export const WaveformCanvas = forwardRef<WaveformCanvasHandle, WaveformCanvasPro
   }, [data, frame]);
 
   useEffect(() => {
+    viewportRef.current = viewport;
     sceneUpdateMetricsRef.current.reactViewportCommitCount += 1;
     applyViewportToScene(viewport, { countDisplayUpdate: false });
   }, [viewport]);
@@ -249,6 +257,7 @@ export const WaveformCanvas = forwardRef<WaveformCanvasHandle, WaveformCanvasPro
     sceneUpdateMetricsRef.current.cursorUpdateCount += 1;
     applyRenderStats(scene.renderStats);
     writeDisplayViewportDataset(scene.state.viewport);
+    writeRenderStatsDataset();
     requestRender();
   }, [cursorTime]);
 
@@ -262,6 +271,7 @@ export const WaveformCanvas = forwardRef<WaveformCanvasHandle, WaveformCanvasPro
     updateWaveformSceneSelection(scene, selectedSignalId);
     sceneUpdateMetricsRef.current.selectionUpdateCount += 1;
     applyRenderStats(scene.renderStats);
+    writeRenderStatsDataset();
     requestRender();
   }, [selectedSignalId]);
 
@@ -276,6 +286,7 @@ export const WaveformCanvas = forwardRef<WaveformCanvasHandle, WaveformCanvasPro
     sceneUpdateMetricsRef.current.verticalScrollUpdateCount += 1;
     accumulateRowLifecycleMetrics(scene.renderStats);
     applyRenderStats(scene.renderStats);
+    writeRenderStatsDataset();
     requestRender();
   }, [verticalScrollTop]);
 
@@ -386,6 +397,7 @@ export const WaveformCanvas = forwardRef<WaveformCanvasHandle, WaveformCanvasPro
       if (rulerDrag && rulerDrag.pointerId === event.pointerId) {
         rulerScrollDragRef.current = null;
         host.releasePointerCapture(event.pointerId);
+        commitPendingDisplayViewport();
         return;
       }
 
@@ -400,6 +412,8 @@ export const WaveformCanvas = forwardRef<WaveformCanvasHandle, WaveformCanvasPro
 
       if (!drag.moved) {
         onCursorTimeChangeRef.current(clampTime(getPointerTime(event.clientX), dataRef.current.duration));
+      } else {
+        commitPendingDisplayViewport();
       }
     }
 
@@ -429,12 +443,12 @@ export const WaveformCanvas = forwardRef<WaveformCanvasHandle, WaveformCanvasPro
     };
   }, []);
 
-  function scheduleViewportChange(nextViewport: WaveformViewport) {
+  function scheduleViewportChange(nextViewport: WaveformViewport, options: { commit?: boolean } = {}) {
     pendingViewportRef.current = nextViewport;
+    pendingViewportNeedsCommitRef.current = pendingViewportNeedsCommitRef.current || Boolean(options.commit);
     viewportRef.current = nextViewport;
 
     if (viewportChangeFrameRef.current !== null) {
-      scheduleReactViewportCommit();
       return;
     }
 
@@ -443,8 +457,16 @@ export const WaveformCanvas = forwardRef<WaveformCanvasHandle, WaveformCanvasPro
       const pendingViewport = pendingViewportRef.current;
 
       if (pendingViewport) {
-        applyViewportToScene(pendingViewport, { countDisplayUpdate: true });
-        scheduleReactViewportCommit();
+        const applyResult = applyViewportToScene(pendingViewport, { countDisplayUpdate: true });
+        const needsViewportCommit = pendingViewportNeedsCommitRef.current || (applyResult.changed && !applyResult.transformOnly);
+
+        if (needsViewportCommit) {
+          pendingViewportNeedsCommitRef.current = true;
+          pendingViewportRef.current = pendingViewport;
+          scheduleReactViewportCommit();
+        } else if (pendingViewportRef.current === pendingViewport) {
+          pendingViewportRef.current = null;
+        }
       }
     });
   }
@@ -460,26 +482,41 @@ export const WaveformCanvas = forwardRef<WaveformCanvasHandle, WaveformCanvasPro
     }, waveformViewportCommitDelayMs);
   }
 
+  function commitPendingDisplayViewport() {
+    const nextViewport = pendingViewportRef.current ?? viewportRef.current;
+
+    if (!nextViewport) {
+      return;
+    }
+
+    pendingViewportRef.current = nextViewport;
+    pendingViewportNeedsCommitRef.current = true;
+    flushPendingViewportCommit();
+  }
+
   function flushPendingViewportCommit() {
     const pendingViewport = pendingViewportRef.current;
+    const shouldCommit = pendingViewportNeedsCommitRef.current;
     pendingViewportRef.current = null;
+    pendingViewportNeedsCommitRef.current = false;
 
-    if (pendingViewport && !areViewportsEqual(pendingViewport, viewport)) {
+    if (shouldCommit && pendingViewport && !areViewportsEqual(pendingViewport, viewport)) {
       sceneUpdateMetricsRef.current.idleViewportCommitCount += 1;
       onViewportChangeRef.current(pendingViewport);
     }
   }
 
-  function applyViewportToScene(nextViewport: WaveformViewport, options: { countDisplayUpdate: boolean }) {
+  function applyViewportToScene(nextViewport: WaveformViewport, options: { countDisplayUpdate: boolean }): ViewportApplyResult {
     const scene = sceneRef.current;
 
     if (!scene) {
-      return;
+      return { changed: false, handledAsPan: false, transformOnly: false };
     }
 
     if (areViewportsEqual(scene.state.viewport, nextViewport)) {
       writeDisplayViewportDataset(nextViewport);
-      return;
+      writeRenderStatsDataset();
+      return { changed: false, handledAsPan: false, transformOnly: false };
     }
 
     const sceneUpdateStartedAt = performance.now();
@@ -487,7 +524,6 @@ export const WaveformCanvas = forwardRef<WaveformCanvasHandle, WaveformCanvasPro
 
     if (!handledAsPan) {
       updateWaveformSceneViewport(scene, nextViewport);
-      flushPendingViewportCommit();
     }
 
     sceneUpdateMetricsRef.current.sceneUpdateMs = Math.max(0, performance.now() - sceneUpdateStartedAt);
@@ -502,6 +538,7 @@ export const WaveformCanvas = forwardRef<WaveformCanvasHandle, WaveformCanvasPro
     applyRenderStats(scene.renderStats);
     writeDisplayViewportDataset(scene.state.viewport);
     requestRender();
+    return { changed: true, handledAsPan, transformOnly: handledAsPan && scene.renderStats.gpuBufferUpdateCount === 0 };
   }
 
   function rebuildScene() {
@@ -659,13 +696,28 @@ export const WaveformCanvas = forwardRef<WaveformCanvasHandle, WaveformCanvasPro
       return;
     }
 
+    host.dataset.averageFps = formatOptionalNumber(nextMetrics.averageFps);
+    host.dataset.averageRenderMs = formatOptionalNumber(nextMetrics.averageRenderDurationMs);
+    writeRenderStatsDataset();
+    host.dataset.lastFps = formatOptionalNumber(nextMetrics.lastFps);
+    host.dataset.lastRenderMs = formatOptionalNumber(nextMetrics.lastRenderDurationMs);
+    host.dataset.renderCount = String(renderCountRef.current);
+    host.dataset.visiblePrimitiveCount = String(nextMetrics.visiblePrimitiveCount);
+    writeDisplayViewportDataset();
+  }
+
+  function writeRenderStatsDataset() {
+    const host = hostRef.current;
+
+    if (!host) {
+      return;
+    }
+
     const latestStats = {
       ...renderStatsRef.current,
       ...sceneUpdateMetricsRef.current,
     };
 
-    host.dataset.averageFps = formatOptionalNumber(nextMetrics.averageFps);
-    host.dataset.averageRenderMs = formatOptionalNumber(nextMetrics.averageRenderDurationMs);
     host.dataset.displayViewportOnlyUpdateCount = String(latestStats.displayViewportOnlyUpdateCount);
     host.dataset.displayViewportUpdateCount = String(latestStats.displayViewportUpdateCount);
     host.dataset.droppedFrameCount = String(latestStats.droppedFrameCount);
@@ -693,15 +745,10 @@ export const WaveformCanvas = forwardRef<WaveformCanvasHandle, WaveformCanvasPro
     host.dataset.labelLayoutCacheHitCount = String(latestStats.labelLayoutCacheHitCount);
     host.dataset.labelLayoutCacheMissCount = String(latestStats.labelLayoutCacheMissCount);
     host.dataset.labelTextureUpdateCount = String(latestStats.labelTextureUpdateCount);
-    host.dataset.lastFps = formatOptionalNumber(nextMetrics.lastFps);
-    host.dataset.lastRenderMs = formatOptionalNumber(nextMetrics.lastRenderDurationMs);
     host.dataset.pixiRenderMs = latestStats.pixiRenderMs.toFixed(3);
     host.dataset.reactViewportCommitCount = String(latestStats.reactViewportCommitCount);
-    host.dataset.renderCount = String(renderCountRef.current);
     host.dataset.sceneUpdateMs = latestStats.sceneUpdateMs.toFixed(3);
     host.dataset.transformOnlyPanCount = String(latestStats.transformOnlyPanCount);
-    host.dataset.visiblePrimitiveCount = String(nextMetrics.visiblePrimitiveCount);
-    writeDisplayViewportDataset();
   }
 
   function writeDisplayViewportDataset(nextViewport?: WaveformViewport) {

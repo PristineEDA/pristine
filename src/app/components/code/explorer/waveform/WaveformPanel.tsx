@@ -230,11 +230,11 @@ export function WaveformPanel() {
     return displayViewportRef.current ?? viewport ?? getInitialWaveformViewport(currentData);
   }
 
-  function scheduleDisplayViewport(nextViewport: WaveformViewport) {
+  function scheduleDisplayViewport(nextViewport: WaveformViewport, options: { commit?: boolean } = {}) {
     displayViewportRef.current = nextViewport;
 
     if (waveformCanvasRef.current) {
-      waveformCanvasRef.current.setDisplayViewport(nextViewport);
+      waveformCanvasRef.current.setDisplayViewport(nextViewport, options);
       return;
     }
 
@@ -279,7 +279,7 @@ export function WaveformPanel() {
       return;
     }
 
-    scheduleDisplayViewport(getWaveformViewportForHorizontalScroll(getPanelDisplayViewport(data), data.duration, waveformViewportWidth, horizontalScrollElement.scrollLeft));
+    scheduleDisplayViewport(getWaveformViewportForHorizontalScroll(getPanelDisplayViewport(data), data.duration, waveformViewportWidth, horizontalScrollElement.scrollLeft), { commit: true });
   }
 
   function clampVerticalScrollTop(scrollTop: number) {

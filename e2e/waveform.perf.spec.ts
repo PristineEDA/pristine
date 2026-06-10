@@ -9,6 +9,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const fixtureWorkspace = path.join(__dirname, '..', 'test', 'fixtures', 'workspace');
 const releaseRoot = path.join(__dirname, '..', 'release');
 const UI_READY_TIMEOUT_MS = 60000;
+const waveformViewportCommitSettleMs = 180;
 
 interface StartupWindowEntry {
   page: Page;
@@ -718,6 +719,7 @@ test('packaged waveform sustained 10s viewport and interaction perf', async () =
     await waitForNextRender(canvasHost, async () => {
       await zoomInButton.click();
     });
+    await window.waitForTimeout(waveformViewportCommitSettleMs);
 
     const jsHeapBefore = await readJsHeapBytes(window);
     const samples: Array<Awaited<ReturnType<typeof capturePerfSample>>> = [];
@@ -929,12 +931,36 @@ test('packaged waveform sustained 10s viewport and interaction perf', async () =
       expect(panDelta.gpuBufferReallocCount).toBe(0);
     }
     expect(panDelta.rowReuseCount).toBeGreaterThanOrEqual(panDelta.viewportContentUpdateCount * panVisibleRowCount);
+    expect(panDelta.displayViewportOnlyUpdateCount).toBe(panDelta.viewportContentUpdateCount);
+    expect(panDelta.reactViewportCommitCount).toBe(0);
+    expect(panDelta.idleViewportCommitCount).toBe(0);
+    expect(panDelta.gpuBufferUpdateCount).toBe(0);
+    expect(panDelta.glyphBufferUpdateCount).toBe(0);
+    const observedGpuActiveIndexCount = Math.max(
+      finalStats.gpuActiveIndexCount,
+      panDelta.gpuActiveIndexCount,
+      zoomDelta.gpuActiveIndexCount,
+      rapidMixedDelta.gpuActiveIndexCount,
+      verticalThenInteractDelta.gpuActiveIndexCount,
+    );
+    const observedGlyphActiveIndexCount = Math.max(
+      finalStats.glyphActiveIndexCount,
+      panDelta.glyphActiveIndexCount,
+      zoomDelta.glyphActiveIndexCount,
+      rapidMixedDelta.glyphActiveIndexCount,
+      verticalThenInteractDelta.glyphActiveIndexCount,
+    );
+    const observedGlyphVertexCount = Math.max(
+      finalStats.glyphVertexCount,
+      ...samples.map((sample) => sample.canvasStats.glyphVertexCount),
+    );
+
     expect(finalStats.gpuDrawLayerCount).toBeLessThanOrEqual(8);
     expect(finalStats.explicitDrawCountEnabled).toBe('true');
-    expect(finalStats.gpuActiveIndexCount).toBeGreaterThan(0);
+    expect(observedGpuActiveIndexCount).toBeGreaterThan(0);
     expect(finalStats.glyphAtlasTextureCount).toBeGreaterThanOrEqual(1);
-    expect(finalStats.glyphActiveIndexCount).toBeGreaterThan(0);
-    expect(finalStats.glyphVertexCount).toBeGreaterThan(0);
+    expect(observedGlyphActiveIndexCount).toBeGreaterThan(0);
+    expect(observedGlyphVertexCount).toBeGreaterThan(0);
     expect(panDelta.labelTextureUpdateCount).toBe(0);
     expect(panDelta.glyphBufferReallocCount).toBe(0);
     expect(panDelta.gpuBufferDataReplaceCount).toBe(0);
