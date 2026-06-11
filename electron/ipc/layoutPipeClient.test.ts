@@ -189,7 +189,7 @@ describe('layoutPipeClient', () => {
           kind: process.platform === 'win32' ? 'namedPipe' : 'unixSocket',
           path: endpointPath,
         },
-        fileUris: ['file:///workspace/.pristine/layout/sg13g2_stdcell.lef'],
+        fileUris: ['file:///workspace/sg13g2_stdcell.lef'],
         layerCount: 1,
         lefCount: 1,
         macroCount: 1,

@@ -18,7 +18,7 @@ export const layoutFixtureOpenResult = {
   componentCount: 0,
   netCount: 0,
   diagnosticCount: 0,
-  fileUris: ['file:///workspace/.pristine/layout/sg13g2_stdcell.lef'],
+  fileUris: ['file:///workspace/sg13g2_stdcell.lef'],
   messages: [],
   catalog: {
     unitsPerMicron: 1000,

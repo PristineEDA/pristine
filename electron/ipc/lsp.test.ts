@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mockHandle = vi.fn();
 const mockExistsSync = vi.fn((_filePath?: string) => true);
 const mockMkdirSync = vi.fn();
-const mockCopyFileSync = vi.fn();
 const mockSpawn = vi.fn();
 const mockCreateMessageConnection = vi.fn();
 const mockCloseAllWaveformPipeSessions = vi.fn<(...args: unknown[]) => Promise<void>>(async () => undefined);
@@ -47,7 +46,7 @@ const mockOpenLayoutPipeSession = vi.fn<(...args: unknown[]) => Promise<unknown>
   componentCount: 0,
   defPresent: false,
   diagnosticCount: 0,
-  fileUris: ['file:///C:/workspace/Pristine/.pristine/layout/sg13g2_stdcell.lef'],
+  fileUris: ['file:///C:/workspace/Pristine/sg13g2_stdcell.lef'],
   id: 'layout-1',
   layerCount: 1,
   lefCount: 1,
@@ -90,11 +89,9 @@ vi.mock('node:fs', () => ({
   default: {
     existsSync: (filePath: string) => mockExistsSync(filePath),
     mkdirSync: (...args: unknown[]) => mockMkdirSync(...args),
-    copyFileSync: (...args: unknown[]) => mockCopyFileSync(...args),
   },
   existsSync: (filePath: string) => mockExistsSync(filePath),
   mkdirSync: (...args: unknown[]) => mockMkdirSync(...args),
-  copyFileSync: (...args: unknown[]) => mockCopyFileSync(...args),
 }));
 
 vi.mock('node:child_process', () => ({
@@ -441,7 +438,7 @@ function createFakeConnection(): FakeConnection {
             kind: 'namedPipe',
             path: '\\\\.\\pipe\\pristine-engine-layout-test',
           },
-          fileUris: ['file:///C:/workspace/Pristine/.pristine/layout/sg13g2_stdcell.lef'],
+          fileUris: ['file:///C:/workspace/Pristine/sg13g2_stdcell.lef'],
           layerCount: 1,
           lefCount: 1,
           macroCount: 1,
@@ -1140,19 +1137,14 @@ describe('LSP IPC handlers', () => {
 
   it('opens layout sessions through LSP control plane and pipe catalog metadata', async () => {
     setLspProjectRoot('C:/workspace/Pristine/test/fixtures/workspace');
-    mockExistsSync.mockImplementation((filePath?: string) => String(filePath).endsWith('.pristine\\layout\\sg13g2_stdcell.lef') ? false : true);
     const openHandler = getHandler('async:lsp:layout-open');
 
     const result = await openHandler({});
 
-    expect(mockMkdirSync).toHaveBeenCalledWith('C:\\workspace\\Pristine\\test\\fixtures\\workspace\\.pristine\\layout', { recursive: true });
-    expect(mockCopyFileSync).toHaveBeenCalledWith(
-      'C:\\workspace\\pristine-engine\\.deps\\src\\ihp-open-pdk\\ihp-sg13g2\\libs.ref\\sg13g2_stdcell\\lef\\sg13g2_stdcell.lef',
-      'C:\\workspace\\Pristine\\test\\fixtures\\workspace\\.pristine\\layout\\sg13g2_stdcell.lef',
-    );
+    expect(mockMkdirSync).not.toHaveBeenCalled();
     expect(fakeConnection.sendRequest).toHaveBeenCalledWith('systemverilog/layout/open', {
       defUri: undefined,
-      lefUris: ['file:///C:/workspace/Pristine/test/fixtures/workspace/.pristine/layout/sg13g2_stdcell.lef'],
+      lefUris: ['file:///C:/workspace/Pristine/test/fixtures/workspace/sg13g2_stdcell.lef'],
       title: 'sg13g2_stdcell.lef',
     });
     expect(fakeConnection.sendRequest).not.toHaveBeenCalledWith('systemverilog/layoutOpen', expect.anything());
@@ -1172,6 +1164,18 @@ describe('LSP IPC handlers', () => {
       sessionId: 'layout-1',
       title: 'sg13g2_stdcell.lef',
     }));
+    setLspProjectRoot('C:/workspace/Pristine');
+  });
+
+  it('reports a clear error when the default workspace-root layout LEF is missing', async () => {
+    setLspProjectRoot('C:/workspace/Pristine/test/fixtures/workspace');
+    mockExistsSync.mockImplementation((filePath?: string) => !String(filePath).endsWith('sg13g2_stdcell.lef'));
+    const openHandler = getHandler('async:lsp:layout-open');
+
+    await expect(openHandler({})).rejects.toThrow(
+      'Default Physical layout LEF not found at C:\\workspace\\Pristine\\test\\fixtures\\workspace\\sg13g2_stdcell.lef. Place sg13g2_stdcell.lef in the LSP workspace root.',
+    );
+    expect(mockMkdirSync).not.toHaveBeenCalled();
     setLspProjectRoot('C:/workspace/Pristine');
   });
 

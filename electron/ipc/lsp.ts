@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { BrowserWindow, ipcMain } from 'electron';
 import * as childProcess from 'node:child_process';
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import fs from 'node:fs';
@@ -109,13 +109,6 @@ const LSP_WAVEFORM_TIMEOUT_MS = 30_000;
 const LSP_LAYOUT_TIMEOUT_MS = 30_000;
 const LSP_DEBUG_EVENT_LIMIT = 200;
 const DEFAULT_IHP_STDCELL_LEF_FILE_NAME = 'sg13g2_stdcell.lef';
-const DEFAULT_IHP_STDCELL_LEF_DEP_PATH = [
-  'ihp-sg13g2',
-  'libs.ref',
-  'sg13g2_stdcell',
-  'lef',
-  DEFAULT_IHP_STDCELL_LEF_FILE_NAME,
-] as const;
 
 interface SendDebugRequestOptions {
   timeoutMs?: number;
@@ -220,44 +213,15 @@ function getProjectPathModule(): typeof path {
   return isWindowsAbsolutePath(getProjectRoot()) ? path.win32 : path;
 }
 
-function getDevelopmentApplicationRoot(): string {
-  const appPath = app.getAppPath();
-  const pathModule = isWindowsAbsolutePath(appPath) ? path.win32 : path;
-  const resolvedAppPath = pathModule.resolve(appPath);
-  return pathModule.basename(resolvedAppPath) === 'dist-electron'
-    ? pathModule.resolve(resolvedAppPath, '..')
-    : resolvedAppPath;
-}
-
-function resolveDefaultIhpStdcellLefSourcePath(): string {
-  const appRoot = getDevelopmentApplicationRoot();
-  const pathModule = isWindowsAbsolutePath(appRoot) ? path.win32 : path;
-  return pathModule.join(
-    pathModule.dirname(appRoot),
-    'pristine-engine',
-    '.deps',
-    'src',
-    'ihp-open-pdk',
-    ...DEFAULT_IHP_STDCELL_LEF_DEP_PATH,
-  );
-}
-
-function prepareDefaultLayoutLefUri(): string {
+function resolveDefaultLayoutLefUri(): string {
   const root = getProjectRoot();
   const pathModule = getProjectPathModule();
-  const sourcePath = resolveDefaultIhpStdcellLefSourcePath();
-  if (!fs.existsSync(sourcePath)) {
-    throw new Error(`IHP Open PDK stdcell LEF not found at ${sourcePath}. Bootstrap IHP Open PDK in pristine-engine first.`);
+  const lefPath = pathModule.join(root, DEFAULT_IHP_STDCELL_LEF_FILE_NAME);
+  if (!fs.existsSync(lefPath)) {
+    throw new Error(`Default Physical layout LEF not found at ${lefPath}. Place ${DEFAULT_IHP_STDCELL_LEF_FILE_NAME} in the LSP workspace root.`);
   }
 
-  const destinationDirectory = pathModule.join(root, '.pristine', 'layout');
-  const destinationPath = pathModule.join(destinationDirectory, DEFAULT_IHP_STDCELL_LEF_FILE_NAME);
-  fs.mkdirSync(destinationDirectory, { recursive: true });
-  if (!fs.existsSync(destinationPath)) {
-    fs.copyFileSync(sourcePath, destinationPath);
-  }
-
-  return absolutePathToFileUri(destinationPath);
+  return absolutePathToFileUri(lefPath);
 }
 
 function getRelativeWorkspaceFilePath(uri: string): string | null {
@@ -2829,7 +2793,7 @@ export function registerLspHandlers(getMainWindow: () => BrowserWindow | null): 
     const normalizedOptions = normalizeLayoutOpenOptions(options);
     const lefUris = normalizedOptions.lefUris && normalizedOptions.lefUris.length > 0
       ? normalizedOptions.lefUris
-      : [prepareDefaultLayoutLefUri()];
+      : [resolveDefaultLayoutLefUri()];
 
     return withInitializedSession(getMainWindow, async (session) => {
       try {

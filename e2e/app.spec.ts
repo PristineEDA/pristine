@@ -24,6 +24,75 @@ const MONACO_READY_TIMEOUT_MS = 60000;
 const UI_READY_TIMEOUT_MS = 60000;
 type SettingsPageId = 'general' | 'appearance' | 'editor' | 'schematic' | 'window';
 
+const physicalLayoutE2eLef = `
+VERSION 5.8 ;
+UNITS DATABASE MICRONS 1000 ;
+LAYER Metal1
+  TYPE ROUTING ;
+  PITCH 0.48 ;
+  WIDTH 0.16 ;
+END Metal1
+LAYER Metal2
+  TYPE ROUTING ;
+  PITCH 0.56 ;
+  WIDTH 0.18 ;
+END Metal2
+MACRO sg13g2_e2e_inv_1
+  CLASS CORE ;
+  ORIGIN 0 0 ;
+  SIZE 1.2 BY 3.78 ;
+  PIN A
+    DIRECTION INPUT ;
+    PORT
+      LAYER Metal1 ;
+        RECT 0.10 0.40 0.30 0.90 ;
+    END
+  END A
+  PIN Y
+    DIRECTION OUTPUT ;
+    PORT
+      LAYER Metal2 ;
+        RECT 0.72 1.20 1.05 1.70 ;
+    END
+  END Y
+  OBS
+    LAYER Metal1 ;
+      RECT 0.20 2.30 1.00 2.65 ;
+  END
+END sg13g2_e2e_inv_1
+MACRO sg13g2_e2e_nand2_1
+  CLASS CORE ;
+  ORIGIN 0 0 ;
+  SIZE 2.4 BY 3.78 ;
+  PIN A
+    DIRECTION INPUT ;
+    PORT
+      LAYER Metal1 ;
+        RECT 0.15 0.35 0.45 0.80 ;
+    END
+  END A
+  PIN B
+    DIRECTION INPUT ;
+    PORT
+      LAYER Metal1 ;
+        RECT 0.60 0.95 0.92 1.40 ;
+    END
+  END B
+  PIN Y
+    DIRECTION OUTPUT ;
+    PORT
+      LAYER Metal2 ;
+        RECT 1.40 1.85 2.15 2.25 ;
+    END
+  END Y
+  OBS
+    LAYER Metal2 ;
+      RECT 0.25 2.75 2.15 3.05 ;
+  END
+END sg13g2_e2e_nand2_1
+END LIBRARY
+`;
+
 function normalizeComparableMonospaceFontFamily(fontFamily: string) {
   const tokens = fontFamily
     .split(',')
@@ -446,7 +515,7 @@ async function launchAppForSplashHandoff() {
   return { app, windowPromise };
 }
 
-async function launchPackagedWindowsApp() {
+async function launchPackagedWindowsApp(options?: { projectRoot?: string }) {
   if (!packagedWindowsExecutablePath) {
     throw new Error('Packaged Windows executable not found');
   }
@@ -456,7 +525,7 @@ async function launchPackagedWindowsApp() {
     env: {
       ...process.env,
       PRISTINE_E2E: '1',
-      PRISTINE_PROJECT_ROOT: fixtureWorkspace,
+      PRISTINE_PROJECT_ROOT: options?.projectRoot ?? fixtureWorkspace,
       PRISTINE_USER_DATA_PATH: getE2EUserDataPath(),
     },
   });
@@ -1768,6 +1837,32 @@ test('packaged Windows app loads model provider logos from relative app assets',
     await searchInput.fill('openrouter');
 
     await expectModelProviderLogoLoaded(window, 'OpenRouter', 'model-provider-logos/openrouter.svg');
+  } finally {
+    await app.close();
+  }
+});
+
+test('packaged Windows app opens Physical layout from workspace-root LEF', async () => {
+  test.skip(process.platform !== 'win32', 'Packaged Physical E2E runs on Windows only');
+  test.skip(!packagedWindowsExecutablePath, 'Run pnpm run package:win before executing packaged Physical E2E');
+
+  const physicalWorkspaceRoot = createWorkspaceCopyWithFiles('packaged-physical-layout-workspace', {
+    'sg13g2_stdcell.lef': physicalLayoutE2eLef,
+  });
+  const { app, window } = await launchPackagedWindowsApp({ projectRoot: physicalWorkspaceRoot });
+
+  try {
+    await window.getByTestId('activity-item-physical').click();
+    const layoutEditor = window.getByTestId('physical-layout-editor');
+    const layoutCanvas = window.getByTestId('physical-layout-canvas');
+
+    await expect(layoutEditor).toHaveAttribute('data-status', 'ready', { timeout: UI_READY_TIMEOUT_MS });
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-macro-count') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(0);
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-shape-count') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(0);
   } finally {
     await app.close();
   }
@@ -4503,7 +4598,10 @@ test('explorer root toggles first-level children and hides the legacy collapse-a
 });
 
 test('activity bar switches code subpages and menu bar keeps higher-priority page navigation', async () => {
-  const { app, window } = await launchApp();
+  const physicalWorkspaceRoot = createWorkspaceCopyWithFiles('physical-layout-workspace', {
+    'sg13g2_stdcell.lef': physicalLayoutE2eLef,
+  });
+  const { app, window } = await launchApp({ projectRoot: physicalWorkspaceRoot });
   const activityBarTrigger = window.getByTestId('toggle-activity-bar');
 
   await expect(activityBarTrigger).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
