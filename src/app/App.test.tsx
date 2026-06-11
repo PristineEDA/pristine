@@ -224,7 +224,7 @@ async function waitForPanelWidth(testId: string, width: string) {
   });
 }
 
-function expectPlaceholderWorkspace(viewId: 'simulation' | 'synthesis' | 'physical', mainTitle: string) {
+function expectPlaceholderWorkspace(viewId: 'simulation' | 'synthesis', mainTitle: string) {
   expect(screen.getByTestId(`code-view-${viewId}`)).toBeInTheDocument();
   expect(screen.getByTestId(`panel-${viewId}-left-panel`)).toBeInTheDocument();
   expect(screen.getByTestId(`panel-${viewId}-center-panel`)).toBeInTheDocument();
@@ -238,6 +238,29 @@ function expectPlaceholderWorkspace(viewId: 'simulation' | 'synthesis' | 'physic
   expect(screen.getByTestId(`${viewId}-bottom-panel-content`)).toHaveTextContent('Coming soon');
   expect(screen.getByTestId(`${viewId}-right-panel-content`)).toHaveTextContent('Right Panel');
   expect(screen.getByTestId(`${viewId}-right-panel-content`)).toHaveTextContent('Coming soon');
+}
+
+function expectPhysicalWorkspace() {
+  expect(screen.getByTestId('code-view-physical')).toBeInTheDocument();
+  expect(screen.getByTestId('panel-physical-left-panel')).toBeInTheDocument();
+  expect(screen.getByTestId('panel-physical-center-panel')).toBeInTheDocument();
+  expect(screen.getByTestId('panel-physical-bottom-panel')).toBeInTheDocument();
+  expect(screen.getByTestId('panel-physical-right-panel')).toBeInTheDocument();
+  expect(screen.getByTestId('physical-main-panel-content')).toHaveTextContent('Physical');
+  expect(screen.getByTestId('physical-main-panel-content')).toHaveTextContent('Coming soon');
+  expect(screen.getByTestId('physical-left-panel-tabs')).toBeInTheDocument();
+  expect(screen.getByTestId('physical-left-panel-split-toggle')).toBeInTheDocument();
+  expect(screen.getByTestId('physical-left-panel-tab-layout')).toBeInTheDocument();
+  expect(screen.getByTestId('physical-left-panel-tab-constraints')).toBeInTheDocument();
+  expect(screen.getByTestId('physical-right-panel-tabs')).toBeInTheDocument();
+  expect(screen.getByTestId('physical-right-panel-split-toggle')).toBeInTheDocument();
+  expect(screen.getByTestId('physical-right-panel-tab-inspector')).toBeInTheDocument();
+  expect(screen.getByTestId('physical-right-panel-tab-checks')).toBeInTheDocument();
+  expect(screen.getByTestId('physical-bottom-panel-tabs')).toBeInTheDocument();
+  expect(screen.getByTestId('physical-bottom-panel-tab-reports')).toBeInTheDocument();
+  expect(screen.getByTestId('physical-bottom-panel-tab-console')).toBeInTheDocument();
+  expect(screen.getByTestId('panel-handle-physical-left-panel')).toBeInTheDocument();
+  expect(screen.getByTestId('panel-handle-physical-right-panel')).toBeInTheDocument();
 }
 
 function triggerDeferredWorkflowMount() {
@@ -361,7 +384,7 @@ describe('App', () => {
     await clickText('select-physical');
     expect(await screen.findByTestId('code-view-physical')).toBeInTheDocument();
     expect(screen.getByTestId('status-bar-code-view')).toHaveTextContent('physical');
-    expectPlaceholderWorkspace('physical', 'Physical');
+    expectPhysicalWorkspace();
 
     await clickText('select-explorer');
     expect(screen.getByTestId('activity-view')).toHaveTextContent('explorer');
@@ -507,7 +530,7 @@ describe('App', () => {
       await clickTestId('activity-item-physical');
 
       expect(await screen.findByTestId('code-view-physical')).toBeInTheDocument();
-      expectPlaceholderWorkspace('physical', 'Physical');
+      expectPhysicalWorkspace();
 
       await clickTestId('activity-item-factory');
 

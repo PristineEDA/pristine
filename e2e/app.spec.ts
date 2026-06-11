@@ -4563,9 +4563,50 @@ test('activity bar switches code subpages and menu bar keeps higher-priority pag
   await expect(window.getByTestId('panel-physical-bottom-panel')).toBeVisible();
   await expect(window.getByTestId('panel-physical-right-panel')).toBeVisible();
   await expect(window.getByTestId('physical-main-panel-content')).toContainText('Physical');
+  await expect(window.getByTestId('physical-left-panel-tabs')).toBeVisible();
+  await expect(window.getByTestId('physical-left-panel-tab-layout')).toBeVisible();
+  await expect(window.getByTestId('physical-left-panel-tab-constraints')).toBeVisible();
+  await expect(window.getByTestId('physical-left-panel-split-toggle')).toBeVisible();
+  await expect(window.getByTestId('physical-right-panel-tabs')).toBeVisible();
+  await expect(window.getByTestId('physical-right-panel-tab-inspector')).toBeVisible();
+  await expect(window.getByTestId('physical-right-panel-tab-checks')).toBeVisible();
+  await expect(window.getByTestId('physical-right-panel-split-toggle')).toBeVisible();
+  await expect(window.getByTestId('physical-bottom-panel-tabs')).toBeVisible();
+  await expect(window.getByTestId('physical-bottom-panel-tab-reports')).toBeVisible();
+  await expect(window.getByTestId('physical-bottom-panel-tab-console')).toBeVisible();
   await expect(window.getByTestId('toggle-left-panel')).toBeEnabled();
   await expect(window.getByTestId('toggle-bottom-panel')).toBeEnabled();
   await expect(window.getByTestId('toggle-right-panel')).toBeEnabled();
+
+  const [physicalShellBox, physicalLeftPanelBox, physicalMainPanelBox, physicalBottomPanelBox] = await Promise.all([
+    window.getByTestId('code-view-physical').boundingBox(),
+    window.getByTestId('panel-physical-left-panel').boundingBox(),
+    window.getByTestId('panel-physical-center-panel').boundingBox(),
+    window.getByTestId('panel-physical-bottom-panel').boundingBox(),
+  ]);
+
+  if (!physicalShellBox || !physicalLeftPanelBox || !physicalMainPanelBox || !physicalBottomPanelBox) {
+    throw new Error('Expected Physical workspace panel geometry to be measurable');
+  }
+
+  expect(physicalLeftPanelBox.x - physicalShellBox.x).toBeGreaterThanOrEqual(55);
+  expect(physicalLeftPanelBox.y - physicalShellBox.y).toBeGreaterThanOrEqual(8);
+  expect(physicalBottomPanelBox.y + physicalBottomPanelBox.height).toBeLessThanOrEqual(
+    physicalShellBox.y + physicalShellBox.height - 8,
+  );
+  expect(Math.abs(physicalMainPanelBox.x - physicalBottomPanelBox.x)).toBeLessThanOrEqual(2);
+
+  await window.getByTestId('physical-left-panel-split-toggle').click();
+  await expect(window.getByTestId('physical-left-panel-split-group')).toBeVisible();
+  await expect(window.getByTestId('physical-left-panel-lower-panel-content')).toContainText('Layer Details');
+  await window.getByTestId('physical-left-panel-split-toggle').click();
+  await expect(window.getByTestId('physical-left-panel-lower-panel-content')).toHaveCount(0);
+
+  await window.getByTestId('physical-right-panel-split-toggle').click();
+  await expect(window.getByTestId('physical-right-panel-split-group')).toBeVisible();
+  await expect(window.getByTestId('physical-right-panel-lower-panel-content')).toContainText('Selection Details');
+  await window.getByTestId('physical-right-panel-split-toggle').click();
+  await expect(window.getByTestId('physical-right-panel-lower-panel-content')).toHaveCount(0);
 
   await window.getByTestId('activity-item-factory').click();
   await expect(window.getByTestId('code-view-factory')).toBeVisible();

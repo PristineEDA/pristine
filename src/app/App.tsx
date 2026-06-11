@@ -20,6 +20,12 @@ import {
   EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX,
 } from './components/code/shared/CodeWorkspaceShell';
 import { AppStatusBar } from './components/code/shared/statusBars/AppStatusBar';
+import {
+  PhysicalBottomPanel,
+  PhysicalLeftPanel,
+  PhysicalMainPanel,
+  PhysicalRightPanel,
+} from './components/code/physical/PhysicalWorkspacePanels';
 import { QuickOpenPalette } from './components/code/shared/QuickOpenPalette';
 import { isMonacoTextInputFocused } from './editor/focusEditor';
 import {
@@ -73,7 +79,7 @@ const codeViewPlaceholderConfig = {
   },
 } as const;
 
-type PlaceholderWorkspaceView = 'simulation' | 'synthesis' | 'physical';
+type PlaceholderWorkspaceView = 'simulation' | 'synthesis';
 
 // ─── AppLayout (consumes context) ────────────────────────────────────────────
 function AppLayout() {
@@ -120,6 +126,10 @@ function AppLayout() {
   const [explorerAssistantPanelWidthPx, setExplorerAssistantPanelWidthPx] = useState(EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX);
   const [isExplorerLeftPanelSplitVisible, setIsExplorerLeftPanelSplitVisible] = useState(false);
   const [isExplorerRightPanelSplitVisible, setIsExplorerRightPanelSplitVisible] = useState(false);
+  const [physicalLeftPanelWidthPx, setPhysicalLeftPanelWidthPx] = useState(EXPLORER_LEFT_PANEL_DEFAULT_WIDTH_PX);
+  const [physicalRightPanelWidthPx, setPhysicalRightPanelWidthPx] = useState(EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX);
+  const [isPhysicalLeftPanelSplitVisible, setIsPhysicalLeftPanelSplitVisible] = useState(false);
+  const [isPhysicalRightPanelSplitVisible, setIsPhysicalRightPanelSplitVisible] = useState(false);
   const [assistantThreadListExpanded, setAssistantThreadListExpanded] = useState(false);
   const [assistantThreadListWidthPx, setAssistantThreadListWidthPx] = useState(ASSISTANT_THREAD_LIST_DEFAULT_WIDTH_PX);
   const [shouldMountWorkflowView, setShouldMountWorkflowView] = useState(mainContentView === 'workflow');
@@ -468,6 +478,45 @@ function AppLayout() {
     })
   );
 
+  const renderPhysicalWorkspace = () => (
+    renderWorkspaceShell({
+      shellTestId: 'code-view-physical',
+      leftPanelId: 'physical-left-panel',
+      centerPanelId: 'physical-center-panel',
+      topPanelId: 'physical-main-panel',
+      bottomPanelId: 'physical-bottom-panel',
+      rightPanelId: 'physical-right-panel',
+      useLeftPanelFrame: !isPhysicalLeftPanelSplitVisible,
+      useRightPanelFrame: !isPhysicalRightPanelSplitVisible,
+      leftFixedWidthPx: physicalLeftPanelWidthPx,
+      onLeftFixedWidthChange: setPhysicalLeftPanelWidthPx,
+      rightFixedWidthPx: physicalRightPanelWidthPx,
+      onRightFixedWidthChange: setPhysicalRightPanelWidthPx,
+      rightFixedMinWidthPx: EXPLORER_RIGHT_PANEL_MIN_WIDTH_PX,
+      rightFixedMaxWidthPx: EXPLORER_RIGHT_PANEL_MAX_WIDTH_PX,
+      leftContent: (
+        <PhysicalLeftPanel
+          onSplitPanelVisibleChange={setIsPhysicalLeftPanelSplitVisible}
+        />
+      ),
+      topContent: <PhysicalMainPanel />,
+      bottomContent: ({ isMaximized, onMaximizeToggle }) => (
+        <PhysicalBottomPanel
+          isMaximized={isMaximized}
+          onClose={() => setShowBottomPanel(false)}
+          onMaximizeToggle={onMaximizeToggle}
+        />
+      ),
+      enableBottomPanelMaximize: true,
+      onBottomPanelAutoHide: () => setShowBottomPanel(false),
+      rightContent: (
+        <PhysicalRightPanel
+          onSplitPanelVisibleChange={setIsPhysicalRightPanelSplitVisible}
+        />
+      ),
+    })
+  );
+
   const renderCodePlaceholder = () => {
     const placeholder = codeViewPlaceholderConfig[activeView as keyof typeof codeViewPlaceholderConfig];
 
@@ -533,7 +582,7 @@ function AppLayout() {
               : activeView === 'synthesis'
                 ? renderPlaceholderWorkspace('synthesis', 'Synthesis')
                 : activeView === 'physical'
-                  ? renderPlaceholderWorkspace('physical', 'Physical')
+                  ? renderPhysicalWorkspace()
                   : renderCodePlaceholder())
           : null}
 
