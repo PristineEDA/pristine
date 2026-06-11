@@ -1021,7 +1021,7 @@ async function writeTerminalCommand(window: Awaited<ReturnType<typeof launchApp>
 
 function getBottomPanelTab(
   window: Awaited<ReturnType<typeof launchApp>>['window'],
-  tabId: 'terminal' | 'output' | 'problems' | 'debug' | 'lsp' | 'schematic' | 'waveform',
+  tabId: 'terminal' | 'output' | 'problems' | 'debug' | 'lsp' | 'schematic' | 'waveform' | 'synthesis',
 ) {
   return window.getByTestId(`bottom-panel-tab-${tabId}`);
 }
@@ -1034,6 +1034,30 @@ async function expectCompactPanelTabButton(tabButton: Locator) {
 
   await expect(icon).toHaveAttribute('width', '12');
   await expect(icon).toHaveAttribute('height', '12');
+}
+
+async function expectTimingStatChipBottomAligned(chip: Locator, testId: string, label: string, value: string) {
+  await expect(chip).toBeVisible();
+  await expect(chip.getByTestId(`${testId}-label`)).toHaveText(label);
+  await expect(chip.getByTestId(`${testId}-value`)).toHaveText(value);
+
+  const [iconBox, labelBox, valueBox] = await Promise.all([
+    chip.getByTestId(`${testId}-icon`).boundingBox(),
+    chip.getByTestId(`${testId}-label`).boundingBox(),
+    chip.getByTestId(`${testId}-value`).boundingBox(),
+  ]);
+
+  if (!iconBox || !labelBox || !valueBox) {
+    throw new Error(`Expected ${testId} geometry to be measurable`);
+  }
+
+  const iconBottom = iconBox.y + iconBox.height;
+  const labelBottom = labelBox.y + labelBox.height;
+  const valueBottom = valueBox.y + valueBox.height;
+
+  expect(Math.abs(iconBottom - labelBottom)).toBeLessThanOrEqual(2);
+  expect(Math.abs(valueBottom - labelBottom)).toBeLessThanOrEqual(2);
+  expect(valueBox.y).toBeGreaterThanOrEqual(labelBox.y - 1);
 }
 
 async function switchToWhiteboard(window: Awaited<ReturnType<typeof launchApp>>['window']) {
@@ -4515,9 +4539,17 @@ test('activity bar switches code subpages and menu bar keeps higher-priority pag
 
   await window.getByTestId('activity-item-synthesis').click();
   await expect(window.getByTestId('code-view-synthesis')).toBeVisible();
-  await expect(window.getByTestId('toggle-left-panel')).toBeDisabled();
-  await expect(window.getByTestId('toggle-bottom-panel')).toBeDisabled();
-  await expect(window.getByTestId('toggle-right-panel')).toBeDisabled();
+  await expect(window.getByTestId('panel-synthesis-center-panel')).toBeVisible();
+  await expect(window.getByTestId('panel-synthesis-left-panel')).toBeVisible();
+  await expect(window.getByTestId('panel-synthesis-bottom-panel')).toBeVisible();
+  await expect(window.getByTestId('panel-synthesis-right-panel')).toBeVisible();
+  await expect(window.getByTestId('synthesis-left-panel-content')).toContainText('Left Panel');
+  await expect(window.getByTestId('synthesis-main-panel-content')).toContainText('Synthesis');
+  await expect(window.getByTestId('synthesis-bottom-panel-content')).toContainText('Bottom Panel');
+  await expect(window.getByTestId('synthesis-right-panel-content')).toContainText('Right Panel');
+  await expect(window.getByTestId('toggle-left-panel')).toBeEnabled();
+  await expect(window.getByTestId('toggle-bottom-panel')).toBeEnabled();
+  await expect(window.getByTestId('toggle-right-panel')).toBeEnabled();
   await expect(window.getByTestId('toggle-activity-bar')).toBeEnabled();
   await window.getByTestId('toggle-activity-bar').click();
   await expect(window.getByTestId('activity-item-physical').getByText('Physical')).toBeVisible();
@@ -4526,6 +4558,55 @@ test('activity bar switches code subpages and menu bar keeps higher-priority pag
 
   await window.getByTestId('activity-item-physical').click();
   await expect(window.getByTestId('code-view-physical')).toBeVisible();
+  await expect(window.getByTestId('panel-physical-center-panel')).toBeVisible();
+  await expect(window.getByTestId('panel-physical-left-panel')).toBeVisible();
+  await expect(window.getByTestId('panel-physical-bottom-panel')).toBeVisible();
+  await expect(window.getByTestId('panel-physical-right-panel')).toBeVisible();
+  await expect(window.getByTestId('physical-main-panel-content')).toContainText('Physical');
+  await expect(window.getByTestId('physical-left-panel-tabs')).toBeVisible();
+  await expect(window.getByTestId('physical-left-panel-tab-layout')).toBeVisible();
+  await expect(window.getByTestId('physical-left-panel-tab-constraints')).toBeVisible();
+  await expect(window.getByTestId('physical-left-panel-split-toggle')).toBeVisible();
+  await expect(window.getByTestId('physical-right-panel-tabs')).toBeVisible();
+  await expect(window.getByTestId('physical-right-panel-tab-inspector')).toBeVisible();
+  await expect(window.getByTestId('physical-right-panel-tab-checks')).toBeVisible();
+  await expect(window.getByTestId('physical-right-panel-split-toggle')).toBeVisible();
+  await expect(window.getByTestId('physical-bottom-panel-tabs')).toBeVisible();
+  await expect(window.getByTestId('physical-bottom-panel-tab-reports')).toBeVisible();
+  await expect(window.getByTestId('physical-bottom-panel-tab-console')).toBeVisible();
+  await expect(window.getByTestId('toggle-left-panel')).toBeEnabled();
+  await expect(window.getByTestId('toggle-bottom-panel')).toBeEnabled();
+  await expect(window.getByTestId('toggle-right-panel')).toBeEnabled();
+
+  const [physicalShellBox, physicalLeftPanelBox, physicalMainPanelBox, physicalBottomPanelBox] = await Promise.all([
+    window.getByTestId('code-view-physical').boundingBox(),
+    window.getByTestId('panel-physical-left-panel').boundingBox(),
+    window.getByTestId('panel-physical-center-panel').boundingBox(),
+    window.getByTestId('panel-physical-bottom-panel').boundingBox(),
+  ]);
+
+  if (!physicalShellBox || !physicalLeftPanelBox || !physicalMainPanelBox || !physicalBottomPanelBox) {
+    throw new Error('Expected Physical workspace panel geometry to be measurable');
+  }
+
+  expect(physicalLeftPanelBox.x - physicalShellBox.x).toBeGreaterThanOrEqual(55);
+  expect(physicalLeftPanelBox.y - physicalShellBox.y).toBeGreaterThanOrEqual(8);
+  expect(physicalBottomPanelBox.y + physicalBottomPanelBox.height).toBeLessThanOrEqual(
+    physicalShellBox.y + physicalShellBox.height - 8,
+  );
+  expect(Math.abs(physicalMainPanelBox.x - physicalBottomPanelBox.x)).toBeLessThanOrEqual(2);
+
+  await window.getByTestId('physical-left-panel-split-toggle').click();
+  await expect(window.getByTestId('physical-left-panel-split-group')).toBeVisible();
+  await expect(window.getByTestId('physical-left-panel-lower-panel-content')).toContainText('Layer Details');
+  await window.getByTestId('physical-left-panel-split-toggle').click();
+  await expect(window.getByTestId('physical-left-panel-lower-panel-content')).toHaveCount(0);
+
+  await window.getByTestId('physical-right-panel-split-toggle').click();
+  await expect(window.getByTestId('physical-right-panel-split-group')).toBeVisible();
+  await expect(window.getByTestId('physical-right-panel-lower-panel-content')).toContainText('Selection Details');
+  await window.getByTestId('physical-right-panel-split-toggle').click();
+  await expect(window.getByTestId('physical-right-panel-lower-panel-content')).toHaveCount(0);
 
   await window.getByTestId('activity-item-factory').click();
   await expect(window.getByTestId('code-view-factory')).toBeVisible();
@@ -5492,12 +5573,13 @@ test('terminal tab creates a real shell session and shows command output', async
   const bottomPanelTabBar = window.getByTestId('bottom-panel-tab-bar');
   await expect(bottomPanelTabBar).not.toHaveClass(/(?:^|\s)bg-muted\/40(?:\s|$)/);
   await expect(bottomPanelTabBar).toHaveClass(/(?:^|\s)bg-ide-tab-bg(?:\s|$)/);
-  await expect(bottomPanelTabBar).toHaveClass(/(?:^|\s)border-b(?:\s|$)/);
-  await expect(bottomPanelTabBar).toHaveClass(/(?:^|\s)border-ide-border(?:\s|$)/);
+  await expect(bottomPanelTabBar).not.toHaveClass(/(?:^|\s)border-b(?:\s|$)/);
+  await expect(bottomPanelTabBar).not.toHaveClass(/(?:^|\s)border-ide-border(?:\s|$)/);
   await expectCompactPanelTabButton(getBottomPanelTab(window, 'terminal'));
   await expectCompactPanelTabButton(getBottomPanelTab(window, 'output'));
   await expectCompactPanelTabButton(getBottomPanelTab(window, 'schematic'));
   await expectCompactPanelTabButton(getBottomPanelTab(window, 'waveform'));
+  await expectCompactPanelTabButton(getBottomPanelTab(window, 'synthesis'));
 
   const terminalInput = window.locator('[data-testid="terminal-host"] .xterm-helper-textarea');
   await expect(terminalInput).toHaveCount(1);
@@ -5508,6 +5590,133 @@ test('terminal tab creates a real shell session and shows command output', async
   await expect.poll(async () => readTerminalText(window), {
     timeout: 15000,
   }).toContain(marker);
+
+  await app.close();
+});
+
+test('synthesis bottom panel renders mock treemap sankey and timing table', async () => {
+  test.slow();
+
+  const { app, window } = await launchApp();
+
+  await openBottomTerminal(window);
+  await getBottomPanelTab(window, 'synthesis').click();
+
+  const panel = window.getByTestId('synthesis-panel');
+  await expect(panel).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect(window.getByText('Module Cell Treemap')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect(window.getByText('Timing Path Sankey')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect(window.getByTestId('synthesis-treemap-header')).not.toContainText('retroSoC');
+  await expect(window.getByTestId('synthesis-sankey-header')).not.toContainText(/^timing$/i);
+  await expect(window.getByTestId('synthesis-timing-table')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect(window.getByText('Path 1', { exact: true })).toBeVisible();
+  await expect(window.getByText('Path 100', { exact: true })).toBeVisible();
+  await expect(window.getByText('Slack')).toBeVisible();
+  await expect(window.getByText('Clock Uncertainty')).toBeVisible();
+
+  const statChips = [
+    ['synthesis-timing-stat-worst', 'Worst', '5.008 ns'],
+    ['synthesis-timing-stat-levels', 'Levels', '11'],
+    ['synthesis-timing-stat-fanout', 'Fanout', '78'],
+  ] as const;
+  const timingSummary = window.getByTestId('synthesis-timing-summary');
+  await expect(timingSummary).toHaveClass(/(?:^|\s)flex-nowrap(?:\s|$)/);
+
+  const chipBoxes = await Promise.all(statChips.map(([testId]) => window.getByTestId(testId).boundingBox()));
+  if (chipBoxes.some((box) => !box)) {
+    throw new Error('Expected synthesis timing stat chip geometry to be measurable');
+  }
+
+  const [firstChipBox, ...remainingChipBoxes] = chipBoxes as NonNullable<typeof chipBoxes[number]>[];
+  remainingChipBoxes.forEach((chipBox) => {
+    expect(Math.abs(chipBox.y - firstChipBox.y)).toBeLessThanOrEqual(2);
+  });
+
+  for (const [testId, label, value] of statChips) {
+    await expectTimingStatChipBottomAligned(window.getByTestId(testId), testId, label, value);
+  }
+
+  const treemapChart = window.getByTestId('synthesis-treemap-chart');
+  const sankeyChart = window.getByTestId('synthesis-sankey-chart');
+  await expect(treemapChart.locator('canvas')).toHaveCount(1, { timeout: UI_READY_TIMEOUT_MS });
+  await expect(sankeyChart.locator('canvas')).toHaveCount(1, { timeout: UI_READY_TIMEOUT_MS });
+  await expect.poll(async () => treemapChart.boundingBox().then((box) => box?.width ?? 0), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(120);
+  await expect.poll(async () => sankeyChart.boundingBox().then((box) => box?.height ?? 0), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(40);
+
+  const treemapBox = await treemapChart.boundingBox();
+  if (!treemapBox) {
+    throw new Error('Expected synthesis treemap chart geometry to be measurable');
+  }
+  const treemapCenterX = treemapBox.x + treemapBox.width / 2;
+  const treemapCenterY = treemapBox.y + treemapBox.height / 2;
+
+  await window.mouse.click(treemapCenterX, treemapCenterY);
+  await expect(treemapChart.locator('canvas')).toHaveCount(1, { timeout: UI_READY_TIMEOUT_MS });
+  await window.mouse.move(treemapCenterX, treemapCenterY);
+  await window.mouse.wheel(0, -180);
+  await expect(treemapChart.locator('canvas')).toHaveCount(1, { timeout: UI_READY_TIMEOUT_MS });
+  await window.mouse.down();
+  await window.mouse.move(treemapCenterX + 24, treemapCenterY + 18, { steps: 4 });
+  await window.mouse.up();
+  await expect(treemapChart.locator('canvas')).toHaveCount(1, { timeout: UI_READY_TIMEOUT_MS });
+
+  const chartsPanel = window.getByTestId('panel-synthesis-charts');
+  const tablePanel = window.getByTestId('panel-synthesis-table');
+  const initialChartsWidth = await readElementPixelWidth(chartsPanel);
+  const initialTableWidth = await readElementPixelWidth(tablePanel);
+  const mainSplitHandle = window.getByTestId('synthesis-main-split-handle');
+  await expect(mainSplitHandle).toHaveClass(/(?:^|\s)!bg-transparent(?:\s|$)/);
+  const mainHandleBox = await mainSplitHandle.boundingBox();
+  if (!mainHandleBox) {
+    throw new Error('Expected synthesis main split handle geometry to be measurable');
+  }
+  expect(mainHandleBox.width).toBeLessThanOrEqual(3);
+
+  await window.mouse.move(mainHandleBox.x + mainHandleBox.width / 2, mainHandleBox.y + mainHandleBox.height / 2);
+  await window.mouse.down();
+  await window.mouse.move(mainHandleBox.x + mainHandleBox.width / 2 + 90, mainHandleBox.y + mainHandleBox.height / 2, { steps: 8 });
+  await window.mouse.up();
+
+  await expect.poll(async () => {
+    const [nextChartsWidth, nextTableWidth] = await Promise.all([
+      readElementPixelWidth(chartsPanel),
+      readElementPixelWidth(tablePanel),
+    ]);
+
+    return Math.abs(nextChartsWidth - initialChartsWidth) + Math.abs(nextTableWidth - initialTableWidth);
+  }, { timeout: UI_READY_TIMEOUT_MS }).toBeGreaterThan(16);
+  await expect(treemapChart.locator('canvas')).toHaveCount(1, { timeout: UI_READY_TIMEOUT_MS });
+  await expect(sankeyChart.locator('canvas')).toHaveCount(1, { timeout: UI_READY_TIMEOUT_MS });
+
+  const treemapPanel = window.getByTestId('panel-synthesis-treemap');
+  const sankeyPanel = window.getByTestId('panel-synthesis-sankey');
+  const leftSplitHandle = window.getByTestId('synthesis-left-split-handle');
+  await expect(leftSplitHandle).toHaveClass(/(?:^|\s)!bg-transparent(?:\s|$)/);
+  const leftHandleBox = await leftSplitHandle.boundingBox();
+  if (!leftHandleBox) {
+    throw new Error('Expected synthesis left split handle geometry to be measurable');
+  }
+  expect(leftHandleBox.height).toBeLessThanOrEqual(3);
+
+  await window.mouse.move(leftHandleBox.x + leftHandleBox.width / 2, leftHandleBox.y + leftHandleBox.height / 2);
+  await window.mouse.down();
+  await window.mouse.move(leftHandleBox.x + leftHandleBox.width / 2, leftHandleBox.y + leftHandleBox.height / 2 + 55, { steps: 8 });
+  await window.mouse.up();
+
+  await expect.poll(async () => {
+    const [treemapHeight, sankeyHeight] = await Promise.all([
+      readElementPixelHeight(treemapPanel),
+      readElementPixelHeight(sankeyPanel),
+    ]);
+
+    return Math.min(treemapHeight, sankeyHeight);
+  }, { timeout: UI_READY_TIMEOUT_MS }).toBeGreaterThan(40);
+  await expect(treemapChart.locator('canvas')).toHaveCount(1, { timeout: UI_READY_TIMEOUT_MS });
+  await expect(sankeyChart.locator('canvas')).toHaveCount(1, { timeout: UI_READY_TIMEOUT_MS });
 
   await app.close();
 });

@@ -113,6 +113,10 @@ vi.mock('./waveform/WaveformPanel', () => ({
   WaveformPanel: () => <div data-testid="waveform-panel">Waveform mock</div>,
 }));
 
+vi.mock('./SynthesisPanel', () => ({
+  SynthesisPanel: () => <div data-testid="synthesis-panel">Synthesis mock</div>,
+}));
+
 vi.mock('./TerminalPanel', async () => {
   const React = await import('react');
 
@@ -143,7 +147,7 @@ vi.mock('./TerminalPanel', async () => {
 
 type TestUser = ReturnType<typeof userEvent.setup>;
 
-type BottomPanelTabId = 'terminal' | 'output' | 'problems' | 'debug' | 'lsp' | 'schematic' | 'waveform';
+type BottomPanelTabId = 'terminal' | 'output' | 'problems' | 'debug' | 'lsp' | 'schematic' | 'waveform' | 'synthesis';
 
 async function clickButton(user: TestUser, name: string | RegExp) {
   await user.click(screen.getByRole('button', { name }));
@@ -287,7 +291,8 @@ describe('BottomPanel', () => {
 
     render(<BottomPanel onClose={onClose} />);
 
-    expect(screen.getByTestId('bottom-panel-tab-bar')).toHaveClass('bg-ide-tab-bg', 'border-b', 'border-ide-border');
+    expect(screen.getByTestId('bottom-panel-tab-bar')).toHaveClass('bg-ide-tab-bg');
+    expect(screen.getByTestId('bottom-panel-tab-bar')).not.toHaveClass('border-b', 'border-ide-border');
     expect(screen.getByTestId('bottom-panel-tab-problems')).toHaveAccessibleName('Problems');
 
     await clickBottomTab(user, 'problems');
@@ -310,6 +315,9 @@ describe('BottomPanel', () => {
 
     await clickBottomTab(user, 'waveform');
     expect(await screen.findByTestId('waveform-panel')).toBeInTheDocument();
+
+    await clickBottomTab(user, 'synthesis');
+    expect(await screen.findByTestId('synthesis-panel')).toBeInTheDocument();
 
     await clickButton(user, /close panel/i);
     expect(terminateTerminalSessionMock).toHaveBeenCalled();
@@ -357,7 +365,8 @@ describe('BottomPanel', () => {
     expect(container.firstChild).not.toHaveClass('border');
     expect(container.firstChild).not.toHaveClass('border-t');
     expect(screen.getByTestId('bottom-panel-tab-bar')).toHaveClass('h-9', 'gap-1.5', 'px-1.5');
-    expect(screen.getByTestId('bottom-panel-tab-bar')).toHaveClass('bg-ide-tab-bg', 'border-b', 'border-ide-border');
+    expect(screen.getByTestId('bottom-panel-tab-bar')).toHaveClass('bg-ide-tab-bg');
+    expect(screen.getByTestId('bottom-panel-tab-bar')).not.toHaveClass('border-b', 'border-ide-border');
     expect(screen.getByTestId('bottom-panel-tab-group')).toHaveAttribute('aria-label', 'Bottom panel tabs');
     expectCompactTabButton('bottom-panel-tab-terminal');
     expectCompactTabButton('bottom-panel-tab-output');
@@ -366,9 +375,38 @@ describe('BottomPanel', () => {
     expectCompactTabButton('bottom-panel-tab-lsp');
     expectCompactTabButton('bottom-panel-tab-schematic');
     expectCompactTabButton('bottom-panel-tab-waveform');
+    expectCompactTabButton('bottom-panel-tab-synthesis');
     expect(screen.getByTestId('bottom-panel-tab-terminal')).toHaveAccessibleName('Terminal');
     expect(screen.getByTestId('bottom-panel-tab-schematic')).toHaveAccessibleName('Schematic');
     expect(screen.getByTestId('bottom-panel-tab-waveform')).toHaveAccessibleName('Waveform');
+    expect(screen.getByTestId('bottom-panel-tab-synthesis')).toHaveAccessibleName('Synthesis');
     expect(screen.getByTestId('bottom-panel-tab-terminal')).toHaveAttribute('data-state', 'on');
+  });
+
+  it('adds Synthesis as the final bottom-panel tab', () => {
+    render(<BottomPanel />);
+
+    const tabItems = [
+      'terminal',
+      'output',
+      'problems',
+      'debug',
+      'lsp',
+      'schematic',
+      'waveform',
+      'synthesis',
+    ].map((tabId) => screen.getByTestId(`bottom-panel-tab-${tabId}`));
+
+    expect(tabItems.map((button) => button.getAttribute('data-testid'))).toEqual([
+      'bottom-panel-tab-terminal',
+      'bottom-panel-tab-output',
+      'bottom-panel-tab-problems',
+      'bottom-panel-tab-debug',
+      'bottom-panel-tab-lsp',
+      'bottom-panel-tab-schematic',
+      'bottom-panel-tab-waveform',
+      'bottom-panel-tab-synthesis',
+    ]);
+    expect(screen.getByTestId('bottom-panel-tab-synthesis').querySelector('svg')).toHaveClass('lucide-network');
   });
 });

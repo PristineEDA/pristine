@@ -106,7 +106,7 @@ export function getBottomPanelClassName(layoutMode: CodeViewerLayoutMode) {
 
 export function getBottomPanelTabBarClassName(layoutMode: CodeViewerLayoutMode) {
   return cn(
-    'flex items-center shrink-0 bg-ide-tab-bg text-ide-text border-b border-ide-border',
+    'flex items-center shrink-0 bg-ide-tab-bg text-ide-text',
     isMinimalCodeViewerLayout(layoutMode) ? 'h-9 gap-1.5 px-1.5 rounded-t-md' : 'h-8 gap-1 px-1',
   );
 }

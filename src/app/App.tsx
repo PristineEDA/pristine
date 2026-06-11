@@ -20,6 +20,12 @@ import {
   EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX,
 } from './components/code/shared/CodeWorkspaceShell';
 import { AppStatusBar } from './components/code/shared/statusBars/AppStatusBar';
+import {
+  PhysicalBottomPanel,
+  PhysicalLeftPanel,
+  PhysicalMainPanel,
+  PhysicalRightPanel,
+} from './components/code/physical/PhysicalWorkspacePanels';
 import { QuickOpenPalette } from './components/code/shared/QuickOpenPalette';
 import { isMonacoTextInputFocused } from './editor/focusEditor';
 import {
@@ -67,23 +73,13 @@ const PlaceholderView = ({
 );
 
 const codeViewPlaceholderConfig = {
-  simulation: {
-    title: 'Simulation',
-    testId: 'code-view-simulation',
-  },
-  synthesis: {
-    title: 'Synthesis',
-    testId: 'code-view-synthesis',
-  },
-  physical: {
-    title: 'Physical Design',
-    testId: 'code-view-physical',
-  },
   factory: {
     title: 'Factory',
     testId: 'code-view-factory',
   },
 } as const;
+
+type PlaceholderWorkspaceView = 'simulation' | 'synthesis';
 
 // ─── AppLayout (consumes context) ────────────────────────────────────────────
 function AppLayout() {
@@ -130,6 +126,10 @@ function AppLayout() {
   const [explorerAssistantPanelWidthPx, setExplorerAssistantPanelWidthPx] = useState(EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX);
   const [isExplorerLeftPanelSplitVisible, setIsExplorerLeftPanelSplitVisible] = useState(false);
   const [isExplorerRightPanelSplitVisible, setIsExplorerRightPanelSplitVisible] = useState(false);
+  const [physicalLeftPanelWidthPx, setPhysicalLeftPanelWidthPx] = useState(EXPLORER_LEFT_PANEL_DEFAULT_WIDTH_PX);
+  const [physicalRightPanelWidthPx, setPhysicalRightPanelWidthPx] = useState(EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX);
+  const [isPhysicalLeftPanelSplitVisible, setIsPhysicalLeftPanelSplitVisible] = useState(false);
+  const [isPhysicalRightPanelSplitVisible, setIsPhysicalRightPanelSplitVisible] = useState(false);
   const [assistantThreadListExpanded, setAssistantThreadListExpanded] = useState(false);
   const [assistantThreadListWidthPx, setAssistantThreadListWidthPx] = useState(ASSISTANT_THREAD_LIST_DEFAULT_WIDTH_PX);
   const [shouldMountWorkflowView, setShouldMountWorkflowView] = useState(mainContentView === 'workflow');
@@ -463,18 +463,57 @@ function AppLayout() {
     })
   );
 
-  const renderSimulationWorkspace = () => (
+  const renderPlaceholderWorkspace = (viewId: PlaceholderWorkspaceView, mainTitle: string) => (
     renderWorkspaceShell({
-      shellTestId: 'code-view-simulation',
-      leftPanelId: 'simulation-left-panel',
-      centerPanelId: 'simulation-center-panel',
-      topPanelId: 'simulation-main-panel',
-      bottomPanelId: 'simulation-bottom-panel',
-      rightPanelId: 'simulation-right-panel',
-      leftContent: renderPanelPlaceholder('Left Panel', 'simulation-left-panel-content'),
-      topContent: renderPanelPlaceholder('Simulation Workspace', 'simulation-main-panel-content'),
-      bottomContent: renderPanelPlaceholder('Bottom Panel', 'simulation-bottom-panel-content'),
-      rightContent: renderPanelPlaceholder('Right Panel', 'simulation-right-panel-content'),
+      shellTestId: `code-view-${viewId}`,
+      leftPanelId: `${viewId}-left-panel`,
+      centerPanelId: `${viewId}-center-panel`,
+      topPanelId: `${viewId}-main-panel`,
+      bottomPanelId: `${viewId}-bottom-panel`,
+      rightPanelId: `${viewId}-right-panel`,
+      leftContent: renderPanelPlaceholder('Left Panel', `${viewId}-left-panel-content`),
+      topContent: renderPanelPlaceholder(mainTitle, `${viewId}-main-panel-content`),
+      bottomContent: renderPanelPlaceholder('Bottom Panel', `${viewId}-bottom-panel-content`),
+      rightContent: renderPanelPlaceholder('Right Panel', `${viewId}-right-panel-content`),
+    })
+  );
+
+  const renderPhysicalWorkspace = () => (
+    renderWorkspaceShell({
+      shellTestId: 'code-view-physical',
+      leftPanelId: 'physical-left-panel',
+      centerPanelId: 'physical-center-panel',
+      topPanelId: 'physical-main-panel',
+      bottomPanelId: 'physical-bottom-panel',
+      rightPanelId: 'physical-right-panel',
+      useLeftPanelFrame: !isPhysicalLeftPanelSplitVisible,
+      useRightPanelFrame: !isPhysicalRightPanelSplitVisible,
+      leftFixedWidthPx: physicalLeftPanelWidthPx,
+      onLeftFixedWidthChange: setPhysicalLeftPanelWidthPx,
+      rightFixedWidthPx: physicalRightPanelWidthPx,
+      onRightFixedWidthChange: setPhysicalRightPanelWidthPx,
+      rightFixedMinWidthPx: EXPLORER_RIGHT_PANEL_MIN_WIDTH_PX,
+      rightFixedMaxWidthPx: EXPLORER_RIGHT_PANEL_MAX_WIDTH_PX,
+      leftContent: (
+        <PhysicalLeftPanel
+          onSplitPanelVisibleChange={setIsPhysicalLeftPanelSplitVisible}
+        />
+      ),
+      topContent: <PhysicalMainPanel />,
+      bottomContent: ({ isMaximized, onMaximizeToggle }) => (
+        <PhysicalBottomPanel
+          isMaximized={isMaximized}
+          onClose={() => setShowBottomPanel(false)}
+          onMaximizeToggle={onMaximizeToggle}
+        />
+      ),
+      enableBottomPanelMaximize: true,
+      onBottomPanelAutoHide: () => setShowBottomPanel(false),
+      rightContent: (
+        <PhysicalRightPanel
+          onSplitPanelVisibleChange={setIsPhysicalRightPanelSplitVisible}
+        />
+      ),
     })
   );
 
@@ -539,8 +578,12 @@ function AppLayout() {
           ? (activeView === 'explorer'
             ? renderExplorerWorkspace()
             : activeView === 'simulation'
-              ? renderSimulationWorkspace()
-              : renderCodePlaceholder())
+              ? renderPlaceholderWorkspace('simulation', 'Simulation Workspace')
+              : activeView === 'synthesis'
+                ? renderPlaceholderWorkspace('synthesis', 'Synthesis')
+                : activeView === 'physical'
+                  ? renderPhysicalWorkspace()
+                  : renderCodePlaceholder())
           : null}
 
         {renderDeferredMainContentLayer({

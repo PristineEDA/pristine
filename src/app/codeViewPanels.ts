@@ -38,13 +38,21 @@ export const DEFAULT_PANEL_STATE_BY_CODE_VIEW: Record<CodeView, PanelVisibilityS
     showBottomPanel: true,
     showRightPanel: true,
   },
-  synthesis: EMPTY_PANEL_STATE,
-  physical: EMPTY_PANEL_STATE,
+  synthesis: {
+    showLeftPanel: true,
+    showBottomPanel: true,
+    showRightPanel: true,
+  },
+  physical: {
+    showLeftPanel: true,
+    showBottomPanel: true,
+    showRightPanel: true,
+  },
   factory: EMPTY_PANEL_STATE,
 };
 
 export function codeViewSupportsPanels(view: CodeView): boolean {
-  return view === 'explorer' || view === 'simulation';
+  return view === 'explorer' || view === 'simulation' || view === 'synthesis' || view === 'physical';
 }
 
 export function canToggleLayoutPanels(mainContentView: MainContentView, activeView: CodeView): boolean {

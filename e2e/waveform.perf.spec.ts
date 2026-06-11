@@ -9,6 +9,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const fixtureWorkspace = path.join(__dirname, '..', 'test', 'fixtures', 'workspace');
 const releaseRoot = path.join(__dirname, '..', 'release');
 const UI_READY_TIMEOUT_MS = 60000;
+const waveformViewportCommitSettleMs = 180;
 
 interface StartupWindowEntry {
   page: Page;
@@ -261,6 +262,8 @@ async function readCanvasStats(canvasHost: ReturnType<Page['getByTestId']>) {
     suppressedLabelCount: await readNumber('data-suppressed-label-count'),
     transformOnlyPanCount: await readNumber('data-transform-only-pan-count'),
     cursorUpdateCount: await readNumber('data-cursor-update-count'),
+    selectionOverlayUpdateCount: await readNumber('data-selection-overlay-update-count'),
+    selectionSegmentRebuildCount: await readNumber('data-selection-segment-rebuild-count'),
     selectionUpdateCount: await readNumber('data-selection-update-count'),
     sceneUpdateMs: await readNumber('data-scene-update-ms'),
     visibleRowCount: await readNumber('data-visible-row-count'),
@@ -407,6 +410,8 @@ function diffInteractionMetrics(
     rowRecycleCount: end.rowRecycleCount - start.rowRecycleCount,
     rowReuseCount: end.rowReuseCount - start.rowReuseCount,
     cursorUpdateCount: end.cursorUpdateCount - start.cursorUpdateCount,
+    selectionOverlayUpdateCount: end.selectionOverlayUpdateCount - start.selectionOverlayUpdateCount,
+    selectionSegmentRebuildCount: end.selectionSegmentRebuildCount - start.selectionSegmentRebuildCount,
     selectionUpdateCount: end.selectionUpdateCount - start.selectionUpdateCount,
     transformOnlyPanCount: end.transformOnlyPanCount - start.transformOnlyPanCount,
     verticalScrollUpdateCount: end.verticalScrollUpdateCount - start.verticalScrollUpdateCount,
@@ -718,6 +723,7 @@ test('packaged waveform sustained 10s viewport and interaction perf', async () =
     await waitForNextRender(canvasHost, async () => {
       await zoomInButton.click();
     });
+    await window.waitForTimeout(waveformViewportCommitSettleMs);
 
     const jsHeapBefore = await readJsHeapBytes(window);
     const samples: Array<Awaited<ReturnType<typeof capturePerfSample>>> = [];
@@ -929,12 +935,36 @@ test('packaged waveform sustained 10s viewport and interaction perf', async () =
       expect(panDelta.gpuBufferReallocCount).toBe(0);
     }
     expect(panDelta.rowReuseCount).toBeGreaterThanOrEqual(panDelta.viewportContentUpdateCount * panVisibleRowCount);
+    expect(panDelta.displayViewportOnlyUpdateCount).toBe(panDelta.viewportContentUpdateCount);
+    expect(panDelta.reactViewportCommitCount).toBe(0);
+    expect(panDelta.idleViewportCommitCount).toBe(0);
+    expect(panDelta.gpuBufferUpdateCount).toBe(0);
+    expect(panDelta.glyphBufferUpdateCount).toBe(0);
+    const observedGpuActiveIndexCount = Math.max(
+      finalStats.gpuActiveIndexCount,
+      panDelta.gpuActiveIndexCount,
+      zoomDelta.gpuActiveIndexCount,
+      rapidMixedDelta.gpuActiveIndexCount,
+      verticalThenInteractDelta.gpuActiveIndexCount,
+    );
+    const observedGlyphActiveIndexCount = Math.max(
+      finalStats.glyphActiveIndexCount,
+      panDelta.glyphActiveIndexCount,
+      zoomDelta.glyphActiveIndexCount,
+      rapidMixedDelta.glyphActiveIndexCount,
+      verticalThenInteractDelta.glyphActiveIndexCount,
+    );
+    const observedGlyphVertexCount = Math.max(
+      finalStats.glyphVertexCount,
+      ...samples.map((sample) => sample.canvasStats.glyphVertexCount),
+    );
+
     expect(finalStats.gpuDrawLayerCount).toBeLessThanOrEqual(8);
     expect(finalStats.explicitDrawCountEnabled).toBe('true');
-    expect(finalStats.gpuActiveIndexCount).toBeGreaterThan(0);
+    expect(observedGpuActiveIndexCount).toBeGreaterThan(0);
     expect(finalStats.glyphAtlasTextureCount).toBeGreaterThanOrEqual(1);
-    expect(finalStats.glyphActiveIndexCount).toBeGreaterThan(0);
-    expect(finalStats.glyphVertexCount).toBeGreaterThan(0);
+    expect(observedGlyphActiveIndexCount).toBeGreaterThan(0);
+    expect(observedGlyphVertexCount).toBeGreaterThan(0);
     expect(panDelta.labelTextureUpdateCount).toBe(0);
     expect(panDelta.glyphBufferReallocCount).toBe(0);
     expect(panDelta.gpuBufferDataReplaceCount).toBe(0);
@@ -952,10 +982,10 @@ test('packaged waveform sustained 10s viewport and interaction perf', async () =
     expect(cursorDelta.fullSceneRebuildCount).toBe(0);
     expect(cursorDelta.cursorUpdateCount).toBeGreaterThan(0);
     expect(cursorDelta.viewportContentUpdateCount).toBe(0);
-    if (strictPackagedHotPathMetrics) {
-      expect(selectionDelta.fullSceneRebuildCount).toBe(0);
-    }
+    expect(selectionDelta.fullSceneRebuildCount).toBe(0);
     expect(selectionDelta.selectionUpdateCount).toBeGreaterThan(0);
+    expect(selectionDelta.selectionOverlayUpdateCount).toBeGreaterThan(0);
+    expect(selectionDelta.selectionSegmentRebuildCount).toBe(0);
     expect(selectionDelta.viewportContentUpdateCount).toBe(0);
     expect(rapidMixedDelta.fullSceneRebuildCount).toBe(0);
     expect(rapidMixedDelta.viewportContentUpdateCount).toBeGreaterThan(0);
@@ -963,7 +993,7 @@ test('packaged waveform sustained 10s viewport and interaction perf', async () =
     expect(largeRangeDelta.viewportContentUpdateCount).toBeGreaterThan(0);
     expect(extremeZoomDelta.fullSceneRebuildCount).toBe(0);
     expect(extremeZoomDelta.viewportContentUpdateCount).toBeGreaterThan(0);
-    expect(verticalThenInteractDelta.fullSceneRebuildCount).toBeLessThanOrEqual(1);
+    expect(verticalThenInteractDelta.fullSceneRebuildCount).toBe(0);
     expect(verticalThenInteractDelta.verticalScrollUpdateCount).toBeGreaterThan(0);
     expect(verticalThenInteractDelta.viewportContentUpdateCount).toBeGreaterThan(0);
     expect(panVisibleRowCounts).toHaveLength(1);

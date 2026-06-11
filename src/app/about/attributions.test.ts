@@ -20,6 +20,7 @@ const directRuntimeDependencyAttributionIds = new Map([
   ['class-variance-authority', 'class-variance-authority'],
   ['clsx', 'clsx'],
   ['cmdk', 'cmdk'],
+  ['echarts', 'echarts'],
   ['elkjs', 'elkjs'],
   ['ignore', 'ignore'],
   ['jsonc-parser', 'jsonc-parser'],

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BitmapText, Container, Text } from 'pixi.js';
 
-import { clipWaveformLineToBounds, createWaveformScene, getWaveformBusHexagonBevel, getWaveformBusLabelBounds, getWaveformBusSpecialStateHexDigitWidth, getWaveformBusSpecialStateLabelText, getWaveformDigitalSegmentStrokeWidth, getWaveformDigitalSpecialStateBounds, getWaveformFittedBusLabelText, updateWaveformSceneCursor, updateWaveformScenePan, updateWaveformSceneSelection, updateWaveformSceneVerticalScroll, updateWaveformSceneViewport, waveformHighImpedanceStripeSpacing, waveformLayerNames, waveformUnknownStripeSpacing } from './createWaveformScene';
+import { clipWaveformLineToBounds, createWaveformScene, getWaveformBusHexagonBevel, getWaveformBusLabelBounds, getWaveformBusSpecialStateHexDigitWidth, getWaveformBusSpecialStateLabelText, getWaveformDigitalSegmentStrokeWidth, getWaveformDigitalSpecialStateBounds, getWaveformFittedBusLabelText, updateWaveformSceneCursor, updateWaveformSceneFrame, updateWaveformScenePan, updateWaveformSceneSelection, updateWaveformSceneVerticalScroll, updateWaveformSceneViewport, waveformHighImpedanceStripeSpacing, waveformLayerNames, waveformUnknownStripeSpacing } from './createWaveformScene';
 import { fitWaveformViewport, getInitialWaveformViewport, getWaveformCanvasHeightForData, getWaveformDigitalPulseFillCount, getWaveformDisplayRows, getWaveformRulerScrollIndicatorMetrics, getWaveformShapeCounts, getWaveformSignalLaneY, timeToX, waveformHeaderHeight } from './waveformLayout';
 import { createWaveformBinaryFrameFromDataset, parseWaveformBinaryFrame, WaveformBinaryValueKind, waveformBinaryFrameVersionV2, type WaveformBinaryFrameSegmentInput } from './waveformBinaryFrame';
 import { createWaveformFixtureFrame, waveformFixtureData, waveformTransitionFixtureData as mockWaveformData } from './waveformTestFixtures';
@@ -590,6 +590,36 @@ describe('createWaveformScene', () => {
     expect(toggledRowAfter?.contentMetrics.renderedSegmentCount ?? -1).toBe(0);
     expect(scene.renderStats.renderedSignalCount).toBe(0);
     expect(scene.renderStats.renderedSegmentCount).toBe(0);
+
+    scene.world.destroy({ children: true });
+  });
+
+  it('swaps binary frames without replacing the Pixi world or batch renderer', () => {
+    const viewport = { startTime: 0, endTime: 100 };
+    const frame = createBinaryFrameFromTransitions(mockWaveformData, viewport, 900);
+    const scene = createWaveformScene({
+      cursorTime: mockWaveformData.cursorTime,
+      data: mockWaveformData,
+      frame,
+      height: 320,
+      selectedSignalId: null,
+      viewport,
+      width: 900,
+    });
+    const originalWorld = scene.world;
+    const originalGpuBatchRenderer = scene.state.gpuBatchRenderer;
+    const originalContentLayer = scene.layers.content;
+    const nextFrame = createBinaryFrameFromTransitions(mockWaveformData, { startTime: 20, endTime: 120 }, 900);
+
+    updateWaveformSceneFrame(scene, mockWaveformData, nextFrame);
+
+    expect(scene.world).toBe(originalWorld);
+    expect(scene.layers.content).toBe(originalContentLayer);
+    expect(scene.state.gpuBatchRenderer).toBe(originalGpuBatchRenderer);
+    expect(scene.state.frame).toBe(nextFrame);
+    expect(scene.renderStats.visibleRowCount).toBeGreaterThan(0);
+    expect(scene.renderStats.fullSceneRebuildCount).toBe(0);
+    expect(scene.renderStats.explicitDrawCountEnabled).toBe(1);
 
     scene.world.destroy({ children: true });
   });
