@@ -1,6 +1,7 @@
-import { BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain } from 'electron';
 import * as childProcess from 'node:child_process';
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
@@ -27,6 +28,9 @@ import type {
   LspFoldingRange,
   LspHover,
   LspInlayHint,
+  LspLayoutGeometryOptions,
+  LspLayoutOpenOptions,
+  LspLayoutOpenResult,
   LspMarkupContent,
   LspModuleHierarchy,
   LspModuleHierarchyNode,
@@ -68,6 +72,13 @@ import {
   openWaveformPipeSession,
   requestWaveformPipeFrame,
 } from './waveformPipeClient.js';
+import {
+  closeAllLayoutPipeSessions,
+  closeLayoutPipeSession,
+  normalizeLayoutOpenSessionMetadata,
+  openLayoutPipeSession,
+  requestLayoutPipeGeometry,
+} from './layoutPipeClient.js';
 
 interface TrackedDocument {
   filePath: string;
@@ -95,7 +106,16 @@ const LSP_INITIALIZE_TIMEOUT_MS = 30_000;
 const LSP_OUTLINE_TIMEOUT_MS = 30_000;
 const LSP_MODULE_HIERARCHY_TIMEOUT_MS = 30_000;
 const LSP_WAVEFORM_TIMEOUT_MS = 30_000;
+const LSP_LAYOUT_TIMEOUT_MS = 30_000;
 const LSP_DEBUG_EVENT_LIMIT = 200;
+const DEFAULT_IHP_STDCELL_LEF_FILE_NAME = 'sg13g2_stdcell.lef';
+const DEFAULT_IHP_STDCELL_LEF_DEP_PATH = [
+  'ihp-sg13g2',
+  'libs.ref',
+  'sg13g2_stdcell',
+  'lef',
+  DEFAULT_IHP_STDCELL_LEF_FILE_NAME,
+] as const;
 
 interface SendDebugRequestOptions {
   timeoutMs?: number;
@@ -194,6 +214,50 @@ function fileUriToAbsolutePath(uri: string): string | null {
 
 function getDocumentUri(filePath: string): string {
   return absolutePathToFileUri(resolveWorkspaceFilePath(filePath));
+}
+
+function getProjectPathModule(): typeof path {
+  return isWindowsAbsolutePath(getProjectRoot()) ? path.win32 : path;
+}
+
+function getDevelopmentApplicationRoot(): string {
+  const appPath = app.getAppPath();
+  const pathModule = isWindowsAbsolutePath(appPath) ? path.win32 : path;
+  const resolvedAppPath = pathModule.resolve(appPath);
+  return pathModule.basename(resolvedAppPath) === 'dist-electron'
+    ? pathModule.resolve(resolvedAppPath, '..')
+    : resolvedAppPath;
+}
+
+function resolveDefaultIhpStdcellLefSourcePath(): string {
+  const appRoot = getDevelopmentApplicationRoot();
+  const pathModule = isWindowsAbsolutePath(appRoot) ? path.win32 : path;
+  return pathModule.join(
+    pathModule.dirname(appRoot),
+    'pristine-engine',
+    '.deps',
+    'src',
+    'ihp-open-pdk',
+    ...DEFAULT_IHP_STDCELL_LEF_DEP_PATH,
+  );
+}
+
+function prepareDefaultLayoutLefUri(): string {
+  const root = getProjectRoot();
+  const pathModule = getProjectPathModule();
+  const sourcePath = resolveDefaultIhpStdcellLefSourcePath();
+  if (!fs.existsSync(sourcePath)) {
+    throw new Error(`IHP Open PDK stdcell LEF not found at ${sourcePath}. Bootstrap IHP Open PDK in pristine-engine first.`);
+  }
+
+  const destinationDirectory = pathModule.join(root, '.pristine', 'layout');
+  const destinationPath = pathModule.join(destinationDirectory, DEFAULT_IHP_STDCELL_LEF_FILE_NAME);
+  fs.mkdirSync(destinationDirectory, { recursive: true });
+  if (!fs.existsSync(destinationPath)) {
+    fs.copyFileSync(sourcePath, destinationPath);
+  }
+
+  return absolutePathToFileUri(destinationPath);
 }
 
 function getRelativeWorkspaceFilePath(uri: string): string | null {
@@ -1571,6 +1635,35 @@ function createEmptyWaveformOpenResult(message: string): LspWaveformOpenResult {
   };
 }
 
+function createEmptyLayoutOpenResult(message: string): LspLayoutOpenResult {
+  return {
+    sessionId: '',
+    protocol: 'pristine-layout-columnar-v1',
+    title: 'Layout',
+    lefCount: 0,
+    defPresent: false,
+    unitsPerMicron: 0,
+    bbox: null,
+    layerCount: 0,
+    macroCount: 0,
+    componentCount: 0,
+    netCount: 0,
+    diagnosticCount: 0,
+    fileUris: [],
+    messages: [message],
+    catalog: {
+      unitsPerMicron: 0,
+      hasBounds: false,
+      layers: [],
+      macros: [],
+      vias: [],
+      components: [],
+      nets: [],
+      diagnostics: [],
+    },
+  };
+}
+
 function normalizeWaveformFrameOptions(value: unknown): LspWaveformFrameOptions {
   if (!value || typeof value !== 'object') {
     throw new Error('Expected waveform frame options.');
@@ -1628,6 +1721,101 @@ function normalizeWaveformFrameOptions(value: unknown): LspWaveformFrameOptions 
     viewportEndTime: typeof candidate.viewportEndTime === 'number' ? candidate.viewportEndTime : undefined,
     viewportStartTime: typeof candidate.viewportStartTime === 'number' ? candidate.viewportStartTime : undefined,
   };
+}
+
+function normalizeLayoutOpenOptions(value: unknown): LspLayoutOpenOptions {
+  if (value === undefined || value === null) {
+    return {};
+  }
+
+  if (typeof value !== 'object') {
+    throw new Error('Expected layout open options.');
+  }
+
+  const candidate = value as {
+    defUri?: unknown;
+    lefUris?: unknown;
+    title?: unknown;
+  };
+  assertOptionalString(candidate.defUri, 'defUri');
+  assertOptionalString(candidate.title, 'title');
+
+  if (candidate.lefUris !== undefined && !Array.isArray(candidate.lefUris)) {
+    throw new Error('Expected string array or undefined for "lefUris".');
+  }
+
+  return {
+    defUri: candidate.defUri,
+    lefUris: Array.isArray(candidate.lefUris)
+      ? candidate.lefUris.filter((entry): entry is string => typeof entry === 'string' && entry.length > 0)
+      : undefined,
+    title: candidate.title,
+  };
+}
+
+function normalizeLayoutGeometryOptions(value: unknown): LspLayoutGeometryOptions {
+  if (!value || typeof value !== 'object') {
+    throw new Error('Expected layout geometry options.');
+  }
+
+  const candidate = value as {
+    bbox?: unknown;
+    layerIndices?: unknown;
+    maxShapes?: unknown;
+    sessionId?: unknown;
+    shapeKinds?: unknown;
+  };
+  const sessionId = candidate.sessionId;
+  assertString(sessionId, 'sessionId');
+
+  if (candidate.maxShapes !== undefined && (
+    typeof candidate.maxShapes !== 'number'
+    || !Number.isInteger(candidate.maxShapes)
+    || candidate.maxShapes < 0
+  )) {
+    throw new Error('Expected non-negative integer or undefined for "maxShapes".');
+  }
+
+  return {
+    sessionId,
+    bbox: normalizeLayoutRequestBounds(candidate.bbox),
+    maxShapes: typeof candidate.maxShapes === 'number' ? candidate.maxShapes : undefined,
+    layerIndices: normalizeIntegerArray(candidate.layerIndices, 'layerIndices'),
+    shapeKinds: normalizeIntegerArray(candidate.shapeKinds, 'shapeKinds'),
+  };
+}
+
+function normalizeLayoutRequestBounds(value: unknown): LspLayoutGeometryOptions['bbox'] {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!value || typeof value !== 'object') {
+    throw new Error('Expected layout bbox object.');
+  }
+
+  const candidate = value as { x0?: unknown; y0?: unknown; x1?: unknown; y1?: unknown };
+  const x0 = candidate.x0;
+  const y0 = candidate.y0;
+  const x1 = candidate.x1;
+  const y1 = candidate.y1;
+  assertNumber(x0, 'bbox.x0');
+  assertNumber(y0, 'bbox.y0');
+  assertNumber(x1, 'bbox.x1');
+  assertNumber(y1, 'bbox.y1');
+  return { x0, y0, x1, y1 };
+}
+
+function normalizeIntegerArray(value: unknown, name: string): number[] | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!Array.isArray(value)) {
+    throw new Error(`Expected number array or undefined for "${name}".`);
+  }
+
+  return value.filter((entry): entry is number => Number.isInteger(entry) && entry >= 0);
 }
 
 function normalizeSchematicOptions(value: unknown): LspSchematicOptions {
@@ -1938,6 +2126,7 @@ export function setLspProjectRoot(root: string): void {
 
 export function disposeLspSession(): void {
   void closeAllWaveformPipeSessions();
+  void closeAllLayoutPipeSessions();
 
   if (activeSession) {
     cleanupSession(activeSession);
@@ -2630,6 +2819,52 @@ export function registerLspHandlers(getMainWindow: () => BrowserWindow | null): 
     return withInitializedSession(getMainWindow, async (session) => {
       await sendDebugRequest(session, getMainWindow, 'systemverilog/waveform/close', { sessionId }, {
         timeoutMs: LSP_WAVEFORM_TIMEOUT_MS,
+      });
+
+      return true;
+    });
+  });
+
+  ipcMain.handle(AsyncChannels.LSP_LAYOUT_OPEN, async (_event, options?: unknown) => {
+    const normalizedOptions = normalizeLayoutOpenOptions(options);
+    const lefUris = normalizedOptions.lefUris && normalizedOptions.lefUris.length > 0
+      ? normalizedOptions.lefUris
+      : [prepareDefaultLayoutLefUri()];
+
+    return withInitializedSession(getMainWindow, async (session) => {
+      try {
+        const result = await sendDebugRequest(session, getMainWindow, 'systemverilog/layout/open', {
+          defUri: normalizedOptions.defUri,
+          lefUris,
+          title: normalizedOptions.title ?? DEFAULT_IHP_STDCELL_LEF_FILE_NAME,
+        }, {
+          timeoutMs: LSP_LAYOUT_TIMEOUT_MS,
+        });
+
+        return openLayoutPipeSession(normalizeLayoutOpenSessionMetadata(result));
+      } catch (error) {
+        if (isLspRequestTimeoutError(error)) {
+          return createEmptyLayoutOpenResult(getLspRequestErrorMessage(error));
+        }
+
+        throw error;
+      }
+    });
+  });
+
+  ipcMain.handle(AsyncChannels.LSP_LAYOUT_GEOMETRY, async (_event, options?: unknown) => {
+    const normalizedOptions = normalizeLayoutGeometryOptions(options);
+
+    return requestLayoutPipeGeometry(normalizedOptions);
+  });
+
+  ipcMain.handle(AsyncChannels.LSP_LAYOUT_CLOSE, async (_event, sessionId: unknown) => {
+    assertString(sessionId, 'sessionId');
+    await closeLayoutPipeSession(sessionId);
+
+    return withInitializedSession(getMainWindow, async (session) => {
+      await sendDebugRequest(session, getMainWindow, 'systemverilog/layout/close', { sessionId }, {
+        timeoutMs: LSP_LAYOUT_TIMEOUT_MS,
       });
 
       return true;

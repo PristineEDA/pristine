@@ -384,6 +384,147 @@ export interface LspWaveformFrameOptions {
   signalIds?: string[];
 }
 
+export interface LspLayoutBounds {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+
+export interface LspLayoutEndpoint {
+  kind: 'namedPipe' | 'unixSocket';
+  path: string;
+}
+
+export interface LspLayoutOpenOptions {
+  title?: string;
+  lefUris?: string[];
+  defUri?: string;
+}
+
+export interface LspLayoutLayer {
+  index: number;
+  name: string;
+  kind: number;
+  pitch: number;
+  width: number;
+  spacing: number;
+}
+
+export interface LspLayoutMacro {
+  index: number;
+  name: string;
+  className: string;
+  originX: number;
+  originY: number;
+  sizeX: number;
+  sizeY: number;
+  pinCount: number;
+}
+
+export interface LspLayoutVia {
+  index: number;
+  name: string;
+  shapeCount: number;
+}
+
+export interface LspLayoutComponent {
+  index: number;
+  name: string;
+  macroName: string;
+  status: number;
+  x: number;
+  y: number;
+  orientation: string;
+}
+
+export interface LspLayoutNet {
+  index: number;
+  name: string;
+  connectionCount: number;
+  shapeCount: number;
+  special: boolean;
+}
+
+export interface LspLayoutDiagnostic {
+  severity: number;
+  line: number;
+  column: number;
+  message: string;
+}
+
+export interface LspLayoutCatalog {
+  unitsPerMicron: number;
+  hasBounds: boolean;
+  layers: LspLayoutLayer[];
+  macros: LspLayoutMacro[];
+  vias: LspLayoutVia[];
+  components: LspLayoutComponent[];
+  nets: LspLayoutNet[];
+  diagnostics: LspLayoutDiagnostic[];
+}
+
+export type LspLayoutShapeKind = 'rect' | 'polygon' | 'placement' | 'unknown';
+
+export type LspLayoutOwnerKind =
+  | 'unknown'
+  | 'layer'
+  | 'via'
+  | 'macro'
+  | 'pin'
+  | 'obstruction'
+  | 'component'
+  | 'net'
+  | 'blockage'
+  | 'specialNet';
+
+export interface LspLayoutShape {
+  index: number;
+  layerIndex: number;
+  kind: LspLayoutShapeKind;
+  ownerKind: LspLayoutOwnerKind;
+  ownerIndex: number;
+  flags: number;
+  rect: LspLayoutBounds;
+  polygon?: Array<{ x: number; y: number }>;
+}
+
+export interface LspLayoutGeometry {
+  unitsPerMicron: number;
+  truncated: boolean;
+  shapeCount: number;
+  polygonPointCount: number;
+  shapes: LspLayoutShape[];
+}
+
+export interface LspLayoutGeometryOptions {
+  sessionId: string;
+  bbox?: LspLayoutBounds;
+  maxShapes?: number;
+  layerIndices?: number[];
+  shapeKinds?: number[];
+}
+
+export interface LspLayoutOpenResult {
+  sessionId: string;
+  id?: string;
+  protocol: string;
+  endpoint?: LspLayoutEndpoint;
+  title: string;
+  lefCount: number;
+  defPresent: boolean;
+  unitsPerMicron: number;
+  bbox: LspLayoutBounds | null;
+  layerCount: number;
+  macroCount: number;
+  componentCount: number;
+  netCount: number;
+  diagnosticCount: number;
+  fileUris: string[];
+  messages: string[];
+  catalog: LspLayoutCatalog;
+}
+
 export interface LspStateEvent {
   status: 'starting' | 'ready' | 'stopped' | 'error';
   message?: string;

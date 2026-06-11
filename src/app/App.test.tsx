@@ -78,6 +78,27 @@ vi.mock('./components/code/shared/MenuBar', async () => {
   };
 });
 
+vi.mock('./components/code/physical/PhysicalLayoutCanvas', () => ({
+  PhysicalLayoutCanvas: ({
+    catalog,
+    geometry,
+    selectedMacroName,
+  }: {
+    catalog: { layers: unknown[]; macros: unknown[] } | null;
+    geometry: { shapes: unknown[] } | null;
+    selectedMacroName: string | null;
+  }) => (
+    <div
+      data-layer-count={catalog?.layers.length ?? 0}
+      data-macro-count={catalog?.macros.length ?? 0}
+      data-renderer="webgl"
+      data-selected-macro-name={selectedMacroName ?? ''}
+      data-shape-count={geometry?.shapes.length ?? 0}
+      data-testid="physical-layout-canvas"
+    />
+  ),
+}));
+
 vi.mock('./components/code/shared/ActivityBar', async () => {
   const sidebar = await vi.importActual<typeof import('./components/ui/sidebar')>('./components/ui/sidebar');
   const actualActivityBar = await vi.importActual<typeof import('./components/code/shared/ActivityBar')>('./components/code/shared/ActivityBar');
@@ -246,8 +267,8 @@ function expectPhysicalWorkspace() {
   expect(screen.getByTestId('panel-physical-center-panel')).toBeInTheDocument();
   expect(screen.getByTestId('panel-physical-bottom-panel')).toBeInTheDocument();
   expect(screen.getByTestId('panel-physical-right-panel')).toBeInTheDocument();
-  expect(screen.getByTestId('physical-main-panel-content')).toHaveTextContent('Physical');
-  expect(screen.getByTestId('physical-main-panel-content')).toHaveTextContent('Coming soon');
+  expect(screen.getByTestId('physical-layout-editor')).toBeInTheDocument();
+  expect(screen.getByTestId('physical-layout-canvas')).toBeInTheDocument();
   expect(screen.getByTestId('physical-left-panel-tabs')).toBeInTheDocument();
   expect(screen.getByTestId('physical-left-panel-split-toggle')).toBeInTheDocument();
   expect(screen.getByTestId('physical-left-panel-tab-layout')).toBeInTheDocument();

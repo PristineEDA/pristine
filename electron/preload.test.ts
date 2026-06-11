@@ -153,6 +153,9 @@ describe('preload bridge', () => {
     api.lsp.outline('rtl/core/cpu_top.sv', { maxDepth: 8, limit: 2000 });
     api.lsp.moduleHierarchy({ maxDepth: 12 });
     api.lsp.schematic({ moduleName: 'cpu_top', maxDepth: 12 });
+    api.lsp.layoutOpen({ title: 'sg13g2_stdcell.lef' });
+    api.lsp.layoutGeometry({ sessionId: 'layout-1', maxShapes: 1024 });
+    api.lsp.layoutClose('layout-1');
     api.lsp.getDebugEvents();
     api.notices.revealBundledFiles();
     api.auth.openAccountPage('login');
@@ -245,6 +248,9 @@ describe('preload bridge', () => {
     expect(mockInvoke).toHaveBeenCalledWith('async:lsp:outline', 'rtl/core/cpu_top.sv', { maxDepth: 8, limit: 2000 });
     expect(mockInvoke).toHaveBeenCalledWith('async:lsp:module-hierarchy', { maxDepth: 12 });
     expect(mockInvoke).toHaveBeenCalledWith('async:lsp:schematic', { moduleName: 'cpu_top', maxDepth: 12 });
+    expect(mockInvoke).toHaveBeenCalledWith('async:lsp:layout-open', { title: 'sg13g2_stdcell.lef' });
+    expect(mockInvoke).toHaveBeenCalledWith('async:lsp:layout-geometry', { sessionId: 'layout-1', maxShapes: 1024 });
+    expect(mockInvoke).toHaveBeenCalledWith('async:lsp:layout-close', 'layout-1');
     expect(mockInvoke).toHaveBeenCalledWith('async:lsp:get-debug-events');
     expect(mockInvoke).toHaveBeenCalledWith('async:notices:reveal-bundled-files');
     expect(mockInvoke).toHaveBeenCalledWith('async:auth:open-account-page', 'login');

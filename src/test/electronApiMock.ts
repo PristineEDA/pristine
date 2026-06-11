@@ -1,6 +1,7 @@
 import { vi } from 'vitest';
 import type { ElectronAPI } from '../../types/electron-api';
 import { createWaveformFixtureFrame, waveformFixtureData } from '../app/components/code/explorer/waveform/waveformTestFixtures';
+import { layoutFixtureGeometry, layoutFixtureOpenResult } from './layoutFixture';
 
 const defaultGpuDiagnostics = {
   hardwareAccelerationEnabled: true,
@@ -160,6 +161,9 @@ export function createElectronApiMock(): ElectronAPI {
         options.signalIds,
       )),
       waveformClose: vi.fn().mockResolvedValue(true),
+      layoutOpen: vi.fn().mockResolvedValue(layoutFixtureOpenResult),
+      layoutGeometry: vi.fn().mockResolvedValue(layoutFixtureGeometry),
+      layoutClose: vi.fn().mockResolvedValue(true),
       getDebugEvents: vi.fn().mockResolvedValue([]),
       onDebug: vi.fn(() => vi.fn()),
       onDiagnostics: vi.fn(() => vi.fn()),

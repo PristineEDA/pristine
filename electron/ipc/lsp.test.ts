@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockHandle = vi.fn();
 const mockExistsSync = vi.fn((_filePath?: string) => true);
+const mockMkdirSync = vi.fn();
+const mockCopyFileSync = vi.fn();
 const mockSpawn = vi.fn();
 const mockCreateMessageConnection = vi.fn();
 const mockCloseAllWaveformPipeSessions = vi.fn<(...args: unknown[]) => Promise<void>>(async () => undefined);
@@ -27,6 +29,51 @@ const mockOpenWaveformPipeSession = vi.fn<(...args: unknown[]) => Promise<unknow
   title: 'counter_tb',
 }));
 const mockRequestWaveformPipeFrame = vi.fn<(...args: unknown[]) => Promise<ArrayBuffer>>(async () => new ArrayBuffer(8));
+const mockCloseAllLayoutPipeSessions = vi.fn<(...args: unknown[]) => Promise<void>>(async () => undefined);
+const mockCloseLayoutPipeSession = vi.fn<(...args: unknown[]) => Promise<void>>(async () => undefined);
+const mockNormalizeLayoutOpenSessionMetadata = vi.fn<(...args: unknown[]) => unknown>((value: unknown) => value);
+const mockOpenLayoutPipeSession = vi.fn<(...args: unknown[]) => Promise<unknown>>(async () => ({
+  bbox: { x0: 0, y0: 0, x1: 1.2, y1: 3.78 },
+  catalog: {
+    components: [],
+    diagnostics: [],
+    hasBounds: true,
+    layers: [{ index: 0, name: 'Metal1', kind: 1, pitch: 0.48, width: 0.16, spacing: 0.16 }],
+    macros: [{ index: 0, name: 'sg13g2_inv_1', className: 'CORE', originX: 0, originY: 0, sizeX: 1.2, sizeY: 3.78, pinCount: 3 }],
+    nets: [],
+    unitsPerMicron: 1000,
+    vias: [],
+  },
+  componentCount: 0,
+  defPresent: false,
+  diagnosticCount: 0,
+  fileUris: ['file:///C:/workspace/Pristine/.pristine/layout/sg13g2_stdcell.lef'],
+  id: 'layout-1',
+  layerCount: 1,
+  lefCount: 1,
+  macroCount: 1,
+  messages: [],
+  netCount: 0,
+  protocol: 'pristine-layout-columnar-v1',
+  sessionId: 'layout-1',
+  title: 'sg13g2_stdcell.lef',
+  unitsPerMicron: 1000,
+}));
+const mockRequestLayoutPipeGeometry = vi.fn<(...args: unknown[]) => Promise<unknown>>(async () => ({
+  polygonPointCount: 0,
+  shapeCount: 1,
+  shapes: [{
+    flags: 0,
+    index: 0,
+    kind: 'rect',
+    layerIndex: 0,
+    ownerIndex: 0,
+    ownerKind: 'pin',
+    rect: { x0: 0, y0: 0, x1: 1, y1: 1 },
+  }],
+  truncated: false,
+  unitsPerMicron: 1000,
+}));
 
 vi.mock('electron', () => ({
   ipcMain: {
@@ -42,8 +89,12 @@ vi.mock('electron', () => ({
 vi.mock('node:fs', () => ({
   default: {
     existsSync: (filePath: string) => mockExistsSync(filePath),
+    mkdirSync: (...args: unknown[]) => mockMkdirSync(...args),
+    copyFileSync: (...args: unknown[]) => mockCopyFileSync(...args),
   },
   existsSync: (filePath: string) => mockExistsSync(filePath),
+  mkdirSync: (...args: unknown[]) => mockMkdirSync(...args),
+  copyFileSync: (...args: unknown[]) => mockCopyFileSync(...args),
 }));
 
 vi.mock('node:child_process', () => ({
@@ -66,6 +117,14 @@ vi.mock('./waveformPipeClient.js', () => ({
   normalizeWaveformOpenSessionMetadata: (...args: unknown[]) => mockNormalizeWaveformOpenSessionMetadata.apply(null, args),
   openWaveformPipeSession: (...args: unknown[]) => mockOpenWaveformPipeSession.apply(null, args),
   requestWaveformPipeFrame: (...args: unknown[]) => mockRequestWaveformPipeFrame.apply(null, args),
+}));
+
+vi.mock('./layoutPipeClient.js', () => ({
+  closeAllLayoutPipeSessions: (...args: unknown[]) => mockCloseAllLayoutPipeSessions.apply(null, args),
+  closeLayoutPipeSession: (...args: unknown[]) => mockCloseLayoutPipeSession.apply(null, args),
+  normalizeLayoutOpenSessionMetadata: (...args: unknown[]) => mockNormalizeLayoutOpenSessionMetadata.apply(null, args),
+  openLayoutPipeSession: (...args: unknown[]) => mockOpenLayoutPipeSession.apply(null, args),
+  requestLayoutPipeGeometry: (...args: unknown[]) => mockRequestLayoutPipeGeometry.apply(null, args),
 }));
 
 import { disposeLspSession, registerLspHandlers, setLspProjectRoot } from './lsp.js';
@@ -369,6 +428,33 @@ function createFakeConnection(): FakeConnection {
       }
 
       if (method === 'systemverilog/waveform/close') {
+        return { closed: true };
+      }
+
+      if (method === 'systemverilog/layout/open') {
+        return {
+          bbox: { x0: 0, y0: 0, x1: 1.2, y1: 3.78 },
+          componentCount: 0,
+          defPresent: false,
+          diagnosticCount: 0,
+          endpoint: {
+            kind: 'namedPipe',
+            path: '\\\\.\\pipe\\pristine-engine-layout-test',
+          },
+          fileUris: ['file:///C:/workspace/Pristine/.pristine/layout/sg13g2_stdcell.lef'],
+          layerCount: 1,
+          lefCount: 1,
+          macroCount: 1,
+          messages: [],
+          netCount: 0,
+          protocol: 'pristine-layout-columnar-v1',
+          sessionId: 'layout-1',
+          title: 'sg13g2_stdcell.lef',
+          unitsPerMicron: 1000,
+        };
+      }
+
+      if (method === 'systemverilog/layout/close') {
         return { closed: true };
       }
 
@@ -1050,5 +1136,73 @@ describe('LSP IPC handlers', () => {
     expect(mockCloseWaveformPipeSession).toHaveBeenCalledWith('1');
     expect(fakeConnection.sendRequest).toHaveBeenCalledWith('systemverilog/waveform/close', { sessionId: '1' });
     expect(fakeConnection.sendRequest).not.toHaveBeenCalledWith('systemverilog/waveformClose', expect.anything());
+  });
+
+  it('opens layout sessions through LSP control plane and pipe catalog metadata', async () => {
+    setLspProjectRoot('C:/workspace/Pristine/test/fixtures/workspace');
+    mockExistsSync.mockImplementation((filePath?: string) => String(filePath).endsWith('.pristine\\layout\\sg13g2_stdcell.lef') ? false : true);
+    const openHandler = getHandler('async:lsp:layout-open');
+
+    const result = await openHandler({});
+
+    expect(mockMkdirSync).toHaveBeenCalledWith('C:\\workspace\\Pristine\\test\\fixtures\\workspace\\.pristine\\layout', { recursive: true });
+    expect(mockCopyFileSync).toHaveBeenCalledWith(
+      'C:\\workspace\\pristine-engine\\.deps\\src\\ihp-open-pdk\\ihp-sg13g2\\libs.ref\\sg13g2_stdcell\\lef\\sg13g2_stdcell.lef',
+      'C:\\workspace\\Pristine\\test\\fixtures\\workspace\\.pristine\\layout\\sg13g2_stdcell.lef',
+    );
+    expect(fakeConnection.sendRequest).toHaveBeenCalledWith('systemverilog/layout/open', {
+      defUri: undefined,
+      lefUris: ['file:///C:/workspace/Pristine/test/fixtures/workspace/.pristine/layout/sg13g2_stdcell.lef'],
+      title: 'sg13g2_stdcell.lef',
+    });
+    expect(fakeConnection.sendRequest).not.toHaveBeenCalledWith('systemverilog/layoutOpen', expect.anything());
+    expect(mockNormalizeLayoutOpenSessionMetadata).toHaveBeenCalledWith(expect.objectContaining({
+      endpoint: {
+        kind: 'namedPipe',
+        path: '\\\\.\\pipe\\pristine-engine-layout-test',
+      },
+      protocol: 'pristine-layout-columnar-v1',
+      sessionId: 'layout-1',
+    }));
+    expect(mockOpenLayoutPipeSession).toHaveBeenCalledWith(expect.objectContaining({
+      protocol: 'pristine-layout-columnar-v1',
+      sessionId: 'layout-1',
+    }));
+    expect(result).toEqual(expect.objectContaining({
+      sessionId: 'layout-1',
+      title: 'sg13g2_stdcell.lef',
+    }));
+    setLspProjectRoot('C:/workspace/Pristine');
+  });
+
+  it('requests layout geometry from the pipe data plane instead of LSP', async () => {
+    const geometryHandler = getHandler('async:lsp:layout-geometry');
+    const geometryOptions = {
+      bbox: { x0: 0, y0: 0, x1: 1, y1: 1 },
+      layerIndices: [0],
+      maxShapes: 1024,
+      sessionId: 'layout-1',
+      shapeKinds: [1, 2],
+    };
+
+    const geometry = await geometryHandler({}, geometryOptions);
+
+    expect(geometry).toEqual(expect.objectContaining({
+      shapeCount: 1,
+      unitsPerMicron: 1000,
+    }));
+    expect(mockRequestLayoutPipeGeometry).toHaveBeenCalledWith(geometryOptions);
+    expect(fakeConnection.sendRequest).not.toHaveBeenCalledWith('systemverilog/layout/geometry', expect.anything());
+  });
+
+  it('closes layout pipe sessions before LSP control-plane close', async () => {
+    const closeHandler = getHandler('async:lsp:layout-close');
+
+    const result = await closeHandler({}, 'layout-1');
+
+    expect(result).toBe(true);
+    expect(mockCloseLayoutPipeSession).toHaveBeenCalledWith('layout-1');
+    expect(fakeConnection.sendRequest).toHaveBeenCalledWith('systemverilog/layout/close', { sessionId: 'layout-1' });
+    expect(fakeConnection.sendRequest).not.toHaveBeenCalledWith('systemverilog/layoutClose', expect.anything());
   });
 });

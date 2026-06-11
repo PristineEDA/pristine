@@ -4562,10 +4562,26 @@ test('activity bar switches code subpages and menu bar keeps higher-priority pag
   await expect(window.getByTestId('panel-physical-left-panel')).toBeVisible();
   await expect(window.getByTestId('panel-physical-bottom-panel')).toBeVisible();
   await expect(window.getByTestId('panel-physical-right-panel')).toBeVisible();
-  await expect(window.getByTestId('physical-main-panel-content')).toContainText('Physical');
+  const layoutEditor = window.getByTestId('physical-layout-editor');
+  const layoutCanvas = window.getByTestId('physical-layout-canvas');
+  await expect(layoutEditor).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect(layoutEditor).toHaveAttribute('data-status', 'ready', { timeout: UI_READY_TIMEOUT_MS });
+  await expect(layoutCanvas).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect(layoutCanvas).toHaveAttribute('data-renderer', /^(webgpu|webgl)$/);
+  await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-macro-count') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
+  await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-layer-count') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
+  await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-shape-count') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
+  await expect(layoutCanvas.locator('canvas[data-physical-layout-canvas="true"]')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
   await expect(window.getByTestId('physical-left-panel-tabs')).toBeVisible();
   await expect(window.getByTestId('physical-left-panel-tab-layout')).toBeVisible();
   await expect(window.getByTestId('physical-left-panel-tab-constraints')).toBeVisible();
+  await expect(window.getByTestId('physical-layout-macro-list')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
   await expect(window.getByTestId('physical-left-panel-split-toggle')).toBeVisible();
   await expect(window.getByTestId('physical-right-panel-tabs')).toBeVisible();
   await expect(window.getByTestId('physical-right-panel-tab-inspector')).toBeVisible();
@@ -4577,6 +4593,43 @@ test('activity bar switches code subpages and menu bar keeps higher-priority pag
   await expect(window.getByTestId('toggle-left-panel')).toBeEnabled();
   await expect(window.getByTestId('toggle-bottom-panel')).toBeEnabled();
   await expect(window.getByTestId('toggle-right-panel')).toBeEnabled();
+
+  await layoutCanvas.hover();
+  const panYBeforeWheel = Number(await layoutCanvas.getAttribute('data-pan-y') ?? '0');
+  await window.mouse.wheel(0, 120);
+  await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-pan-y') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).not.toBe(panYBeforeWheel);
+
+  const panXBeforeShiftWheel = Number(await layoutCanvas.getAttribute('data-pan-x') ?? '0');
+  await window.keyboard.down('Shift');
+  await window.mouse.wheel(0, 120);
+  await window.keyboard.up('Shift');
+  await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-pan-x') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).not.toBe(panXBeforeShiftWheel);
+
+  const zoomBeforeCtrlWheel = Number(await layoutCanvas.getAttribute('data-zoom') ?? '0');
+  await window.keyboard.down('Control');
+  await window.mouse.wheel(0, -120);
+  await window.keyboard.up('Control');
+  await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-zoom') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(zoomBeforeCtrlWheel);
+
+  const macroItems = window.getByTestId('physical-layout-macro-list').locator('[data-testid^="physical-layout-macro-item-"]');
+  await expect.poll(async () => macroItems.count(), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(1);
+  const selectedMacroBeforeSwitch = await layoutCanvas.getAttribute('data-selected-macro-name');
+  const renderCountBeforeSwitch = Number(await layoutCanvas.getAttribute('data-render-count') ?? '0');
+  await macroItems.nth(1).dblclick();
+  await expect.poll(async () => await layoutCanvas.getAttribute('data-selected-macro-name'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).not.toBe(selectedMacroBeforeSwitch);
+  await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-render-count') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(renderCountBeforeSwitch);
 
   const [physicalShellBox, physicalLeftPanelBox, physicalMainPanelBox, physicalBottomPanelBox] = await Promise.all([
     window.getByTestId('code-view-physical').boundingBox(),

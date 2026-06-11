@@ -1,15 +1,46 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
+import { layoutFixtureGeometry, layoutFixtureOpenResult } from '../../../../test/layoutFixture';
 import { CodeViewerLayoutProvider } from '../../../context/CodeViewerLayoutContext';
 import {
   PhysicalBottomPanel,
   PhysicalLeftPanel,
   PhysicalMainPanel,
   PhysicalRightPanel,
+  type PhysicalWorkspaceLayoutState,
 } from './PhysicalWorkspacePanels';
+
+vi.mock('./PhysicalLayoutCanvas', () => ({
+  PhysicalLayoutCanvas: ({
+    catalog,
+    geometry,
+    selectedMacroName,
+  }: {
+    catalog: typeof layoutFixtureOpenResult.catalog | null;
+    geometry: typeof layoutFixtureGeometry | null;
+    selectedMacroName: string | null;
+  }) => (
+    <div
+      data-layer-count={catalog?.layers.length ?? 0}
+      data-macro-count={catalog?.macros.length ?? 0}
+      data-renderer="webgl"
+      data-selected-macro-name={selectedMacroName ?? ''}
+      data-shape-count={geometry?.shapes.length ?? 0}
+      data-testid="physical-layout-canvas"
+    />
+  ),
+}));
+
+const readyLayoutState: PhysicalWorkspaceLayoutState = {
+  catalog: layoutFixtureOpenResult.catalog,
+  error: null,
+  geometry: layoutFixtureGeometry,
+  openResult: layoutFixtureOpenResult,
+  status: 'ready',
+};
 
 function renderInCodeLayout(node: ReactNode) {
   return render(
@@ -20,22 +51,49 @@ function renderInCodeLayout(node: ReactNode) {
 }
 
 describe('PhysicalWorkspacePanels', () => {
-  it('renders the main physical placeholder content', () => {
-    renderInCodeLayout(<PhysicalMainPanel />);
+  it('renders the main physical layout editor content', async () => {
+    const onLayoutStateChange = vi.fn();
+    const onSelectedMacroNameChange = vi.fn();
+    renderInCodeLayout(
+      <PhysicalMainPanel
+        selectedMacroName={null}
+        onLayoutStateChange={onLayoutStateChange}
+        onSelectedMacroNameChange={onSelectedMacroNameChange}
+      />,
+    );
 
-    expect(screen.getByTestId('physical-main-panel-content')).toHaveTextContent('Physical');
-    expect(screen.getByTestId('physical-main-panel-content')).toHaveTextContent('Coming soon');
+    expect(screen.getByTestId('physical-layout-editor')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId('physical-layout-editor')).toHaveAttribute('data-status', 'ready'));
+    expect(screen.getByTestId('physical-layout-canvas')).toHaveAttribute('data-renderer', 'webgl');
+    expect(onSelectedMacroNameChange).toHaveBeenCalledWith('sg13g2_inv_1');
+    expect(onLayoutStateChange).toHaveBeenCalledWith(expect.objectContaining({
+      status: 'ready',
+      catalog: layoutFixtureOpenResult.catalog,
+      geometry: layoutFixtureGeometry,
+    }));
   });
 
-  it('switches the physical left panel placeholder tabs', async () => {
+  it('switches the physical left panel tabs and activates macros', async () => {
     const user = userEvent.setup();
-    renderInCodeLayout(<PhysicalLeftPanel />);
+    const onMacroActivate = vi.fn();
+    renderInCodeLayout(
+      <PhysicalLeftPanel
+        catalog={layoutFixtureOpenResult.catalog}
+        selectedMacroName="sg13g2_inv_1"
+        onMacroActivate={onMacroActivate}
+      />,
+    );
 
     expect(screen.getByTestId('physical-left-panel-tabs')).toBeInTheDocument();
     expect(screen.getByTestId('physical-left-panel-split-toggle')).toHaveAttribute('aria-label', 'Show lower physical left panel');
     expect(screen.getByTestId('physical-left-panel-tab-layout')).toBeInTheDocument();
     expect(screen.getByTestId('physical-left-panel-tab-constraints')).toBeInTheDocument();
-    expect(screen.getByTestId('physical-left-panel-layout-content')).toHaveTextContent('Layout');
+    expect(screen.getByTestId('physical-layout-macro-list')).toBeInTheDocument();
+    expect(screen.getByTestId('physical-layout-macro-item-sg13g2_inv_1')).toHaveAttribute('aria-selected', 'true');
+
+    await user.dblClick(screen.getByTestId('physical-layout-macro-item-sg13g2_nand2_1'));
+
+    expect(onMacroActivate).toHaveBeenCalledWith('sg13g2_nand2_1');
 
     await user.click(screen.getByTestId('physical-left-panel-tab-constraints'));
 
@@ -45,7 +103,13 @@ describe('PhysicalWorkspacePanels', () => {
   it('toggles the physical left lower panel', async () => {
     const user = userEvent.setup();
     const onSplitPanelVisibleChange = vi.fn();
-    renderInCodeLayout(<PhysicalLeftPanel onSplitPanelVisibleChange={onSplitPanelVisibleChange} />);
+    renderInCodeLayout(
+      <PhysicalLeftPanel
+        catalog={layoutFixtureOpenResult.catalog}
+        selectedMacroName="sg13g2_inv_1"
+        onSplitPanelVisibleChange={onSplitPanelVisibleChange}
+      />,
+    );
 
     expect(screen.queryByTestId('physical-left-panel-split-group')).not.toBeInTheDocument();
 
@@ -64,13 +128,18 @@ describe('PhysicalWorkspacePanels', () => {
 
   it('switches the physical right panel placeholder tabs', async () => {
     const user = userEvent.setup();
-    renderInCodeLayout(<PhysicalRightPanel />);
+    renderInCodeLayout(
+      <PhysicalRightPanel
+        layoutState={readyLayoutState}
+        selectedMacroName="sg13g2_inv_1"
+      />,
+    );
 
     expect(screen.getByTestId('physical-right-panel-tabs')).toBeInTheDocument();
     expect(screen.getByTestId('physical-right-panel-split-toggle')).toHaveAttribute('aria-label', 'Show lower physical right panel');
     expect(screen.getByTestId('physical-right-panel-tab-inspector')).toBeInTheDocument();
     expect(screen.getByTestId('physical-right-panel-tab-checks')).toBeInTheDocument();
-    expect(screen.getByTestId('physical-right-panel-inspector-content')).toHaveTextContent('Inspector');
+    expect(screen.getByTestId('physical-right-panel-inspector-content')).toHaveTextContent('sg13g2_inv_1');
 
     await user.click(screen.getByTestId('physical-right-panel-tab-checks'));
 
@@ -103,6 +172,7 @@ describe('PhysicalWorkspacePanels', () => {
     const onMaximizeToggle = vi.fn();
     renderInCodeLayout(
       <PhysicalBottomPanel
+        layoutState={readyLayoutState}
         onClose={onClose}
         onMaximizeToggle={onMaximizeToggle}
       />,
@@ -111,7 +181,7 @@ describe('PhysicalWorkspacePanels', () => {
     expect(screen.getByTestId('physical-bottom-panel-tabs')).toBeInTheDocument();
     expect(screen.getByTestId('physical-bottom-panel-tab-reports')).toBeInTheDocument();
     expect(screen.getByTestId('physical-bottom-panel-tab-console')).toBeInTheDocument();
-    expect(screen.getByTestId('physical-bottom-panel-reports-content')).toHaveTextContent('Reports');
+    expect(screen.getByTestId('physical-bottom-panel-reports-content')).toHaveTextContent('Macros');
 
     await user.click(screen.getByTestId('physical-bottom-panel-tab-console'));
 

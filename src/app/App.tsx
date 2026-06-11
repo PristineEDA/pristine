@@ -25,6 +25,7 @@ import {
   PhysicalLeftPanel,
   PhysicalMainPanel,
   PhysicalRightPanel,
+  type PhysicalWorkspaceLayoutState,
 } from './components/code/physical/PhysicalWorkspacePanels';
 import { QuickOpenPalette } from './components/code/shared/QuickOpenPalette';
 import { isMonacoTextInputFocused } from './editor/focusEditor';
@@ -130,6 +131,14 @@ function AppLayout() {
   const [physicalRightPanelWidthPx, setPhysicalRightPanelWidthPx] = useState(EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX);
   const [isPhysicalLeftPanelSplitVisible, setIsPhysicalLeftPanelSplitVisible] = useState(false);
   const [isPhysicalRightPanelSplitVisible, setIsPhysicalRightPanelSplitVisible] = useState(false);
+  const [physicalLayoutState, setPhysicalLayoutState] = useState<PhysicalWorkspaceLayoutState>({
+    catalog: null,
+    error: null,
+    geometry: null,
+    openResult: null,
+    status: 'idle',
+  });
+  const [physicalSelectedMacroName, setPhysicalSelectedMacroName] = useState<string | null>(null);
   const [assistantThreadListExpanded, setAssistantThreadListExpanded] = useState(false);
   const [assistantThreadListWidthPx, setAssistantThreadListWidthPx] = useState(ASSISTANT_THREAD_LIST_DEFAULT_WIDTH_PX);
   const [shouldMountWorkflowView, setShouldMountWorkflowView] = useState(mainContentView === 'workflow');
@@ -496,13 +505,23 @@ function AppLayout() {
       rightFixedMaxWidthPx: EXPLORER_RIGHT_PANEL_MAX_WIDTH_PX,
       leftContent: (
         <PhysicalLeftPanel
+          catalog={physicalLayoutState.catalog}
+          selectedMacroName={physicalSelectedMacroName}
+          onMacroActivate={setPhysicalSelectedMacroName}
           onSplitPanelVisibleChange={setIsPhysicalLeftPanelSplitVisible}
         />
       ),
-      topContent: <PhysicalMainPanel />,
+      topContent: (
+        <PhysicalMainPanel
+          selectedMacroName={physicalSelectedMacroName}
+          onSelectedMacroNameChange={setPhysicalSelectedMacroName}
+          onLayoutStateChange={setPhysicalLayoutState}
+        />
+      ),
       bottomContent: ({ isMaximized, onMaximizeToggle }) => (
         <PhysicalBottomPanel
           isMaximized={isMaximized}
+          layoutState={physicalLayoutState}
           onClose={() => setShowBottomPanel(false)}
           onMaximizeToggle={onMaximizeToggle}
         />
@@ -511,6 +530,8 @@ function AppLayout() {
       onBottomPanelAutoHide: () => setShowBottomPanel(false),
       rightContent: (
         <PhysicalRightPanel
+          layoutState={physicalLayoutState}
+          selectedMacroName={physicalSelectedMacroName}
           onSplitPanelVisibleChange={setIsPhysicalRightPanelSplitVisible}
         />
       ),

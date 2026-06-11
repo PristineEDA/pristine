@@ -13,6 +13,7 @@ import {
   Minimize2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import type { LspLayoutCatalog, LspLayoutGeometry, LspLayoutOpenResult } from '../../../../../types/systemverilog-lsp';
 
 import { useCodeViewerLayout } from '../../../context/CodeViewerLayoutContext';
 import { Button } from '../../ui/button';
@@ -34,10 +35,23 @@ import {
   getEditorAreaRootClassName,
   getPanelHeaderClassName,
 } from '../shared/codeViewerLayoutStyles';
+import {
+  PhysicalLayoutEditorPanel,
+  type PhysicalLayoutStateSnapshot,
+  type PhysicalLayoutStatus,
+} from './PhysicalLayoutEditorPanel';
 
 type PhysicalLeftPanelTab = 'layout' | 'constraints';
 type PhysicalRightPanelTab = 'inspector' | 'checks';
 type PhysicalBottomPanelTab = 'reports' | 'console';
+
+export interface PhysicalWorkspaceLayoutState {
+  catalog: LspLayoutCatalog | null;
+  error: string | null;
+  geometry: LspLayoutGeometry | null;
+  openResult: LspLayoutOpenResult | null;
+  status: PhysicalLayoutStatus;
+}
 
 const physicalLeftPanelTabs = [
   { value: 'layout', label: 'Layout', icon: Layers3, testId: 'physical-left-panel-tab-layout' },
@@ -125,18 +139,167 @@ function PhysicalPanelTabs<TTab extends string>({
   );
 }
 
-export function PhysicalMainPanel() {
+export function PhysicalMainPanel({
+  onLayoutStateChange,
+  onSelectedMacroNameChange,
+  selectedMacroName,
+}: {
+  onLayoutStateChange?: (state: PhysicalLayoutStateSnapshot) => void;
+  onSelectedMacroNameChange?: (macroName: string) => void;
+  selectedMacroName?: string | null;
+}) {
   const { layoutMode } = useCodeViewerLayout();
 
   return (
     <div className={getEditorAreaRootClassName(layoutMode)}>
-      <PhysicalEmptyState
-        testId="physical-main-panel-content"
-        title="Physical"
-        description="Coming soon"
-      />
+      <div data-testid="physical-main-panel-content" className="h-full min-h-0">
+        <PhysicalLayoutEditorPanel
+          selectedMacroName={selectedMacroName ?? null}
+          onLayoutStateChange={onLayoutStateChange}
+          onSelectedMacroNameChange={onSelectedMacroNameChange}
+        />
+      </div>
     </div>
   );
+}
+
+function PhysicalMacroList({
+  catalog,
+  selectedMacroName,
+  onMacroActivate,
+}: {
+  catalog?: LspLayoutCatalog | null;
+  selectedMacroName?: string | null;
+  onMacroActivate?: (macroName: string) => void;
+}) {
+  const macros = catalog?.macros ?? [];
+
+  if (macros.length === 0) {
+    return (
+      <PhysicalEmptyState
+        testId="physical-left-panel-layout-content"
+        title="Layout"
+        description="Open IHP stdcell LEF macros will appear here."
+      />
+    );
+  }
+
+  return (
+    <div data-testid="physical-left-panel-layout-content" className="flex h-full min-h-0 flex-col">
+      <div className="shrink-0 border-b border-ide-border/60 px-3 py-2">
+        <div className="flex items-center justify-between gap-2 text-[11px]">
+          <span className="font-medium text-ide-text">Layout Macros</span>
+          <span className="text-ide-text-muted" data-testid="physical-layout-macro-count">{macros.length}</span>
+        </div>
+      </div>
+      <div
+        className="min-h-0 flex-1 overflow-y-auto px-1 py-1"
+        data-testid="physical-layout-macro-list"
+      >
+        {macros.map((macro) => {
+          const selected = macro.name === selectedMacroName;
+          return (
+            <button
+              key={macro.name}
+              type="button"
+              aria-selected={selected}
+              className={cn(
+                'flex w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-left text-[11px] hover:bg-ide-hover',
+                selected ? 'bg-ide-selection text-ide-text' : 'text-ide-text-muted',
+              )}
+              data-testid={`physical-layout-macro-item-${sanitizeMacroTestId(macro.name)}`}
+              onClick={() => onMacroActivate?.(macro.name)}
+              onDoubleClick={() => onMacroActivate?.(macro.name)}
+              title={macro.name}
+            >
+              <span className="min-w-0 truncate">{macro.name}</span>
+              <span className="shrink-0 text-[10px] text-ide-text-muted">{macro.pinCount} pins</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function PhysicalInspectorSummary({
+  layoutState,
+  selectedMacroName,
+}: {
+  layoutState?: PhysicalWorkspaceLayoutState;
+  selectedMacroName?: string | null;
+}) {
+  const macro = layoutState?.catalog?.macros.find((entry) => entry.name === selectedMacroName) ?? null;
+
+  if (!macro) {
+    return (
+      <PhysicalEmptyState
+        testId="physical-right-panel-inspector-content"
+        title="Inspector"
+        description="Select a layout macro to inspect geometry metadata."
+      />
+    );
+  }
+
+  return (
+    <div data-testid="physical-right-panel-inspector-content" className="flex h-full min-h-0 flex-col gap-3 overflow-auto p-3 text-[11px]">
+      <div>
+        <p className="font-medium text-ide-text">{macro.name}</p>
+        <p className="mt-1 text-ide-text-muted">{macro.className || 'Macro'}</p>
+      </div>
+      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-ide-text-muted">
+        <dt>Size</dt>
+        <dd className="text-ide-text">{macro.sizeX.toFixed(3)} x {macro.sizeY.toFixed(3)}</dd>
+        <dt>Origin</dt>
+        <dd className="text-ide-text">{macro.originX.toFixed(3)}, {macro.originY.toFixed(3)}</dd>
+        <dt>Pins</dt>
+        <dd className="text-ide-text">{macro.pinCount}</dd>
+        <dt>Layers</dt>
+        <dd className="text-ide-text">{layoutState?.catalog?.layers.length ?? 0}</dd>
+        <dt>Shapes</dt>
+        <dd className="text-ide-text">{layoutState?.geometry?.shapes.length ?? 0}</dd>
+      </dl>
+    </div>
+  );
+}
+
+function PhysicalReportsSummary({ layoutState }: { layoutState?: PhysicalWorkspaceLayoutState }) {
+  if (!layoutState || layoutState.status === 'idle' || layoutState.status === 'loading') {
+    return (
+      <PhysicalEmptyState
+        testId="physical-bottom-panel-reports-content"
+        title="Reports"
+        description="Layout summary will appear after the IHP stdcell LEF opens."
+      />
+    );
+  }
+
+  return (
+    <div data-testid="physical-bottom-panel-reports-content" className="grid h-full min-h-0 grid-cols-4 gap-3 overflow-auto p-3 text-[11px]">
+      <PhysicalMetricTile label="Status" value={layoutState.status} />
+      <PhysicalMetricTile label="Macros" value={String(layoutState.catalog?.macros.length ?? 0)} />
+      <PhysicalMetricTile label="Layers" value={String(layoutState.catalog?.layers.length ?? 0)} />
+      <PhysicalMetricTile label="Shapes" value={String(layoutState.geometry?.shapes.length ?? 0)} />
+      {layoutState.error && (
+        <div className="col-span-4 rounded border border-ide-error/40 bg-ide-error/10 px-3 py-2 text-ide-error">
+          {layoutState.error}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PhysicalMetricTile({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded border border-ide-border/70 bg-ide-panel px-3 py-2">
+      <p className="text-[10px] uppercase tracking-normal text-ide-text-muted">{label}</p>
+      <p className="mt-1 truncate text-[12px] font-medium text-ide-text">{value}</p>
+    </div>
+  );
+}
+
+function sanitizeMacroTestId(value: string): string {
+  return value.replace(/[^a-zA-Z0-9_-]+/g, '-');
 }
 
 function PhysicalLowerPanel({
@@ -172,9 +335,15 @@ function PhysicalLowerPanel({
 }
 
 export function PhysicalLeftPanel({
+  catalog,
   onSplitPanelVisibleChange,
+  onMacroActivate,
+  selectedMacroName,
 }: {
+  catalog?: LspLayoutCatalog | null;
   onSplitPanelVisibleChange?: (isVisible: boolean) => void;
+  onMacroActivate?: (macroName: string) => void;
+  selectedMacroName?: string | null;
 }) {
   const { layoutMode } = useCodeViewerLayout();
   const [tab, setTab] = useState<PhysicalLeftPanelTab>('layout');
@@ -206,10 +375,10 @@ export function PhysicalLeftPanel({
   const primaryContent = (
     <div className="min-h-0 flex-1 overflow-hidden">
       {tab === 'layout' ? (
-        <PhysicalEmptyState
-          testId="physical-left-panel-layout-content"
-          title="Layout"
-          description="Physical hierarchy and floorplan layers will appear here."
+        <PhysicalMacroList
+          catalog={catalog}
+          selectedMacroName={selectedMacroName}
+          onMacroActivate={onMacroActivate}
         />
       ) : (
         <PhysicalEmptyState
@@ -280,9 +449,13 @@ export function PhysicalLeftPanel({
 }
 
 export function PhysicalRightPanel({
+  layoutState,
   onSplitPanelVisibleChange,
+  selectedMacroName,
 }: {
+  layoutState?: PhysicalWorkspaceLayoutState;
   onSplitPanelVisibleChange?: (isVisible: boolean) => void;
+  selectedMacroName?: string | null;
 }) {
   const { layoutMode } = useCodeViewerLayout();
   const [tab, setTab] = useState<PhysicalRightPanelTab>('inspector');
@@ -314,10 +487,9 @@ export function PhysicalRightPanel({
   const primaryContent = (
     <div className="min-h-0 flex-1 overflow-hidden">
       {tab === 'inspector' ? (
-        <PhysicalEmptyState
-          testId="physical-right-panel-inspector-content"
-          title="Inspector"
-          description="Selected physical objects and properties will appear here."
+        <PhysicalInspectorSummary
+          layoutState={layoutState}
+          selectedMacroName={selectedMacroName}
         />
       ) : (
         <PhysicalEmptyState
@@ -389,10 +561,12 @@ export function PhysicalRightPanel({
 
 export function PhysicalBottomPanel({
   isMaximized = false,
+  layoutState,
   onClose,
   onMaximizeToggle,
 }: {
   isMaximized?: boolean;
+  layoutState?: PhysicalWorkspaceLayoutState;
   onClose?: () => void;
   onMaximizeToggle?: () => void;
 }) {
@@ -402,11 +576,7 @@ export function PhysicalBottomPanel({
   const maximizeLabel = isMaximized ? 'Restore Panel' : 'Maximize Panel';
   const panelContent = useMemo<Record<PhysicalBottomPanelTab, ReactNode>>(() => ({
     reports: (
-      <PhysicalEmptyState
-        testId="physical-bottom-panel-reports-content"
-        title="Reports"
-        description="Area, congestion, timing, and route reports will appear here."
-      />
+      <PhysicalReportsSummary layoutState={layoutState} />
     ),
     console: (
       <PhysicalEmptyState
