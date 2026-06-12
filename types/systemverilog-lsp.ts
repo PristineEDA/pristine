@@ -484,6 +484,7 @@ export interface LspLayoutShape {
   kind: LspLayoutShapeKind;
   ownerKind: LspLayoutOwnerKind;
   ownerIndex: number;
+  macroIndex: number | null;
   flags: number;
   rect: LspLayoutBounds;
   polygon?: Array<{ x: number; y: number }>;

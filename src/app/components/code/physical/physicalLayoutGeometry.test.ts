@@ -10,6 +10,11 @@ import {
   getShapesBounds,
   selectMacroShapes,
 } from './physicalLayoutGeometry';
+import {
+  filterVisibleLayoutShapes,
+  getPhysicalLayoutLayerColor,
+  isLayoutLayerVisible,
+} from './physicalLayoutLayers';
 
 describe('physicalLayoutGeometry', () => {
   const catalog = layoutFixtureOpenResult.catalog;
@@ -26,13 +31,20 @@ describe('physicalLayoutGeometry', () => {
     expect(macro ? getMacroBounds(macro) : null).toEqual({ x0: 0, y0: 0, x1: 2.4, y1: 3.78 });
   });
 
-  it('filters selected macro geometry using owner and bounds relationships', () => {
+  it('filters selected macro geometry using macro ownership', () => {
     const inverterShapes = selectMacroShapes(catalog, layoutFixtureGeometry, 'sg13g2_inv_1');
     const nandShapes = selectMacroShapes(catalog, layoutFixtureGeometry, 'sg13g2_nand2_1');
 
-    expect(inverterShapes.some((shape) => shape.ownerKind === 'obstruction' && shape.ownerIndex === 0)).toBe(true);
+    expect(inverterShapes).toHaveLength(3);
+    expect(inverterShapes.every((shape) => shape.macroIndex === 0)).toBe(true);
+    expect(nandShapes).toHaveLength(1);
+    expect(nandShapes.every((shape) => shape.macroIndex === 1)).toBe(true);
+  });
+
+  it('does not include overlapping shapes from other macros', () => {
+    const inverterShapes = selectMacroShapes(catalog, layoutFixtureGeometry, 'sg13g2_inv_1');
+
     expect(inverterShapes.some((shape) => shape.ownerKind === 'obstruction' && shape.ownerIndex === 1)).toBe(false);
-    expect(nandShapes.some((shape) => shape.ownerKind === 'obstruction' && shape.ownerIndex === 1)).toBe(true);
   });
 
   it('computes fit camera from layout bounds and viewport size', () => {
@@ -73,5 +85,17 @@ describe('physicalLayoutGeometry', () => {
       deltaX: 0,
       deltaY: -120,
     }, { x: 0, y: 0 }).zoom).toBeGreaterThan(camera.zoom);
+  });
+
+  it('provides stable layer colors and filters visible layer shapes', () => {
+    const metal1Color = getPhysicalLayoutLayerColor(0);
+
+    expect(metal1Color).toEqual(getPhysicalLayoutLayerColor(0));
+    expect(metal1Color.cssColor).toMatch(/^#[0-9a-f]{6}$/);
+    expect(Number.parseInt(metal1Color.cssColor.slice(1), 16)).toBe(metal1Color.pixiColor);
+    expect(isLayoutLayerVisible(new Set([0]), 0)).toBe(true);
+    expect(isLayoutLayerVisible(new Set([0]), 1)).toBe(false);
+    expect(filterVisibleLayoutShapes(layoutFixtureGeometry.shapes, new Set([0]))).toHaveLength(2);
+    expect(filterVisibleLayoutShapes(layoutFixtureGeometry.shapes, new Set())).toEqual([]);
   });
 });

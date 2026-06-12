@@ -27,6 +27,7 @@ import {
   PhysicalRightPanel,
   type PhysicalWorkspaceLayoutState,
 } from './components/code/physical/PhysicalWorkspacePanels';
+import { createVisibleLayoutLayerSet } from './components/code/physical/physicalLayoutLayers';
 import { QuickOpenPalette } from './components/code/shared/QuickOpenPalette';
 import { isMonacoTextInputFocused } from './editor/focusEditor';
 import {
@@ -139,6 +140,7 @@ function AppLayout() {
     status: 'idle',
   });
   const [physicalSelectedMacroName, setPhysicalSelectedMacroName] = useState<string | null>(null);
+  const [physicalVisibleLayerIndices, setPhysicalVisibleLayerIndices] = useState<Set<number>>(() => new Set());
   const [assistantThreadListExpanded, setAssistantThreadListExpanded] = useState(false);
   const [assistantThreadListWidthPx, setAssistantThreadListWidthPx] = useState(ASSISTANT_THREAD_LIST_DEFAULT_WIDTH_PX);
   const [shouldMountWorkflowView, setShouldMountWorkflowView] = useState(mainContentView === 'workflow');
@@ -150,6 +152,24 @@ function AppLayout() {
   const explorerRightPanelWidthPx = explorerAssistantPanelWidthPx + assistantThreadListExtraWidthPx;
   const explorerRightPanelMinWidthPx = EXPLORER_RIGHT_PANEL_MIN_WIDTH_PX + assistantThreadListExtraWidthPx;
   const explorerRightPanelMaxWidthPx = EXPLORER_RIGHT_PANEL_MAX_WIDTH_PX + assistantThreadListExtraWidthPx;
+
+  useEffect(() => {
+    setPhysicalVisibleLayerIndices(createVisibleLayoutLayerSet(
+      physicalLayoutState.catalog?.layers.map((layer) => layer.index) ?? [],
+    ));
+  }, [physicalLayoutState.catalog]);
+
+  const handlePhysicalLayerVisibilityToggle = useCallback((layerIndex: number) => {
+    setPhysicalVisibleLayerIndices((current) => {
+      const next = new Set(current);
+      if (next.has(layerIndex)) {
+        next.delete(layerIndex);
+      } else {
+        next.add(layerIndex);
+      }
+      return next;
+    });
+  }, []);
 
   const handleActivityItemSelect = (nextView: string) => {
     setActiveView(nextView as typeof activeView);
@@ -514,6 +534,7 @@ function AppLayout() {
       topContent: (
         <PhysicalMainPanel
           selectedMacroName={physicalSelectedMacroName}
+          visibleLayerIndices={physicalVisibleLayerIndices}
           onSelectedMacroNameChange={setPhysicalSelectedMacroName}
           onLayoutStateChange={setPhysicalLayoutState}
         />
@@ -532,6 +553,8 @@ function AppLayout() {
         <PhysicalRightPanel
           layoutState={physicalLayoutState}
           selectedMacroName={physicalSelectedMacroName}
+          visibleLayerIndices={physicalVisibleLayerIndices}
+          onLayerVisibilityToggle={handlePhysicalLayerVisibilityToggle}
           onSplitPanelVisibleChange={setIsPhysicalRightPanelSplitVisible}
         />
       ),

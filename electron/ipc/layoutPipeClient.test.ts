@@ -27,7 +27,7 @@ describe('layoutPipeClient', () => {
     const bytes = new Uint8Array(encoded);
 
     expect(String.fromCharCode(...bytes.subarray(0, 4))).toBe('PLD1');
-    expect(view.getUint16(4, true)).toBe(1);
+    expect(view.getUint16(4, true)).toBe(2);
     expect(view.getUint16(6, true)).toBe(5);
     expect(view.getUint32(8, true)).toBe(42);
     expect(view.getUint32(12, true)).toBe(7);
@@ -116,6 +116,7 @@ describe('layoutPipeClient', () => {
       kind: 'rect',
       ownerKind: 'pin',
       layerIndex: 0,
+      macroIndex: 0,
       rect: { x0: 0.1, y0: 0.2, x1: 0.3, y1: 0.4 },
     });
     expect(geometry.shapes[1]).toMatchObject({
@@ -123,6 +124,7 @@ describe('layoutPipeClient', () => {
       kind: 'polygon',
       ownerKind: 'obstruction',
       ownerIndex: 0,
+      macroIndex: null,
       polygon: [
         { x: 0, y: 0 },
         { x: 1, y: 0 },
@@ -131,10 +133,19 @@ describe('layoutPipeClient', () => {
     });
   });
 
+  it('rejects older geometry payload versions', () => {
+    const payload = createGeometryPayloadFixture();
+    const legacyPayload = new Uint8Array(payload);
+    legacyPayload[4] = 1;
+    legacyPayload[5] = 0;
+
+    expect(() => parseLayoutGeometryPayload(legacyPayload)).toThrow('Unsupported layout geometry version: 1');
+  });
+
   it('validates LSP layout open metadata before connecting to the pipe', () => {
     expect(normalizeLayoutOpenSessionMetadata({
       endpoint: { kind: 'namedPipe', path: '\\\\.\\pipe\\layout-test' },
-      protocol: 'pristine-layout-columnar-v1',
+      protocol: 'pristine-layout-columnar-v2',
       sessionId: '1',
       title: 'sg13g2_stdcell.lef',
       lefCount: 1,
@@ -142,7 +153,7 @@ describe('layoutPipeClient', () => {
       bbox: { x0: 0, y0: 0, x1: 1, y1: 1 },
     })).toMatchObject({
       endpoint: { kind: 'namedPipe', path: '\\\\.\\pipe\\layout-test' },
-      protocol: 'pristine-layout-columnar-v1',
+      protocol: 'pristine-layout-columnar-v2',
       sessionId: '1',
       title: 'sg13g2_stdcell.lef',
       lefCount: 1,
@@ -195,7 +206,7 @@ describe('layoutPipeClient', () => {
         macroCount: 1,
         messages: [],
         netCount: 0,
-        protocol: 'pristine-layout-columnar-v1',
+        protocol: 'pristine-layout-columnar-v2',
         sessionId: 'layout-open-test',
         title: 'sg13g2_stdcell.lef',
         unitsPerMicron: 1000,
@@ -260,7 +271,7 @@ function createCatalogPayloadFixture(): Uint8Array {
   output[1] = 'L'.charCodeAt(0);
   output[2] = 'C'.charCodeAt(0);
   output[3] = 'T'.charCodeAt(0);
-  setU16(output, 4, 1);
+  setU16(output, 4, 2);
   setU16(output, 6, 80);
   setU32(output, 8, 1000);
   setU32(output, 12, 1);
@@ -292,11 +303,13 @@ function createGeometryPayloadFixture(): Uint8Array {
   pushU32(output, 0);
   pushU32(output, 0);
   pushU32(output, 0);
+  pushU32(output, 0);
 
   pushU32(output, 0);
   pushU16(output, 2);
   pushU16(output, 5);
   pushU32(output, 0);
+  pushU32(output, 0xffffffff);
   pushU32(output, 0);
   pushU32(output, 0);
   pushU32(output, 3);
@@ -326,7 +339,7 @@ function createGeometryPayloadFixture(): Uint8Array {
   output[1] = 'L'.charCodeAt(0);
   output[2] = 'G'.charCodeAt(0);
   output[3] = 'E'.charCodeAt(0);
-  setU16(output, 4, 1);
+  setU16(output, 4, 2);
   setU16(output, 6, 96);
   setU32(output, 8, 1000);
   setU32(output, 12, 2);
@@ -345,7 +358,7 @@ function createGeometryPayloadFixture(): Uint8Array {
 
 function createHelloPayloadFixture(): Uint8Array {
   const output: number[] = [];
-  pushU16(output, 1);
+  pushU16(output, 2);
   pushU16(output, 0);
   pushU32(output, 1000);
   pushU32(output, 1);

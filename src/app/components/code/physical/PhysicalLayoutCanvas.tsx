@@ -16,6 +16,11 @@ import {
   selectMacroShapes,
   type PhysicalLayoutCamera,
 } from './physicalLayoutGeometry';
+import {
+  filterVisibleLayoutShapes,
+  getPhysicalLayoutLayerColor,
+  type VisibleLayoutLayerSet,
+} from './physicalLayoutLayers';
 
 type PixiRendererPreference = 'webgpu' | 'webgl';
 type PixiRendererStatus = PixiRendererPreference | 'error' | 'initializing';
@@ -24,6 +29,7 @@ interface PhysicalLayoutCanvasProps {
   catalog: LspLayoutCatalog | null;
   geometry: LspLayoutGeometry | null;
   selectedMacroName: string | null;
+  visibleLayerIndices: VisibleLayoutLayerSet;
 }
 
 const defaultCamera: PhysicalLayoutCamera = { panX: 0, panY: 0, zoom: 24 };
@@ -31,23 +37,12 @@ const minimumCanvasWidth = 240;
 const minimumCanvasHeight = 180;
 const gridMajorStep = 1;
 const gridMinorStep = 0.2;
-const layerPalette = [
-  0x52a8ff,
-  0xffc857,
-  0x4dd599,
-  0xf67280,
-  0xb38cff,
-  0x74d4ff,
-  0xff9f43,
-  0xa3e635,
-  0xf472b6,
-  0x7dd3fc,
-] as const;
 
 export function PhysicalLayoutCanvas({
   catalog,
   geometry,
   selectedMacroName,
+  visibleLayerIndices,
 }: PhysicalLayoutCanvasProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const appRef = useRef<Application | null>(null);
@@ -68,13 +63,19 @@ export function PhysicalLayoutCanvas({
     () => selectMacroShapes(catalog, geometry, selectedMacroName),
     [catalog, geometry, selectedMacroName],
   );
+  const visibleShapes = useMemo(
+    () => filterVisibleLayoutShapes(selectedShapes, visibleLayerIndices),
+    [selectedShapes, visibleLayerIndices],
+  );
   const selectedBounds = useMemo(
     () => getShapesBounds(selectedShapes, selectedMacro ? getMacroBounds(selectedMacro) : null),
     [selectedMacro, selectedShapes],
   );
+  const layerCount = catalog?.layers.length ?? 0;
+  const visibleLayerCount = catalog?.layers.filter((layer) => visibleLayerIndices.has(layer.index)).length ?? 0;
 
   selectedMacroRef.current = selectedMacro;
-  selectedShapesRef.current = selectedShapes;
+  selectedShapesRef.current = visibleShapes;
 
   useEffect(() => {
     const host = hostRef.current;
@@ -96,6 +97,7 @@ export function PhysicalLayoutCanvas({
       app.stage.addChild(worldRef.current);
       setRenderer(pixiRenderer);
       setSize({ width: app.renderer.width, height: app.renderer.height });
+      redrawScene();
       requestRender();
     }).catch((cause: unknown) => {
       if (disposed) {
@@ -148,6 +150,11 @@ export function PhysicalLayoutCanvas({
     redrawScene();
     requestRender();
   }, [selectedBounds, selectedMacroName, size.height, size.width]);
+
+  useEffect(() => {
+    redrawScene();
+    requestRender();
+  }, [visibleShapes]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -274,15 +281,20 @@ export function PhysicalLayoutCanvas({
       ref={hostRef}
       aria-label="Physical layout editor canvas"
       className="relative h-full min-h-0 w-full overflow-hidden bg-[#101317] outline-none"
-      data-layer-count={catalog?.layers.length ?? 0}
+      data-geometry-shape-count={geometry?.shapes.length ?? 0}
+      data-hidden-layer-count={Math.max(0, layerCount - visibleLayerCount)}
+      data-layer-count={layerCount}
       data-macro-count={catalog?.macros.length ?? 0}
       data-pan-x={camera.panX.toFixed(2)}
       data-pan-y={camera.panY.toFixed(2)}
       data-render-count={renderCount}
       data-renderer={renderer}
       data-selected-macro-name={selectedMacroName ?? ''}
+      data-selected-shape-count={selectedShapes.length}
       data-shape-count={selectedShapes.length}
       data-testid="physical-layout-canvas"
+      data-visible-layer-count={visibleLayerCount}
+      data-visible-shape-count={visibleShapes.length}
       data-zoom={camera.zoom.toFixed(4)}
       role="img"
       tabIndex={0}
@@ -371,7 +383,7 @@ function drawShapes(shapes: readonly LspLayoutShape[]) {
   const graphics = new Graphics();
 
   for (const shape of shapes) {
-    const color = layerPalette[Math.abs(shape.layerIndex) % layerPalette.length] ?? 0x52a8ff;
+    const color = getPhysicalLayoutLayerColor(shape.layerIndex).pixiColor;
     const alpha = shape.ownerKind === 'obstruction' ? 0.35 : 0.7;
 
     if (shape.kind === 'polygon' && shape.polygon && shape.polygon.length >= 3) {

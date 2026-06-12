@@ -1602,7 +1602,7 @@ function createEmptyWaveformOpenResult(message: string): LspWaveformOpenResult {
 function createEmptyLayoutOpenResult(message: string): LspLayoutOpenResult {
   return {
     sessionId: '',
-    protocol: 'pristine-layout-columnar-v1',
+    protocol: 'pristine-layout-columnar-v2',
     title: 'Layout',
     lefCount: 0,
     defPresent: false,

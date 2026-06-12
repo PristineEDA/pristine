@@ -1860,9 +1860,20 @@ test('packaged Windows app opens Physical layout from workspace-root LEF', async
     await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-macro-count') ?? '0'), {
       timeout: UI_READY_TIMEOUT_MS,
     }).toBeGreaterThan(0);
-    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-shape-count') ?? '0'), {
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-selected-shape-count') ?? '0'), {
       timeout: UI_READY_TIMEOUT_MS,
     }).toBeGreaterThan(0);
+    await expect.poll(async () => {
+      const selected = Number(await layoutCanvas.getAttribute('data-selected-shape-count') ?? '0');
+      const total = Number(await layoutCanvas.getAttribute('data-geometry-shape-count') ?? '0');
+      return total > selected && selected > 0;
+    }, {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBe(true);
+    const packagedSelectedShapeCount = Number(await layoutCanvas.getAttribute('data-selected-shape-count') ?? '0');
+    const packagedGeometryShapeCount = Number(await layoutCanvas.getAttribute('data-geometry-shape-count') ?? '0');
+    expect(packagedSelectedShapeCount).toBeGreaterThan(0);
+    expect(packagedGeometryShapeCount).toBeGreaterThan(packagedSelectedShapeCount);
   } finally {
     await app.close();
   }
@@ -4672,9 +4683,15 @@ test('activity bar switches code subpages and menu bar keeps higher-priority pag
   await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-layer-count') ?? '0'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(0);
-  await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-shape-count') ?? '0'), {
+  await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-selected-shape-count') ?? '0'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(0);
+  await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-geometry-shape-count') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
+  const selectedShapeCount = Number(await layoutCanvas.getAttribute('data-selected-shape-count') ?? '0');
+  const geometryShapeCount = Number(await layoutCanvas.getAttribute('data-geometry-shape-count') ?? '0');
+  expect(geometryShapeCount).toBeGreaterThan(selectedShapeCount);
   await expect(layoutCanvas.locator('canvas[data-physical-layout-canvas="true"]')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
   await expect(window.getByTestId('physical-left-panel-tabs')).toBeVisible();
   await expect(window.getByTestId('physical-left-panel-tab-layout')).toBeVisible();
@@ -4682,8 +4699,16 @@ test('activity bar switches code subpages and menu bar keeps higher-priority pag
   await expect(window.getByTestId('physical-layout-macro-list')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
   await expect(window.getByTestId('physical-left-panel-split-toggle')).toBeVisible();
   await expect(window.getByTestId('physical-right-panel-tabs')).toBeVisible();
-  await expect(window.getByTestId('physical-right-panel-tab-inspector')).toBeVisible();
+  await expect(window.getByTestId('physical-right-panel-tab-layers')).toBeVisible();
   await expect(window.getByTestId('physical-right-panel-tab-checks')).toBeVisible();
+  await expect(window.getByTestId('physical-layer-list')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  const layerRows = window.getByTestId('physical-layer-list').locator('[data-testid^="physical-layer-row-"]');
+  const layerSwatches = window.getByTestId('physical-layer-list').locator('[data-testid^="physical-layer-swatch-"]');
+  await expect.poll(async () => layerRows.count(), { timeout: UI_READY_TIMEOUT_MS }).toBeGreaterThan(0);
+  await expect.poll(async () => layerSwatches.count(), { timeout: UI_READY_TIMEOUT_MS }).toBe(
+    Number(await layoutCanvas.getAttribute('data-layer-count') ?? '0'),
+  );
+  await expect(layoutCanvas).toHaveAttribute('data-visible-layer-count', await layoutCanvas.getAttribute('data-layer-count') ?? '0');
   await expect(window.getByTestId('physical-right-panel-split-toggle')).toBeVisible();
   await expect(window.getByTestId('physical-bottom-panel-tabs')).toBeVisible();
   await expect(window.getByTestId('physical-bottom-panel-tab-reports')).toBeVisible();
@@ -4691,6 +4716,25 @@ test('activity bar switches code subpages and menu bar keeps higher-priority pag
   await expect(window.getByTestId('toggle-left-panel')).toBeEnabled();
   await expect(window.getByTestId('toggle-bottom-panel')).toBeEnabled();
   await expect(window.getByTestId('toggle-right-panel')).toBeEnabled();
+  const visibleLayerCountBeforeToggle = Number(await layoutCanvas.getAttribute('data-visible-layer-count') ?? '0');
+  const visibleShapeCountBeforeToggle = Number(await layoutCanvas.getAttribute('data-visible-shape-count') ?? '0');
+  const renderCountBeforeLayerToggle = Number(await layoutCanvas.getAttribute('data-render-count') ?? '0');
+  await layerSwatches.first().click();
+  await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-render-count') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(renderCountBeforeLayerToggle);
+  await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-visible-layer-count') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBe(visibleLayerCountBeforeToggle - 1);
+  expect(Number(await layoutCanvas.getAttribute('data-visible-shape-count') ?? '0')).toBeLessThanOrEqual(visibleShapeCountBeforeToggle);
+  for (let layerIndex = 1; layerIndex < await layerSwatches.count(); layerIndex += 1) {
+    await layerSwatches.nth(layerIndex).click();
+  }
+  await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-visible-layer-count') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBe(0);
+  await expect(layoutCanvas).toHaveAttribute('data-renderer', /^(webgpu|webgl)$/);
+  await expect(layoutCanvas.locator('canvas[data-physical-layout-canvas="true"]')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
 
   await layoutCanvas.hover();
   const panYBeforeWheel = Number(await layoutCanvas.getAttribute('data-pan-y') ?? '0');
@@ -4749,13 +4793,19 @@ test('activity bar switches code subpages and menu bar keeps higher-priority pag
 
   await window.getByTestId('physical-left-panel-split-toggle').click();
   await expect(window.getByTestId('physical-left-panel-split-group')).toBeVisible();
-  await expect(window.getByTestId('physical-left-panel-lower-panel-content')).toContainText('Layer Details');
+  await expect(window.getByTestId('physical-left-panel-lower-panel-tabs')).toBeVisible();
+  await expect(window.getByTestId('physical-left-lower-panel-tab-details')).toBeVisible();
+  await expect(window.getByTestId('physical-left-lower-panel-tab-notes')).toBeVisible();
+  await expect(window.getByTestId('physical-left-lower-panel-details-content')).toContainText('Layer Details');
   await window.getByTestId('physical-left-panel-split-toggle').click();
   await expect(window.getByTestId('physical-left-panel-lower-panel-content')).toHaveCount(0);
 
   await window.getByTestId('physical-right-panel-split-toggle').click();
   await expect(window.getByTestId('physical-right-panel-split-group')).toBeVisible();
-  await expect(window.getByTestId('physical-right-panel-lower-panel-content')).toContainText('Selection Details');
+  await expect(window.getByTestId('physical-right-panel-lower-panel-tabs')).toBeVisible();
+  await expect(window.getByTestId('physical-right-lower-panel-tab-inspector')).toBeVisible();
+  await expect(window.getByTestId('physical-right-lower-panel-tab-notes')).toBeVisible();
+  await expect(window.getByTestId('physical-right-panel-inspector-content')).toBeVisible();
   await window.getByTestId('physical-right-panel-split-toggle').click();
   await expect(window.getByTestId('physical-right-panel-lower-panel-content')).toHaveCount(0);
 

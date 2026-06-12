@@ -12,16 +12,19 @@ import {
   PhysicalRightPanel,
   type PhysicalWorkspaceLayoutState,
 } from './PhysicalWorkspacePanels';
+import { filterVisibleLayoutShapes } from './physicalLayoutLayers';
 
 vi.mock('./PhysicalLayoutCanvas', () => ({
   PhysicalLayoutCanvas: ({
     catalog,
     geometry,
     selectedMacroName,
+    visibleLayerIndices,
   }: {
     catalog: typeof layoutFixtureOpenResult.catalog | null;
     geometry: typeof layoutFixtureGeometry | null;
     selectedMacroName: string | null;
+    visibleLayerIndices: ReadonlySet<number>;
   }) => (
     <div
       data-layer-count={catalog?.layers.length ?? 0}
@@ -30,6 +33,7 @@ vi.mock('./PhysicalLayoutCanvas', () => ({
       data-selected-macro-name={selectedMacroName ?? ''}
       data-shape-count={geometry?.shapes.length ?? 0}
       data-testid="physical-layout-canvas"
+      data-visible-shape-count={geometry ? filterVisibleLayoutShapes(geometry.shapes, visibleLayerIndices).length : 0}
     />
   ),
 }));
@@ -57,6 +61,7 @@ describe('PhysicalWorkspacePanels', () => {
     renderInCodeLayout(
       <PhysicalMainPanel
         selectedMacroName={null}
+        visibleLayerIndices={new Set([0, 1])}
         onLayoutStateChange={onLayoutStateChange}
         onSelectedMacroNameChange={onSelectedMacroNameChange}
       />,
@@ -117,7 +122,10 @@ describe('PhysicalWorkspacePanels', () => {
 
     expect(screen.getByTestId('physical-left-panel-split-group')).toBeInTheDocument();
     expect(screen.getByTestId('physical-left-panel-split-resize-handle')).toBeInTheDocument();
-    expect(screen.getByTestId('physical-left-panel-lower-panel-content')).toHaveTextContent('Layer Details');
+    expect(screen.getByTestId('physical-left-panel-lower-panel-tabs')).toBeInTheDocument();
+    expect(screen.getByTestId('physical-left-lower-panel-tab-details')).toBeInTheDocument();
+    expect(screen.getByTestId('physical-left-lower-panel-tab-notes')).toBeInTheDocument();
+    expect(screen.getByTestId('physical-left-lower-panel-details-content')).toHaveTextContent('Layer Details');
     expect(screen.getByTestId('physical-left-panel-split-toggle')).toHaveAttribute('aria-label', 'Hide lower physical left panel');
     expect(onSplitPanelVisibleChange).toHaveBeenCalledWith(true);
 
@@ -126,20 +134,28 @@ describe('PhysicalWorkspacePanels', () => {
     expect(screen.getByTestId('physical-left-panel-split-toggle')).toHaveAttribute('aria-label', 'Show lower physical left panel');
   });
 
-  it('switches the physical right panel placeholder tabs', async () => {
+  it('switches physical right layers and checks tabs', async () => {
     const user = userEvent.setup();
+    const onLayerVisibilityToggle = vi.fn();
     renderInCodeLayout(
       <PhysicalRightPanel
         layoutState={readyLayoutState}
         selectedMacroName="sg13g2_inv_1"
+        visibleLayerIndices={new Set([0, 1])}
+        onLayerVisibilityToggle={onLayerVisibilityToggle}
       />,
     );
 
     expect(screen.getByTestId('physical-right-panel-tabs')).toBeInTheDocument();
     expect(screen.getByTestId('physical-right-panel-split-toggle')).toHaveAttribute('aria-label', 'Show lower physical right panel');
-    expect(screen.getByTestId('physical-right-panel-tab-inspector')).toBeInTheDocument();
+    expect(screen.getByTestId('physical-right-panel-tab-layers')).toBeInTheDocument();
     expect(screen.getByTestId('physical-right-panel-tab-checks')).toBeInTheDocument();
-    expect(screen.getByTestId('physical-right-panel-inspector-content')).toHaveTextContent('sg13g2_inv_1');
+    expect(screen.getByTestId('physical-right-panel-layers-content')).toHaveTextContent('Metal1');
+    expect(screen.getByTestId('physical-right-panel-layers-content')).toHaveTextContent('Metal2');
+
+    await user.click(screen.getByTestId('physical-layer-swatch-0'));
+
+    expect(onLayerVisibilityToggle).toHaveBeenCalledWith(0);
 
     await user.click(screen.getByTestId('physical-right-panel-tab-checks'));
 
@@ -157,7 +173,10 @@ describe('PhysicalWorkspacePanels', () => {
 
     expect(screen.getByTestId('physical-right-panel-split-group')).toBeInTheDocument();
     expect(screen.getByTestId('physical-right-panel-split-resize-handle')).toBeInTheDocument();
-    expect(screen.getByTestId('physical-right-panel-lower-panel-content')).toHaveTextContent('Selection Details');
+    expect(screen.getByTestId('physical-right-panel-lower-panel-tabs')).toBeInTheDocument();
+    expect(screen.getByTestId('physical-right-lower-panel-tab-inspector')).toBeInTheDocument();
+    expect(screen.getByTestId('physical-right-lower-panel-tab-notes')).toBeInTheDocument();
+    expect(screen.getByTestId('physical-right-panel-inspector-content')).toHaveTextContent('Inspector');
     expect(screen.getByTestId('physical-right-panel-split-toggle')).toHaveAttribute('aria-label', 'Hide lower physical right panel');
     expect(onSplitPanelVisibleChange).toHaveBeenCalledWith(true);
 

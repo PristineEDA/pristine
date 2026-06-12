@@ -53,7 +53,7 @@ const mockOpenLayoutPipeSession = vi.fn<(...args: unknown[]) => Promise<unknown>
   macroCount: 1,
   messages: [],
   netCount: 0,
-  protocol: 'pristine-layout-columnar-v1',
+  protocol: 'pristine-layout-columnar-v2',
   sessionId: 'layout-1',
   title: 'sg13g2_stdcell.lef',
   unitsPerMicron: 1000,
@@ -66,6 +66,7 @@ const mockRequestLayoutPipeGeometry = vi.fn<(...args: unknown[]) => Promise<unkn
     index: 0,
     kind: 'rect',
     layerIndex: 0,
+    macroIndex: 0,
     ownerIndex: 0,
     ownerKind: 'pin',
     rect: { x0: 0, y0: 0, x1: 1, y1: 1 },
@@ -444,7 +445,7 @@ function createFakeConnection(): FakeConnection {
           macroCount: 1,
           messages: [],
           netCount: 0,
-          protocol: 'pristine-layout-columnar-v1',
+          protocol: 'pristine-layout-columnar-v2',
           sessionId: 'layout-1',
           title: 'sg13g2_stdcell.lef',
           unitsPerMicron: 1000,
@@ -1153,11 +1154,11 @@ describe('LSP IPC handlers', () => {
         kind: 'namedPipe',
         path: '\\\\.\\pipe\\pristine-engine-layout-test',
       },
-      protocol: 'pristine-layout-columnar-v1',
+      protocol: 'pristine-layout-columnar-v2',
       sessionId: 'layout-1',
     }));
     expect(mockOpenLayoutPipeSession).toHaveBeenCalledWith(expect.objectContaining({
-      protocol: 'pristine-layout-columnar-v1',
+      protocol: 'pristine-layout-columnar-v2',
       sessionId: 'layout-1',
     }));
     expect(result).toEqual(expect.objectContaining({

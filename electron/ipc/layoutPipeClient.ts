@@ -16,9 +16,11 @@ import type {
   LspLayoutVia,
 } from '../../types/systemverilog-lsp.js';
 
-const layoutProtocolName = 'pristine-layout-columnar-v1';
-const layoutProtocolVersion = 1;
+const layoutProtocolName = 'pristine-layout-columnar-v2';
+const layoutProtocolVersion = 2;
 const layoutEnvelopeHeaderByteLength = 24;
+const layoutShapeTableEntryByteLength = 28;
+const layoutNoMacroIndex = 0xffffffff;
 const layoutMaxPayloadByteLength = 128 * 1024 * 1024;
 const layoutPipeRequestTimeoutMs = 10_000;
 
@@ -471,7 +473,7 @@ export function parseLayoutGeometryPayload(payload: Uint8Array): LspLayoutGeomet
   const polygonXOffset = readU32(view, 44);
   const polygonYOffset = readU32(view, 48);
 
-  requirePayloadRange(payload.byteLength, shapeTableOffset, shapeCount * 24, 'shape table');
+  requirePayloadRange(payload.byteLength, shapeTableOffset, shapeCount * layoutShapeTableEntryByteLength, 'shape table');
   requirePayloadRange(payload.byteLength, x0Offset, shapeCount * 8, 'x0 column');
   requirePayloadRange(payload.byteLength, y0Offset, shapeCount * 8, 'y0 column');
   requirePayloadRange(payload.byteLength, x1Offset, shapeCount * 8, 'x1 column');
@@ -481,9 +483,10 @@ export function parseLayoutGeometryPayload(payload: Uint8Array): LspLayoutGeomet
 
   const shapes: LspLayoutShape[] = [];
   for (let index = 0; index < shapeCount; index += 1) {
-    const shapeOffset = shapeTableOffset + index * 24;
-    const polygonOffset = readU32(view, shapeOffset + 16);
-    const polygonPointLength = readU32(view, shapeOffset + 20);
+    const shapeOffset = shapeTableOffset + index * layoutShapeTableEntryByteLength;
+    const macroIndex = readU32(view, shapeOffset + 12);
+    const polygonOffset = readU32(view, shapeOffset + 20);
+    const polygonPointLength = readU32(view, shapeOffset + 24);
     const polygon = polygonPointLength > 0
       ? readPolygonPoints(view, polygonXOffset, polygonYOffset, polygonPointCount, polygonOffset, polygonPointLength)
       : undefined;
@@ -494,7 +497,8 @@ export function parseLayoutGeometryPayload(payload: Uint8Array): LspLayoutGeomet
       kind: normalizeShapeKind(readU16(view, shapeOffset + 4)),
       ownerKind: normalizeOwnerKind(readU16(view, shapeOffset + 6)),
       ownerIndex: readU32(view, shapeOffset + 8),
-      flags: readU32(view, shapeOffset + 12),
+      macroIndex: macroIndex === layoutNoMacroIndex ? null : macroIndex,
+      flags: readU32(view, shapeOffset + 16),
       rect: {
         x0: readF64(view, x0Offset + index * 8),
         y0: readF64(view, y0Offset + index * 8),

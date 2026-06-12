@@ -53,18 +53,7 @@ export function selectMacroShapes(
     return [];
   }
 
-  const bounds = getMacroBounds(macro);
-  return geometry.shapes.filter((shape) => {
-    if (shape.ownerKind === 'obstruction' || shape.ownerKind === 'macro') {
-      return shape.ownerIndex === macro.index;
-    }
-
-    if (shape.ownerKind === 'pin') {
-      return shapeIntersectsBounds(shape, bounds);
-    }
-
-    return shapeIntersectsBounds(shape, bounds);
-  });
+  return geometry.shapes.filter((shape) => shape.macroIndex === macro.index);
 }
 
 export function getShapesBounds(shapes: readonly LspLayoutShape[], fallback: LspLayoutBounds | null): LspLayoutBounds | null {
@@ -174,14 +163,6 @@ export function shapeBounds(shape: LspLayoutShape): LspLayoutBounds {
     x1: Math.max(shape.rect.x0, shape.rect.x1),
     y1: Math.max(shape.rect.y0, shape.rect.y1),
   };
-}
-
-function shapeIntersectsBounds(shape: LspLayoutShape, bounds: LspLayoutBounds): boolean {
-  const shapeRect = shapeBounds(shape);
-  return shapeRect.x0 <= bounds.x1
-    && shapeRect.x1 >= bounds.x0
-    && shapeRect.y0 <= bounds.y1
-    && shapeRect.y1 >= bounds.y0;
 }
 
 function normalizeWheelDelta(value: number, deltaMode = 0): number {

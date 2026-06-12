@@ -83,10 +83,12 @@ vi.mock('./components/code/physical/PhysicalLayoutCanvas', () => ({
     catalog,
     geometry,
     selectedMacroName,
+    visibleLayerIndices,
   }: {
     catalog: { layers: unknown[]; macros: unknown[] } | null;
     geometry: { shapes: unknown[] } | null;
     selectedMacroName: string | null;
+    visibleLayerIndices: ReadonlySet<number>;
   }) => (
     <div
       data-layer-count={catalog?.layers.length ?? 0}
@@ -95,6 +97,7 @@ vi.mock('./components/code/physical/PhysicalLayoutCanvas', () => ({
       data-selected-macro-name={selectedMacroName ?? ''}
       data-shape-count={geometry?.shapes.length ?? 0}
       data-testid="physical-layout-canvas"
+      data-visible-layer-count={visibleLayerIndices.size}
     />
   ),
 }));
@@ -275,7 +278,7 @@ function expectPhysicalWorkspace() {
   expect(screen.getByTestId('physical-left-panel-tab-constraints')).toBeInTheDocument();
   expect(screen.getByTestId('physical-right-panel-tabs')).toBeInTheDocument();
   expect(screen.getByTestId('physical-right-panel-split-toggle')).toBeInTheDocument();
-  expect(screen.getByTestId('physical-right-panel-tab-inspector')).toBeInTheDocument();
+  expect(screen.getByTestId('physical-right-panel-tab-layers')).toBeInTheDocument();
   expect(screen.getByTestId('physical-right-panel-tab-checks')).toBeInTheDocument();
   expect(screen.getByTestId('physical-bottom-panel-tabs')).toBeInTheDocument();
   expect(screen.getByTestId('physical-bottom-panel-tab-reports')).toBeInTheDocument();

@@ -4,10 +4,12 @@ import {
   FileText,
   Gauge,
   Layers3,
+  ListChecks,
   PanelBottomClose,
   PanelBottomOpen,
   Ruler,
   ScanSearch,
+  SlidersHorizontal,
   X,
   Maximize,
   Minimize2,
@@ -40,10 +42,18 @@ import {
   type PhysicalLayoutStateSnapshot,
   type PhysicalLayoutStatus,
 } from './PhysicalLayoutEditorPanel';
+import {
+  getPhysicalLayoutLayerColor,
+  isLayoutLayerVisible,
+  type VisibleLayoutLayerSet,
+} from './physicalLayoutLayers';
 
 type PhysicalLeftPanelTab = 'layout' | 'constraints';
-type PhysicalRightPanelTab = 'inspector' | 'checks';
+type PhysicalLowerPanelTab = 'details' | 'notes';
+type PhysicalRightPanelTab = 'layers' | 'checks';
 type PhysicalBottomPanelTab = 'reports' | 'console';
+
+const emptyVisibleLayoutLayerSet = new Set<number>();
 
 export interface PhysicalWorkspaceLayoutState {
   catalog: LspLayoutCatalog | null;
@@ -59,8 +69,18 @@ const physicalLeftPanelTabs = [
 ] as const satisfies readonly IconTabToggleGroupItem[];
 
 const physicalRightPanelTabs = [
-  { value: 'inspector', label: 'Inspector', icon: ScanSearch, testId: 'physical-right-panel-tab-inspector' },
+  { value: 'layers', label: 'Layers', icon: Layers3, testId: 'physical-right-panel-tab-layers' },
   { value: 'checks', label: 'Checks', icon: Gauge, testId: 'physical-right-panel-tab-checks' },
+] as const satisfies readonly IconTabToggleGroupItem[];
+
+const physicalLeftLowerPanelTabs = [
+  { value: 'details', label: 'Details', icon: SlidersHorizontal, testId: 'physical-left-lower-panel-tab-details' },
+  { value: 'notes', label: 'Notes', icon: ListChecks, testId: 'physical-left-lower-panel-tab-notes' },
+] as const satisfies readonly IconTabToggleGroupItem[];
+
+const physicalRightLowerPanelTabs = [
+  { value: 'details', label: 'Inspector', icon: ScanSearch, testId: 'physical-right-lower-panel-tab-inspector' },
+  { value: 'notes', label: 'Notes', icon: ListChecks, testId: 'physical-right-lower-panel-tab-notes' },
 ] as const satisfies readonly IconTabToggleGroupItem[];
 
 const physicalBottomPanelTabs = [
@@ -143,10 +163,12 @@ export function PhysicalMainPanel({
   onLayoutStateChange,
   onSelectedMacroNameChange,
   selectedMacroName,
+  visibleLayerIndices,
 }: {
   onLayoutStateChange?: (state: PhysicalLayoutStateSnapshot) => void;
   onSelectedMacroNameChange?: (macroName: string) => void;
   selectedMacroName?: string | null;
+  visibleLayerIndices: VisibleLayoutLayerSet;
 }) {
   const { layoutMode } = useCodeViewerLayout();
 
@@ -155,6 +177,7 @@ export function PhysicalMainPanel({
       <div data-testid="physical-main-panel-content" className="h-full min-h-0">
         <PhysicalLayoutEditorPanel
           selectedMacroName={selectedMacroName ?? null}
+          visibleLayerIndices={visibleLayerIndices}
           onLayoutStateChange={onLayoutStateChange}
           onSelectedMacroNameChange={onSelectedMacroNameChange}
         />
@@ -263,6 +286,76 @@ function PhysicalInspectorSummary({
   );
 }
 
+function PhysicalLayerPanel({
+  catalog,
+  visibleLayerIndices,
+  onLayerVisibilityToggle,
+}: {
+  catalog?: LspLayoutCatalog | null;
+  visibleLayerIndices: VisibleLayoutLayerSet;
+  onLayerVisibilityToggle?: (layerIndex: number) => void;
+}) {
+  const layers = catalog?.layers ?? [];
+
+  if (layers.length === 0) {
+    return (
+      <PhysicalEmptyState
+        testId="physical-right-panel-layers-content"
+        title="Layers"
+        description="Layout layers will appear after the IHP stdcell LEF opens."
+      />
+    );
+  }
+
+  return (
+    <div data-testid="physical-right-panel-layers-content" className="flex h-full min-h-0 flex-col">
+      <div className="shrink-0 border-b border-ide-border/60 px-3 py-2">
+        <div className="flex items-center justify-between gap-2 text-[11px]">
+          <span className="font-medium text-ide-text">Layers</span>
+          <span className="text-ide-text-muted" data-testid="physical-layer-count">{layers.length}</span>
+        </div>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2" data-testid="physical-layer-list">
+        {layers.map((layer) => {
+          const visible = isLayoutLayerVisible(visibleLayerIndices, layer.index);
+          const color = getPhysicalLayoutLayerColor(layer.index);
+
+          return (
+            <div
+              key={`${layer.index}:${layer.name}`}
+              data-testid={`physical-layer-row-${layer.index}`}
+              className={cn(
+                'flex min-h-7 items-center gap-2 rounded px-1.5 py-1 text-[11px]',
+                visible ? 'text-ide-text' : 'text-ide-text-muted',
+              )}
+            >
+              <button
+                type="button"
+                aria-label={`Toggle layer ${layer.name}`}
+                aria-pressed={visible}
+                className={cn(
+                  'size-3.5 shrink-0 rounded-sm border border-white/20 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ide-accent',
+                  visible ? 'opacity-100' : 'opacity-35',
+                )}
+                data-testid={`physical-layer-swatch-${layer.index}`}
+                onClick={() => onLayerVisibilityToggle?.(layer.index)}
+                style={{ backgroundColor: color.cssColor }}
+              />
+              <span
+                className={cn('min-w-0 truncate', !visible && 'opacity-60')}
+                data-testid={`physical-layer-name-${layer.index}`}
+                title={layer.name}
+              >
+                {layer.name}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function PhysicalReportsSummary({ layoutState }: { layoutState?: PhysicalWorkspaceLayoutState }) {
   if (!layoutState || layoutState.status === 'idle' || layoutState.status === 'loading') {
     return (
@@ -302,18 +395,19 @@ function sanitizeMacroTestId(value: string): string {
   return value.replace(/[^a-zA-Z0-9_-]+/g, '-');
 }
 
-function PhysicalLowerPanel({
-  description,
+function PhysicalLowerPanel<TTab extends PhysicalLowerPanelTab>({
   isExpanded,
+  items,
+  panelContent,
   testId,
-  title,
 }: {
-  description: string;
   isExpanded: boolean;
+  items: readonly IconTabToggleGroupItem[];
+  panelContent: Record<TTab, ReactNode>;
   testId: string;
-  title: string;
 }) {
   const { layoutMode } = useCodeViewerLayout();
+  const [tab, setTab] = useState<TTab>('details' as TTab);
   const splitPanelFrameClassName = getCodeWorkspacePanelFrameClassName(layoutMode, 'flex h-full flex-col bg-ide-bg text-ide-text');
 
   return (
@@ -325,11 +419,21 @@ function PhysicalLowerPanel({
         opacity: isExpanded ? 1 : 0,
       }}
     >
-      <PhysicalEmptyState
-        testId={`${testId}-content`}
-        title={title}
-        description={description}
-      />
+      <div data-testid={`${testId}-tab-bar`} className={getPanelHeaderClassName(layoutMode)}>
+        <IconTabToggleGroup
+          items={items}
+          value={tab}
+          onValueChange={(nextValue) => setTab(nextValue as TTab)}
+          groupLabel="Physical lower panel tabs"
+          groupTestId={`${testId}-tabs`}
+          tooltipSide="bottom"
+          itemClassName={compactIconTabToggleItemClassName}
+          iconSize={compactIconTabToggleIconSize}
+        />
+      </div>
+      <div data-testid={`${testId}-content`} className="min-h-0 flex-1 overflow-hidden">
+        {panelContent[tab]}
+      </div>
     </section>
   );
 }
@@ -389,6 +493,22 @@ export function PhysicalLeftPanel({
       )}
     </div>
   );
+  const lowerContent = useMemo<Record<PhysicalLowerPanelTab, ReactNode>>(() => ({
+    details: (
+      <PhysicalEmptyState
+        testId="physical-left-lower-panel-details-content"
+        title="Layer Details"
+        description="Floorplan layer details and visibility presets will appear here."
+      />
+    ),
+    notes: (
+      <PhysicalEmptyState
+        testId="physical-left-lower-panel-notes-content"
+        title="Notes"
+        description="Physical layer notes and scratch data will appear here."
+      />
+    ),
+  }), []);
 
   return (
     <div
@@ -437,8 +557,8 @@ export function PhysicalLeftPanel({
           >
             <PhysicalLowerPanel
               testId="physical-left-panel-lower-panel"
-              title="Layer Details"
-              description="Floorplan layer details and visibility controls will appear here."
+              items={physicalLeftLowerPanelTabs}
+              panelContent={lowerContent}
               isExpanded={splitPanelPresence.isExpanded}
             />
           </ResizablePanel>
@@ -450,15 +570,19 @@ export function PhysicalLeftPanel({
 
 export function PhysicalRightPanel({
   layoutState,
+  onLayerVisibilityToggle,
   onSplitPanelVisibleChange,
   selectedMacroName,
+  visibleLayerIndices = emptyVisibleLayoutLayerSet,
 }: {
   layoutState?: PhysicalWorkspaceLayoutState;
+  onLayerVisibilityToggle?: (layerIndex: number) => void;
   onSplitPanelVisibleChange?: (isVisible: boolean) => void;
   selectedMacroName?: string | null;
+  visibleLayerIndices?: VisibleLayoutLayerSet;
 }) {
   const { layoutMode } = useCodeViewerLayout();
-  const [tab, setTab] = useState<PhysicalRightPanelTab>('inspector');
+  const [tab, setTab] = useState<PhysicalRightPanelTab>('layers');
   const [isSplitPanelVisible, setIsSplitPanelVisible] = useState(false);
   const splitPanelPresence = useAnimatedSplitPanelPresence(isSplitPanelVisible);
   const splitPanelFrameClassName = getCodeWorkspacePanelFrameClassName(layoutMode, 'flex h-full flex-col bg-ide-bg text-ide-text');
@@ -486,10 +610,11 @@ export function PhysicalRightPanel({
 
   const primaryContent = (
     <div className="min-h-0 flex-1 overflow-hidden">
-      {tab === 'inspector' ? (
-        <PhysicalInspectorSummary
-          layoutState={layoutState}
-          selectedMacroName={selectedMacroName}
+      {tab === 'layers' ? (
+        <PhysicalLayerPanel
+          catalog={layoutState?.catalog}
+          visibleLayerIndices={visibleLayerIndices}
+          onLayerVisibilityToggle={onLayerVisibilityToggle}
         />
       ) : (
         <PhysicalEmptyState
@@ -500,6 +625,21 @@ export function PhysicalRightPanel({
       )}
     </div>
   );
+  const lowerContent = useMemo<Record<PhysicalLowerPanelTab, ReactNode>>(() => ({
+    details: (
+      <PhysicalInspectorSummary
+        layoutState={layoutState}
+        selectedMacroName={selectedMacroName}
+      />
+    ),
+    notes: (
+      <PhysicalEmptyState
+        testId="physical-right-lower-panel-notes-content"
+        title="Notes"
+        description="Physical checks and selected object notes will appear here."
+      />
+    ),
+  }), [layoutState, selectedMacroName]);
 
   return (
     <div
@@ -548,8 +688,8 @@ export function PhysicalRightPanel({
           >
             <PhysicalLowerPanel
               testId="physical-right-panel-lower-panel"
-              title="Selection Details"
-              description="Selected instance details, rule results, and physical metadata will appear here."
+              items={physicalRightLowerPanelTabs}
+              panelContent={lowerContent}
               isExpanded={splitPanelPresence.isExpanded}
             />
           </ResizablePanel>
