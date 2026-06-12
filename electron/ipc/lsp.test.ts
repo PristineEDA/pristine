@@ -39,6 +39,7 @@ const mockOpenLayoutPipeSession = vi.fn<(...args: unknown[]) => Promise<unknown>
     hasBounds: true,
     layers: [{ index: 0, name: 'Metal1', kind: 1, pitch: 0.48, width: 0.16, spacing: 0.16 }],
     macros: [{ index: 0, name: 'sg13g2_inv_1', className: 'CORE', originX: 0, originY: 0, sizeX: 1.2, sizeY: 3.78, pinCount: 3 }],
+    pins: [{ macroIndex: 0, pinIndex: 0, name: 'A', use: 'SIGNAL', direction: 1, firstShapeIndex: 0, shapeCount: 1 }],
     nets: [],
     unitsPerMicron: 1000,
     vias: [],

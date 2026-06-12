@@ -11,6 +11,7 @@ import type {
   LspLayoutMacro,
   LspLayoutNet,
   LspLayoutOpenResult,
+  LspLayoutPin,
   LspLayoutShape,
   LspLayoutShapeKind,
   LspLayoutVia,
@@ -19,6 +20,8 @@ import type {
 const layoutProtocolName = 'pristine-layout-columnar-v2';
 const layoutProtocolVersion = 2;
 const layoutEnvelopeHeaderByteLength = 24;
+const layoutCatalogHeaderByteLength = 80;
+const layoutPinTableEntryByteLength = 28;
 const layoutShapeTableEntryByteLength = 28;
 const layoutNoMacroIndex = 0xffffffff;
 const layoutMaxPayloadByteLength = 128 * 1024 * 1024;
@@ -338,6 +341,9 @@ export function parseLayoutCatalogPayload(payload: Uint8Array): LspLayoutCatalog
 
   const headerSize = readU16(view, 6);
   requirePayloadRange(payload.byteLength, 0, headerSize, 'catalog header');
+  if (headerSize < layoutCatalogHeaderByteLength) {
+    throw new Error(`Unsupported layout catalog header size: ${headerSize}`);
+  }
 
   const unitsPerMicron = readU32(view, 8);
   const layerCount = readU32(view, 12);
@@ -355,6 +361,8 @@ export function parseLayoutCatalogPayload(payload: Uint8Array): LspLayoutCatalog
   const stringOffset = readU32(view, 60);
   const stringSize = readU32(view, 64);
   const hasBounds = readU32(view, 68) !== 0;
+  const pinCount = readU32(view, 72);
+  const pinTableOffset = readU32(view, 76);
   const strings = readTable(payload, stringOffset, stringSize, 'string table');
 
   const layers: LspLayoutLayer[] = [];
@@ -395,6 +403,21 @@ export function parseLayoutCatalogPayload(payload: Uint8Array): LspLayoutCatalog
       index,
       name: readLayoutString(strings, readU32(view, offset)),
       shapeCount: readU32(view, offset + 4),
+    });
+  }
+
+  const pins: LspLayoutPin[] = [];
+  requirePayloadRange(payload.byteLength, pinTableOffset, pinCount * layoutPinTableEntryByteLength, 'pin table');
+  for (let index = 0; index < pinCount; index += 1) {
+    const offset = pinTableOffset + index * layoutPinTableEntryByteLength;
+    pins.push({
+      macroIndex: readU32(view, offset),
+      pinIndex: readU32(view, offset + 4),
+      name: readLayoutString(strings, readU32(view, offset + 8)),
+      use: readLayoutString(strings, readU32(view, offset + 12)),
+      direction: readU16(view, offset + 16),
+      firstShapeIndex: readU32(view, offset + 20),
+      shapeCount: readU32(view, offset + 24),
     });
   }
 
@@ -443,6 +466,7 @@ export function parseLayoutCatalogPayload(payload: Uint8Array): LspLayoutCatalog
     hasBounds,
     layers,
     macros,
+    pins,
     vias,
     components,
     nets,

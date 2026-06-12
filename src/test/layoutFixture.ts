@@ -31,6 +31,13 @@ export const layoutFixtureOpenResult = {
       { index: 0, name: 'sg13g2_inv_1', className: 'CORE', originX: 0, originY: 0, sizeX: 1.2, sizeY: 3.78, pinCount: 3 },
       { index: 1, name: 'sg13g2_nand2_1', className: 'CORE', originX: 0, originY: 0, sizeX: 2.4, sizeY: 3.78, pinCount: 4 },
     ],
+    pins: [
+      { macroIndex: 0, pinIndex: 0, name: 'A', use: 'SIGNAL', direction: 1, firstShapeIndex: 0, shapeCount: 1 },
+      { macroIndex: 0, pinIndex: 1, name: 'Y', use: 'SIGNAL', direction: 2, firstShapeIndex: 1, shapeCount: 1 },
+      { macroIndex: 0, pinIndex: 2, name: 'VDD', use: 'POWER', direction: 3, firstShapeIndex: 0, shapeCount: 0 },
+      { macroIndex: 1, pinIndex: 0, name: 'A1', use: 'SIGNAL', direction: 1, firstShapeIndex: 0, shapeCount: 0 },
+      { macroIndex: 1, pinIndex: 1, name: 'VSS', use: 'GROUND', direction: 3, firstShapeIndex: 3, shapeCount: 1 },
+    ],
     vias: [],
     components: [],
     nets: [],

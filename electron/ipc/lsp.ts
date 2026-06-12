@@ -1620,6 +1620,7 @@ function createEmptyLayoutOpenResult(message: string): LspLayoutOpenResult {
       hasBounds: false,
       layers: [],
       macros: [],
+      pins: [],
       vias: [],
       components: [],
       nets: [],

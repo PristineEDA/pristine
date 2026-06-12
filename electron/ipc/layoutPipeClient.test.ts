@@ -100,6 +100,43 @@ describe('layoutPipeClient', () => {
       sizeX: 1.2,
       sizeY: 3.78,
     }]);
+    expect(catalog.pins).toEqual([
+      {
+        macroIndex: 0,
+        pinIndex: 0,
+        name: 'A',
+        use: 'SIGNAL',
+        direction: 1,
+        firstShapeIndex: 0,
+        shapeCount: 1,
+      },
+      {
+        macroIndex: 0,
+        pinIndex: 1,
+        name: 'VDD',
+        use: 'POWER',
+        direction: 3,
+        firstShapeIndex: 1,
+        shapeCount: 2,
+      },
+    ]);
+  });
+
+  it('rejects catalog payloads without the v2 pin table header fields', () => {
+    const payload = createCatalogPayloadFixture();
+    const legacyPayload = new Uint8Array(payload);
+    legacyPayload[6] = 72;
+    legacyPayload[7] = 0;
+
+    expect(() => parseLayoutCatalogPayload(legacyPayload)).toThrow('Unsupported layout catalog header size: 72');
+  });
+
+  it('rejects truncated catalog pin tables', () => {
+    const payload = createCatalogPayloadFixture();
+    const view = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
+    view.setUint32(76, payload.byteLength - 4, true);
+
+    expect(() => parseLayoutCatalogPayload(payload)).toThrow('Layout pin table is truncated.');
   });
 
   it('parses geometry payloads into shape objects', () => {
@@ -214,6 +251,7 @@ describe('layoutPipeClient', () => {
 
       expect(session.catalog.layers).toHaveLength(1);
       expect(session.catalog.macros[0]?.name).toBe('sg13g2_inv_1');
+      expect(session.catalog.pins.map((pin) => pin.name)).toEqual(['A', 'VDD']);
     } finally {
       await closeAllLayoutPipeSessions();
       await new Promise<void>((resolve, reject) => {
@@ -259,6 +297,24 @@ function createCatalogPayloadFixture(): Uint8Array {
   pushF64(output, 3.78);
   pushU32(output, 3);
 
+  const pinOffset = output.length;
+  pushU32(output, 0);
+  pushU32(output, 0);
+  pushU32(output, addString('A'));
+  pushU32(output, addString('SIGNAL'));
+  pushU16(output, 1);
+  pushU16(output, 0);
+  pushU32(output, 0);
+  pushU32(output, 1);
+  pushU32(output, 0);
+  pushU32(output, 1);
+  pushU32(output, addString('VDD'));
+  pushU32(output, addString('POWER'));
+  pushU16(output, 3);
+  pushU16(output, 0);
+  pushU32(output, 1);
+  pushU32(output, 2);
+
   const viaOffset = output.length;
   const componentOffset = output.length;
   const netOffset = output.length;
@@ -289,6 +345,8 @@ function createCatalogPayloadFixture(): Uint8Array {
   setU32(output, 60, stringOffset);
   setU32(output, 64, strings.length);
   setU32(output, 68, 1);
+  setU32(output, 72, 2);
+  setU32(output, 76, pinOffset);
   return Uint8Array.from(output);
 }
 

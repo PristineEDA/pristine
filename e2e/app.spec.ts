@@ -1870,10 +1870,17 @@ test('packaged Windows app opens Physical layout from workspace-root LEF', async
     }, {
       timeout: UI_READY_TIMEOUT_MS,
     }).toBe(true);
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-selected-pin-count') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(0);
     const packagedSelectedShapeCount = Number(await layoutCanvas.getAttribute('data-selected-shape-count') ?? '0');
     const packagedGeometryShapeCount = Number(await layoutCanvas.getAttribute('data-geometry-shape-count') ?? '0');
     expect(packagedSelectedShapeCount).toBeGreaterThan(0);
     expect(packagedGeometryShapeCount).toBeGreaterThan(packagedSelectedShapeCount);
+    await expect.poll(async () => await layoutCanvas.getAttribute('data-visible-label-names') ?? '', {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toContain('A');
+    expect(await layoutCanvas.getAttribute('data-visible-label-names')).not.toMatch(/PIN \d+/);
   } finally {
     await app.close();
   }
@@ -4689,10 +4696,19 @@ test('activity bar switches code subpages and menu bar keeps higher-priority pag
   await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-geometry-shape-count') ?? '0'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(0);
+  await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-selected-pin-count') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
   const selectedShapeCount = Number(await layoutCanvas.getAttribute('data-selected-shape-count') ?? '0');
   const geometryShapeCount = Number(await layoutCanvas.getAttribute('data-geometry-shape-count') ?? '0');
   expect(geometryShapeCount).toBeGreaterThan(selectedShapeCount);
   await expect(layoutCanvas.locator('canvas[data-physical-layout-canvas="true"]')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect.poll(async () => await layoutCanvas.getAttribute('data-visible-label-names') ?? '', {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toContain('A');
+  const visibleLabelNamesBeforeToggle = await layoutCanvas.getAttribute('data-visible-label-names') ?? '';
+  expect(visibleLabelNamesBeforeToggle.split('|')).toEqual(expect.arrayContaining(['A', 'Y']));
+  expect(visibleLabelNamesBeforeToggle).not.toMatch(/PIN \d+/);
   await expect(window.getByTestId('physical-left-panel-tabs')).toBeVisible();
   await expect(window.getByTestId('physical-left-panel-tab-layout')).toBeVisible();
   await expect(window.getByTestId('physical-left-panel-tab-constraints')).toBeVisible();

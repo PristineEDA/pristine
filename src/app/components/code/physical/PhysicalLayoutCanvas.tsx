@@ -76,8 +76,8 @@ export function PhysicalLayoutCanvas({
     [selectedShapes, layoutVisibility],
   );
   const visibleLabels = useMemo(
-    () => createPhysicalLayoutPinLabels(selectedShapes, layoutVisibility),
-    [selectedShapes, layoutVisibility],
+    () => createPhysicalLayoutPinLabels(catalog, selectedShapes, layoutVisibility),
+    [catalog, selectedShapes, layoutVisibility],
   );
   const visibleShapeCounts = useMemo(
     () => getVisiblePhysicalLayoutShapeCounts(selectedShapes, layoutVisibility),
@@ -88,6 +88,10 @@ export function PhysicalLayoutCanvas({
     [selectedMacro, selectedShapes],
   );
   const layerCount = catalog?.layers.length ?? 0;
+  const catalogPinCount = catalog?.pins.length ?? 0;
+  const selectedPinCount = catalog && selectedMacro
+    ? catalog.pins.filter((pin) => pin.macroIndex === selectedMacro.index).length
+    : 0;
   const visibleLayerCount = getVisiblePhysicalLayoutLayerCount(catalog, layoutVisibility);
   const visibleCategoryCount = getVisiblePhysicalLayoutCategoryCount(catalog, layoutVisibility);
   const outlineVisible = isPhysicalLayoutOutlineVisible(layoutVisibility);
@@ -307,6 +311,7 @@ export function PhysicalLayoutCanvas({
       ref={hostRef}
       aria-label="Physical layout editor canvas"
       className="relative h-full min-h-0 w-full overflow-hidden bg-[#101317] outline-none"
+      data-catalog-pin-count={catalogPinCount}
       data-geometry-shape-count={geometry?.shapes.length ?? 0}
       data-hidden-layer-count={Math.max(0, layerCount - visibleLayerCount)}
       data-outline-visible={outlineVisible ? 'true' : 'false'}
@@ -317,11 +322,13 @@ export function PhysicalLayoutCanvas({
       data-render-count={renderCount}
       data-renderer={renderer}
       data-selected-macro-name={selectedMacroName ?? ''}
+      data-selected-pin-count={selectedPinCount}
       data-selected-shape-count={selectedShapes.length}
       data-shape-count={selectedShapes.length}
       data-testid="physical-layout-canvas"
       data-visible-category-count={visibleCategoryCount}
       data-visible-label-count={visibleLabels.length}
+      data-visible-label-names={visibleLabels.map((label) => label.name).join('|')}
       data-visible-layer-count={visibleLayerCount}
       data-visible-obstruction-shape-count={visibleShapeCounts.obstruction}
       data-visible-pin-shape-count={visibleShapeCounts.pin}

@@ -121,10 +121,10 @@ describe('physicalLayoutGeometry', () => {
 
     expect(isPhysicalLayoutOutlineVisible(hiddenVisibility)).toBe(false);
     expect(filterVisiblePhysicalLayoutShapes(selectedShapes, hiddenVisibility)).toEqual([]);
-    expect(createPhysicalLayoutPinLabels(selectedShapes, hiddenVisibility)).toEqual([]);
+    expect(createPhysicalLayoutPinLabels(catalog, selectedShapes, hiddenVisibility)).toEqual([]);
   });
 
-  it('builds layer tree availability and placeholder pin labels', () => {
+  it('builds layer tree availability and real pin labels', () => {
     const selectedShapes = selectMacroShapes(catalog, layoutFixtureGeometry, 'sg13g2_inv_1');
     const visibility = createPhysicalLayoutVisibility(catalog, findLayoutMacro(catalog, 'sg13g2_inv_1'), selectedShapes);
     const tree = createPhysicalLayoutLayerTree(catalog, selectedShapes);
@@ -134,9 +134,30 @@ describe('physicalLayoutGeometry', () => {
     expect(tree[0]?.available).toBe(true);
     expect(tree[1]?.categories).toEqual({ label: false, obstruction: true, pin: false });
     expect(tree[1]?.available).toBe(true);
-    expect(createPhysicalLayoutPinLabels(selectedShapes, visibility)).toEqual([
-      expect.objectContaining({ layerIndex: 0, name: 'PIN 0', ownerIndex: 0 }),
-      expect.objectContaining({ layerIndex: 0, name: 'PIN 1', ownerIndex: 1 }),
+    expect(createPhysicalLayoutPinLabels(catalog, selectedShapes, visibility)).toEqual([
+      expect.objectContaining({ layerIndex: 0, name: 'A', ownerIndex: 0 }),
+      expect.objectContaining({ layerIndex: 0, name: 'Y', ownerIndex: 1 }),
     ]);
+  });
+
+  it('omits pin labels when the catalog has no matching pin table entry', () => {
+    const selectedShapes = selectMacroShapes(catalog, layoutFixtureGeometry, 'sg13g2_inv_1');
+    const visibility = createPhysicalLayoutVisibility(catalog, findLayoutMacro(catalog, 'sg13g2_inv_1'), selectedShapes);
+    const catalogWithoutPinNames = {
+      ...catalog,
+      pins: catalog.pins.filter((pin) => !(pin.macroIndex === 0 && pin.pinIndex === 1)),
+    };
+
+    expect(createPhysicalLayoutPinLabels(catalogWithoutPinNames, selectedShapes, visibility)).toEqual([
+      expect.objectContaining({ layerIndex: 0, name: 'A', ownerIndex: 0 }),
+    ]);
+
+    const catalogWithoutSelectedPinNames = {
+      ...catalog,
+      pins: catalog.pins.filter((pin) => pin.macroIndex !== 0),
+    };
+
+    expect(createPhysicalLayoutLayerTree(catalogWithoutSelectedPinNames, selectedShapes)[0]?.categories.label).toBe(false);
+    expect(createPhysicalLayoutPinLabels(catalogWithoutSelectedPinNames, selectedShapes, visibility)).toEqual([]);
   });
 });

@@ -422,6 +422,16 @@ export interface LspLayoutMacro {
   pinCount: number;
 }
 
+export interface LspLayoutPin {
+  macroIndex: number;
+  pinIndex: number;
+  name: string;
+  use: string;
+  direction: number;
+  firstShapeIndex: number;
+  shapeCount: number;
+}
+
 export interface LspLayoutVia {
   index: number;
   name: string;
@@ -458,6 +468,7 @@ export interface LspLayoutCatalog {
   hasBounds: boolean;
   layers: LspLayoutLayer[];
   macros: LspLayoutMacro[];
+  pins: LspLayoutPin[];
   vias: LspLayoutVia[];
   components: LspLayoutComponent[];
   nets: LspLayoutNet[];

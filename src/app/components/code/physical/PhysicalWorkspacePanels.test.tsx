@@ -40,6 +40,7 @@ vi.mock('./PhysicalLayoutCanvas', () => ({
       data-shape-count={geometry?.shapes.length ?? 0}
       data-outline-visible={isPhysicalLayoutOutlineVisible(layoutVisibility) ? 'true' : 'false'}
       data-testid="physical-layout-canvas"
+      data-visible-label-names="A|Y"
       data-visible-shape-count={geometry ? filterVisiblePhysicalLayoutShapes(geometry.shapes, layoutVisibility).length : 0}
     />
   ),

@@ -129,13 +129,14 @@ export function createPhysicalLayoutLayerTree(
   shapes: readonly LspLayoutShape[],
 ): PhysicalLayoutLayerTreeEntry[] {
   const shapeCountsByLayer = new Map<number, PhysicalLayoutLayerCategoryAvailability>();
+  const pinNameByKey = createPhysicalLayoutPinNameMap(catalog);
 
   for (const shape of shapes) {
     const categories = shapeCountsByLayer.get(shape.layerIndex) ?? { label: false, obstruction: false, pin: false };
 
     if (shape.ownerKind === 'pin') {
       categories.pin = true;
-      categories.label = true;
+      categories.label = categories.label || getPhysicalLayoutPinName(pinNameByKey, shape) !== null;
     } else if (shape.ownerKind === 'obstruction') {
       categories.obstruction = true;
     }
@@ -193,12 +194,15 @@ export function getVisiblePhysicalLayoutShapeCounts(
 }
 
 export function createPhysicalLayoutPinLabels(
+  catalog: LspLayoutCatalog | null | undefined,
   shapes: readonly LspLayoutShape[],
   visibility: PhysicalLayoutVisibility,
 ): PhysicalLayoutPinLabel[] {
+  const pinNameByKey = createPhysicalLayoutPinNameMap(catalog);
   const labelBoundsByKey = new Map<string, {
     color: number;
     layerIndex: number;
+    name: string;
     ownerIndex: number;
     x0: number;
     x1: number;
@@ -214,8 +218,13 @@ export function createPhysicalLayoutPinLabels(
       continue;
     }
 
+    const pinName = getPhysicalLayoutPinName(pinNameByKey, shape);
+    if (!pinName) {
+      continue;
+    }
+
     const bounds = shapeBounds(shape);
-    const key = `${shape.layerIndex}:${shape.ownerIndex}`;
+    const key = `${shape.macroIndex ?? 'global'}:${shape.layerIndex}:${shape.ownerIndex}`;
     const existing = labelBoundsByKey.get(key);
 
     if (existing) {
@@ -229,6 +238,7 @@ export function createPhysicalLayoutPinLabels(
     labelBoundsByKey.set(key, {
       color: getPhysicalLayoutLayerColor(shape.layerIndex).pixiColor,
       layerIndex: shape.layerIndex,
+      name: pinName,
       ownerIndex: shape.ownerIndex,
       x0: bounds.x0,
       y0: bounds.y0,
@@ -240,11 +250,37 @@ export function createPhysicalLayoutPinLabels(
   return Array.from(labelBoundsByKey.values()).map((entry) => ({
     color: entry.color,
     layerIndex: entry.layerIndex,
-    name: `PIN ${entry.ownerIndex}`,
+    name: entry.name,
     ownerIndex: entry.ownerIndex,
     x: (entry.x0 + entry.x1) / 2,
     y: (entry.y0 + entry.y1) / 2,
   }));
+}
+
+export function createPhysicalLayoutPinNameMap(catalog: LspLayoutCatalog | null | undefined): ReadonlyMap<string, string> {
+  const pinNameByKey = new Map<string, string>();
+
+  for (const pin of catalog?.pins ?? []) {
+    if (pin.name.length === 0) {
+      continue;
+    }
+
+    pinNameByKey.set(createPinNameKey(pin.macroIndex, pin.pinIndex), pin.name);
+  }
+
+  return pinNameByKey;
+}
+
+function getPhysicalLayoutPinName(pinNameByKey: ReadonlyMap<string, string>, shape: LspLayoutShape): string | null {
+  if (shape.macroIndex === null) {
+    return null;
+  }
+
+  return pinNameByKey.get(createPinNameKey(shape.macroIndex, shape.ownerIndex)) ?? null;
+}
+
+function createPinNameKey(macroIndex: number, pinIndex: number): string {
+  return `${macroIndex}:${pinIndex}`;
 }
 
 export function getVisiblePhysicalLayoutLayerCount(
