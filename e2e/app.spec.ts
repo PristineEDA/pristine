@@ -4703,12 +4703,17 @@ test('activity bar switches code subpages and menu bar keeps higher-priority pag
   await expect(window.getByTestId('physical-right-panel-tab-checks')).toBeVisible();
   await expect(window.getByTestId('physical-layer-list')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
   const layerRows = window.getByTestId('physical-layer-list').locator('[data-testid^="physical-layer-row-"]');
-  const layerSwatches = window.getByTestId('physical-layer-list').locator('[data-testid^="physical-layer-swatch-"]');
+  const outlineSwatch = window.getByTestId('physical-layer-outline-swatch');
+  const categorySwatches = window.getByTestId('physical-layer-list').locator('[data-testid^="physical-layer-category-swatch-"]');
   await expect.poll(async () => layerRows.count(), { timeout: UI_READY_TIMEOUT_MS }).toBeGreaterThan(0);
-  await expect.poll(async () => layerSwatches.count(), { timeout: UI_READY_TIMEOUT_MS }).toBe(
-    Number(await layoutCanvas.getAttribute('data-layer-count') ?? '0'),
-  );
-  await expect(layoutCanvas).toHaveAttribute('data-visible-layer-count', await layoutCanvas.getAttribute('data-layer-count') ?? '0');
+  await expect(window.getByTestId('physical-layer-outline-row')).toBeVisible();
+  await expect(window.getByTestId('physical-layer-outline-name')).toHaveText('Outline');
+  await expect(outlineSwatch).toHaveAttribute('aria-pressed', 'true');
+  await expect.poll(async () => categorySwatches.count(), { timeout: UI_READY_TIMEOUT_MS }).toBeGreaterThan(0);
+  await expect(window.getByTestId('physical-layer-list').getByText('Pin').first()).toBeVisible();
+  await expect(window.getByTestId('physical-layer-list').getByText('Label').first()).toBeVisible();
+  await expect(window.getByTestId('physical-layer-list').getByText('Obstruction').first()).toBeVisible();
+  await expect(layoutCanvas).toHaveAttribute('data-outline-visible', 'true');
   await expect(window.getByTestId('physical-right-panel-split-toggle')).toBeVisible();
   await expect(window.getByTestId('physical-bottom-panel-tabs')).toBeVisible();
   await expect(window.getByTestId('physical-bottom-panel-tab-reports')).toBeVisible();
@@ -4716,23 +4721,57 @@ test('activity bar switches code subpages and menu bar keeps higher-priority pag
   await expect(window.getByTestId('toggle-left-panel')).toBeEnabled();
   await expect(window.getByTestId('toggle-bottom-panel')).toBeEnabled();
   await expect(window.getByTestId('toggle-right-panel')).toBeEnabled();
-  const visibleLayerCountBeforeToggle = Number(await layoutCanvas.getAttribute('data-visible-layer-count') ?? '0');
+  const renderCountBeforeOutlineToggle = Number(await layoutCanvas.getAttribute('data-render-count') ?? '0');
+  await outlineSwatch.click();
+  await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-render-count') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(renderCountBeforeOutlineToggle);
+  await expect(layoutCanvas).toHaveAttribute('data-outline-visible', 'false');
+
   const visibleShapeCountBeforeToggle = Number(await layoutCanvas.getAttribute('data-visible-shape-count') ?? '0');
   const renderCountBeforeLayerToggle = Number(await layoutCanvas.getAttribute('data-render-count') ?? '0');
-  await layerSwatches.first().click();
+  const enabledPinSwatch = window.getByTestId('physical-layer-list')
+    .locator('[data-testid^="physical-layer-category-swatch-"][data-testid$="-pin"]:not(:disabled)')
+    .first();
+  await expect(enabledPinSwatch).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await enabledPinSwatch.click();
   await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-render-count') ?? '0'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(renderCountBeforeLayerToggle);
-  await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-visible-layer-count') ?? '0'), {
+  await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-visible-shape-count') ?? '0'), {
     timeout: UI_READY_TIMEOUT_MS,
-  }).toBe(visibleLayerCountBeforeToggle - 1);
-  expect(Number(await layoutCanvas.getAttribute('data-visible-shape-count') ?? '0')).toBeLessThanOrEqual(visibleShapeCountBeforeToggle);
-  for (let layerIndex = 1; layerIndex < await layerSwatches.count(); layerIndex += 1) {
-    await layerSwatches.nth(layerIndex).click();
+  }).toBeLessThan(visibleShapeCountBeforeToggle);
+
+  const labelCountBeforeToggle = Number(await layoutCanvas.getAttribute('data-visible-label-count') ?? '0');
+  const enabledLabelSwatch = window.getByTestId('physical-layer-list')
+    .locator('[data-testid^="physical-layer-category-swatch-"][data-testid$="-label"]:not(:disabled)')
+    .first();
+  await expect(enabledLabelSwatch).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await enabledLabelSwatch.click();
+  await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-visible-label-count') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeLessThan(labelCountBeforeToggle);
+
+  const enabledCategorySwatches = window.getByTestId('physical-layer-list')
+    .locator('[data-testid^="physical-layer-category-swatch-"]:not(:disabled)');
+  const enabledCategoryCount = await enabledCategorySwatches.count();
+  const enabledCategoryTestIds: string[] = [];
+  for (let categoryIndex = 0; categoryIndex < enabledCategoryCount; categoryIndex += 1) {
+    const testId = await enabledCategorySwatches.nth(categoryIndex).getAttribute('data-testid');
+    if (testId) {
+      enabledCategoryTestIds.push(testId);
+    }
   }
-  await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-visible-layer-count') ?? '0'), {
+  for (const testId of enabledCategoryTestIds) {
+    const swatch = window.getByTestId(testId);
+    if (await swatch.getAttribute('aria-pressed') === 'true') {
+      await swatch.click();
+    }
+  }
+  await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-visible-shape-count') ?? '0'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBe(0);
+  await expect(layoutCanvas).toHaveAttribute('data-visible-label-count', '0');
   await expect(layoutCanvas).toHaveAttribute('data-renderer', /^(webgpu|webgl)$/);
   await expect(layoutCanvas.locator('canvas[data-physical-layout-canvas="true"]')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
 

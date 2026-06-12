@@ -27,7 +27,15 @@ import {
   PhysicalRightPanel,
   type PhysicalWorkspaceLayoutState,
 } from './components/code/physical/PhysicalWorkspacePanels';
-import { createVisibleLayoutLayerSet } from './components/code/physical/physicalLayoutLayers';
+import {
+  createEmptyPhysicalLayoutVisibility,
+  createPhysicalLayoutVisibility,
+  createLayerCategoryVisibilityKey,
+  createOutlineVisibilityKey,
+  type PhysicalLayoutLayerCategory,
+  type MutablePhysicalLayoutVisibility,
+} from './components/code/physical/physicalLayoutLayers';
+import { findLayoutMacro, selectMacroShapes } from './components/code/physical/physicalLayoutGeometry';
 import { QuickOpenPalette } from './components/code/shared/QuickOpenPalette';
 import { isMonacoTextInputFocused } from './editor/focusEditor';
 import {
@@ -140,7 +148,9 @@ function AppLayout() {
     status: 'idle',
   });
   const [physicalSelectedMacroName, setPhysicalSelectedMacroName] = useState<string | null>(null);
-  const [physicalVisibleLayerIndices, setPhysicalVisibleLayerIndices] = useState<Set<number>>(() => new Set());
+  const [physicalLayoutVisibility, setPhysicalLayoutVisibility] = useState<MutablePhysicalLayoutVisibility>(() => (
+    createEmptyPhysicalLayoutVisibility()
+  ));
   const [assistantThreadListExpanded, setAssistantThreadListExpanded] = useState(false);
   const [assistantThreadListWidthPx, setAssistantThreadListWidthPx] = useState(ASSISTANT_THREAD_LIST_DEFAULT_WIDTH_PX);
   const [shouldMountWorkflowView, setShouldMountWorkflowView] = useState(mainContentView === 'workflow');
@@ -154,20 +164,45 @@ function AppLayout() {
   const explorerRightPanelMaxWidthPx = EXPLORER_RIGHT_PANEL_MAX_WIDTH_PX + assistantThreadListExtraWidthPx;
 
   useEffect(() => {
-    setPhysicalVisibleLayerIndices(createVisibleLayoutLayerSet(
-      physicalLayoutState.catalog?.layers.map((layer) => layer.index) ?? [],
-    ));
-  }, [physicalLayoutState.catalog]);
+    const macro = findLayoutMacro(physicalLayoutState.catalog, physicalSelectedMacroName);
+    const shapes = selectMacroShapes(physicalLayoutState.catalog, physicalLayoutState.geometry, physicalSelectedMacroName);
+    setPhysicalLayoutVisibility(createPhysicalLayoutVisibility(physicalLayoutState.catalog, macro, shapes));
+  }, [physicalLayoutState.catalog, physicalLayoutState.geometry, physicalSelectedMacroName]);
 
-  const handlePhysicalLayerVisibilityToggle = useCallback((layerIndex: number) => {
-    setPhysicalVisibleLayerIndices((current) => {
-      const next = new Set(current);
-      if (next.has(layerIndex)) {
-        next.delete(layerIndex);
+  const handlePhysicalOutlineVisibilityToggle = useCallback(() => {
+    setPhysicalLayoutVisibility((current) => {
+      const nextItems = new Set(current.visibleItems);
+      const outlineKey = createOutlineVisibilityKey();
+      if (nextItems.has(outlineKey)) {
+        nextItems.delete(outlineKey);
       } else {
-        next.add(layerIndex);
+        nextItems.add(outlineKey);
       }
-      return next;
+
+      return {
+        outlineVisible: nextItems.has(outlineKey),
+        visibleItems: nextItems,
+      };
+    });
+  }, []);
+
+  const handlePhysicalLayerCategoryVisibilityToggle = useCallback((
+    layerIndex: number,
+    category: PhysicalLayoutLayerCategory,
+  ) => {
+    setPhysicalLayoutVisibility((current) => {
+      const nextItems = new Set(current.visibleItems);
+      const key = createLayerCategoryVisibilityKey(layerIndex, category);
+      if (nextItems.has(key)) {
+        nextItems.delete(key);
+      } else {
+        nextItems.add(key);
+      }
+
+      return {
+        outlineVisible: current.outlineVisible,
+        visibleItems: nextItems,
+      };
     });
   }, []);
 
@@ -533,8 +568,8 @@ function AppLayout() {
       ),
       topContent: (
         <PhysicalMainPanel
+          layoutVisibility={physicalLayoutVisibility}
           selectedMacroName={physicalSelectedMacroName}
-          visibleLayerIndices={physicalVisibleLayerIndices}
           onSelectedMacroNameChange={setPhysicalSelectedMacroName}
           onLayoutStateChange={setPhysicalLayoutState}
         />
@@ -551,10 +586,11 @@ function AppLayout() {
       onBottomPanelAutoHide: () => setShowBottomPanel(false),
       rightContent: (
         <PhysicalRightPanel
+          layoutVisibility={physicalLayoutVisibility}
           layoutState={physicalLayoutState}
           selectedMacroName={physicalSelectedMacroName}
-          visibleLayerIndices={physicalVisibleLayerIndices}
-          onLayerVisibilityToggle={handlePhysicalLayerVisibilityToggle}
+          onLayerCategoryVisibilityToggle={handlePhysicalLayerCategoryVisibilityToggle}
+          onOutlineVisibilityToggle={handlePhysicalOutlineVisibilityToggle}
           onSplitPanelVisibleChange={setIsPhysicalRightPanelSplitVisible}
         />
       ),

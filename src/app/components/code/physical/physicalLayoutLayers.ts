@@ -1,4 +1,5 @@
-import type { LspLayoutShape } from '../../../../../types/systemverilog-lsp';
+import type { LspLayoutCatalog, LspLayoutLayer, LspLayoutMacro, LspLayoutShape } from '../../../../../types/systemverilog-lsp';
+import { shapeBounds } from './physicalLayoutGeometry';
 
 const layerPalette = [
   0x52a8ff,
@@ -18,7 +19,40 @@ export interface PhysicalLayoutLayerColor {
   pixiColor: number;
 }
 
-export type VisibleLayoutLayerSet = ReadonlySet<number>;
+export type PhysicalLayoutLayerCategory = 'pin' | 'label' | 'obstruction';
+
+export interface PhysicalLayoutVisibility {
+  outlineVisible: boolean;
+  visibleItems: ReadonlySet<string>;
+}
+
+export interface MutablePhysicalLayoutVisibility {
+  outlineVisible: boolean;
+  visibleItems: Set<string>;
+}
+
+export interface PhysicalLayoutLayerCategoryAvailability {
+  label: boolean;
+  obstruction: boolean;
+  pin: boolean;
+}
+
+export interface PhysicalLayoutLayerTreeEntry {
+  available: boolean;
+  categories: PhysicalLayoutLayerCategoryAvailability;
+  layer: LspLayoutLayer;
+}
+
+export interface PhysicalLayoutPinLabel {
+  color: number;
+  layerIndex: number;
+  name: string;
+  ownerIndex: number;
+  x: number;
+  y: number;
+}
+
+export const physicalLayoutLayerCategories = ['pin', 'label', 'obstruction'] as const satisfies readonly PhysicalLayoutLayerCategory[];
 
 export function getPhysicalLayoutLayerColor(layerIndex: number): PhysicalLayoutLayerColor {
   const pixiColor = layerPalette[Math.abs(layerIndex) % layerPalette.length] ?? layerPalette[0];
@@ -29,17 +63,206 @@ export function getPhysicalLayoutLayerColor(layerIndex: number): PhysicalLayoutL
   };
 }
 
-export function createVisibleLayoutLayerSet(layerIndices: readonly number[]): Set<number> {
-  return new Set(layerIndices);
+export function getPhysicalLayoutOutlineColor(): PhysicalLayoutLayerColor {
+  const pixiColor = 0xe5eef8;
+
+  return {
+    cssColor: `#${pixiColor.toString(16).padStart(6, '0')}`,
+    pixiColor,
+  };
 }
 
-export function isLayoutLayerVisible(visibleLayerIndices: VisibleLayoutLayerSet, layerIndex: number): boolean {
-  return visibleLayerIndices.has(layerIndex);
-}
-
-export function filterVisibleLayoutShapes(
+export function createPhysicalLayoutVisibility(
+  catalog: LspLayoutCatalog | null | undefined,
+  macro: LspLayoutMacro | null | undefined,
   shapes: readonly LspLayoutShape[],
-  visibleLayerIndices: VisibleLayoutLayerSet,
+): MutablePhysicalLayoutVisibility {
+  const visibleItems = new Set<string>();
+
+  if (macro) {
+    visibleItems.add(createOutlineVisibilityKey());
+  }
+
+  for (const entry of createPhysicalLayoutLayerTree(catalog, shapes)) {
+    for (const category of physicalLayoutLayerCategories) {
+      if (entry.categories[category]) {
+        visibleItems.add(createLayerCategoryVisibilityKey(entry.layer.index, category));
+      }
+    }
+  }
+
+  return {
+    outlineVisible: Boolean(macro),
+    visibleItems,
+  };
+}
+
+export function createEmptyPhysicalLayoutVisibility(): MutablePhysicalLayoutVisibility {
+  return {
+    outlineVisible: false,
+    visibleItems: new Set(),
+  };
+}
+
+export function createOutlineVisibilityKey(): string {
+  return 'outline';
+}
+
+export function createLayerCategoryVisibilityKey(layerIndex: number, category: PhysicalLayoutLayerCategory): string {
+  return `layer:${layerIndex}:${category}`;
+}
+
+export function isPhysicalLayoutOutlineVisible(visibility: PhysicalLayoutVisibility): boolean {
+  return visibility.outlineVisible && visibility.visibleItems.has(createOutlineVisibilityKey());
+}
+
+export function isPhysicalLayoutLayerCategoryVisible(
+  visibility: PhysicalLayoutVisibility,
+  layerIndex: number,
+  category: PhysicalLayoutLayerCategory,
+): boolean {
+  return visibility.visibleItems.has(createLayerCategoryVisibilityKey(layerIndex, category));
+}
+
+export function createPhysicalLayoutLayerTree(
+  catalog: LspLayoutCatalog | null | undefined,
+  shapes: readonly LspLayoutShape[],
+): PhysicalLayoutLayerTreeEntry[] {
+  const shapeCountsByLayer = new Map<number, PhysicalLayoutLayerCategoryAvailability>();
+
+  for (const shape of shapes) {
+    const categories = shapeCountsByLayer.get(shape.layerIndex) ?? { label: false, obstruction: false, pin: false };
+
+    if (shape.ownerKind === 'pin') {
+      categories.pin = true;
+      categories.label = true;
+    } else if (shape.ownerKind === 'obstruction') {
+      categories.obstruction = true;
+    }
+
+    shapeCountsByLayer.set(shape.layerIndex, categories);
+  }
+
+  return (catalog?.layers ?? []).map((layer) => {
+    const categories = shapeCountsByLayer.get(layer.index) ?? { label: false, obstruction: false, pin: false };
+
+    return {
+      available: categories.pin || categories.label || categories.obstruction,
+      categories,
+      layer,
+    };
+  });
+}
+
+export function filterVisiblePhysicalLayoutShapes(
+  shapes: readonly LspLayoutShape[],
+  visibility: PhysicalLayoutVisibility,
 ): LspLayoutShape[] {
-  return shapes.filter((shape) => isLayoutLayerVisible(visibleLayerIndices, shape.layerIndex));
+  return shapes.filter((shape) => {
+    if (shape.ownerKind === 'pin') {
+      return isPhysicalLayoutLayerCategoryVisible(visibility, shape.layerIndex, 'pin');
+    }
+
+    if (shape.ownerKind === 'obstruction') {
+      return isPhysicalLayoutLayerCategoryVisible(visibility, shape.layerIndex, 'obstruction');
+    }
+
+    return false;
+  });
+}
+
+export function getVisiblePhysicalLayoutShapeCounts(
+  shapes: readonly LspLayoutShape[],
+  visibility: PhysicalLayoutVisibility,
+): { obstruction: number; pin: number } {
+  let pin = 0;
+  let obstruction = 0;
+
+  for (const shape of shapes) {
+    if (shape.ownerKind === 'pin' && isPhysicalLayoutLayerCategoryVisible(visibility, shape.layerIndex, 'pin')) {
+      pin += 1;
+    } else if (
+      shape.ownerKind === 'obstruction'
+      && isPhysicalLayoutLayerCategoryVisible(visibility, shape.layerIndex, 'obstruction')
+    ) {
+      obstruction += 1;
+    }
+  }
+
+  return { obstruction, pin };
+}
+
+export function createPhysicalLayoutPinLabels(
+  shapes: readonly LspLayoutShape[],
+  visibility: PhysicalLayoutVisibility,
+): PhysicalLayoutPinLabel[] {
+  const labelBoundsByKey = new Map<string, {
+    color: number;
+    layerIndex: number;
+    ownerIndex: number;
+    x0: number;
+    x1: number;
+    y0: number;
+    y1: number;
+  }>();
+
+  for (const shape of shapes) {
+    if (
+      shape.ownerKind !== 'pin'
+      || !isPhysicalLayoutLayerCategoryVisible(visibility, shape.layerIndex, 'label')
+    ) {
+      continue;
+    }
+
+    const bounds = shapeBounds(shape);
+    const key = `${shape.layerIndex}:${shape.ownerIndex}`;
+    const existing = labelBoundsByKey.get(key);
+
+    if (existing) {
+      existing.x0 = Math.min(existing.x0, bounds.x0);
+      existing.y0 = Math.min(existing.y0, bounds.y0);
+      existing.x1 = Math.max(existing.x1, bounds.x1);
+      existing.y1 = Math.max(existing.y1, bounds.y1);
+      continue;
+    }
+
+    labelBoundsByKey.set(key, {
+      color: getPhysicalLayoutLayerColor(shape.layerIndex).pixiColor,
+      layerIndex: shape.layerIndex,
+      ownerIndex: shape.ownerIndex,
+      x0: bounds.x0,
+      y0: bounds.y0,
+      x1: bounds.x1,
+      y1: bounds.y1,
+    });
+  }
+
+  return Array.from(labelBoundsByKey.values()).map((entry) => ({
+    color: entry.color,
+    layerIndex: entry.layerIndex,
+    name: `PIN ${entry.ownerIndex}`,
+    ownerIndex: entry.ownerIndex,
+    x: (entry.x0 + entry.x1) / 2,
+    y: (entry.y0 + entry.y1) / 2,
+  }));
+}
+
+export function getVisiblePhysicalLayoutLayerCount(
+  catalog: LspLayoutCatalog | null | undefined,
+  visibility: PhysicalLayoutVisibility,
+): number {
+  return (catalog?.layers ?? []).filter((layer) => (
+    physicalLayoutLayerCategories.some((category) => isPhysicalLayoutLayerCategoryVisible(visibility, layer.index, category))
+  )).length;
+}
+
+export function getVisiblePhysicalLayoutCategoryCount(
+  catalog: LspLayoutCatalog | null | undefined,
+  visibility: PhysicalLayoutVisibility,
+): number {
+  return (catalog?.layers ?? []).reduce((count, layer) => (
+    count + physicalLayoutLayerCategories.filter((category) => (
+      isPhysicalLayoutLayerCategoryVisible(visibility, layer.index, category)
+    )).length
+  ), 0);
 }

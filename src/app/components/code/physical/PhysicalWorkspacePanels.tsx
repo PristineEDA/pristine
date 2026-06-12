@@ -43,17 +43,20 @@ import {
   type PhysicalLayoutStatus,
 } from './PhysicalLayoutEditorPanel';
 import {
+  createPhysicalLayoutLayerTree,
   getPhysicalLayoutLayerColor,
-  isLayoutLayerVisible,
-  type VisibleLayoutLayerSet,
+  getPhysicalLayoutOutlineColor,
+  isPhysicalLayoutLayerCategoryVisible,
+  isPhysicalLayoutOutlineVisible,
+  physicalLayoutLayerCategories,
+  type PhysicalLayoutLayerCategory,
+  type PhysicalLayoutVisibility,
 } from './physicalLayoutLayers';
 
 type PhysicalLeftPanelTab = 'layout' | 'constraints';
 type PhysicalLowerPanelTab = 'details' | 'notes';
 type PhysicalRightPanelTab = 'layers' | 'checks';
 type PhysicalBottomPanelTab = 'reports' | 'console';
-
-const emptyVisibleLayoutLayerSet = new Set<number>();
 
 export interface PhysicalWorkspaceLayoutState {
   catalog: LspLayoutCatalog | null;
@@ -87,6 +90,17 @@ const physicalBottomPanelTabs = [
   { value: 'reports', label: 'Reports', icon: ClipboardList, testId: 'physical-bottom-panel-tab-reports' },
   { value: 'console', label: 'Console', icon: FileText, testId: 'physical-bottom-panel-tab-console' },
 ] as const satisfies readonly IconTabToggleGroupItem[];
+
+const emptyPhysicalLayoutVisibility: PhysicalLayoutVisibility = {
+  outlineVisible: false,
+  visibleItems: new Set(),
+};
+
+const physicalLayerCategoryLabels: Record<PhysicalLayoutLayerCategory, string> = {
+  label: 'Label',
+  obstruction: 'Obstruction',
+  pin: 'Pin',
+};
 
 function PhysicalEmptyState({ title, description, testId }: { title: string; description: string; testId: string }) {
   return (
@@ -160,15 +174,15 @@ function PhysicalPanelTabs<TTab extends string>({
 }
 
 export function PhysicalMainPanel({
+  layoutVisibility,
   onLayoutStateChange,
   onSelectedMacroNameChange,
   selectedMacroName,
-  visibleLayerIndices,
 }: {
+  layoutVisibility: PhysicalLayoutVisibility;
   onLayoutStateChange?: (state: PhysicalLayoutStateSnapshot) => void;
   onSelectedMacroNameChange?: (macroName: string) => void;
   selectedMacroName?: string | null;
-  visibleLayerIndices: VisibleLayoutLayerSet;
 }) {
   const { layoutMode } = useCodeViewerLayout();
 
@@ -176,8 +190,8 @@ export function PhysicalMainPanel({
     <div className={getEditorAreaRootClassName(layoutMode)}>
       <div data-testid="physical-main-panel-content" className="h-full min-h-0">
         <PhysicalLayoutEditorPanel
+          layoutVisibility={layoutVisibility}
           selectedMacroName={selectedMacroName ?? null}
-          visibleLayerIndices={visibleLayerIndices}
           onLayoutStateChange={onLayoutStateChange}
           onSelectedMacroNameChange={onSelectedMacroNameChange}
         />
@@ -288,14 +302,27 @@ function PhysicalInspectorSummary({
 
 function PhysicalLayerPanel({
   catalog,
-  visibleLayerIndices,
-  onLayerVisibilityToggle,
+  geometry,
+  layoutVisibility,
+  onLayerCategoryVisibilityToggle,
+  onOutlineVisibilityToggle,
+  selectedMacroName,
 }: {
   catalog?: LspLayoutCatalog | null;
-  visibleLayerIndices: VisibleLayoutLayerSet;
-  onLayerVisibilityToggle?: (layerIndex: number) => void;
+  geometry?: LspLayoutGeometry | null;
+  layoutVisibility: PhysicalLayoutVisibility;
+  onLayerCategoryVisibilityToggle?: (layerIndex: number, category: PhysicalLayoutLayerCategory) => void;
+  onOutlineVisibilityToggle?: () => void;
+  selectedMacroName?: string | null;
 }) {
   const layers = catalog?.layers ?? [];
+  const macro = catalog?.macros.find((entry) => entry.name === selectedMacroName) ?? null;
+  const macroShapes = macro && geometry
+    ? geometry.shapes.filter((shape) => shape.macroIndex === macro.index)
+    : [];
+  const layerTree = createPhysicalLayoutLayerTree(catalog, macroShapes);
+  const outlineAvailable = Boolean(macro);
+  const outlineVisible = outlineAvailable && isPhysicalLayoutOutlineVisible(layoutVisibility);
 
   if (layers.length === 0) {
     return (
@@ -316,8 +343,38 @@ function PhysicalLayerPanel({
         </div>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2" data-testid="physical-layer-list">
-        {layers.map((layer) => {
-          const visible = isLayoutLayerVisible(visibleLayerIndices, layer.index);
+        <div
+          data-testid="physical-layer-outline-row"
+          className={cn(
+            'flex min-h-7 items-center gap-2 rounded px-1.5 py-1 text-[11px]',
+            outlineAvailable ? 'text-ide-text' : 'text-ide-text-muted opacity-55',
+          )}
+          aria-disabled={!outlineAvailable}
+        >
+          <button
+            type="button"
+            aria-label="Toggle layout outline"
+            aria-pressed={outlineVisible}
+            disabled={!outlineAvailable}
+            className={cn(
+              'size-3.5 shrink-0 rounded-sm border border-white/20 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ide-accent disabled:cursor-not-allowed',
+              outlineVisible ? 'opacity-100' : 'opacity-35',
+              !outlineAvailable && 'opacity-25',
+            )}
+            data-testid="physical-layer-outline-swatch"
+            onClick={onOutlineVisibilityToggle}
+            style={{ backgroundColor: getPhysicalLayoutOutlineColor().cssColor }}
+          />
+          <span
+            className={cn('min-w-0 truncate', !outlineVisible && 'opacity-60')}
+            data-testid="physical-layer-outline-name"
+          >
+            Outline
+          </span>
+        </div>
+
+        {layerTree.map((entry) => {
+          const { layer } = entry;
           const color = getPhysicalLayoutLayerColor(layer.index);
 
           return (
@@ -325,29 +382,61 @@ function PhysicalLayerPanel({
               key={`${layer.index}:${layer.name}`}
               data-testid={`physical-layer-row-${layer.index}`}
               className={cn(
-                'flex min-h-7 items-center gap-2 rounded px-1.5 py-1 text-[11px]',
-                visible ? 'text-ide-text' : 'text-ide-text-muted',
+                'rounded px-1.5 py-1 text-[11px]',
+                entry.available ? 'text-ide-text' : 'text-ide-text-muted opacity-55',
               )}
+              aria-disabled={!entry.available}
             >
-              <button
-                type="button"
-                aria-label={`Toggle layer ${layer.name}`}
-                aria-pressed={visible}
-                className={cn(
-                  'size-3.5 shrink-0 rounded-sm border border-white/20 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ide-accent',
-                  visible ? 'opacity-100' : 'opacity-35',
-                )}
-                data-testid={`physical-layer-swatch-${layer.index}`}
-                onClick={() => onLayerVisibilityToggle?.(layer.index)}
-                style={{ backgroundColor: color.cssColor }}
-              />
-              <span
-                className={cn('min-w-0 truncate', !visible && 'opacity-60')}
-                data-testid={`physical-layer-name-${layer.index}`}
-                title={layer.name}
-              >
-                {layer.name}
-              </span>
+              <div className="flex min-h-6 items-center gap-2">
+                <span
+                  className="min-w-0 truncate font-medium"
+                  data-testid={`physical-layer-name-${layer.index}`}
+                  title={layer.name}
+                >
+                  {layer.name}
+                </span>
+              </div>
+              <div className="mt-0.5 flex flex-col gap-0.5 pl-3">
+                {physicalLayoutLayerCategories.map((category) => {
+                  const available = entry.categories[category];
+                  const visible = available && isPhysicalLayoutLayerCategoryVisible(layoutVisibility, layer.index, category);
+                  const label = physicalLayerCategoryLabels[category];
+
+                  return (
+                    <div
+                      key={category}
+                      aria-disabled={!available}
+                      className={cn(
+                        'flex min-h-6 items-center gap-2 rounded px-1 py-0.5',
+                        available ? 'text-ide-text' : 'text-ide-text-muted opacity-45',
+                      )}
+                      data-testid={`physical-layer-category-row-${layer.index}-${category}`}
+                    >
+                      <button
+                        type="button"
+                        aria-label={`Toggle ${layer.name} ${label}`}
+                        aria-pressed={visible}
+                        disabled={!available}
+                        className={cn(
+                          'size-3.5 shrink-0 rounded-sm border border-white/20 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ide-accent disabled:cursor-not-allowed',
+                          visible ? 'opacity-100' : 'opacity-35',
+                          !available && 'opacity-25',
+                        )}
+                        data-testid={`physical-layer-category-swatch-${layer.index}-${category}`}
+                        onClick={() => onLayerCategoryVisibilityToggle?.(layer.index, category)}
+                        style={{ backgroundColor: color.cssColor }}
+                      />
+                      <span
+                        className={cn('min-w-0 truncate', !visible && available && 'opacity-60')}
+                        data-testid={`physical-layer-category-name-${layer.index}-${category}`}
+                        title={label}
+                      >
+                        {label}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           );
         })}
@@ -570,16 +659,18 @@ export function PhysicalLeftPanel({
 
 export function PhysicalRightPanel({
   layoutState,
-  onLayerVisibilityToggle,
+  layoutVisibility = emptyPhysicalLayoutVisibility,
+  onLayerCategoryVisibilityToggle,
+  onOutlineVisibilityToggle,
   onSplitPanelVisibleChange,
   selectedMacroName,
-  visibleLayerIndices = emptyVisibleLayoutLayerSet,
 }: {
   layoutState?: PhysicalWorkspaceLayoutState;
-  onLayerVisibilityToggle?: (layerIndex: number) => void;
+  layoutVisibility?: PhysicalLayoutVisibility;
+  onLayerCategoryVisibilityToggle?: (layerIndex: number, category: PhysicalLayoutLayerCategory) => void;
+  onOutlineVisibilityToggle?: () => void;
   onSplitPanelVisibleChange?: (isVisible: boolean) => void;
   selectedMacroName?: string | null;
-  visibleLayerIndices?: VisibleLayoutLayerSet;
 }) {
   const { layoutMode } = useCodeViewerLayout();
   const [tab, setTab] = useState<PhysicalRightPanelTab>('layers');
@@ -613,8 +704,11 @@ export function PhysicalRightPanel({
       {tab === 'layers' ? (
         <PhysicalLayerPanel
           catalog={layoutState?.catalog}
-          visibleLayerIndices={visibleLayerIndices}
-          onLayerVisibilityToggle={onLayerVisibilityToggle}
+          geometry={layoutState?.geometry}
+          layoutVisibility={layoutVisibility}
+          selectedMacroName={selectedMacroName}
+          onLayerCategoryVisibilityToggle={onLayerCategoryVisibilityToggle}
+          onOutlineVisibilityToggle={onOutlineVisibilityToggle}
         />
       ) : (
         <PhysicalEmptyState

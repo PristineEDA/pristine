@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Application, Container, Graphics } from 'pixi.js';
+import { Application, Container, Graphics, Text } from 'pixi.js';
 
 import type {
   LspLayoutCatalog,
@@ -17,9 +17,15 @@ import {
   type PhysicalLayoutCamera,
 } from './physicalLayoutGeometry';
 import {
-  filterVisibleLayoutShapes,
+  createPhysicalLayoutPinLabels,
+  filterVisiblePhysicalLayoutShapes,
   getPhysicalLayoutLayerColor,
-  type VisibleLayoutLayerSet,
+  getVisiblePhysicalLayoutCategoryCount,
+  getVisiblePhysicalLayoutLayerCount,
+  getVisiblePhysicalLayoutShapeCounts,
+  isPhysicalLayoutOutlineVisible,
+  type PhysicalLayoutPinLabel,
+  type PhysicalLayoutVisibility,
 } from './physicalLayoutLayers';
 
 type PixiRendererPreference = 'webgpu' | 'webgl';
@@ -29,7 +35,7 @@ interface PhysicalLayoutCanvasProps {
   catalog: LspLayoutCatalog | null;
   geometry: LspLayoutGeometry | null;
   selectedMacroName: string | null;
-  visibleLayerIndices: VisibleLayoutLayerSet;
+  layoutVisibility: PhysicalLayoutVisibility;
 }
 
 const defaultCamera: PhysicalLayoutCamera = { panX: 0, panY: 0, zoom: 24 };
@@ -42,7 +48,7 @@ export function PhysicalLayoutCanvas({
   catalog,
   geometry,
   selectedMacroName,
-  visibleLayerIndices,
+  layoutVisibility,
 }: PhysicalLayoutCanvasProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const appRef = useRef<Application | null>(null);
@@ -52,6 +58,8 @@ export function PhysicalLayoutCanvas({
   const cameraRef = useRef<PhysicalLayoutCamera>(defaultCamera);
   const selectedMacroRef = useRef<LspLayoutMacro | null>(null);
   const selectedShapesRef = useRef<LspLayoutShape[]>([]);
+  const selectedLabelsRef = useRef<PhysicalLayoutPinLabel[]>([]);
+  const outlineVisibleRef = useRef(false);
   const [renderer, setRenderer] = useState<PixiRendererStatus>('initializing');
   const [camera, setCamera] = useState<PhysicalLayoutCamera>(defaultCamera);
   const [renderCount, setRenderCount] = useState(0);
@@ -64,18 +72,30 @@ export function PhysicalLayoutCanvas({
     [catalog, geometry, selectedMacroName],
   );
   const visibleShapes = useMemo(
-    () => filterVisibleLayoutShapes(selectedShapes, visibleLayerIndices),
-    [selectedShapes, visibleLayerIndices],
+    () => filterVisiblePhysicalLayoutShapes(selectedShapes, layoutVisibility),
+    [selectedShapes, layoutVisibility],
+  );
+  const visibleLabels = useMemo(
+    () => createPhysicalLayoutPinLabels(selectedShapes, layoutVisibility),
+    [selectedShapes, layoutVisibility],
+  );
+  const visibleShapeCounts = useMemo(
+    () => getVisiblePhysicalLayoutShapeCounts(selectedShapes, layoutVisibility),
+    [selectedShapes, layoutVisibility],
   );
   const selectedBounds = useMemo(
     () => getShapesBounds(selectedShapes, selectedMacro ? getMacroBounds(selectedMacro) : null),
     [selectedMacro, selectedShapes],
   );
   const layerCount = catalog?.layers.length ?? 0;
-  const visibleLayerCount = catalog?.layers.filter((layer) => visibleLayerIndices.has(layer.index)).length ?? 0;
+  const visibleLayerCount = getVisiblePhysicalLayoutLayerCount(catalog, layoutVisibility);
+  const visibleCategoryCount = getVisiblePhysicalLayoutCategoryCount(catalog, layoutVisibility);
+  const outlineVisible = isPhysicalLayoutOutlineVisible(layoutVisibility);
 
   selectedMacroRef.current = selectedMacro;
   selectedShapesRef.current = visibleShapes;
+  selectedLabelsRef.current = visibleLabels;
+  outlineVisibleRef.current = outlineVisible;
 
   useEffect(() => {
     const host = hostRef.current;
@@ -154,7 +174,7 @@ export function PhysicalLayoutCanvas({
   useEffect(() => {
     redrawScene();
     requestRender();
-  }, [visibleShapes]);
+  }, [outlineVisible, visibleLabels, visibleShapes]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -272,8 +292,14 @@ export function PhysicalLayoutCanvas({
     }
 
     world.addChild(drawGrid(macro));
-    world.addChild(drawMacroOutline(macro));
+    if (outlineVisibleRef.current) {
+      world.addChild(drawMacroOutline(macro));
+    }
     world.addChild(drawShapes(selectedShapesRef.current));
+    const labels = drawPinLabels(selectedLabelsRef.current);
+    if (labels.length > 0) {
+      world.addChild(...labels);
+    }
   };
 
   return (
@@ -283,6 +309,7 @@ export function PhysicalLayoutCanvas({
       className="relative h-full min-h-0 w-full overflow-hidden bg-[#101317] outline-none"
       data-geometry-shape-count={geometry?.shapes.length ?? 0}
       data-hidden-layer-count={Math.max(0, layerCount - visibleLayerCount)}
+      data-outline-visible={outlineVisible ? 'true' : 'false'}
       data-layer-count={layerCount}
       data-macro-count={catalog?.macros.length ?? 0}
       data-pan-x={camera.panX.toFixed(2)}
@@ -293,7 +320,11 @@ export function PhysicalLayoutCanvas({
       data-selected-shape-count={selectedShapes.length}
       data-shape-count={selectedShapes.length}
       data-testid="physical-layout-canvas"
+      data-visible-category-count={visibleCategoryCount}
+      data-visible-label-count={visibleLabels.length}
       data-visible-layer-count={visibleLayerCount}
+      data-visible-obstruction-shape-count={visibleShapeCounts.obstruction}
+      data-visible-pin-shape-count={visibleShapeCounts.pin}
       data-visible-shape-count={visibleShapes.length}
       data-zoom={camera.zoom.toFixed(4)}
       role="img"
@@ -405,4 +436,28 @@ function drawShapes(shapes: readonly LspLayoutShape[]) {
   }
 
   return graphics;
+}
+
+function drawPinLabels(labels: readonly PhysicalLayoutPinLabel[]) {
+  const baseFontSize = 14;
+  const worldFontSize = 0.16;
+
+  return labels.map((label) => {
+    const text = new Text({
+      text: label.name,
+      style: {
+        fontFamily: 'Arial, sans-serif',
+        fontSize: baseFontSize,
+        fontWeight: '600',
+        fill: label.color,
+        stroke: { color: 0x101317, width: 2 },
+      },
+    });
+
+    text.anchor.set(0.5);
+    text.position.set(label.x, label.y);
+    text.scale.set(worldFontSize / baseFontSize);
+    text.resolution = 2;
+    return text;
+  });
 }

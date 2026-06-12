@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import type { LspLayoutCatalog, LspLayoutGeometry, LspLayoutOpenResult } from '../../../../../types/systemverilog-lsp';
-import type { VisibleLayoutLayerSet } from './physicalLayoutLayers';
+import type { PhysicalLayoutVisibility } from './physicalLayoutLayers';
 import { getFirstLayoutMacroName } from './physicalLayoutGeometry';
 import { PhysicalLayoutCanvas } from './PhysicalLayoutCanvas';
 
@@ -16,8 +16,8 @@ export interface PhysicalLayoutStateSnapshot {
 }
 
 interface PhysicalLayoutEditorPanelProps {
+  layoutVisibility: PhysicalLayoutVisibility;
   selectedMacroName: string | null;
-  visibleLayerIndices: VisibleLayoutLayerSet;
   onLayoutStateChange?: (state: PhysicalLayoutStateSnapshot) => void;
   onSelectedMacroNameChange?: (macroName: string) => void;
 }
@@ -25,8 +25,8 @@ interface PhysicalLayoutEditorPanelProps {
 const geometryMaxShapes = 250_000;
 
 export function PhysicalLayoutEditorPanel({
+  layoutVisibility,
   selectedMacroName,
-  visibleLayerIndices,
   onLayoutStateChange,
   onSelectedMacroNameChange,
 }: PhysicalLayoutEditorPanelProps) {
@@ -151,8 +151,8 @@ export function PhysicalLayoutEditorPanel({
           <PhysicalLayoutCanvas
             catalog={catalog}
             geometry={geometry}
+            layoutVisibility={layoutVisibility}
             selectedMacroName={selectedMacroName}
-            visibleLayerIndices={visibleLayerIndices}
           />
         )}
 
