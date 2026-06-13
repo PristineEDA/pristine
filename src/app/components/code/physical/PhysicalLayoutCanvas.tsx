@@ -19,7 +19,7 @@ import {
 import {
   createPhysicalLayoutPinLabels,
   filterVisiblePhysicalLayoutShapes,
-  getPhysicalLayoutLayerColor,
+  getPhysicalLayoutLayerCategoryColor,
   getVisiblePhysicalLayoutCategoryCount,
   getVisiblePhysicalLayoutLayerCount,
   getVisiblePhysicalLayoutShapeCounts,
@@ -421,8 +421,11 @@ function drawShapes(shapes: readonly LspLayoutShape[]) {
   const graphics = new Graphics();
 
   for (const shape of shapes) {
-    const color = getPhysicalLayoutLayerColor(shape.layerIndex).pixiColor;
-    const alpha = shape.ownerKind === 'obstruction' ? 0.35 : 0.7;
+    const color = getPhysicalLayoutLayerCategoryColor(
+      shape.layerIndex,
+      shape.ownerKind === 'obstruction' ? 'obstruction' : 'pin',
+    ).pixiColor;
+    const alpha = shape.ownerKind === 'obstruction' ? 0.28 : 0.7;
 
     if (shape.kind === 'polygon' && shape.polygon && shape.polygon.length >= 3) {
       graphics
@@ -457,7 +460,7 @@ function drawPinLabels(labels: readonly PhysicalLayoutPinLabel[]) {
         fontSize: baseFontSize,
         fontWeight: '600',
         fill: label.color,
-        stroke: { color: 0x101317, width: 2 },
+        stroke: { color: 0x101317, width: 3 },
       },
     });
 

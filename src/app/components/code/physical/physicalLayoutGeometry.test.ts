@@ -15,6 +15,7 @@ import {
   createPhysicalLayoutPinLabels,
   createPhysicalLayoutVisibility,
   filterVisiblePhysicalLayoutShapes,
+  getPhysicalLayoutLayerCategoryColor,
   getPhysicalLayoutLayerColor,
   getPhysicalLayoutOutlineColor,
   getVisiblePhysicalLayoutShapeCounts,
@@ -95,9 +96,13 @@ describe('physicalLayoutGeometry', () => {
 
   it('provides stable layer and outline colors', () => {
     const metal1Color = getPhysicalLayoutLayerColor(0);
+    const metal1PinColor = getPhysicalLayoutLayerCategoryColor(0, 'pin');
+    const metal1ObstructionColor = getPhysicalLayoutLayerCategoryColor(0, 'obstruction');
     const outlineColor = getPhysicalLayoutOutlineColor();
 
     expect(metal1Color).toEqual(getPhysicalLayoutLayerColor(0));
+    expect(metal1PinColor).toEqual(metal1Color);
+    expect(metal1ObstructionColor).toEqual({ cssColor: '#f472b6', pixiColor: 0xf472b6 });
     expect(metal1Color.cssColor).toMatch(/^#[0-9a-f]{6}$/);
     expect(Number.parseInt(metal1Color.cssColor.slice(1), 16)).toBe(metal1Color.pixiColor);
     expect(outlineColor.cssColor).toBe('#e5eef8');

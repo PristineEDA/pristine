@@ -63,6 +63,22 @@ export function getPhysicalLayoutLayerColor(layerIndex: number): PhysicalLayoutL
   };
 }
 
+export function getPhysicalLayoutLayerCategoryColor(
+  layerIndex: number,
+  category: PhysicalLayoutLayerCategory,
+): PhysicalLayoutLayerColor {
+  if (category === 'obstruction') {
+    const pixiColor = 0xf472b6;
+
+    return {
+      cssColor: `#${pixiColor.toString(16).padStart(6, '0')}`,
+      pixiColor,
+    };
+  }
+
+  return getPhysicalLayoutLayerColor(layerIndex);
+}
+
 export function getPhysicalLayoutOutlineColor(): PhysicalLayoutLayerColor {
   const pixiColor = 0xe5eef8;
 

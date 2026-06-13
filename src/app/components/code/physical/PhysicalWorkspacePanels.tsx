@@ -44,7 +44,7 @@ import {
 } from './PhysicalLayoutEditorPanel';
 import {
   createPhysicalLayoutLayerTree,
-  getPhysicalLayoutLayerColor,
+  getPhysicalLayoutLayerCategoryColor,
   getPhysicalLayoutOutlineColor,
   isPhysicalLayoutLayerCategoryVisible,
   isPhysicalLayoutOutlineVisible,
@@ -375,8 +375,6 @@ function PhysicalLayerPanel({
 
         {layerTree.map((entry) => {
           const { layer } = entry;
-          const color = getPhysicalLayoutLayerColor(layer.index);
-
           return (
             <div
               key={`${layer.index}:${layer.name}`}
@@ -401,6 +399,7 @@ function PhysicalLayerPanel({
                   const available = entry.categories[category];
                   const visible = available && isPhysicalLayoutLayerCategoryVisible(layoutVisibility, layer.index, category);
                   const label = physicalLayerCategoryLabels[category];
+                  const color = getPhysicalLayoutLayerCategoryColor(layer.index, category);
 
                   return (
                     <div
