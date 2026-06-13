@@ -93,6 +93,119 @@ END sg13g2_e2e_nand2_1
 END LIBRARY
 `;
 
+const physicalLayoutE2eDef = `
+VERSION 5.8 ;
+DIVIDERCHAR "/" ;
+BUSBITCHARS "[]" ;
+DESIGN physical_e2e ;
+UNITS DISTANCE MICRONS 1000 ;
+DIEAREA ( 0 0 ) ( 3000 3000 ) ;
+PINS 1 ;
+  - VDD + NET VDD + DIRECTION INPUT + USE POWER + PLACED ( 500 500 ) N
+    + LAYER Metal1 ( 0 0 ) ( 180 180 ) ;
+END PINS
+NETS 1 ;
+  - VDD ( PIN VDD ) ;
+END NETS
+END DESIGN
+`;
+
+const physicalLayoutE2eGds = createPhysicalLayoutE2eGds();
+const physicalLayoutE2eOasis = 'OASIS placeholder';
+
+function createPhysicalLayoutE2eGds() {
+  const date = gdsInt2(2026, 6, 13, 12, 0, 0, 2026, 6, 13, 12, 0, 0);
+
+  return Buffer.concat([
+    gdsRecord(0x00, 0x02, gdsInt2(600)),
+    gdsRecord(0x01, 0x02, date),
+    gdsRecord(0x02, 0x06, gdsAscii('PRISTINE_E2E')),
+    gdsRecord(0x03, 0x05, Buffer.concat([gdsReal8(0.001), gdsReal8(1e-9)])),
+    gdsRecord(0x05, 0x02, date),
+    gdsRecord(0x06, 0x06, gdsAscii('TOP')),
+    gdsRecord(0x08, 0x00),
+    gdsRecord(0x0d, 0x02, gdsInt2(1)),
+    gdsRecord(0x0e, 0x02, gdsInt2(0)),
+    gdsRecord(0x10, 0x03, gdsInt4(0, 0, 2000, 0, 2000, 1000, 0, 1000, 0, 0)),
+    gdsRecord(0x11, 0x00),
+    gdsRecord(0x09, 0x00),
+    gdsRecord(0x0d, 0x02, gdsInt2(2)),
+    gdsRecord(0x0e, 0x02, gdsInt2(0)),
+    gdsRecord(0x0f, 0x03, gdsInt4(100)),
+    gdsRecord(0x10, 0x03, gdsInt4(200, 500, 1800, 500)),
+    gdsRecord(0x11, 0x00),
+    gdsRecord(0x0c, 0x00),
+    gdsRecord(0x0d, 0x02, gdsInt2(1)),
+    gdsRecord(0x16, 0x02, gdsInt2(0)),
+    gdsRecord(0x10, 0x03, gdsInt4(1000, 500)),
+    gdsRecord(0x19, 0x06, gdsAscii('VDD')),
+    gdsRecord(0x11, 0x00),
+    gdsRecord(0x07, 0x00),
+    gdsRecord(0x04, 0x00),
+  ]);
+}
+
+function gdsRecord(recordType: number, dataType: number, data = Buffer.alloc(0)) {
+  const length = 4 + data.byteLength + (data.byteLength % 2);
+  const record = Buffer.alloc(length);
+  record.writeUInt16BE(length, 0);
+  record[2] = recordType;
+  record[3] = dataType;
+  data.copy(record, 4);
+  return record;
+}
+
+function gdsInt2(...values: number[]) {
+  const buffer = Buffer.alloc(values.length * 2);
+  values.forEach((value, index) => buffer.writeInt16BE(value, index * 2));
+  return buffer;
+}
+
+function gdsInt4(...values: number[]) {
+  const buffer = Buffer.alloc(values.length * 4);
+  values.forEach((value, index) => buffer.writeInt32BE(value, index * 4));
+  return buffer;
+}
+
+function gdsAscii(value: string) {
+  return Buffer.from(value, 'ascii');
+}
+
+function gdsReal8(value: number) {
+  const buffer = Buffer.alloc(8);
+  if (value === 0) {
+    return buffer;
+  }
+
+  const sign = value < 0 ? 0x80 : 0;
+  let fraction = Math.abs(value);
+  let exponent = 64;
+
+  while (fraction < 0.0625) {
+    fraction *= 16;
+    exponent -= 1;
+  }
+
+  while (fraction >= 1) {
+    fraction /= 16;
+    exponent += 1;
+  }
+
+  let mantissa = BigInt(Math.round(fraction * 2 ** 56));
+  if (mantissa >= (1n << 56n)) {
+    mantissa >>= 4n;
+    exponent += 1;
+  }
+
+  buffer[0] = sign | (exponent & 0x7f);
+  for (let index = 7; index >= 1; index -= 1) {
+    buffer[index] = Number(mantissa & 0xffn);
+    mantissa >>= 8n;
+  }
+
+  return buffer;
+}
+
 function normalizeComparableMonospaceFontFamily(fontFamily: string) {
   const tokens = fontFamily
     .split(',')
@@ -446,7 +559,7 @@ function createWorkspaceCopy(targetPath: string) {
   fs.cpSync(fixtureWorkspace, targetPath, { recursive: true });
 }
 
-function createWorkspaceCopyWithFiles(targetName: string, files: Record<string, string>) {
+function createWorkspaceCopyWithFiles(targetName: string, files: Record<string, string | Buffer>) {
   const targetPath = test.info().outputPath(targetName);
 
   createWorkspaceCopy(targetPath);
@@ -455,7 +568,11 @@ function createWorkspaceCopyWithFiles(targetName: string, files: Record<string, 
     const filePath = path.join(targetPath, relativePath);
 
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    fs.writeFileSync(filePath, `${content.trimEnd()}\n`, 'utf-8');
+    if (Buffer.isBuffer(content)) {
+      fs.writeFileSync(filePath, content);
+    } else {
+      fs.writeFileSync(filePath, `${content.trimEnd()}\n`, 'utf-8');
+    }
   }
 
   return targetPath;
@@ -1847,6 +1964,9 @@ test('packaged Windows app opens Physical layout from workspace-root LEF', async
   test.skip(!packagedWindowsExecutablePath, 'Run pnpm run package:win before executing packaged Physical E2E');
 
   const physicalWorkspaceRoot = createWorkspaceCopyWithFiles('packaged-physical-layout-workspace', {
+    'chip.gds': physicalLayoutE2eGds,
+    'chip.oas': physicalLayoutE2eOasis,
+    'chip.def': physicalLayoutE2eDef,
     'sg13g2_stdcell.lef': physicalLayoutE2eLef,
   });
   const { app, window } = await launchPackagedWindowsApp({ projectRoot: physicalWorkspaceRoot });
@@ -1856,6 +1976,10 @@ test('packaged Windows app opens Physical layout from workspace-root LEF', async
     const layoutEditor = window.getByTestId('physical-layout-editor');
     const layoutCanvas = window.getByTestId('physical-layout-canvas');
 
+    await expect(window.getByTestId('physical-layout-file-item-sg13g2_stdcell-lef')).toBeVisible({
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await window.getByTestId('physical-layout-file-item-sg13g2_stdcell-lef').click();
     await expect(layoutEditor).toHaveAttribute('data-status', 'ready', { timeout: UI_READY_TIMEOUT_MS });
     await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-macro-count') ?? '0'), {
       timeout: UI_READY_TIMEOUT_MS,
@@ -4617,6 +4741,9 @@ test('explorer root toggles first-level children and hides the legacy collapse-a
 
 test('activity bar switches code subpages and menu bar keeps higher-priority page navigation', async () => {
   const physicalWorkspaceRoot = createWorkspaceCopyWithFiles('physical-layout-workspace', {
+    'chip.gds': physicalLayoutE2eGds,
+    'chip.oas': physicalLayoutE2eOasis,
+    'chip.def': physicalLayoutE2eDef,
     'sg13g2_stdcell.lef': physicalLayoutE2eLef,
   });
   const { app, window } = await launchApp({ projectRoot: physicalWorkspaceRoot });
@@ -4681,6 +4808,13 @@ test('activity bar switches code subpages and menu bar keeps higher-priority pag
   const layoutEditor = window.getByTestId('physical-layout-editor');
   const layoutCanvas = window.getByTestId('physical-layout-canvas');
   await expect(layoutEditor).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect(layoutEditor).toHaveAttribute('data-status', 'idle', { timeout: UI_READY_TIMEOUT_MS });
+  await expect(window.getByTestId('physical-layout-file-tree')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect(window.getByTestId('physical-layout-file-item-sg13g2_stdcell-lef')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect(window.getByTestId('physical-layout-file-item-chip-def')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect(window.getByTestId('physical-layout-file-item-chip-gds')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect(window.getByTestId('physical-layout-file-item-chip-oas')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await window.getByTestId('physical-layout-file-item-sg13g2_stdcell-lef').click();
   await expect(layoutEditor).toHaveAttribute('data-status', 'ready', { timeout: UI_READY_TIMEOUT_MS });
   await expect(layoutCanvas).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
   await expect(layoutCanvas).toHaveAttribute('data-renderer', /^(webgpu|webgl)$/);
@@ -4712,7 +4846,10 @@ test('activity bar switches code subpages and menu bar keeps higher-priority pag
   await expect(window.getByTestId('physical-left-panel-tabs')).toBeVisible();
   await expect(window.getByTestId('physical-left-panel-tab-layout')).toBeVisible();
   await expect(window.getByTestId('physical-left-panel-tab-constraints')).toBeVisible();
-  await expect(window.getByTestId('physical-layout-macro-list')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect(window.getByTestId('physical-layout-file-tree')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect(window.getByTestId('physical-layout-target-item-macro-sg13g2_e2e_inv_1')).toBeVisible({
+    timeout: UI_READY_TIMEOUT_MS,
+  });
   await expect(window.getByTestId('physical-left-panel-split-toggle')).toBeVisible();
   await expect(window.getByTestId('physical-right-panel-tabs')).toBeVisible();
   await expect(window.getByTestId('physical-right-panel-tab-layers')).toBeVisible();
@@ -4814,19 +4951,51 @@ test('activity bar switches code subpages and menu bar keeps higher-priority pag
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(zoomBeforeCtrlWheel);
 
-  const macroItems = window.getByTestId('physical-layout-macro-list').locator('[data-testid^="physical-layout-macro-item-"]');
+  const macroItems = window.getByTestId('physical-layout-file-tree').locator('[data-testid^="physical-layout-target-item-macro-"]');
   await expect.poll(async () => macroItems.count(), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(1);
   const selectedMacroBeforeSwitch = await layoutCanvas.getAttribute('data-selected-macro-name');
   const renderCountBeforeSwitch = Number(await layoutCanvas.getAttribute('data-render-count') ?? '0');
-  await macroItems.nth(1).dblclick();
+  await macroItems.nth(1).click();
   await expect.poll(async () => await layoutCanvas.getAttribute('data-selected-macro-name'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).not.toBe(selectedMacroBeforeSwitch);
   await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-render-count') ?? '0'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(renderCountBeforeSwitch);
+
+  await window.getByTestId('physical-layout-file-item-chip-gds').click();
+  await expect(window.getByTestId('physical-layout-target-item-gdsCell-TOP')).toBeVisible({
+    timeout: UI_READY_TIMEOUT_MS,
+  });
+  await window.getByTestId('physical-layout-target-item-gdsCell-TOP').click();
+  await expect(layoutEditor).toHaveAttribute('data-status', 'ready', { timeout: UI_READY_TIMEOUT_MS });
+  await expect(layoutCanvas).toHaveAttribute('data-source-kind', 'gds', { timeout: UI_READY_TIMEOUT_MS });
+  await expect(layoutCanvas).toHaveAttribute('data-selected-target-kind', 'gdsCell');
+  await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-selected-shape-count') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
+  await expect(window.getByTestId('physical-layer-list').getByText('Boundary').first()).toBeVisible();
+  await expect(window.getByTestId('physical-layer-list').getByText('Path').first()).toBeVisible();
+  await expect(window.getByTestId('physical-layer-list').getByText('Text').first()).toBeVisible();
+
+  await window.getByTestId('physical-layout-file-item-chip-def').click();
+  await expect(window.getByTestId('physical-layout-target-item-design-Design')).toBeVisible({
+    timeout: UI_READY_TIMEOUT_MS,
+  });
+  await window.getByTestId('physical-layout-target-item-design-Design').click();
+  await expect(layoutEditor).toHaveAttribute('data-status', 'ready', { timeout: UI_READY_TIMEOUT_MS });
+  await expect(layoutCanvas).toHaveAttribute('data-source-kind', 'lefdef', { timeout: UI_READY_TIMEOUT_MS });
+  await expect(layoutCanvas).toHaveAttribute('data-selected-target-kind', 'design');
+  await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-selected-shape-count') ?? '0'), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(0);
+
+  await window.getByTestId('physical-layout-file-item-chip-oas').click();
+  await expect(layoutEditor).toHaveAttribute('data-status', 'error', { timeout: UI_READY_TIMEOUT_MS });
+  await expect(layoutEditor).toContainText('OASIS layout rendering is not supported yet.');
+  await expect(layoutEditor).toBeVisible();
 
   const [physicalShellBox, physicalLeftPanelBox, physicalMainPanelBox, physicalBottomPanelBox] = await Promise.all([
     window.getByTestId('code-view-physical').boundingBox(),

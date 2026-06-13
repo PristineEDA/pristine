@@ -4,7 +4,12 @@ import type {
   LspLayoutBounds,
   LspLayoutCatalog,
   LspLayoutComponent,
+  LspLayoutDefPin,
   LspLayoutDiagnostic,
+  LspLayoutGdsCell,
+  LspLayoutGdsElement,
+  LspLayoutGdsPoint,
+  LspLayoutGdsReference,
   LspLayoutGeometry,
   LspLayoutGeometryOptions,
   LspLayoutLayer,
@@ -17,13 +22,19 @@ import type {
   LspLayoutVia,
 } from '../../types/systemverilog-lsp.js';
 
-const layoutProtocolName = 'pristine-layout-columnar-v2';
-const layoutProtocolVersion = 2;
+const layoutProtocolName = 'pristine-layout-columnar-v3';
+const layoutProtocolVersion = 3;
 const layoutEnvelopeHeaderByteLength = 24;
-const layoutCatalogHeaderByteLength = 80;
+const layoutCatalogHeaderByteLength = 136;
 const layoutPinTableEntryByteLength = 28;
+const layoutDefPinTableEntryByteLength = 40;
+const layoutGdsCellTableEntryByteLength = 56;
+const layoutGdsReferenceTableEntryByteLength = 88;
+const layoutGdsElementTableEntryByteLength = 36;
+const layoutGdsPointTableEntryByteLength = 16;
 const layoutShapeTableEntryByteLength = 28;
 const layoutNoMacroIndex = 0xffffffff;
+const layoutNoIndex = 0xffffffff;
 const layoutMaxPayloadByteLength = 128 * 1024 * 1024;
 const layoutPipeRequestTimeoutMs = 10_000;
 
@@ -346,23 +357,36 @@ export function parseLayoutCatalogPayload(payload: Uint8Array): LspLayoutCatalog
   }
 
   const unitsPerMicron = readU32(view, 8);
-  const layerCount = readU32(view, 12);
-  const macroCount = readU32(view, 16);
-  const viaCount = readU32(view, 20);
-  const componentCount = readU32(view, 24);
-  const netCount = readU32(view, 28);
-  const diagnosticCount = readU32(view, 32);
-  const layerOffset = readU32(view, 36);
-  const macroOffset = readU32(view, 40);
-  const viaOffset = readU32(view, 44);
-  const componentOffset = readU32(view, 48);
-  const netOffset = readU32(view, 52);
-  const diagnosticOffset = readU32(view, 56);
-  const stringOffset = readU32(view, 60);
-  const stringSize = readU32(view, 64);
-  const hasBounds = readU32(view, 68) !== 0;
-  const pinCount = readU32(view, 72);
-  const pinTableOffset = readU32(view, 76);
+  const sourceKind = normalizeCatalogSourceKind(readU32(view, 12));
+  const shapeCount = readU32(view, 16);
+  const hasBounds = readU32(view, 20) !== 0;
+  const rawTopCellIndex = readU32(view, 24);
+  const stringOffset = readU32(view, 28);
+  const stringSize = readU32(view, 32);
+  const layerCount = readU32(view, 36);
+  const layerOffset = readU32(view, 40);
+  const macroCount = readU32(view, 44);
+  const macroOffset = readU32(view, 48);
+  const pinCount = readU32(view, 52);
+  const pinTableOffset = readU32(view, 56);
+  const viaCount = readU32(view, 60);
+  const viaOffset = readU32(view, 64);
+  const componentCount = readU32(view, 68);
+  const componentOffset = readU32(view, 72);
+  const defPinCount = readU32(view, 76);
+  const defPinOffset = readU32(view, 80);
+  const netCount = readU32(view, 84);
+  const netOffset = readU32(view, 88);
+  const gdsCellCount = readU32(view, 92);
+  const gdsCellOffset = readU32(view, 96);
+  const gdsReferenceCount = readU32(view, 100);
+  const gdsReferenceOffset = readU32(view, 104);
+  const gdsElementCount = readU32(view, 108);
+  const gdsElementOffset = readU32(view, 112);
+  const gdsPointCount = readU32(view, 116);
+  const gdsPointOffset = readU32(view, 120);
+  const diagnosticCount = readU32(view, 124);
+  const diagnosticOffset = readU32(view, 128);
   const strings = readTable(payload, stringOffset, stringSize, 'string table');
 
   const layers: LspLayoutLayer[] = [];
@@ -421,6 +445,22 @@ export function parseLayoutCatalogPayload(payload: Uint8Array): LspLayoutCatalog
     });
   }
 
+  const defPins: LspLayoutDefPin[] = [];
+  requirePayloadRange(payload.byteLength, defPinOffset, defPinCount * layoutDefPinTableEntryByteLength, 'DEF pin table');
+  for (let index = 0; index < defPinCount; index += 1) {
+    const offset = defPinOffset + index * layoutDefPinTableEntryByteLength;
+    defPins.push({
+      name: readLayoutString(strings, readU32(view, offset)),
+      netName: readLayoutString(strings, readU32(view, offset + 4)),
+      status: readU16(view, offset + 8),
+      x: readF64(view, offset + 12),
+      y: readF64(view, offset + 20),
+      orientation: readLayoutString(strings, readU32(view, offset + 28)),
+      firstShapeIndex: readU32(view, offset + 32),
+      shapeCount: readU32(view, offset + 36),
+    });
+  }
+
   const components: LspLayoutComponent[] = [];
   for (let index = 0; index < componentCount; index += 1) {
     const offset = componentOffset + index * 32;
@@ -449,6 +489,82 @@ export function parseLayoutCatalogPayload(payload: Uint8Array): LspLayoutCatalog
     });
   }
 
+  const gdsCells: LspLayoutGdsCell[] = [];
+  requirePayloadRange(payload.byteLength, gdsCellOffset, gdsCellCount * layoutGdsCellTableEntryByteLength, 'GDS cell table');
+  for (let index = 0; index < gdsCellCount; index += 1) {
+    const offset = gdsCellOffset + index * layoutGdsCellTableEntryByteLength;
+    const bounds = {
+      x0: readF64(view, offset + 24),
+      y0: readF64(view, offset + 32),
+      x1: readF64(view, offset + 40),
+      y1: readF64(view, offset + 48),
+    };
+    gdsCells.push({
+      index,
+      name: readLayoutString(strings, readU32(view, offset)),
+      firstReferenceIndex: readU32(view, offset + 4),
+      referenceCount: readU32(view, offset + 8),
+      firstElementIndex: readU32(view, offset + 12),
+      elementCount: readU32(view, offset + 16),
+      top: readU32(view, offset + 20) !== 0,
+      bounds: bounds.x0 === 0 && bounds.y0 === 0 && bounds.x1 === 0 && bounds.y1 === 0 ? null : bounds,
+    });
+  }
+
+  const gdsReferences: LspLayoutGdsReference[] = [];
+  requirePayloadRange(payload.byteLength, gdsReferenceOffset, gdsReferenceCount * layoutGdsReferenceTableEntryByteLength, 'GDS reference table');
+  for (let index = 0; index < gdsReferenceCount; index += 1) {
+    const offset = gdsReferenceOffset + index * layoutGdsReferenceTableEntryByteLength;
+    gdsReferences.push({
+      index,
+      parentCellIndex: readU32(view, offset),
+      targetCellIndex: readU32(view, offset + 4),
+      kind: readU16(view, offset + 8),
+      reflected: readU16(view, offset + 10) !== 0,
+      originX: readF64(view, offset + 12),
+      originY: readF64(view, offset + 20),
+      magnification: readF64(view, offset + 28),
+      angle: readF64(view, offset + 36),
+      columns: readU32(view, offset + 44),
+      rows: readU32(view, offset + 48),
+      columnVectorX: readF64(view, offset + 52),
+      columnVectorY: readF64(view, offset + 60),
+      rowVectorX: readF64(view, offset + 68),
+      rowVectorY: readF64(view, offset + 76),
+      targetName: readLayoutString(strings, readU32(view, offset + 84)),
+    });
+  }
+
+  const gdsElements: LspLayoutGdsElement[] = [];
+  requirePayloadRange(payload.byteLength, gdsElementOffset, gdsElementCount * layoutGdsElementTableEntryByteLength, 'GDS element table');
+  for (let index = 0; index < gdsElementCount; index += 1) {
+    const offset = gdsElementOffset + index * layoutGdsElementTableEntryByteLength;
+    const referenceIndex = readU32(view, offset + 20);
+    gdsElements.push({
+      index,
+      cellIndex: readU32(view, offset),
+      kind: readU16(view, offset + 4),
+      layer: readU32(view, offset + 8),
+      datatype: readU32(view, offset + 12),
+      texttype: readU32(view, offset + 16),
+      referenceIndex: referenceIndex === layoutNoIndex ? null : referenceIndex,
+      firstPointIndex: readU32(view, offset + 24),
+      pointCount: readU32(view, offset + 28),
+      text: readLayoutString(strings, readU32(view, offset + 32)),
+    });
+  }
+
+  const gdsPoints: LspLayoutGdsPoint[] = [];
+  requirePayloadRange(payload.byteLength, gdsPointOffset, gdsPointCount * layoutGdsPointTableEntryByteLength, 'GDS point table');
+  for (let index = 0; index < gdsPointCount; index += 1) {
+    const offset = gdsPointOffset + index * layoutGdsPointTableEntryByteLength;
+    gdsPoints.push({
+      index,
+      x: readF64(view, offset),
+      y: readF64(view, offset + 8),
+    });
+  }
+
   const diagnostics: LspLayoutDiagnostic[] = [];
   for (let index = 0; index < diagnosticCount; index += 1) {
     const offset = diagnosticOffset + index * 16;
@@ -463,13 +579,21 @@ export function parseLayoutCatalogPayload(payload: Uint8Array): LspLayoutCatalog
 
   return {
     unitsPerMicron,
+    sourceKind,
+    shapeCount,
     hasBounds,
+    topCellIndex: rawTopCellIndex === layoutNoIndex ? null : rawTopCellIndex,
     layers,
     macros,
     pins,
+    defPins,
     vias,
     components,
     nets,
+    gdsCells,
+    gdsReferences,
+    gdsElements,
+    gdsPoints,
     diagnostics,
   };
 }
@@ -810,6 +934,17 @@ function normalizeMaxShapes(value: unknown): number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : 250_000;
 }
 
+function normalizeCatalogSourceKind(value: number): LspLayoutCatalog['sourceKind'] {
+  if (value === 1) {
+    return 'lefdef';
+  }
+  if (value === 2) {
+    return 'gds';
+  }
+
+  throw new Error(`Unsupported layout catalog source kind: ${value}`);
+}
+
 function normalizeShapeKind(value: number): LspLayoutShapeKind {
   if (value === 1) {
     return 'rect';
@@ -819,6 +954,12 @@ function normalizeShapeKind(value: number): LspLayoutShapeKind {
   }
   if (value === 3) {
     return 'placement';
+  }
+  if (value === 4) {
+    return 'path';
+  }
+  if (value === 5) {
+    return 'text';
   }
 
   return 'unknown';
@@ -851,6 +992,15 @@ function normalizeOwnerKind(value: number): LspLayoutShape['ownerKind'] {
   }
   if (value === 9) {
     return 'specialNet';
+  }
+  if (value === 10) {
+    return 'gdsCell';
+  }
+  if (value === 11) {
+    return 'gdsElement';
+  }
+  if (value === 12) {
+    return 'gdsReference';
   }
 
   return 'unknown';

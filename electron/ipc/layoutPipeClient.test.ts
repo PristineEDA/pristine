@@ -27,7 +27,7 @@ describe('layoutPipeClient', () => {
     const bytes = new Uint8Array(encoded);
 
     expect(String.fromCharCode(...bytes.subarray(0, 4))).toBe('PLD1');
-    expect(view.getUint16(4, true)).toBe(2);
+    expect(view.getUint16(4, true)).toBe(3);
     expect(view.getUint16(6, true)).toBe(5);
     expect(view.getUint32(8, true)).toBe(42);
     expect(view.getUint32(12, true)).toBe(7);
@@ -82,6 +82,9 @@ describe('layoutPipeClient', () => {
     const catalog = parseLayoutCatalogPayload(createCatalogPayloadFixture());
 
     expect(catalog.unitsPerMicron).toBe(1000);
+    expect(catalog.sourceKind).toBe('lefdef');
+    expect(catalog.shapeCount).toBe(2);
+    expect(catalog.topCellIndex).toBeNull();
     expect(catalog.layers).toEqual([{
       index: 0,
       kind: 1,
@@ -120,23 +123,74 @@ describe('layoutPipeClient', () => {
         shapeCount: 2,
       },
     ]);
+    expect(catalog.defPins).toEqual([]);
+    expect(catalog.gdsCells).toEqual([]);
   });
 
-  it('rejects catalog payloads without the v2 pin table header fields', () => {
+  it('rejects catalog payloads without the v3 superset header fields', () => {
     const payload = createCatalogPayloadFixture();
     const legacyPayload = new Uint8Array(payload);
-    legacyPayload[6] = 72;
+    legacyPayload[6] = 80;
     legacyPayload[7] = 0;
 
-    expect(() => parseLayoutCatalogPayload(legacyPayload)).toThrow('Unsupported layout catalog header size: 72');
+    expect(() => parseLayoutCatalogPayload(legacyPayload)).toThrow('Unsupported layout catalog header size: 80');
   });
 
   it('rejects truncated catalog pin tables', () => {
     const payload = createCatalogPayloadFixture();
     const view = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
-    view.setUint32(76, payload.byteLength - 4, true);
+    view.setUint32(56, payload.byteLength - 4, true);
 
     expect(() => parseLayoutCatalogPayload(payload)).toThrow('Layout pin table is truncated.');
+  });
+
+  it('parses v3 DEF pins and GDS catalog tables', () => {
+    const catalog = parseLayoutCatalogPayload(createGdsCatalogPayloadFixture());
+
+    expect(catalog.sourceKind).toBe('gds');
+    expect(catalog.shapeCount).toBe(3);
+    expect(catalog.topCellIndex).toBe(0);
+    expect(catalog.defPins).toEqual([{
+      firstShapeIndex: 0,
+      name: 'VDD',
+      netName: 'VDD',
+      orientation: 'N',
+      shapeCount: 1,
+      status: 1,
+      x: 1.25,
+      y: 2.5,
+    }]);
+    expect(catalog.gdsCells).toEqual([{
+      bounds: { x0: 0, y0: 0, x1: 10, y1: 6 },
+      elementCount: 1,
+      firstElementIndex: 0,
+      firstReferenceIndex: 0,
+      index: 0,
+      name: 'TOP',
+      referenceCount: 1,
+      top: true,
+    }]);
+    expect(catalog.gdsReferences).toEqual([expect.objectContaining({
+      parentCellIndex: 0,
+      targetCellIndex: 1,
+      targetName: 'CHILD',
+    })]);
+    expect(catalog.gdsElements).toEqual([{
+      cellIndex: 0,
+      datatype: 0,
+      firstPointIndex: 0,
+      index: 0,
+      kind: 3,
+      layer: 7,
+      pointCount: 2,
+      referenceIndex: 0,
+      text: 'VSS',
+      texttype: 0,
+    }]);
+    expect(catalog.gdsPoints).toEqual([
+      { index: 0, x: 1, y: 2 },
+      { index: 1, x: 3, y: 4 },
+    ]);
   });
 
   it('parses geometry payloads into shape objects', () => {
@@ -182,7 +236,7 @@ describe('layoutPipeClient', () => {
   it('validates LSP layout open metadata before connecting to the pipe', () => {
     expect(normalizeLayoutOpenSessionMetadata({
       endpoint: { kind: 'namedPipe', path: '\\\\.\\pipe\\layout-test' },
-      protocol: 'pristine-layout-columnar-v2',
+      protocol: 'pristine-layout-columnar-v3',
       sessionId: '1',
       title: 'sg13g2_stdcell.lef',
       lefCount: 1,
@@ -190,7 +244,7 @@ describe('layoutPipeClient', () => {
       bbox: { x0: 0, y0: 0, x1: 1, y1: 1 },
     })).toMatchObject({
       endpoint: { kind: 'namedPipe', path: '\\\\.\\pipe\\layout-test' },
-      protocol: 'pristine-layout-columnar-v2',
+      protocol: 'pristine-layout-columnar-v3',
       sessionId: '1',
       title: 'sg13g2_stdcell.lef',
       lefCount: 1,
@@ -243,7 +297,7 @@ describe('layoutPipeClient', () => {
         macroCount: 1,
         messages: [],
         netCount: 0,
-        protocol: 'pristine-layout-columnar-v2',
+        protocol: 'pristine-layout-columnar-v3',
         sessionId: 'layout-open-test',
         title: 'sg13g2_stdcell.lef',
         unitsPerMicron: 1000,
@@ -279,7 +333,7 @@ function createCatalogPayloadFixture(): Uint8Array {
     return offset;
   };
 
-  const output = new Array<number>(80).fill(0);
+  const output = new Array<number>(136).fill(0);
   const layerOffset = output.length;
   pushU32(output, addString('Metal1'));
   pushU16(output, 1);
@@ -317,7 +371,12 @@ function createCatalogPayloadFixture(): Uint8Array {
 
   const viaOffset = output.length;
   const componentOffset = output.length;
+  const defPinOffset = output.length;
   const netOffset = output.length;
+  const gdsCellOffset = output.length;
+  const gdsReferenceOffset = output.length;
+  const gdsElementOffset = output.length;
+  const gdsPointOffset = output.length;
   const diagnosticOffset = output.length;
   alignTo(output, 4);
   const stringOffset = output.length;
@@ -327,26 +386,169 @@ function createCatalogPayloadFixture(): Uint8Array {
   output[1] = 'L'.charCodeAt(0);
   output[2] = 'C'.charCodeAt(0);
   output[3] = 'T'.charCodeAt(0);
-  setU16(output, 4, 2);
-  setU16(output, 6, 80);
+  setU16(output, 4, 3);
+  setU16(output, 6, 136);
   setU32(output, 8, 1000);
   setU32(output, 12, 1);
-  setU32(output, 16, 1);
-  setU32(output, 20, 0);
+  setU32(output, 16, 2);
+  setU32(output, 20, 1);
+  setU32(output, 24, 0xffffffff);
+  setU32(output, 28, stringOffset);
+  setU32(output, 32, strings.length);
+  setU32(output, 36, 1);
+  setU32(output, 40, layerOffset);
+  setU32(output, 44, 1);
+  setU32(output, 48, macroOffset);
+  setU32(output, 52, 2);
+  setU32(output, 56, pinOffset);
+  setU32(output, 60, 0);
+  setU32(output, 64, viaOffset);
+  setU32(output, 68, 0);
+  setU32(output, 72, componentOffset);
+  setU32(output, 76, 0);
+  setU32(output, 80, defPinOffset);
+  setU32(output, 84, 0);
+  setU32(output, 88, netOffset);
+  setU32(output, 92, 0);
+  setU32(output, 96, gdsCellOffset);
+  setU32(output, 100, 0);
+  setU32(output, 104, gdsReferenceOffset);
+  setU32(output, 108, 0);
+  setU32(output, 112, gdsElementOffset);
+  setU32(output, 116, 0);
+  setU32(output, 120, gdsPointOffset);
+  setU32(output, 124, 0);
+  setU32(output, 128, diagnosticOffset);
+  return Uint8Array.from(output);
+}
+
+function createGdsCatalogPayloadFixture(): Uint8Array {
+  const strings: number[] = [];
+  const textEncoder = new TextEncoder();
+  const addString = (value: string) => {
+    const offset = strings.length;
+    const encoded = textEncoder.encode(value);
+    pushU32(strings, encoded.byteLength);
+    strings.push(...encoded);
+    return offset;
+  };
+
+  const output = new Array<number>(136).fill(0);
+  const layerOffset = output.length;
+  pushU32(output, addString('GDS-7'));
+  pushU16(output, 0);
+  pushU16(output, 0);
+  pushF64(output, 0);
+  pushF64(output, 0);
+  pushF64(output, 0);
+
+  const macroOffset = output.length;
+  const macroPinOffset = output.length;
+  const viaOffset = output.length;
+  const componentOffset = output.length;
+
+  const defPinOffset = output.length;
+  pushU32(output, addString('VDD'));
+  pushU32(output, addString('VDD'));
+  pushU16(output, 1);
+  pushU16(output, 0);
+  pushF64(output, 1.25);
+  pushF64(output, 2.5);
+  pushU32(output, addString('N'));
+  pushU32(output, 0);
+  pushU32(output, 1);
+
+  const netOffset = output.length;
+
+  const gdsCellOffset = output.length;
+  pushU32(output, addString('TOP'));
+  pushU32(output, 0);
+  pushU32(output, 1);
+  pushU32(output, 0);
+  pushU32(output, 1);
+  pushU32(output, 1);
+  pushF64(output, 0);
+  pushF64(output, 0);
+  pushF64(output, 10);
+  pushF64(output, 6);
+
+  const gdsReferenceOffset = output.length;
+  pushU32(output, 0);
+  pushU32(output, 1);
+  pushU16(output, 1);
+  pushU16(output, 0);
+  pushF64(output, 0.5);
+  pushF64(output, 0.75);
+  pushF64(output, 1);
+  pushF64(output, 0);
+  pushU32(output, 1);
+  pushU32(output, 1);
+  pushF64(output, 0);
+  pushF64(output, 0);
+  pushF64(output, 0);
+  pushF64(output, 0);
+  pushU32(output, addString('CHILD'));
+
+  const gdsElementOffset = output.length;
+  pushU32(output, 0);
+  pushU16(output, 3);
+  pushU16(output, 0);
+  pushU32(output, 7);
+  pushU32(output, 0);
+  pushU32(output, 0);
+  pushU32(output, 0);
+  pushU32(output, 0);
+  pushU32(output, 2);
+  pushU32(output, addString('VSS'));
+
+  const gdsPointOffset = output.length;
+  pushF64(output, 1);
+  pushF64(output, 2);
+  pushF64(output, 3);
+  pushF64(output, 4);
+
+  const diagnosticOffset = output.length;
+  alignTo(output, 4);
+  const stringOffset = output.length;
+  output.push(...strings);
+
+  output[0] = 'P'.charCodeAt(0);
+  output[1] = 'L'.charCodeAt(0);
+  output[2] = 'C'.charCodeAt(0);
+  output[3] = 'T'.charCodeAt(0);
+  setU16(output, 4, 3);
+  setU16(output, 6, 136);
+  setU32(output, 8, 1000);
+  setU32(output, 12, 2);
+  setU32(output, 16, 3);
+  setU32(output, 20, 1);
   setU32(output, 24, 0);
-  setU32(output, 28, 0);
-  setU32(output, 32, 0);
-  setU32(output, 36, layerOffset);
-  setU32(output, 40, macroOffset);
-  setU32(output, 44, viaOffset);
-  setU32(output, 48, componentOffset);
-  setU32(output, 52, netOffset);
-  setU32(output, 56, diagnosticOffset);
-  setU32(output, 60, stringOffset);
-  setU32(output, 64, strings.length);
-  setU32(output, 68, 1);
-  setU32(output, 72, 2);
-  setU32(output, 76, pinOffset);
+  setU32(output, 28, stringOffset);
+  setU32(output, 32, strings.length);
+  setU32(output, 36, 1);
+  setU32(output, 40, layerOffset);
+  setU32(output, 44, 0);
+  setU32(output, 48, macroOffset);
+  setU32(output, 52, 0);
+  setU32(output, 56, macroPinOffset);
+  setU32(output, 60, 0);
+  setU32(output, 64, viaOffset);
+  setU32(output, 68, 0);
+  setU32(output, 72, componentOffset);
+  setU32(output, 76, 1);
+  setU32(output, 80, defPinOffset);
+  setU32(output, 84, 0);
+  setU32(output, 88, netOffset);
+  setU32(output, 92, 1);
+  setU32(output, 96, gdsCellOffset);
+  setU32(output, 100, 1);
+  setU32(output, 104, gdsReferenceOffset);
+  setU32(output, 108, 1);
+  setU32(output, 112, gdsElementOffset);
+  setU32(output, 116, 2);
+  setU32(output, 120, gdsPointOffset);
+  setU32(output, 124, 0);
+  setU32(output, 128, diagnosticOffset);
   return Uint8Array.from(output);
 }
 
@@ -397,7 +599,7 @@ function createGeometryPayloadFixture(): Uint8Array {
   output[1] = 'L'.charCodeAt(0);
   output[2] = 'G'.charCodeAt(0);
   output[3] = 'E'.charCodeAt(0);
-  setU16(output, 4, 2);
+  setU16(output, 4, 3);
   setU16(output, 6, 96);
   setU32(output, 8, 1000);
   setU32(output, 12, 2);

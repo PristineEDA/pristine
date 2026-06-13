@@ -3,18 +3,18 @@ import { Application, Container, Graphics, Text } from 'pixi.js';
 
 import type {
   LspLayoutCatalog,
+  LspLayoutBounds,
   LspLayoutGeometry,
-  LspLayoutMacro,
   LspLayoutShape,
 } from '../../../../../types/systemverilog-lsp';
 import {
   applyLayoutWheel,
-  findLayoutMacro,
   getFitLayoutCamera,
-  getMacroBounds,
+  getLayoutTargetBounds,
   getShapesBounds,
-  selectMacroShapes,
+  selectLayoutTargetShapes,
   type PhysicalLayoutCamera,
+  type PhysicalLayoutTarget,
 } from './physicalLayoutGeometry';
 import {
   createPhysicalLayoutPinLabels,
@@ -24,6 +24,7 @@ import {
   getVisiblePhysicalLayoutLayerCount,
   getVisiblePhysicalLayoutShapeCounts,
   isPhysicalLayoutOutlineVisible,
+  type PhysicalLayoutLayerCategory,
   type PhysicalLayoutPinLabel,
   type PhysicalLayoutVisibility,
 } from './physicalLayoutLayers';
@@ -34,7 +35,7 @@ type PixiRendererStatus = PixiRendererPreference | 'error' | 'initializing';
 interface PhysicalLayoutCanvasProps {
   catalog: LspLayoutCatalog | null;
   geometry: LspLayoutGeometry | null;
-  selectedMacroName: string | null;
+  selectedTarget: PhysicalLayoutTarget | null;
   layoutVisibility: PhysicalLayoutVisibility;
 }
 
@@ -47,7 +48,7 @@ const gridMinorStep = 0.2;
 export function PhysicalLayoutCanvas({
   catalog,
   geometry,
-  selectedMacroName,
+  selectedTarget,
   layoutVisibility,
 }: PhysicalLayoutCanvasProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -56,7 +57,7 @@ export function PhysicalLayoutCanvas({
   const backgroundRef = useRef<Container | null>(null);
   const renderFrameRef = useRef<number | null>(null);
   const cameraRef = useRef<PhysicalLayoutCamera>(defaultCamera);
-  const selectedMacroRef = useRef<LspLayoutMacro | null>(null);
+  const selectedBoundsRef = useRef<LspLayoutBounds | null>(null);
   const selectedShapesRef = useRef<LspLayoutShape[]>([]);
   const selectedLabelsRef = useRef<PhysicalLayoutPinLabel[]>([]);
   const outlineVisibleRef = useRef(false);
@@ -66,10 +67,9 @@ export function PhysicalLayoutCanvas({
   const [error, setError] = useState<string | null>(null);
   const [size, setSize] = useState({ width: minimumCanvasWidth, height: minimumCanvasHeight });
 
-  const selectedMacro = useMemo(() => findLayoutMacro(catalog, selectedMacroName), [catalog, selectedMacroName]);
   const selectedShapes = useMemo(
-    () => selectMacroShapes(catalog, geometry, selectedMacroName),
-    [catalog, geometry, selectedMacroName],
+    () => selectLayoutTargetShapes(catalog, geometry, selectedTarget),
+    [catalog, geometry, selectedTarget],
   );
   const visibleShapes = useMemo(
     () => filterVisiblePhysicalLayoutShapes(selectedShapes, layoutVisibility),
@@ -84,19 +84,19 @@ export function PhysicalLayoutCanvas({
     [selectedShapes, layoutVisibility],
   );
   const selectedBounds = useMemo(
-    () => getShapesBounds(selectedShapes, selectedMacro ? getMacroBounds(selectedMacro) : null),
-    [selectedMacro, selectedShapes],
+    () => getShapesBounds(selectedShapes, getLayoutTargetBounds(catalog, selectedTarget, geometry ? getShapesBounds(geometry.shapes, null) : null)),
+    [catalog, geometry, selectedShapes, selectedTarget],
   );
   const layerCount = catalog?.layers.length ?? 0;
   const catalogPinCount = catalog?.pins.length ?? 0;
-  const selectedPinCount = catalog && selectedMacro
-    ? catalog.pins.filter((pin) => pin.macroIndex === selectedMacro.index).length
-    : 0;
+  const selectedPinCount = catalog && selectedTarget?.kind === 'macro' && selectedTarget.index !== null
+    ? catalog.pins.filter((pin) => pin.macroIndex === selectedTarget.index).length
+    : catalog?.defPins.length ?? 0;
   const visibleLayerCount = getVisiblePhysicalLayoutLayerCount(catalog, layoutVisibility);
   const visibleCategoryCount = getVisiblePhysicalLayoutCategoryCount(catalog, layoutVisibility);
   const outlineVisible = isPhysicalLayoutOutlineVisible(layoutVisibility);
 
-  selectedMacroRef.current = selectedMacro;
+  selectedBoundsRef.current = selectedBounds;
   selectedShapesRef.current = visibleShapes;
   selectedLabelsRef.current = visibleLabels;
   outlineVisibleRef.current = outlineVisible;
@@ -173,7 +173,7 @@ export function PhysicalLayoutCanvas({
     setCamera(nextCamera);
     redrawScene();
     requestRender();
-  }, [selectedBounds, selectedMacroName, size.height, size.width]);
+  }, [selectedBounds, selectedTarget, size.height, size.width]);
 
   useEffect(() => {
     redrawScene();
@@ -290,14 +290,14 @@ export function PhysicalLayoutCanvas({
     world.removeChildren().forEach((child) => child.destroy({ children: true }));
     background.addChild(drawBackground(size.width, size.height));
 
-    const macro = selectedMacroRef.current;
-    if (!macro) {
+    const bounds = selectedBoundsRef.current;
+    if (!bounds) {
       return;
     }
 
-    world.addChild(drawGrid(macro));
+    world.addChild(drawGrid(bounds));
     if (outlineVisibleRef.current) {
-      world.addChild(drawMacroOutline(macro));
+      world.addChild(drawLayoutOutline(bounds));
     }
     world.addChild(drawShapes(selectedShapesRef.current));
     const labels = drawPinLabels(selectedLabelsRef.current);
@@ -321,7 +321,9 @@ export function PhysicalLayoutCanvas({
       data-pan-y={camera.panY.toFixed(2)}
       data-render-count={renderCount}
       data-renderer={renderer}
-      data-selected-macro-name={selectedMacroName ?? ''}
+      data-selected-macro-name={selectedTarget?.kind === 'macro' ? selectedTarget.name : ''}
+      data-selected-target-kind={selectedTarget?.kind ?? ''}
+      data-selected-target-name={selectedTarget?.name ?? ''}
       data-selected-pin-count={selectedPinCount}
       data-selected-shape-count={selectedShapes.length}
       data-shape-count={selectedShapes.length}
@@ -332,6 +334,7 @@ export function PhysicalLayoutCanvas({
       data-visible-layer-count={visibleLayerCount}
       data-visible-obstruction-shape-count={visibleShapeCounts.obstruction}
       data-visible-pin-shape-count={visibleShapeCounts.pin}
+      data-source-kind={catalog?.sourceKind ?? ''}
       data-visible-shape-count={visibleShapes.length}
       data-zoom={camera.zoom.toFixed(4)}
       role="img"
@@ -386,8 +389,7 @@ function drawBackground(width: number, height: number) {
     .fill({ color: 0x101317, alpha: 1 });
 }
 
-function drawGrid(macro: LspLayoutMacro) {
-  const bounds = getMacroBounds(macro);
+function drawGrid(bounds: LspLayoutBounds) {
   const graphics = new Graphics();
 
   for (let x = Math.floor(bounds.x0 / gridMinorStep) * gridMinorStep; x <= bounds.x1 + 0.001; x += gridMinorStep) {
@@ -409,8 +411,7 @@ function drawGrid(macro: LspLayoutMacro) {
   return graphics;
 }
 
-function drawMacroOutline(macro: LspLayoutMacro) {
-  const bounds = getMacroBounds(macro);
+function drawLayoutOutline(bounds: LspLayoutBounds) {
   return new Graphics()
     .rect(bounds.x0, bounds.y0, bounds.x1 - bounds.x0, bounds.y1 - bounds.y0)
     .fill({ color: 0x151c24, alpha: 0.48 })
@@ -421,11 +422,9 @@ function drawShapes(shapes: readonly LspLayoutShape[]) {
   const graphics = new Graphics();
 
   for (const shape of shapes) {
-    const color = getPhysicalLayoutLayerCategoryColor(
-      shape.layerIndex,
-      shape.ownerKind === 'obstruction' ? 'obstruction' : 'pin',
-    ).pixiColor;
-    const alpha = shape.ownerKind === 'obstruction' ? 0.28 : 0.7;
+    const category = getCanvasShapeCategory(shape);
+    const color = getPhysicalLayoutLayerCategoryColor(shape.layerIndex, category).pixiColor;
+    const alpha = category === 'obstruction' || category === 'blockage' ? 0.28 : 0.7;
 
     if (shape.kind === 'polygon' && shape.polygon && shape.polygon.length >= 3) {
       graphics
@@ -446,6 +445,32 @@ function drawShapes(shapes: readonly LspLayoutShape[]) {
   }
 
   return graphics;
+}
+
+function getCanvasShapeCategory(shape: LspLayoutShape): PhysicalLayoutLayerCategory {
+  if (shape.ownerKind === 'obstruction') {
+    return 'obstruction';
+  }
+  if (shape.ownerKind === 'net') {
+    return 'net';
+  }
+  if (shape.ownerKind === 'specialNet') {
+    return 'specialNet';
+  }
+  if (shape.ownerKind === 'blockage') {
+    return 'blockage';
+  }
+  if (shape.ownerKind === 'gdsElement') {
+    if (shape.kind === 'text') {
+      return 'text';
+    }
+    if (shape.kind === 'path') {
+      return 'path';
+    }
+    return 'boundary';
+  }
+
+  return 'pin';
 }
 
 function drawPinLabels(labels: readonly PhysicalLayoutPinLabel[]) {

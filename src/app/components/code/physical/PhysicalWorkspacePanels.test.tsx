@@ -18,25 +18,25 @@ import {
   isPhysicalLayoutOutlineVisible,
   type PhysicalLayoutVisibility,
 } from './physicalLayoutLayers';
-import { findLayoutMacro, selectMacroShapes } from './physicalLayoutGeometry';
+import { selectMacroShapes, type PhysicalLayoutTarget } from './physicalLayoutGeometry';
 
 vi.mock('./PhysicalLayoutCanvas', () => ({
   PhysicalLayoutCanvas: ({
     catalog,
     geometry,
     layoutVisibility,
-    selectedMacroName,
+    selectedTarget,
   }: {
     catalog: typeof layoutFixtureOpenResult.catalog | null;
     geometry: typeof layoutFixtureGeometry | null;
     layoutVisibility: PhysicalLayoutVisibility;
-    selectedMacroName: string | null;
+    selectedTarget: PhysicalLayoutTarget | null;
   }) => (
     <div
       data-layer-count={catalog?.layers.length ?? 0}
       data-macro-count={catalog?.macros.length ?? 0}
       data-renderer="webgl"
-      data-selected-macro-name={selectedMacroName ?? ''}
+      data-selected-macro-name={selectedTarget?.kind === 'macro' ? selectedTarget.name : ''}
       data-shape-count={geometry?.shapes.length ?? 0}
       data-outline-visible={isPhysicalLayoutOutlineVisible(layoutVisibility) ? 'true' : 'false'}
       data-testid="physical-layout-canvas"
@@ -53,12 +53,13 @@ const readyLayoutState: PhysicalWorkspaceLayoutState = {
   openResult: layoutFixtureOpenResult,
   status: 'ready',
 };
-const readyMacro = findLayoutMacro(layoutFixtureOpenResult.catalog, 'sg13g2_inv_1');
 const readyMacroShapes = selectMacroShapes(layoutFixtureOpenResult.catalog, layoutFixtureGeometry, 'sg13g2_inv_1');
-const readyVisibility = createPhysicalLayoutVisibility(layoutFixtureOpenResult.catalog, readyMacro, readyMacroShapes);
-const nandMacro = findLayoutMacro(layoutFixtureOpenResult.catalog, 'sg13g2_nand2_1');
+const readyTarget: PhysicalLayoutTarget = { kind: 'macro', name: 'sg13g2_inv_1', index: 0 };
+const readyVisibility = createPhysicalLayoutVisibility(layoutFixtureOpenResult.catalog, true, readyMacroShapes);
 const nandMacroShapes = selectMacroShapes(layoutFixtureOpenResult.catalog, layoutFixtureGeometry, 'sg13g2_nand2_1');
-const nandVisibility = createPhysicalLayoutVisibility(layoutFixtureOpenResult.catalog, nandMacro, nandMacroShapes);
+const nandTarget: PhysicalLayoutTarget = { kind: 'macro', name: 'sg13g2_nand2_1', index: 1 };
+const nandVisibility = createPhysicalLayoutVisibility(layoutFixtureOpenResult.catalog, true, nandMacroShapes);
+const layoutFiles = [{ extension: '.lef', name: 'sg13g2_stdcell.lef', path: 'sg13g2_stdcell.lef' }];
 
 function renderInCodeLayout(node: ReactNode) {
   return render(
@@ -71,20 +72,21 @@ function renderInCodeLayout(node: ReactNode) {
 describe('PhysicalWorkspacePanels', () => {
   it('renders the main physical layout editor content', async () => {
     const onLayoutStateChange = vi.fn();
-    const onSelectedMacroNameChange = vi.fn();
+    const onSelectedTargetChange = vi.fn();
     renderInCodeLayout(
       <PhysicalMainPanel
+        activeLayoutFilePath="sg13g2_stdcell.lef"
         layoutVisibility={readyVisibility}
-        selectedMacroName={null}
+        selectedTarget={null}
         onLayoutStateChange={onLayoutStateChange}
-        onSelectedMacroNameChange={onSelectedMacroNameChange}
+        onSelectedTargetChange={onSelectedTargetChange}
       />,
     );
 
     expect(screen.getByTestId('physical-layout-editor')).toBeInTheDocument();
     await waitFor(() => expect(screen.getByTestId('physical-layout-editor')).toHaveAttribute('data-status', 'ready'));
     expect(screen.getByTestId('physical-layout-canvas')).toHaveAttribute('data-renderer', 'webgl');
-    expect(onSelectedMacroNameChange).toHaveBeenCalledWith('sg13g2_inv_1');
+    expect(onSelectedTargetChange).toHaveBeenCalledWith(readyTarget);
     expect(onLayoutStateChange).toHaveBeenCalledWith(expect.objectContaining({
       status: 'ready',
       catalog: layoutFixtureOpenResult.catalog,
@@ -94,12 +96,17 @@ describe('PhysicalWorkspacePanels', () => {
 
   it('switches the physical left panel tabs and activates macros', async () => {
     const user = userEvent.setup();
-    const onMacroActivate = vi.fn();
+    const onTargetActivate = vi.fn();
+    const onFileToggle = vi.fn();
     renderInCodeLayout(
       <PhysicalLeftPanel
+        activeLayoutFilePath="sg13g2_stdcell.lef"
         catalog={layoutFixtureOpenResult.catalog}
-        selectedMacroName="sg13g2_inv_1"
-        onMacroActivate={onMacroActivate}
+        expandedLayoutFilePaths={new Set(['sg13g2_stdcell.lef'])}
+        layoutFiles={layoutFiles}
+        selectedTarget={readyTarget}
+        onLayoutFileToggle={onFileToggle}
+        onLayoutTargetActivate={onTargetActivate}
       />,
     );
 
@@ -107,12 +114,13 @@ describe('PhysicalWorkspacePanels', () => {
     expect(screen.getByTestId('physical-left-panel-split-toggle')).toHaveAttribute('aria-label', 'Show lower physical left panel');
     expect(screen.getByTestId('physical-left-panel-tab-layout')).toBeInTheDocument();
     expect(screen.getByTestId('physical-left-panel-tab-constraints')).toBeInTheDocument();
-    expect(screen.getByTestId('physical-layout-macro-list')).toBeInTheDocument();
-    expect(screen.getByTestId('physical-layout-macro-item-sg13g2_inv_1')).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByTestId('physical-layout-file-tree')).toBeInTheDocument();
+    expect(screen.getByTestId('physical-layout-file-item-sg13g2_stdcell-lef')).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByTestId('physical-layout-target-item-macro-sg13g2_inv_1')).toHaveAttribute('aria-selected', 'true');
 
-    await user.dblClick(screen.getByTestId('physical-layout-macro-item-sg13g2_nand2_1'));
+    await user.click(screen.getByTestId('physical-layout-target-item-macro-sg13g2_nand2_1'));
 
-    expect(onMacroActivate).toHaveBeenCalledWith('sg13g2_nand2_1');
+    expect(onTargetActivate).toHaveBeenCalledWith(nandTarget);
 
     await user.click(screen.getByTestId('physical-left-panel-tab-constraints'));
 
@@ -124,8 +132,11 @@ describe('PhysicalWorkspacePanels', () => {
     const onSplitPanelVisibleChange = vi.fn();
     renderInCodeLayout(
       <PhysicalLeftPanel
+        activeLayoutFilePath="sg13g2_stdcell.lef"
         catalog={layoutFixtureOpenResult.catalog}
-        selectedMacroName="sg13g2_inv_1"
+        expandedLayoutFilePaths={new Set(['sg13g2_stdcell.lef'])}
+        layoutFiles={layoutFiles}
+        selectedTarget={readyTarget}
         onSplitPanelVisibleChange={onSplitPanelVisibleChange}
       />,
     );
@@ -156,7 +167,7 @@ describe('PhysicalWorkspacePanels', () => {
       <PhysicalRightPanel
         layoutVisibility={readyVisibility}
         layoutState={readyLayoutState}
-        selectedMacroName="sg13g2_inv_1"
+        selectedTarget={readyTarget}
         onLayerCategoryVisibilityToggle={onLayerCategoryVisibilityToggle}
         onOutlineVisibilityToggle={onOutlineVisibilityToggle}
       />,
@@ -194,11 +205,11 @@ describe('PhysicalWorkspacePanels', () => {
       <PhysicalRightPanel
         layoutVisibility={nandVisibility}
         layoutState={readyLayoutState}
-        selectedMacroName="sg13g2_nand2_1"
+        selectedTarget={nandTarget}
       />,
     );
 
-    expect(screen.getByTestId('physical-layer-row-0')).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByTestId('physical-layer-row-0')).toHaveAttribute('aria-disabled', 'false');
     expect(screen.getByTestId('physical-layer-category-swatch-0-pin')).toBeDisabled();
     expect(screen.getByTestId('physical-layer-category-swatch-0-label')).toBeDisabled();
     expect(screen.getByTestId('physical-layer-category-swatch-0-obstruction')).toBeDisabled();

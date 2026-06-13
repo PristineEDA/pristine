@@ -3,7 +3,7 @@ import type { LspLayoutGeometry, LspLayoutOpenResult } from '../../types/systemv
 export const layoutFixtureOpenResult = {
   sessionId: 'layout-test-session',
   id: 'layout-test-session',
-  protocol: 'pristine-layout-columnar-v2',
+  protocol: 'pristine-layout-columnar-v3',
   endpoint: {
     kind: 'namedPipe',
     path: '\\\\.\\pipe\\pristine-layout-test',
@@ -22,7 +22,10 @@ export const layoutFixtureOpenResult = {
   messages: [],
   catalog: {
     unitsPerMicron: 1000,
+    sourceKind: 'lefdef',
+    shapeCount: 4,
     hasBounds: true,
+    topCellIndex: null,
     layers: [
       { index: 0, name: 'Metal1', kind: 1, pitch: 0.48, width: 0.16, spacing: 0.16 },
       { index: 1, name: 'Metal2', kind: 1, pitch: 0.56, width: 0.18, spacing: 0.18 },
@@ -38,10 +41,58 @@ export const layoutFixtureOpenResult = {
       { macroIndex: 1, pinIndex: 0, name: 'A1', use: 'SIGNAL', direction: 1, firstShapeIndex: 0, shapeCount: 0 },
       { macroIndex: 1, pinIndex: 1, name: 'VSS', use: 'GROUND', direction: 3, firstShapeIndex: 3, shapeCount: 1 },
     ],
+    defPins: [],
     vias: [],
     components: [],
     nets: [],
+    gdsCells: [],
+    gdsReferences: [],
+    gdsElements: [],
+    gdsPoints: [],
     diagnostics: [],
+  },
+} satisfies LspLayoutOpenResult;
+
+export const layoutFixtureGdsOpenResult = {
+  ...layoutFixtureOpenResult,
+  title: 'tiny.gds',
+  fileUris: ['file:///workspace/tiny.gds'],
+  macroCount: 0,
+  protocol: 'pristine-layout-columnar-v3',
+  catalog: {
+    ...layoutFixtureOpenResult.catalog,
+    sourceKind: 'gds',
+    macros: [],
+    pins: [],
+    gdsCells: [
+      {
+        index: 0,
+        name: 'TOP',
+        firstReferenceIndex: 0,
+        referenceCount: 0,
+        firstElementIndex: 0,
+        elementCount: 1,
+        top: true,
+        bounds: { x0: 0, y0: 0, x1: 4, y1: 2 },
+      },
+    ],
+    gdsReferences: [],
+    gdsElements: [
+      {
+        index: 0,
+        cellIndex: 0,
+        kind: 1,
+        layer: 0,
+        datatype: 0,
+        texttype: 0,
+        referenceIndex: null,
+        firstPointIndex: 0,
+        pointCount: 0,
+        text: '',
+      },
+    ],
+    gdsPoints: [],
+    topCellIndex: 0,
   },
 } satisfies LspLayoutOpenResult;
 

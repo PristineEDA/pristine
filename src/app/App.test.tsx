@@ -83,19 +83,21 @@ vi.mock('./components/code/physical/PhysicalLayoutCanvas', () => ({
     catalog,
     geometry,
     layoutVisibility,
-    selectedMacroName,
+    selectedTarget,
   }: {
     catalog: { layers: unknown[]; macros: unknown[] } | null;
     geometry: { shapes: unknown[] } | null;
     layoutVisibility: { outlineVisible: boolean; visibleItems: ReadonlySet<string> };
-    selectedMacroName: string | null;
+    selectedTarget: { kind: string; name: string } | null;
   }) => (
     <div
       data-layer-count={catalog?.layers.length ?? 0}
       data-macro-count={catalog?.macros.length ?? 0}
       data-outline-visible={layoutVisibility.outlineVisible ? 'true' : 'false'}
       data-renderer="webgl"
-      data-selected-macro-name={selectedMacroName ?? ''}
+      data-selected-macro-name={selectedTarget?.kind === 'macro' ? selectedTarget.name : ''}
+      data-selected-target-kind={selectedTarget?.kind ?? ''}
+      data-selected-target-name={selectedTarget?.name ?? ''}
       data-shape-count={geometry?.shapes.length ?? 0}
       data-testid="physical-layout-canvas"
       data-visible-category-count={layoutVisibility.visibleItems.size}

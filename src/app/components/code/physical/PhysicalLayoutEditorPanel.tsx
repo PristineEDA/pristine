@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import type { LspLayoutCatalog, LspLayoutGeometry, LspLayoutOpenResult } from '../../../../../types/systemverilog-lsp';
 import type { PhysicalLayoutVisibility } from './physicalLayoutLayers';
-import { getFirstLayoutMacroName } from './physicalLayoutGeometry';
+import { getDefaultLayoutTarget, type PhysicalLayoutTarget } from './physicalLayoutGeometry';
 import { PhysicalLayoutCanvas } from './PhysicalLayoutCanvas';
 
 export type PhysicalLayoutStatus = 'idle' | 'loading' | 'ready' | 'error';
@@ -16,19 +16,21 @@ export interface PhysicalLayoutStateSnapshot {
 }
 
 interface PhysicalLayoutEditorPanelProps {
+  activeLayoutFilePath: string | null;
   layoutVisibility: PhysicalLayoutVisibility;
-  selectedMacroName: string | null;
+  selectedTarget: PhysicalLayoutTarget | null;
   onLayoutStateChange?: (state: PhysicalLayoutStateSnapshot) => void;
-  onSelectedMacroNameChange?: (macroName: string) => void;
+  onSelectedTargetChange?: (target: PhysicalLayoutTarget | null) => void;
 }
 
 const geometryMaxShapes = 250_000;
 
 export function PhysicalLayoutEditorPanel({
+  activeLayoutFilePath,
   layoutVisibility,
-  selectedMacroName,
+  selectedTarget,
   onLayoutStateChange,
-  onSelectedMacroNameChange,
+  onSelectedTargetChange,
 }: PhysicalLayoutEditorPanelProps) {
   const [status, setStatus] = useState<PhysicalLayoutStatus>('idle');
   const [openResult, setOpenResult] = useState<LspLayoutOpenResult | null>(null);
@@ -36,10 +38,12 @@ export function PhysicalLayoutEditorPanel({
   const [error, setError] = useState<string | null>(null);
   const sessionIdRef = useRef<string | null>(null);
   const onLayoutStateChangeRef = useRef(onLayoutStateChange);
-  const onSelectedMacroNameChangeRef = useRef(onSelectedMacroNameChange);
+  const onSelectedTargetChangeRef = useRef(onSelectedTargetChange);
+  const selectedTargetRef = useRef(selectedTarget);
 
   onLayoutStateChangeRef.current = onLayoutStateChange;
-  onSelectedMacroNameChangeRef.current = onSelectedMacroNameChange;
+  onSelectedTargetChangeRef.current = onSelectedTargetChange;
+  selectedTargetRef.current = selectedTarget;
 
   useEffect(() => {
     let disposed = false;
@@ -52,10 +56,21 @@ export function PhysicalLayoutEditorPanel({
         return;
       }
 
+      if (!activeLayoutFilePath) {
+        setStatus('idle');
+        setError(null);
+        setOpenResult(null);
+        setGeometry(null);
+        return;
+      }
+
       setStatus('loading');
       setError(null);
       try {
-        const result = await lsp.layoutOpen({ title: 'sg13g2_stdcell.lef' });
+        const result = await lsp.layoutOpen({
+          workspaceFilePath: activeLayoutFilePath,
+          title: activeLayoutFilePath.split('/').pop() ?? activeLayoutFilePath,
+        });
         if (disposed) {
           if (result.sessionId) {
             void lsp.layoutClose(result.sessionId);
@@ -69,9 +84,9 @@ export function PhysicalLayoutEditorPanel({
 
         sessionIdRef.current = result.sessionId;
         setOpenResult(result);
-        const firstMacro = getFirstLayoutMacroName(result.catalog);
-        if (firstMacro && !selectedMacroName) {
-          onSelectedMacroNameChangeRef.current?.(firstMacro);
+        const defaultTarget = getDefaultLayoutTarget(result.catalog);
+        if (defaultTarget && !selectedTargetRef.current) {
+          onSelectedTargetChangeRef.current?.(defaultTarget);
         }
 
         const nextGeometry = await lsp.layoutGeometry({
@@ -104,7 +119,7 @@ export function PhysicalLayoutEditorPanel({
         void window.electronAPI?.lsp.layoutClose?.(sessionId);
       }
     };
-  }, []);
+  }, [activeLayoutFilePath]);
 
   useEffect(() => {
     onLayoutStateChangeRef.current?.({
@@ -119,22 +134,28 @@ export function PhysicalLayoutEditorPanel({
   const catalog = openResult?.catalog ?? null;
   const shapeCount = geometry?.shapes.length ?? 0;
   const macroCount = catalog?.macros.length ?? 0;
+  const cellCount = catalog?.gdsCells.length ?? 0;
   const layerCount = catalog?.layers.length ?? 0;
+  const selectedTargetName = selectedTarget?.name ?? '';
 
   return (
     <div
       className="flex h-full min-h-0 flex-col bg-[#0f1419] text-ide-text"
       data-layer-count={layerCount}
       data-macro-count={macroCount}
-      data-selected-macro-name={selectedMacroName ?? ''}
+      data-selected-macro-name={selectedTarget?.kind === 'macro' ? selectedTarget.name : ''}
+      data-selected-target-kind={selectedTarget?.kind ?? ''}
+      data-selected-target-name={selectedTargetName}
       data-shape-count={shapeCount}
+      data-source-kind={catalog?.sourceKind ?? ''}
       data-status={status}
       data-testid="physical-layout-editor"
     >
       <div className="flex h-8 shrink-0 items-center gap-3 border-b border-ide-border/70 px-3 text-[11px] text-ide-text-muted">
         <span className="font-medium text-ide-text">Physical Layout</span>
-        <span data-testid="physical-layout-selected-macro">{selectedMacroName ?? 'No macro'}</span>
+        <span data-testid="physical-layout-selected-macro">{selectedTargetName || 'No layout target'}</span>
         <span>{macroCount} macros</span>
+        <span>{cellCount} cells</span>
         <span>{layerCount} layers</span>
         <span>{shapeCount} shapes</span>
       </div>
@@ -152,7 +173,7 @@ export function PhysicalLayoutEditorPanel({
             catalog={catalog}
             geometry={geometry}
             layoutVisibility={layoutVisibility}
-            selectedMacroName={selectedMacroName}
+            selectedTarget={selectedTarget}
           />
         )}
 
@@ -161,7 +182,7 @@ export function PhysicalLayoutEditorPanel({
             className="pointer-events-none absolute left-3 top-3 rounded border border-ide-border/80 bg-ide-bg/90 px-2 py-1 text-[11px] text-ide-text-muted shadow"
             data-testid="physical-layout-loading"
           >
-            Loading IHP stdcell LEF
+            Loading physical layout
           </div>
         )}
       </div>

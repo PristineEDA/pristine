@@ -25,6 +25,7 @@ import {
   PhysicalLeftPanel,
   PhysicalMainPanel,
   PhysicalRightPanel,
+  type PhysicalLayoutFileEntry,
   type PhysicalWorkspaceLayoutState,
 } from './components/code/physical/PhysicalWorkspacePanels';
 import {
@@ -35,7 +36,11 @@ import {
   type PhysicalLayoutLayerCategory,
   type MutablePhysicalLayoutVisibility,
 } from './components/code/physical/physicalLayoutLayers';
-import { findLayoutMacro, selectMacroShapes } from './components/code/physical/physicalLayoutGeometry';
+import {
+  getDefaultLayoutTarget,
+  selectLayoutTargetShapes,
+  type PhysicalLayoutTarget,
+} from './components/code/physical/physicalLayoutGeometry';
 import { QuickOpenPalette } from './components/code/shared/QuickOpenPalette';
 import { isMonacoTextInputFocused } from './editor/focusEditor';
 import {
@@ -147,7 +152,10 @@ function AppLayout() {
     openResult: null,
     status: 'idle',
   });
-  const [physicalSelectedMacroName, setPhysicalSelectedMacroName] = useState<string | null>(null);
+  const [physicalLayoutFiles, setPhysicalLayoutFiles] = useState<PhysicalLayoutFileEntry[]>([]);
+  const [expandedPhysicalLayoutFilePaths, setExpandedPhysicalLayoutFilePaths] = useState<Set<string>>(() => new Set());
+  const [activePhysicalLayoutFilePath, setActivePhysicalLayoutFilePath] = useState<string | null>(null);
+  const [physicalSelectedTarget, setPhysicalSelectedTarget] = useState<PhysicalLayoutTarget | null>(null);
   const [physicalLayoutVisibility, setPhysicalLayoutVisibility] = useState<MutablePhysicalLayoutVisibility>(() => (
     createEmptyPhysicalLayoutVisibility()
   ));
@@ -164,10 +172,47 @@ function AppLayout() {
   const explorerRightPanelMaxWidthPx = EXPLORER_RIGHT_PANEL_MAX_WIDTH_PX + assistantThreadListExtraWidthPx;
 
   useEffect(() => {
-    const macro = findLayoutMacro(physicalLayoutState.catalog, physicalSelectedMacroName);
-    const shapes = selectMacroShapes(physicalLayoutState.catalog, physicalLayoutState.geometry, physicalSelectedMacroName);
-    setPhysicalLayoutVisibility(createPhysicalLayoutVisibility(physicalLayoutState.catalog, macro, shapes));
-  }, [physicalLayoutState.catalog, physicalLayoutState.geometry, physicalSelectedMacroName]);
+    let disposed = false;
+
+    async function loadPhysicalLayoutFiles() {
+      const entries = await window.electronAPI?.fs.readDir?.('.');
+      if (disposed || !Array.isArray(entries)) {
+        return;
+      }
+
+      const files = entries
+        .filter((entry) => entry.isFile)
+        .map((entry) => {
+          const extension = getPhysicalLayoutFileExtension(entry.name);
+          return { extension, name: entry.name, path: entry.name };
+        })
+        .filter((entry): entry is PhysicalLayoutFileEntry => isPhysicalLayoutFileExtension(entry.extension))
+        .sort((left, right) => left.name.localeCompare(right.name, undefined, { numeric: true, sensitivity: 'base' }));
+      setPhysicalLayoutFiles(files);
+    }
+
+    void loadPhysicalLayoutFiles().catch(() => {
+      if (!disposed) {
+        setPhysicalLayoutFiles([]);
+      }
+    });
+
+    return () => {
+      disposed = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    const defaultTarget = getDefaultLayoutTarget(physicalLayoutState.catalog);
+    if (!physicalSelectedTarget && defaultTarget) {
+      setPhysicalSelectedTarget(defaultTarget);
+    }
+  }, [physicalLayoutState.catalog, physicalSelectedTarget]);
+
+  useEffect(() => {
+    const shapes = selectLayoutTargetShapes(physicalLayoutState.catalog, physicalLayoutState.geometry, physicalSelectedTarget);
+    setPhysicalLayoutVisibility(createPhysicalLayoutVisibility(physicalLayoutState.catalog, Boolean(physicalSelectedTarget), shapes));
+  }, [physicalLayoutState.catalog, physicalLayoutState.geometry, physicalSelectedTarget]);
 
   const handlePhysicalOutlineVisibilityToggle = useCallback(() => {
     setPhysicalLayoutVisibility((current) => {
@@ -204,6 +249,32 @@ function AppLayout() {
         visibleItems: nextItems,
       };
     });
+  }, []);
+
+  const handlePhysicalLayoutFileToggle = useCallback((file: PhysicalLayoutFileEntry) => {
+    setExpandedPhysicalLayoutFilePaths((current) => {
+      const next = new Set(current);
+      if (next.has(file.path)) {
+        next.delete(file.path);
+      } else {
+        next.add(file.path);
+      }
+      return next;
+    });
+
+    setPhysicalSelectedTarget(null);
+    setActivePhysicalLayoutFilePath(file.path);
+    setPhysicalLayoutState({
+      catalog: null,
+      error: null,
+      geometry: null,
+      openResult: null,
+      status: 'loading',
+    });
+  }, []);
+
+  const handlePhysicalLayoutTargetActivate = useCallback((target: PhysicalLayoutTarget) => {
+    setPhysicalSelectedTarget(target);
   }, []);
 
   const handleActivityItemSelect = (nextView: string) => {
@@ -560,17 +631,22 @@ function AppLayout() {
       rightFixedMaxWidthPx: EXPLORER_RIGHT_PANEL_MAX_WIDTH_PX,
       leftContent: (
         <PhysicalLeftPanel
+          activeLayoutFilePath={activePhysicalLayoutFilePath}
           catalog={physicalLayoutState.catalog}
-          selectedMacroName={physicalSelectedMacroName}
-          onMacroActivate={setPhysicalSelectedMacroName}
+          expandedLayoutFilePaths={expandedPhysicalLayoutFilePaths}
+          layoutFiles={physicalLayoutFiles}
+          selectedTarget={physicalSelectedTarget}
+          onLayoutFileToggle={handlePhysicalLayoutFileToggle}
+          onLayoutTargetActivate={handlePhysicalLayoutTargetActivate}
           onSplitPanelVisibleChange={setIsPhysicalLeftPanelSplitVisible}
         />
       ),
       topContent: (
         <PhysicalMainPanel
+          activeLayoutFilePath={activePhysicalLayoutFilePath}
           layoutVisibility={physicalLayoutVisibility}
-          selectedMacroName={physicalSelectedMacroName}
-          onSelectedMacroNameChange={setPhysicalSelectedMacroName}
+          selectedTarget={physicalSelectedTarget}
+          onSelectedTargetChange={setPhysicalSelectedTarget}
           onLayoutStateChange={setPhysicalLayoutState}
         />
       ),
@@ -588,7 +664,7 @@ function AppLayout() {
         <PhysicalRightPanel
           layoutVisibility={physicalLayoutVisibility}
           layoutState={physicalLayoutState}
-          selectedMacroName={physicalSelectedMacroName}
+          selectedTarget={physicalSelectedTarget}
           onLayerCategoryVisibilityToggle={handlePhysicalLayerCategoryVisibilityToggle}
           onOutlineVisibilityToggle={handlePhysicalOutlineVisibilityToggle}
           onSplitPanelVisibleChange={setIsPhysicalRightPanelSplitVisible}
@@ -763,6 +839,21 @@ function AppLayout() {
       />
     </SidebarProvider>
   );
+}
+
+function getPhysicalLayoutFileExtension(fileName: string): string {
+  const normalized = fileName.toLowerCase();
+  const index = normalized.lastIndexOf('.');
+  return index >= 0 ? normalized.slice(index) : '';
+}
+
+function isPhysicalLayoutFileExtension(extension: string): boolean {
+  return extension === '.lef'
+    || extension === '.def'
+    || extension === '.gds'
+    || extension === '.gdsii'
+    || extension === '.oas'
+    || extension === '.oasis';
 }
 
 export default function App() {

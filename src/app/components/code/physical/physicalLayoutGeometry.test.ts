@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import type { LspLayoutCatalog, LspLayoutGeometry } from '../../../../../types/systemverilog-lsp';
 import { layoutFixtureGeometry, layoutFixtureOpenResult } from '../../../../test/layoutFixture';
 import {
   applyLayoutWheel,
@@ -112,7 +113,7 @@ describe('physicalLayoutGeometry', () => {
   it('creates category visibility, filters shapes, and allows all categories to hide', () => {
     const macro = findLayoutMacro(catalog, 'sg13g2_inv_1');
     const selectedShapes = selectMacroShapes(catalog, layoutFixtureGeometry, 'sg13g2_inv_1');
-    const visibility = createPhysicalLayoutVisibility(catalog, macro, selectedShapes);
+    const visibility = createPhysicalLayoutVisibility(catalog, Boolean(macro), selectedShapes);
 
     expect(isPhysicalLayoutOutlineVisible(visibility)).toBe(true);
     expect(isPhysicalLayoutLayerCategoryVisible(visibility, 0, 'pin')).toBe(true);
@@ -120,7 +121,7 @@ describe('physicalLayoutGeometry', () => {
     expect(isPhysicalLayoutLayerCategoryVisible(visibility, 0, 'obstruction')).toBe(false);
     expect(isPhysicalLayoutLayerCategoryVisible(visibility, 1, 'obstruction')).toBe(true);
     expect(filterVisiblePhysicalLayoutShapes(selectedShapes, visibility)).toHaveLength(3);
-    expect(getVisiblePhysicalLayoutShapeCounts(selectedShapes, visibility)).toEqual({ obstruction: 1, pin: 2 });
+    expect(getVisiblePhysicalLayoutShapeCounts(selectedShapes, visibility)).toMatchObject({ obstruction: 1, pin: 2 });
 
     const hiddenVisibility = { outlineVisible: false, visibleItems: new Set<string>() };
 
@@ -131,13 +132,13 @@ describe('physicalLayoutGeometry', () => {
 
   it('builds layer tree availability and real pin labels', () => {
     const selectedShapes = selectMacroShapes(catalog, layoutFixtureGeometry, 'sg13g2_inv_1');
-    const visibility = createPhysicalLayoutVisibility(catalog, findLayoutMacro(catalog, 'sg13g2_inv_1'), selectedShapes);
+    const visibility = createPhysicalLayoutVisibility(catalog, true, selectedShapes);
     const tree = createPhysicalLayoutLayerTree(catalog, selectedShapes);
 
     expect(tree).toHaveLength(2);
-    expect(tree[0]?.categories).toEqual({ label: true, obstruction: false, pin: true });
+    expect(tree[0]?.categories).toMatchObject({ label: true, obstruction: false, pin: true });
     expect(tree[0]?.available).toBe(true);
-    expect(tree[1]?.categories).toEqual({ label: false, obstruction: true, pin: false });
+    expect(tree[1]?.categories).toMatchObject({ label: false, obstruction: true, pin: false });
     expect(tree[1]?.available).toBe(true);
     expect(createPhysicalLayoutPinLabels(catalog, selectedShapes, visibility)).toEqual([
       expect.objectContaining({ layerIndex: 0, name: 'A', ownerIndex: 0 }),
@@ -147,7 +148,7 @@ describe('physicalLayoutGeometry', () => {
 
   it('omits pin labels when the catalog has no matching pin table entry', () => {
     const selectedShapes = selectMacroShapes(catalog, layoutFixtureGeometry, 'sg13g2_inv_1');
-    const visibility = createPhysicalLayoutVisibility(catalog, findLayoutMacro(catalog, 'sg13g2_inv_1'), selectedShapes);
+    const visibility = createPhysicalLayoutVisibility(catalog, true, selectedShapes);
     const catalogWithoutPinNames = {
       ...catalog,
       pins: catalog.pins.filter((pin) => !(pin.macroIndex === 0 && pin.pinIndex === 1)),
@@ -164,5 +165,59 @@ describe('physicalLayoutGeometry', () => {
 
     expect(createPhysicalLayoutLayerTree(catalogWithoutSelectedPinNames, selectedShapes)[0]?.categories.label).toBe(false);
     expect(createPhysicalLayoutPinLabels(catalogWithoutSelectedPinNames, selectedShapes, visibility)).toEqual([]);
+  });
+
+  it('uses source-aware GDS layer categories and text labels', () => {
+    const gdsCatalog: LspLayoutCatalog = {
+      ...catalog,
+      defPins: [],
+      gdsCells: [{
+        bounds: { x0: 0, y0: 0, x1: 2, y1: 2 },
+        elementCount: 3,
+        firstElementIndex: 0,
+        firstReferenceIndex: 0,
+        index: 0,
+        name: 'TOP',
+        referenceCount: 0,
+        top: true,
+      }],
+      gdsElements: [
+        { cellIndex: 0, datatype: 0, firstPointIndex: 0, index: 0, kind: 0, layer: 0, pointCount: 4, referenceIndex: null, text: '', texttype: 0 },
+        { cellIndex: 0, datatype: 0, firstPointIndex: 4, index: 1, kind: 1, layer: 0, pointCount: 2, referenceIndex: null, text: '', texttype: 0 },
+        { cellIndex: 0, datatype: 0, firstPointIndex: 6, index: 2, kind: 3, layer: 0, pointCount: 1, referenceIndex: null, text: 'VSS', texttype: 0 },
+      ],
+      gdsPoints: [],
+      gdsReferences: [],
+      macros: [],
+      pins: [],
+      shapeCount: 3,
+      sourceKind: 'gds',
+      topCellIndex: 0,
+    };
+    const gdsGeometry: LspLayoutGeometry = {
+      polygonPointCount: 0,
+      shapeCount: 3,
+      shapes: [
+        { flags: 0, index: 0, kind: 'polygon', layerIndex: 0, macroIndex: 0, ownerIndex: 0, ownerKind: 'gdsElement', polygon: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }], rect: { x0: 0, y0: 0, x1: 1, y1: 1 } },
+        { flags: 0, index: 1, kind: 'path', layerIndex: 0, macroIndex: 0, ownerIndex: 1, ownerKind: 'gdsElement', polygon: [{ x: 0.2, y: 0.2 }, { x: 1.2, y: 0.2 }], rect: { x0: 0.2, y0: 0.2, x1: 1.2, y1: 0.2 } },
+        { flags: 0, index: 2, kind: 'text', layerIndex: 0, macroIndex: 0, ownerIndex: 2, ownerKind: 'gdsElement', rect: { x0: 0.4, y0: 0.4, x1: 0.6, y1: 0.6 } },
+      ],
+      truncated: false,
+      unitsPerMicron: 1000,
+    };
+    const selectedShapes = gdsGeometry.shapes;
+    const visibility = createPhysicalLayoutVisibility(gdsCatalog, true, selectedShapes);
+    const tree = createPhysicalLayoutLayerTree(gdsCatalog, selectedShapes);
+
+    expect(tree[0]?.categories).toMatchObject({ boundary: true, path: true, text: true });
+    expect(filterVisiblePhysicalLayoutShapes(selectedShapes, visibility)).toHaveLength(3);
+    expect(getVisiblePhysicalLayoutShapeCounts(selectedShapes, visibility)).toMatchObject({
+      boundary: 1,
+      path: 1,
+      text: 1,
+    });
+    expect(createPhysicalLayoutPinLabels(gdsCatalog, selectedShapes, visibility)).toEqual([
+      expect.objectContaining({ layerIndex: 0, name: 'VSS', ownerIndex: 2 }),
+    ]);
   });
 });

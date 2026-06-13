@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   ClipboardList,
+  Boxes,
+  ChevronRight,
+  CircuitBoard,
   FileText,
   Gauge,
   Layers3,
@@ -44,14 +47,15 @@ import {
 } from './PhysicalLayoutEditorPanel';
 import {
   createPhysicalLayoutLayerTree,
+  getPhysicalLayoutLayerCategories,
   getPhysicalLayoutLayerCategoryColor,
   getPhysicalLayoutOutlineColor,
   isPhysicalLayoutLayerCategoryVisible,
   isPhysicalLayoutOutlineVisible,
-  physicalLayoutLayerCategories,
   type PhysicalLayoutLayerCategory,
   type PhysicalLayoutVisibility,
 } from './physicalLayoutLayers';
+import { selectLayoutTargetShapes, type PhysicalLayoutTarget } from './physicalLayoutGeometry';
 
 type PhysicalLeftPanelTab = 'layout' | 'constraints';
 type PhysicalLowerPanelTab = 'details' | 'notes';
@@ -64,6 +68,12 @@ export interface PhysicalWorkspaceLayoutState {
   geometry: LspLayoutGeometry | null;
   openResult: LspLayoutOpenResult | null;
   status: PhysicalLayoutStatus;
+}
+
+export interface PhysicalLayoutFileEntry {
+  extension: string;
+  name: string;
+  path: string;
 }
 
 const physicalLeftPanelTabs = [
@@ -97,9 +107,15 @@ const emptyPhysicalLayoutVisibility: PhysicalLayoutVisibility = {
 };
 
 const physicalLayerCategoryLabels: Record<PhysicalLayoutLayerCategory, string> = {
+  blockage: 'Blockage',
+  boundary: 'Boundary',
   label: 'Label',
+  net: 'Net',
   obstruction: 'Obstruction',
+  path: 'Path',
   pin: 'Pin',
+  specialNet: 'Special Net',
+  text: 'Text',
 };
 
 function PhysicalEmptyState({ title, description, testId }: { title: string; description: string; testId: string }) {
@@ -174,15 +190,17 @@ function PhysicalPanelTabs<TTab extends string>({
 }
 
 export function PhysicalMainPanel({
+  activeLayoutFilePath,
   layoutVisibility,
   onLayoutStateChange,
-  onSelectedMacroNameChange,
-  selectedMacroName,
+  onSelectedTargetChange,
+  selectedTarget,
 }: {
+  activeLayoutFilePath: string | null;
   layoutVisibility: PhysicalLayoutVisibility;
   onLayoutStateChange?: (state: PhysicalLayoutStateSnapshot) => void;
-  onSelectedMacroNameChange?: (macroName: string) => void;
-  selectedMacroName?: string | null;
+  onSelectedTargetChange?: (target: PhysicalLayoutTarget | null) => void;
+  selectedTarget?: PhysicalLayoutTarget | null;
 }) {
   const { layoutMode } = useCodeViewerLayout();
 
@@ -190,33 +208,40 @@ export function PhysicalMainPanel({
     <div className={getEditorAreaRootClassName(layoutMode)}>
       <div data-testid="physical-main-panel-content" className="h-full min-h-0">
         <PhysicalLayoutEditorPanel
+          activeLayoutFilePath={activeLayoutFilePath}
           layoutVisibility={layoutVisibility}
-          selectedMacroName={selectedMacroName ?? null}
+          selectedTarget={selectedTarget ?? null}
           onLayoutStateChange={onLayoutStateChange}
-          onSelectedMacroNameChange={onSelectedMacroNameChange}
+          onSelectedTargetChange={onSelectedTargetChange}
         />
       </div>
     </div>
   );
 }
 
-function PhysicalMacroList({
+function PhysicalLayoutFileTree({
+  activeFilePath,
   catalog,
-  selectedMacroName,
-  onMacroActivate,
+  expandedFilePaths,
+  files,
+  onFileToggle,
+  onTargetActivate,
+  selectedTarget,
 }: {
+  activeFilePath?: string | null;
   catalog?: LspLayoutCatalog | null;
-  selectedMacroName?: string | null;
-  onMacroActivate?: (macroName: string) => void;
+  expandedFilePaths: ReadonlySet<string>;
+  files: readonly PhysicalLayoutFileEntry[];
+  onFileToggle?: (file: PhysicalLayoutFileEntry) => void;
+  onTargetActivate?: (target: PhysicalLayoutTarget) => void;
+  selectedTarget?: PhysicalLayoutTarget | null;
 }) {
-  const macros = catalog?.macros ?? [];
-
-  if (macros.length === 0) {
+  if (files.length === 0) {
     return (
       <PhysicalEmptyState
         testId="physical-left-panel-layout-content"
         title="Layout"
-        description="Open IHP stdcell LEF macros will appear here."
+        description="Workspace layout files will appear here."
       />
     );
   }
@@ -225,33 +250,68 @@ function PhysicalMacroList({
     <div data-testid="physical-left-panel-layout-content" className="flex h-full min-h-0 flex-col">
       <div className="shrink-0 border-b border-ide-border/60 px-3 py-2">
         <div className="flex items-center justify-between gap-2 text-[11px]">
-          <span className="font-medium text-ide-text">Layout Macros</span>
-          <span className="text-ide-text-muted" data-testid="physical-layout-macro-count">{macros.length}</span>
+          <span className="font-medium text-ide-text">Layout Files</span>
+          <span className="text-ide-text-muted" data-testid="physical-layout-file-count">{files.length}</span>
         </div>
       </div>
       <div
         className="min-h-0 flex-1 overflow-y-auto px-1 py-1"
-        data-testid="physical-layout-macro-list"
+        data-testid="physical-layout-file-tree"
       >
-        {macros.map((macro) => {
-          const selected = macro.name === selectedMacroName;
+        {files.map((file) => {
+          const active = file.path === activeFilePath;
+          const expanded = expandedFilePaths.has(file.path);
+          const targets = active && catalog ? createLayoutFileTargets(catalog) : [];
+          const hasChildren = targets.length > 0;
+          const FileIcon = getPhysicalLayoutFileIcon(file.extension);
           return (
-            <button
-              key={macro.name}
-              type="button"
-              aria-selected={selected}
-              className={cn(
-                'flex w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-left text-[11px] hover:bg-ide-hover',
-                selected ? 'bg-ide-selection text-ide-text' : 'text-ide-text-muted',
+            <div key={file.path}>
+              <button
+                type="button"
+                aria-expanded={expanded}
+                aria-selected={active}
+                className={cn(
+                  'flex w-full items-center gap-1.5 rounded px-1.5 py-1.5 text-left text-[11px] hover:bg-ide-hover',
+                  active ? 'bg-ide-selection text-ide-text' : 'text-ide-text-muted',
+                )}
+                data-testid={`physical-layout-file-item-${sanitizeLayoutTestId(file.path)}`}
+                onClick={() => onFileToggle?.(file)}
+                title={file.path}
+              >
+                <ChevronRight
+                  size={12}
+                  className={cn('shrink-0 transition-transform', expanded && hasChildren && 'rotate-90', !hasChildren && 'opacity-30')}
+                />
+                <FileIcon size={13} className="shrink-0" />
+                <span className="min-w-0 flex-1 truncate">{file.name}</span>
+              </button>
+
+              {expanded && hasChildren && (
+                <div className="ml-5 mt-0.5 flex flex-col gap-0.5">
+                  {targets.map((target) => {
+                    const selected = selectedTarget?.kind === target.kind && selectedTarget.name === target.name;
+                    const TargetIcon = target.kind === 'gdsCell' ? Boxes : target.kind === 'design' ? CircuitBoard : Layers3;
+                    return (
+                      <button
+                        key={`${target.kind}:${target.name}`}
+                        type="button"
+                        aria-selected={selected}
+                        className={cn(
+                          'flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-left text-[11px] hover:bg-ide-hover',
+                          selected ? 'bg-ide-selection text-ide-text' : 'text-ide-text-muted',
+                        )}
+                        data-testid={`physical-layout-target-item-${sanitizeLayoutTestId(target.kind)}-${sanitizeLayoutTestId(target.name)}`}
+                        onClick={() => onTargetActivate?.(target)}
+                        title={target.name}
+                      >
+                        <TargetIcon size={12} className="shrink-0" />
+                        <span className="min-w-0 flex-1 truncate">{target.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               )}
-              data-testid={`physical-layout-macro-item-${sanitizeMacroTestId(macro.name)}`}
-              onClick={() => onMacroActivate?.(macro.name)}
-              onDoubleClick={() => onMacroActivate?.(macro.name)}
-              title={macro.name}
-            >
-              <span className="min-w-0 truncate">{macro.name}</span>
-              <span className="shrink-0 text-[10px] text-ide-text-muted">{macro.pinCount} pins</span>
-            </button>
+            </div>
           );
         })}
       </div>
@@ -261,19 +321,25 @@ function PhysicalMacroList({
 
 function PhysicalInspectorSummary({
   layoutState,
-  selectedMacroName,
+  selectedTarget,
 }: {
   layoutState?: PhysicalWorkspaceLayoutState;
-  selectedMacroName?: string | null;
+  selectedTarget?: PhysicalLayoutTarget | null;
 }) {
-  const macro = layoutState?.catalog?.macros.find((entry) => entry.name === selectedMacroName) ?? null;
+  const catalog = layoutState?.catalog ?? null;
+  const macro = selectedTarget?.kind === 'macro'
+    ? catalog?.macros.find((entry) => entry.name === selectedTarget.name) ?? null
+    : null;
+  const cell = selectedTarget?.kind === 'gdsCell'
+    ? catalog?.gdsCells.find((entry) => entry.name === selectedTarget.name) ?? null
+    : null;
 
-  if (!macro) {
+  if (!selectedTarget) {
     return (
       <PhysicalEmptyState
         testId="physical-right-panel-inspector-content"
         title="Inspector"
-        description="Select a layout macro to inspect geometry metadata."
+        description="Select a layout target to inspect geometry metadata."
       />
     );
   }
@@ -281,18 +347,30 @@ function PhysicalInspectorSummary({
   return (
     <div data-testid="physical-right-panel-inspector-content" className="flex h-full min-h-0 flex-col gap-3 overflow-auto p-3 text-[11px]">
       <div>
-        <p className="font-medium text-ide-text">{macro.name}</p>
-        <p className="mt-1 text-ide-text-muted">{macro.className || 'Macro'}</p>
+        <p className="font-medium text-ide-text">{selectedTarget.name}</p>
+        <p className="mt-1 text-ide-text-muted">{selectedTarget.kind}</p>
       </div>
       <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-ide-text-muted">
-        <dt>Size</dt>
-        <dd className="text-ide-text">{macro.sizeX.toFixed(3)} x {macro.sizeY.toFixed(3)}</dd>
-        <dt>Origin</dt>
-        <dd className="text-ide-text">{macro.originX.toFixed(3)}, {macro.originY.toFixed(3)}</dd>
-        <dt>Pins</dt>
-        <dd className="text-ide-text">{macro.pinCount}</dd>
+        {macro && (
+          <>
+            <dt>Size</dt>
+            <dd className="text-ide-text">{macro.sizeX.toFixed(3)} x {macro.sizeY.toFixed(3)}</dd>
+            <dt>Origin</dt>
+            <dd className="text-ide-text">{macro.originX.toFixed(3)}, {macro.originY.toFixed(3)}</dd>
+            <dt>Pins</dt>
+            <dd className="text-ide-text">{macro.pinCount}</dd>
+          </>
+        )}
+        {cell && (
+          <>
+            <dt>Elements</dt>
+            <dd className="text-ide-text">{cell.elementCount}</dd>
+            <dt>References</dt>
+            <dd className="text-ide-text">{cell.referenceCount}</dd>
+          </>
+        )}
         <dt>Layers</dt>
-        <dd className="text-ide-text">{layoutState?.catalog?.layers.length ?? 0}</dd>
+        <dd className="text-ide-text">{catalog?.layers.length ?? 0}</dd>
         <dt>Shapes</dt>
         <dd className="text-ide-text">{layoutState?.geometry?.shapes.length ?? 0}</dd>
       </dl>
@@ -306,22 +384,20 @@ function PhysicalLayerPanel({
   layoutVisibility,
   onLayerCategoryVisibilityToggle,
   onOutlineVisibilityToggle,
-  selectedMacroName,
+  selectedTarget,
 }: {
   catalog?: LspLayoutCatalog | null;
   geometry?: LspLayoutGeometry | null;
   layoutVisibility: PhysicalLayoutVisibility;
   onLayerCategoryVisibilityToggle?: (layerIndex: number, category: PhysicalLayoutLayerCategory) => void;
   onOutlineVisibilityToggle?: () => void;
-  selectedMacroName?: string | null;
+  selectedTarget?: PhysicalLayoutTarget | null;
 }) {
   const layers = catalog?.layers ?? [];
-  const macro = catalog?.macros.find((entry) => entry.name === selectedMacroName) ?? null;
-  const macroShapes = macro && geometry
-    ? geometry.shapes.filter((shape) => shape.macroIndex === macro.index)
-    : [];
-  const layerTree = createPhysicalLayoutLayerTree(catalog, macroShapes);
-  const outlineAvailable = Boolean(macro);
+  const selectedShapes = selectLayoutTargetShapes(catalog, geometry, selectedTarget);
+  const layerTree = createPhysicalLayoutLayerTree(catalog, selectedShapes);
+  const layerCategories = getPhysicalLayoutLayerCategories(catalog);
+  const outlineAvailable = Boolean(selectedTarget);
   const outlineVisible = outlineAvailable && isPhysicalLayoutOutlineVisible(layoutVisibility);
 
   if (layers.length === 0) {
@@ -379,11 +455,8 @@ function PhysicalLayerPanel({
             <div
               key={`${layer.index}:${layer.name}`}
               data-testid={`physical-layer-row-${layer.index}`}
-              className={cn(
-                'rounded px-1.5 py-1 text-[11px]',
-                entry.available ? 'text-ide-text' : 'text-ide-text-muted opacity-55',
-              )}
-              aria-disabled={!entry.available}
+              className="rounded px-1.5 py-1 text-[11px] text-ide-text"
+              aria-disabled={false}
             >
               <div className="flex min-h-6 items-center gap-2">
                 <span
@@ -395,7 +468,7 @@ function PhysicalLayerPanel({
                 </span>
               </div>
               <div className="mt-0.5 flex flex-col gap-0.5 pl-3">
-                {physicalLayoutLayerCategories.map((category) => {
+                {layerCategories.map((category) => {
                   const available = entry.categories[category];
                   const visible = available && isPhysicalLayoutLayerCategoryVisible(layoutVisibility, layer.index, category);
                   const label = physicalLayerCategoryLabels[category];
@@ -407,7 +480,7 @@ function PhysicalLayerPanel({
                       aria-disabled={!available}
                       className={cn(
                         'flex min-h-6 items-center gap-2 rounded px-1 py-0.5',
-                        available ? 'text-ide-text' : 'text-ide-text-muted opacity-45',
+                        available ? 'text-ide-text' : 'text-ide-text-muted opacity-75',
                       )}
                       data-testid={`physical-layer-category-row-${layer.index}-${category}`}
                     >
@@ -419,7 +492,7 @@ function PhysicalLayerPanel({
                         className={cn(
                           'size-3.5 shrink-0 rounded-sm border border-white/20 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ide-accent disabled:cursor-not-allowed',
                           visible ? 'opacity-100' : 'opacity-35',
-                          !available && 'opacity-25',
+                          !available && 'opacity-45',
                         )}
                         data-testid={`physical-layer-category-swatch-${layer.index}-${category}`}
                         onClick={() => onLayerCategoryVisibilityToggle?.(layer.index, category)}
@@ -479,8 +552,39 @@ function PhysicalMetricTile({ label, value }: { label: string; value: string }) 
   );
 }
 
-function sanitizeMacroTestId(value: string): string {
+function sanitizeLayoutTestId(value: string): string {
   return value.replace(/[^a-zA-Z0-9_-]+/g, '-');
+}
+
+function createLayoutFileTargets(catalog: LspLayoutCatalog): PhysicalLayoutTarget[] {
+  if (catalog.sourceKind === 'gds') {
+    return catalog.gdsCells.map((cell) => ({
+      kind: 'gdsCell',
+      name: cell.name,
+      index: cell.index,
+    }));
+  }
+
+  if (catalog.defPins.length > 0 || catalog.components.length > 0 || catalog.nets.length > 0) {
+    return [{ kind: 'design', name: 'Design', index: null }];
+  }
+
+  return catalog.macros.map((macro) => ({
+    kind: 'macro',
+    name: macro.name,
+    index: macro.index,
+  }));
+}
+
+function getPhysicalLayoutFileIcon(extension: string) {
+  if (extension === '.gds' || extension === '.gdsii') {
+    return CircuitBoard;
+  }
+  if (extension === '.def') {
+    return Boxes;
+  }
+
+  return FileText;
 }
 
 function PhysicalLowerPanel<TTab extends PhysicalLowerPanelTab>({
@@ -527,15 +631,23 @@ function PhysicalLowerPanel<TTab extends PhysicalLowerPanelTab>({
 }
 
 export function PhysicalLeftPanel({
+  activeLayoutFilePath,
   catalog,
+  expandedLayoutFilePaths,
+  layoutFiles,
   onSplitPanelVisibleChange,
-  onMacroActivate,
-  selectedMacroName,
+  onLayoutFileToggle,
+  onLayoutTargetActivate,
+  selectedTarget,
 }: {
+  activeLayoutFilePath?: string | null;
   catalog?: LspLayoutCatalog | null;
+  expandedLayoutFilePaths: ReadonlySet<string>;
+  layoutFiles: readonly PhysicalLayoutFileEntry[];
   onSplitPanelVisibleChange?: (isVisible: boolean) => void;
-  onMacroActivate?: (macroName: string) => void;
-  selectedMacroName?: string | null;
+  onLayoutFileToggle?: (file: PhysicalLayoutFileEntry) => void;
+  onLayoutTargetActivate?: (target: PhysicalLayoutTarget) => void;
+  selectedTarget?: PhysicalLayoutTarget | null;
 }) {
   const { layoutMode } = useCodeViewerLayout();
   const [tab, setTab] = useState<PhysicalLeftPanelTab>('layout');
@@ -567,10 +679,14 @@ export function PhysicalLeftPanel({
   const primaryContent = (
     <div className="min-h-0 flex-1 overflow-hidden">
       {tab === 'layout' ? (
-        <PhysicalMacroList
+        <PhysicalLayoutFileTree
+          activeFilePath={activeLayoutFilePath}
           catalog={catalog}
-          selectedMacroName={selectedMacroName}
-          onMacroActivate={onMacroActivate}
+          expandedFilePaths={expandedLayoutFilePaths}
+          files={layoutFiles}
+          selectedTarget={selectedTarget}
+          onFileToggle={onLayoutFileToggle}
+          onTargetActivate={onLayoutTargetActivate}
         />
       ) : (
         <PhysicalEmptyState
@@ -662,14 +778,14 @@ export function PhysicalRightPanel({
   onLayerCategoryVisibilityToggle,
   onOutlineVisibilityToggle,
   onSplitPanelVisibleChange,
-  selectedMacroName,
+  selectedTarget,
 }: {
   layoutState?: PhysicalWorkspaceLayoutState;
   layoutVisibility?: PhysicalLayoutVisibility;
   onLayerCategoryVisibilityToggle?: (layerIndex: number, category: PhysicalLayoutLayerCategory) => void;
   onOutlineVisibilityToggle?: () => void;
   onSplitPanelVisibleChange?: (isVisible: boolean) => void;
-  selectedMacroName?: string | null;
+  selectedTarget?: PhysicalLayoutTarget | null;
 }) {
   const { layoutMode } = useCodeViewerLayout();
   const [tab, setTab] = useState<PhysicalRightPanelTab>('layers');
@@ -705,7 +821,7 @@ export function PhysicalRightPanel({
           catalog={layoutState?.catalog}
           geometry={layoutState?.geometry}
           layoutVisibility={layoutVisibility}
-          selectedMacroName={selectedMacroName}
+          selectedTarget={selectedTarget}
           onLayerCategoryVisibilityToggle={onLayerCategoryVisibilityToggle}
           onOutlineVisibilityToggle={onOutlineVisibilityToggle}
         />
@@ -722,7 +838,7 @@ export function PhysicalRightPanel({
     details: (
       <PhysicalInspectorSummary
         layoutState={layoutState}
-        selectedMacroName={selectedMacroName}
+        selectedTarget={selectedTarget}
       />
     ),
     notes: (
@@ -732,7 +848,7 @@ export function PhysicalRightPanel({
         description="Physical checks and selected object notes will appear here."
       />
     ),
-  }), [layoutState, selectedMacroName]);
+  }), [layoutState, selectedTarget]);
 
   return (
     <div

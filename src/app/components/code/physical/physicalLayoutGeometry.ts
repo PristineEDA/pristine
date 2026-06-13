@@ -1,6 +1,7 @@
 import type {
   LspLayoutBounds,
   LspLayoutCatalog,
+  LspLayoutGdsCell,
   LspLayoutGeometry,
   LspLayoutMacro,
   LspLayoutShape,
@@ -17,6 +18,14 @@ export interface PhysicalLayoutViewport {
   width: number;
 }
 
+export type PhysicalLayoutTargetKind = 'macro' | 'gdsCell' | 'design';
+
+export interface PhysicalLayoutTarget {
+  kind: PhysicalLayoutTargetKind;
+  name: string;
+  index: number | null;
+}
+
 export const physicalLayoutZoomLimits = {
   max: 200,
   min: 2,
@@ -24,6 +33,27 @@ export const physicalLayoutZoomLimits = {
 
 export function getFirstLayoutMacroName(catalog: LspLayoutCatalog | null | undefined): string | null {
   return catalog?.macros[0]?.name ?? null;
+}
+
+export function getDefaultLayoutTarget(catalog: LspLayoutCatalog | null | undefined): PhysicalLayoutTarget | null {
+  if (!catalog) {
+    return null;
+  }
+
+  if (catalog.sourceKind === 'gds') {
+    const topCell = catalog.topCellIndex !== null
+      ? catalog.gdsCells.find((cell) => cell.index === catalog.topCellIndex)
+      : null;
+    const cell = topCell ?? catalog.gdsCells[0] ?? null;
+    return cell ? { kind: 'gdsCell', name: cell.name, index: cell.index } : null;
+  }
+
+  if (catalog.defPins.length > 0 || catalog.components.length > 0 || catalog.nets.length > 0) {
+    return { kind: 'design', name: 'Design', index: null };
+  }
+
+  const macro = catalog.macros[0] ?? null;
+  return macro ? { kind: 'macro', name: macro.name, index: macro.index } : null;
 }
 
 export function findLayoutMacro(catalog: LspLayoutCatalog | null | undefined, macroName: string | null | undefined): LspLayoutMacro | null {
@@ -34,6 +64,14 @@ export function findLayoutMacro(catalog: LspLayoutCatalog | null | undefined, ma
   return catalog.macros.find((macro) => macro.name === macroName) ?? null;
 }
 
+export function findLayoutGdsCell(catalog: LspLayoutCatalog | null | undefined, cellName: string | null | undefined): LspLayoutGdsCell | null {
+  if (!catalog || !cellName) {
+    return null;
+  }
+
+  return catalog.gdsCells.find((cell) => cell.name === cellName) ?? null;
+}
+
 export function getMacroBounds(macro: LspLayoutMacro): LspLayoutBounds {
   return {
     x0: macro.originX,
@@ -41,6 +79,27 @@ export function getMacroBounds(macro: LspLayoutMacro): LspLayoutBounds {
     x1: macro.originX + macro.sizeX,
     y1: macro.originY + macro.sizeY,
   };
+}
+
+export function getLayoutTargetBounds(
+  catalog: LspLayoutCatalog | null | undefined,
+  target: PhysicalLayoutTarget | null | undefined,
+  fallback: LspLayoutBounds | null,
+): LspLayoutBounds | null {
+  if (!catalog || !target) {
+    return fallback;
+  }
+
+  if (target.kind === 'macro') {
+    const macro = findLayoutMacro(catalog, target.name);
+    return macro ? getMacroBounds(macro) : fallback;
+  }
+
+  if (target.kind === 'gdsCell') {
+    return findLayoutGdsCell(catalog, target.name)?.bounds ?? fallback;
+  }
+
+  return fallback;
 }
 
 export function selectMacroShapes(
@@ -54,6 +113,26 @@ export function selectMacroShapes(
   }
 
   return geometry.shapes.filter((shape) => shape.macroIndex === macro.index);
+}
+
+export function selectLayoutTargetShapes(
+  catalog: LspLayoutCatalog | null | undefined,
+  geometry: LspLayoutGeometry | null | undefined,
+  target: PhysicalLayoutTarget | null | undefined,
+): LspLayoutShape[] {
+  if (!catalog || !geometry || !target) {
+    return [];
+  }
+
+  if (target.kind === 'design') {
+    return geometry.shapes;
+  }
+
+  if (target.index === null) {
+    return [];
+  }
+
+  return geometry.shapes.filter((shape) => shape.macroIndex === target.index);
 }
 
 export function getShapesBounds(shapes: readonly LspLayoutShape[], fallback: LspLayoutBounds | null): LspLayoutBounds | null {

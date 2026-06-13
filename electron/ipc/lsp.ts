@@ -224,6 +224,74 @@ function resolveDefaultLayoutLefUri(): string {
   return absolutePathToFileUri(lefPath);
 }
 
+function resolveWorkspaceLayoutFileUri(workspaceFilePath: string): string {
+  return absolutePathToFileUri(resolveWorkspaceFilePath(workspaceFilePath));
+}
+
+function getWorkspaceLayoutFileExtension(workspaceFilePath: string): string {
+  return path.posix.extname(normalizeWorkspaceFilePath(workspaceFilePath)).toLowerCase();
+}
+
+function listWorkspaceRootLefUris(): string[] {
+  const root = getProjectRoot();
+  const pathModule = getProjectPathModule();
+
+  return fs.readdirSync(root, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith('.lef'))
+    .map((entry) => absolutePathToFileUri(pathModule.join(root, entry.name)))
+    .sort((left, right) => left.localeCompare(right, undefined, { numeric: true, sensitivity: 'base' }));
+}
+
+function resolveLayoutOpenRequestOptions(options: LspLayoutOpenOptions): {
+  defUri?: string;
+  gdsUri?: string;
+  lefUris?: string[];
+  title: string;
+} {
+  if (!options.workspaceFilePath) {
+    const lefUris = options.lefUris && options.lefUris.length > 0
+      ? options.lefUris
+      : [resolveDefaultLayoutLefUri()];
+
+    return {
+      defUri: options.defUri,
+      gdsUri: options.gdsUri,
+      lefUris,
+      title: options.title ?? DEFAULT_IHP_STDCELL_LEF_FILE_NAME,
+    };
+  }
+
+  const workspaceFilePath = normalizeWorkspaceFilePath(options.workspaceFilePath);
+  const extension = getWorkspaceLayoutFileExtension(workspaceFilePath);
+  const fileUri = resolveWorkspaceLayoutFileUri(workspaceFilePath);
+  const title = options.title ?? path.posix.basename(workspaceFilePath);
+
+  if (extension === '.lef') {
+    return { lefUris: [fileUri], title };
+  }
+
+  if (extension === '.def') {
+    const lefUris = options.lefUris && options.lefUris.length > 0
+      ? options.lefUris
+      : listWorkspaceRootLefUris();
+    if (lefUris.length === 0) {
+      throw new Error(`No LEF files found in the LSP workspace root. Place at least one .lef file next to ${workspaceFilePath} before opening DEF layout.`);
+    }
+
+    return { defUri: fileUri, lefUris, title };
+  }
+
+  if (extension === '.gds' || extension === '.gdsii') {
+    return { gdsUri: fileUri, title };
+  }
+
+  if (extension === '.oas' || extension === '.oasis') {
+    throw new Error('OASIS layout rendering is not supported yet.');
+  }
+
+  throw new Error(`Unsupported physical layout file extension: ${extension || '<none>'}`);
+}
+
 function getRelativeWorkspaceFilePath(uri: string): string | null {
   const absolutePath = fileUriToAbsolutePath(uri);
   if (!absolutePath) {
@@ -1602,7 +1670,7 @@ function createEmptyWaveformOpenResult(message: string): LspWaveformOpenResult {
 function createEmptyLayoutOpenResult(message: string): LspLayoutOpenResult {
   return {
     sessionId: '',
-    protocol: 'pristine-layout-columnar-v2',
+    protocol: 'pristine-layout-columnar-v3',
     title: 'Layout',
     lefCount: 0,
     defPresent: false,
@@ -1617,13 +1685,21 @@ function createEmptyLayoutOpenResult(message: string): LspLayoutOpenResult {
     messages: [message],
     catalog: {
       unitsPerMicron: 0,
+      sourceKind: 'lefdef',
+      shapeCount: 0,
       hasBounds: false,
+      topCellIndex: null,
       layers: [],
       macros: [],
       pins: [],
+      defPins: [],
       vias: [],
       components: [],
       nets: [],
+      gdsCells: [],
+      gdsReferences: [],
+      gdsElements: [],
+      gdsPoints: [],
       diagnostics: [],
     },
   };
@@ -1699,11 +1775,15 @@ function normalizeLayoutOpenOptions(value: unknown): LspLayoutOpenOptions {
 
   const candidate = value as {
     defUri?: unknown;
+    gdsUri?: unknown;
     lefUris?: unknown;
     title?: unknown;
+    workspaceFilePath?: unknown;
   };
   assertOptionalString(candidate.defUri, 'defUri');
+  assertOptionalString(candidate.gdsUri, 'gdsUri');
   assertOptionalString(candidate.title, 'title');
+  assertOptionalString(candidate.workspaceFilePath, 'workspaceFilePath');
 
   if (candidate.lefUris !== undefined && !Array.isArray(candidate.lefUris)) {
     throw new Error('Expected string array or undefined for "lefUris".');
@@ -1711,10 +1791,12 @@ function normalizeLayoutOpenOptions(value: unknown): LspLayoutOpenOptions {
 
   return {
     defUri: candidate.defUri,
+    gdsUri: candidate.gdsUri,
     lefUris: Array.isArray(candidate.lefUris)
       ? candidate.lefUris.filter((entry): entry is string => typeof entry === 'string' && entry.length > 0)
       : undefined,
     title: candidate.title,
+    workspaceFilePath: candidate.workspaceFilePath,
   };
 }
 
@@ -2792,17 +2874,11 @@ export function registerLspHandlers(getMainWindow: () => BrowserWindow | null): 
 
   ipcMain.handle(AsyncChannels.LSP_LAYOUT_OPEN, async (_event, options?: unknown) => {
     const normalizedOptions = normalizeLayoutOpenOptions(options);
-    const lefUris = normalizedOptions.lefUris && normalizedOptions.lefUris.length > 0
-      ? normalizedOptions.lefUris
-      : [resolveDefaultLayoutLefUri()];
+    const requestOptions = resolveLayoutOpenRequestOptions(normalizedOptions);
 
     return withInitializedSession(getMainWindow, async (session) => {
       try {
-        const result = await sendDebugRequest(session, getMainWindow, 'systemverilog/layout/open', {
-          defUri: normalizedOptions.defUri,
-          lefUris,
-          title: normalizedOptions.title ?? DEFAULT_IHP_STDCELL_LEF_FILE_NAME,
-        }, {
+        const result = await sendDebugRequest(session, getMainWindow, 'systemverilog/layout/open', requestOptions, {
           timeoutMs: LSP_LAYOUT_TIMEOUT_MS,
         });
 

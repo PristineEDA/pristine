@@ -1,4 +1,4 @@
-import type { LspLayoutCatalog, LspLayoutLayer, LspLayoutMacro, LspLayoutShape } from '../../../../../types/systemverilog-lsp';
+import type { LspLayoutCatalog, LspLayoutLayer, LspLayoutShape } from '../../../../../types/systemverilog-lsp';
 import { shapeBounds } from './physicalLayoutGeometry';
 
 const layerPalette = [
@@ -19,7 +19,16 @@ export interface PhysicalLayoutLayerColor {
   pixiColor: number;
 }
 
-export type PhysicalLayoutLayerCategory = 'pin' | 'label' | 'obstruction';
+export type PhysicalLayoutLayerCategory =
+  | 'pin'
+  | 'label'
+  | 'obstruction'
+  | 'net'
+  | 'specialNet'
+  | 'blockage'
+  | 'boundary'
+  | 'path'
+  | 'text';
 
 export interface PhysicalLayoutVisibility {
   outlineVisible: boolean;
@@ -31,11 +40,7 @@ export interface MutablePhysicalLayoutVisibility {
   visibleItems: Set<string>;
 }
 
-export interface PhysicalLayoutLayerCategoryAvailability {
-  label: boolean;
-  obstruction: boolean;
-  pin: boolean;
-}
+export type PhysicalLayoutLayerCategoryAvailability = Record<PhysicalLayoutLayerCategory, boolean>;
 
 export interface PhysicalLayoutLayerTreeEntry {
   available: boolean;
@@ -52,7 +57,16 @@ export interface PhysicalLayoutPinLabel {
   y: number;
 }
 
-export const physicalLayoutLayerCategories = ['pin', 'label', 'obstruction'] as const satisfies readonly PhysicalLayoutLayerCategory[];
+export const physicalLayoutLefDefLayerCategories = ['pin', 'label', 'obstruction', 'net', 'specialNet', 'blockage'] as const satisfies readonly PhysicalLayoutLayerCategory[];
+export const physicalLayoutGdsLayerCategories = ['boundary', 'path', 'text'] as const satisfies readonly PhysicalLayoutLayerCategory[];
+export const physicalLayoutLayerCategories = [
+  ...physicalLayoutLefDefLayerCategories,
+  ...physicalLayoutGdsLayerCategories,
+] as const satisfies readonly PhysicalLayoutLayerCategory[];
+
+export function getPhysicalLayoutLayerCategories(catalog: LspLayoutCatalog | null | undefined): readonly PhysicalLayoutLayerCategory[] {
+  return catalog?.sourceKind === 'gds' ? physicalLayoutGdsLayerCategories : physicalLayoutLefDefLayerCategories;
+}
 
 export function getPhysicalLayoutLayerColor(layerIndex: number): PhysicalLayoutLayerColor {
   const pixiColor = layerPalette[Math.abs(layerIndex) % layerPalette.length] ?? layerPalette[0];
@@ -68,39 +82,35 @@ export function getPhysicalLayoutLayerCategoryColor(
   category: PhysicalLayoutLayerCategory,
 ): PhysicalLayoutLayerColor {
   if (category === 'obstruction') {
-    const pixiColor = 0xf472b6;
-
-    return {
-      cssColor: `#${pixiColor.toString(16).padStart(6, '0')}`,
-      pixiColor,
-    };
+    return toLayerColor(0xf472b6);
+  }
+  if (category === 'blockage') {
+    return toLayerColor(0xff8fab);
+  }
+  if (category === 'specialNet') {
+    return toLayerColor(0x90cdf4);
   }
 
   return getPhysicalLayoutLayerColor(layerIndex);
 }
 
 export function getPhysicalLayoutOutlineColor(): PhysicalLayoutLayerColor {
-  const pixiColor = 0xe5eef8;
-
-  return {
-    cssColor: `#${pixiColor.toString(16).padStart(6, '0')}`,
-    pixiColor,
-  };
+  return toLayerColor(0xe5eef8);
 }
 
 export function createPhysicalLayoutVisibility(
   catalog: LspLayoutCatalog | null | undefined,
-  macro: LspLayoutMacro | null | undefined,
+  hasOutline: boolean,
   shapes: readonly LspLayoutShape[],
 ): MutablePhysicalLayoutVisibility {
   const visibleItems = new Set<string>();
 
-  if (macro) {
+  if (hasOutline) {
     visibleItems.add(createOutlineVisibilityKey());
   }
 
   for (const entry of createPhysicalLayoutLayerTree(catalog, shapes)) {
-    for (const category of physicalLayoutLayerCategories) {
+    for (const category of getPhysicalLayoutLayerCategories(catalog)) {
       if (entry.categories[category]) {
         visibleItems.add(createLayerCategoryVisibilityKey(entry.layer.index, category));
       }
@@ -108,7 +118,7 @@ export function createPhysicalLayoutVisibility(
   }
 
   return {
-    outlineVisible: Boolean(macro),
+    outlineVisible: hasOutline,
     visibleItems,
   };
 }
@@ -148,23 +158,25 @@ export function createPhysicalLayoutLayerTree(
   const pinNameByKey = createPhysicalLayoutPinNameMap(catalog);
 
   for (const shape of shapes) {
-    const categories = shapeCountsByLayer.get(shape.layerIndex) ?? { label: false, obstruction: false, pin: false };
+    const categories = shapeCountsByLayer.get(shape.layerIndex) ?? createEmptyCategoryAvailability();
+    const category = getShapeLayerCategory(shape);
 
-    if (shape.ownerKind === 'pin') {
-      categories.pin = true;
-      categories.label = categories.label || getPhysicalLayoutPinName(pinNameByKey, shape) !== null;
-    } else if (shape.ownerKind === 'obstruction') {
-      categories.obstruction = true;
+    if (category) {
+      categories[category] = true;
+    }
+
+    if (shape.ownerKind === 'pin' && getPhysicalLayoutShapeLabel(catalog, pinNameByKey, shape)) {
+      categories.label = true;
     }
 
     shapeCountsByLayer.set(shape.layerIndex, categories);
   }
 
   return (catalog?.layers ?? []).map((layer) => {
-    const categories = shapeCountsByLayer.get(layer.index) ?? { label: false, obstruction: false, pin: false };
+    const categories = shapeCountsByLayer.get(layer.index) ?? createEmptyCategoryAvailability();
 
     return {
-      available: categories.pin || categories.label || categories.obstruction,
+      available: true,
       categories,
       layer,
     };
@@ -176,37 +188,25 @@ export function filterVisiblePhysicalLayoutShapes(
   visibility: PhysicalLayoutVisibility,
 ): LspLayoutShape[] {
   return shapes.filter((shape) => {
-    if (shape.ownerKind === 'pin') {
-      return isPhysicalLayoutLayerCategoryVisible(visibility, shape.layerIndex, 'pin');
-    }
-
-    if (shape.ownerKind === 'obstruction') {
-      return isPhysicalLayoutLayerCategoryVisible(visibility, shape.layerIndex, 'obstruction');
-    }
-
-    return false;
+    const category = getShapeLayerCategory(shape);
+    return category ? isPhysicalLayoutLayerCategoryVisible(visibility, shape.layerIndex, category) : false;
   });
 }
 
 export function getVisiblePhysicalLayoutShapeCounts(
   shapes: readonly LspLayoutShape[],
   visibility: PhysicalLayoutVisibility,
-): { obstruction: number; pin: number } {
-  let pin = 0;
-  let obstruction = 0;
+): Record<PhysicalLayoutLayerCategory, number> {
+  const counts = createEmptyCategoryCount();
 
   for (const shape of shapes) {
-    if (shape.ownerKind === 'pin' && isPhysicalLayoutLayerCategoryVisible(visibility, shape.layerIndex, 'pin')) {
-      pin += 1;
-    } else if (
-      shape.ownerKind === 'obstruction'
-      && isPhysicalLayoutLayerCategoryVisible(visibility, shape.layerIndex, 'obstruction')
-    ) {
-      obstruction += 1;
+    const category = getShapeLayerCategory(shape);
+    if (category && isPhysicalLayoutLayerCategoryVisible(visibility, shape.layerIndex, category)) {
+      counts[category] += 1;
     }
   }
 
-  return { obstruction, pin };
+  return counts;
 }
 
 export function createPhysicalLayoutPinLabels(
@@ -227,20 +227,18 @@ export function createPhysicalLayoutPinLabels(
   }>();
 
   for (const shape of shapes) {
-    if (
-      shape.ownerKind !== 'pin'
-      || !isPhysicalLayoutLayerCategoryVisible(visibility, shape.layerIndex, 'label')
-    ) {
+    const labelVisibilityCategory = getShapeLabelVisibilityCategory(shape);
+    if (!isPhysicalLayoutLayerCategoryVisible(visibility, shape.layerIndex, labelVisibilityCategory)) {
       continue;
     }
 
-    const pinName = getPhysicalLayoutPinName(pinNameByKey, shape);
-    if (!pinName) {
+    const labelName = getPhysicalLayoutShapeLabel(catalog, pinNameByKey, shape);
+    if (!labelName) {
       continue;
     }
 
     const bounds = shapeBounds(shape);
-    const key = `${shape.macroIndex ?? 'global'}:${shape.layerIndex}:${shape.ownerIndex}`;
+    const key = `${shape.ownerKind}:${shape.macroIndex ?? 'global'}:${shape.layerIndex}:${shape.ownerIndex}`;
     const existing = labelBoundsByKey.get(key);
 
     if (existing) {
@@ -254,7 +252,7 @@ export function createPhysicalLayoutPinLabels(
     labelBoundsByKey.set(key, {
       color: getPhysicalLayoutLayerColor(shape.layerIndex).pixiColor,
       layerIndex: shape.layerIndex,
-      name: pinName,
+      name: labelName,
       ownerIndex: shape.ownerIndex,
       x0: bounds.x0,
       y0: bounds.y0,
@@ -287,24 +285,13 @@ export function createPhysicalLayoutPinNameMap(catalog: LspLayoutCatalog | null 
   return pinNameByKey;
 }
 
-function getPhysicalLayoutPinName(pinNameByKey: ReadonlyMap<string, string>, shape: LspLayoutShape): string | null {
-  if (shape.macroIndex === null) {
-    return null;
-  }
-
-  return pinNameByKey.get(createPinNameKey(shape.macroIndex, shape.ownerIndex)) ?? null;
-}
-
-function createPinNameKey(macroIndex: number, pinIndex: number): string {
-  return `${macroIndex}:${pinIndex}`;
-}
-
 export function getVisiblePhysicalLayoutLayerCount(
   catalog: LspLayoutCatalog | null | undefined,
   visibility: PhysicalLayoutVisibility,
 ): number {
+  const categories = getPhysicalLayoutLayerCategories(catalog);
   return (catalog?.layers ?? []).filter((layer) => (
-    physicalLayoutLayerCategories.some((category) => isPhysicalLayoutLayerCategoryVisible(visibility, layer.index, category))
+    categories.some((category) => isPhysicalLayoutLayerCategoryVisible(visibility, layer.index, category))
   )).length;
 }
 
@@ -312,9 +299,92 @@ export function getVisiblePhysicalLayoutCategoryCount(
   catalog: LspLayoutCatalog | null | undefined,
   visibility: PhysicalLayoutVisibility,
 ): number {
+  const categories = getPhysicalLayoutLayerCategories(catalog);
   return (catalog?.layers ?? []).reduce((count, layer) => (
-    count + physicalLayoutLayerCategories.filter((category) => (
+    count + categories.filter((category) => (
       isPhysicalLayoutLayerCategoryVisible(visibility, layer.index, category)
     )).length
   ), 0);
+}
+
+function getShapeLayerCategory(shape: LspLayoutShape): PhysicalLayoutLayerCategory | null {
+  if (shape.ownerKind === 'pin') {
+    return 'pin';
+  }
+  if (shape.ownerKind === 'obstruction') {
+    return 'obstruction';
+  }
+  if (shape.ownerKind === 'net') {
+    return 'net';
+  }
+  if (shape.ownerKind === 'specialNet') {
+    return 'specialNet';
+  }
+  if (shape.ownerKind === 'blockage') {
+    return 'blockage';
+  }
+  if (shape.ownerKind === 'gdsElement') {
+    if (shape.kind === 'text') {
+      return 'text';
+    }
+    if (shape.kind === 'path') {
+      return 'path';
+    }
+    return 'boundary';
+  }
+
+  return null;
+}
+
+function getShapeLabelVisibilityCategory(shape: LspLayoutShape): PhysicalLayoutLayerCategory {
+  if (shape.ownerKind === 'gdsElement' && shape.kind === 'text') {
+    return 'text';
+  }
+
+  return 'label';
+}
+
+function getPhysicalLayoutShapeLabel(
+  catalog: LspLayoutCatalog | null | undefined,
+  pinNameByKey: ReadonlyMap<string, string>,
+  shape: LspLayoutShape,
+): string | null {
+  if (shape.ownerKind === 'pin') {
+    if (shape.macroIndex === null) {
+      return catalog?.defPins[shape.ownerIndex]?.name || null;
+    }
+
+    return pinNameByKey.get(createPinNameKey(shape.macroIndex, shape.ownerIndex)) ?? null;
+  }
+
+  if (shape.ownerKind === 'gdsElement' && shape.kind === 'text') {
+    return catalog?.gdsElements[shape.ownerIndex]?.text || null;
+  }
+
+  return null;
+}
+
+function createPinNameKey(macroIndex: number, pinIndex: number): string {
+  return `${macroIndex}:${pinIndex}`;
+}
+
+function createEmptyCategoryAvailability(): PhysicalLayoutLayerCategoryAvailability {
+  return physicalLayoutLayerCategories.reduce((categories, category) => {
+    categories[category] = false;
+    return categories;
+  }, {} as PhysicalLayoutLayerCategoryAvailability);
+}
+
+function createEmptyCategoryCount(): Record<PhysicalLayoutLayerCategory, number> {
+  return physicalLayoutLayerCategories.reduce((counts, category) => {
+    counts[category] = 0;
+    return counts;
+  }, {} as Record<PhysicalLayoutLayerCategory, number>);
+}
+
+function toLayerColor(pixiColor: number): PhysicalLayoutLayerColor {
+  return {
+    cssColor: `#${pixiColor.toString(16).padStart(6, '0')}`,
+    pixiColor,
+  };
 }
