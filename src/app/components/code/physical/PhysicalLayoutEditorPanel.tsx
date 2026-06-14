@@ -309,7 +309,7 @@ export function PhysicalLayoutEditorPanel({
             orientation="horizontal"
             layoutGapPx={getCodeWorkspacePanelGroupLayoutGapPx(layoutMode)}
           >
-            <ResizablePanel id="physical-layout-2d-panel" defaultSize={58} minSize={28} minSizePx={260}>
+            <ResizablePanel id="physical-layout-2d-panel" defaultSize={50} minSize={28} minSizePx={260}>
               {canvas2D}
             </ResizablePanel>
 
@@ -323,7 +323,7 @@ export function PhysicalLayoutEditorPanel({
               />
             </ResizableHandle>
 
-            <ResizablePanel id="physical-layout-3d-panel" defaultSize={42} minSize={24} minSizePx={220}>
+            <ResizablePanel id="physical-layout-3d-panel" defaultSize={50} minSize={24} minSizePx={220}>
               {canvas3D}
             </ResizablePanel>
           </ResizablePanelGroup>

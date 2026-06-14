@@ -69,6 +69,7 @@ vi.mock('./PhysicalLayout3DCanvas', () => ({
       data-source-kind={catalog?.sourceKind ?? ''}
       data-testid="physical-layout-3d-canvas"
       data-viewport-framed="true"
+      data-viewport-left-border="false"
       data-visible-shape-count={geometry?.shapes.length ?? 0}
       data-zoom="1.0000"
     />
@@ -173,6 +174,8 @@ describe('PhysicalWorkspacePanels', () => {
 
     expect(screen.getByTestId('physical-layout-editor')).toHaveAttribute('data-3d-visible', 'true');
     expect(screen.getByTestId('physical-layout-3d-split')).toBeInTheDocument();
+    expect(screen.getByTestId('panel-physical-layout-2d-panel')).toHaveAttribute('data-default-size', '50');
+    expect(screen.getByTestId('panel-physical-layout-3d-panel')).toHaveAttribute('data-default-size', '50');
     expect(screen.getByTestId('physical-layout-3d-resize-handle')).toBeInTheDocument();
     expect(screen.getByTestId('physical-layout-3d-resize-indicator')).toHaveClass('bg-[var(--ide-text-dim)]');
     expect(screen.getByTestId('physical-layout-3d-empty')).toHaveTextContent('GDS cell');
@@ -239,10 +242,13 @@ describe('PhysicalWorkspacePanels', () => {
 
     expect(screen.getByTestId('physical-layout-editor')).toHaveAttribute('data-3d-supported', 'true');
     expect(screen.getByTestId('physical-layout-3d-split')).toBeInTheDocument();
+    expect(screen.getByTestId('panel-physical-layout-2d-panel')).toHaveAttribute('data-default-size', '50');
+    expect(screen.getByTestId('panel-physical-layout-3d-panel')).toHaveAttribute('data-default-size', '50');
     expect(screen.getByTestId('physical-layout-3d-resize-indicator')).toHaveClass('w-[var(--ide-scrollbar-size)]');
     expect(screen.getByTestId('physical-layout-canvas')).toBeInTheDocument();
     expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveAttribute('data-renderer', 'three-webgl');
     expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveAttribute('data-viewport-framed', 'true');
+    expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveAttribute('data-viewport-left-border', 'false');
     expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveAttribute('data-orbit-origin', 'bounds3d');
     expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveAttribute('data-selected-target-name', 'CHILD');
     expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveAttribute('data-source-kind', 'gds');

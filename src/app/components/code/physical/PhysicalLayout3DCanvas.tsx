@@ -202,11 +202,11 @@ export function PhysicalLayout3DCanvas({
       }
 
       if (event.shiftKey) {
-        setPan((current) => ({ ...current, x: current.x - event.deltaY * 0.01 }));
+        setPan((current) => ({ ...current, x: current.x + event.deltaY * 0.01 }));
         return;
       }
 
-      setPan((current) => ({ ...current, y: current.y + event.deltaY * 0.01 }));
+      setPan((current) => ({ ...current, y: current.y - event.deltaY * 0.01 }));
     };
     const handleDoubleClick = () => {
       setOrbit(defaultOrbit);
@@ -323,7 +323,7 @@ export function PhysicalLayout3DCanvas({
     <div
       ref={hostRef}
       aria-label="Physical layout 3D canvas"
-      className="relative box-border h-full min-h-0 w-full overflow-hidden border border-ide-border/80 bg-[#101317] outline-none [&>canvas]:block [&>canvas]:h-full [&>canvas]:max-h-full [&>canvas]:max-w-full [&>canvas]:w-full"
+      className="relative box-border h-full min-h-0 w-full overflow-hidden border border-l-0 border-ide-border/80 bg-[#101317] outline-none [&>canvas]:block [&>canvas]:h-full [&>canvas]:max-h-full [&>canvas]:max-w-full [&>canvas]:w-full"
       data-orbit-origin="bounds3d"
       data-orbit-angle-x={orbit.angleX.toFixed(4)}
       data-orbit-angle-y={orbit.angleY.toFixed(4)}
@@ -339,6 +339,7 @@ export function PhysicalLayout3DCanvas({
       data-source-kind={catalog?.sourceKind ?? ''}
       data-testid="physical-layout-3d-canvas"
       data-viewport-framed="true"
+      data-viewport-left-border="false"
       data-visible-shape-count={sceneInput.meshes.length}
       data-zoom={zoom.toFixed(4)}
       role="img"

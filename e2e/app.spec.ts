@@ -2117,6 +2117,7 @@ test('Physical layout requests indexed geometry for LEF macros and GDS cells', a
     await expect(layout3DCanvas).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
     await expect(layout3DCanvas).toHaveAttribute('data-renderer', 'three-webgl', { timeout: UI_READY_TIMEOUT_MS });
     await expect(layout3DCanvas).toHaveAttribute('data-viewport-framed', 'true', { timeout: UI_READY_TIMEOUT_MS });
+    await expect(layout3DCanvas).toHaveAttribute('data-viewport-left-border', 'false', { timeout: UI_READY_TIMEOUT_MS });
     await expect(layout3DCanvas).toHaveAttribute('data-orbit-origin', 'bounds3d', { timeout: UI_READY_TIMEOUT_MS });
     await expect(layout3DCanvas).toHaveAttribute('data-selected-target-name', 'sg13g2_xor2_1', {
       timeout: UI_READY_TIMEOUT_MS,
@@ -2124,6 +2125,14 @@ test('Physical layout requests indexed geometry for LEF macros and GDS cells', a
     await expect.poll(async () => Number(await layout3DCanvas.getAttribute('data-visible-shape-count') ?? '0'), {
       timeout: UI_READY_TIMEOUT_MS,
     }).toBeGreaterThan(0);
+
+    const twoDPanelBox = await window.getByTestId('panel-physical-layout-2d-panel').boundingBox();
+    const threeDPanelBox = await window.getByTestId('panel-physical-layout-3d-panel').boundingBox();
+    expect(twoDPanelBox).not.toBeNull();
+    expect(threeDPanelBox).not.toBeNull();
+    if (twoDPanelBox && threeDPanelBox) {
+      expect(Math.abs(twoDPanelBox.width - threeDPanelBox.width)).toBeLessThanOrEqual(24);
+    }
 
     const splitHandle = window.getByTestId('physical-layout-3d-resize-handle');
     await expect(window.getByTestId('physical-layout-3d-resize-indicator')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
@@ -2164,13 +2173,13 @@ test('Physical layout requests indexed geometry for LEF macros and GDS cells', a
       await window.mouse.wheel(0, 180);
       await expect.poll(async () => Number(await layout3DCanvas.getAttribute('data-pan-y') ?? '0'), {
         timeout: UI_READY_TIMEOUT_MS,
-      }).toBeGreaterThan(panYBefore);
+      }).toBeLessThan(panYBefore);
       await window.keyboard.down('Shift');
       await window.mouse.wheel(0, 180);
       await window.keyboard.up('Shift');
       await expect.poll(async () => Number(await layout3DCanvas.getAttribute('data-pan-x') ?? '0'), {
         timeout: UI_READY_TIMEOUT_MS,
-      }).toBeLessThan(panXBefore);
+      }).toBeGreaterThan(panXBefore);
       await window.keyboard.down('Control');
       await window.mouse.wheel(0, -240);
       await window.keyboard.up('Control');
