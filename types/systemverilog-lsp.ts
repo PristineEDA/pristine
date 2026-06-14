@@ -590,6 +590,8 @@ export interface LspLayoutGeometryOptions {
   maxShapes?: number;
   layerIndices?: number[];
   shapeKinds?: number[];
+  macroIndices?: number[];
+  gdsRootCellIndices?: number[];
 }
 
 export interface LspLayoutOpenResult {

@@ -1264,7 +1264,9 @@ describe('LSP IPC handlers', () => {
     const geometryHandler = getHandler('async:lsp:layout-geometry');
     const geometryOptions = {
       bbox: { x0: 0, y0: 0, x1: 1, y1: 1 },
+      gdsRootCellIndices: [4],
       layerIndices: [0],
+      macroIndices: [2],
       maxShapes: 1024,
       sessionId: 'layout-1',
       shapeKinds: [1, 2],
@@ -1278,6 +1280,20 @@ describe('LSP IPC handlers', () => {
     }));
     expect(mockRequestLayoutPipeGeometry).toHaveBeenCalledWith(geometryOptions);
     expect(fakeConnection.sendRequest).not.toHaveBeenCalledWith('systemverilog/layout/geometry', expect.anything());
+  });
+
+  it('rejects invalid layout geometry owner indexes', async () => {
+    const geometryHandler = getHandler('async:lsp:layout-geometry');
+
+    await expect(geometryHandler({}, {
+      sessionId: 'layout-1',
+      macroIndices: [-1],
+    })).rejects.toThrow('Expected non-negative integer entries for "macroIndices".');
+
+    await expect(geometryHandler({}, {
+      sessionId: 'layout-1',
+      gdsRootCellIndices: [1.5],
+    })).rejects.toThrow('Expected non-negative integer entries for "gdsRootCellIndices".');
   });
 
   it('closes layout pipe sessions before LSP control-plane close', async () => {

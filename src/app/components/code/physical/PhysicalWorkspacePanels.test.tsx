@@ -1,9 +1,9 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { layoutFixtureGeometry, layoutFixtureOpenResult } from '../../../../test/layoutFixture';
+import { layoutFixtureGdsOpenResult, layoutFixtureGeometry, layoutFixtureOpenResult } from '../../../../test/layoutFixture';
 import { CodeViewerLayoutProvider } from '../../../context/CodeViewerLayoutContext';
 import {
   PhysicalBottomPanel,
@@ -69,29 +69,89 @@ function renderInCodeLayout(node: ReactNode) {
   );
 }
 
+function getTestElectronApi() {
+  if (!window.electronAPI) {
+    throw new Error('Electron API mock is not installed.');
+  }
+
+  return window.electronAPI;
+}
+
 describe('PhysicalWorkspacePanels', () => {
   it('renders the main physical layout editor content', async () => {
     const onLayoutStateChange = vi.fn();
     const onSelectedTargetChange = vi.fn();
+
+    function PhysicalMainPanelHarness() {
+      const [selectedTarget, setSelectedTarget] = useState<PhysicalLayoutTarget | null>(null);
+
+      return (
+        <PhysicalMainPanel
+          activeLayoutFilePath="sg13g2_stdcell.lef"
+          layoutVisibility={readyVisibility}
+          selectedTarget={selectedTarget}
+          onLayoutStateChange={onLayoutStateChange}
+          onSelectedTargetChange={(target) => {
+            onSelectedTargetChange(target);
+            setSelectedTarget(target);
+          }}
+        />
+      );
+    }
+
     renderInCodeLayout(
-      <PhysicalMainPanel
-        activeLayoutFilePath="sg13g2_stdcell.lef"
-        layoutVisibility={readyVisibility}
-        selectedTarget={null}
-        onLayoutStateChange={onLayoutStateChange}
-        onSelectedTargetChange={onSelectedTargetChange}
-      />,
+      <PhysicalMainPanelHarness />,
     );
 
     expect(screen.getByTestId('physical-layout-editor')).toBeInTheDocument();
     await waitFor(() => expect(screen.getByTestId('physical-layout-editor')).toHaveAttribute('data-status', 'ready'));
     expect(screen.getByTestId('physical-layout-canvas')).toHaveAttribute('data-renderer', 'webgl');
     await waitFor(() => expect(onSelectedTargetChange).toHaveBeenCalledWith(readyTarget));
+    await waitFor(() => expect(getTestElectronApi().lsp.layoutGeometry).toHaveBeenCalledWith({
+      sessionId: 'layout-test-session',
+      maxShapes: 0,
+      macroIndices: [0],
+    }));
     await waitFor(() => expect(onLayoutStateChange).toHaveBeenCalledWith(expect.objectContaining({
       status: 'ready',
       catalog: layoutFixtureOpenResult.catalog,
-      geometry: layoutFixtureGeometry,
+      geometry: expect.objectContaining({ shapeCount: 3 }),
     })));
+  });
+
+  it('requests GDS cell geometry by selected cell index', async () => {
+    const layoutOpen = vi.mocked(getTestElectronApi().lsp.layoutOpen);
+    const layoutGeometry = vi.mocked(getTestElectronApi().lsp.layoutGeometry);
+    const selectedCellTarget: PhysicalLayoutTarget = { kind: 'gdsCell', name: 'CHILD', index: 1 };
+    layoutOpen.mockResolvedValueOnce(layoutFixtureGdsOpenResult);
+    layoutGeometry.mockClear();
+
+    function PhysicalGdsPanelHarness() {
+      const [selectedTarget, setSelectedTarget] = useState<PhysicalLayoutTarget | null>(selectedCellTarget);
+
+      return (
+        <PhysicalMainPanel
+          activeLayoutFilePath="chip.gds"
+          layoutVisibility={readyVisibility}
+          selectedTarget={selectedTarget}
+          onSelectedTargetChange={setSelectedTarget}
+        />
+      );
+    }
+
+    renderInCodeLayout(<PhysicalGdsPanelHarness />);
+
+    await waitFor(() => expect(screen.getByTestId('physical-layout-editor')).toHaveAttribute('data-status', 'ready'));
+    expect(layoutOpen).toHaveBeenCalledWith({
+      workspaceFilePath: 'chip.gds',
+      title: 'chip.gds',
+    });
+    expect(layoutGeometry).toHaveBeenCalledWith({
+      sessionId: 'layout-test-session',
+      maxShapes: 0,
+      gdsRootCellIndices: [1],
+    });
+    expect(screen.getByTestId('physical-layout-canvas')).toHaveAttribute('data-selected-macro-name', '');
   });
 
   it('switches the physical left panel tabs and activates macros', async () => {
@@ -161,8 +221,10 @@ describe('PhysicalWorkspacePanels', () => {
 
   it('renders physical right layer tree and toggles category visibility', async () => {
     const user = userEvent.setup();
+    const layoutGeometry = vi.mocked(getTestElectronApi().lsp.layoutGeometry);
     const onLayerCategoryVisibilityToggle = vi.fn();
     const onOutlineVisibilityToggle = vi.fn();
+    layoutGeometry.mockClear();
     renderInCodeLayout(
       <PhysicalRightPanel
         layoutVisibility={readyVisibility}
@@ -194,6 +256,7 @@ describe('PhysicalWorkspacePanels', () => {
 
     expect(onOutlineVisibilityToggle).toHaveBeenCalledTimes(1);
     expect(onLayerCategoryVisibilityToggle).toHaveBeenCalledWith(0, 'pin');
+    expect(layoutGeometry).not.toHaveBeenCalled();
 
     await user.click(screen.getByTestId('physical-right-panel-tab-checks'));
 

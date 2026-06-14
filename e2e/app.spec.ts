@@ -122,7 +122,7 @@ function createPhysicalLayoutE2eGds() {
     gdsRecord(0x02, 0x06, gdsAscii('PRISTINE_E2E')),
     gdsRecord(0x03, 0x05, Buffer.concat([gdsReal8(0.001), gdsReal8(1e-9)])),
     gdsRecord(0x05, 0x02, date),
-    gdsRecord(0x06, 0x06, gdsAscii('TOP')),
+    gdsRecord(0x06, 0x06, gdsAscii('sg13g2_xor2_1')),
     gdsRecord(0x08, 0x00),
     gdsRecord(0x0d, 0x02, gdsInt2(1)),
     gdsRecord(0x0e, 0x02, gdsInt2(0)),
@@ -139,6 +139,26 @@ function createPhysicalLayoutE2eGds() {
     gdsRecord(0x16, 0x02, gdsInt2(0)),
     gdsRecord(0x10, 0x03, gdsInt4(1000, 500)),
     gdsRecord(0x19, 0x06, gdsAscii('VDD')),
+    gdsRecord(0x11, 0x00),
+    gdsRecord(0x07, 0x00),
+    gdsRecord(0x05, 0x02, date),
+    gdsRecord(0x06, 0x06, gdsAscii('sg13g2_xnor2_1')),
+    gdsRecord(0x08, 0x00),
+    gdsRecord(0x0d, 0x02, gdsInt2(3)),
+    gdsRecord(0x0e, 0x02, gdsInt2(0)),
+    gdsRecord(0x10, 0x03, gdsInt4(0, 0, 2400, 0, 2400, 1200, 0, 1200, 0, 0)),
+    gdsRecord(0x11, 0x00),
+    gdsRecord(0x09, 0x00),
+    gdsRecord(0x0d, 0x02, gdsInt2(4)),
+    gdsRecord(0x0e, 0x02, gdsInt2(0)),
+    gdsRecord(0x0f, 0x03, gdsInt4(120)),
+    gdsRecord(0x10, 0x03, gdsInt4(300, 600, 2100, 600)),
+    gdsRecord(0x11, 0x00),
+    gdsRecord(0x0c, 0x00),
+    gdsRecord(0x0d, 0x02, gdsInt2(3)),
+    gdsRecord(0x16, 0x02, gdsInt2(0)),
+    gdsRecord(0x10, 0x03, gdsInt4(1200, 600)),
+    gdsRecord(0x19, 0x06, gdsAscii('XNOR')),
     gdsRecord(0x11, 0x00),
     gdsRecord(0x07, 0x00),
     gdsRecord(0x04, 0x00),
@@ -1987,24 +2007,107 @@ test('packaged Windows app opens Physical layout from workspace-root LEF', async
     await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-selected-shape-count') ?? '0'), {
       timeout: UI_READY_TIMEOUT_MS,
     }).toBeGreaterThan(0);
-    await expect.poll(async () => {
-      const selected = Number(await layoutCanvas.getAttribute('data-selected-shape-count') ?? '0');
-      const total = Number(await layoutCanvas.getAttribute('data-geometry-shape-count') ?? '0');
-      return total > selected && selected > 0;
-    }, {
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-geometry-shape-count') ?? '0'), {
       timeout: UI_READY_TIMEOUT_MS,
-    }).toBe(true);
+    }).toBeGreaterThan(0);
     await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-selected-pin-count') ?? '0'), {
       timeout: UI_READY_TIMEOUT_MS,
     }).toBeGreaterThan(0);
     const packagedSelectedShapeCount = Number(await layoutCanvas.getAttribute('data-selected-shape-count') ?? '0');
     const packagedGeometryShapeCount = Number(await layoutCanvas.getAttribute('data-geometry-shape-count') ?? '0');
     expect(packagedSelectedShapeCount).toBeGreaterThan(0);
-    expect(packagedGeometryShapeCount).toBeGreaterThan(packagedSelectedShapeCount);
+    expect(packagedGeometryShapeCount).toBe(packagedSelectedShapeCount);
     await expect.poll(async () => await layoutCanvas.getAttribute('data-visible-label-names') ?? '', {
       timeout: UI_READY_TIMEOUT_MS,
     }).toContain('A');
     expect(await layoutCanvas.getAttribute('data-visible-label-names')).not.toMatch(/PIN \d+/);
+  } finally {
+    await app.close();
+  }
+});
+
+test('Physical layout requests indexed geometry for LEF macros and GDS cells', async () => {
+  test.slow();
+
+  const physicalWorkspaceRoot = createWorkspaceCopyWithFiles('physical-indexed-layout-workspace', {
+    'chip.gds': physicalLayoutE2eGds,
+    'chip.oas': physicalLayoutE2eOasis,
+    'chip.def': physicalLayoutE2eDef,
+    'sg13g2_stdcell.lef': physicalLayoutE2eLef,
+  });
+  const { app, window } = await launchApp({ projectRoot: physicalWorkspaceRoot });
+
+  try {
+    await window.getByTestId('activity-item-physical').click();
+    const layoutEditor = window.getByTestId('physical-layout-editor');
+    const layoutCanvas = window.getByTestId('physical-layout-canvas');
+
+    await expect(layoutEditor).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+    await expect(window.getByTestId('physical-layout-file-tree')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+
+    await window.getByTestId('physical-layout-file-item-sg13g2_stdcell-lef').click();
+    await expect(layoutEditor).toHaveAttribute('data-status', 'ready', { timeout: UI_READY_TIMEOUT_MS });
+    await expect(window.getByTestId('physical-layout-target-item-macro-sg13g2_e2e_inv_1')).toBeVisible({
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+
+    await expect(layoutCanvas).toHaveAttribute('data-selected-target-name', 'sg13g2_e2e_inv_1', {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-selected-shape-count') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(0);
+    const firstMacroShapeCount = Number(await layoutCanvas.getAttribute('data-selected-shape-count') ?? '0');
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-geometry-shape-count') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBe(firstMacroShapeCount);
+
+    const renderCountBeforeMacroSwitch = Number(await layoutCanvas.getAttribute('data-render-count') ?? '0');
+    await window.getByTestId('physical-layout-target-item-macro-sg13g2_e2e_nand2_1').click();
+    await expect(layoutCanvas).toHaveAttribute('data-selected-target-name', 'sg13g2_e2e_nand2_1', {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-selected-shape-count') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(0);
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-render-count') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(renderCountBeforeMacroSwitch);
+
+    const geometryShapeCountBeforeLayerToggle = Number(await layoutCanvas.getAttribute('data-geometry-shape-count') ?? '0');
+    const visibleShapeCountBeforeLayerToggle = Number(await layoutCanvas.getAttribute('data-visible-shape-count') ?? '0');
+    await window.getByTestId('physical-layer-category-swatch-0-pin').click();
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-visible-shape-count') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeLessThan(visibleShapeCountBeforeLayerToggle);
+    expect(Number(await layoutCanvas.getAttribute('data-geometry-shape-count') ?? '0')).toBe(geometryShapeCountBeforeLayerToggle);
+
+    await window.getByTestId('physical-layout-file-item-chip-gds').click();
+    await expect(window.getByTestId('physical-layout-target-item-gdsCell-sg13g2_xor2_1')).toBeVisible({
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await expect(window.getByTestId('physical-layout-target-item-gdsCell-sg13g2_xnor2_1')).toBeVisible({
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await expect(layoutCanvas).toHaveAttribute('data-source-kind', 'gds', { timeout: UI_READY_TIMEOUT_MS });
+    await expect(layoutCanvas).toHaveAttribute('data-selected-target-name', 'sg13g2_xor2_1', {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-selected-shape-count') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(0);
+
+    const renderCountBeforeGdsSwitch = Number(await layoutCanvas.getAttribute('data-render-count') ?? '0');
+    await window.getByTestId('physical-layout-target-item-gdsCell-sg13g2_xnor2_1').click();
+    await expect(layoutCanvas).toHaveAttribute('data-selected-target-name', 'sg13g2_xnor2_1', {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-selected-shape-count') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(0);
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-render-count') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(renderCountBeforeGdsSwitch);
   } finally {
     await app.close();
   }

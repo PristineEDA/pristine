@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 
-import type { LspLayoutCatalog, LspLayoutGeometry, LspLayoutOpenResult } from '../../../../../types/systemverilog-lsp';
+import type {
+  LspLayoutCatalog,
+  LspLayoutGeometry,
+  LspLayoutGeometryOptions,
+  LspLayoutOpenResult,
+} from '../../../../../types/systemverilog-lsp';
 import type { PhysicalLayoutVisibility } from './physicalLayoutLayers';
 import { getDefaultLayoutTarget, type PhysicalLayoutTarget } from './physicalLayoutGeometry';
 import { PhysicalLayoutCanvas } from './PhysicalLayoutCanvas';
@@ -24,6 +29,40 @@ interface PhysicalLayoutEditorPanelProps {
 }
 
 const geometryMaxShapes = 250_000;
+
+function createLayoutTargetGeometryOptions(
+  sessionId: string,
+  target: PhysicalLayoutTarget | null,
+): LspLayoutGeometryOptions | null {
+  if (!target) {
+    return null;
+  }
+
+  if (target.kind === 'macro' && target.index !== null) {
+    return {
+      sessionId,
+      maxShapes: 0,
+      macroIndices: [target.index],
+    };
+  }
+
+  if (target.kind === 'gdsCell' && target.index !== null) {
+    return {
+      sessionId,
+      maxShapes: 0,
+      gdsRootCellIndices: [target.index],
+    };
+  }
+
+  if (target.kind === 'design') {
+    return {
+      sessionId,
+      maxShapes: geometryMaxShapes,
+    };
+  }
+
+  return null;
+}
 
 export function PhysicalLayoutEditorPanel({
   activeLayoutFilePath,
@@ -66,6 +105,8 @@ export function PhysicalLayoutEditorPanel({
 
       setStatus('loading');
       setError(null);
+      setOpenResult(null);
+      setGeometry(null);
       try {
         const result = await lsp.layoutOpen({
           workspaceFilePath: activeLayoutFilePath,
@@ -84,21 +125,12 @@ export function PhysicalLayoutEditorPanel({
 
         sessionIdRef.current = result.sessionId;
         setOpenResult(result);
+        setGeometry(null);
         const defaultTarget = getDefaultLayoutTarget(result.catalog);
         if (defaultTarget && !selectedTargetRef.current) {
           onSelectedTargetChangeRef.current?.(defaultTarget);
         }
-
-        const nextGeometry = await lsp.layoutGeometry({
-          sessionId: result.sessionId,
-          maxShapes: geometryMaxShapes,
-        });
-        if (disposed) {
-          return;
-        }
-
-        setGeometry(nextGeometry);
-        setStatus('ready');
+        setStatus(defaultTarget ? 'loading' : 'ready');
       } catch (cause) {
         if (disposed) {
           return;
@@ -120,6 +152,52 @@ export function PhysicalLayoutEditorPanel({
       }
     };
   }, [activeLayoutFilePath]);
+
+  useEffect(() => {
+    let disposed = false;
+    const lsp = window.electronAPI?.lsp;
+    const sessionId = openResult?.sessionId;
+
+    async function requestTargetGeometry() {
+      if (!sessionId || !lsp?.layoutGeometry) {
+        return;
+      }
+
+      const options = createLayoutTargetGeometryOptions(sessionId, selectedTarget);
+      if (!options) {
+        setGeometry(null);
+        setStatus('ready');
+        return;
+      }
+
+      setStatus('loading');
+      setError(null);
+      setGeometry(null);
+
+      try {
+        const nextGeometry = await lsp.layoutGeometry(options);
+        if (disposed) {
+          return;
+        }
+
+        setGeometry(nextGeometry);
+        setStatus('ready');
+      } catch (cause) {
+        if (disposed) {
+          return;
+        }
+
+        setStatus('error');
+        setError(cause instanceof Error ? cause.message : 'Unable to load physical layout geometry.');
+      }
+    }
+
+    void requestTargetGeometry();
+
+    return () => {
+      disposed = true;
+    };
+  }, [openResult?.sessionId, selectedTarget]);
 
   useEffect(() => {
     onLayoutStateChangeRef.current?.({

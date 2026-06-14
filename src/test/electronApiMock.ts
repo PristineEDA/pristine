@@ -2,6 +2,7 @@ import { vi } from 'vitest';
 import type { ElectronAPI } from '../../types/electron-api';
 import { createWaveformFixtureFrame, waveformFixtureData } from '../app/components/code/explorer/waveform/waveformTestFixtures';
 import { layoutFixtureGeometry, layoutFixtureOpenResult } from './layoutFixture';
+import type { LspLayoutGeometryOptions } from '../../types/systemverilog-lsp';
 
 const defaultGpuDiagnostics = {
   hardwareAccelerationEnabled: true,
@@ -20,6 +21,23 @@ const defaultGpuDiagnostics = {
 };
 
 export function createElectronApiMock(): ElectronAPI {
+  const getLayoutGeometry = async (options: LspLayoutGeometryOptions) => {
+    const macroIndices = options.macroIndices ?? options.gdsRootCellIndices ?? [];
+    if (macroIndices.length === 0) {
+      return layoutFixtureGeometry;
+    }
+
+    const shapes = layoutFixtureGeometry.shapes.filter((shape) => (
+      shape.macroIndex !== null && macroIndices.includes(shape.macroIndex)
+    ));
+
+    return {
+      ...layoutFixtureGeometry,
+      shapeCount: shapes.length,
+      shapes,
+    };
+  };
+
   return {
     platform: 'win32',
     arch: 'x64',
@@ -162,7 +180,7 @@ export function createElectronApiMock(): ElectronAPI {
       )),
       waveformClose: vi.fn().mockResolvedValue(true),
       layoutOpen: vi.fn().mockResolvedValue(layoutFixtureOpenResult),
-      layoutGeometry: vi.fn().mockResolvedValue(layoutFixtureGeometry),
+      layoutGeometry: vi.fn().mockImplementation(getLayoutGeometry),
       layoutClose: vi.fn().mockResolvedValue(true),
       getDebugEvents: vi.fn().mockResolvedValue([]),
       onDebug: vi.fn(() => vi.fn()),

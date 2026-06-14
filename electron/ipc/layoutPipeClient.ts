@@ -302,14 +302,23 @@ export function decodeLayoutEnvelope(buffer: ArrayBuffer): LayoutEnvelope {
 export function encodeLayoutGeometryRequestPayload(options: LspLayoutGeometryOptions): Uint8Array {
   const layerIndices = options.layerIndices ?? [];
   const shapeKinds = options.shapeKinds ?? [];
+  const macroIndices = options.macroIndices ?? [];
+  const gdsRootCellIndices = options.gdsRootCellIndices ?? [];
   const hasBbox = Boolean(options.bbox);
+  const hasOwnerFilters = macroIndices.length > 0 || gdsRootCellIndices.length > 0;
   const bboxByteLength = hasBbox ? 32 : 0;
-  const byteLength = 4 + 4 + bboxByteLength + 4 + layerIndices.length * 4 + 4 + shapeKinds.length * 4;
+  const ownerFilterByteLength = hasOwnerFilters
+    ? 4 + macroIndices.length * 4 + 4 + gdsRootCellIndices.length * 4
+    : 0;
+  const byteLength = 4 + 4 + bboxByteLength
+    + 4 + layerIndices.length * 4
+    + 4 + shapeKinds.length * 4
+    + ownerFilterByteLength;
   const buffer = new ArrayBuffer(byteLength);
   const view = new DataView(buffer);
   let offset = 0;
 
-  view.setUint32(offset, hasBbox ? 1 : 0, true);
+  view.setUint32(offset, (hasBbox ? 1 : 0) | (hasOwnerFilters ? 2 : 0), true);
   offset += 4;
   view.setUint32(offset, normalizeMaxShapes(options.maxShapes), true);
   offset += 4;
@@ -337,6 +346,22 @@ export function encodeLayoutGeometryRequestPayload(options: LspLayoutGeometryOpt
   for (const shapeKind of shapeKinds) {
     view.setUint32(offset, shapeKind, true);
     offset += 4;
+  }
+
+  if (hasOwnerFilters) {
+    view.setUint32(offset, macroIndices.length, true);
+    offset += 4;
+    for (const macroIndex of macroIndices) {
+      view.setUint32(offset, macroIndex, true);
+      offset += 4;
+    }
+
+    view.setUint32(offset, gdsRootCellIndices.length, true);
+    offset += 4;
+    for (const gdsRootCellIndex of gdsRootCellIndices) {
+      view.setUint32(offset, gdsRootCellIndex, true);
+      offset += 4;
+    }
   }
 
   return new Uint8Array(buffer);

@@ -1807,7 +1807,9 @@ function normalizeLayoutGeometryOptions(value: unknown): LspLayoutGeometryOption
 
   const candidate = value as {
     bbox?: unknown;
+    gdsRootCellIndices?: unknown;
     layerIndices?: unknown;
+    macroIndices?: unknown;
     maxShapes?: unknown;
     sessionId?: unknown;
     shapeKinds?: unknown;
@@ -1829,6 +1831,8 @@ function normalizeLayoutGeometryOptions(value: unknown): LspLayoutGeometryOption
     maxShapes: typeof candidate.maxShapes === 'number' ? candidate.maxShapes : undefined,
     layerIndices: normalizeIntegerArray(candidate.layerIndices, 'layerIndices'),
     shapeKinds: normalizeIntegerArray(candidate.shapeKinds, 'shapeKinds'),
+    macroIndices: normalizeIntegerArray(candidate.macroIndices, 'macroIndices'),
+    gdsRootCellIndices: normalizeIntegerArray(candidate.gdsRootCellIndices, 'gdsRootCellIndices'),
   };
 }
 
@@ -1862,7 +1866,13 @@ function normalizeIntegerArray(value: unknown, name: string): number[] | undefin
     throw new Error(`Expected number array or undefined for "${name}".`);
   }
 
-  return value.filter((entry): entry is number => Number.isInteger(entry) && entry >= 0);
+  for (const entry of value) {
+    if (!Number.isInteger(entry) || entry < 0) {
+      throw new Error(`Expected non-negative integer entries for "${name}".`);
+    }
+  }
+
+  return value as number[];
 }
 
 function normalizeSchematicOptions(value: unknown): LspSchematicOptions {

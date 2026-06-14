@@ -76,6 +76,59 @@ describe('layoutPipeClient', () => {
     expect(view.getUint32(offset, true)).toBe(1);
     offset += 4;
     expect(view.getUint32(offset, true)).toBe(2);
+    offset += 4;
+    expect(offset).toBe(payload.byteLength);
+  });
+
+  it('encodes geometry owner filters after layer and kind filters', () => {
+    const payload = encodeLayoutGeometryRequestPayload({
+      sessionId: 'layout-1',
+      maxShapes: 0,
+      macroIndices: [3, 5],
+      gdsRootCellIndices: [7],
+    });
+    const view = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
+    let offset = 0;
+
+    expect(view.getUint32(offset, true)).toBe(2);
+    offset += 4;
+    expect(view.getUint32(offset, true)).toBe(0);
+    offset += 4;
+    expect(view.getUint32(offset, true)).toBe(0);
+    offset += 4;
+    expect(view.getUint32(offset, true)).toBe(0);
+    offset += 4;
+    expect(view.getUint32(offset, true)).toBe(2);
+    offset += 4;
+    expect(view.getUint32(offset, true)).toBe(3);
+    offset += 4;
+    expect(view.getUint32(offset, true)).toBe(5);
+    offset += 4;
+    expect(view.getUint32(offset, true)).toBe(1);
+    offset += 4;
+    expect(view.getUint32(offset, true)).toBe(7);
+    offset += 4;
+    expect(offset).toBe(payload.byteLength);
+  });
+
+  it('does not set owner filter flags for empty index arrays', () => {
+    const payload = encodeLayoutGeometryRequestPayload({
+      sessionId: 'layout-1',
+      macroIndices: [],
+      gdsRootCellIndices: [],
+    });
+    const view = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
+    let offset = 0;
+
+    expect(view.getUint32(offset, true)).toBe(0);
+    offset += 4;
+    expect(view.getUint32(offset, true)).toBe(250_000);
+    offset += 4;
+    expect(view.getUint32(offset, true)).toBe(0);
+    offset += 4;
+    expect(view.getUint32(offset, true)).toBe(0);
+    offset += 4;
+    expect(offset).toBe(payload.byteLength);
   });
 
   it('parses catalog payloads into layout metadata', () => {
