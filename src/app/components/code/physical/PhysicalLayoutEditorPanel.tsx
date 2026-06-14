@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Box } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 import type {
   LspLayoutCatalog,
@@ -313,9 +314,14 @@ export function PhysicalLayoutEditorPanel({
             </ResizablePanel>
 
             <ResizableHandle
-              className={getCodeWorkspaceResizeHandleClassName(layoutMode)}
+              className={cn(getCodeWorkspaceResizeHandleClassName(layoutMode), 'group')}
               data-testid="physical-layout-3d-resize-handle"
-            />
+            >
+              <span
+                className="pointer-events-none h-full w-[var(--ide-scrollbar-size)] rounded-[var(--ide-scrollbar-radius)] bg-[var(--ide-text-dim)] opacity-80 transition-colors group-hover:bg-[var(--ide-text-muted)] group-focus-visible:bg-[var(--ide-text-muted)]"
+                data-testid="physical-layout-3d-resize-indicator"
+              />
+            </ResizableHandle>
 
             <ResizablePanel id="physical-layout-3d-panel" defaultSize={42} minSize={24} minSizePx={220}>
               {canvas3D}

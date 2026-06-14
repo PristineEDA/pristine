@@ -42,8 +42,24 @@ export interface PhysicalLayout3DSceneInput {
     x1: number;
     y1: number;
   } | null;
+  bounds3D: PhysicalLayout3DBounds | null;
   meshes: PhysicalLayout3DMeshInput[];
   selectedShapeCount: number;
+}
+
+export interface PhysicalLayout3DBounds {
+  x0: number;
+  y0: number;
+  z0: number;
+  x1: number;
+  y1: number;
+  z1: number;
+}
+
+export interface PhysicalLayout3DCenter {
+  x: number;
+  y: number;
+  z: number;
 }
 
 const layerZStep = 0.18;
@@ -68,6 +84,7 @@ export function createPhysicalLayout3DSceneInput(
   if (catalog?.sourceKind !== 'gds' || selectedTarget?.kind !== 'gdsCell' || !geometry) {
     return {
       bounds: null,
+      bounds3D: null,
       meshes: [],
       selectedShapeCount: 0,
     };
@@ -81,6 +98,7 @@ export function createPhysicalLayout3DSceneInput(
 
   return {
     bounds,
+    bounds3D: getPhysicalLayout3DBounds(meshes, bounds),
     meshes,
     selectedShapeCount: selectedShapes.length,
   };
@@ -92,6 +110,45 @@ export function getPhysicalLayout3DLayerZ(layerIndex: number, category: Physical
 
 export function getPhysicalLayout3DDepth(category: PhysicalLayoutLayerCategory): number {
   return categoryDepths[category] ?? 0.08;
+}
+
+export function getPhysicalLayout3DBounds(
+  meshes: readonly PhysicalLayout3DMeshInput[],
+  fallbackBounds: PhysicalLayout3DSceneInput['bounds'],
+): PhysicalLayout3DBounds | null {
+  let bounds: PhysicalLayout3DBounds | null = null;
+
+  for (const mesh of meshes) {
+    for (const point of mesh.points) {
+      bounds = extendPhysicalLayout3DBounds(bounds, point.x, point.y, mesh.z);
+      bounds = extendPhysicalLayout3DBounds(bounds, point.x, point.y, mesh.z + mesh.depth);
+    }
+  }
+
+  if (bounds) {
+    return normalizePhysicalLayout3DBounds(bounds);
+  }
+
+  if (!fallbackBounds) {
+    return null;
+  }
+
+  return normalizePhysicalLayout3DBounds({
+    x0: fallbackBounds.x0,
+    y0: fallbackBounds.y0,
+    z0: 0,
+    x1: fallbackBounds.x1,
+    y1: fallbackBounds.y1,
+    z1: getPhysicalLayout3DDepth('boundary'),
+  });
+}
+
+export function getPhysicalLayout3DCenter(bounds: PhysicalLayout3DBounds): PhysicalLayout3DCenter {
+  return {
+    x: (bounds.x0 + bounds.x1) / 2,
+    y: (bounds.y0 + bounds.y1) / 2,
+    z: (bounds.z0 + bounds.z1) / 2,
+  };
 }
 
 function createMeshInput(shape: LspLayoutShape): PhysicalLayout3DMeshInput[] {
@@ -146,4 +203,35 @@ function createRectPoints(shape: LspLayoutShape): PhysicalLayout3DPoint[] {
     { x: x1, y: y1 },
     { x: bounds.x0, y: y1 },
   ];
+}
+
+function extendPhysicalLayout3DBounds(
+  bounds: PhysicalLayout3DBounds | null,
+  x: number,
+  y: number,
+  z: number,
+): PhysicalLayout3DBounds {
+  if (!bounds) {
+    return { x0: x, y0: y, z0: z, x1: x, y1: y, z1: z };
+  }
+
+  return {
+    x0: Math.min(bounds.x0, x),
+    y0: Math.min(bounds.y0, y),
+    z0: Math.min(bounds.z0, z),
+    x1: Math.max(bounds.x1, x),
+    y1: Math.max(bounds.y1, y),
+    z1: Math.max(bounds.z1, z),
+  };
+}
+
+function normalizePhysicalLayout3DBounds(bounds: PhysicalLayout3DBounds): PhysicalLayout3DBounds {
+  return {
+    x0: bounds.x0,
+    y0: bounds.y0,
+    z0: bounds.z0,
+    x1: bounds.x1 === bounds.x0 ? bounds.x0 + minimumShapeSize : bounds.x1,
+    y1: bounds.y1 === bounds.y0 ? bounds.y0 + minimumShapeSize : bounds.y1,
+    z1: bounds.z1 === bounds.z0 ? bounds.z0 + minimumShapeSize : bounds.z1,
+  };
 }

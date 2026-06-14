@@ -57,12 +57,20 @@ vi.mock('./PhysicalLayout3DCanvas', () => ({
     selectedTarget: PhysicalLayoutTarget | null;
   }) => (
     <div
+      data-orbit-origin="bounds3d"
+      data-pan-x="0.0000"
+      data-pan-y="0.0000"
       data-renderer="three-webgl"
+      data-scene-center-offset-x="2.0000"
+      data-scene-center-offset-y="1.5000"
+      data-scene-center-offset-z="0.0625"
       data-selected-target-name={selectedTarget?.name ?? ''}
       data-shape-count={geometry?.shapes.length ?? 0}
       data-source-kind={catalog?.sourceKind ?? ''}
       data-testid="physical-layout-3d-canvas"
+      data-viewport-framed="true"
       data-visible-shape-count={geometry?.shapes.length ?? 0}
+      data-zoom="1.0000"
     />
   ),
 }));
@@ -166,6 +174,7 @@ describe('PhysicalWorkspacePanels', () => {
     expect(screen.getByTestId('physical-layout-editor')).toHaveAttribute('data-3d-visible', 'true');
     expect(screen.getByTestId('physical-layout-3d-split')).toBeInTheDocument();
     expect(screen.getByTestId('physical-layout-3d-resize-handle')).toBeInTheDocument();
+    expect(screen.getByTestId('physical-layout-3d-resize-indicator')).toHaveClass('bg-[var(--ide-text-dim)]');
     expect(screen.getByTestId('physical-layout-3d-empty')).toHaveTextContent('GDS cell');
   });
 
@@ -230,8 +239,11 @@ describe('PhysicalWorkspacePanels', () => {
 
     expect(screen.getByTestId('physical-layout-editor')).toHaveAttribute('data-3d-supported', 'true');
     expect(screen.getByTestId('physical-layout-3d-split')).toBeInTheDocument();
+    expect(screen.getByTestId('physical-layout-3d-resize-indicator')).toHaveClass('w-[var(--ide-scrollbar-size)]');
     expect(screen.getByTestId('physical-layout-canvas')).toBeInTheDocument();
     expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveAttribute('data-renderer', 'three-webgl');
+    expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveAttribute('data-viewport-framed', 'true');
+    expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveAttribute('data-orbit-origin', 'bounds3d');
     expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveAttribute('data-selected-target-name', 'CHILD');
     expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveAttribute('data-source-kind', 'gds');
   });

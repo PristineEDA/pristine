@@ -6,7 +6,12 @@ import type {
   LspLayoutCatalog,
   LspLayoutGeometry,
 } from '../../../../../types/systemverilog-lsp';
-import { createPhysicalLayout3DSceneInput, type PhysicalLayout3DMeshInput } from './physicalLayout3dGeometry';
+import {
+  createPhysicalLayout3DSceneInput,
+  getPhysicalLayout3DCenter,
+  type PhysicalLayout3DCenter,
+  type PhysicalLayout3DMeshInput,
+} from './physicalLayout3dGeometry';
 import type { PhysicalLayoutTarget } from './physicalLayoutGeometry';
 import type { PhysicalLayoutVisibility } from './physicalLayoutLayers';
 
@@ -37,14 +42,15 @@ export function PhysicalLayout3DCanvas({
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.OrthographicCamera | null>(null);
-  const groupRef = useRef<THREE.Group | null>(null);
+  const orbitGroupRef = useRef<THREE.Group | null>(null);
+  const contentGroupRef = useRef<THREE.Group | null>(null);
   const renderFrameRef = useRef<number | null>(null);
-  const boundsRef = useRef<LspLayoutBounds | null>(null);
   const [rendererStatus, setRendererStatus] = useState<ThreeRendererStatus>('initializing');
   const [renderCount, setRenderCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [size, setSize] = useState({ width: minimumCanvasWidth, height: minimumCanvasHeight });
   const [orbit, setOrbit] = useState(defaultOrbit);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(defaultZoom);
 
   const sceneInput = useMemo(
@@ -52,7 +58,7 @@ export function PhysicalLayout3DCanvas({
     [catalog, geometry, layoutVisibility, selectedTarget],
   );
 
-  boundsRef.current = sceneInput.bounds;
+  const sceneCenter = sceneInput.bounds3D ? getPhysicalLayout3DCenter(sceneInput.bounds3D) : null;
 
   useEffect(() => {
     const host = hostRef.current;
@@ -75,6 +81,9 @@ export function PhysicalLayout3DCanvas({
 
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.setClearColor(0x101317, 1);
+    renderer.domElement.style.display = 'block';
+    renderer.domElement.style.height = '100%';
+    renderer.domElement.style.width = '100%';
     renderer.domElement.tabIndex = -1;
     renderer.domElement.dataset.physicalLayout3DCanvas = 'true';
     host.appendChild(renderer.domElement);
@@ -82,9 +91,12 @@ export function PhysicalLayout3DCanvas({
 
     const scene = new THREE.Scene();
     sceneRef.current = scene;
-    const group = new THREE.Group();
-    groupRef.current = group;
-    scene.add(group);
+    const orbitGroup = new THREE.Group();
+    const contentGroup = new THREE.Group();
+    orbitGroupRef.current = orbitGroup;
+    contentGroupRef.current = contentGroup;
+    orbitGroup.add(contentGroup);
+    scene.add(orbitGroup);
     scene.add(new THREE.AmbientLight(0xffffff, 0.72));
 
     const keyLight = new THREE.DirectionalLight(0xffffff, 0.9);
@@ -106,13 +118,14 @@ export function PhysicalLayout3DCanvas({
         window.cancelAnimationFrame(renderFrameRef.current);
         renderFrameRef.current = null;
       }
-      disposeGroup(group);
+      disposeGroup(contentGroup);
       renderer.dispose();
       renderer.domElement.remove();
       rendererRef.current = null;
       sceneRef.current = null;
       cameraRef.current = null;
-      groupRef.current = null;
+      orbitGroupRef.current = null;
+      contentGroupRef.current = null;
     };
   }, []);
 
@@ -138,7 +151,7 @@ export function PhysicalLayout3DCanvas({
   useEffect(() => {
     updateTransforms();
     requestRender();
-  }, [orbit.angleX, orbit.angleY, size.height, size.width, zoom]);
+  }, [orbit.angleX, orbit.angleY, pan.x, pan.y, size.height, size.width, zoom]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -183,10 +196,21 @@ export function PhysicalLayout3DCanvas({
     };
     const handleWheel = (event: WheelEvent) => {
       event.preventDefault();
-      setZoom((current) => clamp(current * Math.exp(-event.deltaY * 0.001), 0.28, 5));
+      if (event.ctrlKey || event.metaKey) {
+        setZoom((current) => clamp(current * Math.exp(-event.deltaY * 0.001), 0.28, 5));
+        return;
+      }
+
+      if (event.shiftKey) {
+        setPan((current) => ({ ...current, x: current.x - event.deltaY * 0.01 }));
+        return;
+      }
+
+      setPan((current) => ({ ...current, y: current.y + event.deltaY * 0.01 }));
     };
     const handleDoubleClick = () => {
       setOrbit(defaultOrbit);
+      setPan({ x: 0, y: 0 });
       setZoom(defaultZoom);
     };
 
@@ -226,51 +250,51 @@ export function PhysicalLayout3DCanvas({
       return;
     }
 
-    const bounds = boundsRef.current;
+    const bounds = sceneInput.bounds3D;
     const boundsWidth = Math.max((bounds?.x1 ?? 1) - (bounds?.x0 ?? 0), 0.001);
     const boundsHeight = Math.max((bounds?.y1 ?? 1) - (bounds?.y0 ?? 0), 0.001);
+    const boundsDepth = Math.max((bounds?.z1 ?? 0) - (bounds?.z0 ?? 0), 0.001);
     const aspect = Math.max(width / Math.max(height, 1), 0.01);
-    const viewSize = Math.max(boundsWidth / Math.max(aspect, 0.01), boundsHeight, 1) * 1.35 / zoom;
-    camera.left = -viewSize * aspect / 2;
-    camera.right = viewSize * aspect / 2;
-    camera.top = viewSize / 2;
-    camera.bottom = -viewSize / 2;
+    const viewSize = Math.max(boundsWidth / Math.max(aspect, 0.01), boundsHeight + boundsDepth * 0.7, 1) * 1.35 / zoom;
+    camera.left = -viewSize * aspect / 2 + pan.x;
+    camera.right = viewSize * aspect / 2 + pan.x;
+    camera.top = viewSize / 2 + pan.y;
+    camera.bottom = -viewSize / 2 + pan.y;
     camera.near = 0.1;
     camera.far = 1000;
     camera.updateProjectionMatrix();
   };
 
   const updateTransforms = () => {
-    const group = groupRef.current;
-    if (!group) {
+    const orbitGroup = orbitGroupRef.current;
+    if (!orbitGroup) {
       return;
     }
 
-    group.rotation.x = orbit.angleX;
-    group.rotation.z = orbit.angleY;
+    orbitGroup.rotation.x = orbit.angleX;
+    orbitGroup.rotation.z = orbit.angleY;
     updateCamera();
   };
 
   const redrawScene = () => {
-    const group = groupRef.current;
-    if (!group) {
+    const contentGroup = contentGroupRef.current;
+    if (!contentGroup) {
       return;
     }
 
-    disposeGroup(group);
+    disposeGroup(contentGroup);
     const bounds = sceneInput.bounds;
     if (!bounds) {
       return;
     }
 
-    const centerX = (bounds.x0 + bounds.x1) / 2;
-    const centerY = (bounds.y0 + bounds.y1) / 2;
-    group.add(createBaseGrid(bounds, centerX, centerY));
+    const center = sceneCenter ?? { x: (bounds.x0 + bounds.x1) / 2, y: (bounds.y0 + bounds.y1) / 2, z: 0 };
+    contentGroup.add(createBaseGrid(bounds, center));
 
     for (const meshInput of sceneInput.meshes) {
-      const mesh = createExtrudedMesh(meshInput, centerX, centerY);
+      const mesh = createExtrudedMesh(meshInput, center);
       if (mesh) {
-        group.add(mesh);
+        contentGroup.add(mesh);
       }
     }
     updateTransforms();
@@ -299,15 +323,22 @@ export function PhysicalLayout3DCanvas({
     <div
       ref={hostRef}
       aria-label="Physical layout 3D canvas"
-      className="relative h-full min-h-0 w-full overflow-hidden bg-[#101317] outline-none"
+      className="relative box-border h-full min-h-0 w-full overflow-hidden border border-ide-border/80 bg-[#101317] outline-none [&>canvas]:block [&>canvas]:h-full [&>canvas]:max-h-full [&>canvas]:max-w-full [&>canvas]:w-full"
+      data-orbit-origin="bounds3d"
       data-orbit-angle-x={orbit.angleX.toFixed(4)}
       data-orbit-angle-y={orbit.angleY.toFixed(4)}
+      data-pan-x={pan.x.toFixed(4)}
+      data-pan-y={pan.y.toFixed(4)}
       data-render-count={renderCount}
       data-renderer={rendererStatus}
+      data-scene-center-offset-x={sceneCenter ? sceneCenter.x.toFixed(4) : '0.0000'}
+      data-scene-center-offset-y={sceneCenter ? sceneCenter.y.toFixed(4) : '0.0000'}
+      data-scene-center-offset-z={sceneCenter ? sceneCenter.z.toFixed(4) : '0.0000'}
       data-selected-target-name={selectedTarget?.name ?? ''}
       data-shape-count={sceneInput.selectedShapeCount}
       data-source-kind={catalog?.sourceKind ?? ''}
       data-testid="physical-layout-3d-canvas"
+      data-viewport-framed="true"
       data-visible-shape-count={sceneInput.meshes.length}
       data-zoom={zoom.toFixed(4)}
       role="img"
@@ -324,8 +355,7 @@ export function PhysicalLayout3DCanvas({
 
 function createExtrudedMesh(
   input: PhysicalLayout3DMeshInput,
-  centerX: number,
-  centerY: number,
+  center: PhysicalLayout3DCenter,
 ): THREE.Group | null {
   try {
     const shape = new THREE.Shape();
@@ -334,9 +364,9 @@ function createExtrudedMesh(
       return null;
     }
 
-    shape.moveTo(first.x - centerX, first.y - centerY);
+    shape.moveTo(first.x - center.x, first.y - center.y);
     for (const point of input.points.slice(1)) {
-      shape.lineTo(point.x - centerX, point.y - centerY);
+      shape.lineTo(point.x - center.x, point.y - center.y);
     }
     shape.closePath();
 
@@ -345,7 +375,7 @@ function createExtrudedMesh(
       depth: input.depth,
       steps: 1,
     });
-    geometry.translate(0, 0, input.z);
+    geometry.translate(0, 0, input.z - center.z);
     const material = new THREE.MeshStandardMaterial({
       color: input.color,
       metalness: input.category === 'path' ? 0.28 : 0.12,
@@ -371,7 +401,7 @@ function createExtrudedMesh(
   }
 }
 
-function createBaseGrid(bounds: LspLayoutBounds, centerX: number, centerY: number): THREE.Group {
+function createBaseGrid(bounds: LspLayoutBounds, center: PhysicalLayout3DCenter): THREE.Group {
   const group = new THREE.Group();
   const width = Math.max(bounds.x1 - bounds.x0, 0.001);
   const height = Math.max(bounds.y1 - bounds.y0, 0.001);
@@ -384,7 +414,7 @@ function createBaseGrid(bounds: LspLayoutBounds, centerX: number, centerY: numbe
       transparent: true,
     }),
   );
-  plane.position.set((bounds.x0 + bounds.x1) / 2 - centerX, (bounds.y0 + bounds.y1) / 2 - centerY, -0.015);
+  plane.position.set((bounds.x0 + bounds.x1) / 2 - center.x, (bounds.y0 + bounds.y1) / 2 - center.y, -0.015 - center.z);
   group.add(plane);
 
   const outline = new THREE.LineSegments(

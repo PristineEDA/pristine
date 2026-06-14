@@ -2116,6 +2116,8 @@ test('Physical layout requests indexed geometry for LEF macros and GDS cells', a
     const layout3DCanvas = window.getByTestId('physical-layout-3d-canvas');
     await expect(layout3DCanvas).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
     await expect(layout3DCanvas).toHaveAttribute('data-renderer', 'three-webgl', { timeout: UI_READY_TIMEOUT_MS });
+    await expect(layout3DCanvas).toHaveAttribute('data-viewport-framed', 'true', { timeout: UI_READY_TIMEOUT_MS });
+    await expect(layout3DCanvas).toHaveAttribute('data-orbit-origin', 'bounds3d', { timeout: UI_READY_TIMEOUT_MS });
     await expect(layout3DCanvas).toHaveAttribute('data-selected-target-name', 'sg13g2_xor2_1', {
       timeout: UI_READY_TIMEOUT_MS,
     });
@@ -2124,6 +2126,7 @@ test('Physical layout requests indexed geometry for LEF macros and GDS cells', a
     }).toBeGreaterThan(0);
 
     const splitHandle = window.getByTestId('physical-layout-3d-resize-handle');
+    await expect(window.getByTestId('physical-layout-3d-resize-indicator')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
     const handleBox = await splitHandle.boundingBox();
     const threeBoxBeforeResize = await layout3DCanvas.boundingBox();
     expect(handleBox).not.toBeNull();
@@ -2142,6 +2145,8 @@ test('Physical layout requests indexed geometry for LEF macros and GDS cells', a
     expect(threeBox).not.toBeNull();
     if (threeBox) {
       const orbitAngleBefore = Number(await layout3DCanvas.getAttribute('data-orbit-angle-y') ?? '0');
+      const panXBefore = Number(await layout3DCanvas.getAttribute('data-pan-x') ?? '0');
+      const panYBefore = Number(await layout3DCanvas.getAttribute('data-pan-y') ?? '0');
       const zoomBefore = Number(await layout3DCanvas.getAttribute('data-zoom') ?? '0');
       const renderCountBeforeOrbit = Number(await layout3DCanvas.getAttribute('data-render-count') ?? '0');
       await window.mouse.move(threeBox.x + threeBox.width / 2, threeBox.y + threeBox.height / 2);
@@ -2156,7 +2161,19 @@ test('Physical layout requests indexed geometry for LEF macros and GDS cells', a
       }).toBeGreaterThan(renderCountBeforeOrbit);
 
       await layout3DCanvas.hover();
+      await window.mouse.wheel(0, 180);
+      await expect.poll(async () => Number(await layout3DCanvas.getAttribute('data-pan-y') ?? '0'), {
+        timeout: UI_READY_TIMEOUT_MS,
+      }).toBeGreaterThan(panYBefore);
+      await window.keyboard.down('Shift');
+      await window.mouse.wheel(0, 180);
+      await window.keyboard.up('Shift');
+      await expect.poll(async () => Number(await layout3DCanvas.getAttribute('data-pan-x') ?? '0'), {
+        timeout: UI_READY_TIMEOUT_MS,
+      }).toBeLessThan(panXBefore);
+      await window.keyboard.down('Control');
       await window.mouse.wheel(0, -240);
+      await window.keyboard.up('Control');
       await expect.poll(async () => Number(await layout3DCanvas.getAttribute('data-zoom') ?? '0'), {
         timeout: UI_READY_TIMEOUT_MS,
       }).toBeGreaterThan(zoomBefore);

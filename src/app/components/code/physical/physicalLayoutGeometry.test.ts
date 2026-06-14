@@ -13,7 +13,9 @@ import {
 } from './physicalLayoutGeometry';
 import {
   createPhysicalLayout3DSceneInput,
+  getPhysicalLayout3DCenter,
   getPhysicalLayout3DDepth,
+  getPhysicalLayout3DBounds,
   getPhysicalLayout3DLayerZ,
 } from './physicalLayout3dGeometry';
 import {
@@ -246,6 +248,20 @@ describe('physicalLayoutGeometry', () => {
       z: getPhysicalLayout3DLayerZ(0, 'boundary'),
       depth: getPhysicalLayout3DDepth('boundary'),
     });
+    const maxMeshZ = Math.max(...sceneInput.meshes.map((mesh) => mesh.z + mesh.depth));
+    expect(sceneInput.bounds3D).toEqual({
+      x0: 1,
+      y0: 1,
+      z0: getPhysicalLayout3DLayerZ(0, 'boundary'),
+      x1: 3,
+      y1: 2,
+      z1: maxMeshZ,
+    });
+    expect(sceneInput.bounds3D ? getPhysicalLayout3DCenter(sceneInput.bounds3D) : null).toEqual({
+      x: 2,
+      y: 1.5,
+      z: (getPhysicalLayout3DLayerZ(0, 'boundary') + maxMeshZ) / 2,
+    });
     expect(sceneInput.meshes[1]?.points).toEqual([
       { x: 1.2, y: 1.4 },
       { x: 2.8, y: 1.4 },
@@ -262,5 +278,23 @@ describe('physicalLayoutGeometry', () => {
     );
 
     expect(hiddenBoundaryInput.meshes.map((mesh) => mesh.category)).toEqual(['path', 'text']);
+  });
+
+  it('uses fallback layout bounds when hidden 3D categories leave no meshes', () => {
+    const bounds = getPhysicalLayout3DBounds([], { x0: 1, y0: 2, x1: 3, y1: 5 });
+
+    expect(bounds).toEqual({
+      x0: 1,
+      y0: 2,
+      z0: 0,
+      x1: 3,
+      y1: 5,
+      z1: getPhysicalLayout3DDepth('boundary'),
+    });
+    expect(bounds ? getPhysicalLayout3DCenter(bounds) : null).toEqual({
+      x: 2,
+      y: 3.5,
+      z: getPhysicalLayout3DDepth('boundary') / 2,
+    });
   });
 });
