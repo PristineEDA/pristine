@@ -384,6 +384,235 @@ export interface LspWaveformFrameOptions {
   signalIds?: string[];
 }
 
+export interface LspLayoutBounds {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+
+export interface LspLayoutEndpoint {
+  kind: 'namedPipe' | 'unixSocket';
+  path: string;
+}
+
+export interface LspLayoutOpenOptions {
+  title?: string;
+  lefUris?: string[];
+  defUri?: string;
+  gdsUri?: string;
+  workspaceFilePath?: string;
+}
+
+export type LspLayoutSourceKind = 'lefdef' | 'gds';
+
+export interface LspLayoutLayer {
+  index: number;
+  name: string;
+  kind: number;
+  pitch: number;
+  width: number;
+  spacing: number;
+}
+
+export interface LspLayoutMacro {
+  index: number;
+  name: string;
+  className: string;
+  originX: number;
+  originY: number;
+  sizeX: number;
+  sizeY: number;
+  pinCount: number;
+}
+
+export interface LspLayoutPin {
+  macroIndex: number;
+  pinIndex: number;
+  name: string;
+  use: string;
+  direction: number;
+  firstShapeIndex: number;
+  shapeCount: number;
+}
+
+export interface LspLayoutDefPin {
+  name: string;
+  netName: string;
+  status: number;
+  x: number;
+  y: number;
+  orientation: string;
+  firstShapeIndex: number;
+  shapeCount: number;
+}
+
+export interface LspLayoutVia {
+  index: number;
+  name: string;
+  shapeCount: number;
+}
+
+export interface LspLayoutComponent {
+  index: number;
+  name: string;
+  macroName: string;
+  status: number;
+  x: number;
+  y: number;
+  orientation: string;
+}
+
+export interface LspLayoutNet {
+  index: number;
+  name: string;
+  connectionCount: number;
+  shapeCount: number;
+  special: boolean;
+}
+
+export interface LspLayoutDiagnostic {
+  severity: number;
+  line: number;
+  column: number;
+  message: string;
+}
+
+export interface LspLayoutGdsCell {
+  index: number;
+  name: string;
+  firstReferenceIndex: number;
+  referenceCount: number;
+  firstElementIndex: number;
+  elementCount: number;
+  top: boolean;
+  bounds: LspLayoutBounds | null;
+}
+
+export interface LspLayoutGdsReference {
+  index: number;
+  parentCellIndex: number;
+  targetCellIndex: number;
+  kind: number;
+  reflected: boolean;
+  originX: number;
+  originY: number;
+  magnification: number;
+  angle: number;
+  columns: number;
+  rows: number;
+  columnVectorX: number;
+  columnVectorY: number;
+  rowVectorX: number;
+  rowVectorY: number;
+  targetName: string;
+}
+
+export interface LspLayoutGdsElement {
+  index: number;
+  cellIndex: number;
+  kind: number;
+  layer: number;
+  datatype: number;
+  texttype: number;
+  referenceIndex: number | null;
+  firstPointIndex: number;
+  pointCount: number;
+  text: string;
+}
+
+export interface LspLayoutGdsPoint {
+  index: number;
+  x: number;
+  y: number;
+}
+
+export interface LspLayoutCatalog {
+  unitsPerMicron: number;
+  sourceKind: LspLayoutSourceKind;
+  shapeCount: number;
+  hasBounds: boolean;
+  topCellIndex: number | null;
+  layers: LspLayoutLayer[];
+  macros: LspLayoutMacro[];
+  pins: LspLayoutPin[];
+  defPins: LspLayoutDefPin[];
+  vias: LspLayoutVia[];
+  components: LspLayoutComponent[];
+  nets: LspLayoutNet[];
+  gdsCells: LspLayoutGdsCell[];
+  gdsReferences: LspLayoutGdsReference[];
+  gdsElements: LspLayoutGdsElement[];
+  gdsPoints: LspLayoutGdsPoint[];
+  diagnostics: LspLayoutDiagnostic[];
+}
+
+export type LspLayoutShapeKind = 'rect' | 'polygon' | 'placement' | 'path' | 'text' | 'unknown';
+
+export type LspLayoutOwnerKind =
+  | 'unknown'
+  | 'layer'
+  | 'via'
+  | 'macro'
+  | 'pin'
+  | 'obstruction'
+  | 'component'
+  | 'net'
+  | 'blockage'
+  | 'specialNet'
+  | 'gdsCell'
+  | 'gdsElement'
+  | 'gdsReference';
+
+export interface LspLayoutShape {
+  index: number;
+  layerIndex: number;
+  kind: LspLayoutShapeKind;
+  ownerKind: LspLayoutOwnerKind;
+  ownerIndex: number;
+  macroIndex: number | null;
+  flags: number;
+  rect: LspLayoutBounds;
+  polygon?: Array<{ x: number; y: number }>;
+}
+
+export interface LspLayoutGeometry {
+  unitsPerMicron: number;
+  truncated: boolean;
+  shapeCount: number;
+  polygonPointCount: number;
+  shapes: LspLayoutShape[];
+}
+
+export interface LspLayoutGeometryOptions {
+  sessionId: string;
+  bbox?: LspLayoutBounds;
+  maxShapes?: number;
+  layerIndices?: number[];
+  shapeKinds?: number[];
+}
+
+export interface LspLayoutOpenResult {
+  sessionId: string;
+  id?: string;
+  protocol: string;
+  endpoint?: LspLayoutEndpoint;
+  title: string;
+  lefCount: number;
+  defPresent: boolean;
+  unitsPerMicron: number;
+  bbox: LspLayoutBounds | null;
+  layerCount: number;
+  macroCount: number;
+  componentCount: number;
+  netCount: number;
+  cellCount?: number;
+  diagnosticCount: number;
+  fileUris: string[];
+  messages: string[];
+  catalog: LspLayoutCatalog;
+}
+
 export interface LspStateEvent {
   status: 'starting' | 'ready' | 'stopped' | 'error';
   message?: string;

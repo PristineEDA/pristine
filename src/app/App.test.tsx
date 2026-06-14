@@ -78,6 +78,33 @@ vi.mock('./components/code/shared/MenuBar', async () => {
   };
 });
 
+vi.mock('./components/code/physical/PhysicalLayoutCanvas', () => ({
+  PhysicalLayoutCanvas: ({
+    catalog,
+    geometry,
+    layoutVisibility,
+    selectedTarget,
+  }: {
+    catalog: { layers: unknown[]; macros: unknown[] } | null;
+    geometry: { shapes: unknown[] } | null;
+    layoutVisibility: { outlineVisible: boolean; visibleItems: ReadonlySet<string> };
+    selectedTarget: { kind: string; name: string } | null;
+  }) => (
+    <div
+      data-layer-count={catalog?.layers.length ?? 0}
+      data-macro-count={catalog?.macros.length ?? 0}
+      data-outline-visible={layoutVisibility.outlineVisible ? 'true' : 'false'}
+      data-renderer="webgl"
+      data-selected-macro-name={selectedTarget?.kind === 'macro' ? selectedTarget.name : ''}
+      data-selected-target-kind={selectedTarget?.kind ?? ''}
+      data-selected-target-name={selectedTarget?.name ?? ''}
+      data-shape-count={geometry?.shapes.length ?? 0}
+      data-testid="physical-layout-canvas"
+      data-visible-category-count={layoutVisibility.visibleItems.size}
+    />
+  ),
+}));
+
 vi.mock('./components/code/shared/ActivityBar', async () => {
   const sidebar = await vi.importActual<typeof import('./components/ui/sidebar')>('./components/ui/sidebar');
   const actualActivityBar = await vi.importActual<typeof import('./components/code/shared/ActivityBar')>('./components/code/shared/ActivityBar');
@@ -246,15 +273,15 @@ function expectPhysicalWorkspace() {
   expect(screen.getByTestId('panel-physical-center-panel')).toBeInTheDocument();
   expect(screen.getByTestId('panel-physical-bottom-panel')).toBeInTheDocument();
   expect(screen.getByTestId('panel-physical-right-panel')).toBeInTheDocument();
-  expect(screen.getByTestId('physical-main-panel-content')).toHaveTextContent('Physical');
-  expect(screen.getByTestId('physical-main-panel-content')).toHaveTextContent('Coming soon');
+  expect(screen.getByTestId('physical-layout-editor')).toBeInTheDocument();
+  expect(screen.getByTestId('physical-layout-canvas')).toBeInTheDocument();
   expect(screen.getByTestId('physical-left-panel-tabs')).toBeInTheDocument();
   expect(screen.getByTestId('physical-left-panel-split-toggle')).toBeInTheDocument();
   expect(screen.getByTestId('physical-left-panel-tab-layout')).toBeInTheDocument();
   expect(screen.getByTestId('physical-left-panel-tab-constraints')).toBeInTheDocument();
   expect(screen.getByTestId('physical-right-panel-tabs')).toBeInTheDocument();
   expect(screen.getByTestId('physical-right-panel-split-toggle')).toBeInTheDocument();
-  expect(screen.getByTestId('physical-right-panel-tab-inspector')).toBeInTheDocument();
+  expect(screen.getByTestId('physical-right-panel-tab-layers')).toBeInTheDocument();
   expect(screen.getByTestId('physical-right-panel-tab-checks')).toBeInTheDocument();
   expect(screen.getByTestId('physical-bottom-panel-tabs')).toBeInTheDocument();
   expect(screen.getByTestId('physical-bottom-panel-tab-reports')).toBeInTheDocument();

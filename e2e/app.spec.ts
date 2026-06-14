@@ -24,6 +24,188 @@ const MONACO_READY_TIMEOUT_MS = 60000;
 const UI_READY_TIMEOUT_MS = 60000;
 type SettingsPageId = 'general' | 'appearance' | 'editor' | 'schematic' | 'window';
 
+const physicalLayoutE2eLef = `
+VERSION 5.8 ;
+UNITS DATABASE MICRONS 1000 ;
+LAYER Metal1
+  TYPE ROUTING ;
+  PITCH 0.48 ;
+  WIDTH 0.16 ;
+END Metal1
+LAYER Metal2
+  TYPE ROUTING ;
+  PITCH 0.56 ;
+  WIDTH 0.18 ;
+END Metal2
+MACRO sg13g2_e2e_inv_1
+  CLASS CORE ;
+  ORIGIN 0 0 ;
+  SIZE 1.2 BY 3.78 ;
+  PIN A
+    DIRECTION INPUT ;
+    PORT
+      LAYER Metal1 ;
+        RECT 0.10 0.40 0.30 0.90 ;
+    END
+  END A
+  PIN Y
+    DIRECTION OUTPUT ;
+    PORT
+      LAYER Metal2 ;
+        RECT 0.72 1.20 1.05 1.70 ;
+    END
+  END Y
+  OBS
+    LAYER Metal1 ;
+      RECT 0.20 2.30 1.00 2.65 ;
+  END
+END sg13g2_e2e_inv_1
+MACRO sg13g2_e2e_nand2_1
+  CLASS CORE ;
+  ORIGIN 0 0 ;
+  SIZE 2.4 BY 3.78 ;
+  PIN A
+    DIRECTION INPUT ;
+    PORT
+      LAYER Metal1 ;
+        RECT 0.15 0.35 0.45 0.80 ;
+    END
+  END A
+  PIN B
+    DIRECTION INPUT ;
+    PORT
+      LAYER Metal1 ;
+        RECT 0.60 0.95 0.92 1.40 ;
+    END
+  END B
+  PIN Y
+    DIRECTION OUTPUT ;
+    PORT
+      LAYER Metal2 ;
+        RECT 1.40 1.85 2.15 2.25 ;
+    END
+  END Y
+  OBS
+    LAYER Metal2 ;
+      RECT 0.25 2.75 2.15 3.05 ;
+  END
+END sg13g2_e2e_nand2_1
+END LIBRARY
+`;
+
+const physicalLayoutE2eDef = `
+VERSION 5.8 ;
+DIVIDERCHAR "/" ;
+BUSBITCHARS "[]" ;
+DESIGN physical_e2e ;
+UNITS DISTANCE MICRONS 1000 ;
+DIEAREA ( 0 0 ) ( 3000 3000 ) ;
+PINS 1 ;
+  - VDD + NET VDD + DIRECTION INPUT + USE POWER + PLACED ( 500 500 ) N
+    + LAYER Metal1 ( 0 0 ) ( 180 180 ) ;
+END PINS
+NETS 1 ;
+  - VDD ( PIN VDD ) ;
+END NETS
+END DESIGN
+`;
+
+const physicalLayoutE2eGds = createPhysicalLayoutE2eGds();
+const physicalLayoutE2eOasis = 'OASIS placeholder';
+
+function createPhysicalLayoutE2eGds() {
+  const date = gdsInt2(2026, 6, 13, 12, 0, 0, 2026, 6, 13, 12, 0, 0);
+
+  return Buffer.concat([
+    gdsRecord(0x00, 0x02, gdsInt2(600)),
+    gdsRecord(0x01, 0x02, date),
+    gdsRecord(0x02, 0x06, gdsAscii('PRISTINE_E2E')),
+    gdsRecord(0x03, 0x05, Buffer.concat([gdsReal8(0.001), gdsReal8(1e-9)])),
+    gdsRecord(0x05, 0x02, date),
+    gdsRecord(0x06, 0x06, gdsAscii('TOP')),
+    gdsRecord(0x08, 0x00),
+    gdsRecord(0x0d, 0x02, gdsInt2(1)),
+    gdsRecord(0x0e, 0x02, gdsInt2(0)),
+    gdsRecord(0x10, 0x03, gdsInt4(0, 0, 2000, 0, 2000, 1000, 0, 1000, 0, 0)),
+    gdsRecord(0x11, 0x00),
+    gdsRecord(0x09, 0x00),
+    gdsRecord(0x0d, 0x02, gdsInt2(2)),
+    gdsRecord(0x0e, 0x02, gdsInt2(0)),
+    gdsRecord(0x0f, 0x03, gdsInt4(100)),
+    gdsRecord(0x10, 0x03, gdsInt4(200, 500, 1800, 500)),
+    gdsRecord(0x11, 0x00),
+    gdsRecord(0x0c, 0x00),
+    gdsRecord(0x0d, 0x02, gdsInt2(1)),
+    gdsRecord(0x16, 0x02, gdsInt2(0)),
+    gdsRecord(0x10, 0x03, gdsInt4(1000, 500)),
+    gdsRecord(0x19, 0x06, gdsAscii('VDD')),
+    gdsRecord(0x11, 0x00),
+    gdsRecord(0x07, 0x00),
+    gdsRecord(0x04, 0x00),
+  ]);
+}
+
+function gdsRecord(recordType: number, dataType: number, data = Buffer.alloc(0)) {
+  const length = 4 + data.byteLength + (data.byteLength % 2);
+  const record = Buffer.alloc(length);
+  record.writeUInt16BE(length, 0);
+  record[2] = recordType;
+  record[3] = dataType;
+  data.copy(record, 4);
+  return record;
+}
+
+function gdsInt2(...values: number[]) {
+  const buffer = Buffer.alloc(values.length * 2);
+  values.forEach((value, index) => buffer.writeInt16BE(value, index * 2));
+  return buffer;
+}
+
+function gdsInt4(...values: number[]) {
+  const buffer = Buffer.alloc(values.length * 4);
+  values.forEach((value, index) => buffer.writeInt32BE(value, index * 4));
+  return buffer;
+}
+
+function gdsAscii(value: string) {
+  return Buffer.from(value, 'ascii');
+}
+
+function gdsReal8(value: number) {
+  const buffer = Buffer.alloc(8);
+  if (value === 0) {
+    return buffer;
+  }
+
+  const sign = value < 0 ? 0x80 : 0;
+  let fraction = Math.abs(value);
+  let exponent = 64;
+
+  while (fraction < 0.0625) {
+    fraction *= 16;
+    exponent -= 1;
+  }
+
+  while (fraction >= 1) {
+    fraction /= 16;
+    exponent += 1;
+  }
+
+  let mantissa = BigInt(Math.round(fraction * 2 ** 56));
+  if (mantissa >= (1n << 56n)) {
+    mantissa >>= 4n;
+    exponent += 1;
+  }
+
+  buffer[0] = sign | (exponent & 0x7f);
+  for (let index = 7; index >= 1; index -= 1) {
+    buffer[index] = Number(mantissa & 0xffn);
+    mantissa >>= 8n;
+  }
+
+  return buffer;
+}
+
 function normalizeComparableMonospaceFontFamily(fontFamily: string) {
   const tokens = fontFamily
     .split(',')
@@ -377,7 +559,7 @@ function createWorkspaceCopy(targetPath: string) {
   fs.cpSync(fixtureWorkspace, targetPath, { recursive: true });
 }
 
-function createWorkspaceCopyWithFiles(targetName: string, files: Record<string, string>) {
+function createWorkspaceCopyWithFiles(targetName: string, files: Record<string, string | Buffer>) {
   const targetPath = test.info().outputPath(targetName);
 
   createWorkspaceCopy(targetPath);
@@ -386,7 +568,11 @@ function createWorkspaceCopyWithFiles(targetName: string, files: Record<string, 
     const filePath = path.join(targetPath, relativePath);
 
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    fs.writeFileSync(filePath, `${content.trimEnd()}\n`, 'utf-8');
+    if (Buffer.isBuffer(content)) {
+      fs.writeFileSync(filePath, content);
+    } else {
+      fs.writeFileSync(filePath, `${content.trimEnd()}\n`, 'utf-8');
+    }
   }
 
   return targetPath;
@@ -446,7 +632,7 @@ async function launchAppForSplashHandoff() {
   return { app, windowPromise };
 }
 
-async function launchPackagedWindowsApp() {
+async function launchPackagedWindowsApp(options?: { projectRoot?: string }) {
   if (!packagedWindowsExecutablePath) {
     throw new Error('Packaged Windows executable not found');
   }
@@ -456,7 +642,7 @@ async function launchPackagedWindowsApp() {
     env: {
       ...process.env,
       PRISTINE_E2E: '1',
-      PRISTINE_PROJECT_ROOT: fixtureWorkspace,
+      PRISTINE_PROJECT_ROOT: options?.projectRoot ?? fixtureWorkspace,
       PRISTINE_USER_DATA_PATH: getE2EUserDataPath(),
     },
   });
@@ -1768,6 +1954,57 @@ test('packaged Windows app loads model provider logos from relative app assets',
     await searchInput.fill('openrouter');
 
     await expectModelProviderLogoLoaded(window, 'OpenRouter', 'model-provider-logos/openrouter.svg');
+  } finally {
+    await app.close();
+  }
+});
+
+test('packaged Windows app opens Physical layout from workspace-root LEF', async () => {
+  test.skip(process.platform !== 'win32', 'Packaged Physical E2E runs on Windows only');
+  test.skip(!packagedWindowsExecutablePath, 'Run pnpm run package:win before executing packaged Physical E2E');
+
+  const physicalWorkspaceRoot = createWorkspaceCopyWithFiles('packaged-physical-layout-workspace', {
+    'chip.gds': physicalLayoutE2eGds,
+    'chip.oas': physicalLayoutE2eOasis,
+    'chip.def': physicalLayoutE2eDef,
+    'sg13g2_stdcell.lef': physicalLayoutE2eLef,
+  });
+  const { app, window } = await launchPackagedWindowsApp({ projectRoot: physicalWorkspaceRoot });
+
+  try {
+    await window.getByTestId('activity-item-physical').click();
+    const layoutEditor = window.getByTestId('physical-layout-editor');
+    const layoutCanvas = window.getByTestId('physical-layout-canvas');
+
+    await expect(window.getByTestId('physical-layout-file-item-sg13g2_stdcell-lef')).toBeVisible({
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await window.getByTestId('physical-layout-file-item-sg13g2_stdcell-lef').click();
+    await expect(layoutEditor).toHaveAttribute('data-status', 'ready', { timeout: UI_READY_TIMEOUT_MS });
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-macro-count') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(0);
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-selected-shape-count') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(0);
+    await expect.poll(async () => {
+      const selected = Number(await layoutCanvas.getAttribute('data-selected-shape-count') ?? '0');
+      const total = Number(await layoutCanvas.getAttribute('data-geometry-shape-count') ?? '0');
+      return total > selected && selected > 0;
+    }, {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBe(true);
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-selected-pin-count') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(0);
+    const packagedSelectedShapeCount = Number(await layoutCanvas.getAttribute('data-selected-shape-count') ?? '0');
+    const packagedGeometryShapeCount = Number(await layoutCanvas.getAttribute('data-geometry-shape-count') ?? '0');
+    expect(packagedSelectedShapeCount).toBeGreaterThan(0);
+    expect(packagedGeometryShapeCount).toBeGreaterThan(packagedSelectedShapeCount);
+    await expect.poll(async () => await layoutCanvas.getAttribute('data-visible-label-names') ?? '', {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toContain('A');
+    expect(await layoutCanvas.getAttribute('data-visible-label-names')).not.toMatch(/PIN \d+/);
   } finally {
     await app.close();
   }
@@ -4503,7 +4740,15 @@ test('explorer root toggles first-level children and hides the legacy collapse-a
 });
 
 test('activity bar switches code subpages and menu bar keeps higher-priority page navigation', async () => {
-  const { app, window } = await launchApp();
+  test.slow();
+
+  const physicalWorkspaceRoot = createWorkspaceCopyWithFiles('physical-layout-workspace', {
+    'chip.gds': physicalLayoutE2eGds,
+    'chip.oas': physicalLayoutE2eOasis,
+    'chip.def': physicalLayoutE2eDef,
+    'sg13g2_stdcell.lef': physicalLayoutE2eLef,
+  });
+  const { app, window } = await launchApp({ projectRoot: physicalWorkspaceRoot });
   const activityBarTrigger = window.getByTestId('toggle-activity-bar');
 
   await expect(activityBarTrigger).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
@@ -4562,13 +4807,20 @@ test('activity bar switches code subpages and menu bar keeps higher-priority pag
   await expect(window.getByTestId('panel-physical-left-panel')).toBeVisible();
   await expect(window.getByTestId('panel-physical-bottom-panel')).toBeVisible();
   await expect(window.getByTestId('panel-physical-right-panel')).toBeVisible();
-  await expect(window.getByTestId('physical-main-panel-content')).toContainText('Physical');
+  const layoutEditor = window.getByTestId('physical-layout-editor');
+  await expect(layoutEditor).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect(layoutEditor).toHaveAttribute('data-status', 'idle', { timeout: UI_READY_TIMEOUT_MS });
+  await expect(window.getByTestId('physical-layout-file-tree')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect(window.getByTestId('physical-layout-file-item-sg13g2_stdcell-lef')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect(window.getByTestId('physical-layout-file-item-chip-def')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect(window.getByTestId('physical-layout-file-item-chip-gds')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect(window.getByTestId('physical-layout-file-item-chip-oas')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
   await expect(window.getByTestId('physical-left-panel-tabs')).toBeVisible();
   await expect(window.getByTestId('physical-left-panel-tab-layout')).toBeVisible();
   await expect(window.getByTestId('physical-left-panel-tab-constraints')).toBeVisible();
   await expect(window.getByTestId('physical-left-panel-split-toggle')).toBeVisible();
   await expect(window.getByTestId('physical-right-panel-tabs')).toBeVisible();
-  await expect(window.getByTestId('physical-right-panel-tab-inspector')).toBeVisible();
+  await expect(window.getByTestId('physical-right-panel-tab-layers')).toBeVisible();
   await expect(window.getByTestId('physical-right-panel-tab-checks')).toBeVisible();
   await expect(window.getByTestId('physical-right-panel-split-toggle')).toBeVisible();
   await expect(window.getByTestId('physical-bottom-panel-tabs')).toBeVisible();
@@ -4598,13 +4850,19 @@ test('activity bar switches code subpages and menu bar keeps higher-priority pag
 
   await window.getByTestId('physical-left-panel-split-toggle').click();
   await expect(window.getByTestId('physical-left-panel-split-group')).toBeVisible();
-  await expect(window.getByTestId('physical-left-panel-lower-panel-content')).toContainText('Layer Details');
+  await expect(window.getByTestId('physical-left-panel-lower-panel-tabs')).toBeVisible();
+  await expect(window.getByTestId('physical-left-lower-panel-tab-details')).toBeVisible();
+  await expect(window.getByTestId('physical-left-lower-panel-tab-notes')).toBeVisible();
+  await expect(window.getByTestId('physical-left-lower-panel-details-content')).toContainText('Layer Details');
   await window.getByTestId('physical-left-panel-split-toggle').click();
   await expect(window.getByTestId('physical-left-panel-lower-panel-content')).toHaveCount(0);
 
   await window.getByTestId('physical-right-panel-split-toggle').click();
   await expect(window.getByTestId('physical-right-panel-split-group')).toBeVisible();
-  await expect(window.getByTestId('physical-right-panel-lower-panel-content')).toContainText('Selection Details');
+  await expect(window.getByTestId('physical-right-panel-lower-panel-tabs')).toBeVisible();
+  await expect(window.getByTestId('physical-right-lower-panel-tab-inspector')).toBeVisible();
+  await expect(window.getByTestId('physical-right-lower-panel-tab-notes')).toBeVisible();
+  await expect(window.getByTestId('physical-right-panel-inspector-content')).toBeVisible();
   await window.getByTestId('physical-right-panel-split-toggle').click();
   await expect(window.getByTestId('physical-right-panel-lower-panel-content')).toHaveCount(0);
 

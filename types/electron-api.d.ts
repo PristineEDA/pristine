@@ -14,6 +14,10 @@ import type {
   LspFoldingRange,
   LspHover,
   LspInlayHint,
+  LspLayoutGeometry,
+  LspLayoutGeometryOptions,
+  LspLayoutOpenOptions,
+  LspLayoutOpenResult,
   LspModuleHierarchy,
   LspModuleHierarchyOptions,
   LspOutlineOptions,
@@ -186,6 +190,9 @@ export interface ElectronAPI {
     waveformOpen: () => Promise<LspWaveformOpenResult>;
     waveformFrame: (options: LspWaveformFrameOptions) => Promise<ArrayBuffer>;
     waveformClose: (sessionId: string) => Promise<boolean>;
+    layoutOpen: (options?: LspLayoutOpenOptions) => Promise<LspLayoutOpenResult>;
+    layoutGeometry: (options: LspLayoutGeometryOptions) => Promise<LspLayoutGeometry>;
+    layoutClose: (sessionId: string) => Promise<boolean>;
     getDebugEvents: () => Promise<LspDebugEvent[]>;
     onDebug: (callback: (payload: LspDebugEvent) => void) => () => void;
     onDiagnostics: (callback: (payload: LspDiagnosticsEvent) => void) => () => void;

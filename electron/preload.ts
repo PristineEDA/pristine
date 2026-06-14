@@ -17,6 +17,10 @@ import type {
   LspFoldingRange,
   LspHover,
   LspInlayHint,
+  LspLayoutGeometry,
+  LspLayoutGeometryOptions,
+  LspLayoutOpenOptions,
+  LspLayoutOpenResult,
   LspModuleHierarchy,
   LspModuleHierarchyOptions,
   LspOutlineOptions,
@@ -327,6 +331,12 @@ const electronAPI = {
       ipcRenderer.invoke(AsyncChannels.LSP_WAVEFORM_FRAME, options) as Promise<ArrayBuffer>,
     waveformClose: (sessionId: string) =>
       ipcRenderer.invoke(AsyncChannels.LSP_WAVEFORM_CLOSE, sessionId) as Promise<boolean>,
+    layoutOpen: (options?: LspLayoutOpenOptions) =>
+      ipcRenderer.invoke(AsyncChannels.LSP_LAYOUT_OPEN, options) as Promise<LspLayoutOpenResult>,
+    layoutGeometry: (options: LspLayoutGeometryOptions) =>
+      ipcRenderer.invoke(AsyncChannels.LSP_LAYOUT_GEOMETRY, options) as Promise<LspLayoutGeometry>,
+    layoutClose: (sessionId: string) =>
+      ipcRenderer.invoke(AsyncChannels.LSP_LAYOUT_CLOSE, sessionId) as Promise<boolean>,
     getDebugEvents: () =>
       ipcRenderer.invoke(AsyncChannels.LSP_GET_DEBUG_EVENTS) as Promise<LspDebugEvent[]>,
     onDiagnostics: (callback: (payload: LspDiagnosticsEvent) => void) => {

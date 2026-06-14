@@ -2,6 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockHandle = vi.fn();
 const mockExistsSync = vi.fn((_filePath?: string) => true);
+const mockMkdirSync = vi.fn();
+const mockReaddirSync = vi.fn<(_directoryPath: string) => Array<{ isFile: () => boolean; name: string }>>(
+  () => [],
+);
 const mockSpawn = vi.fn();
 const mockCreateMessageConnection = vi.fn();
 const mockCloseAllWaveformPipeSessions = vi.fn<(...args: unknown[]) => Promise<void>>(async () => undefined);
@@ -27,6 +31,61 @@ const mockOpenWaveformPipeSession = vi.fn<(...args: unknown[]) => Promise<unknow
   title: 'counter_tb',
 }));
 const mockRequestWaveformPipeFrame = vi.fn<(...args: unknown[]) => Promise<ArrayBuffer>>(async () => new ArrayBuffer(8));
+const mockCloseAllLayoutPipeSessions = vi.fn<(...args: unknown[]) => Promise<void>>(async () => undefined);
+const mockCloseLayoutPipeSession = vi.fn<(...args: unknown[]) => Promise<void>>(async () => undefined);
+const mockNormalizeLayoutOpenSessionMetadata = vi.fn<(...args: unknown[]) => unknown>((value: unknown) => value);
+const mockOpenLayoutPipeSession = vi.fn<(...args: unknown[]) => Promise<unknown>>(async () => ({
+  bbox: { x0: 0, y0: 0, x1: 1.2, y1: 3.78 },
+  catalog: {
+    components: [],
+    defPins: [],
+    diagnostics: [],
+    gdsCells: [],
+    gdsElements: [],
+    gdsPoints: [],
+    gdsReferences: [],
+    hasBounds: true,
+    layers: [{ index: 0, name: 'Metal1', kind: 1, pitch: 0.48, width: 0.16, spacing: 0.16 }],
+    macros: [{ index: 0, name: 'sg13g2_inv_1', className: 'CORE', originX: 0, originY: 0, sizeX: 1.2, sizeY: 3.78, pinCount: 3 }],
+    pins: [{ macroIndex: 0, pinIndex: 0, name: 'A', use: 'SIGNAL', direction: 1, firstShapeIndex: 0, shapeCount: 1 }],
+    nets: [],
+    shapeCount: 1,
+    sourceKind: 'lefdef',
+    topCellIndex: null,
+    unitsPerMicron: 1000,
+    vias: [],
+  },
+  componentCount: 0,
+  defPresent: false,
+  diagnosticCount: 0,
+  fileUris: ['file:///C:/workspace/Pristine/sg13g2_stdcell.lef'],
+  id: 'layout-1',
+  layerCount: 1,
+  lefCount: 1,
+  macroCount: 1,
+  messages: [],
+  netCount: 0,
+  protocol: 'pristine-layout-columnar-v3',
+  sessionId: 'layout-1',
+  title: 'sg13g2_stdcell.lef',
+  unitsPerMicron: 1000,
+}));
+const mockRequestLayoutPipeGeometry = vi.fn<(...args: unknown[]) => Promise<unknown>>(async () => ({
+  polygonPointCount: 0,
+  shapeCount: 1,
+  shapes: [{
+    flags: 0,
+    index: 0,
+    kind: 'rect',
+    layerIndex: 0,
+    macroIndex: 0,
+    ownerIndex: 0,
+    ownerKind: 'pin',
+    rect: { x0: 0, y0: 0, x1: 1, y1: 1 },
+  }],
+  truncated: false,
+  unitsPerMicron: 1000,
+}));
 
 vi.mock('electron', () => ({
   ipcMain: {
@@ -42,8 +101,12 @@ vi.mock('electron', () => ({
 vi.mock('node:fs', () => ({
   default: {
     existsSync: (filePath: string) => mockExistsSync(filePath),
+    mkdirSync: (...args: unknown[]) => mockMkdirSync(...args),
+    readdirSync: (directoryPath: string) => mockReaddirSync(directoryPath),
   },
   existsSync: (filePath: string) => mockExistsSync(filePath),
+  mkdirSync: (...args: unknown[]) => mockMkdirSync(...args),
+  readdirSync: (directoryPath: string) => mockReaddirSync(directoryPath),
 }));
 
 vi.mock('node:child_process', () => ({
@@ -66,6 +129,14 @@ vi.mock('./waveformPipeClient.js', () => ({
   normalizeWaveformOpenSessionMetadata: (...args: unknown[]) => mockNormalizeWaveformOpenSessionMetadata.apply(null, args),
   openWaveformPipeSession: (...args: unknown[]) => mockOpenWaveformPipeSession.apply(null, args),
   requestWaveformPipeFrame: (...args: unknown[]) => mockRequestWaveformPipeFrame.apply(null, args),
+}));
+
+vi.mock('./layoutPipeClient.js', () => ({
+  closeAllLayoutPipeSessions: (...args: unknown[]) => mockCloseAllLayoutPipeSessions.apply(null, args),
+  closeLayoutPipeSession: (...args: unknown[]) => mockCloseLayoutPipeSession.apply(null, args),
+  normalizeLayoutOpenSessionMetadata: (...args: unknown[]) => mockNormalizeLayoutOpenSessionMetadata.apply(null, args),
+  openLayoutPipeSession: (...args: unknown[]) => mockOpenLayoutPipeSession.apply(null, args),
+  requestLayoutPipeGeometry: (...args: unknown[]) => mockRequestLayoutPipeGeometry.apply(null, args),
 }));
 
 import { disposeLspSession, registerLspHandlers, setLspProjectRoot } from './lsp.js';
@@ -372,6 +443,33 @@ function createFakeConnection(): FakeConnection {
         return { closed: true };
       }
 
+      if (method === 'systemverilog/layout/open') {
+        return {
+          bbox: { x0: 0, y0: 0, x1: 1.2, y1: 3.78 },
+          componentCount: 0,
+          defPresent: false,
+          diagnosticCount: 0,
+          endpoint: {
+            kind: 'namedPipe',
+            path: '\\\\.\\pipe\\pristine-engine-layout-test',
+          },
+          fileUris: ['file:///C:/workspace/Pristine/sg13g2_stdcell.lef'],
+          layerCount: 1,
+          lefCount: 1,
+          macroCount: 1,
+          messages: [],
+          netCount: 0,
+          protocol: 'pristine-layout-columnar-v3',
+          sessionId: 'layout-1',
+          title: 'sg13g2_stdcell.lef',
+          unitsPerMicron: 1000,
+        };
+      }
+
+      if (method === 'systemverilog/layout/close') {
+        return { closed: true };
+      }
+
       return null;
     }),
     sendNotification: vi.fn(async () => undefined),
@@ -397,6 +495,8 @@ describe('LSP IPC handlers', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockHandle.mockClear();
+    mockExistsSync.mockImplementation((_filePath?: string) => true);
+    mockReaddirSync.mockReturnValue([]);
     setLspProjectRoot('C:/workspace/Pristine');
     fakeProcess = createFakeProcess();
     fakeConnection = createFakeConnection();
@@ -1050,5 +1150,144 @@ describe('LSP IPC handlers', () => {
     expect(mockCloseWaveformPipeSession).toHaveBeenCalledWith('1');
     expect(fakeConnection.sendRequest).toHaveBeenCalledWith('systemverilog/waveform/close', { sessionId: '1' });
     expect(fakeConnection.sendRequest).not.toHaveBeenCalledWith('systemverilog/waveformClose', expect.anything());
+  });
+
+  it('opens layout sessions through LSP control plane and pipe catalog metadata', async () => {
+    setLspProjectRoot('C:/workspace/Pristine/test/fixtures/workspace');
+    const openHandler = getHandler('async:lsp:layout-open');
+
+    const result = await openHandler({});
+
+    expect(mockMkdirSync).not.toHaveBeenCalled();
+    expect(fakeConnection.sendRequest).toHaveBeenCalledWith('systemverilog/layout/open', {
+      lefUris: ['file:///C:/workspace/Pristine/test/fixtures/workspace/sg13g2_stdcell.lef'],
+      title: 'sg13g2_stdcell.lef',
+    });
+    expect(fakeConnection.sendRequest).not.toHaveBeenCalledWith('systemverilog/layoutOpen', expect.anything());
+    expect(mockNormalizeLayoutOpenSessionMetadata).toHaveBeenCalledWith(expect.objectContaining({
+      endpoint: {
+        kind: 'namedPipe',
+        path: '\\\\.\\pipe\\pristine-engine-layout-test',
+      },
+      protocol: 'pristine-layout-columnar-v3',
+      sessionId: 'layout-1',
+    }));
+    expect(mockOpenLayoutPipeSession).toHaveBeenCalledWith(expect.objectContaining({
+      protocol: 'pristine-layout-columnar-v3',
+      sessionId: 'layout-1',
+    }));
+    expect(result).toEqual(expect.objectContaining({
+      sessionId: 'layout-1',
+      title: 'sg13g2_stdcell.lef',
+    }));
+    setLspProjectRoot('C:/workspace/Pristine');
+  });
+
+  it('opens workspace LEF layout files directly from the LSP workspace root', async () => {
+    const openHandler = getHandler('async:lsp:layout-open');
+
+    await openHandler({}, { workspaceFilePath: 'cells/custom.lef' });
+
+    expect(fakeConnection.sendRequest).toHaveBeenCalledWith('systemverilog/layout/open', {
+      lefUris: ['file:///C:/workspace/Pristine/cells/custom.lef'],
+      title: 'custom.lef',
+    });
+    expect(mockMkdirSync).not.toHaveBeenCalled();
+  });
+
+  it('opens workspace DEF layout files with all root LEF libraries', async () => {
+    mockReaddirSync.mockReturnValue([
+      { isFile: () => true, name: 'stdcell.lef' },
+      { isFile: () => true, name: 'io.LEF' },
+      { isFile: () => true, name: 'chip.def' },
+      { isFile: () => false, name: 'nested.lef' },
+    ]);
+    const openHandler = getHandler('async:lsp:layout-open');
+
+    await openHandler({}, { workspaceFilePath: 'chip.def' });
+
+    expect(fakeConnection.sendRequest).toHaveBeenCalledWith('systemverilog/layout/open', {
+      defUri: 'file:///C:/workspace/Pristine/chip.def',
+      lefUris: [
+        'file:///C:/workspace/Pristine/io.LEF',
+        'file:///C:/workspace/Pristine/stdcell.lef',
+      ],
+      title: 'chip.def',
+    });
+  });
+
+  it('opens workspace GDS layout files directly from the LSP workspace root', async () => {
+    const openHandler = getHandler('async:lsp:layout-open');
+
+    await openHandler({}, { workspaceFilePath: 'layout/chip.gdsii' });
+
+    expect(fakeConnection.sendRequest).toHaveBeenCalledWith('systemverilog/layout/open', {
+      gdsUri: 'file:///C:/workspace/Pristine/layout/chip.gdsii',
+      title: 'chip.gdsii',
+    });
+  });
+
+  it('rejects OASIS workspace layout files before sending layout open to the engine', async () => {
+    const openHandler = getHandler('async:lsp:layout-open');
+    fakeConnection.sendRequest.mockClear();
+
+    await expect(openHandler({}, { workspaceFilePath: 'chip.oasis' })).rejects.toThrow(
+      'OASIS layout rendering is not supported yet.',
+    );
+    expect(fakeConnection.sendRequest).not.toHaveBeenCalledWith('systemverilog/layout/open', expect.anything());
+  });
+
+  it('reports a clear error when DEF has no root LEF library files', async () => {
+    mockReaddirSync.mockReturnValue([{ isFile: () => true, name: 'chip.def' }]);
+    const openHandler = getHandler('async:lsp:layout-open');
+    fakeConnection.sendRequest.mockClear();
+
+    await expect(openHandler({}, { workspaceFilePath: 'chip.def' })).rejects.toThrow(
+      'No LEF files found in the LSP workspace root.',
+    );
+    expect(fakeConnection.sendRequest).not.toHaveBeenCalledWith('systemverilog/layout/open', expect.anything());
+  });
+
+  it('reports a clear error when the default workspace-root layout LEF is missing', async () => {
+    setLspProjectRoot('C:/workspace/Pristine/test/fixtures/workspace');
+    mockExistsSync.mockImplementation((filePath?: string) => !String(filePath).endsWith('sg13g2_stdcell.lef'));
+    const openHandler = getHandler('async:lsp:layout-open');
+
+    await expect(openHandler({})).rejects.toThrow(
+      'Default Physical layout LEF not found at C:\\workspace\\Pristine\\test\\fixtures\\workspace\\sg13g2_stdcell.lef. Place sg13g2_stdcell.lef in the LSP workspace root.',
+    );
+    expect(mockMkdirSync).not.toHaveBeenCalled();
+    setLspProjectRoot('C:/workspace/Pristine');
+  });
+
+  it('requests layout geometry from the pipe data plane instead of LSP', async () => {
+    const geometryHandler = getHandler('async:lsp:layout-geometry');
+    const geometryOptions = {
+      bbox: { x0: 0, y0: 0, x1: 1, y1: 1 },
+      layerIndices: [0],
+      maxShapes: 1024,
+      sessionId: 'layout-1',
+      shapeKinds: [1, 2],
+    };
+
+    const geometry = await geometryHandler({}, geometryOptions);
+
+    expect(geometry).toEqual(expect.objectContaining({
+      shapeCount: 1,
+      unitsPerMicron: 1000,
+    }));
+    expect(mockRequestLayoutPipeGeometry).toHaveBeenCalledWith(geometryOptions);
+    expect(fakeConnection.sendRequest).not.toHaveBeenCalledWith('systemverilog/layout/geometry', expect.anything());
+  });
+
+  it('closes layout pipe sessions before LSP control-plane close', async () => {
+    const closeHandler = getHandler('async:lsp:layout-close');
+
+    const result = await closeHandler({}, 'layout-1');
+
+    expect(result).toBe(true);
+    expect(mockCloseLayoutPipeSession).toHaveBeenCalledWith('layout-1');
+    expect(fakeConnection.sendRequest).toHaveBeenCalledWith('systemverilog/layout/close', { sessionId: 'layout-1' });
+    expect(fakeConnection.sendRequest).not.toHaveBeenCalledWith('systemverilog/layoutClose', expect.anything());
   });
 });

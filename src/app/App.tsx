@@ -25,7 +25,22 @@ import {
   PhysicalLeftPanel,
   PhysicalMainPanel,
   PhysicalRightPanel,
+  type PhysicalLayoutFileEntry,
+  type PhysicalWorkspaceLayoutState,
 } from './components/code/physical/PhysicalWorkspacePanels';
+import {
+  createEmptyPhysicalLayoutVisibility,
+  createPhysicalLayoutVisibility,
+  createLayerCategoryVisibilityKey,
+  createOutlineVisibilityKey,
+  type PhysicalLayoutLayerCategory,
+  type MutablePhysicalLayoutVisibility,
+} from './components/code/physical/physicalLayoutLayers';
+import {
+  getDefaultLayoutTarget,
+  selectLayoutTargetShapes,
+  type PhysicalLayoutTarget,
+} from './components/code/physical/physicalLayoutGeometry';
 import { QuickOpenPalette } from './components/code/shared/QuickOpenPalette';
 import { isMonacoTextInputFocused } from './editor/focusEditor';
 import {
@@ -130,6 +145,20 @@ function AppLayout() {
   const [physicalRightPanelWidthPx, setPhysicalRightPanelWidthPx] = useState(EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX);
   const [isPhysicalLeftPanelSplitVisible, setIsPhysicalLeftPanelSplitVisible] = useState(false);
   const [isPhysicalRightPanelSplitVisible, setIsPhysicalRightPanelSplitVisible] = useState(false);
+  const [physicalLayoutState, setPhysicalLayoutState] = useState<PhysicalWorkspaceLayoutState>({
+    catalog: null,
+    error: null,
+    geometry: null,
+    openResult: null,
+    status: 'idle',
+  });
+  const [physicalLayoutFiles, setPhysicalLayoutFiles] = useState<PhysicalLayoutFileEntry[]>([]);
+  const [expandedPhysicalLayoutFilePaths, setExpandedPhysicalLayoutFilePaths] = useState<Set<string>>(() => new Set());
+  const [activePhysicalLayoutFilePath, setActivePhysicalLayoutFilePath] = useState<string | null>(null);
+  const [physicalSelectedTarget, setPhysicalSelectedTarget] = useState<PhysicalLayoutTarget | null>(null);
+  const [physicalLayoutVisibility, setPhysicalLayoutVisibility] = useState<MutablePhysicalLayoutVisibility>(() => (
+    createEmptyPhysicalLayoutVisibility()
+  ));
   const [assistantThreadListExpanded, setAssistantThreadListExpanded] = useState(false);
   const [assistantThreadListWidthPx, setAssistantThreadListWidthPx] = useState(ASSISTANT_THREAD_LIST_DEFAULT_WIDTH_PX);
   const [shouldMountWorkflowView, setShouldMountWorkflowView] = useState(mainContentView === 'workflow');
@@ -141,6 +170,112 @@ function AppLayout() {
   const explorerRightPanelWidthPx = explorerAssistantPanelWidthPx + assistantThreadListExtraWidthPx;
   const explorerRightPanelMinWidthPx = EXPLORER_RIGHT_PANEL_MIN_WIDTH_PX + assistantThreadListExtraWidthPx;
   const explorerRightPanelMaxWidthPx = EXPLORER_RIGHT_PANEL_MAX_WIDTH_PX + assistantThreadListExtraWidthPx;
+
+  useEffect(() => {
+    let disposed = false;
+
+    async function loadPhysicalLayoutFiles() {
+      const entries = await window.electronAPI?.fs.readDir?.('.');
+      if (disposed || !Array.isArray(entries)) {
+        return;
+      }
+
+      const files = entries
+        .filter((entry) => entry.isFile)
+        .map((entry) => {
+          const extension = getPhysicalLayoutFileExtension(entry.name);
+          return { extension, name: entry.name, path: entry.name };
+        })
+        .filter((entry): entry is PhysicalLayoutFileEntry => isPhysicalLayoutFileExtension(entry.extension))
+        .sort((left, right) => left.name.localeCompare(right.name, undefined, { numeric: true, sensitivity: 'base' }));
+      setPhysicalLayoutFiles(files);
+    }
+
+    void loadPhysicalLayoutFiles().catch(() => {
+      if (!disposed) {
+        setPhysicalLayoutFiles([]);
+      }
+    });
+
+    return () => {
+      disposed = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    const defaultTarget = getDefaultLayoutTarget(physicalLayoutState.catalog);
+    if (!physicalSelectedTarget && defaultTarget) {
+      setPhysicalSelectedTarget(defaultTarget);
+    }
+  }, [physicalLayoutState.catalog, physicalSelectedTarget]);
+
+  useEffect(() => {
+    const shapes = selectLayoutTargetShapes(physicalLayoutState.catalog, physicalLayoutState.geometry, physicalSelectedTarget);
+    setPhysicalLayoutVisibility(createPhysicalLayoutVisibility(physicalLayoutState.catalog, Boolean(physicalSelectedTarget), shapes));
+  }, [physicalLayoutState.catalog, physicalLayoutState.geometry, physicalSelectedTarget]);
+
+  const handlePhysicalOutlineVisibilityToggle = useCallback(() => {
+    setPhysicalLayoutVisibility((current) => {
+      const nextItems = new Set(current.visibleItems);
+      const outlineKey = createOutlineVisibilityKey();
+      if (nextItems.has(outlineKey)) {
+        nextItems.delete(outlineKey);
+      } else {
+        nextItems.add(outlineKey);
+      }
+
+      return {
+        outlineVisible: nextItems.has(outlineKey),
+        visibleItems: nextItems,
+      };
+    });
+  }, []);
+
+  const handlePhysicalLayerCategoryVisibilityToggle = useCallback((
+    layerIndex: number,
+    category: PhysicalLayoutLayerCategory,
+  ) => {
+    setPhysicalLayoutVisibility((current) => {
+      const nextItems = new Set(current.visibleItems);
+      const key = createLayerCategoryVisibilityKey(layerIndex, category);
+      if (nextItems.has(key)) {
+        nextItems.delete(key);
+      } else {
+        nextItems.add(key);
+      }
+
+      return {
+        outlineVisible: current.outlineVisible,
+        visibleItems: nextItems,
+      };
+    });
+  }, []);
+
+  const handlePhysicalLayoutFileToggle = useCallback((file: PhysicalLayoutFileEntry) => {
+    setExpandedPhysicalLayoutFilePaths((current) => {
+      const next = new Set(current);
+      if (next.has(file.path)) {
+        next.delete(file.path);
+      } else {
+        next.add(file.path);
+      }
+      return next;
+    });
+
+    setPhysicalSelectedTarget(null);
+    setActivePhysicalLayoutFilePath(file.path);
+    setPhysicalLayoutState({
+      catalog: null,
+      error: null,
+      geometry: null,
+      openResult: null,
+      status: 'loading',
+    });
+  }, []);
+
+  const handlePhysicalLayoutTargetActivate = useCallback((target: PhysicalLayoutTarget) => {
+    setPhysicalSelectedTarget(target);
+  }, []);
 
   const handleActivityItemSelect = (nextView: string) => {
     setActiveView(nextView as typeof activeView);
@@ -496,13 +631,29 @@ function AppLayout() {
       rightFixedMaxWidthPx: EXPLORER_RIGHT_PANEL_MAX_WIDTH_PX,
       leftContent: (
         <PhysicalLeftPanel
+          activeLayoutFilePath={activePhysicalLayoutFilePath}
+          catalog={physicalLayoutState.catalog}
+          expandedLayoutFilePaths={expandedPhysicalLayoutFilePaths}
+          layoutFiles={physicalLayoutFiles}
+          selectedTarget={physicalSelectedTarget}
+          onLayoutFileToggle={handlePhysicalLayoutFileToggle}
+          onLayoutTargetActivate={handlePhysicalLayoutTargetActivate}
           onSplitPanelVisibleChange={setIsPhysicalLeftPanelSplitVisible}
         />
       ),
-      topContent: <PhysicalMainPanel />,
+      topContent: (
+        <PhysicalMainPanel
+          activeLayoutFilePath={activePhysicalLayoutFilePath}
+          layoutVisibility={physicalLayoutVisibility}
+          selectedTarget={physicalSelectedTarget}
+          onSelectedTargetChange={setPhysicalSelectedTarget}
+          onLayoutStateChange={setPhysicalLayoutState}
+        />
+      ),
       bottomContent: ({ isMaximized, onMaximizeToggle }) => (
         <PhysicalBottomPanel
           isMaximized={isMaximized}
+          layoutState={physicalLayoutState}
           onClose={() => setShowBottomPanel(false)}
           onMaximizeToggle={onMaximizeToggle}
         />
@@ -511,6 +662,11 @@ function AppLayout() {
       onBottomPanelAutoHide: () => setShowBottomPanel(false),
       rightContent: (
         <PhysicalRightPanel
+          layoutVisibility={physicalLayoutVisibility}
+          layoutState={physicalLayoutState}
+          selectedTarget={physicalSelectedTarget}
+          onLayerCategoryVisibilityToggle={handlePhysicalLayerCategoryVisibilityToggle}
+          onOutlineVisibilityToggle={handlePhysicalOutlineVisibilityToggle}
           onSplitPanelVisibleChange={setIsPhysicalRightPanelSplitVisible}
         />
       ),
@@ -683,6 +839,21 @@ function AppLayout() {
       />
     </SidebarProvider>
   );
+}
+
+function getPhysicalLayoutFileExtension(fileName: string): string {
+  const normalized = fileName.toLowerCase();
+  const index = normalized.lastIndexOf('.');
+  return index >= 0 ? normalized.slice(index) : '';
+}
+
+function isPhysicalLayoutFileExtension(extension: string): boolean {
+  return extension === '.lef'
+    || extension === '.def'
+    || extension === '.gds'
+    || extension === '.gdsii'
+    || extension === '.oas'
+    || extension === '.oasis';
 }
 
 export default function App() {
