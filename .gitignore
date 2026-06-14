@@ -21,6 +21,7 @@ tmp*
 .tmp-*.cjs
 public/generated/
 binaries/
+.tmp/
 perf-results/
 .pristine-agent/
 .pristine-vendor/

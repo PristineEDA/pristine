@@ -86,12 +86,12 @@ describe('PhysicalWorkspacePanels', () => {
     expect(screen.getByTestId('physical-layout-editor')).toBeInTheDocument();
     await waitFor(() => expect(screen.getByTestId('physical-layout-editor')).toHaveAttribute('data-status', 'ready'));
     expect(screen.getByTestId('physical-layout-canvas')).toHaveAttribute('data-renderer', 'webgl');
-    expect(onSelectedTargetChange).toHaveBeenCalledWith(readyTarget);
-    expect(onLayoutStateChange).toHaveBeenCalledWith(expect.objectContaining({
+    await waitFor(() => expect(onSelectedTargetChange).toHaveBeenCalledWith(readyTarget));
+    await waitFor(() => expect(onLayoutStateChange).toHaveBeenCalledWith(expect.objectContaining({
       status: 'ready',
       catalog: layoutFixtureOpenResult.catalog,
       geometry: layoutFixtureGeometry,
-    }));
+    })));
   });
 
   it('switches the physical left panel tabs and activates macros', async () => {

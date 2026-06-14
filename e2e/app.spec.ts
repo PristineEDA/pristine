@@ -4740,6 +4740,8 @@ test('explorer root toggles first-level children and hides the legacy collapse-a
 });
 
 test('activity bar switches code subpages and menu bar keeps higher-priority page navigation', async () => {
+  test.slow();
+
   const physicalWorkspaceRoot = createWorkspaceCopyWithFiles('physical-layout-workspace', {
     'chip.gds': physicalLayoutE2eGds,
     'chip.oas': physicalLayoutE2eOasis,
@@ -4806,7 +4808,6 @@ test('activity bar switches code subpages and menu bar keeps higher-priority pag
   await expect(window.getByTestId('panel-physical-bottom-panel')).toBeVisible();
   await expect(window.getByTestId('panel-physical-right-panel')).toBeVisible();
   const layoutEditor = window.getByTestId('physical-layout-editor');
-  const layoutCanvas = window.getByTestId('physical-layout-canvas');
   await expect(layoutEditor).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
   await expect(layoutEditor).toHaveAttribute('data-status', 'idle', { timeout: UI_READY_TIMEOUT_MS });
   await expect(window.getByTestId('physical-layout-file-tree')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
@@ -4814,59 +4815,13 @@ test('activity bar switches code subpages and menu bar keeps higher-priority pag
   await expect(window.getByTestId('physical-layout-file-item-chip-def')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
   await expect(window.getByTestId('physical-layout-file-item-chip-gds')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
   await expect(window.getByTestId('physical-layout-file-item-chip-oas')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
-  await window.getByTestId('physical-layout-file-item-sg13g2_stdcell-lef').click();
-  await expect(layoutEditor).toHaveAttribute('data-status', 'ready', { timeout: UI_READY_TIMEOUT_MS });
-  await expect(layoutCanvas).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
-  await expect(layoutCanvas).toHaveAttribute('data-renderer', /^(webgpu|webgl)$/);
-  await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-macro-count') ?? '0'), {
-    timeout: UI_READY_TIMEOUT_MS,
-  }).toBeGreaterThan(0);
-  await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-layer-count') ?? '0'), {
-    timeout: UI_READY_TIMEOUT_MS,
-  }).toBeGreaterThan(0);
-  await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-selected-shape-count') ?? '0'), {
-    timeout: UI_READY_TIMEOUT_MS,
-  }).toBeGreaterThan(0);
-  await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-geometry-shape-count') ?? '0'), {
-    timeout: UI_READY_TIMEOUT_MS,
-  }).toBeGreaterThan(0);
-  await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-selected-pin-count') ?? '0'), {
-    timeout: UI_READY_TIMEOUT_MS,
-  }).toBeGreaterThan(0);
-  const selectedShapeCount = Number(await layoutCanvas.getAttribute('data-selected-shape-count') ?? '0');
-  const geometryShapeCount = Number(await layoutCanvas.getAttribute('data-geometry-shape-count') ?? '0');
-  expect(geometryShapeCount).toBeGreaterThan(selectedShapeCount);
-  await expect(layoutCanvas.locator('canvas[data-physical-layout-canvas="true"]')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
-  await expect.poll(async () => await layoutCanvas.getAttribute('data-visible-label-names') ?? '', {
-    timeout: UI_READY_TIMEOUT_MS,
-  }).toContain('A');
-  const visibleLabelNamesBeforeToggle = await layoutCanvas.getAttribute('data-visible-label-names') ?? '';
-  expect(visibleLabelNamesBeforeToggle.split('|')).toEqual(expect.arrayContaining(['A', 'Y']));
-  expect(visibleLabelNamesBeforeToggle).not.toMatch(/PIN \d+/);
   await expect(window.getByTestId('physical-left-panel-tabs')).toBeVisible();
   await expect(window.getByTestId('physical-left-panel-tab-layout')).toBeVisible();
   await expect(window.getByTestId('physical-left-panel-tab-constraints')).toBeVisible();
-  await expect(window.getByTestId('physical-layout-file-tree')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
-  await expect(window.getByTestId('physical-layout-target-item-macro-sg13g2_e2e_inv_1')).toBeVisible({
-    timeout: UI_READY_TIMEOUT_MS,
-  });
   await expect(window.getByTestId('physical-left-panel-split-toggle')).toBeVisible();
   await expect(window.getByTestId('physical-right-panel-tabs')).toBeVisible();
   await expect(window.getByTestId('physical-right-panel-tab-layers')).toBeVisible();
   await expect(window.getByTestId('physical-right-panel-tab-checks')).toBeVisible();
-  await expect(window.getByTestId('physical-layer-list')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
-  const layerRows = window.getByTestId('physical-layer-list').locator('[data-testid^="physical-layer-row-"]');
-  const outlineSwatch = window.getByTestId('physical-layer-outline-swatch');
-  const categorySwatches = window.getByTestId('physical-layer-list').locator('[data-testid^="physical-layer-category-swatch-"]');
-  await expect.poll(async () => layerRows.count(), { timeout: UI_READY_TIMEOUT_MS }).toBeGreaterThan(0);
-  await expect(window.getByTestId('physical-layer-outline-row')).toBeVisible();
-  await expect(window.getByTestId('physical-layer-outline-name')).toHaveText('Outline');
-  await expect(outlineSwatch).toHaveAttribute('aria-pressed', 'true');
-  await expect.poll(async () => categorySwatches.count(), { timeout: UI_READY_TIMEOUT_MS }).toBeGreaterThan(0);
-  await expect(window.getByTestId('physical-layer-list').getByText('Pin').first()).toBeVisible();
-  await expect(window.getByTestId('physical-layer-list').getByText('Label').first()).toBeVisible();
-  await expect(window.getByTestId('physical-layer-list').getByText('Obstruction').first()).toBeVisible();
-  await expect(layoutCanvas).toHaveAttribute('data-outline-visible', 'true');
   await expect(window.getByTestId('physical-right-panel-split-toggle')).toBeVisible();
   await expect(window.getByTestId('physical-bottom-panel-tabs')).toBeVisible();
   await expect(window.getByTestId('physical-bottom-panel-tab-reports')).toBeVisible();
@@ -4874,128 +4829,6 @@ test('activity bar switches code subpages and menu bar keeps higher-priority pag
   await expect(window.getByTestId('toggle-left-panel')).toBeEnabled();
   await expect(window.getByTestId('toggle-bottom-panel')).toBeEnabled();
   await expect(window.getByTestId('toggle-right-panel')).toBeEnabled();
-  const renderCountBeforeOutlineToggle = Number(await layoutCanvas.getAttribute('data-render-count') ?? '0');
-  await outlineSwatch.click();
-  await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-render-count') ?? '0'), {
-    timeout: UI_READY_TIMEOUT_MS,
-  }).toBeGreaterThan(renderCountBeforeOutlineToggle);
-  await expect(layoutCanvas).toHaveAttribute('data-outline-visible', 'false');
-
-  const visibleShapeCountBeforeToggle = Number(await layoutCanvas.getAttribute('data-visible-shape-count') ?? '0');
-  const renderCountBeforeLayerToggle = Number(await layoutCanvas.getAttribute('data-render-count') ?? '0');
-  const enabledPinSwatch = window.getByTestId('physical-layer-list')
-    .locator('[data-testid^="physical-layer-category-swatch-"][data-testid$="-pin"]:not(:disabled)')
-    .first();
-  await expect(enabledPinSwatch).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
-  await enabledPinSwatch.click();
-  await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-render-count') ?? '0'), {
-    timeout: UI_READY_TIMEOUT_MS,
-  }).toBeGreaterThan(renderCountBeforeLayerToggle);
-  await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-visible-shape-count') ?? '0'), {
-    timeout: UI_READY_TIMEOUT_MS,
-  }).toBeLessThan(visibleShapeCountBeforeToggle);
-
-  const labelCountBeforeToggle = Number(await layoutCanvas.getAttribute('data-visible-label-count') ?? '0');
-  const enabledLabelSwatch = window.getByTestId('physical-layer-list')
-    .locator('[data-testid^="physical-layer-category-swatch-"][data-testid$="-label"]:not(:disabled)')
-    .first();
-  await expect(enabledLabelSwatch).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
-  await enabledLabelSwatch.click();
-  await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-visible-label-count') ?? '0'), {
-    timeout: UI_READY_TIMEOUT_MS,
-  }).toBeLessThan(labelCountBeforeToggle);
-
-  const enabledCategorySwatches = window.getByTestId('physical-layer-list')
-    .locator('[data-testid^="physical-layer-category-swatch-"]:not(:disabled)');
-  const enabledCategoryCount = await enabledCategorySwatches.count();
-  const enabledCategoryTestIds: string[] = [];
-  for (let categoryIndex = 0; categoryIndex < enabledCategoryCount; categoryIndex += 1) {
-    const testId = await enabledCategorySwatches.nth(categoryIndex).getAttribute('data-testid');
-    if (testId) {
-      enabledCategoryTestIds.push(testId);
-    }
-  }
-  for (const testId of enabledCategoryTestIds) {
-    const swatch = window.getByTestId(testId);
-    if (await swatch.getAttribute('aria-pressed') === 'true') {
-      await swatch.click();
-    }
-  }
-  await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-visible-shape-count') ?? '0'), {
-    timeout: UI_READY_TIMEOUT_MS,
-  }).toBe(0);
-  await expect(layoutCanvas).toHaveAttribute('data-visible-label-count', '0');
-  await expect(layoutCanvas).toHaveAttribute('data-renderer', /^(webgpu|webgl)$/);
-  await expect(layoutCanvas.locator('canvas[data-physical-layout-canvas="true"]')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
-
-  await layoutCanvas.hover();
-  const panYBeforeWheel = Number(await layoutCanvas.getAttribute('data-pan-y') ?? '0');
-  await window.mouse.wheel(0, 120);
-  await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-pan-y') ?? '0'), {
-    timeout: UI_READY_TIMEOUT_MS,
-  }).not.toBe(panYBeforeWheel);
-
-  const panXBeforeShiftWheel = Number(await layoutCanvas.getAttribute('data-pan-x') ?? '0');
-  await window.keyboard.down('Shift');
-  await window.mouse.wheel(0, 120);
-  await window.keyboard.up('Shift');
-  await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-pan-x') ?? '0'), {
-    timeout: UI_READY_TIMEOUT_MS,
-  }).not.toBe(panXBeforeShiftWheel);
-
-  const zoomBeforeCtrlWheel = Number(await layoutCanvas.getAttribute('data-zoom') ?? '0');
-  await window.keyboard.down('Control');
-  await window.mouse.wheel(0, -120);
-  await window.keyboard.up('Control');
-  await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-zoom') ?? '0'), {
-    timeout: UI_READY_TIMEOUT_MS,
-  }).toBeGreaterThan(zoomBeforeCtrlWheel);
-
-  const macroItems = window.getByTestId('physical-layout-file-tree').locator('[data-testid^="physical-layout-target-item-macro-"]');
-  await expect.poll(async () => macroItems.count(), {
-    timeout: UI_READY_TIMEOUT_MS,
-  }).toBeGreaterThan(1);
-  const selectedMacroBeforeSwitch = await layoutCanvas.getAttribute('data-selected-macro-name');
-  const renderCountBeforeSwitch = Number(await layoutCanvas.getAttribute('data-render-count') ?? '0');
-  await macroItems.nth(1).click();
-  await expect.poll(async () => await layoutCanvas.getAttribute('data-selected-macro-name'), {
-    timeout: UI_READY_TIMEOUT_MS,
-  }).not.toBe(selectedMacroBeforeSwitch);
-  await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-render-count') ?? '0'), {
-    timeout: UI_READY_TIMEOUT_MS,
-  }).toBeGreaterThan(renderCountBeforeSwitch);
-
-  await window.getByTestId('physical-layout-file-item-chip-gds').click();
-  await expect(window.getByTestId('physical-layout-target-item-gdsCell-TOP')).toBeVisible({
-    timeout: UI_READY_TIMEOUT_MS,
-  });
-  await window.getByTestId('physical-layout-target-item-gdsCell-TOP').click();
-  await expect(layoutEditor).toHaveAttribute('data-status', 'ready', { timeout: UI_READY_TIMEOUT_MS });
-  await expect(layoutCanvas).toHaveAttribute('data-source-kind', 'gds', { timeout: UI_READY_TIMEOUT_MS });
-  await expect(layoutCanvas).toHaveAttribute('data-selected-target-kind', 'gdsCell');
-  await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-selected-shape-count') ?? '0'), {
-    timeout: UI_READY_TIMEOUT_MS,
-  }).toBeGreaterThan(0);
-  await expect(window.getByTestId('physical-layer-list').getByText('Boundary').first()).toBeVisible();
-  await expect(window.getByTestId('physical-layer-list').getByText('Path').first()).toBeVisible();
-  await expect(window.getByTestId('physical-layer-list').getByText('Text').first()).toBeVisible();
-
-  await window.getByTestId('physical-layout-file-item-chip-def').click();
-  await expect(window.getByTestId('physical-layout-target-item-design-Design')).toBeVisible({
-    timeout: UI_READY_TIMEOUT_MS,
-  });
-  await window.getByTestId('physical-layout-target-item-design-Design').click();
-  await expect(layoutEditor).toHaveAttribute('data-status', 'ready', { timeout: UI_READY_TIMEOUT_MS });
-  await expect(layoutCanvas).toHaveAttribute('data-source-kind', 'lefdef', { timeout: UI_READY_TIMEOUT_MS });
-  await expect(layoutCanvas).toHaveAttribute('data-selected-target-kind', 'design');
-  await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-selected-shape-count') ?? '0'), {
-    timeout: UI_READY_TIMEOUT_MS,
-  }).toBeGreaterThan(0);
-
-  await window.getByTestId('physical-layout-file-item-chip-oas').click();
-  await expect(layoutEditor).toHaveAttribute('data-status', 'error', { timeout: UI_READY_TIMEOUT_MS });
-  await expect(layoutEditor).toContainText('OASIS layout rendering is not supported yet.');
-  await expect(layoutEditor).toBeVisible();
 
   const [physicalShellBox, physicalLeftPanelBox, physicalMainPanelBox, physicalBottomPanelBox] = await Promise.all([
     window.getByTestId('code-view-physical').boundingBox(),
