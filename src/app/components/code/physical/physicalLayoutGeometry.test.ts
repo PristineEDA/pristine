@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { LspLayoutCatalog, LspLayoutGeometry } from '../../../../../types/systemverilog-lsp';
-import { layoutFixtureGeometry, layoutFixtureOpenResult } from '../../../../test/layoutFixture';
+import { layoutFixtureGdsGeometry, layoutFixtureGdsOpenResult, layoutFixtureGeometry, layoutFixtureOpenResult } from '../../../../test/layoutFixture';
 import {
   applyLayoutWheel,
   findLayoutMacro,
@@ -11,6 +11,11 @@ import {
   getShapesBounds,
   selectMacroShapes,
 } from './physicalLayoutGeometry';
+import {
+  createPhysicalLayout3DSceneInput,
+  getPhysicalLayout3DDepth,
+  getPhysicalLayout3DLayerZ,
+} from './physicalLayout3dGeometry';
 import {
   createPhysicalLayoutLayerTree,
   createPhysicalLayoutPinLabels,
@@ -219,5 +224,43 @@ describe('physicalLayoutGeometry', () => {
     expect(createPhysicalLayoutPinLabels(gdsCatalog, selectedShapes, visibility)).toEqual([
       expect.objectContaining({ layerIndex: 0, name: 'VSS', ownerIndex: 2 }),
     ]);
+  });
+
+  it('creates 2.5D mesh inputs for visible GDS cell shapes', () => {
+    const selectedTarget = { kind: 'gdsCell' as const, name: 'CHILD', index: 1 };
+    const selectedShapes = layoutFixtureGdsGeometry.shapes.filter((shape) => shape.macroIndex === selectedTarget.index);
+    const visibility = createPhysicalLayoutVisibility(layoutFixtureGdsOpenResult.catalog, true, selectedShapes);
+    const sceneInput = createPhysicalLayout3DSceneInput(
+      layoutFixtureGdsOpenResult.catalog,
+      layoutFixtureGdsGeometry,
+      selectedTarget,
+      visibility,
+    );
+
+    expect(sceneInput.selectedShapeCount).toBe(3);
+    expect(sceneInput.meshes).toHaveLength(3);
+    expect(sceneInput.meshes.map((mesh) => mesh.category)).toEqual(['boundary', 'path', 'text']);
+    expect(sceneInput.meshes[0]).toMatchObject({
+      layerIndex: 0,
+      points: [{ x: 1, y: 1 }, { x: 3, y: 1 }, { x: 3, y: 2 }, { x: 1, y: 2 }],
+      z: getPhysicalLayout3DLayerZ(0, 'boundary'),
+      depth: getPhysicalLayout3DDepth('boundary'),
+    });
+    expect(sceneInput.meshes[1]?.points).toEqual([
+      { x: 1.2, y: 1.4 },
+      { x: 2.8, y: 1.4 },
+      { x: 2.8, y: 1.55 },
+      { x: 1.2, y: 1.55 },
+    ]);
+
+    visibility.visibleItems.delete('layer:0:boundary');
+    const hiddenBoundaryInput = createPhysicalLayout3DSceneInput(
+      layoutFixtureGdsOpenResult.catalog,
+      layoutFixtureGdsGeometry,
+      selectedTarget,
+      visibility,
+    );
+
+    expect(hiddenBoundaryInput.meshes.map((mesh) => mesh.category)).toEqual(['path', 'text']);
   });
 });

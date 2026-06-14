@@ -223,6 +223,7 @@ Zod（https://github.com/colinhacks/zod）Colin McDonnell MIT
 Mermaid（https://github.com/mermaid-js/mermaid）Knut Sveidqvist MIT
 Apache ECharts（https://github.com/apache/echarts）The Apache Software Foundation Apache-2.0
 PixiJS（https://github.com/pixijs/pixijs）PixiJS Team MIT
+Three.js（https://github.com/mrdoob/three.js）Three.js Authors MIT
 elkjs（https://github.com/kieler/elkjs）Ulf Rüegg EPL-2.0
 Liveline（https://github.com/benjitaylor/liveline）Benji Taylor MIT
 react-shiki（https://github.com/AVGVSTVS96/react-shiki）Bassim Shahidy MIT

@@ -2021,6 +2021,19 @@ test('packaged Windows app opens Physical layout from workspace-root LEF', async
       timeout: UI_READY_TIMEOUT_MS,
     }).toContain('A');
     expect(await layoutCanvas.getAttribute('data-visible-label-names')).not.toMatch(/PIN \d+/);
+
+    await window.getByTestId('physical-layout-file-item-chip-gds').click();
+    await expect(window.getByTestId('physical-layout-target-item-gdsCell-sg13g2_xor2_1')).toBeVisible({
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await expect(layoutCanvas).toHaveAttribute('data-source-kind', 'gds', { timeout: UI_READY_TIMEOUT_MS });
+    await window.getByTestId('physical-layout-3d-toggle').click();
+    const packagedThreeCanvas = window.getByTestId('physical-layout-3d-canvas');
+    await expect(packagedThreeCanvas).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+    await expect(packagedThreeCanvas).toHaveAttribute('data-renderer', 'three-webgl', { timeout: UI_READY_TIMEOUT_MS });
+    await expect.poll(async () => Number(await packagedThreeCanvas.getAttribute('data-visible-shape-count') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(0);
   } finally {
     await app.close();
   }
@@ -2097,17 +2110,85 @@ test('Physical layout requests indexed geometry for LEF macros and GDS cells', a
       timeout: UI_READY_TIMEOUT_MS,
     }).toBeGreaterThan(0);
 
+    await window.getByTestId('physical-layout-3d-toggle').click();
+    await expect(window.getByTestId('physical-layout-3d-split')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+    await expect(layoutCanvas).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+    const layout3DCanvas = window.getByTestId('physical-layout-3d-canvas');
+    await expect(layout3DCanvas).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+    await expect(layout3DCanvas).toHaveAttribute('data-renderer', 'three-webgl', { timeout: UI_READY_TIMEOUT_MS });
+    await expect(layout3DCanvas).toHaveAttribute('data-selected-target-name', 'sg13g2_xor2_1', {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await expect.poll(async () => Number(await layout3DCanvas.getAttribute('data-visible-shape-count') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(0);
+
+    const splitHandle = window.getByTestId('physical-layout-3d-resize-handle');
+    const handleBox = await splitHandle.boundingBox();
+    const threeBoxBeforeResize = await layout3DCanvas.boundingBox();
+    expect(handleBox).not.toBeNull();
+    expect(threeBoxBeforeResize).not.toBeNull();
+    if (handleBox && threeBoxBeforeResize) {
+      await window.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2);
+      await window.mouse.down();
+      await window.mouse.move(handleBox.x - 120, handleBox.y + handleBox.height / 2, { steps: 8 });
+      await window.mouse.up();
+      await expect.poll(async () => (await layout3DCanvas.boundingBox())?.width ?? 0, {
+        timeout: UI_READY_TIMEOUT_MS,
+      }).toBeGreaterThan(threeBoxBeforeResize.width + 20);
+    }
+
+    const threeBox = await layout3DCanvas.boundingBox();
+    expect(threeBox).not.toBeNull();
+    if (threeBox) {
+      const orbitAngleBefore = Number(await layout3DCanvas.getAttribute('data-orbit-angle-y') ?? '0');
+      const zoomBefore = Number(await layout3DCanvas.getAttribute('data-zoom') ?? '0');
+      const renderCountBeforeOrbit = Number(await layout3DCanvas.getAttribute('data-render-count') ?? '0');
+      await window.mouse.move(threeBox.x + threeBox.width / 2, threeBox.y + threeBox.height / 2);
+      await window.mouse.down();
+      await window.mouse.move(threeBox.x + threeBox.width / 2 + 90, threeBox.y + threeBox.height / 2 + 35, { steps: 8 });
+      await window.mouse.up();
+      await expect.poll(async () => Number(await layout3DCanvas.getAttribute('data-orbit-angle-y') ?? '0'), {
+        timeout: UI_READY_TIMEOUT_MS,
+      }).toBeGreaterThan(orbitAngleBefore);
+      await expect.poll(async () => Number(await layout3DCanvas.getAttribute('data-render-count') ?? '0'), {
+        timeout: UI_READY_TIMEOUT_MS,
+      }).toBeGreaterThan(renderCountBeforeOrbit);
+
+      await layout3DCanvas.hover();
+      await window.mouse.wheel(0, -240);
+      await expect.poll(async () => Number(await layout3DCanvas.getAttribute('data-zoom') ?? '0'), {
+        timeout: UI_READY_TIMEOUT_MS,
+      }).toBeGreaterThan(zoomBefore);
+    }
+
     const renderCountBeforeGdsSwitch = Number(await layoutCanvas.getAttribute('data-render-count') ?? '0');
     await window.getByTestId('physical-layout-target-item-gdsCell-sg13g2_xnor2_1').click();
     await expect(layoutCanvas).toHaveAttribute('data-selected-target-name', 'sg13g2_xnor2_1', {
       timeout: UI_READY_TIMEOUT_MS,
     });
+    await expect(layout3DCanvas).toHaveAttribute('data-selected-target-name', 'sg13g2_xnor2_1', {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
     await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-selected-shape-count') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(0);
+    await expect.poll(async () => Number(await layout3DCanvas.getAttribute('data-visible-shape-count') ?? '0'), {
       timeout: UI_READY_TIMEOUT_MS,
     }).toBeGreaterThan(0);
     await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-render-count') ?? '0'), {
       timeout: UI_READY_TIMEOUT_MS,
     }).toBeGreaterThan(renderCountBeforeGdsSwitch);
+
+    const twoDVisibleBeforeGdsLayerToggle = Number(await layoutCanvas.getAttribute('data-visible-shape-count') ?? '0');
+    const threeDVisibleBeforeGdsLayerToggle = Number(await layout3DCanvas.getAttribute('data-visible-shape-count') ?? '0');
+    await window.locator('button[data-testid^="physical-layer-category-swatch-"][data-testid$="-boundary"]:not(:disabled)').first().click();
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-visible-shape-count') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeLessThan(twoDVisibleBeforeGdsLayerToggle);
+    await expect.poll(async () => Number(await layout3DCanvas.getAttribute('data-visible-shape-count') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeLessThan(threeDVisibleBeforeGdsLayerToggle);
   } finally {
     await app.close();
   }

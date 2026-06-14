@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { useState, type ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { layoutFixtureGdsOpenResult, layoutFixtureGeometry, layoutFixtureOpenResult } from '../../../../test/layoutFixture';
+import { layoutFixtureGdsGeometry, layoutFixtureGdsOpenResult, layoutFixtureGeometry, layoutFixtureOpenResult } from '../../../../test/layoutFixture';
 import { CodeViewerLayoutProvider } from '../../../context/CodeViewerLayoutContext';
 import {
   PhysicalBottomPanel,
@@ -46,6 +46,27 @@ vi.mock('./PhysicalLayoutCanvas', () => ({
   ),
 }));
 
+vi.mock('./PhysicalLayout3DCanvas', () => ({
+  PhysicalLayout3DCanvas: ({
+    catalog,
+    geometry,
+    selectedTarget,
+  }: {
+    catalog: typeof layoutFixtureOpenResult.catalog | null;
+    geometry: typeof layoutFixtureGeometry | null;
+    selectedTarget: PhysicalLayoutTarget | null;
+  }) => (
+    <div
+      data-renderer="three-webgl"
+      data-selected-target-name={selectedTarget?.name ?? ''}
+      data-shape-count={geometry?.shapes.length ?? 0}
+      data-source-kind={catalog?.sourceKind ?? ''}
+      data-testid="physical-layout-3d-canvas"
+      data-visible-shape-count={geometry?.shapes.length ?? 0}
+    />
+  ),
+}));
+
 const readyLayoutState: PhysicalWorkspaceLayoutState = {
   catalog: layoutFixtureOpenResult.catalog,
   error: null,
@@ -59,6 +80,7 @@ const readyVisibility = createPhysicalLayoutVisibility(layoutFixtureOpenResult.c
 const nandMacroShapes = selectMacroShapes(layoutFixtureOpenResult.catalog, layoutFixtureGeometry, 'sg13g2_nand2_1');
 const nandTarget: PhysicalLayoutTarget = { kind: 'macro', name: 'sg13g2_nand2_1', index: 1 };
 const nandVisibility = createPhysicalLayoutVisibility(layoutFixtureOpenResult.catalog, true, nandMacroShapes);
+const readyGdsTarget: PhysicalLayoutTarget = { kind: 'gdsCell', name: 'CHILD', index: 1 };
 const layoutFiles = [{ extension: '.lef', name: 'sg13g2_stdcell.lef', path: 'sg13g2_stdcell.lef' }];
 
 function renderInCodeLayout(node: ReactNode) {
@@ -104,6 +126,7 @@ describe('PhysicalWorkspacePanels', () => {
     );
 
     expect(screen.getByTestId('physical-layout-editor')).toBeInTheDocument();
+    expect(screen.getByTestId('physical-layout-3d-toggle')).toBeInTheDocument();
     await waitFor(() => expect(screen.getByTestId('physical-layout-editor')).toHaveAttribute('data-status', 'ready'));
     expect(screen.getByTestId('physical-layout-canvas')).toHaveAttribute('data-renderer', 'webgl');
     await waitFor(() => expect(onSelectedTargetChange).toHaveBeenCalledWith(readyTarget));
@@ -119,15 +142,41 @@ describe('PhysicalWorkspacePanels', () => {
     })));
   });
 
+  it('toggles the 3D split and shows an empty 3D state for non-GDS targets', async () => {
+    const user = userEvent.setup();
+
+    function PhysicalMainPanelHarness() {
+      const [selectedTarget, setSelectedTarget] = useState<PhysicalLayoutTarget | null>(null);
+
+      return (
+        <PhysicalMainPanel
+          activeLayoutFilePath="sg13g2_stdcell.lef"
+          layoutVisibility={readyVisibility}
+          selectedTarget={selectedTarget}
+          onSelectedTargetChange={setSelectedTarget}
+        />
+      );
+    }
+
+    renderInCodeLayout(<PhysicalMainPanelHarness />);
+
+    await waitFor(() => expect(screen.getByTestId('physical-layout-editor')).toHaveAttribute('data-status', 'ready'));
+    await user.click(screen.getByTestId('physical-layout-3d-toggle'));
+
+    expect(screen.getByTestId('physical-layout-editor')).toHaveAttribute('data-3d-visible', 'true');
+    expect(screen.getByTestId('physical-layout-3d-split')).toBeInTheDocument();
+    expect(screen.getByTestId('physical-layout-3d-resize-handle')).toBeInTheDocument();
+    expect(screen.getByTestId('physical-layout-3d-empty')).toHaveTextContent('GDS cell');
+  });
+
   it('requests GDS cell geometry by selected cell index', async () => {
     const layoutOpen = vi.mocked(getTestElectronApi().lsp.layoutOpen);
     const layoutGeometry = vi.mocked(getTestElectronApi().lsp.layoutGeometry);
-    const selectedCellTarget: PhysicalLayoutTarget = { kind: 'gdsCell', name: 'CHILD', index: 1 };
     layoutOpen.mockResolvedValueOnce(layoutFixtureGdsOpenResult);
     layoutGeometry.mockClear();
 
     function PhysicalGdsPanelHarness() {
-      const [selectedTarget, setSelectedTarget] = useState<PhysicalLayoutTarget | null>(selectedCellTarget);
+      const [selectedTarget, setSelectedTarget] = useState<PhysicalLayoutTarget | null>(readyGdsTarget);
 
       return (
         <PhysicalMainPanel
@@ -152,6 +201,39 @@ describe('PhysicalWorkspacePanels', () => {
       gdsRootCellIndices: [1],
     });
     expect(screen.getByTestId('physical-layout-canvas')).toHaveAttribute('data-selected-macro-name', '');
+  });
+
+  it('renders the 3D canvas split for selected GDS cell geometry', async () => {
+    const user = userEvent.setup();
+    const layoutOpen = vi.mocked(getTestElectronApi().lsp.layoutOpen);
+    const selectedGdsShapes = layoutFixtureGdsGeometry.shapes.filter((shape) => shape.macroIndex === readyGdsTarget.index);
+    const gdsVisibility = createPhysicalLayoutVisibility(layoutFixtureGdsOpenResult.catalog, true, selectedGdsShapes);
+    layoutOpen.mockResolvedValueOnce(layoutFixtureGdsOpenResult);
+
+    function PhysicalGdsPanelHarness() {
+      const [selectedTarget, setSelectedTarget] = useState<PhysicalLayoutTarget | null>(readyGdsTarget);
+
+      return (
+        <PhysicalMainPanel
+          activeLayoutFilePath="chip.gds"
+          layoutVisibility={gdsVisibility}
+          selectedTarget={selectedTarget}
+          onSelectedTargetChange={setSelectedTarget}
+        />
+      );
+    }
+
+    renderInCodeLayout(<PhysicalGdsPanelHarness />);
+
+    await waitFor(() => expect(screen.getByTestId('physical-layout-editor')).toHaveAttribute('data-status', 'ready'));
+    await user.click(screen.getByTestId('physical-layout-3d-toggle'));
+
+    expect(screen.getByTestId('physical-layout-editor')).toHaveAttribute('data-3d-supported', 'true');
+    expect(screen.getByTestId('physical-layout-3d-split')).toBeInTheDocument();
+    expect(screen.getByTestId('physical-layout-canvas')).toBeInTheDocument();
+    expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveAttribute('data-renderer', 'three-webgl');
+    expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveAttribute('data-selected-target-name', 'CHILD');
+    expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveAttribute('data-source-kind', 'gds');
   });
 
   it('switches the physical left panel tabs and activates macros', async () => {

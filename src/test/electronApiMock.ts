@@ -1,7 +1,7 @@
 import { vi } from 'vitest';
 import type { ElectronAPI } from '../../types/electron-api';
 import { createWaveformFixtureFrame, waveformFixtureData } from '../app/components/code/explorer/waveform/waveformTestFixtures';
-import { layoutFixtureGeometry, layoutFixtureOpenResult } from './layoutFixture';
+import { layoutFixtureGdsGeometry, layoutFixtureGeometry, layoutFixtureOpenResult } from './layoutFixture';
 import type { LspLayoutGeometryOptions } from '../../types/systemverilog-lsp';
 
 const defaultGpuDiagnostics = {
@@ -22,17 +22,18 @@ const defaultGpuDiagnostics = {
 
 export function createElectronApiMock(): ElectronAPI {
   const getLayoutGeometry = async (options: LspLayoutGeometryOptions) => {
-    const macroIndices = options.macroIndices ?? options.gdsRootCellIndices ?? [];
-    if (macroIndices.length === 0) {
+    const geometry = options.gdsRootCellIndices ? layoutFixtureGdsGeometry : layoutFixtureGeometry;
+    const ownerIndices = options.macroIndices ?? options.gdsRootCellIndices ?? [];
+    if (ownerIndices.length === 0) {
       return layoutFixtureGeometry;
     }
 
-    const shapes = layoutFixtureGeometry.shapes.filter((shape) => (
-      shape.macroIndex !== null && macroIndices.includes(shape.macroIndex)
+    const shapes = geometry.shapes.filter((shape) => (
+      shape.macroIndex !== null && ownerIndices.includes(shape.macroIndex)
     ));
 
     return {
-      ...layoutFixtureGeometry,
+      ...geometry,
       shapeCount: shapes.length,
       shapes,
     };

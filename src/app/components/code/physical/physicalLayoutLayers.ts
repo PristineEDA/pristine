@@ -159,7 +159,7 @@ export function createPhysicalLayoutLayerTree(
 
   for (const shape of shapes) {
     const categories = shapeCountsByLayer.get(shape.layerIndex) ?? createEmptyCategoryAvailability();
-    const category = getShapeLayerCategory(shape);
+    const category = getPhysicalLayoutShapeCategory(shape);
 
     if (category) {
       categories[category] = true;
@@ -188,7 +188,7 @@ export function filterVisiblePhysicalLayoutShapes(
   visibility: PhysicalLayoutVisibility,
 ): LspLayoutShape[] {
   return shapes.filter((shape) => {
-    const category = getShapeLayerCategory(shape);
+    const category = getPhysicalLayoutShapeCategory(shape);
     return category ? isPhysicalLayoutLayerCategoryVisible(visibility, shape.layerIndex, category) : false;
   });
 }
@@ -200,7 +200,7 @@ export function getVisiblePhysicalLayoutShapeCounts(
   const counts = createEmptyCategoryCount();
 
   for (const shape of shapes) {
-    const category = getShapeLayerCategory(shape);
+    const category = getPhysicalLayoutShapeCategory(shape);
     if (category && isPhysicalLayoutLayerCategoryVisible(visibility, shape.layerIndex, category)) {
       counts[category] += 1;
     }
@@ -307,7 +307,7 @@ export function getVisiblePhysicalLayoutCategoryCount(
   ), 0);
 }
 
-function getShapeLayerCategory(shape: LspLayoutShape): PhysicalLayoutLayerCategory | null {
+export function getPhysicalLayoutShapeCategory(shape: LspLayoutShape): PhysicalLayoutLayerCategory | null {
   if (shape.ownerKind === 'pin') {
     return 'pin';
   }
