@@ -21,6 +21,14 @@ import {
   getPhysicalLayout3DShapeRenderOrder,
   physicalLayout3DRenderOrders,
 } from './physicalLayout3dRendering';
+import {
+  createPhysicalLayout3DViewHelper,
+  getPhysicalLayout3DViewHelperTargetOrbit,
+  getPhysicalLayout3DViewHelperViewport,
+  physicalLayout3DViewHelperSize,
+  type PhysicalLayout3DViewHelperAxis,
+  type PhysicalLayout3DViewHelperEndpointPositions,
+} from './physicalLayout3dViewHelper';
 import type { PhysicalLayoutTarget } from './physicalLayoutGeometry';
 import type { PhysicalLayoutVisibility } from './physicalLayoutLayers';
 
@@ -44,6 +52,7 @@ const defaultOrbit = {
 const defaultZoom = 1;
 const clickDistanceThresholdPx = 4;
 const viewportStateSyncIntervalMs = 120;
+const viewHelperAnimationDurationMs = 260;
 
 export function PhysicalLayout3DCanvas({
   catalog,
@@ -60,6 +69,14 @@ export function PhysicalLayout3DCanvas({
   const orbitGroupRef = useRef<THREE.Group | null>(null);
   const contentGroupRef = useRef<THREE.Group | null>(null);
   const raycasterRef = useRef(new THREE.Raycaster());
+  const viewHelperRef = useRef<ReturnType<typeof createPhysicalLayout3DViewHelper> | null>(null);
+  const lastViewHelperAxisRef = useRef<PhysicalLayout3DViewHelperAxis | ''>('');
+  const viewHelperAnimationRef = useRef<{
+    axis: PhysicalLayout3DViewHelperAxis;
+    from: typeof defaultOrbit;
+    start: number;
+    to: typeof defaultOrbit;
+  } | null>(null);
   const renderFrameRef = useRef<number | null>(null);
   const highlightedShapeIndexRef = useRef<number | null>(highlightedShapeIndex);
   const onHighlightedShapeChangeRef = useRef(onHighlightedShapeChange);
@@ -79,6 +96,15 @@ export function PhysicalLayout3DCanvas({
     orbit: defaultOrbit,
     pan: { x: 0, y: 0 },
     zoom: defaultZoom,
+  });
+  const [viewHelperState, setViewHelperState] = useState<{
+    animating: boolean;
+    lastAxis: PhysicalLayout3DViewHelperAxis | '';
+    positions: PhysicalLayout3DViewHelperEndpointPositions | null;
+  }>({
+    animating: false,
+    lastAxis: '',
+    positions: null,
   });
 
   const sceneInput = useMemo(
@@ -129,6 +155,8 @@ export function PhysicalLayout3DCanvas({
     renderer.domElement.dataset.physicalLayout3DCanvas = 'true';
     host.appendChild(renderer.domElement);
     rendererRef.current = renderer;
+    const viewHelper = createPhysicalLayout3DViewHelper();
+    viewHelperRef.current = viewHelper;
 
     const scene = new THREE.Scene();
     sceneRef.current = scene;
@@ -165,8 +193,10 @@ export function PhysicalLayout3DCanvas({
       }
       disposeGroup(contentGroup);
       renderer.dispose();
+      viewHelper.dispose();
       renderer.domElement.remove();
       rendererRef.current = null;
+      viewHelperRef.current = null;
       sceneRef.current = null;
       cameraRef.current = null;
       orbitGroupRef.current = null;
@@ -210,19 +240,26 @@ export function PhysicalLayout3DCanvas({
       previousX: 0,
       previousY: 0,
       totalDistance: 0,
+      viewHelperPointer: false,
     };
     const handlePointerDown = (event: PointerEvent) => {
       if (event.button !== 0) {
         return;
       }
 
+      const helperHit = getViewHelperPointerHit(event.clientX, event.clientY);
       dragState.moved = false;
       dragState.pointerId = event.pointerId;
       dragState.previousX = event.clientX;
       dragState.previousY = event.clientY;
       dragState.totalDistance = 0;
+      dragState.viewHelperPointer = Boolean(helperHit?.inside);
       isInteractingRef.current = false;
       host.setPointerCapture(event.pointerId);
+      if (dragState.viewHelperPointer) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
     };
     const handlePointerMove = (event: PointerEvent) => {
       if (dragState.pointerId !== event.pointerId) {
@@ -235,6 +272,11 @@ export function PhysicalLayout3DCanvas({
       dragState.previousY = event.clientY;
       dragState.totalDistance += Math.hypot(dx, dy);
       dragState.moved = dragState.totalDistance > clickDistanceThresholdPx;
+      if (dragState.viewHelperPointer) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
       if (!dragState.moved) {
         return;
       }
@@ -254,6 +296,19 @@ export function PhysicalLayout3DCanvas({
       dragState.pointerId = -1;
       isInteractingRef.current = false;
       syncViewportState();
+      if (dragState.viewHelperPointer) {
+        const helperHit = getViewHelperPointerHit(event.clientX, event.clientY);
+        if (!dragState.moved && helperHit?.axis) {
+          startViewHelperAxisAnimation(helperHit.axis);
+        }
+        dragState.viewHelperPointer = false;
+        event.preventDefault();
+        event.stopPropagation();
+        if (host.hasPointerCapture(event.pointerId)) {
+          host.releasePointerCapture(event.pointerId);
+        }
+        return;
+      }
       if (!dragState.moved) {
         onHighlightedShapeChangeRef.current?.(pickShapeIndexAtClientPoint(event.clientX, event.clientY));
       }
@@ -289,11 +344,28 @@ export function PhysicalLayout3DCanvas({
       requestRender();
       syncViewportState();
     };
+    const handleClick = (event: MouseEvent) => {
+      if (event.button !== 0) {
+        return;
+      }
+
+      const helperHit = getViewHelperPointerHit(event.clientX, event.clientY);
+      if (!helperHit?.inside) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      if (helperHit.axis) {
+        startViewHelperAxisAnimation(helperHit.axis);
+      }
+    };
 
     host.addEventListener('pointerdown', handlePointerDown, true);
     host.addEventListener('pointermove', handlePointerMove, true);
     host.addEventListener('pointerup', handlePointerUp, true);
     host.addEventListener('pointercancel', handlePointerUp, true);
+    host.addEventListener('click', handleClick, true);
     host.addEventListener('wheel', handleWheel, { passive: false });
     host.addEventListener('dblclick', handleDoubleClick);
     return () => {
@@ -301,6 +373,7 @@ export function PhysicalLayout3DCanvas({
       host.removeEventListener('pointermove', handlePointerMove, true);
       host.removeEventListener('pointerup', handlePointerUp, true);
       host.removeEventListener('pointercancel', handlePointerUp, true);
+      host.removeEventListener('click', handleClick, true);
       host.removeEventListener('wheel', handleWheel);
       host.removeEventListener('dblclick', handleDoubleClick);
     };
@@ -381,13 +454,25 @@ export function PhysicalLayout3DCanvas({
       const renderer = rendererRef.current;
       const scene = sceneRef.current;
       const camera = cameraRef.current;
+      const orbitGroup = orbitGroupRef.current;
       if (!renderer || !scene || !camera) {
         return;
       }
 
+      const animating = updateViewHelperAnimation();
       updateTransforms();
       renderer.render(scene, camera);
+      if (viewHelperRef.current && orbitGroup) {
+        viewHelperRef.current.render(
+          renderer,
+          getPhysicalLayout3DViewHelperViewport(sizeRef.current.width, sizeRef.current.height),
+          orbitGroup.quaternion,
+        );
+      }
       renderCountRef.current += 1;
+      if (animating) {
+        requestRender();
+      }
       if (!isInteractingRef.current) {
         scheduleViewportStateSync(false);
       }
@@ -429,6 +514,87 @@ export function PhysicalLayout3DCanvas({
       pan: panRef.current,
       zoom: zoomRef.current,
     });
+    setViewHelperState((current) => ({
+      ...current,
+      animating: Boolean(viewHelperAnimationRef.current),
+      positions: getViewHelperEndpointPositions(),
+    }));
+  };
+
+  const startViewHelperAxisAnimation = (axis: PhysicalLayout3DViewHelperAxis) => {
+    lastViewHelperAxisRef.current = axis;
+    viewHelperAnimationRef.current = {
+      axis,
+      from: orbitRef.current,
+      start: window.performance.now(),
+      to: getPhysicalLayout3DViewHelperTargetOrbit(axis),
+    };
+    setViewHelperState((current) => ({
+      ...current,
+      animating: true,
+      lastAxis: lastViewHelperAxisRef.current,
+    }));
+    requestRender();
+  };
+
+  const updateViewHelperAnimation = () => {
+    const animation = viewHelperAnimationRef.current;
+    if (!animation) {
+      return false;
+    }
+
+    const progress = clamp((window.performance.now() - animation.start) / viewHelperAnimationDurationMs, 0, 1);
+    const eased = easeInOutCubic(progress);
+    orbitRef.current = {
+      angleX: interpolateOrbitAngle(animation.from.angleX, animation.to.angleX, eased),
+      angleY: interpolateOrbitAngle(animation.from.angleY, animation.to.angleY, eased),
+    };
+
+    if (progress >= 1) {
+      orbitRef.current = animation.to;
+      viewHelperAnimationRef.current = null;
+      syncViewportState();
+      return false;
+    }
+
+    return true;
+  };
+
+  const getViewHelperEndpointPositions = (): PhysicalLayout3DViewHelperEndpointPositions | null => {
+    const viewHelper = viewHelperRef.current;
+    if (!viewHelper) {
+      return null;
+    }
+
+    return viewHelper.getEndpointPositions(getPhysicalLayout3DViewHelperViewport(sizeRef.current.width, sizeRef.current.height));
+  };
+
+  const getViewHelperPointerHit = (clientX: number, clientY: number): {
+    axis: PhysicalLayout3DViewHelperAxis | null;
+    inside: boolean;
+  } | null => {
+    const host = hostRef.current;
+    const viewHelper = viewHelperRef.current;
+    if (!host || !viewHelper) {
+      return null;
+    }
+
+    const bounds = host.getBoundingClientRect();
+    const viewport = getPhysicalLayout3DViewHelperViewport(sizeRef.current.width, sizeRef.current.height);
+    const viewportX = clientX - bounds.left;
+    const viewportY = clientY - bounds.top;
+    const inside = viewportX >= viewport.left
+      && viewportY >= viewport.top
+      && viewportX <= viewport.left + viewport.width
+      && viewportY <= viewport.top + viewport.height;
+    if (!inside) {
+      return null;
+    }
+
+    return {
+      axis: viewHelper.hitTest(viewportX, viewportY, viewport),
+      inside,
+    };
   };
 
   const pickShapeIndexAtClientPoint = (clientX: number, clientY: number): number | null => {
@@ -499,6 +665,22 @@ export function PhysicalLayout3DCanvas({
       data-viewport-framed="true"
       data-viewport-left-border="false"
       data-visible-shape-count={sceneInput.meshes.length}
+      data-view-helper-animating={viewHelperState.animating ? 'true' : 'false'}
+      data-view-helper-last-axis={viewHelperState.lastAxis}
+      data-view-helper-neg-x-screen-x={formatViewHelperPosition(viewHelperState.positions?.negX?.x)}
+      data-view-helper-neg-x-screen-y={formatViewHelperPosition(viewHelperState.positions?.negX?.y)}
+      data-view-helper-neg-y-screen-x={formatViewHelperPosition(viewHelperState.positions?.negY?.x)}
+      data-view-helper-neg-y-screen-y={formatViewHelperPosition(viewHelperState.positions?.negY?.y)}
+      data-view-helper-neg-z-screen-x={formatViewHelperPosition(viewHelperState.positions?.negZ?.x)}
+      data-view-helper-neg-z-screen-y={formatViewHelperPosition(viewHelperState.positions?.negZ?.y)}
+      data-view-helper-pos-x-screen-x={formatViewHelperPosition(viewHelperState.positions?.posX?.x)}
+      data-view-helper-pos-x-screen-y={formatViewHelperPosition(viewHelperState.positions?.posX?.y)}
+      data-view-helper-pos-y-screen-x={formatViewHelperPosition(viewHelperState.positions?.posY?.x)}
+      data-view-helper-pos-y-screen-y={formatViewHelperPosition(viewHelperState.positions?.posY?.y)}
+      data-view-helper-pos-z-screen-x={formatViewHelperPosition(viewHelperState.positions?.posZ?.x)}
+      data-view-helper-pos-z-screen-y={formatViewHelperPosition(viewHelperState.positions?.posZ?.y)}
+      data-view-helper-size={physicalLayout3DViewHelperSize}
+      data-view-helper-visible="true"
       data-zoom={viewportState.zoom.toFixed(4)}
       role="img"
       tabIndex={0}
@@ -745,7 +927,22 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
+function easeInOutCubic(value: number) {
+  return value < 0.5
+    ? 4 * value * value * value
+    : 1 - ((-2 * value + 2) ** 3) / 2;
+}
+
+function interpolateOrbitAngle(from: number, to: number, amount: number) {
+  const delta = normalizeOrbitAngle(to - from);
+  return normalizeOrbitAngle(from + delta * amount);
+}
+
 function normalizeOrbitAngle(value: number) {
   const turn = Math.PI * 2;
   return ((((value + Math.PI) % turn) + turn) % turn) - Math.PI;
+}
+
+function formatViewHelperPosition(value: number | undefined) {
+  return typeof value === 'number' && Number.isFinite(value) ? value.toFixed(2) : '';
 }

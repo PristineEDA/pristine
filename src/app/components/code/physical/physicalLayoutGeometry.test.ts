@@ -29,6 +29,12 @@ import {
   physicalLayout3DRenderOrders,
 } from './physicalLayout3dRendering';
 import {
+  getPhysicalLayout3DViewHelperAxisColor,
+  getPhysicalLayout3DViewHelperTargetOrbit,
+  getPhysicalLayout3DViewHelperViewport,
+  physicalLayout3DViewHelperSize,
+} from './physicalLayout3dViewHelper';
+import {
   createPhysicalLayoutLayerTree,
   createPhysicalLayoutPinLabels,
   createPhysicalLayoutVisibility,
@@ -336,6 +342,24 @@ describe('physicalLayoutGeometry', () => {
     expect(getPhysicalLayout3DShapeRenderOrder(meshInput, false)).toBeLessThan(getPhysicalLayout3DEdgeRenderOrder(meshInput, false));
     expect(getPhysicalLayout3DShapeRenderOrder(meshInput, true)).toBeGreaterThan(getPhysicalLayout3DEdgeRenderOrder(meshInput, false));
     expect(getPhysicalLayout3DShapeRenderOrder(meshInput, false)).toBeLessThan(getPhysicalLayout3DShapeRenderOrder(nextMeshInput, false));
+  });
+
+  it('defines the Physical 3D view helper viewport, colors, and axis targets', () => {
+    expect(physicalLayout3DViewHelperSize).toBe(128);
+    expect(getPhysicalLayout3DViewHelperViewport(500, 300)).toEqual({
+      height: 128,
+      left: 364,
+      top: 8,
+      width: 128,
+    });
+    expect(getPhysicalLayout3DViewHelperAxisColor('posX')).toBe(0xff4466);
+    expect(getPhysicalLayout3DViewHelperAxisColor('posY')).toBe(0x88ff44);
+    expect(getPhysicalLayout3DViewHelperAxisColor('posZ')).toBe(0x4488ff);
+    expect(getPhysicalLayout3DViewHelperAxisColor('negX')).toBe(0x222222);
+    expect(getPhysicalLayout3DViewHelperTargetOrbit('posZ')).toEqual({ angleX: 0, angleY: 0 });
+    expect(getPhysicalLayout3DViewHelperTargetOrbit('negZ')).toEqual({ angleX: Math.PI, angleY: 0 });
+    expect(getPhysicalLayout3DViewHelperTargetOrbit('posX').angleY).toBeCloseTo(-Math.PI / 2);
+    expect(getPhysicalLayout3DViewHelperTargetOrbit('negY').angleY).toBeCloseTo(Math.PI);
   });
 
   it('finds the topmost visible shape at a layout point', () => {

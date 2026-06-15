@@ -87,6 +87,12 @@ vi.mock('./PhysicalLayout3DCanvas', () => ({
       data-viewport-framed="true"
       data-viewport-left-border="false"
       data-visible-shape-count={geometry?.shapes.length ?? 0}
+      data-view-helper-animating="false"
+      data-view-helper-last-axis=""
+      data-view-helper-pos-x-screen-x="96.00"
+      data-view-helper-pos-x-screen-y="64.00"
+      data-view-helper-size="128"
+      data-view-helper-visible="true"
       data-zoom="1.0000"
       onClick={() => onHighlightedShapeChange?.(geometry?.shapes[1]?.index ?? null)}
     />
@@ -275,6 +281,9 @@ describe('PhysicalWorkspacePanels', () => {
     expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveAttribute('data-material-side', 'double');
     expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveAttribute('data-orbit-render-mode', 'raf-ref-interaction-idle-sync');
     expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveAttribute('data-shape-opacity-mode', 'opaque');
+    expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveAttribute('data-view-helper-visible', 'true');
+    expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveAttribute('data-view-helper-size', '128');
+    expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveAttribute('data-view-helper-animating', 'false');
     expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveAttribute('data-selected-target-name', 'CHILD');
     expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveAttribute('data-source-kind', 'gds');
   });

@@ -2158,6 +2158,8 @@ test('Physical layout requests indexed geometry for LEF macros and GDS cells', a
       timeout: UI_READY_TIMEOUT_MS,
     });
     await expect(layout3DCanvas).toHaveAttribute('data-shape-opacity-mode', 'opaque', { timeout: UI_READY_TIMEOUT_MS });
+    await expect(layout3DCanvas).toHaveAttribute('data-view-helper-visible', 'true', { timeout: UI_READY_TIMEOUT_MS });
+    await expect(layout3DCanvas).toHaveAttribute('data-view-helper-size', '128', { timeout: UI_READY_TIMEOUT_MS });
     await expect(layout3DCanvas).toHaveAttribute('data-selected-target-name', 'sg13g2_xor2_1', {
       timeout: UI_READY_TIMEOUT_MS,
     });
@@ -2339,6 +2341,50 @@ test('Physical layout requests indexed geometry for LEF macros and GDS cells', a
       await expect(layout3DCanvas).toHaveAttribute('data-visible-shape-count', String(visibleShapeCountBeforeBacksideOrbit), {
         timeout: UI_READY_TIMEOUT_MS,
       });
+
+      await expect.poll(async () => {
+        const [x, y] = await Promise.all([
+          layout3DCanvas.getAttribute('data-view-helper-pos-x-screen-x'),
+          layout3DCanvas.getAttribute('data-view-helper-pos-x-screen-y'),
+        ]);
+        const screenX = Number(x ?? 'NaN');
+        const screenY = Number(y ?? 'NaN');
+        return Number.isFinite(screenX) && Number.isFinite(screenY) ? 'ready' : '';
+      }, {
+        timeout: UI_READY_TIMEOUT_MS,
+      }).toBe('ready');
+      const viewHelperLastAxisBefore = await layout3DCanvas.getAttribute('data-view-helper-last-axis');
+      const viewHelperOrbitBefore = Number(await layout3DCanvas.getAttribute('data-orbit-angle-y') ?? '0');
+      const renderCountBeforeViewHelper = Number(await layout3DCanvas.getAttribute('data-render-count') ?? '0');
+      const highlightedShapeBeforeHelperBlank = await layout3DCanvas.getAttribute('data-highlighted-shape-index');
+      const helperBlankX = threeBox.width - 122;
+      const helperBlankY = 16;
+      await layout3DCanvas.click({ position: { x: helperBlankX, y: helperBlankY } });
+      await expect(layout3DCanvas).toHaveAttribute('data-highlighted-shape-index', highlightedShapeBeforeHelperBlank ?? '', {
+        timeout: UI_READY_TIMEOUT_MS,
+      });
+      const refreshedViewHelperPosX = {
+        screenX: Number(await layout3DCanvas.getAttribute('data-view-helper-pos-x-screen-x') ?? 'NaN'),
+        screenY: Number(await layout3DCanvas.getAttribute('data-view-helper-pos-x-screen-y') ?? 'NaN'),
+      };
+      expect(Number.isFinite(refreshedViewHelperPosX.screenX)).toBe(true);
+      expect(Number.isFinite(refreshedViewHelperPosX.screenY)).toBe(true);
+      await layout3DCanvas.click({
+        position: {
+          x: refreshedViewHelperPosX.screenX,
+          y: refreshedViewHelperPosX.screenY,
+        },
+      });
+      await expect(layout3DCanvas).toHaveAttribute('data-view-helper-last-axis', 'posX', {
+        timeout: UI_READY_TIMEOUT_MS,
+      });
+      await expect.poll(async () => Number(await layout3DCanvas.getAttribute('data-render-count') ?? '0'), {
+        timeout: UI_READY_TIMEOUT_MS,
+      }).toBeGreaterThan(renderCountBeforeViewHelper);
+      await expect.poll(async () => Number(await layout3DCanvas.getAttribute('data-orbit-angle-y') ?? '0'), {
+        timeout: UI_READY_TIMEOUT_MS,
+      }).not.toBe(viewHelperOrbitBefore);
+      expect(viewHelperLastAxisBefore).not.toBe('posX');
 
       await layout3DCanvas.hover();
       await window.mouse.wheel(0, 180);
