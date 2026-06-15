@@ -322,13 +322,13 @@ describe('physicalLayoutGeometry', () => {
       transparent: true,
     });
     expect(getPhysicalLayout3DBaseGridMaterialOptions()).toMatchObject({
-      depthTest: false,
+      depthTest: true,
       depthWrite: false,
       side: 2,
       transparent: true,
     });
     expect(getPhysicalLayout3DBaseOutlineMaterialOptions()).toMatchObject({
-      depthTest: false,
+      depthTest: true,
       depthWrite: false,
       transparent: true,
     });

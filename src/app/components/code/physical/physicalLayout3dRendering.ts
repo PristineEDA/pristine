@@ -69,7 +69,7 @@ export function getPhysicalLayout3DEdgeMaterialOptions(
 export function getPhysicalLayout3DBaseGridMaterialOptions(): THREE.MeshBasicMaterialParameters {
   return {
     color: 0x121820,
-    depthTest: false,
+    depthTest: true,
     depthWrite: false,
     opacity: 0.78,
     side: THREE.DoubleSide,
@@ -80,7 +80,7 @@ export function getPhysicalLayout3DBaseGridMaterialOptions(): THREE.MeshBasicMat
 export function getPhysicalLayout3DBaseOutlineMaterialOptions(): THREE.LineBasicMaterialParameters {
   return {
     color: 0x384552,
-    depthTest: false,
+    depthTest: true,
     depthWrite: false,
     opacity: 0.75,
     transparent: true,

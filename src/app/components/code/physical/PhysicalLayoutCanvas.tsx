@@ -75,6 +75,7 @@ export function PhysicalLayoutCanvas({
   const [camera, setCamera] = useState<PhysicalLayoutCamera>(defaultCamera);
   const [renderCount, setRenderCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [lastPick, setLastPick] = useState<{ shapeIndex: number | null; worldX: number; worldY: number } | null>(null);
   const [size, setSize] = useState({ width: minimumCanvasWidth, height: minimumCanvasHeight });
 
   const selectedShapes = useMemo(
@@ -203,6 +204,9 @@ export function PhysicalLayoutCanvas({
     }
 
     const dragState = {
+      downCamera: defaultCamera,
+      downX: 0,
+      downY: 0,
       moved: false,
       pointerId: -1,
       previousX: 0,
@@ -215,6 +219,24 @@ export function PhysicalLayoutCanvas({
       const bounds = host.getBoundingClientRect();
       updateCamera(applyLayoutWheel(cameraRef.current, event, { x: bounds.left, y: bounds.top }));
     };
+    const selectShapeAtClientPoint = (
+      clientX: number,
+      clientY: number,
+      camera: PhysicalLayoutCamera,
+      options: { clearWhenEmpty: boolean } = { clearWhenEmpty: true },
+    ) => {
+      const bounds = host.getBoundingClientRect();
+      const point = layoutClientPointToWorldPoint(
+        { x: clientX, y: clientY },
+        bounds,
+        camera,
+      );
+      const shape = findShapeAtLayoutPoint(selectedShapesRef.current, point, 4 / camera.zoom);
+      setLastPick({ shapeIndex: shape?.index ?? null, worldX: point.x, worldY: point.y });
+      if (shape || options.clearWhenEmpty) {
+        onHighlightedShapeChangeRef.current?.(shape?.index ?? null);
+      }
+    };
     const handlePointerDown = (event: PointerEvent) => {
       if (event.button !== 0) {
         return;
@@ -222,6 +244,9 @@ export function PhysicalLayoutCanvas({
 
       dragState.moved = false;
       dragState.pointerId = event.pointerId;
+      dragState.downCamera = cameraRef.current;
+      dragState.downX = event.clientX;
+      dragState.downY = event.clientY;
       dragState.previousX = event.clientX;
       dragState.previousY = event.clientY;
       dragState.totalDistance = 0;
@@ -251,19 +276,19 @@ export function PhysicalLayoutCanvas({
 
       dragState.pointerId = -1;
       if (!dragState.moved) {
-        const bounds = host.getBoundingClientRect();
-        const point = layoutClientPointToWorldPoint(
-          { x: event.clientX, y: event.clientY },
-          bounds,
-          cameraRef.current,
-        );
-        const shape = findShapeAtLayoutPoint(selectedShapesRef.current, point, 4 / cameraRef.current.zoom);
-        onHighlightedShapeChangeRef.current?.(shape?.index ?? null);
+        selectShapeAtClientPoint(dragState.downX, dragState.downY, dragState.downCamera);
       }
 
       if (host.hasPointerCapture(event.pointerId)) {
         host.releasePointerCapture(event.pointerId);
       }
+    };
+    const handleClick = (event: MouseEvent) => {
+      if (event.button !== 0 || dragState.moved) {
+        return;
+      }
+
+      selectShapeAtClientPoint(event.clientX, event.clientY, cameraRef.current, { clearWhenEmpty: false });
     };
 
     host.addEventListener('wheel', handleWheel, { passive: false });
@@ -271,12 +296,14 @@ export function PhysicalLayoutCanvas({
     host.addEventListener('pointermove', handlePointerMove, true);
     host.addEventListener('pointerup', handlePointerUp, true);
     host.addEventListener('pointercancel', handlePointerUp, true);
+    host.addEventListener('click', handleClick, true);
     return () => {
       host.removeEventListener('wheel', handleWheel);
       host.removeEventListener('pointerdown', handlePointerDown, true);
       host.removeEventListener('pointermove', handlePointerMove, true);
       host.removeEventListener('pointerup', handlePointerUp, true);
       host.removeEventListener('pointercancel', handlePointerUp, true);
+      host.removeEventListener('click', handleClick, true);
     };
   }, []);
 
@@ -358,6 +385,9 @@ export function PhysicalLayoutCanvas({
       data-highlighted-shape-index={highlightedShapeIndex ?? ''}
       data-outline-visible={outlineVisible ? 'true' : 'false'}
       data-layer-count={layerCount}
+      data-last-pick-shape-index={lastPick?.shapeIndex ?? ''}
+      data-last-pick-world-x={lastPick ? lastPick.worldX.toFixed(4) : ''}
+      data-last-pick-world-y={lastPick ? lastPick.worldY.toFixed(4) : ''}
       data-macro-count={catalog?.macros.length ?? 0}
       data-pan-x={camera.panX.toFixed(2)}
       data-pan-y={camera.panY.toFixed(2)}
@@ -464,7 +494,7 @@ function getPickableVisibleShape(
   const tolerance = 4 / camera.zoom;
   for (let shapeIndex = shapes.length - 1; shapeIndex >= 0; shapeIndex -= 1) {
     const shape = shapes[shapeIndex];
-    if (!shape) {
+    if (!shape || shape.kind === 'path' || shape.kind === 'text') {
       continue;
     }
 

@@ -67,6 +67,7 @@ vi.mock('./PhysicalLayout3DCanvas', () => ({
     selectedTarget: PhysicalLayoutTarget | null;
   }) => (
     <div
+      data-base-grid-depth-test="true"
       data-depth-write-mode="solid-mesh"
       data-highlighted-shape-index={highlightedShapeIndex ?? ''}
       data-material-side="double"
@@ -269,6 +270,7 @@ describe('PhysicalWorkspacePanels', () => {
     expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveAttribute('data-viewport-framed', 'true');
     expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveAttribute('data-viewport-left-border', 'false');
     expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveAttribute('data-orbit-origin', 'bounds3d');
+    expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveAttribute('data-base-grid-depth-test', 'true');
     expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveAttribute('data-depth-write-mode', 'solid-mesh');
     expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveAttribute('data-material-side', 'double');
     expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveAttribute('data-orbit-render-mode', 'raf-ref-interaction-idle-sync');

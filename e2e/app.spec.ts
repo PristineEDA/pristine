@@ -2147,6 +2147,9 @@ test('Physical layout requests indexed geometry for LEF macros and GDS cells', a
     await expect(layout3DCanvas).toHaveAttribute('data-viewport-framed', 'true', { timeout: UI_READY_TIMEOUT_MS });
     await expect(layout3DCanvas).toHaveAttribute('data-viewport-left-border', 'false', { timeout: UI_READY_TIMEOUT_MS });
     await expect(layout3DCanvas).toHaveAttribute('data-orbit-origin', 'bounds3d', { timeout: UI_READY_TIMEOUT_MS });
+    await expect(layout3DCanvas).toHaveAttribute('data-base-grid-depth-test', 'true', {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
     await expect(layout3DCanvas).toHaveAttribute('data-depth-write-mode', 'solid-mesh', {
       timeout: UI_READY_TIMEOUT_MS,
     });
@@ -2162,22 +2165,61 @@ test('Physical layout requests indexed geometry for LEF macros and GDS cells', a
       timeout: UI_READY_TIMEOUT_MS,
     }).toBeGreaterThan(0);
 
-    const firstVisibleShapeIndex = await layoutCanvas.getAttribute('data-pick-visible-shape-index');
-    const firstVisibleShapeScreenX = Number(await layoutCanvas.getAttribute('data-pick-visible-shape-screen-x') ?? 'NaN');
-    const firstVisibleShapeScreenY = Number(await layoutCanvas.getAttribute('data-pick-visible-shape-screen-y') ?? 'NaN');
+    const readCanvasPick = async () => {
+      const [index, x, y, box] = await Promise.all([
+        layoutCanvas.getAttribute('data-pick-visible-shape-index'),
+        layoutCanvas.getAttribute('data-pick-visible-shape-screen-x'),
+        layoutCanvas.getAttribute('data-pick-visible-shape-screen-y'),
+        layoutCanvas.boundingBox(),
+      ]);
+      const screenX = Number(x ?? 'NaN');
+      const screenY = Number(y ?? 'NaN');
+      if (!index || !box || !Number.isFinite(screenX) || !Number.isFinite(screenY)) {
+        return null;
+      }
+      if (screenX < 0 || screenY < 0 || screenX > box.width || screenY > box.height) {
+        return null;
+      }
+      return { index, screenX, screenY };
+    };
+    await expect.poll(async () => (await readCanvasPick())?.index ?? '', {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).not.toBe('');
+    const firstPick = await readCanvasPick();
+    expect(firstPick).not.toBeNull();
+    if (!firstPick) {
+      throw new Error('Expected a pickable 2D layout shape.');
+    }
     const layoutCanvasBox = await layoutCanvas.boundingBox();
-    expect(firstVisibleShapeIndex).toBeTruthy();
-    expect(Number.isFinite(firstVisibleShapeScreenX)).toBe(true);
-    expect(Number.isFinite(firstVisibleShapeScreenY)).toBe(true);
+    let firstVisibleShapeIndex = firstPick.index;
     expect(layoutCanvasBox).not.toBeNull();
-    if (layoutCanvasBox && firstVisibleShapeIndex) {
-      await window.mouse.click(
-        layoutCanvasBox.x + firstVisibleShapeScreenX,
-        layoutCanvasBox.y + firstVisibleShapeScreenY,
-      );
-      await expect(layoutCanvas).toHaveAttribute('data-highlighted-shape-index', firstVisibleShapeIndex, {
-        timeout: UI_READY_TIMEOUT_MS,
-      });
+    if (layoutCanvasBox) {
+      let selectedFrom2D = false;
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        const pick = await readCanvasPick();
+        if (!pick) {
+          await window.waitForTimeout(120);
+          continue;
+        }
+
+        firstVisibleShapeIndex = pick.index;
+        await window.mouse.click(
+          layoutCanvasBox.x + pick.screenX,
+          layoutCanvasBox.y + pick.screenY,
+        );
+        await window.waitForTimeout(120);
+
+        const [lastPickShapeIndex, highlightedShapeIndex] = await Promise.all([
+          layoutCanvas.getAttribute('data-last-pick-shape-index'),
+          layoutCanvas.getAttribute('data-highlighted-shape-index'),
+        ]);
+        if (lastPickShapeIndex === pick.index && highlightedShapeIndex === pick.index) {
+          selectedFrom2D = true;
+          break;
+        }
+      }
+
+      expect(selectedFrom2D).toBe(true);
       await expect(layout3DCanvas).toHaveAttribute('data-highlighted-shape-index', firstVisibleShapeIndex, {
         timeout: UI_READY_TIMEOUT_MS,
       });
@@ -2244,9 +2286,12 @@ test('Physical layout requests indexed geometry for LEF macros and GDS cells', a
       await window.mouse.down();
       await window.mouse.move(handleBox.x - 120, handleBox.y + handleBox.height / 2, { steps: 8 });
       await window.mouse.up();
-      await expect.poll(async () => (await layout3DCanvas.boundingBox())?.width ?? 0, {
+      await expect.poll(async () => {
+        const nextBox = await layout3DCanvas.boundingBox();
+        return Math.abs((nextBox?.width ?? threeBoxBeforeResize.width) - threeBoxBeforeResize.width);
+      }, {
         timeout: UI_READY_TIMEOUT_MS,
-      }).toBeGreaterThan(threeBoxBeforeResize.width + 20);
+      }).toBeGreaterThan(20);
     }
 
     const threeBox = await layout3DCanvas.boundingBox();

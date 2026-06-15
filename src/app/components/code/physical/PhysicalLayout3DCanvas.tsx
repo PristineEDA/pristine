@@ -473,9 +473,9 @@ export function PhysicalLayout3DCanvas({
       ref={hostRef}
       aria-label="Physical layout 3D canvas"
       className="relative box-border h-full min-h-0 w-full overflow-hidden border border-l-0 border-ide-border/80 bg-[#101317] outline-none [&>canvas]:block [&>canvas]:h-full [&>canvas]:max-h-full [&>canvas]:max-w-full [&>canvas]:w-full"
-      data-depth-write-disabled="true"
-      data-material-side="double"
+      data-base-grid-depth-test="true"
       data-depth-write-mode="solid-mesh"
+      data-material-side="double"
       data-orbit-origin="bounds3d"
       data-orbit-angle-x={viewportState.orbit.angleX.toFixed(4)}
       data-orbit-angle-y={viewportState.orbit.angleY.toFixed(4)}
