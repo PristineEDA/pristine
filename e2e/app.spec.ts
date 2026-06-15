@@ -2197,6 +2197,7 @@ test('Physical layout requests indexed geometry for LEF macros and GDS cells', a
         timeout: UI_READY_TIMEOUT_MS,
       }).toBeGreaterThan(renderCountBeforeOrbit);
 
+      const orbitAngleXBeforeFullOrbit = Number(await layout3DCanvas.getAttribute('data-orbit-angle-x') ?? '0');
       const renderCountBeforeFullOrbit = Number(await layout3DCanvas.getAttribute('data-render-count') ?? '0');
       await window.mouse.move(threeBox.x + threeBox.width / 2, threeBox.y + threeBox.height / 2);
       await window.mouse.down();
@@ -2204,7 +2205,7 @@ test('Physical layout requests indexed geometry for LEF macros and GDS cells', a
       await window.mouse.up();
       await expect.poll(async () => Number(await layout3DCanvas.getAttribute('data-orbit-angle-x') ?? '0'), {
         timeout: UI_READY_TIMEOUT_MS,
-      }).toBeLessThan(-1.35);
+      }).toBeLessThan(orbitAngleXBeforeFullOrbit - 0.5);
       await expect.poll(async () => Number(await layout3DCanvas.getAttribute('data-render-count') ?? '0'), {
         timeout: UI_READY_TIMEOUT_MS,
       }).toBeGreaterThan(renderCountBeforeFullOrbit);
