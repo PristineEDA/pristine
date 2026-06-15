@@ -20,6 +20,15 @@ import {
   getPhysicalLayout3DLayerZ,
 } from './physicalLayout3dGeometry';
 import {
+  getPhysicalLayout3DBaseGridMaterialOptions,
+  getPhysicalLayout3DBaseOutlineMaterialOptions,
+  getPhysicalLayout3DEdgeMaterialOptions,
+  getPhysicalLayout3DEdgeRenderOrder,
+  getPhysicalLayout3DMeshMaterialOptions,
+  getPhysicalLayout3DShapeRenderOrder,
+  physicalLayout3DRenderOrders,
+} from './physicalLayout3dRendering';
+import {
   createPhysicalLayoutLayerTree,
   createPhysicalLayoutPinLabels,
   createPhysicalLayoutVisibility,
@@ -279,6 +288,54 @@ describe('physicalLayoutGeometry', () => {
     );
 
     expect(hiddenBoundaryInput.meshes.map((mesh) => mesh.category)).toEqual(['path', 'text']);
+  });
+
+  it('uses stable 2.5D material depth settings and render ordering', () => {
+    const selectedTarget = { kind: 'gdsCell' as const, name: 'CHILD', index: 1 };
+    const selectedShapes = layoutFixtureGdsGeometry.shapes.filter((shape) => shape.macroIndex === selectedTarget.index);
+    const visibility = createPhysicalLayoutVisibility(layoutFixtureGdsOpenResult.catalog, true, selectedShapes);
+    const sceneInput = createPhysicalLayout3DSceneInput(
+      layoutFixtureGdsOpenResult.catalog,
+      layoutFixtureGdsGeometry,
+      selectedTarget,
+      visibility,
+    );
+    const meshInput = sceneInput.meshes[0];
+    const nextMeshInput = sceneInput.meshes[1];
+
+    expect(meshInput).toBeDefined();
+    expect(nextMeshInput).toBeDefined();
+    if (!meshInput || !nextMeshInput) {
+      return;
+    }
+
+    expect(getPhysicalLayout3DMeshMaterialOptions(meshInput, false)).toMatchObject({
+      depthTest: true,
+      depthWrite: true,
+      opacity: 1,
+      side: 2,
+      transparent: false,
+    });
+    expect(getPhysicalLayout3DEdgeMaterialOptions(meshInput, false)).toMatchObject({
+      depthTest: true,
+      depthWrite: false,
+      transparent: true,
+    });
+    expect(getPhysicalLayout3DBaseGridMaterialOptions()).toMatchObject({
+      depthTest: false,
+      depthWrite: false,
+      side: 2,
+      transparent: true,
+    });
+    expect(getPhysicalLayout3DBaseOutlineMaterialOptions()).toMatchObject({
+      depthTest: false,
+      depthWrite: false,
+      transparent: true,
+    });
+    expect(physicalLayout3DRenderOrders.baseGrid).toBeLessThan(physicalLayout3DRenderOrders.shapeBase);
+    expect(getPhysicalLayout3DShapeRenderOrder(meshInput, false)).toBeLessThan(getPhysicalLayout3DEdgeRenderOrder(meshInput, false));
+    expect(getPhysicalLayout3DShapeRenderOrder(meshInput, true)).toBeGreaterThan(getPhysicalLayout3DEdgeRenderOrder(meshInput, false));
+    expect(getPhysicalLayout3DShapeRenderOrder(meshInput, false)).toBeLessThan(getPhysicalLayout3DShapeRenderOrder(nextMeshInput, false));
   });
 
   it('finds the topmost visible shape at a layout point', () => {

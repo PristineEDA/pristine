@@ -12,6 +12,15 @@ import {
   type PhysicalLayout3DCenter,
   type PhysicalLayout3DMeshInput,
 } from './physicalLayout3dGeometry';
+import {
+  getPhysicalLayout3DBaseGridMaterialOptions,
+  getPhysicalLayout3DBaseOutlineMaterialOptions,
+  getPhysicalLayout3DEdgeMaterialOptions,
+  getPhysicalLayout3DEdgeRenderOrder,
+  getPhysicalLayout3DMeshMaterialOptions,
+  getPhysicalLayout3DShapeRenderOrder,
+  physicalLayout3DRenderOrders,
+} from './physicalLayout3dRendering';
 import type { PhysicalLayoutTarget } from './physicalLayoutGeometry';
 import type { PhysicalLayoutVisibility } from './physicalLayoutLayers';
 
@@ -34,6 +43,7 @@ const defaultOrbit = {
 };
 const defaultZoom = 1;
 const clickDistanceThresholdPx = 4;
+const viewportStateSyncIntervalMs = 120;
 
 export function PhysicalLayout3DCanvas({
   catalog,
@@ -54,13 +64,22 @@ export function PhysicalLayout3DCanvas({
   const highlightedShapeIndexRef = useRef<number | null>(highlightedShapeIndex);
   const onHighlightedShapeChangeRef = useRef(onHighlightedShapeChange);
   const sizeRef = useRef({ width: minimumCanvasWidth, height: minimumCanvasHeight });
+  const orbitRef = useRef(defaultOrbit);
+  const panRef = useRef({ x: 0, y: 0 });
+  const zoomRef = useRef(defaultZoom);
+  const renderCountRef = useRef(0);
+  const lastViewportStateSyncAtRef = useRef(0);
+  const viewportStateSyncTimeoutRef = useRef<number | null>(null);
+  const isInteractingRef = useRef(false);
   const [rendererStatus, setRendererStatus] = useState<ThreeRendererStatus>('initializing');
   const [renderCount, setRenderCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [size, setSize] = useState({ width: minimumCanvasWidth, height: minimumCanvasHeight });
-  const [orbit, setOrbit] = useState(defaultOrbit);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
-  const [zoom, setZoom] = useState(defaultZoom);
+  const [viewportState, setViewportState] = useState({
+    orbit: defaultOrbit,
+    pan: { x: 0, y: 0 },
+    zoom: defaultZoom,
+  });
 
   const sceneInput = useMemo(
     () => createPhysicalLayout3DSceneInput(catalog, geometry, selectedTarget, layoutVisibility),
@@ -68,14 +87,16 @@ export function PhysicalLayout3DCanvas({
   );
 
   const sceneCenter = sceneInput.bounds3D ? getPhysicalLayout3DCenter(sceneInput.bounds3D) : null;
-  const pickableMeshHit = getPickableMeshHit(
-    sceneInput.meshes,
-    sceneCenter,
-    cameraRef.current,
-    orbitGroupRef.current,
-    size,
-    pickShapeIndexAtViewportPoint,
-  );
+  const pickableMeshHit = isInteractingRef.current
+    ? null
+    : getPickableMeshHit(
+      sceneInput.meshes,
+      sceneCenter,
+      cameraRef.current,
+      orbitGroupRef.current,
+      size,
+      pickShapeIndexAtViewportPoint,
+    );
   highlightedShapeIndexRef.current = highlightedShapeIndex;
   onHighlightedShapeChangeRef.current = onHighlightedShapeChange;
   sizeRef.current = size;
@@ -138,6 +159,10 @@ export function PhysicalLayout3DCanvas({
         window.cancelAnimationFrame(renderFrameRef.current);
         renderFrameRef.current = null;
       }
+      if (viewportStateSyncTimeoutRef.current !== null) {
+        window.clearTimeout(viewportStateSyncTimeoutRef.current);
+        viewportStateSyncTimeoutRef.current = null;
+      }
       disposeGroup(contentGroup);
       renderer.dispose();
       renderer.domElement.remove();
@@ -174,11 +199,6 @@ export function PhysicalLayout3DCanvas({
   }, [highlightedShapeIndex]);
 
   useEffect(() => {
-    updateTransforms();
-    requestRender();
-  }, [orbit.angleX, orbit.angleY, pan.x, pan.y, size.height, size.width, zoom]);
-
-  useEffect(() => {
     const host = hostRef.current;
     if (!host) {
       return undefined;
@@ -201,6 +221,7 @@ export function PhysicalLayout3DCanvas({
       dragState.previousX = event.clientX;
       dragState.previousY = event.clientY;
       dragState.totalDistance = 0;
+      isInteractingRef.current = false;
       host.setPointerCapture(event.pointerId);
     };
     const handlePointerMove = (event: PointerEvent) => {
@@ -218,10 +239,12 @@ export function PhysicalLayout3DCanvas({
         return;
       }
 
-      setOrbit((current) => ({
-        angleX: normalizeOrbitAngle(current.angleX + dy * 0.01),
-        angleY: normalizeOrbitAngle(current.angleY + dx * 0.01),
-      }));
+      isInteractingRef.current = true;
+      orbitRef.current = {
+        angleX: normalizeOrbitAngle(orbitRef.current.angleX + dy * 0.01),
+        angleY: normalizeOrbitAngle(orbitRef.current.angleY + dx * 0.01),
+      };
+      requestRender();
     };
     const handlePointerUp = (event: PointerEvent) => {
       if (dragState.pointerId !== event.pointerId) {
@@ -229,6 +252,8 @@ export function PhysicalLayout3DCanvas({
       }
 
       dragState.pointerId = -1;
+      isInteractingRef.current = false;
+      syncViewportState();
       if (!dragState.moved) {
         onHighlightedShapeChangeRef.current?.(pickShapeIndexAtClientPoint(event.clientX, event.clientY));
       }
@@ -240,21 +265,29 @@ export function PhysicalLayout3DCanvas({
     const handleWheel = (event: WheelEvent) => {
       event.preventDefault();
       if (event.ctrlKey || event.metaKey) {
-        setZoom((current) => clamp(current * Math.exp(-event.deltaY * 0.001), 0.28, 5));
+        zoomRef.current = clamp(zoomRef.current * Math.exp(-event.deltaY * 0.001), 0.28, 5);
+        requestRender();
+        scheduleViewportStateSync(true);
         return;
       }
 
       if (event.shiftKey) {
-        setPan((current) => ({ ...current, x: current.x + event.deltaY * 0.01 }));
+        panRef.current = { ...panRef.current, x: panRef.current.x + event.deltaY * 0.01 };
+        requestRender();
+        scheduleViewportStateSync(true);
         return;
       }
 
-      setPan((current) => ({ ...current, y: current.y - event.deltaY * 0.01 }));
+      panRef.current = { ...panRef.current, y: panRef.current.y - event.deltaY * 0.01 };
+      requestRender();
+      scheduleViewportStateSync(true);
     };
     const handleDoubleClick = () => {
-      setOrbit(defaultOrbit);
-      setPan({ x: 0, y: 0 });
-      setZoom(defaultZoom);
+      orbitRef.current = defaultOrbit;
+      panRef.current = { x: 0, y: 0 };
+      zoomRef.current = defaultZoom;
+      requestRender();
+      syncViewportState();
     };
 
     host.addEventListener('pointerdown', handlePointerDown, true);
@@ -293,7 +326,7 @@ export function PhysicalLayout3DCanvas({
       return;
     }
 
-    const view = getCameraView(sceneInput.bounds3D, width, height, zoom, pan);
+    const view = getCameraView(sceneInput.bounds3D, width, height, zoomRef.current, panRef.current);
     camera.left = view.left;
     camera.right = view.right;
     camera.top = view.top;
@@ -309,8 +342,8 @@ export function PhysicalLayout3DCanvas({
       return;
     }
 
-    orbitGroup.rotation.x = orbit.angleX;
-    orbitGroup.rotation.z = orbit.angleY;
+    orbitGroup.rotation.x = orbitRef.current.angleX;
+    orbitGroup.rotation.z = orbitRef.current.angleY;
     updateCamera();
   };
 
@@ -352,8 +385,49 @@ export function PhysicalLayout3DCanvas({
         return;
       }
 
+      updateTransforms();
       renderer.render(scene, camera);
-      setRenderCount((current) => current + 1);
+      renderCountRef.current += 1;
+      if (!isInteractingRef.current) {
+        scheduleViewportStateSync(false);
+      }
+    });
+  };
+
+  const scheduleViewportStateSync = (immediate: boolean) => {
+    if (immediate) {
+      syncViewportState();
+      return;
+    }
+
+    const now = window.performance.now();
+    if (now - lastViewportStateSyncAtRef.current >= viewportStateSyncIntervalMs) {
+      syncViewportState();
+      return;
+    }
+
+    if (viewportStateSyncTimeoutRef.current !== null) {
+      return;
+    }
+
+    const delay = Math.max(0, viewportStateSyncIntervalMs - (now - lastViewportStateSyncAtRef.current));
+    viewportStateSyncTimeoutRef.current = window.setTimeout(() => {
+      viewportStateSyncTimeoutRef.current = null;
+      syncViewportState();
+    }, delay);
+  };
+
+  const syncViewportState = () => {
+    if (viewportStateSyncTimeoutRef.current !== null) {
+      window.clearTimeout(viewportStateSyncTimeoutRef.current);
+      viewportStateSyncTimeoutRef.current = null;
+    }
+    lastViewportStateSyncAtRef.current = window.performance.now();
+    setRenderCount(renderCountRef.current);
+    setViewportState({
+      orbit: orbitRef.current,
+      pan: panRef.current,
+      zoom: zoomRef.current,
     });
   };
 
@@ -399,12 +473,16 @@ export function PhysicalLayout3DCanvas({
       ref={hostRef}
       aria-label="Physical layout 3D canvas"
       className="relative box-border h-full min-h-0 w-full overflow-hidden border border-l-0 border-ide-border/80 bg-[#101317] outline-none [&>canvas]:block [&>canvas]:h-full [&>canvas]:max-h-full [&>canvas]:max-w-full [&>canvas]:w-full"
+      data-depth-write-disabled="true"
+      data-material-side="double"
+      data-depth-write-mode="solid-mesh"
       data-orbit-origin="bounds3d"
-      data-orbit-angle-x={orbit.angleX.toFixed(4)}
-      data-orbit-angle-y={orbit.angleY.toFixed(4)}
+      data-orbit-angle-x={viewportState.orbit.angleX.toFixed(4)}
+      data-orbit-angle-y={viewportState.orbit.angleY.toFixed(4)}
+      data-orbit-render-mode="raf-ref-interaction-idle-sync"
       data-highlighted-shape-index={highlightedShapeIndex ?? ''}
-      data-pan-x={pan.x.toFixed(4)}
-      data-pan-y={pan.y.toFixed(4)}
+      data-pan-x={viewportState.pan.x.toFixed(4)}
+      data-pan-y={viewportState.pan.y.toFixed(4)}
       data-pick-visible-shape-index={pickableMeshHit?.shapeIndex ?? ''}
       data-pick-visible-shape-screen-x={pickableMeshHit ? pickableMeshHit.x.toFixed(2) : ''}
       data-pick-visible-shape-screen-y={pickableMeshHit ? pickableMeshHit.y.toFixed(2) : ''}
@@ -415,12 +493,13 @@ export function PhysicalLayout3DCanvas({
       data-scene-center-offset-z={sceneCenter ? sceneCenter.z.toFixed(4) : '0.0000'}
       data-selected-target-name={selectedTarget?.name ?? ''}
       data-shape-count={sceneInput.selectedShapeCount}
+      data-shape-opacity-mode="opaque"
       data-source-kind={catalog?.sourceKind ?? ''}
       data-testid="physical-layout-3d-canvas"
       data-viewport-framed="true"
       data-viewport-left-border="false"
       data-visible-shape-count={sceneInput.meshes.length}
-      data-zoom={zoom.toFixed(4)}
+      data-zoom={viewportState.zoom.toFixed(4)}
       role="img"
       tabIndex={0}
     >
@@ -458,23 +537,15 @@ function createExtrudedMesh(
     });
     geometry.translate(0, 0, input.z - center.z);
     const highlighted = input.shapeIndex === highlightedShapeIndex;
-    const material = new THREE.MeshStandardMaterial({
-      color: highlighted ? 0xf8fafc : input.color,
-      metalness: input.category === 'path' ? 0.28 : 0.12,
-      opacity: highlighted ? Math.min(0.96, input.opacity + 0.24) : input.opacity,
-      roughness: 0.58,
-      transparent: true,
-    });
+    const material = new THREE.MeshStandardMaterial(getPhysicalLayout3DMeshMaterialOptions(input, highlighted));
     const mesh = new THREE.Mesh(geometry, material);
+    mesh.renderOrder = getPhysicalLayout3DShapeRenderOrder(input, highlighted);
     mesh.userData.shapeIndex = input.shapeIndex;
     const edges = new THREE.LineSegments(
       new THREE.EdgesGeometry(geometry),
-      new THREE.LineBasicMaterial({
-        color: highlighted ? 0xffffff : input.color,
-        opacity: highlighted ? 1 : Math.min(1, input.opacity + 0.2),
-        transparent: true,
-      }),
+      new THREE.LineBasicMaterial(getPhysicalLayout3DEdgeMaterialOptions(input, highlighted)),
     );
+    edges.renderOrder = getPhysicalLayout3DEdgeRenderOrder(input, highlighted);
     edges.userData.shapeIndex = input.shapeIndex;
     const group = new THREE.Group();
     group.userData.shapeIndex = input.shapeIndex;
@@ -633,20 +704,17 @@ function createBaseGrid(bounds: LspLayoutBounds, center: PhysicalLayout3DCenter)
   const height = Math.max(bounds.y1 - bounds.y0, 0.001);
   const plane = new THREE.Mesh(
     new THREE.PlaneGeometry(width, height),
-    new THREE.MeshBasicMaterial({
-      color: 0x121820,
-      opacity: 0.78,
-      side: THREE.DoubleSide,
-      transparent: true,
-    }),
+    new THREE.MeshBasicMaterial(getPhysicalLayout3DBaseGridMaterialOptions()),
   );
+  plane.renderOrder = physicalLayout3DRenderOrders.baseGrid;
   plane.position.set((bounds.x0 + bounds.x1) / 2 - center.x, (bounds.y0 + bounds.y1) / 2 - center.y, -0.015 - center.z);
   group.add(plane);
 
   const outline = new THREE.LineSegments(
     new THREE.EdgesGeometry(new THREE.PlaneGeometry(width, height)),
-    new THREE.LineBasicMaterial({ color: 0x384552, opacity: 0.75, transparent: true }),
+    new THREE.LineBasicMaterial(getPhysicalLayout3DBaseOutlineMaterialOptions()),
   );
+  outline.renderOrder = physicalLayout3DRenderOrders.baseGridOutline;
   outline.position.copy(plane.position);
   group.add(outline);
   return group;

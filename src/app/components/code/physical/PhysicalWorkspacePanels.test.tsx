@@ -67,8 +67,11 @@ vi.mock('./PhysicalLayout3DCanvas', () => ({
     selectedTarget: PhysicalLayoutTarget | null;
   }) => (
     <div
+      data-depth-write-mode="solid-mesh"
       data-highlighted-shape-index={highlightedShapeIndex ?? ''}
+      data-material-side="double"
       data-orbit-origin="bounds3d"
+      data-orbit-render-mode="raf-ref-interaction-idle-sync"
       data-pan-x="0.0000"
       data-pan-y="0.0000"
       data-renderer="three-webgl"
@@ -76,6 +79,7 @@ vi.mock('./PhysicalLayout3DCanvas', () => ({
       data-scene-center-offset-y="1.5000"
       data-scene-center-offset-z="0.0625"
       data-selected-target-name={selectedTarget?.name ?? ''}
+      data-shape-opacity-mode="opaque"
       data-shape-count={geometry?.shapes.length ?? 0}
       data-source-kind={catalog?.sourceKind ?? ''}
       data-testid="physical-layout-3d-canvas"
@@ -265,6 +269,10 @@ describe('PhysicalWorkspacePanels', () => {
     expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveAttribute('data-viewport-framed', 'true');
     expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveAttribute('data-viewport-left-border', 'false');
     expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveAttribute('data-orbit-origin', 'bounds3d');
+    expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveAttribute('data-depth-write-mode', 'solid-mesh');
+    expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveAttribute('data-material-side', 'double');
+    expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveAttribute('data-orbit-render-mode', 'raf-ref-interaction-idle-sync');
+    expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveAttribute('data-shape-opacity-mode', 'opaque');
     expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveAttribute('data-selected-target-name', 'CHILD');
     expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveAttribute('data-source-kind', 'gds');
   });

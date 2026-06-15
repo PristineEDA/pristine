@@ -2147,6 +2147,14 @@ test('Physical layout requests indexed geometry for LEF macros and GDS cells', a
     await expect(layout3DCanvas).toHaveAttribute('data-viewport-framed', 'true', { timeout: UI_READY_TIMEOUT_MS });
     await expect(layout3DCanvas).toHaveAttribute('data-viewport-left-border', 'false', { timeout: UI_READY_TIMEOUT_MS });
     await expect(layout3DCanvas).toHaveAttribute('data-orbit-origin', 'bounds3d', { timeout: UI_READY_TIMEOUT_MS });
+    await expect(layout3DCanvas).toHaveAttribute('data-depth-write-mode', 'solid-mesh', {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await expect(layout3DCanvas).toHaveAttribute('data-material-side', 'double', { timeout: UI_READY_TIMEOUT_MS });
+    await expect(layout3DCanvas).toHaveAttribute('data-orbit-render-mode', 'raf-ref-interaction-idle-sync', {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await expect(layout3DCanvas).toHaveAttribute('data-shape-opacity-mode', 'opaque', { timeout: UI_READY_TIMEOUT_MS });
     await expect(layout3DCanvas).toHaveAttribute('data-selected-target-name', 'sg13g2_xor2_1', {
       timeout: UI_READY_TIMEOUT_MS,
     });
@@ -2272,6 +2280,20 @@ test('Physical layout requests indexed geometry for LEF macros and GDS cells', a
       await expect.poll(async () => Number(await layout3DCanvas.getAttribute('data-render-count') ?? '0'), {
         timeout: UI_READY_TIMEOUT_MS,
       }).toBeGreaterThan(renderCountBeforeFullOrbit);
+
+      const visibleShapeCountBeforeBacksideOrbit = Number(await layout3DCanvas.getAttribute('data-visible-shape-count') ?? '0');
+      const renderCountBeforeBacksideOrbit = Number(await layout3DCanvas.getAttribute('data-render-count') ?? '0');
+      await window.mouse.move(threeBox.x + threeBox.width / 2, threeBox.y + threeBox.height / 2);
+      await window.mouse.down();
+      await window.mouse.move(threeBox.x + threeBox.width / 2 + 140, threeBox.y + threeBox.height / 2 + 180, { steps: 14 });
+      await window.mouse.move(threeBox.x + threeBox.width / 2 - 110, threeBox.y + threeBox.height / 2 - 160, { steps: 14 });
+      await window.mouse.up();
+      await expect.poll(async () => Number(await layout3DCanvas.getAttribute('data-render-count') ?? '0'), {
+        timeout: UI_READY_TIMEOUT_MS,
+      }).toBeGreaterThan(renderCountBeforeBacksideOrbit);
+      await expect(layout3DCanvas).toHaveAttribute('data-visible-shape-count', String(visibleShapeCountBeforeBacksideOrbit), {
+        timeout: UI_READY_TIMEOUT_MS,
+      });
 
       await layout3DCanvas.hover();
       await window.mouse.wheel(0, 180);
