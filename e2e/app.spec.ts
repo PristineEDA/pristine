@@ -2253,11 +2253,17 @@ test('window controls toggle minimize and maximize state', async () => {
 
   const maximizeButton = window.getByTestId('window-control-maximize');
   await expect(maximizeButton).toBeVisible();
+  await expect(maximizeButton).toHaveAttribute('aria-label', 'Maximize Window');
+  await expect(maximizeButton.locator('svg.lucide-square')).toBeVisible();
   await maximizeButton.click();
   await expect.poll(async () => browserWindow.evaluate((win) => win.isMaximized())).toBe(true);
+  await expect(maximizeButton).toHaveAttribute('aria-label', 'Restore Window');
+  await expect(maximizeButton.locator('svg.lucide-copy')).toBeVisible();
 
   await maximizeButton.click();
   await expect.poll(async () => browserWindow.evaluate((win) => win.isMaximized())).toBe(false);
+  await expect(maximizeButton).toHaveAttribute('aria-label', 'Maximize Window');
+  await expect(maximizeButton.locator('svg.lucide-square')).toBeVisible();
 
   const minimizeButton = window.getByTestId('window-control-minimize');
   await expect(minimizeButton).toBeVisible();
