@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState, type ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
@@ -14,7 +14,9 @@ import {
 } from './PhysicalWorkspacePanels';
 import {
   createPhysicalLayoutVisibility,
+  formatPhysicalLayoutLayerOpacitySummary,
   filterVisiblePhysicalLayoutShapes,
+  hasNonDefaultPhysicalLayoutLayerOpacity,
   isPhysicalLayoutOutlineVisible,
   type PhysicalLayoutVisibility,
 } from './physicalLayoutLayers';
@@ -38,6 +40,7 @@ vi.mock('./PhysicalLayoutCanvas', () => ({
   }) => (
     <div
       data-highlighted-shape-index={highlightedShapeIndex ?? ''}
+      data-layer-opacity-summary={formatPhysicalLayoutLayerOpacitySummary(layoutVisibility)}
       data-layer-count={catalog?.layers.length ?? 0}
       data-macro-count={catalog?.macros.length ?? 0}
       data-renderer="webgl"
@@ -57,12 +60,14 @@ vi.mock('./PhysicalLayout3DCanvas', () => ({
     catalog,
     geometry,
     highlightedShapeIndex,
+    layoutVisibility,
     onHighlightedShapeChange,
     selectedTarget,
   }: {
     catalog: typeof layoutFixtureOpenResult.catalog | null;
     geometry: typeof layoutFixtureGeometry | null;
     highlightedShapeIndex?: number | null;
+    layoutVisibility: PhysicalLayoutVisibility;
     onHighlightedShapeChange?: (shapeIndex: number | null) => void;
     selectedTarget: PhysicalLayoutTarget | null;
   }) => (
@@ -70,6 +75,7 @@ vi.mock('./PhysicalLayout3DCanvas', () => ({
       data-base-grid-depth-test="true"
       data-depth-write-mode="solid-mesh"
       data-highlighted-shape-index={highlightedShapeIndex ?? ''}
+      data-layer-opacity-summary={formatPhysicalLayoutLayerOpacitySummary(layoutVisibility)}
       data-material-side="double"
       data-orbit-origin="bounds3d"
       data-orbit-render-mode="raf-ref-interaction-idle-sync"
@@ -80,7 +86,7 @@ vi.mock('./PhysicalLayout3DCanvas', () => ({
       data-scene-center-offset-y="1.5000"
       data-scene-center-offset-z="0.0625"
       data-selected-target-name={selectedTarget?.name ?? ''}
-      data-shape-opacity-mode="opaque"
+      data-shape-opacity-mode={hasNonDefaultPhysicalLayoutLayerOpacity(layoutVisibility) ? 'layered' : 'opaque'}
       data-shape-count={geometry?.shapes.length ?? 0}
       data-source-kind={catalog?.sourceKind ?? ''}
       data-testid="physical-layout-3d-canvas"
@@ -91,7 +97,8 @@ vi.mock('./PhysicalLayout3DCanvas', () => ({
       data-view-helper-last-axis=""
       data-view-helper-pos-x-screen-x="96.00"
       data-view-helper-pos-x-screen-y="64.00"
-      data-view-helper-size="128"
+      data-view-helper-background="transparent"
+      data-view-helper-size="112"
       data-view-helper-visible="true"
       data-zoom="1.0000"
       onClick={() => onHighlightedShapeChange?.(geometry?.shapes[1]?.index ?? null)}
@@ -282,7 +289,8 @@ describe('PhysicalWorkspacePanels', () => {
     expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveAttribute('data-orbit-render-mode', 'raf-ref-interaction-idle-sync');
     expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveAttribute('data-shape-opacity-mode', 'opaque');
     expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveAttribute('data-view-helper-visible', 'true');
-    expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveAttribute('data-view-helper-size', '128');
+    expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveAttribute('data-view-helper-background', 'transparent');
+    expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveAttribute('data-view-helper-size', '112');
     expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveAttribute('data-view-helper-animating', 'false');
     expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveAttribute('data-selected-target-name', 'CHILD');
     expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveAttribute('data-source-kind', 'gds');
@@ -403,6 +411,7 @@ describe('PhysicalWorkspacePanels', () => {
     const user = userEvent.setup();
     const layoutGeometry = vi.mocked(getTestElectronApi().lsp.layoutGeometry);
     const onLayerCategoryVisibilityToggle = vi.fn();
+    const onLayerOpacityChange = vi.fn();
     const onOutlineVisibilityToggle = vi.fn();
     layoutGeometry.mockClear();
     renderInCodeLayout(
@@ -411,6 +420,7 @@ describe('PhysicalWorkspacePanels', () => {
         layoutState={readyLayoutState}
         selectedTarget={readyTarget}
         onLayerCategoryVisibilityToggle={onLayerCategoryVisibilityToggle}
+        onLayerOpacityChange={onLayerOpacityChange}
         onOutlineVisibilityToggle={onOutlineVisibilityToggle}
       />,
     );
@@ -423,6 +433,9 @@ describe('PhysicalWorkspacePanels', () => {
     expect(screen.getByTestId('physical-layer-outline-swatch')).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByTestId('physical-right-panel-layers-content')).toHaveTextContent('Metal1');
     expect(screen.getByTestId('physical-right-panel-layers-content')).toHaveTextContent('Metal2');
+    expect(screen.getByTestId('physical-layer-opacity-button-0')).toHaveTextContent('Metal1');
+    expect(screen.getByTestId('physical-layer-opacity-button-0')).toHaveClass('text-[11px]', 'font-medium', 'leading-5');
+    expect(screen.getByTestId('physical-layer-opacity-value-0')).toHaveTextContent('100%');
     expect(screen.getByTestId('physical-layer-row-0')).toHaveTextContent('Pin');
     expect(screen.getByTestId('physical-layer-row-0')).toHaveTextContent('Label');
     expect(screen.getByTestId('physical-layer-row-0')).toHaveTextContent('Obstruction');
@@ -431,9 +444,15 @@ describe('PhysicalWorkspacePanels', () => {
     expect(screen.getByTestId('physical-layer-category-swatch-0-obstruction')).toBeDisabled();
     expect(screen.getByTestId('physical-layer-category-row-0-obstruction')).toHaveAttribute('aria-disabled', 'true');
 
+    await user.click(screen.getByTestId('physical-layer-opacity-button-0'));
+    expect(screen.queryByTestId('physical-layer-opacity-popover-0')).not.toBeInTheDocument();
+    expect(within(screen.getByTestId('physical-layer-opacity-row-0')).getByTestId('physical-layer-opacity-slider-0')).toBeInTheDocument();
+    await user.click(screen.getByTestId('physical-layer-opacity-decrease-0'));
+
     await user.click(screen.getByTestId('physical-layer-outline-swatch'));
     await user.click(screen.getByTestId('physical-layer-category-swatch-0-pin'));
 
+    expect(onLayerOpacityChange).toHaveBeenCalled();
     expect(onOutlineVisibilityToggle).toHaveBeenCalledTimes(1);
     expect(onLayerCategoryVisibilityToggle).toHaveBeenCalledWith(0, 'pin');
     expect(layoutGeometry).not.toHaveBeenCalled();

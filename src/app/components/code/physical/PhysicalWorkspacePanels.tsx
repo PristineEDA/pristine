@@ -24,6 +24,7 @@ import { useCodeViewerLayout } from '../../../context/CodeViewerLayoutContext';
 import { Button } from '../../ui/button';
 import { TooltipIconButton } from '../../ui/tooltip-icon-button';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '../../ui/resizable';
+import { Slider } from '../../ui/slider';
 import { SPLIT_PANEL_CONTENT_TRANSITION_STYLE, useAnimatedSplitPanelPresence } from '../explorer/useAnimatedSplitPanelPresence';
 import {
   compactIconTabToggleIconSize,
@@ -47,13 +48,19 @@ import {
 } from './PhysicalLayoutEditorPanel';
 import {
   createPhysicalLayoutLayerTree,
+  formatPhysicalLayoutLayerOpacity,
   getPhysicalLayoutLayerColor,
   getPhysicalLayoutLayerCategories,
   getPhysicalLayoutLayerCategoryColor,
+  getPhysicalLayoutLayerOpacity,
   getPhysicalLayoutOutlineColor,
   getPhysicalLayoutShapeCategory,
   isPhysicalLayoutLayerCategoryVisible,
   isPhysicalLayoutOutlineVisible,
+  normalizePhysicalLayoutLayerOpacity,
+  physicalLayoutLayerOpacityMax,
+  physicalLayoutLayerOpacityMin,
+  physicalLayoutLayerOpacityStep,
   type PhysicalLayoutLayerCategory,
   type PhysicalLayoutVisibility,
 } from './physicalLayoutLayers';
@@ -104,6 +111,7 @@ const physicalBottomPanelTabs = [
 ] as const satisfies readonly IconTabToggleGroupItem[];
 
 const emptyPhysicalLayoutVisibility: PhysicalLayoutVisibility = {
+  layerOpacities: new Map(),
   outlineVisible: false,
   visibleItems: new Set(),
 };
@@ -485,6 +493,7 @@ function PhysicalLayerPanel({
   geometry,
   layoutVisibility,
   onLayerCategoryVisibilityToggle,
+  onLayerOpacityChange,
   onOutlineVisibilityToggle,
   selectedTarget,
 }: {
@@ -492,9 +501,11 @@ function PhysicalLayerPanel({
   geometry?: LspLayoutGeometry | null;
   layoutVisibility: PhysicalLayoutVisibility;
   onLayerCategoryVisibilityToggle?: (layerIndex: number, category: PhysicalLayoutLayerCategory) => void;
+  onLayerOpacityChange?: (layerIndex: number, opacity: number) => void;
   onOutlineVisibilityToggle?: () => void;
   selectedTarget?: PhysicalLayoutTarget | null;
 }) {
+  const [expandedOpacityLayerIndex, setExpandedOpacityLayerIndex] = useState<number | null>(null);
   const layers = catalog?.layers ?? [];
   const selectedShapes = selectLayoutTargetShapes(catalog, geometry, selectedTarget);
   const layerTree = createPhysicalLayoutLayerTree(catalog, selectedShapes);
@@ -553,6 +564,8 @@ function PhysicalLayerPanel({
 
         {layerTree.map((entry) => {
           const { layer } = entry;
+          const layerOpacity = getPhysicalLayoutLayerOpacity(layoutVisibility, layer.index);
+          const isOpacityExpanded = expandedOpacityLayerIndex === layer.index;
           return (
             <div
               key={`${layer.index}:${layer.name}`}
@@ -560,13 +573,69 @@ function PhysicalLayerPanel({
               className="rounded px-1.5 py-1 text-[11px] text-ide-text"
               aria-disabled={false}
             >
-              <div className="flex min-h-6 items-center gap-2">
-                <span
-                  className="min-w-0 truncate font-medium"
-                  data-testid={`physical-layer-name-${layer.index}`}
-                  title={layer.name}
+              <div
+                className="flex min-h-6 items-center gap-2"
+                data-testid={`physical-layer-opacity-row-${layer.index}`}
+              >
+                <button
+                  type="button"
+                  aria-expanded={isOpacityExpanded}
+                  aria-label={`Set ${layer.name} opacity`}
+                  className="min-w-0 shrink rounded px-0.5 py-0 text-left text-[11px] font-medium leading-5 text-ide-text transition-colors hover:bg-ide-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ide-accent"
+                  data-testid={`physical-layer-opacity-button-${layer.index}`}
+                  onClick={() => setExpandedOpacityLayerIndex(isOpacityExpanded ? null : layer.index)}
+                  title={`${layer.name} opacity ${formatPhysicalLayoutLayerOpacity(layerOpacity)}`}
                 >
-                  {layer.name}
+                  <span
+                    className="min-w-0 truncate"
+                    data-testid={`physical-layer-name-${layer.index}`}
+                  >
+                    {layer.name}
+                  </span>
+                </button>
+                {isOpacityExpanded && (
+                  <>
+                    <button
+                      type="button"
+                      aria-label={`Decrease ${layer.name} opacity`}
+                      className="flex size-4 shrink-0 items-center justify-center rounded border border-ide-border/70 text-[10px] leading-none text-ide-text-muted transition-colors hover:bg-ide-hover hover:text-ide-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ide-accent"
+                      data-testid={`physical-layer-opacity-decrease-${layer.index}`}
+                      onClick={() => onLayerOpacityChange?.(
+                        layer.index,
+                        normalizePhysicalLayoutLayerOpacity(layerOpacity - physicalLayoutLayerOpacityStep),
+                      )}
+                    >
+                      -
+                    </button>
+                    <Slider
+                      aria-label={`Set ${layer.name} opacity`}
+                      className="h-4 min-w-14 flex-1"
+                      data-testid={`physical-layer-opacity-slider-${layer.index}`}
+                      max={physicalLayoutLayerOpacityMax}
+                      min={physicalLayoutLayerOpacityMin}
+                      onValueChange={(value) => onLayerOpacityChange?.(layer.index, value[0] ?? 1)}
+                      step={physicalLayoutLayerOpacityStep}
+                      value={[layerOpacity]}
+                    />
+                    <button
+                      type="button"
+                      aria-label={`Increase ${layer.name} opacity`}
+                      className="flex size-4 shrink-0 items-center justify-center rounded border border-ide-border/70 text-[10px] leading-none text-ide-text-muted transition-colors hover:bg-ide-hover hover:text-ide-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ide-accent"
+                      data-testid={`physical-layer-opacity-increase-${layer.index}`}
+                      onClick={() => onLayerOpacityChange?.(
+                        layer.index,
+                        normalizePhysicalLayoutLayerOpacity(layerOpacity + physicalLayoutLayerOpacityStep),
+                      )}
+                    >
+                      +
+                    </button>
+                  </>
+                )}
+                <span
+                    className="ml-auto shrink-0 text-[10px] font-normal tabular-nums text-ide-text-muted"
+                    data-testid={`physical-layer-opacity-value-${layer.index}`}
+                  >
+                    {formatPhysicalLayoutLayerOpacity(layerOpacity)}
                 </span>
               </div>
               <div className="mt-0.5 flex flex-col gap-0.5 pl-3">
@@ -907,6 +976,7 @@ export function PhysicalRightPanel({
   layoutState,
   layoutVisibility = emptyPhysicalLayoutVisibility,
   onLayerCategoryVisibilityToggle,
+  onLayerOpacityChange,
   onOutlineVisibilityToggle,
   onSplitPanelVisibleChange,
   selectedTarget,
@@ -915,6 +985,7 @@ export function PhysicalRightPanel({
   layoutState?: PhysicalWorkspaceLayoutState;
   layoutVisibility?: PhysicalLayoutVisibility;
   onLayerCategoryVisibilityToggle?: (layerIndex: number, category: PhysicalLayoutLayerCategory) => void;
+  onLayerOpacityChange?: (layerIndex: number, opacity: number) => void;
   onOutlineVisibilityToggle?: () => void;
   onSplitPanelVisibleChange?: (isVisible: boolean) => void;
   selectedTarget?: PhysicalLayoutTarget | null;
@@ -955,6 +1026,7 @@ export function PhysicalRightPanel({
           layoutVisibility={layoutVisibility}
           selectedTarget={selectedTarget}
           onLayerCategoryVisibilityToggle={onLayerCategoryVisibilityToggle}
+          onLayerOpacityChange={onLayerOpacityChange}
           onOutlineVisibilityToggle={onOutlineVisibilityToggle}
         />
       ) : (

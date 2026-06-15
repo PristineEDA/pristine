@@ -23,12 +23,12 @@ export interface PhysicalLayout3DViewHelperEndpointPositions {
   posZ: PhysicalLayout3DViewHelperEndpointPosition | null;
 }
 
-const helperSize = 128;
+const helperSize = 112;
 const helperPadding = 8;
-const axisLength = 42;
-const axisRadius = 1.8;
-const endpointRadius = 7;
-const endpointHitRadius = 12;
+const axisLength = 37;
+const axisRadius = 1.6;
+const endpointRadius = 6;
+const endpointHitRadius = 11;
 
 const axisColors: Record<PhysicalLayout3DViewHelperAxis, number> = {
   negX: 0x222222,
@@ -76,8 +76,9 @@ export function createPhysicalLayout3DViewHelper() {
   const scene = new THREE.Scene();
   const group = new THREE.Group();
   scene.add(group);
-  const camera = new THREE.OrthographicCamera(-64, 64, 64, -64, -128, 128);
-  camera.position.set(0, 0, 64);
+  const cameraHalfExtent = helperSize / 2;
+  const camera = new THREE.OrthographicCamera(-cameraHalfExtent, cameraHalfExtent, cameraHalfExtent, -cameraHalfExtent, -128, 128);
+  camera.position.set(0, 0, cameraHalfExtent);
   camera.lookAt(0, 0, 0);
   const raycaster = new THREE.Raycaster();
   const endpoints: Record<PhysicalLayout3DViewHelperAxis, THREE.Sprite> = {
@@ -162,6 +163,7 @@ export function createPhysicalLayout3DViewHelper() {
       group.updateMatrixWorld(true);
 
       const previousScissorTest = renderer.getScissorTest();
+      const previousAutoClear = renderer.autoClear;
       const previousViewport = new THREE.Vector4();
       const previousScissor = new THREE.Vector4();
       renderer.getViewport(previousViewport);
@@ -173,7 +175,9 @@ export function createPhysicalLayout3DViewHelper() {
       renderer.setScissorTest(true);
       renderer.setViewport(viewport.left, viewportY, viewport.width, viewport.height);
       renderer.setScissor(viewport.left, viewportY, viewport.width, viewport.height);
+      renderer.autoClear = false;
       renderer.render(scene, camera);
+      renderer.autoClear = previousAutoClear;
       renderer.setViewport(previousViewport);
       renderer.setScissor(previousScissor);
       renderer.setScissorTest(previousScissorTest);

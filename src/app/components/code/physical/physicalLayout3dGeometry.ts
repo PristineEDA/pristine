@@ -13,6 +13,7 @@ import {
 import {
   filterVisiblePhysicalLayoutShapes,
   getPhysicalLayoutLayerCategoryColor,
+  getPhysicalLayoutLayerOpacity,
   getPhysicalLayoutShapeCategory,
   type PhysicalLayoutLayerCategory,
   type PhysicalLayoutVisibility,
@@ -92,7 +93,7 @@ export function createPhysicalLayout3DSceneInput(
 
   const selectedShapes = selectLayoutTargetShapes(catalog, geometry, selectedTarget);
   const visibleShapes = filterVisiblePhysicalLayoutShapes(selectedShapes, layoutVisibility);
-  const meshes = visibleShapes.flatMap((shape) => createMeshInput(shape));
+  const meshes = visibleShapes.flatMap((shape) => createMeshInput(shape, layoutVisibility));
   const fallbackBounds = geometry ? getShapesBounds(geometry.shapes, null) : null;
   const bounds = getShapesBounds(selectedShapes, getLayoutTargetBounds(catalog, selectedTarget, fallbackBounds));
 
@@ -151,7 +152,7 @@ export function getPhysicalLayout3DCenter(bounds: PhysicalLayout3DBounds): Physi
   };
 }
 
-function createMeshInput(shape: LspLayoutShape): PhysicalLayout3DMeshInput[] {
+function createMeshInput(shape: LspLayoutShape, layoutVisibility: PhysicalLayoutVisibility): PhysicalLayout3DMeshInput[] {
   const category = getPhysicalLayoutShapeCategory(shape);
   if (category !== 'boundary' && category !== 'path' && category !== 'text') {
     return [];
@@ -171,7 +172,7 @@ function createMeshInput(shape: LspLayoutShape): PhysicalLayout3DMeshInput[] {
     depth: getPhysicalLayout3DDepth(category),
     id: `${shape.index}:${shape.layerIndex}:${category}`,
     layerIndex: shape.layerIndex,
-    opacity: category === 'text' ? 0.82 : 0.72,
+    opacity: getPhysicalLayoutLayerOpacity(layoutVisibility, shape.layerIndex),
     points,
     shapeIndex: shape.index,
     z: getPhysicalLayout3DLayerZ(shape.layerIndex, category),

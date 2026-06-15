@@ -2159,7 +2159,8 @@ test('Physical layout requests indexed geometry for LEF macros and GDS cells', a
     });
     await expect(layout3DCanvas).toHaveAttribute('data-shape-opacity-mode', 'opaque', { timeout: UI_READY_TIMEOUT_MS });
     await expect(layout3DCanvas).toHaveAttribute('data-view-helper-visible', 'true', { timeout: UI_READY_TIMEOUT_MS });
-    await expect(layout3DCanvas).toHaveAttribute('data-view-helper-size', '128', { timeout: UI_READY_TIMEOUT_MS });
+    await expect(layout3DCanvas).toHaveAttribute('data-view-helper-background', 'transparent', { timeout: UI_READY_TIMEOUT_MS });
+    await expect(layout3DCanvas).toHaveAttribute('data-view-helper-size', '112', { timeout: UI_READY_TIMEOUT_MS });
     await expect(layout3DCanvas).toHaveAttribute('data-selected-target-name', 'sg13g2_xor2_1', {
       timeout: UI_READY_TIMEOUT_MS,
     });
@@ -2357,7 +2358,8 @@ test('Physical layout requests indexed geometry for LEF macros and GDS cells', a
       const viewHelperOrbitBefore = Number(await layout3DCanvas.getAttribute('data-orbit-angle-y') ?? '0');
       const renderCountBeforeViewHelper = Number(await layout3DCanvas.getAttribute('data-render-count') ?? '0');
       const highlightedShapeBeforeHelperBlank = await layout3DCanvas.getAttribute('data-highlighted-shape-index');
-      const helperBlankX = threeBox.width - 122;
+      const viewHelperSize = Number(await layout3DCanvas.getAttribute('data-view-helper-size') ?? '112');
+      const helperBlankX = threeBox.width - viewHelperSize + 8;
       const helperBlankY = 16;
       await layout3DCanvas.click({ position: { x: helperBlankX, y: helperBlankY } });
       await expect(layout3DCanvas).toHaveAttribute('data-highlighted-shape-index', highlightedShapeBeforeHelperBlank ?? '', {
@@ -2430,6 +2432,32 @@ test('Physical layout requests indexed geometry for LEF macros and GDS cells', a
     const firstVisibleShapeCategoryBeforeHide = await layoutCanvas.getAttribute('data-pick-visible-shape-category');
     const firstVisibleShapeScreenXBeforeHide = Number(await layoutCanvas.getAttribute('data-pick-visible-shape-screen-x') ?? 'NaN');
     const firstVisibleShapeScreenYBeforeHide = Number(await layoutCanvas.getAttribute('data-pick-visible-shape-screen-y') ?? 'NaN');
+    const twoDOpacitySummaryBeforeLayerOpacity = await layoutCanvas.getAttribute('data-layer-opacity-summary');
+    const threeDOpacitySummaryBeforeLayerOpacity = await layout3DCanvas.getAttribute('data-layer-opacity-summary');
+    expect(firstVisibleShapeLayerIndexBeforeHide).toBeTruthy();
+    await window.getByTestId(`physical-layer-opacity-button-${firstVisibleShapeLayerIndexBeforeHide}`).click();
+    const inlineOpacityRow = window.getByTestId(`physical-layer-opacity-row-${firstVisibleShapeLayerIndexBeforeHide}`);
+    await expect(inlineOpacityRow.getByTestId(`physical-layer-opacity-slider-${firstVisibleShapeLayerIndexBeforeHide}`)).toBeVisible({
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await window.getByTestId(`physical-layer-opacity-decrease-${firstVisibleShapeLayerIndexBeforeHide}`).click();
+    await expect.poll(async () => await layoutCanvas.getAttribute('data-layer-opacity-summary'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).not.toBe(twoDOpacitySummaryBeforeLayerOpacity);
+    const twoDOpacitySummaryAfterLayerOpacity = await layoutCanvas.getAttribute('data-layer-opacity-summary');
+    await expect(layout3DCanvas).toHaveAttribute('data-layer-opacity-summary', twoDOpacitySummaryAfterLayerOpacity ?? '', {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await expect(layout3DCanvas).toHaveAttribute('data-shape-opacity-mode', 'layered', {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    expect(threeDOpacitySummaryBeforeLayerOpacity).toBe(twoDOpacitySummaryBeforeLayerOpacity);
+    await expect(layoutCanvas).toHaveAttribute('data-visible-shape-count', String(twoDVisibleBeforeGdsLayerToggle), {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await expect(layout3DCanvas).toHaveAttribute('data-visible-shape-count', String(threeDVisibleBeforeGdsLayerToggle), {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
     const layoutCanvasBoxBeforeHide = await layoutCanvas.boundingBox();
     if (
       layoutCanvasBoxBeforeHide
@@ -2445,7 +2473,6 @@ test('Physical layout requests indexed geometry for LEF macros and GDS cells', a
         timeout: UI_READY_TIMEOUT_MS,
       });
     }
-    expect(firstVisibleShapeLayerIndexBeforeHide).toBeTruthy();
     expect(firstVisibleShapeCategoryBeforeHide).toBeTruthy();
     await window.getByTestId(`physical-layer-category-swatch-${firstVisibleShapeLayerIndexBeforeHide}-${firstVisibleShapeCategoryBeforeHide}`).click();
     await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-visible-shape-count') ?? '0'), {

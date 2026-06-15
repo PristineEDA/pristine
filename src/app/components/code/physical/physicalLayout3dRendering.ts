@@ -41,15 +41,18 @@ export function getPhysicalLayout3DMeshMaterialOptions(
   input: PhysicalLayout3DMeshInput,
   highlighted: boolean,
 ): THREE.MeshStandardMaterialParameters {
+  const opacity = highlighted ? 1 : Math.min(1, Math.max(0.01, input.opacity));
+  const transparent = opacity < 0.999;
+
   return {
     color: highlighted ? 0xf8fafc : input.color,
     depthTest: true,
-    depthWrite: true,
+    depthWrite: !transparent,
     metalness: input.category === 'path' ? 0.34 : 0.18,
-    opacity: 1,
+    opacity,
     roughness: 0.48,
     side: THREE.DoubleSide,
-    transparent: false,
+    transparent,
   };
 }
 
@@ -61,7 +64,7 @@ export function getPhysicalLayout3DEdgeMaterialOptions(
     color: highlighted ? 0xffffff : input.color,
     depthTest: !highlighted,
     depthWrite: false,
-    opacity: highlighted ? 1 : Math.min(1, input.opacity + 0.2),
+    opacity: highlighted ? 1 : Math.min(1, Math.max(0.08, input.opacity + 0.2)),
     transparent: true,
   };
 }

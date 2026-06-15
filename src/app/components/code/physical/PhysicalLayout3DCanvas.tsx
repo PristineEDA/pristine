@@ -30,7 +30,11 @@ import {
   type PhysicalLayout3DViewHelperEndpointPositions,
 } from './physicalLayout3dViewHelper';
 import type { PhysicalLayoutTarget } from './physicalLayoutGeometry';
-import type { PhysicalLayoutVisibility } from './physicalLayoutLayers';
+import {
+  formatPhysicalLayoutLayerOpacitySummary,
+  hasNonDefaultPhysicalLayoutLayerOpacity,
+  type PhysicalLayoutVisibility,
+} from './physicalLayoutLayers';
 
 type ThreeRendererStatus = 'initializing' | 'three-webgl' | 'error';
 
@@ -580,7 +584,7 @@ export function PhysicalLayout3DCanvas({
     }
 
     const bounds = host.getBoundingClientRect();
-    const viewport = getPhysicalLayout3DViewHelperViewport(sizeRef.current.width, sizeRef.current.height);
+    const viewport = getPhysicalLayout3DViewHelperViewport(bounds.width, bounds.height);
     const viewportX = clientX - bounds.left;
     const viewportY = clientY - bounds.top;
     const inside = viewportX >= viewport.left
@@ -647,6 +651,7 @@ export function PhysicalLayout3DCanvas({
       data-orbit-angle-y={viewportState.orbit.angleY.toFixed(4)}
       data-orbit-render-mode="raf-ref-interaction-idle-sync"
       data-highlighted-shape-index={highlightedShapeIndex ?? ''}
+      data-layer-opacity-summary={formatPhysicalLayoutLayerOpacitySummary(layoutVisibility)}
       data-pan-x={viewportState.pan.x.toFixed(4)}
       data-pan-y={viewportState.pan.y.toFixed(4)}
       data-pick-visible-shape-index={pickableMeshHit?.shapeIndex ?? ''}
@@ -659,7 +664,7 @@ export function PhysicalLayout3DCanvas({
       data-scene-center-offset-z={sceneCenter ? sceneCenter.z.toFixed(4) : '0.0000'}
       data-selected-target-name={selectedTarget?.name ?? ''}
       data-shape-count={sceneInput.selectedShapeCount}
-      data-shape-opacity-mode="opaque"
+      data-shape-opacity-mode={hasNonDefaultPhysicalLayoutLayerOpacity(layoutVisibility) ? 'layered' : 'opaque'}
       data-source-kind={catalog?.sourceKind ?? ''}
       data-testid="physical-layout-3d-canvas"
       data-viewport-framed="true"
@@ -679,6 +684,7 @@ export function PhysicalLayout3DCanvas({
       data-view-helper-pos-y-screen-y={formatViewHelperPosition(viewHelperState.positions?.posY?.y)}
       data-view-helper-pos-z-screen-x={formatViewHelperPosition(viewHelperState.positions?.posZ?.x)}
       data-view-helper-pos-z-screen-y={formatViewHelperPosition(viewHelperState.positions?.posZ?.y)}
+      data-view-helper-background="transparent"
       data-view-helper-size={physicalLayout3DViewHelperSize}
       data-view-helper-visible="true"
       data-zoom={viewportState.zoom.toFixed(4)}

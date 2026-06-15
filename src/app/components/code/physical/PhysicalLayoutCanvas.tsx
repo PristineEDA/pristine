@@ -21,8 +21,10 @@ import {
 } from './physicalLayoutGeometry';
 import {
   createPhysicalLayoutPinLabels,
+  formatPhysicalLayoutLayerOpacitySummary,
   filterVisiblePhysicalLayoutShapes,
   getPhysicalLayoutLayerCategoryColor,
+  getPhysicalLayoutLayerOpacity,
   getVisiblePhysicalLayoutCategoryCount,
   getVisiblePhysicalLayoutLayerCount,
   getVisiblePhysicalLayoutShapeCounts,
@@ -363,7 +365,7 @@ export function PhysicalLayoutCanvas({
     if (outlineVisibleRef.current) {
       world.addChild(drawLayoutOutline(bounds));
     }
-    world.addChild(drawShapes(selectedShapesRef.current));
+    world.addChild(drawShapes(selectedShapesRef.current, layoutVisibility));
     const highlightedShape = selectedShapesRef.current.find((shape) => shape.index === highlightedShapeIndexRef.current) ?? null;
     if (highlightedShape) {
       world.addChild(drawHighlightedShape(highlightedShape));
@@ -383,6 +385,7 @@ export function PhysicalLayoutCanvas({
       data-geometry-shape-count={geometry?.shapes.length ?? 0}
       data-hidden-layer-count={Math.max(0, layerCount - visibleLayerCount)}
       data-highlighted-shape-index={highlightedShapeIndex ?? ''}
+      data-layer-opacity-summary={formatPhysicalLayoutLayerOpacitySummary(layoutVisibility)}
       data-outline-visible={outlineVisible ? 'true' : 'false'}
       data-layer-count={layerCount}
       data-last-pick-shape-index={lastPick?.shapeIndex ?? ''}
@@ -598,19 +601,20 @@ function drawLayoutOutline(bounds: LspLayoutBounds) {
     .stroke({ color: 0xe5eef8, alpha: 0.9, width: 0.025 });
 }
 
-function drawShapes(shapes: readonly LspLayoutShape[]) {
+function drawShapes(shapes: readonly LspLayoutShape[], layoutVisibility: PhysicalLayoutVisibility) {
   const graphics = new Graphics();
 
   for (const shape of shapes) {
     const category = getCanvasShapeCategory(shape);
     const color = getPhysicalLayoutLayerCategoryColor(shape.layerIndex, category).pixiColor;
-    const alpha = category === 'obstruction' || category === 'blockage' ? 0.28 : 0.7;
+    const layerOpacity = getPhysicalLayoutLayerOpacity(layoutVisibility, shape.layerIndex);
+    const alpha = (category === 'obstruction' || category === 'blockage' ? 0.28 : 0.7) * layerOpacity;
 
     if (shape.kind === 'polygon' && shape.polygon && shape.polygon.length >= 3) {
       graphics
         .poly(shape.polygon.flatMap((point) => [point.x, point.y]), true)
         .fill({ color, alpha })
-        .stroke({ color, alpha: 0.9, width: 0.018 });
+        .stroke({ color, alpha: 0.9 * layerOpacity, width: 0.018 });
       continue;
     }
 
@@ -621,7 +625,7 @@ function drawShapes(shapes: readonly LspLayoutShape[]) {
     graphics
       .rect(x0, y0, width, height)
       .fill({ color, alpha })
-      .stroke({ color, alpha: 0.92, width: 0.015 });
+      .stroke({ color, alpha: 0.92 * layerOpacity, width: 0.015 });
   }
 
   return graphics;
@@ -688,6 +692,7 @@ function drawPinLabels(labels: readonly PhysicalLayoutPinLabel[]) {
     });
 
     text.anchor.set(0.5);
+    text.alpha = label.opacity;
     text.position.set(label.x, label.y);
     text.scale.set(worldFontSize / baseFontSize);
     text.resolution = 2;

@@ -34,6 +34,7 @@ import {
   createLayerCategoryVisibilityKey,
   createOutlineVisibilityKey,
   filterVisiblePhysicalLayoutShapes,
+  normalizePhysicalLayoutLayerOpacity,
   type PhysicalLayoutLayerCategory,
   type MutablePhysicalLayoutVisibility,
 } from './components/code/physical/physicalLayoutLayers';
@@ -249,6 +250,7 @@ function AppLayout() {
       }
 
       return {
+        layerOpacities: new Map(current.layerOpacities),
         outlineVisible: nextItems.has(outlineKey),
         visibleItems: nextItems,
       };
@@ -269,8 +271,22 @@ function AppLayout() {
       }
 
       return {
+        layerOpacities: new Map(current.layerOpacities),
         outlineVisible: current.outlineVisible,
         visibleItems: nextItems,
+      };
+    });
+  }, []);
+
+  const handlePhysicalLayerOpacityChange = useCallback((layerIndex: number, opacity: number) => {
+    setPhysicalLayoutVisibility((current) => {
+      const nextOpacities = new Map(current.layerOpacities);
+      nextOpacities.set(layerIndex, normalizePhysicalLayoutLayerOpacity(opacity));
+
+      return {
+        layerOpacities: nextOpacities,
+        outlineVisible: current.outlineVisible,
+        visibleItems: new Set(current.visibleItems),
       };
     });
   }, []);
@@ -695,6 +711,7 @@ function AppLayout() {
           layoutState={physicalLayoutState}
           selectedTarget={physicalSelectedTarget}
           onLayerCategoryVisibilityToggle={handlePhysicalLayerCategoryVisibilityToggle}
+          onLayerOpacityChange={handlePhysicalLayerOpacityChange}
           onOutlineVisibilityToggle={handlePhysicalOutlineVisibilityToggle}
           onSplitPanelVisibleChange={setIsPhysicalRightPanelSplitVisible}
         />

@@ -31,11 +31,13 @@ export type PhysicalLayoutLayerCategory =
   | 'text';
 
 export interface PhysicalLayoutVisibility {
+  layerOpacities: ReadonlyMap<number, number>;
   outlineVisible: boolean;
   visibleItems: ReadonlySet<string>;
 }
 
 export interface MutablePhysicalLayoutVisibility {
+  layerOpacities: Map<number, number>;
   outlineVisible: boolean;
   visibleItems: Set<string>;
 }
@@ -52,6 +54,7 @@ export interface PhysicalLayoutPinLabel {
   color: number;
   layerIndex: number;
   name: string;
+  opacity: number;
   ownerIndex: number;
   x: number;
   y: number;
@@ -63,6 +66,10 @@ export const physicalLayoutLayerCategories = [
   ...physicalLayoutLefDefLayerCategories,
   ...physicalLayoutGdsLayerCategories,
 ] as const satisfies readonly PhysicalLayoutLayerCategory[];
+
+export const physicalLayoutLayerOpacityMin = 0.2;
+export const physicalLayoutLayerOpacityMax = 1;
+export const physicalLayoutLayerOpacityStep = 0.05;
 
 export function getPhysicalLayoutLayerCategories(catalog: LspLayoutCatalog | null | undefined): readonly PhysicalLayoutLayerCategory[] {
   return catalog?.sourceKind === 'gds' ? physicalLayoutGdsLayerCategories : physicalLayoutLefDefLayerCategories;
@@ -103,6 +110,7 @@ export function createPhysicalLayoutVisibility(
   hasOutline: boolean,
   shapes: readonly LspLayoutShape[],
 ): MutablePhysicalLayoutVisibility {
+  const layerOpacities = new Map<number, number>();
   const visibleItems = new Set<string>();
 
   if (hasOutline) {
@@ -110,6 +118,7 @@ export function createPhysicalLayoutVisibility(
   }
 
   for (const entry of createPhysicalLayoutLayerTree(catalog, shapes)) {
+    layerOpacities.set(entry.layer.index, 1);
     for (const category of getPhysicalLayoutLayerCategories(catalog)) {
       if (entry.categories[category]) {
         visibleItems.add(createLayerCategoryVisibilityKey(entry.layer.index, category));
@@ -118,6 +127,7 @@ export function createPhysicalLayoutVisibility(
   }
 
   return {
+    layerOpacities,
     outlineVisible: hasOutline,
     visibleItems,
   };
@@ -125,6 +135,7 @@ export function createPhysicalLayoutVisibility(
 
 export function createEmptyPhysicalLayoutVisibility(): MutablePhysicalLayoutVisibility {
   return {
+    layerOpacities: new Map(),
     outlineVisible: false,
     visibleItems: new Set(),
   };
@@ -148,6 +159,37 @@ export function isPhysicalLayoutLayerCategoryVisible(
   category: PhysicalLayoutLayerCategory,
 ): boolean {
   return visibility.visibleItems.has(createLayerCategoryVisibilityKey(layerIndex, category));
+}
+
+export function getPhysicalLayoutLayerOpacity(
+  visibility: PhysicalLayoutVisibility,
+  layerIndex: number,
+): number {
+  return normalizePhysicalLayoutLayerOpacity(visibility.layerOpacities.get(layerIndex));
+}
+
+export function normalizePhysicalLayoutLayerOpacity(value: number | null | undefined): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return 1;
+  }
+
+  const stepped = Math.round(value / physicalLayoutLayerOpacityStep) * physicalLayoutLayerOpacityStep;
+  return Math.min(physicalLayoutLayerOpacityMax, Math.max(physicalLayoutLayerOpacityMin, Number(stepped.toFixed(2))));
+}
+
+export function formatPhysicalLayoutLayerOpacity(value: number): string {
+  return `${Math.round(normalizePhysicalLayoutLayerOpacity(value) * 100)}%`;
+}
+
+export function formatPhysicalLayoutLayerOpacitySummary(visibility: PhysicalLayoutVisibility): string {
+  return Array.from(visibility.layerOpacities.entries())
+    .sort(([left], [right]) => left - right)
+    .map(([layerIndex, opacity]) => `${layerIndex}:${normalizePhysicalLayoutLayerOpacity(opacity).toFixed(2)}`)
+    .join('|');
+}
+
+export function hasNonDefaultPhysicalLayoutLayerOpacity(visibility: PhysicalLayoutVisibility): boolean {
+  return Array.from(visibility.layerOpacities.values()).some((opacity) => normalizePhysicalLayoutLayerOpacity(opacity) < 1);
 }
 
 export function createPhysicalLayoutLayerTree(
@@ -265,6 +307,7 @@ export function createPhysicalLayoutPinLabels(
     color: entry.color,
     layerIndex: entry.layerIndex,
     name: entry.name,
+    opacity: getPhysicalLayoutLayerOpacity(visibility, entry.layerIndex),
     ownerIndex: entry.ownerIndex,
     x: (entry.x0 + entry.x1) / 2,
     y: (entry.y0 + entry.y1) / 2,

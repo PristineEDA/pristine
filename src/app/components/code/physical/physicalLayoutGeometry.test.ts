@@ -38,13 +38,16 @@ import {
   createPhysicalLayoutLayerTree,
   createPhysicalLayoutPinLabels,
   createPhysicalLayoutVisibility,
+  formatPhysicalLayoutLayerOpacitySummary,
   filterVisiblePhysicalLayoutShapes,
   getPhysicalLayoutLayerCategoryColor,
   getPhysicalLayoutLayerColor,
+  getPhysicalLayoutLayerOpacity,
   getPhysicalLayoutOutlineColor,
   getVisiblePhysicalLayoutShapeCounts,
   isPhysicalLayoutLayerCategoryVisible,
   isPhysicalLayoutOutlineVisible,
+  normalizePhysicalLayoutLayerOpacity,
 } from './physicalLayoutLayers';
 
 describe('physicalLayoutGeometry', () => {
@@ -146,7 +149,11 @@ describe('physicalLayoutGeometry', () => {
     expect(filterVisiblePhysicalLayoutShapes(selectedShapes, visibility)).toHaveLength(3);
     expect(getVisiblePhysicalLayoutShapeCounts(selectedShapes, visibility)).toMatchObject({ obstruction: 1, pin: 2 });
 
-    const hiddenVisibility = { outlineVisible: false, visibleItems: new Set<string>() };
+    expect(getPhysicalLayoutLayerOpacity(visibility, 0)).toBe(1);
+    expect(formatPhysicalLayoutLayerOpacitySummary(visibility)).toBe('0:1.00|1:1.00');
+    expect(normalizePhysicalLayoutLayerOpacity(0.333)).toBe(0.35);
+
+    const hiddenVisibility = { layerOpacities: new Map<number, number>(), outlineVisible: false, visibleItems: new Set<string>() };
 
     expect(isPhysicalLayoutOutlineVisible(hiddenVisibility)).toBe(false);
     expect(filterVisiblePhysicalLayoutShapes(selectedShapes, hiddenVisibility)).toEqual([]);
@@ -164,8 +171,8 @@ describe('physicalLayoutGeometry', () => {
     expect(tree[1]?.categories).toMatchObject({ label: false, obstruction: true, pin: false });
     expect(tree[1]?.available).toBe(true);
     expect(createPhysicalLayoutPinLabels(catalog, selectedShapes, visibility)).toEqual([
-      expect.objectContaining({ layerIndex: 0, name: 'A', ownerIndex: 0 }),
-      expect.objectContaining({ layerIndex: 0, name: 'Y', ownerIndex: 1 }),
+      expect.objectContaining({ layerIndex: 0, name: 'A', opacity: 1, ownerIndex: 0 }),
+      expect.objectContaining({ layerIndex: 0, name: 'Y', opacity: 1, ownerIndex: 1 }),
     ]);
   });
 
@@ -322,6 +329,14 @@ describe('physicalLayoutGeometry', () => {
       side: 2,
       transparent: false,
     });
+    meshInput.opacity = 0.35;
+    expect(getPhysicalLayout3DMeshMaterialOptions(meshInput, false)).toMatchObject({
+      depthTest: true,
+      depthWrite: false,
+      opacity: 0.35,
+      side: 2,
+      transparent: true,
+    });
     expect(getPhysicalLayout3DEdgeMaterialOptions(meshInput, false)).toMatchObject({
       depthTest: true,
       depthWrite: false,
@@ -345,12 +360,12 @@ describe('physicalLayoutGeometry', () => {
   });
 
   it('defines the Physical 3D view helper viewport, colors, and axis targets', () => {
-    expect(physicalLayout3DViewHelperSize).toBe(128);
+    expect(physicalLayout3DViewHelperSize).toBe(112);
     expect(getPhysicalLayout3DViewHelperViewport(500, 300)).toEqual({
-      height: 128,
-      left: 364,
+      height: 112,
+      left: 380,
       top: 8,
-      width: 128,
+      width: 112,
     });
     expect(getPhysicalLayout3DViewHelperAxisColor('posX')).toBe(0xff4466);
     expect(getPhysicalLayout3DViewHelperAxisColor('posY')).toBe(0x88ff44);
