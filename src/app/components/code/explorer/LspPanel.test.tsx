@@ -136,4 +136,78 @@ describe('LspPanel', () => {
     expect(screen.getByRole('button', { name: /textDocument\/definition/i })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /textDocument\/publishDiagnostics/i })).not.toBeInTheDocument();
   });
+
+  it('renders layout and waveform control-plane requests without pipe binary entries', async () => {
+    const user = userEvent.setup();
+
+    mockEvents = [
+      {
+        sequence: 1,
+        timestamp: '2026-01-01T12:00:00.000Z',
+        direction: 'client->server',
+        kind: 'request',
+        requestId: 21,
+        method: 'systemverilog/waveform/open',
+        payload: { source: 'mock' },
+      },
+      {
+        sequence: 2,
+        timestamp: '2026-01-01T12:00:01.000Z',
+        direction: 'server->client',
+        kind: 'response',
+        requestId: 21,
+        method: 'systemverilog/waveform/open',
+        payload: {
+          protocol: 'pristine-waveform-columnar-v1',
+          sessionId: 'wave-1',
+          title: 'counter_tb',
+        },
+      },
+      {
+        sequence: 3,
+        timestamp: '2026-01-01T12:00:02.000Z',
+        direction: 'client->server',
+        kind: 'request',
+        requestId: 22,
+        method: 'systemverilog/layout/open',
+        payload: {
+          lefUris: ['file:///C:/workspace/Pristine/sg13g2_stdcell.lef'],
+          title: 'sg13g2_stdcell.lef',
+        },
+      },
+      {
+        sequence: 4,
+        timestamp: '2026-01-01T12:00:03.000Z',
+        direction: 'server->client',
+        kind: 'response',
+        requestId: 22,
+        method: 'systemverilog/layout/open',
+        payload: {
+          protocol: 'pristine-layout-columnar-v3',
+          sessionId: 'layout-1',
+          title: 'sg13g2_stdcell.lef',
+        },
+      },
+    ];
+
+    render(<LspPanel />);
+
+    expect(screen.getByRole('button', { name: /systemverilog\/waveform\/open/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /systemverilog\/layout\/open/i })).toBeInTheDocument();
+    expect(screen.queryByText(/systemverilog\/waveform\/frame/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/systemverilog\/layout\/geometry/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/PWF1|PWVF/i)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /systemverilog\/waveform\/open/i }));
+    expect(screen.getByText('Request payload')).toBeInTheDocument();
+    expect(queryJsonSnippet('"protocol": "pristine-waveform-columnar-v1"')).toBeInTheDocument();
+
+    await user.click(screen.getByTestId('lsp-filter-request'));
+    expect(screen.getByRole('button', { name: /systemverilog\/waveform\/open/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /systemverilog\/layout\/open/i })).toBeInTheDocument();
+
+    await user.click(screen.getByTestId('lsp-filter-response'));
+    expect(screen.getByRole('button', { name: /systemverilog\/waveform\/open/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /systemverilog\/layout\/open/i })).toBeInTheDocument();
+  });
 });

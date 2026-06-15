@@ -1232,6 +1232,26 @@ function getBottomPanelTab(
   return window.getByTestId(`bottom-panel-tab-${tabId}`);
 }
 
+async function expectLspPanelShowsControlPlaneOnly(
+  window: Awaited<ReturnType<typeof launchApp>>['window'],
+  expectedMethod: string,
+  hiddenMethods: string[],
+) {
+  await openBottomTerminal(window);
+  await getBottomPanelTab(window, 'lsp').click();
+  const lspPanel = window.getByTestId('lsp-panel');
+  await expect(lspPanel).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect.poll(async () => lspPanel.innerText(), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toContain(expectedMethod);
+
+  const panelText = await lspPanel.innerText();
+  for (const hiddenMethod of hiddenMethods) {
+    expect(panelText).not.toContain(hiddenMethod);
+  }
+  expect(panelText).not.toMatch(/\b(?:PWF1|PWVF)\b/);
+}
+
 async function expectCompactPanelTabButton(tabButton: Locator) {
   await expect(tabButton).toHaveClass(/(?:^|\s)h-7(?:\s|$)/);
   await expect(tabButton).toHaveClass(/(?:^|\s)w-7(?:\s|$)/);
@@ -2215,6 +2235,13 @@ test('Physical layout requests indexed geometry for LEF macros and GDS cells', a
     await expect.poll(async () => Number(await layout3DCanvas.getAttribute('data-visible-shape-count') ?? '0'), {
       timeout: UI_READY_TIMEOUT_MS,
     }).toBeLessThan(threeDVisibleBeforeGdsLayerToggle);
+
+    await window.getByTestId('activity-item-explorer').click();
+    await expect(window.getByTestId('code-view-explorer')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+    await expectLspPanelShowsControlPlaneOnly(window, 'systemverilog/layout/open', [
+      'systemverilog/layout/geometry',
+      'systemverilog/layoutGeometry',
+    ]);
   } finally {
     await app.close();
   }
@@ -6262,6 +6289,11 @@ test('waveform bottom panel renders binary waveform and controls', async () => {
   await expect.poll(async () => readCanvasNumber('data-waveform-frame-segment-count'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(0);
+  await expectLspPanelShowsControlPlaneOnly(window, 'systemverilog/waveform/open', [
+    'systemverilog/waveform/frame',
+    'systemverilog/waveformFrame',
+  ]);
+  await getBottomPanelTab(window, 'waveform').click();
   await expect.poll(async () => readCanvasNumber('data-source-segment-count'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(0);

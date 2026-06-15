@@ -170,6 +170,17 @@ function getHandler(channel: string): (...args: unknown[]) => Promise<unknown> {
   return entry[1];
 }
 
+function getLspDebugEventsForMethod(sendMock: ReturnType<typeof vi.fn>, method: string) {
+  return sendMock.mock.calls
+    .filter((call): call is [string, { method?: string }] => (
+      call[0] === 'stream:lsp:debug'
+      && typeof call[1] === 'object'
+      && call[1] !== null
+      && (call[1] as { method?: string }).method === method
+    ))
+    .map((call) => call[1]);
+}
+
 function createFakeProcess(): FakeProcess {
   const handlers: Record<string, (...args: unknown[]) => void> = {};
 
@@ -1097,6 +1108,21 @@ describe('LSP IPC handlers', () => {
 
     expect(fakeConnection.sendRequest).toHaveBeenCalledWith('systemverilog/waveform/open', { source: 'mock' });
     expect(fakeConnection.sendRequest).not.toHaveBeenCalledWith('systemverilog/waveformOpen', expect.anything());
+    expect(getLspDebugEventsForMethod(send, 'systemverilog/waveform/open')).toEqual([
+      expect.objectContaining({
+        direction: 'client->server',
+        kind: 'request',
+        payload: { source: 'mock' },
+      }),
+      expect.objectContaining({
+        direction: 'server->client',
+        kind: 'response',
+        payload: expect.objectContaining({
+          protocol: 'pristine-waveform-columnar-v1',
+          sessionId: '1',
+        }),
+      }),
+    ]);
     expect(mockNormalizeWaveformOpenSessionMetadata).toHaveBeenCalledWith(expect.objectContaining({
       endpoint: {
         kind: 'namedPipe',
@@ -1139,6 +1165,8 @@ describe('LSP IPC handlers', () => {
     expect(frame).toBeInstanceOf(ArrayBuffer);
     expect(mockRequestWaveformPipeFrame).toHaveBeenCalledWith(frameOptions);
     expect(fakeConnection.sendRequest).not.toHaveBeenCalledWith('systemverilog/waveformFrame', expect.anything());
+    expect(fakeConnection.sendRequest).not.toHaveBeenCalledWith('systemverilog/waveform/frame', expect.anything());
+    expect(getLspDebugEventsForMethod(send, 'systemverilog/waveform/frame')).toEqual([]);
   });
 
   it('closes waveform pipe sessions before LSP control-plane close', async () => {
@@ -1150,6 +1178,18 @@ describe('LSP IPC handlers', () => {
     expect(mockCloseWaveformPipeSession).toHaveBeenCalledWith('1');
     expect(fakeConnection.sendRequest).toHaveBeenCalledWith('systemverilog/waveform/close', { sessionId: '1' });
     expect(fakeConnection.sendRequest).not.toHaveBeenCalledWith('systemverilog/waveformClose', expect.anything());
+    expect(getLspDebugEventsForMethod(send, 'systemverilog/waveform/close')).toEqual([
+      expect.objectContaining({
+        direction: 'client->server',
+        kind: 'request',
+        payload: { sessionId: '1' },
+      }),
+      expect.objectContaining({
+        direction: 'server->client',
+        kind: 'response',
+        payload: { closed: true },
+      }),
+    ]);
   });
 
   it('opens layout sessions through LSP control plane and pipe catalog metadata', async () => {
@@ -1164,6 +1204,24 @@ describe('LSP IPC handlers', () => {
       title: 'sg13g2_stdcell.lef',
     });
     expect(fakeConnection.sendRequest).not.toHaveBeenCalledWith('systemverilog/layoutOpen', expect.anything());
+    expect(getLspDebugEventsForMethod(send, 'systemverilog/layout/open')).toEqual([
+      expect.objectContaining({
+        direction: 'client->server',
+        kind: 'request',
+        payload: {
+          lefUris: ['file:///C:/workspace/Pristine/test/fixtures/workspace/sg13g2_stdcell.lef'],
+          title: 'sg13g2_stdcell.lef',
+        },
+      }),
+      expect.objectContaining({
+        direction: 'server->client',
+        kind: 'response',
+        payload: expect.objectContaining({
+          protocol: 'pristine-layout-columnar-v3',
+          sessionId: 'layout-1',
+        }),
+      }),
+    ]);
     expect(mockNormalizeLayoutOpenSessionMetadata).toHaveBeenCalledWith(expect.objectContaining({
       endpoint: {
         kind: 'namedPipe',
@@ -1280,6 +1338,7 @@ describe('LSP IPC handlers', () => {
     }));
     expect(mockRequestLayoutPipeGeometry).toHaveBeenCalledWith(geometryOptions);
     expect(fakeConnection.sendRequest).not.toHaveBeenCalledWith('systemverilog/layout/geometry', expect.anything());
+    expect(getLspDebugEventsForMethod(send, 'systemverilog/layout/geometry')).toEqual([]);
   });
 
   it('rejects invalid layout geometry owner indexes', async () => {
@@ -1305,5 +1364,17 @@ describe('LSP IPC handlers', () => {
     expect(mockCloseLayoutPipeSession).toHaveBeenCalledWith('layout-1');
     expect(fakeConnection.sendRequest).toHaveBeenCalledWith('systemverilog/layout/close', { sessionId: 'layout-1' });
     expect(fakeConnection.sendRequest).not.toHaveBeenCalledWith('systemverilog/layoutClose', expect.anything());
+    expect(getLspDebugEventsForMethod(send, 'systemverilog/layout/close')).toEqual([
+      expect.objectContaining({
+        direction: 'client->server',
+        kind: 'request',
+        payload: { sessionId: 'layout-1' },
+      }),
+      expect.objectContaining({
+        direction: 'server->client',
+        kind: 'response',
+        payload: { closed: true },
+      }),
+    ]);
   });
 });
