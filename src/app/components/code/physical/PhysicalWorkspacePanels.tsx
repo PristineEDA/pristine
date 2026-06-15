@@ -47,6 +47,7 @@ import {
 } from './PhysicalLayoutEditorPanel';
 import {
   createPhysicalLayoutLayerTree,
+  getPhysicalLayoutLayerColor,
   getPhysicalLayoutLayerCategories,
   getPhysicalLayoutLayerCategoryColor,
   getPhysicalLayoutOutlineColor,
@@ -264,6 +265,7 @@ function PhysicalLayoutFileTree({
           const targets = active && catalog ? createLayoutFileTargets(catalog) : [];
           const hasChildren = targets.length > 0;
           const FileIcon = getPhysicalLayoutFileIcon(file.extension);
+          const fileIconColor = getPhysicalLayoutFileIconColor(file.extension);
           return (
             <div key={file.path}>
               <button
@@ -282,7 +284,13 @@ function PhysicalLayoutFileTree({
                   size={12}
                   className={cn('shrink-0 transition-transform', expanded && hasChildren && 'rotate-90', !hasChildren && 'opacity-30')}
                 />
-                <FileIcon size={13} className="shrink-0" />
+                <FileIcon
+                  size={13}
+                  className="shrink-0"
+                  data-icon-color={fileIconColor}
+                  data-testid={`physical-layout-file-icon-${sanitizeLayoutTestId(file.path)}`}
+                  style={{ color: fileIconColor }}
+                />
                 <span className="min-w-0 flex-1 truncate">{file.name}</span>
               </button>
 
@@ -291,6 +299,7 @@ function PhysicalLayoutFileTree({
                   {targets.map((target) => {
                     const selected = selectedTarget?.kind === target.kind && selectedTarget.name === target.name;
                     const TargetIcon = target.kind === 'gdsCell' ? Boxes : target.kind === 'design' ? CircuitBoard : Layers3;
+                    const targetIconColor = getPhysicalLayoutTargetIconColor(target);
                     return (
                       <button
                         key={`${target.kind}:${target.name}`}
@@ -304,7 +313,13 @@ function PhysicalLayoutFileTree({
                         onClick={() => onTargetActivate?.(target)}
                         title={target.name}
                       >
-                        <TargetIcon size={12} className="shrink-0" />
+                        <TargetIcon
+                          size={12}
+                          className="shrink-0"
+                          data-icon-color={targetIconColor}
+                          data-testid={`physical-layout-target-icon-${sanitizeLayoutTestId(target.kind)}-${sanitizeLayoutTestId(target.name)}`}
+                          style={{ color: targetIconColor }}
+                        />
                         <span className="min-w-0 flex-1 truncate">{target.name}</span>
                       </button>
                     );
@@ -585,6 +600,34 @@ function getPhysicalLayoutFileIcon(extension: string) {
   }
 
   return FileText;
+}
+
+function getPhysicalLayoutFileIconColor(extension: string) {
+  if (extension === '.gds' || extension === '.gdsii') {
+    return getPhysicalLayoutLayerColor(2).cssColor;
+  }
+  if (extension === '.def') {
+    return getPhysicalLayoutLayerColor(1).cssColor;
+  }
+  if (extension === '.lef') {
+    return getPhysicalLayoutLayerColor(0).cssColor;
+  }
+  if (extension === '.oas' || extension === '.oasis') {
+    return getPhysicalLayoutLayerColor(4).cssColor;
+  }
+
+  return getPhysicalLayoutOutlineColor().cssColor;
+}
+
+function getPhysicalLayoutTargetIconColor(target: PhysicalLayoutTarget) {
+  if (target.kind === 'gdsCell') {
+    return getPhysicalLayoutLayerColor(2).cssColor;
+  }
+  if (target.kind === 'design') {
+    return getPhysicalLayoutLayerColor(1).cssColor;
+  }
+
+  return getPhysicalLayoutLayerColor(0).cssColor;
 }
 
 function PhysicalLowerPanel<TTab extends PhysicalLowerPanelTab>({

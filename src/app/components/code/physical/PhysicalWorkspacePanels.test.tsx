@@ -90,7 +90,10 @@ const nandMacroShapes = selectMacroShapes(layoutFixtureOpenResult.catalog, layou
 const nandTarget: PhysicalLayoutTarget = { kind: 'macro', name: 'sg13g2_nand2_1', index: 1 };
 const nandVisibility = createPhysicalLayoutVisibility(layoutFixtureOpenResult.catalog, true, nandMacroShapes);
 const readyGdsTarget: PhysicalLayoutTarget = { kind: 'gdsCell', name: 'CHILD', index: 1 };
-const layoutFiles = [{ extension: '.lef', name: 'sg13g2_stdcell.lef', path: 'sg13g2_stdcell.lef' }];
+const layoutFiles = [
+  { extension: '.lef', name: 'sg13g2_stdcell.lef', path: 'sg13g2_stdcell.lef' },
+  { extension: '.gds', name: 'chip.gds', path: 'chip.gds' },
+];
 
 function renderInCodeLayout(node: ReactNode) {
   return render(
@@ -276,7 +279,10 @@ describe('PhysicalWorkspacePanels', () => {
     expect(screen.getByTestId('physical-left-panel-tab-constraints')).toBeInTheDocument();
     expect(screen.getByTestId('physical-layout-file-tree')).toBeInTheDocument();
     expect(screen.getByTestId('physical-layout-file-item-sg13g2_stdcell-lef')).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByTestId('physical-layout-file-icon-sg13g2_stdcell-lef')).toHaveAttribute('data-icon-color', '#52a8ff');
+    expect(screen.getByTestId('physical-layout-file-icon-chip-gds')).toHaveAttribute('data-icon-color', '#4dd599');
     expect(screen.getByTestId('physical-layout-target-item-macro-sg13g2_inv_1')).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByTestId('physical-layout-target-icon-macro-sg13g2_inv_1')).toHaveAttribute('data-icon-color', '#52a8ff');
 
     await user.click(screen.getByTestId('physical-layout-target-item-macro-sg13g2_nand2_1'));
 

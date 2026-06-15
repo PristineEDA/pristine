@@ -180,8 +180,8 @@ export function PhysicalLayout3DCanvas({
       dragState.previousX = event.clientX;
       dragState.previousY = event.clientY;
       setOrbit((current) => ({
-        angleX: clamp(current.angleX + dy * 0.01, -1.35, -0.2),
-        angleY: current.angleY + dx * 0.01,
+        angleX: normalizeOrbitAngle(current.angleX + dy * 0.01),
+        angleY: normalizeOrbitAngle(current.angleY + dx * 0.01),
       }));
     };
     const handlePointerUp = (event: PointerEvent) => {
@@ -450,4 +450,9 @@ function disposeObject(object: THREE.Object3D) {
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
+}
+
+function normalizeOrbitAngle(value: number) {
+  const turn = Math.PI * 2;
+  return ((((value + Math.PI) % turn) + turn) % turn) - Math.PI;
 }

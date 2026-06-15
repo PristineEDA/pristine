@@ -2079,10 +2079,14 @@ test('Physical layout requests indexed geometry for LEF macros and GDS cells', a
     await expect(window.getByTestId('physical-layout-file-tree')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
 
     await window.getByTestId('physical-layout-file-item-sg13g2_stdcell-lef').click();
+    await expect(window.getByTestId('physical-layout-file-icon-sg13g2_stdcell-lef')).toHaveAttribute('data-icon-color', '#52a8ff', {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
     await expect(layoutEditor).toHaveAttribute('data-status', 'ready', { timeout: UI_READY_TIMEOUT_MS });
     await expect(window.getByTestId('physical-layout-target-item-macro-sg13g2_e2e_inv_1')).toBeVisible({
       timeout: UI_READY_TIMEOUT_MS,
     });
+    await expect(window.getByTestId('physical-layout-target-icon-macro-sg13g2_e2e_inv_1')).toHaveAttribute('data-icon-color', '#52a8ff');
 
     await expect(layoutCanvas).toHaveAttribute('data-selected-target-name', 'sg13g2_e2e_inv_1', {
       timeout: UI_READY_TIMEOUT_MS,
@@ -2116,9 +2120,13 @@ test('Physical layout requests indexed geometry for LEF macros and GDS cells', a
     expect(Number(await layoutCanvas.getAttribute('data-geometry-shape-count') ?? '0')).toBe(geometryShapeCountBeforeLayerToggle);
 
     await window.getByTestId('physical-layout-file-item-chip-gds').click();
+    await expect(window.getByTestId('physical-layout-file-icon-chip-gds')).toHaveAttribute('data-icon-color', '#4dd599', {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
     await expect(window.getByTestId('physical-layout-target-item-gdsCell-sg13g2_xor2_1')).toBeVisible({
       timeout: UI_READY_TIMEOUT_MS,
     });
+    await expect(window.getByTestId('physical-layout-target-icon-gdsCell-sg13g2_xor2_1')).toHaveAttribute('data-icon-color', '#4dd599');
     await expect(window.getByTestId('physical-layout-target-item-gdsCell-sg13g2_xnor2_1')).toBeVisible({
       timeout: UI_READY_TIMEOUT_MS,
     });
@@ -2188,6 +2196,18 @@ test('Physical layout requests indexed geometry for LEF macros and GDS cells', a
       await expect.poll(async () => Number(await layout3DCanvas.getAttribute('data-render-count') ?? '0'), {
         timeout: UI_READY_TIMEOUT_MS,
       }).toBeGreaterThan(renderCountBeforeOrbit);
+
+      const renderCountBeforeFullOrbit = Number(await layout3DCanvas.getAttribute('data-render-count') ?? '0');
+      await window.mouse.move(threeBox.x + threeBox.width / 2, threeBox.y + threeBox.height / 2);
+      await window.mouse.down();
+      await window.mouse.move(threeBox.x + threeBox.width / 2, threeBox.y + threeBox.height / 2 - 80, { steps: 10 });
+      await window.mouse.up();
+      await expect.poll(async () => Number(await layout3DCanvas.getAttribute('data-orbit-angle-x') ?? '0'), {
+        timeout: UI_READY_TIMEOUT_MS,
+      }).toBeLessThan(-1.35);
+      await expect.poll(async () => Number(await layout3DCanvas.getAttribute('data-render-count') ?? '0'), {
+        timeout: UI_READY_TIMEOUT_MS,
+      }).toBeGreaterThan(renderCountBeforeFullOrbit);
 
       await layout3DCanvas.hover();
       await window.mouse.wheel(0, 180);
