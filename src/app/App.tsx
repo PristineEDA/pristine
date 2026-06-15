@@ -33,6 +33,7 @@ import {
   createPhysicalLayoutVisibility,
   createLayerCategoryVisibilityKey,
   createOutlineVisibilityKey,
+  filterVisiblePhysicalLayoutShapes,
   type PhysicalLayoutLayerCategory,
   type MutablePhysicalLayoutVisibility,
 } from './components/code/physical/physicalLayoutLayers';
@@ -156,6 +157,7 @@ function AppLayout() {
   const [expandedPhysicalLayoutFilePaths, setExpandedPhysicalLayoutFilePaths] = useState<Set<string>>(() => new Set());
   const [activePhysicalLayoutFilePath, setActivePhysicalLayoutFilePath] = useState<string | null>(null);
   const [physicalSelectedTarget, setPhysicalSelectedTarget] = useState<PhysicalLayoutTarget | null>(null);
+  const [physicalHighlightedShapeIndex, setPhysicalHighlightedShapeIndex] = useState<number | null>(null);
   const [physicalLayoutVisibility, setPhysicalLayoutVisibility] = useState<MutablePhysicalLayoutVisibility>(() => (
     createEmptyPhysicalLayoutVisibility()
   ));
@@ -214,6 +216,28 @@ function AppLayout() {
     setPhysicalLayoutVisibility(createPhysicalLayoutVisibility(physicalLayoutState.catalog, Boolean(physicalSelectedTarget), shapes));
   }, [physicalLayoutState.catalog, physicalLayoutState.geometry, physicalSelectedTarget]);
 
+  useEffect(() => {
+    setPhysicalHighlightedShapeIndex(null);
+  }, [activePhysicalLayoutFilePath, physicalLayoutState.geometry, physicalSelectedTarget]);
+
+  useEffect(() => {
+    if (physicalHighlightedShapeIndex === null) {
+      return;
+    }
+
+    const selectedShapes = selectLayoutTargetShapes(physicalLayoutState.catalog, physicalLayoutState.geometry, physicalSelectedTarget);
+    const visibleShapes = filterVisiblePhysicalLayoutShapes(selectedShapes, physicalLayoutVisibility);
+    if (!visibleShapes.some((shape) => shape.index === physicalHighlightedShapeIndex)) {
+      setPhysicalHighlightedShapeIndex(null);
+    }
+  }, [
+    physicalHighlightedShapeIndex,
+    physicalLayoutState.catalog,
+    physicalLayoutState.geometry,
+    physicalLayoutVisibility,
+    physicalSelectedTarget,
+  ]);
+
   const handlePhysicalOutlineVisibilityToggle = useCallback(() => {
     setPhysicalLayoutVisibility((current) => {
       const nextItems = new Set(current.visibleItems);
@@ -262,6 +286,7 @@ function AppLayout() {
       return next;
     });
 
+    setPhysicalHighlightedShapeIndex(null);
     setPhysicalSelectedTarget(null);
     setActivePhysicalLayoutFilePath(file.path);
     setPhysicalLayoutState({
@@ -274,6 +299,7 @@ function AppLayout() {
   }, []);
 
   const handlePhysicalLayoutTargetActivate = useCallback((target: PhysicalLayoutTarget) => {
+    setPhysicalHighlightedShapeIndex(null);
     setPhysicalSelectedTarget(target);
   }, []);
 
@@ -644,8 +670,10 @@ function AppLayout() {
       topContent: (
         <PhysicalMainPanel
           activeLayoutFilePath={activePhysicalLayoutFilePath}
+          highlightedShapeIndex={physicalHighlightedShapeIndex}
           layoutVisibility={physicalLayoutVisibility}
           selectedTarget={physicalSelectedTarget}
+          onHighlightedShapeChange={setPhysicalHighlightedShapeIndex}
           onSelectedTargetChange={setPhysicalSelectedTarget}
           onLayoutStateChange={setPhysicalLayoutState}
         />
@@ -662,6 +690,7 @@ function AppLayout() {
       onBottomPanelAutoHide: () => setShowBottomPanel(false),
       rightContent: (
         <PhysicalRightPanel
+          highlightedShapeIndex={physicalHighlightedShapeIndex}
           layoutVisibility={physicalLayoutVisibility}
           layoutState={physicalLayoutState}
           selectedTarget={physicalSelectedTarget}

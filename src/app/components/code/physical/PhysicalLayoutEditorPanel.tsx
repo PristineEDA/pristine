@@ -33,8 +33,10 @@ export interface PhysicalLayoutStateSnapshot {
 
 interface PhysicalLayoutEditorPanelProps {
   activeLayoutFilePath: string | null;
+  highlightedShapeIndex?: number | null;
   layoutVisibility: PhysicalLayoutVisibility;
   selectedTarget: PhysicalLayoutTarget | null;
+  onHighlightedShapeChange?: (shapeIndex: number | null) => void;
   onLayoutStateChange?: (state: PhysicalLayoutStateSnapshot) => void;
   onSelectedTargetChange?: (target: PhysicalLayoutTarget | null) => void;
 }
@@ -77,8 +79,10 @@ function createLayoutTargetGeometryOptions(
 
 export function PhysicalLayoutEditorPanel({
   activeLayoutFilePath,
+  highlightedShapeIndex = null,
   layoutVisibility,
   selectedTarget,
+  onHighlightedShapeChange,
   onLayoutStateChange,
   onSelectedTargetChange,
 }: PhysicalLayoutEditorPanelProps) {
@@ -233,16 +237,20 @@ export function PhysicalLayoutEditorPanel({
     <PhysicalLayoutCanvas
       catalog={catalog}
       geometry={geometry}
+      highlightedShapeIndex={highlightedShapeIndex}
       layoutVisibility={layoutVisibility}
       selectedTarget={selectedTarget}
+      onHighlightedShapeChange={onHighlightedShapeChange}
     />
   );
   const canvas3D = is3DRenderable ? (
     <PhysicalLayout3DCanvas
       catalog={catalog}
       geometry={geometry}
+      highlightedShapeIndex={highlightedShapeIndex}
       layoutVisibility={layoutVisibility}
       selectedTarget={selectedTarget}
+      onHighlightedShapeChange={onHighlightedShapeChange}
     />
   ) : (
     <div
@@ -258,6 +266,7 @@ export function PhysicalLayoutEditorPanel({
       className="flex h-full min-h-0 flex-col bg-[#0f1419] text-ide-text"
       data-3d-supported={is3DRenderable ? 'true' : 'false'}
       data-3d-visible={is3DViewVisible ? 'true' : 'false'}
+      data-highlighted-shape-index={highlightedShapeIndex ?? ''}
       data-layer-count={layerCount}
       data-macro-count={macroCount}
       data-selected-macro-name={selectedTarget?.kind === 'macro' ? selectedTarget.name : ''}

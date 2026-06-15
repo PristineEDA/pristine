@@ -2154,6 +2154,69 @@ test('Physical layout requests indexed geometry for LEF macros and GDS cells', a
       timeout: UI_READY_TIMEOUT_MS,
     }).toBeGreaterThan(0);
 
+    const firstVisibleShapeIndex = await layoutCanvas.getAttribute('data-pick-visible-shape-index');
+    const firstVisibleShapeScreenX = Number(await layoutCanvas.getAttribute('data-pick-visible-shape-screen-x') ?? 'NaN');
+    const firstVisibleShapeScreenY = Number(await layoutCanvas.getAttribute('data-pick-visible-shape-screen-y') ?? 'NaN');
+    const layoutCanvasBox = await layoutCanvas.boundingBox();
+    expect(firstVisibleShapeIndex).toBeTruthy();
+    expect(Number.isFinite(firstVisibleShapeScreenX)).toBe(true);
+    expect(Number.isFinite(firstVisibleShapeScreenY)).toBe(true);
+    expect(layoutCanvasBox).not.toBeNull();
+    if (layoutCanvasBox && firstVisibleShapeIndex) {
+      await window.mouse.click(
+        layoutCanvasBox.x + firstVisibleShapeScreenX,
+        layoutCanvasBox.y + firstVisibleShapeScreenY,
+      );
+      await expect(layoutCanvas).toHaveAttribute('data-highlighted-shape-index', firstVisibleShapeIndex, {
+        timeout: UI_READY_TIMEOUT_MS,
+      });
+      await expect(layout3DCanvas).toHaveAttribute('data-highlighted-shape-index', firstVisibleShapeIndex, {
+        timeout: UI_READY_TIMEOUT_MS,
+      });
+    }
+
+    await window.getByTestId('physical-right-panel-split-toggle').click();
+    await expect(window.getByTestId('physical-inspector-selected-shape')).toBeVisible({
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await expect(window.getByTestId('physical-inspector-selected-shape-index')).toHaveText(firstVisibleShapeIndex ?? '', {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await expect(window.getByTestId('physical-inspector-selected-shape-layer')).toBeVisible();
+    await expect(window.getByTestId('physical-inspector-selected-shape-kind')).toBeVisible();
+    await expect(window.getByTestId('physical-inspector-selected-shape-bounds')).toBeVisible();
+
+    const threeSelectionBox = await layout3DCanvas.boundingBox();
+    const threePickShapeIndex = await layout3DCanvas.getAttribute('data-pick-visible-shape-index');
+    const threePickShapeScreenX = Number(await layout3DCanvas.getAttribute('data-pick-visible-shape-screen-x') ?? 'NaN');
+    const threePickShapeScreenY = Number(await layout3DCanvas.getAttribute('data-pick-visible-shape-screen-y') ?? 'NaN');
+    expect(threeSelectionBox).not.toBeNull();
+    expect(threePickShapeIndex).toBeTruthy();
+    expect(Number.isFinite(threePickShapeScreenX)).toBe(true);
+    expect(Number.isFinite(threePickShapeScreenY)).toBe(true);
+    if (threeSelectionBox && threePickShapeIndex) {
+      await window.mouse.click(
+        threeSelectionBox.x + threePickShapeScreenX,
+        threeSelectionBox.y + threePickShapeScreenY,
+      );
+      await expect(layout3DCanvas).toHaveAttribute('data-highlighted-shape-index', threePickShapeIndex, {
+        timeout: UI_READY_TIMEOUT_MS,
+      });
+      await expect(layoutCanvas).toHaveAttribute('data-highlighted-shape-index', threePickShapeIndex, {
+        timeout: UI_READY_TIMEOUT_MS,
+      });
+    }
+
+    if (layoutCanvasBox) {
+      await window.mouse.click(layoutCanvasBox.x + 8, layoutCanvasBox.y + 8);
+      await expect(layoutCanvas).toHaveAttribute('data-highlighted-shape-index', '', {
+        timeout: UI_READY_TIMEOUT_MS,
+      });
+      await expect(layout3DCanvas).toHaveAttribute('data-highlighted-shape-index', '', {
+        timeout: UI_READY_TIMEOUT_MS,
+      });
+    }
+
     const twoDPanelBox = await window.getByTestId('panel-physical-layout-2d-panel').boundingBox();
     const threeDPanelBox = await window.getByTestId('panel-physical-layout-3d-panel').boundingBox();
     expect(twoDPanelBox).not.toBeNull();
@@ -2249,13 +2312,41 @@ test('Physical layout requests indexed geometry for LEF macros and GDS cells', a
 
     const twoDVisibleBeforeGdsLayerToggle = Number(await layoutCanvas.getAttribute('data-visible-shape-count') ?? '0');
     const threeDVisibleBeforeGdsLayerToggle = Number(await layout3DCanvas.getAttribute('data-visible-shape-count') ?? '0');
-    await window.locator('button[data-testid^="physical-layer-category-swatch-"][data-testid$="-boundary"]:not(:disabled)').first().click();
+    const firstVisibleShapeIndexBeforeHide = await layoutCanvas.getAttribute('data-pick-visible-shape-index');
+    const firstVisibleShapeLayerIndexBeforeHide = await layoutCanvas.getAttribute('data-pick-visible-shape-layer-index');
+    const firstVisibleShapeCategoryBeforeHide = await layoutCanvas.getAttribute('data-pick-visible-shape-category');
+    const firstVisibleShapeScreenXBeforeHide = Number(await layoutCanvas.getAttribute('data-pick-visible-shape-screen-x') ?? 'NaN');
+    const firstVisibleShapeScreenYBeforeHide = Number(await layoutCanvas.getAttribute('data-pick-visible-shape-screen-y') ?? 'NaN');
+    const layoutCanvasBoxBeforeHide = await layoutCanvas.boundingBox();
+    if (
+      layoutCanvasBoxBeforeHide
+      && firstVisibleShapeIndexBeforeHide
+      && Number.isFinite(firstVisibleShapeScreenXBeforeHide)
+      && Number.isFinite(firstVisibleShapeScreenYBeforeHide)
+    ) {
+      await window.mouse.click(
+        layoutCanvasBoxBeforeHide.x + firstVisibleShapeScreenXBeforeHide,
+        layoutCanvasBoxBeforeHide.y + firstVisibleShapeScreenYBeforeHide,
+      );
+      await expect(layoutCanvas).toHaveAttribute('data-highlighted-shape-index', firstVisibleShapeIndexBeforeHide, {
+        timeout: UI_READY_TIMEOUT_MS,
+      });
+    }
+    expect(firstVisibleShapeLayerIndexBeforeHide).toBeTruthy();
+    expect(firstVisibleShapeCategoryBeforeHide).toBeTruthy();
+    await window.getByTestId(`physical-layer-category-swatch-${firstVisibleShapeLayerIndexBeforeHide}-${firstVisibleShapeCategoryBeforeHide}`).click();
     await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-visible-shape-count') ?? '0'), {
       timeout: UI_READY_TIMEOUT_MS,
     }).toBeLessThan(twoDVisibleBeforeGdsLayerToggle);
     await expect.poll(async () => Number(await layout3DCanvas.getAttribute('data-visible-shape-count') ?? '0'), {
       timeout: UI_READY_TIMEOUT_MS,
     }).toBeLessThan(threeDVisibleBeforeGdsLayerToggle);
+    await expect(layoutCanvas).toHaveAttribute('data-highlighted-shape-index', '', {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await expect(layout3DCanvas).toHaveAttribute('data-highlighted-shape-index', '', {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
 
     await window.getByTestId('activity-item-explorer').click();
     await expect(window.getByTestId('code-view-explorer')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });

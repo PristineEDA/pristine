@@ -24,15 +24,20 @@ vi.mock('./PhysicalLayoutCanvas', () => ({
   PhysicalLayoutCanvas: ({
     catalog,
     geometry,
+    highlightedShapeIndex,
     layoutVisibility,
+    onHighlightedShapeChange,
     selectedTarget,
   }: {
     catalog: typeof layoutFixtureOpenResult.catalog | null;
     geometry: typeof layoutFixtureGeometry | null;
+    highlightedShapeIndex?: number | null;
     layoutVisibility: PhysicalLayoutVisibility;
+    onHighlightedShapeChange?: (shapeIndex: number | null) => void;
     selectedTarget: PhysicalLayoutTarget | null;
   }) => (
     <div
+      data-highlighted-shape-index={highlightedShapeIndex ?? ''}
       data-layer-count={catalog?.layers.length ?? 0}
       data-macro-count={catalog?.macros.length ?? 0}
       data-renderer="webgl"
@@ -42,6 +47,7 @@ vi.mock('./PhysicalLayoutCanvas', () => ({
       data-testid="physical-layout-canvas"
       data-visible-label-names="A|Y"
       data-visible-shape-count={geometry ? filterVisiblePhysicalLayoutShapes(geometry.shapes, layoutVisibility).length : 0}
+      onClick={() => onHighlightedShapeChange?.(geometry?.shapes[0]?.index ?? null)}
     />
   ),
 }));
@@ -50,13 +56,18 @@ vi.mock('./PhysicalLayout3DCanvas', () => ({
   PhysicalLayout3DCanvas: ({
     catalog,
     geometry,
+    highlightedShapeIndex,
+    onHighlightedShapeChange,
     selectedTarget,
   }: {
     catalog: typeof layoutFixtureOpenResult.catalog | null;
     geometry: typeof layoutFixtureGeometry | null;
+    highlightedShapeIndex?: number | null;
+    onHighlightedShapeChange?: (shapeIndex: number | null) => void;
     selectedTarget: PhysicalLayoutTarget | null;
   }) => (
     <div
+      data-highlighted-shape-index={highlightedShapeIndex ?? ''}
       data-orbit-origin="bounds3d"
       data-pan-x="0.0000"
       data-pan-y="0.0000"
@@ -72,6 +83,7 @@ vi.mock('./PhysicalLayout3DCanvas', () => ({
       data-viewport-left-border="false"
       data-visible-shape-count={geometry?.shapes.length ?? 0}
       data-zoom="1.0000"
+      onClick={() => onHighlightedShapeChange?.(geometry?.shapes[1]?.index ?? null)}
     />
   ),
 }));
@@ -257,6 +269,49 @@ describe('PhysicalWorkspacePanels', () => {
     expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveAttribute('data-source-kind', 'gds');
   });
 
+  it('syncs highlighted shape state between 2D and 3D canvases', async () => {
+    const user = userEvent.setup();
+    const layoutOpen = vi.mocked(getTestElectronApi().lsp.layoutOpen);
+    const selectedGdsShapes = layoutFixtureGdsGeometry.shapes.filter((shape) => shape.macroIndex === readyGdsTarget.index);
+    const gdsVisibility = createPhysicalLayoutVisibility(layoutFixtureGdsOpenResult.catalog, true, selectedGdsShapes);
+    layoutOpen.mockResolvedValueOnce(layoutFixtureGdsOpenResult);
+
+    function PhysicalGdsPanelHarness() {
+      const [selectedTarget, setSelectedTarget] = useState<PhysicalLayoutTarget | null>(readyGdsTarget);
+      const [highlightedShapeIndex, setHighlightedShapeIndex] = useState<number | null>(null);
+
+      return (
+        <PhysicalMainPanel
+          activeLayoutFilePath="chip.gds"
+          highlightedShapeIndex={highlightedShapeIndex}
+          layoutVisibility={gdsVisibility}
+          selectedTarget={selectedTarget}
+          onHighlightedShapeChange={setHighlightedShapeIndex}
+          onSelectedTargetChange={setSelectedTarget}
+        />
+      );
+    }
+
+    renderInCodeLayout(<PhysicalGdsPanelHarness />);
+
+    await waitFor(() => expect(screen.getByTestId('physical-layout-editor')).toHaveAttribute('data-status', 'ready'));
+    await user.click(screen.getByTestId('physical-layout-3d-toggle'));
+    const layoutGeometryResults = vi.mocked(getTestElectronApi().lsp.layoutGeometry).mock.results;
+    const selectedGdsGeometry = await layoutGeometryResults[layoutGeometryResults.length - 1]?.value;
+    const selectedGdsShapeIndex = (await selectedGdsGeometry)?.shapes[0]?.index;
+    const nextGdsShapeIndex = (await selectedGdsGeometry)?.shapes[1]?.index;
+
+    await user.click(screen.getByTestId('physical-layout-canvas'));
+
+    expect(screen.getByTestId('physical-layout-canvas')).toHaveAttribute('data-highlighted-shape-index', String(selectedGdsShapeIndex));
+    expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveAttribute('data-highlighted-shape-index', String(selectedGdsShapeIndex));
+
+    await user.click(screen.getByTestId('physical-layout-3d-canvas'));
+
+    expect(screen.getByTestId('physical-layout-canvas')).toHaveAttribute('data-highlighted-shape-index', String(nextGdsShapeIndex));
+    expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveAttribute('data-highlighted-shape-index', String(nextGdsShapeIndex));
+  });
+
   it('switches the physical left panel tabs and activates macros', async () => {
     const user = userEvent.setup();
     const onTargetActivate = vi.fn();
@@ -407,6 +462,26 @@ describe('PhysicalWorkspacePanels', () => {
     await user.click(screen.getByTestId('physical-right-panel-split-toggle'));
 
     expect(screen.getByTestId('physical-right-panel-split-toggle')).toHaveAttribute('aria-label', 'Show lower physical right panel');
+  });
+
+  it('shows selected shape details in the right lower inspector', async () => {
+    const user = userEvent.setup();
+    renderInCodeLayout(
+      <PhysicalRightPanel
+        highlightedShapeIndex={layoutFixtureGeometry.shapes[0]?.index}
+        layoutVisibility={readyVisibility}
+        layoutState={readyLayoutState}
+        selectedTarget={readyTarget}
+      />,
+    );
+
+    await user.click(screen.getByTestId('physical-right-panel-split-toggle'));
+
+    expect(screen.getByTestId('physical-inspector-selected-shape')).toHaveTextContent('Selected Shape');
+    expect(screen.getByTestId('physical-inspector-selected-shape-index')).toHaveTextContent(String(layoutFixtureGeometry.shapes[0]?.index));
+    expect(screen.getByTestId('physical-inspector-selected-shape-layer')).toHaveTextContent('Metal1');
+    expect(screen.getByTestId('physical-inspector-selected-shape-kind')).toHaveTextContent(layoutFixtureGeometry.shapes[0]?.kind ?? '');
+    expect(screen.getByTestId('physical-inspector-selected-shape-bounds')).toHaveTextContent('0.120');
   });
 
   it('switches bottom tabs and calls bottom panel controls', async () => {

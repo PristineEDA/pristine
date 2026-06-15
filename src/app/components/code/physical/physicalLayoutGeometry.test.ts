@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import type { LspLayoutCatalog, LspLayoutGeometry } from '../../../../../types/systemverilog-lsp';
+import type { LspLayoutCatalog, LspLayoutGeometry, LspLayoutShape } from '../../../../../types/systemverilog-lsp';
 import { layoutFixtureGdsGeometry, layoutFixtureGdsOpenResult, layoutFixtureGeometry, layoutFixtureOpenResult } from '../../../../test/layoutFixture';
 import {
   applyLayoutWheel,
+  findShapeAtLayoutPoint,
   findLayoutMacro,
   getFitLayoutCamera,
   getFirstLayoutMacroName,
@@ -278,6 +279,40 @@ describe('physicalLayoutGeometry', () => {
     );
 
     expect(hiddenBoundaryInput.meshes.map((mesh) => mesh.category)).toEqual(['path', 'text']);
+  });
+
+  it('finds the topmost visible shape at a layout point', () => {
+    const bottomShape = layoutFixtureGeometry.shapes[0] as LspLayoutShape;
+    const topShape = {
+      ...layoutFixtureGeometry.shapes[1],
+      index: 99,
+      rect: { x0: 0.3, y0: 0.6, x1: 1.1, y1: 1.4 },
+    } as LspLayoutShape;
+
+    const bottomPoint = {
+      x: (bottomShape.rect.x0 + bottomShape.rect.x1) / 2,
+      y: (bottomShape.rect.y0 + bottomShape.rect.y1) / 2,
+    };
+
+    expect(findShapeAtLayoutPoint([bottomShape, topShape], { x: 0.5, y: 0.8 })?.index).toBe(99);
+    expect(findShapeAtLayoutPoint([bottomShape], bottomPoint)?.index).toBe(bottomShape.index);
+    expect(findShapeAtLayoutPoint([bottomShape], { x: -10, y: -10 })).toBeNull();
+  });
+
+  it('uses polygon hit testing for polygon shapes', () => {
+    const polygonShape = {
+      ...layoutFixtureGeometry.shapes[0],
+      kind: 'polygon' as const,
+      polygon: [
+        { x: 0, y: 0 },
+        { x: 2, y: 0 },
+        { x: 1, y: 2 },
+      ],
+      rect: { x0: 0, y0: 0, x1: 2, y1: 2 },
+    } as LspLayoutShape;
+
+    expect(findShapeAtLayoutPoint([polygonShape], { x: 1, y: 1 })?.index).toBe(polygonShape.index);
+    expect(findShapeAtLayoutPoint([polygonShape], { x: 0.1, y: 1.9 })).toBeNull();
   });
 
   it('uses fallback layout bounds when hidden 3D categories leave no meshes', () => {

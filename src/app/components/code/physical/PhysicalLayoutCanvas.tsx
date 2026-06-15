@@ -9,10 +9,13 @@ import type {
 } from '../../../../../types/systemverilog-lsp';
 import {
   applyLayoutWheel,
+  findShapeAtLayoutPoint,
   getFitLayoutCamera,
   getLayoutTargetBounds,
   getShapesBounds,
+  layoutClientPointToWorldPoint,
   selectLayoutTargetShapes,
+  shapeBounds,
   type PhysicalLayoutCamera,
   type PhysicalLayoutTarget,
 } from './physicalLayoutGeometry';
@@ -35,8 +38,10 @@ type PixiRendererStatus = PixiRendererPreference | 'error' | 'initializing';
 interface PhysicalLayoutCanvasProps {
   catalog: LspLayoutCatalog | null;
   geometry: LspLayoutGeometry | null;
+  highlightedShapeIndex?: number | null;
   selectedTarget: PhysicalLayoutTarget | null;
   layoutVisibility: PhysicalLayoutVisibility;
+  onHighlightedShapeChange?: (shapeIndex: number | null) => void;
 }
 
 const defaultCamera: PhysicalLayoutCamera = { panX: 0, panY: 0, zoom: 24 };
@@ -44,12 +49,15 @@ const minimumCanvasWidth = 240;
 const minimumCanvasHeight = 180;
 const gridMajorStep = 1;
 const gridMinorStep = 0.2;
+const clickDistanceThresholdPx = 4;
 
 export function PhysicalLayoutCanvas({
   catalog,
   geometry,
+  highlightedShapeIndex = null,
   selectedTarget,
   layoutVisibility,
+  onHighlightedShapeChange,
 }: PhysicalLayoutCanvasProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const appRef = useRef<Application | null>(null);
@@ -61,6 +69,8 @@ export function PhysicalLayoutCanvas({
   const selectedShapesRef = useRef<LspLayoutShape[]>([]);
   const selectedLabelsRef = useRef<PhysicalLayoutPinLabel[]>([]);
   const outlineVisibleRef = useRef(false);
+  const highlightedShapeIndexRef = useRef<number | null>(highlightedShapeIndex);
+  const onHighlightedShapeChangeRef = useRef(onHighlightedShapeChange);
   const [renderer, setRenderer] = useState<PixiRendererStatus>('initializing');
   const [camera, setCamera] = useState<PhysicalLayoutCamera>(defaultCamera);
   const [renderCount, setRenderCount] = useState(0);
@@ -95,11 +105,17 @@ export function PhysicalLayoutCanvas({
   const visibleLayerCount = getVisiblePhysicalLayoutLayerCount(catalog, layoutVisibility);
   const visibleCategoryCount = getVisiblePhysicalLayoutCategoryCount(catalog, layoutVisibility);
   const outlineVisible = isPhysicalLayoutOutlineVisible(layoutVisibility);
+  const pickableShape = useMemo(
+    () => getPickableVisibleShape(visibleShapes, camera, size),
+    [camera, size, visibleShapes],
+  );
 
   selectedBoundsRef.current = selectedBounds;
   selectedShapesRef.current = visibleShapes;
   selectedLabelsRef.current = visibleLabels;
   outlineVisibleRef.current = outlineVisible;
+  highlightedShapeIndexRef.current = highlightedShapeIndex;
+  onHighlightedShapeChangeRef.current = onHighlightedShapeChange;
 
   useEffect(() => {
     const host = hostRef.current;
@@ -178,7 +194,7 @@ export function PhysicalLayoutCanvas({
   useEffect(() => {
     redrawScene();
     requestRender();
-  }, [outlineVisible, visibleLabels, visibleShapes]);
+  }, [highlightedShapeIndex, outlineVisible, visibleLabels, visibleShapes]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -187,9 +203,11 @@ export function PhysicalLayoutCanvas({
     }
 
     const dragState = {
+      moved: false,
       pointerId: -1,
       previousX: 0,
       previousY: 0,
+      totalDistance: 0,
     };
 
     const handleWheel = (event: WheelEvent) => {
@@ -198,9 +216,15 @@ export function PhysicalLayoutCanvas({
       updateCamera(applyLayoutWheel(cameraRef.current, event, { x: bounds.left, y: bounds.top }));
     };
     const handlePointerDown = (event: PointerEvent) => {
+      if (event.button !== 0) {
+        return;
+      }
+
+      dragState.moved = false;
       dragState.pointerId = event.pointerId;
       dragState.previousX = event.clientX;
       dragState.previousY = event.clientY;
+      dragState.totalDistance = 0;
       host.setPointerCapture(event.pointerId);
     };
     const handlePointerMove = (event: PointerEvent) => {
@@ -212,6 +236,8 @@ export function PhysicalLayoutCanvas({
       const dy = event.clientY - dragState.previousY;
       dragState.previousX = event.clientX;
       dragState.previousY = event.clientY;
+      dragState.totalDistance += Math.hypot(dx, dy);
+      dragState.moved = dragState.totalDistance > clickDistanceThresholdPx;
       updateCamera({
         ...cameraRef.current,
         panX: cameraRef.current.panX + dx,
@@ -224,22 +250,33 @@ export function PhysicalLayoutCanvas({
       }
 
       dragState.pointerId = -1;
+      if (!dragState.moved) {
+        const bounds = host.getBoundingClientRect();
+        const point = layoutClientPointToWorldPoint(
+          { x: event.clientX, y: event.clientY },
+          bounds,
+          cameraRef.current,
+        );
+        const shape = findShapeAtLayoutPoint(selectedShapesRef.current, point, 4 / cameraRef.current.zoom);
+        onHighlightedShapeChangeRef.current?.(shape?.index ?? null);
+      }
+
       if (host.hasPointerCapture(event.pointerId)) {
         host.releasePointerCapture(event.pointerId);
       }
     };
 
     host.addEventListener('wheel', handleWheel, { passive: false });
-    host.addEventListener('pointerdown', handlePointerDown);
-    host.addEventListener('pointermove', handlePointerMove);
-    host.addEventListener('pointerup', handlePointerUp);
-    host.addEventListener('pointercancel', handlePointerUp);
+    host.addEventListener('pointerdown', handlePointerDown, true);
+    host.addEventListener('pointermove', handlePointerMove, true);
+    host.addEventListener('pointerup', handlePointerUp, true);
+    host.addEventListener('pointercancel', handlePointerUp, true);
     return () => {
       host.removeEventListener('wheel', handleWheel);
-      host.removeEventListener('pointerdown', handlePointerDown);
-      host.removeEventListener('pointermove', handlePointerMove);
-      host.removeEventListener('pointerup', handlePointerUp);
-      host.removeEventListener('pointercancel', handlePointerUp);
+      host.removeEventListener('pointerdown', handlePointerDown, true);
+      host.removeEventListener('pointermove', handlePointerMove, true);
+      host.removeEventListener('pointerup', handlePointerUp, true);
+      host.removeEventListener('pointercancel', handlePointerUp, true);
     };
   }, []);
 
@@ -300,6 +337,10 @@ export function PhysicalLayoutCanvas({
       world.addChild(drawLayoutOutline(bounds));
     }
     world.addChild(drawShapes(selectedShapesRef.current));
+    const highlightedShape = selectedShapesRef.current.find((shape) => shape.index === highlightedShapeIndexRef.current) ?? null;
+    if (highlightedShape) {
+      world.addChild(drawHighlightedShape(highlightedShape));
+    }
     const labels = drawPinLabels(selectedLabelsRef.current);
     if (labels.length > 0) {
       world.addChild(...labels);
@@ -314,6 +355,7 @@ export function PhysicalLayoutCanvas({
       data-catalog-pin-count={catalogPinCount}
       data-geometry-shape-count={geometry?.shapes.length ?? 0}
       data-hidden-layer-count={Math.max(0, layerCount - visibleLayerCount)}
+      data-highlighted-shape-index={highlightedShapeIndex ?? ''}
       data-outline-visible={outlineVisible ? 'true' : 'false'}
       data-layer-count={layerCount}
       data-macro-count={catalog?.macros.length ?? 0}
@@ -329,6 +371,14 @@ export function PhysicalLayoutCanvas({
       data-shape-count={selectedShapes.length}
       data-testid="physical-layout-canvas"
       data-visible-category-count={visibleCategoryCount}
+      data-first-visible-shape-index={visibleShapes[0]?.index ?? ''}
+      data-first-visible-shape-screen-x={formatShapeScreenX(visibleShapes[0], camera)}
+      data-first-visible-shape-screen-y={formatShapeScreenY(visibleShapes[0], camera)}
+      data-pick-visible-shape-category={pickableShape ? getCanvasShapeCategory(pickableShape.shape) : ''}
+      data-pick-visible-shape-index={pickableShape?.shape.index ?? ''}
+      data-pick-visible-shape-layer-index={pickableShape?.shape.layerIndex ?? ''}
+      data-pick-visible-shape-screen-x={formatPickScreenX(pickableShape, camera)}
+      data-pick-visible-shape-screen-y={formatPickScreenY(pickableShape, camera)}
       data-visible-label-count={visibleLabels.length}
       data-visible-label-names={visibleLabels.map((label) => label.name).join('|')}
       data-visible-layer-count={visibleLayerCount}
@@ -381,6 +431,106 @@ async function createPixiApp(host: HTMLElement) {
   }
 
   throw lastError instanceof Error ? lastError : new Error('Unable to initialize layout renderer.');
+}
+
+function formatShapeScreenX(shape: LspLayoutShape | undefined, camera: PhysicalLayoutCamera): string {
+  if (!shape) {
+    return '';
+  }
+
+  const bounds = shapeBounds(shape);
+  return (camera.panX + ((bounds.x0 + bounds.x1) / 2) * camera.zoom).toFixed(2);
+}
+
+function formatShapeScreenY(shape: LspLayoutShape | undefined, camera: PhysicalLayoutCamera): string {
+  if (!shape) {
+    return '';
+  }
+
+  const bounds = shapeBounds(shape);
+  return (camera.panY + ((bounds.y0 + bounds.y1) / 2) * camera.zoom).toFixed(2);
+}
+
+interface PickableLayoutShape {
+  point: { x: number; y: number };
+  shape: LspLayoutShape;
+}
+
+function getPickableVisibleShape(
+  shapes: readonly LspLayoutShape[],
+  camera: PhysicalLayoutCamera,
+  size: { width: number; height: number },
+): PickableLayoutShape | null {
+  const tolerance = 4 / camera.zoom;
+  for (let shapeIndex = shapes.length - 1; shapeIndex >= 0; shapeIndex -= 1) {
+    const shape = shapes[shapeIndex];
+    if (!shape) {
+      continue;
+    }
+
+    for (const point of getShapePickCandidatePoints(shape)) {
+      const topShape = findShapeAtLayoutPoint(shapes, point, tolerance);
+      if (topShape?.index !== shape.index) {
+        continue;
+      }
+
+      const screenX = camera.panX + point.x * camera.zoom;
+      const screenY = camera.panY + point.y * camera.zoom;
+      if (screenX >= 2 && screenX <= size.width - 2 && screenY >= 2 && screenY <= size.height - 2) {
+        return { point, shape };
+      }
+    }
+  }
+
+  return null;
+}
+
+function getShapePickCandidatePoints(shape: LspLayoutShape): Array<{ x: number; y: number }> {
+  const bounds = shapeBounds(shape);
+  const candidates: Array<{ x: number; y: number }> = [
+    {
+      x: (bounds.x0 + bounds.x1) / 2,
+      y: (bounds.y0 + bounds.y1) / 2,
+    },
+  ];
+
+  if (shape.polygon && shape.polygon.length > 0) {
+    const centroid = shape.polygon.reduce(
+      (sum, point) => ({ x: sum.x + point.x, y: sum.y + point.y }),
+      { x: 0, y: 0 },
+    );
+    candidates.push({
+      x: centroid.x / shape.polygon.length,
+      y: centroid.y / shape.polygon.length,
+    });
+  }
+
+  for (const xFraction of [0.25, 0.5, 0.75]) {
+    for (const yFraction of [0.25, 0.5, 0.75]) {
+      candidates.push({
+        x: bounds.x0 + (bounds.x1 - bounds.x0) * xFraction,
+        y: bounds.y0 + (bounds.y1 - bounds.y0) * yFraction,
+      });
+    }
+  }
+
+  return candidates;
+}
+
+function formatPickScreenX(pickableShape: PickableLayoutShape | null, camera: PhysicalLayoutCamera): string {
+  if (!pickableShape) {
+    return '';
+  }
+
+  return (camera.panX + pickableShape.point.x * camera.zoom).toFixed(2);
+}
+
+function formatPickScreenY(pickableShape: PickableLayoutShape | null, camera: PhysicalLayoutCamera): string {
+  if (!pickableShape) {
+    return '';
+  }
+
+  return (camera.panY + pickableShape.point.y * camera.zoom).toFixed(2);
 }
 
 function drawBackground(width: number, height: number) {
@@ -445,6 +595,24 @@ function drawShapes(shapes: readonly LspLayoutShape[]) {
   }
 
   return graphics;
+}
+
+function drawHighlightedShape(shape: LspLayoutShape) {
+  const graphics = new Graphics();
+  const highlightColor = 0xf8fafc;
+
+  if (shape.kind === 'polygon' && shape.polygon && shape.polygon.length >= 3) {
+    return graphics
+      .poly(shape.polygon.flatMap((point) => [point.x, point.y]), true)
+      .fill({ color: highlightColor, alpha: 0.2 })
+      .stroke({ color: highlightColor, alpha: 1, width: 0.045 });
+  }
+
+  const bounds = shapeBounds(shape);
+  return graphics
+    .rect(bounds.x0, bounds.y0, Math.max(bounds.x1 - bounds.x0, 0.01), Math.max(bounds.y1 - bounds.y0, 0.01))
+    .fill({ color: highlightColor, alpha: 0.2 })
+    .stroke({ color: highlightColor, alpha: 1, width: 0.045 });
 }
 
 function getCanvasShapeCategory(shape: LspLayoutShape): PhysicalLayoutLayerCategory {

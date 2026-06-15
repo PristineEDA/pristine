@@ -51,12 +51,13 @@ import {
   getPhysicalLayoutLayerCategories,
   getPhysicalLayoutLayerCategoryColor,
   getPhysicalLayoutOutlineColor,
+  getPhysicalLayoutShapeCategory,
   isPhysicalLayoutLayerCategoryVisible,
   isPhysicalLayoutOutlineVisible,
   type PhysicalLayoutLayerCategory,
   type PhysicalLayoutVisibility,
 } from './physicalLayoutLayers';
-import { selectLayoutTargetShapes, type PhysicalLayoutTarget } from './physicalLayoutGeometry';
+import { selectLayoutTargetShapes, shapeBounds, type PhysicalLayoutTarget } from './physicalLayoutGeometry';
 
 type PhysicalLeftPanelTab = 'layout' | 'constraints';
 type PhysicalLowerPanelTab = 'details' | 'notes';
@@ -192,13 +193,17 @@ function PhysicalPanelTabs<TTab extends string>({
 
 export function PhysicalMainPanel({
   activeLayoutFilePath,
+  highlightedShapeIndex,
   layoutVisibility,
+  onHighlightedShapeChange,
   onLayoutStateChange,
   onSelectedTargetChange,
   selectedTarget,
 }: {
   activeLayoutFilePath: string | null;
+  highlightedShapeIndex?: number | null;
   layoutVisibility: PhysicalLayoutVisibility;
+  onHighlightedShapeChange?: (shapeIndex: number | null) => void;
   onLayoutStateChange?: (state: PhysicalLayoutStateSnapshot) => void;
   onSelectedTargetChange?: (target: PhysicalLayoutTarget | null) => void;
   selectedTarget?: PhysicalLayoutTarget | null;
@@ -210,8 +215,10 @@ export function PhysicalMainPanel({
       <div data-testid="physical-main-panel-content" className="h-full min-h-0">
         <PhysicalLayoutEditorPanel
           activeLayoutFilePath={activeLayoutFilePath}
+          highlightedShapeIndex={highlightedShapeIndex ?? null}
           layoutVisibility={layoutVisibility}
           selectedTarget={selectedTarget ?? null}
+          onHighlightedShapeChange={onHighlightedShapeChange}
           onLayoutStateChange={onLayoutStateChange}
           onSelectedTargetChange={onSelectedTargetChange}
         />
@@ -335,19 +342,25 @@ function PhysicalLayoutFileTree({
 }
 
 function PhysicalInspectorSummary({
+  highlightedShapeIndex,
   layoutState,
   selectedTarget,
 }: {
+  highlightedShapeIndex?: number | null;
   layoutState?: PhysicalWorkspaceLayoutState;
   selectedTarget?: PhysicalLayoutTarget | null;
 }) {
   const catalog = layoutState?.catalog ?? null;
+  const geometry = layoutState?.geometry ?? null;
   const macro = selectedTarget?.kind === 'macro'
     ? catalog?.macros.find((entry) => entry.name === selectedTarget.name) ?? null
     : null;
   const cell = selectedTarget?.kind === 'gdsCell'
     ? catalog?.gdsCells.find((entry) => entry.name === selectedTarget.name) ?? null
     : null;
+  const highlightedShape = highlightedShapeIndex === null || highlightedShapeIndex === undefined
+    ? null
+    : selectLayoutTargetShapes(catalog, geometry, selectedTarget).find((shape) => shape.index === highlightedShapeIndex) ?? null;
 
   if (!selectedTarget) {
     return (
@@ -389,8 +402,82 @@ function PhysicalInspectorSummary({
         <dt>Shapes</dt>
         <dd className="text-ide-text">{layoutState?.geometry?.shapes.length ?? 0}</dd>
       </dl>
+      <PhysicalSelectedShapeInspector
+        catalog={catalog}
+        shape={highlightedShape}
+      />
     </div>
   );
+}
+
+function PhysicalSelectedShapeInspector({
+  catalog,
+  shape,
+}: {
+  catalog: LspLayoutCatalog | null;
+  shape: LspLayoutGeometry['shapes'][number] | null;
+}) {
+  if (!shape) {
+    return (
+      <div
+        className="rounded border border-ide-border/70 bg-ide-panel/70 px-3 py-2 text-ide-text-muted"
+        data-testid="physical-inspector-selected-shape-empty"
+      >
+        Click a visible shape to inspect it.
+      </div>
+    );
+  }
+
+  const bounds = shapeBounds(shape);
+  const layer = catalog?.layers.find((entry) => entry.index === shape.layerIndex) ?? null;
+  const category = getPhysicalLayoutShapeCategory(shape);
+  const gdsElement = shape.ownerKind === 'gdsElement'
+    ? catalog?.gdsElements[shape.ownerIndex] ?? null
+    : null;
+
+  return (
+    <div
+      className="rounded border border-ide-border/70 bg-ide-panel/70 px-3 py-2"
+      data-testid="physical-inspector-selected-shape"
+    >
+      <p className="font-medium text-ide-text">Selected Shape</p>
+      <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-ide-text-muted">
+        <dt>Index</dt>
+        <dd className="text-ide-text" data-testid="physical-inspector-selected-shape-index">{shape.index}</dd>
+        <dt>Layer</dt>
+        <dd className="text-ide-text" data-testid="physical-inspector-selected-shape-layer">
+          {layer ? `${layer.name} (${layer.index})` : shape.layerIndex}
+        </dd>
+        <dt>Category</dt>
+        <dd className="text-ide-text" data-testid="physical-inspector-selected-shape-category">{category ? physicalLayerCategoryLabels[category] : 'Unknown'}</dd>
+        <dt>Kind</dt>
+        <dd className="text-ide-text" data-testid="physical-inspector-selected-shape-kind">{shape.kind}</dd>
+        <dt>Owner</dt>
+        <dd className="text-ide-text">{shape.ownerKind} #{shape.ownerIndex}</dd>
+        <dt>Macro</dt>
+        <dd className="text-ide-text">{shape.macroIndex ?? 'global'}</dd>
+        <dt>Bounds</dt>
+        <dd className="text-ide-text" data-testid="physical-inspector-selected-shape-bounds">{formatLayoutBounds(bounds)}</dd>
+        <dt>Points</dt>
+        <dd className="text-ide-text">{shape.polygon?.length ?? 0}</dd>
+        <dt>Flags</dt>
+        <dd className="text-ide-text">{shape.flags}</dd>
+        {gdsElement && (
+          <>
+            <dt>GDS</dt>
+            <dd className="text-ide-text">
+              {gdsElement.kind} L{gdsElement.layer}/{gdsElement.datatype}
+              {gdsElement.text ? ` ${gdsElement.text}` : ''}
+            </dd>
+          </>
+        )}
+      </dl>
+    </div>
+  );
+}
+
+function formatLayoutBounds(bounds: ReturnType<typeof shapeBounds>): string {
+  return `${bounds.x0.toFixed(3)}, ${bounds.y0.toFixed(3)} - ${bounds.x1.toFixed(3)}, ${bounds.y1.toFixed(3)}`;
 }
 
 function PhysicalLayerPanel({
@@ -816,6 +903,7 @@ export function PhysicalLeftPanel({
 }
 
 export function PhysicalRightPanel({
+  highlightedShapeIndex,
   layoutState,
   layoutVisibility = emptyPhysicalLayoutVisibility,
   onLayerCategoryVisibilityToggle,
@@ -823,6 +911,7 @@ export function PhysicalRightPanel({
   onSplitPanelVisibleChange,
   selectedTarget,
 }: {
+  highlightedShapeIndex?: number | null;
   layoutState?: PhysicalWorkspaceLayoutState;
   layoutVisibility?: PhysicalLayoutVisibility;
   onLayerCategoryVisibilityToggle?: (layerIndex: number, category: PhysicalLayoutLayerCategory) => void;
@@ -880,6 +969,7 @@ export function PhysicalRightPanel({
   const lowerContent = useMemo<Record<PhysicalLowerPanelTab, ReactNode>>(() => ({
     details: (
       <PhysicalInspectorSummary
+        highlightedShapeIndex={highlightedShapeIndex}
         layoutState={layoutState}
         selectedTarget={selectedTarget}
       />
@@ -891,7 +981,7 @@ export function PhysicalRightPanel({
         description="Physical checks and selected object notes will appear here."
       />
     ),
-  }), [layoutState, selectedTarget]);
+  }), [highlightedShapeIndex, layoutState, selectedTarget]);
 
   return (
     <div

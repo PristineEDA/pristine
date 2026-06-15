@@ -20,8 +20,10 @@ type ThreeRendererStatus = 'initializing' | 'three-webgl' | 'error';
 interface PhysicalLayout3DCanvasProps {
   catalog: LspLayoutCatalog | null;
   geometry: LspLayoutGeometry | null;
+  highlightedShapeIndex?: number | null;
   layoutVisibility: PhysicalLayoutVisibility;
   selectedTarget: PhysicalLayoutTarget | null;
+  onHighlightedShapeChange?: (shapeIndex: number | null) => void;
 }
 
 const minimumCanvasWidth = 220;
@@ -31,11 +33,14 @@ const defaultOrbit = {
   angleY: -0.72,
 };
 const defaultZoom = 1;
+const clickDistanceThresholdPx = 4;
 
 export function PhysicalLayout3DCanvas({
   catalog,
   geometry,
+  highlightedShapeIndex = null,
   layoutVisibility,
+  onHighlightedShapeChange,
   selectedTarget,
 }: PhysicalLayout3DCanvasProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -44,7 +49,11 @@ export function PhysicalLayout3DCanvas({
   const cameraRef = useRef<THREE.OrthographicCamera | null>(null);
   const orbitGroupRef = useRef<THREE.Group | null>(null);
   const contentGroupRef = useRef<THREE.Group | null>(null);
+  const raycasterRef = useRef(new THREE.Raycaster());
   const renderFrameRef = useRef<number | null>(null);
+  const highlightedShapeIndexRef = useRef<number | null>(highlightedShapeIndex);
+  const onHighlightedShapeChangeRef = useRef(onHighlightedShapeChange);
+  const sizeRef = useRef({ width: minimumCanvasWidth, height: minimumCanvasHeight });
   const [rendererStatus, setRendererStatus] = useState<ThreeRendererStatus>('initializing');
   const [renderCount, setRenderCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -59,6 +68,17 @@ export function PhysicalLayout3DCanvas({
   );
 
   const sceneCenter = sceneInput.bounds3D ? getPhysicalLayout3DCenter(sceneInput.bounds3D) : null;
+  const pickableMeshHit = getPickableMeshHit(
+    sceneInput.meshes,
+    sceneCenter,
+    cameraRef.current,
+    orbitGroupRef.current,
+    size,
+    pickShapeIndexAtViewportPoint,
+  );
+  highlightedShapeIndexRef.current = highlightedShapeIndex;
+  onHighlightedShapeChangeRef.current = onHighlightedShapeChange;
+  sizeRef.current = size;
 
   useEffect(() => {
     const host = hostRef.current;
@@ -149,6 +169,11 @@ export function PhysicalLayout3DCanvas({
   }, [sceneInput]);
 
   useEffect(() => {
+    redrawScene();
+    requestRender();
+  }, [highlightedShapeIndex]);
+
+  useEffect(() => {
     updateTransforms();
     requestRender();
   }, [orbit.angleX, orbit.angleY, pan.x, pan.y, size.height, size.width, zoom]);
@@ -160,14 +185,22 @@ export function PhysicalLayout3DCanvas({
     }
 
     const dragState = {
+      moved: false,
       pointerId: -1,
       previousX: 0,
       previousY: 0,
+      totalDistance: 0,
     };
     const handlePointerDown = (event: PointerEvent) => {
+      if (event.button !== 0) {
+        return;
+      }
+
+      dragState.moved = false;
       dragState.pointerId = event.pointerId;
       dragState.previousX = event.clientX;
       dragState.previousY = event.clientY;
+      dragState.totalDistance = 0;
       host.setPointerCapture(event.pointerId);
     };
     const handlePointerMove = (event: PointerEvent) => {
@@ -179,6 +212,12 @@ export function PhysicalLayout3DCanvas({
       const dy = event.clientY - dragState.previousY;
       dragState.previousX = event.clientX;
       dragState.previousY = event.clientY;
+      dragState.totalDistance += Math.hypot(dx, dy);
+      dragState.moved = dragState.totalDistance > clickDistanceThresholdPx;
+      if (!dragState.moved) {
+        return;
+      }
+
       setOrbit((current) => ({
         angleX: normalizeOrbitAngle(current.angleX + dy * 0.01),
         angleY: normalizeOrbitAngle(current.angleY + dx * 0.01),
@@ -190,6 +229,10 @@ export function PhysicalLayout3DCanvas({
       }
 
       dragState.pointerId = -1;
+      if (!dragState.moved) {
+        onHighlightedShapeChangeRef.current?.(pickShapeIndexAtClientPoint(event.clientX, event.clientY));
+      }
+
       if (host.hasPointerCapture(event.pointerId)) {
         host.releasePointerCapture(event.pointerId);
       }
@@ -214,17 +257,17 @@ export function PhysicalLayout3DCanvas({
       setZoom(defaultZoom);
     };
 
-    host.addEventListener('pointerdown', handlePointerDown);
-    host.addEventListener('pointermove', handlePointerMove);
-    host.addEventListener('pointerup', handlePointerUp);
-    host.addEventListener('pointercancel', handlePointerUp);
+    host.addEventListener('pointerdown', handlePointerDown, true);
+    host.addEventListener('pointermove', handlePointerMove, true);
+    host.addEventListener('pointerup', handlePointerUp, true);
+    host.addEventListener('pointercancel', handlePointerUp, true);
     host.addEventListener('wheel', handleWheel, { passive: false });
     host.addEventListener('dblclick', handleDoubleClick);
     return () => {
-      host.removeEventListener('pointerdown', handlePointerDown);
-      host.removeEventListener('pointermove', handlePointerMove);
-      host.removeEventListener('pointerup', handlePointerUp);
-      host.removeEventListener('pointercancel', handlePointerUp);
+      host.removeEventListener('pointerdown', handlePointerDown, true);
+      host.removeEventListener('pointermove', handlePointerMove, true);
+      host.removeEventListener('pointerup', handlePointerUp, true);
+      host.removeEventListener('pointercancel', handlePointerUp, true);
       host.removeEventListener('wheel', handleWheel);
       host.removeEventListener('dblclick', handleDoubleClick);
     };
@@ -250,16 +293,11 @@ export function PhysicalLayout3DCanvas({
       return;
     }
 
-    const bounds = sceneInput.bounds3D;
-    const boundsWidth = Math.max((bounds?.x1 ?? 1) - (bounds?.x0 ?? 0), 0.001);
-    const boundsHeight = Math.max((bounds?.y1 ?? 1) - (bounds?.y0 ?? 0), 0.001);
-    const boundsDepth = Math.max((bounds?.z1 ?? 0) - (bounds?.z0 ?? 0), 0.001);
-    const aspect = Math.max(width / Math.max(height, 1), 0.01);
-    const viewSize = Math.max(boundsWidth / Math.max(aspect, 0.01), boundsHeight + boundsDepth * 0.7, 1) * 1.35 / zoom;
-    camera.left = -viewSize * aspect / 2 + pan.x;
-    camera.right = viewSize * aspect / 2 + pan.x;
-    camera.top = viewSize / 2 + pan.y;
-    camera.bottom = -viewSize / 2 + pan.y;
+    const view = getCameraView(sceneInput.bounds3D, width, height, zoom, pan);
+    camera.left = view.left;
+    camera.right = view.right;
+    camera.top = view.top;
+    camera.bottom = view.bottom;
     camera.near = 0.1;
     camera.far = 1000;
     camera.updateProjectionMatrix();
@@ -292,7 +330,7 @@ export function PhysicalLayout3DCanvas({
     contentGroup.add(createBaseGrid(bounds, center));
 
     for (const meshInput of sceneInput.meshes) {
-      const mesh = createExtrudedMesh(meshInput, center);
+      const mesh = createExtrudedMesh(meshInput, center, highlightedShapeIndexRef.current);
       if (mesh) {
         contentGroup.add(mesh);
       }
@@ -319,6 +357,43 @@ export function PhysicalLayout3DCanvas({
     });
   };
 
+  const pickShapeIndexAtClientPoint = (clientX: number, clientY: number): number | null => {
+    const host = hostRef.current;
+    if (!host) {
+      return null;
+    }
+
+    const bounds = host.getBoundingClientRect();
+    return pickShapeIndexAtViewportPoint(clientX - bounds.left, clientY - bounds.top);
+  };
+
+  function pickShapeIndexAtViewportPoint(viewportX: number, viewportY: number): number | null {
+    const camera = cameraRef.current;
+    const contentGroup = contentGroupRef.current;
+    if (!camera || !contentGroup) {
+      return null;
+    }
+
+    const pointer = new THREE.Vector2(
+      (viewportX / Math.max(sizeRef.current.width, 1)) * 2 - 1,
+      -((viewportY / Math.max(sizeRef.current.height, 1)) * 2 - 1),
+    );
+    const raycaster = raycasterRef.current;
+    camera.updateMatrixWorld(true);
+    contentGroup.updateWorldMatrix(true, true);
+    raycaster.setFromCamera(pointer, camera);
+
+    const intersections = raycaster.intersectObjects(contentGroup.children, true);
+    for (const intersection of intersections) {
+      const shapeIndex = findShapeIndexOnObject(intersection.object);
+      if (shapeIndex !== null) {
+        return shapeIndex;
+      }
+    }
+
+    return null;
+  }
+
   return (
     <div
       ref={hostRef}
@@ -327,8 +402,12 @@ export function PhysicalLayout3DCanvas({
       data-orbit-origin="bounds3d"
       data-orbit-angle-x={orbit.angleX.toFixed(4)}
       data-orbit-angle-y={orbit.angleY.toFixed(4)}
+      data-highlighted-shape-index={highlightedShapeIndex ?? ''}
       data-pan-x={pan.x.toFixed(4)}
       data-pan-y={pan.y.toFixed(4)}
+      data-pick-visible-shape-index={pickableMeshHit?.shapeIndex ?? ''}
+      data-pick-visible-shape-screen-x={pickableMeshHit ? pickableMeshHit.x.toFixed(2) : ''}
+      data-pick-visible-shape-screen-y={pickableMeshHit ? pickableMeshHit.y.toFixed(2) : ''}
       data-render-count={renderCount}
       data-renderer={rendererStatus}
       data-scene-center-offset-x={sceneCenter ? sceneCenter.x.toFixed(4) : '0.0000'}
@@ -357,6 +436,7 @@ export function PhysicalLayout3DCanvas({
 function createExtrudedMesh(
   input: PhysicalLayout3DMeshInput,
   center: PhysicalLayout3DCenter,
+  highlightedShapeIndex: number | null,
 ): THREE.Group | null {
   try {
     const shape = new THREE.Shape();
@@ -377,29 +457,174 @@ function createExtrudedMesh(
       steps: 1,
     });
     geometry.translate(0, 0, input.z - center.z);
+    const highlighted = input.shapeIndex === highlightedShapeIndex;
     const material = new THREE.MeshStandardMaterial({
-      color: input.color,
+      color: highlighted ? 0xf8fafc : input.color,
       metalness: input.category === 'path' ? 0.28 : 0.12,
-      opacity: input.opacity,
+      opacity: highlighted ? Math.min(0.96, input.opacity + 0.24) : input.opacity,
       roughness: 0.58,
       transparent: true,
     });
     const mesh = new THREE.Mesh(geometry, material);
+    mesh.userData.shapeIndex = input.shapeIndex;
     const edges = new THREE.LineSegments(
       new THREE.EdgesGeometry(geometry),
       new THREE.LineBasicMaterial({
-        color: input.color,
-        opacity: Math.min(1, input.opacity + 0.2),
+        color: highlighted ? 0xffffff : input.color,
+        opacity: highlighted ? 1 : Math.min(1, input.opacity + 0.2),
         transparent: true,
       }),
     );
+    edges.userData.shapeIndex = input.shapeIndex;
     const group = new THREE.Group();
+    group.userData.shapeIndex = input.shapeIndex;
     group.add(mesh);
     group.add(edges);
     return group;
   } catch {
     return null;
   }
+}
+
+function getCameraView(
+  bounds: ReturnType<typeof createPhysicalLayout3DSceneInput>['bounds3D'],
+  width: number,
+  height: number,
+  zoom: number,
+  pan: { x: number; y: number },
+) {
+  const boundsWidth = Math.max((bounds?.x1 ?? 1) - (bounds?.x0 ?? 0), 0.001);
+  const boundsHeight = Math.max((bounds?.y1 ?? 1) - (bounds?.y0 ?? 0), 0.001);
+  const boundsDepth = Math.max((bounds?.z1 ?? 0) - (bounds?.z0 ?? 0), 0.001);
+  const aspect = Math.max(width / Math.max(height, 1), 0.01);
+  const viewSize = Math.max(boundsWidth / Math.max(aspect, 0.01), boundsHeight + boundsDepth * 0.7, 1) * 1.35 / zoom;
+
+  return {
+    bottom: -viewSize / 2 + pan.y,
+    left: -viewSize * aspect / 2 + pan.x,
+    right: viewSize * aspect / 2 + pan.x,
+    top: viewSize / 2 + pan.y,
+  };
+}
+
+function getMeshInputBounds(input: PhysicalLayout3DMeshInput) {
+  let x0 = Number.POSITIVE_INFINITY;
+  let y0 = Number.POSITIVE_INFINITY;
+  let x1 = Number.NEGATIVE_INFINITY;
+  let y1 = Number.NEGATIVE_INFINITY;
+
+  for (const point of input.points) {
+    x0 = Math.min(x0, point.x);
+    y0 = Math.min(y0, point.y);
+    x1 = Math.max(x1, point.x);
+    y1 = Math.max(y1, point.y);
+  }
+
+  return { x0, y0, x1, y1 };
+}
+
+interface PickableMeshHit {
+  shapeIndex: number;
+  x: number;
+  y: number;
+}
+
+function getPickableMeshHit(
+  meshes: readonly PhysicalLayout3DMeshInput[],
+  center: PhysicalLayout3DCenter | null,
+  camera: THREE.Camera | null,
+  orbitGroup: THREE.Group | null,
+  size: { width: number; height: number },
+  pickShapeIndexAtViewportPoint: (viewportX: number, viewportY: number) => number | null,
+): PickableMeshHit | null {
+  if (!center || !camera || !orbitGroup || size.width <= 0 || size.height <= 0) {
+    return null;
+  }
+
+  camera.updateMatrixWorld(true);
+  orbitGroup.updateWorldMatrix(true, true);
+  for (let meshIndex = meshes.length - 1; meshIndex >= 0; meshIndex -= 1) {
+    const mesh = meshes[meshIndex];
+    if (!mesh) {
+      continue;
+    }
+
+    for (const point of getMeshPickCandidatePoints(mesh, center)) {
+      const screenPoint = projectWorldPointToViewport(point, camera, orbitGroup, size);
+      if (!screenPoint) {
+        continue;
+      }
+
+      if (pickShapeIndexAtViewportPoint(screenPoint.x, screenPoint.y) === mesh.shapeIndex) {
+        return {
+          shapeIndex: mesh.shapeIndex,
+          x: screenPoint.x,
+          y: screenPoint.y,
+        };
+      }
+    }
+  }
+
+  return null;
+}
+
+function getMeshPickCandidatePoints(
+  input: PhysicalLayout3DMeshInput,
+  center: PhysicalLayout3DCenter,
+): THREE.Vector3[] {
+  const meshBounds = getMeshInputBounds(input);
+  const z = input.z + input.depth / 2 - center.z;
+  const candidates = [
+    new THREE.Vector3(
+      (meshBounds.x0 + meshBounds.x1) / 2 - center.x,
+      (meshBounds.y0 + meshBounds.y1) / 2 - center.y,
+      z,
+    ),
+  ];
+
+  for (const xFraction of [0.25, 0.5, 0.75]) {
+    for (const yFraction of [0.25, 0.5, 0.75]) {
+      candidates.push(new THREE.Vector3(
+        meshBounds.x0 + (meshBounds.x1 - meshBounds.x0) * xFraction - center.x,
+        meshBounds.y0 + (meshBounds.y1 - meshBounds.y0) * yFraction - center.y,
+        z,
+      ));
+    }
+  }
+
+  return candidates;
+}
+
+function projectWorldPointToViewport(
+  point: THREE.Vector3,
+  camera: THREE.Camera,
+  orbitGroup: THREE.Group,
+  size: { width: number; height: number },
+): { x: number; y: number } | null {
+  const projected = point.clone();
+  orbitGroup.localToWorld(projected);
+  projected.project(camera);
+  const x = ((projected.x + 1) / 2) * size.width;
+  const y = ((1 - projected.y) / 2) * size.height;
+  if (!Number.isFinite(x) || !Number.isFinite(y) || x < 2 || y < 2 || x > size.width - 2 || y > size.height - 2) {
+    return null;
+  }
+
+  return { x, y };
+}
+
+function findShapeIndexOnObject(object: THREE.Object3D): number | null {
+  let current: THREE.Object3D | null = object;
+  while (current) {
+    const shapeIndex = current.userData.shapeIndex;
+    if (typeof shapeIndex === 'number') {
+      return shapeIndex;
+    }
+
+    current = current.parent;
+  }
+
+  return null;
 }
 
 function createBaseGrid(bounds: LspLayoutBounds, center: PhysicalLayout3DCenter): THREE.Group {
