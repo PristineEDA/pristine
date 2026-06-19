@@ -2170,20 +2170,45 @@ test('Physical layout uses indexed LEF geometry and GDS tile-mesh rendering', as
     await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-frame-p95-ms') ?? '0'), {
       timeout: UI_READY_TIMEOUT_MS,
     }).toBeGreaterThanOrEqual(0);
+    await expect(layoutCanvas).toHaveAttribute('data-gds-minimap-visible', 'true', {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-minimap-cell-width') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(0);
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-minimap-viewport-width') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(0);
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-minimap-viewport-world-width') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(0);
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-minimap-viewport-world-height') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(0);
 
     const gdsShapeCountBeforeFastNavigation = Number(await layoutCanvas.getAttribute('data-gds-last-good-shape-count') ?? '0');
     const canvasBox = await layoutCanvas.boundingBox();
     expect(canvasBox).not.toBeNull();
+    const minimapViewportWorldWidthBeforeZoom = Number(
+      await layoutCanvas.getAttribute('data-gds-minimap-viewport-world-width') ?? '0',
+    );
     if (canvasBox) {
-      for (let index = 0; index < 5; index += 1) {
-        await window.mouse.wheel(0, 220);
-      }
       await window.keyboard.down('Control');
       for (let index = 0; index < 4; index += 1) {
         await window.mouse.move(canvasBox.x + canvasBox.width / 2, canvasBox.y + canvasBox.height / 2);
-        await window.mouse.wheel(0, -180);
+        await window.mouse.wheel(0, 180);
       }
       await window.keyboard.up('Control');
+      await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-minimap-viewport-world-width') ?? '0'), {
+        timeout: UI_READY_TIMEOUT_MS,
+      }).toBeGreaterThan(minimapViewportWorldWidthBeforeZoom);
+      const minimapViewportWorldYBeforePan = Number(await layoutCanvas.getAttribute('data-gds-minimap-viewport-world-y') ?? '0');
+      for (let index = 0; index < 5; index += 1) {
+        await window.mouse.wheel(0, 220);
+      }
+      await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-minimap-viewport-world-y') ?? '0'), {
+        timeout: UI_READY_TIMEOUT_MS,
+      }).not.toBe(minimapViewportWorldYBeforePan);
     }
     await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-last-good-shape-count') ?? '0'), {
       timeout: UI_READY_TIMEOUT_MS,

@@ -47,6 +47,7 @@ import {
   getViewportWorldBounds,
   mergeGdsTileGeometryResults,
 } from './physicalLayoutGdsTiles';
+import { createPhysicalLayoutMinimapModel } from './physicalLayoutMinimap';
 import {
   createEmptyPhysicalLayoutVisibility,
   createPhysicalLayoutLayerTree,
@@ -508,6 +509,70 @@ describe('physicalLayoutGeometry', () => {
 
     expect(overviewPlan.lod).toBe(2);
     expect(shouldRequestPreciseGdsTile(overviewPlan)).toBe(false);
+  });
+
+  it('maps GDS cell and viewport bounds into the minimap', () => {
+    const model = createPhysicalLayoutMinimapModel({
+      canvasSize: { height: 300, width: 500 },
+      cellBounds: { x0: 0, y0: 0, x1: 100, y1: 50 },
+      viewportBounds: { x0: 25, y0: 10, x1: 75, y1: 30 },
+    });
+
+    expect(model.visible).toBe(true);
+    expect(model.panel).toMatchObject({ height: 84, width: 112, x: 376, y: 12 });
+    expect(model.cellWorldWidth).toBe(100);
+    expect(model.cellWorldHeight).toBe(50);
+    expect(model.cell.width).toBeCloseTo(96);
+    expect(model.cell.height).toBeCloseTo(48);
+    expect(model.viewport.x).toBeGreaterThan(model.cell.x);
+    expect(model.viewport.y).toBeGreaterThan(model.cell.y);
+    expect(model.viewport.width).toBeCloseTo(48);
+    expect(model.viewport.height).toBeCloseTo(19.2);
+  });
+
+  it('moves and scales the minimap viewport frame as the camera changes', () => {
+    const cellBounds = { x0: 0, y0: 0, x1: 100, y1: 50 };
+    const canvasSize = { height: 300, width: 500 };
+    const initial = createPhysicalLayoutMinimapModel({
+      canvasSize,
+      cellBounds,
+      viewportBounds: getViewportWorldBounds({ panX: 0, panY: 0, zoom: 2 }, { height: 200, width: 200 }, 0),
+    });
+    const panned = createPhysicalLayoutMinimapModel({
+      canvasSize,
+      cellBounds,
+      viewportBounds: getViewportWorldBounds({ panX: -50, panY: -20, zoom: 2 }, { height: 200, width: 200 }, 0),
+    });
+    const zoomed = createPhysicalLayoutMinimapModel({
+      canvasSize,
+      cellBounds,
+      viewportBounds: getViewportWorldBounds({ panX: 0, panY: 0, zoom: 8 }, { height: 200, width: 200 }, 0),
+    });
+
+    expect(panned.viewport.x).toBeGreaterThan(initial.viewport.x);
+    expect(panned.viewport.y).toBeGreaterThan(initial.viewport.y);
+    expect(zoomed.viewport.width).toBeLessThan(initial.viewport.width);
+    expect(zoomed.viewport.height).toBeLessThan(initial.viewport.height);
+  });
+
+  it('clips and keeps the minimap viewport frame visible outside cell bounds', () => {
+    const model = createPhysicalLayoutMinimapModel({
+      canvasSize: { height: 300, width: 500 },
+      cellBounds: { x0: 0, y0: 0, x1: 100, y1: 50 },
+      viewportBounds: { x0: -100, y0: -100, x1: 1, y1: 1 },
+    });
+    const tiny = createPhysicalLayoutMinimapModel({
+      canvasSize: { height: 300, width: 500 },
+      cellBounds: { x0: 0, y0: 0, x1: 100, y1: 50 },
+      viewportBounds: { x0: 10, y0: 10, x1: 10.01, y1: 10.01 },
+    });
+
+    expect(model.visible).toBe(true);
+    expect(model.viewport.x).toBeCloseTo(model.cell.x);
+    expect(model.viewport.y).toBeCloseTo(model.cell.y);
+    expect(model.viewport.width).toBeGreaterThanOrEqual(4);
+    expect(tiny.viewport.width).toBe(4);
+    expect(tiny.viewport.height).toBe(4);
   });
 
   it('creates 2.5D mesh inputs for visible GDS cell shapes', () => {

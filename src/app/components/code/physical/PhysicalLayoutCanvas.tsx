@@ -29,6 +29,7 @@ import {
   defaultPhysicalLayoutGdsTileMetrics,
   doLayoutBoundsIntersect,
   getGdsTileShapeStyle,
+  getViewportWorldBounds,
   isGdsTileModeEnabled,
   mergeGdsTileGeometryResults,
   shouldRequestPreciseGdsTile,
@@ -37,6 +38,7 @@ import {
   type PhysicalLayoutGdsTileRequestInput,
   type PhysicalLayoutGdsTileRequestPlan,
 } from './physicalLayoutGdsTiles';
+import { createPhysicalLayoutMinimapModel, type PhysicalLayoutMinimapModel } from './physicalLayoutMinimap';
 import {
   createPhysicalLayoutPinLabels,
   formatPhysicalLayoutLayerOpacitySummary,
@@ -91,6 +93,8 @@ export function PhysicalLayoutCanvas({
   const appRef = useRef<Application | null>(null);
   const worldRef = useRef<Container | null>(null);
   const backgroundRef = useRef<Container | null>(null);
+  const overlayRef = useRef<Container | null>(null);
+  const minimapGraphicsRef = useRef<Graphics | null>(null);
   const renderFrameRef = useRef<number | null>(null);
   const cameraRef = useRef<PhysicalLayoutCamera>(defaultCamera);
   const isGdsTileModeRef = useRef(false);
@@ -116,15 +120,18 @@ export function PhysicalLayoutCanvas({
   });
   const gdsCameraSyncTimeoutRef = useRef<number | null>(null);
   const gdsMetricsSyncTimeoutRef = useRef<number | null>(null);
+  const minimapSyncTimeoutRef = useRef<number | null>(null);
   const gdsRenderCountSyncTimeoutRef = useRef<number | null>(null);
   const frameDurationsRef = useRef<number[]>([]);
   const lastFrameAtRef = useRef<number | null>(null);
   const lastRenderDurationMsRef = useRef(0);
   const lastRenderCountSyncAtRef = useRef(0);
   const lastGdsMetricsSyncAtRef = useRef(0);
+  const lastMinimapSyncAtRef = useRef(0);
   const lastTileRoundtripMsRef = useRef(0);
   const tileRequestCountRef = useRef(0);
   const meshStatsRef = useRef({ drawNodeCount: 0, indexCount: 0, meshBatchCount: 0, orderBucketSize: 0, vertexCount: 0 });
+  const minimapModelRef = useRef<PhysicalLayoutMinimapModel | null>(null);
   const renderCountRef = useRef(0);
   const outlineVisibleRef = useRef(false);
   const highlightedShapeIndexRef = useRef<number | null>(highlightedShapeIndex);
@@ -141,6 +148,7 @@ export function PhysicalLayoutCanvas({
   const [gdsTileMetrics, setGdsTileMetrics] = useState<PhysicalLayoutGdsTileMetrics>(defaultPhysicalLayoutGdsTileMetrics);
   const [cameraSync, setCameraSync] = useState<PhysicalLayoutCamera>(defaultCamera);
   const [gdsTileDiagnostics, setGdsTileDiagnostics] = useState(gdsTileDiagnosticsRef.current);
+  const [minimapModel, setMinimapModel] = useState<PhysicalLayoutMinimapModel | null>(null);
 
   const isGdsTileMode = isGdsTileModeEnabled(catalog?.sourceKind, selectedTarget?.kind);
   const activeGeometry = isGdsTileMode ? gdsTileGeometry : geometry;
@@ -214,8 +222,12 @@ export function PhysicalLayoutCanvas({
       appRef.current = app;
       backgroundRef.current = new Container();
       worldRef.current = new Container();
+      overlayRef.current = new Container();
+      minimapGraphicsRef.current = new Graphics();
       app.stage.addChild(backgroundRef.current);
       app.stage.addChild(worldRef.current);
+      app.stage.addChild(overlayRef.current);
+      overlayRef.current.addChild(minimapGraphicsRef.current);
       setRenderer(pixiRenderer);
       setSize({ width: app.renderer.width, height: app.renderer.height });
       redrawScene();
@@ -247,6 +259,10 @@ export function PhysicalLayoutCanvas({
         window.clearTimeout(gdsMetricsSyncTimeoutRef.current);
         gdsMetricsSyncTimeoutRef.current = null;
       }
+      if (minimapSyncTimeoutRef.current !== null) {
+        window.clearTimeout(minimapSyncTimeoutRef.current);
+        minimapSyncTimeoutRef.current = null;
+      }
       if (gdsRenderCountSyncTimeoutRef.current !== null) {
         window.clearTimeout(gdsRenderCountSyncTimeoutRef.current);
         gdsRenderCountSyncTimeoutRef.current = null;
@@ -255,6 +271,8 @@ export function PhysicalLayoutCanvas({
       appRef.current = null;
       worldRef.current = null;
       backgroundRef.current = null;
+      overlayRef.current = null;
+      minimapGraphicsRef.current = null;
     };
   }, []);
 
@@ -454,6 +472,7 @@ export function PhysicalLayoutCanvas({
       }
 
       updateTransforms();
+      updateMinimapOverlay();
       app.render();
       const frameEndedAt = performance.now();
       lastRenderDurationMsRef.current = frameEndedAt - frameStartedAt;
@@ -786,6 +805,54 @@ export function PhysicalLayoutCanvas({
     world.scale.set(nextCamera.zoom);
   };
 
+  const updateMinimapOverlay = () => {
+    const minimap = minimapGraphicsRef.current;
+    if (!minimap) {
+      return;
+    }
+
+    minimap.clear();
+    const model = createCurrentMinimapModel();
+    minimapModelRef.current = model;
+    syncMinimapModelState();
+    if (!model.visible) {
+      return;
+    }
+
+    drawGdsMinimap(minimap, model);
+  };
+
+  const createCurrentMinimapModel = () => createPhysicalLayoutMinimapModel({
+    canvasSize: sizeRef.current,
+    cellBounds: isGdsTileModeRef.current ? selectedBoundsRef.current : null,
+    viewportBounds: isGdsTileModeRef.current
+      ? getViewportWorldBounds(cameraRef.current, sizeRef.current, 0)
+      : null,
+  });
+
+  const syncMinimapModelState = (force = false) => {
+    const nextModel = minimapModelRef.current;
+    const now = performance.now();
+    if (!isGdsTileModeRef.current || force || now - lastMinimapSyncAtRef.current >= 120) {
+      if (minimapSyncTimeoutRef.current !== null) {
+        window.clearTimeout(minimapSyncTimeoutRef.current);
+        minimapSyncTimeoutRef.current = null;
+      }
+      lastMinimapSyncAtRef.current = now;
+      setMinimapModel((previousModel) => areMinimapModelsEqual(previousModel, nextModel) ? previousModel : nextModel);
+      return;
+    }
+
+    if (minimapSyncTimeoutRef.current === null) {
+      minimapSyncTimeoutRef.current = window.setTimeout(() => {
+        minimapSyncTimeoutRef.current = null;
+        lastMinimapSyncAtRef.current = performance.now();
+        const currentModel = minimapModelRef.current;
+        setMinimapModel((previousModel) => areMinimapModelsEqual(previousModel, currentModel) ? previousModel : currentModel);
+      }, Math.max(16, 120 - (now - lastMinimapSyncAtRef.current)));
+    }
+  };
+
   const redrawScene = (overrideGeometry?: LspLayoutGeometry | null) => {
     const background = backgroundRef.current;
     const world = worldRef.current;
@@ -843,6 +910,17 @@ export function PhysicalLayoutCanvas({
       data-gds-last-good-shape-count={gdsTileDiagnostics.lastGoodShapeCount}
       data-gds-mesh-buffer-bytes={gdsTileMetrics.bufferByteLength + gdsTileMetrics.indexByteLength}
       data-gds-mesh-batch-count={meshStatsRef.current.meshBatchCount}
+      data-gds-minimap-cell-height={minimapModel?.visible ? minimapModel.cellWorldHeight.toFixed(4) : ''}
+      data-gds-minimap-cell-width={minimapModel?.visible ? minimapModel.cellWorldWidth.toFixed(4) : ''}
+      data-gds-minimap-viewport-height={minimapModel?.visible ? minimapModel.viewport.height.toFixed(2) : ''}
+      data-gds-minimap-viewport-width={minimapModel?.visible ? minimapModel.viewport.width.toFixed(2) : ''}
+      data-gds-minimap-viewport-world-height={minimapModel?.visible ? minimapModel.viewportWorldHeight.toFixed(4) : ''}
+      data-gds-minimap-viewport-world-width={minimapModel?.visible ? minimapModel.viewportWorldWidth.toFixed(4) : ''}
+      data-gds-minimap-viewport-world-x={minimapModel?.visible ? minimapModel.viewportWorld.x0.toFixed(4) : ''}
+      data-gds-minimap-viewport-world-y={minimapModel?.visible ? minimapModel.viewportWorld.y0.toFixed(4) : ''}
+      data-gds-minimap-viewport-x={minimapModel?.visible ? minimapModel.viewport.x.toFixed(2) : ''}
+      data-gds-minimap-viewport-y={minimapModel?.visible ? minimapModel.viewport.y.toFixed(2) : ''}
+      data-gds-minimap-visible={minimapModel?.visible ? 'true' : 'false'}
       data-gds-precise-tile-pending={gdsTileDiagnostics.precisePending ? 'true' : 'false'}
       data-gds-render-batch-mode={isGdsTileMode ? 'order-bucket' : 'none'}
       data-gds-render-bucket-size={isGdsTileMode ? meshStatsRef.current.orderBucketSize : 0}
@@ -1042,6 +1120,51 @@ function drawBackground(width: number, height: number) {
   return new Graphics()
     .rect(0, 0, width, height)
     .fill({ color: 0x101317, alpha: 1 });
+}
+
+function drawGdsMinimap(graphics: Graphics, model: PhysicalLayoutMinimapModel) {
+  graphics
+    .roundRect(model.panel.x, model.panel.y, model.panel.width, model.panel.height, 6)
+    .fill({ color: 0x0b1117, alpha: 0.78 })
+    .stroke({ color: 0x34404c, alpha: 0.8, width: 1 });
+  graphics
+    .rect(model.cell.x, model.cell.y, model.cell.width, model.cell.height)
+    .fill({ color: 0x5b7286, alpha: 0.2 })
+    .stroke({ color: 0x94a3b8, alpha: 0.9, width: 1 });
+  graphics
+    .rect(model.viewport.x, model.viewport.y, model.viewport.width, model.viewport.height)
+    .stroke({ color: 0xf8fafc, alpha: 0.98, width: 1.5 });
+}
+
+function areMinimapModelsEqual(
+  left: PhysicalLayoutMinimapModel | null,
+  right: PhysicalLayoutMinimapModel | null,
+): boolean {
+  if (left === right) {
+    return true;
+  }
+
+  if (!left || !right) {
+    return false;
+  }
+
+  return left.visible === right.visible
+    && areMinimapRectsEqual(left.panel, right.panel)
+    && areMinimapRectsEqual(left.cell, right.cell)
+    && areMinimapRectsEqual(left.viewport, right.viewport)
+    && Math.abs(left.cellWorldWidth - right.cellWorldWidth) < 0.001
+    && Math.abs(left.cellWorldHeight - right.cellWorldHeight) < 0.001
+    && Math.abs(left.viewportWorld.x0 - right.viewportWorld.x0) < 0.001
+    && Math.abs(left.viewportWorld.y0 - right.viewportWorld.y0) < 0.001
+    && Math.abs(left.viewportWorld.x1 - right.viewportWorld.x1) < 0.001
+    && Math.abs(left.viewportWorld.y1 - right.viewportWorld.y1) < 0.001;
+}
+
+function areMinimapRectsEqual(left: { x: number; y: number; width: number; height: number }, right: { x: number; y: number; width: number; height: number }): boolean {
+  return Math.abs(left.x - right.x) < 0.01
+    && Math.abs(left.y - right.y) < 0.01
+    && Math.abs(left.width - right.width) < 0.01
+    && Math.abs(left.height - right.height) < 0.01;
 }
 
 function drawGrid(bounds: LspLayoutBounds) {
