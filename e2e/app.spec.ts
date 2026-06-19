@@ -2193,8 +2193,35 @@ test('Physical layout uses indexed LEF geometry and GDS tile-mesh rendering', as
       await layoutCanvas.getAttribute('data-gds-minimap-viewport-world-width') ?? '0',
     );
     if (canvasBox) {
+      await layoutCanvas.hover();
+      await window.mouse.move(canvasBox.x + canvasBox.width / 2, canvasBox.y + canvasBox.height / 2);
+      let highZoomValue = Number(await layoutCanvas.getAttribute('data-zoom') ?? '0');
+      if (highZoomValue <= 200) {
+        await window.keyboard.down('Control');
+        try {
+          for (let index = 0; index < 10 && highZoomValue <= 200; index += 1) {
+            const zoomBeforeWheel = highZoomValue;
+            await window.mouse.wheel(0, -120);
+            await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-zoom') ?? '0'), {
+              timeout: UI_READY_TIMEOUT_MS,
+            }).toBeGreaterThan(zoomBeforeWheel);
+            highZoomValue = Number(await layoutCanvas.getAttribute('data-zoom') ?? '0');
+          }
+        } finally {
+          await window.keyboard.up('Control');
+        }
+      }
+      if (highZoomValue <= 200) {
+        highZoomValue = Number(await layoutCanvas.getAttribute('data-zoom') ?? '0');
+      }
+      expect(highZoomValue).toBeGreaterThan(200);
+      expect(highZoomValue).toBeLessThanOrEqual(1000);
+      await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-mesh-batch-count') ?? '0'), {
+        timeout: UI_READY_TIMEOUT_MS,
+      }).toBeGreaterThan(0);
+
       await window.keyboard.down('Control');
-      for (let index = 0; index < 4; index += 1) {
+      for (let index = 0; index < 16; index += 1) {
         await window.mouse.move(canvasBox.x + canvasBox.width / 2, canvasBox.y + canvasBox.height / 2);
         await window.mouse.wheel(0, 180);
       }

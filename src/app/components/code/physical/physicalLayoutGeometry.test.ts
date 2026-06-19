@@ -104,6 +104,12 @@ describe('physicalLayoutGeometry', () => {
     expect(camera.panY).toBeGreaterThan(0);
   });
 
+  it('clamps fit camera zoom to the Physical layout maximum', () => {
+    const camera = getFitLayoutCamera({ x0: 0, y0: 0, x1: 0.001, y1: 0.001 }, { width: 800, height: 600 });
+
+    expect(camera.zoom).toBe(1000);
+  });
+
   it('computes shape bounds with a fallback', () => {
     expect(getShapesBounds([], { x0: 0, y0: 0, x1: 1, y1: 1 })).toEqual({ x0: 0, y0: 0, x1: 1, y1: 1 });
     expect(getShapesBounds(layoutFixtureGeometry.shapes, null)).toEqual({ x0: 0.12, y0: 0.42, x1: 2.18, y1: 3.08 });
@@ -134,6 +140,20 @@ describe('physicalLayoutGeometry', () => {
       deltaX: 0,
       deltaY: -120,
     }, { x: 0, y: 0 }).zoom).toBeGreaterThan(camera.zoom);
+  });
+
+  it('clamps wheel zoom to the Physical layout maximum', () => {
+    expect(applyLayoutWheel({
+      panX: 0,
+      panY: 0,
+      zoom: 980,
+    }, {
+      clientX: 100,
+      clientY: 100,
+      ctrlKey: true,
+      deltaX: 0,
+      deltaY: -500,
+    }, { x: 0, y: 0 }).zoom).toBe(1000);
   });
 
   it('plans GDS viewport tile requests without using full target geometry', () => {

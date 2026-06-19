@@ -32,7 +32,7 @@ export interface PhysicalLayoutTarget {
 }
 
 export const physicalLayoutZoomLimits = {
-  max: 200,
+  max: 1000,
   min: 2,
 } as const;
 
