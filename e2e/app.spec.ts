@@ -774,6 +774,22 @@ async function readComputedTextColor(locator: Locator) {
   });
 }
 
+async function readElementFocusVisualState(locator: Locator) {
+  return locator.evaluate((element) => {
+    const browserGlobal = globalThis as typeof globalThis & {
+      document: { activeElement: Element | null };
+      getComputedStyle: (node: unknown) => { boxShadow: string; outlineStyle: string };
+    };
+    const style = browserGlobal.getComputedStyle(element);
+
+    return {
+      active: browserGlobal.document.activeElement === element,
+      boxShadow: style.boxShadow,
+      outlineStyle: style.outlineStyle,
+    };
+  });
+}
+
 async function readSearchInputVisualState(locator: Locator) {
   return locator.evaluate((element) => {
     type StyleLike = {
@@ -2186,6 +2202,14 @@ test('Physical layout uses indexed LEF geometry and GDS tile-mesh rendering', as
     await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-minimap-viewport-world-height') ?? '0'), {
       timeout: UI_READY_TIMEOUT_MS,
     }).toBeGreaterThan(0);
+    await expect(layoutCanvas).toHaveAttribute('tabIndex', '-1');
+    await expect.poll(async () => readElementFocusVisualState(layoutCanvas), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toEqual({
+      active: false,
+      boxShadow: 'none',
+      outlineStyle: 'none',
+    });
 
     const gdsShapeCountBeforeFastNavigation = Number(await layoutCanvas.getAttribute('data-gds-last-good-shape-count') ?? '0');
     const canvasBox = await layoutCanvas.boundingBox();
@@ -2237,6 +2261,20 @@ test('Physical layout uses indexed LEF geometry and GDS tile-mesh rendering', as
       await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-minimap-viewport-world-y') ?? '0'), {
         timeout: UI_READY_TIMEOUT_MS,
       }).not.toBe(minimapViewportWorldYBeforePan);
+      const twoDPanXBeforeShiftWheel = Number(await layoutCanvas.getAttribute('data-pan-x') ?? '0');
+      await window.keyboard.down('Shift');
+      await window.mouse.wheel(0, 220);
+      await window.keyboard.up('Shift');
+      await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-pan-x') ?? '0'), {
+        timeout: UI_READY_TIMEOUT_MS,
+      }).toBeLessThan(twoDPanXBeforeShiftWheel);
+      await expect.poll(async () => readElementFocusVisualState(layoutCanvas), {
+        timeout: UI_READY_TIMEOUT_MS,
+      }).toEqual({
+        active: false,
+        boxShadow: 'none',
+        outlineStyle: 'none',
+      });
     }
     await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-last-good-shape-count') ?? '0'), {
       timeout: UI_READY_TIMEOUT_MS,
@@ -2251,6 +2289,7 @@ test('Physical layout uses indexed LEF geometry and GDS tile-mesh rendering', as
     const layout3DCanvas = window.getByTestId('physical-layout-3d-canvas');
     await expect(layout3DCanvas).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
     await expect(layout3DCanvas).toHaveAttribute('data-renderer', 'three-webgl', { timeout: UI_READY_TIMEOUT_MS });
+    await expect(layout3DCanvas).toHaveAttribute('tabIndex', '-1');
     await expect(layout3DCanvas).toHaveAttribute('data-viewport-framed', 'true', { timeout: UI_READY_TIMEOUT_MS });
     await expect(layout3DCanvas).toHaveAttribute('data-viewport-left-border', 'false', { timeout: UI_READY_TIMEOUT_MS });
     await expect(layout3DCanvas).toHaveAttribute('data-orbit-origin', 'bounds3d', { timeout: UI_READY_TIMEOUT_MS });
@@ -2505,6 +2544,13 @@ test('Physical layout uses indexed LEF geometry and GDS tile-mesh rendering', as
       await expect.poll(async () => Number(await layout3DCanvas.getAttribute('data-pan-x') ?? '0'), {
         timeout: UI_READY_TIMEOUT_MS,
       }).toBeGreaterThan(panXBefore);
+      await expect.poll(async () => readElementFocusVisualState(layout3DCanvas), {
+        timeout: UI_READY_TIMEOUT_MS,
+      }).toEqual({
+        active: false,
+        boxShadow: 'none',
+        outlineStyle: 'none',
+      });
       await window.keyboard.down('Control');
       await window.mouse.wheel(0, -240);
       await window.keyboard.up('Control');

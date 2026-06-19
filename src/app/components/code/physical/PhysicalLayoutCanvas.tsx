@@ -365,6 +365,7 @@ export function PhysicalLayoutCanvas({
 
     const handleWheel = (event: WheelEvent) => {
       event.preventDefault();
+      event.stopPropagation();
       const bounds = host.getBoundingClientRect();
       updateCamera(applyLayoutWheel(cameraRef.current, event, { x: bounds.left, y: bounds.top }));
       scheduleGdsTileRequest();
@@ -899,7 +900,7 @@ export function PhysicalLayoutCanvas({
     <div
       ref={hostRef}
       aria-label="Physical layout editor canvas"
-      className="relative h-full min-h-0 w-full overflow-hidden bg-[#101317] outline-none"
+      className="relative h-full min-h-0 w-full overflow-hidden bg-[#101317] outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 [&>canvas]:outline-none [&>canvas]:focus:outline-none [&>canvas]:focus:ring-0 [&>canvas]:focus-visible:outline-none [&>canvas]:focus-visible:ring-0"
       data-catalog-pin-count={catalogPinCount}
       data-gds-average-fps={gdsTileMetrics.averageFps.toFixed(1)}
       data-gds-frame-p95-ms={gdsTileMetrics.frameP95Ms.toFixed(1)}
@@ -971,7 +972,7 @@ export function PhysicalLayoutCanvas({
       data-visible-shape-count={visibleShapes.length}
       data-zoom={cameraSync.zoom.toFixed(4)}
       role="img"
-      tabIndex={0}
+      tabIndex={-1}
     >
       {renderer === 'error' && (
         <div className="absolute inset-0 flex items-center justify-center px-4 text-center text-[12px] text-ide-error">

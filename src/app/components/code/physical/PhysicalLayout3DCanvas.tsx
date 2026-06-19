@@ -323,6 +323,7 @@ export function PhysicalLayout3DCanvas({
     };
     const handleWheel = (event: WheelEvent) => {
       event.preventDefault();
+      event.stopPropagation();
       if (event.ctrlKey || event.metaKey) {
         zoomRef.current = clamp(zoomRef.current * Math.exp(-event.deltaY * 0.001), 0.28, 5);
         requestRender();
@@ -642,7 +643,7 @@ export function PhysicalLayout3DCanvas({
     <div
       ref={hostRef}
       aria-label="Physical layout 3D canvas"
-      className="relative box-border h-full min-h-0 w-full overflow-hidden border border-l-0 border-ide-border/80 bg-[#101317] outline-none [&>canvas]:block [&>canvas]:h-full [&>canvas]:max-h-full [&>canvas]:max-w-full [&>canvas]:w-full"
+      className="relative box-border h-full min-h-0 w-full overflow-hidden border border-l-0 border-ide-border/80 bg-[#101317] outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 [&>canvas]:block [&>canvas]:h-full [&>canvas]:max-h-full [&>canvas]:max-w-full [&>canvas]:w-full [&>canvas]:outline-none [&>canvas]:focus:outline-none [&>canvas]:focus:ring-0 [&>canvas]:focus-visible:outline-none [&>canvas]:focus-visible:ring-0"
       data-base-grid-depth-test="true"
       data-depth-write-mode="solid-mesh"
       data-material-side="double"
@@ -689,7 +690,7 @@ export function PhysicalLayout3DCanvas({
       data-view-helper-visible="true"
       data-zoom={viewportState.zoom.toFixed(4)}
       role="img"
-      tabIndex={0}
+      tabIndex={-1}
     >
       {rendererStatus === 'error' && (
         <div className="absolute inset-0 flex items-center justify-center px-4 text-center text-[12px] text-ide-error">

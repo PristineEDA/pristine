@@ -78,6 +78,7 @@ vi.mock('./PhysicalLayoutCanvas', () => ({
 
     return (
       <div
+        className="outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
         data-gds-draw-node-count={catalog?.sourceKind === 'gds' ? 3 : 0}
         data-gds-mesh-batch-count={catalog?.sourceKind === 'gds' ? 2 : 0}
         data-gds-render-batch-mode={catalog?.sourceKind === 'gds' ? 'order-bucket' : 'none'}
@@ -95,6 +96,7 @@ vi.mock('./PhysicalLayoutCanvas', () => ({
         data-visible-label-names="A|Y"
         data-visible-shape-count={activeGeometry ? filterVisiblePhysicalLayoutShapes(activeGeometry.shapes, layoutVisibility).length : 0}
         onClick={() => onHighlightedShapeChange?.(activeGeometry?.shapes[0]?.index ?? null)}
+        tabIndex={-1}
       />
     );
   },
@@ -117,6 +119,7 @@ vi.mock('./PhysicalLayout3DCanvas', () => ({
     selectedTarget: PhysicalLayoutTarget | null;
   }) => (
     <div
+      className="outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
       data-base-grid-depth-test="true"
       data-depth-write-mode="solid-mesh"
       data-highlighted-shape-index={highlightedShapeIndex ?? ''}
@@ -147,6 +150,7 @@ vi.mock('./PhysicalLayout3DCanvas', () => ({
       data-view-helper-visible="true"
       data-zoom="1.0000"
       onClick={() => onHighlightedShapeChange?.(geometry?.shapes[1]?.index ?? null)}
+      tabIndex={-1}
     />
   ),
 }));
@@ -291,6 +295,13 @@ describe('PhysicalWorkspacePanels', () => {
     expect(screen.getByTestId('physical-layout-3d-toggle')).toBeInTheDocument();
     await waitFor(() => expect(screen.getByTestId('physical-layout-editor')).toHaveAttribute('data-status', 'ready'));
     expect(screen.getByTestId('physical-layout-canvas')).toHaveAttribute('data-renderer', 'webgl');
+    expect(screen.getByTestId('physical-layout-canvas')).toHaveAttribute('tabIndex', '-1');
+    expect(screen.getByTestId('physical-layout-canvas')).toHaveClass(
+      'focus:outline-none',
+      'focus:ring-0',
+      'focus-visible:outline-none',
+      'focus-visible:ring-0',
+    );
     await waitFor(() => expect(onSelectedTargetChange).toHaveBeenCalledWith(readyTarget));
     await waitFor(() => expect(getTestElectronApi().lsp.layoutGeometry).toHaveBeenCalledWith({
       sessionId: 'layout-test-session',
@@ -422,6 +433,13 @@ describe('PhysicalWorkspacePanels', () => {
     expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveAttribute('data-view-helper-animating', 'false');
     expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveAttribute('data-selected-target-name', 'CHILD');
     expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveAttribute('data-source-kind', 'gds');
+    expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveAttribute('tabIndex', '-1');
+    expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveClass(
+      'focus:outline-none',
+      'focus:ring-0',
+      'focus-visible:outline-none',
+      'focus-visible:ring-0',
+    );
   });
 
   it('syncs highlighted shape state between 2D and 3D canvases', async () => {
