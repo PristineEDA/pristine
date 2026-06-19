@@ -66,6 +66,8 @@ const minimumCanvasHeight = 180;
 const gridMajorStep = 1;
 const gridMinorStep = 0.2;
 const clickDistanceThresholdPx = 4;
+const GDS_TILE_ORDER_BUCKET_SIZE = 512;
+const GDS_TILE_PRECISE_ORDER_SHAPE_LIMIT = 2_048;
 
 export function PhysicalLayoutCanvas({
   catalog,
@@ -105,7 +107,7 @@ export function PhysicalLayoutCanvas({
   const lastGdsMetricsSyncAtRef = useRef(0);
   const lastTileRoundtripMsRef = useRef(0);
   const tileRequestCountRef = useRef(0);
-  const meshStatsRef = useRef({ indexCount: 0, vertexCount: 0 });
+  const meshStatsRef = useRef({ drawNodeCount: 0, indexCount: 0, meshBatchCount: 0, orderBucketSize: 0, vertexCount: 0 });
   const renderCountRef = useRef(0);
   const outlineVisibleRef = useRef(false);
   const highlightedShapeIndexRef = useRef<number | null>(highlightedShapeIndex);
@@ -603,6 +605,8 @@ export function PhysicalLayoutCanvas({
 
     const nextMetrics = createGdsTileMetricsSnapshot({
       frameDurationsMs: frameDurationsRef.current,
+      meshBatchCount: meshStatsRef.current.meshBatchCount,
+      meshDrawNodeCount: meshStatsRef.current.drawNodeCount,
       meshIndexCount: meshStatsRef.current.indexCount,
       meshVertexCount: meshStatsRef.current.vertexCount,
       renderMs: lastRenderDurationMsRef.current,
@@ -675,7 +679,11 @@ export function PhysicalLayoutCanvas({
       data-catalog-pin-count={catalogPinCount}
       data-gds-average-fps={gdsTileMetrics.averageFps.toFixed(1)}
       data-gds-frame-p95-ms={gdsTileMetrics.frameP95Ms.toFixed(1)}
+      data-gds-draw-node-count={meshStatsRef.current.drawNodeCount}
       data-gds-mesh-buffer-bytes={gdsTileMetrics.bufferByteLength + gdsTileMetrics.indexByteLength}
+      data-gds-mesh-batch-count={meshStatsRef.current.meshBatchCount}
+      data-gds-render-batch-mode={isGdsTileMode ? 'order-bucket' : 'none'}
+      data-gds-render-bucket-size={isGdsTileMode ? meshStatsRef.current.orderBucketSize : 0}
       data-gds-render-mode={isGdsTileMode ? 'tile-mesh' : 'full-graphics'}
       data-gds-render-ms={gdsTileMetrics.lastRenderMs.toFixed(2)}
       data-gds-tile-query-ms={gdsTileMetrics.lastTileQueryMs.toFixed(2)}
@@ -905,7 +913,10 @@ function drawLayoutOutline(bounds: LspLayoutBounds) {
 interface PhysicalLayoutShapeDisplay {
   node: Container;
   stats: {
+    drawNodeCount: number;
     indexCount: number;
+    orderBucketSize: number;
+    meshBatchCount: number;
     vertexCount: number;
   };
 }
@@ -915,6 +926,12 @@ interface PhysicalLayoutMeshBatch {
   color: number;
   indices: number[];
   positions: number[];
+}
+
+interface PhysicalLayoutGdsTileOrderBucket {
+  batches: Map<string, PhysicalLayoutMeshBatch>;
+  fallbackGraphics: Graphics;
+  hasFallbackGraphics: boolean;
 }
 
 function drawShapes(shapes: readonly LspLayoutShape[], layoutVisibility: PhysicalLayoutVisibility): PhysicalLayoutShapeDisplay {
@@ -949,7 +966,10 @@ function drawShapes(shapes: readonly LspLayoutShape[], layoutVisibility: Physica
   return {
     node: container,
     stats: {
+      drawNodeCount: 1,
       indexCount: 0,
+      orderBucketSize: 0,
+      meshBatchCount: 0,
       vertexCount: 0,
     },
   };
@@ -957,9 +977,9 @@ function drawShapes(shapes: readonly LspLayoutShape[], layoutVisibility: Physica
 
 function drawGdsTileShapes(shapes: readonly LspLayoutShape[], layoutVisibility: PhysicalLayoutVisibility): PhysicalLayoutShapeDisplay {
   const container = new Container({ label: 'gds-tile-shapes' });
-  const fallbackGraphics = new Graphics();
-  const batches = new Map<string, PhysicalLayoutMeshBatch>();
-  let fallbackShapeCount = 0;
+  const buckets: PhysicalLayoutGdsTileOrderBucket[] = [];
+  const orderBucketSize = getGdsTileOrderBucketSize(shapes.length);
+  let visibleShapeOrdinal = 0;
 
   for (const shape of shapes) {
     const style = getGdsTileShapeStyle(shape, layoutVisibility, getPhysicalLayoutLayerCategoryColor);
@@ -967,62 +987,114 @@ function drawGdsTileShapes(shapes: readonly LspLayoutShape[], layoutVisibility: 
       continue;
     }
 
+    const bucketIndex = Math.floor(visibleShapeOrdinal / orderBucketSize);
+    visibleShapeOrdinal += 1;
+    const bucket = getGdsTileOrderBucket(buckets, bucketIndex);
     const points = getMeshableShapePoints(shape);
     if (points && isConvexPolygon(points)) {
-      const batchKey = `${style.color}:${style.alpha.toFixed(3)}`;
-      const batch = batches.get(batchKey) ?? {
+      const batchKey = getGdsTileMeshBatchKey(shape, style);
+      const batch = bucket.batches.get(batchKey) ?? {
         alpha: style.alpha,
         color: style.color,
         indices: [],
         positions: [],
       };
       addPolygonToMeshBatch(batch, points);
-      batches.set(batchKey, batch);
-      drawGdsTileShapeStroke(fallbackGraphics, shape, style);
+      bucket.batches.set(batchKey, batch);
+      drawGdsTileShapeStroke(bucket.fallbackGraphics, shape, style);
+      bucket.hasFallbackGraphics = true;
       continue;
     }
 
-    fallbackShapeCount += 1;
-    drawGdsTileShapeGraphics(fallbackGraphics, shape, style);
+    drawGdsTileShapeGraphics(bucket.fallbackGraphics, shape, style);
+    bucket.hasFallbackGraphics = true;
   }
 
   let vertexCount = 0;
   let indexCount = 0;
-  for (const batch of batches.values()) {
-    if (batch.positions.length === 0 || batch.indices.length === 0) {
-      continue;
+  let meshBatchCount = 0;
+  let drawNodeCount = 0;
+  for (const bucket of buckets) {
+    const bucketContainer = new Container({ label: 'gds-tile-order-bucket' });
+    for (const batch of bucket.batches.values()) {
+      if (batch.positions.length === 0 || batch.indices.length === 0) {
+        continue;
+      }
+
+      vertexCount += batch.positions.length / 2;
+      indexCount += batch.indices.length;
+      meshBatchCount += 1;
+      drawNodeCount += 1;
+      const geometry = new MeshGeometry({
+        indices: new Uint32Array(batch.indices),
+        positions: new Float32Array(batch.positions),
+        shrinkBuffersToFit: false,
+        topology: 'triangle-list',
+        uvs: createZeroUvs(batch.positions.length / 2),
+      });
+      const mesh = new Mesh({
+        geometry,
+        label: 'gds-tile-fill-mesh',
+        texture: Texture.WHITE,
+      });
+      mesh.tint = batch.color;
+      mesh.alpha = batch.alpha;
+      bucketContainer.addChild(mesh);
     }
 
-    vertexCount += batch.positions.length / 2;
-    indexCount += batch.indices.length;
-    const geometry = new MeshGeometry({
-      indices: new Uint32Array(batch.indices),
-      positions: new Float32Array(batch.positions),
-      shrinkBuffersToFit: false,
-      topology: 'triangle-list',
-      uvs: createZeroUvs(batch.positions.length / 2),
-    });
-    const mesh = new Mesh({
-      geometry,
-      label: 'gds-tile-fill-mesh',
-      texture: Texture.WHITE,
-    });
-    mesh.tint = batch.color;
-    mesh.alpha = batch.alpha;
-    container.addChild(mesh);
-  }
-
-  if (fallbackShapeCount > 0 || batches.size > 0) {
-    container.addChild(fallbackGraphics);
+    if (bucket.hasFallbackGraphics || bucket.batches.size > 0) {
+      bucketContainer.addChild(bucket.fallbackGraphics);
+      drawNodeCount += 1;
+    }
+    if (bucketContainer.children.length > 0) {
+      container.addChild(bucketContainer);
+    } else {
+      bucket.fallbackGraphics.destroy();
+      bucketContainer.destroy({ children: true });
+    }
   }
 
   return {
     node: container,
     stats: {
+      drawNodeCount,
       indexCount,
+      orderBucketSize,
+      meshBatchCount,
       vertexCount,
     },
   };
+}
+
+function getGdsTileOrderBucket(
+  buckets: PhysicalLayoutGdsTileOrderBucket[],
+  bucketIndex: number,
+): PhysicalLayoutGdsTileOrderBucket {
+  let bucket = buckets[bucketIndex];
+  if (!bucket) {
+    bucket = {
+      batches: new Map<string, PhysicalLayoutMeshBatch>(),
+      fallbackGraphics: new Graphics(),
+      hasFallbackGraphics: false,
+    };
+    buckets[bucketIndex] = bucket;
+  }
+  return bucket;
+}
+
+function getGdsTileOrderBucketSize(shapeCount: number): number {
+  return shapeCount <= GDS_TILE_PRECISE_ORDER_SHAPE_LIMIT ? 1 : GDS_TILE_ORDER_BUCKET_SIZE;
+}
+
+function getGdsTileMeshBatchKey(shape: LspLayoutShape, style: PhysicalLayoutGdsTileShapeStyle): string {
+  return [
+    shape.layerIndex,
+    getCanvasShapeCategory(shape),
+    style.color,
+    style.alpha.toFixed(3),
+    style.strokeAlpha.toFixed(3),
+    style.strokeWidth.toFixed(4),
+  ].join(':');
 }
 
 function getMeshableShapePoints(shape: LspLayoutShape): Array<{ x: number; y: number }> | null {

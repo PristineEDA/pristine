@@ -392,6 +392,8 @@ function PhysicalGdsMetricInfo({ metrics }: PhysicalGdsMetricInfoProps) {
       data-gds-average-fps={formatMetricValue(metrics.averageFps, 1)}
       data-gds-frame-p95-ms={formatMetricValue(metrics.frameP95Ms, 1)}
       data-gds-mesh-buffer-bytes={metrics.bufferByteLength + metrics.indexByteLength}
+      data-gds-mesh-batch-count={metrics.meshBatchCount}
+      data-gds-draw-node-count={metrics.meshDrawNodeCount}
       data-gds-render-mode="tile-mesh"
       data-gds-render-ms={formatMetricValue(metrics.lastRenderMs, 2)}
       data-gds-tile-query-ms={formatMetricValue(metrics.lastTileQueryMs, 2)}
@@ -422,7 +424,7 @@ function PhysicalGdsMetricInfo({ metrics }: PhysicalGdsMetricInfoProps) {
       <div className="flex items-center gap-1" data-testid="physical-gds-toolbar-metrics-mesh">
         <span>Mesh</span>
         <span className="font-mono text-ide-accent" data-testid="physical-gds-toolbar-metrics-mesh-value">
-          {metrics.meshVertexCount}
+          {metrics.meshBatchCount}
         </span>
       </div>
     </div>

@@ -2140,6 +2140,18 @@ test('Physical layout uses indexed LEF geometry and GDS tile-mesh rendering', as
     await expect(layoutCanvas).toHaveAttribute('data-gds-render-mode', 'tile-mesh', {
       timeout: UI_READY_TIMEOUT_MS,
     });
+    await expect(layoutCanvas).toHaveAttribute('data-gds-render-batch-mode', 'order-bucket', {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await expect(layoutCanvas).toHaveAttribute('data-gds-render-bucket-size', '1', {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-mesh-batch-count') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(0);
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-draw-node-count') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(0);
     await expect(window.getByTestId('physical-gds-toolbar-metrics')).toBeVisible({
       timeout: UI_READY_TIMEOUT_MS,
     });

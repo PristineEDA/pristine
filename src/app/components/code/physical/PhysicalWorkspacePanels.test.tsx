@@ -64,6 +64,8 @@ vi.mock('./PhysicalLayoutCanvas', () => ({
         lastRenderMs: 1.2,
         lastTileQueryMs: 0.4,
         lastTileRoundtripMs: 2.5,
+        meshBatchCount: 2,
+        meshDrawNodeCount: 3,
         meshIndexCount: 6,
         meshVertexCount: 4,
         tileRequestCount: 1,
@@ -76,6 +78,10 @@ vi.mock('./PhysicalLayoutCanvas', () => ({
 
     return (
       <div
+        data-gds-draw-node-count={catalog?.sourceKind === 'gds' ? 3 : 0}
+        data-gds-mesh-batch-count={catalog?.sourceKind === 'gds' ? 2 : 0}
+        data-gds-render-batch-mode={catalog?.sourceKind === 'gds' ? 'order-bucket' : 'none'}
+        data-gds-render-bucket-size={catalog?.sourceKind === 'gds' ? 1 : 0}
         data-gds-render-mode={catalog?.sourceKind === 'gds' ? 'tile-mesh' : 'full-graphics'}
         data-highlighted-shape-index={highlightedShapeIndex ?? ''}
         data-layer-opacity-summary={formatPhysicalLayoutLayerOpacitySummary(layoutVisibility)}
@@ -283,7 +289,14 @@ describe('PhysicalWorkspacePanels', () => {
       gdsRootCellIndices: [1],
     }));
     expect(screen.getByTestId('physical-layout-canvas')).toHaveAttribute('data-gds-render-mode', 'tile-mesh');
+    expect(screen.getByTestId('physical-layout-canvas')).toHaveAttribute('data-gds-render-batch-mode', 'order-bucket');
+    expect(screen.getByTestId('physical-layout-canvas')).toHaveAttribute('data-gds-render-bucket-size', '1');
+    expect(screen.getByTestId('physical-layout-canvas')).toHaveAttribute('data-gds-mesh-batch-count', '2');
+    expect(screen.getByTestId('physical-layout-canvas')).toHaveAttribute('data-gds-draw-node-count', '3');
     await waitFor(() => expect(screen.getByTestId('physical-gds-toolbar-metrics')).toBeInTheDocument());
+    expect(screen.getByTestId('physical-gds-toolbar-metrics')).toHaveAttribute('data-gds-mesh-batch-count', '2');
+    expect(screen.getByTestId('physical-gds-toolbar-metrics')).toHaveAttribute('data-gds-draw-node-count', '3');
+    expect(screen.getByTestId('physical-gds-toolbar-metrics-mesh-value')).toHaveTextContent('2');
     expect(screen.getByTestId('physical-layout-canvas')).toHaveAttribute('data-selected-macro-name', '');
   });
 

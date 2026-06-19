@@ -243,6 +243,8 @@ describe('physicalLayoutGeometry', () => {
 
     const metrics = createGdsTileMetricsSnapshot({
       frameDurationsMs: [16, 17, 18, 19],
+      meshBatchCount: 2,
+      meshDrawNodeCount: 3,
       meshIndexCount: 6,
       meshVertexCount: 4,
       renderMs: 1.2,
@@ -252,6 +254,8 @@ describe('physicalLayoutGeometry', () => {
     });
 
     expect(metrics.averageFps).toBeGreaterThan(50);
+    expect(metrics.meshBatchCount).toBe(2);
+    expect(metrics.meshDrawNodeCount).toBe(3);
     expect(metrics.meshVertexCount).toBe(4);
     expect(metrics.lastTileQueryMs).toBe(0.7);
     expect(metrics.tileRequestCount).toBe(2);

@@ -27,6 +27,8 @@ export interface PhysicalLayoutGdsTileMetrics {
   lastRenderMs: number;
   lastTileRoundtripMs: number;
   lastTileQueryMs: number;
+  meshBatchCount: number;
+  meshDrawNodeCount: number;
   meshIndexCount: number;
   meshVertexCount: number;
   tileRequestCount: number;
@@ -64,6 +66,8 @@ export const defaultPhysicalLayoutGdsTileMetrics: PhysicalLayoutGdsTileMetrics =
   lastRenderMs: 0,
   lastTileRoundtripMs: 0,
   lastTileQueryMs: 0,
+  meshBatchCount: 0,
+  meshDrawNodeCount: 0,
   meshIndexCount: 0,
   meshVertexCount: 0,
   tileRequestCount: 0,
@@ -155,6 +159,8 @@ export function mergeGdsTileGeometryResults(results: readonly LspLayoutTileGeome
 
 export function createGdsTileMetricsSnapshot(input: {
   frameDurationsMs: readonly number[];
+  meshBatchCount?: number;
+  meshDrawNodeCount?: number;
   meshIndexCount: number;
   meshVertexCount: number;
   renderMs: number;
@@ -183,6 +189,8 @@ export function createGdsTileMetricsSnapshot(input: {
     lastRenderMs: input.renderMs,
     lastTileRoundtripMs: input.tileRoundtripMs,
     lastTileQueryMs: microsToMs(input.tile?.metrics.queryMicros ?? 0),
+    meshBatchCount: input.meshBatchCount ?? 0,
+    meshDrawNodeCount: input.meshDrawNodeCount ?? 0,
     meshIndexCount: input.meshIndexCount,
     meshVertexCount: input.meshVertexCount,
     tileRequestCount: input.tileRequestCount,
