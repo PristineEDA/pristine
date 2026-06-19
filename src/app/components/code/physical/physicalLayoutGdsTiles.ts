@@ -16,11 +16,18 @@ import {
 
 export interface PhysicalLayoutGdsTileMetrics {
   averageFps: number;
+  bufferCapacityVertexCount: number;
+  bufferReallocCount: number;
+  bufferUpdateCount: number;
+  bufferUpdateMs: number;
   bufferByteLength: number;
+  cacheByteLength: number;
+  cacheEntryCount: number;
   cacheHitCount: number;
   cacheMissCount: number;
   continuationCount: number;
   frameP95Ms: number;
+  inflightRequestCount: number;
   indexByteLength: number;
   lastFps: number;
   lastFrameMs: number;
@@ -31,6 +38,7 @@ export interface PhysicalLayoutGdsTileMetrics {
   meshDrawNodeCount: number;
   meshIndexCount: number;
   meshVertexCount: number;
+  retryCount: number;
   tileRequestCount: number;
   truncated: boolean;
   visiblePointCount: number;
@@ -44,6 +52,11 @@ export interface PhysicalLayoutGdsTileRequestPlan {
   layerIndices: number[] | undefined;
   lod: number;
   options: LspLayoutTileGeometryOptions;
+}
+
+export interface PhysicalLayoutGdsTileCacheStats {
+  byteLength: number;
+  entryCount: number;
 }
 
 export interface PhysicalLayoutGdsTileRequestInput {
@@ -64,11 +77,18 @@ export interface PhysicalLayoutGdsTileShapeStyle {
 
 export const defaultPhysicalLayoutGdsTileMetrics: PhysicalLayoutGdsTileMetrics = {
   averageFps: 0,
+  bufferCapacityVertexCount: 0,
+  bufferReallocCount: 0,
+  bufferUpdateCount: 0,
+  bufferUpdateMs: 0,
   bufferByteLength: 0,
+  cacheByteLength: 0,
+  cacheEntryCount: 0,
   cacheHitCount: 0,
   cacheMissCount: 0,
   continuationCount: 0,
   frameP95Ms: 0,
+  inflightRequestCount: 0,
   indexByteLength: 0,
   lastFps: 0,
   lastFrameMs: 0,
@@ -79,6 +99,7 @@ export const defaultPhysicalLayoutGdsTileMetrics: PhysicalLayoutGdsTileMetrics =
   meshDrawNodeCount: 0,
   meshIndexCount: 0,
   meshVertexCount: 0,
+  retryCount: 0,
   tileRequestCount: 0,
   truncated: false,
   visiblePointCount: 0,
@@ -88,10 +109,72 @@ export const defaultPhysicalLayoutGdsTileMetrics: PhysicalLayoutGdsTileMetrics =
 const tileOverscanRatio = 0.18;
 const retryTileOverscanRatio = 1;
 const tileBboxRoundingMicrons = 0.25;
+const gdsTileCacheMaxEntries = 96;
+const gdsTileCacheMaxBytes = 192 * 1024 * 1024;
 const tileMaxShapes = 80_000;
 const tileMaxPoints = 400_000;
 const tileMaxBytes = 8 * 1024 * 1024;
 const preciseTileMaxAreaMicrons = 250_000;
+
+export class PhysicalLayoutGdsTileLruCache {
+  private readonly entries = new Map<string, { byteLength: number; tile: LspLayoutTileGeometry }>();
+  private byteLength = 0;
+
+  public clear() {
+    this.entries.clear();
+    this.byteLength = 0;
+  }
+
+  public get(key: string): LspLayoutTileGeometry | undefined {
+    const entry = this.entries.get(key);
+    if (!entry) {
+      return undefined;
+    }
+
+    this.entries.delete(key);
+    this.entries.set(key, entry);
+    return entry.tile;
+  }
+
+  public set(key: string, tile: LspLayoutTileGeometry) {
+    const byteLength = estimateGdsTileByteLength(tile);
+    const existing = this.entries.get(key);
+    if (existing) {
+      this.byteLength -= existing.byteLength;
+      this.entries.delete(key);
+    }
+
+    if (byteLength > gdsTileCacheMaxBytes) {
+      return;
+    }
+
+    this.entries.set(key, { byteLength, tile });
+    this.byteLength += byteLength;
+    this.prune();
+  }
+
+  public getStats(): PhysicalLayoutGdsTileCacheStats {
+    return {
+      byteLength: this.byteLength,
+      entryCount: this.entries.size,
+    };
+  }
+
+  private prune() {
+    while (this.entries.size > gdsTileCacheMaxEntries || this.byteLength > gdsTileCacheMaxBytes) {
+      const firstKey = this.entries.keys().next().value as string | undefined;
+      if (!firstKey) {
+        break;
+      }
+
+      const entry = this.entries.get(firstKey);
+      if (entry) {
+        this.byteLength -= entry.byteLength;
+      }
+      this.entries.delete(firstKey);
+    }
+  }
+}
 
 export function isGdsTileModeEnabled(
   sourceKind: string | null | undefined,
@@ -101,14 +184,18 @@ export function isGdsTileModeEnabled(
 }
 
 export function createGdsTileRequestPlan(input: PhysicalLayoutGdsTileRequestInput & {
+  layerFilterMode?: 'visible' | 'all';
   lod?: number;
   overscanRatio?: number;
 }): PhysicalLayoutGdsTileRequestPlan {
   const bbox = getViewportWorldBounds(input.camera, input.size, input.overscanRatio ?? tileOverscanRatio);
   const lod = input.lod ?? getGdsTileLod(input.camera.zoom);
   const visibleLayerIndices = getVisibleGdsTileLayerIndices(input.visibility);
-  const empty = visibleLayerIndices.length === 0 && input.visibility.layerOpacities.size > 0;
-  const layerIndices = empty ? [] : visibleLayerIndices.length > 0 ? visibleLayerIndices : undefined;
+  const useVisibleLayerFilter = input.layerFilterMode !== 'all';
+  const empty = useVisibleLayerFilter && visibleLayerIndices.length === 0 && input.visibility.layerOpacities.size > 0;
+  const layerIndices = !useVisibleLayerFilter
+    ? undefined
+    : empty ? [] : visibleLayerIndices.length > 0 ? visibleLayerIndices : undefined;
   const roundedBbox = roundTileBounds(bbox);
   const cacheKey = createGdsTileCacheKey({
     bbox: roundedBbox,
@@ -153,8 +240,34 @@ export function createGdsRetryTileRequestPlan(input: PhysicalLayoutGdsTileReques
   });
 }
 
+export function createGdsOverviewRetryTileRequestPlan(input: PhysicalLayoutGdsTileRequestInput): PhysicalLayoutGdsTileRequestPlan {
+  return createGdsTileRequestPlan({
+    ...input,
+    layerFilterMode: 'all',
+    lod: Math.max(1, getGdsTileLod(input.camera.zoom)),
+    overscanRatio: retryTileOverscanRatio,
+  });
+}
+
 export function shouldRequestPreciseGdsTile(plan: PhysicalLayoutGdsTileRequestPlan): boolean {
   return !plan.empty && plan.lod > 0 && getLayoutBoundsArea(plan.bbox) <= preciseTileMaxAreaMicrons;
+}
+
+export type PhysicalLayoutGdsEmptyRetryKind = 'none' | 'overview' | 'precise';
+
+export function getGdsEmptyTileRetryKind(
+  plan: PhysicalLayoutGdsTileRequestPlan,
+  selectedBounds: LspLayoutBounds | null | undefined,
+): PhysicalLayoutGdsEmptyRetryKind {
+  if (plan.empty || !doLayoutBoundsIntersect(plan.bbox, selectedBounds)) {
+    return 'none';
+  }
+
+  if (getLayoutBoundsArea(plan.bbox) <= preciseTileMaxAreaMicrons) {
+    return 'precise';
+  }
+
+  return plan.lod > 0 ? 'overview' : 'none';
 }
 
 export function doLayoutBoundsIntersect(left: LspLayoutBounds | null | undefined, right: LspLayoutBounds | null | undefined): boolean {
@@ -235,12 +348,19 @@ export function mergeGdsTileGeometryResults(results: readonly LspLayoutTileGeome
 }
 
 export function createGdsTileMetricsSnapshot(input: {
+  bufferCapacityVertexCount?: number;
+  bufferReallocCount?: number;
+  bufferUpdateCount?: number;
+  bufferUpdateMs?: number;
+  cacheStats?: PhysicalLayoutGdsTileCacheStats;
   frameDurationsMs: readonly number[];
+  inflightRequestCount?: number;
   meshBatchCount?: number;
   meshDrawNodeCount?: number;
   meshIndexCount: number;
   meshVertexCount: number;
   renderMs: number;
+  retryCount?: number;
   tile: LspLayoutTileGeometry | null;
   tileRequestCount: number;
   tileRoundtripMs: number;
@@ -255,11 +375,18 @@ export function createGdsTileMetricsSnapshot(input: {
 
   return {
     averageFps,
+    bufferCapacityVertexCount: input.bufferCapacityVertexCount ?? input.meshVertexCount,
+    bufferReallocCount: input.bufferReallocCount ?? 0,
+    bufferUpdateCount: input.bufferUpdateCount ?? 0,
+    bufferUpdateMs: input.bufferUpdateMs ?? 0,
     bufferByteLength: input.meshVertexCount * 2 * Float32Array.BYTES_PER_ELEMENT,
+    cacheByteLength: input.cacheStats?.byteLength ?? 0,
+    cacheEntryCount: input.cacheStats?.entryCount ?? 0,
     cacheHitCount: input.tile?.metrics.cacheHitCount ?? 0,
     cacheMissCount: input.tile?.metrics.cacheMissCount ?? 0,
     continuationCount: input.tile?.nextToken === null ? 0 : 1,
     frameP95Ms: percentile(frameDurations, 0.95),
+    inflightRequestCount: input.inflightRequestCount ?? 0,
     indexByteLength: input.meshIndexCount * Uint32Array.BYTES_PER_ELEMENT,
     lastFps,
     lastFrameMs,
@@ -270,11 +397,24 @@ export function createGdsTileMetricsSnapshot(input: {
     meshDrawNodeCount: input.meshDrawNodeCount ?? 0,
     meshIndexCount: input.meshIndexCount,
     meshVertexCount: input.meshVertexCount,
+    retryCount: input.retryCount ?? 0,
     tileRequestCount: input.tileRequestCount,
     truncated: input.tile?.truncated ?? false,
     visiblePointCount: input.tile?.geometry.polygonPointCount ?? 0,
     visibleShapeCount: input.tile?.geometry.shapes.length ?? 0,
   };
+}
+
+export function estimateGdsTileByteLength(tile: LspLayoutTileGeometry): number {
+  const payloadSize = Math.max(0, tile.payloadSize);
+  const shapeBytes = tile.geometry.shapes.reduce((sum, shape) => (
+    sum
+    + 96
+    + ((shape.polygon?.length ?? 0) * 16)
+  ), 0);
+  const geometryBytes = shapeBytes + tile.geometry.polygonPointCount * 16;
+
+  return Math.max(payloadSize, geometryBytes);
 }
 
 export function getGdsTileShapeStyle(

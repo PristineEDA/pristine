@@ -390,12 +390,20 @@ function PhysicalGdsMetricInfo({ metrics }: PhysicalGdsMetricInfoProps) {
     <div
       className="flex h-6 items-center gap-2 rounded-md border border-ide-border/70 bg-ide-bg/40 px-2 text-[10px] leading-none text-ide-text-muted"
       data-gds-average-fps={formatMetricValue(metrics.averageFps, 1)}
+      data-gds-buffer-capacity-vertex-count={metrics.bufferCapacityVertexCount}
+      data-gds-buffer-realloc-count={metrics.bufferReallocCount}
+      data-gds-buffer-update-count={metrics.bufferUpdateCount}
+      data-gds-buffer-update-ms={formatMetricValue(metrics.bufferUpdateMs, 3)}
+      data-gds-cache-bytes={metrics.cacheByteLength}
+      data-gds-cache-entry-count={metrics.cacheEntryCount}
       data-gds-frame-p95-ms={formatMetricValue(metrics.frameP95Ms, 1)}
+      data-gds-inflight-count={metrics.inflightRequestCount}
       data-gds-mesh-buffer-bytes={metrics.bufferByteLength + metrics.indexByteLength}
       data-gds-mesh-batch-count={metrics.meshBatchCount}
       data-gds-draw-node-count={metrics.meshDrawNodeCount}
       data-gds-render-mode="tile-mesh"
       data-gds-render-ms={formatMetricValue(metrics.lastRenderMs, 2)}
+      data-gds-retry-count={metrics.retryCount}
       data-gds-tile-query-ms={formatMetricValue(metrics.lastTileQueryMs, 2)}
       data-gds-tile-roundtrip-ms={formatMetricValue(metrics.lastTileRoundtripMs, 2)}
       data-gds-truncated={metrics.truncated ? 'true' : 'false'}
@@ -427,6 +435,12 @@ function PhysicalGdsMetricInfo({ metrics }: PhysicalGdsMetricInfoProps) {
           {metrics.meshBatchCount}
         </span>
       </div>
+      <div className="flex items-center gap-1" data-testid="physical-gds-toolbar-metrics-cache">
+        <span>Cache</span>
+        <span className="font-mono text-ide-accent" data-testid="physical-gds-toolbar-metrics-cache-value">
+          {formatByteMetric(metrics.cacheByteLength)}
+        </span>
+      </div>
     </div>
   );
 }
@@ -437,4 +451,12 @@ function formatMetricValue(value: number, digits: number): string {
   }
 
   return value.toFixed(digits);
+}
+
+function formatByteMetric(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) {
+    return '0M';
+  }
+
+  return `${(value / (1024 * 1024)).toFixed(0)}M`;
 }

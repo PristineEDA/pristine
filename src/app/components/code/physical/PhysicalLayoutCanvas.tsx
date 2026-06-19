@@ -23,12 +23,14 @@ import {
 import {
   createGdsTileMetricsSnapshot,
   createEmptyGdsTileGeometry,
+  createGdsOverviewRetryTileRequestPlan,
   createGdsPreciseTileRequestPlan,
   createGdsTileRequestPlan,
   createGdsRetryTileRequestPlan,
   defaultPhysicalLayoutGdsTileMetrics,
-  doLayoutBoundsIntersect,
+  getGdsEmptyTileRetryKind,
   getGdsTileShapeStyle,
+  PhysicalLayoutGdsTileLruCache,
   getViewportWorldBounds,
   isGdsTileModeEnabled,
   mergeGdsTileGeometryResults,
@@ -107,15 +109,17 @@ export function PhysicalLayoutCanvas({
   const selectedLabelsRef = useRef<PhysicalLayoutPinLabel[]>([]);
   const gdsTileGenerationRef = useRef(0);
   const gdsTileRequestTimeoutRef = useRef<number | null>(null);
-  const gdsTileCacheRef = useRef(new Map<string, LspLayoutTileGeometry>());
+  const gdsTileCacheRef = useRef(new PhysicalLayoutGdsTileLruCache());
   const gdsLatestRequestKeyRef = useRef('');
   const gdsLastGoodTileRef = useRef<LspLayoutTileGeometry | null>(null);
   const gdsTileDiagnosticsRef = useRef({
+    bboxArea: 0,
     displayedState: 'empty',
     emptyReason: '',
     finalLod: -1,
     lastGoodShapeCount: 0,
     precisePending: false,
+    retryKind: 'none',
     tileLod: -1,
   });
   const gdsCameraSyncTimeoutRef = useRef<number | null>(null);
@@ -129,8 +133,20 @@ export function PhysicalLayoutCanvas({
   const lastGdsMetricsSyncAtRef = useRef(0);
   const lastMinimapSyncAtRef = useRef(0);
   const lastTileRoundtripMsRef = useRef(0);
+  const inflightTileRequestCountRef = useRef(0);
+  const retryTileRequestCountRef = useRef(0);
   const tileRequestCountRef = useRef(0);
-  const meshStatsRef = useRef({ drawNodeCount: 0, indexCount: 0, meshBatchCount: 0, orderBucketSize: 0, vertexCount: 0 });
+  const meshStatsRef = useRef({
+    bufferCapacityVertexCount: 0,
+    bufferReallocCount: 0,
+    bufferUpdateCount: 0,
+    bufferUpdateMs: 0,
+    drawNodeCount: 0,
+    indexCount: 0,
+    meshBatchCount: 0,
+    orderBucketSize: 0,
+    vertexCount: 0,
+  });
   const minimapModelRef = useRef<PhysicalLayoutMinimapModel | null>(null);
   const renderCountRef = useRef(0);
   const outlineVisibleRef = useRef(false);
@@ -319,11 +335,13 @@ export function PhysicalLayoutCanvas({
     gdsLatestRequestKeyRef.current = '';
     gdsLastGoodTileRef.current = null;
     updateGdsTileDiagnostics({
+      bboxArea: 0,
       displayedState: 'empty',
       emptyReason: '',
       finalLod: -1,
       lastGoodShapeCount: 0,
       precisePending: false,
+      retryKind: 'none',
       tileLod: -1,
     });
     setGdsTileGeometry(null);
@@ -578,9 +596,11 @@ export function PhysicalLayoutCanvas({
     const plan = createGdsTileRequestPlan(input);
     gdsLatestRequestKeyRef.current = plan.cacheKey;
     updateGdsTileDiagnostics({
+      bboxArea: getTilePlanArea(plan),
       displayedState: gdsLastGoodTileRef.current ? 'pending-last-good' : 'pending',
       emptyReason: '',
       precisePending: false,
+      retryKind: 'none',
       tileLod: plan.lod,
     });
     if (plan.empty) {
@@ -621,7 +641,11 @@ export function PhysicalLayoutCanvas({
 
     const startedAt = performance.now();
     const results: LspLayoutTileGeometry[] = [];
+    const seenContinuationTokens = new Set<number>();
     let continuationToken: number | null | undefined = undefined;
+    let continuationCount = 0;
+    inflightTileRequestCountRef.current += 1;
+    updateGdsTileMetrics();
     try {
       do {
         const tile = await lsp.layoutTileGeometry({
@@ -633,6 +657,23 @@ export function PhysicalLayoutCanvas({
         }
         results.push(tile);
         continuationToken = tile.nextToken;
+        if (continuationToken !== null && continuationToken !== undefined) {
+          if (seenContinuationTokens.has(continuationToken)) {
+            updateGdsTileDiagnostics({
+              emptyReason: 'repeated-continuation-token',
+            });
+            continuationToken = null;
+          } else {
+            seenContinuationTokens.add(continuationToken);
+          }
+        }
+        continuationCount += 1;
+        if (continuationCount > 32) {
+          updateGdsTileDiagnostics({
+            emptyReason: 'continuation-limit',
+          });
+          continuationToken = null;
+        }
       } while (continuationToken !== null && continuationToken !== undefined);
 
       const mergedTile = mergeGdsTileGeometryResults(results);
@@ -645,6 +686,9 @@ export function PhysicalLayoutCanvas({
       handleGdsTileResult(mergedTile, input, plan, generation, performance.now() - startedAt, options);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Unable to load GDS viewport tile.');
+    } finally {
+      inflightTileRequestCountRef.current = Math.max(0, inflightTileRequestCountRef.current - 1);
+      updateGdsTileMetrics();
     }
   };
 
@@ -665,13 +709,21 @@ export function PhysicalLayoutCanvas({
     }
 
     if (tile.geometry.shapes.length === 0 && !options.acceptEmpty) {
-      if (options.retryEmpty !== false && doLayoutBoundsIntersect(plan.bbox, selectedBoundsRef.current)) {
-        const retryPlan = createGdsRetryTileRequestPlan(input);
+      const retryKind = options.retryEmpty === false
+        ? 'none'
+        : getGdsEmptyTileRetryKind(plan, selectedBoundsRef.current);
+      if (retryKind !== 'none') {
+        const retryPlan = retryKind === 'precise'
+          ? createGdsRetryTileRequestPlan(input)
+          : createGdsOverviewRetryTileRequestPlan(input);
         gdsLatestRequestKeyRef.current = retryPlan.cacheKey;
+        retryTileRequestCountRef.current += 1;
         updateGdsTileDiagnostics({
+          bboxArea: getTilePlanArea(retryPlan),
           displayedState: gdsLastGoodTileRef.current ? 'empty-retry-last-good' : 'empty-retry',
-          emptyReason: 'retry-expanded-lod0',
-          precisePending: true,
+          emptyReason: retryKind === 'precise' ? 'retry-expanded-lod0' : 'retry-overview',
+          precisePending: retryKind === 'precise',
+          retryKind,
           tileLod: plan.lod,
         });
         void requestGdsTilePlan(input, retryPlan, generation, {
@@ -684,8 +736,9 @@ export function PhysicalLayoutCanvas({
       if (gdsLastGoodTileRef.current) {
         updateGdsTileDiagnostics({
           displayedState: 'empty-kept-last-good',
-          emptyReason: 'empty-current-tile',
+          emptyReason: retryKind === 'none' ? 'empty-no-safe-retry' : 'empty-current-tile',
           precisePending: false,
+          retryKind,
           tileLod: plan.lod,
         });
         updateGdsTileMetrics(tile);
@@ -702,6 +755,7 @@ export function PhysicalLayoutCanvas({
       const precisePlan = createGdsPreciseTileRequestPlan(input);
       updateGdsTileDiagnostics({
         precisePending: true,
+        retryKind: 'precise',
       });
       window.setTimeout(() => {
         if (gdsTileGenerationRef.current !== generation || gdsLatestRequestKeyRef.current !== plan.cacheKey) {
@@ -739,6 +793,7 @@ export function PhysicalLayoutCanvas({
     syncRenderCountState(true);
     updateGdsTileMetrics(tile);
     updateGdsTileDiagnostics({
+      bboxArea: getTilePlanArea(plan),
       displayedState: options.state,
       emptyReason: tile.geometry.shapes.length === 0
         ? options.acceptEmpty ? 'accepted-empty' : 'empty-current-tile'
@@ -746,6 +801,7 @@ export function PhysicalLayoutCanvas({
       finalLod: plan.lod,
       lastGoodShapeCount: gdsLastGoodTileRef.current?.geometry.shapes.length ?? 0,
       precisePending: false,
+      retryKind: tile.geometry.shapes.length === 0 ? gdsTileDiagnosticsRef.current.retryKind : 'none',
       tileLod: plan.lod,
     });
   };
@@ -781,12 +837,19 @@ export function PhysicalLayoutCanvas({
     lastGdsMetricsSyncAtRef.current = now;
 
     const nextMetrics = createGdsTileMetricsSnapshot({
+      bufferCapacityVertexCount: meshStatsRef.current.bufferCapacityVertexCount,
+      bufferReallocCount: meshStatsRef.current.bufferReallocCount,
+      bufferUpdateCount: meshStatsRef.current.bufferUpdateCount,
+      bufferUpdateMs: meshStatsRef.current.bufferUpdateMs,
+      cacheStats: gdsTileCacheRef.current.getStats(),
       frameDurationsMs: frameDurationsRef.current,
+      inflightRequestCount: inflightTileRequestCountRef.current,
       meshBatchCount: meshStatsRef.current.meshBatchCount,
       meshDrawNodeCount: meshStatsRef.current.drawNodeCount,
       meshIndexCount: meshStatsRef.current.indexCount,
       meshVertexCount: meshStatsRef.current.vertexCount,
       renderMs: lastRenderDurationMsRef.current,
+      retryCount: retryTileRequestCountRef.current,
       tile: tile ?? null,
       tileRequestCount: tileRequestCountRef.current,
       tileRoundtripMs: lastTileRoundtripMsRef.current,
@@ -903,11 +966,19 @@ export function PhysicalLayoutCanvas({
       className="relative h-full min-h-0 w-full overflow-hidden bg-[#101317] outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 [&>canvas]:outline-none [&>canvas]:focus:outline-none [&>canvas]:focus:ring-0 [&>canvas]:focus-visible:outline-none [&>canvas]:focus-visible:ring-0"
       data-catalog-pin-count={catalogPinCount}
       data-gds-average-fps={gdsTileMetrics.averageFps.toFixed(1)}
+      data-gds-bbox-area={gdsTileDiagnostics.bboxArea.toFixed(2)}
+      data-gds-buffer-capacity-vertex-count={gdsTileMetrics.bufferCapacityVertexCount}
+      data-gds-buffer-realloc-count={gdsTileMetrics.bufferReallocCount}
+      data-gds-buffer-update-count={gdsTileMetrics.bufferUpdateCount}
+      data-gds-buffer-update-ms={gdsTileMetrics.bufferUpdateMs.toFixed(3)}
+      data-gds-cache-bytes={gdsTileMetrics.cacheByteLength}
+      data-gds-cache-entry-count={gdsTileMetrics.cacheEntryCount}
       data-gds-frame-p95-ms={gdsTileMetrics.frameP95Ms.toFixed(1)}
       data-gds-draw-node-count={meshStatsRef.current.drawNodeCount}
       data-gds-displayed-tile-state={gdsTileDiagnostics.displayedState}
       data-gds-empty-tile-reason={gdsTileDiagnostics.emptyReason}
       data-gds-final-tile-lod={gdsTileDiagnostics.finalLod}
+      data-gds-inflight-count={gdsTileMetrics.inflightRequestCount}
       data-gds-last-good-shape-count={gdsTileDiagnostics.lastGoodShapeCount}
       data-gds-mesh-buffer-bytes={gdsTileMetrics.bufferByteLength + gdsTileMetrics.indexByteLength}
       data-gds-mesh-batch-count={meshStatsRef.current.meshBatchCount}
@@ -926,6 +997,8 @@ export function PhysicalLayoutCanvas({
       data-gds-render-batch-mode={isGdsTileMode ? 'order-bucket' : 'none'}
       data-gds-render-bucket-size={isGdsTileMode ? meshStatsRef.current.orderBucketSize : 0}
       data-gds-render-mode={isGdsTileMode ? 'tile-mesh' : 'full-graphics'}
+      data-gds-retry-count={gdsTileMetrics.retryCount}
+      data-gds-retry-kind={gdsTileDiagnostics.retryKind}
       data-gds-tile-lod={gdsTileDiagnostics.tileLod}
       data-gds-render-ms={gdsTileMetrics.lastRenderMs.toFixed(2)}
       data-gds-tile-query-ms={gdsTileMetrics.lastTileQueryMs.toFixed(2)}
@@ -1200,6 +1273,10 @@ function drawLayoutOutline(bounds: LspLayoutBounds) {
 interface PhysicalLayoutShapeDisplay {
   node: Container;
   stats: {
+    bufferCapacityVertexCount: number;
+    bufferReallocCount: number;
+    bufferUpdateCount: number;
+    bufferUpdateMs: number;
     drawNodeCount: number;
     indexCount: number;
     orderBucketSize: number;
@@ -1210,9 +1287,8 @@ interface PhysicalLayoutShapeDisplay {
 
 interface PhysicalLayoutMeshBatch {
   alpha: number;
+  builder: PhysicalLayoutGdsMeshBuilder;
   color: number;
-  indices: number[];
-  positions: number[];
 }
 
 interface PhysicalLayoutGdsTileOrderBucket {
@@ -1254,6 +1330,10 @@ function drawShapes(shapes: readonly LspLayoutShape[], layoutVisibility: Physica
     node: container,
     stats: {
       drawNodeCount: 1,
+      bufferCapacityVertexCount: 0,
+      bufferReallocCount: 0,
+      bufferUpdateCount: 0,
+      bufferUpdateMs: 0,
       indexCount: 0,
       orderBucketSize: 0,
       meshBatchCount: 0,
@@ -1282,11 +1362,10 @@ function drawGdsTileShapes(shapes: readonly LspLayoutShape[], layoutVisibility: 
       const batchKey = getGdsTileMeshBatchKey(shape, style);
       const batch = bucket.batches.get(batchKey) ?? {
         alpha: style.alpha,
+        builder: new PhysicalLayoutGdsMeshBuilder(),
         color: style.color,
-        indices: [],
-        positions: [],
       };
-      addPolygonToMeshBatch(batch, points);
+      batch.builder.addPolygon(points);
       bucket.batches.set(batchKey, batch);
       drawGdsTileShapeStroke(bucket.fallbackGraphics, shape, style);
       bucket.hasFallbackGraphics = true;
@@ -1301,23 +1380,31 @@ function drawGdsTileShapes(shapes: readonly LspLayoutShape[], layoutVisibility: 
   let indexCount = 0;
   let meshBatchCount = 0;
   let drawNodeCount = 0;
+  let bufferCapacityVertexCount = 0;
+  let bufferReallocCount = 0;
+  let bufferUpdateCount = 0;
+  const bufferUpdateStartedAt = performance.now();
   for (const bucket of buckets) {
     const bucketContainer = new Container({ label: 'gds-tile-order-bucket' });
     for (const batch of bucket.batches.values()) {
-      if (batch.positions.length === 0 || batch.indices.length === 0) {
+      if (batch.builder.vertexCount === 0 || batch.builder.indexCount === 0) {
         continue;
       }
 
-      vertexCount += batch.positions.length / 2;
-      indexCount += batch.indices.length;
+      const committed = batch.builder.commit();
+      vertexCount += committed.vertexCount;
+      indexCount += committed.indexCount;
+      bufferCapacityVertexCount += committed.capacityVertexCount;
+      bufferReallocCount += committed.reallocCount;
+      bufferUpdateCount += 1;
       meshBatchCount += 1;
       drawNodeCount += 1;
       const geometry = new MeshGeometry({
-        indices: new Uint32Array(batch.indices),
-        positions: new Float32Array(batch.positions),
+        indices: committed.indices,
+        positions: committed.positions,
         shrinkBuffersToFit: false,
         topology: 'triangle-list',
-        uvs: createZeroUvs(batch.positions.length / 2),
+        uvs: committed.uvs,
       });
       const mesh = new Mesh({
         geometry,
@@ -1345,12 +1432,97 @@ function drawGdsTileShapes(shapes: readonly LspLayoutShape[], layoutVisibility: 
     node: container,
     stats: {
       drawNodeCount,
+      bufferCapacityVertexCount,
+      bufferReallocCount,
+      bufferUpdateCount,
+      bufferUpdateMs: Math.max(0, performance.now() - bufferUpdateStartedAt),
       indexCount,
       orderBucketSize,
       meshBatchCount,
       vertexCount,
     },
   };
+}
+
+class PhysicalLayoutGdsMeshBuilder {
+  private indices = new Uint32Array(0);
+  private positions = new Float32Array(0);
+  private uvs = new Float32Array(0);
+  private indexLength = 0;
+  private positionLength = 0;
+  private reallocCount = 0;
+
+  public get vertexCount() {
+    return this.positionLength / 2;
+  }
+
+  public get indexCount() {
+    return this.indexLength;
+  }
+
+  public addPolygon(points: readonly { x: number; y: number }[]) {
+    if (points.length < 3) {
+      return;
+    }
+
+    const baseIndex = this.vertexCount;
+    this.ensurePositionCapacity(this.positionLength + points.length * 2);
+    this.ensureIndexCapacity(this.indexLength + (points.length - 2) * 3);
+
+    for (const point of points) {
+      this.positions[this.positionLength] = point.x;
+      this.positions[this.positionLength + 1] = point.y;
+      this.uvs[this.positionLength] = 0;
+      this.uvs[this.positionLength + 1] = 0;
+      this.positionLength += 2;
+    }
+
+    for (let pointIndex = 1; pointIndex < points.length - 1; pointIndex += 1) {
+      this.indices[this.indexLength] = baseIndex;
+      this.indices[this.indexLength + 1] = baseIndex + pointIndex;
+      this.indices[this.indexLength + 2] = baseIndex + pointIndex + 1;
+      this.indexLength += 3;
+    }
+  }
+
+  public commit() {
+    return {
+      capacityVertexCount: this.positions.length / 2,
+      indexCount: this.indexLength,
+      indices: this.indices.subarray(0, this.indexLength),
+      positions: this.positions.subarray(0, this.positionLength),
+      reallocCount: this.reallocCount,
+      uvs: this.uvs.subarray(0, this.positionLength),
+      vertexCount: this.vertexCount,
+    };
+  }
+
+  private ensurePositionCapacity(requiredLength: number) {
+    if (this.positions.length >= requiredLength) {
+      return;
+    }
+
+    const nextLength = getNextPowerOfTwo(Math.max(8, requiredLength));
+    const nextPositions = new Float32Array(nextLength);
+    nextPositions.set(this.positions.subarray(0, this.positionLength));
+    this.positions = nextPositions;
+    const nextUvs = new Float32Array(nextLength);
+    nextUvs.set(this.uvs.subarray(0, this.positionLength));
+    this.uvs = nextUvs;
+    this.reallocCount += 1;
+  }
+
+  private ensureIndexCapacity(requiredLength: number) {
+    if (this.indices.length >= requiredLength) {
+      return;
+    }
+
+    const nextLength = getNextPowerOfTwo(Math.max(6, requiredLength));
+    const nextIndices = new Uint32Array(nextLength);
+    nextIndices.set(this.indices.subarray(0, this.indexLength));
+    this.indices = nextIndices;
+    this.reallocCount += 1;
+  }
 }
 
 function getGdsTileOrderBucket(
@@ -1402,17 +1574,6 @@ function getMeshableShapePoints(shape: LspLayoutShape): Array<{ x: number; y: nu
   return null;
 }
 
-function addPolygonToMeshBatch(batch: PhysicalLayoutMeshBatch, points: readonly { x: number; y: number }[]) {
-  const baseIndex = batch.positions.length / 2;
-  for (const point of points) {
-    batch.positions.push(point.x, point.y);
-  }
-
-  for (let pointIndex = 1; pointIndex < points.length - 1; pointIndex += 1) {
-    batch.indices.push(baseIndex, baseIndex + pointIndex, baseIndex + pointIndex + 1);
-  }
-}
-
 function drawGdsTileShapeStroke(
   graphics: Graphics,
   shape: LspLayoutShape,
@@ -1451,10 +1612,6 @@ function drawGdsTileShapeGraphics(
     .stroke({ color: style.color, alpha: style.strokeAlpha, width: style.strokeWidth });
 }
 
-function createZeroUvs(vertexCount: number): Float32Array {
-  return new Float32Array(vertexCount * 2);
-}
-
 function isConvexPolygon(points: readonly { x: number; y: number }[]): boolean {
   if (points.length < 3) {
     return false;
@@ -1486,6 +1643,19 @@ function isConvexPolygon(points: readonly { x: number; y: number }[]): boolean {
   }
 
   return true;
+}
+
+function getTilePlanArea(plan: PhysicalLayoutGdsTileRequestPlan): number {
+  return Math.max(0, plan.bbox.x1 - plan.bbox.x0) * Math.max(0, plan.bbox.y1 - plan.bbox.y0);
+}
+
+function getNextPowerOfTwo(value: number): number {
+  let result = 1;
+  while (result < value) {
+    result *= 2;
+  }
+
+  return result;
 }
 
 function drawHighlightedShape(shape: LspLayoutShape) {
