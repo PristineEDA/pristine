@@ -164,6 +164,81 @@ const readyVisibility = createPhysicalLayoutVisibility(layoutFixtureOpenResult.c
 const nandMacroShapes = selectMacroShapes(layoutFixtureOpenResult.catalog, layoutFixtureGeometry, 'sg13g2_nand2_1');
 const nandTarget: PhysicalLayoutTarget = { kind: 'macro', name: 'sg13g2_nand2_1', index: 1 };
 const nandVisibility = createPhysicalLayoutVisibility(layoutFixtureOpenResult.catalog, true, nandMacroShapes);
+const defCatalog = {
+  ...layoutFixtureOpenResult.catalog,
+  defPins: [{
+    firstShapeIndex: 0,
+    name: 'PAD',
+    netName: 'net0',
+    orientation: 'N',
+    shapeCount: 1,
+    status: 1,
+    x: 0,
+    y: 0,
+  }],
+  nets: [{
+    connectionCount: 1,
+    index: 0,
+    name: 'net0',
+    shapeCount: 1,
+    special: false,
+  }, {
+    connectionCount: 1,
+    index: 1,
+    name: 'vdd',
+    shapeCount: 1,
+    special: true,
+  }],
+};
+const defGeometry: LspLayoutGeometry = {
+  polygonPointCount: 0,
+  shapeCount: 4,
+  shapes: [
+    {
+      flags: 0,
+      index: 10,
+      kind: 'rect',
+      layerIndex: 0,
+      macroIndex: null,
+      ownerIndex: 0,
+      ownerKind: 'pin',
+      rect: { x0: 0, y0: 0, x1: 1, y1: 1 },
+    },
+    {
+      flags: 0,
+      index: 11,
+      kind: 'rect',
+      layerIndex: 0,
+      macroIndex: null,
+      ownerIndex: 0,
+      ownerKind: 'net',
+      rect: { x0: 1, y0: 1, x1: 2, y1: 2 },
+    },
+    {
+      flags: 0,
+      index: 12,
+      kind: 'rect',
+      layerIndex: 0,
+      macroIndex: null,
+      ownerIndex: 1,
+      ownerKind: 'specialNet',
+      rect: { x0: 2, y0: 2, x1: 3, y1: 3 },
+    },
+    {
+      flags: 0,
+      index: 13,
+      kind: 'rect',
+      layerIndex: 0,
+      macroIndex: null,
+      ownerIndex: 0,
+      ownerKind: 'blockage',
+      rect: { x0: 3, y0: 3, x1: 4, y1: 4 },
+    },
+  ],
+  truncated: false,
+  unitsPerMicron: 1000,
+};
+const defVisibility = createPhysicalLayoutVisibility(defCatalog, true, defGeometry.shapes);
 const readyGdsTarget: PhysicalLayoutTarget = { kind: 'gdsCell', name: 'CHILD', index: 1 };
 const layoutFiles = [
   { extension: '.lef', name: 'sg13g2_stdcell.lef', path: 'sg13g2_stdcell.lef' },
@@ -488,6 +563,7 @@ describe('PhysicalWorkspacePanels', () => {
     expect(screen.getByTestId('physical-layer-opacity-button-0')).toHaveTextContent('Metal1');
     expect(screen.getByTestId('physical-layer-opacity-button-0')).toHaveClass('text-[11px]', 'font-medium', 'leading-5');
     expect(screen.getByTestId('physical-layer-opacity-value-0')).toHaveTextContent('100%');
+    expect(screen.getByTestId('physical-layer-category-grid-0')).toHaveClass('grid', 'grid-cols-3');
     expect(screen.getByTestId('physical-layer-row-0')).toHaveTextContent('Pin');
     expect(screen.getByTestId('physical-layer-row-0')).toHaveTextContent('Label');
     expect(screen.getByTestId('physical-layer-row-0')).toHaveTextContent('Obstruction');
@@ -512,6 +588,34 @@ describe('PhysicalWorkspacePanels', () => {
     await user.click(screen.getByTestId('physical-right-panel-tab-checks'));
 
     expect(screen.getByTestId('physical-right-panel-checks-content')).toHaveTextContent('Checks');
+  });
+
+  it('renders DEF layer categories in a compact three-column grid', () => {
+    renderInCodeLayout(
+      <PhysicalRightPanel
+        layoutVisibility={defVisibility}
+        layoutState={{
+          catalog: defCatalog,
+          error: null,
+          geometry: defGeometry,
+          openResult: {
+            ...layoutFixtureOpenResult,
+            catalog: defCatalog,
+            defPresent: true,
+            title: 'chip.def',
+          },
+          status: 'ready',
+        }}
+        selectedTarget={{ kind: 'design', name: 'Design', index: 0 }}
+      />,
+    );
+
+    expect(screen.getByTestId('physical-layer-category-grid-0')).toHaveClass('grid', 'grid-cols-3');
+    expect(screen.getByTestId('physical-layer-row-0')).toHaveTextContent('Pin');
+    expect(screen.getByTestId('physical-layer-row-0')).toHaveTextContent('Label');
+    expect(screen.getByTestId('physical-layer-row-0')).toHaveTextContent('Net');
+    expect(screen.getByTestId('physical-layer-row-0')).toHaveTextContent('Special Net');
+    expect(screen.getByTestId('physical-layer-row-0')).toHaveTextContent('Blockage');
   });
 
   it('disables layer tree rows that have no selected macro data', () => {
@@ -559,6 +663,7 @@ describe('PhysicalWorkspacePanels', () => {
     );
 
     const boundarySwatch = screen.getByTestId('physical-layer-category-swatch-0-boundary');
+    expect(screen.getByTestId('physical-layer-category-grid-0')).toHaveClass('grid', 'grid-cols-3');
     expect(boundarySwatch).not.toBeDisabled();
 
     await user.click(boundarySwatch);

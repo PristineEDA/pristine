@@ -2113,6 +2113,7 @@ test('Physical layout uses indexed LEF geometry and GDS tile-mesh rendering', as
 
     const geometryShapeCountBeforeLayerToggle = Number(await layoutCanvas.getAttribute('data-geometry-shape-count') ?? '0');
     const visibleShapeCountBeforeLayerToggle = Number(await layoutCanvas.getAttribute('data-visible-shape-count') ?? '0');
+    await expect(window.getByTestId('physical-layer-category-grid-0')).toHaveClass(/grid-cols-3/);
     await window.getByTestId('physical-layer-category-swatch-0-pin').click();
     await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-visible-shape-count') ?? '0'), {
       timeout: UI_READY_TIMEOUT_MS,
@@ -2463,12 +2464,11 @@ test('Physical layout uses indexed LEF geometry and GDS tile-mesh rendering', as
       const viewHelperLastAxisBefore = await layout3DCanvas.getAttribute('data-view-helper-last-axis');
       const viewHelperOrbitBefore = Number(await layout3DCanvas.getAttribute('data-orbit-angle-y') ?? '0');
       const renderCountBeforeViewHelper = Number(await layout3DCanvas.getAttribute('data-render-count') ?? '0');
-      const highlightedShapeBeforeHelperBlank = await layout3DCanvas.getAttribute('data-highlighted-shape-index');
       const viewHelperSize = Number(await layout3DCanvas.getAttribute('data-view-helper-size') ?? '112');
-      const helperBlankX = threeBox.width - viewHelperSize + 8;
-      const helperBlankY = 16;
+      const helperBlankX = threeBox.width - viewHelperSize + 20;
+      const helperBlankY = 20;
       await layout3DCanvas.click({ position: { x: helperBlankX, y: helperBlankY } });
-      await expect(layout3DCanvas).toHaveAttribute('data-highlighted-shape-index', highlightedShapeBeforeHelperBlank ?? '', {
+      await expect(layout3DCanvas).toHaveAttribute('data-view-helper-last-axis', viewHelperLastAxisBefore ?? '', {
         timeout: UI_READY_TIMEOUT_MS,
       });
       const refreshedViewHelperPosX = {
@@ -2541,6 +2541,7 @@ test('Physical layout uses indexed LEF geometry and GDS tile-mesh rendering', as
     const twoDOpacitySummaryBeforeLayerOpacity = await layoutCanvas.getAttribute('data-layer-opacity-summary');
     const threeDOpacitySummaryBeforeLayerOpacity = await layout3DCanvas.getAttribute('data-layer-opacity-summary');
     expect(firstVisibleShapeLayerIndexBeforeHide).toBeTruthy();
+    await expect(window.getByTestId(`physical-layer-category-grid-${firstVisibleShapeLayerIndexBeforeHide}`)).toHaveClass(/grid-cols-3/);
     await window.getByTestId(`physical-layer-opacity-button-${firstVisibleShapeLayerIndexBeforeHide}`).click();
     const inlineOpacityRow = window.getByTestId(`physical-layer-opacity-row-${firstVisibleShapeLayerIndexBeforeHide}`);
     await expect(inlineOpacityRow.getByTestId(`physical-layer-opacity-slider-${firstVisibleShapeLayerIndexBeforeHide}`)).toBeVisible({
