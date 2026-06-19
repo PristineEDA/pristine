@@ -40,6 +40,7 @@ const directRuntimeDependencyAttributionIds = new Map([
   ['rxjs', 'rxjs'],
   ['streamdown', 'streamdown'],
   ['tailwind-merge', 'tailwind-merge'],
+  ['three', 'three-js'],
   ['tw-shimmer', 'tw-shimmer'],
   ['vscode-jsonrpc', 'vscode-jsonrpc'],
   ['zustand', 'zustand'],

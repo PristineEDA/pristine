@@ -62,6 +62,9 @@ Pristine is currently an Electron, Vite, React, TypeScript, and Mastra workspace
 - Waveform performance changes must be driven by measured data. Update or add perf probes before drawing conclusions, and report FPS, render time, frame interval, dropped frames, scene update, GPU/glyph buffer update, React commit, pipe roundtrip, and parse timing when relevant.
 - Waveform perf coverage should include continuous pan, continuous zoom, rapid pan+zoom, large-range pan, extreme zoom in/out, and vertical-scroll-then-interact cases.
 - When waveform performance is part of the request, include the packaged app in the same verification loop when practical: build, package, run packaged perf, and compare dev and packaged results.
+- Physical large-GDS 2D rendering should use the v3 staged status/catalog-page/tile-geometry path. Do not use full-cell geometry pulls or row/primitive Graphics redraws as the pan/zoom hot path for large GDS.
+- Preserve Physical GDS visual quality during performance work: do not lower DPR, downsample, hide labels or shapes, change colors, line widths, opacity, outline, or layer/category/opacity semantics to improve FPS.
+- Physical GDS performance work should include measured tile/mesh metrics and the local `tt_um_tt_tinyQV.gds` fixture when practical. Use `pnpm run prepare:physical-gds-fixture` to fetch it into `.deps`; do not commit the downloaded GDS.
 
 ## pristine-engine Coordination
 

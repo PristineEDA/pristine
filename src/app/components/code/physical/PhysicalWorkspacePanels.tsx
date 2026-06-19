@@ -24,6 +24,7 @@ import { useCodeViewerLayout } from '../../../context/CodeViewerLayoutContext';
 import { Button } from '../../ui/button';
 import { TooltipIconButton } from '../../ui/tooltip-icon-button';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '../../ui/resizable';
+import { Slider } from '../../ui/slider';
 import { SPLIT_PANEL_CONTENT_TRANSITION_STYLE, useAnimatedSplitPanelPresence } from '../explorer/useAnimatedSplitPanelPresence';
 import {
   compactIconTabToggleIconSize,
@@ -47,15 +48,23 @@ import {
 } from './PhysicalLayoutEditorPanel';
 import {
   createPhysicalLayoutLayerTree,
+  formatPhysicalLayoutLayerOpacity,
+  getPhysicalLayoutLayerColor,
   getPhysicalLayoutLayerCategories,
   getPhysicalLayoutLayerCategoryColor,
+  getPhysicalLayoutLayerOpacity,
   getPhysicalLayoutOutlineColor,
+  getPhysicalLayoutShapeCategory,
   isPhysicalLayoutLayerCategoryVisible,
   isPhysicalLayoutOutlineVisible,
+  normalizePhysicalLayoutLayerOpacity,
+  physicalLayoutLayerOpacityMax,
+  physicalLayoutLayerOpacityMin,
+  physicalLayoutLayerOpacityStep,
   type PhysicalLayoutLayerCategory,
   type PhysicalLayoutVisibility,
 } from './physicalLayoutLayers';
-import { selectLayoutTargetShapes, type PhysicalLayoutTarget } from './physicalLayoutGeometry';
+import { selectLayoutTargetShapes, shapeBounds, type PhysicalLayoutTarget } from './physicalLayoutGeometry';
 
 type PhysicalLeftPanelTab = 'layout' | 'constraints';
 type PhysicalLowerPanelTab = 'details' | 'notes';
@@ -102,6 +111,7 @@ const physicalBottomPanelTabs = [
 ] as const satisfies readonly IconTabToggleGroupItem[];
 
 const emptyPhysicalLayoutVisibility: PhysicalLayoutVisibility = {
+  layerOpacities: new Map(),
   outlineVisible: false,
   visibleItems: new Set(),
 };
@@ -191,13 +201,19 @@ function PhysicalPanelTabs<TTab extends string>({
 
 export function PhysicalMainPanel({
   activeLayoutFilePath,
+  highlightedShapeIndex,
   layoutVisibility,
+  onGdsTileGeometryChange,
+  onHighlightedShapeChange,
   onLayoutStateChange,
   onSelectedTargetChange,
   selectedTarget,
 }: {
   activeLayoutFilePath: string | null;
+  highlightedShapeIndex?: number | null;
   layoutVisibility: PhysicalLayoutVisibility;
+  onGdsTileGeometryChange?: (geometry: LspLayoutGeometry | null) => void;
+  onHighlightedShapeChange?: (shapeIndex: number | null) => void;
   onLayoutStateChange?: (state: PhysicalLayoutStateSnapshot) => void;
   onSelectedTargetChange?: (target: PhysicalLayoutTarget | null) => void;
   selectedTarget?: PhysicalLayoutTarget | null;
@@ -209,8 +225,11 @@ export function PhysicalMainPanel({
       <div data-testid="physical-main-panel-content" className="h-full min-h-0">
         <PhysicalLayoutEditorPanel
           activeLayoutFilePath={activeLayoutFilePath}
+          highlightedShapeIndex={highlightedShapeIndex ?? null}
           layoutVisibility={layoutVisibility}
           selectedTarget={selectedTarget ?? null}
+          onGdsTileGeometryChange={onGdsTileGeometryChange}
+          onHighlightedShapeChange={onHighlightedShapeChange}
           onLayoutStateChange={onLayoutStateChange}
           onSelectedTargetChange={onSelectedTargetChange}
         />
@@ -264,6 +283,7 @@ function PhysicalLayoutFileTree({
           const targets = active && catalog ? createLayoutFileTargets(catalog) : [];
           const hasChildren = targets.length > 0;
           const FileIcon = getPhysicalLayoutFileIcon(file.extension);
+          const fileIconColor = getPhysicalLayoutFileIconColor(file.extension);
           return (
             <div key={file.path}>
               <button
@@ -282,7 +302,13 @@ function PhysicalLayoutFileTree({
                   size={12}
                   className={cn('shrink-0 transition-transform', expanded && hasChildren && 'rotate-90', !hasChildren && 'opacity-30')}
                 />
-                <FileIcon size={13} className="shrink-0" />
+                <FileIcon
+                  size={13}
+                  className="shrink-0"
+                  data-icon-color={fileIconColor}
+                  data-testid={`physical-layout-file-icon-${sanitizeLayoutTestId(file.path)}`}
+                  style={{ color: fileIconColor }}
+                />
                 <span className="min-w-0 flex-1 truncate">{file.name}</span>
               </button>
 
@@ -291,6 +317,7 @@ function PhysicalLayoutFileTree({
                   {targets.map((target) => {
                     const selected = selectedTarget?.kind === target.kind && selectedTarget.name === target.name;
                     const TargetIcon = target.kind === 'gdsCell' ? Boxes : target.kind === 'design' ? CircuitBoard : Layers3;
+                    const targetIconColor = getPhysicalLayoutTargetIconColor(target);
                     return (
                       <button
                         key={`${target.kind}:${target.name}`}
@@ -304,7 +331,13 @@ function PhysicalLayoutFileTree({
                         onClick={() => onTargetActivate?.(target)}
                         title={target.name}
                       >
-                        <TargetIcon size={12} className="shrink-0" />
+                        <TargetIcon
+                          size={12}
+                          className="shrink-0"
+                          data-icon-color={targetIconColor}
+                          data-testid={`physical-layout-target-icon-${sanitizeLayoutTestId(target.kind)}-${sanitizeLayoutTestId(target.name)}`}
+                          style={{ color: targetIconColor }}
+                        />
                         <span className="min-w-0 flex-1 truncate">{target.name}</span>
                       </button>
                     );
@@ -320,19 +353,25 @@ function PhysicalLayoutFileTree({
 }
 
 function PhysicalInspectorSummary({
+  highlightedShapeIndex,
   layoutState,
   selectedTarget,
 }: {
+  highlightedShapeIndex?: number | null;
   layoutState?: PhysicalWorkspaceLayoutState;
   selectedTarget?: PhysicalLayoutTarget | null;
 }) {
   const catalog = layoutState?.catalog ?? null;
+  const geometry = layoutState?.geometry ?? null;
   const macro = selectedTarget?.kind === 'macro'
     ? catalog?.macros.find((entry) => entry.name === selectedTarget.name) ?? null
     : null;
   const cell = selectedTarget?.kind === 'gdsCell'
     ? catalog?.gdsCells.find((entry) => entry.name === selectedTarget.name) ?? null
     : null;
+  const highlightedShape = highlightedShapeIndex === null || highlightedShapeIndex === undefined
+    ? null
+    : selectLayoutTargetShapes(catalog, geometry, selectedTarget).find((shape) => shape.index === highlightedShapeIndex) ?? null;
 
   if (!selectedTarget) {
     return (
@@ -374,8 +413,82 @@ function PhysicalInspectorSummary({
         <dt>Shapes</dt>
         <dd className="text-ide-text">{layoutState?.geometry?.shapes.length ?? 0}</dd>
       </dl>
+      <PhysicalSelectedShapeInspector
+        catalog={catalog}
+        shape={highlightedShape}
+      />
     </div>
   );
+}
+
+function PhysicalSelectedShapeInspector({
+  catalog,
+  shape,
+}: {
+  catalog: LspLayoutCatalog | null;
+  shape: LspLayoutGeometry['shapes'][number] | null;
+}) {
+  if (!shape) {
+    return (
+      <div
+        className="rounded border border-ide-border/70 bg-ide-panel/70 px-3 py-2 text-ide-text-muted"
+        data-testid="physical-inspector-selected-shape-empty"
+      >
+        Click a visible shape to inspect it.
+      </div>
+    );
+  }
+
+  const bounds = shapeBounds(shape);
+  const layer = catalog?.layers.find((entry) => entry.index === shape.layerIndex) ?? null;
+  const category = getPhysicalLayoutShapeCategory(shape);
+  const gdsElement = shape.ownerKind === 'gdsElement'
+    ? catalog?.gdsElements[shape.ownerIndex] ?? null
+    : null;
+
+  return (
+    <div
+      className="rounded border border-ide-border/70 bg-ide-panel/70 px-3 py-2"
+      data-testid="physical-inspector-selected-shape"
+    >
+      <p className="font-medium text-ide-text">Selected Shape</p>
+      <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-ide-text-muted">
+        <dt>Index</dt>
+        <dd className="text-ide-text" data-testid="physical-inspector-selected-shape-index">{shape.index}</dd>
+        <dt>Layer</dt>
+        <dd className="text-ide-text" data-testid="physical-inspector-selected-shape-layer">
+          {layer ? `${layer.name} (${layer.index})` : shape.layerIndex}
+        </dd>
+        <dt>Category</dt>
+        <dd className="text-ide-text" data-testid="physical-inspector-selected-shape-category">{category ? physicalLayerCategoryLabels[category] : 'Unknown'}</dd>
+        <dt>Kind</dt>
+        <dd className="text-ide-text" data-testid="physical-inspector-selected-shape-kind">{shape.kind}</dd>
+        <dt>Owner</dt>
+        <dd className="text-ide-text">{shape.ownerKind} #{shape.ownerIndex}</dd>
+        <dt>Macro</dt>
+        <dd className="text-ide-text">{shape.macroIndex ?? 'global'}</dd>
+        <dt>Bounds</dt>
+        <dd className="text-ide-text" data-testid="physical-inspector-selected-shape-bounds">{formatLayoutBounds(bounds)}</dd>
+        <dt>Points</dt>
+        <dd className="text-ide-text">{shape.polygon?.length ?? 0}</dd>
+        <dt>Flags</dt>
+        <dd className="text-ide-text">{shape.flags}</dd>
+        {gdsElement && (
+          <>
+            <dt>GDS</dt>
+            <dd className="text-ide-text">
+              {gdsElement.kind} L{gdsElement.layer}/{gdsElement.datatype}
+              {gdsElement.text ? ` ${gdsElement.text}` : ''}
+            </dd>
+          </>
+        )}
+      </dl>
+    </div>
+  );
+}
+
+function formatLayoutBounds(bounds: ReturnType<typeof shapeBounds>): string {
+  return `${bounds.x0.toFixed(3)}, ${bounds.y0.toFixed(3)} - ${bounds.x1.toFixed(3)}, ${bounds.y1.toFixed(3)}`;
 }
 
 function PhysicalLayerPanel({
@@ -383,6 +496,7 @@ function PhysicalLayerPanel({
   geometry,
   layoutVisibility,
   onLayerCategoryVisibilityToggle,
+  onLayerOpacityChange,
   onOutlineVisibilityToggle,
   selectedTarget,
 }: {
@@ -390,9 +504,11 @@ function PhysicalLayerPanel({
   geometry?: LspLayoutGeometry | null;
   layoutVisibility: PhysicalLayoutVisibility;
   onLayerCategoryVisibilityToggle?: (layerIndex: number, category: PhysicalLayoutLayerCategory) => void;
+  onLayerOpacityChange?: (layerIndex: number, opacity: number) => void;
   onOutlineVisibilityToggle?: () => void;
   selectedTarget?: PhysicalLayoutTarget | null;
 }) {
+  const [expandedOpacityLayerIndex, setExpandedOpacityLayerIndex] = useState<number | null>(null);
   const layers = catalog?.layers ?? [];
   const selectedShapes = selectLayoutTargetShapes(catalog, geometry, selectedTarget);
   const layerTree = createPhysicalLayoutLayerTree(catalog, selectedShapes);
@@ -451,6 +567,8 @@ function PhysicalLayerPanel({
 
         {layerTree.map((entry) => {
           const { layer } = entry;
+          const layerOpacity = getPhysicalLayoutLayerOpacity(layoutVisibility, layer.index);
+          const isOpacityExpanded = expandedOpacityLayerIndex === layer.index;
           return (
             <div
               key={`${layer.index}:${layer.name}`}
@@ -458,13 +576,69 @@ function PhysicalLayerPanel({
               className="rounded px-1.5 py-1 text-[11px] text-ide-text"
               aria-disabled={false}
             >
-              <div className="flex min-h-6 items-center gap-2">
-                <span
-                  className="min-w-0 truncate font-medium"
-                  data-testid={`physical-layer-name-${layer.index}`}
-                  title={layer.name}
+              <div
+                className="flex min-h-6 items-center gap-2"
+                data-testid={`physical-layer-opacity-row-${layer.index}`}
+              >
+                <button
+                  type="button"
+                  aria-expanded={isOpacityExpanded}
+                  aria-label={`Set ${layer.name} opacity`}
+                  className="min-w-0 shrink rounded px-0.5 py-0 text-left text-[11px] font-medium leading-5 text-ide-text transition-colors hover:bg-ide-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ide-accent"
+                  data-testid={`physical-layer-opacity-button-${layer.index}`}
+                  onClick={() => setExpandedOpacityLayerIndex(isOpacityExpanded ? null : layer.index)}
+                  title={`${layer.name} opacity ${formatPhysicalLayoutLayerOpacity(layerOpacity)}`}
                 >
-                  {layer.name}
+                  <span
+                    className="min-w-0 truncate"
+                    data-testid={`physical-layer-name-${layer.index}`}
+                  >
+                    {layer.name}
+                  </span>
+                </button>
+                {isOpacityExpanded && (
+                  <>
+                    <button
+                      type="button"
+                      aria-label={`Decrease ${layer.name} opacity`}
+                      className="flex size-4 shrink-0 items-center justify-center rounded border border-ide-border/70 text-[10px] leading-none text-ide-text-muted transition-colors hover:bg-ide-hover hover:text-ide-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ide-accent"
+                      data-testid={`physical-layer-opacity-decrease-${layer.index}`}
+                      onClick={() => onLayerOpacityChange?.(
+                        layer.index,
+                        normalizePhysicalLayoutLayerOpacity(layerOpacity - physicalLayoutLayerOpacityStep),
+                      )}
+                    >
+                      -
+                    </button>
+                    <Slider
+                      aria-label={`Set ${layer.name} opacity`}
+                      className="h-4 min-w-14 flex-1"
+                      data-testid={`physical-layer-opacity-slider-${layer.index}`}
+                      max={physicalLayoutLayerOpacityMax}
+                      min={physicalLayoutLayerOpacityMin}
+                      onValueChange={(value) => onLayerOpacityChange?.(layer.index, value[0] ?? 1)}
+                      step={physicalLayoutLayerOpacityStep}
+                      value={[layerOpacity]}
+                    />
+                    <button
+                      type="button"
+                      aria-label={`Increase ${layer.name} opacity`}
+                      className="flex size-4 shrink-0 items-center justify-center rounded border border-ide-border/70 text-[10px] leading-none text-ide-text-muted transition-colors hover:bg-ide-hover hover:text-ide-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ide-accent"
+                      data-testid={`physical-layer-opacity-increase-${layer.index}`}
+                      onClick={() => onLayerOpacityChange?.(
+                        layer.index,
+                        normalizePhysicalLayoutLayerOpacity(layerOpacity + physicalLayoutLayerOpacityStep),
+                      )}
+                    >
+                      +
+                    </button>
+                  </>
+                )}
+                <span
+                    className="ml-auto shrink-0 text-[10px] font-normal tabular-nums text-ide-text-muted"
+                    data-testid={`physical-layer-opacity-value-${layer.index}`}
+                  >
+                    {formatPhysicalLayoutLayerOpacity(layerOpacity)}
                 </span>
               </div>
               <div className="mt-0.5 flex flex-col gap-0.5 pl-3">
@@ -585,6 +759,34 @@ function getPhysicalLayoutFileIcon(extension: string) {
   }
 
   return FileText;
+}
+
+function getPhysicalLayoutFileIconColor(extension: string) {
+  if (extension === '.gds' || extension === '.gdsii') {
+    return getPhysicalLayoutLayerColor(2).cssColor;
+  }
+  if (extension === '.def') {
+    return getPhysicalLayoutLayerColor(1).cssColor;
+  }
+  if (extension === '.lef') {
+    return getPhysicalLayoutLayerColor(0).cssColor;
+  }
+  if (extension === '.oas' || extension === '.oasis') {
+    return getPhysicalLayoutLayerColor(4).cssColor;
+  }
+
+  return getPhysicalLayoutOutlineColor().cssColor;
+}
+
+function getPhysicalLayoutTargetIconColor(target: PhysicalLayoutTarget) {
+  if (target.kind === 'gdsCell') {
+    return getPhysicalLayoutLayerColor(2).cssColor;
+  }
+  if (target.kind === 'design') {
+    return getPhysicalLayoutLayerColor(1).cssColor;
+  }
+
+  return getPhysicalLayoutLayerColor(0).cssColor;
 }
 
 function PhysicalLowerPanel<TTab extends PhysicalLowerPanelTab>({
@@ -773,16 +975,20 @@ export function PhysicalLeftPanel({
 }
 
 export function PhysicalRightPanel({
+  highlightedShapeIndex,
   layoutState,
   layoutVisibility = emptyPhysicalLayoutVisibility,
   onLayerCategoryVisibilityToggle,
+  onLayerOpacityChange,
   onOutlineVisibilityToggle,
   onSplitPanelVisibleChange,
   selectedTarget,
 }: {
+  highlightedShapeIndex?: number | null;
   layoutState?: PhysicalWorkspaceLayoutState;
   layoutVisibility?: PhysicalLayoutVisibility;
   onLayerCategoryVisibilityToggle?: (layerIndex: number, category: PhysicalLayoutLayerCategory) => void;
+  onLayerOpacityChange?: (layerIndex: number, opacity: number) => void;
   onOutlineVisibilityToggle?: () => void;
   onSplitPanelVisibleChange?: (isVisible: boolean) => void;
   selectedTarget?: PhysicalLayoutTarget | null;
@@ -823,6 +1029,7 @@ export function PhysicalRightPanel({
           layoutVisibility={layoutVisibility}
           selectedTarget={selectedTarget}
           onLayerCategoryVisibilityToggle={onLayerCategoryVisibilityToggle}
+          onLayerOpacityChange={onLayerOpacityChange}
           onOutlineVisibilityToggle={onOutlineVisibilityToggle}
         />
       ) : (
@@ -837,6 +1044,7 @@ export function PhysicalRightPanel({
   const lowerContent = useMemo<Record<PhysicalLowerPanelTab, ReactNode>>(() => ({
     details: (
       <PhysicalInspectorSummary
+        highlightedShapeIndex={highlightedShapeIndex}
         layoutState={layoutState}
         selectedTarget={selectedTarget}
       />
@@ -848,7 +1056,7 @@ export function PhysicalRightPanel({
         description="Physical checks and selected object notes will appear here."
       />
     ),
-  }), [layoutState, selectedTarget]);
+  }), [highlightedShapeIndex, layoutState, selectedTarget]);
 
   return (
     <div

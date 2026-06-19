@@ -52,6 +52,63 @@ describe('MenuBar', () => {
     expect(window.electronAPI?.close).toHaveBeenCalledTimes(1);
   });
 
+  it('shows the maximize icon while the window is not maximized', () => {
+    renderMenuBar();
+
+    const maximizeControl = screen.getByTestId('window-control-maximize');
+
+    expect(maximizeControl).toHaveAttribute('aria-label', 'Maximize Window');
+    expect(maximizeControl).toHaveAttribute('title', 'Maximize Window');
+    expect(maximizeControl.querySelector('.lucide-square')).toBeInTheDocument();
+    expect(maximizeControl.querySelector('.lucide-copy')).not.toBeInTheDocument();
+  });
+
+  it('shows the restore icon while the window is maximized', () => {
+    vi.mocked(window.electronAPI!.isMaximized).mockReturnValue(true);
+
+    renderMenuBar();
+
+    const maximizeControl = screen.getByTestId('window-control-maximize');
+
+    expect(maximizeControl).toHaveAttribute('aria-label', 'Restore Window');
+    expect(maximizeControl).toHaveAttribute('title', 'Restore Window');
+    expect(maximizeControl.querySelector('.lucide-copy')).toBeInTheDocument();
+    expect(maximizeControl.querySelector('.lucide-square')).not.toBeInTheDocument();
+  });
+
+  it('updates the maximize control icon when the native maximized state changes', () => {
+    let maximizedListener: ((maximized: boolean) => void) | undefined;
+    const dispose = vi.fn();
+    vi.mocked(window.electronAPI!.onMaximizedChange).mockImplementation((callback: (maximized: boolean) => void) => {
+      maximizedListener = callback;
+      return dispose;
+    });
+
+    const { unmount } = renderMenuBar();
+    const maximizeControl = screen.getByTestId('window-control-maximize');
+
+    expect(maximizeControl).toHaveAttribute('aria-label', 'Maximize Window');
+    expect(maximizeControl.querySelector('.lucide-square')).toBeInTheDocument();
+
+    act(() => {
+      maximizedListener?.(true);
+    });
+
+    expect(maximizeControl).toHaveAttribute('aria-label', 'Restore Window');
+    expect(maximizeControl.querySelector('.lucide-copy')).toBeInTheDocument();
+
+    act(() => {
+      maximizedListener?.(false);
+    });
+
+    expect(maximizeControl).toHaveAttribute('aria-label', 'Maximize Window');
+    expect(maximizeControl.querySelector('.lucide-square')).toBeInTheDocument();
+
+    unmount();
+
+    expect(dispose).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps the close window icon neutral until hover', () => {
     mockPersistedSettingsConfig({ codeViewerLayoutMode: 'compact' });
 

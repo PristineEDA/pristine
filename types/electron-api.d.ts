@@ -16,8 +16,14 @@ import type {
   LspInlayHint,
   LspLayoutGeometry,
   LspLayoutGeometryOptions,
+  LspLayoutCatalogPage,
+  LspLayoutCatalogPageOptions,
+  LspLayoutCatalogSummary,
   LspLayoutOpenOptions,
   LspLayoutOpenResult,
+  LspLayoutStatus,
+  LspLayoutTileGeometry,
+  LspLayoutTileGeometryOptions,
   LspModuleHierarchy,
   LspModuleHierarchyOptions,
   LspOutlineOptions,
@@ -192,6 +198,10 @@ export interface ElectronAPI {
     waveformClose: (sessionId: string) => Promise<boolean>;
     layoutOpen: (options?: LspLayoutOpenOptions) => Promise<LspLayoutOpenResult>;
     layoutGeometry: (options: LspLayoutGeometryOptions) => Promise<LspLayoutGeometry>;
+    layoutStatus: (sessionId: string) => Promise<LspLayoutStatus>;
+    layoutCatalogSummary: (sessionId: string) => Promise<LspLayoutCatalogSummary>;
+    layoutCatalogPage: (options: LspLayoutCatalogPageOptions) => Promise<LspLayoutCatalogPage>;
+    layoutTileGeometry: (options: LspLayoutTileGeometryOptions) => Promise<LspLayoutTileGeometry>;
     layoutClose: (sessionId: string) => Promise<boolean>;
     getDebugEvents: () => Promise<LspDebugEvent[]>;
     onDebug: (callback: (payload: LspDebugEvent) => void) => () => void;

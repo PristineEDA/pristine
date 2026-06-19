@@ -320,6 +320,13 @@ export const openSourceAttributionSections: AttributionSection[] = [
         license: 'MIT',
       },
       {
+        id: 'three-js',
+        name: 'Three.js',
+        url: 'https://github.com/mrdoob/three.js',
+        author: 'Three.js Authors',
+        license: 'MIT',
+      },
+      {
         id: 'elkjs',
         name: 'elkjs',
         url: 'https://github.com/kieler/elkjs',

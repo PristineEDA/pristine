@@ -401,6 +401,7 @@ export interface LspLayoutOpenOptions {
   lefUris?: string[];
   defUri?: string;
   gdsUri?: string;
+  openMode?: 'sync' | 'staged' | 'auto';
   workspaceFilePath?: string;
 }
 
@@ -584,12 +585,136 @@ export interface LspLayoutGeometry {
   shapes: LspLayoutShape[];
 }
 
+export type LspLayoutStatusState = 'parsing' | 'ready' | 'failed' | 'closing' | 'unknown';
+
+export type LspLayoutStatusPhase = 'unknown' | 'read' | 'records' | 'finalize' | 'resolve' | 'ready' | 'failed';
+
+export interface LspLayoutStatus {
+  state: LspLayoutStatusState;
+  phase: LspLayoutStatusPhase;
+  fileSizeBytes: number;
+  bytesRead: number;
+  recordCount: number;
+  cellCount: number;
+  referenceCount: number;
+  elementCount: number;
+  pointCount: number;
+  stringCount: number;
+  diagnosticCount: number;
+  elapsedMicros: number;
+  openMicros: number;
+  parseMicros: number;
+  warmupScheduled: boolean;
+  warmupReady: boolean;
+  error: string;
+}
+
+export interface LspLayoutCatalogSummary {
+  unitsPerMicron: number;
+  sourceKind: LspLayoutSourceKind;
+  shapeCount: number;
+  hasBounds: boolean;
+  topCellIndex: number | null;
+  bounds: LspLayoutBounds | null;
+  layerCount: number;
+  layerSummary: LspLayoutLayer[];
+  macroCount: number;
+  componentCount: number;
+  defPinCount: number;
+  netCount: number;
+  gdsCellCount: number;
+  gdsReferenceCount: number;
+  gdsElementCount: number;
+  gdsPointCount: number;
+  stringCount: number;
+  diagnosticCount: number;
+  parseMicros: number;
+  layerRegisterMicros: number;
+  boundsMicros: number;
+  openMicros: number;
+}
+
+export type LspLayoutCatalogPageTableKind =
+  | 'layers'
+  | 'cells'
+  | 'references'
+  | 'elements'
+  | 'points'
+  | 'strings'
+  | 'diagnostics';
+
+export interface LspLayoutCatalogPageOptions {
+  sessionId: string;
+  tableKind: LspLayoutCatalogPageTableKind;
+  offset?: number;
+  limit?: number;
+  maxBytes?: number;
+}
+
+export interface LspLayoutCatalogPage {
+  tableKind: LspLayoutCatalogPageTableKind;
+  offset: number;
+  count: number;
+  totalCount: number;
+  nextOffset: number | null;
+  layers: LspLayoutLayer[];
+  gdsCells: LspLayoutGdsCell[];
+  gdsReferences: LspLayoutGdsReference[];
+  gdsElements: LspLayoutGdsElement[];
+  gdsPoints: LspLayoutGdsPoint[];
+  strings: string[];
+  diagnostics: LspLayoutDiagnostic[];
+}
+
+export interface LspLayoutTileMetrics {
+  indexBuildMicros: number;
+  queryMicros: number;
+  encodeMicros: number;
+  visitedCellCount: number;
+  elementCandidateCount: number;
+  referenceCandidateCount: number;
+  traversedReferenceCount: number;
+  lodShapeCount: number;
+  cacheHitCount: number;
+  cacheMissCount: number;
+  gridBuildMicros: number;
+  gridHitCount: number;
+  gridMissCount: number;
+  gridCandidateCount: number;
+  gridBinCount: number;
+}
+
+export interface LspLayoutTileGeometryOptions {
+  sessionId: string;
+  bbox?: LspLayoutBounds;
+  rootCellIndex: number;
+  maxShapes?: number;
+  maxPoints?: number;
+  maxBytes?: number;
+  lod?: number;
+  continuationToken?: number;
+  layerIndices?: number[];
+  shapeKinds?: number[];
+  datatypes?: number[];
+}
+
+export interface LspLayoutTileGeometry {
+  geometry: LspLayoutGeometry;
+  truncated: boolean;
+  nextToken: number | null;
+  payloadSize: number;
+  tileShapeCount: number;
+  metrics: LspLayoutTileMetrics;
+}
+
 export interface LspLayoutGeometryOptions {
   sessionId: string;
   bbox?: LspLayoutBounds;
   maxShapes?: number;
   layerIndices?: number[];
   shapeKinds?: number[];
+  macroIndices?: number[];
+  gdsRootCellIndices?: number[];
 }
 
 export interface LspLayoutOpenResult {

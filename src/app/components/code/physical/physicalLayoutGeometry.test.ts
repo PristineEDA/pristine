@@ -1,27 +1,63 @@
 import { describe, expect, it } from 'vitest';
 
-import type { LspLayoutCatalog, LspLayoutGeometry } from '../../../../../types/systemverilog-lsp';
-import { layoutFixtureGeometry, layoutFixtureOpenResult } from '../../../../test/layoutFixture';
+import type { LspLayoutCatalog, LspLayoutGeometry, LspLayoutShape } from '../../../../../types/systemverilog-lsp';
+import { layoutFixtureGdsGeometry, layoutFixtureGdsOpenResult, layoutFixtureGeometry, layoutFixtureOpenResult } from '../../../../test/layoutFixture';
 import {
   applyLayoutWheel,
+  findShapeAtLayoutPoint,
   findLayoutMacro,
   getFitLayoutCamera,
   getFirstLayoutMacroName,
   getMacroBounds,
   getShapesBounds,
   selectMacroShapes,
+  selectLayoutTargetShapes,
 } from './physicalLayoutGeometry';
 import {
+  createPhysicalLayout3DSceneInput,
+  getPhysicalLayout3DCenter,
+  getPhysicalLayout3DDepth,
+  getPhysicalLayout3DBounds,
+  getPhysicalLayout3DLayerZ,
+} from './physicalLayout3dGeometry';
+import {
+  getPhysicalLayout3DBaseGridMaterialOptions,
+  getPhysicalLayout3DBaseOutlineMaterialOptions,
+  getPhysicalLayout3DEdgeMaterialOptions,
+  getPhysicalLayout3DEdgeRenderOrder,
+  getPhysicalLayout3DMeshMaterialOptions,
+  getPhysicalLayout3DShapeRenderOrder,
+  physicalLayout3DRenderOrders,
+} from './physicalLayout3dRendering';
+import {
+  getPhysicalLayout3DViewHelperAxisColor,
+  getPhysicalLayout3DViewHelperTargetOrbit,
+  getPhysicalLayout3DViewHelperViewport,
+  physicalLayout3DViewHelperSize,
+} from './physicalLayout3dViewHelper';
+import {
+  createEmptyGdsTileGeometry,
+  createGdsTileMetricsSnapshot,
+  createGdsTileRequestPlan,
+  getGdsTileLod,
+  getViewportWorldBounds,
+  mergeGdsTileGeometryResults,
+} from './physicalLayoutGdsTiles';
+import {
+  createEmptyPhysicalLayoutVisibility,
   createPhysicalLayoutLayerTree,
   createPhysicalLayoutPinLabels,
   createPhysicalLayoutVisibility,
+  formatPhysicalLayoutLayerOpacitySummary,
   filterVisiblePhysicalLayoutShapes,
   getPhysicalLayoutLayerCategoryColor,
   getPhysicalLayoutLayerColor,
+  getPhysicalLayoutLayerOpacity,
   getPhysicalLayoutOutlineColor,
   getVisiblePhysicalLayoutShapeCounts,
   isPhysicalLayoutLayerCategoryVisible,
   isPhysicalLayoutOutlineVisible,
+  normalizePhysicalLayoutLayerOpacity,
 } from './physicalLayoutLayers';
 
 describe('physicalLayoutGeometry', () => {
@@ -95,6 +131,137 @@ describe('physicalLayoutGeometry', () => {
     }, { x: 0, y: 0 }).zoom).toBeGreaterThan(camera.zoom);
   });
 
+  it('plans GDS viewport tile requests without using full target geometry', () => {
+    const visibility = createPhysicalLayoutVisibility(layoutFixtureGdsOpenResult.catalog, true, layoutFixtureGdsGeometry.shapes);
+    const camera = { panX: 20, panY: 30, zoom: 10 };
+    const bounds = getViewportWorldBounds(camera, { width: 400, height: 200 }, 0);
+    const plan = createGdsTileRequestPlan({
+      camera,
+      rootCellIndex: 1,
+      sessionId: 'layout-gds',
+      size: { width: 400, height: 200 },
+      visibility,
+    });
+
+    expect(bounds).toEqual({ x0: -2, y0: -3, x1: 38, y1: 17 });
+    expect(getGdsTileLod(2)).toBe(2);
+    expect(getGdsTileLod(12)).toBe(1);
+    expect(getGdsTileLod(48)).toBe(0);
+    expect(plan.options).toEqual(expect.objectContaining({
+      bbox: expect.objectContaining({ x0: expect.any(Number), x1: expect.any(Number) }),
+      lod: 1,
+      rootCellIndex: 1,
+      sessionId: 'layout-gds',
+    }));
+    expect(plan.layerIndices).toBeDefined();
+    expect(plan.layerIndices?.length).toBeGreaterThan(0);
+  });
+
+  it('does not send a GDS layer filter before tile visibility is initialized', () => {
+    const visibility = createEmptyPhysicalLayoutVisibility();
+    const plan = createGdsTileRequestPlan({
+      camera: { panX: 20, panY: 30, zoom: 10 },
+      rootCellIndex: 1,
+      sessionId: 'layout-gds',
+      size: { width: 400, height: 200 },
+      visibility,
+    });
+
+    expect(plan.layerIndices).toBeUndefined();
+    expect(plan.options.layerIndices).toBeUndefined();
+  });
+
+  it('merges paged GDS tile geometry and records metrics', () => {
+    const tile = mergeGdsTileGeometryResults([
+      {
+        geometry: {
+          polygonPointCount: 4,
+          shapeCount: 1,
+          shapes: [layoutFixtureGdsGeometry.shapes[0] as LspLayoutShape],
+          truncated: false,
+          unitsPerMicron: 1000,
+        },
+        metrics: {
+          cacheHitCount: 1,
+          cacheMissCount: 0,
+          elementCandidateCount: 1,
+          encodeMicros: 200,
+          gridBinCount: 2,
+          gridBuildMicros: 0,
+          gridCandidateCount: 3,
+          gridHitCount: 1,
+          gridMissCount: 0,
+          indexBuildMicros: 0,
+          lodShapeCount: 1,
+          queryMicros: 300,
+          referenceCandidateCount: 0,
+          traversedReferenceCount: 0,
+          visitedCellCount: 1,
+        },
+        nextToken: 7,
+        payloadSize: 128,
+        tileShapeCount: 1,
+        truncated: true,
+      },
+      {
+        geometry: {
+          polygonPointCount: 4,
+          shapeCount: 1,
+          shapes: [layoutFixtureGdsGeometry.shapes[1] as LspLayoutShape],
+          truncated: false,
+          unitsPerMicron: 1000,
+        },
+        metrics: {
+          cacheHitCount: 0,
+          cacheMissCount: 1,
+          elementCandidateCount: 2,
+          encodeMicros: 300,
+          gridBinCount: 4,
+          gridBuildMicros: 0,
+          gridCandidateCount: 5,
+          gridHitCount: 0,
+          gridMissCount: 1,
+          indexBuildMicros: 0,
+          lodShapeCount: 1,
+          queryMicros: 400,
+          referenceCandidateCount: 0,
+          traversedReferenceCount: 0,
+          visitedCellCount: 1,
+        },
+        nextToken: null,
+        payloadSize: 256,
+        tileShapeCount: 1,
+        truncated: false,
+      },
+    ]);
+
+    expect(tile?.geometry.shapes).toHaveLength(2);
+    expect(tile?.nextToken).toBeNull();
+    expect(tile?.payloadSize).toBe(384);
+    expect(tile?.metrics.queryMicros).toBe(700);
+    expect(tile?.metrics.cacheHitCount).toBe(1);
+    expect(tile?.metrics.cacheMissCount).toBe(1);
+
+    const metrics = createGdsTileMetricsSnapshot({
+      frameDurationsMs: [16, 17, 18, 19],
+      meshBatchCount: 2,
+      meshDrawNodeCount: 3,
+      meshIndexCount: 6,
+      meshVertexCount: 4,
+      renderMs: 1.2,
+      tile,
+      tileRequestCount: 2,
+      tileRoundtripMs: 5,
+    });
+
+    expect(metrics.averageFps).toBeGreaterThan(50);
+    expect(metrics.meshBatchCount).toBe(2);
+    expect(metrics.meshDrawNodeCount).toBe(3);
+    expect(metrics.meshVertexCount).toBe(4);
+    expect(metrics.lastTileQueryMs).toBe(0.7);
+    expect(metrics.tileRequestCount).toBe(2);
+  });
+
   it('provides stable layer and outline colors', () => {
     const metal1Color = getPhysicalLayoutLayerColor(0);
     const metal1PinColor = getPhysicalLayoutLayerCategoryColor(0, 'pin');
@@ -123,7 +290,11 @@ describe('physicalLayoutGeometry', () => {
     expect(filterVisiblePhysicalLayoutShapes(selectedShapes, visibility)).toHaveLength(3);
     expect(getVisiblePhysicalLayoutShapeCounts(selectedShapes, visibility)).toMatchObject({ obstruction: 1, pin: 2 });
 
-    const hiddenVisibility = { outlineVisible: false, visibleItems: new Set<string>() };
+    expect(getPhysicalLayoutLayerOpacity(visibility, 0)).toBe(1);
+    expect(formatPhysicalLayoutLayerOpacitySummary(visibility)).toBe('0:1.00|1:1.00');
+    expect(normalizePhysicalLayoutLayerOpacity(0.333)).toBe(0.35);
+
+    const hiddenVisibility = { layerOpacities: new Map<number, number>(), outlineVisible: false, visibleItems: new Set<string>() };
 
     expect(isPhysicalLayoutOutlineVisible(hiddenVisibility)).toBe(false);
     expect(filterVisiblePhysicalLayoutShapes(selectedShapes, hiddenVisibility)).toEqual([]);
@@ -141,8 +312,8 @@ describe('physicalLayoutGeometry', () => {
     expect(tree[1]?.categories).toMatchObject({ label: false, obstruction: true, pin: false });
     expect(tree[1]?.available).toBe(true);
     expect(createPhysicalLayoutPinLabels(catalog, selectedShapes, visibility)).toEqual([
-      expect.objectContaining({ layerIndex: 0, name: 'A', ownerIndex: 0 }),
-      expect.objectContaining({ layerIndex: 0, name: 'Y', ownerIndex: 1 }),
+      expect.objectContaining({ layerIndex: 0, name: 'A', opacity: 1, ownerIndex: 0 }),
+      expect.objectContaining({ layerIndex: 0, name: 'Y', opacity: 1, ownerIndex: 1 }),
     ]);
   });
 
@@ -219,5 +390,256 @@ describe('physicalLayoutGeometry', () => {
     expect(createPhysicalLayoutPinLabels(gdsCatalog, selectedShapes, visibility)).toEqual([
       expect.objectContaining({ layerIndex: 0, name: 'VSS', ownerIndex: 2 }),
     ]);
+  });
+
+  it('keeps already-filtered GDS tile geometry even when shapes have no macro index', () => {
+    const selectedTarget = { kind: 'gdsCell' as const, name: 'CHILD', index: 1 };
+    const tileGeometry: LspLayoutGeometry = {
+      ...layoutFixtureGdsGeometry,
+      shapeCount: 2,
+      shapes: layoutFixtureGdsGeometry.shapes.slice(0, 2).map((shape) => ({
+        ...shape,
+        macroIndex: null,
+      })),
+    };
+
+    expect(selectLayoutTargetShapes(layoutFixtureGdsOpenResult.catalog, tileGeometry, selectedTarget)).toHaveLength(2);
+  });
+
+  it('classifies GDS tile shapes by shape kind when owner kind is incomplete', () => {
+    const boundaryShape = layoutFixtureGdsGeometry.shapes.find((shape) => shape.kind === 'polygon');
+    const pathShape = layoutFixtureGdsGeometry.shapes.find((shape) => shape.kind === 'path');
+    const textShape = layoutFixtureGdsGeometry.shapes.find((shape) => shape.kind === 'text');
+    expect(boundaryShape).toBeDefined();
+    expect(pathShape).toBeDefined();
+    expect(textShape).toBeDefined();
+
+    const tileShapes = [boundaryShape, pathShape, textShape].map((shape) => ({
+      ...(shape as LspLayoutShape),
+      ownerKind: 'unknown' as const,
+    }));
+    const visibility = createPhysicalLayoutVisibility(layoutFixtureGdsOpenResult.catalog, true, tileShapes);
+
+    expect(filterVisiblePhysicalLayoutShapes(tileShapes, visibility, 'gds')).toHaveLength(3);
+    expect(getVisiblePhysicalLayoutShapeCounts(tileShapes, visibility, 'gds')).toMatchObject({
+      boundary: 1,
+      path: 1,
+      text: 1,
+    });
+  });
+
+  it('keeps GDS layer categories available when the current filtered tile has no shapes', () => {
+    const tree = createPhysicalLayoutLayerTree(layoutFixtureGdsOpenResult.catalog, []);
+
+    expect(tree[0]?.categories).toMatchObject({
+      boundary: true,
+      path: true,
+      text: true,
+    });
+  });
+
+  it('creates an empty GDS tile plan when all layer categories are hidden', () => {
+    const selectedShapes = layoutFixtureGdsGeometry.shapes.filter((shape) => shape.macroIndex === 1);
+    const visibility = createPhysicalLayoutVisibility(layoutFixtureGdsOpenResult.catalog, true, selectedShapes);
+    for (const key of Array.from(visibility.visibleItems)) {
+      if (key.startsWith('layer:')) {
+        visibility.visibleItems.delete(key);
+      }
+    }
+
+    const plan = createGdsTileRequestPlan({
+      camera: { panX: 0, panY: 0, zoom: 32 },
+      rootCellIndex: 1,
+      sessionId: 'layout-1',
+      size: { height: 600, width: 800 },
+      visibility,
+    });
+
+    expect(plan.empty).toBe(true);
+    expect(plan.layerIndices).toEqual([]);
+    expect(plan.options.layerIndices).toEqual([]);
+    expect(createEmptyGdsTileGeometry(1000).geometry).toMatchObject({
+      shapeCount: 0,
+      shapes: [],
+      unitsPerMicron: 1000,
+    });
+  });
+
+  it('creates 2.5D mesh inputs for visible GDS cell shapes', () => {
+    const selectedTarget = { kind: 'gdsCell' as const, name: 'CHILD', index: 1 };
+    const selectedShapes = layoutFixtureGdsGeometry.shapes.filter((shape) => shape.macroIndex === selectedTarget.index);
+    const visibility = createPhysicalLayoutVisibility(layoutFixtureGdsOpenResult.catalog, true, selectedShapes);
+    const sceneInput = createPhysicalLayout3DSceneInput(
+      layoutFixtureGdsOpenResult.catalog,
+      layoutFixtureGdsGeometry,
+      selectedTarget,
+      visibility,
+    );
+
+    expect(sceneInput.selectedShapeCount).toBe(3);
+    expect(sceneInput.meshes).toHaveLength(3);
+    expect(sceneInput.meshes.map((mesh) => mesh.category)).toEqual(['boundary', 'path', 'text']);
+    expect(sceneInput.meshes[0]).toMatchObject({
+      layerIndex: 0,
+      points: [{ x: 1, y: 1 }, { x: 3, y: 1 }, { x: 3, y: 2 }, { x: 1, y: 2 }],
+      z: getPhysicalLayout3DLayerZ(0, 'boundary'),
+      depth: getPhysicalLayout3DDepth('boundary'),
+    });
+    const maxMeshZ = Math.max(...sceneInput.meshes.map((mesh) => mesh.z + mesh.depth));
+    expect(sceneInput.bounds3D).toEqual({
+      x0: 1,
+      y0: 1,
+      z0: getPhysicalLayout3DLayerZ(0, 'boundary'),
+      x1: 3,
+      y1: 2,
+      z1: maxMeshZ,
+    });
+    expect(sceneInput.bounds3D ? getPhysicalLayout3DCenter(sceneInput.bounds3D) : null).toEqual({
+      x: 2,
+      y: 1.5,
+      z: (getPhysicalLayout3DLayerZ(0, 'boundary') + maxMeshZ) / 2,
+    });
+    expect(sceneInput.meshes[1]?.points).toEqual([
+      { x: 1.2, y: 1.4 },
+      { x: 2.8, y: 1.4 },
+      { x: 2.8, y: 1.55 },
+      { x: 1.2, y: 1.55 },
+    ]);
+
+    visibility.visibleItems.delete('layer:0:boundary');
+    const hiddenBoundaryInput = createPhysicalLayout3DSceneInput(
+      layoutFixtureGdsOpenResult.catalog,
+      layoutFixtureGdsGeometry,
+      selectedTarget,
+      visibility,
+    );
+
+    expect(hiddenBoundaryInput.meshes.map((mesh) => mesh.category)).toEqual(['path', 'text']);
+  });
+
+  it('uses stable 2.5D material depth settings and render ordering', () => {
+    const selectedTarget = { kind: 'gdsCell' as const, name: 'CHILD', index: 1 };
+    const selectedShapes = layoutFixtureGdsGeometry.shapes.filter((shape) => shape.macroIndex === selectedTarget.index);
+    const visibility = createPhysicalLayoutVisibility(layoutFixtureGdsOpenResult.catalog, true, selectedShapes);
+    const sceneInput = createPhysicalLayout3DSceneInput(
+      layoutFixtureGdsOpenResult.catalog,
+      layoutFixtureGdsGeometry,
+      selectedTarget,
+      visibility,
+    );
+    const meshInput = sceneInput.meshes[0];
+    const nextMeshInput = sceneInput.meshes[1];
+
+    expect(meshInput).toBeDefined();
+    expect(nextMeshInput).toBeDefined();
+    if (!meshInput || !nextMeshInput) {
+      return;
+    }
+
+    expect(getPhysicalLayout3DMeshMaterialOptions(meshInput, false)).toMatchObject({
+      depthTest: true,
+      depthWrite: true,
+      opacity: 1,
+      side: 2,
+      transparent: false,
+    });
+    meshInput.opacity = 0.35;
+    expect(getPhysicalLayout3DMeshMaterialOptions(meshInput, false)).toMatchObject({
+      depthTest: true,
+      depthWrite: false,
+      opacity: 0.35,
+      side: 2,
+      transparent: true,
+    });
+    expect(getPhysicalLayout3DEdgeMaterialOptions(meshInput, false)).toMatchObject({
+      depthTest: true,
+      depthWrite: false,
+      transparent: true,
+    });
+    expect(getPhysicalLayout3DBaseGridMaterialOptions()).toMatchObject({
+      depthTest: true,
+      depthWrite: false,
+      side: 2,
+      transparent: true,
+    });
+    expect(getPhysicalLayout3DBaseOutlineMaterialOptions()).toMatchObject({
+      depthTest: true,
+      depthWrite: false,
+      transparent: true,
+    });
+    expect(physicalLayout3DRenderOrders.baseGrid).toBeLessThan(physicalLayout3DRenderOrders.shapeBase);
+    expect(getPhysicalLayout3DShapeRenderOrder(meshInput, false)).toBeLessThan(getPhysicalLayout3DEdgeRenderOrder(meshInput, false));
+    expect(getPhysicalLayout3DShapeRenderOrder(meshInput, true)).toBeGreaterThan(getPhysicalLayout3DEdgeRenderOrder(meshInput, false));
+    expect(getPhysicalLayout3DShapeRenderOrder(meshInput, false)).toBeLessThan(getPhysicalLayout3DShapeRenderOrder(nextMeshInput, false));
+  });
+
+  it('defines the Physical 3D view helper viewport, colors, and axis targets', () => {
+    expect(physicalLayout3DViewHelperSize).toBe(112);
+    expect(getPhysicalLayout3DViewHelperViewport(500, 300)).toEqual({
+      height: 112,
+      left: 380,
+      top: 8,
+      width: 112,
+    });
+    expect(getPhysicalLayout3DViewHelperAxisColor('posX')).toBe(0xff4466);
+    expect(getPhysicalLayout3DViewHelperAxisColor('posY')).toBe(0x88ff44);
+    expect(getPhysicalLayout3DViewHelperAxisColor('posZ')).toBe(0x4488ff);
+    expect(getPhysicalLayout3DViewHelperAxisColor('negX')).toBe(0x222222);
+    expect(getPhysicalLayout3DViewHelperTargetOrbit('posZ')).toEqual({ angleX: 0, angleY: 0 });
+    expect(getPhysicalLayout3DViewHelperTargetOrbit('negZ')).toEqual({ angleX: Math.PI, angleY: 0 });
+    expect(getPhysicalLayout3DViewHelperTargetOrbit('posX').angleY).toBeCloseTo(-Math.PI / 2);
+    expect(getPhysicalLayout3DViewHelperTargetOrbit('negY').angleY).toBeCloseTo(Math.PI);
+  });
+
+  it('finds the topmost visible shape at a layout point', () => {
+    const bottomShape = layoutFixtureGeometry.shapes[0] as LspLayoutShape;
+    const topShape = {
+      ...layoutFixtureGeometry.shapes[1],
+      index: 99,
+      rect: { x0: 0.3, y0: 0.6, x1: 1.1, y1: 1.4 },
+    } as LspLayoutShape;
+
+    const bottomPoint = {
+      x: (bottomShape.rect.x0 + bottomShape.rect.x1) / 2,
+      y: (bottomShape.rect.y0 + bottomShape.rect.y1) / 2,
+    };
+
+    expect(findShapeAtLayoutPoint([bottomShape, topShape], { x: 0.5, y: 0.8 })?.index).toBe(99);
+    expect(findShapeAtLayoutPoint([bottomShape], bottomPoint)?.index).toBe(bottomShape.index);
+    expect(findShapeAtLayoutPoint([bottomShape], { x: -10, y: -10 })).toBeNull();
+  });
+
+  it('uses polygon hit testing for polygon shapes', () => {
+    const polygonShape = {
+      ...layoutFixtureGeometry.shapes[0],
+      kind: 'polygon' as const,
+      polygon: [
+        { x: 0, y: 0 },
+        { x: 2, y: 0 },
+        { x: 1, y: 2 },
+      ],
+      rect: { x0: 0, y0: 0, x1: 2, y1: 2 },
+    } as LspLayoutShape;
+
+    expect(findShapeAtLayoutPoint([polygonShape], { x: 1, y: 1 })?.index).toBe(polygonShape.index);
+    expect(findShapeAtLayoutPoint([polygonShape], { x: 0.1, y: 1.9 })).toBeNull();
+  });
+
+  it('uses fallback layout bounds when hidden 3D categories leave no meshes', () => {
+    const bounds = getPhysicalLayout3DBounds([], { x0: 1, y0: 2, x1: 3, y1: 5 });
+
+    expect(bounds).toEqual({
+      x0: 1,
+      y0: 2,
+      z0: 0,
+      x1: 3,
+      y1: 5,
+      z1: getPhysicalLayout3DDepth('boundary'),
+    });
+    expect(bounds ? getPhysicalLayout3DCenter(bounds) : null).toEqual({
+      x: 2,
+      y: 3.5,
+      z: getPhysicalLayout3DDepth('boundary') / 2,
+    });
   });
 });

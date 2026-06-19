@@ -1,7 +1,8 @@
 import { vi } from 'vitest';
 import type { ElectronAPI } from '../../types/electron-api';
 import { createWaveformFixtureFrame, waveformFixtureData } from '../app/components/code/explorer/waveform/waveformTestFixtures';
-import { layoutFixtureGeometry, layoutFixtureOpenResult } from './layoutFixture';
+import { layoutFixtureGdsGeometry, layoutFixtureGeometry, layoutFixtureGdsOpenResult, layoutFixtureOpenResult } from './layoutFixture';
+import type { LspLayoutGeometryOptions, LspLayoutTileGeometryOptions } from '../../types/systemverilog-lsp';
 
 const defaultGpuDiagnostics = {
   hardwareAccelerationEnabled: true,
@@ -20,6 +21,55 @@ const defaultGpuDiagnostics = {
 };
 
 export function createElectronApiMock(): ElectronAPI {
+  const getLayoutGeometry = async (options: LspLayoutGeometryOptions) => {
+    const geometry = options.gdsRootCellIndices ? layoutFixtureGdsGeometry : layoutFixtureGeometry;
+    const ownerIndices = options.macroIndices ?? options.gdsRootCellIndices ?? [];
+    if (ownerIndices.length === 0) {
+      return layoutFixtureGeometry;
+    }
+
+    const shapes = geometry.shapes.filter((shape) => (
+      shape.macroIndex !== null && ownerIndices.includes(shape.macroIndex)
+    ));
+
+    return {
+      ...geometry,
+      shapeCount: shapes.length,
+      shapes,
+    };
+  };
+  const getLayoutTileGeometry = async (options: LspLayoutTileGeometryOptions) => {
+    const shapes = layoutFixtureGdsGeometry.shapes.filter((shape) => shape.macroIndex === options.rootCellIndex);
+    return {
+      geometry: {
+        ...layoutFixtureGdsGeometry,
+        shapeCount: shapes.length,
+        shapes,
+      },
+      truncated: false,
+      nextToken: null,
+      payloadSize: 512,
+      tileShapeCount: shapes.length,
+      metrics: {
+        indexBuildMicros: 100,
+        queryMicros: 200,
+        encodeMicros: 50,
+        visitedCellCount: 1,
+        elementCandidateCount: shapes.length,
+        referenceCandidateCount: 0,
+        traversedReferenceCount: 0,
+        lodShapeCount: shapes.length,
+        cacheHitCount: 1,
+        cacheMissCount: 0,
+        gridBuildMicros: 0,
+        gridHitCount: 1,
+        gridMissCount: 0,
+        gridCandidateCount: shapes.length,
+        gridBinCount: 1,
+      },
+    };
+  };
+
   return {
     platform: 'win32',
     arch: 'x64',
@@ -162,7 +212,65 @@ export function createElectronApiMock(): ElectronAPI {
       )),
       waveformClose: vi.fn().mockResolvedValue(true),
       layoutOpen: vi.fn().mockResolvedValue(layoutFixtureOpenResult),
-      layoutGeometry: vi.fn().mockResolvedValue(layoutFixtureGeometry),
+      layoutGeometry: vi.fn().mockImplementation(getLayoutGeometry),
+      layoutStatus: vi.fn().mockResolvedValue({
+        state: 'ready',
+        phase: 'ready',
+        fileSizeBytes: 1024,
+        bytesRead: 1024,
+        recordCount: 8,
+        cellCount: 2,
+        referenceCount: 0,
+        elementCount: 4,
+        pointCount: 4,
+        stringCount: 4,
+        diagnosticCount: 0,
+        elapsedMicros: 1000,
+        openMicros: 200,
+        parseMicros: 800,
+        warmupScheduled: false,
+        warmupReady: true,
+        error: '',
+      }),
+      layoutCatalogSummary: vi.fn().mockResolvedValue({
+        unitsPerMicron: layoutFixtureGdsOpenResult.catalog.unitsPerMicron,
+        sourceKind: 'gds',
+        shapeCount: layoutFixtureGdsOpenResult.catalog.shapeCount,
+        hasBounds: true,
+        topCellIndex: layoutFixtureGdsOpenResult.catalog.topCellIndex,
+        bounds: layoutFixtureGdsOpenResult.catalog.gdsCells[0]?.bounds,
+        layerCount: layoutFixtureGdsOpenResult.catalog.layers.length,
+        layerSummary: layoutFixtureGdsOpenResult.catalog.layers,
+        macroCount: 0,
+        componentCount: 0,
+        defPinCount: 0,
+        netCount: 0,
+        gdsCellCount: layoutFixtureGdsOpenResult.catalog.gdsCells.length,
+        gdsReferenceCount: 0,
+        gdsElementCount: layoutFixtureGdsOpenResult.catalog.gdsElements.length,
+        gdsPointCount: 0,
+        stringCount: 4,
+        diagnosticCount: 0,
+        parseMicros: 800,
+        layerRegisterMicros: 20,
+        boundsMicros: 30,
+        openMicros: 200,
+      }),
+      layoutCatalogPage: vi.fn().mockResolvedValue({
+        tableKind: 'cells',
+        offset: 0,
+        count: layoutFixtureGdsOpenResult.catalog.gdsCells.length,
+        totalCount: layoutFixtureGdsOpenResult.catalog.gdsCells.length,
+        nextOffset: null,
+        layers: [],
+        gdsCells: layoutFixtureGdsOpenResult.catalog.gdsCells,
+        gdsReferences: [],
+        gdsElements: [],
+        gdsPoints: [],
+        strings: [],
+        diagnostics: [],
+      }),
+      layoutTileGeometry: vi.fn().mockImplementation(getLayoutTileGeometry),
       layoutClose: vi.fn().mockResolvedValue(true),
       getDebugEvents: vi.fn().mockResolvedValue([]),
       onDebug: vi.fn(() => vi.fn()),

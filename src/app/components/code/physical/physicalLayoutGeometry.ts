@@ -18,6 +18,11 @@ export interface PhysicalLayoutViewport {
   width: number;
 }
 
+export interface PhysicalLayoutPoint {
+  x: number;
+  y: number;
+}
+
 export type PhysicalLayoutTargetKind = 'macro' | 'gdsCell' | 'design';
 
 export interface PhysicalLayoutTarget {
@@ -132,6 +137,11 @@ export function selectLayoutTargetShapes(
     return [];
   }
 
+  if (catalog.sourceKind === 'gds' && target.kind === 'gdsCell') {
+    const matchingShapes = geometry.shapes.filter((shape) => shape.macroIndex === target.index);
+    return matchingShapes.length > 0 ? matchingShapes : geometry.shapes;
+  }
+
   return geometry.shapes.filter((shape) => shape.macroIndex === target.index);
 }
 
@@ -220,6 +230,45 @@ export function applyLayoutWheel(camera: PhysicalLayoutCamera, event: {
   };
 }
 
+export function layoutClientPointToWorldPoint(
+  clientPoint: PhysicalLayoutPoint,
+  viewportBounds: Pick<DOMRect, 'left' | 'top'>,
+  camera: PhysicalLayoutCamera,
+): PhysicalLayoutPoint {
+  return {
+    x: (clientPoint.x - viewportBounds.left - camera.panX) / camera.zoom,
+    y: (clientPoint.y - viewportBounds.top - camera.panY) / camera.zoom,
+  };
+}
+
+export function findShapeAtLayoutPoint(
+  shapes: readonly LspLayoutShape[],
+  point: PhysicalLayoutPoint,
+  tolerance = 0,
+): LspLayoutShape | null {
+  for (let index = shapes.length - 1; index >= 0; index -= 1) {
+    const shape = shapes[index];
+    if (shape && containsLayoutShapePoint(shape, point, tolerance)) {
+      return shape;
+    }
+  }
+
+  return null;
+}
+
+export function containsLayoutShapePoint(
+  shape: LspLayoutShape,
+  point: PhysicalLayoutPoint,
+  tolerance = 0,
+): boolean {
+  if (shape.kind === 'polygon' && shape.polygon && shape.polygon.length >= 3) {
+    return pointInPolygon(point, shape.polygon)
+      || (tolerance > 0 && pointInBounds(point, expandBounds(shapeBounds(shape), tolerance)));
+  }
+
+  return pointInBounds(point, expandBounds(shapeBounds(shape), tolerance));
+}
+
 export function shapeBounds(shape: LspLayoutShape): LspLayoutBounds {
   if (shape.polygon && shape.polygon.length > 0) {
     let x0 = shape.polygon[0]?.x ?? shape.rect.x0;
@@ -242,6 +291,41 @@ export function shapeBounds(shape: LspLayoutShape): LspLayoutBounds {
     x1: Math.max(shape.rect.x0, shape.rect.x1),
     y1: Math.max(shape.rect.y0, shape.rect.y1),
   };
+}
+
+function pointInPolygon(point: PhysicalLayoutPoint, polygon: readonly PhysicalLayoutPoint[]): boolean {
+  let inside = false;
+  for (let currentIndex = 0, previousIndex = polygon.length - 1; currentIndex < polygon.length; previousIndex = currentIndex, currentIndex += 1) {
+    const current = polygon[currentIndex];
+    const previous = polygon[previousIndex];
+    if (!current || !previous) {
+      continue;
+    }
+
+    const intersects = ((current.y > point.y) !== (previous.y > point.y))
+      && point.x < ((previous.x - current.x) * (point.y - current.y)) / ((previous.y - current.y) || Number.EPSILON) + current.x;
+    if (intersects) {
+      inside = !inside;
+    }
+  }
+
+  return inside;
+}
+
+function expandBounds(bounds: LspLayoutBounds, tolerance: number): LspLayoutBounds {
+  return {
+    x0: bounds.x0 - tolerance,
+    y0: bounds.y0 - tolerance,
+    x1: bounds.x1 + tolerance,
+    y1: bounds.y1 + tolerance,
+  };
+}
+
+function pointInBounds(point: PhysicalLayoutPoint, bounds: LspLayoutBounds): boolean {
+  return point.x >= bounds.x0
+    && point.x <= bounds.x1
+    && point.y >= bounds.y0
+    && point.y <= bounds.y1;
 }
 
 function normalizeWheelDelta(value: number, deltaMode = 0): number {

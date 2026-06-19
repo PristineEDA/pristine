@@ -11,6 +11,7 @@
     "prepare:package-app": "node scripts/prepare-package-app.mjs",
     "prepare:assets": "node scripts/prepare-assets.mjs",
     "prepare:bundled-theme-assets": "node scripts/prepare-bundled-theme-assets.mjs",
+    "prepare:physical-gds-fixture": "node scripts/fetch-tt-tinyqv-gds.mjs",
     "sync:bundled-theme-assets": "node scripts/sync-bundled-theme-assets.mjs",
     "prepare:pristine-engine": "node scripts/prepare-pristine-engine.mjs",
     "generate:notice": "node scripts/generate-notice.mjs",
@@ -79,6 +80,7 @@
     "rxjs": "^7.8.2",
     "streamdown": "^2.5.0",
     "tailwind-merge": "^3.5.0",
+    "three": "^0.184.0",
     "tw-shimmer": "^0.4.11",
     "vscode-jsonrpc": "^8.2.1",
     "zustand": "^5.0.12"
@@ -108,6 +110,7 @@
     "@types/node": "^25.5.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
+    "@types/three": "^0.184.1",
     "@vitejs/plugin-react": "6.0.1",
     "@vitest/coverage-v8": "4.1.2",
     "electron": "^35.0.0",

@@ -1,25 +1,42 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Application, Container, Graphics, Text } from 'pixi.js';
+import { Application, Container, Graphics, Mesh, MeshGeometry, Text, Texture } from 'pixi.js';
 
 import type {
   LspLayoutCatalog,
   LspLayoutBounds,
   LspLayoutGeometry,
   LspLayoutShape,
+  LspLayoutTileGeometry,
 } from '../../../../../types/systemverilog-lsp';
 import {
   applyLayoutWheel,
+  findShapeAtLayoutPoint,
   getFitLayoutCamera,
   getLayoutTargetBounds,
   getShapesBounds,
+  layoutClientPointToWorldPoint,
   selectLayoutTargetShapes,
+  shapeBounds,
   type PhysicalLayoutCamera,
   type PhysicalLayoutTarget,
 } from './physicalLayoutGeometry';
 import {
+  createGdsTileMetricsSnapshot,
+  createEmptyGdsTileGeometry,
+  createGdsTileRequestPlan,
+  defaultPhysicalLayoutGdsTileMetrics,
+  getGdsTileShapeStyle,
+  isGdsTileModeEnabled,
+  mergeGdsTileGeometryResults,
+  type PhysicalLayoutGdsTileShapeStyle,
+  type PhysicalLayoutGdsTileMetrics,
+} from './physicalLayoutGdsTiles';
+import {
   createPhysicalLayoutPinLabels,
+  formatPhysicalLayoutLayerOpacitySummary,
   filterVisiblePhysicalLayoutShapes,
   getPhysicalLayoutLayerCategoryColor,
+  getPhysicalLayoutLayerOpacity,
   getVisiblePhysicalLayoutCategoryCount,
   getVisiblePhysicalLayoutLayerCount,
   getVisiblePhysicalLayoutShapeCounts,
@@ -35,8 +52,13 @@ type PixiRendererStatus = PixiRendererPreference | 'error' | 'initializing';
 interface PhysicalLayoutCanvasProps {
   catalog: LspLayoutCatalog | null;
   geometry: LspLayoutGeometry | null;
+  highlightedShapeIndex?: number | null;
+  layoutSessionId?: string | null;
   selectedTarget: PhysicalLayoutTarget | null;
   layoutVisibility: PhysicalLayoutVisibility;
+  onGdsTileGeometryChange?: (geometry: LspLayoutGeometry | null) => void;
+  onGdsTileMetricsChange?: (metrics: PhysicalLayoutGdsTileMetrics) => void;
+  onHighlightedShapeChange?: (shapeIndex: number | null) => void;
 }
 
 const defaultCamera: PhysicalLayoutCamera = { panX: 0, panY: 0, zoom: 24 };
@@ -44,12 +66,20 @@ const minimumCanvasWidth = 240;
 const minimumCanvasHeight = 180;
 const gridMajorStep = 1;
 const gridMinorStep = 0.2;
+const clickDistanceThresholdPx = 4;
+const GDS_TILE_ORDER_BUCKET_SIZE = 512;
+const GDS_TILE_PRECISE_ORDER_SHAPE_LIMIT = 2_048;
 
 export function PhysicalLayoutCanvas({
   catalog,
   geometry,
+  highlightedShapeIndex = null,
+  layoutSessionId = null,
   selectedTarget,
   layoutVisibility,
+  onGdsTileGeometryChange,
+  onGdsTileMetricsChange,
+  onHighlightedShapeChange,
 }: PhysicalLayoutCanvasProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const appRef = useRef<Application | null>(null);
@@ -57,35 +87,72 @@ export function PhysicalLayoutCanvas({
   const backgroundRef = useRef<Container | null>(null);
   const renderFrameRef = useRef<number | null>(null);
   const cameraRef = useRef<PhysicalLayoutCamera>(defaultCamera);
+  const isGdsTileModeRef = useRef(false);
+  const layoutSessionIdRef = useRef<string | null>(layoutSessionId);
+  const layoutVisibilityRef = useRef(layoutVisibility);
+  const selectedTargetRef = useRef<PhysicalLayoutTarget | null>(selectedTarget);
+  const sizeRef = useRef({ width: minimumCanvasWidth, height: minimumCanvasHeight });
   const selectedBoundsRef = useRef<LspLayoutBounds | null>(null);
   const selectedShapesRef = useRef<LspLayoutShape[]>([]);
   const selectedLabelsRef = useRef<PhysicalLayoutPinLabel[]>([]);
+  const gdsTileGenerationRef = useRef(0);
+  const gdsTileRequestTimeoutRef = useRef<number | null>(null);
+  const gdsTileCacheRef = useRef(new Map<string, LspLayoutTileGeometry>());
+  const gdsCameraSyncTimeoutRef = useRef<number | null>(null);
+  const gdsMetricsSyncTimeoutRef = useRef<number | null>(null);
+  const gdsRenderCountSyncTimeoutRef = useRef<number | null>(null);
+  const frameDurationsRef = useRef<number[]>([]);
+  const lastFrameAtRef = useRef<number | null>(null);
+  const lastRenderDurationMsRef = useRef(0);
+  const lastRenderCountSyncAtRef = useRef(0);
+  const lastGdsMetricsSyncAtRef = useRef(0);
+  const lastTileRoundtripMsRef = useRef(0);
+  const tileRequestCountRef = useRef(0);
+  const meshStatsRef = useRef({ drawNodeCount: 0, indexCount: 0, meshBatchCount: 0, orderBucketSize: 0, vertexCount: 0 });
+  const renderCountRef = useRef(0);
   const outlineVisibleRef = useRef(false);
+  const highlightedShapeIndexRef = useRef<number | null>(highlightedShapeIndex);
+  const onHighlightedShapeChangeRef = useRef(onHighlightedShapeChange);
+  const onGdsTileGeometryChangeRef = useRef(onGdsTileGeometryChange);
+  const onGdsTileMetricsChangeRef = useRef(onGdsTileMetricsChange);
   const [renderer, setRenderer] = useState<PixiRendererStatus>('initializing');
   const [camera, setCamera] = useState<PhysicalLayoutCamera>(defaultCamera);
   const [renderCount, setRenderCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [lastPick, setLastPick] = useState<{ shapeIndex: number | null; worldX: number; worldY: number } | null>(null);
   const [size, setSize] = useState({ width: minimumCanvasWidth, height: minimumCanvasHeight });
+  const [gdsTileGeometry, setGdsTileGeometry] = useState<LspLayoutGeometry | null>(null);
+  const [gdsTileMetrics, setGdsTileMetrics] = useState<PhysicalLayoutGdsTileMetrics>(defaultPhysicalLayoutGdsTileMetrics);
+  const [cameraSync, setCameraSync] = useState<PhysicalLayoutCamera>(defaultCamera);
+
+  const isGdsTileMode = isGdsTileModeEnabled(catalog?.sourceKind, selectedTarget?.kind);
+  const activeGeometry = isGdsTileMode ? gdsTileGeometry : geometry;
 
   const selectedShapes = useMemo(
-    () => selectLayoutTargetShapes(catalog, geometry, selectedTarget),
-    [catalog, geometry, selectedTarget],
+    () => selectLayoutTargetShapes(catalog, activeGeometry, selectedTarget),
+    [activeGeometry, catalog, selectedTarget],
   );
   const visibleShapes = useMemo(
-    () => filterVisiblePhysicalLayoutShapes(selectedShapes, layoutVisibility),
-    [selectedShapes, layoutVisibility],
+    () => filterVisiblePhysicalLayoutShapes(selectedShapes, layoutVisibility, catalog?.sourceKind),
+    [catalog?.sourceKind, selectedShapes, layoutVisibility],
   );
   const visibleLabels = useMemo(
     () => createPhysicalLayoutPinLabels(catalog, selectedShapes, layoutVisibility),
     [catalog, selectedShapes, layoutVisibility],
   );
   const visibleShapeCounts = useMemo(
-    () => getVisiblePhysicalLayoutShapeCounts(selectedShapes, layoutVisibility),
-    [selectedShapes, layoutVisibility],
+    () => getVisiblePhysicalLayoutShapeCounts(selectedShapes, layoutVisibility, catalog?.sourceKind),
+    [catalog?.sourceKind, selectedShapes, layoutVisibility],
   );
   const selectedBounds = useMemo(
-    () => getShapesBounds(selectedShapes, getLayoutTargetBounds(catalog, selectedTarget, geometry ? getShapesBounds(geometry.shapes, null) : null)),
-    [catalog, geometry, selectedShapes, selectedTarget],
+    () => {
+      if (isGdsTileMode) {
+        return getLayoutTargetBounds(catalog, selectedTarget, null);
+      }
+
+      return getShapesBounds(selectedShapes, getLayoutTargetBounds(catalog, selectedTarget, activeGeometry ? getShapesBounds(activeGeometry.shapes, null) : null));
+    },
+    [activeGeometry, catalog, isGdsTileMode, selectedShapes, selectedTarget],
   );
   const layerCount = catalog?.layers.length ?? 0;
   const catalogPinCount = catalog?.pins.length ?? 0;
@@ -95,11 +162,24 @@ export function PhysicalLayoutCanvas({
   const visibleLayerCount = getVisiblePhysicalLayoutLayerCount(catalog, layoutVisibility);
   const visibleCategoryCount = getVisiblePhysicalLayoutCategoryCount(catalog, layoutVisibility);
   const outlineVisible = isPhysicalLayoutOutlineVisible(layoutVisibility);
+  const pickableShape = useMemo(
+    () => getPickableVisibleShape(visibleShapes, camera, size),
+    [camera, size, visibleShapes],
+  );
 
   selectedBoundsRef.current = selectedBounds;
   selectedShapesRef.current = visibleShapes;
   selectedLabelsRef.current = visibleLabels;
+  isGdsTileModeRef.current = isGdsTileMode;
+  layoutSessionIdRef.current = layoutSessionId;
+  layoutVisibilityRef.current = layoutVisibility;
+  selectedTargetRef.current = selectedTarget;
+  sizeRef.current = size;
   outlineVisibleRef.current = outlineVisible;
+  highlightedShapeIndexRef.current = highlightedShapeIndex;
+  onHighlightedShapeChangeRef.current = onHighlightedShapeChange;
+  onGdsTileGeometryChangeRef.current = onGdsTileGeometryChange;
+  onGdsTileMetricsChangeRef.current = onGdsTileMetricsChange;
 
   useEffect(() => {
     const host = hostRef.current;
@@ -138,6 +218,22 @@ export function PhysicalLayoutCanvas({
         window.cancelAnimationFrame(renderFrameRef.current);
         renderFrameRef.current = null;
       }
+      if (gdsTileRequestTimeoutRef.current !== null) {
+        window.clearTimeout(gdsTileRequestTimeoutRef.current);
+        gdsTileRequestTimeoutRef.current = null;
+      }
+      if (gdsCameraSyncTimeoutRef.current !== null) {
+        window.clearTimeout(gdsCameraSyncTimeoutRef.current);
+        gdsCameraSyncTimeoutRef.current = null;
+      }
+      if (gdsMetricsSyncTimeoutRef.current !== null) {
+        window.clearTimeout(gdsMetricsSyncTimeoutRef.current);
+        gdsMetricsSyncTimeoutRef.current = null;
+      }
+      if (gdsRenderCountSyncTimeoutRef.current !== null) {
+        window.clearTimeout(gdsRenderCountSyncTimeoutRef.current);
+        gdsRenderCountSyncTimeoutRef.current = null;
+      }
       appRef.current?.destroy({ removeView: true, releaseGlobalResources: true }, { children: true });
       appRef.current = null;
       worldRef.current = null;
@@ -171,14 +267,38 @@ export function PhysicalLayoutCanvas({
     const nextCamera = getFitLayoutCamera(selectedBounds, size);
     cameraRef.current = nextCamera;
     setCamera(nextCamera);
+    setCameraSync(nextCamera);
     redrawScene();
     requestRender();
+    scheduleGdsTileRequest();
   }, [selectedBounds, selectedTarget, size.height, size.width]);
 
   useEffect(() => {
     redrawScene();
     requestRender();
-  }, [outlineVisible, visibleLabels, visibleShapes]);
+  }, [highlightedShapeIndex, layoutVisibility, outlineVisible, visibleLabels, visibleShapes]);
+
+  useEffect(() => {
+    gdsTileGenerationRef.current += 1;
+    gdsTileCacheRef.current.clear();
+    setGdsTileGeometry(null);
+    onGdsTileGeometryChangeRef.current?.(null);
+    setGdsTileMetrics(defaultPhysicalLayoutGdsTileMetrics);
+    onGdsTileMetricsChangeRef.current?.(defaultPhysicalLayoutGdsTileMetrics);
+    if (isGdsTileMode) {
+      scheduleGdsTileRequest();
+    }
+  }, [isGdsTileMode, layoutSessionId, selectedTarget?.index]);
+
+  useEffect(() => {
+    if (!isGdsTileMode) {
+      return;
+    }
+
+    gdsTileGenerationRef.current += 1;
+    gdsTileCacheRef.current.clear();
+    scheduleGdsTileRequest();
+  }, [isGdsTileMode, layoutVisibility]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -187,20 +307,53 @@ export function PhysicalLayoutCanvas({
     }
 
     const dragState = {
+      downCamera: defaultCamera,
+      downX: 0,
+      downY: 0,
+      moved: false,
       pointerId: -1,
       previousX: 0,
       previousY: 0,
+      totalDistance: 0,
     };
 
     const handleWheel = (event: WheelEvent) => {
       event.preventDefault();
       const bounds = host.getBoundingClientRect();
       updateCamera(applyLayoutWheel(cameraRef.current, event, { x: bounds.left, y: bounds.top }));
+      scheduleGdsTileRequest();
+    };
+    const selectShapeAtClientPoint = (
+      clientX: number,
+      clientY: number,
+      camera: PhysicalLayoutCamera,
+      options: { clearWhenEmpty: boolean } = { clearWhenEmpty: true },
+    ) => {
+      const bounds = host.getBoundingClientRect();
+      const point = layoutClientPointToWorldPoint(
+        { x: clientX, y: clientY },
+        bounds,
+        camera,
+      );
+      const shape = findShapeAtLayoutPoint(selectedShapesRef.current, point, 4 / camera.zoom);
+      setLastPick({ shapeIndex: shape?.index ?? null, worldX: point.x, worldY: point.y });
+      if (shape || options.clearWhenEmpty) {
+        onHighlightedShapeChangeRef.current?.(shape?.index ?? null);
+      }
     };
     const handlePointerDown = (event: PointerEvent) => {
+      if (event.button !== 0) {
+        return;
+      }
+
+      dragState.moved = false;
       dragState.pointerId = event.pointerId;
+      dragState.downCamera = cameraRef.current;
+      dragState.downX = event.clientX;
+      dragState.downY = event.clientY;
       dragState.previousX = event.clientX;
       dragState.previousY = event.clientY;
+      dragState.totalDistance = 0;
       host.setPointerCapture(event.pointerId);
     };
     const handlePointerMove = (event: PointerEvent) => {
@@ -212,11 +365,14 @@ export function PhysicalLayoutCanvas({
       const dy = event.clientY - dragState.previousY;
       dragState.previousX = event.clientX;
       dragState.previousY = event.clientY;
+      dragState.totalDistance += Math.hypot(dx, dy);
+      dragState.moved = dragState.totalDistance > clickDistanceThresholdPx;
       updateCamera({
         ...cameraRef.current,
         panX: cameraRef.current.panX + dx,
         panY: cameraRef.current.panY + dy,
       });
+      scheduleGdsTileRequest();
     };
     const handlePointerUp = (event: PointerEvent) => {
       if (dragState.pointerId !== event.pointerId) {
@@ -224,22 +380,35 @@ export function PhysicalLayoutCanvas({
       }
 
       dragState.pointerId = -1;
+      if (!dragState.moved) {
+        selectShapeAtClientPoint(dragState.downX, dragState.downY, dragState.downCamera);
+      }
+
       if (host.hasPointerCapture(event.pointerId)) {
         host.releasePointerCapture(event.pointerId);
       }
     };
+    const handleClick = (event: MouseEvent) => {
+      if (event.button !== 0 || dragState.moved) {
+        return;
+      }
+
+      selectShapeAtClientPoint(event.clientX, event.clientY, cameraRef.current, { clearWhenEmpty: false });
+    };
 
     host.addEventListener('wheel', handleWheel, { passive: false });
-    host.addEventListener('pointerdown', handlePointerDown);
-    host.addEventListener('pointermove', handlePointerMove);
-    host.addEventListener('pointerup', handlePointerUp);
-    host.addEventListener('pointercancel', handlePointerUp);
+    host.addEventListener('pointerdown', handlePointerDown, true);
+    host.addEventListener('pointermove', handlePointerMove, true);
+    host.addEventListener('pointerup', handlePointerUp, true);
+    host.addEventListener('pointercancel', handlePointerUp, true);
+    host.addEventListener('click', handleClick, true);
     return () => {
       host.removeEventListener('wheel', handleWheel);
-      host.removeEventListener('pointerdown', handlePointerDown);
-      host.removeEventListener('pointermove', handlePointerMove);
-      host.removeEventListener('pointerup', handlePointerUp);
-      host.removeEventListener('pointercancel', handlePointerUp);
+      host.removeEventListener('pointerdown', handlePointerDown, true);
+      host.removeEventListener('pointermove', handlePointerMove, true);
+      host.removeEventListener('pointerup', handlePointerUp, true);
+      host.removeEventListener('pointercancel', handlePointerUp, true);
+      host.removeEventListener('click', handleClick, true);
     };
   }, []);
 
@@ -250,6 +419,7 @@ export function PhysicalLayoutCanvas({
 
     renderFrameRef.current = window.requestAnimationFrame(() => {
       renderFrameRef.current = null;
+      const frameStartedAt = performance.now();
       const app = appRef.current;
       if (!app) {
         return;
@@ -257,14 +427,202 @@ export function PhysicalLayoutCanvas({
 
       updateTransforms();
       app.render();
-      setRenderCount((current) => current + 1);
+      const frameEndedAt = performance.now();
+      lastRenderDurationMsRef.current = frameEndedAt - frameStartedAt;
+      if (lastFrameAtRef.current !== null) {
+        frameDurationsRef.current.push(frameEndedAt - lastFrameAtRef.current);
+        if (frameDurationsRef.current.length > 120) {
+          frameDurationsRef.current.shift();
+        }
+      }
+      lastFrameAtRef.current = frameEndedAt;
+      renderCountRef.current += 1;
+      syncRenderCountState();
+      updateGdsTileMetrics();
     });
   };
 
   const updateCamera = (nextCamera: PhysicalLayoutCamera) => {
     cameraRef.current = nextCamera;
-    setCamera(nextCamera);
+    if (isGdsTileMode) {
+      syncGdsCameraState();
+    } else {
+      setCamera(nextCamera);
+      setCameraSync(nextCamera);
+    }
     requestRender();
+  };
+
+  const syncRenderCountState = (force = false) => {
+    const now = performance.now();
+    if (!isGdsTileModeRef.current || force || now - lastRenderCountSyncAtRef.current >= 120) {
+      if (gdsRenderCountSyncTimeoutRef.current !== null) {
+        window.clearTimeout(gdsRenderCountSyncTimeoutRef.current);
+        gdsRenderCountSyncTimeoutRef.current = null;
+      }
+      lastRenderCountSyncAtRef.current = now;
+      setRenderCount(renderCountRef.current);
+      return;
+    }
+
+    if (gdsRenderCountSyncTimeoutRef.current === null) {
+      gdsRenderCountSyncTimeoutRef.current = window.setTimeout(() => {
+        gdsRenderCountSyncTimeoutRef.current = null;
+        lastRenderCountSyncAtRef.current = performance.now();
+        setRenderCount(renderCountRef.current);
+      }, Math.max(16, 120 - (now - lastRenderCountSyncAtRef.current)));
+    }
+  };
+
+  const syncGdsCameraState = (force = false) => {
+    if (!isGdsTileModeRef.current || force) {
+      if (gdsCameraSyncTimeoutRef.current !== null) {
+        window.clearTimeout(gdsCameraSyncTimeoutRef.current);
+        gdsCameraSyncTimeoutRef.current = null;
+      }
+      setCamera(cameraRef.current);
+      setCameraSync(cameraRef.current);
+      return;
+    }
+
+    if (gdsCameraSyncTimeoutRef.current !== null) {
+      return;
+    }
+
+    gdsCameraSyncTimeoutRef.current = window.setTimeout(() => {
+      gdsCameraSyncTimeoutRef.current = null;
+      setCamera(cameraRef.current);
+      setCameraSync(cameraRef.current);
+    }, 80);
+  };
+
+  const syncGdsFullCameraState = () => {
+    setCamera(cameraRef.current);
+    setCameraSync(cameraRef.current);
+  };
+
+  const scheduleGdsTileRequest = () => {
+    const currentTarget = selectedTargetRef.current;
+    if (!isGdsTileModeRef.current || !layoutSessionIdRef.current || currentTarget?.index === null || currentTarget?.index === undefined) {
+      return;
+    }
+
+    if (gdsTileRequestTimeoutRef.current !== null) {
+      window.clearTimeout(gdsTileRequestTimeoutRef.current);
+    }
+
+    gdsTileRequestTimeoutRef.current = window.setTimeout(() => {
+      gdsTileRequestTimeoutRef.current = null;
+      void requestGdsTileGeometry();
+    }, 80);
+  };
+
+  const requestGdsTileGeometry = async () => {
+    const lsp = window.electronAPI?.lsp;
+    const currentSessionId = layoutSessionIdRef.current;
+    const currentTarget = selectedTargetRef.current;
+    if (!lsp?.layoutTileGeometry || !currentSessionId || currentTarget?.index === null || currentTarget?.index === undefined) {
+      return;
+    }
+
+    const generation = gdsTileGenerationRef.current;
+    const plan = createGdsTileRequestPlan({
+      camera: cameraRef.current,
+      rootCellIndex: currentTarget.index,
+      sessionId: currentSessionId,
+      size: sizeRef.current,
+      visibility: layoutVisibilityRef.current,
+    });
+    if (plan.empty) {
+      const emptyTile = createEmptyGdsTileGeometry(catalog?.unitsPerMicron);
+      gdsTileCacheRef.current.set(plan.cacheKey, emptyTile);
+      applyGdsTile(emptyTile, generation, 0);
+      return;
+    }
+    const cachedTile = gdsTileCacheRef.current.get(plan.cacheKey);
+    if (cachedTile) {
+      applyGdsTile(cachedTile, generation, 0);
+      return;
+    }
+
+    const startedAt = performance.now();
+    const results: LspLayoutTileGeometry[] = [];
+    let continuationToken: number | null | undefined = undefined;
+    try {
+      do {
+        const tile = await lsp.layoutTileGeometry({
+          ...plan.options,
+          continuationToken,
+        });
+        if (gdsTileGenerationRef.current !== generation) {
+          return;
+        }
+        results.push(tile);
+        continuationToken = tile.nextToken;
+      } while (continuationToken !== null && continuationToken !== undefined);
+
+      const mergedTile = mergeGdsTileGeometryResults(results);
+      if (!mergedTile) {
+        return;
+      }
+
+      gdsTileCacheRef.current.set(plan.cacheKey, mergedTile);
+      tileRequestCountRef.current += 1;
+      applyGdsTile(mergedTile, generation, performance.now() - startedAt);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Unable to load GDS viewport tile.');
+    }
+  };
+
+  const applyGdsTile = (tile: LspLayoutTileGeometry, generation: number, roundtripMs: number) => {
+    if (gdsTileGenerationRef.current !== generation) {
+      return;
+    }
+
+    lastTileRoundtripMsRef.current = roundtripMs;
+    setGdsTileGeometry(tile.geometry);
+    onGdsTileGeometryChangeRef.current?.(tile.geometry);
+    redrawScene(tile.geometry);
+    requestRender();
+    syncGdsFullCameraState();
+    syncRenderCountState(true);
+    updateGdsTileMetrics(tile);
+  };
+
+  const updateGdsTileMetrics = (tile?: LspLayoutTileGeometry | null) => {
+    if (!isGdsTileModeRef.current) {
+      return;
+    }
+
+    const now = performance.now();
+    if (!tile && now - lastGdsMetricsSyncAtRef.current < 250) {
+      if (gdsMetricsSyncTimeoutRef.current === null) {
+        gdsMetricsSyncTimeoutRef.current = window.setTimeout(() => {
+          gdsMetricsSyncTimeoutRef.current = null;
+          updateGdsTileMetrics();
+        }, Math.max(16, 250 - (now - lastGdsMetricsSyncAtRef.current)));
+      }
+      return;
+    }
+    if (gdsMetricsSyncTimeoutRef.current !== null) {
+      window.clearTimeout(gdsMetricsSyncTimeoutRef.current);
+      gdsMetricsSyncTimeoutRef.current = null;
+    }
+    lastGdsMetricsSyncAtRef.current = now;
+
+    const nextMetrics = createGdsTileMetricsSnapshot({
+      frameDurationsMs: frameDurationsRef.current,
+      meshBatchCount: meshStatsRef.current.meshBatchCount,
+      meshDrawNodeCount: meshStatsRef.current.drawNodeCount,
+      meshIndexCount: meshStatsRef.current.indexCount,
+      meshVertexCount: meshStatsRef.current.vertexCount,
+      renderMs: lastRenderDurationMsRef.current,
+      tile: tile ?? null,
+      tileRequestCount: tileRequestCountRef.current,
+      tileRoundtripMs: lastTileRoundtripMsRef.current,
+    });
+    setGdsTileMetrics(nextMetrics);
+    onGdsTileMetricsChangeRef.current?.(nextMetrics);
   };
 
   const updateTransforms = () => {
@@ -278,7 +636,7 @@ export function PhysicalLayoutCanvas({
     world.scale.set(nextCamera.zoom);
   };
 
-  const redrawScene = () => {
+  const redrawScene = (overrideGeometry?: LspLayoutGeometry | null) => {
     const background = backgroundRef.current;
     const world = worldRef.current;
     const app = appRef.current;
@@ -299,7 +657,21 @@ export function PhysicalLayoutCanvas({
     if (outlineVisibleRef.current) {
       world.addChild(drawLayoutOutline(bounds));
     }
-    world.addChild(drawShapes(selectedShapesRef.current));
+    const nextShapes = overrideGeometry
+      ? selectLayoutTargetShapes(catalog, overrideGeometry, selectedTarget)
+      : selectedShapesRef.current;
+    const visibleNextShapes = overrideGeometry
+      ? filterVisiblePhysicalLayoutShapes(nextShapes, layoutVisibility, catalog?.sourceKind)
+      : selectedShapesRef.current;
+    const shapeDisplay = isGdsTileMode
+      ? drawGdsTileShapes(visibleNextShapes, layoutVisibility)
+      : drawShapes(visibleNextShapes, layoutVisibility);
+    meshStatsRef.current = shapeDisplay.stats;
+    world.addChild(shapeDisplay.node);
+    const highlightedShape = selectedShapesRef.current.find((shape) => shape.index === highlightedShapeIndexRef.current) ?? null;
+    if (highlightedShape) {
+      world.addChild(drawHighlightedShape(highlightedShape));
+    }
     const labels = drawPinLabels(selectedLabelsRef.current);
     if (labels.length > 0) {
       world.addChild(...labels);
@@ -312,13 +684,32 @@ export function PhysicalLayoutCanvas({
       aria-label="Physical layout editor canvas"
       className="relative h-full min-h-0 w-full overflow-hidden bg-[#101317] outline-none"
       data-catalog-pin-count={catalogPinCount}
-      data-geometry-shape-count={geometry?.shapes.length ?? 0}
+      data-gds-average-fps={gdsTileMetrics.averageFps.toFixed(1)}
+      data-gds-frame-p95-ms={gdsTileMetrics.frameP95Ms.toFixed(1)}
+      data-gds-draw-node-count={meshStatsRef.current.drawNodeCount}
+      data-gds-mesh-buffer-bytes={gdsTileMetrics.bufferByteLength + gdsTileMetrics.indexByteLength}
+      data-gds-mesh-batch-count={meshStatsRef.current.meshBatchCount}
+      data-gds-render-batch-mode={isGdsTileMode ? 'order-bucket' : 'none'}
+      data-gds-render-bucket-size={isGdsTileMode ? meshStatsRef.current.orderBucketSize : 0}
+      data-gds-render-mode={isGdsTileMode ? 'tile-mesh' : 'full-graphics'}
+      data-gds-render-ms={gdsTileMetrics.lastRenderMs.toFixed(2)}
+      data-gds-tile-query-ms={gdsTileMetrics.lastTileQueryMs.toFixed(2)}
+      data-gds-tile-request-count={tileRequestCountRef.current}
+      data-gds-tile-roundtrip-ms={gdsTileMetrics.lastTileRoundtripMs.toFixed(2)}
+      data-gds-tile-shape-count={gdsTileGeometry?.shapes.length ?? 0}
+      data-gds-truncated={gdsTileMetrics.truncated ? 'true' : 'false'}
+      data-geometry-shape-count={activeGeometry?.shapes.length ?? 0}
       data-hidden-layer-count={Math.max(0, layerCount - visibleLayerCount)}
+      data-highlighted-shape-index={highlightedShapeIndex ?? ''}
+      data-layer-opacity-summary={formatPhysicalLayoutLayerOpacitySummary(layoutVisibility)}
       data-outline-visible={outlineVisible ? 'true' : 'false'}
       data-layer-count={layerCount}
+      data-last-pick-shape-index={lastPick?.shapeIndex ?? ''}
+      data-last-pick-world-x={lastPick ? lastPick.worldX.toFixed(4) : ''}
+      data-last-pick-world-y={lastPick ? lastPick.worldY.toFixed(4) : ''}
       data-macro-count={catalog?.macros.length ?? 0}
-      data-pan-x={camera.panX.toFixed(2)}
-      data-pan-y={camera.panY.toFixed(2)}
+      data-pan-x={cameraSync.panX.toFixed(2)}
+      data-pan-y={cameraSync.panY.toFixed(2)}
       data-render-count={renderCount}
       data-renderer={renderer}
       data-selected-macro-name={selectedTarget?.kind === 'macro' ? selectedTarget.name : ''}
@@ -329,6 +720,14 @@ export function PhysicalLayoutCanvas({
       data-shape-count={selectedShapes.length}
       data-testid="physical-layout-canvas"
       data-visible-category-count={visibleCategoryCount}
+      data-first-visible-shape-index={visibleShapes[0]?.index ?? ''}
+      data-first-visible-shape-screen-x={formatShapeScreenX(visibleShapes[0], camera)}
+      data-first-visible-shape-screen-y={formatShapeScreenY(visibleShapes[0], camera)}
+      data-pick-visible-shape-category={pickableShape ? getCanvasShapeCategory(pickableShape.shape) : ''}
+      data-pick-visible-shape-index={pickableShape?.shape.index ?? ''}
+      data-pick-visible-shape-layer-index={pickableShape?.shape.layerIndex ?? ''}
+      data-pick-visible-shape-screen-x={formatPickScreenX(pickableShape, camera)}
+      data-pick-visible-shape-screen-y={formatPickScreenY(pickableShape, camera)}
       data-visible-label-count={visibleLabels.length}
       data-visible-label-names={visibleLabels.map((label) => label.name).join('|')}
       data-visible-layer-count={visibleLayerCount}
@@ -336,7 +735,7 @@ export function PhysicalLayoutCanvas({
       data-visible-pin-shape-count={visibleShapeCounts.pin}
       data-source-kind={catalog?.sourceKind ?? ''}
       data-visible-shape-count={visibleShapes.length}
-      data-zoom={camera.zoom.toFixed(4)}
+      data-zoom={cameraSync.zoom.toFixed(4)}
       role="img"
       tabIndex={0}
     >
@@ -383,6 +782,106 @@ async function createPixiApp(host: HTMLElement) {
   throw lastError instanceof Error ? lastError : new Error('Unable to initialize layout renderer.');
 }
 
+function formatShapeScreenX(shape: LspLayoutShape | undefined, camera: PhysicalLayoutCamera): string {
+  if (!shape) {
+    return '';
+  }
+
+  const bounds = shapeBounds(shape);
+  return (camera.panX + ((bounds.x0 + bounds.x1) / 2) * camera.zoom).toFixed(2);
+}
+
+function formatShapeScreenY(shape: LspLayoutShape | undefined, camera: PhysicalLayoutCamera): string {
+  if (!shape) {
+    return '';
+  }
+
+  const bounds = shapeBounds(shape);
+  return (camera.panY + ((bounds.y0 + bounds.y1) / 2) * camera.zoom).toFixed(2);
+}
+
+interface PickableLayoutShape {
+  point: { x: number; y: number };
+  shape: LspLayoutShape;
+}
+
+function getPickableVisibleShape(
+  shapes: readonly LspLayoutShape[],
+  camera: PhysicalLayoutCamera,
+  size: { width: number; height: number },
+): PickableLayoutShape | null {
+  const tolerance = 4 / camera.zoom;
+  for (let shapeIndex = shapes.length - 1; shapeIndex >= 0; shapeIndex -= 1) {
+    const shape = shapes[shapeIndex];
+    if (!shape || shape.kind === 'path' || shape.kind === 'text') {
+      continue;
+    }
+
+    for (const point of getShapePickCandidatePoints(shape)) {
+      const topShape = findShapeAtLayoutPoint(shapes, point, tolerance);
+      if (topShape?.index !== shape.index) {
+        continue;
+      }
+
+      const screenX = camera.panX + point.x * camera.zoom;
+      const screenY = camera.panY + point.y * camera.zoom;
+      if (screenX >= 2 && screenX <= size.width - 2 && screenY >= 2 && screenY <= size.height - 2) {
+        return { point, shape };
+      }
+    }
+  }
+
+  return null;
+}
+
+function getShapePickCandidatePoints(shape: LspLayoutShape): Array<{ x: number; y: number }> {
+  const bounds = shapeBounds(shape);
+  const candidates: Array<{ x: number; y: number }> = [
+    {
+      x: (bounds.x0 + bounds.x1) / 2,
+      y: (bounds.y0 + bounds.y1) / 2,
+    },
+  ];
+
+  if (shape.polygon && shape.polygon.length > 0) {
+    const centroid = shape.polygon.reduce(
+      (sum, point) => ({ x: sum.x + point.x, y: sum.y + point.y }),
+      { x: 0, y: 0 },
+    );
+    candidates.push({
+      x: centroid.x / shape.polygon.length,
+      y: centroid.y / shape.polygon.length,
+    });
+  }
+
+  for (const xFraction of [0.25, 0.5, 0.75]) {
+    for (const yFraction of [0.25, 0.5, 0.75]) {
+      candidates.push({
+        x: bounds.x0 + (bounds.x1 - bounds.x0) * xFraction,
+        y: bounds.y0 + (bounds.y1 - bounds.y0) * yFraction,
+      });
+    }
+  }
+
+  return candidates;
+}
+
+function formatPickScreenX(pickableShape: PickableLayoutShape | null, camera: PhysicalLayoutCamera): string {
+  if (!pickableShape) {
+    return '';
+  }
+
+  return (camera.panX + pickableShape.point.x * camera.zoom).toFixed(2);
+}
+
+function formatPickScreenY(pickableShape: PickableLayoutShape | null, camera: PhysicalLayoutCamera): string {
+  if (!pickableShape) {
+    return '';
+  }
+
+  return (camera.panY + pickableShape.point.y * camera.zoom).toFixed(2);
+}
+
 function drawBackground(width: number, height: number) {
   return new Graphics()
     .rect(0, 0, width, height)
@@ -418,19 +917,44 @@ function drawLayoutOutline(bounds: LspLayoutBounds) {
     .stroke({ color: 0xe5eef8, alpha: 0.9, width: 0.025 });
 }
 
-function drawShapes(shapes: readonly LspLayoutShape[]) {
+interface PhysicalLayoutShapeDisplay {
+  node: Container;
+  stats: {
+    drawNodeCount: number;
+    indexCount: number;
+    orderBucketSize: number;
+    meshBatchCount: number;
+    vertexCount: number;
+  };
+}
+
+interface PhysicalLayoutMeshBatch {
+  alpha: number;
+  color: number;
+  indices: number[];
+  positions: number[];
+}
+
+interface PhysicalLayoutGdsTileOrderBucket {
+  batches: Map<string, PhysicalLayoutMeshBatch>;
+  fallbackGraphics: Graphics;
+  hasFallbackGraphics: boolean;
+}
+
+function drawShapes(shapes: readonly LspLayoutShape[], layoutVisibility: PhysicalLayoutVisibility): PhysicalLayoutShapeDisplay {
   const graphics = new Graphics();
 
   for (const shape of shapes) {
     const category = getCanvasShapeCategory(shape);
     const color = getPhysicalLayoutLayerCategoryColor(shape.layerIndex, category).pixiColor;
-    const alpha = category === 'obstruction' || category === 'blockage' ? 0.28 : 0.7;
+    const layerOpacity = getPhysicalLayoutLayerOpacity(layoutVisibility, shape.layerIndex);
+    const alpha = (category === 'obstruction' || category === 'blockage' ? 0.28 : 0.7) * layerOpacity;
 
     if (shape.kind === 'polygon' && shape.polygon && shape.polygon.length >= 3) {
       graphics
         .poly(shape.polygon.flatMap((point) => [point.x, point.y]), true)
         .fill({ color, alpha })
-        .stroke({ color, alpha: 0.9, width: 0.018 });
+        .stroke({ color, alpha: 0.9 * layerOpacity, width: 0.018 });
       continue;
     }
 
@@ -441,10 +965,265 @@ function drawShapes(shapes: readonly LspLayoutShape[]) {
     graphics
       .rect(x0, y0, width, height)
       .fill({ color, alpha })
-      .stroke({ color, alpha: 0.92, width: 0.015 });
+      .stroke({ color, alpha: 0.92 * layerOpacity, width: 0.015 });
   }
 
-  return graphics;
+  const container = new Container({ label: 'layout-shapes-graphics' });
+  container.addChild(graphics);
+  return {
+    node: container,
+    stats: {
+      drawNodeCount: 1,
+      indexCount: 0,
+      orderBucketSize: 0,
+      meshBatchCount: 0,
+      vertexCount: 0,
+    },
+  };
+}
+
+function drawGdsTileShapes(shapes: readonly LspLayoutShape[], layoutVisibility: PhysicalLayoutVisibility): PhysicalLayoutShapeDisplay {
+  const container = new Container({ label: 'gds-tile-shapes' });
+  const buckets: PhysicalLayoutGdsTileOrderBucket[] = [];
+  const orderBucketSize = getGdsTileOrderBucketSize(shapes.length);
+  let visibleShapeOrdinal = 0;
+
+  for (const shape of shapes) {
+    const style = getGdsTileShapeStyle(shape, layoutVisibility, getPhysicalLayoutLayerCategoryColor);
+    if (!style) {
+      continue;
+    }
+
+    const bucketIndex = Math.floor(visibleShapeOrdinal / orderBucketSize);
+    visibleShapeOrdinal += 1;
+    const bucket = getGdsTileOrderBucket(buckets, bucketIndex);
+    const points = getMeshableShapePoints(shape);
+    if (points && isConvexPolygon(points)) {
+      const batchKey = getGdsTileMeshBatchKey(shape, style);
+      const batch = bucket.batches.get(batchKey) ?? {
+        alpha: style.alpha,
+        color: style.color,
+        indices: [],
+        positions: [],
+      };
+      addPolygonToMeshBatch(batch, points);
+      bucket.batches.set(batchKey, batch);
+      drawGdsTileShapeStroke(bucket.fallbackGraphics, shape, style);
+      bucket.hasFallbackGraphics = true;
+      continue;
+    }
+
+    drawGdsTileShapeGraphics(bucket.fallbackGraphics, shape, style);
+    bucket.hasFallbackGraphics = true;
+  }
+
+  let vertexCount = 0;
+  let indexCount = 0;
+  let meshBatchCount = 0;
+  let drawNodeCount = 0;
+  for (const bucket of buckets) {
+    const bucketContainer = new Container({ label: 'gds-tile-order-bucket' });
+    for (const batch of bucket.batches.values()) {
+      if (batch.positions.length === 0 || batch.indices.length === 0) {
+        continue;
+      }
+
+      vertexCount += batch.positions.length / 2;
+      indexCount += batch.indices.length;
+      meshBatchCount += 1;
+      drawNodeCount += 1;
+      const geometry = new MeshGeometry({
+        indices: new Uint32Array(batch.indices),
+        positions: new Float32Array(batch.positions),
+        shrinkBuffersToFit: false,
+        topology: 'triangle-list',
+        uvs: createZeroUvs(batch.positions.length / 2),
+      });
+      const mesh = new Mesh({
+        geometry,
+        label: 'gds-tile-fill-mesh',
+        texture: Texture.WHITE,
+      });
+      mesh.tint = batch.color;
+      mesh.alpha = batch.alpha;
+      bucketContainer.addChild(mesh);
+    }
+
+    if (bucket.hasFallbackGraphics || bucket.batches.size > 0) {
+      bucketContainer.addChild(bucket.fallbackGraphics);
+      drawNodeCount += 1;
+    }
+    if (bucketContainer.children.length > 0) {
+      container.addChild(bucketContainer);
+    } else {
+      bucket.fallbackGraphics.destroy();
+      bucketContainer.destroy({ children: true });
+    }
+  }
+
+  return {
+    node: container,
+    stats: {
+      drawNodeCount,
+      indexCount,
+      orderBucketSize,
+      meshBatchCount,
+      vertexCount,
+    },
+  };
+}
+
+function getGdsTileOrderBucket(
+  buckets: PhysicalLayoutGdsTileOrderBucket[],
+  bucketIndex: number,
+): PhysicalLayoutGdsTileOrderBucket {
+  let bucket = buckets[bucketIndex];
+  if (!bucket) {
+    bucket = {
+      batches: new Map<string, PhysicalLayoutMeshBatch>(),
+      fallbackGraphics: new Graphics(),
+      hasFallbackGraphics: false,
+    };
+    buckets[bucketIndex] = bucket;
+  }
+  return bucket;
+}
+
+function getGdsTileOrderBucketSize(shapeCount: number): number {
+  return shapeCount <= GDS_TILE_PRECISE_ORDER_SHAPE_LIMIT ? 1 : GDS_TILE_ORDER_BUCKET_SIZE;
+}
+
+function getGdsTileMeshBatchKey(shape: LspLayoutShape, style: PhysicalLayoutGdsTileShapeStyle): string {
+  return [
+    shape.layerIndex,
+    getCanvasShapeCategory(shape),
+    style.color,
+    style.alpha.toFixed(3),
+    style.strokeAlpha.toFixed(3),
+    style.strokeWidth.toFixed(4),
+  ].join(':');
+}
+
+function getMeshableShapePoints(shape: LspLayoutShape): Array<{ x: number; y: number }> | null {
+  if (shape.kind === 'polygon' && shape.polygon && shape.polygon.length >= 3) {
+    return shape.polygon;
+  }
+
+  if (shape.kind === 'rect') {
+    const bounds = shapeBounds(shape);
+    return [
+      { x: bounds.x0, y: bounds.y0 },
+      { x: bounds.x1, y: bounds.y0 },
+      { x: bounds.x1, y: bounds.y1 },
+      { x: bounds.x0, y: bounds.y1 },
+    ];
+  }
+
+  return null;
+}
+
+function addPolygonToMeshBatch(batch: PhysicalLayoutMeshBatch, points: readonly { x: number; y: number }[]) {
+  const baseIndex = batch.positions.length / 2;
+  for (const point of points) {
+    batch.positions.push(point.x, point.y);
+  }
+
+  for (let pointIndex = 1; pointIndex < points.length - 1; pointIndex += 1) {
+    batch.indices.push(baseIndex, baseIndex + pointIndex, baseIndex + pointIndex + 1);
+  }
+}
+
+function drawGdsTileShapeStroke(
+  graphics: Graphics,
+  shape: LspLayoutShape,
+  style: PhysicalLayoutGdsTileShapeStyle,
+) {
+  if (shape.kind === 'polygon' && shape.polygon && shape.polygon.length >= 3) {
+    graphics
+      .poly(shape.polygon.flatMap((point) => [point.x, point.y]), true)
+      .stroke({ color: style.color, alpha: style.strokeAlpha, width: style.strokeWidth });
+    return;
+  }
+
+  const bounds = shapeBounds(shape);
+  graphics
+    .rect(bounds.x0, bounds.y0, Math.max(bounds.x1 - bounds.x0, 0.01), Math.max(bounds.y1 - bounds.y0, 0.01))
+    .stroke({ color: style.color, alpha: style.strokeAlpha, width: style.strokeWidth });
+}
+
+function drawGdsTileShapeGraphics(
+  graphics: Graphics,
+  shape: LspLayoutShape,
+  style: PhysicalLayoutGdsTileShapeStyle,
+) {
+  if (shape.kind === 'polygon' && shape.polygon && shape.polygon.length >= 3) {
+    graphics
+      .poly(shape.polygon.flatMap((point) => [point.x, point.y]), true)
+      .fill({ color: style.color, alpha: style.alpha })
+      .stroke({ color: style.color, alpha: style.strokeAlpha, width: style.strokeWidth });
+    return;
+  }
+
+  const bounds = shapeBounds(shape);
+  graphics
+    .rect(bounds.x0, bounds.y0, Math.max(bounds.x1 - bounds.x0, 0.01), Math.max(bounds.y1 - bounds.y0, 0.01))
+    .fill({ color: style.color, alpha: style.alpha })
+    .stroke({ color: style.color, alpha: style.strokeAlpha, width: style.strokeWidth });
+}
+
+function createZeroUvs(vertexCount: number): Float32Array {
+  return new Float32Array(vertexCount * 2);
+}
+
+function isConvexPolygon(points: readonly { x: number; y: number }[]): boolean {
+  if (points.length < 3) {
+    return false;
+  }
+
+  let sign = 0;
+  for (let index = 0; index < points.length; index += 1) {
+    const a = points[index];
+    const b = points[(index + 1) % points.length];
+    const c = points[(index + 2) % points.length];
+    if (!a || !b || !c) {
+      continue;
+    }
+
+    const cross = (b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x);
+    if (Math.abs(cross) < 1e-9) {
+      continue;
+    }
+
+    const nextSign = Math.sign(cross);
+    if (sign === 0) {
+      sign = nextSign;
+      continue;
+    }
+
+    if (sign !== nextSign) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function drawHighlightedShape(shape: LspLayoutShape) {
+  const graphics = new Graphics();
+  const highlightColor = 0xf8fafc;
+
+  if (shape.kind === 'polygon' && shape.polygon && shape.polygon.length >= 3) {
+    return graphics
+      .poly(shape.polygon.flatMap((point) => [point.x, point.y]), true)
+      .fill({ color: highlightColor, alpha: 0.2 })
+      .stroke({ color: highlightColor, alpha: 1, width: 0.045 });
+  }
+
+  const bounds = shapeBounds(shape);
+  return graphics
+    .rect(bounds.x0, bounds.y0, Math.max(bounds.x1 - bounds.x0, 0.01), Math.max(bounds.y1 - bounds.y0, 0.01))
+    .fill({ color: highlightColor, alpha: 0.2 })
+    .stroke({ color: highlightColor, alpha: 1, width: 0.045 });
 }
 
 function getCanvasShapeCategory(shape: LspLayoutShape): PhysicalLayoutLayerCategory {
@@ -490,6 +1269,7 @@ function drawPinLabels(labels: readonly PhysicalLayoutPinLabel[]) {
     });
 
     text.anchor.set(0.5);
+    text.alpha = label.opacity;
     text.position.set(label.x, label.y);
     text.scale.set(worldFontSize / baseFontSize);
     text.resolution = 2;

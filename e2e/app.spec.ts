@@ -122,7 +122,7 @@ function createPhysicalLayoutE2eGds() {
     gdsRecord(0x02, 0x06, gdsAscii('PRISTINE_E2E')),
     gdsRecord(0x03, 0x05, Buffer.concat([gdsReal8(0.001), gdsReal8(1e-9)])),
     gdsRecord(0x05, 0x02, date),
-    gdsRecord(0x06, 0x06, gdsAscii('TOP')),
+    gdsRecord(0x06, 0x06, gdsAscii('sg13g2_xor2_1')),
     gdsRecord(0x08, 0x00),
     gdsRecord(0x0d, 0x02, gdsInt2(1)),
     gdsRecord(0x0e, 0x02, gdsInt2(0)),
@@ -139,6 +139,26 @@ function createPhysicalLayoutE2eGds() {
     gdsRecord(0x16, 0x02, gdsInt2(0)),
     gdsRecord(0x10, 0x03, gdsInt4(1000, 500)),
     gdsRecord(0x19, 0x06, gdsAscii('VDD')),
+    gdsRecord(0x11, 0x00),
+    gdsRecord(0x07, 0x00),
+    gdsRecord(0x05, 0x02, date),
+    gdsRecord(0x06, 0x06, gdsAscii('sg13g2_xnor2_1')),
+    gdsRecord(0x08, 0x00),
+    gdsRecord(0x0d, 0x02, gdsInt2(3)),
+    gdsRecord(0x0e, 0x02, gdsInt2(0)),
+    gdsRecord(0x10, 0x03, gdsInt4(0, 0, 2400, 0, 2400, 1200, 0, 1200, 0, 0)),
+    gdsRecord(0x11, 0x00),
+    gdsRecord(0x09, 0x00),
+    gdsRecord(0x0d, 0x02, gdsInt2(4)),
+    gdsRecord(0x0e, 0x02, gdsInt2(0)),
+    gdsRecord(0x0f, 0x03, gdsInt4(120)),
+    gdsRecord(0x10, 0x03, gdsInt4(300, 600, 2100, 600)),
+    gdsRecord(0x11, 0x00),
+    gdsRecord(0x0c, 0x00),
+    gdsRecord(0x0d, 0x02, gdsInt2(3)),
+    gdsRecord(0x16, 0x02, gdsInt2(0)),
+    gdsRecord(0x10, 0x03, gdsInt4(1200, 600)),
+    gdsRecord(0x19, 0x06, gdsAscii('XNOR')),
     gdsRecord(0x11, 0x00),
     gdsRecord(0x07, 0x00),
     gdsRecord(0x04, 0x00),
@@ -1212,6 +1232,26 @@ function getBottomPanelTab(
   return window.getByTestId(`bottom-panel-tab-${tabId}`);
 }
 
+async function expectLspPanelShowsControlPlaneOnly(
+  window: Awaited<ReturnType<typeof launchApp>>['window'],
+  expectedMethod: string,
+  hiddenMethods: string[],
+) {
+  await openBottomTerminal(window);
+  await getBottomPanelTab(window, 'lsp').click();
+  const lspPanel = window.getByTestId('lsp-panel');
+  await expect(lspPanel).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect.poll(async () => lspPanel.innerText(), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toContain(expectedMethod);
+
+  const panelText = await lspPanel.innerText();
+  for (const hiddenMethod of hiddenMethods) {
+    expect(panelText).not.toContain(hiddenMethod);
+  }
+  expect(panelText).not.toMatch(/\b(?:PWF1|PWVF)\b/);
+}
+
 async function expectCompactPanelTabButton(tabButton: Locator) {
   await expect(tabButton).toHaveClass(/(?:^|\s)h-7(?:\s|$)/);
   await expect(tabButton).toHaveClass(/(?:^|\s)w-7(?:\s|$)/);
@@ -1987,24 +2027,497 @@ test('packaged Windows app opens Physical layout from workspace-root LEF', async
     await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-selected-shape-count') ?? '0'), {
       timeout: UI_READY_TIMEOUT_MS,
     }).toBeGreaterThan(0);
-    await expect.poll(async () => {
-      const selected = Number(await layoutCanvas.getAttribute('data-selected-shape-count') ?? '0');
-      const total = Number(await layoutCanvas.getAttribute('data-geometry-shape-count') ?? '0');
-      return total > selected && selected > 0;
-    }, {
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-geometry-shape-count') ?? '0'), {
       timeout: UI_READY_TIMEOUT_MS,
-    }).toBe(true);
+    }).toBeGreaterThan(0);
     await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-selected-pin-count') ?? '0'), {
       timeout: UI_READY_TIMEOUT_MS,
     }).toBeGreaterThan(0);
     const packagedSelectedShapeCount = Number(await layoutCanvas.getAttribute('data-selected-shape-count') ?? '0');
     const packagedGeometryShapeCount = Number(await layoutCanvas.getAttribute('data-geometry-shape-count') ?? '0');
     expect(packagedSelectedShapeCount).toBeGreaterThan(0);
-    expect(packagedGeometryShapeCount).toBeGreaterThan(packagedSelectedShapeCount);
+    expect(packagedGeometryShapeCount).toBe(packagedSelectedShapeCount);
     await expect.poll(async () => await layoutCanvas.getAttribute('data-visible-label-names') ?? '', {
       timeout: UI_READY_TIMEOUT_MS,
     }).toContain('A');
     expect(await layoutCanvas.getAttribute('data-visible-label-names')).not.toMatch(/PIN \d+/);
+
+    await window.getByTestId('physical-layout-file-item-chip-gds').click();
+    await expect(window.getByTestId('physical-layout-target-item-gdsCell-sg13g2_xor2_1')).toBeVisible({
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await expect(layoutCanvas).toHaveAttribute('data-source-kind', 'gds', { timeout: UI_READY_TIMEOUT_MS });
+    await window.getByTestId('physical-layout-3d-toggle').click();
+    const packagedThreeCanvas = window.getByTestId('physical-layout-3d-canvas');
+    await expect(packagedThreeCanvas).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+    await expect(packagedThreeCanvas).toHaveAttribute('data-renderer', 'three-webgl', { timeout: UI_READY_TIMEOUT_MS });
+    await expect.poll(async () => Number(await packagedThreeCanvas.getAttribute('data-visible-shape-count') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(0);
+  } finally {
+    await app.close();
+  }
+});
+
+test('Physical layout uses indexed LEF geometry and GDS tile-mesh rendering', async () => {
+  test.slow();
+
+  const physicalWorkspaceRoot = createWorkspaceCopyWithFiles('physical-indexed-layout-workspace', {
+    'chip.gds': physicalLayoutE2eGds,
+    'chip.oas': physicalLayoutE2eOasis,
+    'chip.def': physicalLayoutE2eDef,
+    'sg13g2_stdcell.lef': physicalLayoutE2eLef,
+  });
+  const { app, window } = await launchApp({ projectRoot: physicalWorkspaceRoot });
+
+  try {
+    await window.getByTestId('activity-item-physical').click();
+    const layoutEditor = window.getByTestId('physical-layout-editor');
+    const layoutCanvas = window.getByTestId('physical-layout-canvas');
+
+    await expect(layoutEditor).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+    await expect(window.getByTestId('physical-layout-file-tree')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+
+    await window.getByTestId('physical-layout-file-item-sg13g2_stdcell-lef').click();
+    await expect(window.getByTestId('physical-layout-file-icon-sg13g2_stdcell-lef')).toHaveAttribute('data-icon-color', '#52a8ff', {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await expect(layoutEditor).toHaveAttribute('data-status', 'ready', { timeout: UI_READY_TIMEOUT_MS });
+    await expect(window.getByTestId('physical-layout-target-item-macro-sg13g2_e2e_inv_1')).toBeVisible({
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await expect(window.getByTestId('physical-layout-target-icon-macro-sg13g2_e2e_inv_1')).toHaveAttribute('data-icon-color', '#52a8ff');
+
+    await expect(layoutCanvas).toHaveAttribute('data-selected-target-name', 'sg13g2_e2e_inv_1', {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-selected-shape-count') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(0);
+    const firstMacroShapeCount = Number(await layoutCanvas.getAttribute('data-selected-shape-count') ?? '0');
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-geometry-shape-count') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBe(firstMacroShapeCount);
+
+    const renderCountBeforeMacroSwitch = Number(await layoutCanvas.getAttribute('data-render-count') ?? '0');
+    await window.getByTestId('physical-layout-target-item-macro-sg13g2_e2e_nand2_1').click();
+    await expect(layoutCanvas).toHaveAttribute('data-selected-target-name', 'sg13g2_e2e_nand2_1', {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-selected-shape-count') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(0);
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-render-count') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(renderCountBeforeMacroSwitch);
+
+    const geometryShapeCountBeforeLayerToggle = Number(await layoutCanvas.getAttribute('data-geometry-shape-count') ?? '0');
+    const visibleShapeCountBeforeLayerToggle = Number(await layoutCanvas.getAttribute('data-visible-shape-count') ?? '0');
+    await window.getByTestId('physical-layer-category-swatch-0-pin').click();
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-visible-shape-count') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeLessThan(visibleShapeCountBeforeLayerToggle);
+    expect(Number(await layoutCanvas.getAttribute('data-geometry-shape-count') ?? '0')).toBe(geometryShapeCountBeforeLayerToggle);
+
+    await window.getByTestId('physical-layout-file-item-chip-gds').click();
+    await expect(window.getByTestId('physical-layout-file-icon-chip-gds')).toHaveAttribute('data-icon-color', '#4dd599', {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await expect(window.getByTestId('physical-layout-target-item-gdsCell-sg13g2_xor2_1')).toBeVisible({
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await expect(window.getByTestId('physical-layout-target-icon-gdsCell-sg13g2_xor2_1')).toHaveAttribute('data-icon-color', '#4dd599');
+    await expect(window.getByTestId('physical-layout-target-item-gdsCell-sg13g2_xnor2_1')).toBeVisible({
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await expect(layoutCanvas).toHaveAttribute('data-source-kind', 'gds', { timeout: UI_READY_TIMEOUT_MS });
+    await expect(layoutCanvas).toHaveAttribute('data-selected-target-name', 'sg13g2_xor2_1', {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-selected-shape-count') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(0);
+    await expect(layoutCanvas).toHaveAttribute('data-gds-render-mode', 'tile-mesh', {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await expect(layoutCanvas).toHaveAttribute('data-gds-render-batch-mode', 'order-bucket', {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await expect(layoutCanvas).toHaveAttribute('data-gds-render-bucket-size', '1', {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-mesh-batch-count') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(0);
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-draw-node-count') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(0);
+    await expect(window.getByTestId('physical-gds-toolbar-metrics')).toBeVisible({
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await expect(layoutCanvas).toHaveAttribute('data-gds-truncated', 'false', {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-frame-p95-ms') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThanOrEqual(0);
+
+    await window.getByTestId('physical-layout-3d-toggle').click();
+    await expect(window.getByTestId('physical-layout-3d-split')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+    await expect(layoutCanvas).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+    const layout3DCanvas = window.getByTestId('physical-layout-3d-canvas');
+    await expect(layout3DCanvas).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+    await expect(layout3DCanvas).toHaveAttribute('data-renderer', 'three-webgl', { timeout: UI_READY_TIMEOUT_MS });
+    await expect(layout3DCanvas).toHaveAttribute('data-viewport-framed', 'true', { timeout: UI_READY_TIMEOUT_MS });
+    await expect(layout3DCanvas).toHaveAttribute('data-viewport-left-border', 'false', { timeout: UI_READY_TIMEOUT_MS });
+    await expect(layout3DCanvas).toHaveAttribute('data-orbit-origin', 'bounds3d', { timeout: UI_READY_TIMEOUT_MS });
+    await expect(layout3DCanvas).toHaveAttribute('data-base-grid-depth-test', 'true', {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await expect(layout3DCanvas).toHaveAttribute('data-depth-write-mode', 'solid-mesh', {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await expect(layout3DCanvas).toHaveAttribute('data-material-side', 'double', { timeout: UI_READY_TIMEOUT_MS });
+    await expect(layout3DCanvas).toHaveAttribute('data-orbit-render-mode', 'raf-ref-interaction-idle-sync', {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await expect(layout3DCanvas).toHaveAttribute('data-shape-opacity-mode', 'opaque', { timeout: UI_READY_TIMEOUT_MS });
+    await expect(layout3DCanvas).toHaveAttribute('data-view-helper-visible', 'true', { timeout: UI_READY_TIMEOUT_MS });
+    await expect(layout3DCanvas).toHaveAttribute('data-view-helper-background', 'transparent', { timeout: UI_READY_TIMEOUT_MS });
+    await expect(layout3DCanvas).toHaveAttribute('data-view-helper-size', '112', { timeout: UI_READY_TIMEOUT_MS });
+    await expect(layout3DCanvas).toHaveAttribute('data-selected-target-name', 'sg13g2_xor2_1', {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await expect.poll(async () => Number(await layout3DCanvas.getAttribute('data-visible-shape-count') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(0);
+
+    const readCanvasPick = async () => {
+      const [index, x, y, box] = await Promise.all([
+        layoutCanvas.getAttribute('data-pick-visible-shape-index'),
+        layoutCanvas.getAttribute('data-pick-visible-shape-screen-x'),
+        layoutCanvas.getAttribute('data-pick-visible-shape-screen-y'),
+        layoutCanvas.boundingBox(),
+      ]);
+      const screenX = Number(x ?? 'NaN');
+      const screenY = Number(y ?? 'NaN');
+      if (!index || !box || !Number.isFinite(screenX) || !Number.isFinite(screenY)) {
+        return null;
+      }
+      if (screenX < 0 || screenY < 0 || screenX > box.width || screenY > box.height) {
+        return null;
+      }
+      return { index, screenX, screenY };
+    };
+    await expect.poll(async () => (await readCanvasPick())?.index ?? '', {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).not.toBe('');
+    const firstPick = await readCanvasPick();
+    expect(firstPick).not.toBeNull();
+    if (!firstPick) {
+      throw new Error('Expected a pickable 2D layout shape.');
+    }
+    const layoutCanvasBox = await layoutCanvas.boundingBox();
+    let firstVisibleShapeIndex = firstPick.index;
+    expect(layoutCanvasBox).not.toBeNull();
+    if (layoutCanvasBox) {
+      let selectedFrom2D = false;
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        const pick = await readCanvasPick();
+        if (!pick) {
+          await window.waitForTimeout(120);
+          continue;
+        }
+
+        firstVisibleShapeIndex = pick.index;
+        await window.mouse.click(
+          layoutCanvasBox.x + pick.screenX,
+          layoutCanvasBox.y + pick.screenY,
+        );
+        await window.waitForTimeout(120);
+
+        const [lastPickShapeIndex, highlightedShapeIndex] = await Promise.all([
+          layoutCanvas.getAttribute('data-last-pick-shape-index'),
+          layoutCanvas.getAttribute('data-highlighted-shape-index'),
+        ]);
+        if (lastPickShapeIndex === pick.index && highlightedShapeIndex === pick.index) {
+          selectedFrom2D = true;
+          break;
+        }
+      }
+
+      expect(selectedFrom2D).toBe(true);
+      await expect(layout3DCanvas).toHaveAttribute('data-highlighted-shape-index', firstVisibleShapeIndex, {
+        timeout: UI_READY_TIMEOUT_MS,
+      });
+    }
+
+    await window.getByTestId('physical-right-panel-split-toggle').click();
+    await expect(window.getByTestId('physical-inspector-selected-shape')).toBeVisible({
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await expect(window.getByTestId('physical-inspector-selected-shape-index')).toHaveText(firstVisibleShapeIndex ?? '', {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await expect(window.getByTestId('physical-inspector-selected-shape-layer')).toBeVisible();
+    await expect(window.getByTestId('physical-inspector-selected-shape-kind')).toBeVisible();
+    await expect(window.getByTestId('physical-inspector-selected-shape-bounds')).toBeVisible();
+
+    const threeSelectionBox = await layout3DCanvas.boundingBox();
+    const threePickShapeIndex = await layout3DCanvas.getAttribute('data-pick-visible-shape-index');
+    const threePickShapeScreenX = Number(await layout3DCanvas.getAttribute('data-pick-visible-shape-screen-x') ?? 'NaN');
+    const threePickShapeScreenY = Number(await layout3DCanvas.getAttribute('data-pick-visible-shape-screen-y') ?? 'NaN');
+    expect(threeSelectionBox).not.toBeNull();
+    expect(threePickShapeIndex).toBeTruthy();
+    expect(Number.isFinite(threePickShapeScreenX)).toBe(true);
+    expect(Number.isFinite(threePickShapeScreenY)).toBe(true);
+    if (threeSelectionBox && threePickShapeIndex) {
+      await window.mouse.click(
+        threeSelectionBox.x + threePickShapeScreenX,
+        threeSelectionBox.y + threePickShapeScreenY,
+      );
+      await expect(layout3DCanvas).toHaveAttribute('data-highlighted-shape-index', threePickShapeIndex, {
+        timeout: UI_READY_TIMEOUT_MS,
+      });
+      await expect(layoutCanvas).toHaveAttribute('data-highlighted-shape-index', threePickShapeIndex, {
+        timeout: UI_READY_TIMEOUT_MS,
+      });
+    }
+
+    if (layoutCanvasBox) {
+      await window.mouse.click(layoutCanvasBox.x + 8, layoutCanvasBox.y + 8);
+      await expect(layoutCanvas).toHaveAttribute('data-highlighted-shape-index', '', {
+        timeout: UI_READY_TIMEOUT_MS,
+      });
+      await expect(layout3DCanvas).toHaveAttribute('data-highlighted-shape-index', '', {
+        timeout: UI_READY_TIMEOUT_MS,
+      });
+    }
+
+    const twoDPanelBox = await window.getByTestId('panel-physical-layout-2d-panel').boundingBox();
+    const threeDPanelBox = await window.getByTestId('panel-physical-layout-3d-panel').boundingBox();
+    expect(twoDPanelBox).not.toBeNull();
+    expect(threeDPanelBox).not.toBeNull();
+    if (twoDPanelBox && threeDPanelBox) {
+      expect(Math.abs(twoDPanelBox.width - threeDPanelBox.width)).toBeLessThanOrEqual(24);
+    }
+
+    const splitHandle = window.getByTestId('physical-layout-3d-resize-handle');
+    await expect(window.getByTestId('physical-layout-3d-resize-indicator')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+    const handleBox = await splitHandle.boundingBox();
+    const threeBoxBeforeResize = await layout3DCanvas.boundingBox();
+    expect(handleBox).not.toBeNull();
+    expect(threeBoxBeforeResize).not.toBeNull();
+    if (handleBox && threeBoxBeforeResize) {
+      await window.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2);
+      await window.mouse.down();
+      await window.mouse.move(handleBox.x - 120, handleBox.y + handleBox.height / 2, { steps: 8 });
+      await window.mouse.up();
+      await expect.poll(async () => {
+        const nextBox = await layout3DCanvas.boundingBox();
+        return Math.abs((nextBox?.width ?? threeBoxBeforeResize.width) - threeBoxBeforeResize.width);
+      }, {
+        timeout: UI_READY_TIMEOUT_MS,
+      }).toBeGreaterThan(20);
+    }
+
+    const threeBox = await layout3DCanvas.boundingBox();
+    expect(threeBox).not.toBeNull();
+    if (threeBox) {
+      const orbitAngleBefore = Number(await layout3DCanvas.getAttribute('data-orbit-angle-y') ?? '0');
+      const panXBefore = Number(await layout3DCanvas.getAttribute('data-pan-x') ?? '0');
+      const panYBefore = Number(await layout3DCanvas.getAttribute('data-pan-y') ?? '0');
+      const zoomBefore = Number(await layout3DCanvas.getAttribute('data-zoom') ?? '0');
+      const renderCountBeforeOrbit = Number(await layout3DCanvas.getAttribute('data-render-count') ?? '0');
+      await window.mouse.move(threeBox.x + threeBox.width / 2, threeBox.y + threeBox.height / 2);
+      await window.mouse.down();
+      await window.mouse.move(threeBox.x + threeBox.width / 2 + 90, threeBox.y + threeBox.height / 2 + 35, { steps: 8 });
+      await window.mouse.up();
+      await expect.poll(async () => Number(await layout3DCanvas.getAttribute('data-orbit-angle-y') ?? '0'), {
+        timeout: UI_READY_TIMEOUT_MS,
+      }).toBeGreaterThan(orbitAngleBefore);
+      await expect.poll(async () => Number(await layout3DCanvas.getAttribute('data-render-count') ?? '0'), {
+        timeout: UI_READY_TIMEOUT_MS,
+      }).toBeGreaterThan(renderCountBeforeOrbit);
+
+      const orbitAngleXBeforeFullOrbit = Number(await layout3DCanvas.getAttribute('data-orbit-angle-x') ?? '0');
+      const renderCountBeforeFullOrbit = Number(await layout3DCanvas.getAttribute('data-render-count') ?? '0');
+      await window.mouse.move(threeBox.x + threeBox.width / 2, threeBox.y + threeBox.height / 2);
+      await window.mouse.down();
+      await window.mouse.move(threeBox.x + threeBox.width / 2, threeBox.y + threeBox.height / 2 - 80, { steps: 10 });
+      await window.mouse.up();
+      await expect.poll(async () => Number(await layout3DCanvas.getAttribute('data-orbit-angle-x') ?? '0'), {
+        timeout: UI_READY_TIMEOUT_MS,
+      }).toBeLessThan(orbitAngleXBeforeFullOrbit - 0.5);
+      await expect.poll(async () => Number(await layout3DCanvas.getAttribute('data-render-count') ?? '0'), {
+        timeout: UI_READY_TIMEOUT_MS,
+      }).toBeGreaterThan(renderCountBeforeFullOrbit);
+
+      const visibleShapeCountBeforeBacksideOrbit = Number(await layout3DCanvas.getAttribute('data-visible-shape-count') ?? '0');
+      const renderCountBeforeBacksideOrbit = Number(await layout3DCanvas.getAttribute('data-render-count') ?? '0');
+      await window.mouse.move(threeBox.x + threeBox.width / 2, threeBox.y + threeBox.height / 2);
+      await window.mouse.down();
+      await window.mouse.move(threeBox.x + threeBox.width / 2 + 140, threeBox.y + threeBox.height / 2 + 180, { steps: 14 });
+      await window.mouse.move(threeBox.x + threeBox.width / 2 - 110, threeBox.y + threeBox.height / 2 - 160, { steps: 14 });
+      await window.mouse.up();
+      await expect.poll(async () => Number(await layout3DCanvas.getAttribute('data-render-count') ?? '0'), {
+        timeout: UI_READY_TIMEOUT_MS,
+      }).toBeGreaterThan(renderCountBeforeBacksideOrbit);
+      await expect(layout3DCanvas).toHaveAttribute('data-visible-shape-count', String(visibleShapeCountBeforeBacksideOrbit), {
+        timeout: UI_READY_TIMEOUT_MS,
+      });
+
+      await expect.poll(async () => {
+        const [x, y] = await Promise.all([
+          layout3DCanvas.getAttribute('data-view-helper-pos-x-screen-x'),
+          layout3DCanvas.getAttribute('data-view-helper-pos-x-screen-y'),
+        ]);
+        const screenX = Number(x ?? 'NaN');
+        const screenY = Number(y ?? 'NaN');
+        return Number.isFinite(screenX) && Number.isFinite(screenY) ? 'ready' : '';
+      }, {
+        timeout: UI_READY_TIMEOUT_MS,
+      }).toBe('ready');
+      const viewHelperLastAxisBefore = await layout3DCanvas.getAttribute('data-view-helper-last-axis');
+      const viewHelperOrbitBefore = Number(await layout3DCanvas.getAttribute('data-orbit-angle-y') ?? '0');
+      const renderCountBeforeViewHelper = Number(await layout3DCanvas.getAttribute('data-render-count') ?? '0');
+      const highlightedShapeBeforeHelperBlank = await layout3DCanvas.getAttribute('data-highlighted-shape-index');
+      const viewHelperSize = Number(await layout3DCanvas.getAttribute('data-view-helper-size') ?? '112');
+      const helperBlankX = threeBox.width - viewHelperSize + 8;
+      const helperBlankY = 16;
+      await layout3DCanvas.click({ position: { x: helperBlankX, y: helperBlankY } });
+      await expect(layout3DCanvas).toHaveAttribute('data-highlighted-shape-index', highlightedShapeBeforeHelperBlank ?? '', {
+        timeout: UI_READY_TIMEOUT_MS,
+      });
+      const refreshedViewHelperPosX = {
+        screenX: Number(await layout3DCanvas.getAttribute('data-view-helper-pos-x-screen-x') ?? 'NaN'),
+        screenY: Number(await layout3DCanvas.getAttribute('data-view-helper-pos-x-screen-y') ?? 'NaN'),
+      };
+      expect(Number.isFinite(refreshedViewHelperPosX.screenX)).toBe(true);
+      expect(Number.isFinite(refreshedViewHelperPosX.screenY)).toBe(true);
+      await layout3DCanvas.click({
+        position: {
+          x: refreshedViewHelperPosX.screenX,
+          y: refreshedViewHelperPosX.screenY,
+        },
+      });
+      await expect(layout3DCanvas).toHaveAttribute('data-view-helper-last-axis', 'posX', {
+        timeout: UI_READY_TIMEOUT_MS,
+      });
+      await expect.poll(async () => Number(await layout3DCanvas.getAttribute('data-render-count') ?? '0'), {
+        timeout: UI_READY_TIMEOUT_MS,
+      }).toBeGreaterThan(renderCountBeforeViewHelper);
+      await expect.poll(async () => Number(await layout3DCanvas.getAttribute('data-orbit-angle-y') ?? '0'), {
+        timeout: UI_READY_TIMEOUT_MS,
+      }).not.toBe(viewHelperOrbitBefore);
+      expect(viewHelperLastAxisBefore).not.toBe('posX');
+
+      await layout3DCanvas.hover();
+      await window.mouse.wheel(0, 180);
+      await expect.poll(async () => Number(await layout3DCanvas.getAttribute('data-pan-y') ?? '0'), {
+        timeout: UI_READY_TIMEOUT_MS,
+      }).toBeLessThan(panYBefore);
+      await window.keyboard.down('Shift');
+      await window.mouse.wheel(0, 180);
+      await window.keyboard.up('Shift');
+      await expect.poll(async () => Number(await layout3DCanvas.getAttribute('data-pan-x') ?? '0'), {
+        timeout: UI_READY_TIMEOUT_MS,
+      }).toBeGreaterThan(panXBefore);
+      await window.keyboard.down('Control');
+      await window.mouse.wheel(0, -240);
+      await window.keyboard.up('Control');
+      await expect.poll(async () => Number(await layout3DCanvas.getAttribute('data-zoom') ?? '0'), {
+        timeout: UI_READY_TIMEOUT_MS,
+      }).toBeGreaterThan(zoomBefore);
+    }
+
+    const renderCountBeforeGdsSwitch = Number(await layoutCanvas.getAttribute('data-render-count') ?? '0');
+    await window.getByTestId('physical-layout-target-item-gdsCell-sg13g2_xnor2_1').click();
+    await expect(layoutCanvas).toHaveAttribute('data-selected-target-name', 'sg13g2_xnor2_1', {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await expect(layout3DCanvas).toHaveAttribute('data-selected-target-name', 'sg13g2_xnor2_1', {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-selected-shape-count') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(0);
+    await expect.poll(async () => Number(await layout3DCanvas.getAttribute('data-visible-shape-count') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(0);
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-render-count') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(renderCountBeforeGdsSwitch);
+
+    const twoDVisibleBeforeGdsLayerToggle = Number(await layoutCanvas.getAttribute('data-visible-shape-count') ?? '0');
+    const threeDVisibleBeforeGdsLayerToggle = Number(await layout3DCanvas.getAttribute('data-visible-shape-count') ?? '0');
+    const firstVisibleShapeIndexBeforeHide = await layoutCanvas.getAttribute('data-pick-visible-shape-index');
+    const firstVisibleShapeLayerIndexBeforeHide = await layoutCanvas.getAttribute('data-pick-visible-shape-layer-index');
+    const firstVisibleShapeCategoryBeforeHide = await layoutCanvas.getAttribute('data-pick-visible-shape-category');
+    const firstVisibleShapeScreenXBeforeHide = Number(await layoutCanvas.getAttribute('data-pick-visible-shape-screen-x') ?? 'NaN');
+    const firstVisibleShapeScreenYBeforeHide = Number(await layoutCanvas.getAttribute('data-pick-visible-shape-screen-y') ?? 'NaN');
+    const twoDOpacitySummaryBeforeLayerOpacity = await layoutCanvas.getAttribute('data-layer-opacity-summary');
+    const threeDOpacitySummaryBeforeLayerOpacity = await layout3DCanvas.getAttribute('data-layer-opacity-summary');
+    expect(firstVisibleShapeLayerIndexBeforeHide).toBeTruthy();
+    await window.getByTestId(`physical-layer-opacity-button-${firstVisibleShapeLayerIndexBeforeHide}`).click();
+    const inlineOpacityRow = window.getByTestId(`physical-layer-opacity-row-${firstVisibleShapeLayerIndexBeforeHide}`);
+    await expect(inlineOpacityRow.getByTestId(`physical-layer-opacity-slider-${firstVisibleShapeLayerIndexBeforeHide}`)).toBeVisible({
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await window.getByTestId(`physical-layer-opacity-decrease-${firstVisibleShapeLayerIndexBeforeHide}`).click();
+    await expect.poll(async () => await layoutCanvas.getAttribute('data-layer-opacity-summary'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).not.toBe(twoDOpacitySummaryBeforeLayerOpacity);
+    const twoDOpacitySummaryAfterLayerOpacity = await layoutCanvas.getAttribute('data-layer-opacity-summary');
+    await expect(layout3DCanvas).toHaveAttribute('data-layer-opacity-summary', twoDOpacitySummaryAfterLayerOpacity ?? '', {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await expect(layout3DCanvas).toHaveAttribute('data-shape-opacity-mode', 'layered', {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    expect(threeDOpacitySummaryBeforeLayerOpacity).toBe(twoDOpacitySummaryBeforeLayerOpacity);
+    await expect(layoutCanvas).toHaveAttribute('data-visible-shape-count', String(twoDVisibleBeforeGdsLayerToggle), {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await expect(layout3DCanvas).toHaveAttribute('data-visible-shape-count', String(threeDVisibleBeforeGdsLayerToggle), {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    const layoutCanvasBoxBeforeHide = await layoutCanvas.boundingBox();
+    if (
+      layoutCanvasBoxBeforeHide
+      && firstVisibleShapeIndexBeforeHide
+      && Number.isFinite(firstVisibleShapeScreenXBeforeHide)
+      && Number.isFinite(firstVisibleShapeScreenYBeforeHide)
+    ) {
+      await window.mouse.click(
+        layoutCanvasBoxBeforeHide.x + firstVisibleShapeScreenXBeforeHide,
+        layoutCanvasBoxBeforeHide.y + firstVisibleShapeScreenYBeforeHide,
+      );
+      await expect(layoutCanvas).toHaveAttribute('data-highlighted-shape-index', firstVisibleShapeIndexBeforeHide, {
+        timeout: UI_READY_TIMEOUT_MS,
+      });
+    }
+    expect(firstVisibleShapeCategoryBeforeHide).toBeTruthy();
+    await window.getByTestId(`physical-layer-category-swatch-${firstVisibleShapeLayerIndexBeforeHide}-${firstVisibleShapeCategoryBeforeHide}`).click();
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-visible-shape-count') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeLessThan(twoDVisibleBeforeGdsLayerToggle);
+    await expect.poll(async () => Number(await layout3DCanvas.getAttribute('data-visible-shape-count') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeLessThan(threeDVisibleBeforeGdsLayerToggle);
+    await expect(layoutCanvas).toHaveAttribute('data-highlighted-shape-index', '', {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await expect(layout3DCanvas).toHaveAttribute('data-highlighted-shape-index', '', {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+
+    await window.getByTestId('activity-item-explorer').click();
+    await expect(window.getByTestId('code-view-explorer')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+    await expectLspPanelShowsControlPlaneOnly(window, 'systemverilog/layout/open', [
+      'systemverilog/layout/geometry',
+      'systemverilog/layoutGeometry',
+    ]);
   } finally {
     await app.close();
   }
@@ -2016,11 +2529,17 @@ test('window controls toggle minimize and maximize state', async () => {
 
   const maximizeButton = window.getByTestId('window-control-maximize');
   await expect(maximizeButton).toBeVisible();
+  await expect(maximizeButton).toHaveAttribute('aria-label', 'Maximize Window');
+  await expect(maximizeButton.locator('svg.lucide-square')).toBeVisible();
   await maximizeButton.click();
   await expect.poll(async () => browserWindow.evaluate((win) => win.isMaximized())).toBe(true);
+  await expect(maximizeButton).toHaveAttribute('aria-label', 'Restore Window');
+  await expect(maximizeButton.locator('svg.lucide-copy')).toBeVisible();
 
   await maximizeButton.click();
   await expect.poll(async () => browserWindow.evaluate((win) => win.isMaximized())).toBe(false);
+  await expect(maximizeButton).toHaveAttribute('aria-label', 'Maximize Window');
+  await expect(maximizeButton.locator('svg.lucide-square')).toBeVisible();
 
   const minimizeButton = window.getByTestId('window-control-minimize');
   await expect(minimizeButton).toBeVisible();
@@ -6052,6 +6571,11 @@ test('waveform bottom panel renders binary waveform and controls', async () => {
   await expect.poll(async () => readCanvasNumber('data-waveform-frame-segment-count'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(0);
+  await expectLspPanelShowsControlPlaneOnly(window, 'systemverilog/waveform/open', [
+    'systemverilog/waveform/frame',
+    'systemverilog/waveformFrame',
+  ]);
+  await getBottomPanelTab(window, 'waveform').click();
   await expect.poll(async () => readCanvasNumber('data-source-segment-count'), {
     timeout: UI_READY_TIMEOUT_MS,
   }).toBeGreaterThan(0);

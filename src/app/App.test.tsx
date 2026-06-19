@@ -105,6 +105,16 @@ vi.mock('./components/code/physical/PhysicalLayoutCanvas', () => ({
   ),
 }));
 
+vi.mock('./components/code/physical/PhysicalLayout3DCanvas', () => ({
+  PhysicalLayout3DCanvas: () => (
+    <div
+      data-renderer="three-webgl"
+      data-testid="physical-layout-3d-canvas"
+      data-visible-shape-count={1}
+    />
+  ),
+}));
+
 vi.mock('./components/code/shared/ActivityBar', async () => {
   const sidebar = await vi.importActual<typeof import('./components/ui/sidebar')>('./components/ui/sidebar');
   const actualActivityBar = await vi.importActual<typeof import('./components/code/shared/ActivityBar')>('./components/code/shared/ActivityBar');

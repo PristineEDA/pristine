@@ -414,6 +414,7 @@ Covered components:
 - Zod (AI Agent Frameworks; declared as MIT)
 - Mermaid (Content Rendering, Diagrams & State; declared as MIT)
 - PixiJS (Content Rendering, Diagrams & State; declared as MIT)
+- Three.js (Content Rendering, Diagrams & State; declared as MIT)
 - Liveline (Content Rendering, Diagrams & State; declared as MIT)
 - react-shiki (Content Rendering, Diagrams & State; declared as MIT)
 - remark-gfm (Content Rendering, Diagrams & State; declared as MIT)
