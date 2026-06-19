@@ -23,13 +23,19 @@ import {
 import {
   createGdsTileMetricsSnapshot,
   createEmptyGdsTileGeometry,
+  createGdsPreciseTileRequestPlan,
   createGdsTileRequestPlan,
+  createGdsRetryTileRequestPlan,
   defaultPhysicalLayoutGdsTileMetrics,
+  doLayoutBoundsIntersect,
   getGdsTileShapeStyle,
   isGdsTileModeEnabled,
   mergeGdsTileGeometryResults,
+  shouldRequestPreciseGdsTile,
   type PhysicalLayoutGdsTileShapeStyle,
   type PhysicalLayoutGdsTileMetrics,
+  type PhysicalLayoutGdsTileRequestInput,
+  type PhysicalLayoutGdsTileRequestPlan,
 } from './physicalLayoutGdsTiles';
 import {
   createPhysicalLayoutPinLabels,
@@ -98,6 +104,16 @@ export function PhysicalLayoutCanvas({
   const gdsTileGenerationRef = useRef(0);
   const gdsTileRequestTimeoutRef = useRef<number | null>(null);
   const gdsTileCacheRef = useRef(new Map<string, LspLayoutTileGeometry>());
+  const gdsLatestRequestKeyRef = useRef('');
+  const gdsLastGoodTileRef = useRef<LspLayoutTileGeometry | null>(null);
+  const gdsTileDiagnosticsRef = useRef({
+    displayedState: 'empty',
+    emptyReason: '',
+    finalLod: -1,
+    lastGoodShapeCount: 0,
+    precisePending: false,
+    tileLod: -1,
+  });
   const gdsCameraSyncTimeoutRef = useRef<number | null>(null);
   const gdsMetricsSyncTimeoutRef = useRef<number | null>(null);
   const gdsRenderCountSyncTimeoutRef = useRef<number | null>(null);
@@ -124,6 +140,7 @@ export function PhysicalLayoutCanvas({
   const [gdsTileGeometry, setGdsTileGeometry] = useState<LspLayoutGeometry | null>(null);
   const [gdsTileMetrics, setGdsTileMetrics] = useState<PhysicalLayoutGdsTileMetrics>(defaultPhysicalLayoutGdsTileMetrics);
   const [cameraSync, setCameraSync] = useState<PhysicalLayoutCamera>(defaultCamera);
+  const [gdsTileDiagnostics, setGdsTileDiagnostics] = useState(gdsTileDiagnosticsRef.current);
 
   const isGdsTileMode = isGdsTileModeEnabled(catalog?.sourceKind, selectedTarget?.kind);
   const activeGeometry = isGdsTileMode ? gdsTileGeometry : geometry;
@@ -281,6 +298,16 @@ export function PhysicalLayoutCanvas({
   useEffect(() => {
     gdsTileGenerationRef.current += 1;
     gdsTileCacheRef.current.clear();
+    gdsLatestRequestKeyRef.current = '';
+    gdsLastGoodTileRef.current = null;
+    updateGdsTileDiagnostics({
+      displayedState: 'empty',
+      emptyReason: '',
+      finalLod: -1,
+      lastGoodShapeCount: 0,
+      precisePending: false,
+      tileLod: -1,
+    });
     setGdsTileGeometry(null);
     onGdsTileGeometryChangeRef.current?.(null);
     setGdsTileMetrics(defaultPhysicalLayoutGdsTileMetrics);
@@ -297,6 +324,7 @@ export function PhysicalLayoutCanvas({
 
     gdsTileGenerationRef.current += 1;
     gdsTileCacheRef.current.clear();
+    gdsLatestRequestKeyRef.current = '';
     scheduleGdsTileRequest();
   }, [isGdsTileMode, layoutVisibility]);
 
@@ -526,22 +554,48 @@ export function PhysicalLayoutCanvas({
     }
 
     const generation = gdsTileGenerationRef.current;
-    const plan = createGdsTileRequestPlan({
-      camera: cameraRef.current,
-      rootCellIndex: currentTarget.index,
-      sessionId: currentSessionId,
-      size: sizeRef.current,
-      visibility: layoutVisibilityRef.current,
+    const input = createGdsTileRequestInput(currentSessionId, currentTarget.index);
+    const plan = createGdsTileRequestPlan(input);
+    gdsLatestRequestKeyRef.current = plan.cacheKey;
+    updateGdsTileDiagnostics({
+      displayedState: gdsLastGoodTileRef.current ? 'pending-last-good' : 'pending',
+      emptyReason: '',
+      precisePending: false,
+      tileLod: plan.lod,
     });
     if (plan.empty) {
       const emptyTile = createEmptyGdsTileGeometry(catalog?.unitsPerMicron);
       gdsTileCacheRef.current.set(plan.cacheKey, emptyTile);
-      applyGdsTile(emptyTile, generation, 0);
+      gdsLastGoodTileRef.current = null;
+      applyGdsTile(emptyTile, plan, generation, 0, { acceptEmpty: true, state: 'empty-hidden' });
       return;
     }
+
+    void requestGdsTilePlan(input, plan, generation, { requestPreciseAfterSuccess: true });
+  };
+
+  const createGdsTileRequestInput = (sessionId: string, rootCellIndex: number): PhysicalLayoutGdsTileRequestInput => ({
+      camera: cameraRef.current,
+      rootCellIndex,
+      sessionId,
+      size: sizeRef.current,
+      visibility: layoutVisibilityRef.current,
+    });
+
+  const requestGdsTilePlan = async (
+    input: PhysicalLayoutGdsTileRequestInput,
+    plan: PhysicalLayoutGdsTileRequestPlan,
+    generation: number,
+    options: { acceptEmpty?: boolean; requestPreciseAfterSuccess?: boolean; retryEmpty?: boolean },
+  ) => {
+    const lsp = window.electronAPI?.lsp;
+    if (!lsp?.layoutTileGeometry) {
+      return;
+    }
+
     const cachedTile = gdsTileCacheRef.current.get(plan.cacheKey);
     if (cachedTile) {
-      applyGdsTile(cachedTile, generation, 0);
+      handleGdsTileResult(cachedTile, input, plan, generation, 0, options);
       return;
     }
 
@@ -568,18 +622,95 @@ export function PhysicalLayoutCanvas({
 
       gdsTileCacheRef.current.set(plan.cacheKey, mergedTile);
       tileRequestCountRef.current += 1;
-      applyGdsTile(mergedTile, generation, performance.now() - startedAt);
+      handleGdsTileResult(mergedTile, input, plan, generation, performance.now() - startedAt, options);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Unable to load GDS viewport tile.');
     }
   };
 
-  const applyGdsTile = (tile: LspLayoutTileGeometry, generation: number, roundtripMs: number) => {
+  const handleGdsTileResult = (
+    tile: LspLayoutTileGeometry,
+    input: PhysicalLayoutGdsTileRequestInput,
+    plan: PhysicalLayoutGdsTileRequestPlan,
+    generation: number,
+    roundtripMs: number,
+    options: { acceptEmpty?: boolean; requestPreciseAfterSuccess?: boolean; retryEmpty?: boolean },
+  ) => {
+    if (gdsTileGenerationRef.current !== generation) {
+      return;
+    }
+
+    if (gdsLatestRequestKeyRef.current !== plan.cacheKey) {
+      return;
+    }
+
+    if (tile.geometry.shapes.length === 0 && !options.acceptEmpty) {
+      if (options.retryEmpty !== false && doLayoutBoundsIntersect(plan.bbox, selectedBoundsRef.current)) {
+        const retryPlan = createGdsRetryTileRequestPlan(input);
+        gdsLatestRequestKeyRef.current = retryPlan.cacheKey;
+        updateGdsTileDiagnostics({
+          displayedState: gdsLastGoodTileRef.current ? 'empty-retry-last-good' : 'empty-retry',
+          emptyReason: 'retry-expanded-lod0',
+          precisePending: true,
+          tileLod: plan.lod,
+        });
+        void requestGdsTilePlan(input, retryPlan, generation, {
+          acceptEmpty: true,
+          retryEmpty: false,
+        });
+        return;
+      }
+
+      if (gdsLastGoodTileRef.current) {
+        updateGdsTileDiagnostics({
+          displayedState: 'empty-kept-last-good',
+          emptyReason: 'empty-current-tile',
+          precisePending: false,
+          tileLod: plan.lod,
+        });
+        updateGdsTileMetrics(tile);
+        return;
+      }
+    }
+
+    applyGdsTile(tile, plan, generation, roundtripMs, {
+      acceptEmpty: Boolean(options.acceptEmpty),
+      state: tile.geometry.shapes.length > 0 ? 'ready' : 'empty-confirmed',
+    });
+
+    if (tile.geometry.shapes.length > 0 && options.requestPreciseAfterSuccess && shouldRequestPreciseGdsTile(plan)) {
+      const precisePlan = createGdsPreciseTileRequestPlan(input);
+      updateGdsTileDiagnostics({
+        precisePending: true,
+      });
+      window.setTimeout(() => {
+        if (gdsTileGenerationRef.current !== generation || gdsLatestRequestKeyRef.current !== plan.cacheKey) {
+          return;
+        }
+        gdsLatestRequestKeyRef.current = precisePlan.cacheKey;
+        void requestGdsTilePlan(input, precisePlan, generation, {
+          acceptEmpty: false,
+          retryEmpty: true,
+        });
+      }, 120);
+    }
+  };
+
+  const applyGdsTile = (
+    tile: LspLayoutTileGeometry,
+    plan: PhysicalLayoutGdsTileRequestPlan,
+    generation: number,
+    roundtripMs: number,
+    options: { acceptEmpty: boolean; state: string },
+  ) => {
     if (gdsTileGenerationRef.current !== generation) {
       return;
     }
 
     lastTileRoundtripMsRef.current = roundtripMs;
+    if (tile.geometry.shapes.length > 0) {
+      gdsLastGoodTileRef.current = tile;
+    }
     setGdsTileGeometry(tile.geometry);
     onGdsTileGeometryChangeRef.current?.(tile.geometry);
     redrawScene(tile.geometry);
@@ -587,6 +718,25 @@ export function PhysicalLayoutCanvas({
     syncGdsFullCameraState();
     syncRenderCountState(true);
     updateGdsTileMetrics(tile);
+    updateGdsTileDiagnostics({
+      displayedState: options.state,
+      emptyReason: tile.geometry.shapes.length === 0
+        ? options.acceptEmpty ? 'accepted-empty' : 'empty-current-tile'
+        : '',
+      finalLod: plan.lod,
+      lastGoodShapeCount: gdsLastGoodTileRef.current?.geometry.shapes.length ?? 0,
+      precisePending: false,
+      tileLod: plan.lod,
+    });
+  };
+
+  const updateGdsTileDiagnostics = (updates: Partial<typeof gdsTileDiagnosticsRef.current>) => {
+    const nextDiagnostics = {
+      ...gdsTileDiagnosticsRef.current,
+      ...updates,
+    };
+    gdsTileDiagnosticsRef.current = nextDiagnostics;
+    setGdsTileDiagnostics(nextDiagnostics);
   };
 
   const updateGdsTileMetrics = (tile?: LspLayoutTileGeometry | null) => {
@@ -687,11 +837,17 @@ export function PhysicalLayoutCanvas({
       data-gds-average-fps={gdsTileMetrics.averageFps.toFixed(1)}
       data-gds-frame-p95-ms={gdsTileMetrics.frameP95Ms.toFixed(1)}
       data-gds-draw-node-count={meshStatsRef.current.drawNodeCount}
+      data-gds-displayed-tile-state={gdsTileDiagnostics.displayedState}
+      data-gds-empty-tile-reason={gdsTileDiagnostics.emptyReason}
+      data-gds-final-tile-lod={gdsTileDiagnostics.finalLod}
+      data-gds-last-good-shape-count={gdsTileDiagnostics.lastGoodShapeCount}
       data-gds-mesh-buffer-bytes={gdsTileMetrics.bufferByteLength + gdsTileMetrics.indexByteLength}
       data-gds-mesh-batch-count={meshStatsRef.current.meshBatchCount}
+      data-gds-precise-tile-pending={gdsTileDiagnostics.precisePending ? 'true' : 'false'}
       data-gds-render-batch-mode={isGdsTileMode ? 'order-bucket' : 'none'}
       data-gds-render-bucket-size={isGdsTileMode ? meshStatsRef.current.orderBucketSize : 0}
       data-gds-render-mode={isGdsTileMode ? 'tile-mesh' : 'full-graphics'}
+      data-gds-tile-lod={gdsTileDiagnostics.tileLod}
       data-gds-render-ms={gdsTileMetrics.lastRenderMs.toFixed(2)}
       data-gds-tile-query-ms={gdsTileMetrics.lastTileQueryMs.toFixed(2)}
       data-gds-tile-request-count={tileRequestCountRef.current}

@@ -46,6 +46,14 @@ export interface PhysicalLayoutGdsTileRequestPlan {
   options: LspLayoutTileGeometryOptions;
 }
 
+export interface PhysicalLayoutGdsTileRequestInput {
+  camera: PhysicalLayoutCamera;
+  rootCellIndex: number;
+  sessionId: string;
+  size: PhysicalLayoutViewport;
+  visibility: PhysicalLayoutVisibility;
+}
+
 export interface PhysicalLayoutGdsTileShapeStyle {
   alpha: number;
   category: PhysicalLayoutLayerCategory;
@@ -78,10 +86,12 @@ export const defaultPhysicalLayoutGdsTileMetrics: PhysicalLayoutGdsTileMetrics =
 };
 
 const tileOverscanRatio = 0.18;
+const retryTileOverscanRatio = 1;
 const tileBboxRoundingMicrons = 0.25;
 const tileMaxShapes = 80_000;
 const tileMaxPoints = 400_000;
 const tileMaxBytes = 8 * 1024 * 1024;
+const preciseTileMaxAreaMicrons = 250_000;
 
 export function isGdsTileModeEnabled(
   sourceKind: string | null | undefined,
@@ -90,15 +100,12 @@ export function isGdsTileModeEnabled(
   return sourceKind === 'gds' && targetKind === 'gdsCell';
 }
 
-export function createGdsTileRequestPlan(input: {
-  camera: PhysicalLayoutCamera;
-  rootCellIndex: number;
-  sessionId: string;
-  size: PhysicalLayoutViewport;
-  visibility: PhysicalLayoutVisibility;
+export function createGdsTileRequestPlan(input: PhysicalLayoutGdsTileRequestInput & {
+  lod?: number;
+  overscanRatio?: number;
 }): PhysicalLayoutGdsTileRequestPlan {
-  const bbox = getViewportWorldBounds(input.camera, input.size, tileOverscanRatio);
-  const lod = getGdsTileLod(input.camera.zoom);
+  const bbox = getViewportWorldBounds(input.camera, input.size, input.overscanRatio ?? tileOverscanRatio);
+  const lod = input.lod ?? getGdsTileLod(input.camera.zoom);
   const visibleLayerIndices = getVisibleGdsTileLayerIndices(input.visibility);
   const empty = visibleLayerIndices.length === 0 && input.visibility.layerOpacities.size > 0;
   const layerIndices = empty ? [] : visibleLayerIndices.length > 0 ? visibleLayerIndices : undefined;
@@ -129,6 +136,40 @@ export function createGdsTileRequestPlan(input: {
       sessionId: input.sessionId,
     },
   };
+}
+
+export function createGdsPreciseTileRequestPlan(input: PhysicalLayoutGdsTileRequestInput): PhysicalLayoutGdsTileRequestPlan {
+  return createGdsTileRequestPlan({
+    ...input,
+    lod: 0,
+  });
+}
+
+export function createGdsRetryTileRequestPlan(input: PhysicalLayoutGdsTileRequestInput): PhysicalLayoutGdsTileRequestPlan {
+  return createGdsTileRequestPlan({
+    ...input,
+    lod: 0,
+    overscanRatio: retryTileOverscanRatio,
+  });
+}
+
+export function shouldRequestPreciseGdsTile(plan: PhysicalLayoutGdsTileRequestPlan): boolean {
+  return !plan.empty && plan.lod > 0 && getLayoutBoundsArea(plan.bbox) <= preciseTileMaxAreaMicrons;
+}
+
+export function doLayoutBoundsIntersect(left: LspLayoutBounds | null | undefined, right: LspLayoutBounds | null | undefined): boolean {
+  if (!left || !right) {
+    return false;
+  }
+
+  return left.x0 <= right.x1
+    && left.x1 >= right.x0
+    && left.y0 <= right.y1
+    && left.y1 >= right.y0;
+}
+
+export function getLayoutBoundsArea(bounds: LspLayoutBounds): number {
+  return Math.max(0, bounds.x1 - bounds.x0) * Math.max(0, bounds.y1 - bounds.y0);
 }
 
 export function createEmptyGdsTileGeometry(unitsPerMicron = 1): LspLayoutTileGeometry {

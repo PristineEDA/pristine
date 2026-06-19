@@ -37,9 +37,13 @@ import {
 } from './physicalLayout3dViewHelper';
 import {
   createEmptyGdsTileGeometry,
+  createGdsPreciseTileRequestPlan,
   createGdsTileMetricsSnapshot,
   createGdsTileRequestPlan,
+  createGdsRetryTileRequestPlan,
+  doLayoutBoundsIntersect,
   getGdsTileLod,
+  shouldRequestPreciseGdsTile,
   getViewportWorldBounds,
   mergeGdsTileGeometryResults,
 } from './physicalLayoutGdsTiles';
@@ -463,6 +467,47 @@ describe('physicalLayoutGeometry', () => {
       shapes: [],
       unitsPerMicron: 1000,
     });
+  });
+
+  it('plans precise and retry GDS tiles without changing visibility filters', () => {
+    const selectedShapes = layoutFixtureGdsGeometry.shapes.filter((shape) => shape.macroIndex === 1);
+    const visibility = createPhysicalLayoutVisibility(layoutFixtureGdsOpenResult.catalog, true, selectedShapes);
+    const input = {
+      camera: { panX: 20, panY: 30, zoom: 10 },
+      rootCellIndex: 1,
+      sessionId: 'layout-gds',
+      size: { height: 200, width: 400 },
+      visibility,
+    };
+    const coarsePlan = createGdsTileRequestPlan(input);
+    const precisePlan = createGdsPreciseTileRequestPlan(input);
+    const retryPlan = createGdsRetryTileRequestPlan(input);
+
+    expect(coarsePlan.lod).toBe(1);
+    expect(shouldRequestPreciseGdsTile(coarsePlan)).toBe(true);
+    expect(precisePlan.lod).toBe(0);
+    expect(precisePlan.layerIndices).toEqual(coarsePlan.layerIndices);
+    expect(retryPlan.lod).toBe(0);
+    expect(retryPlan.layerIndices).toEqual(coarsePlan.layerIndices);
+    expect(retryPlan.bbox.x0).toBeLessThan(coarsePlan.bbox.x0);
+    expect(retryPlan.bbox.x1).toBeGreaterThan(coarsePlan.bbox.x1);
+    expect(doLayoutBoundsIntersect(coarsePlan.bbox, { x0: 0, y0: 0, x1: 4, y1: 4 })).toBe(true);
+    expect(doLayoutBoundsIntersect(coarsePlan.bbox, { x0: 100, y0: 100, x1: 101, y1: 101 })).toBe(false);
+  });
+
+  it('does not force precise GDS tiles for very large overview bboxes', () => {
+    const selectedShapes = layoutFixtureGdsGeometry.shapes.filter((shape) => shape.macroIndex === 1);
+    const visibility = createPhysicalLayoutVisibility(layoutFixtureGdsOpenResult.catalog, true, selectedShapes);
+    const overviewPlan = createGdsTileRequestPlan({
+      camera: { panX: 0, panY: 0, zoom: 0.1 },
+      rootCellIndex: 1,
+      sessionId: 'layout-gds',
+      size: { height: 10_000, width: 10_000 },
+      visibility,
+    });
+
+    expect(overviewPlan.lod).toBe(2);
+    expect(shouldRequestPreciseGdsTile(overviewPlan)).toBe(false);
   });
 
   it('creates 2.5D mesh inputs for visible GDS cell shapes', () => {

@@ -2149,6 +2149,15 @@ test('Physical layout uses indexed LEF geometry and GDS tile-mesh rendering', as
     await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-mesh-batch-count') ?? '0'), {
       timeout: UI_READY_TIMEOUT_MS,
     }).toBeGreaterThan(0);
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-last-good-shape-count') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(0);
+    await expect(layoutCanvas).toHaveAttribute('data-gds-final-tile-lod', '0', {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await expect(layoutCanvas).not.toHaveAttribute('data-gds-displayed-tile-state', 'empty-confirmed', {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
     await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-draw-node-count') ?? '0'), {
       timeout: UI_READY_TIMEOUT_MS,
     }).toBeGreaterThan(0);
@@ -2161,6 +2170,27 @@ test('Physical layout uses indexed LEF geometry and GDS tile-mesh rendering', as
     await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-frame-p95-ms') ?? '0'), {
       timeout: UI_READY_TIMEOUT_MS,
     }).toBeGreaterThanOrEqual(0);
+
+    const gdsShapeCountBeforeFastNavigation = Number(await layoutCanvas.getAttribute('data-gds-last-good-shape-count') ?? '0');
+    const canvasBox = await layoutCanvas.boundingBox();
+    expect(canvasBox).not.toBeNull();
+    if (canvasBox) {
+      for (let index = 0; index < 5; index += 1) {
+        await window.mouse.wheel(0, 220);
+      }
+      await window.keyboard.down('Control');
+      for (let index = 0; index < 4; index += 1) {
+        await window.mouse.move(canvasBox.x + canvasBox.width / 2, canvasBox.y + canvasBox.height / 2);
+        await window.mouse.wheel(0, -180);
+      }
+      await window.keyboard.up('Control');
+    }
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-last-good-shape-count') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThanOrEqual(gdsShapeCountBeforeFastNavigation);
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-mesh-batch-count') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(0);
 
     await window.getByTestId('physical-layout-3d-toggle').click();
     await expect(window.getByTestId('physical-layout-3d-split')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
