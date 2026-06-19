@@ -19,8 +19,14 @@ import type {
   LspInlayHint,
   LspLayoutGeometry,
   LspLayoutGeometryOptions,
+  LspLayoutCatalogPage,
+  LspLayoutCatalogPageOptions,
+  LspLayoutCatalogSummary,
   LspLayoutOpenOptions,
   LspLayoutOpenResult,
+  LspLayoutStatus,
+  LspLayoutTileGeometry,
+  LspLayoutTileGeometryOptions,
   LspModuleHierarchy,
   LspModuleHierarchyOptions,
   LspOutlineOptions,
@@ -335,6 +341,14 @@ const electronAPI = {
       ipcRenderer.invoke(AsyncChannels.LSP_LAYOUT_OPEN, options) as Promise<LspLayoutOpenResult>,
     layoutGeometry: (options: LspLayoutGeometryOptions) =>
       ipcRenderer.invoke(AsyncChannels.LSP_LAYOUT_GEOMETRY, options) as Promise<LspLayoutGeometry>,
+    layoutStatus: (sessionId: string) =>
+      ipcRenderer.invoke(AsyncChannels.LSP_LAYOUT_STATUS, sessionId) as Promise<LspLayoutStatus>,
+    layoutCatalogSummary: (sessionId: string) =>
+      ipcRenderer.invoke(AsyncChannels.LSP_LAYOUT_CATALOG_SUMMARY, sessionId) as Promise<LspLayoutCatalogSummary>,
+    layoutCatalogPage: (options: LspLayoutCatalogPageOptions) =>
+      ipcRenderer.invoke(AsyncChannels.LSP_LAYOUT_CATALOG_PAGE, options) as Promise<LspLayoutCatalogPage>,
+    layoutTileGeometry: (options: LspLayoutTileGeometryOptions) =>
+      ipcRenderer.invoke(AsyncChannels.LSP_LAYOUT_TILE_GEOMETRY, options) as Promise<LspLayoutTileGeometry>,
     layoutClose: (sessionId: string) =>
       ipcRenderer.invoke(AsyncChannels.LSP_LAYOUT_CLOSE, sessionId) as Promise<boolean>,
     getDebugEvents: () =>

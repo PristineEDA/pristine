@@ -86,6 +86,99 @@ const mockRequestLayoutPipeGeometry = vi.fn<(...args: unknown[]) => Promise<unkn
   truncated: false,
   unitsPerMicron: 1000,
 }));
+const mockRequestLayoutPipeStatus = vi.fn<(...args: unknown[]) => Promise<unknown>>(async () => ({
+  bytesRead: 1024,
+  cellCount: 1,
+  diagnosticCount: 0,
+  elapsedMicros: 10,
+  elementCount: 1,
+  error: null,
+  fileSize: 1024,
+  openMicros: 8,
+  parseMicros: 6,
+  phase: 'ready',
+  pointCount: 4,
+  recordCount: 20,
+  referenceCount: 0,
+  state: 'ready',
+  stringCount: 1,
+  warmupDone: true,
+  warmupQueued: false,
+}));
+const mockRequestLayoutPipeCatalogSummary = vi.fn<(...args: unknown[]) => Promise<unknown>>(async () => ({
+  bounds: { x0: 0, y0: 0, x1: 1.2, y1: 3.78 },
+  componentCount: 0,
+  defPinCount: 0,
+  diagnosticCount: 0,
+  gdsCellCount: 1,
+  gdsElementCount: 1,
+  gdsPointCount: 4,
+  gdsReferenceCount: 0,
+  hasBounds: true,
+  layerCount: 1,
+  macroCount: 0,
+  netCount: 0,
+  shapeCount: 1,
+  sourceKind: 'gds',
+  stringCount: 1,
+  topCellIndex: 0,
+  unitsPerMicron: 1000,
+}));
+const mockRequestLayoutPipeCatalogPage = vi.fn<(...args: unknown[]) => Promise<unknown>>(async () => ({
+  items: [{
+    bounds: { x0: 0, y0: 0, x1: 1.2, y1: 3.78 },
+    elementCount: 1,
+    firstElementIndex: 0,
+    firstReferenceIndex: 0,
+    index: 0,
+    isTop: true,
+    name: 'top',
+    referenceCount: 0,
+  }],
+  nextOffset: null,
+  offset: 0,
+  tableKind: 'cells',
+  totalCount: 1,
+}));
+const mockRequestLayoutPipeTileGeometry = vi.fn<(...args: unknown[]) => Promise<unknown>>(async () => ({
+  geometry: {
+    polygonPointCount: 0,
+    shapeCount: 1,
+    shapes: [{
+      flags: 0,
+      index: 0,
+      kind: 'rect',
+      layerIndex: 0,
+      macroIndex: 0,
+      ownerIndex: 0,
+      ownerKind: 'gdsElement',
+      rect: { x0: 0, y0: 0, x1: 1, y1: 1 },
+    }],
+    truncated: false,
+    unitsPerMicron: 1000,
+  },
+  metrics: {
+    cacheHitCount: 0,
+    cacheMissCount: 1,
+    elementCandidateCount: 1,
+    encodeMicros: 3,
+    gridBinCount: 0,
+    gridBuildMicros: 0,
+    gridCandidateCount: 0,
+    gridHitCount: 0,
+    gridMissCount: 0,
+    indexBuildMicros: 0,
+    lodShapeCount: 1,
+    queryMicros: 2,
+    referenceCandidateCount: 0,
+    traversedReferenceCount: 0,
+    visitedCellCount: 1,
+  },
+  nextContinuationToken: null,
+  payloadByteLength: 128,
+  shapeCount: 1,
+  truncated: false,
+}));
 
 vi.mock('electron', () => ({
   ipcMain: {
@@ -136,7 +229,11 @@ vi.mock('./layoutPipeClient.js', () => ({
   closeLayoutPipeSession: (...args: unknown[]) => mockCloseLayoutPipeSession.apply(null, args),
   normalizeLayoutOpenSessionMetadata: (...args: unknown[]) => mockNormalizeLayoutOpenSessionMetadata.apply(null, args),
   openLayoutPipeSession: (...args: unknown[]) => mockOpenLayoutPipeSession.apply(null, args),
+  requestLayoutPipeCatalogPage: (...args: unknown[]) => mockRequestLayoutPipeCatalogPage.apply(null, args),
+  requestLayoutPipeCatalogSummary: (...args: unknown[]) => mockRequestLayoutPipeCatalogSummary.apply(null, args),
   requestLayoutPipeGeometry: (...args: unknown[]) => mockRequestLayoutPipeGeometry.apply(null, args),
+  requestLayoutPipeStatus: (...args: unknown[]) => mockRequestLayoutPipeStatus.apply(null, args),
+  requestLayoutPipeTileGeometry: (...args: unknown[]) => mockRequestLayoutPipeTileGeometry.apply(null, args),
 }));
 
 import { disposeLspSession, registerLspHandlers, setLspProjectRoot } from './lsp.js';
@@ -1281,6 +1378,7 @@ describe('LSP IPC handlers', () => {
 
     expect(fakeConnection.sendRequest).toHaveBeenCalledWith('systemverilog/layout/open', {
       gdsUri: 'file:///C:/workspace/Pristine/layout/chip.gdsii',
+      openMode: 'auto',
       title: 'chip.gdsii',
     });
   });
@@ -1339,6 +1437,80 @@ describe('LSP IPC handlers', () => {
     expect(mockRequestLayoutPipeGeometry).toHaveBeenCalledWith(geometryOptions);
     expect(fakeConnection.sendRequest).not.toHaveBeenCalledWith('systemverilog/layout/geometry', expect.anything());
     expect(getLspDebugEventsForMethod(send, 'systemverilog/layout/geometry')).toEqual([]);
+  });
+
+  it('requests layout status from the pipe data plane', async () => {
+    const statusHandler = getHandler('async:lsp:layout-status');
+
+    const status = await statusHandler({}, 'layout-1');
+
+    expect(status).toEqual(expect.objectContaining({ state: 'ready', phase: 'ready' }));
+    expect(mockRequestLayoutPipeStatus).toHaveBeenCalledWith('layout-1');
+    expect(fakeConnection.sendRequest).not.toHaveBeenCalledWith('systemverilog/layout/status', expect.anything());
+  });
+
+  it('requests layout catalog summary and pages from the pipe data plane', async () => {
+    const summaryHandler = getHandler('async:lsp:layout-catalog-summary');
+    const pageHandler = getHandler('async:lsp:layout-catalog-page');
+
+    const summary = await summaryHandler({}, 'layout-1');
+    const page = await pageHandler({}, {
+      sessionId: 'layout-1',
+      tableKind: 'cells',
+      offset: 4,
+      limit: 32,
+      maxBytes: 4096,
+    });
+
+    expect(summary).toEqual(expect.objectContaining({ sourceKind: 'gds', gdsCellCount: 1 }));
+    expect(page).toEqual(expect.objectContaining({ tableKind: 'cells', totalCount: 1 }));
+    expect(mockRequestLayoutPipeCatalogSummary).toHaveBeenCalledWith('layout-1');
+    expect(mockRequestLayoutPipeCatalogPage).toHaveBeenCalledWith({
+      sessionId: 'layout-1',
+      tableKind: 'cells',
+      offset: 4,
+      limit: 32,
+      maxBytes: 4096,
+    });
+  });
+
+  it('requests GDS tile geometry from the pipe data plane', async () => {
+    const tileHandler = getHandler('async:lsp:layout-tile-geometry');
+    const options = {
+      bbox: { x0: 0, y0: 0, x1: 2, y1: 3 },
+      layerIndices: [0],
+      lod: 1,
+      maxBytes: 8192,
+      maxPoints: 200,
+      maxShapes: 100,
+      rootCellIndex: 0,
+      sessionId: 'layout-1',
+      shapeKinds: [1, 2],
+    };
+
+    const tile = await tileHandler({}, options);
+
+    expect(tile).toEqual(expect.objectContaining({
+      shapeCount: 1,
+      truncated: false,
+    }));
+    expect(mockRequestLayoutPipeTileGeometry).toHaveBeenCalledWith(options);
+    expect(fakeConnection.sendRequest).not.toHaveBeenCalledWith('systemverilog/layout/tileGeometry', expect.anything());
+  });
+
+  it('rejects invalid GDS tile geometry options', async () => {
+    const tileHandler = getHandler('async:lsp:layout-tile-geometry');
+
+    await expect(tileHandler({}, {
+      sessionId: 'layout-1',
+      rootCellIndex: -1,
+    })).rejects.toThrow('Expected non-negative integer for "rootCellIndex".');
+
+    await expect(tileHandler({}, {
+      sessionId: 'layout-1',
+      rootCellIndex: 0,
+      lod: 1.5,
+    })).rejects.toThrow('Expected non-negative integer for "lod".');
   });
 
   it('rejects invalid layout geometry owner indexes', async () => {

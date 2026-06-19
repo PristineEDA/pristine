@@ -2059,7 +2059,7 @@ test('packaged Windows app opens Physical layout from workspace-root LEF', async
   }
 });
 
-test('Physical layout requests indexed geometry for LEF macros and GDS cells', async () => {
+test('Physical layout uses indexed LEF geometry and GDS tile-mesh rendering', async () => {
   test.slow();
 
   const physicalWorkspaceRoot = createWorkspaceCopyWithFiles('physical-indexed-layout-workspace', {
@@ -2137,6 +2137,18 @@ test('Physical layout requests indexed geometry for LEF macros and GDS cells', a
     await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-selected-shape-count') ?? '0'), {
       timeout: UI_READY_TIMEOUT_MS,
     }).toBeGreaterThan(0);
+    await expect(layoutCanvas).toHaveAttribute('data-gds-render-mode', 'tile-mesh', {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await expect(window.getByTestId('physical-gds-toolbar-metrics')).toBeVisible({
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await expect(layoutCanvas).toHaveAttribute('data-gds-truncated', 'false', {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-frame-p95-ms') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThanOrEqual(0);
 
     await window.getByTestId('physical-layout-3d-toggle').click();
     await expect(window.getByTestId('physical-layout-3d-split')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });

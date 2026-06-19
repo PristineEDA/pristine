@@ -7,12 +7,18 @@ import {
   closeAllLayoutPipeSessions,
   decodeLayoutEnvelope,
   encodeLayoutEnvelope,
+  encodeLayoutCatalogPageRequestPayload,
   encodeLayoutGeometryRequestPayload,
+  encodeLayoutTileGeometryRequestPayload,
   getOpenLayoutPipeSessionCount,
   normalizeLayoutOpenSessionMetadata,
   openLayoutPipeSession,
   parseLayoutCatalogPayload,
+  parseLayoutCatalogPagePayload,
+  parseLayoutCatalogSummaryPayload,
   parseLayoutGeometryPayload,
+  parseLayoutStatusPayload,
+  parseLayoutTileGeometryPayload,
 } from './layoutPipeClient.js';
 
 describe('layoutPipeClient', () => {
@@ -129,6 +135,122 @@ describe('layoutPipeClient', () => {
     expect(view.getUint32(offset, true)).toBe(0);
     offset += 4;
     expect(offset).toBe(payload.byteLength);
+  });
+
+  it('encodes tile geometry requests with DBU bbox coordinates', () => {
+    const payload = encodeLayoutTileGeometryRequestPayload({
+      sessionId: 'layout-1',
+      rootCellIndex: 7,
+      bbox: { x0: 1.25, y0: 2, x1: 3, y1: 4.5 },
+      maxShapes: 11,
+      maxPoints: 22,
+      maxBytes: 33,
+      lod: 2,
+      continuationToken: 44,
+      layerIndices: [5],
+      shapeKinds: [1, 4],
+      datatypes: [0, 3],
+    }, 1000);
+    const view = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
+    let offset = 0;
+
+    expect(view.getUint32(offset, true)).toBe(1);
+    offset += 4;
+    expect(view.getUint32(offset, true)).toBe(7);
+    offset += 4;
+    expect(view.getUint32(offset, true)).toBe(11);
+    offset += 4;
+    expect(view.getUint32(offset, true)).toBe(22);
+    offset += 4;
+    expect(view.getUint32(offset, true)).toBe(33);
+    offset += 4;
+    expect(view.getUint32(offset, true)).toBe(2);
+    offset += 4;
+    expect(view.getUint32(offset, true)).toBe(44);
+    offset += 4;
+    expect(view.getFloat64(offset, true)).toBe(1250);
+    offset += 8;
+    expect(view.getFloat64(offset, true)).toBe(2000);
+    offset += 8;
+    expect(view.getFloat64(offset, true)).toBe(3000);
+    offset += 8;
+    expect(view.getFloat64(offset, true)).toBe(4500);
+  });
+
+  it('encodes catalog page requests', () => {
+    const payload = encodeLayoutCatalogPageRequestPayload({
+      sessionId: 'layout-1',
+      tableKind: 'cells',
+      offset: 8,
+      limit: 16,
+      maxBytes: 4096,
+    });
+    const view = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
+
+    expect(view.getUint32(0, true)).toBe(0);
+    expect(view.getUint32(4, true)).toBe(2);
+    expect(view.getUint32(8, true)).toBe(8);
+    expect(view.getUint32(12, true)).toBe(16);
+    expect(view.getUint32(16, true)).toBe(4096);
+  });
+
+  it('parses layout status responses', () => {
+    const status = parseLayoutStatusPayload(createStatusPayloadFixture());
+
+    expect(status).toMatchObject({
+      state: 'parsing',
+      phase: 'records',
+      fileSizeBytes: 1000,
+      bytesRead: 500,
+      recordCount: 12,
+      cellCount: 2,
+      warmupScheduled: true,
+      warmupReady: false,
+      error: 'still parsing',
+    });
+  });
+
+  it('parses catalog summary responses', () => {
+    const summary = parseLayoutCatalogSummaryPayload(createCatalogSummaryPayloadFixture());
+
+    expect(summary).toMatchObject({
+      sourceKind: 'gds',
+      topCellIndex: 1,
+      gdsCellCount: 2,
+      layerCount: 1,
+      layerSummary: [{ index: 0, name: 'GDS:5/0' }],
+      bounds: { x0: 0, y0: 0, x1: 10, y1: 6 },
+      parseMicros: 101,
+      openMicros: 404,
+    });
+  });
+
+  it('parses catalog page responses', () => {
+    const page = parseLayoutCatalogPagePayload(createCatalogCellPagePayloadFixture());
+
+    expect(page.tableKind).toBe('cells');
+    expect(page.offset).toBe(1);
+    expect(page.nextOffset).toBeNull();
+    expect(page.gdsCells).toEqual([expect.objectContaining({
+      index: 1,
+      name: 'CHILD',
+      bounds: { x0: 1, y0: 2, x1: 3, y1: 4 },
+    })]);
+  });
+
+  it('parses catalog layer page responses', () => {
+    const page = parseLayoutCatalogPagePayload(createCatalogLayerPagePayloadFixture());
+
+    expect(page.tableKind).toBe('layers');
+    expect(page.offset).toBe(0);
+    expect(page.layers).toEqual([{
+      index: 0,
+      kind: 0,
+      name: 'GDS:7/1',
+      pitch: 0,
+      spacing: 0,
+      width: 0,
+    }]);
   });
 
   it('parses catalog payloads into layout metadata', () => {
@@ -274,6 +396,23 @@ describe('layoutPipeClient', () => {
         { x: 1, y: 0 },
         { x: 1, y: 1 },
       ],
+    });
+  });
+
+  it('parses tile geometry responses with metrics and embedded PLGE', () => {
+    const tile = parseLayoutTileGeometryPayload(createTileGeometryPayloadFixture());
+
+    expect(tile.truncated).toBe(true);
+    expect(tile.nextToken).toBe(99);
+    expect(tile.tileShapeCount).toBe(2);
+    expect(tile.geometry.shapes).toHaveLength(2);
+    expect(tile.metrics).toMatchObject({
+      indexBuildMicros: 1,
+      queryMicros: 2,
+      encodeMicros: 3,
+      cacheHitCount: 8,
+      cacheMissCount: 9,
+      gridBinCount: 14,
     });
   });
 
@@ -689,6 +828,194 @@ function createHelloPayloadFixture(): Uint8Array {
   return Uint8Array.from(output);
 }
 
+function createStatusPayloadFixture(): Uint8Array {
+  const strings: number[] = [];
+  const errorOffset = strings.length;
+  pushString(strings, 'still parsing');
+  const output = new Array<number>(116).fill(0);
+  const stringOffset = output.length;
+  output.push(...strings);
+  writeMagic(output, 'PLST');
+  setU16(output, 4, 3);
+  setU16(output, 6, 116);
+  setU32(output, 8, 1);
+  setU32(output, 12, 2);
+  setU64(output, 16, 1000);
+  setU64(output, 24, 500);
+  setU32(output, 32, 12);
+  setU32(output, 36, 2);
+  setU32(output, 40, 3);
+  setU32(output, 44, 4);
+  setU32(output, 48, 5);
+  setU32(output, 52, 6);
+  setU32(output, 56, 7);
+  setU64(output, 60, 100);
+  setU64(output, 68, 20);
+  setU64(output, 76, 80);
+  setU32(output, 84, 1);
+  setU32(output, 88, 0);
+  setU32(output, 92, stringOffset);
+  setU32(output, 96, strings.length);
+  setU32(output, 100, errorOffset);
+  return Uint8Array.from(output);
+}
+
+function createCatalogSummaryPayloadFixture(): Uint8Array {
+  const strings: number[] = [];
+  const textEncoder = new TextEncoder();
+  const addString = (value: string) => {
+    const offset = strings.length;
+    const encoded = textEncoder.encode(value);
+    pushU32(strings, encoded.byteLength);
+    strings.push(...encoded);
+    return offset;
+  };
+  const output = new Array<number>(152).fill(0);
+  const layerOffset = output.length;
+  pushU32(output, addString('GDS:5/0'));
+  pushU16(output, 0);
+  pushU16(output, 0);
+  pushF64(output, 0);
+  pushF64(output, 0);
+  pushF64(output, 0);
+  alignTo(output, 4);
+  const stringOffset = output.length;
+  output.push(...strings);
+
+  writeMagic(output, 'PLCS');
+  setU16(output, 4, 3);
+  setU16(output, 6, 152);
+  setU32(output, 8, 1000);
+  setU32(output, 12, 2);
+  setU32(output, 16, 12);
+  setU32(output, 20, 1);
+  setU32(output, 24, 1);
+  setF64(output, 28, 0);
+  setF64(output, 36, 0);
+  setF64(output, 44, 10);
+  setF64(output, 52, 6);
+  setU32(output, 60, 1);
+  setU32(output, 64, layerOffset);
+  setU32(output, 68, 1);
+  setU32(output, 88, 2);
+  setU32(output, 92, 3);
+  setU32(output, 96, 4);
+  setU32(output, 100, 5);
+  setU32(output, 104, 6);
+  setU32(output, 108, 7);
+  setU32(output, 112, stringOffset);
+  setU32(output, 116, strings.length);
+  setU64(output, 120, 101);
+  setU64(output, 128, 202);
+  setU64(output, 136, 303);
+  setU64(output, 144, 404);
+  return Uint8Array.from(output);
+}
+
+function createCatalogCellPagePayloadFixture(): Uint8Array {
+  const strings: number[] = [];
+  const textEncoder = new TextEncoder();
+  const addString = (value: string) => {
+    const offset = strings.length;
+    const encoded = textEncoder.encode(value);
+    pushU32(strings, encoded.byteLength);
+    strings.push(...encoded);
+    return offset;
+  };
+  const output = new Array<number>(40).fill(0);
+  pushU32(output, addString('CHILD'));
+  pushU32(output, 0);
+  pushU32(output, 0);
+  pushU32(output, 2);
+  pushU32(output, 3);
+  pushU32(output, 0);
+  pushF64(output, 1);
+  pushF64(output, 2);
+  pushF64(output, 3);
+  pushF64(output, 4);
+  alignTo(output, 4);
+  const stringOffset = output.length;
+  output.push(...strings);
+
+  writeMagic(output, 'PLCP');
+  setU16(output, 4, 3);
+  setU16(output, 6, 40);
+  setU32(output, 8, 2);
+  setU32(output, 12, 1);
+  setU32(output, 16, 1);
+  setU32(output, 20, 2);
+  setU32(output, 24, 0xffffffff);
+  setU32(output, 28, stringOffset);
+  setU32(output, 32, strings.length);
+  return Uint8Array.from(output);
+}
+
+function createCatalogLayerPagePayloadFixture(): Uint8Array {
+  const strings: number[] = [];
+  const textEncoder = new TextEncoder();
+  const addString = (value: string) => {
+    const offset = strings.length;
+    const encoded = textEncoder.encode(value);
+    pushU32(strings, encoded.byteLength);
+    strings.push(...encoded);
+    return offset;
+  };
+  const output = new Array<number>(40).fill(0);
+  pushU32(output, addString('GDS:7/1'));
+  pushU16(output, 0);
+  pushU16(output, 0);
+  pushF64(output, 0);
+  pushF64(output, 0);
+  pushF64(output, 0);
+  alignTo(output, 4);
+  const stringOffset = output.length;
+  output.push(...strings);
+
+  writeMagic(output, 'PLCP');
+  setU16(output, 4, 3);
+  setU16(output, 6, 40);
+  setU32(output, 8, 1);
+  setU32(output, 12, 0);
+  setU32(output, 16, 1);
+  setU32(output, 20, 1);
+  setU32(output, 24, 0xffffffff);
+  setU32(output, 28, stringOffset);
+  setU32(output, 32, strings.length);
+  return Uint8Array.from(output);
+}
+
+function createTileGeometryPayloadFixture(): Uint8Array {
+  const geometry = createGeometryPayloadFixture();
+  const output = new Array<number>(108).fill(0);
+  const geometryOffset = output.length;
+  output.push(...geometry);
+  writeMagic(output, 'PLTG');
+  setU16(output, 4, 3);
+  setU16(output, 6, 108);
+  setU32(output, 8, 1);
+  setU32(output, 12, 99);
+  setU32(output, 16, geometryOffset);
+  setU32(output, 20, geometry.byteLength);
+  setU32(output, 24, 2);
+  setU32(output, 28, output.length);
+  setU64(output, 32, 1);
+  setU64(output, 40, 2);
+  setU64(output, 48, 3);
+  setU32(output, 56, 4);
+  setU32(output, 60, 5);
+  setU32(output, 64, 6);
+  setU32(output, 68, 7);
+  setU32(output, 72, 2);
+  setU32(output, 76, 8);
+  setU32(output, 80, 9);
+  setU64(output, 84, 10);
+  setU32(output, 92, 11);
+  setU32(output, 96, 12);
+  setU32(output, 100, 13);
+  setU32(output, 104, 14);
+  return Uint8Array.from(output);
+}
+
 function createPipeEndpointPath(): string {
   const suffix = `pristine-layout-client-test-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   return process.platform === 'win32'
@@ -776,6 +1103,12 @@ function pushString(output: number[], value: string) {
   output.push(...encoded);
 }
 
+function writeMagic(output: number[], magic: string) {
+  for (let index = 0; index < magic.length; index += 1) {
+    output[index] = magic.charCodeAt(index);
+  }
+}
+
 function setU32(output: number[], offset: number, value: number) {
   output[offset] = value & 0xff;
   output[offset + 1] = (value >> 8) & 0xff;
@@ -786,4 +1119,22 @@ function setU32(output: number[], offset: number, value: number) {
 function setU16(output: number[], offset: number, value: number) {
   output[offset] = value & 0xff;
   output[offset + 1] = (value >> 8) & 0xff;
+}
+
+function setU64(output: number[], offset: number, value: number) {
+  const buffer = new ArrayBuffer(8);
+  new DataView(buffer).setBigUint64(0, BigInt(value), true);
+  const bytes = new Uint8Array(buffer);
+  for (let index = 0; index < bytes.byteLength; index += 1) {
+    output[offset + index] = bytes[index] ?? 0;
+  }
+}
+
+function setF64(output: number[], offset: number, value: number) {
+  const buffer = new ArrayBuffer(8);
+  new DataView(buffer).setFloat64(0, value, true);
+  const bytes = new Uint8Array(buffer);
+  for (let index = 0; index < bytes.byteLength; index += 1) {
+    output[offset + index] = bytes[index] ?? 0;
+  }
 }

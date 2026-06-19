@@ -203,6 +203,7 @@ export function PhysicalMainPanel({
   activeLayoutFilePath,
   highlightedShapeIndex,
   layoutVisibility,
+  onGdsTileGeometryChange,
   onHighlightedShapeChange,
   onLayoutStateChange,
   onSelectedTargetChange,
@@ -211,6 +212,7 @@ export function PhysicalMainPanel({
   activeLayoutFilePath: string | null;
   highlightedShapeIndex?: number | null;
   layoutVisibility: PhysicalLayoutVisibility;
+  onGdsTileGeometryChange?: (geometry: LspLayoutGeometry | null) => void;
   onHighlightedShapeChange?: (shapeIndex: number | null) => void;
   onLayoutStateChange?: (state: PhysicalLayoutStateSnapshot) => void;
   onSelectedTargetChange?: (target: PhysicalLayoutTarget | null) => void;
@@ -226,6 +228,7 @@ export function PhysicalMainPanel({
           highlightedShapeIndex={highlightedShapeIndex ?? null}
           layoutVisibility={layoutVisibility}
           selectedTarget={selectedTarget ?? null}
+          onGdsTileGeometryChange={onGdsTileGeometryChange}
           onHighlightedShapeChange={onHighlightedShapeChange}
           onLayoutStateChange={onLayoutStateChange}
           onSelectedTargetChange={onSelectedTargetChange}

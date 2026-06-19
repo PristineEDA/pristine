@@ -17,6 +17,10 @@ import {
   getCodeWorkspaceResizeHandleClassName,
 } from '../shared/codeViewerLayoutStyles';
 import type { PhysicalLayoutVisibility } from './physicalLayoutLayers';
+import {
+  defaultPhysicalLayoutGdsTileMetrics,
+  type PhysicalLayoutGdsTileMetrics,
+} from './physicalLayoutGdsTiles';
 import { getDefaultLayoutTarget, type PhysicalLayoutTarget } from './physicalLayoutGeometry';
 import { PhysicalLayout3DCanvas } from './PhysicalLayout3DCanvas';
 import { PhysicalLayoutCanvas } from './PhysicalLayoutCanvas';
@@ -37,6 +41,7 @@ interface PhysicalLayoutEditorPanelProps {
   layoutVisibility: PhysicalLayoutVisibility;
   selectedTarget: PhysicalLayoutTarget | null;
   onHighlightedShapeChange?: (shapeIndex: number | null) => void;
+  onGdsTileGeometryChange?: (geometry: LspLayoutGeometry | null) => void;
   onLayoutStateChange?: (state: PhysicalLayoutStateSnapshot) => void;
   onSelectedTargetChange?: (target: PhysicalLayoutTarget | null) => void;
 }
@@ -59,14 +64,6 @@ function createLayoutTargetGeometryOptions(
     };
   }
 
-  if (target.kind === 'gdsCell' && target.index !== null) {
-    return {
-      sessionId,
-      maxShapes: 0,
-      gdsRootCellIndices: [target.index],
-    };
-  }
-
   if (target.kind === 'design') {
     return {
       sessionId,
@@ -81,6 +78,7 @@ export function PhysicalLayoutEditorPanel({
   activeLayoutFilePath,
   highlightedShapeIndex = null,
   layoutVisibility,
+  onGdsTileGeometryChange,
   selectedTarget,
   onHighlightedShapeChange,
   onLayoutStateChange,
@@ -90,14 +88,18 @@ export function PhysicalLayoutEditorPanel({
   const [status, setStatus] = useState<PhysicalLayoutStatus>('idle');
   const [openResult, setOpenResult] = useState<LspLayoutOpenResult | null>(null);
   const [geometry, setGeometry] = useState<LspLayoutGeometry | null>(null);
+  const [gdsTileGeometry, setGdsTileGeometry] = useState<LspLayoutGeometry | null>(null);
+  const [gdsTileMetrics, setGdsTileMetrics] = useState<PhysicalLayoutGdsTileMetrics>(defaultPhysicalLayoutGdsTileMetrics);
   const [error, setError] = useState<string | null>(null);
   const [is3DViewVisible, setIs3DViewVisible] = useState(false);
   const sessionIdRef = useRef<string | null>(null);
   const onLayoutStateChangeRef = useRef(onLayoutStateChange);
+  const onGdsTileGeometryChangeRef = useRef(onGdsTileGeometryChange);
   const onSelectedTargetChangeRef = useRef(onSelectedTargetChange);
   const selectedTargetRef = useRef(selectedTarget);
 
   onLayoutStateChangeRef.current = onLayoutStateChange;
+  onGdsTileGeometryChangeRef.current = onGdsTileGeometryChange;
   onSelectedTargetChangeRef.current = onSelectedTargetChange;
   selectedTargetRef.current = selectedTarget;
 
@@ -117,6 +119,9 @@ export function PhysicalLayoutEditorPanel({
         setError(null);
         setOpenResult(null);
         setGeometry(null);
+        setGdsTileGeometry(null);
+        onGdsTileGeometryChangeRef.current?.(null);
+        setGdsTileMetrics(defaultPhysicalLayoutGdsTileMetrics);
         return;
       }
 
@@ -124,6 +129,9 @@ export function PhysicalLayoutEditorPanel({
       setError(null);
       setOpenResult(null);
       setGeometry(null);
+      setGdsTileGeometry(null);
+      onGdsTileGeometryChangeRef.current?.(null);
+      setGdsTileMetrics(defaultPhysicalLayoutGdsTileMetrics);
       try {
         const result = await lsp.layoutOpen({
           workspaceFilePath: activeLayoutFilePath,
@@ -143,6 +151,9 @@ export function PhysicalLayoutEditorPanel({
         sessionIdRef.current = result.sessionId;
         setOpenResult(result);
         setGeometry(null);
+        setGdsTileGeometry(null);
+        onGdsTileGeometryChangeRef.current?.(null);
+        setGdsTileMetrics(defaultPhysicalLayoutGdsTileMetrics);
         const defaultTarget = getDefaultLayoutTarget(result.catalog);
         if (defaultTarget && !selectedTargetRef.current) {
           onSelectedTargetChangeRef.current?.(defaultTarget);
@@ -217,6 +228,12 @@ export function PhysicalLayoutEditorPanel({
   }, [openResult?.sessionId, selectedTarget]);
 
   useEffect(() => {
+    setGdsTileGeometry(null);
+    onGdsTileGeometryChangeRef.current?.(null);
+    setGdsTileMetrics(defaultPhysicalLayoutGdsTileMetrics);
+  }, [activeLayoutFilePath, selectedTarget?.kind, selectedTarget?.index]);
+
+  useEffect(() => {
     onLayoutStateChangeRef.current?.({
       catalog: openResult?.catalog ?? null,
       error,
@@ -227,26 +244,34 @@ export function PhysicalLayoutEditorPanel({
   }, [error, geometry, openResult, status]);
 
   const catalog = openResult?.catalog ?? null;
-  const shapeCount = geometry?.shapes.length ?? 0;
+  const isGdsTarget = catalog?.sourceKind === 'gds' && selectedTarget?.kind === 'gdsCell';
+  const activeCanvasGeometry = isGdsTarget ? gdsTileGeometry : geometry;
+  const shapeCount = activeCanvasGeometry?.shapes.length ?? 0;
   const macroCount = catalog?.macros.length ?? 0;
   const cellCount = catalog?.gdsCells.length ?? 0;
   const layerCount = catalog?.layers.length ?? 0;
   const selectedTargetName = selectedTarget?.name ?? '';
-  const is3DRenderable = catalog?.sourceKind === 'gds' && selectedTarget?.kind === 'gdsCell' && geometry !== null;
+  const is3DRenderable = isGdsTarget && gdsTileGeometry !== null;
   const canvas2D = (
     <PhysicalLayoutCanvas
       catalog={catalog}
       geometry={geometry}
       highlightedShapeIndex={highlightedShapeIndex}
+      layoutSessionId={openResult?.sessionId ?? null}
       layoutVisibility={layoutVisibility}
       selectedTarget={selectedTarget}
+      onGdsTileGeometryChange={(nextGeometry) => {
+        setGdsTileGeometry(nextGeometry);
+        onGdsTileGeometryChangeRef.current?.(nextGeometry);
+      }}
+      onGdsTileMetricsChange={setGdsTileMetrics}
       onHighlightedShapeChange={onHighlightedShapeChange}
     />
   );
   const canvas3D = is3DRenderable ? (
     <PhysicalLayout3DCanvas
       catalog={catalog}
-      geometry={geometry}
+      geometry={gdsTileGeometry}
       highlightedShapeIndex={highlightedShapeIndex}
       layoutVisibility={layoutVisibility}
       selectedTarget={selectedTarget}
@@ -286,21 +311,24 @@ export function PhysicalLayoutEditorPanel({
           <span className="shrink-0">{layerCount} layers</span>
           <span className="shrink-0">{shapeCount} shapes</span>
         </div>
-        <TooltipIconButton content={is3DViewVisible ? 'Hide 3D layout view' : 'Show 3D layout view'} side="bottom">
-          <Button
-            aria-label="Toggle 3D layout view"
-            aria-pressed={is3DViewVisible}
-            className="h-6 w-6 rounded-md text-ide-text-muted hover:text-ide-text data-[active=true]:bg-ide-accent/20 data-[active=true]:text-ide-accent"
-            data-active={is3DViewVisible}
-            data-testid="physical-layout-3d-toggle"
-            size="icon-xs"
-            type="button"
-            variant="ghost"
-            onClick={() => setIs3DViewVisible((current) => !current)}
-          >
-            <Box size={13} />
-          </Button>
-        </TooltipIconButton>
+        <div className="flex shrink-0 items-center gap-2">
+          {isGdsTarget && <PhysicalGdsMetricInfo metrics={gdsTileMetrics} />}
+          <TooltipIconButton content={is3DViewVisible ? 'Hide 3D layout view' : 'Show 3D layout view'} side="bottom">
+            <Button
+              aria-label="Toggle 3D layout view"
+              aria-pressed={is3DViewVisible}
+              className="h-6 w-6 rounded-md text-ide-text-muted hover:text-ide-text data-[active=true]:bg-ide-accent/20 data-[active=true]:text-ide-accent"
+              data-active={is3DViewVisible}
+              data-testid="physical-layout-3d-toggle"
+              size="icon-xs"
+              type="button"
+              variant="ghost"
+              onClick={() => setIs3DViewVisible((current) => !current)}
+            >
+              <Box size={13} />
+            </Button>
+          </TooltipIconButton>
+        </div>
       </div>
 
       <div className="relative min-h-0 flex-1">
@@ -351,4 +379,60 @@ export function PhysicalLayoutEditorPanel({
       </div>
     </div>
   );
+}
+
+interface PhysicalGdsMetricInfoProps {
+  metrics: PhysicalLayoutGdsTileMetrics;
+}
+
+function PhysicalGdsMetricInfo({ metrics }: PhysicalGdsMetricInfoProps) {
+  return (
+    <div
+      className="flex h-6 items-center gap-2 rounded-md border border-ide-border/70 bg-ide-bg/40 px-2 text-[10px] leading-none text-ide-text-muted"
+      data-gds-average-fps={formatMetricValue(metrics.averageFps, 1)}
+      data-gds-frame-p95-ms={formatMetricValue(metrics.frameP95Ms, 1)}
+      data-gds-mesh-buffer-bytes={metrics.bufferByteLength + metrics.indexByteLength}
+      data-gds-render-mode="tile-mesh"
+      data-gds-render-ms={formatMetricValue(metrics.lastRenderMs, 2)}
+      data-gds-tile-query-ms={formatMetricValue(metrics.lastTileQueryMs, 2)}
+      data-gds-tile-roundtrip-ms={formatMetricValue(metrics.lastTileRoundtripMs, 2)}
+      data-gds-truncated={metrics.truncated ? 'true' : 'false'}
+      data-testid="physical-gds-toolbar-metrics"
+    >
+      <div className="flex items-center gap-1" data-testid="physical-gds-toolbar-metrics-render">
+        <span>Render</span>
+        <span className="font-mono text-ide-accent" data-testid="physical-gds-toolbar-metrics-render-value">
+          {formatMetricValue(metrics.lastRenderMs, 1)}
+        </span>
+        <span>ms</span>
+      </div>
+      <div className="flex items-center gap-1" data-testid="physical-gds-toolbar-metrics-fps">
+        <span>FPS</span>
+        <span className="font-mono text-ide-accent" data-testid="physical-gds-toolbar-metrics-fps-value">
+          {formatMetricValue(metrics.averageFps, 1)}
+        </span>
+      </div>
+      <div className="flex items-center gap-1" data-testid="physical-gds-toolbar-metrics-tile">
+        <span>Tile</span>
+        <span className="font-mono text-ide-accent" data-testid="physical-gds-toolbar-metrics-tile-value">
+          {formatMetricValue(metrics.lastTileRoundtripMs, 1)}
+        </span>
+        <span>ms</span>
+      </div>
+      <div className="flex items-center gap-1" data-testid="physical-gds-toolbar-metrics-mesh">
+        <span>Mesh</span>
+        <span className="font-mono text-ide-accent" data-testid="physical-gds-toolbar-metrics-mesh-value">
+          {metrics.meshVertexCount}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function formatMetricValue(value: number, digits: number): string {
+  if (!Number.isFinite(value)) {
+    return '0';
+  }
+
+  return value.toFixed(digits);
 }

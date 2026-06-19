@@ -92,7 +92,7 @@ export function createPhysicalLayout3DSceneInput(
   }
 
   const selectedShapes = selectLayoutTargetShapes(catalog, geometry, selectedTarget);
-  const visibleShapes = filterVisiblePhysicalLayoutShapes(selectedShapes, layoutVisibility);
+  const visibleShapes = filterVisiblePhysicalLayoutShapes(selectedShapes, layoutVisibility, catalog.sourceKind);
   const meshes = visibleShapes.flatMap((shape) => createMeshInput(shape, layoutVisibility));
   const fallbackBounds = geometry ? getShapesBounds(geometry.shapes, null) : null;
   const bounds = getShapesBounds(selectedShapes, getLayoutTargetBounds(catalog, selectedTarget, fallbackBounds));
@@ -153,7 +153,7 @@ export function getPhysicalLayout3DCenter(bounds: PhysicalLayout3DBounds): Physi
 }
 
 function createMeshInput(shape: LspLayoutShape, layoutVisibility: PhysicalLayoutVisibility): PhysicalLayout3DMeshInput[] {
-  const category = getPhysicalLayoutShapeCategory(shape);
+  const category = getPhysicalLayoutShapeCategory(shape, 'gds');
   if (category !== 'boundary' && category !== 'path' && category !== 'text') {
     return [];
   }

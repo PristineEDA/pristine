@@ -3,6 +3,10 @@ import net from 'node:net';
 import type {
   LspLayoutBounds,
   LspLayoutCatalog,
+  LspLayoutCatalogPage,
+  LspLayoutCatalogPageOptions,
+  LspLayoutCatalogPageTableKind,
+  LspLayoutCatalogSummary,
   LspLayoutComponent,
   LspLayoutDefPin,
   LspLayoutDiagnostic,
@@ -19,6 +23,11 @@ import type {
   LspLayoutPin,
   LspLayoutShape,
   LspLayoutShapeKind,
+  LspLayoutStatus,
+  LspLayoutStatusPhase,
+  LspLayoutStatusState,
+  LspLayoutTileGeometry,
+  LspLayoutTileGeometryOptions,
   LspLayoutVia,
 } from '../../types/systemverilog-lsp.js';
 
@@ -26,12 +35,17 @@ const layoutProtocolName = 'pristine-layout-columnar-v3';
 const layoutProtocolVersion = 3;
 const layoutEnvelopeHeaderByteLength = 24;
 const layoutCatalogHeaderByteLength = 136;
+const layoutCatalogSummaryHeaderByteLength = 152;
+const layoutCatalogPageHeaderByteLength = 40;
+const layoutTileGeometryHeaderByteLength = 108;
+const layoutStatusHeaderByteLength = 116;
 const layoutPinTableEntryByteLength = 28;
 const layoutDefPinTableEntryByteLength = 40;
 const layoutGdsCellTableEntryByteLength = 56;
 const layoutGdsReferenceTableEntryByteLength = 88;
 const layoutGdsElementTableEntryByteLength = 36;
 const layoutGdsPointTableEntryByteLength = 16;
+const layoutLayerTableEntryByteLength = 32;
 const layoutShapeTableEntryByteLength = 28;
 const layoutNoMacroIndex = 0xffffffff;
 const layoutNoIndex = 0xffffffff;
@@ -47,6 +61,14 @@ const layoutMessageType = {
   geometryResponse: 6,
   errorResponse: 7,
   close: 8,
+  tileGeometryRequest: 9,
+  tileGeometryResponse: 10,
+  catalogSummaryRequest: 19,
+  catalogSummaryResponse: 20,
+  catalogPageRequest: 21,
+  catalogPageResponse: 22,
+  statusRequest: 23,
+  statusResponse: 24,
 } as const;
 
 interface LayoutEndpoint {
@@ -164,12 +186,7 @@ export async function openLayoutPipeSession(metadata: LayoutOpenSessionMetadata)
       throw new Error(`Unexpected layout hello response type: ${helloResponse.messageType}`);
     }
 
-    const catalogResponse = await sendLayoutPipeRequest(session, layoutMessageType.catalogRequest);
-    if (catalogResponse.messageType !== layoutMessageType.catalogResponse) {
-      throw new Error(`Unexpected layout catalog response type: ${catalogResponse.messageType}`);
-    }
-
-    const catalog = parseLayoutCatalogPayload(catalogResponse.payload);
+    const catalog = await loadInitialLayoutCatalog(session, metadata);
 
     return {
       sessionId: metadata.sessionId,
@@ -196,6 +213,100 @@ export async function openLayoutPipeSession(metadata: LayoutOpenSessionMetadata)
   }
 }
 
+async function loadInitialLayoutCatalog(
+  session: LayoutPipeSession,
+  metadata: LayoutOpenSessionMetadata,
+): Promise<LspLayoutCatalog> {
+  const shouldUsePagedGdsCatalog = metadata.protocol === layoutProtocolName && isGdsLayoutTitle(metadata.title);
+
+  if (shouldUsePagedGdsCatalog) {
+    try {
+      const status = await requestLayoutPipeStatus(metadata.sessionId);
+      if (status.state === 'failed') {
+        throw new Error(status.error || 'GDS layout parsing failed.');
+      }
+
+      const summary = await requestLayoutPipeCatalogSummary(metadata.sessionId);
+      const catalog = createCatalogFromSummary(summary);
+      if (summary.gdsCellCount > 0) {
+        const page = await requestLayoutPipeCatalogPage({
+          sessionId: metadata.sessionId,
+          tableKind: 'cells',
+          offset: 0,
+          limit: Math.min(summary.gdsCellCount, 4096),
+          maxBytes: 8 * 1024 * 1024,
+        });
+        catalog.gdsCells = page.gdsCells;
+      }
+      if (summary.layerCount > 0) {
+        const page = await requestLayoutPipeCatalogPage({
+          sessionId: metadata.sessionId,
+          tableKind: 'layers',
+          offset: 0,
+          limit: Math.min(summary.layerCount, 4096),
+          maxBytes: 4 * 1024 * 1024,
+        });
+        catalog.layers = page.layers;
+      }
+      return catalog;
+    } catch (error) {
+      if (error instanceof Error && /pending|parsing/i.test(error.message)) {
+        const summary = await waitForReadyLayoutCatalogSummary(metadata.sessionId);
+        const catalog = createCatalogFromSummary(summary);
+        if (summary.gdsCellCount > 0) {
+          const page = await requestLayoutPipeCatalogPage({
+            sessionId: metadata.sessionId,
+            tableKind: 'cells',
+            offset: 0,
+            limit: Math.min(summary.gdsCellCount, 4096),
+            maxBytes: 8 * 1024 * 1024,
+          });
+          catalog.gdsCells = page.gdsCells;
+        }
+        if (summary.layerCount > 0) {
+          const page = await requestLayoutPipeCatalogPage({
+            sessionId: metadata.sessionId,
+            tableKind: 'layers',
+            offset: 0,
+            limit: Math.min(summary.layerCount, 4096),
+            maxBytes: 4 * 1024 * 1024,
+          });
+          catalog.layers = page.layers;
+        }
+        return catalog;
+      }
+    }
+  }
+
+  const catalogResponse = await sendLayoutPipeRequest(session, layoutMessageType.catalogRequest);
+  if (catalogResponse.messageType !== layoutMessageType.catalogResponse) {
+    throw new Error(`Unexpected layout catalog response type: ${catalogResponse.messageType}`);
+  }
+
+  return parseLayoutCatalogPayload(catalogResponse.payload);
+}
+
+function isGdsLayoutTitle(title: string): boolean {
+  const normalizedTitle = title.toLowerCase();
+  return normalizedTitle.endsWith('.gds') || normalizedTitle.endsWith('.gdsii');
+}
+
+async function waitForReadyLayoutCatalogSummary(sessionId: string): Promise<LspLayoutCatalogSummary> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < 120_000) {
+    const status = await requestLayoutPipeStatus(sessionId);
+    if (status.state === 'failed') {
+      throw new Error(status.error || 'GDS layout parsing failed.');
+    }
+    if (status.state === 'ready') {
+      return requestLayoutPipeCatalogSummary(sessionId);
+    }
+    await delay(150);
+  }
+
+  throw new Error('Timed out waiting for GDS layout parsing to finish.');
+}
+
 export async function requestLayoutPipeGeometry(options: LspLayoutGeometryOptions): Promise<LspLayoutGeometry> {
   const session = layoutPipeSessions.get(options.sessionId);
   if (!session) {
@@ -213,6 +324,73 @@ export async function requestLayoutPipeGeometry(options: LspLayoutGeometryOption
   }
 
   return parseLayoutGeometryPayload(response.payload);
+}
+
+export async function requestLayoutPipeStatus(sessionId: string): Promise<LspLayoutStatus> {
+  const session = getLayoutPipeSession(sessionId);
+  const response = await runExclusiveLayoutPipeRequest(session, () => sendLayoutPipeRequest(
+    session,
+    layoutMessageType.statusRequest,
+    encodeLayoutStatusRequestPayload(),
+  ));
+
+  if (response.messageType !== layoutMessageType.statusResponse) {
+    throw new Error(`Unexpected layout status response type: ${response.messageType}`);
+  }
+
+  return parseLayoutStatusPayload(response.payload);
+}
+
+export async function requestLayoutPipeCatalogSummary(sessionId: string): Promise<LspLayoutCatalogSummary> {
+  const session = getLayoutPipeSession(sessionId);
+  const response = await runExclusiveLayoutPipeRequest(session, () => sendLayoutPipeRequest(
+    session,
+    layoutMessageType.catalogSummaryRequest,
+  ));
+
+  if (response.messageType !== layoutMessageType.catalogSummaryResponse) {
+    throw new Error(`Unexpected layout catalog summary response type: ${response.messageType}`);
+  }
+
+  return parseLayoutCatalogSummaryPayload(response.payload);
+}
+
+export async function requestLayoutPipeCatalogPage(options: LspLayoutCatalogPageOptions): Promise<LspLayoutCatalogPage> {
+  const session = getLayoutPipeSession(options.sessionId);
+  const response = await runExclusiveLayoutPipeRequest(session, () => sendLayoutPipeRequest(
+    session,
+    layoutMessageType.catalogPageRequest,
+    encodeLayoutCatalogPageRequestPayload(options),
+  ));
+
+  if (response.messageType !== layoutMessageType.catalogPageResponse) {
+    throw new Error(`Unexpected layout catalog page response type: ${response.messageType}`);
+  }
+
+  return parseLayoutCatalogPagePayload(response.payload);
+}
+
+export async function requestLayoutPipeTileGeometry(options: LspLayoutTileGeometryOptions): Promise<LspLayoutTileGeometry> {
+  const session = getLayoutPipeSession(options.sessionId);
+  const response = await runExclusiveLayoutPipeRequest(session, () => sendLayoutPipeRequest(
+    session,
+    layoutMessageType.tileGeometryRequest,
+    encodeLayoutTileGeometryRequestPayload(options, session.metadata.unitsPerMicron),
+  ));
+
+  if (response.messageType !== layoutMessageType.tileGeometryResponse) {
+    throw new Error(`Unexpected layout tile geometry response type: ${response.messageType}`);
+  }
+
+  return parseLayoutTileGeometryPayload(response.payload);
+}
+
+function getLayoutPipeSession(sessionId: string): LayoutPipeSession {
+  const session = layoutPipeSessions.get(sessionId);
+  if (!session) {
+    throw new Error(`Layout session is not open: ${sessionId}`);
+  }
+  return session;
 }
 
 export async function closeLayoutPipeSession(sessionId: string): Promise<void> {
@@ -364,6 +542,73 @@ export function encodeLayoutGeometryRequestPayload(options: LspLayoutGeometryOpt
     }
   }
 
+  return new Uint8Array(buffer);
+}
+
+export function encodeLayoutStatusRequestPayload(): Uint8Array {
+  const buffer = new ArrayBuffer(4);
+  new DataView(buffer).setUint32(0, 0, true);
+  return new Uint8Array(buffer);
+}
+
+export function encodeLayoutCatalogPageRequestPayload(options: LspLayoutCatalogPageOptions): Uint8Array {
+  const buffer = new ArrayBuffer(20);
+  const view = new DataView(buffer);
+  view.setUint32(0, 0, true);
+  view.setUint32(4, catalogPageTableKindToCode(options.tableKind), true);
+  view.setUint32(8, normalizeNonNegativeUint32(options.offset ?? 0, 'catalog page offset'), true);
+  view.setUint32(12, normalizeNonNegativeUint32(options.limit ?? 4096, 'catalog page limit'), true);
+  view.setUint32(16, normalizeNonNegativeUint32(options.maxBytes ?? 8 * 1024 * 1024, 'catalog page maxBytes'), true);
+  return new Uint8Array(buffer);
+}
+
+export function encodeLayoutTileGeometryRequestPayload(
+  options: LspLayoutTileGeometryOptions,
+  unitsPerMicron: number,
+): Uint8Array {
+  const layerIndices = options.layerIndices ?? [];
+  const shapeKinds = options.shapeKinds ?? [];
+  const datatypes = options.datatypes ?? [];
+  const hasBbox = Boolean(options.bbox);
+  const bboxByteLength = hasBbox ? 32 : 0;
+  const byteLength = 4 + 4 + 4 + 4 + 4 + 4 + 4 + bboxByteLength
+    + 4 + layerIndices.length * 4
+    + 4 + shapeKinds.length * 4
+    + 4 + datatypes.length * 4;
+  const buffer = new ArrayBuffer(byteLength);
+  const view = new DataView(buffer);
+  let offset = 0;
+
+  view.setUint32(offset, hasBbox ? 1 : 0, true);
+  offset += 4;
+  view.setUint32(offset, normalizeNonNegativeUint32(options.rootCellIndex, 'tile rootCellIndex'), true);
+  offset += 4;
+  view.setUint32(offset, normalizeNonNegativeUint32(options.maxShapes ?? 100_000, 'tile maxShapes'), true);
+  offset += 4;
+  view.setUint32(offset, normalizeNonNegativeUint32(options.maxPoints ?? 500_000, 'tile maxPoints'), true);
+  offset += 4;
+  view.setUint32(offset, normalizeNonNegativeUint32(options.maxBytes ?? 8 * 1024 * 1024, 'tile maxBytes'), true);
+  offset += 4;
+  view.setUint32(offset, normalizeNonNegativeUint32(options.lod ?? 0, 'tile lod'), true);
+  offset += 4;
+  view.setUint32(offset, normalizeNonNegativeUint32(options.continuationToken ?? 0, 'tile continuationToken'), true);
+  offset += 4;
+
+  if (options.bbox) {
+    const scale = unitsPerMicron > 0 ? unitsPerMicron : 1;
+    view.setFloat64(offset, options.bbox.x0 * scale, true);
+    offset += 8;
+    view.setFloat64(offset, options.bbox.y0 * scale, true);
+    offset += 8;
+    view.setFloat64(offset, options.bbox.x1 * scale, true);
+    offset += 8;
+    view.setFloat64(offset, options.bbox.y1 * scale, true);
+    offset += 8;
+  }
+
+  offset = writeU32List(view, offset, layerIndices, 'tile layer index');
+  offset = writeU32List(view, offset, shapeKinds, 'tile shape kind');
+  offset = writeU32List(view, offset, datatypes, 'tile datatype');
   return new Uint8Array(buffer);
 }
 
@@ -620,6 +865,176 @@ export function parseLayoutCatalogPayload(payload: Uint8Array): LspLayoutCatalog
     gdsElements,
     gdsPoints,
     diagnostics,
+  };
+}
+
+export function parseLayoutStatusPayload(payload: Uint8Array): LspLayoutStatus {
+  const view = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
+  requireMagic(payload, 0, 'PLST', 'status');
+  const version = readU16(view, 4);
+  if (version !== layoutProtocolVersion) {
+    throw new Error(`Unsupported layout status version: ${version}`);
+  }
+
+  const headerSize = readU16(view, 6);
+  requirePayloadRange(payload.byteLength, 0, headerSize, 'status header');
+  if (headerSize < layoutStatusHeaderByteLength) {
+    throw new Error(`Unsupported layout status header size: ${headerSize}`);
+  }
+
+  const stringOffset = readU32(view, 92);
+  const stringSize = readU32(view, 96);
+  const strings = readTable(payload, stringOffset, stringSize, 'status string table');
+  return {
+    state: normalizeStatusState(readU32(view, 8)),
+    phase: normalizeStatusPhase(readU32(view, 12)),
+    fileSizeBytes: readU64Number(view, 16),
+    bytesRead: readU64Number(view, 24),
+    recordCount: readU32(view, 32),
+    cellCount: readU32(view, 36),
+    referenceCount: readU32(view, 40),
+    elementCount: readU32(view, 44),
+    pointCount: readU32(view, 48),
+    stringCount: readU32(view, 52),
+    diagnosticCount: readU32(view, 56),
+    elapsedMicros: readU64Number(view, 60),
+    openMicros: readU64Number(view, 68),
+    parseMicros: readU64Number(view, 76),
+    warmupScheduled: readU32(view, 84) !== 0,
+    warmupReady: readU32(view, 88) !== 0,
+    error: readLayoutString(strings, readU32(view, 100)),
+  };
+}
+
+export function parseLayoutCatalogSummaryPayload(payload: Uint8Array): LspLayoutCatalogSummary {
+  const view = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
+  requireMagic(payload, 0, 'PLCS', 'catalog summary');
+  const version = readU16(view, 4);
+  if (version !== layoutProtocolVersion) {
+    throw new Error(`Unsupported layout catalog summary version: ${version}`);
+  }
+
+  const headerSize = readU16(view, 6);
+  requirePayloadRange(payload.byteLength, 0, headerSize, 'catalog summary header');
+  if (headerSize < layoutCatalogSummaryHeaderByteLength) {
+    throw new Error(`Unsupported layout catalog summary header size: ${headerSize}`);
+  }
+
+  const hasBounds = readU32(view, 20) !== 0;
+  const layerCount = readU32(view, 60);
+  const layerOffset = readU32(view, 64);
+  const layerSummaryCount = readU32(view, 68);
+  const stringOffset = readU32(view, 112);
+  const stringSize = readU32(view, 116);
+  const strings = readTable(payload, stringOffset, stringSize, 'catalog summary string table');
+  return {
+    unitsPerMicron: readU32(view, 8),
+    sourceKind: normalizeCatalogSourceKind(readU32(view, 12)),
+    shapeCount: readU32(view, 16),
+    hasBounds,
+    topCellIndex: readU32(view, 24) === layoutNoIndex ? null : readU32(view, 24),
+    bounds: hasBounds
+      ? { x0: readF64(view, 28), y0: readF64(view, 36), x1: readF64(view, 44), y1: readF64(view, 52) }
+      : null,
+    layerCount,
+    layerSummary: parseLayerRows(payload, view, strings, layerOffset, layerSummaryCount),
+    macroCount: readU32(view, 72),
+    componentCount: readU32(view, 76),
+    defPinCount: readU32(view, 80),
+    netCount: readU32(view, 84),
+    gdsCellCount: readU32(view, 88),
+    gdsReferenceCount: readU32(view, 92),
+    gdsElementCount: readU32(view, 96),
+    gdsPointCount: readU32(view, 100),
+    stringCount: readU32(view, 104),
+    diagnosticCount: readU32(view, 108),
+    parseMicros: readU64Number(view, 120),
+    layerRegisterMicros: readU64Number(view, 128),
+    boundsMicros: readU64Number(view, 136),
+    openMicros: readU64Number(view, 144),
+  };
+}
+
+export function parseLayoutCatalogPagePayload(payload: Uint8Array): LspLayoutCatalogPage {
+  const view = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
+  requireMagic(payload, 0, 'PLCP', 'catalog page');
+  const version = readU16(view, 4);
+  if (version !== layoutProtocolVersion) {
+    throw new Error(`Unsupported layout catalog page version: ${version}`);
+  }
+
+  const headerSize = readU16(view, 6);
+  requirePayloadRange(payload.byteLength, 0, headerSize, 'catalog page header');
+  if (headerSize < layoutCatalogPageHeaderByteLength) {
+    throw new Error(`Unsupported layout catalog page header size: ${headerSize}`);
+  }
+
+  const tableKind = catalogPageCodeToTableKind(readU32(view, 8));
+  const offset = readU32(view, 12);
+  const count = readU32(view, 16);
+  const totalCount = readU32(view, 20);
+  const rawNextOffset = readU32(view, 24);
+  const stringOffset = readU32(view, 28);
+  const stringSize = readU32(view, 32);
+  const strings = readTable(payload, stringOffset, stringSize, 'catalog page string table');
+  const rowOffset = headerSize;
+
+  return {
+    tableKind,
+    offset,
+    count,
+    totalCount,
+    nextOffset: rawNextOffset === layoutNoIndex ? null : rawNextOffset,
+    layers: tableKind === 'layers' ? parseLayerRows(payload, view, strings, rowOffset, count, offset) : [],
+    gdsCells: tableKind === 'cells' ? parseGdsCellRows(payload, view, strings, rowOffset, offset, count) : [],
+    gdsReferences: tableKind === 'references' ? parseGdsReferenceRows(payload, view, strings, rowOffset, offset, count) : [],
+    gdsElements: tableKind === 'elements' ? parseGdsElementRows(payload, view, strings, rowOffset, offset, count) : [],
+    gdsPoints: tableKind === 'points' ? parseGdsPointRows(payload, view, rowOffset, offset, count) : [],
+    strings: tableKind === 'strings' ? parseStringRows(payload, rowOffset, stringOffset, count) : [],
+    diagnostics: tableKind === 'diagnostics' ? parseDiagnosticRows(payload, view, strings, rowOffset, count) : [],
+  };
+}
+
+export function parseLayoutTileGeometryPayload(payload: Uint8Array): LspLayoutTileGeometry {
+  const view = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
+  requireMagic(payload, 0, 'PLTG', 'tile geometry');
+  const version = readU16(view, 4);
+  if (version !== layoutProtocolVersion) {
+    throw new Error(`Unsupported layout tile geometry version: ${version}`);
+  }
+
+  const headerSize = readU16(view, 6);
+  requirePayloadRange(payload.byteLength, 0, headerSize, 'tile geometry header');
+  if (headerSize < layoutTileGeometryHeaderByteLength) {
+    throw new Error(`Unsupported layout tile geometry header size: ${headerSize}`);
+  }
+
+  const geometryOffset = readU32(view, 16);
+  const geometrySize = readU32(view, 20);
+  const geometryPayload = readTable(payload, geometryOffset, geometrySize, 'tile geometry payload');
+  return {
+    geometry: parseLayoutGeometryPayload(geometryPayload),
+    truncated: (readU32(view, 8) & 1) !== 0,
+    nextToken: readU32(view, 12) === 0 ? null : readU32(view, 12),
+    payloadSize: readU32(view, 28),
+    tileShapeCount: readU32(view, 24),
+    metrics: {
+      indexBuildMicros: readU64Number(view, 32),
+      queryMicros: readU64Number(view, 40),
+      encodeMicros: readU64Number(view, 48),
+      visitedCellCount: readU32(view, 56),
+      elementCandidateCount: readU32(view, 60),
+      referenceCandidateCount: readU32(view, 64),
+      traversedReferenceCount: readU32(view, 68),
+      lodShapeCount: readU32(view, 72),
+      cacheHitCount: readU32(view, 76),
+      cacheMissCount: readU32(view, 80),
+      gridBuildMicros: readU64Number(view, 84),
+      gridHitCount: readU32(view, 92),
+      gridMissCount: readU32(view, 96),
+      gridCandidateCount: readU32(view, 100),
+      gridBinCount: readU32(view, 104),
+    },
   };
 }
 
@@ -891,6 +1306,205 @@ function readLayoutString(strings: Uint8Array, offset: number): string {
   return readLengthPrefixedString(strings, offset);
 }
 
+function createCatalogFromSummary(summary: LspLayoutCatalogSummary): LspLayoutCatalog {
+  return {
+    unitsPerMicron: summary.unitsPerMicron,
+    sourceKind: summary.sourceKind,
+    shapeCount: summary.shapeCount,
+    hasBounds: summary.hasBounds,
+    topCellIndex: summary.topCellIndex,
+    layers: summary.layerSummary,
+    macros: [],
+    pins: [],
+    defPins: [],
+    vias: [],
+    components: [],
+    nets: [],
+    gdsCells: [],
+    gdsReferences: [],
+    gdsElements: [],
+    gdsPoints: [],
+    diagnostics: [],
+  };
+}
+
+function parseLayerRows(
+  payload: Uint8Array,
+  view: DataView,
+  strings: Uint8Array,
+  rowOffset: number,
+  count: number,
+  baseIndex = 0,
+): LspLayoutLayer[] {
+  requirePayloadRange(payload.byteLength, rowOffset, count * layoutLayerTableEntryByteLength, 'layer rows');
+  const layers: LspLayoutLayer[] = [];
+  for (let row = 0; row < count; row += 1) {
+    const offset = rowOffset + row * layoutLayerTableEntryByteLength;
+    layers.push({
+      index: baseIndex + row,
+      name: readLayoutString(strings, readU32(view, offset)),
+      kind: readU16(view, offset + 4),
+      pitch: readF64(view, offset + 8),
+      width: readF64(view, offset + 16),
+      spacing: readF64(view, offset + 24),
+    });
+  }
+  return layers;
+}
+
+function parseGdsCellRows(
+  payload: Uint8Array,
+  view: DataView,
+  strings: Uint8Array,
+  rowOffset: number,
+  baseIndex: number,
+  count: number,
+): LspLayoutGdsCell[] {
+  requirePayloadRange(payload.byteLength, rowOffset, count * layoutGdsCellTableEntryByteLength, 'GDS cell rows');
+  const cells: LspLayoutGdsCell[] = [];
+  for (let row = 0; row < count; row += 1) {
+    const offset = rowOffset + row * layoutGdsCellTableEntryByteLength;
+    const bounds = {
+      x0: readF64(view, offset + 24),
+      y0: readF64(view, offset + 32),
+      x1: readF64(view, offset + 40),
+      y1: readF64(view, offset + 48),
+    };
+    cells.push({
+      index: baseIndex + row,
+      name: readLayoutString(strings, readU32(view, offset)),
+      firstReferenceIndex: readU32(view, offset + 4),
+      referenceCount: readU32(view, offset + 8),
+      firstElementIndex: readU32(view, offset + 12),
+      elementCount: readU32(view, offset + 16),
+      top: readU32(view, offset + 20) !== 0,
+      bounds: bounds.x0 === 0 && bounds.y0 === 0 && bounds.x1 === 0 && bounds.y1 === 0 ? null : bounds,
+    });
+  }
+  return cells;
+}
+
+function parseGdsReferenceRows(
+  payload: Uint8Array,
+  view: DataView,
+  strings: Uint8Array,
+  rowOffset: number,
+  baseIndex: number,
+  count: number,
+): LspLayoutGdsReference[] {
+  requirePayloadRange(payload.byteLength, rowOffset, count * layoutGdsReferenceTableEntryByteLength, 'GDS reference rows');
+  const references: LspLayoutGdsReference[] = [];
+  for (let row = 0; row < count; row += 1) {
+    const offset = rowOffset + row * layoutGdsReferenceTableEntryByteLength;
+    references.push({
+      index: baseIndex + row,
+      parentCellIndex: readU32(view, offset),
+      targetCellIndex: readU32(view, offset + 4),
+      kind: readU16(view, offset + 8),
+      reflected: readU16(view, offset + 10) !== 0,
+      originX: readF64(view, offset + 12),
+      originY: readF64(view, offset + 20),
+      magnification: readF64(view, offset + 28),
+      angle: readF64(view, offset + 36),
+      columns: readU32(view, offset + 44),
+      rows: readU32(view, offset + 48),
+      columnVectorX: readF64(view, offset + 52),
+      columnVectorY: readF64(view, offset + 60),
+      rowVectorX: readF64(view, offset + 68),
+      rowVectorY: readF64(view, offset + 76),
+      targetName: readLayoutString(strings, readU32(view, offset + 84)),
+    });
+  }
+  return references;
+}
+
+function parseGdsElementRows(
+  payload: Uint8Array,
+  view: DataView,
+  strings: Uint8Array,
+  rowOffset: number,
+  baseIndex: number,
+  count: number,
+): LspLayoutGdsElement[] {
+  requirePayloadRange(payload.byteLength, rowOffset, count * layoutGdsElementTableEntryByteLength, 'GDS element rows');
+  const elements: LspLayoutGdsElement[] = [];
+  for (let row = 0; row < count; row += 1) {
+    const offset = rowOffset + row * layoutGdsElementTableEntryByteLength;
+    const referenceIndex = readU32(view, offset + 20);
+    elements.push({
+      index: baseIndex + row,
+      cellIndex: readU32(view, offset),
+      kind: readU16(view, offset + 4),
+      layer: readU32(view, offset + 8),
+      datatype: readU32(view, offset + 12),
+      texttype: readU32(view, offset + 16),
+      referenceIndex: referenceIndex === layoutNoIndex ? null : referenceIndex,
+      firstPointIndex: readU32(view, offset + 24),
+      pointCount: readU32(view, offset + 28),
+      text: readLayoutString(strings, readU32(view, offset + 32)),
+    });
+  }
+  return elements;
+}
+
+function parseGdsPointRows(
+  payload: Uint8Array,
+  view: DataView,
+  rowOffset: number,
+  baseIndex: number,
+  count: number,
+): LspLayoutGdsPoint[] {
+  requirePayloadRange(payload.byteLength, rowOffset, count * layoutGdsPointTableEntryByteLength, 'GDS point rows');
+  const points: LspLayoutGdsPoint[] = [];
+  for (let row = 0; row < count; row += 1) {
+    const offset = rowOffset + row * layoutGdsPointTableEntryByteLength;
+    points.push({
+      index: baseIndex + row,
+      x: readF64(view, offset),
+      y: readF64(view, offset + 8),
+    });
+  }
+  return points;
+}
+
+function parseStringRows(
+  payload: Uint8Array,
+  rowOffset: number,
+  stringOffset: number,
+  count: number,
+): string[] {
+  const strings: string[] = [];
+  let offset = rowOffset;
+  for (let row = 0; row < count && offset < stringOffset; row += 1) {
+    const value = readLengthPrefixedString(payload, offset);
+    strings.push(value);
+    offset += 4 + new TextEncoder().encode(value).byteLength;
+  }
+  return strings;
+}
+
+function parseDiagnosticRows(
+  payload: Uint8Array,
+  view: DataView,
+  strings: Uint8Array,
+  rowOffset: number,
+  count: number,
+): LspLayoutDiagnostic[] {
+  const rowByteLength = 16;
+  requirePayloadRange(payload.byteLength, rowOffset, count * rowByteLength, 'diagnostic rows');
+  const diagnostics: LspLayoutDiagnostic[] = [];
+  for (let row = 0; row < count; row += 1) {
+    const offset = rowOffset + row * rowByteLength;
+    diagnostics.push({
+      severity: readU16(view, offset),
+      line: readU32(view, offset + 4),
+      column: readU32(view, offset + 8),
+      message: readLayoutString(strings, readU32(view, offset + 12)),
+    });
+  }
+  return diagnostics;
+}
+
 function readLengthPrefixedString(bytes: Uint8Array, offset: number): string {
   requirePayloadRange(bytes.byteLength, offset, 4, 'string length');
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -959,6 +1573,23 @@ function normalizeMaxShapes(value: unknown): number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : 250_000;
 }
 
+function normalizeNonNegativeUint32(value: unknown, name: string): number {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value > 0xffffffff) {
+    throw new Error(`Layout ${name} must be a non-negative uint32.`);
+  }
+  return value;
+}
+
+function writeU32List(view: DataView, offset: number, values: readonly number[], name: string): number {
+  view.setUint32(offset, values.length, true);
+  offset += 4;
+  for (const value of values) {
+    view.setUint32(offset, normalizeNonNegativeUint32(value, name), true);
+    offset += 4;
+  }
+  return offset;
+}
+
 function normalizeCatalogSourceKind(value: number): LspLayoutCatalog['sourceKind'] {
   if (value === 1) {
     return 'lefdef';
@@ -968,6 +1599,88 @@ function normalizeCatalogSourceKind(value: number): LspLayoutCatalog['sourceKind
   }
 
   throw new Error(`Unsupported layout catalog source kind: ${value}`);
+}
+
+function normalizeStatusState(value: number): LspLayoutStatusState {
+  if (value === 1) {
+    return 'parsing';
+  }
+  if (value === 2) {
+    return 'ready';
+  }
+  if (value === 3) {
+    return 'failed';
+  }
+  if (value === 4) {
+    return 'closing';
+  }
+  return 'unknown';
+}
+
+function normalizeStatusPhase(value: number): LspLayoutStatusPhase {
+  if (value === 1) {
+    return 'read';
+  }
+  if (value === 2) {
+    return 'records';
+  }
+  if (value === 3) {
+    return 'finalize';
+  }
+  if (value === 4) {
+    return 'resolve';
+  }
+  if (value === 5) {
+    return 'ready';
+  }
+  if (value === 6) {
+    return 'failed';
+  }
+  return 'unknown';
+}
+
+function catalogPageTableKindToCode(tableKind: LspLayoutCatalogPageTableKind): number {
+  switch (tableKind) {
+    case 'layers':
+      return 1;
+    case 'cells':
+      return 2;
+    case 'references':
+      return 3;
+    case 'elements':
+      return 4;
+    case 'points':
+      return 5;
+    case 'strings':
+      return 6;
+    case 'diagnostics':
+      return 7;
+  }
+}
+
+function catalogPageCodeToTableKind(value: number): LspLayoutCatalogPageTableKind {
+  if (value === 1) {
+    return 'layers';
+  }
+  if (value === 2) {
+    return 'cells';
+  }
+  if (value === 3) {
+    return 'references';
+  }
+  if (value === 4) {
+    return 'elements';
+  }
+  if (value === 5) {
+    return 'points';
+  }
+  if (value === 6) {
+    return 'strings';
+  }
+  if (value === 7) {
+    return 'diagnostics';
+  }
+  throw new Error(`Unsupported layout catalog page table kind: ${value}`);
 }
 
 function normalizeShapeKind(value: number): LspLayoutShapeKind {
@@ -1050,6 +1763,11 @@ function readU16(view: DataView, offset: number): number {
 
 function readU32(view: DataView, offset: number): number {
   return view.getUint32(offset, true);
+}
+
+function readU64Number(view: DataView, offset: number): number {
+  const value = view.getBigUint64(offset, true);
+  return value > BigInt(Number.MAX_SAFE_INTEGER) ? Number.MAX_SAFE_INTEGER : Number(value);
 }
 
 function readF64(view: DataView, offset: number): number {

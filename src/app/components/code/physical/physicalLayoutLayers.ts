@@ -201,7 +201,7 @@ export function createPhysicalLayoutLayerTree(
 
   for (const shape of shapes) {
     const categories = shapeCountsByLayer.get(shape.layerIndex) ?? createEmptyCategoryAvailability();
-    const category = getPhysicalLayoutShapeCategory(shape);
+    const category = getPhysicalLayoutShapeCategory(shape, catalog?.sourceKind);
 
     if (category) {
       categories[category] = true;
@@ -228,9 +228,10 @@ export function createPhysicalLayoutLayerTree(
 export function filterVisiblePhysicalLayoutShapes(
   shapes: readonly LspLayoutShape[],
   visibility: PhysicalLayoutVisibility,
+  sourceKind?: LspLayoutCatalog['sourceKind'],
 ): LspLayoutShape[] {
   return shapes.filter((shape) => {
-    const category = getPhysicalLayoutShapeCategory(shape);
+    const category = getPhysicalLayoutShapeCategory(shape, sourceKind);
     return category ? isPhysicalLayoutLayerCategoryVisible(visibility, shape.layerIndex, category) : false;
   });
 }
@@ -238,11 +239,12 @@ export function filterVisiblePhysicalLayoutShapes(
 export function getVisiblePhysicalLayoutShapeCounts(
   shapes: readonly LspLayoutShape[],
   visibility: PhysicalLayoutVisibility,
+  sourceKind?: LspLayoutCatalog['sourceKind'],
 ): Record<PhysicalLayoutLayerCategory, number> {
   const counts = createEmptyCategoryCount();
 
   for (const shape of shapes) {
-    const category = getPhysicalLayoutShapeCategory(shape);
+    const category = getPhysicalLayoutShapeCategory(shape, sourceKind);
     if (category && isPhysicalLayoutLayerCategoryVisible(visibility, shape.layerIndex, category)) {
       counts[category] += 1;
     }
@@ -350,7 +352,20 @@ export function getVisiblePhysicalLayoutCategoryCount(
   ), 0);
 }
 
-export function getPhysicalLayoutShapeCategory(shape: LspLayoutShape): PhysicalLayoutLayerCategory | null {
+export function getPhysicalLayoutShapeCategory(
+  shape: LspLayoutShape,
+  sourceKind?: LspLayoutCatalog['sourceKind'],
+): PhysicalLayoutLayerCategory | null {
+  if (sourceKind === 'gds') {
+    if (shape.kind === 'text') {
+      return 'text';
+    }
+    if (shape.kind === 'path') {
+      return 'path';
+    }
+    return 'boundary';
+  }
+
   if (shape.ownerKind === 'pin') {
     return 'pin';
   }

@@ -1,9 +1,10 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { layoutFixtureGdsGeometry, layoutFixtureGdsOpenResult, layoutFixtureGeometry, layoutFixtureOpenResult } from '../../../../test/layoutFixture';
+import type { LspLayoutCatalog, LspLayoutGeometry } from '../../../../../types/systemverilog-lsp';
 import { CodeViewerLayoutProvider } from '../../../context/CodeViewerLayoutContext';
 import {
   PhysicalBottomPanel,
@@ -28,31 +29,69 @@ vi.mock('./PhysicalLayoutCanvas', () => ({
     geometry,
     highlightedShapeIndex,
     layoutVisibility,
+    onGdsTileGeometryChange,
+    onGdsTileMetricsChange,
     onHighlightedShapeChange,
     selectedTarget,
   }: {
-    catalog: typeof layoutFixtureOpenResult.catalog | null;
-    geometry: typeof layoutFixtureGeometry | null;
+    catalog: LspLayoutCatalog | null;
+    geometry: LspLayoutGeometry | null;
     highlightedShapeIndex?: number | null;
     layoutVisibility: PhysicalLayoutVisibility;
+    onGdsTileGeometryChange?: (geometry: LspLayoutGeometry | null) => void;
+    onGdsTileMetricsChange?: (metrics: any) => void;
     onHighlightedShapeChange?: (shapeIndex: number | null) => void;
     selectedTarget: PhysicalLayoutTarget | null;
-  }) => (
-    <div
-      data-highlighted-shape-index={highlightedShapeIndex ?? ''}
-      data-layer-opacity-summary={formatPhysicalLayoutLayerOpacitySummary(layoutVisibility)}
-      data-layer-count={catalog?.layers.length ?? 0}
-      data-macro-count={catalog?.macros.length ?? 0}
-      data-renderer="webgl"
-      data-selected-macro-name={selectedTarget?.kind === 'macro' ? selectedTarget.name : ''}
-      data-shape-count={geometry?.shapes.length ?? 0}
-      data-outline-visible={isPhysicalLayoutOutlineVisible(layoutVisibility) ? 'true' : 'false'}
-      data-testid="physical-layout-canvas"
-      data-visible-label-names="A|Y"
-      data-visible-shape-count={geometry ? filterVisiblePhysicalLayoutShapes(geometry.shapes, layoutVisibility).length : 0}
-      onClick={() => onHighlightedShapeChange?.(geometry?.shapes[0]?.index ?? null)}
-    />
-  ),
+  }) => {
+    const activeGeometry = catalog?.sourceKind === 'gds' ? layoutFixtureGdsGeometry : geometry;
+    useEffect(() => {
+      if (catalog?.sourceKind !== 'gds') {
+        return;
+      }
+
+      window.setTimeout(() => {
+        onGdsTileGeometryChange?.(layoutFixtureGdsGeometry);
+        onGdsTileMetricsChange?.({
+        averageFps: 60,
+        bufferByteLength: 256,
+        cacheHitCount: 0,
+        cacheMissCount: 1,
+        continuationCount: 0,
+        frameP95Ms: 16,
+        indexByteLength: 64,
+        lastFps: 60,
+        lastFrameMs: 16,
+        lastRenderMs: 1.2,
+        lastTileQueryMs: 0.4,
+        lastTileRoundtripMs: 2.5,
+        meshIndexCount: 6,
+        meshVertexCount: 4,
+        tileRequestCount: 1,
+        truncated: false,
+        visiblePointCount: 4,
+        visibleShapeCount: layoutFixtureGdsGeometry.shapes.length,
+      });
+      }, 0);
+    }, [catalog?.sourceKind, onGdsTileGeometryChange, onGdsTileMetricsChange]);
+
+    return (
+      <div
+        data-gds-render-mode={catalog?.sourceKind === 'gds' ? 'tile-mesh' : 'full-graphics'}
+        data-highlighted-shape-index={highlightedShapeIndex ?? ''}
+        data-layer-opacity-summary={formatPhysicalLayoutLayerOpacitySummary(layoutVisibility)}
+        data-layer-count={catalog?.layers.length ?? 0}
+        data-macro-count={catalog?.macros.length ?? 0}
+        data-renderer="webgl"
+        data-selected-macro-name={selectedTarget?.kind === 'macro' ? selectedTarget.name : ''}
+        data-shape-count={activeGeometry?.shapes.length ?? 0}
+        data-outline-visible={isPhysicalLayoutOutlineVisible(layoutVisibility) ? 'true' : 'false'}
+        data-testid="physical-layout-canvas"
+        data-visible-label-names="A|Y"
+        data-visible-shape-count={activeGeometry ? filterVisiblePhysicalLayoutShapes(activeGeometry.shapes, layoutVisibility).length : 0}
+        onClick={() => onHighlightedShapeChange?.(activeGeometry?.shapes[0]?.index ?? null)}
+      />
+    );
+  },
 }));
 
 vi.mock('./PhysicalLayout3DCanvas', () => ({
@@ -64,8 +103,8 @@ vi.mock('./PhysicalLayout3DCanvas', () => ({
     onHighlightedShapeChange,
     selectedTarget,
   }: {
-    catalog: typeof layoutFixtureOpenResult.catalog | null;
-    geometry: typeof layoutFixtureGeometry | null;
+    catalog: LspLayoutCatalog | null;
+    geometry: LspLayoutGeometry | null;
     highlightedShapeIndex?: number | null;
     layoutVisibility: PhysicalLayoutVisibility;
     onHighlightedShapeChange?: (shapeIndex: number | null) => void;
@@ -214,7 +253,7 @@ describe('PhysicalWorkspacePanels', () => {
     expect(screen.getByTestId('physical-layout-3d-empty')).toHaveTextContent('GDS cell');
   });
 
-  it('requests GDS cell geometry by selected cell index', async () => {
+  it('uses tile-mesh rendering instead of full geometry for selected GDS cells', async () => {
     const layoutOpen = vi.mocked(getTestElectronApi().lsp.layoutOpen);
     const layoutGeometry = vi.mocked(getTestElectronApi().lsp.layoutGeometry);
     layoutOpen.mockResolvedValueOnce(layoutFixtureGdsOpenResult);
@@ -240,11 +279,11 @@ describe('PhysicalWorkspacePanels', () => {
       workspaceFilePath: 'chip.gds',
       title: 'chip.gds',
     });
-    expect(layoutGeometry).toHaveBeenCalledWith({
-      sessionId: 'layout-test-session',
-      maxShapes: 0,
+    expect(layoutGeometry).not.toHaveBeenCalledWith(expect.objectContaining({
       gdsRootCellIndices: [1],
-    });
+    }));
+    expect(screen.getByTestId('physical-layout-canvas')).toHaveAttribute('data-gds-render-mode', 'tile-mesh');
+    await waitFor(() => expect(screen.getByTestId('physical-gds-toolbar-metrics')).toBeInTheDocument());
     expect(screen.getByTestId('physical-layout-canvas')).toHaveAttribute('data-selected-macro-name', '');
   });
 
@@ -271,6 +310,7 @@ describe('PhysicalWorkspacePanels', () => {
     renderInCodeLayout(<PhysicalGdsPanelHarness />);
 
     await waitFor(() => expect(screen.getByTestId('physical-layout-editor')).toHaveAttribute('data-status', 'ready'));
+    await waitFor(() => expect(screen.getByTestId('physical-layout-editor')).toHaveAttribute('data-3d-supported', 'true'));
     await user.click(screen.getByTestId('physical-layout-3d-toggle'));
 
     expect(screen.getByTestId('physical-layout-editor')).toHaveAttribute('data-3d-supported', 'true');
@@ -322,11 +362,10 @@ describe('PhysicalWorkspacePanels', () => {
     renderInCodeLayout(<PhysicalGdsPanelHarness />);
 
     await waitFor(() => expect(screen.getByTestId('physical-layout-editor')).toHaveAttribute('data-status', 'ready'));
+    await waitFor(() => expect(screen.getByTestId('physical-layout-editor')).toHaveAttribute('data-3d-supported', 'true'));
     await user.click(screen.getByTestId('physical-layout-3d-toggle'));
-    const layoutGeometryResults = vi.mocked(getTestElectronApi().lsp.layoutGeometry).mock.results;
-    const selectedGdsGeometry = await layoutGeometryResults[layoutGeometryResults.length - 1]?.value;
-    const selectedGdsShapeIndex = (await selectedGdsGeometry)?.shapes[0]?.index;
-    const nextGdsShapeIndex = (await selectedGdsGeometry)?.shapes[1]?.index;
+    const selectedGdsShapeIndex = layoutFixtureGdsGeometry.shapes[0]?.index;
+    const nextGdsShapeIndex = layoutFixtureGdsGeometry.shapes[1]?.index;
 
     await user.click(screen.getByTestId('physical-layout-canvas'));
 

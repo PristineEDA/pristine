@@ -29,8 +29,10 @@ import type {
   LspHover,
   LspInlayHint,
   LspLayoutGeometryOptions,
+  LspLayoutCatalogPageOptions,
   LspLayoutOpenOptions,
   LspLayoutOpenResult,
+  LspLayoutTileGeometryOptions,
   LspMarkupContent,
   LspModuleHierarchy,
   LspModuleHierarchyNode,
@@ -77,7 +79,11 @@ import {
   closeLayoutPipeSession,
   normalizeLayoutOpenSessionMetadata,
   openLayoutPipeSession,
+  requestLayoutPipeCatalogPage,
+  requestLayoutPipeCatalogSummary,
   requestLayoutPipeGeometry,
+  requestLayoutPipeStatus,
+  requestLayoutPipeTileGeometry,
 } from './layoutPipeClient.js';
 
 interface TrackedDocument {
@@ -246,6 +252,7 @@ function resolveLayoutOpenRequestOptions(options: LspLayoutOpenOptions): {
   defUri?: string;
   gdsUri?: string;
   lefUris?: string[];
+  openMode?: 'sync' | 'staged' | 'auto';
   title: string;
 } {
   if (!options.workspaceFilePath) {
@@ -257,6 +264,7 @@ function resolveLayoutOpenRequestOptions(options: LspLayoutOpenOptions): {
       defUri: options.defUri,
       gdsUri: options.gdsUri,
       lefUris,
+      openMode: options.openMode,
       title: options.title ?? DEFAULT_IHP_STDCELL_LEF_FILE_NAME,
     };
   }
@@ -267,7 +275,7 @@ function resolveLayoutOpenRequestOptions(options: LspLayoutOpenOptions): {
   const title = options.title ?? path.posix.basename(workspaceFilePath);
 
   if (extension === '.lef') {
-    return { lefUris: [fileUri], title };
+    return { lefUris: [fileUri], openMode: options.openMode, title };
   }
 
   if (extension === '.def') {
@@ -278,11 +286,11 @@ function resolveLayoutOpenRequestOptions(options: LspLayoutOpenOptions): {
       throw new Error(`No LEF files found in the LSP workspace root. Place at least one .lef file next to ${workspaceFilePath} before opening DEF layout.`);
     }
 
-    return { defUri: fileUri, lefUris, title };
+    return { defUri: fileUri, lefUris, openMode: options.openMode, title };
   }
 
   if (extension === '.gds' || extension === '.gdsii') {
-    return { gdsUri: fileUri, title };
+    return { gdsUri: fileUri, openMode: options.openMode ?? 'auto', title };
   }
 
   if (extension === '.oas' || extension === '.oasis') {
@@ -1777,6 +1785,7 @@ function normalizeLayoutOpenOptions(value: unknown): LspLayoutOpenOptions {
     defUri?: unknown;
     gdsUri?: unknown;
     lefUris?: unknown;
+    openMode?: unknown;
     title?: unknown;
     workspaceFilePath?: unknown;
   };
@@ -1794,6 +1803,9 @@ function normalizeLayoutOpenOptions(value: unknown): LspLayoutOpenOptions {
     gdsUri: candidate.gdsUri,
     lefUris: Array.isArray(candidate.lefUris)
       ? candidate.lefUris.filter((entry): entry is string => typeof entry === 'string' && entry.length > 0)
+      : undefined,
+    openMode: candidate.openMode === 'sync' || candidate.openMode === 'staged' || candidate.openMode === 'auto'
+      ? candidate.openMode
       : undefined,
     title: candidate.title,
     workspaceFilePath: candidate.workspaceFilePath,
@@ -1834,6 +1846,91 @@ function normalizeLayoutGeometryOptions(value: unknown): LspLayoutGeometryOption
     macroIndices: normalizeIntegerArray(candidate.macroIndices, 'macroIndices'),
     gdsRootCellIndices: normalizeIntegerArray(candidate.gdsRootCellIndices, 'gdsRootCellIndices'),
   };
+}
+
+function normalizeLayoutCatalogPageOptions(value: unknown): LspLayoutCatalogPageOptions {
+  if (!value || typeof value !== 'object') {
+    throw new Error('Expected layout catalog page options.');
+  }
+
+  const candidate = value as {
+    sessionId?: unknown;
+    tableKind?: unknown;
+    offset?: unknown;
+    limit?: unknown;
+    maxBytes?: unknown;
+  };
+  const sessionId = candidate.sessionId;
+  assertString(sessionId, 'sessionId');
+  if (
+    candidate.tableKind !== 'layers'
+    && candidate.tableKind !== 'cells'
+    && candidate.tableKind !== 'references'
+    && candidate.tableKind !== 'elements'
+    && candidate.tableKind !== 'points'
+    && candidate.tableKind !== 'strings'
+    && candidate.tableKind !== 'diagnostics'
+  ) {
+    throw new Error('Expected supported layout catalog page tableKind.');
+  }
+
+  return {
+    sessionId,
+    tableKind: candidate.tableKind,
+    offset: normalizeOptionalNonNegativeInteger(candidate.offset, 'offset'),
+    limit: normalizeOptionalNonNegativeInteger(candidate.limit, 'limit'),
+    maxBytes: normalizeOptionalNonNegativeInteger(candidate.maxBytes, 'maxBytes'),
+  };
+}
+
+function normalizeLayoutTileGeometryOptions(value: unknown): LspLayoutTileGeometryOptions {
+  if (!value || typeof value !== 'object') {
+    throw new Error('Expected layout tile geometry options.');
+  }
+
+  const candidate = value as {
+    bbox?: unknown;
+    continuationToken?: unknown;
+    datatypes?: unknown;
+    layerIndices?: unknown;
+    lod?: unknown;
+    maxBytes?: unknown;
+    maxPoints?: unknown;
+    maxShapes?: unknown;
+    rootCellIndex?: unknown;
+    sessionId?: unknown;
+    shapeKinds?: unknown;
+  };
+  const sessionId = candidate.sessionId;
+  assertString(sessionId, 'sessionId');
+
+  return {
+    sessionId,
+    bbox: normalizeLayoutRequestBounds(candidate.bbox),
+    rootCellIndex: normalizeRequiredNonNegativeInteger(candidate.rootCellIndex, 'rootCellIndex'),
+    maxShapes: normalizeOptionalNonNegativeInteger(candidate.maxShapes, 'maxShapes'),
+    maxPoints: normalizeOptionalNonNegativeInteger(candidate.maxPoints, 'maxPoints'),
+    maxBytes: normalizeOptionalNonNegativeInteger(candidate.maxBytes, 'maxBytes'),
+    lod: normalizeOptionalNonNegativeInteger(candidate.lod, 'lod'),
+    continuationToken: normalizeOptionalNonNegativeInteger(candidate.continuationToken, 'continuationToken'),
+    layerIndices: normalizeIntegerArray(candidate.layerIndices, 'layerIndices'),
+    shapeKinds: normalizeIntegerArray(candidate.shapeKinds, 'shapeKinds'),
+    datatypes: normalizeIntegerArray(candidate.datatypes, 'datatypes'),
+  };
+}
+
+function normalizeRequiredNonNegativeInteger(value: unknown, name: string): number {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
+    throw new Error(`Expected non-negative integer for "${name}".`);
+  }
+  return value;
+}
+
+function normalizeOptionalNonNegativeInteger(value: unknown, name: string): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  return normalizeRequiredNonNegativeInteger(value, name);
 }
 
 function normalizeLayoutRequestBounds(value: unknown): LspLayoutGeometryOptions['bbox'] {
@@ -2907,6 +3004,30 @@ export function registerLspHandlers(getMainWindow: () => BrowserWindow | null): 
     const normalizedOptions = normalizeLayoutGeometryOptions(options);
 
     return requestLayoutPipeGeometry(normalizedOptions);
+  });
+
+  ipcMain.handle(AsyncChannels.LSP_LAYOUT_STATUS, async (_event, sessionId: unknown) => {
+    assertString(sessionId, 'sessionId');
+
+    return requestLayoutPipeStatus(sessionId);
+  });
+
+  ipcMain.handle(AsyncChannels.LSP_LAYOUT_CATALOG_SUMMARY, async (_event, sessionId: unknown) => {
+    assertString(sessionId, 'sessionId');
+
+    return requestLayoutPipeCatalogSummary(sessionId);
+  });
+
+  ipcMain.handle(AsyncChannels.LSP_LAYOUT_CATALOG_PAGE, async (_event, options?: unknown) => {
+    const normalizedOptions = normalizeLayoutCatalogPageOptions(options);
+
+    return requestLayoutPipeCatalogPage(normalizedOptions);
+  });
+
+  ipcMain.handle(AsyncChannels.LSP_LAYOUT_TILE_GEOMETRY, async (_event, options?: unknown) => {
+    const normalizedOptions = normalizeLayoutTileGeometryOptions(options);
+
+    return requestLayoutPipeTileGeometry(normalizedOptions);
   });
 
   ipcMain.handle(AsyncChannels.LSP_LAYOUT_CLOSE, async (_event, sessionId: unknown) => {

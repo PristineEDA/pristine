@@ -137,6 +137,11 @@ export function selectLayoutTargetShapes(
     return [];
   }
 
+  if (catalog.sourceKind === 'gds' && target.kind === 'gdsCell') {
+    const matchingShapes = geometry.shapes.filter((shape) => shape.macroIndex === target.index);
+    return matchingShapes.length > 0 ? matchingShapes : geometry.shapes;
+  }
+
   return geometry.shapes.filter((shape) => shape.macroIndex === target.index);
 }
 
