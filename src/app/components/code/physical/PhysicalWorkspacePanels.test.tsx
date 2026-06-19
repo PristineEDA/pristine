@@ -531,6 +531,41 @@ describe('PhysicalWorkspacePanels', () => {
     expect(screen.getByTestId('physical-layer-category-swatch-1-obstruction')).not.toBeDisabled();
   });
 
+  it('keeps GDS layer swatches clickable when the filtered viewport tile has no shapes', async () => {
+    const user = userEvent.setup();
+    const onLayerCategoryVisibilityToggle = vi.fn();
+    const emptyGdsGeometry: LspLayoutGeometry = {
+      polygonPointCount: 0,
+      shapeCount: 0,
+      shapes: [],
+      truncated: false,
+      unitsPerMicron: 1000,
+    };
+    const gdsVisibility = createPhysicalLayoutVisibility(layoutFixtureGdsOpenResult.catalog, true, []);
+
+    renderInCodeLayout(
+      <PhysicalRightPanel
+        layoutVisibility={gdsVisibility}
+        layoutState={{
+          catalog: layoutFixtureGdsOpenResult.catalog,
+          error: null,
+          geometry: emptyGdsGeometry,
+          openResult: layoutFixtureGdsOpenResult,
+          status: 'ready',
+        }}
+        selectedTarget={{ kind: 'gdsCell', name: 'CHILD', index: 1 }}
+        onLayerCategoryVisibilityToggle={onLayerCategoryVisibilityToggle}
+      />,
+    );
+
+    const boundarySwatch = screen.getByTestId('physical-layer-category-swatch-0-boundary');
+    expect(boundarySwatch).not.toBeDisabled();
+
+    await user.click(boundarySwatch);
+
+    expect(onLayerCategoryVisibilityToggle).toHaveBeenCalledWith(0, 'boundary');
+  });
+
   it('toggles the physical right lower panel', async () => {
     const user = userEvent.setup();
     const onSplitPanelVisibleChange = vi.fn();

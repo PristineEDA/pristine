@@ -36,6 +36,7 @@ import {
   physicalLayout3DViewHelperSize,
 } from './physicalLayout3dViewHelper';
 import {
+  createEmptyGdsTileGeometry,
   createGdsTileMetricsSnapshot,
   createGdsTileRequestPlan,
   getGdsTileLod,
@@ -424,6 +425,43 @@ describe('physicalLayoutGeometry', () => {
       boundary: 1,
       path: 1,
       text: 1,
+    });
+  });
+
+  it('keeps GDS layer categories available when the current filtered tile has no shapes', () => {
+    const tree = createPhysicalLayoutLayerTree(layoutFixtureGdsOpenResult.catalog, []);
+
+    expect(tree[0]?.categories).toMatchObject({
+      boundary: true,
+      path: true,
+      text: true,
+    });
+  });
+
+  it('creates an empty GDS tile plan when all layer categories are hidden', () => {
+    const selectedShapes = layoutFixtureGdsGeometry.shapes.filter((shape) => shape.macroIndex === 1);
+    const visibility = createPhysicalLayoutVisibility(layoutFixtureGdsOpenResult.catalog, true, selectedShapes);
+    for (const key of Array.from(visibility.visibleItems)) {
+      if (key.startsWith('layer:')) {
+        visibility.visibleItems.delete(key);
+      }
+    }
+
+    const plan = createGdsTileRequestPlan({
+      camera: { panX: 0, panY: 0, zoom: 32 },
+      rootCellIndex: 1,
+      sessionId: 'layout-1',
+      size: { height: 600, width: 800 },
+      visibility,
+    });
+
+    expect(plan.empty).toBe(true);
+    expect(plan.layerIndices).toEqual([]);
+    expect(plan.options.layerIndices).toEqual([]);
+    expect(createEmptyGdsTileGeometry(1000).geometry).toMatchObject({
+      shapeCount: 0,
+      shapes: [],
+      unitsPerMicron: 1000,
     });
   });
 

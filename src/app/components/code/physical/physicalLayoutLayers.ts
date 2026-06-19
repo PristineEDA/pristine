@@ -196,6 +196,10 @@ export function createPhysicalLayoutLayerTree(
   catalog: LspLayoutCatalog | null | undefined,
   shapes: readonly LspLayoutShape[],
 ): PhysicalLayoutLayerTreeEntry[] {
+  if (catalog?.sourceKind === 'gds') {
+    return createGdsPhysicalLayoutLayerTree(catalog, shapes);
+  }
+
   const shapeCountsByLayer = new Map<number, PhysicalLayoutLayerCategoryAvailability>();
   const pinNameByKey = createPhysicalLayoutPinNameMap(catalog);
 
@@ -216,6 +220,38 @@ export function createPhysicalLayoutLayerTree(
 
   return (catalog?.layers ?? []).map((layer) => {
     const categories = shapeCountsByLayer.get(layer.index) ?? createEmptyCategoryAvailability();
+
+    return {
+      available: true,
+      categories,
+      layer,
+    };
+  });
+}
+
+function createGdsPhysicalLayoutLayerTree(
+  catalog: LspLayoutCatalog,
+  shapes: readonly LspLayoutShape[],
+): PhysicalLayoutLayerTreeEntry[] {
+  const shapeCountsByLayer = new Map<number, PhysicalLayoutLayerCategoryAvailability>();
+
+  for (const shape of shapes) {
+    const categories = shapeCountsByLayer.get(shape.layerIndex) ?? createEmptyCategoryAvailability();
+    const category = getPhysicalLayoutShapeCategory(shape, catalog.sourceKind);
+    if (category) {
+      categories[category] = true;
+    }
+    shapeCountsByLayer.set(shape.layerIndex, categories);
+  }
+
+  return catalog.layers.map((layer) => {
+    const categories = shapeCountsByLayer.get(layer.index) ?? createEmptyCategoryAvailability();
+
+    if (!categories.boundary && !categories.path && !categories.text) {
+      categories.boundary = true;
+      categories.path = true;
+      categories.text = true;
+    }
 
     return {
       available: true,

@@ -224,7 +224,7 @@ function AppLayout() {
 
   useEffect(() => {
     const activeGeometry = physicalLayoutState.catalog?.sourceKind === 'gds' && physicalSelectedTarget?.kind === 'gdsCell'
-      ? physicalGdsTileGeometry
+      ? null
       : physicalLayoutState.geometry;
     const shapes = selectLayoutTargetShapes(physicalLayoutState.catalog, activeGeometry, physicalSelectedTarget);
     const nextVisibility = createPhysicalLayoutVisibility(physicalLayoutState.catalog, Boolean(physicalSelectedTarget), shapes);
@@ -239,7 +239,7 @@ function AppLayout() {
       physicalLayoutVisibilitySignatureRef.current = nextSignature;
       setPhysicalLayoutVisibility(nextVisibility);
     }
-  }, [physicalGdsTileGeometry, physicalLayoutState.catalog, physicalLayoutState.geometry, physicalSelectedTarget]);
+  }, [physicalLayoutState.catalog, physicalLayoutState.geometry, physicalSelectedTarget]);
 
   useEffect(() => {
     setPhysicalHighlightedShapeIndex(null);

@@ -22,6 +22,7 @@ import {
 } from './physicalLayoutGeometry';
 import {
   createGdsTileMetricsSnapshot,
+  createEmptyGdsTileGeometry,
   createGdsTileRequestPlan,
   defaultPhysicalLayoutGdsTileMetrics,
   getGdsTileShapeStyle,
@@ -532,6 +533,12 @@ export function PhysicalLayoutCanvas({
       size: sizeRef.current,
       visibility: layoutVisibilityRef.current,
     });
+    if (plan.empty) {
+      const emptyTile = createEmptyGdsTileGeometry(catalog?.unitsPerMicron);
+      gdsTileCacheRef.current.set(plan.cacheKey, emptyTile);
+      applyGdsTile(emptyTile, generation, 0);
+      return;
+    }
     const cachedTile = gdsTileCacheRef.current.get(plan.cacheKey);
     if (cachedTile) {
       applyGdsTile(cachedTile, generation, 0);

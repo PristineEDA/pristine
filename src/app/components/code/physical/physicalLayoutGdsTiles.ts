@@ -40,6 +40,7 @@ export interface PhysicalLayoutGdsTileMetrics {
 export interface PhysicalLayoutGdsTileRequestPlan {
   bbox: LspLayoutBounds;
   cacheKey: string;
+  empty: boolean;
   layerIndices: number[] | undefined;
   lod: number;
   options: LspLayoutTileGeometryOptions;
@@ -99,7 +100,8 @@ export function createGdsTileRequestPlan(input: {
   const bbox = getViewportWorldBounds(input.camera, input.size, tileOverscanRatio);
   const lod = getGdsTileLod(input.camera.zoom);
   const visibleLayerIndices = getVisibleGdsTileLayerIndices(input.visibility);
-  const layerIndices = visibleLayerIndices.length > 0 ? visibleLayerIndices : undefined;
+  const empty = visibleLayerIndices.length === 0 && input.visibility.layerOpacities.size > 0;
+  const layerIndices = empty ? [] : visibleLayerIndices.length > 0 ? visibleLayerIndices : undefined;
   const roundedBbox = roundTileBounds(bbox);
   const cacheKey = createGdsTileCacheKey({
     bbox: roundedBbox,
@@ -113,6 +115,7 @@ export function createGdsTileRequestPlan(input: {
   return {
     bbox: roundedBbox,
     cacheKey,
+    empty,
     layerIndices,
     lod,
     options: {
@@ -125,6 +128,39 @@ export function createGdsTileRequestPlan(input: {
       rootCellIndex: input.rootCellIndex,
       sessionId: input.sessionId,
     },
+  };
+}
+
+export function createEmptyGdsTileGeometry(unitsPerMicron = 1): LspLayoutTileGeometry {
+  return {
+    geometry: {
+      polygonPointCount: 0,
+      shapeCount: 0,
+      shapes: [],
+      truncated: false,
+      unitsPerMicron,
+    },
+    metrics: {
+      cacheHitCount: 0,
+      cacheMissCount: 0,
+      elementCandidateCount: 0,
+      encodeMicros: 0,
+      gridBinCount: 0,
+      gridBuildMicros: 0,
+      gridCandidateCount: 0,
+      gridHitCount: 0,
+      gridMissCount: 0,
+      indexBuildMicros: 0,
+      lodShapeCount: 0,
+      queryMicros: 0,
+      referenceCandidateCount: 0,
+      traversedReferenceCount: 0,
+      visitedCellCount: 0,
+    },
+    nextToken: null,
+    payloadSize: 0,
+    tileShapeCount: 0,
+    truncated: false,
   };
 }
 
