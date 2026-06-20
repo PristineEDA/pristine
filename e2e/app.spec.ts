@@ -2677,6 +2677,56 @@ test('Physical layout keeps tinyQV GDS tile memory bounded during pan and zoom',
     await window.getByTestId('activity-item-physical').click();
     const layoutEditor = window.getByTestId('physical-layout-editor');
     const layoutCanvas = window.getByTestId('physical-layout-canvas');
+    const readTinyQvMetrics = async () => layoutCanvas.evaluate((element) => {
+      const metricNames = [
+        'data-gds-average-fps',
+        'data-gds-frame-p95-ms',
+        'data-gds-render-ms',
+        'data-gds-tile-query-ms',
+        'data-gds-tile-roundtrip-ms',
+        'data-gds-cache-bytes',
+        'data-gds-cache-entry-count',
+        'data-gds-continuation-count',
+        'data-gds-inflight-count',
+        'data-gds-retry-count',
+        'data-gds-buffer-capacity-vertex-count',
+        'data-gds-buffer-realloc-count',
+        'data-gds-buffer-update-count',
+        'data-gds-buffer-update-ms',
+        'data-gds-mesh-batch-count',
+        'data-gds-draw-node-count',
+        'data-gds-tile-shape-count',
+        'data-visible-shape-count',
+        'data-gds-tile-lod',
+        'data-gds-final-tile-lod',
+        'data-gds-displayed-tile-state',
+        'data-gds-last-good-shape-count',
+        'data-gds-empty-tile-reason',
+        'data-gds-retry-kind',
+      ];
+
+      const metricElement = element as unknown as { getAttribute(name: string): string | null };
+      return Object.fromEntries(metricNames.map((name) => [name, metricElement.getAttribute(name) ?? '']));
+    });
+    const writeTinyQvJson = async (name: string, value: unknown) => {
+      const body = JSON.stringify(value, null, 2);
+      await test.info().attach(name, {
+        body,
+        contentType: 'application/json',
+      });
+      const outputPath = test.info().outputPath(name);
+      fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+      fs.writeFileSync(outputPath, body);
+    };
+    const writeTinyQvPng = async (name: string, body: Buffer) => {
+      await test.info().attach(name, {
+        body,
+        contentType: 'image/png',
+      });
+      const outputPath = test.info().outputPath(name);
+      fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+      fs.writeFileSync(outputPath, body);
+    };
 
     await expect(layoutEditor).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
     await window.getByTestId('physical-layout-file-item-tt_um_tt_tinyQV-gds').click();
@@ -2699,10 +2749,7 @@ test('Physical layout keeps tinyQV GDS tile memory bounded during pan and zoom',
 
       return Object.fromEntries(attributeNames.map((name) => [name, progressElement.getAttribute(name) ?? '']));
     });
-    await test.info().attach('tinyqv-gds-progress.json', {
-      body: JSON.stringify(tinyQvProgressSnapshot, null, 2),
-      contentType: 'application/json',
-    });
+    await writeTinyQvJson('tinyqv-gds-progress.json', tinyQvProgressSnapshot);
     await expect(layoutCanvas).toHaveAttribute('data-source-kind', 'gds', { timeout: UI_READY_TIMEOUT_MS });
     await expect(layoutEditor).toHaveAttribute('data-status', 'ready', { timeout: UI_READY_TIMEOUT_MS });
     await expect(layoutEditor).toHaveAttribute('data-gds-parse-state', '', { timeout: UI_READY_TIMEOUT_MS });
@@ -2711,6 +2758,13 @@ test('Physical layout keeps tinyQV GDS tile memory bounded during pan and zoom',
       timeout: UI_READY_TIMEOUT_MS,
     }).toBeGreaterThan(0);
     await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-cache-bytes') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(0);
+    await writeTinyQvJson('tinyqv-gds-initial-metrics.json', await readTinyQvMetrics());
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-mesh-batch-count') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(0);
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-draw-node-count') ?? '0'), {
       timeout: UI_READY_TIMEOUT_MS,
     }).toBeGreaterThan(0);
     await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-inflight-count') ?? '0'), {
@@ -2738,6 +2792,7 @@ test('Physical layout keeps tinyQV GDS tile memory bounded during pan and zoom',
       }
     }
 
+    await writeTinyQvJson('tinyqv-gds-after-navigation-metrics.json', await readTinyQvMetrics());
     await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-inflight-count') ?? '0'), {
       timeout: UI_READY_TIMEOUT_MS,
     }).toBe(0);
@@ -2754,39 +2809,9 @@ test('Physical layout keeps tinyQV GDS tile memory bounded during pan and zoom',
     await expect.poll(async () => Number(await window.getByTestId('physical-gds-toolbar-metrics').getAttribute('data-gds-cache-bytes') ?? '0'), {
       timeout: UI_READY_TIMEOUT_MS,
     }).toBeGreaterThan(0);
-    const tinyQvMetrics = await layoutCanvas.evaluate((element) => {
-      const metricNames = [
-        'data-gds-average-fps',
-        'data-gds-frame-p95-ms',
-        'data-gds-render-ms',
-        'data-gds-tile-query-ms',
-        'data-gds-tile-roundtrip-ms',
-        'data-gds-cache-bytes',
-        'data-gds-cache-entry-count',
-        'data-gds-inflight-count',
-        'data-gds-retry-count',
-        'data-gds-buffer-capacity-vertex-count',
-        'data-gds-buffer-realloc-count',
-        'data-gds-buffer-update-count',
-        'data-gds-buffer-update-ms',
-        'data-gds-mesh-batch-count',
-        'data-gds-draw-node-count',
-        'data-gds-empty-tile-reason',
-        'data-gds-retry-kind',
-      ];
-
-      const metricElement = element as unknown as { getAttribute(name: string): string | null };
-      const readAttribute = (name: string) => metricElement.getAttribute(name);
-      return Object.fromEntries(metricNames.map((name) => [name, readAttribute(name) ?? '']));
-    });
-    await test.info().attach('tinyqv-gds-metrics.json', {
-      body: JSON.stringify(tinyQvMetrics, null, 2),
-      contentType: 'application/json',
-    });
-    await test.info().attach('tinyqv-gds-canvas.png', {
-      body: await layoutCanvas.screenshot(),
-      contentType: 'image/png',
-    });
+    const tinyQvMetrics = await readTinyQvMetrics();
+    await writeTinyQvJson('tinyqv-gds-metrics.json', tinyQvMetrics);
+    await writeTinyQvPng('tinyqv-gds-canvas.png', await layoutCanvas.screenshot());
   } finally {
     await app.close();
   }

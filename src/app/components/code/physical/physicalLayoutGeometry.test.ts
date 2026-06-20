@@ -39,6 +39,7 @@ import {
   createEmptyGdsTileGeometry,
   createGdsOverviewRetryTileRequestPlan,
   createGdsPreciseTileRequestPlan,
+  createGdsTileFilterKey,
   createGdsTileMetricsSnapshot,
   createGdsTileRequestPlan,
   createGdsRetryTileRequestPlan,
@@ -46,6 +47,7 @@ import {
   estimateGdsTileByteLength,
   getGdsEmptyTileRetryKind,
   getGdsTileLod,
+  getGdsTileShapeStyle,
   PhysicalLayoutGdsTileLruCache,
   shouldRequestPreciseGdsTile,
   getViewportWorldBounds,
@@ -114,6 +116,18 @@ describe('physicalLayoutGeometry', () => {
     expect(camera.zoom).toBe(1000);
   });
 
+  it('allows GDS callers to fit very large layout bounds below the default minimum zoom', () => {
+    const camera = getFitLayoutCamera(
+      { x0: 0, y0: 0, x1: 100_000, y1: 50_000 },
+      { width: 800, height: 600 },
+      { max: 1000, min: 0.000001 },
+    );
+
+    expect(camera.zoom).toBeGreaterThan(0);
+    expect(camera.zoom).toBeLessThan(2);
+    expect(camera.panX).toBeGreaterThan(0);
+  });
+
   it('computes shape bounds with a fallback', () => {
     expect(getShapesBounds([], { x0: 0, y0: 0, x1: 1, y1: 1 })).toEqual({ x0: 0, y0: 0, x1: 1, y1: 1 });
     expect(getShapesBounds(layoutFixtureGeometry.shapes, null)).toEqual({ x0: 0.12, y0: 0.42, x1: 2.18, y1: 3.08 });
@@ -160,6 +174,20 @@ describe('physicalLayoutGeometry', () => {
     }, { x: 0, y: 0 }).zoom).toBe(1000);
   });
 
+  it('uses caller zoom limits when applying wheel zoom', () => {
+    expect(applyLayoutWheel({
+      panX: 0,
+      panY: 0,
+      zoom: 0.5,
+    }, {
+      clientX: 100,
+      clientY: 100,
+      ctrlKey: true,
+      deltaX: 0,
+      deltaY: 500,
+    }, { x: 0, y: 0 }, { max: 1000, min: 0.01 }).zoom).toBeGreaterThanOrEqual(0.01);
+  });
+
   it('plans GDS viewport tile requests without using full target geometry', () => {
     const visibility = createPhysicalLayoutVisibility(layoutFixtureGdsOpenResult.catalog, true, layoutFixtureGdsGeometry.shapes);
     const camera = { panX: 20, panY: 30, zoom: 10 };
@@ -182,8 +210,81 @@ describe('physicalLayoutGeometry', () => {
       rootCellIndex: 1,
       sessionId: 'layout-gds',
     }));
-    expect(plan.layerIndices).toBeDefined();
-    expect(plan.layerIndices?.length).toBeGreaterThan(0);
+    expect(plan.layerIndices).toBeUndefined();
+    expect(plan.options.layerIndices).toBeUndefined();
+    expect(plan.shapeKinds).toBeUndefined();
+    expect(plan.options.shapeKinds).toBeUndefined();
+  });
+
+  it('clips GDS tile request bounds to the selected cell bounds', () => {
+    const visibility = createPhysicalLayoutVisibility(layoutFixtureGdsOpenResult.catalog, true, layoutFixtureGdsGeometry.shapes);
+    const plan = createGdsTileRequestPlan({
+      camera: { panX: 0, panY: 0, zoom: 1 },
+      rootCellIndex: 1,
+      selectedBounds: { x0: 10, y0: 20, x1: 30, y1: 40 },
+      sessionId: 'layout-gds',
+      size: { height: 200, width: 200 },
+      visibility,
+    });
+
+    expect(plan.empty).toBe(false);
+    expect(plan.bbox).toEqual({ x0: 10, y0: 20, x1: 30, y1: 40 });
+    expect(plan.options.bbox).toEqual(plan.bbox);
+  });
+
+  it('creates a bounded empty GDS tile plan when the viewport is outside the selected cell', () => {
+    const visibility = createPhysicalLayoutVisibility(layoutFixtureGdsOpenResult.catalog, true, layoutFixtureGdsGeometry.shapes);
+    const plan = createGdsTileRequestPlan({
+      camera: { panX: -10_000, panY: -10_000, zoom: 1 },
+      rootCellIndex: 1,
+      selectedBounds: { x0: 0, y0: 0, x1: 10, y1: 10 },
+      sessionId: 'layout-gds',
+      size: { height: 100, width: 100 },
+      visibility,
+    });
+
+    expect(plan.empty).toBe(true);
+    expect(plan.emptyReason).toBe('outside-cell-bounds');
+    expect(plan.options.layerIndices).toBeUndefined();
+    expect(plan.options.shapeKinds).toBeUndefined();
+  });
+
+  it('keeps raw GDS tile cache keys independent of layer opacity', () => {
+    const visibility = createPhysicalLayoutVisibility(layoutFixtureGdsOpenResult.catalog, true, layoutFixtureGdsGeometry.shapes);
+    const opacityVisibility = createPhysicalLayoutVisibility(layoutFixtureGdsOpenResult.catalog, true, layoutFixtureGdsGeometry.shapes);
+    opacityVisibility.layerOpacities.set(opacityVisibility.layerOpacities.keys().next().value as number, 0.35);
+    const baseInput = {
+      camera: { panX: 20, panY: 30, zoom: 10 },
+      rootCellIndex: 1,
+      sessionId: 'layout-gds',
+      size: { height: 200, width: 400 },
+    };
+
+    expect(createGdsTileFilterKey(visibility)).toBe(createGdsTileFilterKey(opacityVisibility));
+    expect(createGdsTileRequestPlan({ ...baseInput, visibility }).cacheKey)
+      .toBe(createGdsTileRequestPlan({ ...baseInput, visibility: opacityVisibility }).cacheKey);
+  });
+
+  it('only sends GDS tile layer filters after the user hides a category', () => {
+    const visibility = createPhysicalLayoutVisibility(layoutFixtureGdsOpenResult.catalog, true, layoutFixtureGdsGeometry.shapes);
+    const baseInput = {
+      camera: { panX: 20, panY: 30, zoom: 48 },
+      rootCellIndex: 1,
+      sessionId: 'layout-gds',
+      size: { height: 200, width: 400 },
+    };
+    const allVisiblePlan = createGdsTileRequestPlan({ ...baseInput, visibility });
+
+    expect(allVisiblePlan.layerIndices).toBeUndefined();
+    expect(allVisiblePlan.shapeKinds).toBeUndefined();
+
+    visibility.visibleItems.delete('layer:0:path');
+    visibility.visibleItems.delete('layer:1:path');
+    const filteredPlan = createGdsTileRequestPlan({ ...baseInput, visibility });
+
+    expect(filteredPlan.layerIndices).toEqual(expect.arrayContaining([0]));
+    expect(filteredPlan.shapeKinds).toEqual(expect.arrayContaining([1, 2, 5]));
+    expect(filteredPlan.shapeKinds).not.toContain(4);
   });
 
   it('does not send a GDS layer filter before tile visibility is initialized', () => {
@@ -304,6 +405,28 @@ describe('physicalLayoutGeometry', () => {
     expect(metrics.inflightRequestCount).toBe(1);
     expect(metrics.retryCount).toBe(1);
     expect(estimateGdsTileByteLength(tile as NonNullable<typeof tile>)).toBeGreaterThan(0);
+
+    const transformOnlyMetrics = createGdsTileMetricsSnapshot({
+      bufferCapacityVertexCount: 16,
+      bufferReallocCount: 0,
+      bufferUpdateCount: 0,
+      bufferUpdateMs: 0,
+      cacheStats: { byteLength: 1024, entryCount: 1 },
+      frameDurationsMs: [16, 17, 2000, 18],
+      inflightRequestCount: 0,
+      meshBatchCount: 1,
+      meshDrawNodeCount: 1,
+      meshIndexCount: 6,
+      meshVertexCount: 4,
+      renderMs: 1,
+      retryCount: 0,
+      tile,
+      tileRequestCount: 1,
+      tileRoundtripMs: 5,
+    });
+
+    expect(transformOnlyMetrics.averageFps).toBeGreaterThan(50);
+    expect(transformOnlyMetrics.frameP95Ms).toBeLessThan(250);
   });
 
   it('bounds raw GDS tile cache by entry count and estimated bytes', () => {
@@ -524,6 +647,30 @@ describe('physicalLayoutGeometry', () => {
     });
   });
 
+  it('keeps GDS placement overview shapes visible even when they use synthetic layers', () => {
+    const visibility = createPhysicalLayoutVisibility(layoutFixtureGdsOpenResult.catalog, true, []);
+    const placementShape: LspLayoutShape = {
+      flags: 0,
+      index: 42,
+      kind: 'placement',
+      layerIndex: 9999,
+      macroIndex: null,
+      ownerIndex: 0,
+      ownerKind: 'gdsReference',
+      rect: { x0: 0, y0: 0, x1: 100, y1: 80 },
+    };
+
+    expect(filterVisiblePhysicalLayoutShapes([placementShape], visibility, 'gds')).toHaveLength(1);
+    expect(getVisiblePhysicalLayoutShapeCounts([placementShape], visibility, 'gds')).toMatchObject({
+      boundary: 1,
+    });
+    expect(getGdsTileShapeStyle(placementShape, visibility, getPhysicalLayoutLayerCategoryColor)).toMatchObject({
+      category: 'boundary',
+      alpha: expect.any(Number),
+      strokeWidth: expect.any(Number),
+    });
+  });
+
   it('creates an empty GDS tile plan when all layer categories are hidden', () => {
     const selectedShapes = layoutFixtureGdsGeometry.shapes.filter((shape) => shape.macroIndex === 1);
     const visibility = createPhysicalLayoutVisibility(layoutFixtureGdsOpenResult.catalog, true, selectedShapes);
@@ -544,6 +691,8 @@ describe('physicalLayoutGeometry', () => {
     expect(plan.empty).toBe(true);
     expect(plan.layerIndices).toEqual([]);
     expect(plan.options.layerIndices).toEqual([]);
+    expect(plan.shapeKinds).toEqual([]);
+    expect(plan.options.shapeKinds).toEqual([]);
     expect(createEmptyGdsTileGeometry(1000).geometry).toMatchObject({
       shapeCount: 0,
       shapes: [],
@@ -569,8 +718,10 @@ describe('physicalLayoutGeometry', () => {
     expect(shouldRequestPreciseGdsTile(coarsePlan)).toBe(true);
     expect(precisePlan.lod).toBe(0);
     expect(precisePlan.layerIndices).toEqual(coarsePlan.layerIndices);
+    expect(precisePlan.shapeKinds).toEqual(coarsePlan.shapeKinds);
     expect(retryPlan.lod).toBe(0);
     expect(retryPlan.layerIndices).toEqual(coarsePlan.layerIndices);
+    expect(retryPlan.shapeKinds).toEqual(coarsePlan.shapeKinds);
     expect(retryPlan.bbox.x0).toBeLessThan(coarsePlan.bbox.x0);
     expect(retryPlan.bbox.x1).toBeGreaterThan(coarsePlan.bbox.x1);
     expect(getGdsEmptyTileRetryKind(coarsePlan, { x0: -10, y0: -10, x1: 50, y1: 50 })).toBe('precise');

@@ -15,10 +15,12 @@ import {
   getLayoutTargetBounds,
   getShapesBounds,
   layoutClientPointToWorldPoint,
+  physicalLayoutZoomLimits,
   selectLayoutTargetShapes,
   shapeBounds,
   type PhysicalLayoutCamera,
   type PhysicalLayoutTarget,
+  type PhysicalLayoutZoomLimits,
 } from './physicalLayoutGeometry';
 import {
   createGdsTileMetricsSnapshot,
@@ -30,6 +32,8 @@ import {
   defaultPhysicalLayoutGdsTileMetrics,
   getGdsEmptyTileRetryKind,
   getGdsTileShapeStyle,
+  gdsTileMaxContinuationPages,
+  gdsTileMaxMergedPayloadBytes,
   PhysicalLayoutGdsTileLruCache,
   getViewportWorldBounds,
   isGdsTileModeEnabled,
@@ -77,8 +81,20 @@ const minimumCanvasHeight = 180;
 const gridMajorStep = 1;
 const gridMinorStep = 0.2;
 const clickDistanceThresholdPx = 4;
+const gdsPreciseTileIdleDelayMs = 300;
+const gdsTileApplyIdleDelayMs = 180;
+const cameraFitPaddingPx = 48;
 const GDS_TILE_ORDER_BUCKET_SIZE = 512;
 const GDS_TILE_PRECISE_ORDER_SHAPE_LIMIT = 2_048;
+const GDS_TILE_PICKABLE_SHAPE_LIMIT = 4_096;
+
+interface PendingGdsTileApply {
+  generation: number;
+  options: { acceptEmpty: boolean; state: string };
+  plan: PhysicalLayoutGdsTileRequestPlan;
+  roundtripMs: number;
+  tile: LspLayoutTileGeometry;
+}
 
 export function PhysicalLayoutCanvas({
   catalog,
@@ -98,6 +114,7 @@ export function PhysicalLayoutCanvas({
   const overlayRef = useRef<Container | null>(null);
   const minimapGraphicsRef = useRef<Graphics | null>(null);
   const renderFrameRef = useRef<number | null>(null);
+  const gdsTransformFrameRef = useRef<number | null>(null);
   const cameraRef = useRef<PhysicalLayoutCamera>(defaultCamera);
   const isGdsTileModeRef = useRef(false);
   const layoutSessionIdRef = useRef<string | null>(layoutSessionId);
@@ -109,6 +126,9 @@ export function PhysicalLayoutCanvas({
   const selectedLabelsRef = useRef<PhysicalLayoutPinLabel[]>([]);
   const gdsTileGenerationRef = useRef(0);
   const gdsTileRequestTimeoutRef = useRef<number | null>(null);
+  const gdsPreciseTileTimeoutRef = useRef<number | null>(null);
+  const gdsDeferredTileApplyTimeoutRef = useRef<number | null>(null);
+  const gdsDeferredTileApplyRef = useRef<PendingGdsTileApply | null>(null);
   const gdsTileCacheRef = useRef(new PhysicalLayoutGdsTileLruCache());
   const gdsLatestRequestKeyRef = useRef('');
   const gdsLastGoodTileRef = useRef<LspLayoutTileGeometry | null>(null);
@@ -128,11 +148,14 @@ export function PhysicalLayoutCanvas({
   const gdsRenderCountSyncTimeoutRef = useRef<number | null>(null);
   const frameDurationsRef = useRef<number[]>([]);
   const lastFrameAtRef = useRef<number | null>(null);
+  const lastGdsHotFrameAtRef = useRef<number | null>(null);
   const lastRenderDurationMsRef = useRef(0);
   const lastRenderCountSyncAtRef = useRef(0);
   const lastGdsMetricsSyncAtRef = useRef(0);
   const lastMinimapSyncAtRef = useRef(0);
+  const lastGdsInteractionAtRef = useRef(0);
   const lastTileRoundtripMsRef = useRef(0);
+  const lastTileContinuationCountRef = useRef(0);
   const inflightTileRequestCountRef = useRef(0);
   const retryTileRequestCountRef = useRef(0);
   const tileRequestCountRef = useRef(0);
@@ -204,8 +227,14 @@ export function PhysicalLayoutCanvas({
   const visibleCategoryCount = getVisiblePhysicalLayoutCategoryCount(catalog, layoutVisibility);
   const outlineVisible = isPhysicalLayoutOutlineVisible(layoutVisibility);
   const pickableShape = useMemo(
-    () => getPickableVisibleShape(visibleShapes, camera, size),
-    [camera, size, visibleShapes],
+    () => {
+      if (isGdsTileMode && visibleShapes.length > GDS_TILE_PICKABLE_SHAPE_LIMIT) {
+        return null;
+      }
+
+      return getPickableVisibleShape(visibleShapes, camera, size);
+    },
+    [camera, isGdsTileMode, size, visibleShapes],
   );
 
   selectedBoundsRef.current = selectedBounds;
@@ -263,10 +292,23 @@ export function PhysicalLayoutCanvas({
         window.cancelAnimationFrame(renderFrameRef.current);
         renderFrameRef.current = null;
       }
+      if (gdsTransformFrameRef.current !== null) {
+        window.cancelAnimationFrame(gdsTransformFrameRef.current);
+        gdsTransformFrameRef.current = null;
+      }
       if (gdsTileRequestTimeoutRef.current !== null) {
         window.clearTimeout(gdsTileRequestTimeoutRef.current);
         gdsTileRequestTimeoutRef.current = null;
       }
+      if (gdsPreciseTileTimeoutRef.current !== null) {
+        window.clearTimeout(gdsPreciseTileTimeoutRef.current);
+        gdsPreciseTileTimeoutRef.current = null;
+      }
+      if (gdsDeferredTileApplyTimeoutRef.current !== null) {
+        window.clearTimeout(gdsDeferredTileApplyTimeoutRef.current);
+        gdsDeferredTileApplyTimeoutRef.current = null;
+      }
+      gdsDeferredTileApplyRef.current = null;
       if (gdsCameraSyncTimeoutRef.current !== null) {
         window.clearTimeout(gdsCameraSyncTimeoutRef.current);
         gdsCameraSyncTimeoutRef.current = null;
@@ -315,7 +357,8 @@ export function PhysicalLayoutCanvas({
   }, []);
 
   useEffect(() => {
-    const nextCamera = getFitLayoutCamera(selectedBounds, size);
+    const zoomLimits = getPhysicalLayoutCanvasZoomLimits(catalog?.sourceKind, selectedTarget?.kind, selectedBounds, size);
+    const nextCamera = getFitLayoutCamera(selectedBounds, size, zoomLimits);
     cameraRef.current = nextCamera;
     setCamera(nextCamera);
     setCameraSync(nextCamera);
@@ -334,6 +377,11 @@ export function PhysicalLayoutCanvas({
     gdsTileCacheRef.current.clear();
     gdsLatestRequestKeyRef.current = '';
     gdsLastGoodTileRef.current = null;
+    if (gdsDeferredTileApplyTimeoutRef.current !== null) {
+      window.clearTimeout(gdsDeferredTileApplyTimeoutRef.current);
+      gdsDeferredTileApplyTimeoutRef.current = null;
+    }
+    gdsDeferredTileApplyRef.current = null;
     updateGdsTileDiagnostics({
       bboxArea: 0,
       displayedState: 'empty',
@@ -361,6 +409,11 @@ export function PhysicalLayoutCanvas({
     gdsTileGenerationRef.current += 1;
     gdsTileCacheRef.current.clear();
     gdsLatestRequestKeyRef.current = '';
+    if (gdsDeferredTileApplyTimeoutRef.current !== null) {
+      window.clearTimeout(gdsDeferredTileApplyTimeoutRef.current);
+      gdsDeferredTileApplyTimeoutRef.current = null;
+    }
+    gdsDeferredTileApplyRef.current = null;
     scheduleGdsTileRequest();
   }, [isGdsTileMode, layoutVisibility]);
 
@@ -384,8 +437,10 @@ export function PhysicalLayoutCanvas({
     const handleWheel = (event: WheelEvent) => {
       event.preventDefault();
       event.stopPropagation();
+      markGdsViewportInteraction();
       const bounds = host.getBoundingClientRect();
-      updateCamera(applyLayoutWheel(cameraRef.current, event, { x: bounds.left, y: bounds.top }));
+      const zoomLimits = getPhysicalLayoutCanvasZoomLimits(catalog?.sourceKind, selectedTargetRef.current?.kind, selectedBoundsRef.current, sizeRef.current);
+      updateCamera(applyLayoutWheel(cameraRef.current, event, { x: bounds.left, y: bounds.top }, zoomLimits));
       scheduleGdsTileRequest();
     };
     const selectShapeAtClientPoint = (
@@ -437,6 +492,7 @@ export function PhysicalLayoutCanvas({
         panX: cameraRef.current.panX + dx,
         panY: cameraRef.current.panY + dy,
       });
+      markGdsViewportInteraction();
       scheduleGdsTileRequest();
     };
     const handlePointerUp = (event: PointerEvent) => {
@@ -477,24 +533,31 @@ export function PhysicalLayoutCanvas({
     };
   }, []);
 
-  const requestRender = () => {
-    if (renderFrameRef.current !== null) {
+  const renderFrameNow = () => {
+    const frameStartedAt = performance.now();
+    const app = appRef.current;
+    if (!app) {
       return;
     }
 
-    renderFrameRef.current = window.requestAnimationFrame(() => {
-      renderFrameRef.current = null;
-      const frameStartedAt = performance.now();
-      const app = appRef.current;
-      if (!app) {
-        return;
+    updateTransforms();
+    updateMinimapOverlay();
+    app.render();
+    const frameEndedAt = performance.now();
+    lastRenderDurationMsRef.current = frameEndedAt - frameStartedAt;
+    if (isGdsTileModeRef.current) {
+      if (isGdsViewportInteractionActive()) {
+        if (lastGdsHotFrameAtRef.current !== null) {
+          frameDurationsRef.current.push(frameEndedAt - lastGdsHotFrameAtRef.current);
+          if (frameDurationsRef.current.length > 120) {
+            frameDurationsRef.current.shift();
+          }
+        }
+        lastGdsHotFrameAtRef.current = frameEndedAt;
+      } else {
+        lastGdsHotFrameAtRef.current = null;
       }
-
-      updateTransforms();
-      updateMinimapOverlay();
-      app.render();
-      const frameEndedAt = performance.now();
-      lastRenderDurationMsRef.current = frameEndedAt - frameStartedAt;
+    } else {
       if (lastFrameAtRef.current !== null) {
         frameDurationsRef.current.push(frameEndedAt - lastFrameAtRef.current);
         if (frameDurationsRef.current.length > 120) {
@@ -502,9 +565,20 @@ export function PhysicalLayoutCanvas({
         }
       }
       lastFrameAtRef.current = frameEndedAt;
-      renderCountRef.current += 1;
-      syncRenderCountState();
-      updateGdsTileMetrics();
+    }
+    renderCountRef.current += 1;
+    syncRenderCountState();
+    updateGdsTileMetrics();
+  };
+
+  const requestRender = () => {
+    if (renderFrameRef.current !== null) {
+      return;
+    }
+
+    renderFrameRef.current = window.requestAnimationFrame(() => {
+      renderFrameRef.current = null;
+      renderFrameNow();
     });
   };
 
@@ -519,8 +593,56 @@ export function PhysicalLayoutCanvas({
     requestRender();
   };
 
+  const isGdsViewportInteractionActive = () => (
+    isGdsTileModeRef.current
+    && performance.now() - lastGdsInteractionAtRef.current < gdsTileApplyIdleDelayMs
+  );
+
+  const getGdsViewportIdleDelay = () => Math.max(
+    16,
+    gdsTileApplyIdleDelayMs - (performance.now() - lastGdsInteractionAtRef.current),
+  );
+
+  const runGdsTransformLoopFrame = () => {
+    gdsTransformFrameRef.current = null;
+
+    if (!isGdsViewportInteractionActive()) {
+      syncRenderCountState(true);
+      syncGdsCameraState(true);
+      syncMinimapModelState(true);
+      updateGdsTileMetrics(gdsLastGoodTileRef.current);
+      return;
+    }
+
+    if (renderFrameRef.current !== null) {
+      window.cancelAnimationFrame(renderFrameRef.current);
+      renderFrameRef.current = null;
+    }
+
+    renderFrameNow();
+    gdsTransformFrameRef.current = window.requestAnimationFrame(runGdsTransformLoopFrame);
+  };
+
+  const startGdsTransformLoop = () => {
+    if (!isGdsTileModeRef.current || gdsTransformFrameRef.current !== null) {
+      return;
+    }
+
+    gdsTransformFrameRef.current = window.requestAnimationFrame(runGdsTransformLoopFrame);
+  };
+
   const syncRenderCountState = (force = false) => {
     const now = performance.now();
+    if (isGdsTileModeRef.current && !force && isGdsViewportInteractionActive()) {
+      if (gdsRenderCountSyncTimeoutRef.current === null) {
+        gdsRenderCountSyncTimeoutRef.current = window.setTimeout(() => {
+          gdsRenderCountSyncTimeoutRef.current = null;
+          syncRenderCountState(true);
+        }, getGdsViewportIdleDelay());
+      }
+      return;
+    }
+
     if (!isGdsTileModeRef.current || force || now - lastRenderCountSyncAtRef.current >= 120) {
       if (gdsRenderCountSyncTimeoutRef.current !== null) {
         window.clearTimeout(gdsRenderCountSyncTimeoutRef.current);
@@ -548,6 +670,16 @@ export function PhysicalLayoutCanvas({
       }
       setCamera(cameraRef.current);
       setCameraSync(cameraRef.current);
+      return;
+    }
+
+    if (isGdsViewportInteractionActive()) {
+      if (gdsCameraSyncTimeoutRef.current === null) {
+        gdsCameraSyncTimeoutRef.current = window.setTimeout(() => {
+          gdsCameraSyncTimeoutRef.current = null;
+          syncGdsCameraState();
+        }, getGdsViewportIdleDelay());
+      }
       return;
     }
 
@@ -583,6 +715,67 @@ export function PhysicalLayoutCanvas({
     }, 80);
   };
 
+  const cancelPendingPreciseGdsTile = () => {
+    if (gdsPreciseTileTimeoutRef.current !== null) {
+      window.clearTimeout(gdsPreciseTileTimeoutRef.current);
+      gdsPreciseTileTimeoutRef.current = null;
+    }
+  };
+
+  const markGdsViewportInteraction = () => {
+    const wasActive = isGdsViewportInteractionActive();
+    lastGdsInteractionAtRef.current = performance.now();
+    if (!wasActive) {
+      lastGdsHotFrameAtRef.current = null;
+    }
+    cancelPendingPreciseGdsTile();
+    startGdsTransformLoop();
+  };
+
+  const schedulePreciseGdsTileRequest = (
+    input: PhysicalLayoutGdsTileRequestInput,
+    sourcePlan: PhysicalLayoutGdsTileRequestPlan,
+    generation: number,
+  ) => {
+    cancelPendingPreciseGdsTile();
+    updateGdsTileDiagnostics({
+      precisePending: true,
+      retryKind: 'precise',
+    });
+    gdsPreciseTileTimeoutRef.current = window.setTimeout(() => {
+      gdsPreciseTileTimeoutRef.current = null;
+      if (gdsTileGenerationRef.current !== generation || gdsLatestRequestKeyRef.current !== sourcePlan.cacheKey) {
+        updateGdsTileDiagnostics({
+          precisePending: false,
+        });
+        return;
+      }
+
+      const elapsedSinceInteraction = performance.now() - lastGdsInteractionAtRef.current;
+      if (elapsedSinceInteraction < gdsPreciseTileIdleDelayMs) {
+        schedulePreciseGdsTileRequest(input, sourcePlan, generation);
+        return;
+      }
+
+      const currentInput = createGdsTileRequestInput(input.sessionId, input.rootCellIndex);
+      const currentPlan = createGdsTileRequestPlan(currentInput);
+      if (currentPlan.cacheKey !== sourcePlan.cacheKey || !shouldRequestPreciseGdsTile(currentPlan)) {
+        updateGdsTileDiagnostics({
+          precisePending: false,
+          retryKind: 'none',
+        });
+        return;
+      }
+
+      const precisePlan = createGdsPreciseTileRequestPlan(currentInput);
+      gdsLatestRequestKeyRef.current = precisePlan.cacheKey;
+      void requestGdsTilePlan(currentInput, precisePlan, generation, {
+        acceptEmpty: false,
+        retryEmpty: true,
+      });
+    }, gdsPreciseTileIdleDelayMs);
+  };
+
   const requestGdsTileGeometry = async () => {
     const lsp = window.electronAPI?.lsp;
     const currentSessionId = layoutSessionIdRef.current;
@@ -594,6 +787,7 @@ export function PhysicalLayoutCanvas({
     const generation = gdsTileGenerationRef.current;
     const input = createGdsTileRequestInput(currentSessionId, currentTarget.index);
     const plan = createGdsTileRequestPlan(input);
+    cancelPendingPreciseGdsTile();
     gdsLatestRequestKeyRef.current = plan.cacheKey;
     updateGdsTileDiagnostics({
       bboxArea: getTilePlanArea(plan),
@@ -604,10 +798,28 @@ export function PhysicalLayoutCanvas({
       tileLod: plan.lod,
     });
     if (plan.empty) {
+      if (plan.emptyReason === 'outside-cell-bounds' && gdsLastGoodTileRef.current) {
+        updateGdsTileDiagnostics({
+          bboxArea: getTilePlanArea(plan),
+          displayedState: 'outside-kept-last-good',
+          emptyReason: 'outside-cell-bounds',
+          lastGoodShapeCount: gdsLastGoodTileRef.current.geometry.shapes.length,
+          precisePending: false,
+          retryKind: 'none',
+          tileLod: plan.lod,
+        });
+        updateGdsTileMetrics(gdsLastGoodTileRef.current);
+        return;
+      }
       const emptyTile = createEmptyGdsTileGeometry(catalog?.unitsPerMicron);
       gdsTileCacheRef.current.set(plan.cacheKey, emptyTile);
-      gdsLastGoodTileRef.current = null;
-      applyGdsTile(emptyTile, plan, generation, 0, { acceptEmpty: true, state: 'empty-hidden' });
+      if (plan.emptyReason === 'all-hidden') {
+        gdsLastGoodTileRef.current = null;
+      }
+      applyGdsTile(emptyTile, plan, generation, 0, {
+        acceptEmpty: true,
+        state: plan.emptyReason === 'outside-cell-bounds' ? 'empty-outside-cell-bounds' : 'empty-hidden',
+      });
       return;
     }
 
@@ -617,6 +829,7 @@ export function PhysicalLayoutCanvas({
   const createGdsTileRequestInput = (sessionId: string, rootCellIndex: number): PhysicalLayoutGdsTileRequestInput => ({
       camera: cameraRef.current,
       rootCellIndex,
+      selectedBounds: selectedBoundsRef.current,
       sessionId,
       size: sizeRef.current,
       visibility: layoutVisibilityRef.current,
@@ -635,6 +848,7 @@ export function PhysicalLayoutCanvas({
 
     const cachedTile = gdsTileCacheRef.current.get(plan.cacheKey);
     if (cachedTile) {
+      lastTileContinuationCountRef.current = 0;
       handleGdsTileResult(cachedTile, input, plan, generation, 0, options);
       return;
     }
@@ -644,6 +858,8 @@ export function PhysicalLayoutCanvas({
     const seenContinuationTokens = new Set<number>();
     let continuationToken: number | null | undefined = undefined;
     let continuationCount = 0;
+    let mergedPayloadSize = 0;
+    let stoppedByBudget = false;
     inflightTileRequestCountRef.current += 1;
     updateGdsTileMetrics();
     try {
@@ -656,25 +872,47 @@ export function PhysicalLayoutCanvas({
           return;
         }
         results.push(tile);
+        mergedPayloadSize += Math.max(0, tile.payloadSize);
         continuationToken = tile.nextToken;
         if (continuationToken !== null && continuationToken !== undefined) {
           if (seenContinuationTokens.has(continuationToken)) {
             updateGdsTileDiagnostics({
               emptyReason: 'repeated-continuation-token',
             });
+            stoppedByBudget = true;
             continuationToken = null;
           } else {
             seenContinuationTokens.add(continuationToken);
           }
         }
         continuationCount += 1;
-        if (continuationCount > 32) {
+        if (continuationCount > gdsTileMaxContinuationPages) {
           updateGdsTileDiagnostics({
             emptyReason: 'continuation-limit',
           });
+          stoppedByBudget = true;
+          continuationToken = null;
+        }
+        if (mergedPayloadSize > gdsTileMaxMergedPayloadBytes) {
+          updateGdsTileDiagnostics({
+            emptyReason: 'payload-budget-exceeded',
+          });
+          stoppedByBudget = true;
           continuationToken = null;
         }
       } while (continuationToken !== null && continuationToken !== undefined);
+
+      if (stoppedByBudget) {
+        lastTileContinuationCountRef.current = Math.max(0, continuationCount - 1);
+        if (gdsLastGoodTileRef.current) {
+          updateGdsTileDiagnostics({
+            displayedState: 'budget-kept-last-good',
+            precisePending: false,
+            retryKind: 'none',
+          });
+        }
+        return;
+      }
 
       const mergedTile = mergeGdsTileGeometryResults(results);
       if (!mergedTile) {
@@ -683,6 +921,7 @@ export function PhysicalLayoutCanvas({
 
       gdsTileCacheRef.current.set(plan.cacheKey, mergedTile);
       tileRequestCountRef.current += 1;
+      lastTileContinuationCountRef.current = Math.max(0, continuationCount - 1);
       handleGdsTileResult(mergedTile, input, plan, generation, performance.now() - startedAt, options);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Unable to load GDS viewport tile.');
@@ -746,27 +985,13 @@ export function PhysicalLayoutCanvas({
       }
     }
 
-    applyGdsTile(tile, plan, generation, roundtripMs, {
+    applyOrDeferGdsTile(tile, plan, generation, roundtripMs, {
       acceptEmpty: Boolean(options.acceptEmpty),
       state: tile.geometry.shapes.length > 0 ? 'ready' : 'empty-confirmed',
     });
 
     if (tile.geometry.shapes.length > 0 && options.requestPreciseAfterSuccess && shouldRequestPreciseGdsTile(plan)) {
-      const precisePlan = createGdsPreciseTileRequestPlan(input);
-      updateGdsTileDiagnostics({
-        precisePending: true,
-        retryKind: 'precise',
-      });
-      window.setTimeout(() => {
-        if (gdsTileGenerationRef.current !== generation || gdsLatestRequestKeyRef.current !== plan.cacheKey) {
-          return;
-        }
-        gdsLatestRequestKeyRef.current = precisePlan.cacheKey;
-        void requestGdsTilePlan(input, precisePlan, generation, {
-          acceptEmpty: false,
-          retryEmpty: true,
-        });
-      }, 120);
+      schedulePreciseGdsTileRequest(input, plan, generation);
     }
   };
 
@@ -796,7 +1021,7 @@ export function PhysicalLayoutCanvas({
       bboxArea: getTilePlanArea(plan),
       displayedState: options.state,
       emptyReason: tile.geometry.shapes.length === 0
-        ? options.acceptEmpty ? 'accepted-empty' : 'empty-current-tile'
+        ? plan.emptyReason || (options.acceptEmpty ? 'accepted-empty' : 'empty-current-tile')
         : '',
       finalLod: plan.lod,
       lastGoodShapeCount: gdsLastGoodTileRef.current?.geometry.shapes.length ?? 0,
@@ -804,6 +1029,101 @@ export function PhysicalLayoutCanvas({
       retryKind: tile.geometry.shapes.length === 0 ? gdsTileDiagnosticsRef.current.retryKind : 'none',
       tileLod: plan.lod,
     });
+  };
+
+  const shouldDeferGdsTileApply = (tile: LspLayoutTileGeometry, options: { acceptEmpty: boolean }) => {
+    if (!isGdsTileModeRef.current || tile.geometry.shapes.length === 0 || options.acceptEmpty) {
+      return false;
+    }
+
+    return performance.now() - lastGdsInteractionAtRef.current < gdsTileApplyIdleDelayMs;
+  };
+
+  const clearDeferredGdsTileApply = () => {
+    if (gdsDeferredTileApplyTimeoutRef.current !== null) {
+      window.clearTimeout(gdsDeferredTileApplyTimeoutRef.current);
+      gdsDeferredTileApplyTimeoutRef.current = null;
+    }
+    gdsDeferredTileApplyRef.current = null;
+  };
+
+  const scheduleDeferredGdsTileApply = (pending: PendingGdsTileApply) => {
+    gdsDeferredTileApplyRef.current = pending;
+    if (gdsDeferredTileApplyTimeoutRef.current !== null) {
+      window.clearTimeout(gdsDeferredTileApplyTimeoutRef.current);
+    }
+
+    const delayMs = Math.max(
+      16,
+      gdsTileApplyIdleDelayMs - (performance.now() - lastGdsInteractionAtRef.current),
+    );
+    gdsDeferredTileApplyTimeoutRef.current = window.setTimeout(() => {
+      gdsDeferredTileApplyTimeoutRef.current = null;
+      const currentPending = gdsDeferredTileApplyRef.current;
+      if (!currentPending) {
+        return;
+      }
+
+      if (performance.now() - lastGdsInteractionAtRef.current < gdsTileApplyIdleDelayMs) {
+        scheduleDeferredGdsTileApply(currentPending);
+        return;
+      }
+
+      if (
+        currentPending.generation !== gdsTileGenerationRef.current
+        || currentPending.plan.cacheKey !== gdsLatestRequestKeyRef.current
+      ) {
+        gdsDeferredTileApplyRef.current = null;
+        return;
+      }
+
+      gdsDeferredTileApplyRef.current = null;
+      applyGdsTile(
+        currentPending.tile,
+        currentPending.plan,
+        currentPending.generation,
+        currentPending.roundtripMs,
+        currentPending.options,
+      );
+    }, delayMs);
+  };
+
+  const applyOrDeferGdsTile = (
+    tile: LspLayoutTileGeometry,
+    plan: PhysicalLayoutGdsTileRequestPlan,
+    generation: number,
+    roundtripMs: number,
+    options: { acceptEmpty: boolean; state: string },
+  ) => {
+    if (
+      generation !== gdsTileGenerationRef.current
+      || plan.cacheKey !== gdsLatestRequestKeyRef.current
+    ) {
+      return;
+    }
+
+    if (shouldDeferGdsTileApply(tile, options)) {
+      scheduleDeferredGdsTileApply({
+        generation,
+        options,
+        plan,
+        roundtripMs,
+        tile,
+      });
+      updateGdsTileDiagnostics({
+        bboxArea: getTilePlanArea(plan),
+        displayedState: gdsLastGoodTileRef.current ? 'deferred-last-good' : 'deferred',
+        emptyReason: '',
+        precisePending: false,
+        retryKind: 'none',
+        tileLod: plan.lod,
+      });
+      updateGdsTileMetrics(gdsLastGoodTileRef.current ?? tile);
+      return;
+    }
+
+    clearDeferredGdsTileApply();
+    applyGdsTile(tile, plan, generation, roundtripMs, options);
   };
 
   const updateGdsTileDiagnostics = (updates: Partial<typeof gdsTileDiagnosticsRef.current>) => {
@@ -821,6 +1141,16 @@ export function PhysicalLayoutCanvas({
     }
 
     const now = performance.now();
+    if (!tile && isGdsViewportInteractionActive()) {
+      if (gdsMetricsSyncTimeoutRef.current === null) {
+        gdsMetricsSyncTimeoutRef.current = window.setTimeout(() => {
+          gdsMetricsSyncTimeoutRef.current = null;
+          updateGdsTileMetrics();
+        }, getGdsViewportIdleDelay());
+      }
+      return;
+    }
+
     if (!tile && now - lastGdsMetricsSyncAtRef.current < 250) {
       if (gdsMetricsSyncTimeoutRef.current === null) {
         gdsMetricsSyncTimeoutRef.current = window.setTimeout(() => {
@@ -842,6 +1172,7 @@ export function PhysicalLayoutCanvas({
       bufferUpdateCount: meshStatsRef.current.bufferUpdateCount,
       bufferUpdateMs: meshStatsRef.current.bufferUpdateMs,
       cacheStats: gdsTileCacheRef.current.getStats(),
+      continuationCount: lastTileContinuationCountRef.current,
       frameDurationsMs: frameDurationsRef.current,
       inflightRequestCount: inflightTileRequestCountRef.current,
       meshBatchCount: meshStatsRef.current.meshBatchCount,
@@ -897,6 +1228,16 @@ export function PhysicalLayoutCanvas({
   const syncMinimapModelState = (force = false) => {
     const nextModel = minimapModelRef.current;
     const now = performance.now();
+    if (isGdsTileModeRef.current && !force && isGdsViewportInteractionActive()) {
+      if (minimapSyncTimeoutRef.current === null) {
+        minimapSyncTimeoutRef.current = window.setTimeout(() => {
+          minimapSyncTimeoutRef.current = null;
+          syncMinimapModelState(true);
+        }, getGdsViewportIdleDelay());
+      }
+      return;
+    }
+
     if (!isGdsTileModeRef.current || force || now - lastMinimapSyncAtRef.current >= 120) {
       if (minimapSyncTimeoutRef.current !== null) {
         window.clearTimeout(minimapSyncTimeoutRef.current);
@@ -973,10 +1314,12 @@ export function PhysicalLayoutCanvas({
       data-gds-buffer-update-ms={gdsTileMetrics.bufferUpdateMs.toFixed(3)}
       data-gds-cache-bytes={gdsTileMetrics.cacheByteLength}
       data-gds-cache-entry-count={gdsTileMetrics.cacheEntryCount}
+      data-gds-continuation-count={gdsTileMetrics.continuationCount}
       data-gds-frame-p95-ms={gdsTileMetrics.frameP95Ms.toFixed(1)}
       data-gds-draw-node-count={meshStatsRef.current.drawNodeCount}
       data-gds-displayed-tile-state={gdsTileDiagnostics.displayedState}
       data-gds-empty-tile-reason={gdsTileDiagnostics.emptyReason}
+      data-gds-deferred-tile-pending={gdsDeferredTileApplyRef.current ? 'true' : 'false'}
       data-gds-final-tile-lod={gdsTileDiagnostics.finalLod}
       data-gds-inflight-count={gdsTileMetrics.inflightRequestCount}
       data-gds-last-good-shape-count={gdsTileDiagnostics.lastGoodShapeCount}
@@ -1054,6 +1397,28 @@ export function PhysicalLayoutCanvas({
       )}
     </div>
   );
+}
+
+function getPhysicalLayoutCanvasZoomLimits(
+  sourceKind: LspLayoutCatalog['sourceKind'] | undefined,
+  targetKind: PhysicalLayoutTarget['kind'] | undefined,
+  bounds: LspLayoutBounds | null,
+  viewport: { height: number; width: number },
+): PhysicalLayoutZoomLimits {
+  if (sourceKind !== 'gds' || targetKind !== 'gdsCell' || !bounds || viewport.width <= 0 || viewport.height <= 0) {
+    return physicalLayoutZoomLimits;
+  }
+
+  const width = Math.max(bounds.x1 - bounds.x0, 0.001);
+  const height = Math.max(bounds.y1 - bounds.y0, 0.001);
+  const availableWidth = Math.max(viewport.width - cameraFitPaddingPx * 2, 24);
+  const availableHeight = Math.max(viewport.height - cameraFitPaddingPx * 2, 24);
+  const fitZoom = Math.min(availableWidth / width, availableHeight / height);
+
+  return {
+    max: physicalLayoutZoomLimits.max,
+    min: Math.min(physicalLayoutZoomLimits.min, Math.max(0.000001, fitZoom)),
+  };
 }
 
 async function createPixiApp(host: HTMLElement) {
@@ -1367,8 +1732,10 @@ function drawGdsTileShapes(shapes: readonly LspLayoutShape[], layoutVisibility: 
       };
       batch.builder.addPolygon(points);
       bucket.batches.set(batchKey, batch);
-      drawGdsTileShapeStroke(bucket.fallbackGraphics, shape, style);
-      bucket.hasFallbackGraphics = true;
+      if (shape.kind !== 'placement') {
+        drawGdsTileShapeStroke(bucket.fallbackGraphics, shape, style);
+        bucket.hasFallbackGraphics = true;
+      }
       continue;
     }
 
@@ -1416,7 +1783,7 @@ function drawGdsTileShapes(shapes: readonly LspLayoutShape[], layoutVisibility: 
       bucketContainer.addChild(mesh);
     }
 
-    if (bucket.hasFallbackGraphics || bucket.batches.size > 0) {
+    if (bucket.hasFallbackGraphics) {
       bucketContainer.addChild(bucket.fallbackGraphics);
       drawNodeCount += 1;
     }
@@ -1561,7 +1928,7 @@ function getMeshableShapePoints(shape: LspLayoutShape): Array<{ x: number; y: nu
     return shape.polygon;
   }
 
-  if (shape.kind === 'rect') {
+  if (shape.kind === 'rect' || shape.kind === 'placement') {
     const bounds = shapeBounds(shape);
     return [
       { x: bounds.x0, y: bounds.y0 },

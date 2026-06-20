@@ -49,9 +49,11 @@ export interface PhysicalLayoutGdsTileRequestPlan {
   bbox: LspLayoutBounds;
   cacheKey: string;
   empty: boolean;
+  emptyReason: 'all-hidden' | 'outside-cell-bounds' | '';
   layerIndices: number[] | undefined;
   lod: number;
   options: LspLayoutTileGeometryOptions;
+  shapeKinds: number[] | undefined;
 }
 
 export interface PhysicalLayoutGdsTileCacheStats {
@@ -62,6 +64,7 @@ export interface PhysicalLayoutGdsTileCacheStats {
 export interface PhysicalLayoutGdsTileRequestInput {
   camera: PhysicalLayoutCamera;
   rootCellIndex: number;
+  selectedBounds?: LspLayoutBounds | null;
   sessionId: string;
   size: PhysicalLayoutViewport;
   visibility: PhysicalLayoutVisibility;
@@ -111,10 +114,13 @@ const retryTileOverscanRatio = 1;
 const tileBboxRoundingMicrons = 0.25;
 const gdsTileCacheMaxEntries = 96;
 const gdsTileCacheMaxBytes = 192 * 1024 * 1024;
+const gdsHotFrameMaxDurationMs = 250;
 const tileMaxShapes = 80_000;
 const tileMaxPoints = 400_000;
 const tileMaxBytes = 8 * 1024 * 1024;
 const preciseTileMaxAreaMicrons = 250_000;
+export const gdsTileMaxContinuationPages = 32;
+export const gdsTileMaxMergedPayloadBytes = 64 * 1024 * 1024;
 
 export class PhysicalLayoutGdsTileLruCache {
   private readonly entries = new Map<string, { byteLength: number; tile: LspLayoutTileGeometry }>();
@@ -188,28 +194,37 @@ export function createGdsTileRequestPlan(input: PhysicalLayoutGdsTileRequestInpu
   lod?: number;
   overscanRatio?: number;
 }): PhysicalLayoutGdsTileRequestPlan {
-  const bbox = getViewportWorldBounds(input.camera, input.size, input.overscanRatio ?? tileOverscanRatio);
+  const viewportBbox = getViewportWorldBounds(input.camera, input.size, input.overscanRatio ?? tileOverscanRatio);
+  const clippedBbox = input.selectedBounds ? clipLayoutBounds(viewportBbox, input.selectedBounds) : viewportBbox;
   const lod = input.lod ?? getGdsTileLod(input.camera.zoom);
-  const visibleLayerIndices = getVisibleGdsTileLayerIndices(input.visibility);
-  const useVisibleLayerFilter = input.layerFilterMode !== 'all';
-  const empty = useVisibleLayerFilter && visibleLayerIndices.length === 0 && input.visibility.layerOpacities.size > 0;
+  const visibleFilter = getVisibleGdsTileFilter(input.visibility);
+  const useVisibleLayerFilter = input.layerFilterMode !== 'all' && hasActiveGdsTileVisibilityFilter(input.visibility);
+  const emptyByVisibility = useVisibleLayerFilter && visibleFilter.layerIndices.length === 0 && input.visibility.layerOpacities.size > 0;
+  const emptyByBounds = clippedBbox === null;
+  const empty = emptyByVisibility || emptyByBounds;
   const layerIndices = !useVisibleLayerFilter
     ? undefined
-    : empty ? [] : visibleLayerIndices.length > 0 ? visibleLayerIndices : undefined;
-  const roundedBbox = roundTileBounds(bbox);
+    : empty ? [] : visibleFilter.layerIndices.length > 0 ? visibleFilter.layerIndices : undefined;
+  const shouldSendShapeKindFilter = useVisibleLayerFilter && lod === 0;
+  const shapeKinds = !useVisibleLayerFilter
+    ? undefined
+    : empty ? [] : shouldSendShapeKindFilter && visibleFilter.shapeKinds.length > 0 ? visibleFilter.shapeKinds : undefined;
+  const roundedBbox = roundTileBounds(clippedBbox ?? viewportBbox);
   const cacheKey = createGdsTileCacheKey({
     bbox: roundedBbox,
     layerIndices,
     lod,
     rootCellIndex: input.rootCellIndex,
+    shapeKinds,
     sessionId: input.sessionId,
-    visibilityKey: createGdsTileVisibilityKey(input.visibility),
+    visibilityKey: createGdsTileFilterKey(input.visibility),
   });
 
   return {
     bbox: roundedBbox,
     cacheKey,
     empty,
+    emptyReason: emptyByVisibility ? 'all-hidden' : emptyByBounds ? 'outside-cell-bounds' : '',
     layerIndices,
     lod,
     options: {
@@ -221,7 +236,9 @@ export function createGdsTileRequestPlan(input: PhysicalLayoutGdsTileRequestInpu
       maxShapes: tileMaxShapes,
       rootCellIndex: input.rootCellIndex,
       sessionId: input.sessionId,
+      shapeKinds,
     },
+    shapeKinds,
   };
 }
 
@@ -353,6 +370,7 @@ export function createGdsTileMetricsSnapshot(input: {
   bufferUpdateCount?: number;
   bufferUpdateMs?: number;
   cacheStats?: PhysicalLayoutGdsTileCacheStats;
+  continuationCount?: number;
   frameDurationsMs: readonly number[];
   inflightRequestCount?: number;
   meshBatchCount?: number;
@@ -365,7 +383,11 @@ export function createGdsTileMetricsSnapshot(input: {
   tileRequestCount: number;
   tileRoundtripMs: number;
 }): PhysicalLayoutGdsTileMetrics {
-  const frameDurations = input.frameDurationsMs.filter((value) => Number.isFinite(value) && value > 0);
+  const frameDurations = input.frameDurationsMs.filter((value) => (
+    Number.isFinite(value)
+    && value > 0
+    && value <= gdsHotFrameMaxDurationMs
+  ));
   const lastFrameMs = frameDurations[frameDurations.length - 1] ?? 0;
   const fpsValues = frameDurations.map((value) => 1000 / value);
   const lastFps = fpsValues[fpsValues.length - 1] ?? 0;
@@ -384,7 +406,7 @@ export function createGdsTileMetricsSnapshot(input: {
     cacheEntryCount: input.cacheStats?.entryCount ?? 0,
     cacheHitCount: input.tile?.metrics.cacheHitCount ?? 0,
     cacheMissCount: input.tile?.metrics.cacheMissCount ?? 0,
-    continuationCount: input.tile?.nextToken === null ? 0 : 1,
+    continuationCount: input.continuationCount ?? (input.tile?.nextToken === null ? 0 : 1),
     frameP95Ms: percentile(frameDurations, 0.95),
     inflightRequestCount: input.inflightRequestCount ?? 0,
     indexByteLength: input.meshIndexCount * Uint32Array.BYTES_PER_ELEMENT,
@@ -422,6 +444,18 @@ export function getGdsTileShapeStyle(
   visibility: PhysicalLayoutVisibility,
   getColor: (layerIndex: number, category: PhysicalLayoutLayerCategory) => { pixiColor: number },
 ): PhysicalLayoutGdsTileShapeStyle | null {
+  if (shape.kind === 'placement') {
+    const category: PhysicalLayoutLayerCategory = 'boundary';
+    const layerOpacity = getPhysicalLayoutLayerOpacity(visibility, shape.layerIndex);
+    return {
+      alpha: 0.7 * layerOpacity,
+      category,
+      color: getColor(shape.layerIndex, category).pixiColor,
+      strokeAlpha: 0.92 * layerOpacity,
+      strokeWidth: 0.015,
+    };
+  }
+
   const category = getPhysicalLayoutShapeCategory(shape, 'gds');
   if (!category || !isPhysicalLayoutLayerCategoryVisible(visibility, shape.layerIndex, category)) {
     return null;
@@ -479,8 +513,38 @@ export function createGdsTileVisibilityKey(visibility: PhysicalLayoutVisibility)
   ].join('|');
 }
 
-function getVisibleGdsTileLayerIndices(visibility: PhysicalLayoutVisibility): number[] {
+export function createGdsTileFilterKey(visibility: PhysicalLayoutVisibility): string {
+  const filter = getVisibleGdsTileFilter(visibility);
+  return [
+    hasActiveGdsTileVisibilityFilter(visibility) ? 'filtered' : 'all-visible',
+    filter.layerIndices.join(','),
+    filter.shapeKinds.join(','),
+    visibility.layerOpacities.size > 0 ? 'initialized' : 'uninitialized',
+  ].join('|');
+}
+
+export function hasActiveGdsTileVisibilityFilter(visibility: PhysicalLayoutVisibility): boolean {
+  if (visibility.layerOpacities.size === 0) {
+    return false;
+  }
+
+  for (const layerIndex of visibility.layerOpacities.keys()) {
+    if (!visibility.visibleItems.has(`layer:${layerIndex}:boundary`)
+      || !visibility.visibleItems.has(`layer:${layerIndex}:path`)
+      || !visibility.visibleItems.has(`layer:${layerIndex}:text`)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function getVisibleGdsTileFilter(visibility: PhysicalLayoutVisibility): {
+  layerIndices: number[];
+  shapeKinds: number[];
+} {
   const layerIndices = new Set<number>();
+  const shapeKinds = new Set<number>();
 
   for (const key of visibility.visibleItems) {
     const match = /^layer:(-?\d+):(boundary|path|text)$/.exec(key);
@@ -492,9 +556,34 @@ function getVisibleGdsTileLayerIndices(visibility: PhysicalLayoutVisibility): nu
     if (Number.isInteger(layerIndex)) {
       layerIndices.add(layerIndex);
     }
+
+    const category = match[2];
+    if (!category) {
+      continue;
+    }
+
+    for (const shapeKind of getGdsShapeKindCodesForCategory(category)) {
+      shapeKinds.add(shapeKind);
+    }
   }
 
-  return Array.from(layerIndices).sort((left, right) => left - right);
+  return {
+    layerIndices: Array.from(layerIndices).sort((left, right) => left - right),
+    shapeKinds: Array.from(shapeKinds).sort((left, right) => left - right),
+  };
+}
+
+function getGdsShapeKindCodesForCategory(category: string): number[] {
+  if (category === 'boundary') {
+    return [1, 2];
+  }
+  if (category === 'path') {
+    return [4];
+  }
+  if (category === 'text') {
+    return [5];
+  }
+  return [];
 }
 
 function createGdsTileCacheKey(input: {
@@ -502,6 +591,7 @@ function createGdsTileCacheKey(input: {
   layerIndices: readonly number[] | undefined;
   lod: number;
   rootCellIndex: number;
+  shapeKinds: readonly number[] | undefined;
   sessionId: string;
   visibilityKey: string;
 }): string {
@@ -510,12 +600,25 @@ function createGdsTileCacheKey(input: {
     input.rootCellIndex,
     input.lod,
     input.layerIndices ? input.layerIndices.join(',') : 'all',
+    input.shapeKinds ? input.shapeKinds.join(',') : 'all',
     input.visibilityKey,
     input.bbox.x0,
     input.bbox.y0,
     input.bbox.x1,
     input.bbox.y1,
   ].join('|');
+}
+
+function clipLayoutBounds(bounds: LspLayoutBounds, clip: LspLayoutBounds): LspLayoutBounds | null {
+  const x0 = Math.max(bounds.x0, clip.x0);
+  const y0 = Math.max(bounds.y0, clip.y0);
+  const x1 = Math.min(bounds.x1, clip.x1);
+  const y1 = Math.min(bounds.y1, clip.y1);
+  if (x1 <= x0 || y1 <= y0) {
+    return null;
+  }
+
+  return { x0, y0, x1, y1 };
 }
 
 function roundTileBounds(bounds: LspLayoutBounds): LspLayoutBounds {

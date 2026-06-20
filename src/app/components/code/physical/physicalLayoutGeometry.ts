@@ -36,6 +36,11 @@ export const physicalLayoutZoomLimits = {
   min: 2,
 } as const;
 
+export interface PhysicalLayoutZoomLimits {
+  max: number;
+  min: number;
+}
+
 export function getFirstLayoutMacroName(catalog: LspLayoutCatalog | null | undefined): string | null {
   return catalog?.macros[0]?.name ?? null;
 }
@@ -170,7 +175,11 @@ export function getShapesBounds(shapes: readonly LspLayoutShape[], fallback: Lsp
   return { x0, y0, x1, y1 };
 }
 
-export function getFitLayoutCamera(bounds: LspLayoutBounds | null, viewport: PhysicalLayoutViewport): PhysicalLayoutCamera {
+export function getFitLayoutCamera(
+  bounds: LspLayoutBounds | null,
+  viewport: PhysicalLayoutViewport,
+  zoomLimits: PhysicalLayoutZoomLimits = physicalLayoutZoomLimits,
+): PhysicalLayoutCamera {
   if (!bounds || viewport.width <= 0 || viewport.height <= 0) {
     return { panX: 0, panY: 0, zoom: 24 };
   }
@@ -180,7 +189,7 @@ export function getFitLayoutCamera(bounds: LspLayoutBounds | null, viewport: Phy
   const padding = 48;
   const availableWidth = Math.max(viewport.width - padding * 2, 24);
   const availableHeight = Math.max(viewport.height - padding * 2, 24);
-  const zoom = clamp(Math.min(availableWidth / width, availableHeight / height), physicalLayoutZoomLimits.min, physicalLayoutZoomLimits.max);
+  const zoom = clamp(Math.min(availableWidth / width, availableHeight / height), zoomLimits.min, zoomLimits.max);
 
   return {
     panX: viewport.width / 2 - (bounds.x0 + width / 2) * zoom,
@@ -198,7 +207,7 @@ export function applyLayoutWheel(camera: PhysicalLayoutCamera, event: {
   deltaY: number;
   metaKey?: boolean;
   shiftKey?: boolean;
-}, viewportOrigin: { x: number; y: number }): PhysicalLayoutCamera {
+}, viewportOrigin: { x: number; y: number }, zoomLimits: PhysicalLayoutZoomLimits = physicalLayoutZoomLimits): PhysicalLayoutCamera {
   const deltaX = normalizeWheelDelta(event.deltaX, event.deltaMode);
   const deltaY = normalizeWheelDelta(event.deltaY, event.deltaMode);
 
@@ -208,7 +217,7 @@ export function applyLayoutWheel(camera: PhysicalLayoutCamera, event: {
     const worldX = (localX - camera.panX) / camera.zoom;
     const worldY = (localY - camera.panY) / camera.zoom;
     const zoomFactor = Math.exp(-deltaY * 0.002);
-    const zoom = clamp(camera.zoom * zoomFactor, physicalLayoutZoomLimits.min, physicalLayoutZoomLimits.max);
+    const zoom = clamp(camera.zoom * zoomFactor, zoomLimits.min, zoomLimits.max);
 
     return {
       panX: localX - worldX * zoom,
