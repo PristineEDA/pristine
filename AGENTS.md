@@ -65,6 +65,7 @@ Pristine is currently an Electron, Vite, React, TypeScript, and Mastra workspace
 - Physical large-GDS 2D rendering should use the v3 staged status/catalog-page/tile-geometry path. Do not use full-cell geometry pulls or row/primitive Graphics redraws as the pan/zoom hot path for large GDS.
 - Preserve Physical GDS visual quality during performance work: do not lower DPR, downsample, hide labels or shapes, change colors, line widths, opacity, outline, or layer/category/opacity semantics to improve FPS.
 - Physical GDS performance work should include measured tile/mesh metrics and the local `tt_um_tt_tinyQV.gds` fixture when practical. Use `pnpm run prepare:physical-gds-fixture` to fetch it into `.deps`; do not commit the downloaded GDS.
+- Physical staged GDS open should surface `PLST` parsing progress in the renderer and wait for `ready` before catalog-page or tile requests. Do not hide staged parsing entirely inside Electron handlers when UI or perf metrics need it.
 - Physical large-GDS tile retries and caches must be bounded: do not retry large empty viewport bboxes with full `lod=0`, cap raw tile cache entries/bytes, release stale mesh resources, and report cache/inflight/retry metrics.
 
 ## pristine-engine Coordination

@@ -368,6 +368,8 @@ describe('PhysicalWorkspacePanels', () => {
 
     await waitFor(() => expect(screen.getByTestId('physical-layout-editor')).toHaveAttribute('data-status', 'ready'));
     expect(layoutOpen).toHaveBeenCalledWith({
+      deferCatalog: true,
+      openMode: 'auto',
       workspaceFilePath: 'chip.gds',
       title: 'chip.gds',
     });
@@ -384,6 +386,126 @@ describe('PhysicalWorkspacePanels', () => {
     expect(screen.getByTestId('physical-gds-toolbar-metrics')).toHaveAttribute('data-gds-draw-node-count', '3');
     expect(screen.getByTestId('physical-gds-toolbar-metrics-mesh-value')).toHaveTextContent('2');
     expect(screen.getByTestId('physical-layout-canvas')).toHaveAttribute('data-selected-macro-name', '');
+  });
+
+  it('shows staged GDS parsing progress before loading the paged catalog', async () => {
+    const layoutOpen = vi.mocked(getTestElectronApi().lsp.layoutOpen);
+    const layoutStatus = vi.mocked(getTestElectronApi().lsp.layoutStatus);
+    const layoutCatalogSummary = vi.mocked(getTestElectronApi().lsp.layoutCatalogSummary);
+    const layoutCatalogPage = vi.mocked(getTestElectronApi().lsp.layoutCatalogPage);
+    layoutOpen.mockResolvedValueOnce({
+      ...layoutFixtureGdsOpenResult,
+      deferred: true,
+      initialStatus: 'parsing',
+      catalog: {
+        ...layoutFixtureGdsOpenResult.catalog,
+        layers: [],
+        gdsCells: [],
+      },
+    });
+    layoutStatus
+      .mockResolvedValueOnce({
+        state: 'parsing',
+        phase: 'records',
+        fileSizeBytes: 100,
+        bytesRead: 25,
+        recordCount: 10,
+        cellCount: 0,
+        referenceCount: 0,
+        elementCount: 0,
+        pointCount: 0,
+        stringCount: 0,
+        diagnosticCount: 0,
+        elapsedMicros: 1000,
+        openMicros: 100,
+        parseMicros: 900,
+        warmupScheduled: false,
+        warmupReady: false,
+        error: '',
+      })
+      .mockResolvedValueOnce({
+        state: 'ready',
+        phase: 'ready',
+        fileSizeBytes: 100,
+        bytesRead: 100,
+        recordCount: 40,
+        cellCount: layoutFixtureGdsOpenResult.catalog.gdsCells.length,
+        referenceCount: 0,
+        elementCount: layoutFixtureGdsOpenResult.catalog.gdsElements.length,
+        pointCount: 0,
+        stringCount: 4,
+        diagnosticCount: 0,
+        elapsedMicros: 5000,
+        openMicros: 100,
+        parseMicros: 4900,
+        warmupScheduled: false,
+        warmupReady: true,
+        error: '',
+      });
+    layoutCatalogSummary.mockResolvedValueOnce({
+      unitsPerMicron: layoutFixtureGdsOpenResult.catalog.unitsPerMicron,
+      sourceKind: 'gds',
+      shapeCount: layoutFixtureGdsOpenResult.catalog.shapeCount,
+      hasBounds: true,
+      topCellIndex: layoutFixtureGdsOpenResult.catalog.topCellIndex,
+      bounds: layoutFixtureGdsOpenResult.catalog.gdsCells[0]?.bounds ?? null,
+      layerCount: layoutFixtureGdsOpenResult.catalog.layers.length,
+      layerSummary: layoutFixtureGdsOpenResult.catalog.layers,
+      macroCount: 0,
+      componentCount: 0,
+      defPinCount: 0,
+      netCount: 0,
+      gdsCellCount: layoutFixtureGdsOpenResult.catalog.gdsCells.length,
+      gdsReferenceCount: 0,
+      gdsElementCount: layoutFixtureGdsOpenResult.catalog.gdsElements.length,
+      gdsPointCount: 0,
+      stringCount: 4,
+      diagnosticCount: 0,
+      parseMicros: 4900,
+      layerRegisterMicros: 20,
+      boundsMicros: 30,
+      openMicros: 100,
+    });
+    layoutCatalogPage.mockImplementation(async (options) => ({
+      tableKind: options.tableKind,
+      offset: options.offset ?? 0,
+      count: options.tableKind === 'layers'
+        ? layoutFixtureGdsOpenResult.catalog.layers.length
+        : layoutFixtureGdsOpenResult.catalog.gdsCells.length,
+      totalCount: options.tableKind === 'layers'
+        ? layoutFixtureGdsOpenResult.catalog.layers.length
+        : layoutFixtureGdsOpenResult.catalog.gdsCells.length,
+      nextOffset: null,
+      layers: options.tableKind === 'layers' ? layoutFixtureGdsOpenResult.catalog.layers : [],
+      gdsCells: options.tableKind === 'cells' ? layoutFixtureGdsOpenResult.catalog.gdsCells : [],
+      gdsReferences: [],
+      gdsElements: [],
+      gdsPoints: [],
+      strings: [],
+      diagnostics: [],
+    }));
+
+    function PhysicalGdsPanelHarness() {
+      const [selectedTarget, setSelectedTarget] = useState<PhysicalLayoutTarget | null>(null);
+
+      return (
+        <PhysicalMainPanel
+          activeLayoutFilePath="chip.gds"
+          layoutVisibility={readyVisibility}
+          selectedTarget={selectedTarget}
+          onSelectedTargetChange={setSelectedTarget}
+        />
+      );
+    }
+
+    renderInCodeLayout(<PhysicalGdsPanelHarness />);
+
+    await waitFor(() => expect(screen.getByTestId('physical-gds-progress')).toHaveAttribute('data-gds-parse-state', 'parsing'));
+    expect(screen.getByTestId('physical-gds-progress')).toHaveAttribute('data-gds-parse-progress', '25.0');
+    await waitFor(() => expect(screen.getByTestId('physical-layout-editor')).toHaveAttribute('data-status', 'ready'));
+    expect(layoutCatalogSummary).toHaveBeenCalledWith('layout-test-session');
+    expect(layoutCatalogPage).toHaveBeenCalledWith(expect.objectContaining({ tableKind: 'cells' }));
+    expect(layoutCatalogPage).toHaveBeenCalledWith(expect.objectContaining({ tableKind: 'layers' }));
   });
 
   it('renders the 3D canvas split for selected GDS cell geometry', async () => {

@@ -1330,7 +1330,7 @@ describe('LSP IPC handlers', () => {
     expect(mockOpenLayoutPipeSession).toHaveBeenCalledWith(expect.objectContaining({
       protocol: 'pristine-layout-columnar-v3',
       sessionId: 'layout-1',
-    }));
+    }), expect.objectContaining({ deferCatalog: false }));
     expect(result).toEqual(expect.objectContaining({
       sessionId: 'layout-1',
       title: 'sg13g2_stdcell.lef',
@@ -1374,12 +1374,15 @@ describe('LSP IPC handlers', () => {
   it('opens workspace GDS layout files directly from the LSP workspace root', async () => {
     const openHandler = getHandler('async:lsp:layout-open');
 
-    await openHandler({}, { workspaceFilePath: 'layout/chip.gdsii' });
+    await openHandler({}, { deferCatalog: true, workspaceFilePath: 'layout/chip.gdsii' });
 
     expect(fakeConnection.sendRequest).toHaveBeenCalledWith('systemverilog/layout/open', {
       gdsUri: 'file:///C:/workspace/Pristine/layout/chip.gdsii',
       openMode: 'auto',
       title: 'chip.gdsii',
+    });
+    expect(mockOpenLayoutPipeSession).toHaveBeenLastCalledWith(expect.anything(), {
+      deferCatalog: true,
     });
   });
 

@@ -23,6 +23,7 @@ import type {
   LspLayoutPin,
   LspLayoutShape,
   LspLayoutShapeKind,
+  LspLayoutSourceKind,
   LspLayoutStatus,
   LspLayoutStatusPhase,
   LspLayoutStatusState,
@@ -80,6 +81,7 @@ export interface LayoutOpenSessionMetadata {
   bbox: LspLayoutBounds | null;
   componentCount: number;
   defPresent: boolean;
+  deferred: boolean;
   diagnosticCount: number;
   endpoint: LayoutEndpoint;
   fileUris: string[];
@@ -90,8 +92,14 @@ export interface LayoutOpenSessionMetadata {
   netCount: number;
   protocol: string;
   sessionId: string;
+  sourceKind: LspLayoutSourceKind;
+  status: LspLayoutStatusState;
   title: string;
   unitsPerMicron: number;
+}
+
+export interface OpenLayoutPipeSessionOptions {
+  deferCatalog?: boolean;
 }
 
 interface LayoutEnvelope {
@@ -120,6 +128,7 @@ export function normalizeLayoutOpenSessionMetadata(value: unknown): LayoutOpenSe
     bbox?: unknown;
     componentCount?: unknown;
     defPresent?: unknown;
+    deferred?: unknown;
     diagnosticCount?: unknown;
     endpoint?: unknown;
     fileUris?: unknown;
@@ -130,6 +139,9 @@ export function normalizeLayoutOpenSessionMetadata(value: unknown): LayoutOpenSe
     netCount?: unknown;
     protocol?: unknown;
     sessionId?: unknown;
+    source?: unknown;
+    sourceKind?: unknown;
+    status?: unknown;
     title?: unknown;
     unitsPerMicron?: unknown;
   };
@@ -148,6 +160,7 @@ export function normalizeLayoutOpenSessionMetadata(value: unknown): LayoutOpenSe
     bbox: normalizeLayoutBounds(candidate.bbox),
     componentCount: normalizeCount(candidate.componentCount),
     defPresent: candidate.defPresent === true,
+    deferred: candidate.deferred === true,
     diagnosticCount: normalizeCount(candidate.diagnosticCount),
     endpoint,
     fileUris: Array.isArray(candidate.fileUris)
@@ -162,12 +175,17 @@ export function normalizeLayoutOpenSessionMetadata(value: unknown): LayoutOpenSe
     netCount: normalizeCount(candidate.netCount),
     protocol,
     sessionId: candidate.sessionId,
+    sourceKind: normalizeOpenSourceKind(candidate.sourceKind ?? candidate.source, candidate.title),
+    status: normalizeOpenStatus(candidate.status),
     title: typeof candidate.title === 'string' && candidate.title.length > 0 ? candidate.title : 'Layout',
     unitsPerMicron: normalizePositiveNumber(candidate.unitsPerMicron, 0),
   };
 }
 
-export async function openLayoutPipeSession(metadata: LayoutOpenSessionMetadata): Promise<LspLayoutOpenResult> {
+export async function openLayoutPipeSession(
+  metadata: LayoutOpenSessionMetadata,
+  options: OpenLayoutPipeSessionOptions = {},
+): Promise<LspLayoutOpenResult> {
   await closeLayoutPipeSession(metadata.sessionId);
 
   const socket = await connectLayoutPipe(metadata.endpoint);
@@ -186,13 +204,18 @@ export async function openLayoutPipeSession(metadata: LayoutOpenSessionMetadata)
       throw new Error(`Unexpected layout hello response type: ${helloResponse.messageType}`);
     }
 
-    const catalog = await loadInitialLayoutCatalog(session, metadata);
+    const catalog = options.deferCatalog
+      ? createDeferredLayoutCatalog(metadata)
+      : await loadInitialLayoutCatalog(session, metadata);
 
     return {
       sessionId: metadata.sessionId,
       id: metadata.sessionId,
       protocol: metadata.protocol,
       endpoint: metadata.endpoint,
+      deferred: metadata.deferred,
+      sourceKind: catalog.sourceKind,
+      initialStatus: metadata.status,
       title: metadata.title,
       lefCount: metadata.lefCount,
       defPresent: metadata.defPresent,
@@ -289,6 +312,44 @@ async function loadInitialLayoutCatalog(
 function isGdsLayoutTitle(title: string): boolean {
   const normalizedTitle = title.toLowerCase();
   return normalizedTitle.endsWith('.gds') || normalizedTitle.endsWith('.gdsii');
+}
+
+function normalizeOpenSourceKind(value: unknown, title: unknown): LspLayoutSourceKind {
+  if (value === 'gds' || value === 'lefdef') {
+    return value;
+  }
+
+  return typeof title === 'string' && isGdsLayoutTitle(title) ? 'gds' : 'lefdef';
+}
+
+function normalizeOpenStatus(value: unknown): LspLayoutStatusState {
+  if (value === 'parsing' || value === 'ready' || value === 'failed' || value === 'closing') {
+    return value;
+  }
+
+  return 'unknown';
+}
+
+function createDeferredLayoutCatalog(metadata: LayoutOpenSessionMetadata): LspLayoutCatalog {
+  return {
+    unitsPerMicron: metadata.unitsPerMicron,
+    sourceKind: metadata.sourceKind,
+    shapeCount: 0,
+    hasBounds: metadata.bbox !== null,
+    topCellIndex: null,
+    layers: [],
+    macros: [],
+    pins: [],
+    defPins: [],
+    vias: [],
+    components: [],
+    nets: [],
+    gdsCells: [],
+    gdsReferences: [],
+    gdsElements: [],
+    gdsPoints: [],
+    diagnostics: [],
+  };
 }
 
 async function waitForReadyLayoutCatalogSummary(sessionId: string): Promise<LspLayoutCatalogSummary> {

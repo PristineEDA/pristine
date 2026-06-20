@@ -2675,11 +2675,37 @@ test('Physical layout keeps tinyQV GDS tile memory bounded during pan and zoom',
 
   try {
     await window.getByTestId('activity-item-physical').click();
+    const layoutEditor = window.getByTestId('physical-layout-editor');
     const layoutCanvas = window.getByTestId('physical-layout-canvas');
 
-    await expect(window.getByTestId('physical-layout-editor')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+    await expect(layoutEditor).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
     await window.getByTestId('physical-layout-file-item-tt_um_tt_tinyQV-gds').click();
+    const gdsProgress = window.getByTestId('physical-gds-progress');
+    await expect(gdsProgress).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+    await expect(gdsProgress).toHaveAttribute('data-gds-parse-state', 'parsing', { timeout: UI_READY_TIMEOUT_MS });
+    const tinyQvProgressSnapshot = await gdsProgress.evaluate((element) => {
+      const progressElement = element as unknown as { getAttribute(name: string): string | null };
+      const attributeNames = [
+        'data-gds-parse-state',
+        'data-gds-parse-phase',
+        'data-gds-parse-progress',
+        'data-gds-parse-bytes-read',
+        'data-gds-parse-file-size',
+        'data-gds-parse-record-count',
+        'data-gds-parse-cell-count',
+        'data-gds-parse-point-count',
+        'data-gds-parse-elapsed-ms',
+      ];
+
+      return Object.fromEntries(attributeNames.map((name) => [name, progressElement.getAttribute(name) ?? '']));
+    });
+    await test.info().attach('tinyqv-gds-progress.json', {
+      body: JSON.stringify(tinyQvProgressSnapshot, null, 2),
+      contentType: 'application/json',
+    });
     await expect(layoutCanvas).toHaveAttribute('data-source-kind', 'gds', { timeout: UI_READY_TIMEOUT_MS });
+    await expect(layoutEditor).toHaveAttribute('data-status', 'ready', { timeout: UI_READY_TIMEOUT_MS });
+    await expect(layoutEditor).toHaveAttribute('data-gds-parse-state', '', { timeout: UI_READY_TIMEOUT_MS });
     await expect(layoutCanvas).toHaveAttribute('data-gds-render-mode', 'tile-mesh', { timeout: UI_READY_TIMEOUT_MS });
     await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-cache-entry-count') ?? '0'), {
       timeout: UI_READY_TIMEOUT_MS,
