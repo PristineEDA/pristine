@@ -37,19 +37,26 @@ import {
 } from './physicalLayout3dViewHelper';
 import {
   createEmptyGdsTileGeometry,
+  createGdsFullCellTileRequestPlan,
+  createGdsTileAtlasUpdate,
   createGdsOverviewRetryTileRequestPlan,
   createGdsPreciseTileRequestPlan,
   createGdsTileFilterKey,
   createGdsTileMetricsSnapshot,
   createGdsTileRequestPlan,
   createGdsRetryTileRequestPlan,
+  createGdsTileWindowPlan,
+  createMergedGdsTileGeometry,
   doLayoutBoundsIntersect,
+  estimateGdsDisplayedTileAtlasByteLength,
   estimateGdsTileByteLength,
   getGdsEmptyTileRetryKind,
+  getLayoutBoundsIntersectionArea,
   getGdsTileLod,
   getGdsTileShapeStyle,
   PhysicalLayoutGdsTileLruCache,
   shouldRequestPreciseGdsTile,
+  shouldUseFullCellGdsTile,
   getViewportWorldBounds,
   mergeGdsTileGeometryResults,
 } from './physicalLayoutGdsTiles';
@@ -232,6 +239,72 @@ describe('physicalLayoutGeometry', () => {
     expect(plan.options.bbox).toEqual(plan.bbox);
   });
 
+  it('uses a full-cell precise GDS tile for small cells', () => {
+    const visibility = createPhysicalLayoutVisibility(layoutFixtureGdsOpenResult.catalog, true, layoutFixtureGdsGeometry.shapes);
+    const selectedBounds = { x0: 10, y0: 20, x1: 30, y1: 40 };
+    const plan = createGdsFullCellTileRequestPlan({
+      camera: { panX: -1000, panY: -500, zoom: 4 },
+      rootCellIndex: 1,
+      selectedBounds,
+      sessionId: 'layout-gds',
+      size: { height: 200, width: 200 },
+      visibility,
+    });
+
+    expect(shouldUseFullCellGdsTile({ selectedBounds })).toBe(true);
+    expect(shouldUseFullCellGdsTile({ selectedBounds: { x0: 0, y0: 0, x1: 1000, y1: 1000 } })).toBe(false);
+    expect(plan.empty).toBe(false);
+    expect(plan.lod).toBe(0);
+    expect(plan.bbox).toEqual(selectedBounds);
+    expect(plan.options.bbox).toEqual(selectedBounds);
+    expect(plan.options.layerIndices).toBeUndefined();
+    expect(plan.options.shapeKinds).toBeUndefined();
+    expect(plan.cacheKey).toContain('full-cell');
+  });
+
+  it('plans a stable GDS tile window with visible and prefetch tiles', () => {
+    const visibility = createPhysicalLayoutVisibility(layoutFixtureGdsOpenResult.catalog, true, layoutFixtureGdsGeometry.shapes);
+    const plan = createGdsTileWindowPlan({
+      camera: { panX: 0, panY: 0, zoom: 8 },
+      rootCellIndex: 1,
+      selectedBounds: { x0: 0, y0: 0, x1: 200, y1: 160 },
+      sessionId: 'layout-gds',
+      size: { height: 300, width: 500 },
+      visibility,
+    });
+
+    expect(plan.primaryPlan.empty).toBe(false);
+    expect(plan.visiblePlans.length).toBeGreaterThan(1);
+    expect(plan.prefetchPlans.length).toBeGreaterThan(0);
+    expect(new Set(plan.visiblePlans.map((tilePlan) => tilePlan.cacheKey)).size).toBe(plan.visiblePlans.length);
+    expect(plan.visiblePlans.every((tilePlan) => doLayoutBoundsIntersect(tilePlan.bbox, plan.viewportBbox))).toBe(true);
+  });
+
+  it('keeps GDS tile window keys stable for small pan changes inside the same quantized grid', () => {
+    const visibility = createPhysicalLayoutVisibility(layoutFixtureGdsOpenResult.catalog, true, layoutFixtureGdsGeometry.shapes);
+    const baseInput = {
+      rootCellIndex: 1,
+      selectedBounds: { x0: 0, y0: 0, x1: 200, y1: 160 },
+      sessionId: 'layout-gds',
+      size: { height: 300, width: 500 },
+      visibility,
+    };
+    const firstPlan = createGdsTileWindowPlan({
+      ...baseInput,
+      camera: { panX: 0, panY: 0, zoom: 8 },
+    });
+    const secondPlan = createGdsTileWindowPlan({
+      ...baseInput,
+      camera: { panX: 8, panY: 6, zoom: 8 },
+    });
+    const firstKeys = new Set(firstPlan.visiblePlans.map((tilePlan) => tilePlan.cacheKey));
+    const secondKeys = new Set(secondPlan.visiblePlans.map((tilePlan) => tilePlan.cacheKey));
+    const sharedKeyCount = Array.from(firstKeys).filter((key) => secondKeys.has(key)).length;
+
+    expect(firstPlan.tileWorldSize).toBe(secondPlan.tileWorldSize);
+    expect(sharedKeyCount).toBeGreaterThan(0);
+  });
+
   it('creates a bounded empty GDS tile plan when the viewport is outside the selected cell', () => {
     const visibility = createPhysicalLayoutVisibility(layoutFixtureGdsOpenResult.catalog, true, layoutFixtureGdsGeometry.shapes);
     const plan = createGdsTileRequestPlan({
@@ -247,6 +320,77 @@ describe('physicalLayoutGeometry', () => {
     expect(plan.emptyReason).toBe('outside-cell-bounds');
     expect(plan.options.layerIndices).toBeUndefined();
     expect(plan.options.shapeKinds).toBeUndefined();
+  });
+
+  it('merges GDS window tiles with unique shape indices and measurable coverage', () => {
+    const shape = layoutFixtureGdsGeometry.shapes[0] as LspLayoutShape;
+    const firstTile = {
+      ...createEmptyGdsTileGeometry(1000),
+      geometry: {
+        polygonPointCount: shape.polygon?.length ?? 0,
+        shapeCount: 1,
+        shapes: [{ ...shape, index: 0 }],
+        truncated: false,
+        unitsPerMicron: 1000,
+      },
+      tileShapeCount: 1,
+    };
+    const secondTile = {
+      ...createEmptyGdsTileGeometry(1000),
+      geometry: {
+        polygonPointCount: shape.polygon?.length ?? 0,
+        shapeCount: 1,
+        shapes: [{ ...shape, index: 0 }],
+        truncated: false,
+        unitsPerMicron: 1000,
+      },
+      tileShapeCount: 1,
+    };
+    const merged = createMergedGdsTileGeometry([firstTile, secondTile]);
+
+    expect(merged?.geometry.shapes.map((mergedShape) => mergedShape.index)).toEqual([0, 1]);
+    expect(getLayoutBoundsIntersectionArea(
+      { x0: 0, y0: 0, x1: 10, y1: 10 },
+      { x0: 5, y0: 5, x1: 15, y1: 20 },
+    )).toBe(25);
+  });
+
+  it('updates a GDS displayed tile atlas without clearing older viewport coverage', () => {
+    const visibility = createPhysicalLayoutVisibility(layoutFixtureGdsOpenResult.catalog, true, layoutFixtureGdsGeometry.shapes);
+    const shape = layoutFixtureGdsGeometry.shapes[0] as LspLayoutShape;
+    const oldTile = {
+      ...createEmptyGdsTileGeometry(1000),
+      geometry: {
+        polygonPointCount: shape.polygon?.length ?? 0,
+        shapeCount: 1,
+        shapes: [{ ...shape, index: 0 }],
+        truncated: false,
+        unitsPerMicron: 1000,
+      },
+      tileShapeCount: 1,
+    };
+    const plan = createGdsTileWindowPlan({
+      camera: { panX: 0, panY: 0, zoom: 8 },
+      rootCellIndex: 1,
+      selectedBounds: { x0: 0, y0: 0, x1: 200, y1: 160 },
+      sessionId: 'layout-gds',
+      size: { height: 300, width: 500 },
+      visibility,
+    });
+    const oldEntry = {
+      plan: plan.visiblePlans[0] ?? plan.primaryPlan,
+      tile: oldTile,
+    };
+    const update = createGdsTileAtlasUpdate({
+      currentTiles: new Map([[oldEntry.plan.cacheKey, oldEntry]]),
+      incomingTiles: [],
+      windowPlan: plan,
+    });
+
+    expect(update.tiles.size).toBe(1);
+    expect(update.keptPreviousTileCount).toBe(1);
+    expect(update.coverageRatio).toBeGreaterThan(0);
+    expect(estimateGdsDisplayedTileAtlasByteLength(update.tiles)).toBeGreaterThan(0);
   });
 
   it('keeps raw GDS tile cache keys independent of layer opacity', () => {

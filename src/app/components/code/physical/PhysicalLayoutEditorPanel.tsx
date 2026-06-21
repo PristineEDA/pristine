@@ -517,12 +517,16 @@ function PhysicalGdsMetricInfo({ metrics }: PhysicalGdsMetricInfoProps) {
     <div
       className="flex h-6 items-center gap-2 rounded-md border border-ide-border/70 bg-ide-bg/40 px-2 text-[10px] leading-none text-ide-text-muted"
       data-gds-average-fps={formatMetricValue(metrics.averageFps, 1)}
+      data-gds-atlas-bytes={metrics.atlasByteLength}
+      data-gds-blank-frame-count={metrics.blankFrameCount}
       data-gds-buffer-capacity-vertex-count={metrics.bufferCapacityVertexCount}
       data-gds-buffer-realloc-count={metrics.bufferReallocCount}
       data-gds-buffer-update-count={metrics.bufferUpdateCount}
       data-gds-buffer-update-ms={formatMetricValue(metrics.bufferUpdateMs, 3)}
       data-gds-cache-bytes={metrics.cacheByteLength}
       data-gds-cache-entry-count={metrics.cacheEntryCount}
+      data-gds-coverage-ratio={formatMetricValue(metrics.coverageRatio, 3)}
+      data-gds-displayed-tile-count={metrics.displayedTileCount}
       data-gds-frame-p95-ms={formatMetricValue(metrics.frameP95Ms, 1)}
       data-gds-inflight-count={metrics.inflightRequestCount}
       data-gds-mesh-buffer-bytes={metrics.bufferByteLength + metrics.indexByteLength}
@@ -531,6 +535,8 @@ function PhysicalGdsMetricInfo({ metrics }: PhysicalGdsMetricInfoProps) {
       data-gds-render-mode="tile-mesh"
       data-gds-render-ms={formatMetricValue(metrics.lastRenderMs, 2)}
       data-gds-retry-count={metrics.retryCount}
+      data-gds-tile-apply-ms={formatMetricValue(metrics.lastTileApplyMs, 2)}
+      data-gds-tile-build-ms={formatMetricValue(metrics.lastTileBuildMs, 2)}
       data-gds-tile-query-ms={formatMetricValue(metrics.lastTileQueryMs, 2)}
       data-gds-tile-roundtrip-ms={formatMetricValue(metrics.lastTileRoundtripMs, 2)}
       data-gds-truncated={metrics.truncated ? 'true' : 'false'}
@@ -567,6 +573,13 @@ function PhysicalGdsMetricInfo({ metrics }: PhysicalGdsMetricInfoProps) {
         <span className="font-mono text-ide-accent" data-testid="physical-gds-toolbar-metrics-cache-value">
           {formatByteMetric(metrics.cacheByteLength)}
         </span>
+      </div>
+      <div className="flex items-center gap-1" data-testid="physical-gds-toolbar-metrics-coverage">
+        <span>Cov</span>
+        <span className="font-mono text-ide-accent" data-testid="physical-gds-toolbar-metrics-coverage-value">
+          {formatMetricValue(metrics.coverageRatio * 100, 0)}
+        </span>
+        <span>%</span>
       </div>
     </div>
   );
