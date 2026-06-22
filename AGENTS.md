@@ -70,6 +70,7 @@ Pristine is currently an Electron, Vite, React, TypeScript, and Mastra workspace
 - Physical GDS performance summaries should include tinyQV baseline/after JSON metrics when practical, covering FPS, p95 frame time, render time, tile roundtrip, cache bytes, inflight requests, and buffer reallocations. Keep pan/zoom transform-only after tiles are loaded, keep tile caches bounded, and do not use large-bbox empty-tile `lod=0` retries to mask missing overview data.
 - Physical staged GDS open should surface `PLST` parsing progress in the renderer and wait for `ready` before catalog-page or tile requests. Do not hide staged parsing entirely inside Electron handlers when UI or perf metrics need it.
 - Physical large-GDS tile retries and caches must be bounded: do not retry large empty viewport bboxes with full `lod=0`, cap raw tile cache entries/bytes, release stale mesh resources, and report cache/inflight/retry metrics.
+- Physical large-GDS PixiJS rendering should keep displayed tiles as an atlas of persistent tile layers. Avoid merging viewport tiles into one geometry and rebuilding the whole scene on each tile response; pan/zoom should update transforms while tile buffers update asynchronously.
 
 ## pristine-engine Coordination
 
