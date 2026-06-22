@@ -73,6 +73,7 @@ Pristine is currently an Electron, Vite, React, TypeScript, and Mastra workspace
 - Physical large-GDS tile retries and caches must be bounded: do not retry large empty viewport bboxes with full `lod=0`, cap raw tile cache entries/bytes, release stale mesh resources, and report cache/inflight/retry metrics.
 - Physical large-GDS PixiJS rendering should keep displayed tiles as an atlas of persistent tile layers. Avoid merging viewport tiles into one geometry and rebuilding the whole scene on each tile response; pan/zoom should update transforms while tile buffers update asynchronously.
 - Physical large-GDS tile cache keys should come from stable quantized tile coordinates, not arbitrary per-wheel viewport bboxes. Keep App-level GDS geometry sync to idle snapshots only; hot-path tile updates should stay inside the Pixi tile atlas.
+- Physical large-GDS atlas apply and geometry snapshots must stay budgeted. Defer or chunk tile apply during active pan/zoom, skip oversized App-level snapshots, and include LOD 0/1/2 plus rapid burst pan/zoom coverage in tinyQV perf validation before claiming 60fps behavior.
 
 ## pristine-engine Coordination
 

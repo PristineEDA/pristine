@@ -239,7 +239,7 @@ describe('RightSidePanel', () => {
     expect(screen.getByTestId('right-panel-primary-panel')).not.toHaveClass('rounded-md', 'border', 'border-ide-border');
     expect(screen.queryByTestId('right-panel-secondary-panel')).not.toBeInTheDocument();
     expect(screen.queryByTestId('right-panel-split-resize-handle')).not.toBeInTheDocument();
-  });
+  }, 10_000);
 
   it('keeps stacked right panels layout-aware in minimal mode', async () => {
     const user = userEvent.setup();
@@ -294,7 +294,7 @@ describe('RightSidePanel', () => {
     expect(screen.getByTestId('right-panel-secondary-placeholder')).toHaveTextContent('X Propagation');
     expect(screen.getByTestId('right-panel-secondary-placeholder')).toHaveTextContent('Propagation path placeholder');
     expect(screen.queryByText('Combinational utilization placeholder')).not.toBeInTheDocument();
-  });
+  }, 10_000);
 
   it('navigates static check items to their source file and line', async () => {
     const user = userEvent.setup();

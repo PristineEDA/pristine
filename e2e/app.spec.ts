@@ -2722,6 +2722,7 @@ test('Physical layout keeps tinyQV GDS tile memory bounded during pan and zoom',
         'data-gds-coverage-ratio',
         'data-gds-displayed-tile-count',
         'data-gds-continuation-count',
+        'data-gds-current-lod-band',
         'data-gds-inflight-count',
         'data-gds-overview-fallback-active',
         'data-gds-prefetch-tile-count',
@@ -2874,6 +2875,9 @@ test('Physical layout keeps tinyQV GDS tile memory bounded during pan and zoom',
       timeout: UI_READY_TIMEOUT_MS,
     }).toBeGreaterThan(0);
     const tinyQvMetrics = await readTinyQvMetrics();
+    expect(Number(tinyQvMetrics['data-gds-displayed-tile-count'] ?? '0')).toBeGreaterThan(0);
+    expect(Number(tinyQvMetrics['data-gds-atlas-bytes'] ?? '0')).toBeGreaterThan(0);
+    expect(tinyQvMetrics['data-gds-displayed-tile-state']).not.toBe('empty-outside-cell-bounds');
     await writeTinyQvJson('tinyqv-gds-metrics.json', tinyQvMetrics);
     await writeTinyQvPng('tinyqv-gds-canvas.png', await layoutCanvas.screenshot());
   } finally {
