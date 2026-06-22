@@ -19,7 +19,9 @@ export interface PhysicalLayoutGdsTileMetrics {
   atlasByteLength: number;
   blankFrameCount: number;
   bufferCapacityVertexCount: number;
+  bufferDataReplaceCount: number;
   bufferReallocCount: number;
+  bufferSubarrayCommitCount: number;
   bufferUpdateCount: number;
   bufferUpdateMs: number;
   bufferByteLength: number;
@@ -112,7 +114,9 @@ export const defaultPhysicalLayoutGdsTileMetrics: PhysicalLayoutGdsTileMetrics =
   atlasByteLength: 0,
   blankFrameCount: 0,
   bufferCapacityVertexCount: 0,
+  bufferDataReplaceCount: 0,
   bufferReallocCount: 0,
+  bufferSubarrayCommitCount: 0,
   bufferUpdateCount: 0,
   bufferUpdateMs: 0,
   bufferByteLength: 0,
@@ -615,7 +619,9 @@ export function createGdsTileMetricsSnapshot(input: {
   atlasByteLength?: number;
   blankFrameCount?: number;
   bufferCapacityVertexCount?: number;
+  bufferDataReplaceCount?: number;
   bufferReallocCount?: number;
+  bufferSubarrayCommitCount?: number;
   bufferUpdateCount?: number;
   bufferUpdateMs?: number;
   cacheStats?: PhysicalLayoutGdsTileCacheStats;
@@ -654,7 +660,9 @@ export function createGdsTileMetricsSnapshot(input: {
     atlasByteLength: input.atlasByteLength ?? 0,
     blankFrameCount: input.blankFrameCount ?? 0,
     bufferCapacityVertexCount: input.bufferCapacityVertexCount ?? input.meshVertexCount,
+    bufferDataReplaceCount: input.bufferDataReplaceCount ?? 0,
     bufferReallocCount: input.bufferReallocCount ?? 0,
+    bufferSubarrayCommitCount: input.bufferSubarrayCommitCount ?? 0,
     bufferUpdateCount: input.bufferUpdateCount ?? 0,
     bufferUpdateMs: input.bufferUpdateMs ?? 0,
     bufferByteLength: input.meshVertexCount * 2 * Float32Array.BYTES_PER_ELEMENT,

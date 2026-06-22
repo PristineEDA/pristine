@@ -548,7 +548,9 @@ describe('physicalLayoutGeometry', () => {
 
     const metrics = createGdsTileMetricsSnapshot({
       bufferCapacityVertexCount: 16,
+      bufferDataReplaceCount: 3,
       bufferReallocCount: 2,
+      bufferSubarrayCommitCount: 6,
       bufferUpdateCount: 1,
       bufferUpdateMs: 0.4,
       cacheStats: { byteLength: 1024, entryCount: 3 },
@@ -572,7 +574,9 @@ describe('physicalLayoutGeometry', () => {
     expect(metrics.lastTileQueryMs).toBe(0.7);
     expect(metrics.tileRequestCount).toBe(2);
     expect(metrics.bufferCapacityVertexCount).toBe(16);
+    expect(metrics.bufferDataReplaceCount).toBe(3);
     expect(metrics.bufferReallocCount).toBe(2);
+    expect(metrics.bufferSubarrayCommitCount).toBe(6);
     expect(metrics.bufferUpdateCount).toBe(1);
     expect(metrics.cacheByteLength).toBe(1024);
     expect(metrics.cacheEntryCount).toBe(3);
@@ -582,7 +586,9 @@ describe('physicalLayoutGeometry', () => {
 
     const transformOnlyMetrics = createGdsTileMetricsSnapshot({
       bufferCapacityVertexCount: 16,
+      bufferDataReplaceCount: 0,
       bufferReallocCount: 0,
+      bufferSubarrayCommitCount: 0,
       bufferUpdateCount: 0,
       bufferUpdateMs: 0,
       cacheStats: { byteLength: 1024, entryCount: 1 },

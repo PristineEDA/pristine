@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Application, Container, Graphics, Mesh, MeshGeometry, Text, Texture } from 'pixi.js';
+import { Application, Buffer as PixiBuffer, Container, Graphics, Mesh, MeshGeometry, Text, Texture } from 'pixi.js';
 
 import type {
   LspLayoutCatalog,
@@ -54,6 +54,11 @@ import {
   type PhysicalLayoutGdsTileRequestPlan,
 } from './physicalLayoutGdsTiles';
 import { createPhysicalLayoutMinimapModel, type PhysicalLayoutMinimapModel } from './physicalLayoutMinimap';
+import {
+  installPhysicalExplicitDrawCountPatch,
+  markPhysicalExplicitDrawCountGeometry,
+  setPhysicalExplicitDrawCount,
+} from './physicalLayoutExplicitDrawCount';
 import {
   createPhysicalLayoutPinLabels,
   formatPhysicalLayoutLayerOpacitySummary,
@@ -215,7 +220,9 @@ export function PhysicalLayoutCanvas({
   const tileRequestCountRef = useRef(0);
   const meshStatsRef = useRef({
     bufferCapacityVertexCount: 0,
+    bufferDataReplaceCount: 0,
     bufferReallocCount: 0,
+    bufferSubarrayCommitCount: 0,
     bufferUpdateCount: 0,
     bufferUpdateMs: 0,
     drawNodeCount: 0,
@@ -1815,7 +1822,9 @@ export function PhysicalLayoutCanvas({
       atlasByteLength: estimateGdsDisplayedTileAtlasByteLength(gdsDisplayedTilesRef.current),
       blankFrameCount: gdsBlankFrameCountRef.current,
       bufferCapacityVertexCount: meshStatsRef.current.bufferCapacityVertexCount,
+      bufferDataReplaceCount: meshStatsRef.current.bufferDataReplaceCount,
       bufferReallocCount: meshStatsRef.current.bufferReallocCount,
+      bufferSubarrayCommitCount: meshStatsRef.current.bufferSubarrayCommitCount,
       bufferUpdateCount: meshStatsRef.current.bufferUpdateCount,
       bufferUpdateMs: meshStatsRef.current.bufferUpdateMs,
       cacheStats: gdsTileCacheRef.current.getStats(),
@@ -2133,7 +2142,9 @@ export function PhysicalLayoutCanvas({
       data-gds-bbox-area={gdsTileDiagnostics.bboxArea.toFixed(2)}
       data-gds-blank-frame-metric-count={gdsTileMetrics.blankFrameCount}
       data-gds-buffer-capacity-vertex-count={gdsTileMetrics.bufferCapacityVertexCount}
+      data-gds-buffer-data-replace-count={gdsTileMetrics.bufferDataReplaceCount}
       data-gds-buffer-realloc-count={gdsTileMetrics.bufferReallocCount}
+      data-gds-buffer-subarray-commit-count={gdsTileMetrics.bufferSubarrayCommitCount}
       data-gds-buffer-update-count={gdsTileMetrics.bufferUpdateCount}
       data-gds-buffer-update-ms={gdsTileMetrics.bufferUpdateMs.toFixed(3)}
       data-gds-cache-bytes={gdsTileMetrics.cacheByteLength}
@@ -2279,6 +2290,7 @@ async function createPixiApp(host: HTMLElement) {
         preference,
         resolution: Math.min(window.devicePixelRatio || 1, 2),
       });
+      installPhysicalExplicitDrawCountPatch(app.renderer);
       app.stop();
       app.canvas.dataset.physicalLayoutCanvas = 'true';
       app.canvas.tabIndex = -1;
@@ -2521,7 +2533,9 @@ interface PhysicalLayoutShapeDisplay {
   node: Container;
   stats: {
     bufferCapacityVertexCount: number;
+    bufferDataReplaceCount: number;
     bufferReallocCount: number;
+    bufferSubarrayCommitCount: number;
     bufferUpdateCount: number;
     bufferUpdateMs: number;
     drawNodeCount: number;
@@ -2643,9 +2657,8 @@ class PhysicalLayoutGdsPersistentTileLayer {
       visibleShapeOrdinal += 1;
       const bucket = this.getBucket(bucketIndex);
       bucket.used = true;
-      const points = getMeshableShapePoints(shape);
-      if (points && isConvexPolygon(points)) {
-        bucket.getBatch(getGdsTileMeshBatchKey(shape, style), style).builder.addPolygon(points);
+      const batch = bucket.getBatch(getGdsTileMeshBatchKey(shape, style), style);
+      if (addGdsTileMeshFill(batch.builder, shape)) {
         if (shape.kind !== 'placement') {
           drawGdsTileShapeStroke(bucket.fallbackGraphics, shape, style);
           bucket.hasFallbackGraphics = true;
@@ -2823,7 +2836,9 @@ function drawShapes(shapes: readonly LspLayoutShape[], layoutVisibility: Physica
     stats: {
       drawNodeCount: 1,
       bufferCapacityVertexCount: 0,
+      bufferDataReplaceCount: 0,
       bufferReallocCount: 0,
+      bufferSubarrayCommitCount: 0,
       bufferUpdateCount: 0,
       bufferUpdateMs: 0,
       indexCount: 0,
@@ -2849,15 +2864,14 @@ function drawGdsTileShapes(shapes: readonly LspLayoutShape[], layoutVisibility: 
     const bucketIndex = Math.floor(visibleShapeOrdinal / orderBucketSize);
     visibleShapeOrdinal += 1;
     const bucket = getGdsTileOrderBucket(buckets, bucketIndex);
-    const points = getMeshableShapePoints(shape);
-    if (points && isConvexPolygon(points)) {
+    if (isGdsTileMeshFillShape(shape)) {
       const batchKey = getGdsTileMeshBatchKey(shape, style);
       const batch = bucket.batches.get(batchKey) ?? {
         alpha: style.alpha,
         builder: new PhysicalLayoutGdsMeshBuilder(),
         color: style.color,
       };
-      batch.builder.addPolygon(points);
+      addGdsTileMeshFill(batch.builder, shape);
       bucket.batches.set(batchKey, batch);
       if (shape.kind !== 'placement') {
         drawGdsTileShapeStroke(bucket.fallbackGraphics, shape, style);
@@ -2875,7 +2889,9 @@ function drawGdsTileShapes(shapes: readonly LspLayoutShape[], layoutVisibility: 
   let meshBatchCount = 0;
   let drawNodeCount = 0;
   let bufferCapacityVertexCount = 0;
+  let bufferDataReplaceCount = 0;
   let bufferReallocCount = 0;
+  let bufferSubarrayCommitCount = 0;
   let bufferUpdateCount = 0;
   const bufferUpdateStartedAt = performance.now();
   for (const bucket of buckets) {
@@ -2889,6 +2905,7 @@ function drawGdsTileShapes(shapes: readonly LspLayoutShape[], layoutVisibility: 
       vertexCount += committed.vertexCount;
       indexCount += committed.indexCount;
       bufferCapacityVertexCount += committed.capacityVertexCount;
+      bufferDataReplaceCount += 3;
       bufferReallocCount += committed.reallocCount;
       bufferUpdateCount += 1;
       meshBatchCount += 1;
@@ -2900,6 +2917,7 @@ function drawGdsTileShapes(shapes: readonly LspLayoutShape[], layoutVisibility: 
         topology: 'triangle-list',
         uvs: committed.uvs,
       });
+      geometry.batchMode = 'no-batch';
       const mesh = new Mesh({
         geometry,
         label: 'gds-tile-fill-mesh',
@@ -2927,7 +2945,9 @@ function drawGdsTileShapes(shapes: readonly LspLayoutShape[], layoutVisibility: 
     stats: {
       drawNodeCount,
       bufferCapacityVertexCount,
+      bufferDataReplaceCount,
       bufferReallocCount,
+      bufferSubarrayCommitCount,
       bufferUpdateCount,
       bufferUpdateMs: Math.max(0, performance.now() - bufferUpdateStartedAt),
       indexCount,
@@ -2939,9 +2959,12 @@ function drawGdsTileShapes(shapes: readonly LspLayoutShape[], layoutVisibility: 
 }
 
 class PhysicalLayoutGdsMeshBuilder {
-  private indices = new Uint32Array(0);
-  private positions = new Float32Array(0);
-  private uvs = new Float32Array(0);
+  private indices = new Uint32Array(6);
+  private positions = new Float32Array(8);
+  private uvs = new Float32Array(8);
+  private activeIndexView = this.indices;
+  private activePositionView = this.positions;
+  private activeUvView = this.uvs;
   private indexLength = 0;
   private positionLength = 0;
   private reallocCount = 0;
@@ -2967,6 +2990,46 @@ class PhysicalLayoutGdsMeshBuilder {
   public reset() {
     this.indexLength = 0;
     this.positionLength = 0;
+  }
+
+  public addRect(bounds: LspLayoutBounds) {
+    const x0 = Math.min(bounds.x0, bounds.x1);
+    const x1 = Math.max(bounds.x0, bounds.x1);
+    const y0 = Math.min(bounds.y0, bounds.y1);
+    const y1 = Math.max(bounds.y0, bounds.y1);
+    if (x1 <= x0 || y1 <= y0) {
+      return;
+    }
+
+    const baseIndex = this.vertexCount;
+    this.ensurePositionCapacity(this.positionLength + 8);
+    this.ensureIndexCapacity(this.indexLength + 6);
+
+    this.positions[this.positionLength] = x0;
+    this.positions[this.positionLength + 1] = y0;
+    this.positions[this.positionLength + 2] = x1;
+    this.positions[this.positionLength + 3] = y0;
+    this.positions[this.positionLength + 4] = x1;
+    this.positions[this.positionLength + 5] = y1;
+    this.positions[this.positionLength + 6] = x0;
+    this.positions[this.positionLength + 7] = y1;
+    this.uvs[this.positionLength] = 0;
+    this.uvs[this.positionLength + 1] = 0;
+    this.uvs[this.positionLength + 2] = 0;
+    this.uvs[this.positionLength + 3] = 0;
+    this.uvs[this.positionLength + 4] = 0;
+    this.uvs[this.positionLength + 5] = 0;
+    this.uvs[this.positionLength + 6] = 0;
+    this.uvs[this.positionLength + 7] = 0;
+    this.positionLength += 8;
+
+    this.indices[this.indexLength] = baseIndex;
+    this.indices[this.indexLength + 1] = baseIndex + 1;
+    this.indices[this.indexLength + 2] = baseIndex + 2;
+    this.indices[this.indexLength + 3] = baseIndex;
+    this.indices[this.indexLength + 4] = baseIndex + 2;
+    this.indices[this.indexLength + 5] = baseIndex + 3;
+    this.indexLength += 6;
   }
 
   public addPolygon(points: readonly { x: number; y: number }[]) {
@@ -3010,6 +3073,41 @@ class PhysicalLayoutGdsMeshBuilder {
     geometry.positions = this.positions.subarray(0, this.positionLength);
     geometry.uvs = this.uvs.subarray(0, this.positionLength);
     geometry.indices = this.indices.subarray(0, this.indexLength);
+  }
+
+  public commitStableToGeometry(geometry: MeshGeometry) {
+    const metrics = {
+      dataReplaceCount: 0,
+      subarrayCommitCount: 0,
+    };
+    const recordCommit = (delta: PhysicalLayoutGdsBufferViewCommitDelta) => {
+      metrics.dataReplaceCount += delta.dataReplaceCount;
+      metrics.subarrayCommitCount += delta.subarrayCommitCount;
+    };
+
+    this.activePositionView = commitPhysicalLayoutGdsStableBufferView(
+      geometry.getBuffer('aPosition'),
+      this.activePositionView,
+      this.positions,
+      this.positionLength,
+      recordCommit,
+    );
+    this.activeUvView = commitPhysicalLayoutGdsStableBufferView(
+      geometry.getBuffer('aUV'),
+      this.activeUvView,
+      this.uvs,
+      this.positionLength,
+      recordCommit,
+    );
+    this.activeIndexView = commitPhysicalLayoutGdsStableBufferView(
+      geometry.indexBuffer,
+      this.activeIndexView,
+      this.indices,
+      this.indexLength,
+      recordCommit,
+    );
+    setPhysicalExplicitDrawCount(geometry, this.indexLength);
+    return metrics;
   }
 
   private ensurePositionCapacity(requiredLength: number) {
@@ -3056,6 +3154,31 @@ function getGdsTileOrderBucket(
   return bucket;
 }
 
+type PhysicalLayoutGdsTypedBuffer = Float32Array | Uint32Array;
+
+interface PhysicalLayoutGdsBufferViewCommitDelta {
+  dataReplaceCount: number;
+  subarrayCommitCount: number;
+}
+
+function commitPhysicalLayoutGdsStableBufferView<TView extends PhysicalLayoutGdsTypedBuffer>(
+  buffer: PixiBuffer,
+  previousView: TView,
+  source: TView,
+  activeLength: number,
+  onCommit: (delta: PhysicalLayoutGdsBufferViewCommitDelta) => void,
+): TView {
+  if (previousView === source && buffer.data === source) {
+    buffer.update(activeLength * source.BYTES_PER_ELEMENT);
+    onCommit({ dataReplaceCount: 0, subarrayCommitCount: 1 });
+    return previousView;
+  }
+
+  buffer.data = source;
+  onCommit({ dataReplaceCount: 1, subarrayCommitCount: 0 });
+  return source;
+}
+
 function createGdsPersistentBatch(style: PhysicalLayoutGdsTileShapeStyle): PhysicalLayoutGdsPersistentBatch {
   const geometry = new MeshGeometry({
     indices: new Uint32Array(0),
@@ -3064,6 +3187,8 @@ function createGdsPersistentBatch(style: PhysicalLayoutGdsTileShapeStyle): Physi
     topology: 'triangle-list',
     uvs: new Float32Array(0),
   });
+  geometry.batchMode = 'no-batch';
+  markPhysicalExplicitDrawCountGeometry(geometry);
   const mesh = new Mesh({
     geometry,
     label: 'gds-persistent-fill-mesh',
@@ -3083,14 +3208,21 @@ function createGdsPersistentBatch(style: PhysicalLayoutGdsTileShapeStyle): Physi
 function commitGdsPersistentBatch(batch: PhysicalLayoutGdsPersistentBatch): PhysicalLayoutShapeDisplay['stats'] {
   const startedAt = performance.now();
   const hasGeometry = batch.builder.vertexCount > 0 && batch.builder.indexCount > 0 && batch.mesh.alpha > 0;
+  const wasVisible = batch.mesh.visible;
+  let dataReplaceCount = 0;
+  let subarrayCommitCount = 0;
   if (hasGeometry || batch.mesh.visible) {
-    batch.builder.commitToGeometry(batch.mesh.geometry);
+    const commitMetrics = batch.builder.commitStableToGeometry(batch.mesh.geometry);
+    dataReplaceCount = commitMetrics.dataReplaceCount;
+    subarrayCommitCount = commitMetrics.subarrayCommitCount;
   }
   batch.mesh.visible = hasGeometry;
   return {
     bufferCapacityVertexCount: batch.builder.capacityVertexCount,
+    bufferDataReplaceCount: dataReplaceCount,
     bufferReallocCount: batch.builder.consumeReallocCount(),
-    bufferUpdateCount: hasGeometry || batch.mesh.visible ? 1 : 0,
+    bufferSubarrayCommitCount: subarrayCommitCount,
+    bufferUpdateCount: hasGeometry || wasVisible ? 1 : 0,
     bufferUpdateMs: Math.max(0, performance.now() - startedAt),
     drawNodeCount: batch.mesh.visible ? 1 : 0,
     indexCount: batch.builder.indexCount,
@@ -3103,7 +3235,9 @@ function commitGdsPersistentBatch(batch: PhysicalLayoutGdsPersistentBatch): Phys
 function createEmptyGdsMeshStats(): PhysicalLayoutShapeDisplay['stats'] {
   return {
     bufferCapacityVertexCount: 0,
+    bufferDataReplaceCount: 0,
     bufferReallocCount: 0,
+    bufferSubarrayCommitCount: 0,
     bufferUpdateCount: 0,
     bufferUpdateMs: 0,
     drawNodeCount: 0,
@@ -3120,7 +3254,9 @@ function mergeGdsMeshStats(
 ): PhysicalLayoutShapeDisplay['stats'] {
   return {
     bufferCapacityVertexCount: left.bufferCapacityVertexCount + right.bufferCapacityVertexCount,
+    bufferDataReplaceCount: left.bufferDataReplaceCount + right.bufferDataReplaceCount,
     bufferReallocCount: left.bufferReallocCount + right.bufferReallocCount,
+    bufferSubarrayCommitCount: left.bufferSubarrayCommitCount + right.bufferSubarrayCommitCount,
     bufferUpdateCount: left.bufferUpdateCount + right.bufferUpdateCount,
     bufferUpdateMs: left.bufferUpdateMs + right.bufferUpdateMs,
     drawNodeCount: left.drawNodeCount + right.drawNodeCount,
@@ -3196,22 +3332,26 @@ function getGdsTileMeshBatchKey(shape: LspLayoutShape, style: PhysicalLayoutGdsT
   ].join(':');
 }
 
-function getMeshableShapePoints(shape: LspLayoutShape): Array<{ x: number; y: number }> | null {
-  if (shape.kind === 'polygon' && shape.polygon && shape.polygon.length >= 3) {
-    return shape.polygon;
-  }
-
+function isGdsTileMeshFillShape(shape: LspLayoutShape): boolean {
   if (shape.kind === 'rect' || shape.kind === 'placement') {
-    const bounds = shapeBounds(shape);
-    return [
-      { x: bounds.x0, y: bounds.y0 },
-      { x: bounds.x1, y: bounds.y0 },
-      { x: bounds.x1, y: bounds.y1 },
-      { x: bounds.x0, y: bounds.y1 },
-    ];
+    return true;
   }
 
-  return null;
+  return !!(shape.kind === 'polygon' && shape.polygon && isConvexPolygon(shape.polygon));
+}
+
+function addGdsTileMeshFill(builder: PhysicalLayoutGdsMeshBuilder, shape: LspLayoutShape): boolean {
+  if (shape.kind === 'rect' || shape.kind === 'placement') {
+    builder.addRect(shapeBounds(shape));
+    return true;
+  }
+
+  if (shape.kind === 'polygon' && shape.polygon && isConvexPolygon(shape.polygon)) {
+    builder.addPolygon(shape.polygon);
+    return true;
+  }
+
+  return false;
 }
 
 function drawGdsTileShapeStroke(

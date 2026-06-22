@@ -520,7 +520,9 @@ function PhysicalGdsMetricInfo({ metrics }: PhysicalGdsMetricInfoProps) {
       data-gds-atlas-bytes={metrics.atlasByteLength}
       data-gds-blank-frame-count={metrics.blankFrameCount}
       data-gds-buffer-capacity-vertex-count={metrics.bufferCapacityVertexCount}
+      data-gds-buffer-data-replace-count={metrics.bufferDataReplaceCount}
       data-gds-buffer-realloc-count={metrics.bufferReallocCount}
+      data-gds-buffer-subarray-commit-count={metrics.bufferSubarrayCommitCount}
       data-gds-buffer-update-count={metrics.bufferUpdateCount}
       data-gds-buffer-update-ms={formatMetricValue(metrics.bufferUpdateMs, 3)}
       data-gds-cache-bytes={metrics.cacheByteLength}
