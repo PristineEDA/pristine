@@ -305,6 +305,36 @@ describe('physicalLayoutGeometry', () => {
     expect(sharedKeyCount).toBeGreaterThan(0);
   });
 
+  it('keys the same GDS tile by stable grid coordinates instead of viewport bbox', () => {
+    const visibility = createPhysicalLayoutVisibility(layoutFixtureGdsOpenResult.catalog, true, layoutFixtureGdsGeometry.shapes);
+    const baseInput = {
+      rootCellIndex: 1,
+      selectedBounds: { x0: 0, y0: 0, x1: 200, y1: 160 },
+      sessionId: 'layout-gds',
+      size: { height: 300, width: 500 },
+      visibility,
+    };
+    const firstPlan = createGdsTileWindowPlan({
+      ...baseInput,
+      camera: { panX: 0, panY: 0, zoom: 8 },
+    });
+    const secondPlan = createGdsTileWindowPlan({
+      ...baseInput,
+      camera: { panX: 8, panY: 6, zoom: 8 },
+    });
+    const firstByBbox = new Map(firstPlan.visiblePlans.map((tilePlan) => [
+      `${tilePlan.bbox.x0},${tilePlan.bbox.y0},${tilePlan.bbox.x1},${tilePlan.bbox.y1}`,
+      tilePlan.cacheKey,
+    ]));
+
+    for (const tilePlan of secondPlan.visiblePlans) {
+      const matchingKey = firstByBbox.get(`${tilePlan.bbox.x0},${tilePlan.bbox.y0},${tilePlan.bbox.x1},${tilePlan.bbox.y1}`);
+      if (matchingKey) {
+        expect(tilePlan.cacheKey).toBe(matchingKey);
+      }
+    }
+  });
+
   it('creates a bounded empty GDS tile plan when the viewport is outside the selected cell', () => {
     const visibility = createPhysicalLayoutVisibility(layoutFixtureGdsOpenResult.catalog, true, layoutFixtureGdsGeometry.shapes);
     const plan = createGdsTileRequestPlan({

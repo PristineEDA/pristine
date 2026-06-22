@@ -148,6 +148,7 @@ export function PhysicalLayoutCanvas({
   const gdsDeferredTileApplyRef = useRef<PendingGdsTileApply | null>(null);
   const gdsGeometrySyncTimeoutRef = useRef<number | null>(null);
   const gdsGeometrySnapshotVersionRef = useRef(0);
+  const gdsGeometrySnapshotKeyRef = useRef('');
   const gdsReactSyncCountRef = useRef(0);
   const gdsTileCacheRef = useRef(new PhysicalLayoutGdsTileLruCache());
   const gdsLatestRequestKeyRef = useRef('');
@@ -157,6 +158,7 @@ export function PhysicalLayoutCanvas({
   const gdsChromeLayerRef = useRef<Container | null>(null);
   const gdsOverlayWorldLayerRef = useRef<Container | null>(null);
   const gdsTileRendererRef = useRef<PhysicalLayoutGdsPersistentTileRenderer | null>(null);
+  const gdsBackgroundSizeKeyRef = useRef('');
   const gdsFullCellFallbackKeyRef = useRef('');
   const gdsFullCellFallbackReasonRef = useRef('');
   const gdsBlankFrameCountRef = useRef(0);
@@ -1007,12 +1009,38 @@ export function PhysicalLayoutCanvas({
     generation: number,
     requestKey: string,
   ) => {
-    const visibleResults = await loadGdsTilePlans(input, windowPlan.visiblePlans, generation, 2);
+    const cachedVisibleResults = getCachedGdsTilePlanResults(windowPlan.visiblePlans);
+    if (cachedVisibleResults.length > 0) {
+      const cachedAtlasUpdate = createGdsTileAtlasUpdate({
+        currentTiles: gdsDisplayedTilesRef.current,
+        incomingTiles: cachedVisibleResults.map((result) => ({
+          plan: result.plan,
+          tile: result.tile,
+        })),
+        windowPlan,
+      });
+      if (
+        cachedAtlasUpdate.tiles.size > 0
+        && (gdsDisplayedTilesRef.current.size === 0 || cachedAtlasUpdate.coverageRatio >= GDS_TILE_REPLACE_MIN_COVERAGE)
+      ) {
+        applyGdsDisplayedTileSet(
+          cachedAtlasUpdate.tiles,
+          windowPlan,
+          generation,
+          0,
+          cachedAtlasUpdate.coverageRatio < GDS_TILE_REPLACE_MIN_COVERAGE ? 'cached-partial-window-atlas' : 'cached-ready-window',
+        );
+      }
+    }
+
+    const cachedKeys = new Set(cachedVisibleResults.map((result) => result.plan.cacheKey));
+    const visiblePlansToLoad = windowPlan.visiblePlans.filter((plan) => !cachedKeys.has(plan.cacheKey));
+    const visibleResults = await loadGdsTilePlans(input, visiblePlansToLoad, generation, 2);
     if (generation !== gdsTileGenerationRef.current || requestKey !== gdsLatestRequestKeyRef.current) {
       return;
     }
 
-    const nonEmptyTiles = visibleResults
+    const nonEmptyTiles = [...cachedVisibleResults, ...visibleResults]
       .filter((result): result is LoadedGdsTilePlan => (
         Boolean(result && result.tile.geometry.shapes.length > 0)
       ));
@@ -1072,7 +1100,13 @@ export function PhysicalLayoutCanvas({
       })),
       windowPlan,
     });
-    if (atlasUpdate.tiles.size === 0 || (atlasUpdate.coverageRatio <= 0 && gdsDisplayedTilesRef.current.size > 0)) {
+    if (
+      atlasUpdate.tiles.size === 0
+      || (
+        gdsDisplayedTilesRef.current.size > 0
+        && atlasUpdate.coverageRatio < GDS_TILE_REPLACE_MIN_COVERAGE
+      )
+    ) {
       gdsCoverageRatioRef.current = atlasUpdate.coverageRatio;
       updateGdsTileDiagnostics({
         bboxArea: getTilePlanArea(windowPlan.primaryPlan),
@@ -1127,6 +1161,13 @@ export function PhysicalLayoutCanvas({
     await Promise.all(Array.from({ length: Math.max(1, Math.min(concurrency, plans.length)) }, () => worker()));
     return results;
   };
+
+  const getCachedGdsTilePlanResults = (
+    plans: readonly PhysicalLayoutGdsTileRequestPlan[],
+  ): LoadedGdsTilePlan[] => plans.flatMap((plan) => {
+    const tile = gdsTileCacheRef.current.peek(plan.cacheKey);
+    return tile ? [{ plan, roundtripMs: 0, stoppedByBudget: false, tile }] : [];
+  });
 
   const loadGdsTilePlan = async (
     _input: PhysicalLayoutGdsTileRequestInput,
@@ -1232,7 +1273,7 @@ export function PhysicalLayoutCanvas({
     lastGdsTileApplyMsRef.current = performance.now() - applyStartedAt;
     requestRender();
     scheduleGdsDisplayedGeometrySnapshot();
-    syncGdsFullCameraState();
+    syncGdsCameraState(false);
     syncRenderCountState(false);
     updateGdsTileMetrics();
     updateGdsTileDiagnostics({
@@ -1431,6 +1472,7 @@ export function PhysicalLayoutCanvas({
     const applyStartedAt = performance.now();
     if (tile.geometry.shapes.length > 0) {
       gdsLastGoodTileRef.current = tile;
+      gdsGeometrySnapshotKeyRef.current = '';
       if (!options.preserveDisplayedTiles) {
         gdsDisplayedTilesRef.current = new Map([[plan.cacheKey, { plan, tile }]]);
         gdsCoverageRatioRef.current = 1;
@@ -1439,6 +1481,7 @@ export function PhysicalLayoutCanvas({
       }
     } else if (options.acceptEmpty && !options.preserveDisplayedTiles) {
       gdsLastGoodTileRef.current = null;
+      gdsGeometrySnapshotKeyRef.current = '';
       gdsDisplayedTilesRef.current = new Map();
       gdsCoverageRatioRef.current = 0;
       gdsActiveTileCountRef.current = 0;
@@ -1668,6 +1711,8 @@ export function PhysicalLayoutCanvas({
     gdsChromeLayerRef.current = null;
     gdsOverlayWorldLayerRef.current = null;
     gdsSceneActiveRef.current = false;
+    gdsBackgroundSizeKeyRef.current = '';
+    gdsGeometrySnapshotKeyRef.current = '';
   };
 
   const redrawGdsDisplayedTileScene = () => {
@@ -1682,8 +1727,12 @@ export function PhysicalLayoutCanvas({
       return;
     }
 
-    background.removeChildren().forEach((child) => child.destroy({ children: true }));
-    background.addChild(drawBackground(sizeRef.current.width, sizeRef.current.height));
+    const backgroundSizeKey = `${sizeRef.current.width}x${sizeRef.current.height}`;
+    if (gdsBackgroundSizeKeyRef.current !== backgroundSizeKey) {
+      background.removeChildren().forEach((child) => child.destroy({ children: true }));
+      background.addChild(drawBackground(sizeRef.current.width, sizeRef.current.height));
+      gdsBackgroundSizeKeyRef.current = backgroundSizeKey;
+    }
 
     if (!gdsSceneActiveRef.current || !gdsChromeLayerRef.current || !gdsTileRendererRef.current || !gdsOverlayWorldLayerRef.current) {
       world.removeChildren().forEach((child) => child.destroy({ children: true }));
@@ -1715,9 +1764,16 @@ export function PhysicalLayoutCanvas({
     meshStatsRef.current = tileRenderer.update(gdsDisplayedTilesRef.current, layoutVisibilityRef.current);
 
     overlayLayer.removeChildren().forEach((child) => child.destroy({ children: true }));
-    const highlightedShape = findGdsDisplayedShapeByIndex(gdsDisplayedTilesRef.current, highlightedShapeIndexRef.current)
+    const highlightedShape = findVisibleGdsDisplayedShapeByIndex(
+      gdsDisplayedTilesRef.current,
+      highlightedShapeIndexRef.current,
+      layoutVisibilityRef.current,
+    )
       ?? selectedShapesRef.current.find((shape) => shape.index === highlightedShapeIndexRef.current)
       ?? null;
+    if (!highlightedShape && highlightedShapeIndexRef.current !== null) {
+      onHighlightedShapeChangeRef.current?.(null);
+    }
     if (highlightedShape) {
       overlayLayer.addChild(drawHighlightedShape(highlightedShape));
     }
@@ -1729,6 +1785,16 @@ export function PhysicalLayoutCanvas({
 
   const scheduleGdsDisplayedGeometrySnapshot = () => {
     if (!isGdsTileModeRef.current || gdsDisplayedTilesRef.current.size === 0) {
+      return;
+    }
+
+    if (isGdsViewportInteractionActive()) {
+      if (gdsGeometrySyncTimeoutRef.current === null) {
+        gdsGeometrySyncTimeoutRef.current = window.setTimeout(() => {
+          gdsGeometrySyncTimeoutRef.current = null;
+          scheduleGdsDisplayedGeometrySnapshot();
+        }, getGdsViewportIdleDelay());
+      }
       return;
     }
 
@@ -1762,11 +1828,17 @@ export function PhysicalLayoutCanvas({
       gdsGeometrySyncTimeoutRef.current = null;
     }
 
+    const snapshotKey = createGdsDisplayedGeometrySnapshotKey(gdsDisplayedTilesRef.current);
+    if (snapshotKey === gdsGeometrySnapshotKeyRef.current) {
+      return;
+    }
+
     const mergedTile = createMergedGdsTileGeometry(Array.from(gdsDisplayedTilesRef.current.values()).map((entry) => entry.tile));
     const nextGeometry = mergedTile?.geometry ?? null;
     if (mergedTile) {
       gdsLastGoodTileRef.current = mergedTile;
     }
+    gdsGeometrySnapshotKeyRef.current = snapshotKey;
     gdsReactSyncCountRef.current += 1;
     setGdsTileGeometry(nextGeometry);
     onGdsTileGeometryChangeRef.current?.(nextGeometry);
@@ -2315,6 +2387,7 @@ class PhysicalLayoutGdsPersistentTileRenderer {
   ): PhysicalLayoutShapeDisplay['stats'] {
     const liveKeys = new Set<string>();
     const orderedEntries = Array.from(tiles.entries()).sort((left, right) => compareGdsDisplayedTiles(left[1], right[1]));
+    const visibilityKey = createGdsPersistentRendererVisibilityKey(layoutVisibility);
 
     let stats = createEmptyGdsMeshStats();
     orderedEntries.forEach(([key, entry], order) => {
@@ -2330,7 +2403,7 @@ class PhysicalLayoutGdsPersistentTileRenderer {
       if (!layer.container.parent) {
         this.container.addChild(layer.container);
       }
-      const layerStats = layer.update(entry.tile.geometry.shapes, layoutVisibility);
+      const layerStats = layer.update(entry.tile, layoutVisibility, visibilityKey);
       stats = mergeGdsMeshStats(stats, layerStats);
     });
 
@@ -2362,15 +2435,24 @@ class PhysicalLayoutGdsPersistentTileLayer {
   public readonly container: Container;
 
   private readonly buckets = new Map<number, PhysicalLayoutGdsPersistentBucket>();
+  private lastStats: PhysicalLayoutShapeDisplay['stats'] = createEmptyGdsMeshStats();
+  private lastTile: LspLayoutTileGeometry | null = null;
+  private lastVisibilityKey = '';
 
   public constructor(key: string) {
     this.container = new Container({ label: `gds-tile-layer:${key}`, sortableChildren: true });
   }
 
   public update(
-    shapes: readonly LspLayoutShape[],
+    tile: LspLayoutTileGeometry,
     layoutVisibility: PhysicalLayoutVisibility,
+    visibilityKey: string,
   ): PhysicalLayoutShapeDisplay['stats'] {
+    if (this.lastTile === tile && this.lastVisibilityKey === visibilityKey) {
+      return this.lastStats;
+    }
+
+    const shapes = tile.geometry.shapes;
     for (const bucket of this.buckets.values()) {
       bucket.beginUpdate();
     }
@@ -2421,6 +2503,9 @@ class PhysicalLayoutGdsPersistentTileLayer {
       }
     }
 
+    this.lastTile = tile;
+    this.lastVisibilityKey = visibilityKey;
+    this.lastStats = stats;
     return stats;
   }
 
@@ -2513,6 +2598,21 @@ class PhysicalLayoutGdsPersistentBucket {
     this.fallbackGraphics.destroy();
     this.container.destroy({ children: true });
   }
+}
+
+function createGdsPersistentRendererVisibilityKey(layoutVisibility: PhysicalLayoutVisibility): string {
+  return [
+    layoutVisibility.outlineVisible ? 'outline:1' : 'outline:0',
+    Array.from(layoutVisibility.visibleItems).sort().join(','),
+    formatPhysicalLayoutLayerOpacitySummary(layoutVisibility),
+  ].join('|');
+}
+
+function createGdsDisplayedGeometrySnapshotKey(tiles: ReadonlyMap<string, PhysicalLayoutGdsDisplayedTile>): string {
+  return Array.from(tiles.entries())
+    .sort((left, right) => left[0].localeCompare(right[0]))
+    .map(([key, entry]) => `${key}:${entry.tile.geometry.shapes.length}:${entry.tile.payloadSize}:${entry.tile.nextToken ?? 'done'}`)
+    .join('|');
 }
 
 function drawShapes(shapes: readonly LspLayoutShape[], layoutVisibility: PhysicalLayoutVisibility): PhysicalLayoutShapeDisplay {
@@ -2893,6 +2993,18 @@ function findGdsDisplayedShapeByIndex(
     }
   }
   return null;
+}
+
+function findVisibleGdsDisplayedShapeByIndex(
+  tiles: ReadonlyMap<string, PhysicalLayoutGdsDisplayedTile>,
+  shapeIndex: number | null,
+  layoutVisibility: PhysicalLayoutVisibility,
+): LspLayoutShape | null {
+  const shape = findGdsDisplayedShapeByIndex(tiles, shapeIndex);
+  if (!shape) {
+    return null;
+  }
+  return filterVisiblePhysicalLayoutShapes([shape], layoutVisibility, 'gds').length > 0 ? shape : null;
 }
 
 function getGdsTileOrderBucketSize(shapeCount: number): number {

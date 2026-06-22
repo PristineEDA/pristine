@@ -182,6 +182,10 @@ export class PhysicalLayoutGdsTileLruCache {
     return entry.tile;
   }
 
+  public peek(key: string): LspLayoutTileGeometry | undefined {
+    return this.entries.get(key)?.tile;
+  }
+
   public set(key: string, tile: LspLayoutTileGeometry) {
     const byteLength = estimateGdsTileByteLength(tile);
     const existing = this.entries.get(key);
@@ -231,6 +235,7 @@ export function isGdsTileModeEnabled(
 
 export function createGdsTileRequestPlan(input: PhysicalLayoutGdsTileRequestInput & {
   bboxOverride?: LspLayoutBounds;
+  cacheKeyOverride?: string;
   cacheKeyTag?: string;
   layerFilterMode?: 'visible' | 'all';
   lod?: number;
@@ -262,7 +267,7 @@ export function createGdsTileRequestPlan(input: PhysicalLayoutGdsTileRequestInpu
     sessionId: input.sessionId,
       visibilityKey: input.layerFilterMode === 'all' ? 'all' : createGdsTileFilterKey(input.visibility),
   });
-  const taggedCacheKey = input.cacheKeyTag ? `${cacheKey}|${input.cacheKeyTag}` : cacheKey;
+  const taggedCacheKey = input.cacheKeyOverride ?? (input.cacheKeyTag ? `${cacheKey}|${input.cacheKeyTag}` : cacheKey);
 
   return {
     bbox: roundedBbox,
@@ -340,7 +345,15 @@ export function createGdsTileWindowPlan(input: PhysicalLayoutGdsTileRequestInput
       const plan = createGdsTileRequestPlan({
         ...input,
         bboxOverride: tileBbox,
-        cacheKeyTag: `tile:${tileX}:${tileY}:${tileWorldSize.toFixed(6)}`,
+        cacheKeyOverride: createGdsTileWindowCacheKey({
+          lod,
+          rootCellIndex: input.rootCellIndex,
+          sessionId: input.sessionId,
+          tileWorldSize,
+          tileX,
+          tileY,
+          visibilityKey: createGdsTileFilterKey(input.visibility),
+        }),
         lod,
       });
       if (plan.empty) {
@@ -854,6 +867,27 @@ function createGdsTileCacheKey(input: {
     input.bbox.y0,
     input.bbox.x1,
     input.bbox.y1,
+  ].join('|');
+}
+
+function createGdsTileWindowCacheKey(input: {
+  lod: number;
+  rootCellIndex: number;
+  sessionId: string;
+  tileWorldSize: number;
+  tileX: number;
+  tileY: number;
+  visibilityKey: string;
+}): string {
+  return [
+    input.sessionId,
+    input.rootCellIndex,
+    input.lod,
+    input.visibilityKey,
+    'window',
+    input.tileWorldSize.toFixed(6),
+    input.tileX,
+    input.tileY,
   ].join('|');
 }
 
