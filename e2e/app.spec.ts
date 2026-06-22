@@ -12,11 +12,11 @@ import {
 import { waveformCanvasMinHeight } from '../src/app/components/code/explorer/waveform/waveformLayout';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const fixtureWorkspace = path.join(__dirname, '..', 'test', 'fixtures', 'workspace');
-const releaseRoot = path.join(__dirname, '..', 'release');
+const repositoryRoot = path.join(__dirname, '..');
+const fixtureWorkspace = path.join(repositoryRoot, 'test', 'fixtures', 'workspace');
+const releaseRoot = path.join(repositoryRoot, 'release');
 const pristineEngineBinaryPath = path.join(
-  __dirname,
-  '..',
+  repositoryRoot,
   'binaries',
   process.platform === 'win32' ? 'pristine-engine.exe' : 'pristine-engine',
 );
@@ -777,8 +777,8 @@ async function readComputedTextColor(locator: Locator) {
 
 function readPhysicalTinyQvGdsFixture() {
   if (!fs.existsSync(physicalTinyQvGdsPath)) {
-    execFileSync('pnpm', ['run', 'prepare:physical-gds-fixture'], {
-      cwd: path.join(__dirname, '..'),
+    execFileSync(process.execPath, [path.join(repositoryRoot, 'scripts', 'fetch-tt-tinyqv-gds.mjs')], {
+      cwd: repositoryRoot,
       stdio: 'inherit',
       windowsHide: true,
     });
