@@ -91,7 +91,7 @@ const gridMajorStep = 1;
 const gridMinorStep = 0.2;
 const clickDistanceThresholdPx = 4;
 const gdsPreciseTileIdleDelayMs = 300;
-const gdsTileApplyIdleDelayMs = 260;
+const gdsTileApplyIdleDelayMs = 480;
 const cameraFitPaddingPx = 48;
 const GDS_TILE_ORDER_BUCKET_SIZE = 512;
 const GDS_TILE_PRECISE_ORDER_SHAPE_LIMIT = 2_048;
@@ -179,6 +179,7 @@ export function PhysicalLayoutCanvas({
   const gdsPrefetchTileCountRef = useRef(0);
   const gdsOverviewFallbackActiveRef = useRef(false);
   const gdsCurrentLodBandRef = useRef('');
+  const gdsObservedLodBandsRef = useRef(new Set<string>());
   const lastGdsTileApplyMsRef = useRef(0);
   const lastGdsTileBuildMsRef = useRef(0);
   const gdsTileDiagnosticsRef = useRef({
@@ -189,6 +190,7 @@ export function PhysicalLayoutCanvas({
     fullCellFallbackReason: '',
     fullCellShapeCount: 0,
     lastGoodShapeCount: 0,
+    observedLodBands: '',
     precisePending: false,
     retryKind: 'none',
     tileScope: 'viewport-window' as PhysicalLayoutGdsTileScope,
@@ -454,6 +456,7 @@ export function PhysicalLayoutCanvas({
     gdsPrefetchTileCountRef.current = 0;
     gdsOverviewFallbackActiveRef.current = false;
     gdsCurrentLodBandRef.current = '';
+    gdsObservedLodBandsRef.current.clear();
     if (gdsDeferredTileApplyTimeoutRef.current !== null) {
       window.clearTimeout(gdsDeferredTileApplyTimeoutRef.current);
       gdsDeferredTileApplyTimeoutRef.current = null;
@@ -476,6 +479,7 @@ export function PhysicalLayoutCanvas({
       fullCellFallbackReason: '',
       fullCellShapeCount: 0,
       lastGoodShapeCount: 0,
+      observedLodBands: '',
       precisePending: false,
       retryKind: 'none',
       tileScope: 'viewport-window',
@@ -838,6 +842,22 @@ export function PhysicalLayoutCanvas({
     startGdsTransformLoop();
   };
 
+  const recordGdsObservedLod = (lod: number) => {
+    if (!Number.isFinite(lod) || lod < 0) {
+      return;
+    }
+
+    const label = `lod${Math.trunc(lod)}`;
+    if (gdsObservedLodBandsRef.current.has(label)) {
+      return;
+    }
+
+    gdsObservedLodBandsRef.current.add(label);
+    updateGdsTileDiagnostics({
+      observedLodBands: Array.from(gdsObservedLodBandsRef.current).sort().join(','),
+    });
+  };
+
   const schedulePreciseGdsTileRequest = (
     input: PhysicalLayoutGdsTileRequestInput,
     sourcePlan: PhysicalLayoutGdsTileRequestPlan,
@@ -914,6 +934,7 @@ export function PhysicalLayoutCanvas({
           tileLod: plan.lod,
         });
         gdsCurrentLodBandRef.current = 'full-cell-lod0';
+        recordGdsObservedLod(plan.lod);
         if (
           gdsDisplayedTilesRef.current.has(plan.cacheKey)
           && gdsLastGoodTileRef.current
@@ -937,6 +958,7 @@ export function PhysicalLayoutCanvas({
     const plan = windowPlan.primaryPlan;
     const requestKey = createGdsTileWindowRequestKey(windowPlan.visiblePlans);
     gdsCurrentLodBandRef.current = `lod${plan.lod}:tile${windowPlan.tileWorldSize.toFixed(3)}`;
+    recordGdsObservedLod(plan.lod);
     cancelPendingPreciseGdsTile();
     gdsLatestRequestKeyRef.current = requestKey;
     gdsPrefetchTileCountRef.current = windowPlan.prefetchPlans.length;
@@ -1213,6 +1235,8 @@ export function PhysicalLayoutCanvas({
       return null;
     }
 
+    recordGdsObservedLod(plan.lod);
+
     const cachedTile = gdsTileCacheRef.current.get(plan.cacheKey);
     if (cachedTile) {
       return { plan, roundtripMs: 0, stoppedByBudget: false, tile: cachedTile };
@@ -1432,6 +1456,8 @@ export function PhysicalLayoutCanvas({
     if (!lsp?.layoutTileGeometry) {
       return;
     }
+
+    recordGdsObservedLod(plan.lod);
 
     const cachedTile = gdsTileCacheRef.current.get(plan.cacheKey);
     if (cachedTile) {
@@ -2144,6 +2170,7 @@ export function PhysicalLayoutCanvas({
       data-gds-precise-tile-pending={gdsTileDiagnostics.precisePending ? 'true' : 'false'}
       data-gds-prefetch-tile-count={gdsPrefetchTileCountRef.current}
       data-gds-overview-fallback-active={gdsOverviewFallbackActiveRef.current ? 'true' : 'false'}
+      data-gds-observed-lod-bands={gdsTileDiagnostics.observedLodBands}
       data-gds-render-batch-mode={isGdsTileMode ? 'order-bucket' : 'none'}
       data-gds-render-bucket-size={isGdsTileMode ? meshStatsRef.current.orderBucketSize : 0}
       data-gds-render-mode={isGdsTileMode ? 'tile-mesh' : 'full-graphics'}

@@ -2743,6 +2743,8 @@ test('Physical layout keeps tinyQV GDS tile memory bounded during pan and zoom',
         'data-gds-last-good-shape-count',
         'data-gds-empty-tile-reason',
         'data-gds-retry-kind',
+        'data-gds-observed-lod-bands',
+        'data-zoom',
       ];
 
       const metricElement = element as unknown as { getAttribute(name: string): string | null };
@@ -2757,6 +2759,62 @@ test('Physical layout keeps tinyQV GDS tile memory bounded during pan and zoom',
       const outputPath = test.info().outputPath(name);
       fs.mkdirSync(path.dirname(outputPath), { recursive: true });
       fs.writeFileSync(outputPath, body);
+    };
+    const readNumericMetric = async (name: string) => Number(await layoutCanvas.getAttribute(name) ?? '0');
+    const waitForTinyQvIdle = async () => {
+      await expect.poll(async () => readNumericMetric('data-gds-inflight-count'), {
+        timeout: UI_READY_TIMEOUT_MS,
+      }).toBe(0);
+    };
+    const waitForTinyQvLod = async (lod: number) => {
+      await expect.poll(async () => layoutCanvas.getAttribute('data-gds-current-lod-band'), {
+        timeout: UI_READY_TIMEOUT_MS,
+      }).toContain(`lod${lod}`);
+    };
+    const resetTinyQvViewportToCell = async () => {
+      const topCellTarget = window.getByTestId('physical-layout-target-item-gdsCell-tt_um_tt_tinyQV');
+      const firstGdsCellTarget = window.locator('[data-testid^="physical-layout-target-item-gdsCell-"]').first();
+      await expect(firstGdsCellTarget).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+      if (await topCellTarget.getAttribute('aria-selected') === 'true') {
+        await firstGdsCellTarget.click();
+      }
+      await topCellTarget.scrollIntoViewIfNeeded();
+      await topCellTarget.click();
+      await expect(layoutCanvas).toHaveAttribute('data-gds-tile-scope', 'viewport-window', { timeout: UI_READY_TIMEOUT_MS });
+      await expectTinyQvStable();
+      await layoutCanvas.hover();
+    };
+    const setTinyQvZoomNear = async (targetZoom: number, expectedLod?: number) => {
+      await layoutCanvas.hover();
+      await window.keyboard.down('Control');
+      try {
+        for (let index = 0; index < 36; index += 1) {
+          const currentZoom = await readNumericMetric('data-zoom');
+          const currentLodBand = await layoutCanvas.getAttribute('data-gds-current-lod-band') ?? '';
+          if (
+            currentZoom > 0
+            && Math.abs(currentZoom - targetZoom) / targetZoom < 0.22
+            && (expectedLod === undefined || currentLodBand.includes(`lod${expectedLod}`))
+          ) {
+            break;
+          }
+          await window.mouse.wheel(0, currentZoom < targetZoom ? -260 : 260);
+        }
+      } finally {
+        await window.keyboard.up('Control');
+      }
+    };
+    const expectTinyQvStable = async () => {
+      expect(await readNumericMetric('data-gds-cache-entry-count')).toBeLessThanOrEqual(96);
+      expect(await readNumericMetric('data-gds-cache-bytes')).toBeLessThanOrEqual(192 * 1024 * 1024);
+      await expect.poll(async () => readNumericMetric('data-gds-displayed-tile-count'), {
+        timeout: UI_READY_TIMEOUT_MS,
+      }).toBeGreaterThan(0);
+      await expect.poll(async () => readNumericMetric('data-gds-coverage-ratio'), {
+        timeout: UI_READY_TIMEOUT_MS,
+      }).toBeGreaterThan(0);
+      await waitForTinyQvIdle();
+      expect(await readNumericMetric('data-gds-blank-frame-count')).toBe(0);
     };
     const writeTinyQvPng = async (name: string, body: Buffer) => {
       await test.info().attach(name, {
@@ -2874,10 +2932,75 @@ test('Physical layout keeps tinyQV GDS tile memory bounded during pan and zoom',
     await expect.poll(async () => Number(await window.getByTestId('physical-gds-toolbar-metrics').getAttribute('data-gds-cache-bytes') ?? '0'), {
       timeout: UI_READY_TIMEOUT_MS,
     }).toBeGreaterThan(0);
+    const scenarioMetrics: Record<string, unknown> = {
+      baseline: await readTinyQvMetrics(),
+    };
+    const runTinyQvScenario = async (name: string, action: () => Promise<void>) => {
+      const before = await readTinyQvMetrics();
+      await action();
+      await expectTinyQvStable();
+      const after = await readTinyQvMetrics();
+      scenarioMetrics[name] = { after, before };
+      await writeTinyQvJson(`tinyqv-gds-${name}-metrics.json`, { after, before });
+    };
+    if (canvasBox) {
+      await layoutCanvas.hover();
+      await window.mouse.move(canvasBox.x + canvasBox.width / 2, canvasBox.y + canvasBox.height / 2);
+      await runTinyQvScenario('large-vertical-pan', async () => {
+        for (let index = 0; index < 12; index += 1) {
+          await window.mouse.wheel(0, index % 2 === 0 ? 720 : -520);
+        }
+      });
+      await runTinyQvScenario('large-horizontal-pan', async () => {
+        await window.keyboard.down('Shift');
+        try {
+          for (let index = 0; index < 12; index += 1) {
+            await window.mouse.wheel(0, index % 2 === 0 ? 680 : -460);
+          }
+        } finally {
+          await window.keyboard.up('Shift');
+        }
+      });
+      await runTinyQvScenario('rapid-pan-zoom-burst', async () => {
+        for (let index = 0; index < 14; index += 1) {
+          if (index % 3 === 0) {
+            await window.keyboard.down('Control');
+            try {
+              await window.mouse.wheel(0, index % 2 === 0 ? -260 : 220);
+            } finally {
+              await window.keyboard.up('Control');
+            }
+          } else {
+            await window.mouse.wheel(0, index % 2 === 0 ? 360 : -320);
+          }
+        }
+      });
+      await runTinyQvScenario('zoom-out-lod2', async () => {
+        await resetTinyQvViewportToCell();
+        await setTinyQvZoomNear(3, 2);
+        await waitForTinyQvLod(2);
+      });
+      await runTinyQvScenario('zoom-mid-lod1', async () => {
+        await resetTinyQvViewportToCell();
+        await setTinyQvZoomNear(12, 1);
+        await waitForTinyQvLod(1);
+      });
+      await runTinyQvScenario('zoom-in-lod0', async () => {
+        await resetTinyQvViewportToCell();
+        await setTinyQvZoomNear(36, 0);
+        await waitForTinyQvLod(0);
+      });
+    }
     const tinyQvMetrics = await readTinyQvMetrics();
     expect(Number(tinyQvMetrics['data-gds-displayed-tile-count'] ?? '0')).toBeGreaterThan(0);
     expect(Number(tinyQvMetrics['data-gds-atlas-bytes'] ?? '0')).toBeGreaterThan(0);
     expect(tinyQvMetrics['data-gds-displayed-tile-state']).not.toBe('empty-outside-cell-bounds');
+    const observedLodBands = String(tinyQvMetrics['data-gds-observed-lod-bands'] ?? '');
+    expect(observedLodBands).toContain('lod0');
+    expect(observedLodBands).toContain('lod1');
+    expect(observedLodBands).toContain('lod2');
+    scenarioMetrics.final = tinyQvMetrics;
+    await writeTinyQvJson('tinyqv-gds-scenario-metrics.json', scenarioMetrics);
     await writeTinyQvJson('tinyqv-gds-metrics.json', tinyQvMetrics);
     await writeTinyQvPng('tinyqv-gds-canvas.png', await layoutCanvas.screenshot());
   } finally {
