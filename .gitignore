@@ -23,6 +23,7 @@ public/generated/
 binaries/
 .tmp/
 perf-results/
+.deps/
 .pristine-agent/
 .pristine-vendor/
 .pristine-package/

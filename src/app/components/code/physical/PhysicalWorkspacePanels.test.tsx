@@ -78,6 +78,7 @@ vi.mock('./PhysicalLayoutCanvas', () => ({
 
     return (
       <div
+        className="outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
         data-gds-draw-node-count={catalog?.sourceKind === 'gds' ? 3 : 0}
         data-gds-mesh-batch-count={catalog?.sourceKind === 'gds' ? 2 : 0}
         data-gds-render-batch-mode={catalog?.sourceKind === 'gds' ? 'order-bucket' : 'none'}
@@ -95,6 +96,7 @@ vi.mock('./PhysicalLayoutCanvas', () => ({
         data-visible-label-names="A|Y"
         data-visible-shape-count={activeGeometry ? filterVisiblePhysicalLayoutShapes(activeGeometry.shapes, layoutVisibility).length : 0}
         onClick={() => onHighlightedShapeChange?.(activeGeometry?.shapes[0]?.index ?? null)}
+        tabIndex={-1}
       />
     );
   },
@@ -117,6 +119,7 @@ vi.mock('./PhysicalLayout3DCanvas', () => ({
     selectedTarget: PhysicalLayoutTarget | null;
   }) => (
     <div
+      className="outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
       data-base-grid-depth-test="true"
       data-depth-write-mode="solid-mesh"
       data-highlighted-shape-index={highlightedShapeIndex ?? ''}
@@ -147,6 +150,7 @@ vi.mock('./PhysicalLayout3DCanvas', () => ({
       data-view-helper-visible="true"
       data-zoom="1.0000"
       onClick={() => onHighlightedShapeChange?.(geometry?.shapes[1]?.index ?? null)}
+      tabIndex={-1}
     />
   ),
 }));
@@ -164,6 +168,81 @@ const readyVisibility = createPhysicalLayoutVisibility(layoutFixtureOpenResult.c
 const nandMacroShapes = selectMacroShapes(layoutFixtureOpenResult.catalog, layoutFixtureGeometry, 'sg13g2_nand2_1');
 const nandTarget: PhysicalLayoutTarget = { kind: 'macro', name: 'sg13g2_nand2_1', index: 1 };
 const nandVisibility = createPhysicalLayoutVisibility(layoutFixtureOpenResult.catalog, true, nandMacroShapes);
+const defCatalog = {
+  ...layoutFixtureOpenResult.catalog,
+  defPins: [{
+    firstShapeIndex: 0,
+    name: 'PAD',
+    netName: 'net0',
+    orientation: 'N',
+    shapeCount: 1,
+    status: 1,
+    x: 0,
+    y: 0,
+  }],
+  nets: [{
+    connectionCount: 1,
+    index: 0,
+    name: 'net0',
+    shapeCount: 1,
+    special: false,
+  }, {
+    connectionCount: 1,
+    index: 1,
+    name: 'vdd',
+    shapeCount: 1,
+    special: true,
+  }],
+};
+const defGeometry: LspLayoutGeometry = {
+  polygonPointCount: 0,
+  shapeCount: 4,
+  shapes: [
+    {
+      flags: 0,
+      index: 10,
+      kind: 'rect',
+      layerIndex: 0,
+      macroIndex: null,
+      ownerIndex: 0,
+      ownerKind: 'pin',
+      rect: { x0: 0, y0: 0, x1: 1, y1: 1 },
+    },
+    {
+      flags: 0,
+      index: 11,
+      kind: 'rect',
+      layerIndex: 0,
+      macroIndex: null,
+      ownerIndex: 0,
+      ownerKind: 'net',
+      rect: { x0: 1, y0: 1, x1: 2, y1: 2 },
+    },
+    {
+      flags: 0,
+      index: 12,
+      kind: 'rect',
+      layerIndex: 0,
+      macroIndex: null,
+      ownerIndex: 1,
+      ownerKind: 'specialNet',
+      rect: { x0: 2, y0: 2, x1: 3, y1: 3 },
+    },
+    {
+      flags: 0,
+      index: 13,
+      kind: 'rect',
+      layerIndex: 0,
+      macroIndex: null,
+      ownerIndex: 0,
+      ownerKind: 'blockage',
+      rect: { x0: 3, y0: 3, x1: 4, y1: 4 },
+    },
+  ],
+  truncated: false,
+  unitsPerMicron: 1000,
+};
+const defVisibility = createPhysicalLayoutVisibility(defCatalog, true, defGeometry.shapes);
 const readyGdsTarget: PhysicalLayoutTarget = { kind: 'gdsCell', name: 'CHILD', index: 1 };
 const layoutFiles = [
   { extension: '.lef', name: 'sg13g2_stdcell.lef', path: 'sg13g2_stdcell.lef' },
@@ -216,6 +295,13 @@ describe('PhysicalWorkspacePanels', () => {
     expect(screen.getByTestId('physical-layout-3d-toggle')).toBeInTheDocument();
     await waitFor(() => expect(screen.getByTestId('physical-layout-editor')).toHaveAttribute('data-status', 'ready'));
     expect(screen.getByTestId('physical-layout-canvas')).toHaveAttribute('data-renderer', 'webgl');
+    expect(screen.getByTestId('physical-layout-canvas')).toHaveAttribute('tabIndex', '-1');
+    expect(screen.getByTestId('physical-layout-canvas')).toHaveClass(
+      'focus:outline-none',
+      'focus:ring-0',
+      'focus-visible:outline-none',
+      'focus-visible:ring-0',
+    );
     await waitFor(() => expect(onSelectedTargetChange).toHaveBeenCalledWith(readyTarget));
     await waitFor(() => expect(getTestElectronApi().lsp.layoutGeometry).toHaveBeenCalledWith({
       sessionId: 'layout-test-session',
@@ -282,6 +368,8 @@ describe('PhysicalWorkspacePanels', () => {
 
     await waitFor(() => expect(screen.getByTestId('physical-layout-editor')).toHaveAttribute('data-status', 'ready'));
     expect(layoutOpen).toHaveBeenCalledWith({
+      deferCatalog: true,
+      openMode: 'auto',
       workspaceFilePath: 'chip.gds',
       title: 'chip.gds',
     });
@@ -298,6 +386,126 @@ describe('PhysicalWorkspacePanels', () => {
     expect(screen.getByTestId('physical-gds-toolbar-metrics')).toHaveAttribute('data-gds-draw-node-count', '3');
     expect(screen.getByTestId('physical-gds-toolbar-metrics-mesh-value')).toHaveTextContent('2');
     expect(screen.getByTestId('physical-layout-canvas')).toHaveAttribute('data-selected-macro-name', '');
+  });
+
+  it('shows staged GDS parsing progress before loading the paged catalog', async () => {
+    const layoutOpen = vi.mocked(getTestElectronApi().lsp.layoutOpen);
+    const layoutStatus = vi.mocked(getTestElectronApi().lsp.layoutStatus);
+    const layoutCatalogSummary = vi.mocked(getTestElectronApi().lsp.layoutCatalogSummary);
+    const layoutCatalogPage = vi.mocked(getTestElectronApi().lsp.layoutCatalogPage);
+    layoutOpen.mockResolvedValueOnce({
+      ...layoutFixtureGdsOpenResult,
+      deferred: true,
+      initialStatus: 'parsing',
+      catalog: {
+        ...layoutFixtureGdsOpenResult.catalog,
+        layers: [],
+        gdsCells: [],
+      },
+    });
+    layoutStatus
+      .mockResolvedValueOnce({
+        state: 'parsing',
+        phase: 'records',
+        fileSizeBytes: 100,
+        bytesRead: 25,
+        recordCount: 10,
+        cellCount: 0,
+        referenceCount: 0,
+        elementCount: 0,
+        pointCount: 0,
+        stringCount: 0,
+        diagnosticCount: 0,
+        elapsedMicros: 1000,
+        openMicros: 100,
+        parseMicros: 900,
+        warmupScheduled: false,
+        warmupReady: false,
+        error: '',
+      })
+      .mockResolvedValueOnce({
+        state: 'ready',
+        phase: 'ready',
+        fileSizeBytes: 100,
+        bytesRead: 100,
+        recordCount: 40,
+        cellCount: layoutFixtureGdsOpenResult.catalog.gdsCells.length,
+        referenceCount: 0,
+        elementCount: layoutFixtureGdsOpenResult.catalog.gdsElements.length,
+        pointCount: 0,
+        stringCount: 4,
+        diagnosticCount: 0,
+        elapsedMicros: 5000,
+        openMicros: 100,
+        parseMicros: 4900,
+        warmupScheduled: false,
+        warmupReady: true,
+        error: '',
+      });
+    layoutCatalogSummary.mockResolvedValueOnce({
+      unitsPerMicron: layoutFixtureGdsOpenResult.catalog.unitsPerMicron,
+      sourceKind: 'gds',
+      shapeCount: layoutFixtureGdsOpenResult.catalog.shapeCount,
+      hasBounds: true,
+      topCellIndex: layoutFixtureGdsOpenResult.catalog.topCellIndex,
+      bounds: layoutFixtureGdsOpenResult.catalog.gdsCells[0]?.bounds ?? null,
+      layerCount: layoutFixtureGdsOpenResult.catalog.layers.length,
+      layerSummary: layoutFixtureGdsOpenResult.catalog.layers,
+      macroCount: 0,
+      componentCount: 0,
+      defPinCount: 0,
+      netCount: 0,
+      gdsCellCount: layoutFixtureGdsOpenResult.catalog.gdsCells.length,
+      gdsReferenceCount: 0,
+      gdsElementCount: layoutFixtureGdsOpenResult.catalog.gdsElements.length,
+      gdsPointCount: 0,
+      stringCount: 4,
+      diagnosticCount: 0,
+      parseMicros: 4900,
+      layerRegisterMicros: 20,
+      boundsMicros: 30,
+      openMicros: 100,
+    });
+    layoutCatalogPage.mockImplementation(async (options) => ({
+      tableKind: options.tableKind,
+      offset: options.offset ?? 0,
+      count: options.tableKind === 'layers'
+        ? layoutFixtureGdsOpenResult.catalog.layers.length
+        : layoutFixtureGdsOpenResult.catalog.gdsCells.length,
+      totalCount: options.tableKind === 'layers'
+        ? layoutFixtureGdsOpenResult.catalog.layers.length
+        : layoutFixtureGdsOpenResult.catalog.gdsCells.length,
+      nextOffset: null,
+      layers: options.tableKind === 'layers' ? layoutFixtureGdsOpenResult.catalog.layers : [],
+      gdsCells: options.tableKind === 'cells' ? layoutFixtureGdsOpenResult.catalog.gdsCells : [],
+      gdsReferences: [],
+      gdsElements: [],
+      gdsPoints: [],
+      strings: [],
+      diagnostics: [],
+    }));
+
+    function PhysicalGdsPanelHarness() {
+      const [selectedTarget, setSelectedTarget] = useState<PhysicalLayoutTarget | null>(null);
+
+      return (
+        <PhysicalMainPanel
+          activeLayoutFilePath="chip.gds"
+          layoutVisibility={readyVisibility}
+          selectedTarget={selectedTarget}
+          onSelectedTargetChange={setSelectedTarget}
+        />
+      );
+    }
+
+    renderInCodeLayout(<PhysicalGdsPanelHarness />);
+
+    await waitFor(() => expect(screen.getByTestId('physical-gds-progress')).toHaveAttribute('data-gds-parse-state', 'parsing'));
+    expect(screen.getByTestId('physical-gds-progress')).toHaveAttribute('data-gds-parse-progress', '25.0');
+    await waitFor(() => expect(screen.getByTestId('physical-layout-editor')).toHaveAttribute('data-status', 'ready'));
+    expect(layoutCatalogSummary).toHaveBeenCalledWith('layout-test-session');
+    expect(layoutCatalogPage).toHaveBeenCalledWith(expect.objectContaining({ tableKind: 'cells' }));
+    expect(layoutCatalogPage).toHaveBeenCalledWith(expect.objectContaining({ tableKind: 'layers' }));
   });
 
   it('renders the 3D canvas split for selected GDS cell geometry', async () => {
@@ -347,6 +555,13 @@ describe('PhysicalWorkspacePanels', () => {
     expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveAttribute('data-view-helper-animating', 'false');
     expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveAttribute('data-selected-target-name', 'CHILD');
     expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveAttribute('data-source-kind', 'gds');
+    expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveAttribute('tabIndex', '-1');
+    expect(screen.getByTestId('physical-layout-3d-canvas')).toHaveClass(
+      'focus:outline-none',
+      'focus:ring-0',
+      'focus-visible:outline-none',
+      'focus-visible:ring-0',
+    );
   });
 
   it('syncs highlighted shape state between 2D and 3D canvases', async () => {
@@ -488,6 +703,7 @@ describe('PhysicalWorkspacePanels', () => {
     expect(screen.getByTestId('physical-layer-opacity-button-0')).toHaveTextContent('Metal1');
     expect(screen.getByTestId('physical-layer-opacity-button-0')).toHaveClass('text-[11px]', 'font-medium', 'leading-5');
     expect(screen.getByTestId('physical-layer-opacity-value-0')).toHaveTextContent('100%');
+    expect(screen.getByTestId('physical-layer-category-grid-0')).toHaveClass('grid', 'grid-cols-3');
     expect(screen.getByTestId('physical-layer-row-0')).toHaveTextContent('Pin');
     expect(screen.getByTestId('physical-layer-row-0')).toHaveTextContent('Label');
     expect(screen.getByTestId('physical-layer-row-0')).toHaveTextContent('Obstruction');
@@ -512,6 +728,34 @@ describe('PhysicalWorkspacePanels', () => {
     await user.click(screen.getByTestId('physical-right-panel-tab-checks'));
 
     expect(screen.getByTestId('physical-right-panel-checks-content')).toHaveTextContent('Checks');
+  });
+
+  it('renders DEF layer categories in a compact three-column grid', () => {
+    renderInCodeLayout(
+      <PhysicalRightPanel
+        layoutVisibility={defVisibility}
+        layoutState={{
+          catalog: defCatalog,
+          error: null,
+          geometry: defGeometry,
+          openResult: {
+            ...layoutFixtureOpenResult,
+            catalog: defCatalog,
+            defPresent: true,
+            title: 'chip.def',
+          },
+          status: 'ready',
+        }}
+        selectedTarget={{ kind: 'design', name: 'Design', index: 0 }}
+      />,
+    );
+
+    expect(screen.getByTestId('physical-layer-category-grid-0')).toHaveClass('grid', 'grid-cols-3');
+    expect(screen.getByTestId('physical-layer-row-0')).toHaveTextContent('Pin');
+    expect(screen.getByTestId('physical-layer-row-0')).toHaveTextContent('Label');
+    expect(screen.getByTestId('physical-layer-row-0')).toHaveTextContent('Net');
+    expect(screen.getByTestId('physical-layer-row-0')).toHaveTextContent('Special Net');
+    expect(screen.getByTestId('physical-layer-row-0')).toHaveTextContent('Blockage');
   });
 
   it('disables layer tree rows that have no selected macro data', () => {
@@ -559,6 +803,7 @@ describe('PhysicalWorkspacePanels', () => {
     );
 
     const boundarySwatch = screen.getByTestId('physical-layer-category-swatch-0-boundary');
+    expect(screen.getByTestId('physical-layer-category-grid-0')).toHaveClass('grid', 'grid-cols-3');
     expect(boundarySwatch).not.toBeDisabled();
 
     await user.click(boundarySwatch);

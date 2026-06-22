@@ -4,8 +4,10 @@ import { cn } from '@/lib/utils';
 
 import type {
   LspLayoutCatalog,
+  LspLayoutCatalogSummary,
   LspLayoutGeometry,
   LspLayoutGeometryOptions,
+  LspLayoutStatus,
   LspLayoutOpenResult,
 } from '../../../../../types/systemverilog-lsp';
 import { Button } from '../../ui/button';
@@ -25,7 +27,7 @@ import { getDefaultLayoutTarget, type PhysicalLayoutTarget } from './physicalLay
 import { PhysicalLayout3DCanvas } from './PhysicalLayout3DCanvas';
 import { PhysicalLayoutCanvas } from './PhysicalLayoutCanvas';
 
-export type PhysicalLayoutStatus = 'idle' | 'loading' | 'ready' | 'error';
+export type PhysicalLayoutStatus = 'idle' | 'loading' | 'parsing' | 'ready' | 'error';
 
 export interface PhysicalLayoutStateSnapshot {
   catalog: LspLayoutCatalog | null;
@@ -74,6 +76,105 @@ function createLayoutTargetGeometryOptions(
   return null;
 }
 
+function isGdsLayoutFilePath(filePath: string): boolean {
+  const normalizedPath = filePath.toLowerCase();
+  return normalizedPath.endsWith('.gds') || normalizedPath.endsWith('.gdsii');
+}
+
+async function loadReadyGdsCatalog(
+  result: LspLayoutOpenResult,
+  onStatus: (status: LspLayoutStatus) => void,
+): Promise<LspLayoutOpenResult> {
+  const lsp = window.electronAPI?.lsp;
+  if (!lsp?.layoutStatus || !lsp.layoutCatalogSummary || !lsp.layoutCatalogPage) {
+    throw new Error('GDS layout catalog API is unavailable.');
+  }
+
+  let status = await lsp.layoutStatus(result.sessionId);
+  onStatus(status);
+  const startedAt = Date.now();
+  while (status.state !== 'ready') {
+    if (status.state === 'failed') {
+      throw new Error(status.error || 'GDS layout parsing failed.');
+    }
+    if (Date.now() - startedAt > 120_000) {
+      throw new Error('Timed out waiting for GDS layout parsing to finish.');
+    }
+    await delay(150);
+    status = await lsp.layoutStatus(result.sessionId);
+    onStatus(status);
+  }
+
+  const summary = await lsp.layoutCatalogSummary(result.sessionId);
+  const catalog = await loadGdsCatalogPages(result.sessionId, summary);
+  return {
+    ...result,
+    catalog,
+    cellCount: catalog.gdsCells.length,
+    layerCount: catalog.layers.length,
+    macroCount: catalog.macros.length,
+    componentCount: catalog.components.length,
+    netCount: catalog.nets.length,
+    diagnosticCount: catalog.diagnostics.length,
+    sourceKind: catalog.sourceKind,
+    unitsPerMicron: catalog.unitsPerMicron || result.unitsPerMicron,
+  };
+}
+
+async function loadGdsCatalogPages(sessionId: string, summary: LspLayoutCatalogSummary): Promise<LspLayoutCatalog> {
+  const lsp = window.electronAPI?.lsp;
+  if (!lsp?.layoutCatalogPage) {
+    throw new Error('GDS layout catalog page API is unavailable.');
+  }
+
+  const [cellPage, layerPage] = await Promise.all([
+    summary.gdsCellCount > 0
+      ? lsp.layoutCatalogPage({
+          sessionId,
+          tableKind: 'cells',
+          offset: 0,
+          limit: Math.min(summary.gdsCellCount, 4096),
+          maxBytes: 8 * 1024 * 1024,
+        })
+      : Promise.resolve(null),
+    summary.layerCount > 0
+      ? lsp.layoutCatalogPage({
+          sessionId,
+          tableKind: 'layers',
+          offset: 0,
+          limit: Math.min(summary.layerCount, 4096),
+          maxBytes: 4 * 1024 * 1024,
+        })
+      : Promise.resolve(null),
+  ]);
+
+  return {
+    unitsPerMicron: summary.unitsPerMicron,
+    sourceKind: summary.sourceKind,
+    shapeCount: summary.shapeCount,
+    hasBounds: summary.hasBounds,
+    topCellIndex: summary.topCellIndex,
+    layers: layerPage?.layers.length ? layerPage.layers : summary.layerSummary,
+    macros: [],
+    pins: [],
+    defPins: [],
+    vias: [],
+    components: [],
+    nets: [],
+    gdsCells: cellPage?.gdsCells ?? [],
+    gdsReferences: [],
+    gdsElements: [],
+    gdsPoints: [],
+    diagnostics: [],
+  };
+}
+
+function delay(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, milliseconds);
+  });
+}
+
 export function PhysicalLayoutEditorPanel({
   activeLayoutFilePath,
   highlightedShapeIndex = null,
@@ -91,6 +192,7 @@ export function PhysicalLayoutEditorPanel({
   const [gdsTileGeometry, setGdsTileGeometry] = useState<LspLayoutGeometry | null>(null);
   const [gdsTileMetrics, setGdsTileMetrics] = useState<PhysicalLayoutGdsTileMetrics>(defaultPhysicalLayoutGdsTileMetrics);
   const [error, setError] = useState<string | null>(null);
+  const [gdsParseStatus, setGdsParseStatus] = useState<LspLayoutStatus | null>(null);
   const [is3DViewVisible, setIs3DViewVisible] = useState(false);
   const sessionIdRef = useRef<string | null>(null);
   const onLayoutStateChangeRef = useRef(onLayoutStateChange);
@@ -122,6 +224,7 @@ export function PhysicalLayoutEditorPanel({
         setGdsTileGeometry(null);
         onGdsTileGeometryChangeRef.current?.(null);
         setGdsTileMetrics(defaultPhysicalLayoutGdsTileMetrics);
+        setGdsParseStatus(null);
         return;
       }
 
@@ -132,8 +235,12 @@ export function PhysicalLayoutEditorPanel({
       setGdsTileGeometry(null);
       onGdsTileGeometryChangeRef.current?.(null);
       setGdsTileMetrics(defaultPhysicalLayoutGdsTileMetrics);
+      setGdsParseStatus(null);
       try {
+        const isGdsFile = isGdsLayoutFilePath(activeLayoutFilePath);
         const result = await lsp.layoutOpen({
+          deferCatalog: isGdsFile,
+          openMode: isGdsFile ? 'auto' : undefined,
           workspaceFilePath: activeLayoutFilePath,
           title: activeLayoutFilePath.split('/').pop() ?? activeLayoutFilePath,
         });
@@ -149,12 +256,28 @@ export function PhysicalLayoutEditorPanel({
         }
 
         sessionIdRef.current = result.sessionId;
-        setOpenResult(result);
         setGeometry(null);
         setGdsTileGeometry(null);
         onGdsTileGeometryChangeRef.current?.(null);
         setGdsTileMetrics(defaultPhysicalLayoutGdsTileMetrics);
-        const defaultTarget = getDefaultLayoutTarget(result.catalog);
+        const readyResult = result.catalog.sourceKind === 'gds'
+          ? await loadReadyGdsCatalog(result, (nextStatus) => {
+              if (!disposed) {
+                setStatus(nextStatus.state === 'ready' ? 'loading' : 'parsing');
+                setGdsParseStatus(nextStatus);
+              }
+            })
+          : result;
+        if (disposed) {
+          if (readyResult.sessionId) {
+            void lsp.layoutClose(readyResult.sessionId);
+          }
+          return;
+        }
+
+        setOpenResult(readyResult);
+        setGdsParseStatus(null);
+        const defaultTarget = getDefaultLayoutTarget(readyResult.catalog);
         if (defaultTarget && !selectedTargetRef.current) {
           onSelectedTargetChangeRef.current?.(defaultTarget);
         }
@@ -298,6 +421,9 @@ export function PhysicalLayoutEditorPanel({
       data-selected-target-kind={selectedTarget?.kind ?? ''}
       data-selected-target-name={selectedTargetName}
       data-shape-count={shapeCount}
+      data-gds-parse-state={gdsParseStatus?.state ?? ''}
+      data-gds-parse-phase={gdsParseStatus?.phase ?? ''}
+      data-gds-parse-progress={formatGdsParseProgress(gdsParseStatus)}
       data-source-kind={catalog?.sourceKind ?? ''}
       data-status={status}
       data-testid="physical-layout-editor"
@@ -312,6 +438,7 @@ export function PhysicalLayoutEditorPanel({
           <span className="shrink-0">{shapeCount} shapes</span>
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          {gdsParseStatus && <PhysicalGdsProgressInfo status={gdsParseStatus} />}
           {isGdsTarget && <PhysicalGdsMetricInfo metrics={gdsTileMetrics} />}
           <TooltipIconButton content={is3DViewVisible ? 'Hide 3D layout view' : 'Show 3D layout view'} side="bottom">
             <Button
@@ -368,12 +495,12 @@ export function PhysicalLayoutEditorPanel({
           canvas2D
         )}
 
-        {status === 'loading' && (
+        {(status === 'loading' || status === 'parsing') && (
           <div
             className="pointer-events-none absolute left-3 top-3 rounded border border-ide-border/80 bg-ide-bg/90 px-2 py-1 text-[11px] text-ide-text-muted shadow"
             data-testid="physical-layout-loading"
           >
-            Loading physical layout
+            {gdsParseStatus ? formatGdsParseLabel(gdsParseStatus) : 'Loading physical layout'}
           </div>
         )}
       </div>
@@ -390,12 +517,26 @@ function PhysicalGdsMetricInfo({ metrics }: PhysicalGdsMetricInfoProps) {
     <div
       className="flex h-6 items-center gap-2 rounded-md border border-ide-border/70 bg-ide-bg/40 px-2 text-[10px] leading-none text-ide-text-muted"
       data-gds-average-fps={formatMetricValue(metrics.averageFps, 1)}
+      data-gds-atlas-bytes={metrics.atlasByteLength}
+      data-gds-blank-frame-count={metrics.blankFrameCount}
+      data-gds-buffer-capacity-vertex-count={metrics.bufferCapacityVertexCount}
+      data-gds-buffer-realloc-count={metrics.bufferReallocCount}
+      data-gds-buffer-update-count={metrics.bufferUpdateCount}
+      data-gds-buffer-update-ms={formatMetricValue(metrics.bufferUpdateMs, 3)}
+      data-gds-cache-bytes={metrics.cacheByteLength}
+      data-gds-cache-entry-count={metrics.cacheEntryCount}
+      data-gds-coverage-ratio={formatMetricValue(metrics.coverageRatio, 3)}
+      data-gds-displayed-tile-count={metrics.displayedTileCount}
       data-gds-frame-p95-ms={formatMetricValue(metrics.frameP95Ms, 1)}
+      data-gds-inflight-count={metrics.inflightRequestCount}
       data-gds-mesh-buffer-bytes={metrics.bufferByteLength + metrics.indexByteLength}
       data-gds-mesh-batch-count={metrics.meshBatchCount}
       data-gds-draw-node-count={metrics.meshDrawNodeCount}
       data-gds-render-mode="tile-mesh"
       data-gds-render-ms={formatMetricValue(metrics.lastRenderMs, 2)}
+      data-gds-retry-count={metrics.retryCount}
+      data-gds-tile-apply-ms={formatMetricValue(metrics.lastTileApplyMs, 2)}
+      data-gds-tile-build-ms={formatMetricValue(metrics.lastTileBuildMs, 2)}
       data-gds-tile-query-ms={formatMetricValue(metrics.lastTileQueryMs, 2)}
       data-gds-tile-roundtrip-ms={formatMetricValue(metrics.lastTileRoundtripMs, 2)}
       data-gds-truncated={metrics.truncated ? 'true' : 'false'}
@@ -427,8 +568,65 @@ function PhysicalGdsMetricInfo({ metrics }: PhysicalGdsMetricInfoProps) {
           {metrics.meshBatchCount}
         </span>
       </div>
+      <div className="flex items-center gap-1" data-testid="physical-gds-toolbar-metrics-cache">
+        <span>Cache</span>
+        <span className="font-mono text-ide-accent" data-testid="physical-gds-toolbar-metrics-cache-value">
+          {formatByteMetric(metrics.cacheByteLength)}
+        </span>
+      </div>
+      <div className="flex items-center gap-1" data-testid="physical-gds-toolbar-metrics-coverage">
+        <span>Cov</span>
+        <span className="font-mono text-ide-accent" data-testid="physical-gds-toolbar-metrics-coverage-value">
+          {formatMetricValue(metrics.coverageRatio * 100, 0)}
+        </span>
+        <span>%</span>
+      </div>
     </div>
   );
+}
+
+interface PhysicalGdsProgressInfoProps {
+  status: LspLayoutStatus;
+}
+
+function PhysicalGdsProgressInfo({ status }: PhysicalGdsProgressInfoProps) {
+  return (
+    <div
+      className="flex h-6 items-center gap-2 rounded-md border border-ide-border/70 bg-ide-bg/40 px-2 text-[10px] leading-none text-ide-text-muted"
+      data-gds-parse-bytes-read={status.bytesRead}
+      data-gds-parse-cell-count={status.cellCount}
+      data-gds-parse-elapsed-ms={formatMetricValue(status.elapsedMicros / 1000, 1)}
+      data-gds-parse-file-size={status.fileSizeBytes}
+      data-gds-parse-phase={status.phase}
+      data-gds-parse-point-count={status.pointCount}
+      data-gds-parse-progress={formatGdsParseProgress(status)}
+      data-gds-parse-record-count={status.recordCount}
+      data-gds-parse-state={status.state}
+      data-testid="physical-gds-progress"
+    >
+      <span>GDS</span>
+      <span className="font-mono text-ide-accent" data-testid="physical-gds-progress-state">
+        {status.state}
+      </span>
+      <span>{status.phase}</span>
+      <span className="font-mono text-ide-accent" data-testid="physical-gds-progress-value">
+        {formatGdsParseProgress(status)}%
+      </span>
+    </div>
+  );
+}
+
+function formatGdsParseLabel(status: LspLayoutStatus): string {
+  return `Parsing GDS ${status.phase} ${formatGdsParseProgress(status)}%`;
+}
+
+function formatGdsParseProgress(status: LspLayoutStatus | null): string {
+  if (!status || status.fileSizeBytes <= 0) {
+    return '0.0';
+  }
+
+  const progress = Math.min(100, Math.max(0, (status.bytesRead / status.fileSizeBytes) * 100));
+  return progress.toFixed(1);
 }
 
 function formatMetricValue(value: number, digits: number): string {
@@ -437,4 +635,12 @@ function formatMetricValue(value: number, digits: number): string {
   }
 
   return value.toFixed(digits);
+}
+
+function formatByteMetric(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) {
+    return '0M';
+  }
+
+  return `${(value / (1024 * 1024)).toFixed(0)}M`;
 }

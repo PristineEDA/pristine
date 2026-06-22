@@ -1783,6 +1783,7 @@ function normalizeLayoutOpenOptions(value: unknown): LspLayoutOpenOptions {
 
   const candidate = value as {
     defUri?: unknown;
+    deferCatalog?: unknown;
     gdsUri?: unknown;
     lefUris?: unknown;
     openMode?: unknown;
@@ -1800,6 +1801,7 @@ function normalizeLayoutOpenOptions(value: unknown): LspLayoutOpenOptions {
 
   return {
     defUri: candidate.defUri,
+    deferCatalog: candidate.deferCatalog === true,
     gdsUri: candidate.gdsUri,
     lefUris: Array.isArray(candidate.lefUris)
       ? candidate.lefUris.filter((entry): entry is string => typeof entry === 'string' && entry.length > 0)
@@ -2989,7 +2991,9 @@ export function registerLspHandlers(getMainWindow: () => BrowserWindow | null): 
           timeoutMs: LSP_LAYOUT_TIMEOUT_MS,
         });
 
-        return openLayoutPipeSession(normalizeLayoutOpenSessionMetadata(result));
+        return openLayoutPipeSession(normalizeLayoutOpenSessionMetadata(result), {
+          deferCatalog: normalizedOptions.deferCatalog === true,
+        });
       } catch (error) {
         if (isLspRequestTimeoutError(error)) {
           return createEmptyLayoutOpenResult(getLspRequestErrorMessage(error));

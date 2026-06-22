@@ -12,11 +12,11 @@ import {
 import { waveformCanvasMinHeight } from '../src/app/components/code/explorer/waveform/waveformLayout';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const fixtureWorkspace = path.join(__dirname, '..', 'test', 'fixtures', 'workspace');
-const releaseRoot = path.join(__dirname, '..', 'release');
+const repositoryRoot = path.join(__dirname, '..');
+const fixtureWorkspace = path.join(repositoryRoot, 'test', 'fixtures', 'workspace');
+const releaseRoot = path.join(repositoryRoot, 'release');
 const pristineEngineBinaryPath = path.join(
-  __dirname,
-  '..',
+  repositoryRoot,
   'binaries',
   process.platform === 'win32' ? 'pristine-engine.exe' : 'pristine-engine',
 );
@@ -112,6 +112,7 @@ END DESIGN
 
 const physicalLayoutE2eGds = createPhysicalLayoutE2eGds();
 const physicalLayoutE2eOasis = 'OASIS placeholder';
+const physicalTinyQvGdsPath = path.join(__dirname, '..', '.deps', 'physical-gds', 'tt_um_tt_tinyQV.gds');
 
 function createPhysicalLayoutE2eGds() {
   const date = gdsInt2(2026, 6, 13, 12, 0, 0, 2026, 6, 13, 12, 0, 0);
@@ -771,6 +772,34 @@ async function readComputedTextColor(locator: Locator) {
     };
 
     return browserGlobal.getComputedStyle(element).color;
+  });
+}
+
+function readPhysicalTinyQvGdsFixture() {
+  if (!fs.existsSync(physicalTinyQvGdsPath)) {
+    execFileSync(process.execPath, [path.join(repositoryRoot, 'scripts', 'fetch-tt-tinyqv-gds.mjs')], {
+      cwd: repositoryRoot,
+      stdio: 'inherit',
+      windowsHide: true,
+    });
+  }
+
+  return fs.readFileSync(physicalTinyQvGdsPath);
+}
+
+async function readElementFocusVisualState(locator: Locator) {
+  return locator.evaluate((element) => {
+    const browserGlobal = globalThis as typeof globalThis & {
+      document: { activeElement: Element | null };
+      getComputedStyle: (node: unknown) => { boxShadow: string; outlineStyle: string };
+    };
+    const style = browserGlobal.getComputedStyle(element);
+
+    return {
+      active: browserGlobal.document.activeElement === element,
+      boxShadow: style.boxShadow,
+      outlineStyle: style.outlineStyle,
+    };
   });
 }
 
@@ -2113,6 +2142,7 @@ test('Physical layout uses indexed LEF geometry and GDS tile-mesh rendering', as
 
     const geometryShapeCountBeforeLayerToggle = Number(await layoutCanvas.getAttribute('data-geometry-shape-count') ?? '0');
     const visibleShapeCountBeforeLayerToggle = Number(await layoutCanvas.getAttribute('data-visible-shape-count') ?? '0');
+    await expect(window.getByTestId('physical-layer-category-grid-0')).toHaveClass(/grid-cols-3/);
     await window.getByTestId('physical-layer-category-swatch-0-pin').click();
     await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-visible-shape-count') ?? '0'), {
       timeout: UI_READY_TIMEOUT_MS,
@@ -2146,9 +2176,25 @@ test('Physical layout uses indexed LEF geometry and GDS tile-mesh rendering', as
     await expect(layoutCanvas).toHaveAttribute('data-gds-render-bucket-size', '1', {
       timeout: UI_READY_TIMEOUT_MS,
     });
+    await expect(layoutCanvas).toHaveAttribute('data-gds-tile-scope', 'full-cell', {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await expect(layoutCanvas).toHaveAttribute('data-gds-final-tile-lod', '0', {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
     await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-mesh-batch-count') ?? '0'), {
       timeout: UI_READY_TIMEOUT_MS,
     }).toBeGreaterThan(0);
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-last-good-shape-count') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(0);
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-full-cell-shape-count') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(0);
+    const fullCellShapeCount = Number(await layoutCanvas.getAttribute('data-gds-full-cell-shape-count') ?? '0');
+    await expect(layoutCanvas).not.toHaveAttribute('data-gds-displayed-tile-state', 'empty-confirmed', {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
     await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-draw-node-count') ?? '0'), {
       timeout: UI_READY_TIMEOUT_MS,
     }).toBeGreaterThan(0);
@@ -2161,6 +2207,107 @@ test('Physical layout uses indexed LEF geometry and GDS tile-mesh rendering', as
     await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-frame-p95-ms') ?? '0'), {
       timeout: UI_READY_TIMEOUT_MS,
     }).toBeGreaterThanOrEqual(0);
+    await expect(layoutCanvas).toHaveAttribute('data-gds-minimap-visible', 'true', {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-minimap-cell-width') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(0);
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-minimap-viewport-width') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(0);
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-minimap-viewport-world-width') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(0);
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-minimap-viewport-world-height') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(0);
+    await expect(layoutCanvas).toHaveAttribute('tabIndex', '-1');
+    await expect.poll(async () => readElementFocusVisualState(layoutCanvas), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toEqual({
+      active: false,
+      boxShadow: 'none',
+      outlineStyle: 'none',
+    });
+
+    const gdsShapeCountBeforeFastNavigation = Number(await layoutCanvas.getAttribute('data-gds-last-good-shape-count') ?? '0');
+    const canvasBox = await layoutCanvas.boundingBox();
+    expect(canvasBox).not.toBeNull();
+    const minimapViewportWorldWidthBeforeZoom = Number(
+      await layoutCanvas.getAttribute('data-gds-minimap-viewport-world-width') ?? '0',
+    );
+    if (canvasBox) {
+      await layoutCanvas.hover();
+      await window.mouse.move(canvasBox.x + canvasBox.width / 2, canvasBox.y + canvasBox.height / 2);
+      let highZoomValue = Number(await layoutCanvas.getAttribute('data-zoom') ?? '0');
+      if (highZoomValue <= 200) {
+        await window.keyboard.down('Control');
+        try {
+          for (let index = 0; index < 10 && highZoomValue <= 200; index += 1) {
+            const zoomBeforeWheel = highZoomValue;
+            await window.mouse.wheel(0, -120);
+            await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-zoom') ?? '0'), {
+              timeout: UI_READY_TIMEOUT_MS,
+            }).toBeGreaterThan(zoomBeforeWheel);
+            highZoomValue = Number(await layoutCanvas.getAttribute('data-zoom') ?? '0');
+          }
+        } finally {
+          await window.keyboard.up('Control');
+        }
+      }
+      if (highZoomValue <= 200) {
+        highZoomValue = Number(await layoutCanvas.getAttribute('data-zoom') ?? '0');
+      }
+      expect(highZoomValue).toBeGreaterThan(200);
+      expect(highZoomValue).toBeLessThanOrEqual(1000);
+      await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-mesh-batch-count') ?? '0'), {
+        timeout: UI_READY_TIMEOUT_MS,
+      }).toBeGreaterThan(0);
+
+      await window.keyboard.down('Control');
+      for (let index = 0; index < 16; index += 1) {
+        await window.mouse.move(canvasBox.x + canvasBox.width / 2, canvasBox.y + canvasBox.height / 2);
+        await window.mouse.wheel(0, 180);
+      }
+      await window.keyboard.up('Control');
+      await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-minimap-viewport-world-width') ?? '0'), {
+        timeout: UI_READY_TIMEOUT_MS,
+      }).toBeGreaterThan(minimapViewportWorldWidthBeforeZoom);
+      const minimapViewportWorldYBeforePan = Number(await layoutCanvas.getAttribute('data-gds-minimap-viewport-world-y') ?? '0');
+      for (let index = 0; index < 5; index += 1) {
+        await window.mouse.wheel(0, 220);
+      }
+      await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-minimap-viewport-world-y') ?? '0'), {
+        timeout: UI_READY_TIMEOUT_MS,
+      }).not.toBe(minimapViewportWorldYBeforePan);
+      const twoDPanXBeforeShiftWheel = Number(await layoutCanvas.getAttribute('data-pan-x') ?? '0');
+      await window.keyboard.down('Shift');
+      await window.mouse.wheel(0, 220);
+      await window.keyboard.up('Shift');
+      await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-pan-x') ?? '0'), {
+        timeout: UI_READY_TIMEOUT_MS,
+      }).toBeLessThan(twoDPanXBeforeShiftWheel);
+      await expect.poll(async () => readElementFocusVisualState(layoutCanvas), {
+        timeout: UI_READY_TIMEOUT_MS,
+      }).toEqual({
+        active: false,
+        boxShadow: 'none',
+        outlineStyle: 'none',
+      });
+    }
+    await expect(layoutCanvas).toHaveAttribute('data-gds-tile-scope', 'full-cell', {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-full-cell-shape-count') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBe(fullCellShapeCount);
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-last-good-shape-count') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThanOrEqual(gdsShapeCountBeforeFastNavigation);
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-mesh-batch-count') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(0);
 
     await window.getByTestId('physical-layout-3d-toggle').click();
     await expect(window.getByTestId('physical-layout-3d-split')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
@@ -2168,6 +2315,7 @@ test('Physical layout uses indexed LEF geometry and GDS tile-mesh rendering', as
     const layout3DCanvas = window.getByTestId('physical-layout-3d-canvas');
     await expect(layout3DCanvas).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
     await expect(layout3DCanvas).toHaveAttribute('data-renderer', 'three-webgl', { timeout: UI_READY_TIMEOUT_MS });
+    await expect(layout3DCanvas).toHaveAttribute('tabIndex', '-1');
     await expect(layout3DCanvas).toHaveAttribute('data-viewport-framed', 'true', { timeout: UI_READY_TIMEOUT_MS });
     await expect(layout3DCanvas).toHaveAttribute('data-viewport-left-border', 'false', { timeout: UI_READY_TIMEOUT_MS });
     await expect(layout3DCanvas).toHaveAttribute('data-orbit-origin', 'bounds3d', { timeout: UI_READY_TIMEOUT_MS });
@@ -2381,12 +2529,11 @@ test('Physical layout uses indexed LEF geometry and GDS tile-mesh rendering', as
       const viewHelperLastAxisBefore = await layout3DCanvas.getAttribute('data-view-helper-last-axis');
       const viewHelperOrbitBefore = Number(await layout3DCanvas.getAttribute('data-orbit-angle-y') ?? '0');
       const renderCountBeforeViewHelper = Number(await layout3DCanvas.getAttribute('data-render-count') ?? '0');
-      const highlightedShapeBeforeHelperBlank = await layout3DCanvas.getAttribute('data-highlighted-shape-index');
       const viewHelperSize = Number(await layout3DCanvas.getAttribute('data-view-helper-size') ?? '112');
-      const helperBlankX = threeBox.width - viewHelperSize + 8;
-      const helperBlankY = 16;
+      const helperBlankX = threeBox.width - viewHelperSize + 20;
+      const helperBlankY = 20;
       await layout3DCanvas.click({ position: { x: helperBlankX, y: helperBlankY } });
-      await expect(layout3DCanvas).toHaveAttribute('data-highlighted-shape-index', highlightedShapeBeforeHelperBlank ?? '', {
+      await expect(layout3DCanvas).toHaveAttribute('data-view-helper-last-axis', viewHelperLastAxisBefore ?? '', {
         timeout: UI_READY_TIMEOUT_MS,
       });
       const refreshedViewHelperPosX = {
@@ -2423,6 +2570,13 @@ test('Physical layout uses indexed LEF geometry and GDS tile-mesh rendering', as
       await expect.poll(async () => Number(await layout3DCanvas.getAttribute('data-pan-x') ?? '0'), {
         timeout: UI_READY_TIMEOUT_MS,
       }).toBeGreaterThan(panXBefore);
+      await expect.poll(async () => readElementFocusVisualState(layout3DCanvas), {
+        timeout: UI_READY_TIMEOUT_MS,
+      }).toEqual({
+        active: false,
+        boxShadow: 'none',
+        outlineStyle: 'none',
+      });
       await window.keyboard.down('Control');
       await window.mouse.wheel(0, -240);
       await window.keyboard.up('Control');
@@ -2459,6 +2613,7 @@ test('Physical layout uses indexed LEF geometry and GDS tile-mesh rendering', as
     const twoDOpacitySummaryBeforeLayerOpacity = await layoutCanvas.getAttribute('data-layer-opacity-summary');
     const threeDOpacitySummaryBeforeLayerOpacity = await layout3DCanvas.getAttribute('data-layer-opacity-summary');
     expect(firstVisibleShapeLayerIndexBeforeHide).toBeTruthy();
+    await expect(window.getByTestId(`physical-layer-category-grid-${firstVisibleShapeLayerIndexBeforeHide}`)).toHaveClass(/grid-cols-3/);
     await window.getByTestId(`physical-layer-opacity-button-${firstVisibleShapeLayerIndexBeforeHide}`).click();
     const inlineOpacityRow = window.getByTestId(`physical-layer-opacity-row-${firstVisibleShapeLayerIndexBeforeHide}`);
     await expect(inlineOpacityRow.getByTestId(`physical-layer-opacity-slider-${firstVisibleShapeLayerIndexBeforeHide}`)).toBeVisible({
@@ -2498,19 +2653,33 @@ test('Physical layout uses indexed LEF geometry and GDS tile-mesh rendering', as
       });
     }
     expect(firstVisibleShapeCategoryBeforeHide).toBeTruthy();
-    await window.getByTestId(`physical-layer-category-swatch-${firstVisibleShapeLayerIndexBeforeHide}-${firstVisibleShapeCategoryBeforeHide}`).click();
-    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-visible-shape-count') ?? '0'), {
+    const firstVisibleShapeCategorySwatch = window.getByTestId(
+      `physical-layer-category-swatch-${firstVisibleShapeLayerIndexBeforeHide}-${firstVisibleShapeCategoryBeforeHide}`,
+    );
+    await expect(firstVisibleShapeCategorySwatch).toHaveAttribute('aria-pressed', 'true', {
       timeout: UI_READY_TIMEOUT_MS,
-    }).toBeLessThan(twoDVisibleBeforeGdsLayerToggle);
-    await expect.poll(async () => Number(await layout3DCanvas.getAttribute('data-visible-shape-count') ?? '0'), {
+    });
+    await firstVisibleShapeCategorySwatch.click();
+    await expect(firstVisibleShapeCategorySwatch).toHaveAttribute('aria-pressed', 'false', {
       timeout: UI_READY_TIMEOUT_MS,
-    }).toBeLessThan(threeDVisibleBeforeGdsLayerToggle);
+    });
     await expect(layoutCanvas).toHaveAttribute('data-highlighted-shape-index', '', {
       timeout: UI_READY_TIMEOUT_MS,
     });
     await expect(layout3DCanvas).toHaveAttribute('data-highlighted-shape-index', '', {
       timeout: UI_READY_TIMEOUT_MS,
     });
+    await expect(firstVisibleShapeCategorySwatch).not.toBeDisabled();
+    await firstVisibleShapeCategorySwatch.click();
+    await expect(firstVisibleShapeCategorySwatch).toHaveAttribute('aria-pressed', 'true', {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-mesh-batch-count') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(0);
+    await expect.poll(async () => Number(await layout3DCanvas.getAttribute('data-visible-shape-count') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(0);
 
     await window.getByTestId('activity-item-explorer').click();
     await expect(window.getByTestId('code-view-explorer')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
@@ -2518,6 +2687,192 @@ test('Physical layout uses indexed LEF geometry and GDS tile-mesh rendering', as
       'systemverilog/layout/geometry',
       'systemverilog/layoutGeometry',
     ]);
+  } finally {
+    await app.close();
+  }
+});
+
+test('Physical layout keeps tinyQV GDS tile memory bounded during pan and zoom', async () => {
+  test.slow();
+
+  const physicalWorkspaceRoot = createWorkspaceCopyWithFiles('physical-tinyqv-gds-workspace', {
+    'tt_um_tt_tinyQV.gds': readPhysicalTinyQvGdsFixture(),
+  });
+  const { app, window } = await launchApp({ projectRoot: physicalWorkspaceRoot });
+
+  try {
+    await window.getByTestId('activity-item-physical').click();
+    const layoutEditor = window.getByTestId('physical-layout-editor');
+    const layoutCanvas = window.getByTestId('physical-layout-canvas');
+    const readTinyQvMetrics = async () => layoutCanvas.evaluate((element) => {
+      const metricNames = [
+        'data-gds-average-fps',
+        'data-gds-frame-p95-ms',
+        'data-gds-render-ms',
+        'data-gds-tile-query-ms',
+        'data-gds-tile-roundtrip-ms',
+        'data-gds-atlas-bytes',
+        'data-gds-cache-bytes',
+        'data-gds-cache-entry-count',
+        'data-gds-active-tile-count',
+        'data-gds-blank-frame-count',
+        'data-gds-coverage-ratio',
+        'data-gds-displayed-tile-count',
+        'data-gds-continuation-count',
+        'data-gds-inflight-count',
+        'data-gds-overview-fallback-active',
+        'data-gds-prefetch-tile-count',
+        'data-gds-retry-count',
+        'data-gds-buffer-capacity-vertex-count',
+        'data-gds-buffer-realloc-count',
+        'data-gds-buffer-update-count',
+        'data-gds-buffer-update-ms',
+        'data-gds-mesh-batch-count',
+        'data-gds-draw-node-count',
+        'data-gds-tile-apply-ms',
+        'data-gds-tile-build-ms',
+        'data-gds-tile-shape-count',
+        'data-visible-shape-count',
+        'data-gds-tile-lod',
+        'data-gds-final-tile-lod',
+        'data-gds-displayed-tile-state',
+        'data-gds-last-good-shape-count',
+        'data-gds-empty-tile-reason',
+        'data-gds-retry-kind',
+      ];
+
+      const metricElement = element as unknown as { getAttribute(name: string): string | null };
+      return Object.fromEntries(metricNames.map((name) => [name, metricElement.getAttribute(name) ?? '']));
+    });
+    const writeTinyQvJson = async (name: string, value: unknown) => {
+      const body = JSON.stringify(value, null, 2);
+      await test.info().attach(name, {
+        body,
+        contentType: 'application/json',
+      });
+      const outputPath = test.info().outputPath(name);
+      fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+      fs.writeFileSync(outputPath, body);
+    };
+    const writeTinyQvPng = async (name: string, body: Buffer) => {
+      await test.info().attach(name, {
+        body,
+        contentType: 'image/png',
+      });
+      const outputPath = test.info().outputPath(name);
+      fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+      fs.writeFileSync(outputPath, body);
+    };
+
+    await expect(layoutEditor).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+    await window.getByTestId('physical-layout-file-item-tt_um_tt_tinyQV-gds').click();
+    const gdsProgress = window.getByTestId('physical-gds-progress');
+    await expect(gdsProgress).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+    await expect(gdsProgress).toHaveAttribute('data-gds-parse-state', 'parsing', { timeout: UI_READY_TIMEOUT_MS });
+    const tinyQvProgressSnapshot = await gdsProgress.evaluate((element) => {
+      const progressElement = element as unknown as { getAttribute(name: string): string | null };
+      const attributeNames = [
+        'data-gds-parse-state',
+        'data-gds-parse-phase',
+        'data-gds-parse-progress',
+        'data-gds-parse-bytes-read',
+        'data-gds-parse-file-size',
+        'data-gds-parse-record-count',
+        'data-gds-parse-cell-count',
+        'data-gds-parse-point-count',
+        'data-gds-parse-elapsed-ms',
+      ];
+
+      return Object.fromEntries(attributeNames.map((name) => [name, progressElement.getAttribute(name) ?? '']));
+    });
+    await writeTinyQvJson('tinyqv-gds-progress.json', tinyQvProgressSnapshot);
+    await expect(layoutCanvas).toHaveAttribute('data-source-kind', 'gds', { timeout: UI_READY_TIMEOUT_MS });
+    await expect(layoutEditor).toHaveAttribute('data-status', 'ready', { timeout: UI_READY_TIMEOUT_MS });
+    await expect(layoutEditor).toHaveAttribute('data-gds-parse-state', '', { timeout: UI_READY_TIMEOUT_MS });
+    await expect(layoutCanvas).toHaveAttribute('data-gds-render-mode', 'tile-mesh', { timeout: UI_READY_TIMEOUT_MS });
+    await expect(layoutCanvas).toHaveAttribute('data-gds-tile-scope', 'viewport-window', { timeout: UI_READY_TIMEOUT_MS });
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-cache-entry-count') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(0);
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-cache-bytes') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(0);
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-atlas-bytes') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(0);
+    await writeTinyQvJson('tinyqv-gds-initial-metrics.json', await readTinyQvMetrics());
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-mesh-batch-count') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(0);
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-active-tile-count') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(0);
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-coverage-ratio') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(0);
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-draw-node-count') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(0);
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-inflight-count') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBe(0);
+
+    const cacheBytesBeforeNavigation = Number(await layoutCanvas.getAttribute('data-gds-cache-bytes') ?? '0');
+    expect(await layoutCanvas.getAttribute('data-gds-empty-tile-reason')).not.toBe('retry-expanded-lod0');
+    expect(await layoutCanvas.getAttribute('data-gds-retry-kind')).not.toBe('precise');
+    const canvasBox = await layoutCanvas.boundingBox();
+    expect(canvasBox).not.toBeNull();
+    if (canvasBox) {
+      await layoutCanvas.hover();
+      await window.mouse.move(canvasBox.x + canvasBox.width / 2, canvasBox.y + canvasBox.height / 2);
+      for (let index = 0; index < 8; index += 1) {
+        await window.mouse.wheel(0, 240);
+      }
+      await window.keyboard.down('Shift');
+      try {
+        for (let index = 0; index < 6; index += 1) {
+          await window.mouse.wheel(0, 220);
+        }
+      } finally {
+        await window.keyboard.up('Shift');
+      }
+      await window.keyboard.down('Control');
+      try {
+        for (let index = 0; index < 10; index += 1) {
+          await window.mouse.wheel(0, index % 2 === 0 ? -220 : 180);
+        }
+      } finally {
+        await window.keyboard.up('Control');
+      }
+    }
+
+    await writeTinyQvJson('tinyqv-gds-after-navigation-metrics.json', await readTinyQvMetrics());
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-inflight-count') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBe(0);
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-cache-entry-count') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeLessThanOrEqual(96);
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-cache-bytes') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeLessThanOrEqual(192 * 1024 * 1024);
+    const cacheBytesAfterNavigation = Number(await layoutCanvas.getAttribute('data-gds-cache-bytes') ?? '0');
+    expect(cacheBytesBeforeNavigation).toBeGreaterThan(0);
+    expect(cacheBytesAfterNavigation).toBeGreaterThan(0);
+    expect(Number(await layoutCanvas.getAttribute('data-gds-active-tile-count') ?? '0')).toBeGreaterThan(0);
+    expect(Number(await layoutCanvas.getAttribute('data-gds-displayed-tile-count') ?? '0')).toBeGreaterThan(0);
+    expect(Number(await layoutCanvas.getAttribute('data-gds-atlas-bytes') ?? '0')).toBeGreaterThan(0);
+    expect(Number(await layoutCanvas.getAttribute('data-gds-coverage-ratio') ?? '0')).toBeGreaterThan(0);
+    expect(Number(await layoutCanvas.getAttribute('data-gds-blank-frame-count') ?? '0')).toBe(0);
+    expect(Number(await layoutCanvas.getAttribute('data-gds-tile-apply-ms') ?? '0')).toBeGreaterThanOrEqual(0);
+    expect(Number(await layoutCanvas.getAttribute('data-gds-tile-build-ms') ?? '0')).toBeGreaterThanOrEqual(0);
+    await expect(window.getByTestId('physical-gds-toolbar-metrics')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+    await expect.poll(async () => Number(await window.getByTestId('physical-gds-toolbar-metrics').getAttribute('data-gds-cache-bytes') ?? '0'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(0);
+    const tinyQvMetrics = await readTinyQvMetrics();
+    await writeTinyQvJson('tinyqv-gds-metrics.json', tinyQvMetrics);
+    await writeTinyQvPng('tinyqv-gds-canvas.png', await layoutCanvas.screenshot());
   } finally {
     await app.close();
   }

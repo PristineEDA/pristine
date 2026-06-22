@@ -438,6 +438,8 @@ describe('layoutPipeClient', () => {
       endpoint: { kind: 'namedPipe', path: '\\\\.\\pipe\\layout-test' },
       protocol: 'pristine-layout-columnar-v3',
       sessionId: '1',
+      sourceKind: 'lefdef',
+      status: 'unknown',
       title: 'sg13g2_stdcell.lef',
       lefCount: 1,
     });
@@ -478,6 +480,7 @@ describe('layoutPipeClient', () => {
         bbox: { x0: 0, y0: 0, x1: 1.2, y1: 3.78 },
         componentCount: 0,
         defPresent: false,
+        deferred: false,
         diagnosticCount: 0,
         endpoint: {
           kind: process.platform === 'win32' ? 'namedPipe' : 'unixSocket',
@@ -491,6 +494,8 @@ describe('layoutPipeClient', () => {
         netCount: 0,
         protocol: 'pristine-layout-columnar-v3',
         sessionId: 'layout-open-test',
+        sourceKind: 'lefdef',
+        status: 'unknown',
         title: 'sg13g2_stdcell.lef',
         unitsPerMicron: 1000,
       });
@@ -498,6 +503,70 @@ describe('layoutPipeClient', () => {
       expect(session.catalog.layers).toHaveLength(1);
       expect(session.catalog.macros[0]?.name).toBe('sg13g2_inv_1');
       expect(session.catalog.pins.map((pin) => pin.name)).toEqual(['A', 'VDD']);
+    } finally {
+      await closeAllLayoutPipeSessions();
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+
+          resolve();
+        });
+      });
+    }
+  });
+
+  it('opens a deferred GDS pipe session without reading the catalog', async () => {
+    const endpointPath = createPipeEndpointPath();
+    const messageTypes: number[] = [];
+    const server = net.createServer((socket) => {
+      void (async () => {
+        const hello = await readTestEnvelope(socket);
+        messageTypes.push(hello.messageType);
+        socket.write(Buffer.from(encodeLayoutEnvelope(2, hello.requestId, createHelloPayloadFixture())));
+      })().catch((error) => {
+        socket.destroy(error);
+      });
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(endpointPath, resolve);
+    });
+
+    try {
+      const session = await openLayoutPipeSession({
+        bbox: { x0: 0, y0: 0, x1: 10, y1: 4 },
+        componentCount: 0,
+        defPresent: false,
+        deferred: true,
+        diagnosticCount: 0,
+        endpoint: {
+          kind: process.platform === 'win32' ? 'namedPipe' : 'unixSocket',
+          path: endpointPath,
+        },
+        fileUris: ['file:///workspace/tiny.gds'],
+        layerCount: 0,
+        lefCount: 0,
+        macroCount: 0,
+        messages: [],
+        netCount: 0,
+        protocol: 'pristine-layout-columnar-v3',
+        sessionId: 'layout-deferred-open-test',
+        sourceKind: 'gds',
+        status: 'parsing',
+        title: 'tiny.gds',
+        unitsPerMicron: 1000,
+      }, { deferCatalog: true });
+
+      expect(messageTypes).toEqual([1]);
+      expect(session.deferred).toBe(true);
+      expect(session.initialStatus).toBe('parsing');
+      expect(session.catalog.sourceKind).toBe('gds');
+      expect(session.catalog.gdsCells).toHaveLength(0);
+      expect(session.catalog.layers).toHaveLength(0);
     } finally {
       await closeAllLayoutPipeSessions();
       await new Promise<void>((resolve, reject) => {

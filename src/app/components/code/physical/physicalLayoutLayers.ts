@@ -247,11 +247,9 @@ function createGdsPhysicalLayoutLayerTree(
   return catalog.layers.map((layer) => {
     const categories = shapeCountsByLayer.get(layer.index) ?? createEmptyCategoryAvailability();
 
-    if (!categories.boundary && !categories.path && !categories.text) {
-      categories.boundary = true;
-      categories.path = true;
-      categories.text = true;
-    }
+    categories.boundary = true;
+    categories.path = true;
+    categories.text = true;
 
     return {
       available: true,
@@ -267,6 +265,10 @@ export function filterVisiblePhysicalLayoutShapes(
   sourceKind?: LspLayoutCatalog['sourceKind'],
 ): LspLayoutShape[] {
   return shapes.filter((shape) => {
+    if (sourceKind === 'gds' && shape.kind === 'placement') {
+      return true;
+    }
+
     const category = getPhysicalLayoutShapeCategory(shape, sourceKind);
     return category ? isPhysicalLayoutLayerCategoryVisible(visibility, shape.layerIndex, category) : false;
   });
@@ -280,6 +282,11 @@ export function getVisiblePhysicalLayoutShapeCounts(
   const counts = createEmptyCategoryCount();
 
   for (const shape of shapes) {
+    if (sourceKind === 'gds' && shape.kind === 'placement') {
+      counts.boundary += 1;
+      continue;
+    }
+
     const category = getPhysicalLayoutShapeCategory(shape, sourceKind);
     if (category && isPhysicalLayoutLayerCategoryVisible(visibility, shape.layerIndex, category)) {
       counts[category] += 1;

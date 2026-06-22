@@ -402,6 +402,7 @@ export interface LspLayoutOpenOptions {
   defUri?: string;
   gdsUri?: string;
   openMode?: 'sync' | 'staged' | 'auto';
+  deferCatalog?: boolean;
   workspaceFilePath?: string;
 }
 
@@ -722,6 +723,9 @@ export interface LspLayoutOpenResult {
   id?: string;
   protocol: string;
   endpoint?: LspLayoutEndpoint;
+  deferred?: boolean;
+  sourceKind?: LspLayoutSourceKind;
+  initialStatus?: LspLayoutStatusState;
   title: string;
   lefCount: number;
   defPresent: boolean;

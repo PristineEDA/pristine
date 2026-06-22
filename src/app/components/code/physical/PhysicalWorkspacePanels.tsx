@@ -641,7 +641,10 @@ function PhysicalLayerPanel({
                     {formatPhysicalLayoutLayerOpacity(layerOpacity)}
                 </span>
               </div>
-              <div className="mt-0.5 flex flex-col gap-0.5 pl-3">
+              <div
+                className="mt-0.5 grid grid-cols-3 gap-x-1 gap-y-0.5 pl-3"
+                data-testid={`physical-layer-category-grid-${layer.index}`}
+              >
                 {layerCategories.map((category) => {
                   const available = entry.categories[category];
                   const visible = available && isPhysicalLayoutLayerCategoryVisible(layoutVisibility, layer.index, category);
@@ -653,7 +656,7 @@ function PhysicalLayerPanel({
                       key={category}
                       aria-disabled={!available}
                       className={cn(
-                        'flex min-h-6 items-center gap-2 rounded px-1 py-0.5',
+                        'flex min-h-6 min-w-0 items-center gap-1.5 rounded px-1 py-0.5',
                         available ? 'text-ide-text' : 'text-ide-text-muted opacity-75',
                       )}
                       data-testid={`physical-layer-category-row-${layer.index}-${category}`}
