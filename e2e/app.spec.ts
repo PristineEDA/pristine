@@ -2204,6 +2204,9 @@ test('Physical layout uses indexed LEF geometry and GDS tile-mesh rendering', as
     await expect(layoutCanvas).toHaveAttribute('data-gds-truncated', 'false', {
       timeout: UI_READY_TIMEOUT_MS,
     });
+    await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-react-sync-count') ?? '-1'), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThanOrEqual(0);
     await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-frame-p95-ms') ?? '0'), {
       timeout: UI_READY_TIMEOUT_MS,
     }).toBeGreaterThanOrEqual(0);

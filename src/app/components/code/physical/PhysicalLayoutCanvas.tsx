@@ -147,6 +147,8 @@ export function PhysicalLayoutCanvas({
   const gdsDeferredTileApplyTimeoutRef = useRef<number | null>(null);
   const gdsDeferredTileApplyRef = useRef<PendingGdsTileApply | null>(null);
   const gdsGeometrySyncTimeoutRef = useRef<number | null>(null);
+  const gdsGeometrySnapshotVersionRef = useRef(0);
+  const gdsReactSyncCountRef = useRef(0);
   const gdsTileCacheRef = useRef(new PhysicalLayoutGdsTileLruCache());
   const gdsLatestRequestKeyRef = useRef('');
   const gdsLastGoodTileRef = useRef<LspLayoutTileGeometry | null>(null);
@@ -423,6 +425,8 @@ export function PhysicalLayoutCanvas({
     gdsFullCellFallbackReasonRef.current = '';
     gdsLastGoodTileRef.current = null;
     gdsDisplayedTilesRef.current.clear();
+    gdsGeometrySnapshotVersionRef.current += 1;
+    gdsReactSyncCountRef.current = 0;
     clearGdsPersistentScene();
     gdsBlankFrameCountRef.current = 0;
     gdsCoverageRatioRef.current = 0;
@@ -1227,9 +1231,9 @@ export function PhysicalLayoutCanvas({
     lastGdsTileBuildMsRef.current = performance.now() - buildStartedAt;
     lastGdsTileApplyMsRef.current = performance.now() - applyStartedAt;
     requestRender();
-    syncGdsDisplayedGeometryState();
+    scheduleGdsDisplayedGeometrySnapshot();
     syncGdsFullCameraState();
-    syncRenderCountState(true);
+    syncRenderCountState(false);
     updateGdsTileMetrics();
     updateGdsTileDiagnostics({
       bboxArea: getTilePlanArea(windowPlan.primaryPlan),
@@ -1440,8 +1444,18 @@ export function PhysicalLayoutCanvas({
       gdsActiveTileCountRef.current = 0;
       gdsOverviewFallbackActiveRef.current = false;
     }
-    setGdsTileGeometry(tile.geometry);
-    onGdsTileGeometryChangeRef.current?.(tile.geometry);
+    const isFullCellTile = gdsTileDiagnosticsRef.current.tileScope === 'full-cell';
+    if (isFullCellTile) {
+      gdsReactSyncCountRef.current += 1;
+      setGdsTileGeometry(tile.geometry);
+      onGdsTileGeometryChangeRef.current?.(tile.geometry);
+    } else if (tile.geometry.shapes.length > 0) {
+      scheduleGdsDisplayedGeometrySnapshot();
+    } else if (options.acceptEmpty && !options.preserveDisplayedTiles && plan.emptyReason === 'all-hidden') {
+      gdsReactSyncCountRef.current += 1;
+      setGdsTileGeometry(null);
+      onGdsTileGeometryChangeRef.current?.(null);
+    }
     const buildStartedAt = performance.now();
     redrawScene(tile.geometry);
     lastGdsTileBuildMsRef.current = performance.now() - buildStartedAt;
@@ -1621,6 +1635,7 @@ export function PhysicalLayoutCanvas({
       meshDrawNodeCount: meshStatsRef.current.drawNodeCount,
       meshIndexCount: meshStatsRef.current.indexCount,
       meshVertexCount: meshStatsRef.current.vertexCount,
+      reactSyncCount: gdsReactSyncCountRef.current,
       renderMs: lastRenderDurationMsRef.current,
       retryCount: retryTileRequestCountRef.current,
       tile: tile ?? null,
@@ -1712,18 +1727,33 @@ export function PhysicalLayoutCanvas({
     }
   };
 
+  const scheduleGdsDisplayedGeometrySnapshot = () => {
+    if (!isGdsTileModeRef.current || gdsDisplayedTilesRef.current.size === 0) {
+      return;
+    }
+
+    if (gdsGeometrySyncTimeoutRef.current !== null) {
+      window.clearTimeout(gdsGeometrySyncTimeoutRef.current);
+    }
+
+    const version = gdsGeometrySnapshotVersionRef.current + 1;
+    gdsGeometrySnapshotVersionRef.current = version;
+    gdsGeometrySyncTimeoutRef.current = window.setTimeout(() => {
+      gdsGeometrySyncTimeoutRef.current = null;
+      if (version !== gdsGeometrySnapshotVersionRef.current) {
+        return;
+      }
+      syncGdsDisplayedGeometryState(true);
+    }, getGdsViewportIdleDelay());
+  };
+
   const syncGdsDisplayedGeometryState = (force = false) => {
     if (!isGdsTileModeRef.current) {
       return;
     }
 
     if (!force && isGdsViewportInteractionActive()) {
-      if (gdsGeometrySyncTimeoutRef.current === null) {
-        gdsGeometrySyncTimeoutRef.current = window.setTimeout(() => {
-          gdsGeometrySyncTimeoutRef.current = null;
-          syncGdsDisplayedGeometryState(true);
-        }, getGdsViewportIdleDelay());
-      }
+      scheduleGdsDisplayedGeometrySnapshot();
       return;
     }
 
@@ -1737,6 +1767,7 @@ export function PhysicalLayoutCanvas({
     if (mergedTile) {
       gdsLastGoodTileRef.current = mergedTile;
     }
+    gdsReactSyncCountRef.current += 1;
     setGdsTileGeometry(nextGeometry);
     onGdsTileGeometryChangeRef.current?.(nextGeometry);
   };
@@ -1902,6 +1933,7 @@ export function PhysicalLayoutCanvas({
       data-gds-tile-lod={gdsTileDiagnostics.tileLod}
       data-gds-tile-scope={gdsTileDiagnostics.tileScope}
       data-gds-render-ms={gdsTileMetrics.lastRenderMs.toFixed(2)}
+      data-gds-react-sync-count={gdsTileMetrics.reactSyncCount}
       data-gds-tile-apply-ms={gdsTileMetrics.lastTileApplyMs.toFixed(2)}
       data-gds-tile-build-ms={gdsTileMetrics.lastTileBuildMs.toFixed(2)}
       data-gds-tile-query-ms={gdsTileMetrics.lastTileQueryMs.toFixed(2)}
@@ -2273,7 +2305,7 @@ interface PhysicalLayoutGdsPersistentBatch {
 }
 
 class PhysicalLayoutGdsPersistentTileRenderer {
-  public readonly container = new Container({ label: 'gds-persistent-tile-atlas' });
+  public readonly container = new Container({ label: 'gds-persistent-tile-atlas', sortableChildren: true });
 
   private readonly tileLayers = new Map<string, PhysicalLayoutGdsPersistentTileLayer>();
 
@@ -2283,10 +2315,9 @@ class PhysicalLayoutGdsPersistentTileRenderer {
   ): PhysicalLayoutShapeDisplay['stats'] {
     const liveKeys = new Set<string>();
     const orderedEntries = Array.from(tiles.entries()).sort((left, right) => compareGdsDisplayedTiles(left[1], right[1]));
-    this.container.removeChildren();
 
     let stats = createEmptyGdsMeshStats();
-    for (const [key, entry] of orderedEntries) {
+    orderedEntries.forEach(([key, entry], order) => {
       liveKeys.add(key);
       let layer = this.tileLayers.get(key);
       if (!layer) {
@@ -2294,10 +2325,14 @@ class PhysicalLayoutGdsPersistentTileRenderer {
         this.tileLayers.set(key, layer);
       }
 
+      layer.container.zIndex = order;
+      layer.container.visible = true;
+      if (!layer.container.parent) {
+        this.container.addChild(layer.container);
+      }
       const layerStats = layer.update(entry.tile.geometry.shapes, layoutVisibility);
       stats = mergeGdsMeshStats(stats, layerStats);
-      this.container.addChild(layer.container);
-    }
+    });
 
     for (const [key, layer] of this.tileLayers) {
       if (!liveKeys.has(key)) {
@@ -2329,7 +2364,7 @@ class PhysicalLayoutGdsPersistentTileLayer {
   private readonly buckets = new Map<number, PhysicalLayoutGdsPersistentBucket>();
 
   public constructor(key: string) {
-    this.container = new Container({ label: `gds-tile-layer:${key}` });
+    this.container = new Container({ label: `gds-tile-layer:${key}`, sortableChildren: true });
   }
 
   public update(
@@ -2366,7 +2401,6 @@ class PhysicalLayoutGdsPersistentTileLayer {
       bucket.hasFallbackGraphics = true;
     }
 
-    this.container.removeChildren();
     let stats: PhysicalLayoutShapeDisplay['stats'] = {
       ...createEmptyGdsMeshStats(),
       orderBucketSize,
@@ -2374,14 +2408,15 @@ class PhysicalLayoutGdsPersistentTileLayer {
     const orderedBuckets = Array.from(this.buckets.entries()).sort((left, right) => left[0] - right[0]);
     for (const [bucketIndex, bucket] of orderedBuckets) {
       if (!bucket.used) {
-        bucket.destroy();
-        this.buckets.delete(bucketIndex);
+        bucket.container.visible = false;
         continue;
       }
 
+      bucket.container.zIndex = bucketIndex;
+      bucket.container.visible = true;
       const bucketStats = bucket.commit();
       stats = mergeGdsMeshStats(stats, { ...bucketStats, orderBucketSize });
-      if (bucket.container.children.length > 0) {
+      if (!bucket.container.parent) {
         this.container.addChild(bucket.container);
       }
     }
@@ -2408,7 +2443,7 @@ class PhysicalLayoutGdsPersistentTileLayer {
 }
 
 class PhysicalLayoutGdsPersistentBucket {
-  public readonly container = new Container({ label: 'gds-persistent-order-bucket' });
+  public readonly container = new Container({ label: 'gds-persistent-order-bucket', sortableChildren: true });
   public readonly fallbackGraphics = new Graphics();
   public hasFallbackGraphics = false;
   public used = false;
@@ -2439,25 +2474,31 @@ class PhysicalLayoutGdsPersistentBucket {
   }
 
   public commit(): PhysicalLayoutShapeDisplay['stats'] {
-    this.container.removeChildren();
     let stats = createEmptyGdsMeshStats();
-    for (const [key, batch] of Array.from(this.batches.entries())) {
+    let childOrder = 0;
+    for (const batch of this.batches.values()) {
       if (!batch.used) {
-        batch.mesh.destroy({ children: true });
-        this.batches.delete(key);
+        batch.mesh.visible = false;
         continue;
       }
 
       const batchStats = commitGdsPersistentBatch(batch);
       stats = mergeGdsMeshStats(stats, batchStats);
       if (batch.mesh.visible) {
-        this.container.addChild(batch.mesh);
+        batch.mesh.zIndex = childOrder;
+        childOrder += 1;
+        if (!batch.mesh.parent) {
+          this.container.addChild(batch.mesh);
+        }
       }
     }
 
     this.fallbackGraphics.visible = this.hasFallbackGraphics;
     if (this.hasFallbackGraphics) {
-      this.container.addChild(this.fallbackGraphics);
+      this.fallbackGraphics.zIndex = childOrder;
+      if (!this.fallbackGraphics.parent) {
+        this.container.addChild(this.fallbackGraphics);
+      }
       stats.drawNodeCount += 1;
     }
 

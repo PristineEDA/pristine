@@ -44,6 +44,7 @@ export interface PhysicalLayoutGdsTileMetrics {
   meshDrawNodeCount: number;
   meshIndexCount: number;
   meshVertexCount: number;
+  reactSyncCount: number;
   retryCount: number;
   tileRequestCount: number;
   truncated: boolean;
@@ -136,6 +137,7 @@ export const defaultPhysicalLayoutGdsTileMetrics: PhysicalLayoutGdsTileMetrics =
   meshDrawNodeCount: 0,
   meshIndexCount: 0,
   meshVertexCount: 0,
+  reactSyncCount: 0,
   retryCount: 0,
   tileRequestCount: 0,
   truncated: false,
@@ -615,6 +617,7 @@ export function createGdsTileMetricsSnapshot(input: {
   meshDrawNodeCount?: number;
   meshIndexCount: number;
   meshVertexCount: number;
+  reactSyncCount?: number;
   renderMs: number;
   retryCount?: number;
   tile: LspLayoutTileGeometry | null;
@@ -663,6 +666,7 @@ export function createGdsTileMetricsSnapshot(input: {
     meshDrawNodeCount: input.meshDrawNodeCount ?? 0,
     meshIndexCount: input.meshIndexCount,
     meshVertexCount: input.meshVertexCount,
+    reactSyncCount: input.reactSyncCount ?? 0,
     retryCount: input.retryCount ?? 0,
     tileRequestCount: input.tileRequestCount,
     truncated: input.tile?.truncated ?? false,
