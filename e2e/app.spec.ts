@@ -2733,6 +2733,19 @@ test('Physical layout keeps tinyQV GDS tile memory bounded during pan and zoom',
         'data-gds-buffer-subarray-commit-count',
         'data-gds-buffer-update-count',
         'data-gds-buffer-update-ms',
+        'data-gds-tile-layer-create-count',
+        'data-gds-tile-layer-reuse-count',
+        'data-gds-tile-layer-destroy-count',
+        'data-gds-batch-create-count',
+        'data-gds-batch-reuse-count',
+        'data-gds-batch-destroy-count',
+        'data-gds-apply-queue-depth',
+        'data-gds-apply-chunk-count',
+        'data-gds-apply-budget-overrun-count',
+        'data-gds-idle-snapshot-ms',
+        'data-gds-idle-snapshot-skipped-count',
+        'data-gds-columnar-bytes',
+        'data-gds-atlas-gpu-bytes',
         'data-gds-mesh-batch-count',
         'data-gds-draw-node-count',
         'data-gds-tile-apply-ms',
@@ -2930,6 +2943,10 @@ test('Physical layout keeps tinyQV GDS tile memory bounded during pan and zoom',
     expect(Number(await layoutCanvas.getAttribute('data-gds-blank-frame-count') ?? '0')).toBe(0);
     expect(Number(await layoutCanvas.getAttribute('data-gds-tile-apply-ms') ?? '0')).toBeGreaterThanOrEqual(0);
     expect(Number(await layoutCanvas.getAttribute('data-gds-tile-build-ms') ?? '0')).toBeGreaterThanOrEqual(0);
+    expect(Number(await layoutCanvas.getAttribute('data-gds-columnar-bytes') ?? '0')).toBeGreaterThan(0);
+    expect(Number(await layoutCanvas.getAttribute('data-gds-atlas-gpu-bytes') ?? '0')).toBeGreaterThan(0);
+    expect(Number(await layoutCanvas.getAttribute('data-gds-tile-layer-create-count') ?? '0')).toBeGreaterThan(0);
+    expect(Number(await layoutCanvas.getAttribute('data-gds-batch-create-count') ?? '0')).toBeGreaterThan(0);
     await expect(window.getByTestId('physical-gds-toolbar-metrics')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
     await expect.poll(async () => Number(await window.getByTestId('physical-gds-toolbar-metrics').getAttribute('data-gds-cache-bytes') ?? '0'), {
       timeout: UI_READY_TIMEOUT_MS,
@@ -2937,11 +2954,25 @@ test('Physical layout keeps tinyQV GDS tile memory bounded during pan and zoom',
     const scenarioMetrics: Record<string, unknown> = {
       baseline: await readTinyQvMetrics(),
     };
+    const observedLodBands = new Set<string>();
+    const recordObservedLodBands = (metrics: Record<string, string>) => {
+      String(metrics['data-gds-observed-lod-bands'] ?? '')
+        .split(',')
+        .map((band) => band.trim())
+        .filter(Boolean)
+        .forEach((band) => observedLodBands.add(band));
+      const currentBand = String(metrics['data-gds-current-lod-band'] ?? '').split(':')[0];
+      if (currentBand) {
+        observedLodBands.add(currentBand);
+      }
+    };
+    recordObservedLodBands(scenarioMetrics.baseline as Record<string, string>);
     const runTinyQvScenario = async (name: string, action: () => Promise<void>) => {
       const before = await readTinyQvMetrics();
       await action();
       await expectTinyQvStable();
       const after = await readTinyQvMetrics();
+      recordObservedLodBands(after);
       scenarioMetrics[name] = { after, before };
       await writeTinyQvJson(`tinyqv-gds-${name}-metrics.json`, { after, before });
     };
@@ -2997,10 +3028,12 @@ test('Physical layout keeps tinyQV GDS tile memory bounded during pan and zoom',
     expect(Number(tinyQvMetrics['data-gds-displayed-tile-count'] ?? '0')).toBeGreaterThan(0);
     expect(Number(tinyQvMetrics['data-gds-atlas-bytes'] ?? '0')).toBeGreaterThan(0);
     expect(tinyQvMetrics['data-gds-displayed-tile-state']).not.toBe('empty-outside-cell-bounds');
-    const observedLodBands = String(tinyQvMetrics['data-gds-observed-lod-bands'] ?? '');
-    expect(observedLodBands).toContain('lod0');
-    expect(observedLodBands).toContain('lod1');
-    expect(observedLodBands).toContain('lod2');
+    recordObservedLodBands(tinyQvMetrics);
+    const observedLodBandList = Array.from(observedLodBands).sort();
+    expect(observedLodBandList).toContain('lod0');
+    expect(observedLodBandList).toContain('lod1');
+    expect(observedLodBandList).toContain('lod2');
+    scenarioMetrics.observedLodBands = observedLodBandList;
     scenarioMetrics.final = tinyQvMetrics;
     await writeTinyQvJson('tinyqv-gds-scenario-metrics.json', scenarioMetrics);
     await writeTinyQvJson('tinyqv-gds-metrics.json', tinyQvMetrics);

@@ -24,6 +24,19 @@ export interface PhysicalLayoutGdsTileMetrics {
   bufferSubarrayCommitCount: number;
   bufferUpdateCount: number;
   bufferUpdateMs: number;
+  tileLayerCreateCount: number;
+  tileLayerReuseCount: number;
+  tileLayerDestroyCount: number;
+  batchCreateCount: number;
+  batchReuseCount: number;
+  batchDestroyCount: number;
+  applyQueueDepth: number;
+  applyChunkCount: number;
+  applyBudgetOverrunCount: number;
+  idleSnapshotMs: number;
+  idleSnapshotSkippedCount: number;
+  columnarByteLength: number;
+  atlasGpuByteLength: number;
   bufferByteLength: number;
   cacheByteLength: number;
   cacheEntryCount: number;
@@ -119,6 +132,19 @@ export const defaultPhysicalLayoutGdsTileMetrics: PhysicalLayoutGdsTileMetrics =
   bufferSubarrayCommitCount: 0,
   bufferUpdateCount: 0,
   bufferUpdateMs: 0,
+  tileLayerCreateCount: 0,
+  tileLayerReuseCount: 0,
+  tileLayerDestroyCount: 0,
+  batchCreateCount: 0,
+  batchReuseCount: 0,
+  batchDestroyCount: 0,
+  applyQueueDepth: 0,
+  applyChunkCount: 0,
+  applyBudgetOverrunCount: 0,
+  idleSnapshotMs: 0,
+  idleSnapshotSkippedCount: 0,
+  columnarByteLength: 0,
+  atlasGpuByteLength: 0,
   bufferByteLength: 0,
   cacheByteLength: 0,
   cacheEntryCount: 0,
@@ -624,6 +650,19 @@ export function createGdsTileMetricsSnapshot(input: {
   bufferSubarrayCommitCount?: number;
   bufferUpdateCount?: number;
   bufferUpdateMs?: number;
+  tileLayerCreateCount?: number;
+  tileLayerReuseCount?: number;
+  tileLayerDestroyCount?: number;
+  batchCreateCount?: number;
+  batchReuseCount?: number;
+  batchDestroyCount?: number;
+  applyQueueDepth?: number;
+  applyChunkCount?: number;
+  applyBudgetOverrunCount?: number;
+  idleSnapshotMs?: number;
+  idleSnapshotSkippedCount?: number;
+  columnarByteLength?: number;
+  atlasGpuByteLength?: number;
   cacheStats?: PhysicalLayoutGdsTileCacheStats;
   continuationCount?: number;
   coverageRatio?: number;
@@ -665,6 +704,19 @@ export function createGdsTileMetricsSnapshot(input: {
     bufferSubarrayCommitCount: input.bufferSubarrayCommitCount ?? 0,
     bufferUpdateCount: input.bufferUpdateCount ?? 0,
     bufferUpdateMs: input.bufferUpdateMs ?? 0,
+    tileLayerCreateCount: input.tileLayerCreateCount ?? 0,
+    tileLayerReuseCount: input.tileLayerReuseCount ?? 0,
+    tileLayerDestroyCount: input.tileLayerDestroyCount ?? 0,
+    batchCreateCount: input.batchCreateCount ?? 0,
+    batchReuseCount: input.batchReuseCount ?? 0,
+    batchDestroyCount: input.batchDestroyCount ?? 0,
+    applyQueueDepth: input.applyQueueDepth ?? 0,
+    applyChunkCount: input.applyChunkCount ?? 0,
+    applyBudgetOverrunCount: input.applyBudgetOverrunCount ?? 0,
+    idleSnapshotMs: input.idleSnapshotMs ?? 0,
+    idleSnapshotSkippedCount: input.idleSnapshotSkippedCount ?? 0,
+    columnarByteLength: input.columnarByteLength ?? 0,
+    atlasGpuByteLength: input.atlasGpuByteLength ?? 0,
     bufferByteLength: input.meshVertexCount * 2 * Float32Array.BYTES_PER_ELEMENT,
     cacheByteLength: input.cacheStats?.byteLength ?? 0,
     cacheEntryCount: input.cacheStats?.entryCount ?? 0,

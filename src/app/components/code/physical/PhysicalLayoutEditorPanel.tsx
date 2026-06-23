@@ -369,7 +369,9 @@ export function PhysicalLayoutEditorPanel({
   const catalog = openResult?.catalog ?? null;
   const isGdsTarget = catalog?.sourceKind === 'gds' && selectedTarget?.kind === 'gdsCell';
   const activeCanvasGeometry = isGdsTarget ? gdsTileGeometry : geometry;
-  const shapeCount = activeCanvasGeometry?.shapes.length ?? 0;
+  const shapeCount = isGdsTarget
+    ? (activeCanvasGeometry?.shapes.length ?? gdsTileMetrics.visibleShapeCount)
+    : (activeCanvasGeometry?.shapes.length ?? 0);
   const macroCount = catalog?.macros.length ?? 0;
   const cellCount = catalog?.gdsCells.length ?? 0;
   const layerCount = catalog?.layers.length ?? 0;
@@ -382,6 +384,7 @@ export function PhysicalLayoutEditorPanel({
       highlightedShapeIndex={highlightedShapeIndex}
       layoutSessionId={openResult?.sessionId ?? null}
       layoutVisibility={layoutVisibility}
+      is3DViewVisible={is3DViewVisible}
       selectedTarget={selectedTarget}
       onGdsTileGeometryChange={(nextGeometry) => {
         setGdsTileGeometry(nextGeometry);
@@ -525,6 +528,19 @@ function PhysicalGdsMetricInfo({ metrics }: PhysicalGdsMetricInfoProps) {
       data-gds-buffer-subarray-commit-count={metrics.bufferSubarrayCommitCount}
       data-gds-buffer-update-count={metrics.bufferUpdateCount}
       data-gds-buffer-update-ms={formatMetricValue(metrics.bufferUpdateMs, 3)}
+      data-gds-tile-layer-create-count={metrics.tileLayerCreateCount}
+      data-gds-tile-layer-reuse-count={metrics.tileLayerReuseCount}
+      data-gds-tile-layer-destroy-count={metrics.tileLayerDestroyCount}
+      data-gds-batch-create-count={metrics.batchCreateCount}
+      data-gds-batch-reuse-count={metrics.batchReuseCount}
+      data-gds-batch-destroy-count={metrics.batchDestroyCount}
+      data-gds-apply-queue-depth={metrics.applyQueueDepth}
+      data-gds-apply-chunk-count={metrics.applyChunkCount}
+      data-gds-apply-budget-overrun-count={metrics.applyBudgetOverrunCount}
+      data-gds-idle-snapshot-ms={formatMetricValue(metrics.idleSnapshotMs, 2)}
+      data-gds-idle-snapshot-skipped-count={metrics.idleSnapshotSkippedCount}
+      data-gds-columnar-bytes={metrics.columnarByteLength}
+      data-gds-atlas-gpu-bytes={metrics.atlasGpuByteLength}
       data-gds-cache-bytes={metrics.cacheByteLength}
       data-gds-cache-entry-count={metrics.cacheEntryCount}
       data-gds-coverage-ratio={formatMetricValue(metrics.coverageRatio, 3)}

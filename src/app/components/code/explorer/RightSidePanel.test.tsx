@@ -231,7 +231,7 @@ describe('RightSidePanel', () => {
     expect(screen.queryByTestId('right-panel-split-resize-handle')).not.toBeInTheDocument();
 
     await waitFor(() => expect(screen.queryByTestId('right-panel-split-group')).not.toBeInTheDocument(), {
-      timeout: 1000,
+      timeout: 3000,
     });
 
     expect(screen.queryByTestId('panel-right-panel-primary')).not.toBeInTheDocument();

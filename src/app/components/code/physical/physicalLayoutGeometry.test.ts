@@ -553,6 +553,19 @@ describe('physicalLayoutGeometry', () => {
       bufferSubarrayCommitCount: 6,
       bufferUpdateCount: 1,
       bufferUpdateMs: 0.4,
+      tileLayerCreateCount: 4,
+      tileLayerReuseCount: 8,
+      tileLayerDestroyCount: 1,
+      batchCreateCount: 5,
+      batchReuseCount: 21,
+      batchDestroyCount: 2,
+      applyQueueDepth: 1,
+      applyChunkCount: 3,
+      applyBudgetOverrunCount: 1,
+      idleSnapshotMs: 2.25,
+      idleSnapshotSkippedCount: 7,
+      columnarByteLength: 4096,
+      atlasGpuByteLength: 8192,
       cacheStats: { byteLength: 1024, entryCount: 3 },
       frameDurationsMs: [16, 17, 18, 19],
       inflightRequestCount: 1,
@@ -578,6 +591,19 @@ describe('physicalLayoutGeometry', () => {
     expect(metrics.bufferReallocCount).toBe(2);
     expect(metrics.bufferSubarrayCommitCount).toBe(6);
     expect(metrics.bufferUpdateCount).toBe(1);
+    expect(metrics.tileLayerCreateCount).toBe(4);
+    expect(metrics.tileLayerReuseCount).toBe(8);
+    expect(metrics.tileLayerDestroyCount).toBe(1);
+    expect(metrics.batchCreateCount).toBe(5);
+    expect(metrics.batchReuseCount).toBe(21);
+    expect(metrics.batchDestroyCount).toBe(2);
+    expect(metrics.applyQueueDepth).toBe(1);
+    expect(metrics.applyChunkCount).toBe(3);
+    expect(metrics.applyBudgetOverrunCount).toBe(1);
+    expect(metrics.idleSnapshotMs).toBe(2.25);
+    expect(metrics.idleSnapshotSkippedCount).toBe(7);
+    expect(metrics.columnarByteLength).toBe(4096);
+    expect(metrics.atlasGpuByteLength).toBe(8192);
     expect(metrics.cacheByteLength).toBe(1024);
     expect(metrics.cacheEntryCount).toBe(3);
     expect(metrics.inflightRequestCount).toBe(1);
