@@ -1986,7 +1986,8 @@ export function PhysicalLayoutCanvas({
       gdsMetricsSyncTimeoutRef.current = null;
     }
     lastGdsMetricsSyncAtRef.current = now;
-    syncGdsScreenVisibleCoverage();
+    const screenCoverage = syncGdsScreenVisibleCoverage();
+    const renderableShapeCount = getGdsDisplayedTileShapeCount(gdsDisplayedTilesRef.current);
 
     const nextMetrics = createGdsTileMetricsSnapshot({
       atlasByteLength: estimateGdsDisplayedTileAtlasByteLength(gdsDisplayedTilesRef.current),
@@ -2037,13 +2038,13 @@ export function PhysicalLayoutCanvas({
       retryCount: retryTileRequestCountRef.current,
       tile: tile ?? null,
       nonEmptyCoverageRatio: gdsNonEmptyCoverageRatioRef.current,
-      renderableShapeCount: gdsScreenVisibleShapeCountRef.current,
-      screenVisibleCoverageRatio: gdsScreenVisibleCoverageRatioRef.current,
-      screenVisibleNonEmptyCoverageRatio: gdsScreenVisibleNonEmptyCoverageRatioRef.current,
-      screenVisibleShapeCount: gdsScreenVisibleShapeCountRef.current,
-      screenVisibleTileCount: gdsScreenVisibleTileCountRef.current,
-      cellIntersectionRatio: gdsCellIntersectionRatioRef.current,
-      visualEmptyReason: gdsVisualEmptyReasonRef.current,
+      renderableShapeCount,
+      screenVisibleCoverageRatio: screenCoverage.screenVisibleCoverageRatio,
+      screenVisibleNonEmptyCoverageRatio: screenCoverage.screenVisibleNonEmptyCoverageRatio,
+      screenVisibleShapeCount: screenCoverage.screenVisibleShapeCount,
+      screenVisibleTileCount: screenCoverage.screenVisibleTileCount,
+      cellIntersectionRatio: screenCoverage.cellIntersectionRatio,
+      visualEmptyReason: screenCoverage.visualEmptyReason,
       tileRequestCount: tileRequestCountRef.current,
       tileRoundtripMs: lastTileRoundtripMsRef.current,
     });
