@@ -23,6 +23,7 @@ import {
   type PhysicalLayoutZoomLimits,
 } from './physicalLayoutGeometry';
 import {
+  calculateGdsNonEmptyTileCoverageRatio,
   calculateGdsTileCoverageRatio,
   createGdsTileAtlasUpdate,
   createGdsTileMetricsSnapshot,
@@ -176,6 +177,7 @@ export function PhysicalLayoutCanvas({
   const gdsLatestRequestKeyRef = useRef('');
   const gdsLastGoodTileRef = useRef<LspLayoutTileGeometry | null>(null);
   const gdsDisplayedTilesRef = useRef(new Map<string, PhysicalLayoutGdsDisplayedTile>());
+  const gdsDisplayedViewportBboxRef = useRef<LspLayoutBounds | null>(null);
   const gdsSceneActiveRef = useRef(false);
   const gdsChromeLayerRef = useRef<Container | null>(null);
   const gdsOverlayWorldLayerRef = useRef<Container | null>(null);
@@ -184,7 +186,9 @@ export function PhysicalLayoutCanvas({
   const gdsFullCellFallbackKeyRef = useRef('');
   const gdsFullCellFallbackReasonRef = useRef('');
   const gdsBlankFrameCountRef = useRef(0);
+  const gdsEmptyVisibleFrameCountRef = useRef(0);
   const gdsCoverageRatioRef = useRef(0);
+  const gdsNonEmptyCoverageRatioRef = useRef(0);
   const gdsActiveTileCountRef = useRef(0);
   const gdsPrefetchTileCountRef = useRef(0);
   const gdsOverviewFallbackActiveRef = useRef(false);
@@ -219,6 +223,10 @@ export function PhysicalLayoutCanvas({
   const lastMinimapSyncAtRef = useRef(0);
   const lastGdsInteractionAtRef = useRef(0);
   const lastTileRoundtripMsRef = useRef(0);
+  const maxFrameP95MsRef = useRef(0);
+  const maxTileApplyMsRef = useRef(0);
+  const maxTileBuildMsRef = useRef(0);
+  const maxTileRoundtripMsRef = useRef(0);
   const lastTileContinuationCountRef = useRef(0);
   const inflightTileRequestCountRef = useRef(0);
   const retryTileRequestCountRef = useRef(0);
@@ -480,12 +488,18 @@ export function PhysicalLayoutCanvas({
     gdsIdleSnapshotSkippedCountRef.current = 0;
     clearGdsPersistentScene();
     gdsBlankFrameCountRef.current = 0;
+    gdsEmptyVisibleFrameCountRef.current = 0;
     gdsCoverageRatioRef.current = 0;
+    gdsNonEmptyCoverageRatioRef.current = 0;
     gdsActiveTileCountRef.current = 0;
     gdsPrefetchTileCountRef.current = 0;
     gdsOverviewFallbackActiveRef.current = false;
     gdsCurrentLodBandRef.current = '';
     gdsObservedLodBandsRef.current.clear();
+    maxFrameP95MsRef.current = 0;
+    maxTileApplyMsRef.current = 0;
+    maxTileBuildMsRef.current = 0;
+    maxTileRoundtripMsRef.current = 0;
     if (gdsDeferredTileApplyTimeoutRef.current !== null) {
       window.clearTimeout(gdsDeferredTileApplyTimeoutRef.current);
       gdsDeferredTileApplyTimeoutRef.current = null;
@@ -714,6 +728,14 @@ export function PhysicalLayoutCanvas({
       && gdsTileDiagnosticsRef.current.displayedState !== 'pending-window'
     ) {
       gdsBlankFrameCountRef.current += 1;
+    }
+    if (
+      isGdsTileModeRef.current
+      && gdsDisplayedTilesRef.current.size > 0
+      && getGdsDisplayedTileShapeCount(gdsDisplayedTilesRef.current) === 0
+      && gdsTileDiagnosticsRef.current.displayedState !== 'empty-hidden'
+    ) {
+      gdsEmptyVisibleFrameCountRef.current += 1;
     }
     syncRenderCountState();
     updateGdsTileMetrics();
@@ -1203,6 +1225,10 @@ export function PhysicalLayoutCanvas({
       )
     ) {
       gdsCoverageRatioRef.current = atlasUpdate.coverageRatio;
+      gdsNonEmptyCoverageRatioRef.current = calculateGdsNonEmptyTileCoverageRatio(
+        Array.from(atlasUpdate.tiles.values()),
+        windowPlan.viewportBbox,
+      );
       updateGdsTileDiagnostics({
         bboxArea: getTilePlanArea(windowPlan.primaryPlan),
         displayedState: 'partial-window-kept-last-good',
@@ -1359,15 +1385,21 @@ export function PhysicalLayoutCanvas({
 
     const applyStartedAt = performance.now();
     const coverageRatio = calculateGdsTileCoverageRatio(Array.from(tiles.values()), windowPlan.viewportBbox);
+    const nonEmptyCoverageRatio = calculateGdsNonEmptyTileCoverageRatio(Array.from(tiles.values()), windowPlan.viewportBbox);
     gdsDisplayedTilesRef.current = tiles;
+    gdsDisplayedViewportBboxRef.current = windowPlan.viewportBbox;
     gdsCoverageRatioRef.current = coverageRatio;
+    gdsNonEmptyCoverageRatioRef.current = nonEmptyCoverageRatio;
     gdsActiveTileCountRef.current = tiles.size;
     gdsOverviewFallbackActiveRef.current = windowPlan.primaryPlan.lod > 0;
     lastTileRoundtripMsRef.current = roundtripMs;
+    maxTileRoundtripMsRef.current = Math.max(maxTileRoundtripMsRef.current, roundtripMs);
     const buildStartedAt = performance.now();
     redrawGdsDisplayedTileScene();
     lastGdsTileBuildMsRef.current = performance.now() - buildStartedAt;
     lastGdsTileApplyMsRef.current = performance.now() - applyStartedAt;
+    maxTileBuildMsRef.current = Math.max(maxTileBuildMsRef.current, lastGdsTileBuildMsRef.current);
+    maxTileApplyMsRef.current = Math.max(maxTileApplyMsRef.current, lastGdsTileApplyMsRef.current);
     requestRender();
     scheduleGdsDisplayedGeometrySnapshot();
     syncGdsCameraState(false);
@@ -1461,6 +1493,10 @@ export function PhysicalLayoutCanvas({
         windowPlan,
       });
       gdsCoverageRatioRef.current = calculateGdsTileCoverageRatio(Array.from(tiles.values()), windowPlan.viewportBbox);
+      gdsNonEmptyCoverageRatioRef.current = calculateGdsNonEmptyTileCoverageRatio(
+        Array.from(tiles.values()),
+        windowPlan.viewportBbox,
+      );
       updateGdsTileDiagnostics({
         bboxArea: getTilePlanArea(windowPlan.primaryPlan),
         displayedState: gdsDisplayedTilesRef.current.size > 0 ? 'deferred-window-atlas-last-good' : 'deferred-window-atlas',
@@ -1660,13 +1696,16 @@ export function PhysicalLayoutCanvas({
 
     clearDeferredGdsTileAtlasApply();
     lastTileRoundtripMsRef.current = roundtripMs;
+    maxTileRoundtripMsRef.current = Math.max(maxTileRoundtripMsRef.current, roundtripMs);
     const applyStartedAt = performance.now();
     if (tile.geometry.shapes.length > 0) {
       gdsLastGoodTileRef.current = tile;
       gdsGeometrySnapshotKeyRef.current = '';
       if (!options.preserveDisplayedTiles) {
         gdsDisplayedTilesRef.current = new Map([[plan.cacheKey, { plan, tile }]]);
+        gdsDisplayedViewportBboxRef.current = plan.bbox;
         gdsCoverageRatioRef.current = 1;
+        gdsNonEmptyCoverageRatioRef.current = 1;
         gdsActiveTileCountRef.current = 1;
         gdsOverviewFallbackActiveRef.current = plan.lod > 0;
       }
@@ -1674,7 +1713,9 @@ export function PhysicalLayoutCanvas({
       gdsLastGoodTileRef.current = null;
       gdsGeometrySnapshotKeyRef.current = '';
       gdsDisplayedTilesRef.current = new Map();
+      gdsDisplayedViewportBboxRef.current = plan.bbox;
       gdsCoverageRatioRef.current = 0;
+      gdsNonEmptyCoverageRatioRef.current = 0;
       gdsActiveTileCountRef.current = 0;
       gdsOverviewFallbackActiveRef.current = false;
     }
@@ -1694,6 +1735,8 @@ export function PhysicalLayoutCanvas({
     redrawScene(tile.geometry);
     lastGdsTileBuildMsRef.current = performance.now() - buildStartedAt;
     lastGdsTileApplyMsRef.current = performance.now() - applyStartedAt;
+    maxTileBuildMsRef.current = Math.max(maxTileBuildMsRef.current, lastGdsTileBuildMsRef.current);
+    maxTileApplyMsRef.current = Math.max(maxTileApplyMsRef.current, lastGdsTileApplyMsRef.current);
     requestRender();
     syncGdsFullCameraState();
     syncRenderCountState(true);
@@ -1880,10 +1923,16 @@ export function PhysicalLayoutCanvas({
       continuationCount: lastTileContinuationCountRef.current,
       coverageRatio: gdsCoverageRatioRef.current,
       displayedTileCount: gdsDisplayedTilesRef.current.size,
+      emptyDisplayedTileCount: getGdsDisplayedEmptyTileCount(gdsDisplayedTilesRef.current),
+      emptyVisibleFrameCount: gdsEmptyVisibleFrameCountRef.current,
       frameDurationsMs: frameDurationsRef.current,
       inflightRequestCount: inflightTileRequestCountRef.current,
       tileApplyMs: lastGdsTileApplyMsRef.current,
       tileBuildMs: lastGdsTileBuildMsRef.current,
+      maxFrameP95Ms: Math.max(maxFrameP95MsRef.current, calculateFrameP95Ms(frameDurationsRef.current)),
+      maxTileApplyMs: maxTileApplyMsRef.current,
+      maxTileBuildMs: maxTileBuildMsRef.current,
+      maxTileRoundtripMs: maxTileRoundtripMsRef.current,
       meshBatchCount: meshStatsRef.current.meshBatchCount,
       meshDrawNodeCount: meshStatsRef.current.drawNodeCount,
       meshIndexCount: meshStatsRef.current.indexCount,
@@ -1892,9 +1941,12 @@ export function PhysicalLayoutCanvas({
       renderMs: lastRenderDurationMsRef.current,
       retryCount: retryTileRequestCountRef.current,
       tile: tile ?? null,
+      nonEmptyCoverageRatio: gdsNonEmptyCoverageRatioRef.current,
+      renderableShapeCount: getGdsDisplayedTileShapeCount(gdsDisplayedTilesRef.current),
       tileRequestCount: tileRequestCountRef.current,
       tileRoundtripMs: lastTileRoundtripMsRef.current,
     });
+    maxFrameP95MsRef.current = Math.max(maxFrameP95MsRef.current, nextMetrics.frameP95Ms);
     setGdsTileMetrics(nextMetrics);
     onGdsTileMetricsChangeRef.current?.(nextMetrics);
   };
@@ -2234,10 +2286,13 @@ export function PhysicalLayoutCanvas({
       data-gds-blank-frame-count={gdsBlankFrameCountRef.current}
       data-gds-coverage-ratio={gdsCoverageRatioRef.current.toFixed(3)}
       data-gds-frame-p95-ms={gdsTileMetrics.frameP95Ms.toFixed(1)}
+      data-gds-max-frame-p95-ms={gdsTileMetrics.maxFrameP95Ms.toFixed(1)}
       data-gds-draw-node-count={meshStatsRef.current.drawNodeCount}
       data-gds-displayed-tile-state={gdsTileDiagnostics.displayedState}
       data-gds-displayed-tile-count={gdsTileMetrics.displayedTileCount}
+      data-gds-empty-displayed-tile-count={gdsTileMetrics.emptyDisplayedTileCount}
       data-gds-empty-tile-reason={gdsTileDiagnostics.emptyReason}
+      data-gds-empty-visible-frame-count={gdsTileMetrics.emptyVisibleFrameCount}
       data-gds-deferred-tile-pending={gdsDeferredTileApplyRef.current || gdsDeferredAtlasApplyRef.current ? 'true' : 'false'}
       data-gds-final-tile-lod={gdsTileDiagnostics.finalLod}
       data-gds-full-cell-fallback-reason={gdsTileDiagnostics.fullCellFallbackReason}
@@ -2257,6 +2312,7 @@ export function PhysicalLayoutCanvas({
       data-gds-minimap-viewport-x={minimapModel?.visible ? minimapModel.viewport.x.toFixed(2) : ''}
       data-gds-minimap-viewport-y={minimapModel?.visible ? minimapModel.viewport.y.toFixed(2) : ''}
       data-gds-minimap-visible={minimapModel?.visible ? 'true' : 'false'}
+      data-gds-non-empty-coverage-ratio={gdsTileMetrics.nonEmptyCoverageRatio.toFixed(3)}
       data-gds-precise-tile-pending={gdsTileDiagnostics.precisePending ? 'true' : 'false'}
       data-gds-prefetch-tile-count={gdsPrefetchTileCountRef.current}
       data-gds-overview-fallback-active={gdsOverviewFallbackActiveRef.current ? 'true' : 'false'}
@@ -2272,11 +2328,15 @@ export function PhysicalLayoutCanvas({
       data-gds-react-sync-count={gdsTileMetrics.reactSyncCount}
       data-gds-tile-apply-ms={gdsTileMetrics.lastTileApplyMs.toFixed(2)}
       data-gds-tile-build-ms={gdsTileMetrics.lastTileBuildMs.toFixed(2)}
+      data-gds-max-tile-apply-ms={gdsTileMetrics.maxTileApplyMs.toFixed(2)}
+      data-gds-max-tile-build-ms={gdsTileMetrics.maxTileBuildMs.toFixed(2)}
+      data-gds-max-tile-roundtrip-ms={gdsTileMetrics.maxTileRoundtripMs.toFixed(2)}
       data-gds-tile-query-ms={gdsTileMetrics.lastTileQueryMs.toFixed(2)}
       data-gds-tile-request-count={tileRequestCountRef.current}
       data-gds-tile-roundtrip-ms={gdsTileMetrics.lastTileRoundtripMs.toFixed(2)}
       data-gds-tile-shape-count={isGdsTileMode ? getGdsDisplayedTileShapeCount(gdsDisplayedTilesRef.current) : (gdsTileGeometry?.shapes.length ?? 0)}
       data-gds-truncated={gdsTileMetrics.truncated ? 'true' : 'false'}
+      data-gds-renderable-shape-count={gdsTileMetrics.renderableShapeCount}
       data-geometry-shape-count={activeGeometry?.shapes.length ?? 0}
       data-hidden-layer-count={Math.max(0, layerCount - visibleLayerCount)}
       data-highlighted-shape-index={highlightedShapeIndex ?? ''}
@@ -3475,6 +3535,31 @@ function getGdsDisplayedTileShapeCount(tiles: ReadonlyMap<string, PhysicalLayout
     count += entry.tile.geometry.shapes.length;
   }
   return count;
+}
+
+function getGdsDisplayedEmptyTileCount(tiles: ReadonlyMap<string, PhysicalLayoutGdsDisplayedTile>): number {
+  let count = 0;
+  for (const entry of tiles.values()) {
+    if (entry.tile.geometry.shapes.length === 0) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+function calculateFrameP95Ms(values: readonly number[]): number {
+  const frameDurations = values
+    .filter((value) => Number.isFinite(value) && value > 0 && value <= 250)
+    .sort((left, right) => left - right);
+  if (frameDurations.length === 0) {
+    return 0;
+  }
+
+  const index = Math.min(
+    frameDurations.length - 1,
+    Math.max(0, Math.ceil(frameDurations.length * 0.95) - 1),
+  );
+  return frameDurations[index] ?? 0;
 }
 
 function findGdsDisplayedShapeByIndex(

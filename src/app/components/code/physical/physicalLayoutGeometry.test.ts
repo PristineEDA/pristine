@@ -38,6 +38,8 @@ import {
 import {
   createEmptyGdsTileGeometry,
   createGdsFullCellTileRequestPlan,
+  calculateGdsNonEmptyTileCoverageRatio,
+  calculateGdsTileCoverageRatio,
   createGdsTileAtlasUpdate,
   createGdsOverviewRetryTileRequestPlan,
   createGdsPreciseTileRequestPlan,
@@ -633,6 +635,40 @@ describe('physicalLayoutGeometry', () => {
 
     expect(transformOnlyMetrics.averageFps).toBeGreaterThan(50);
     expect(transformOnlyMetrics.frameP95Ms).toBeLessThan(250);
+  });
+
+  it('distinguishes spatial tile coverage from non-empty coverage', () => {
+    const viewportBbox = { x0: 0, y0: 0, x1: 10, y1: 10 };
+    const emptyTile = createEmptyGdsTileGeometry(1000);
+    const plan = createGdsTileRequestPlan({
+      camera: { panX: 0, panY: 0, zoom: 10 },
+      rootCellIndex: 0,
+      selectedBounds: viewportBbox,
+      sessionId: 'gds-session',
+      size: { height: 100, width: 100 },
+      visibility: createEmptyPhysicalLayoutVisibility(),
+    });
+    const emptyDisplayedTile = {
+      plan: { ...plan, bbox: viewportBbox, cacheKey: 'empty-tile' },
+      tile: emptyTile,
+    };
+
+    expect(calculateGdsTileCoverageRatio([emptyDisplayedTile], viewportBbox)).toBe(1);
+    expect(calculateGdsNonEmptyTileCoverageRatio([emptyDisplayedTile], viewportBbox)).toBe(0);
+
+    const nonEmptyDisplayedTile = {
+      plan: { ...plan, bbox: viewportBbox, cacheKey: 'non-empty-tile' },
+      tile: {
+        ...emptyTile,
+        geometry: {
+          ...emptyTile.geometry,
+          shapeCount: 1,
+          shapes: [layoutFixtureGdsGeometry.shapes[0] as LspLayoutShape],
+        },
+        tileShapeCount: 1,
+      },
+    };
+    expect(calculateGdsNonEmptyTileCoverageRatio([nonEmptyDisplayedTile], viewportBbox)).toBe(1);
   });
 
   it('bounds raw GDS tile cache by entry count and estimated bytes', () => {

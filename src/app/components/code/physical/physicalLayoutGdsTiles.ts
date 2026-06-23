@@ -45,6 +45,8 @@ export interface PhysicalLayoutGdsTileMetrics {
   continuationCount: number;
   coverageRatio: number;
   displayedTileCount: number;
+  emptyDisplayedTileCount: number;
+  emptyVisibleFrameCount: number;
   frameP95Ms: number;
   inflightRequestCount: number;
   indexByteLength: number;
@@ -55,10 +57,16 @@ export interface PhysicalLayoutGdsTileMetrics {
   lastTileBuildMs: number;
   lastTileRoundtripMs: number;
   lastTileQueryMs: number;
+  maxFrameP95Ms: number;
+  maxTileApplyMs: number;
+  maxTileBuildMs: number;
+  maxTileRoundtripMs: number;
   meshBatchCount: number;
   meshDrawNodeCount: number;
   meshIndexCount: number;
   meshVertexCount: number;
+  nonEmptyCoverageRatio: number;
+  renderableShapeCount: number;
   reactSyncCount: number;
   retryCount: number;
   tileRequestCount: number;
@@ -153,6 +161,8 @@ export const defaultPhysicalLayoutGdsTileMetrics: PhysicalLayoutGdsTileMetrics =
   continuationCount: 0,
   coverageRatio: 0,
   displayedTileCount: 0,
+  emptyDisplayedTileCount: 0,
+  emptyVisibleFrameCount: 0,
   frameP95Ms: 0,
   inflightRequestCount: 0,
   indexByteLength: 0,
@@ -163,10 +173,16 @@ export const defaultPhysicalLayoutGdsTileMetrics: PhysicalLayoutGdsTileMetrics =
   lastTileBuildMs: 0,
   lastTileRoundtripMs: 0,
   lastTileQueryMs: 0,
+  maxFrameP95Ms: 0,
+  maxTileApplyMs: 0,
+  maxTileBuildMs: 0,
+  maxTileRoundtripMs: 0,
   meshBatchCount: 0,
   meshDrawNodeCount: 0,
   meshIndexCount: 0,
   meshVertexCount: 0,
+  nonEmptyCoverageRatio: 0,
+  renderableShapeCount: 0,
   reactSyncCount: 0,
   retryCount: 0,
   tileRequestCount: 0,
@@ -473,6 +489,16 @@ export function calculateGdsTileCoverageRatio(
   return Math.max(0, Math.min(1, coveredArea / viewportArea));
 }
 
+export function calculateGdsNonEmptyTileCoverageRatio(
+  tiles: readonly PhysicalLayoutGdsDisplayedTile[],
+  viewportBbox: LspLayoutBounds,
+): number {
+  return calculateGdsTileCoverageRatio(
+    tiles.filter((entry) => entry.tile.geometry.shapes.length > 0),
+    viewportBbox,
+  );
+}
+
 export function estimateGdsDisplayedTileAtlasByteLength(
   tiles: ReadonlyMap<string, PhysicalLayoutGdsDisplayedTile>,
 ): number {
@@ -667,6 +693,8 @@ export function createGdsTileMetricsSnapshot(input: {
   continuationCount?: number;
   coverageRatio?: number;
   displayedTileCount?: number;
+  emptyDisplayedTileCount?: number;
+  emptyVisibleFrameCount?: number;
   frameDurationsMs: readonly number[];
   inflightRequestCount?: number;
   tileApplyMs?: number;
@@ -681,6 +709,12 @@ export function createGdsTileMetricsSnapshot(input: {
   tile: LspLayoutTileGeometry | null;
   tileRequestCount: number;
   tileRoundtripMs: number;
+  maxFrameP95Ms?: number;
+  maxTileApplyMs?: number;
+  maxTileBuildMs?: number;
+  maxTileRoundtripMs?: number;
+  nonEmptyCoverageRatio?: number;
+  renderableShapeCount?: number;
 }): PhysicalLayoutGdsTileMetrics {
   const frameDurations = input.frameDurationsMs.filter((value) => (
     Number.isFinite(value)
@@ -725,6 +759,8 @@ export function createGdsTileMetricsSnapshot(input: {
     continuationCount: input.continuationCount ?? (input.tile?.nextToken === null ? 0 : 1),
     coverageRatio: input.coverageRatio ?? 0,
     displayedTileCount: input.displayedTileCount ?? 0,
+    emptyDisplayedTileCount: input.emptyDisplayedTileCount ?? 0,
+    emptyVisibleFrameCount: input.emptyVisibleFrameCount ?? 0,
     frameP95Ms: percentile(frameDurations, 0.95),
     inflightRequestCount: input.inflightRequestCount ?? 0,
     indexByteLength: input.meshIndexCount * Uint32Array.BYTES_PER_ELEMENT,
@@ -735,10 +771,16 @@ export function createGdsTileMetricsSnapshot(input: {
     lastTileBuildMs: input.tileBuildMs ?? 0,
     lastTileRoundtripMs: input.tileRoundtripMs,
     lastTileQueryMs: microsToMs(input.tile?.metrics.queryMicros ?? 0),
+    maxFrameP95Ms: input.maxFrameP95Ms ?? percentile(frameDurations, 0.95),
+    maxTileApplyMs: input.maxTileApplyMs ?? (input.tileApplyMs ?? 0),
+    maxTileBuildMs: input.maxTileBuildMs ?? (input.tileBuildMs ?? 0),
+    maxTileRoundtripMs: input.maxTileRoundtripMs ?? input.tileRoundtripMs,
     meshBatchCount: input.meshBatchCount ?? 0,
     meshDrawNodeCount: input.meshDrawNodeCount ?? 0,
     meshIndexCount: input.meshIndexCount,
     meshVertexCount: input.meshVertexCount,
+    nonEmptyCoverageRatio: input.nonEmptyCoverageRatio ?? 0,
+    renderableShapeCount: input.renderableShapeCount ?? (input.tile?.geometry.shapes.length ?? 0),
     reactSyncCount: input.reactSyncCount ?? 0,
     retryCount: input.retryCount ?? 0,
     tileRequestCount: input.tileRequestCount,
