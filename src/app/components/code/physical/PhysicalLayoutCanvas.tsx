@@ -2896,9 +2896,7 @@ class PhysicalLayoutGdsPersistentTileRenderer {
       layer.container.visible = isLayerScreenVisible;
       orderedChildren[order] = layer.container;
       const layerStats = layer.update(entry.tile, layoutVisibility, visibilityKey);
-      if (isLayerScreenVisible) {
-        stats = mergeGdsMeshStats(stats, layerStats);
-      }
+      stats = mergeGdsMeshStats(stats, layerStats);
     });
 
     for (const [key, layer] of this.tileLayers) {
