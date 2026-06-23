@@ -21,6 +21,12 @@ export interface TinyQvViewportVisualAnalysisOptions {
   minimapExclusionWidthPx?: number;
 }
 
+export interface TinyQvViewportVisualAnchor {
+  colorfulPixelCount: number;
+  x: number;
+  y: number;
+}
+
 interface DecodedPngRgba {
   data: Uint8ClampedArray;
   height: number;
@@ -38,33 +44,30 @@ export function analyzeTinyQvViewportPng(
   return analyzeTinyQvViewportPixelsFromRgba(decoded.data, decoded.width, decoded.height, options);
 }
 
+export function findTinyQvViewportColorfulAnchorPng(
+  pngBuffer: Buffer,
+  options: TinyQvViewportVisualAnalysisOptions = {},
+): TinyQvViewportVisualAnchor | null {
+  const decoded = decodePngRgba(pngBuffer);
+
+  return findTinyQvViewportColorfulAnchorFromRgba(decoded.data, decoded.width, decoded.height, options);
+}
+
 export function analyzeTinyQvViewportPixelsFromRgba(
   rgba: Uint8ClampedArray,
   width: number,
   height: number,
   options: TinyQvViewportVisualAnalysisOptions = {},
 ): TinyQvViewportVisualAnalysis {
-  const edgeInsetPx = Math.max(0, Math.floor(options.edgeInsetPx ?? 8));
+  const sampleArea = getTinyQvSampleArea(width, height, options);
   const minColorfulPixelRatio = options.minColorfulPixelRatio ?? tinyQvVisualMinRatio;
-  const minimapWidth = Math.max(0, Math.floor(options.minimapExclusionWidthPx ?? 160));
-  const minimapHeight = Math.max(0, Math.floor(options.minimapExclusionHeightPx ?? 130));
-  const startX = Math.min(edgeInsetPx, width);
-  const startY = Math.min(edgeInsetPx, height);
-  const endX = Math.max(startX, width - edgeInsetPx);
-  const endY = Math.max(startY, height - edgeInsetPx);
-  const shouldExcludeMinimap = minimapWidth > 0
-    && minimapHeight > 0
-    && width > minimapWidth + edgeInsetPx * 2
-    && height > minimapHeight + edgeInsetPx * 2;
-  const minimapStartX = shouldExcludeMinimap ? Math.max(startX, width - minimapWidth - edgeInsetPx) : width;
-  const minimapEndY = shouldExcludeMinimap ? Math.min(endY, minimapHeight + edgeInsetPx) : startY;
   let colorfulPixels = 0;
   let nonBackgroundPixels = 0;
   let samplePixels = 0;
 
-  for (let y = startY; y < endY; y += 1) {
-    for (let x = startX; x < endX; x += 1) {
-      if (x >= minimapStartX && y < minimapEndY) {
+  for (let y = sampleArea.startY; y < sampleArea.endY; y += 1) {
+    for (let x = sampleArea.startX; x < sampleArea.endX; x += 1) {
+      if (isInsideTinyQvMinimapArea(x, y, sampleArea)) {
         continue;
       }
 
@@ -107,10 +110,119 @@ export function analyzeTinyQvViewportPixelsFromRgba(
     visualIsNonBlank: failureReason === '',
     visualNonBackgroundPixelCount: nonBackgroundPixels,
     visualNonBackgroundPixelRatio: nonBackgroundRatio,
-    visualSampleHeight: Math.max(0, endY - startY),
+    visualSampleHeight: Math.max(0, sampleArea.endY - sampleArea.startY),
     visualSamplePixelCount: samplePixels,
-    visualSampleWidth: Math.max(0, endX - startX),
+    visualSampleWidth: Math.max(0, sampleArea.endX - sampleArea.startX),
   };
+}
+
+export function findTinyQvViewportColorfulAnchorFromRgba(
+  rgba: Uint8ClampedArray,
+  width: number,
+  height: number,
+  options: TinyQvViewportVisualAnalysisOptions = {},
+): TinyQvViewportVisualAnchor | null {
+  const sampleArea = getTinyQvSampleArea(width, height, options);
+  const bucketColumnCount = 24;
+  const bucketRowCount = 16;
+  const sampleWidth = Math.max(1, sampleArea.endX - sampleArea.startX);
+  const sampleHeight = Math.max(1, sampleArea.endY - sampleArea.startY);
+  const bucketCount = bucketColumnCount * bucketRowCount;
+  const bucketPixelCounts = new Uint32Array(bucketCount);
+  const bucketSumX = new Float64Array(bucketCount);
+  const bucketSumY = new Float64Array(bucketCount);
+
+  for (let y = sampleArea.startY; y < sampleArea.endY; y += 1) {
+    for (let x = sampleArea.startX; x < sampleArea.endX; x += 1) {
+      if (isInsideTinyQvMinimapArea(x, y, sampleArea)) {
+        continue;
+      }
+
+      const offset = (y * width + x) * 4;
+      const red = rgba[offset] ?? 0;
+      const green = rgba[offset + 1] ?? 0;
+      const blue = rgba[offset + 2] ?? 0;
+      const alpha = rgba[offset + 3] ?? 255;
+
+      if (alpha < 32 || !isTinyQvColorfulGdsPixel(red, green, blue)) {
+        continue;
+      }
+
+      const bucketX = Math.min(
+        bucketColumnCount - 1,
+        Math.max(0, Math.floor(((x - sampleArea.startX) / sampleWidth) * bucketColumnCount)),
+      );
+      const bucketY = Math.min(
+        bucketRowCount - 1,
+        Math.max(0, Math.floor(((y - sampleArea.startY) / sampleHeight) * bucketRowCount)),
+      );
+      const bucketIndex = bucketY * bucketColumnCount + bucketX;
+      bucketPixelCounts[bucketIndex] = (bucketPixelCounts[bucketIndex] ?? 0) + 1;
+      bucketSumX[bucketIndex] = (bucketSumX[bucketIndex] ?? 0) + x;
+      bucketSumY[bucketIndex] = (bucketSumY[bucketIndex] ?? 0) + y;
+    }
+  }
+
+  let bestBucketIndex = -1;
+  let bestBucketPixelCount = 0;
+
+  for (let bucketIndex = 0; bucketIndex < bucketCount; bucketIndex += 1) {
+    const bucketPixelCount = bucketPixelCounts[bucketIndex] ?? 0;
+    if (bucketPixelCount > bestBucketPixelCount) {
+      bestBucketIndex = bucketIndex;
+      bestBucketPixelCount = bucketPixelCount;
+    }
+  }
+
+  if (bestBucketIndex < 0 || bestBucketPixelCount === 0) {
+    return null;
+  }
+
+  return {
+    colorfulPixelCount: bestBucketPixelCount,
+    x: (bucketSumX[bestBucketIndex] ?? 0) / bestBucketPixelCount,
+    y: (bucketSumY[bestBucketIndex] ?? 0) / bestBucketPixelCount,
+  };
+}
+
+interface TinyQvSampleArea {
+  endX: number;
+  endY: number;
+  minimapEndY: number;
+  minimapStartX: number;
+  startX: number;
+  startY: number;
+}
+
+function getTinyQvSampleArea(
+  width: number,
+  height: number,
+  options: TinyQvViewportVisualAnalysisOptions,
+): TinyQvSampleArea {
+  const edgeInsetPx = Math.max(0, Math.floor(options.edgeInsetPx ?? 8));
+  const minimapWidth = Math.max(0, Math.floor(options.minimapExclusionWidthPx ?? 160));
+  const minimapHeight = Math.max(0, Math.floor(options.minimapExclusionHeightPx ?? 130));
+  const startX = Math.min(edgeInsetPx, width);
+  const startY = Math.min(edgeInsetPx, height);
+  const endX = Math.max(startX, width - edgeInsetPx);
+  const endY = Math.max(startY, height - edgeInsetPx);
+  const shouldExcludeMinimap = minimapWidth > 0
+    && minimapHeight > 0
+    && width > minimapWidth + edgeInsetPx * 2
+    && height > minimapHeight + edgeInsetPx * 2;
+
+  return {
+    endX,
+    endY,
+    minimapEndY: shouldExcludeMinimap ? Math.min(endY, minimapHeight + edgeInsetPx) : startY,
+    minimapStartX: shouldExcludeMinimap ? Math.max(startX, width - minimapWidth - edgeInsetPx) : width,
+    startX,
+    startY,
+  };
+}
+
+function isInsideTinyQvMinimapArea(x: number, y: number, sampleArea: TinyQvSampleArea) {
+  return x >= sampleArea.minimapStartX && y < sampleArea.minimapEndY;
 }
 
 function getTinyQvVisualFailureReason(input: {

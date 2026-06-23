@@ -23,6 +23,7 @@ import {
   type PhysicalLayoutZoomLimits,
 } from './physicalLayoutGeometry';
 import {
+  calculateGdsScreenVisibleCoverage,
   calculateGdsNonEmptyTileCoverageRatio,
   calculateGdsTileCoverageRatio,
   createGdsTileAtlasUpdate,
@@ -36,6 +37,7 @@ import {
   createGdsTileRequestPlan,
   createGdsRetryTileRequestPlan,
   defaultPhysicalLayoutGdsTileMetrics,
+  doLayoutBoundsIntersect,
   getGdsEmptyTileRetryKind,
   getGdsTileShapeStyle,
   gdsTileMaxContinuationPages,
@@ -102,8 +104,13 @@ const gdsPreciseTileIdleDelayMs = 300;
 const gdsTileApplyIdleDelayMs = 480;
 const cameraFitPaddingPx = 48;
 const GDS_TILE_ORDER_BUCKET_SIZE = 512;
+const GDS_TILE_LARGE_ORDER_BUCKET_SIZE = 2_048;
+const GDS_TILE_HUGE_ORDER_BUCKET_SIZE = 4_096;
 const GDS_TILE_PRECISE_ORDER_SHAPE_LIMIT = 2_048;
+const GDS_TILE_LARGE_ORDER_SHAPE_LIMIT = 50_000;
+const GDS_TILE_HUGE_ORDER_SHAPE_LIMIT = 200_000;
 const GDS_TILE_PICKABLE_SHAPE_LIMIT = 4_096;
+const GDS_TILE_RENDER_OVERSCAN_RATIO = 0.2;
 const GDS_TILE_REPLACE_MIN_COVERAGE = 0.55;
 const GDS_TILE_GEOMETRY_SNAPSHOT_SHAPE_LIMIT = 12_000;
 const GDS_TILE_GEOMETRY_SNAPSHOT_PAYLOAD_LIMIT = 24 * 1024 * 1024;
@@ -189,6 +196,13 @@ export function PhysicalLayoutCanvas({
   const gdsEmptyVisibleFrameCountRef = useRef(0);
   const gdsCoverageRatioRef = useRef(0);
   const gdsNonEmptyCoverageRatioRef = useRef(0);
+  const gdsScreenVisibleCoverageRatioRef = useRef(0);
+  const gdsScreenVisibleNonEmptyCoverageRatioRef = useRef(0);
+  const gdsScreenVisibleTileCountRef = useRef(0);
+  const gdsScreenVisibleShapeCountRef = useRef(0);
+  const gdsCellIntersectionRatioRef = useRef(0);
+  const gdsVisualEmptyReasonRef = useRef('');
+  const gdsViewportBboxRef = useRef<LspLayoutBounds | null>(null);
   const gdsActiveTileCountRef = useRef(0);
   const gdsPrefetchTileCountRef = useRef(0);
   const gdsOverviewFallbackActiveRef = useRef(false);
@@ -462,6 +476,9 @@ export function PhysicalLayoutCanvas({
     const zoomLimits = getPhysicalLayoutCanvasZoomLimits(catalog?.sourceKind, selectedTarget?.kind, selectedBounds, size);
     const nextCamera = getFitLayoutCamera(selectedBounds, size, zoomLimits);
     cameraRef.current = nextCamera;
+    if (isGdsTileModeRef.current) {
+      syncGdsScreenVisibleCoverage(getViewportWorldBounds(nextCamera, sizeRef.current, 0));
+    }
     setCamera(nextCamera);
     setCameraSync(nextCamera);
     redrawScene();
@@ -491,6 +508,13 @@ export function PhysicalLayoutCanvas({
     gdsEmptyVisibleFrameCountRef.current = 0;
     gdsCoverageRatioRef.current = 0;
     gdsNonEmptyCoverageRatioRef.current = 0;
+    gdsScreenVisibleCoverageRatioRef.current = 0;
+    gdsScreenVisibleNonEmptyCoverageRatioRef.current = 0;
+    gdsScreenVisibleTileCountRef.current = 0;
+    gdsScreenVisibleShapeCountRef.current = 0;
+    gdsCellIntersectionRatioRef.current = 0;
+    gdsVisualEmptyReasonRef.current = '';
+    gdsViewportBboxRef.current = null;
     gdsActiveTileCountRef.current = 0;
     gdsPrefetchTileCountRef.current = 0;
     gdsOverviewFallbackActiveRef.current = false;
@@ -692,6 +716,12 @@ export function PhysicalLayoutCanvas({
     }
 
     updateTransforms();
+    if (isGdsTileModeRef.current && gdsTileRendererRef.current) {
+      gdsTileRendererRef.current.syncCull(
+        gdsDisplayedTilesRef.current,
+        getViewportWorldBounds(cameraRef.current, sizeRef.current, GDS_TILE_RENDER_OVERSCAN_RATIO),
+      );
+    }
     updateMinimapOverlay();
     app.render();
     const frameEndedAt = performance.now();
@@ -718,24 +748,37 @@ export function PhysicalLayoutCanvas({
       lastFrameAtRef.current = frameEndedAt;
     }
     renderCountRef.current += 1;
-    if (
-      isGdsTileModeRef.current
-      && isGdsViewportInteractionActive()
-      && gdsLastGoodTileRef.current !== null
-      && gdsActiveTileCountRef.current === 0
-      && gdsDisplayedTilesRef.current.size === 0
-      && gdsTileDiagnosticsRef.current.displayedState !== 'empty-hidden'
-      && gdsTileDiagnosticsRef.current.displayedState !== 'pending-window'
-    ) {
-      gdsBlankFrameCountRef.current += 1;
-    }
-    if (
-      isGdsTileModeRef.current
-      && gdsDisplayedTilesRef.current.size > 0
-      && getGdsDisplayedTileShapeCount(gdsDisplayedTilesRef.current) === 0
-      && gdsTileDiagnosticsRef.current.displayedState !== 'empty-hidden'
-    ) {
-      gdsEmptyVisibleFrameCountRef.current += 1;
+    if (isGdsTileModeRef.current && gdsTileDiagnosticsRef.current.displayedState !== 'empty-hidden') {
+      const viewportBbox = getViewportWorldBounds(cameraRef.current, sizeRef.current, 0);
+      const hasCellIntersection = selectedBoundsRef.current
+        ? doLayoutBoundsIntersect(viewportBbox, selectedBoundsRef.current)
+        : true;
+      let hasScreenVisibleTile = false;
+      let hasScreenVisibleNonEmptyTile = false;
+      if (hasCellIntersection) {
+        for (const entry of gdsDisplayedTilesRef.current.values()) {
+          if (!doLayoutBoundsIntersect(entry.plan.bbox, viewportBbox)) {
+            continue;
+          }
+          hasScreenVisibleTile = true;
+          if (entry.tile.geometry.shapes.length > 0) {
+            hasScreenVisibleNonEmptyTile = true;
+            break;
+          }
+        }
+      }
+
+      if (
+        isGdsViewportInteractionActive()
+        && hasCellIntersection
+        && !hasScreenVisibleTile
+        && gdsTileDiagnosticsRef.current.displayedState !== 'pending-window'
+      ) {
+        gdsBlankFrameCountRef.current += 1;
+      }
+      if (hasCellIntersection && hasScreenVisibleTile && !hasScreenVisibleNonEmptyTile) {
+        gdsEmptyVisibleFrameCountRef.current += 1;
+      }
     }
     syncRenderCountState();
     updateGdsTileMetrics();
@@ -754,7 +797,13 @@ export function PhysicalLayoutCanvas({
 
   const updateCamera = (nextCamera: PhysicalLayoutCamera) => {
     cameraRef.current = nextCamera;
+    const world = worldRef.current;
+    if (world) {
+      world.position.set(nextCamera.panX, nextCamera.panY);
+      world.scale.set(nextCamera.zoom);
+    }
     if (isGdsTileMode) {
+      syncGdsScreenVisibleCoverage(getViewportWorldBounds(nextCamera, sizeRef.current, 0));
       syncGdsCameraState();
     } else {
       setCamera(nextCamera);
@@ -777,10 +826,14 @@ export function PhysicalLayoutCanvas({
     gdsTransformFrameRef.current = null;
 
     if (!isGdsViewportInteractionActive()) {
+      if (gdsDisplayedTilesRef.current.size > 0) {
+        redrawGdsDisplayedTileScene();
+        requestRender();
+      }
       syncRenderCountState(true);
       syncGdsCameraState(true);
       syncMinimapModelState(true);
-      updateGdsTileMetrics(gdsLastGoodTileRef.current);
+      updateGdsTileMetrics();
       return;
     }
 
@@ -1037,6 +1090,7 @@ export function PhysicalLayoutCanvas({
         plan.emptyReason === 'outside-cell-bounds'
         && (gdsDisplayedTilesRef.current.size > 0 || gdsLastGoodTileRef.current)
       ) {
+        syncGdsScreenVisibleCoverage(getViewportWorldBounds(cameraRef.current, sizeRef.current, 0));
         const displayedShapeCount = getGdsDisplayedTileShapeCount(gdsDisplayedTilesRef.current);
         updateGdsTileDiagnostics({
           bboxArea: getTilePlanArea(plan),
@@ -1052,7 +1106,7 @@ export function PhysicalLayoutCanvas({
           tileScope: 'viewport-window',
           tileLod: plan.lod,
         });
-        updateGdsTileMetrics(gdsLastGoodTileRef.current);
+        updateGdsTileMetrics(null);
         return;
       }
       const emptyTile = createEmptyGdsTileGeometry(catalog?.unitsPerMicron);
@@ -1138,14 +1192,19 @@ export function PhysicalLayoutCanvas({
       });
       if (
         cachedAtlasUpdate.tiles.size > 0
-        && (gdsDisplayedTilesRef.current.size === 0 || cachedAtlasUpdate.coverageRatio >= GDS_TILE_REPLACE_MIN_COVERAGE)
+        && (
+          gdsDisplayedTilesRef.current.size === 0
+          || cachedAtlasUpdate.screenVisibleCoverageRatio >= GDS_TILE_REPLACE_MIN_COVERAGE
+        )
       ) {
         applyOrDeferGdsDisplayedTileSet(
           cachedAtlasUpdate.tiles,
           windowPlan,
           generation,
           0,
-          cachedAtlasUpdate.coverageRatio < GDS_TILE_REPLACE_MIN_COVERAGE ? 'cached-partial-window-atlas' : 'cached-ready-window',
+          cachedAtlasUpdate.screenVisibleCoverageRatio < GDS_TILE_REPLACE_MIN_COVERAGE
+            ? 'cached-partial-window-atlas'
+            : 'cached-ready-window',
         );
       }
     }
@@ -1221,18 +1280,20 @@ export function PhysicalLayoutCanvas({
       atlasUpdate.tiles.size === 0
       || (
         gdsDisplayedTilesRef.current.size > 0
-        && atlasUpdate.coverageRatio < GDS_TILE_REPLACE_MIN_COVERAGE
+        && atlasUpdate.screenVisibleCoverageRatio < GDS_TILE_REPLACE_MIN_COVERAGE
       )
     ) {
-      gdsCoverageRatioRef.current = atlasUpdate.coverageRatio;
+      const currentViewportBbox = getViewportWorldBounds(cameraRef.current, sizeRef.current, 0);
+      gdsCoverageRatioRef.current = calculateGdsTileCoverageRatio(Array.from(atlasUpdate.tiles.values()), currentViewportBbox);
       gdsNonEmptyCoverageRatioRef.current = calculateGdsNonEmptyTileCoverageRatio(
         Array.from(atlasUpdate.tiles.values()),
-        windowPlan.viewportBbox,
+        currentViewportBbox,
       );
+      syncGdsScreenVisibleCoverage(currentViewportBbox);
       updateGdsTileDiagnostics({
         bboxArea: getTilePlanArea(windowPlan.primaryPlan),
         displayedState: 'partial-window-kept-last-good',
-        emptyReason: 'coverage-pending',
+        emptyReason: atlasUpdate.visualEmptyReason || 'coverage-pending',
         lastGoodShapeCount: gdsLastGoodTileRef.current?.geometry.shapes.length ?? 0,
         precisePending: false,
         retryKind: 'none',
@@ -1247,7 +1308,7 @@ export function PhysicalLayoutCanvas({
       windowPlan,
       generation,
       Math.max(...nonEmptyTiles.map((result) => result.roundtripMs), 0),
-      atlasUpdate.coverageRatio < GDS_TILE_REPLACE_MIN_COVERAGE ? 'partial-window-atlas' : 'ready-window',
+      atlasUpdate.screenVisibleCoverageRatio < GDS_TILE_REPLACE_MIN_COVERAGE ? 'partial-window-atlas' : 'ready-window',
     );
 
     if (shouldRequestPreciseGdsTile(windowPlan.primaryPlan)) {
@@ -1485,6 +1546,21 @@ export function PhysicalLayoutCanvas({
     }
 
     if (shouldDeferGdsTileAtlasApply()) {
+      const currentViewportBbox = getViewportWorldBounds(cameraRef.current, sizeRef.current, 0);
+      const currentScreenCoverage = calculateGdsScreenVisibleCoverage({
+        cellBounds: selectedBoundsRef.current,
+        tiles: Array.from(gdsDisplayedTilesRef.current.values()),
+        viewportBbox: currentViewportBbox,
+      });
+      const shouldApplyNowForVisibleCoverage = (
+        currentScreenCoverage.cellIntersectionRatio > 0
+        && currentScreenCoverage.screenVisibleNonEmptyCoverageRatio <= 0
+      );
+      if (shouldApplyNowForVisibleCoverage) {
+        applyGdsDisplayedTileSet(tiles, windowPlan, generation, roundtripMs, state);
+        return;
+      }
+
       scheduleDeferredGdsTileAtlasApply({
         generation,
         roundtripMs,
@@ -1492,15 +1568,16 @@ export function PhysicalLayoutCanvas({
         tiles,
         windowPlan,
       });
-      gdsCoverageRatioRef.current = calculateGdsTileCoverageRatio(Array.from(tiles.values()), windowPlan.viewportBbox);
+      gdsCoverageRatioRef.current = calculateGdsTileCoverageRatio(Array.from(gdsDisplayedTilesRef.current.values()), currentViewportBbox);
       gdsNonEmptyCoverageRatioRef.current = calculateGdsNonEmptyTileCoverageRatio(
-        Array.from(tiles.values()),
-        windowPlan.viewportBbox,
+        Array.from(gdsDisplayedTilesRef.current.values()),
+        currentViewportBbox,
       );
+      const screenCoverage = syncGdsScreenVisibleCoverage(currentViewportBbox);
       updateGdsTileDiagnostics({
         bboxArea: getTilePlanArea(windowPlan.primaryPlan),
         displayedState: gdsDisplayedTilesRef.current.size > 0 ? 'deferred-window-atlas-last-good' : 'deferred-window-atlas',
-        emptyReason: '',
+        emptyReason: screenCoverage.visualEmptyReason,
         precisePending: false,
         retryKind: 'none',
         tileLod: windowPlan.primaryPlan.lod,
@@ -1862,6 +1939,23 @@ export function PhysicalLayoutCanvas({
     setGdsTileDiagnostics(nextDiagnostics);
   };
 
+  const syncGdsScreenVisibleCoverage = (viewportBbox = getViewportWorldBounds(cameraRef.current, sizeRef.current, 0)) => {
+    gdsViewportBboxRef.current = viewportBbox;
+    const screenCoverage = calculateGdsScreenVisibleCoverage({
+      allHidden: gdsTileDiagnosticsRef.current.displayedState === 'empty-hidden',
+      cellBounds: selectedBoundsRef.current,
+      tiles: Array.from(gdsDisplayedTilesRef.current.values()),
+      viewportBbox,
+    });
+    gdsScreenVisibleCoverageRatioRef.current = screenCoverage.screenVisibleCoverageRatio;
+    gdsScreenVisibleNonEmptyCoverageRatioRef.current = screenCoverage.screenVisibleNonEmptyCoverageRatio;
+    gdsScreenVisibleTileCountRef.current = screenCoverage.screenVisibleTileCount;
+    gdsScreenVisibleShapeCountRef.current = screenCoverage.screenVisibleShapeCount;
+    gdsCellIntersectionRatioRef.current = screenCoverage.cellIntersectionRatio;
+    gdsVisualEmptyReasonRef.current = screenCoverage.visualEmptyReason;
+    return screenCoverage;
+  };
+
   const updateGdsTileMetrics = (tile?: LspLayoutTileGeometry | null) => {
     if (!isGdsTileModeRef.current) {
       return;
@@ -1892,6 +1986,7 @@ export function PhysicalLayoutCanvas({
       gdsMetricsSyncTimeoutRef.current = null;
     }
     lastGdsMetricsSyncAtRef.current = now;
+    syncGdsScreenVisibleCoverage();
 
     const nextMetrics = createGdsTileMetricsSnapshot({
       atlasByteLength: estimateGdsDisplayedTileAtlasByteLength(gdsDisplayedTilesRef.current),
@@ -1942,7 +2037,13 @@ export function PhysicalLayoutCanvas({
       retryCount: retryTileRequestCountRef.current,
       tile: tile ?? null,
       nonEmptyCoverageRatio: gdsNonEmptyCoverageRatioRef.current,
-      renderableShapeCount: getGdsDisplayedTileShapeCount(gdsDisplayedTilesRef.current),
+      renderableShapeCount: gdsScreenVisibleShapeCountRef.current,
+      screenVisibleCoverageRatio: gdsScreenVisibleCoverageRatioRef.current,
+      screenVisibleNonEmptyCoverageRatio: gdsScreenVisibleNonEmptyCoverageRatioRef.current,
+      screenVisibleShapeCount: gdsScreenVisibleShapeCountRef.current,
+      screenVisibleTileCount: gdsScreenVisibleTileCountRef.current,
+      cellIntersectionRatio: gdsCellIntersectionRatioRef.current,
+      visualEmptyReason: gdsVisualEmptyReasonRef.current,
       tileRequestCount: tileRequestCountRef.current,
       tileRoundtripMs: lastTileRoundtripMsRef.current,
     });
@@ -2023,7 +2124,10 @@ export function PhysicalLayoutCanvas({
       chromeLayer.addChild(drawLayoutOutline(bounds));
     }
 
-    meshStatsRef.current = tileRenderer.update(gdsDisplayedTilesRef.current, layoutVisibilityRef.current);
+    const currentViewportBbox = getViewportWorldBounds(cameraRef.current, sizeRef.current, 0);
+    const renderCullBbox = getViewportWorldBounds(cameraRef.current, sizeRef.current, GDS_TILE_RENDER_OVERSCAN_RATIO);
+    meshStatsRef.current = tileRenderer.update(gdsDisplayedTilesRef.current, layoutVisibilityRef.current, renderCullBbox);
+    syncGdsScreenVisibleCoverage(currentViewportBbox);
 
     overlayLayer.removeChildren().forEach((child) => child.destroy({ children: true }));
     const highlightedShape = findVisibleGdsDisplayedShapeByIndex(
@@ -2104,8 +2208,6 @@ export function PhysicalLayoutCanvas({
       gdsIdleSnapshotSkippedCountRef.current += 1;
       gdsIdleSnapshotMsRef.current = Math.max(0, performance.now() - snapshotStartedAt);
       updateGdsTileDiagnostics({
-        displayedState: 'ready-window-snapshot-skipped-3d-hidden',
-        emptyReason: '',
         lastGoodShapeCount: gdsLastGoodTileRef.current?.geometry.shapes.length ?? 0,
       });
       updateGdsTileMetrics();
@@ -2123,8 +2225,6 @@ export function PhysicalLayoutCanvas({
       gdsIdleSnapshotSkippedCountRef.current += 1;
       gdsIdleSnapshotMsRef.current = Math.max(0, performance.now() - snapshotStartedAt);
       updateGdsTileDiagnostics({
-        displayedState: 'ready-window-snapshot-skipped',
-        emptyReason: '',
         lastGoodShapeCount: gdsLastGoodTileRef.current?.geometry.shapes.length ?? 0,
       });
       updateGdsTileMetrics();
@@ -2249,6 +2349,19 @@ export function PhysicalLayoutCanvas({
     }
   };
 
+  const liveCamera = isGdsTileMode ? cameraRef.current : cameraSync;
+  const liveViewportBbox = isGdsTileMode
+    ? getViewportWorldBounds(liveCamera, size, 0)
+    : null;
+  const liveScreenCoverage = isGdsTileMode && liveViewportBbox
+    ? calculateGdsScreenVisibleCoverage({
+      allHidden: gdsTileDiagnostics.displayedState === 'empty-hidden',
+      cellBounds: selectedBounds,
+      tiles: Array.from(gdsDisplayedTilesRef.current.values()),
+      viewportBbox: liveViewportBbox,
+    })
+    : null;
+
   return (
     <div
       ref={hostRef}
@@ -2285,6 +2398,14 @@ export function PhysicalLayoutCanvas({
       data-gds-active-tile-count={gdsActiveTileCountRef.current}
       data-gds-blank-frame-count={gdsBlankFrameCountRef.current}
       data-gds-coverage-ratio={gdsCoverageRatioRef.current.toFixed(3)}
+      data-gds-world-coverage-ratio={gdsCoverageRatioRef.current.toFixed(3)}
+      data-gds-viewport-bbox={formatLayoutBoundsDataAttribute(liveViewportBbox ?? gdsViewportBboxRef.current)}
+      data-gds-cell-intersection-ratio={(liveScreenCoverage?.cellIntersectionRatio ?? gdsCellIntersectionRatioRef.current).toFixed(3)}
+      data-gds-screen-visible-coverage-ratio={(liveScreenCoverage?.screenVisibleCoverageRatio ?? gdsScreenVisibleCoverageRatioRef.current).toFixed(3)}
+      data-gds-screen-visible-non-empty-coverage-ratio={(liveScreenCoverage?.screenVisibleNonEmptyCoverageRatio ?? gdsScreenVisibleNonEmptyCoverageRatioRef.current).toFixed(3)}
+      data-gds-screen-visible-tile-count={liveScreenCoverage?.screenVisibleTileCount ?? gdsScreenVisibleTileCountRef.current}
+      data-gds-screen-visible-shape-count={liveScreenCoverage?.screenVisibleShapeCount ?? gdsScreenVisibleShapeCountRef.current}
+      data-gds-visual-empty-reason={liveScreenCoverage?.visualEmptyReason ?? gdsVisualEmptyReasonRef.current}
       data-gds-frame-p95-ms={gdsTileMetrics.frameP95Ms.toFixed(1)}
       data-gds-max-frame-p95-ms={gdsTileMetrics.maxFrameP95Ms.toFixed(1)}
       data-gds-draw-node-count={meshStatsRef.current.drawNodeCount}
@@ -2347,8 +2468,8 @@ export function PhysicalLayoutCanvas({
       data-last-pick-world-x={lastPick ? lastPick.worldX.toFixed(4) : ''}
       data-last-pick-world-y={lastPick ? lastPick.worldY.toFixed(4) : ''}
       data-macro-count={catalog?.macros.length ?? 0}
-      data-pan-x={cameraSync.panX.toFixed(2)}
-      data-pan-y={cameraSync.panY.toFixed(2)}
+      data-pan-x={liveCamera.panX.toFixed(2)}
+      data-pan-y={liveCamera.panY.toFixed(2)}
       data-render-count={renderCount}
       data-renderer={renderer}
       data-selected-macro-name={selectedTarget?.kind === 'macro' ? selectedTarget.name : ''}
@@ -2374,7 +2495,7 @@ export function PhysicalLayoutCanvas({
       data-visible-pin-shape-count={visibleShapeCounts.pin}
       data-source-kind={catalog?.sourceKind ?? ''}
       data-visible-shape-count={visibleShapes.length}
-      data-zoom={cameraSync.zoom.toFixed(4)}
+      data-zoom={liveCamera.zoom.toFixed(4)}
       role="img"
       tabIndex={-1}
     >
@@ -2460,6 +2581,19 @@ function formatShapeScreenY(shape: LspLayoutShape | undefined, camera: PhysicalL
 
   const bounds = shapeBounds(shape);
   return (camera.panY + ((bounds.y0 + bounds.y1) / 2) * camera.zoom).toFixed(2);
+}
+
+function formatLayoutBoundsDataAttribute(bounds: LspLayoutBounds | null): string {
+  if (!bounds) {
+    return '';
+  }
+
+  return [
+    bounds.x0.toFixed(4),
+    bounds.y0.toFixed(4),
+    bounds.x1.toFixed(4),
+    bounds.y1.toFixed(4),
+  ].join(',');
 }
 
 interface PickableLayoutShape {
@@ -2721,9 +2855,20 @@ class PhysicalLayoutGdsPersistentTileRenderer {
 
   private readonly tileLayers = new Map<string, PhysicalLayoutGdsPersistentTileLayer>();
 
+  public syncCull(
+    tiles: ReadonlyMap<string, PhysicalLayoutGdsDisplayedTile>,
+    cullBbox: LspLayoutBounds | null,
+  ) {
+    for (const [key, layer] of this.tileLayers) {
+      const entry = tiles.get(key);
+      layer.container.visible = Boolean(entry && (!cullBbox || doLayoutBoundsIntersect(entry.plan.bbox, cullBbox)));
+    }
+  }
+
   public update(
     tiles: ReadonlyMap<string, PhysicalLayoutGdsDisplayedTile>,
     layoutVisibility: PhysicalLayoutVisibility,
+    cullBbox: LspLayoutBounds | null,
   ): PhysicalLayoutShapeDisplay['stats'] {
     const liveKeys = new Set<string>();
     const orderedEntries = Array.from(tiles.entries()).sort((left, right) => compareGdsDisplayedTiles(left[1], right[1]));
@@ -2746,10 +2891,13 @@ class PhysicalLayoutGdsPersistentTileRenderer {
         tileLayerReuseCount += 1;
       }
 
-      layer.container.visible = true;
+      const isLayerScreenVisible = !cullBbox || doLayoutBoundsIntersect(entry.plan.bbox, cullBbox);
+      layer.container.visible = isLayerScreenVisible;
       orderedChildren[order] = layer.container;
       const layerStats = layer.update(entry.tile, layoutVisibility, visibilityKey);
-      stats = mergeGdsMeshStats(stats, layerStats);
+      if (isLayerScreenVisible) {
+        stats = mergeGdsMeshStats(stats, layerStats);
+      }
     });
 
     for (const [key, layer] of this.tileLayers) {
@@ -3385,6 +3533,7 @@ function commitPhysicalLayoutGdsStableBufferView<TView extends PhysicalLayoutGds
   }
 
   buffer.data = source;
+  buffer.update(activeLength * source.BYTES_PER_ELEMENT);
   onCommit({ dataReplaceCount: 1, subarrayCommitCount: 0 });
   return source;
 }
@@ -3592,7 +3741,16 @@ function findVisibleGdsDisplayedShapeByIndex(
 }
 
 function getGdsTileOrderBucketSize(shapeCount: number): number {
-  return shapeCount <= GDS_TILE_PRECISE_ORDER_SHAPE_LIMIT ? 1 : GDS_TILE_ORDER_BUCKET_SIZE;
+  if (shapeCount <= GDS_TILE_PRECISE_ORDER_SHAPE_LIMIT) {
+    return 1;
+  }
+  if (shapeCount >= GDS_TILE_HUGE_ORDER_SHAPE_LIMIT) {
+    return GDS_TILE_HUGE_ORDER_BUCKET_SIZE;
+  }
+  if (shapeCount >= GDS_TILE_LARGE_ORDER_SHAPE_LIMIT) {
+    return GDS_TILE_LARGE_ORDER_BUCKET_SIZE;
+  }
+  return GDS_TILE_ORDER_BUCKET_SIZE;
 }
 
 function getGdsTileMeshBatchKey(shape: LspLayoutShape, style: PhysicalLayoutGdsTileShapeStyle): string {

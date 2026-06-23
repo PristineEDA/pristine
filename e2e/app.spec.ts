@@ -10,7 +10,11 @@ import {
   ASSISTANT_THREAD_LIST_RESIZE_HANDLE_WIDTH_PX,
 } from '../src/app/components/code/explorer/assistantPanelLayout';
 import { waveformCanvasMinHeight } from '../src/app/components/code/explorer/waveform/waveformLayout';
-import { analyzeTinyQvViewportPng, tinyQvVisualMinRatio } from '../src/test/tinyQvVisualAnalysis';
+import {
+  analyzeTinyQvViewportPng,
+  findTinyQvViewportColorfulAnchorPng,
+  tinyQvVisualMinRatio,
+} from '../src/test/tinyQvVisualAnalysis';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = path.join(__dirname, '..');
@@ -2721,6 +2725,14 @@ test('Physical layout keeps tinyQV GDS tile memory bounded during pan and zoom',
         'data-gds-active-tile-count',
         'data-gds-blank-frame-count',
         'data-gds-coverage-ratio',
+        'data-gds-world-coverage-ratio',
+        'data-gds-viewport-bbox',
+        'data-gds-cell-intersection-ratio',
+        'data-gds-screen-visible-coverage-ratio',
+        'data-gds-screen-visible-non-empty-coverage-ratio',
+        'data-gds-screen-visible-tile-count',
+        'data-gds-screen-visible-shape-count',
+        'data-gds-visual-empty-reason',
         'data-gds-displayed-tile-count',
         'data-gds-empty-displayed-tile-count',
         'data-gds-empty-visible-frame-count',
@@ -2796,6 +2808,34 @@ test('Physical layout keeps tinyQV GDS tile memory bounded during pan and zoom',
         timeout: UI_READY_TIMEOUT_MS,
       }).toContain(`lod${lod}`);
     };
+    const moveTinyQvMouseToViewportCenter = async () => {
+      const canvasBox = await layoutCanvas.boundingBox();
+      expect(canvasBox).not.toBeNull();
+      if (!canvasBox) {
+        return;
+      }
+      await layoutCanvas.hover();
+      await window.mouse.move(canvasBox.x + canvasBox.width / 2, canvasBox.y + canvasBox.height / 2);
+    };
+    const moveTinyQvMouseToVisualAnchor = async () => {
+      const canvasBox = await layoutCanvas.boundingBox();
+      expect(canvasBox).not.toBeNull();
+      if (!canvasBox) {
+        return;
+      }
+
+      const screenshot = await layoutCanvas.screenshot();
+      const anchor = findTinyQvViewportColorfulAnchorPng(screenshot, {
+        minColorfulPixelRatio: tinyQvVisualMinRatio,
+      });
+      await layoutCanvas.hover();
+      if (anchor) {
+        await window.mouse.move(canvasBox.x + anchor.x, canvasBox.y + anchor.y);
+        return;
+      }
+
+      await window.mouse.move(canvasBox.x + canvasBox.width / 2, canvasBox.y + canvasBox.height / 2);
+    };
     const resetTinyQvViewportToCell = async () => {
       const topCellTarget = window.getByTestId('physical-layout-target-item-gdsCell-tt_um_tt_tinyQV');
       const firstGdsCellTarget = window.locator('[data-testid^="physical-layout-target-item-gdsCell-"]').first();
@@ -2807,10 +2847,10 @@ test('Physical layout keeps tinyQV GDS tile memory bounded during pan and zoom',
       await topCellTarget.click();
       await expect(layoutCanvas).toHaveAttribute('data-gds-tile-scope', 'viewport-window', { timeout: UI_READY_TIMEOUT_MS });
       await expectTinyQvStable();
-      await layoutCanvas.hover();
+      await moveTinyQvMouseToViewportCenter();
     };
     const setTinyQvZoomNear = async (targetZoom: number, expectedLod?: number) => {
-      await layoutCanvas.hover();
+      await moveTinyQvMouseToVisualAnchor();
       await window.keyboard.down('Control');
       try {
         for (let index = 0; index < 36; index += 1) {
@@ -2830,11 +2870,27 @@ test('Physical layout keeps tinyQV GDS tile memory bounded during pan and zoom',
       }
     };
     const zoomTinyQvByWheelTicks = async (ticks: number, deltaY: number) => {
-      await layoutCanvas.hover();
+      await moveTinyQvMouseToVisualAnchor();
       await window.keyboard.down('Control');
       try {
         for (let index = 0; index < ticks; index += 1) {
           await window.mouse.wheel(0, deltaY);
+        }
+      } finally {
+        await window.keyboard.up('Control');
+      }
+    };
+    const burstZoomTinyQvByWheelDeltas = async (deltas: readonly number[], anchorInterval = 6) => {
+      await moveTinyQvMouseToVisualAnchor();
+      await window.keyboard.down('Control');
+      try {
+        for (let index = 0; index < deltas.length; index += 1) {
+          if (index > 0 && index % anchorInterval === 0) {
+            await window.keyboard.up('Control');
+            await moveTinyQvMouseToVisualAnchor();
+            await window.keyboard.down('Control');
+          }
+          await window.mouse.wheel(0, deltas[index] ?? 0);
         }
       } finally {
         await window.keyboard.up('Control');
@@ -2845,7 +2901,7 @@ test('Physical layout keeps tinyQV GDS tile memory bounded during pan and zoom',
       deltaY: number,
       modifier?: 'Shift',
     ) => {
-      await layoutCanvas.hover();
+      await moveTinyQvMouseToViewportCenter();
       if (modifier) {
         await window.keyboard.down(modifier);
       }
@@ -2863,15 +2919,25 @@ test('Physical layout keeps tinyQV GDS tile memory bounded during pan and zoom',
       await expect.poll(async () => readNumericMetric('data-gds-displayed-tile-count'), {
         timeout: UI_READY_TIMEOUT_MS,
       }).toBeGreaterThan(0);
-      await expect.poll(async () => readNumericMetric('data-gds-coverage-ratio'), {
+      await expect.poll(async () => readNumericMetric('data-gds-cell-intersection-ratio'), {
         timeout: UI_READY_TIMEOUT_MS,
       }).toBeGreaterThan(0);
-      await expect.poll(async () => readNumericMetric('data-gds-non-empty-coverage-ratio'), {
+      await expect.poll(async () => readNumericMetric('data-gds-screen-visible-coverage-ratio'), {
+        timeout: UI_READY_TIMEOUT_MS,
+      }).toBeGreaterThan(0);
+      await expect.poll(async () => readNumericMetric('data-gds-screen-visible-non-empty-coverage-ratio'), {
+        timeout: UI_READY_TIMEOUT_MS,
+      }).toBeGreaterThan(0);
+      await expect.poll(async () => readNumericMetric('data-gds-screen-visible-tile-count'), {
+        timeout: UI_READY_TIMEOUT_MS,
+      }).toBeGreaterThan(0);
+      await expect.poll(async () => readNumericMetric('data-gds-screen-visible-shape-count'), {
         timeout: UI_READY_TIMEOUT_MS,
       }).toBeGreaterThan(0);
       await expect.poll(async () => readNumericMetric('data-gds-renderable-shape-count'), {
         timeout: UI_READY_TIMEOUT_MS,
       }).toBeGreaterThan(0);
+      expect(await layoutCanvas.getAttribute('data-gds-visual-empty-reason')).toBe('');
       expect(await readNumericMetric('data-gds-blank-frame-count')).toBe(0);
       expect(await readNumericMetric('data-gds-empty-visible-frame-count')).toBe(0);
       expect(await readNumericMetric('data-gds-empty-displayed-tile-count')).toBe(0);
@@ -2880,8 +2946,8 @@ test('Physical layout keeps tinyQV GDS tile memory bounded during pan and zoom',
     const expectTinyQvStable = async () => {
       expect(await readNumericMetric('data-gds-cache-entry-count')).toBeLessThanOrEqual(96);
       expect(await readNumericMetric('data-gds-cache-bytes')).toBeLessThanOrEqual(192 * 1024 * 1024);
-      await assertTinyQvNonBlank();
       await waitForTinyQvIdle();
+      await assertTinyQvNonBlank();
       expect(await readNumericMetric('data-gds-cache-entry-count')).toBeLessThanOrEqual(96);
       expect(await readNumericMetric('data-gds-cache-bytes')).toBeLessThanOrEqual(192 * 1024 * 1024);
       expect(await readNumericMetric('data-gds-blank-frame-count')).toBe(0);
@@ -2906,6 +2972,35 @@ test('Physical layout keeps tinyQV GDS tile memory bounded during pan and zoom',
       await writeTinyQvJson(`${name}-visual.json`, visual);
 
       return visual;
+    };
+    const waitForTinyQvVisualNonBlank = async (name: string) => {
+      let lastScreenshot: Buffer | null = null;
+      let lastVisual: ReturnType<typeof analyzeTinyQvViewportPng> | null = null;
+      const startedAt = Date.now();
+      const intervals = [250, 500, 750, 1_000];
+      let intervalIndex = 0;
+
+      while (Date.now() - startedAt < UI_READY_TIMEOUT_MS) {
+        const screenshot = await layoutCanvas.screenshot();
+        const visual = analyzeTinyQvViewportPng(screenshot, {
+          minColorfulPixelRatio: tinyQvVisualMinRatio,
+        });
+        lastScreenshot = screenshot;
+        lastVisual = visual;
+        if (visual.visualIsNonBlank) {
+          break;
+        }
+        await window.waitForTimeout(intervals[Math.min(intervalIndex, intervals.length - 1)] ?? 1_000);
+        intervalIndex += 1;
+      }
+
+      if (!lastScreenshot || !lastVisual) {
+        return captureTinyQvVisual(name);
+      }
+
+      await writeTinyQvPng(`${name}.png`, lastScreenshot);
+      await writeTinyQvJson(`${name}-visual.json`, lastVisual);
+      return lastVisual;
     };
     const assertTinyQvVisuallyNonBlank = (visual: ReturnType<typeof analyzeTinyQvViewportPng>) => {
       expect(visual.visualNonBackgroundPixelCount, visual.visualFailureReason || 'expected non-background viewport pixels').toBeGreaterThan(0);
@@ -2936,6 +3031,14 @@ test('Physical layout keeps tinyQV GDS tile memory bounded during pan and zoom',
       cacheBytes: readMetricNumber(metrics, 'data-gds-cache-bytes'),
       cacheEntryCount: readMetricNumber(metrics, 'data-gds-cache-entry-count'),
       coverageRatio: readMetricNumber(metrics, 'data-gds-coverage-ratio'),
+      worldCoverageRatio: readMetricNumber(metrics, 'data-gds-world-coverage-ratio'),
+      viewportBbox: metrics['data-gds-viewport-bbox'] ?? '',
+      cellIntersectionRatio: readMetricNumber(metrics, 'data-gds-cell-intersection-ratio'),
+      screenVisibleCoverageRatio: readMetricNumber(metrics, 'data-gds-screen-visible-coverage-ratio'),
+      screenVisibleNonEmptyCoverageRatio: readMetricNumber(metrics, 'data-gds-screen-visible-non-empty-coverage-ratio'),
+      screenVisibleTileCount: readMetricNumber(metrics, 'data-gds-screen-visible-tile-count'),
+      screenVisibleShapeCount: readMetricNumber(metrics, 'data-gds-screen-visible-shape-count'),
+      visualEmptyReason: metrics['data-gds-visual-empty-reason'] ?? '',
       currentLodBand: metrics['data-gds-current-lod-band'] ?? '',
       displayedTileCount: readMetricNumber(metrics, 'data-gds-displayed-tile-count'),
       emptyDisplayedTileCount: readMetricNumber(metrics, 'data-gds-empty-displayed-tile-count'),
@@ -2994,7 +3097,7 @@ test('Physical layout keeps tinyQV GDS tile memory bounded during pan and zoom',
     }).toBeGreaterThan(0);
     await assertTinyQvNonBlank();
     await writeTinyQvJson('tinyqv-gds-initial-metrics.json', await readTinyQvMetrics());
-    const initialVisual = await captureTinyQvVisual('tinyqv-gds-initial');
+    const initialVisual = await waitForTinyQvVisualNonBlank('tinyqv-gds-initial');
     assertTinyQvVisuallyNonBlank(initialVisual);
     await expect.poll(async () => Number(await layoutCanvas.getAttribute('data-gds-mesh-batch-count') ?? '0'), {
       timeout: UI_READY_TIMEOUT_MS,
@@ -3099,7 +3202,7 @@ test('Physical layout keeps tinyQV GDS tile memory bounded during pan and zoom',
       await action();
       await expectTinyQvStable();
       const after = await readTinyQvMetrics();
-      const visual = await captureTinyQvVisual(`tinyqv-gds-${name}`);
+      const visual = await waitForTinyQvVisualNonBlank(`tinyqv-gds-${name}`);
       recordObservedLodBands(after);
       scenarioMetrics[name] = { after, before, visual };
       scenarioSummary[name] = {
@@ -3111,33 +3214,81 @@ test('Physical layout keeps tinyQV GDS tile memory bounded during pan and zoom',
       await writeTinyQvJson('tinyqv-gds-perf-summary.json', scenarioSummary);
       assertTinyQvVisuallyNonBlank(visual);
     };
+    const runTinyQvInsideCellScenario = async (name: string, action: () => Promise<void>) => {
+      await resetTinyQvViewportToCell();
+      await runTinyQvScenario(name, action);
+    };
+    const runTinyQvOutsideCellScenario = async (name: string, action: () => Promise<void>) => {
+      const before = await readTinyQvMetrics();
+      await action();
+      await waitForTinyQvIdle();
+      const after = await readTinyQvMetrics();
+      const visual = await captureTinyQvVisual(`tinyqv-gds-${name}`);
+      recordObservedLodBands(after);
+      const cellIntersectionRatio = readMetricNumber(after, 'data-gds-cell-intersection-ratio');
+      const visualEmptyReason = after['data-gds-visual-empty-reason'] ?? '';
+      scenarioMetrics[name] = { after, before, visual };
+      scenarioSummary[name] = {
+        after: summarizeTinyQvMetrics(after),
+        before: summarizeTinyQvMetrics(before),
+        diagnostic: cellIntersectionRatio <= 0 && visualEmptyReason === 'outside-cell-bounds'
+          ? 'outside-cell-bounds'
+          : 'outside-cell-not-reached',
+        visual: summarizeTinyQvVisual(visual),
+      };
+      await writeTinyQvJson(`tinyqv-gds-${name}-metrics.json`, { after, before, visual });
+      await writeTinyQvJson('tinyqv-gds-perf-summary.json', scenarioSummary);
+      expect(cellIntersectionRatio).toBe(0);
+      expect(visualEmptyReason).toBe('outside-cell-bounds');
+    };
+    const panTinyQvUntilOutsideCell = async () => {
+      await layoutCanvas.hover();
+      for (let index = 0; index < 80; index += 1) {
+        await window.mouse.wheel(0, index < 40 ? 1800 : -1800);
+        if (Number(await layoutCanvas.getAttribute('data-gds-cell-intersection-ratio') ?? '0') <= 0) {
+          return;
+        }
+      }
+
+      await window.keyboard.down('Shift');
+      try {
+        for (let index = 0; index < 80; index += 1) {
+          await window.mouse.wheel(0, index < 40 ? 1800 : -1800);
+          if (Number(await layoutCanvas.getAttribute('data-gds-cell-intersection-ratio') ?? '0') <= 0) {
+            return;
+          }
+        }
+      } finally {
+        await window.keyboard.up('Shift');
+      }
+    };
     if (canvasBox) {
       await layoutCanvas.hover();
       await window.mouse.move(canvasBox.x + canvasBox.width / 2, canvasBox.y + canvasBox.height / 2);
-      await runTinyQvScenario('large-vertical-pan', async () => {
+      await runTinyQvInsideCellScenario('large-vertical-pan', async () => {
         for (let index = 0; index < 12; index += 1) {
-          await window.mouse.wheel(0, index % 2 === 0 ? 720 : -520);
+          await window.mouse.wheel(0, index % 2 === 0 ? 720 : -720);
         }
       });
-      await runTinyQvScenario('large-horizontal-pan', async () => {
+      await runTinyQvInsideCellScenario('large-horizontal-pan', async () => {
         await window.keyboard.down('Shift');
         try {
           for (let index = 0; index < 12; index += 1) {
-            await window.mouse.wheel(0, index % 2 === 0 ? 680 : -460);
+            await window.mouse.wheel(0, index % 2 === 0 ? 680 : -680);
           }
         } finally {
           await window.keyboard.up('Shift');
         }
       });
-      await runTinyQvScenario('long-vertical-pan', async () => {
-        await panTinyQvByWheelTicks(28, 900);
-        await panTinyQvByWheelTicks(18, -720);
+      await runTinyQvInsideCellScenario('long-vertical-pan', async () => {
+        await panTinyQvByWheelTicks(16, 760);
+        await panTinyQvByWheelTicks(16, -760);
       });
-      await runTinyQvScenario('long-horizontal-pan', async () => {
-        await panTinyQvByWheelTicks(28, 860, 'Shift');
-        await panTinyQvByWheelTicks(18, -680, 'Shift');
+      await runTinyQvInsideCellScenario('long-horizontal-pan', async () => {
+        await panTinyQvByWheelTicks(16, 720, 'Shift');
+        await panTinyQvByWheelTicks(16, -720, 'Shift');
       });
-      await runTinyQvScenario('rapid-pan-zoom-burst', async () => {
+      await runTinyQvInsideCellScenario('rapid-pan-zoom-burst', async () => {
         for (let index = 0; index < 14; index += 1) {
           if (index % 3 === 0) {
             await window.keyboard.down('Control');
@@ -3151,17 +3302,12 @@ test('Physical layout keeps tinyQV GDS tile memory bounded during pan and zoom',
           }
         }
       });
-      await runTinyQvScenario('rapid-zoom-burst', async () => {
-        await window.keyboard.down('Control');
-        try {
-          for (let index = 0; index < 40; index += 1) {
-            await window.mouse.wheel(0, index % 2 === 0 ? -420 : 360);
-          }
-        } finally {
-          await window.keyboard.up('Control');
-        }
+      await runTinyQvInsideCellScenario('rapid-zoom-burst', async () => {
+        await burstZoomTinyQvByWheelDeltas(
+          Array.from({ length: 40 }, (_, index) => (index % 2 === 0 ? -420 : 360)),
+        );
       });
-      await runTinyQvScenario('rapid-combo-burst', async () => {
+      await runTinyQvInsideCellScenario('rapid-combo-burst', async () => {
         for (let index = 0; index < 36; index += 1) {
           if (index % 4 === 0) {
             await zoomTinyQvByWheelTicks(1, -360);
@@ -3174,23 +3320,19 @@ test('Physical layout keeps tinyQV GDS tile memory bounded during pan and zoom',
           }
         }
       });
-      await runTinyQvScenario('zoom-out-lod2', async () => {
-        await resetTinyQvViewportToCell();
+      await runTinyQvInsideCellScenario('zoom-out-lod2', async () => {
         await setTinyQvZoomNear(3, 2);
         await waitForTinyQvLod(2);
       });
-      await runTinyQvScenario('zoom-mid-lod1', async () => {
-        await resetTinyQvViewportToCell();
+      await runTinyQvInsideCellScenario('zoom-mid-lod1', async () => {
         await setTinyQvZoomNear(12, 1);
         await waitForTinyQvLod(1);
       });
-      await runTinyQvScenario('zoom-in-lod0', async () => {
-        await resetTinyQvViewportToCell();
+      await runTinyQvInsideCellScenario('zoom-in-lod0', async () => {
         await setTinyQvZoomNear(36, 0);
         await waitForTinyQvLod(0);
       });
-      await runTinyQvScenario('extreme-zoom-in', async () => {
-        await resetTinyQvViewportToCell();
+      await runTinyQvInsideCellScenario('extreme-zoom-in', async () => {
         await zoomTinyQvByWheelTicks(72, -320);
         await waitForTinyQvLod(0);
       });
@@ -3198,17 +3340,19 @@ test('Physical layout keeps tinyQV GDS tile memory bounded during pan and zoom',
         await zoomTinyQvByWheelTicks(64, 320);
         await waitForTinyQvLod(2);
       });
-      await runTinyQvScenario('zoom-in-then-pan', async () => {
-        await resetTinyQvViewportToCell();
+      await runTinyQvInsideCellScenario('zoom-in-then-pan', async () => {
         await zoomTinyQvByWheelTicks(48, -300);
         await waitForTinyQvLod(0);
-        await panTinyQvByWheelTicks(16, 760);
-        await panTinyQvByWheelTicks(12, -640, 'Shift');
+        await panTinyQvByWheelTicks(8, 520);
+        await panTinyQvByWheelTicks(8, -520);
+        await panTinyQvByWheelTicks(8, -460, 'Shift');
+        await panTinyQvByWheelTicks(8, 460, 'Shift');
       });
-      await runTinyQvScenario('pan-then-zoom-in', async () => {
-        await resetTinyQvViewportToCell();
-        await panTinyQvByWheelTicks(20, 820);
-        await panTinyQvByWheelTicks(14, 700, 'Shift');
+      await runTinyQvInsideCellScenario('pan-then-zoom-in', async () => {
+        await panTinyQvByWheelTicks(10, 620);
+        await panTinyQvByWheelTicks(10, -620);
+        await panTinyQvByWheelTicks(8, 520, 'Shift');
+        await panTinyQvByWheelTicks(8, -520, 'Shift');
         await zoomTinyQvByWheelTicks(48, -300);
         await waitForTinyQvLod(0);
       });
@@ -3216,13 +3360,22 @@ test('Physical layout keeps tinyQV GDS tile memory bounded during pan and zoom',
         await waitForTinyQvIdle();
         await window.waitForTimeout(750);
       });
+      await runTinyQvOutsideCellScenario('outside-cell-pan-diagnostic', async () => {
+        await resetTinyQvViewportToCell();
+        await setTinyQvZoomNear(3, 2);
+        await panTinyQvUntilOutsideCell();
+      });
+      await resetTinyQvViewportToCell();
     }
     const tinyQvMetrics = await readTinyQvMetrics();
     expect(Number(tinyQvMetrics['data-gds-displayed-tile-count'] ?? '0')).toBeGreaterThan(0);
     expect(Number(tinyQvMetrics['data-gds-atlas-bytes'] ?? '0')).toBeGreaterThan(0);
-    expect(Number(tinyQvMetrics['data-gds-non-empty-coverage-ratio'] ?? '0')).toBeGreaterThan(0);
+    expect(Number(tinyQvMetrics['data-gds-screen-visible-non-empty-coverage-ratio'] ?? '0')).toBeGreaterThan(0);
+    expect(Number(tinyQvMetrics['data-gds-screen-visible-shape-count'] ?? '0')).toBeGreaterThan(0);
+    expect(Number(tinyQvMetrics['data-gds-cell-intersection-ratio'] ?? '0')).toBeGreaterThan(0);
     expect(Number(tinyQvMetrics['data-gds-renderable-shape-count'] ?? '0')).toBeGreaterThan(0);
     expect(Number(tinyQvMetrics['data-gds-empty-visible-frame-count'] ?? '0')).toBe(0);
+    expect(tinyQvMetrics['data-gds-visual-empty-reason']).toBe('');
     expect(tinyQvMetrics['data-gds-displayed-tile-state']).not.toBe('empty-outside-cell-bounds');
     recordObservedLodBands(tinyQvMetrics);
     const observedLodBandList = Array.from(observedLodBands).sort();
@@ -3232,7 +3385,7 @@ test('Physical layout keeps tinyQV GDS tile memory bounded during pan and zoom',
     scenarioMetrics.observedLodBands = observedLodBandList;
     scenarioMetrics.final = tinyQvMetrics;
     scenarioSummary.observedLodBands = observedLodBandList;
-    const finalVisual = await captureTinyQvVisual('tinyqv-gds-canvas');
+    const finalVisual = await waitForTinyQvVisualNonBlank('tinyqv-gds-canvas');
     assertTinyQvVisuallyNonBlank(finalVisual);
     scenarioSummary.final = {
       ...summarizeTinyQvMetrics(tinyQvMetrics),
