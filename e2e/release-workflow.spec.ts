@@ -11,14 +11,8 @@ const releaseScriptPath = path.join(repoRoot, 'scripts', 'release-version.mjs');
 
 function createPackageFixture(version = '0.0.1') {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pristine-release-e2e-'));
-  const agentServerRoot = path.join(root, 'agent-server');
 
-  fs.mkdirSync(agentServerRoot, { recursive: true });
   fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ name: 'pristine', version }, null, 2));
-  fs.writeFileSync(
-    path.join(agentServerRoot, 'package.json'),
-    JSON.stringify({ name: '@pristine/agent-server', version }, null, 2),
-  );
 
   return root;
 }
@@ -32,10 +26,8 @@ test('release version tooling supports branch sync and tag verification', () => 
   });
 
   const rootPackage = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-  const agentServerPackage = JSON.parse(fs.readFileSync(path.join(root, 'agent-server', 'package.json'), 'utf8'));
 
   expect(rootPackage.version).toBe('2.3.4');
-  expect(agentServerPackage.version).toBe('2.3.4');
 
   const checkOutput = execFileSync(
     process.execPath,
@@ -43,7 +35,7 @@ test('release version tooling supports branch sync and tag verification', () => 
     { cwd: repoRoot, encoding: 'utf8' },
   );
 
-  expect(checkOutput).toContain('Release version 2.3.4 matches package.json, agent-server/package.json');
+  expect(checkOutput).toContain('Release version 2.3.4 matches package.json');
 });
 
 test('GitHub release workflow is tag-gated and publishes staged package assets', () => {

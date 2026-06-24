@@ -209,7 +209,6 @@ RxJS（https://github.com/ReactiveX/rxjs）ReactiveX Apache-2.0
 
 ## AI Agent Frameworks
 
-Mastra（https://github.com/mastra-ai/mastra）Mastra AI Apache-2.0
 @assistant-ui/react（https://github.com/assistant-ui/assistant-ui）AgentbaseAI Inc. MIT
 @assistant-ui/react-ai-sdk（https://github.com/assistant-ui/assistant-ui）AgentbaseAI Inc. MIT
 @assistant-ui/react-markdown（https://github.com/assistant-ui/assistant-ui）AgentbaseAI Inc. MIT

@@ -24,7 +24,7 @@ binaries/
 .tmp/
 perf-results/
 .deps/
-.pristine-agent/
+agent-server/
 .pristine-vendor/
 .pristine-package/
 src/app/theme/bundled-upstream/

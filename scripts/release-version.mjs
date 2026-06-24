@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-const packageJsonPaths = ['package.json', 'agent-server/package.json'];
+const packageJsonPaths = ['package.json'];
 const versionPattern = /(?:^|\/)v?(\d+\.\d+\.\d+)(?:$|[^0-9.])/;
 
 export function extractReleaseVersion(refName) {

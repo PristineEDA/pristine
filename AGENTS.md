@@ -4,10 +4,10 @@ This file contains execution rules for agents working in this repository. Keep i
 
 ## Current Repository
 
-Pristine is currently an Electron, Vite, React, TypeScript, and Mastra workspace.
+Pristine is currently an Electron, Vite, React, and TypeScript workspace.
 
 - Main app: Electron 33, Vite 8, React 19, TypeScript, Tailwind CSS v4, Monaco Editor, Radix/shadcn-style primitives, lucide-react, assistant-ui, and Zustand.
-- Embedded agent server: Mastra, TypeScript, workspace tools, pending file changes, pending shell commands, and local workspace safety helpers.
+- Agent server: the Mastra server lives in sibling `../pristine-agent` and is consumed through the local HTTP API. Do not reintroduce `agent-server/` as a Pristine workspace package.
 - Tests: Vitest for unit tests and Playwright for end-to-end and performance tests.
 - Native/core roadmap work is documented separately. Do not assume a C++ source tree exists unless the repository contains one.
 
@@ -18,7 +18,7 @@ Pristine is currently an Electron, Vite, React, TypeScript, and Mastra workspace
 - Explain the intended approach before substantial implementation work.
 - Clarify ambiguous, high-risk, or broad requests before changing code.
 - Prefer small, independently verifiable changes over large rewrites.
-- Respect the active tool model. When using the embedded Pristine agent, propose pending file changes and pending shell commands for review. When operating in a normal workspace with write access, edit files directly only when the user requested implementation.
+- Respect the active tool model. When using the Pristine agent service, propose pending file changes and pending shell commands for review. When operating in a normal workspace with write access, edit files directly only when the user requested implementation.
 - Use subagents or workers only when the environment supports them and the task can be split into clear, independently verifiable responsibilities.
 - Optional workflow commands such as loop, batch, or simplify may be used only when they exist in the active environment. They are not required repository rules.
 
@@ -104,8 +104,6 @@ Run the narrowest useful verification for the change. Prefer the existing comman
 - `pnpm test:e2e`
 - `pnpm build`
 - `pnpm package:win`
-- `pnpm --filter @pristine/agent-server typecheck`
-- `pnpm --filter @pristine/agent-server test`
 
 For bug fixes, reproduce the issue first when practical, then verify the fix. Report any verification that could not be run.
 Before Electron Playwright or packaged-app validation on Windows, clean leftover `Pristine`, `Electron`, and `pnpm dev` processes so app startup, ports, and user-data isolation are reliable.
