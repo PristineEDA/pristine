@@ -72,7 +72,7 @@ const builtInThemeDefinitions: readonly BuiltInThemeDefinition[] = [
   {
     id: BUILT_IN_DARK_COLOR_THEME_ID,
     label: 'Dark 2026',
-    description: 'Built-in VS Code 2026 dark color theme.',
+    description: 'Built-in 2026 dark color theme.',
     author: 'Microsoft',
     entryPath: '2026-dark.json',
     kind: 'dark',
@@ -80,7 +80,7 @@ const builtInThemeDefinitions: readonly BuiltInThemeDefinition[] = [
   {
     id: BUILT_IN_LIGHT_COLOR_THEME_ID,
     label: 'Light 2026',
-    description: 'Built-in VS Code 2026 light color theme.',
+    description: 'Built-in 2026 light color theme.',
     author: 'Microsoft',
     entryPath: '2026-light.json',
     kind: 'light',
@@ -134,7 +134,7 @@ function loadBuiltInThemeFile(filePath: string): string {
   const fileContents = builtInThemeFiles.get(filePath)
 
   if (!fileContents) {
-    throw new Error(`Missing built-in VS Code color theme asset '${filePath}'.`)
+    throw new Error(`Missing built-in color theme asset '${filePath}'.`)
   }
 
   return fileContents

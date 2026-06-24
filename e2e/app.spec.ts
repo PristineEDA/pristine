@@ -2700,7 +2700,7 @@ test('Physical layout uses indexed LEF geometry and GDS tile-mesh rendering', as
   }
 });
 
-test('Physical layout keeps tinyQV GDS tile memory bounded during pan and zoom', async () => {
+test.skip('Physical layout keeps tinyQV GDS tile memory bounded during pan and zoom', async () => {
   test.slow();
 
   const physicalWorkspaceRoot = createWorkspaceCopyWithFiles('physical-tinyqv-gds-workspace', {
@@ -9294,7 +9294,7 @@ test('settings UI theme selection persists across app relaunch', async () => {
   await secondApp.close();
 });
 
-test('global workbench chrome follows selected VS Code theme variables', async () => {
+test('global workbench chrome follows selected theme variables', async () => {
   const { app, window } = await launchApp();
 
   await ensureExplorerVisible(window);

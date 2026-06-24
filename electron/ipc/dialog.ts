@@ -91,7 +91,7 @@ export function registerDialogHandlers(getMainWindow: () => BrowserWindow | null
       defaultPath: projectRoot ?? undefined,
       filters: [
         {
-          name: 'VS Code Color Themes',
+          name: 'Color Themes',
           extensions: ['json', 'jsonc'],
         },
       ],

@@ -999,7 +999,7 @@ export function MenuBarSettingsDialogs({
       id: 'ui-theme',
       pageId: 'appearance',
       title: 'UI theme',
-      description: 'Choose the VS Code color theme used across Pristine UI, Monaco, and the terminal.',
+      description: 'Choose the color theme used across Pristine UI, Monaco, and the terminal.',
       keywords: ['theme', 'appearance', 'color', 'monaco', 'terminal', 'import'],
       element: (
         <SettingsComboboxSection
@@ -1011,7 +1011,7 @@ export function MenuBarSettingsDialogs({
             description: option.description,
           }))}
           title="UI theme"
-          description="Choose the VS Code color theme used across Pristine UI, Monaco, and the terminal. Imported themes fall back to the matching built-in 2026 base theme for missing tokens."
+          description="Choose the color theme used across Pristine UI, Monaco, and the terminal. Imported themes fall back to the matching built-in 2026 base theme for missing tokens."
           searchPlaceholder="Search UI themes..."
           emptyText="No UI theme found."
           previewPaneTestId="settings-theme-combobox-preview-pane"

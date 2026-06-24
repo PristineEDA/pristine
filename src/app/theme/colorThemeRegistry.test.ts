@@ -108,7 +108,7 @@ describe('colorThemeRegistry', () => {
     expect(darkTheme?.tokenColors.length ?? 0).toBeGreaterThan(100)
   })
 
-  it('resolves third-batch vendored upstream bundled themes and preserves VS Code fallback colors when upstream keys are missing', () => {
+  it('resolves third-batch vendored upstream bundled themes and preserves fallback colors when upstream keys are missing', () => {
     const firstGruvboxTheme = getBundledColorTheme('gruvbox-dark-medium')
     const secondGruvboxTheme = getBundledColorTheme('gruvbox-dark-medium')
     const solarizedLightTheme = getBundledColorTheme('solarized-light')

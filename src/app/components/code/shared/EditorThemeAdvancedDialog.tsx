@@ -157,7 +157,7 @@ export function EditorThemeAdvancedDialog({
       ))}
       availableGridTestId="settings-theme-advanced-grid"
       availableHasItems={filteredAvailableThemeOptions.length > 0}
-      availableSectionDescription="Choose the VS Code color theme used across the workbench, Monaco, and the integrated terminal."
+      availableSectionDescription="Choose the color theme used across the workbench, Monaco, and the integrated terminal."
       availableSectionTestId="settings-theme-available-section"
       availableSectionTitle="Available themes"
       closeButtonTestId="settings-theme-advanced-close-button"
@@ -172,7 +172,7 @@ export function EditorThemeAdvancedDialog({
       currentSectionDescription="The theme currently used across Pristine UI, Monaco editor tabs, and terminal surfaces."
       currentSectionTestId="settings-theme-current-section"
       currentSectionTitle="Current"
-      description="Preview VS Code color themes in a compact editor layout before applying them across the workbench."
+      description="Preview color themes in a compact editor layout before applying them across the workbench."
       dialogStyle={dialogStyle}
       dialogTestId="settings-theme-advanced-dialog"
       onOpenChange={onOpenChange}
