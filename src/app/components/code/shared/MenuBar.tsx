@@ -15,6 +15,7 @@ import { Button } from '../../ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../../ui/tooltip';
 import { useSidebar } from '../../ui/sidebar';
 import { AboutDialog } from './AboutDialog';
+import { CreateProjectDialog } from './CreateProjectDialog';
 import { MenuBarApplicationMenuCollapsible } from './MenuBarApplicationMenuCollapsible';
 import { MenuBarSettingsDialogs, useMenuBarSettingsController } from './MenuBarSettingsDialog';
 import { UserAccountPopover } from './MenuBarUserAccountPopover';
@@ -29,6 +30,18 @@ const noDragInteractive = {
 
 function isCloseShortcutPressed(event: KeyboardEvent): boolean {
   if (event.key.toLowerCase() !== 'q' || event.altKey || event.shiftKey) {
+    return false;
+  }
+
+  if (isMacOSPlatform()) {
+    return event.metaKey && !event.ctrlKey;
+  }
+
+  return event.ctrlKey && !event.metaKey;
+}
+
+function isNewProjectShortcutPressed(event: KeyboardEvent): boolean {
+  if (event.key.toLowerCase() !== 'n' || event.altKey || !event.shiftKey) {
     return false;
   }
 
@@ -127,6 +140,7 @@ export function MenuBar({
   const { state: activityBarState, toggleSidebar } = useSidebar();
   const ref = useRef<HTMLDivElement>(null);
   const [aboutDialogOpen, setAboutDialogOpen] = useState(false);
+  const [createProjectDialogOpen, setCreateProjectDialogOpen] = useState(false);
   const layoutIconsEnabled = canUseLayoutPanels(mainContentView, activeView);
   const activityBarToggleEnabled = mainContentView === 'code';
   const isMinimalLayout = layoutMode === 'minimal';
@@ -159,6 +173,10 @@ export function MenuBar({
     setAboutDialogOpen(true);
   };
 
+  const openCreateProjectDialog = () => {
+    setCreateProjectDialogOpen(true);
+  };
+
   const revealBundledNoticeFiles = () => {
     void window.electronAPI?.notices.revealBundledFiles();
   };
@@ -168,6 +186,11 @@ export function MenuBar({
   };
 
   const handleMenuItemSelect = (action: AppMenuAction | null) => {
+    if (action === 'open-new-project') {
+      openCreateProjectDialog();
+      return;
+    }
+
     if (action === 'open-settings') {
       settingsController.openSettingsDialog();
       return;
@@ -209,6 +232,11 @@ export function MenuBar({
   };
 
   const handleNativeMenuCommand = useEffectEvent((payload: MenuCommandEvent) => {
+    if (payload.action === 'open-new-project') {
+      openCreateProjectDialog();
+      return;
+    }
+
     if (payload.action === 'open-settings') {
       settingsController.openSettingsDialog();
       return;
@@ -272,6 +300,12 @@ export function MenuBar({
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (isNewProjectShortcutPressed(event)) {
+        event.preventDefault();
+        openCreateProjectDialog();
+        return;
+      }
+
       if (!isCloseShortcutPressed(event)) {
         return;
       }
@@ -463,6 +497,12 @@ export function MenuBar({
           onOpenChange={setAboutDialogOpen}
           onRevealBundledNoticeFiles={revealBundledNoticeFiles}
           canRevealBundledNoticeFiles={Boolean(window.electronAPI?.notices?.revealBundledFiles)}
+          dialogStyle={noDragInteractive as React.CSSProperties}
+        />
+
+        <CreateProjectDialog
+          open={createProjectDialogOpen}
+          onOpenChange={setCreateProjectDialogOpen}
           dialogStyle={noDragInteractive as React.CSSProperties}
         />
 

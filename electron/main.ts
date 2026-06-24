@@ -191,7 +191,7 @@ function showMainWindow(): void {
 }
 
 function dispatchRendererMenuActionFromApplicationMenu(
-  action: Extract<AppMenuAction, 'open-settings' | 'open-about' | 'open-notice-files'>,
+  action: Extract<AppMenuAction, 'open-new-project' | 'open-settings' | 'open-about' | 'open-notice-files'>,
 ): void {
   const existingWindow = mainWindow;
 
@@ -215,7 +215,12 @@ function dispatchRendererMenuActionFromApplicationMenu(
 }
 
 function handleApplicationMenuAction(action: AppMenuAction): void {
-  if (action === 'open-settings' || action === 'open-about' || action === 'open-notice-files') {
+  if (
+    action === 'open-new-project'
+    || action === 'open-settings'
+    || action === 'open-about'
+    || action === 'open-notice-files'
+  ) {
     dispatchRendererMenuActionFromApplicationMenu(action);
     return;
   }

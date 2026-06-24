@@ -580,6 +580,16 @@ async function setNextSaveDialogPath(
   }, filePath);
 }
 
+async function setNextProjectDirectoryPath(
+  app: Awaited<ReturnType<typeof electron.launch>>,
+  directoryPath: string,
+) {
+  await app.evaluate(({ app: electronApp }, nextDirectoryPath) => {
+    void electronApp;
+    process.env['PRISTINE_E2E_PROJECT_DIRECTORY_PATH'] = nextDirectoryPath;
+  }, directoryPath);
+}
+
 function createWorkspaceCopy(targetPath: string) {
   fs.rmSync(targetPath, { recursive: true, force: true });
   fs.cpSync(fixtureWorkspace, targetPath, { recursive: true });
@@ -3470,6 +3480,47 @@ test('application menu expands on hover and stays visible when locked', async ()
   await expectMenuShellAttribute(menuShell, 'data-expanded', false);
 
   await app.close();
+});
+
+test('New Project opens from File menu and Ctrl+Shift+N with project defaults', async () => {
+  const workspaceCopy = test.info().outputPath('new-project-dialog-workspace');
+  const selectedProjectPath = test.info().outputPath('selected-project-directory');
+  createWorkspaceCopy(workspaceCopy);
+  fs.mkdirSync(selectedProjectPath, { recursive: true });
+  const primaryModifier = process.platform === 'darwin' ? 'Meta' : 'Control';
+  const { app, window } = await launchApp({ projectRoot: workspaceCopy });
+
+  try {
+    await selectMenuBarItem(window, 'File', 'New Project');
+
+    const dialog = window.getByTestId('create-project-dialog');
+    await expect(dialog).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+    await expect(window.getByRole('heading', { name: 'New Project' })).toBeVisible();
+    await expect(window.getByTestId('create-project-name')).toBeVisible();
+    await expect(window.getByTestId('create-project-name')).toHaveAttribute('placeholder', 'Project name');
+    await expect(window.getByTestId('create-project-path')).toBeVisible();
+    await expect(window.getByTestId('create-project-mode')).toContainText('rtl2gds');
+    await expect(window.getByTestId('create-project-process')).toContainText('ics55');
+    await expect(window.getByTestId('create-project-type')).toContainText('retroSoC');
+    await expect(window.getByTestId('create-project-mgnt')).toContainText('none');
+    await expect(window.getByTestId('create-project-padframe')).toContainText('QFN32');
+
+    await setNextProjectDirectoryPath(app, selectedProjectPath);
+    await window.getByTestId('create-project-browse').click();
+    await expect(window.getByTestId('create-project-path')).toHaveValue(path.resolve(selectedProjectPath));
+
+    await window.getByTestId('create-project-mode').click();
+    await window.getByRole('option', { name: 'rtl', exact: true }).click();
+    await expect(window.getByTestId('create-project-mode')).toContainText('rtl');
+
+    await window.getByTestId('create-project-cancel').click();
+    await expect(dialog).toHaveCount(0);
+
+    await window.keyboard.press(`${primaryModifier}+Shift+N`);
+    await expect(window.getByTestId('create-project-dialog')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  } finally {
+    await app.close();
+  }
 });
 
 test('File > Setting... opens the settings dialog and updates persisted options', async () => {

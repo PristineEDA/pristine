@@ -124,6 +124,10 @@ export function createElectronApiMock(): ElectronAPI {
         canceled: true,
         filePath: null,
       }),
+      showOpenProjectDirectoryDialog: vi.fn().mockResolvedValue({
+        canceled: true,
+        filePath: null,
+      }),
     },
     git: {
       getStatus: vi.fn().mockResolvedValue({

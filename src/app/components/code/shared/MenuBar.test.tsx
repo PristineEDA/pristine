@@ -210,7 +210,7 @@ describe('MenuBar', () => {
     await lockApplicationMenuBar(user);
     await user.click(screen.getByText('File'));
 
-    expect(await screen.findByText(hasNormalizedTextContent('New ProjectCtrl+N'))).toBeInTheDocument();
+    expect(await screen.findByText(hasNormalizedTextContent('New ProjectCtrl+Shift+N'))).toBeInTheDocument();
     expect(screen.getByText(hasNormalizedTextContent('SaveCtrl+S'))).toBeInTheDocument();
     expect(screen.getByText(hasNormalizedTextContent('Save As...Ctrl+Shift+S'))).toBeInTheDocument();
     expect(screen.getByText(hasNormalizedTextContent('CloseCtrl+Q'))).toBeInTheDocument();
@@ -363,6 +363,49 @@ describe('MenuBar', () => {
     expect(firstAttributionRow).toHaveTextContent(firstAttributionItem.name);
     expect(firstAttributionRow).toHaveTextContent(firstAttributionItem.url);
     expect(firstAttributionRow).toHaveTextContent(firstAttributionItem.author);
+  });
+
+  it('opens New Project from the File menu with the default project configuration', async () => {
+    const user = userEvent.setup();
+
+    renderMenuBar();
+
+    await lockApplicationMenuBar(user);
+    await user.click(screen.getByText('File'));
+    await user.click(await screen.findByText('New Project'));
+
+    expect(await screen.findByTestId('create-project-dialog')).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'New Project' })).toBeInTheDocument();
+    expect(screen.getByTestId('create-project-mode')).toHaveTextContent('rtl2gds');
+    expect(screen.getByTestId('create-project-process')).toHaveTextContent('ics55');
+    expect(screen.getByTestId('create-project-type')).toHaveTextContent('retroSoC');
+    expect(screen.getByTestId('create-project-mgnt')).toHaveTextContent('none');
+    expect(screen.getByTestId('create-project-padframe')).toHaveTextContent('QFN32');
+  });
+
+  it('opens New Project from the platform project shortcut', () => {
+    renderMenuBar();
+
+    fireEvent.keyDown(window, {
+      key: 'n',
+      ctrlKey: true,
+      shiftKey: true,
+    });
+
+    expect(screen.getByTestId('create-project-dialog')).toBeVisible();
+  });
+
+  it('opens New Project from native menu commands on macOS', async () => {
+    window.electronAPI!.platform = 'darwin';
+
+    renderMenuBar();
+
+    const menuCommandHandler = vi.mocked(window.electronAPI!.menu.onCommand).mock.calls[0]?.[0];
+    await act(async () => {
+      menuCommandHandler?.({ action: 'open-new-project' });
+    });
+
+    expect(await screen.findByTestId('create-project-dialog')).toBeVisible();
   });
 
   it('opens About from native menu commands on macOS', async () => {

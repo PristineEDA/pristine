@@ -592,7 +592,7 @@ describe('electron main entry', () => {
     expect(mainWindow.webContents.send).toHaveBeenNthCalledWith(3, 'stream:menu:command', { action: 'undo-editor' });
   });
 
-  it('routes the macOS Settings menu item back into the renderer settings dialog flow', async () => {
+  it('routes macOS New Project and Settings menu items back into renderer dialog flows', async () => {
     const { browserWindowInstances } = await importMain({ platform: 'darwin' });
 
     const mainWindow = browserWindowInstances[1];
@@ -603,13 +603,16 @@ describe('electron main entry', () => {
       }>;
     };
     const fileMenu = applicationMenu.template.find((item) => item.label === 'File');
+    const newProjectItem = fileMenu?.submenu?.find((item) => item.label === 'New Project');
     const settingsItem = fileMenu?.submenu?.find((item) => item.label === 'Setting...');
 
+    newProjectItem?.click?.();
     settingsItem?.click?.();
 
-    expect(mainWindow.show).toHaveBeenCalledTimes(1);
-    expect(mainWindow.focus).toHaveBeenCalledTimes(1);
-    expect(mainWindow.webContents.send).toHaveBeenCalledWith('stream:menu:command', { action: 'open-settings' });
+    expect(mainWindow.show).toHaveBeenCalled();
+    expect(mainWindow.focus).toHaveBeenCalledTimes(2);
+    expect(mainWindow.webContents.send).toHaveBeenNthCalledWith(1, 'stream:menu:command', { action: 'open-new-project' });
+    expect(mainWindow.webContents.send).toHaveBeenNthCalledWith(2, 'stream:menu:command', { action: 'open-settings' });
   });
 
   it('routes macOS About menu items back into the renderer about dialog flow', async () => {

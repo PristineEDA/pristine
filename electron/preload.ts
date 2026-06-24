@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { SyncChannels, AsyncChannels, StreamChannels } from './ipc/channels.js';
-import type { OpenThemeDialogResult, SaveDialogResult } from './ipc/dialog.js';
+import type { OpenProjectDirectoryDialogResult, OpenThemeDialogResult, SaveDialogResult } from './ipc/dialog.js';
 import type {
   LspCallHierarchyIncomingCall,
   LspCallHierarchyItem,
@@ -171,6 +171,8 @@ const electronAPI = {
       ipcRenderer.invoke(AsyncChannels.DIALOG_SHOW_SAVE, defaultPath) as Promise<SaveDialogResult>,
     showOpenThemeDialog: () =>
       ipcRenderer.invoke(AsyncChannels.DIALOG_SHOW_OPEN_THEME) as Promise<OpenThemeDialogResult>,
+    showOpenProjectDirectoryDialog: () =>
+      ipcRenderer.invoke(AsyncChannels.DIALOG_SHOW_OPEN_PROJECT_DIRECTORY) as Promise<OpenProjectDirectoryDialogResult>,
   },
 
   git: {

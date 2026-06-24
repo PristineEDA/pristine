@@ -20,6 +20,7 @@ export const AsyncChannels = {
   NOTICES_REVEAL_BUNDLED_FILES: 'async:notices:reveal-bundled-files',
   DIALOG_SHOW_SAVE: 'async:dialog:show-save',
   DIALOG_SHOW_OPEN_THEME: 'async:dialog:show-open-theme',
+  DIALOG_SHOW_OPEN_PROJECT_DIRECTORY: 'async:dialog:show-open-project-directory',
   WINDOW_MINIMIZE: 'async:window:minimize',
   WINDOW_MAXIMIZE: 'async:window:maximize',
   WINDOW_SHOW: 'async:window:show',
