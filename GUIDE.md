@@ -17,18 +17,20 @@ For the full Supabase and Cloudflare setup flow, use the documentation in the si
 
 ## Pristine Agent
 
-The Explorer right sidebar uses a standalone Mastra agent server from `agent-server/`. Start it separately from the Electron renderer:
+The Explorer right sidebar uses the standalone Mastra agent server from the sibling `../pristine-agent` repository. Start it separately from the Electron renderer:
 
 ```powershell
-Copy-Item agent-server/.env.example agent-server/.env.local
-pnpm agent:dev
+Set-Location ..\pristine-agent
+Copy-Item .env.example .env
+pnpm dev
 ```
 
-Set provider keys in `agent-server/.env.local`; the renderer only calls the local HTTP API. The default test model is `openrouter/openrouter/free`. To use another provider/model, set `PRISTINE_AGENT_MODEL` to a Mastra model id such as `openai/gpt-4.1-mini`, `anthropic/claude-3-5-haiku-latest`, or `google/gemini-2.0-flash`.
+Set provider keys in `../pristine-agent/.env`; the renderer only calls the local HTTP API. The default test model is `openrouter/openrouter/free`. To use another provider/model, set `PRISTINE_AGENT_MODEL` to a Mastra model id such as `openai/gpt-4.1-mini`, `anthropic/claude-3-5-haiku-latest`, or `google/gemini-2.0-flash`.
 
 Useful scripts:
-- `pnpm agent:dev` runs the Mastra dev server and Studio.
-- `pnpm agent:typecheck` typechecks the agent server package.
-- `pnpm agent:test` runs agent server tests.
+- `pnpm dev` runs the Mastra dev server and Studio from `../pristine-agent`.
+- `pnpm typecheck` typechecks the agent server.
+- `pnpm test` runs agent server tests.
+- `pnpm build` builds the agent server.
 
 The renderer defaults to `http://localhost:4111`. Override it with `VITE_PRISTINE_AGENT_URL` when needed. File changes and shell commands proposed by the agent stay pending until approved from the sidebar.

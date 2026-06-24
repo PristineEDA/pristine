@@ -1,6 +1,5 @@
 packages:
   - "."
-  - "agent-server"
   - ".pristine-vendor/affine-blocksuite/*/blocksuite/affine/all"
   - ".pristine-vendor/affine-blocksuite/*/blocksuite/affine/{components,data-view,ext-loader,foundation,model,rich-text,shared}"
   - ".pristine-vendor/affine-blocksuite/*/blocksuite/affine/blocks/*"

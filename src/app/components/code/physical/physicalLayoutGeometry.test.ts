@@ -38,6 +38,9 @@ import {
 import {
   createEmptyGdsTileGeometry,
   createGdsFullCellTileRequestPlan,
+  calculateGdsNonEmptyTileCoverageRatio,
+  calculateGdsScreenVisibleCoverage,
+  calculateGdsTileCoverageRatio,
   createGdsTileAtlasUpdate,
   createGdsOverviewRetryTileRequestPlan,
   createGdsPreciseTileRequestPlan,
@@ -49,6 +52,7 @@ import {
   createMergedGdsTileGeometry,
   doLayoutBoundsIntersect,
   estimateGdsDisplayedTileAtlasByteLength,
+  filterGdsScreenVisibleDisplayedTiles,
   estimateGdsTileByteLength,
   getGdsEmptyTileRetryKind,
   getLayoutBoundsIntersectionArea,
@@ -305,6 +309,36 @@ describe('physicalLayoutGeometry', () => {
     expect(sharedKeyCount).toBeGreaterThan(0);
   });
 
+  it('keys the same GDS tile by stable grid coordinates instead of viewport bbox', () => {
+    const visibility = createPhysicalLayoutVisibility(layoutFixtureGdsOpenResult.catalog, true, layoutFixtureGdsGeometry.shapes);
+    const baseInput = {
+      rootCellIndex: 1,
+      selectedBounds: { x0: 0, y0: 0, x1: 200, y1: 160 },
+      sessionId: 'layout-gds',
+      size: { height: 300, width: 500 },
+      visibility,
+    };
+    const firstPlan = createGdsTileWindowPlan({
+      ...baseInput,
+      camera: { panX: 0, panY: 0, zoom: 8 },
+    });
+    const secondPlan = createGdsTileWindowPlan({
+      ...baseInput,
+      camera: { panX: 8, panY: 6, zoom: 8 },
+    });
+    const firstByBbox = new Map(firstPlan.visiblePlans.map((tilePlan) => [
+      `${tilePlan.bbox.x0},${tilePlan.bbox.y0},${tilePlan.bbox.x1},${tilePlan.bbox.y1}`,
+      tilePlan.cacheKey,
+    ]));
+
+    for (const tilePlan of secondPlan.visiblePlans) {
+      const matchingKey = firstByBbox.get(`${tilePlan.bbox.x0},${tilePlan.bbox.y0},${tilePlan.bbox.x1},${tilePlan.bbox.y1}`);
+      if (matchingKey) {
+        expect(tilePlan.cacheKey).toBe(matchingKey);
+      }
+    }
+  });
+
   it('creates a bounded empty GDS tile plan when the viewport is outside the selected cell', () => {
     const visibility = createPhysicalLayoutVisibility(layoutFixtureGdsOpenResult.catalog, true, layoutFixtureGdsGeometry.shapes);
     const plan = createGdsTileRequestPlan({
@@ -391,6 +425,53 @@ describe('physicalLayoutGeometry', () => {
     expect(update.keptPreviousTileCount).toBe(1);
     expect(update.coverageRatio).toBeGreaterThan(0);
     expect(estimateGdsDisplayedTileAtlasByteLength(update.tiles)).toBeGreaterThan(0);
+  });
+
+  it('keeps prefetched GDS tiles out of the displayed atlas until they intersect the viewport', () => {
+    const visibility = createPhysicalLayoutVisibility(layoutFixtureGdsOpenResult.catalog, true, layoutFixtureGdsGeometry.shapes);
+    const shape = layoutFixtureGdsGeometry.shapes[0] as LspLayoutShape;
+    const tile = {
+      ...createEmptyGdsTileGeometry(1000),
+      geometry: {
+        polygonPointCount: shape.polygon?.length ?? 0,
+        shapeCount: 1,
+        shapes: [{ ...shape, index: 0, rect: { x0: 0, y0: 0, x1: 4, y1: 4 } }],
+        truncated: false,
+        unitsPerMicron: 1000,
+      },
+      tileShapeCount: 1,
+    };
+    const plan = createGdsTileWindowPlan({
+      camera: { panX: 0, panY: 0, zoom: 8 },
+      rootCellIndex: 1,
+      selectedBounds: { x0: 0, y0: 0, x1: 200, y1: 160 },
+      sessionId: 'layout-gds',
+      size: { height: 300, width: 500 },
+      visibility,
+    });
+    const prefetchPlan = plan.prefetchPlans.find((candidate) => (
+      !doLayoutBoundsIntersect(candidate.bbox, plan.viewportBbox)
+    )) ?? plan.prefetchPlans[0];
+    if (!prefetchPlan) {
+      throw new Error('Expected the GDS tile window to include a prefetch plan');
+    }
+
+    const prefetchUpdate = createGdsTileAtlasUpdate({
+      currentTiles: new Map(),
+      incomingTiles: [{ plan: prefetchPlan, tile }],
+      windowPlan: plan,
+    });
+    expect(prefetchUpdate.acceptedTileCount).toBe(0);
+    expect(prefetchUpdate.tiles.size).toBe(0);
+
+    const visiblePlan = plan.visiblePlans[0] ?? plan.primaryPlan;
+    const visibleUpdate = createGdsTileAtlasUpdate({
+      currentTiles: new Map(),
+      incomingTiles: [{ plan: visiblePlan, tile }],
+      windowPlan: plan,
+    });
+    expect(visibleUpdate.acceptedTileCount).toBe(1);
+    expect(visibleUpdate.tiles.has(visiblePlan.cacheKey)).toBe(true);
   });
 
   it('keeps raw GDS tile cache keys independent of layer opacity', () => {
@@ -518,9 +599,24 @@ describe('physicalLayoutGeometry', () => {
 
     const metrics = createGdsTileMetricsSnapshot({
       bufferCapacityVertexCount: 16,
+      bufferDataReplaceCount: 3,
       bufferReallocCount: 2,
+      bufferSubarrayCommitCount: 6,
       bufferUpdateCount: 1,
       bufferUpdateMs: 0.4,
+      tileLayerCreateCount: 4,
+      tileLayerReuseCount: 8,
+      tileLayerDestroyCount: 1,
+      batchCreateCount: 5,
+      batchReuseCount: 21,
+      batchDestroyCount: 2,
+      applyQueueDepth: 1,
+      applyChunkCount: 3,
+      applyBudgetOverrunCount: 1,
+      idleSnapshotMs: 2.25,
+      idleSnapshotSkippedCount: 7,
+      columnarByteLength: 4096,
+      atlasGpuByteLength: 8192,
       cacheStats: { byteLength: 1024, entryCount: 3 },
       frameDurationsMs: [16, 17, 18, 19],
       inflightRequestCount: 1,
@@ -542,8 +638,23 @@ describe('physicalLayoutGeometry', () => {
     expect(metrics.lastTileQueryMs).toBe(0.7);
     expect(metrics.tileRequestCount).toBe(2);
     expect(metrics.bufferCapacityVertexCount).toBe(16);
+    expect(metrics.bufferDataReplaceCount).toBe(3);
     expect(metrics.bufferReallocCount).toBe(2);
+    expect(metrics.bufferSubarrayCommitCount).toBe(6);
     expect(metrics.bufferUpdateCount).toBe(1);
+    expect(metrics.tileLayerCreateCount).toBe(4);
+    expect(metrics.tileLayerReuseCount).toBe(8);
+    expect(metrics.tileLayerDestroyCount).toBe(1);
+    expect(metrics.batchCreateCount).toBe(5);
+    expect(metrics.batchReuseCount).toBe(21);
+    expect(metrics.batchDestroyCount).toBe(2);
+    expect(metrics.applyQueueDepth).toBe(1);
+    expect(metrics.applyChunkCount).toBe(3);
+    expect(metrics.applyBudgetOverrunCount).toBe(1);
+    expect(metrics.idleSnapshotMs).toBe(2.25);
+    expect(metrics.idleSnapshotSkippedCount).toBe(7);
+    expect(metrics.columnarByteLength).toBe(4096);
+    expect(metrics.atlasGpuByteLength).toBe(8192);
     expect(metrics.cacheByteLength).toBe(1024);
     expect(metrics.cacheEntryCount).toBe(3);
     expect(metrics.inflightRequestCount).toBe(1);
@@ -552,7 +663,9 @@ describe('physicalLayoutGeometry', () => {
 
     const transformOnlyMetrics = createGdsTileMetricsSnapshot({
       bufferCapacityVertexCount: 16,
+      bufferDataReplaceCount: 0,
       bufferReallocCount: 0,
+      bufferSubarrayCommitCount: 0,
       bufferUpdateCount: 0,
       bufferUpdateMs: 0,
       cacheStats: { byteLength: 1024, entryCount: 1 },
@@ -571,6 +684,147 @@ describe('physicalLayoutGeometry', () => {
 
     expect(transformOnlyMetrics.averageFps).toBeGreaterThan(50);
     expect(transformOnlyMetrics.frameP95Ms).toBeLessThan(250);
+  });
+
+  it('distinguishes spatial tile coverage from non-empty coverage', () => {
+    const viewportBbox = { x0: 0, y0: 0, x1: 10, y1: 10 };
+    const emptyTile = createEmptyGdsTileGeometry(1000);
+    const plan = createGdsTileRequestPlan({
+      camera: { panX: 0, panY: 0, zoom: 10 },
+      rootCellIndex: 0,
+      selectedBounds: viewportBbox,
+      sessionId: 'gds-session',
+      size: { height: 100, width: 100 },
+      visibility: createEmptyPhysicalLayoutVisibility(),
+    });
+    const emptyDisplayedTile = {
+      plan: { ...plan, bbox: viewportBbox, cacheKey: 'empty-tile' },
+      tile: emptyTile,
+    };
+
+    expect(calculateGdsTileCoverageRatio([emptyDisplayedTile], viewportBbox)).toBe(1);
+    expect(calculateGdsNonEmptyTileCoverageRatio([emptyDisplayedTile], viewportBbox)).toBe(0);
+
+    const nonEmptyDisplayedTile = {
+      plan: { ...plan, bbox: viewportBbox, cacheKey: 'non-empty-tile' },
+      tile: {
+        ...emptyTile,
+        geometry: {
+          ...emptyTile.geometry,
+          shapeCount: 1,
+          shapes: [layoutFixtureGdsGeometry.shapes[0] as LspLayoutShape],
+        },
+        tileShapeCount: 1,
+      },
+    };
+    expect(calculateGdsNonEmptyTileCoverageRatio([nonEmptyDisplayedTile], viewportBbox)).toBe(1);
+  });
+
+  it('distinguishes world coverage from current screen-visible GDS coverage', () => {
+    const shape = {
+      ...(layoutFixtureGdsGeometry.shapes[0] as LspLayoutShape),
+      rect: { x0: 105, y0: 105, x1: 108, y1: 108 },
+    };
+    const tile = {
+      ...createEmptyGdsTileGeometry(1000),
+      geometry: {
+        polygonPointCount: shape.polygon?.length ?? 0,
+        shapeCount: 1,
+        shapes: [shape],
+        truncated: false,
+        unitsPerMicron: 1000,
+      },
+      tileShapeCount: 1,
+    };
+    const basePlan = createGdsTileRequestPlan({
+      camera: { panX: 0, panY: 0, zoom: 10 },
+      rootCellIndex: 0,
+      selectedBounds: { x0: 0, y0: 0, x1: 200, y1: 200 },
+      sessionId: 'gds-session',
+      size: { height: 100, width: 100 },
+      visibility: createEmptyPhysicalLayoutVisibility(),
+    });
+    const offscreenEntry = {
+      plan: { ...basePlan, bbox: { x0: 100, y0: 100, x1: 120, y1: 120 }, cacheKey: 'offscreen' },
+      tile,
+    };
+    const viewportBbox = { x0: 0, y0: 0, x1: 20, y1: 20 };
+    const distantViewportBbox = { x0: 100, y0: 100, x1: 120, y1: 120 };
+
+    expect(calculateGdsTileCoverageRatio([offscreenEntry], distantViewportBbox)).toBe(1);
+    const offscreenCoverage = calculateGdsScreenVisibleCoverage({
+      cellBounds: { x0: 0, y0: 0, x1: 200, y1: 200 },
+      tiles: [offscreenEntry],
+      viewportBbox,
+    });
+
+    expect(offscreenCoverage.cellIntersectionRatio).toBe(1);
+    expect(offscreenCoverage.screenVisibleCoverageRatio).toBe(0);
+    expect(offscreenCoverage.screenVisibleNonEmptyCoverageRatio).toBe(0);
+    expect(offscreenCoverage.screenVisibleShapeCount).toBe(0);
+    expect(offscreenCoverage.visualEmptyReason).toBe('no-screen-visible-tiles');
+    expect(filterGdsScreenVisibleDisplayedTiles(new Map([[offscreenEntry.plan.cacheKey, offscreenEntry]]), viewportBbox).size).toBe(0);
+
+    const visibleCoverage = calculateGdsScreenVisibleCoverage({
+      cellBounds: { x0: 0, y0: 0, x1: 200, y1: 200 },
+      tiles: [offscreenEntry],
+      viewportBbox: distantViewportBbox,
+    });
+
+    expect(visibleCoverage.screenVisibleCoverageRatio).toBe(1);
+    expect(visibleCoverage.screenVisibleNonEmptyCoverageRatio).toBe(1);
+    expect(visibleCoverage.screenVisibleShapeCount).toBe(1);
+    expect(visibleCoverage.visualEmptyReason).toBe('');
+
+    const outsideCoverage = calculateGdsScreenVisibleCoverage({
+      cellBounds: { x0: 0, y0: 0, x1: 10, y1: 10 },
+      tiles: [offscreenEntry],
+      viewportBbox: distantViewportBbox,
+    });
+
+    expect(outsideCoverage.cellIntersectionRatio).toBe(0);
+    expect(outsideCoverage.visualEmptyReason).toBe('outside-cell-bounds');
+  });
+
+  it('does not count a tile as screen-visible nonempty when its shapes miss the viewport', () => {
+    const shape = {
+      ...(layoutFixtureGdsGeometry.shapes[0] as LspLayoutShape),
+      rect: { x0: 110, y0: 110, x1: 112, y1: 112 },
+    };
+    const tile = {
+      ...createEmptyGdsTileGeometry(1000),
+      geometry: {
+        polygonPointCount: shape.polygon?.length ?? 0,
+        shapeCount: 1,
+        shapes: [shape],
+        truncated: false,
+        unitsPerMicron: 1000,
+      },
+      tileShapeCount: 1,
+    };
+    const plan = createGdsTileRequestPlan({
+      camera: { panX: 0, panY: 0, zoom: 10 },
+      rootCellIndex: 0,
+      selectedBounds: { x0: 0, y0: 0, x1: 200, y1: 200 },
+      sessionId: 'gds-session',
+      size: { height: 100, width: 100 },
+      visibility: createEmptyPhysicalLayoutVisibility(),
+    });
+    const entry = {
+      plan: { ...plan, bbox: { x0: 100, y0: 100, x1: 120, y1: 120 }, cacheKey: 'visible-empty-corner' },
+      tile,
+    };
+    const coverage = calculateGdsScreenVisibleCoverage({
+      cellBounds: { x0: 0, y0: 0, x1: 200, y1: 200 },
+      tiles: [entry],
+      viewportBbox: { x0: 100, y0: 100, x1: 105, y1: 105 },
+    });
+
+    expect(coverage.screenVisibleCoverageRatio).toBe(1);
+    expect(coverage.screenVisibleTileCount).toBe(1);
+    expect(coverage.screenVisibleNonEmptyCoverageRatio).toBe(0);
+    expect(coverage.screenVisibleShapeCount).toBe(0);
+    expect(coverage.visualEmptyReason).toBe('no-screen-visible-shapes');
   });
 
   it('bounds raw GDS tile cache by entry count and estimated bytes', () => {

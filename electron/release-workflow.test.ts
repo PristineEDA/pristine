@@ -12,16 +12,10 @@ const prepareEngineScriptPath = path.join(repoRoot, 'scripts', 'prepare-pristine
 const engineRemoteSourceHelperPath = path.join(repoRoot, 'scripts', 'pristine-engine-remote-source.mjs')
 const hookPath = path.join(repoRoot, '.githooks', 'pre-commit')
 
-function createPackageFixture(rootVersion = '0.0.1', agentServerVersion = rootVersion) {
+function createPackageFixture(rootVersion = '0.0.1') {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pristine-release-version-'))
-  const agentServerRoot = path.join(root, 'agent-server')
 
-  fs.mkdirSync(agentServerRoot, { recursive: true })
   fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ name: 'pristine', version: rootVersion }, null, 2))
-  fs.writeFileSync(
-    path.join(agentServerRoot, 'package.json'),
-    JSON.stringify({ name: '@pristine/agent-server', version: agentServerVersion }, null, 2),
-  )
 
   return root
 }
@@ -190,7 +184,7 @@ describe('local pristine-engine prepare', () => {
 })
 
 describe('release workflow contract', () => {
-  it('syncs root and agent-server package versions from release branch names', () => {
+  it('syncs the root package version from release branch names', () => {
     const root = createPackageFixture()
 
     const result = runReleaseScript(root, ['sync', '--ref', 'release/v1.2.3'])
@@ -198,17 +192,16 @@ describe('release workflow contract', () => {
     expect(result.status).toBe(0)
     expect(result.stdout).toContain('Synced release version 1.2.3')
     expect(readFixtureVersion(root, 'package.json')).toBe('1.2.3')
-    expect(readFixtureVersion(root, 'agent-server/package.json')).toBe('1.2.3')
   })
 
   it('fails release checks when package versions do not match the tag', () => {
-    const root = createPackageFixture('1.2.3', '1.2.4')
+    const root = createPackageFixture('1.2.4')
 
     const result = runReleaseScript(root, ['check', '--ref', 'refs/tags/v1.2.3'])
 
     expect(result.status).toBe(1)
     expect(result.stderr).toContain('Release version mismatch')
-    expect(result.stderr).toContain('agent-server/package.json has 1.2.4, expected 1.2.3')
+    expect(result.stderr).toContain('package.json has 1.2.4, expected 1.2.3')
   })
 
   it('accepts tag checks when all package versions match', () => {
@@ -217,14 +210,15 @@ describe('release workflow contract', () => {
     const result = runReleaseScript(root, ['check', '--ref', 'refs/tags/v1.2.3'])
 
     expect(result.status).toBe(0)
-    expect(result.stdout).toContain('Release version 1.2.3 matches package.json, agent-server/package.json')
+    expect(result.stdout).toContain('Release version 1.2.3 matches package.json')
   })
 
   it('keeps the local hook scoped to package version sync', () => {
     const hook = fs.readFileSync(hookPath, 'utf8')
 
     expect(hook).toContain('node scripts/release-version.mjs sync --ref "$BRANCH"')
-    expect(hook).toContain('git add package.json agent-server/package.json')
+    expect(hook).toContain('git add package.json')
+    expect(hook).not.toContain('agent-server/package.json')
     expect(hook).toContain('grep -oE')
   })
 

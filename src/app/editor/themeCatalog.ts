@@ -1001,7 +1001,7 @@ export const editorThemeCatalog = [
     kind: 'static',
     value: 'one-dark-pro',
     label: 'One Dark Pro',
-    description: 'Balanced dark theme with familiar VS Code tones.',
+    description: 'Balanced dark theme with familiar tones.',
     author: 'Binaryify',
     sourceUrl: 'https://github.com/Binaryify/OneDark-Pro',
     license: 'MIT',

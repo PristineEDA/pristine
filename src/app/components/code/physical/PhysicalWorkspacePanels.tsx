@@ -353,16 +353,20 @@ function PhysicalLayoutFileTree({
 }
 
 function PhysicalInspectorSummary({
+  gdsInspectorGeometry,
   highlightedShapeIndex,
   layoutState,
   selectedTarget,
 }: {
+  gdsInspectorGeometry?: LspLayoutGeometry | null;
   highlightedShapeIndex?: number | null;
   layoutState?: PhysicalWorkspaceLayoutState;
   selectedTarget?: PhysicalLayoutTarget | null;
 }) {
   const catalog = layoutState?.catalog ?? null;
-  const geometry = layoutState?.geometry ?? null;
+  const geometry = catalog?.sourceKind === 'gds' && selectedTarget?.kind === 'gdsCell'
+    ? gdsInspectorGeometry ?? null
+    : layoutState?.geometry ?? null;
   const macro = selectedTarget?.kind === 'macro'
     ? catalog?.macros.find((entry) => entry.name === selectedTarget.name) ?? null
     : null;
@@ -978,6 +982,7 @@ export function PhysicalLeftPanel({
 }
 
 export function PhysicalRightPanel({
+  gdsInspectorGeometry,
   highlightedShapeIndex,
   layoutState,
   layoutVisibility = emptyPhysicalLayoutVisibility,
@@ -987,6 +992,7 @@ export function PhysicalRightPanel({
   onSplitPanelVisibleChange,
   selectedTarget,
 }: {
+  gdsInspectorGeometry?: LspLayoutGeometry | null;
   highlightedShapeIndex?: number | null;
   layoutState?: PhysicalWorkspaceLayoutState;
   layoutVisibility?: PhysicalLayoutVisibility;
@@ -1047,6 +1053,7 @@ export function PhysicalRightPanel({
   const lowerContent = useMemo<Record<PhysicalLowerPanelTab, ReactNode>>(() => ({
     details: (
       <PhysicalInspectorSummary
+        gdsInspectorGeometry={gdsInspectorGeometry}
         highlightedShapeIndex={highlightedShapeIndex}
         layoutState={layoutState}
         selectedTarget={selectedTarget}
@@ -1059,7 +1066,7 @@ export function PhysicalRightPanel({
         description="Physical checks and selected object notes will appear here."
       />
     ),
-  }), [highlightedShapeIndex, layoutState, selectedTarget]);
+  }), [gdsInspectorGeometry, highlightedShapeIndex, layoutState, selectedTarget]);
 
   return (
     <div

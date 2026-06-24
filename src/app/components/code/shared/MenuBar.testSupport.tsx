@@ -47,7 +47,7 @@ const defaultColorThemeOptions: ColorThemeOption[] = [
   {
     value: 'vscode-2026-dark',
     label: 'Dark 2026',
-    description: 'Built-in VS Code 2026 dark color theme.',
+    description: 'Built-in 2026 dark color theme.',
     author: 'Microsoft',
     kind: 'dark',
     source: 'builtin',
@@ -55,7 +55,7 @@ const defaultColorThemeOptions: ColorThemeOption[] = [
   {
     value: 'vscode-2026-light',
     label: 'Light 2026',
-    description: 'Built-in VS Code 2026 light color theme.',
+    description: 'Built-in 2026 light color theme.',
     author: 'Microsoft',
     kind: 'light',
     source: 'builtin',
@@ -71,7 +71,7 @@ const defaultColorThemeOptions: ColorThemeOption[] = [
   {
     value: 'one-dark-pro',
     label: 'One Dark Pro',
-    description: 'Balanced dark theme with familiar VS Code tones.',
+    description: 'Balanced dark theme with familiar tones.',
     author: 'Binaryify',
     kind: 'dark',
     source: 'bundled',

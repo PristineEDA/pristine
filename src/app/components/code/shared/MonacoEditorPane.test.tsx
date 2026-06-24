@@ -217,7 +217,7 @@ vi.mock('../../../context/ThemeContext', () => ({
     activeTheme: {
       id: 'vscode-2026-dark',
       label: 'Dark 2026',
-      description: 'Built-in VS Code 2026 dark color theme.',
+      description: 'Built-in 2026 dark color theme.',
       author: 'Microsoft',
       kind: 'dark',
       source: 'builtin',

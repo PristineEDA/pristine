@@ -19,9 +19,24 @@ export interface PhysicalLayoutGdsTileMetrics {
   atlasByteLength: number;
   blankFrameCount: number;
   bufferCapacityVertexCount: number;
+  bufferDataReplaceCount: number;
   bufferReallocCount: number;
+  bufferSubarrayCommitCount: number;
   bufferUpdateCount: number;
   bufferUpdateMs: number;
+  tileLayerCreateCount: number;
+  tileLayerReuseCount: number;
+  tileLayerDestroyCount: number;
+  batchCreateCount: number;
+  batchReuseCount: number;
+  batchDestroyCount: number;
+  applyQueueDepth: number;
+  applyChunkCount: number;
+  applyBudgetOverrunCount: number;
+  idleSnapshotMs: number;
+  idleSnapshotSkippedCount: number;
+  columnarByteLength: number;
+  atlasGpuByteLength: number;
   bufferByteLength: number;
   cacheByteLength: number;
   cacheEntryCount: number;
@@ -30,6 +45,8 @@ export interface PhysicalLayoutGdsTileMetrics {
   continuationCount: number;
   coverageRatio: number;
   displayedTileCount: number;
+  emptyDisplayedTileCount: number;
+  emptyVisibleFrameCount: number;
   frameP95Ms: number;
   inflightRequestCount: number;
   indexByteLength: number;
@@ -40,13 +57,26 @@ export interface PhysicalLayoutGdsTileMetrics {
   lastTileBuildMs: number;
   lastTileRoundtripMs: number;
   lastTileQueryMs: number;
+  maxFrameP95Ms: number;
+  maxTileApplyMs: number;
+  maxTileBuildMs: number;
+  maxTileRoundtripMs: number;
   meshBatchCount: number;
   meshDrawNodeCount: number;
   meshIndexCount: number;
   meshVertexCount: number;
+  nonEmptyCoverageRatio: number;
+  renderableShapeCount: number;
+  reactSyncCount: number;
   retryCount: number;
+  screenVisibleCoverageRatio: number;
+  screenVisibleNonEmptyCoverageRatio: number;
+  screenVisibleShapeCount: number;
+  screenVisibleTileCount: number;
+  cellIntersectionRatio: number;
   tileRequestCount: number;
   truncated: boolean;
+  visualEmptyReason: string;
   visiblePointCount: number;
   visibleShapeCount: number;
 }
@@ -63,6 +93,7 @@ export interface PhysicalLayoutGdsTileRequestPlan {
 }
 
 export interface PhysicalLayoutGdsTileWindowPlan {
+  cellBounds: LspLayoutBounds | null;
   prefetchPlans: PhysicalLayoutGdsTileRequestPlan[];
   primaryPlan: PhysicalLayoutGdsTileRequestPlan;
   tileWorldSize: number;
@@ -101,9 +132,24 @@ export interface PhysicalLayoutGdsDisplayedTile {
 
 export interface PhysicalLayoutGdsTileAtlasUpdate {
   acceptedTileCount: number;
+  cellIntersectionRatio: number;
   coverageRatio: number;
   keptPreviousTileCount: number;
+  screenVisibleCoverageRatio: number;
+  screenVisibleNonEmptyCoverageRatio: number;
+  screenVisibleShapeCount: number;
+  screenVisibleTileCount: number;
   tiles: Map<string, PhysicalLayoutGdsDisplayedTile>;
+  visualEmptyReason: string;
+}
+
+export interface PhysicalLayoutGdsScreenCoverage {
+  cellIntersectionRatio: number;
+  screenVisibleCoverageRatio: number;
+  screenVisibleNonEmptyCoverageRatio: number;
+  screenVisibleShapeCount: number;
+  screenVisibleTileCount: number;
+  visualEmptyReason: string;
 }
 
 export const defaultPhysicalLayoutGdsTileMetrics: PhysicalLayoutGdsTileMetrics = {
@@ -111,9 +157,24 @@ export const defaultPhysicalLayoutGdsTileMetrics: PhysicalLayoutGdsTileMetrics =
   atlasByteLength: 0,
   blankFrameCount: 0,
   bufferCapacityVertexCount: 0,
+  bufferDataReplaceCount: 0,
   bufferReallocCount: 0,
+  bufferSubarrayCommitCount: 0,
   bufferUpdateCount: 0,
   bufferUpdateMs: 0,
+  tileLayerCreateCount: 0,
+  tileLayerReuseCount: 0,
+  tileLayerDestroyCount: 0,
+  batchCreateCount: 0,
+  batchReuseCount: 0,
+  batchDestroyCount: 0,
+  applyQueueDepth: 0,
+  applyChunkCount: 0,
+  applyBudgetOverrunCount: 0,
+  idleSnapshotMs: 0,
+  idleSnapshotSkippedCount: 0,
+  columnarByteLength: 0,
+  atlasGpuByteLength: 0,
   bufferByteLength: 0,
   cacheByteLength: 0,
   cacheEntryCount: 0,
@@ -122,6 +183,8 @@ export const defaultPhysicalLayoutGdsTileMetrics: PhysicalLayoutGdsTileMetrics =
   continuationCount: 0,
   coverageRatio: 0,
   displayedTileCount: 0,
+  emptyDisplayedTileCount: 0,
+  emptyVisibleFrameCount: 0,
   frameP95Ms: 0,
   inflightRequestCount: 0,
   indexByteLength: 0,
@@ -132,13 +195,26 @@ export const defaultPhysicalLayoutGdsTileMetrics: PhysicalLayoutGdsTileMetrics =
   lastTileBuildMs: 0,
   lastTileRoundtripMs: 0,
   lastTileQueryMs: 0,
+  maxFrameP95Ms: 0,
+  maxTileApplyMs: 0,
+  maxTileBuildMs: 0,
+  maxTileRoundtripMs: 0,
   meshBatchCount: 0,
   meshDrawNodeCount: 0,
   meshIndexCount: 0,
   meshVertexCount: 0,
+  nonEmptyCoverageRatio: 0,
+  renderableShapeCount: 0,
+  reactSyncCount: 0,
   retryCount: 0,
+  screenVisibleCoverageRatio: 0,
+  screenVisibleNonEmptyCoverageRatio: 0,
+  screenVisibleShapeCount: 0,
+  screenVisibleTileCount: 0,
+  cellIntersectionRatio: 0,
   tileRequestCount: 0,
   truncated: false,
+  visualEmptyReason: '',
   visiblePointCount: 0,
   visibleShapeCount: 0,
 };
@@ -178,6 +254,10 @@ export class PhysicalLayoutGdsTileLruCache {
     this.entries.delete(key);
     this.entries.set(key, entry);
     return entry.tile;
+  }
+
+  public peek(key: string): LspLayoutTileGeometry | undefined {
+    return this.entries.get(key)?.tile;
   }
 
   public set(key: string, tile: LspLayoutTileGeometry) {
@@ -229,6 +309,7 @@ export function isGdsTileModeEnabled(
 
 export function createGdsTileRequestPlan(input: PhysicalLayoutGdsTileRequestInput & {
   bboxOverride?: LspLayoutBounds;
+  cacheKeyOverride?: string;
   cacheKeyTag?: string;
   layerFilterMode?: 'visible' | 'all';
   lod?: number;
@@ -260,7 +341,7 @@ export function createGdsTileRequestPlan(input: PhysicalLayoutGdsTileRequestInpu
     sessionId: input.sessionId,
       visibilityKey: input.layerFilterMode === 'all' ? 'all' : createGdsTileFilterKey(input.visibility),
   });
-  const taggedCacheKey = input.cacheKeyTag ? `${cacheKey}|${input.cacheKeyTag}` : cacheKey;
+  const taggedCacheKey = input.cacheKeyOverride ?? (input.cacheKeyTag ? `${cacheKey}|${input.cacheKeyTag}` : cacheKey);
 
   return {
     bbox: roundedBbox,
@@ -303,6 +384,7 @@ export function createGdsTileWindowPlan(input: PhysicalLayoutGdsTileRequestInput
   const viewportBbox = getViewportWorldBounds(input.camera, input.size, tileOverscanRatio);
   if (primaryPlan.empty || !input.selectedBounds) {
     return {
+      cellBounds: input.selectedBounds ?? null,
       prefetchPlans: [],
       primaryPlan,
       tileWorldSize: 0,
@@ -338,7 +420,15 @@ export function createGdsTileWindowPlan(input: PhysicalLayoutGdsTileRequestInput
       const plan = createGdsTileRequestPlan({
         ...input,
         bboxOverride: tileBbox,
-        cacheKeyTag: `tile:${tileX}:${tileY}:${tileWorldSize.toFixed(6)}`,
+        cacheKeyOverride: createGdsTileWindowCacheKey({
+          lod,
+          rootCellIndex: input.rootCellIndex,
+          sessionId: input.sessionId,
+          tileWorldSize,
+          tileX,
+          tileY,
+          visibilityKey: createGdsTileFilterKey(input.visibility),
+        }),
         lod,
       });
       if (plan.empty) {
@@ -360,6 +450,7 @@ export function createGdsTileWindowPlan(input: PhysicalLayoutGdsTileRequestInput
   }
 
   return {
+    cellBounds: input.selectedBounds,
     prefetchPlans,
     primaryPlan,
     tileWorldSize,
@@ -373,17 +464,14 @@ export function createGdsTileAtlasUpdate(input: {
   incomingTiles: readonly PhysicalLayoutGdsDisplayedTile[];
   windowPlan: PhysicalLayoutGdsTileWindowPlan;
 }): PhysicalLayoutGdsTileAtlasUpdate {
-  const relevantKeys = new Set([
-    ...input.windowPlan.visiblePlans.map((plan) => plan.cacheKey),
-    ...input.windowPlan.prefetchPlans.map((plan) => plan.cacheKey),
-  ]);
+  const visibleKeys = new Set(input.windowPlan.visiblePlans.map((plan) => plan.cacheKey));
   const nextTiles = new Map<string, PhysicalLayoutGdsDisplayedTile>();
   let keptPreviousTileCount = 0;
   let acceptedTileCount = 0;
 
   for (const [key, entry] of input.currentTiles) {
     if (
-      relevantKeys.has(key)
+      visibleKeys.has(key)
       || doLayoutBoundsIntersect(entry.plan.bbox, input.windowPlan.viewportBbox)
     ) {
       nextTiles.set(key, entry);
@@ -395,21 +483,40 @@ export function createGdsTileAtlasUpdate(input: {
     if (entry.tile.geometry.shapes.length === 0) {
       continue;
     }
+    if (
+      !visibleKeys.has(entry.plan.cacheKey)
+      && !doLayoutBoundsIntersect(entry.plan.bbox, input.windowPlan.viewportBbox)
+    ) {
+      continue;
+    }
     nextTiles.set(entry.plan.cacheKey, entry);
     acceptedTileCount += 1;
   }
 
-  let coverageRatio = calculateGdsTileCoverageRatio(Array.from(nextTiles.values()), input.windowPlan.viewportBbox);
+  let nextTileValues = Array.from(nextTiles.values());
+  let coverageRatio = calculateGdsTileCoverageRatio(nextTileValues, input.windowPlan.viewportBbox);
   if (nextTiles.size > gdsDisplayedAtlasMaxEntries) {
     pruneGdsDisplayedTileAtlas(nextTiles, input.windowPlan, gdsDisplayedAtlasMaxEntries);
-    coverageRatio = calculateGdsTileCoverageRatio(Array.from(nextTiles.values()), input.windowPlan.viewportBbox);
+    nextTileValues = Array.from(nextTiles.values());
+    coverageRatio = calculateGdsTileCoverageRatio(nextTileValues, input.windowPlan.viewportBbox);
   }
+  const screenCoverage = calculateGdsScreenVisibleCoverage({
+    cellBounds: input.windowPlan.cellBounds,
+    tiles: nextTileValues,
+    viewportBbox: input.windowPlan.viewportBbox,
+  });
 
   return {
     acceptedTileCount,
+    cellIntersectionRatio: screenCoverage.cellIntersectionRatio,
     coverageRatio,
     keptPreviousTileCount,
+    screenVisibleCoverageRatio: screenCoverage.screenVisibleCoverageRatio,
+    screenVisibleNonEmptyCoverageRatio: screenCoverage.screenVisibleNonEmptyCoverageRatio,
+    screenVisibleShapeCount: screenCoverage.screenVisibleShapeCount,
+    screenVisibleTileCount: screenCoverage.screenVisibleTileCount,
     tiles: nextTiles,
+    visualEmptyReason: screenCoverage.visualEmptyReason,
   };
 }
 
@@ -426,6 +533,116 @@ export function calculateGdsTileCoverageRatio(
     sum + getLayoutBoundsIntersectionArea(entry.plan.bbox, viewportBbox)
   ), 0);
   return Math.max(0, Math.min(1, coveredArea / viewportArea));
+}
+
+export function calculateGdsNonEmptyTileCoverageRatio(
+  tiles: readonly PhysicalLayoutGdsDisplayedTile[],
+  viewportBbox: LspLayoutBounds,
+): number {
+  return calculateGdsTileCoverageRatio(
+    tiles.filter((entry) => entry.tile.geometry.shapes.length > 0),
+    viewportBbox,
+  );
+}
+
+export function calculateGdsScreenVisibleCoverage(input: {
+  allHidden?: boolean;
+  cellBounds?: LspLayoutBounds | null;
+  tiles: readonly PhysicalLayoutGdsDisplayedTile[];
+  viewportBbox: LspLayoutBounds;
+}): PhysicalLayoutGdsScreenCoverage {
+  const viewportArea = getLayoutBoundsArea(input.viewportBbox);
+  if (viewportArea <= 0) {
+    return {
+      cellIntersectionRatio: 0,
+      screenVisibleCoverageRatio: 0,
+      screenVisibleNonEmptyCoverageRatio: 0,
+      screenVisibleShapeCount: 0,
+      screenVisibleTileCount: 0,
+      visualEmptyReason: 'invalid-viewport-bbox',
+    };
+  }
+
+  const cellIntersectionArea = input.cellBounds
+    ? getLayoutBoundsIntersectionArea(input.viewportBbox, input.cellBounds)
+    : viewportArea;
+  const cellIntersectionRatio = Math.max(0, Math.min(1, cellIntersectionArea / viewportArea));
+  if (input.cellBounds && cellIntersectionArea <= 0) {
+    return {
+      cellIntersectionRatio: 0,
+      screenVisibleCoverageRatio: 0,
+      screenVisibleNonEmptyCoverageRatio: 0,
+      screenVisibleShapeCount: 0,
+      screenVisibleTileCount: 0,
+      visualEmptyReason: 'outside-cell-bounds',
+    };
+  }
+
+  const coverageArea = input.cellBounds ? cellIntersectionArea : viewportArea;
+  let coveredArea = 0;
+  let nonEmptyCoveredArea = 0;
+  let screenVisibleShapeCount = 0;
+  let screenVisibleTileCount = 0;
+
+  for (const entry of input.tiles) {
+    const visibleArea = getLayoutBoundsIntersectionArea(entry.plan.bbox, input.viewportBbox);
+    if (visibleArea <= 0) {
+      continue;
+    }
+    screenVisibleTileCount += 1;
+    coveredArea += visibleArea;
+    if (entry.tile.geometry.shapes.length > 0) {
+      const tileVisibleShapeCount = entry.tile.geometry.shapes.reduce((count, shape) => (
+        count + (doLayoutBoundsIntersect(shape.rect, input.viewportBbox) ? 1 : 0)
+      ), 0);
+      if (tileVisibleShapeCount > 0) {
+        nonEmptyCoveredArea += visibleArea;
+        screenVisibleShapeCount += tileVisibleShapeCount;
+      }
+    }
+  }
+
+  const screenVisibleCoverageRatio = coverageArea > 0
+    ? Math.max(0, Math.min(1, coveredArea / coverageArea))
+    : 0;
+  const screenVisibleNonEmptyCoverageRatio = coverageArea > 0
+    ? Math.max(0, Math.min(1, nonEmptyCoveredArea / coverageArea))
+    : 0;
+  let visualEmptyReason = '';
+  if (input.allHidden) {
+    visualEmptyReason = screenVisibleShapeCount === 0 ? 'all-hidden' : '';
+  } else if (screenVisibleTileCount === 0) {
+    visualEmptyReason = 'no-screen-visible-tiles';
+  } else if (screenVisibleShapeCount === 0) {
+    visualEmptyReason = 'no-screen-visible-shapes';
+  }
+
+  return {
+    cellIntersectionRatio,
+    screenVisibleCoverageRatio,
+    screenVisibleNonEmptyCoverageRatio,
+    screenVisibleShapeCount,
+    screenVisibleTileCount,
+    visualEmptyReason,
+  };
+}
+
+export function filterGdsScreenVisibleDisplayedTiles(
+  tiles: ReadonlyMap<string, PhysicalLayoutGdsDisplayedTile>,
+  viewportBbox: LspLayoutBounds,
+  cellBounds?: LspLayoutBounds | null,
+): Map<string, PhysicalLayoutGdsDisplayedTile> {
+  if (cellBounds && getLayoutBoundsIntersectionArea(viewportBbox, cellBounds) <= 0) {
+    return new Map();
+  }
+
+  const visibleTiles = new Map<string, PhysicalLayoutGdsDisplayedTile>();
+  for (const [key, entry] of tiles) {
+    if (getLayoutBoundsIntersectionArea(entry.plan.bbox, viewportBbox) > 0) {
+      visibleTiles.set(key, entry);
+    }
+  }
+  return visibleTiles;
 }
 
 export function estimateGdsDisplayedTileAtlasByteLength(
@@ -600,13 +817,30 @@ export function createGdsTileMetricsSnapshot(input: {
   atlasByteLength?: number;
   blankFrameCount?: number;
   bufferCapacityVertexCount?: number;
+  bufferDataReplaceCount?: number;
   bufferReallocCount?: number;
+  bufferSubarrayCommitCount?: number;
   bufferUpdateCount?: number;
   bufferUpdateMs?: number;
+  tileLayerCreateCount?: number;
+  tileLayerReuseCount?: number;
+  tileLayerDestroyCount?: number;
+  batchCreateCount?: number;
+  batchReuseCount?: number;
+  batchDestroyCount?: number;
+  applyQueueDepth?: number;
+  applyChunkCount?: number;
+  applyBudgetOverrunCount?: number;
+  idleSnapshotMs?: number;
+  idleSnapshotSkippedCount?: number;
+  columnarByteLength?: number;
+  atlasGpuByteLength?: number;
   cacheStats?: PhysicalLayoutGdsTileCacheStats;
   continuationCount?: number;
   coverageRatio?: number;
   displayedTileCount?: number;
+  emptyDisplayedTileCount?: number;
+  emptyVisibleFrameCount?: number;
   frameDurationsMs: readonly number[];
   inflightRequestCount?: number;
   tileApplyMs?: number;
@@ -615,11 +849,24 @@ export function createGdsTileMetricsSnapshot(input: {
   meshDrawNodeCount?: number;
   meshIndexCount: number;
   meshVertexCount: number;
+  reactSyncCount?: number;
   renderMs: number;
   retryCount?: number;
   tile: LspLayoutTileGeometry | null;
   tileRequestCount: number;
   tileRoundtripMs: number;
+  maxFrameP95Ms?: number;
+  maxTileApplyMs?: number;
+  maxTileBuildMs?: number;
+  maxTileRoundtripMs?: number;
+  nonEmptyCoverageRatio?: number;
+  renderableShapeCount?: number;
+  screenVisibleCoverageRatio?: number;
+  screenVisibleNonEmptyCoverageRatio?: number;
+  screenVisibleShapeCount?: number;
+  screenVisibleTileCount?: number;
+  cellIntersectionRatio?: number;
+  visualEmptyReason?: string;
 }): PhysicalLayoutGdsTileMetrics {
   const frameDurations = input.frameDurationsMs.filter((value) => (
     Number.isFinite(value)
@@ -638,9 +885,24 @@ export function createGdsTileMetricsSnapshot(input: {
     atlasByteLength: input.atlasByteLength ?? 0,
     blankFrameCount: input.blankFrameCount ?? 0,
     bufferCapacityVertexCount: input.bufferCapacityVertexCount ?? input.meshVertexCount,
+    bufferDataReplaceCount: input.bufferDataReplaceCount ?? 0,
     bufferReallocCount: input.bufferReallocCount ?? 0,
+    bufferSubarrayCommitCount: input.bufferSubarrayCommitCount ?? 0,
     bufferUpdateCount: input.bufferUpdateCount ?? 0,
     bufferUpdateMs: input.bufferUpdateMs ?? 0,
+    tileLayerCreateCount: input.tileLayerCreateCount ?? 0,
+    tileLayerReuseCount: input.tileLayerReuseCount ?? 0,
+    tileLayerDestroyCount: input.tileLayerDestroyCount ?? 0,
+    batchCreateCount: input.batchCreateCount ?? 0,
+    batchReuseCount: input.batchReuseCount ?? 0,
+    batchDestroyCount: input.batchDestroyCount ?? 0,
+    applyQueueDepth: input.applyQueueDepth ?? 0,
+    applyChunkCount: input.applyChunkCount ?? 0,
+    applyBudgetOverrunCount: input.applyBudgetOverrunCount ?? 0,
+    idleSnapshotMs: input.idleSnapshotMs ?? 0,
+    idleSnapshotSkippedCount: input.idleSnapshotSkippedCount ?? 0,
+    columnarByteLength: input.columnarByteLength ?? 0,
+    atlasGpuByteLength: input.atlasGpuByteLength ?? 0,
     bufferByteLength: input.meshVertexCount * 2 * Float32Array.BYTES_PER_ELEMENT,
     cacheByteLength: input.cacheStats?.byteLength ?? 0,
     cacheEntryCount: input.cacheStats?.entryCount ?? 0,
@@ -649,6 +911,8 @@ export function createGdsTileMetricsSnapshot(input: {
     continuationCount: input.continuationCount ?? (input.tile?.nextToken === null ? 0 : 1),
     coverageRatio: input.coverageRatio ?? 0,
     displayedTileCount: input.displayedTileCount ?? 0,
+    emptyDisplayedTileCount: input.emptyDisplayedTileCount ?? 0,
+    emptyVisibleFrameCount: input.emptyVisibleFrameCount ?? 0,
     frameP95Ms: percentile(frameDurations, 0.95),
     inflightRequestCount: input.inflightRequestCount ?? 0,
     indexByteLength: input.meshIndexCount * Uint32Array.BYTES_PER_ELEMENT,
@@ -659,13 +923,26 @@ export function createGdsTileMetricsSnapshot(input: {
     lastTileBuildMs: input.tileBuildMs ?? 0,
     lastTileRoundtripMs: input.tileRoundtripMs,
     lastTileQueryMs: microsToMs(input.tile?.metrics.queryMicros ?? 0),
+    maxFrameP95Ms: input.maxFrameP95Ms ?? percentile(frameDurations, 0.95),
+    maxTileApplyMs: input.maxTileApplyMs ?? (input.tileApplyMs ?? 0),
+    maxTileBuildMs: input.maxTileBuildMs ?? (input.tileBuildMs ?? 0),
+    maxTileRoundtripMs: input.maxTileRoundtripMs ?? input.tileRoundtripMs,
     meshBatchCount: input.meshBatchCount ?? 0,
     meshDrawNodeCount: input.meshDrawNodeCount ?? 0,
     meshIndexCount: input.meshIndexCount,
     meshVertexCount: input.meshVertexCount,
+    nonEmptyCoverageRatio: input.nonEmptyCoverageRatio ?? 0,
+    renderableShapeCount: input.renderableShapeCount ?? (input.tile?.geometry.shapes.length ?? 0),
+    reactSyncCount: input.reactSyncCount ?? 0,
     retryCount: input.retryCount ?? 0,
+    screenVisibleCoverageRatio: input.screenVisibleCoverageRatio ?? 0,
+    screenVisibleNonEmptyCoverageRatio: input.screenVisibleNonEmptyCoverageRatio ?? 0,
+    screenVisibleShapeCount: input.screenVisibleShapeCount ?? 0,
+    screenVisibleTileCount: input.screenVisibleTileCount ?? 0,
+    cellIntersectionRatio: input.cellIntersectionRatio ?? 0,
     tileRequestCount: input.tileRequestCount,
     truncated: input.tile?.truncated ?? false,
+    visualEmptyReason: input.visualEmptyReason ?? '',
     visiblePointCount: input.tile?.geometry.polygonPointCount ?? 0,
     visibleShapeCount: input.tile?.geometry.shapes.length ?? 0,
   };
@@ -853,6 +1130,27 @@ function createGdsTileCacheKey(input: {
   ].join('|');
 }
 
+function createGdsTileWindowCacheKey(input: {
+  lod: number;
+  rootCellIndex: number;
+  sessionId: string;
+  tileWorldSize: number;
+  tileX: number;
+  tileY: number;
+  visibilityKey: string;
+}): string {
+  return [
+    input.sessionId,
+    input.rootCellIndex,
+    input.lod,
+    input.visibilityKey,
+    'window',
+    input.tileWorldSize.toFixed(6),
+    input.tileX,
+    input.tileY,
+  ].join('|');
+}
+
 function getGdsTileWindowWorldSize(zoom: number, viewportBbox: LspLayoutBounds): number {
   const screenDerivedSize = gdsTileWindowTargetScreenSizePx / Math.max(zoom, 0.000001);
   const viewportDerivedSize = Math.max(
@@ -913,12 +1211,11 @@ function pruneGdsDisplayedTileAtlas(
   maxEntries: number,
 ) {
   const visibleKeys = new Set(windowPlan.visiblePlans.map((plan) => plan.cacheKey));
-  const prefetchKeys = new Set(windowPlan.prefetchPlans.map((plan) => plan.cacheKey));
   const sortedEntries = Array.from(tiles.entries()).sort((left, right) => {
     const leftKey = left[0];
     const rightKey = right[0];
-    const leftRank = getDisplayedTileRetentionRank(leftKey, left[1], visibleKeys, prefetchKeys, windowPlan.viewportBbox);
-    const rightRank = getDisplayedTileRetentionRank(rightKey, right[1], visibleKeys, prefetchKeys, windowPlan.viewportBbox);
+    const leftRank = getDisplayedTileRetentionRank(leftKey, left[1], visibleKeys, windowPlan.viewportBbox);
+    const rightRank = getDisplayedTileRetentionRank(rightKey, right[1], visibleKeys, windowPlan.viewportBbox);
     if (leftRank !== rightRank) {
       return leftRank - rightRank;
     }
@@ -935,7 +1232,6 @@ function getDisplayedTileRetentionRank(
   key: string,
   entry: PhysicalLayoutGdsDisplayedTile,
   visibleKeys: ReadonlySet<string>,
-  prefetchKeys: ReadonlySet<string>,
   viewportBbox: LspLayoutBounds,
 ): number {
   if (visibleKeys.has(key)) {
@@ -944,10 +1240,7 @@ function getDisplayedTileRetentionRank(
   if (doLayoutBoundsIntersect(entry.plan.bbox, viewportBbox)) {
     return 1;
   }
-  if (prefetchKeys.has(key)) {
-    return 2;
-  }
-  return 3;
+  return 2;
 }
 
 function mergeGdsTileMetrics(metrics: readonly LspLayoutTileMetrics[]): LspLayoutTileMetrics {

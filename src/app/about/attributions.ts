@@ -237,13 +237,6 @@ export const openSourceAttributionSections: AttributionSection[] = [
     title: 'AI Agent Frameworks',
     items: [
       {
-        id: 'mastra',
-        name: 'Mastra',
-        url: 'https://github.com/mastra-ai/mastra',
-        author: 'Mastra AI',
-        license: 'Apache-2.0',
-      },
-      {
         id: 'assistant-ui-react',
         name: '@assistant-ui/react',
         url: 'https://github.com/assistant-ui/assistant-ui',

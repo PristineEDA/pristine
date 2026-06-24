@@ -43,6 +43,7 @@ import {
   selectLayoutTargetShapes,
   type PhysicalLayoutTarget,
 } from './components/code/physical/physicalLayoutGeometry';
+import type { LspLayoutGeometry } from '../../types/systemverilog-lsp';
 import { QuickOpenPalette } from './components/code/shared/QuickOpenPalette';
 import { isMonacoTextInputFocused } from './editor/focusEditor';
 import {
@@ -60,7 +61,6 @@ import { useGlobalAppShortcuts } from './useGlobalAppShortcuts';
 import { getPathBaseName } from './workspace/workspaceFiles';
 import { useQuickOpenController } from './useQuickOpenController';
 import { preloadDeferredMainContentViews } from './mainContentViewPreload';
-import type { LspLayoutGeometry } from '../../types/systemverilog-lsp';
 
 const WorkflowView = lazy(() => import('./components/workflow/WorkflowView').then((module) => ({ default: module.WorkflowView })));
 const WhiteboardView = lazy(() => import('./components/whiteboard/WhiteboardView').then((module) => ({ default: module.WhiteboardView })));
@@ -155,11 +155,11 @@ function AppLayout() {
     openResult: null,
     status: 'idle',
   });
+  const [physicalGdsInspectorGeometry, setPhysicalGdsInspectorGeometry] = useState<LspLayoutGeometry | null>(null);
   const [physicalLayoutFiles, setPhysicalLayoutFiles] = useState<PhysicalLayoutFileEntry[]>([]);
   const [expandedPhysicalLayoutFilePaths, setExpandedPhysicalLayoutFilePaths] = useState<Set<string>>(() => new Set());
   const [activePhysicalLayoutFilePath, setActivePhysicalLayoutFilePath] = useState<string | null>(null);
   const [physicalSelectedTarget, setPhysicalSelectedTarget] = useState<PhysicalLayoutTarget | null>(null);
-  const [physicalGdsTileGeometry, setPhysicalGdsTileGeometry] = useState<LspLayoutGeometry | null>(null);
   const [physicalHighlightedShapeIndex, setPhysicalHighlightedShapeIndex] = useState<number | null>(null);
   const [physicalLayoutVisibility, setPhysicalLayoutVisibility] = useState<MutablePhysicalLayoutVisibility>(() => (
     createEmptyPhysicalLayoutVisibility()
@@ -173,12 +173,9 @@ function AppLayout() {
   const assistantThreadListExtraWidthPx = assistantThreadListExpanded
     ? assistantThreadListWidthPx + ASSISTANT_THREAD_LIST_RESIZE_HANDLE_WIDTH_PX
     : 0;
-  const activePhysicalLayoutGeometry = physicalLayoutState.catalog?.sourceKind === 'gds' && physicalSelectedTarget?.kind === 'gdsCell'
-    ? physicalGdsTileGeometry
-    : physicalLayoutState.geometry;
   const activePhysicalLayoutState: PhysicalWorkspaceLayoutState = {
     ...physicalLayoutState,
-    geometry: activePhysicalLayoutGeometry,
+    geometry: physicalLayoutState.geometry,
   };
   const explorerRightPanelWidthPx = explorerAssistantPanelWidthPx + assistantThreadListExtraWidthPx;
   const explorerRightPanelMinWidthPx = EXPLORER_RIGHT_PANEL_MIN_WIDTH_PX + assistantThreadListExtraWidthPx;
@@ -243,24 +240,25 @@ function AppLayout() {
 
   useEffect(() => {
     setPhysicalHighlightedShapeIndex(null);
-  }, [activePhysicalLayoutFilePath, physicalGdsTileGeometry, physicalLayoutState.geometry, physicalSelectedTarget]);
+    setPhysicalGdsInspectorGeometry(null);
+  }, [activePhysicalLayoutFilePath, physicalLayoutState.geometry, physicalSelectedTarget]);
 
   useEffect(() => {
     if (physicalHighlightedShapeIndex === null) {
       return;
     }
 
-    const activeGeometry = physicalLayoutState.catalog?.sourceKind === 'gds' && physicalSelectedTarget?.kind === 'gdsCell'
-      ? physicalGdsTileGeometry
-      : physicalLayoutState.geometry;
-    const selectedShapes = selectLayoutTargetShapes(physicalLayoutState.catalog, activeGeometry, physicalSelectedTarget);
+    if (physicalLayoutState.catalog?.sourceKind === 'gds' && physicalSelectedTarget?.kind === 'gdsCell') {
+      return;
+    }
+
+    const selectedShapes = selectLayoutTargetShapes(physicalLayoutState.catalog, physicalLayoutState.geometry, physicalSelectedTarget);
     const visibleShapes = filterVisiblePhysicalLayoutShapes(selectedShapes, physicalLayoutVisibility, physicalLayoutState.catalog?.sourceKind);
     if (!visibleShapes.some((shape) => shape.index === physicalHighlightedShapeIndex)) {
       setPhysicalHighlightedShapeIndex(null);
     }
   }, [
     physicalHighlightedShapeIndex,
-    physicalGdsTileGeometry,
     physicalLayoutState.catalog,
     physicalLayoutState.geometry,
     physicalLayoutVisibility,
@@ -331,6 +329,7 @@ function AppLayout() {
     });
 
     setPhysicalHighlightedShapeIndex(null);
+    setPhysicalGdsInspectorGeometry(null);
     setPhysicalSelectedTarget(null);
     setActivePhysicalLayoutFilePath(file.path);
     setPhysicalLayoutState({
@@ -344,6 +343,7 @@ function AppLayout() {
 
   const handlePhysicalLayoutTargetActivate = useCallback((target: PhysicalLayoutTarget) => {
     setPhysicalHighlightedShapeIndex(null);
+    setPhysicalGdsInspectorGeometry(null);
     setPhysicalSelectedTarget(target);
   }, []);
 
@@ -717,8 +717,8 @@ function AppLayout() {
           highlightedShapeIndex={physicalHighlightedShapeIndex}
           layoutVisibility={physicalLayoutVisibility}
           selectedTarget={physicalSelectedTarget}
+          onGdsTileGeometryChange={setPhysicalGdsInspectorGeometry}
           onHighlightedShapeChange={setPhysicalHighlightedShapeIndex}
-          onGdsTileGeometryChange={setPhysicalGdsTileGeometry}
           onSelectedTargetChange={setPhysicalSelectedTarget}
           onLayoutStateChange={setPhysicalLayoutState}
         />
@@ -735,6 +735,7 @@ function AppLayout() {
       onBottomPanelAutoHide: () => setShowBottomPanel(false),
       rightContent: (
         <PhysicalRightPanel
+          gdsInspectorGeometry={physicalGdsInspectorGeometry}
           highlightedShapeIndex={physicalHighlightedShapeIndex}
           layoutVisibility={physicalLayoutVisibility}
           layoutState={activePhysicalLayoutState}

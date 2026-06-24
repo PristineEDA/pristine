@@ -17,7 +17,7 @@ const mockThemeApi = vi.hoisted(() => {
   const activeTheme = {
     id: 'vscode-2026-dark',
     label: 'Dark 2026',
-    description: 'Built-in VS Code 2026 dark color theme.',
+    description: 'Built-in 2026 dark color theme.',
     author: 'Microsoft',
     kind: 'dark' as const,
     source: 'builtin' as const,
@@ -771,8 +771,13 @@ describe('EditorArea', () => {
       expect(window.electronAPI!.fs.readFile).toHaveBeenCalledWith('linker/startup.ld', 'utf-8');
     });
 
+    await waitFor(() => {
+      expect(mockMonaco.languages.setMonarchTokensProvider).toHaveBeenCalledWith('linker-script', expect.any(Object));
+      expect(mockMonaco.languages.setMonarchTokensProvider).toHaveBeenCalledWith('filelist', expect.any(Object));
+    });
+
     const linkerProviderCall = mockMonaco.languages.setMonarchTokensProvider.mock.calls.find(
-      ([languageId]) => languageId === 'linker-script',
+      ([languageId, provider]) => languageId === 'linker-script' && Boolean((provider as any).tokenizer),
     );
     const linkerProvider = linkerProviderCall?.[1] as any;
     expect(linkerProvider.tokenizer.root).toEqual(
@@ -782,7 +787,7 @@ describe('EditorArea', () => {
     );
 
     const filelistProviderCall = mockMonaco.languages.setMonarchTokensProvider.mock.calls.find(
-      ([languageId]) => languageId === 'filelist',
+      ([languageId, provider]) => languageId === 'filelist' && Boolean((provider as any).tokenizer),
     );
     expect(filelistProviderCall).toBeDefined();
 
