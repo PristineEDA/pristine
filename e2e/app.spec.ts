@@ -281,7 +281,11 @@ function createTerminalScrollFloodCommand(markerPrefix: string, count: number) {
 }
 
 function getE2EUserDataPath() {
-  return test.info().outputPath('electron-user-data');
+  const testSlug = test.info().titlePath
+    .join('__')
+    .replace(/[^A-Za-z0-9_-]+/g, '-')
+    .slice(0, 120);
+  return test.info().outputPath(`electron-user-data-${testSlug}`);
 }
 
 function skipIfPristineEngineUnavailable() {
@@ -552,14 +556,17 @@ const packagedWindowsExecutablePath = findPackagedWindowsExecutablePath();
 
 test.skip(process.platform === 'darwin', 'Custom window controls are hidden on macOS');
 
-async function launchApp(options?: { env?: Record<string, string | undefined>; projectRoot?: string }) {
+async function launchApp(options?: { env?: Record<string, string | undefined>; projectRoot?: string | null }) {
+  const projectRootEnv = options?.projectRoot === null
+    ? undefined
+    : options?.projectRoot ?? fixtureWorkspace;
   const app = await electron.launch({
     args: [path.join(__dirname, '..', 'dist-electron', 'main.js')],
     env: {
       ...process.env,
       ...options?.env,
       PRISTINE_E2E: '1',
-      PRISTINE_PROJECT_ROOT: options?.projectRoot ?? fixtureWorkspace,
+      ...(projectRootEnv ? { PRISTINE_PROJECT_ROOT: projectRootEnv } : {}),
       PRISTINE_USER_DATA_PATH: getE2EUserDataPath(),
     },
   });
@@ -3485,6 +3492,8 @@ test('application menu expands on hover and stays visible when locked', async ()
 test('New Project opens from File menu and Ctrl+Shift+N with project defaults', async () => {
   const workspaceCopy = test.info().outputPath('new-project-dialog-workspace');
   const selectedProjectPath = test.info().outputPath('selected-project-directory');
+  const projectName = `chip_lab_${Date.now()}`;
+  const createdProjectPath = path.join(selectedProjectPath, projectName);
   createWorkspaceCopy(workspaceCopy);
   fs.mkdirSync(selectedProjectPath, { recursive: true });
   const primaryModifier = process.platform === 'darwin' ? 'Meta' : 'Control';
@@ -3518,8 +3527,94 @@ test('New Project opens from File menu and Ctrl+Shift+N with project defaults', 
 
     await window.keyboard.press(`${primaryModifier}+Shift+N`);
     await expect(window.getByTestId('create-project-dialog')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+    await window.getByTestId('create-project-name').fill(projectName);
+    await setNextProjectDirectoryPath(app, selectedProjectPath);
+    await window.getByTestId('create-project-browse').click();
+    await expect(window.getByTestId('create-project-path')).toHaveValue(path.resolve(selectedProjectPath));
+    await window.getByTestId('create-project-submit').click();
+
+    await expect(window.getByTestId('create-project-dialog')).toHaveCount(0, { timeout: UI_READY_TIMEOUT_MS });
+    await expect.poll(() => fs.existsSync(path.join(createdProjectPath, '.pristine', 'project.sqlite')), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBe(true);
+    await expect(window.getByTestId('file-tree-node-root')).toContainText(projectName);
+    await expect(window.getByTestId('editor-empty-open-project')).toBeVisible();
   } finally {
     await app.close();
+  }
+});
+
+test('No project startup shows an empty project and creating a project restores last project on relaunch', async () => {
+  const selectedProjectPath = test.info().outputPath('no-project-create-root');
+  const projectName = `empty_start_${Date.now()}`;
+  const createdProjectPath = path.join(selectedProjectPath, projectName);
+  fs.mkdirSync(selectedProjectPath, { recursive: true });
+
+  const firstLaunch = await launchApp({ projectRoot: null });
+
+  try {
+    await expect(firstLaunch.window.getByText('No Projects Yet')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+    await expect(firstLaunch.window.getByTestId('file-tree-node-root')).toHaveCount(0);
+    await expect(firstLaunch.window.getByText('retroSoC')).toHaveCount(0);
+
+    await selectMenuBarItem(firstLaunch.window, 'File', 'New Project');
+    await firstLaunch.window.getByTestId('create-project-name').fill(projectName);
+    await setNextProjectDirectoryPath(firstLaunch.app, selectedProjectPath);
+    await firstLaunch.window.getByTestId('create-project-browse').click();
+    await firstLaunch.window.getByTestId('create-project-submit').click();
+
+    await expect.poll(() => fs.existsSync(path.join(createdProjectPath, '.pristine', 'project.sqlite')), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBe(true);
+    await expect(firstLaunch.window.getByTestId('file-tree-node-root')).toContainText(projectName);
+  } finally {
+    await firstLaunch.app.close();
+  }
+
+  const relaunched = await launchApp({ projectRoot: null });
+  try {
+    await expect(relaunched.window.getByTestId('file-tree-node-root')).toContainText(projectName, {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await expect(relaunched.window.getByText('No Projects Yet')).toHaveCount(0);
+  } finally {
+    await relaunched.app.close();
+  }
+});
+
+test('Close Project clears the workspace and removes the last project root', async () => {
+  const selectedProjectPath = test.info().outputPath('close-project-root');
+  const projectName = `close_project_${Date.now()}`;
+  const createdProjectPath = path.join(selectedProjectPath, projectName);
+  fs.mkdirSync(selectedProjectPath, { recursive: true });
+
+  const { app, window } = await launchApp({ projectRoot: null });
+
+  try {
+    await selectMenuBarItem(window, 'File', 'New Project');
+    await window.getByTestId('create-project-name').fill(projectName);
+    await setNextProjectDirectoryPath(app, selectedProjectPath);
+    await window.getByTestId('create-project-browse').click();
+    await window.getByTestId('create-project-submit').click();
+
+    await expect.poll(() => fs.existsSync(path.join(createdProjectPath, '.pristine', 'project.sqlite')), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBe(true);
+    await expect(window.getByTestId('file-tree-node-root')).toContainText(projectName);
+
+    await selectMenuBarItem(window, 'File', 'Close Project');
+    await expect(window.getByText('No Projects Yet')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+    await expect(window.getByTestId('file-tree-node-root')).toHaveCount(0);
+  } finally {
+    await app.close();
+  }
+
+  const relaunched = await launchApp({ projectRoot: null });
+  try {
+    await expect(relaunched.window.getByText('No Projects Yet')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+    await expect(relaunched.window.getByTestId('file-tree-node-root')).toHaveCount(0);
+  } finally {
+    await relaunched.app.close();
   }
 });
 
@@ -4436,7 +4531,7 @@ test('Ctrl+N creates an untitled file, Ctrl+S saves it, and explorer refreshes t
     await expect(window.getByTestId(`editor-tab-${savedRelativePath}`)).toBeVisible();
     await expect(window.getByTestId(`editor-tab-${savedRelativePath}`)).toHaveAttribute('data-active', 'true');
     await expect(window.getByTestId(`editor-tab-dirty-indicator-${savedRelativePath}`)).toHaveCount(0);
-    await expect(window.getByTestId('editor-breadcrumb')).toContainText('retroSoC');
+    await expect(window.getByTestId('editor-breadcrumb')).toContainText('Project');
     await expect(window.getByTestId('editor-breadcrumb')).toContainText('rtl');
     await expect(window.getByTestId('editor-breadcrumb')).toContainText('core');
     await expect(window.getByTestId('editor-breadcrumb')).toContainText(savedFileName);
@@ -6171,7 +6266,7 @@ test('explorer root toggles first-level children and hides the legacy collapse-a
   await expect(rootIcon).toHaveClass(/(?:^|\s)h-2\.5(?:\s|$)/);
   await expect(rootIcon).toHaveClass(/(?:^|\s)w-2\.5(?:\s|$)/);
   await expect(window.getByTestId('left-panel-header')).not.toContainText('retroSoC');
-  await expect(rootNode).toContainText('retroSoC');
+  await expect(rootNode).toContainText(path.basename(fixtureWorkspace));
   await expect(rtlNode).toBeVisible();
 
   await test.step('root row collapses and expands first-level children', async () => {

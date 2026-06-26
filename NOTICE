@@ -402,6 +402,7 @@ Covered components:
 - clsx (UI Components & Styling; declared as MIT)
 - tailwind-merge (UI Components & Styling; declared as MIT)
 - node-pty (Runtime Services & Utilities; declared as MIT)
+- better-sqlite3 (Runtime Services & Utilities; declared as MIT)
 - vscode-jsonrpc (Runtime Services & Utilities; declared as MIT)
 - ignore (Runtime Services & Utilities; declared as MIT)
 - jsonc-parser (Runtime Services & Utilities; declared as MIT)

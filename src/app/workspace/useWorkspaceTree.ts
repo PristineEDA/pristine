@@ -13,6 +13,11 @@ export interface WorkspaceRevealRequest {
   token: number;
 }
 
+export interface UseWorkspaceTreeOptions {
+  enabled?: boolean;
+  rootName?: string;
+}
+
 function updateNode(
   node: WorkspaceTreeNode,
   targetPath: string,
@@ -90,7 +95,13 @@ function mergeDirectoryChildren(
   return nextChildren.map((child) => preserveFolderState(currentChildrenByPath.get(child.path), child));
 }
 
-export function useWorkspaceTree(revealRequest?: WorkspaceRevealRequest | null, refreshToken = 0) {
+export function useWorkspaceTree(
+  revealRequest?: WorkspaceRevealRequest | null,
+  refreshToken = 0,
+  options?: UseWorkspaceTreeOptions,
+) {
+  const enabled = options?.enabled ?? true;
+  const rootName = options?.rootName;
   const [rootNode, setRootNode] = useState<WorkspaceTreeNode | null>(null);
   const [workspaceAvailable, setWorkspaceAvailable] = useState<boolean | null>(null);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(() => new Set([WORKSPACE_ROOT_PATH]));
@@ -128,11 +139,12 @@ export function useWorkspaceTree(revealRequest?: WorkspaceRevealRequest | null, 
           const mergedChildren = mergeDirectoryChildren(current?.children, children);
 
           if (!current) {
-            return createRootNode(mergedChildren);
+            return createRootNode(mergedChildren, rootName);
           }
 
           return {
             ...current,
+            name: rootName ?? current.name,
             children: mergedChildren,
             hasLoadedChildren: true,
             isLoading: false,
@@ -182,9 +194,16 @@ export function useWorkspaceTree(revealRequest?: WorkspaceRevealRequest | null, 
         return nextRootNode;
       });
     }
-  }, []);
+  }, [rootName]);
 
   const initializeTree = useCallback(async () => {
+    if (!enabled) {
+      setWorkspaceAvailable(false);
+      setRootNode(null);
+      setExpandedFolders(new Set([WORKSPACE_ROOT_PATH]));
+      return;
+    }
+
     const fsApi = window.electronAPI?.fs;
     if (!fsApi) {
       setWorkspaceAvailable(false);
@@ -207,13 +226,20 @@ export function useWorkspaceTree(revealRequest?: WorkspaceRevealRequest | null, 
       setRootNode(null);
       setExpandedFolders(new Set([WORKSPACE_ROOT_PATH]));
     }
-  }, [loadDirectory]);
+  }, [enabled, loadDirectory]);
 
   useEffect(() => {
     void initializeTree();
   }, [initializeTree]);
 
   const refreshExpandedTree = useCallback(async () => {
+    if (!enabled) {
+      setWorkspaceAvailable(false);
+      setRootNode(null);
+      setExpandedFolders(new Set([WORKSPACE_ROOT_PATH]));
+      return;
+    }
+
     const fsApi = window.electronAPI?.fs;
     if (!fsApi) {
       setWorkspaceAvailable(false);
@@ -246,7 +272,7 @@ export function useWorkspaceTree(revealRequest?: WorkspaceRevealRequest | null, 
       setRootNode(null);
       setExpandedFolders(new Set([WORKSPACE_ROOT_PATH]));
     }
-  }, [loadDirectory]);
+  }, [enabled, loadDirectory]);
 
   useEffect(() => {
     if (refreshToken === 0) {

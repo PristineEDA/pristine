@@ -13,9 +13,9 @@ import {
 import { registerAllHandlers, setProjectRoot, setupWindowStreams } from './ipc/register.js';
 import { StreamChannels } from './ipc/channels.js';
 import { flushPendingConfigSave, getConfigValue } from './ipc/config.js';
+import { PROJECT_LAST_ROOT_CONFIG_KEY, disposeProjectService, tryOpenStartupProject } from './ipc/project.js';
 import { disposeLspSession } from './ipc/lsp.js';
 import { disposeAllTerminalSessions } from './ipc/terminal.js';
-import { DEFAULT_STARTUP_PROJECT_ROOT } from '../src/app/workspace/workspaceFiles.js';
 import type { WindowCloseDecision, WindowCloseRequest } from '../src/app/window/windowClose.js';
 import type { FloatingInfoWindowMode } from '../src/app/window/floatingInfoWindow.js';
 import { handleAuthCallbackUrl, isAuthProtocolUrl } from './ipc/auth.js';
@@ -139,6 +139,19 @@ function getConfiguredThemeKind(): ThemeKind {
   return getConfigValue(WORKBENCH_COLOR_THEME_KIND_CONFIG_KEY) === 'light' ? 'light' : 'dark';
 }
 
+export function resolveStartupProjectRoot(
+  envProjectRoot: string | undefined,
+  configuredProjectRoot: unknown,
+): string | null {
+  if (envProjectRoot && envProjectRoot.trim().length > 0) {
+    return envProjectRoot;
+  }
+
+  return typeof configuredProjectRoot === 'string' && configuredProjectRoot.trim().length > 0
+    ? configuredProjectRoot
+    : null;
+}
+
 function getConfiguredWindowBackgroundColor(configKey: string, fallback: string): string {
   const value = getConfigValue(configKey);
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : fallback;
@@ -191,7 +204,7 @@ function showMainWindow(): void {
 }
 
 function dispatchRendererMenuActionFromApplicationMenu(
-  action: Extract<AppMenuAction, 'open-new-project' | 'open-settings' | 'open-about' | 'open-notice-files'>,
+  action: Extract<AppMenuAction, 'open-new-project' | 'open-project' | 'close-project' | 'open-settings' | 'open-about' | 'open-notice-files'>,
 ): void {
   const existingWindow = mainWindow;
 
@@ -217,6 +230,8 @@ function dispatchRendererMenuActionFromApplicationMenu(
 function handleApplicationMenuAction(action: AppMenuAction): void {
   if (
     action === 'open-new-project'
+    || action === 'open-project'
+    || action === 'close-project'
     || action === 'open-settings'
     || action === 'open-about'
     || action === 'open-notice-files'
@@ -662,8 +677,11 @@ function createStartupWindows(): void {
   showMainWindowWhenReady(window, splash);
 }
 
-setProjectRoot(process.env['PRISTINE_PROJECT_ROOT'] ?? DEFAULT_STARTUP_PROJECT_ROOT);
 configureElectronStoragePaths();
+tryOpenStartupProject(resolveStartupProjectRoot(
+  process.env['PRISTINE_PROJECT_ROOT'],
+  getConfigValue(PROJECT_LAST_ROOT_CONFIG_KEY),
+), setProjectRoot);
 registerDeepLinkProtocol();
 
 const singleInstanceLock = app.requestSingleInstanceLock();
@@ -726,6 +744,7 @@ if (!singleInstanceLock) {
   app.on('before-quit', () => {
     isQuitting = true;
     flushPendingConfigSave();
+    disposeProjectService();
     disposeLspSession();
     disposeAllTerminalSessions();
     tray?.destroy();

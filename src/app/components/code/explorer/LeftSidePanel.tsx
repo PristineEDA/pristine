@@ -72,6 +72,7 @@ const explorerSecondaryPanelTabs = [
 
 interface LeftSidePanelProps {
   activeFileId: string;
+  hasOpenProject?: boolean;
   onClearWorkspaceClipboard: () => void;
   onCopyWorkspaceEntry: (targetPath: string, entryType: WorkspaceEntryType) => Promise<boolean>;
   onCreateWorkspaceFile: (targetPath: string) => Promise<void>;
@@ -91,10 +92,12 @@ interface LeftSidePanelProps {
   refreshToken?: number;
   revealRequest?: WorkspaceRevealRequest | null;
   workspaceClipboard: WorkspaceClipboardState | null;
+  workspaceRootName?: string | null;
 }
 
 export function LeftSidePanel({
   activeFileId,
+  hasOpenProject = true,
   onCreateWorkspaceFile,
   onCreateWorkspaceFolder,
   onClearWorkspaceClipboard,
@@ -111,6 +114,7 @@ export function LeftSidePanel({
   refreshToken = 0,
   revealRequest,
   workspaceClipboard,
+  workspaceRootName,
 }: LeftSidePanelProps) {
   const { layoutMode } = useCodeViewerLayout();
   const treeContainerRef = useRef<HTMLDivElement | null>(null);
@@ -131,7 +135,10 @@ export function LeftSidePanel({
     workspaceAvailable,
     expandedFolders,
     toggleFolder,
-  } = useWorkspaceTree(revealRequest, refreshToken);
+  } = useWorkspaceTree(revealRequest, refreshToken, {
+    enabled: hasOpenProject,
+    rootName: workspaceRootName ?? undefined,
+  });
 
   latestSelectedNodeRef.current = selectedNode;
 

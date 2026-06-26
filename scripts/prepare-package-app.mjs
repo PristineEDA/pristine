@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs';
 import { cp, mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -7,8 +8,9 @@ const scriptPath = fileURLToPath(import.meta.url);
 const projectRoot = path.resolve(path.dirname(scriptPath), '..');
 const stageRoot = path.join(projectRoot, '.pristine-package');
 const stageApp = path.join(stageRoot, 'app');
-const runtimePackages = ['node-pty', 'node-addon-api', 'vscode-jsonrpc'];
-const directRuntimeDependencies = ['node-pty', 'vscode-jsonrpc'];
+const runtimePackages = ['node-pty', 'node-addon-api', 'vscode-jsonrpc', 'better-sqlite3', 'bindings', 'file-uri-to-path'];
+const directRuntimeDependencies = ['node-pty', 'vscode-jsonrpc', 'better-sqlite3'];
+const resolvedRuntimePackagePaths = new Map();
 
 async function readJson(filePath) {
   const raw = await readFile(filePath, 'utf8');
@@ -34,6 +36,7 @@ async function copyRuntimePackage(packageName) {
   const source = await resolveRuntimePackagePath(packageName);
   const target = path.join(stageApp, 'node_modules', packageName);
 
+  resolvedRuntimePackagePaths.set(packageName, source);
   await mkdir(path.dirname(target), { recursive: true });
   await cp(source, target, {
     recursive: true,
@@ -43,6 +46,12 @@ async function copyRuntimePackage(packageName) {
 }
 
 async function resolveRuntimePackagePath(packageName) {
+  const resolvedPackagePath = resolvedRuntimePackagePaths.get(packageName);
+
+  if (resolvedPackagePath) {
+    return resolvedPackagePath;
+  }
+
   const rootPackagePath = path.join(projectRoot, 'node_modules', packageName);
 
   if (existsSync(rootPackagePath)) {
@@ -54,13 +63,22 @@ async function resolveRuntimePackagePath(packageName) {
       continue;
     }
 
-    const parentPackagePath = path.join(projectRoot, 'node_modules', parentPackageName);
+    const parentPackagePath =
+      resolvedRuntimePackagePaths.get(parentPackageName) ?? path.join(projectRoot, 'node_modules', parentPackageName);
 
     if (!existsSync(parentPackagePath)) {
       continue;
     }
 
     const parentRealPath = await realpath(parentPackagePath);
+    const requireFromParent = createRequire(path.join(parentRealPath, 'package.json'));
+
+    try {
+      return path.dirname(requireFromParent.resolve(`${packageName}/package.json`));
+    } catch {
+      // Fall through to the sibling lookup used by pnpm's symlinked store layout.
+    }
+
     const siblingPackagePath = path.join(path.dirname(parentRealPath), packageName);
 
     if (existsSync(siblingPackagePath)) {
@@ -97,6 +115,21 @@ async function writeStageManifest(rootManifest) {
   await writeFile(path.join(stageApp, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
 }
 
+async function patchStagedRuntimePackageManifests() {
+  const betterSqliteManifestPath = path.join(stageApp, 'node_modules', 'better-sqlite3', 'package.json');
+  const betterSqliteManifest = await readJson(betterSqliteManifestPath);
+
+  if (betterSqliteManifest.dependencies?.['prebuild-install']) {
+    delete betterSqliteManifest.dependencies['prebuild-install'];
+  }
+
+  if (betterSqliteManifest.scripts?.install) {
+    delete betterSqliteManifest.scripts.install;
+  }
+
+  await writeFile(betterSqliteManifestPath, `${JSON.stringify(betterSqliteManifest, null, 2)}\n`, 'utf8');
+}
+
 async function writeStageBuilderConfig() {
   const electronManifest = await readJson(path.join(projectRoot, 'node_modules', 'electron', 'package.json'));
   const config = `appId: com.pristine.ide
@@ -113,6 +146,9 @@ files:
   - node_modules/node-pty/**/*
   - node_modules/node-addon-api/**/*
   - node_modules/vscode-jsonrpc/**/*
+  - node_modules/better-sqlite3/**/*
+  - node_modules/bindings/**/*
+  - node_modules/file-uri-to-path/**/*
 protocols:
   - name: Pristine Auth Callback
     schemes:
@@ -135,6 +171,7 @@ extraResources:
 asar: true
 asarUnpack:
   - node_modules/node-pty/**
+  - node_modules/better-sqlite3/**
 win:
   target:
     - target: nsis
@@ -185,6 +222,7 @@ async function main() {
     await copyRuntimePackage(packageName);
   }
 
+  await patchStagedRuntimePackageManifests();
   await writeStageManifest(rootManifest);
   await writeStageBuilderConfig();
   console.log(`Prepared package app at ${path.relative(projectRoot, stageApp)}`);

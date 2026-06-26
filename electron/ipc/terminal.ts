@@ -102,7 +102,7 @@ export function disposeAllTerminalSessions(): void {
   sessions.clear();
 }
 
-export function setTerminalProjectRoot(root: string): void {
+export function setTerminalProjectRoot(root: string | null): void {
   projectRoot = root;
 }
 

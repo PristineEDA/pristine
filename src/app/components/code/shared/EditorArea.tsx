@@ -69,6 +69,7 @@ function toWorkspaceEditorTab(tab: EditorAreaTab | undefined): WorkspaceEditorTa
 interface EditorAreaProps {
   tabs: EditorAreaTab[];
   activeTabId: string;
+  hasOpenProject?: boolean;
   documentTabId?: string;
   onTabChange: (id: string) => void;
   onTabClose: (id: string) => void;
@@ -300,6 +301,7 @@ function Breadcrumb({
 export function EditorArea({
   tabs,
   activeTabId,
+  hasOpenProject = true,
   documentTabId,
   onTabChange,
   onTabClose,
@@ -511,8 +513,22 @@ export function EditorArea({
   }, []);
 
   if (tabs.length === 0) {
+    if (!hasOpenProject) {
+      return (
+        <EmptyProject />
+      );
+    }
+
     return (
-      <EmptyProject></EmptyProject>
+      <div
+        data-testid="editor-empty-open-project"
+        className="flex h-full w-full items-center justify-center bg-ide-editor-bg text-center text-ide-text-muted"
+      >
+        <div>
+          <p className="text-[14px] font-medium text-ide-text-muted">No file open</p>
+          <p className="mt-1 text-[12px]">Select a file from the explorer to start editing.</p>
+        </div>
+      </div>
     );
   }
 

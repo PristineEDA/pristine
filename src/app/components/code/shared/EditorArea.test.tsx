@@ -213,6 +213,7 @@ describe('EditorArea', () => {
         onTabChange={vi.fn()}
         onTabClose={vi.fn()}
         editorRef={createRef()}
+        hasOpenProject={false}
       />,
     );
 
@@ -642,7 +643,7 @@ describe('EditorArea', () => {
     });
 
     expect(await screen.findByTestId('monaco-editor')).toHaveAttribute('data-language', 'systemverilog');
-    expect(screen.getByText('retroSoC')).toBeInTheDocument();
+    expect(screen.getByText('Project')).toBeInTheDocument();
     expect(screen.getAllByText('tb_cpu_top.sv')).toHaveLength(2);
     expect(mockMonaco.languages.register).toHaveBeenCalled();
     expect(mockMonaco.languages.setMonarchTokensProvider).toHaveBeenCalledTimes(9);
@@ -913,7 +914,7 @@ describe('EditorArea', () => {
       />,
     );
 
-    expect(screen.getByTestId('editor-breadcrumb')).toHaveTextContent('retroSoC');
+    expect(screen.getByTestId('editor-breadcrumb')).toHaveTextContent('Project');
     expect(screen.getByTestId('editor-breadcrumb')).toHaveTextContent('rtl');
     expect(screen.getByTestId('editor-breadcrumb')).toHaveTextContent('core');
     expect(screen.getByTestId('editor-breadcrumb')).toHaveTextContent('generated.sv');

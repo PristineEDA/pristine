@@ -49,6 +49,15 @@ import type { WindowCloseDecision, WindowCloseRequest } from '../src/app/window/
 import type { FloatingInfoWindowMode } from '../src/app/window/floatingInfoWindow';
 import type { AuthView, DesktopAuthSession } from '../src/app/auth/types';
 import type { ElectronGpuDiagnostics } from './electron-gpu';
+import type {
+  CreateProjectInput,
+  ProjectChangedEvent,
+  ProjectCloseResult,
+  ProjectCreateResult,
+  ProjectOpenResult,
+  ProjectSessionSnapshot,
+  ProjectState,
+} from './project';
 
 export interface ElectronAPI {
   platform: string;
@@ -114,6 +123,15 @@ export interface ElectronAPI {
     showSaveDialog: (defaultPath?: string) => Promise<SaveDialogResult>;
     showOpenThemeDialog: () => Promise<OpenThemeDialogResult>;
     showOpenProjectDirectoryDialog: () => Promise<OpenProjectDirectoryDialogResult>;
+  };
+
+  project: {
+    createProject: (input: CreateProjectInput) => Promise<ProjectCreateResult>;
+    openProject: (rootPath?: string) => Promise<ProjectOpenResult>;
+    closeProject: (snapshot?: ProjectSessionSnapshot) => Promise<ProjectCloseResult>;
+    getCurrentProject: () => Promise<ProjectState | null>;
+    flushSession: (snapshot: ProjectSessionSnapshot) => Promise<void>;
+    onProjectChanged: (callback: (payload: ProjectChangedEvent) => void) => () => void;
   };
 
   git: {

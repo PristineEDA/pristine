@@ -20,7 +20,7 @@ const processes = new Map<string, ChildProcess>();
 let nextId = 1;
 let projectRoot: string | null = null;
 
-export function setShellProjectRoot(root: string): void {
+export function setShellProjectRoot(root: string | null): void {
   projectRoot = root;
 }
 

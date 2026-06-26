@@ -119,15 +119,58 @@ describe('CreateProjectDialog', () => {
     expect(screen.getByTestId('create-project-path')).toHaveValue('C:\\Users\\maksy\\Projects\\chip-lab');
   });
 
-  it('closes through Cancel and Create Project without creating files', async () => {
+  it('closes through Cancel without creating files', async () => {
     const user = userEvent.setup();
     const onOpenChange = renderCreateProjectDialog();
 
     await user.click(screen.getByTestId('create-project-cancel'));
-    await user.click(screen.getByTestId('create-project-submit'));
 
     expect(onOpenChange).toHaveBeenCalledWith(false);
     expect(window.electronAPI!.fs.createDirectory).not.toHaveBeenCalled();
     expect(window.electronAPI!.fs.writeFile).not.toHaveBeenCalled();
+  });
+
+  it('submits through the project API and closes on success', async () => {
+    const user = userEvent.setup();
+    const onOpenChange = renderCreateProjectDialog();
+
+    vi.mocked(window.electronAPI!.project.createProject).mockResolvedValueOnce({
+      project: {
+        name: 'Project name',
+        rootPath: 'C:\\Projects\\Project name',
+        session: null,
+      },
+    });
+
+    await user.type(screen.getByTestId('create-project-name'), 'Project name');
+    await user.type(screen.getByTestId('create-project-path'), 'C:\\Projects');
+    await user.click(screen.getByTestId('create-project-submit'));
+
+    expect(window.electronAPI!.project.createProject).toHaveBeenCalledWith({
+      mgnt: 'none',
+      mode: 'rtl2gds',
+      name: 'Project name',
+      padframe: 'QFN32',
+      path: 'C:\\Projects',
+      process: 'ics55',
+      type: 'retroSoC',
+    });
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(window.electronAPI!.fs.createDirectory).not.toHaveBeenCalled();
+    expect(window.electronAPI!.fs.writeFile).not.toHaveBeenCalled();
+  });
+
+  it('shows project API failures without closing the dialog', async () => {
+    const user = userEvent.setup();
+    const onOpenChange = renderCreateProjectDialog();
+
+    vi.mocked(window.electronAPI!.project.createProject).mockRejectedValueOnce(new Error('Project already exists'));
+
+    await user.type(screen.getByTestId('create-project-name'), 'Project name');
+    await user.type(screen.getByTestId('create-project-path'), 'C:\\Projects');
+    await user.click(screen.getByTestId('create-project-submit'));
+
+    expect(screen.getByTestId('create-project-error')).toHaveTextContent('Project already exists');
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
   });
 });

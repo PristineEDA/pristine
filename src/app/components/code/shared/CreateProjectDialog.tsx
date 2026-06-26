@@ -79,6 +79,8 @@ export function CreateProjectDialog({ open, onOpenChange, dialogStyle }: CreateP
   const [type, setType] = useState<(typeof projectTypeOptions)[number]>('retroSoC');
   const [mgnt, setMgnt] = useState<(typeof projectManagementOptions)[number]>('none');
   const [padframe, setPadframe] = useState<(typeof projectPadframeOptions)[number]>('QFN32');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const handleBrowseProjectPath = async () => {
     const result = await window.electronAPI?.dialog.showOpenProjectDirectoryDialog();
@@ -89,8 +91,31 @@ export function CreateProjectDialog({ open, onOpenChange, dialogStyle }: CreateP
     setProjectPath(result.filePath);
   };
 
-  const handleCreateProject = () => {
-    onOpenChange(false);
+  const handleCreateProject = async () => {
+    const projectApi = window.electronAPI?.project;
+    if (!projectApi?.createProject || isSubmitting) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    setErrorMessage(null);
+
+    try {
+      await projectApi.createProject({
+        name,
+        path: projectPath,
+        mode,
+        process,
+        type,
+        mgnt,
+        padframe,
+      });
+      onOpenChange(false);
+    } catch (error: unknown) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to create project.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -202,6 +227,14 @@ export function CreateProjectDialog({ open, onOpenChange, dialogStyle }: CreateP
             testId="create-project-padframe"
             onValueChange={(value) => setPadframe(value as typeof padframe)}
           />
+          {errorMessage && (
+            <p
+              data-testid="create-project-error"
+              className="rounded-md border border-ide-error/40 bg-ide-error/10 px-3 py-2 text-[12px] text-ide-error"
+            >
+              {errorMessage}
+            </p>
+          )}
         </div>
 
         <DialogFooter className="border-t border-ide-border bg-ide-bg px-5 py-4">
@@ -218,9 +251,10 @@ export function CreateProjectDialog({ open, onOpenChange, dialogStyle }: CreateP
             type="button"
             data-testid="create-project-submit"
             className="h-8 bg-ide-accent px-3 text-[12px] text-primary-foreground hover:bg-ide-accent/90"
+            disabled={isSubmitting}
             onClick={handleCreateProject}
           >
-            Create Project
+            {isSubmitting ? 'Creating...' : 'Create Project'}
           </Button>
         </DialogFooter>
       </DialogContent>

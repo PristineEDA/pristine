@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  createEditorGroup,
   createInitialEditorWorkspace,
   focusEditorGroup,
   getCycledTabIdInEditorGroup,
@@ -11,6 +12,8 @@ import {
   setActiveTabInEditorGroup,
   closeFileInEditorGroup,
   splitEditorGroup,
+  type EditorGroup,
+  type EditorLayoutNode,
   type EditorTabCycleDirection,
   type EditorDropPosition,
   type EditorWorkspaceModel,
@@ -747,6 +750,39 @@ export function useWorkspaceEditorState() {
     [],
   );
 
+  const restoreWorkspace = useCallback((options: {
+    editorGroups: EditorGroup[];
+    editorLayout: EditorLayoutNode | null;
+    focusedGroupId: string | null;
+  }) => {
+    const groups = options.editorGroups.length > 0
+      ? Object.fromEntries(options.editorGroups.map((group) => [group.id, group]))
+      : {
+          'group-1': createEditorGroup('group-1'),
+        };
+    const focusedGroupId = options.focusedGroupId && groups[options.focusedGroupId]
+      ? options.focusedGroupId
+      : Object.keys(groups)[0] ?? 'group-1';
+
+    setEditorState({
+      focusedGroupId,
+      groups,
+      layout: options.editorLayout ?? { type: 'group', groupId: focusedGroupId },
+    });
+    setCursorPositions({});
+    setCursorRestoreRequests({});
+    editorRefsRef.current = {};
+    editorRef.current = null;
+  }, []);
+
+  const resetWorkspace = useCallback(() => {
+    setEditorState(createInitialEditorWorkspace('group-1'));
+    setCursorPositions({});
+    setCursorRestoreRequests({});
+    editorRefsRef.current = {};
+    editorRef.current = null;
+  }, []);
+
   return {
     activeTabId,
     captureEditorSelectionSnapshot,
@@ -779,6 +815,8 @@ export function useWorkspaceEditorState() {
     closeFile,
     closeFileInGroup,
     registerEditorRef,
+    resetWorkspace,
+    restoreWorkspace,
     restoreEditorSelection,
     setActiveTabId,
     setActiveTabIdInGroup,

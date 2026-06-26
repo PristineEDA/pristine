@@ -30,6 +30,11 @@ export const AsyncChannels = {
   WINDOW_SET_FLOATING_INFO_VISIBILITY: 'async:window:set-floating-info-visibility',
   WINDOW_SET_FLOATING_INFO_EXPANDED: 'async:window:set-floating-info-expanded',
   WINDOW_SET_FLOATING_INFO_MODE: 'async:window:set-floating-info-mode',
+  PROJECT_CREATE: 'async:project:create',
+  PROJECT_OPEN: 'async:project:open',
+  PROJECT_CLOSE: 'async:project:close',
+  PROJECT_GET_CURRENT: 'async:project:get-current',
+  PROJECT_FLUSH_SESSION: 'async:project:flush-session',
   FS_READ_FILE: 'async:fs:read-file',
   FS_READ_FILE_ABSOLUTE: 'async:fs:read-file-absolute',
   FS_LIST_FILES: 'async:fs:list-files',
@@ -113,4 +118,5 @@ export const StreamChannels = {
   WINDOW_FOCUS: 'stream:window:focus',
   WINDOW_MAXIMIZED_CHANGE: 'stream:window:maximized-change',
   WINDOW_FULLSCREEN_CHANGE: 'stream:window:full-screen-change',
+  PROJECT_CHANGED: 'stream:project:changed',
 } as const;

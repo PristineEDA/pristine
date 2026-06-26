@@ -137,7 +137,7 @@ describe('LeftSidePanel', () => {
     expect(screen.queryByRole('button', { name: /problems/i })).not.toBeInTheDocument();
     expect(await screen.findByTestId('file-tree-node-rtl')).toBeInTheDocument();
     expect(header).not.toHaveTextContent('retroSoC');
-    expect(screen.getByTestId('file-tree-node-root')).toHaveTextContent('retroSoC');
+    expect(screen.getByTestId('file-tree-node-root')).toHaveTextContent('Project');
   });
 
   it('removes the minimal layout outline around the panel tab header', () => {
@@ -376,7 +376,7 @@ describe('LeftSidePanel', () => {
     renderLeftSidePanel();
 
     const rootNode = await screen.findByTestId('file-tree-node-root');
-    expect(rootNode).toHaveTextContent('retroSoC');
+    expect(rootNode).toHaveTextContent('Project');
     expect(await screen.findByTestId('file-tree-node-rtl')).toBeInTheDocument();
 
     await testUser.click(rootNode);

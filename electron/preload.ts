@@ -51,6 +51,15 @@ import type { WindowCloseDecision, WindowCloseRequest } from '../src/app/window/
 import type { FloatingInfoWindowMode } from '../src/app/window/floatingInfoWindow.js';
 import type { AuthView, DesktopAuthSession } from '../src/app/auth/types.js';
 import type { ElectronGpuDiagnostics } from '../types/electron-gpu.js';
+import type {
+  CreateProjectInput,
+  ProjectChangedEvent,
+  ProjectCloseResult,
+  ProjectCreateResult,
+  ProjectOpenResult,
+  ProjectSessionSnapshot,
+  ProjectState,
+} from '../types/project.js';
 
 // ─── Sync Helpers ─────────────────────────────────────────────────────────────
 
@@ -173,6 +182,24 @@ const electronAPI = {
       ipcRenderer.invoke(AsyncChannels.DIALOG_SHOW_OPEN_THEME) as Promise<OpenThemeDialogResult>,
     showOpenProjectDirectoryDialog: () =>
       ipcRenderer.invoke(AsyncChannels.DIALOG_SHOW_OPEN_PROJECT_DIRECTORY) as Promise<OpenProjectDirectoryDialogResult>,
+  },
+
+  project: {
+    createProject: (input: CreateProjectInput) =>
+      ipcRenderer.invoke(AsyncChannels.PROJECT_CREATE, input) as Promise<ProjectCreateResult>,
+    openProject: (rootPath?: string) =>
+      ipcRenderer.invoke(AsyncChannels.PROJECT_OPEN, rootPath) as Promise<ProjectOpenResult>,
+    closeProject: (snapshot?: ProjectSessionSnapshot) =>
+      ipcRenderer.invoke(AsyncChannels.PROJECT_CLOSE, snapshot) as Promise<ProjectCloseResult>,
+    getCurrentProject: () =>
+      ipcRenderer.invoke(AsyncChannels.PROJECT_GET_CURRENT) as Promise<ProjectState | null>,
+    flushSession: (snapshot: ProjectSessionSnapshot) =>
+      ipcRenderer.invoke(AsyncChannels.PROJECT_FLUSH_SESSION, snapshot) as Promise<void>,
+    onProjectChanged: (callback: (payload: ProjectChangedEvent) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, payload: ProjectChangedEvent) => callback(payload);
+      ipcRenderer.on(StreamChannels.PROJECT_CHANGED, handler);
+      return () => { ipcRenderer.removeListener(StreamChannels.PROJECT_CHANGED, handler); };
+    },
   },
 
   git: {

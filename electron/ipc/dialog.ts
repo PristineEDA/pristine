@@ -21,8 +21,8 @@ export interface OpenProjectDirectoryDialogResult {
   filePath: string | null;
 }
 
-export function setDialogProjectRoot(root: string): void {
-  projectRoot = path.resolve(root);
+export function setDialogProjectRoot(root: string | null): void {
+  projectRoot = root ? path.resolve(root) : null;
 }
 
 function getWorkspaceRelativePath(filePath: string): string | null {

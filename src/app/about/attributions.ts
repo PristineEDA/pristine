@@ -196,6 +196,13 @@ export const openSourceAttributionSections: AttributionSection[] = [
         license: 'MIT',
       },
       {
+        id: 'better-sqlite3',
+        name: 'better-sqlite3',
+        url: 'https://github.com/WiseLibs/better-sqlite3',
+        author: 'WiseLibs',
+        license: 'MIT',
+      },
+      {
         id: 'vscode-jsonrpc',
         name: 'vscode-jsonrpc',
         url: 'https://github.com/microsoft/vscode-languageserver-node',

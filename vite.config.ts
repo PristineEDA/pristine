@@ -545,7 +545,7 @@ export default defineConfig(() => ({
                   }
                 },
               },
-                  external: ['node-pty', 'vscode-jsonrpc', 'vscode-jsonrpc/node', 'vscode-jsonrpc/node.js'],
+                  external: ['node-pty', 'better-sqlite3', 'vscode-jsonrpc', 'vscode-jsonrpc/node', 'vscode-jsonrpc/node.js'],
             },
           },
         },
