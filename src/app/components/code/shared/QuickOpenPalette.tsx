@@ -1,4 +1,4 @@
-import { Fragment, memo, useEffect, useMemo, useRef } from 'react';
+import { Fragment, memo, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { CornerDownLeft, Search } from 'lucide-react';
 import { toTreeTestId } from '../../../workspace/workspaceFiles';
 import { FileTypeBadge } from './FileTypeBadge';
@@ -183,16 +183,53 @@ export function QuickOpenPalette({
   onSelectResult,
 }: QuickOpenPaletteProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const overlayRef = useRef<HTMLDivElement | null>(null);
   const resultsContainerRef = useRef<HTMLDivElement | null>(null);
   const selectedRowRef = useRef<HTMLButtonElement | null>(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!isOpen) {
-      return;
+      return undefined;
     }
 
-    inputRef.current?.focus();
-    inputRef.current?.select();
+    let animationFrameId: number | null = null;
+    let timeoutId: number | null = null;
+    let hasSelectedInput = false;
+    const focusDeadline = performance.now() + 500;
+    const focusInput = () => {
+      const input = inputRef.current;
+      const overlay = overlayRef.current;
+
+      if (!input || !overlay) {
+        return;
+      }
+
+      if (!overlay.contains(document.activeElement)) {
+        input.focus({ preventScroll: true });
+
+        if (!hasSelectedInput) {
+          input.select();
+          hasSelectedInput = true;
+        }
+      }
+
+      if (performance.now() < focusDeadline) {
+        animationFrameId = window.requestAnimationFrame(focusInput);
+      }
+    };
+
+    focusInput();
+    timeoutId = window.setTimeout(focusInput, 0);
+
+    return () => {
+      if (animationFrameId !== null) {
+        window.cancelAnimationFrame(animationFrameId);
+      }
+
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+      }
+    };
   }, [isOpen]);
 
   useEffect(() => {
@@ -213,6 +250,7 @@ export function QuickOpenPalette({
   return (
     <div className="pointer-events-none absolute inset-x-0 top-[60px] z-50 flex justify-center px-4">
       <div
+        ref={overlayRef}
         data-testid="quick-open-overlay"
         className="pointer-events-auto w-full max-w-[42rem] overflow-hidden rounded-none border border-border bg-muted shadow-[0_18px_48px_rgba(0,0,0,0.42)]"
       >

@@ -96,12 +96,14 @@ vi.mock('../../../lsp/lspProblems', async (importOriginal) => {
 });
 
 const terminateTerminalSessionMock = vi.fn().mockResolvedValue(undefined);
+const terminateAllTerminalSessionsMock = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('./terminalSessionStore', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./terminalSessionStore')>();
   return {
     ...actual,
-    terminateTerminalSession: () => terminateTerminalSessionMock(),
+    terminateTerminalSession: (sessionKey?: string) => terminateTerminalSessionMock(sessionKey),
+    terminateAllTerminalSessions: () => terminateAllTerminalSessionsMock(),
   };
 });
 
@@ -121,7 +123,7 @@ vi.mock('./TerminalPanel', async () => {
   const React = await import('react');
 
   return {
-    TerminalPanel: ({ layoutVersion }: { layoutVersion?: string }) => {
+    TerminalPanel: ({ layoutVersion, sessionKey, testId }: { layoutVersion?: string; sessionKey?: string; testId?: string }) => {
       const instanceIdRef = React.useRef<number | null>(null);
 
       if (instanceIdRef.current === null) {
@@ -137,9 +139,10 @@ vi.mock('./TerminalPanel', async () => {
       }, []);
 
       return React.createElement('div', {
-        'data-testid': 'terminal-panel-mock',
+        'data-testid': testId ?? 'terminal-panel-mock',
         'data-instance-id': String(instanceIdRef.current),
         'data-layout-version': layoutVersion ?? '',
+        'data-session-key': sessionKey ?? '',
       }, 'Terminal panel mock');
     },
   };
@@ -161,6 +164,7 @@ describe('BottomPanel', () => {
   beforeEach(() => {
     terminalPanelMockState.reset();
     terminateTerminalSessionMock.mockClear();
+    terminateAllTerminalSessionsMock.mockClear();
     mockedProblems = [
       {
         id: 'error-1',
@@ -227,7 +231,7 @@ describe('BottomPanel', () => {
 
     await clickButton(user, /close panel/i);
 
-    await waitFor(() => expect(terminateTerminalSessionMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(terminateAllTerminalSessionsMock).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
   });
 
@@ -251,7 +255,7 @@ describe('BottomPanel', () => {
     await clickButton(user, /maximize panel/i);
 
     expect(onMaximizeToggle).toHaveBeenCalledTimes(1);
-    expect(terminateTerminalSessionMock).not.toHaveBeenCalled();
+    expect(terminateAllTerminalSessionsMock).not.toHaveBeenCalled();
   });
 
   it('labels the maximize button as restore when the panel is maximized', () => {
@@ -267,7 +271,7 @@ describe('BottomPanel', () => {
   it('keeps the terminal panel mounted when only layoutVersion changes', () => {
     const { rerender } = render(<BottomPanel layoutVersion="true:true:true:240" />);
 
-    const initialTerminalPanel = screen.getByTestId('terminal-panel-mock');
+    const initialTerminalPanel = screen.getByTestId('terminal-host');
     const initialInstanceId = initialTerminalPanel.getAttribute('data-instance-id');
 
     expect(initialTerminalPanel).toHaveAttribute('data-layout-version', 'true:true:true:240');
@@ -276,7 +280,7 @@ describe('BottomPanel', () => {
 
     rerender(<BottomPanel layoutVersion="false:true:true:240" />);
 
-    const rerenderedTerminalPanel = screen.getByTestId('terminal-panel-mock');
+    const rerenderedTerminalPanel = screen.getByTestId('terminal-host');
 
     expect(rerenderedTerminalPanel).toBe(initialTerminalPanel);
     expect(rerenderedTerminalPanel).toHaveAttribute('data-instance-id', initialInstanceId ?? '');
@@ -320,7 +324,106 @@ describe('BottomPanel', () => {
     expect(await screen.findByTestId('synthesis-panel')).toBeInTheDocument();
 
     await clickButton(user, /close panel/i);
-    expect(terminateTerminalSessionMock).toHaveBeenCalled();
+    expect(terminateAllTerminalSessionsMock).toHaveBeenCalled();
+  });
+
+  it('splits the focused pane and opens terminal or placeholder content from the new pane menu', async () => {
+    const user = userEvent.setup();
+
+    render(<BottomPanel />);
+
+    const firstPane = screen.getByTestId('bottom-panel-pane-bottom-pane-1');
+    vi.spyOn(firstPane, 'getBoundingClientRect').mockReturnValue({
+      bottom: 200,
+      height: 200,
+      left: 0,
+      right: 900,
+      top: 0,
+      width: 900,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+
+    expect(screen.getByTestId('bottom-panel-split')).toHaveAccessibleName('Split Panel');
+    expect(screen.getByTestId('bottom-panel-remove-split')).toBeDisabled();
+
+    await user.click(screen.getByTestId('bottom-panel-split'));
+
+    const splitPanes = screen.getAllByTestId(/bottom-panel-pane-bottom-pane-/);
+    expect(splitPanes).toHaveLength(2);
+    expect(screen.getByTestId('panel-bottom-panel-split-pane-bottom-pane-1')).toHaveAttribute('data-default-size', '50');
+    expect(screen.getByTestId('panel-bottom-panel-split-pane-bottom-pane-2')).toHaveAttribute('data-default-size', '50');
+    expect(screen.getByTestId('bottom-panel-open-pane-bottom-pane-2')).toHaveTextContent('Open');
+
+    await user.click(screen.getByTestId('bottom-panel-open-pane-bottom-pane-2'));
+    await user.click(await screen.findByTestId('bottom-panel-open-placeholder-a-bottom-pane-2'));
+
+    expect(screen.getByText('Placeholder A')).toBeInTheDocument();
+
+    await user.click(screen.getByTestId('bottom-panel-pane-bottom-pane-2'));
+    await clickBottomTab(user, 'terminal');
+
+    const secondTerminal = await screen.findByTestId('terminal-host-bottom-pane-2');
+    expect(secondTerminal).toHaveAttribute('data-session-key', 'bottom-pane-2');
+  });
+
+  it('does not split panes below the minimum width threshold', async () => {
+    const user = userEvent.setup();
+
+    render(<BottomPanel />);
+
+    const firstPane = screen.getByTestId('bottom-panel-pane-bottom-pane-1');
+    vi.spyOn(firstPane, 'getBoundingClientRect').mockReturnValue({
+      bottom: 200,
+      height: 200,
+      left: 0,
+      right: 400,
+      top: 0,
+      width: 400,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+
+    fireEvent.pointerDown(firstPane);
+
+    expect(screen.getByTestId('bottom-panel-split')).toBeDisabled();
+
+    await user.click(screen.getByTestId('bottom-panel-split'));
+
+    expect(screen.getAllByTestId(/bottom-panel-pane-bottom-pane-/)).toHaveLength(1);
+  });
+
+  it('removes the focused split pane and terminates its terminal session', async () => {
+    const user = userEvent.setup();
+
+    render(<BottomPanel />);
+
+    const firstPane = screen.getByTestId('bottom-panel-pane-bottom-pane-1');
+    vi.spyOn(firstPane, 'getBoundingClientRect').mockReturnValue({
+      bottom: 200,
+      height: 200,
+      left: 0,
+      right: 900,
+      top: 0,
+      width: 900,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+
+    await user.click(screen.getByTestId('bottom-panel-split'));
+    await user.click(screen.getByTestId('bottom-panel-open-pane-bottom-pane-2'));
+    await user.click(await screen.findByTestId('bottom-panel-open-terminal-bottom-pane-2'));
+
+    expect(await screen.findByTestId('terminal-host-bottom-pane-2')).toBeInTheDocument();
+
+    await user.click(screen.getByTestId('bottom-panel-remove-split'));
+
+    await waitFor(() => expect(screen.queryByTestId('terminal-host-bottom-pane-2')).not.toBeInTheDocument());
+    expect(terminateTerminalSessionMock).toHaveBeenCalledWith('bottom-pane-2');
+    expect(screen.getByTestId('terminal-host')).toBeInTheDocument();
   });
 
   it('filters output entries by text and severity', async () => {

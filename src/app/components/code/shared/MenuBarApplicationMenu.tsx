@@ -27,6 +27,15 @@ function getMenuItemShortcut(menuLabel: string, itemName: string): string {
   return formatShortcutLabel(getApplicationMenuItemShortcut(menuLabel, itemName));
 }
 
+function toMenuItemTestId(menuLabel: string, itemName: string): string {
+  const segment = `${menuLabel}-${itemName}`
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+  return `menu-item-${segment}`;
+}
+
 export function MenuBarApplicationMenu({
   menuStyle,
   onMenuValueChange,
@@ -57,6 +66,7 @@ export function MenuBarApplicationMenu({
                 <MenubarItem
                   key={`${menu.label}-${item.name}`}
                   className="px-2 py-1 text-[12px]"
+                  data-testid={toMenuItemTestId(menu.label, item.name)}
                   onSelect={() => onSelectAction(action)}
                 >
                   {item.name} <MenubarShortcut>{shortcut}</MenubarShortcut>

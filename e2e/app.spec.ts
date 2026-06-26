@@ -1,5 +1,6 @@
 import { test, expect, _electron as electron, type Locator, type Page } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -281,11 +282,28 @@ function createTerminalScrollFloodCommand(markerPrefix: string, count: number) {
 }
 
 function getE2EUserDataPath() {
-  const testSlug = test.info().titlePath
-    .join('__')
+  const testTitlePath = test.info().titlePath.join('__');
+  const readableSlug = testTitlePath
     .replace(/[^A-Za-z0-9_-]+/g, '-')
-    .slice(0, 120);
-  return test.info().outputPath(`electron-user-data-${testSlug}`);
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 32) || 'test';
+  const titleHash = createHash('sha1').update(testTitlePath).digest('hex').slice(0, 8);
+
+  return test.info().outputPath(`electron-user-data-${readableSlug}-${titleHash}`);
+}
+
+function getDefaultE2EProjectRoot() {
+  const projectRoot = test.info().outputPath('default-project');
+
+  if (!fs.existsSync(projectRoot)) {
+    createWorkspaceCopy(projectRoot);
+  }
+
+  return projectRoot;
+}
+
+function prepareE2EUserDataPath(userDataPath: string) {
+  fs.mkdirSync(path.join(userDataPath, 'session-data'), { recursive: true });
 }
 
 function skipIfPristineEngineUnavailable() {
@@ -593,7 +611,10 @@ test.skip(process.platform === 'darwin', 'Custom window controls are hidden on m
 async function launchApp(options?: { env?: Record<string, string | undefined>; projectRoot?: string | null }) {
   const projectRootEnv = options?.projectRoot === null
     ? undefined
-    : options?.projectRoot ?? fixtureWorkspace;
+    : options?.projectRoot ?? getDefaultE2EProjectRoot();
+  const userDataPath = getE2EUserDataPath();
+  prepareE2EUserDataPath(userDataPath);
+
   const app = await electron.launch({
     args: [path.join(__dirname, '..', 'dist-electron', 'main.js')],
     env: {
@@ -601,14 +622,14 @@ async function launchApp(options?: { env?: Record<string, string | undefined>; p
       ...options?.env,
       PRISTINE_E2E: '1',
       ...(projectRootEnv ? { PRISTINE_PROJECT_ROOT: projectRootEnv } : {}),
-      PRISTINE_USER_DATA_PATH: getE2EUserDataPath(),
+      PRISTINE_USER_DATA_PATH: userDataPath,
     },
   });
 
   const { splashWindow, window } = await resolveStartupWindows(app);
   await waitForMainUi(window);
 
-  return { app, window, splashWindow };
+  return { app, window, splashWindow, projectRoot: projectRootEnv ?? null };
 }
 
 async function setNextSaveDialogPath(
@@ -694,13 +715,16 @@ function notifyAppWindowFocused(
 }
 
 async function launchAppForSplashHandoff() {
+  const userDataPath = getE2EUserDataPath();
+  prepareE2EUserDataPath(userDataPath);
+
   const app = await electron.launch({
     args: [path.join(__dirname, '..', 'dist-electron', 'main.js')],
     env: {
       ...process.env,
       PRISTINE_E2E: '1',
       PRISTINE_PROJECT_ROOT: fixtureWorkspace,
-      PRISTINE_USER_DATA_PATH: getE2EUserDataPath(),
+      PRISTINE_USER_DATA_PATH: userDataPath,
     },
   });
 
@@ -714,13 +738,16 @@ async function launchPackagedWindowsApp(options?: { projectRoot?: string }) {
     throw new Error('Packaged Windows executable not found');
   }
 
+  const userDataPath = getE2EUserDataPath();
+  prepareE2EUserDataPath(userDataPath);
+
   const app = await electron.launch({
     executablePath: packagedWindowsExecutablePath,
     env: {
       ...process.env,
       PRISTINE_E2E: '1',
       PRISTINE_PROJECT_ROOT: options?.projectRoot ?? fixtureWorkspace,
-      PRISTINE_USER_DATA_PATH: getE2EUserDataPath(),
+      PRISTINE_USER_DATA_PATH: userDataPath,
     },
   });
 
@@ -1212,15 +1239,7 @@ async function setExplorerRenameInputValue(
 }
 
 async function openBottomTerminal(window: Awaited<ReturnType<typeof launchApp>>['window']) {
-  const toggleBottomPanel = window.getByTestId('toggle-bottom-panel');
-  await expect(toggleBottomPanel).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
-
-  if ((await toggleBottomPanel.getAttribute('aria-pressed')) !== 'true') {
-    await toggleBottomPanel.click();
-  }
-
-  const bottomPanel = window.getByTestId('panel-bottom-panel');
-  await expect(bottomPanel).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  const bottomPanel = await ensureBottomPanelOpen(window);
 
   const terminalTab = bottomPanel.getByTestId('bottom-panel-tab-terminal');
   await expect(terminalTab).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
@@ -1233,6 +1252,19 @@ async function openBottomTerminal(window: Awaited<ReturnType<typeof launchApp>>[
   await expect(window.locator('[data-testid="terminal-host"] .xterm')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
 
   return terminalHost;
+}
+
+async function ensureBottomPanelOpen(window: Awaited<ReturnType<typeof launchApp>>['window']) {
+  const toggleBottomPanel = window.getByTestId('toggle-bottom-panel');
+  await expect(toggleBottomPanel).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+
+  if ((await toggleBottomPanel.getAttribute('aria-pressed')) !== 'true') {
+    await toggleBottomPanel.click();
+  }
+
+  const bottomPanel = window.getByTestId('panel-bottom-panel');
+  await expect(bottomPanel).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  return bottomPanel;
 }
 
 async function waitForTerminalLayoutSettled(window: Awaited<ReturnType<typeof launchApp>>['window']) {
@@ -1963,7 +1995,11 @@ async function selectMenuBarItem(
   const menuContent = window.locator('[data-slot="menubar-content"]').last();
   await expect(menuContent).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
 
-  const menuItem = menuContent.locator('[data-slot="menubar-item"]').filter({ hasText: itemLabel }).first();
+  const menuItemTestId = `menu-item-${`${menuLabel}-${itemLabel}`
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')}`;
+  const menuItem = window.getByTestId(menuItemTestId);
   await expect(menuItem).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
   await menuItem.click();
 }
@@ -1984,13 +2020,13 @@ function isProcessRunning(pid: number) {
 test('app launches and shows main UI', async () => {
   test.slow();
 
-  const { app, window } = await launchApp();
+  const { app, projectRoot, window } = await launchApp();
 
   const title = await window.title();
   expect(title).toContain('Pristine');
 
   await waitForMainUi(window);
-  await waitForStartupWorkspaceReady(window, fixtureWorkspace);
+  await waitForStartupWorkspaceReady(window, projectRoot);
   await ensureExplorerVisible(window);
 
   const mainContentStack = window.getByTestId('main-content-stack');
@@ -4058,7 +4094,7 @@ test('pristine-engine lsp smoke resolves a cross-file definition and symbol refe
   await window.getByTestId('outline-node-label-variable-data_ready').click();
   await expect(window.locator('.monaco-editor .line-numbers.active-line-number')).toContainText('6');
 
-  await window.getByTestId('toggle-bottom-panel').click();
+  await ensureBottomPanelOpen(window);
   await getBottomPanelTab(window, 'lsp').click();
   await expect(window.getByTestId('lsp-panel')).toContainText('systemverilog/outline', { timeout: 10000 });
 
@@ -4241,7 +4277,7 @@ test('lsp panel captures initialization logs when hierarchy opens before any edi
   await window.getByTestId('left-panel-secondary-tab-hierarchy').click();
   await expect(window.getByTestId('hierarchy-node-label-cpu_top-root')).toBeVisible({ timeout: 15000 });
 
-  await window.getByTestId('toggle-bottom-panel').click();
+  await ensureBottomPanelOpen(window);
   await getBottomPanelTab(window, 'lsp').click();
   await expect(window.getByTestId('lsp-panel')).toBeVisible();
 
@@ -4263,7 +4299,7 @@ test('lsp panel shows prewarmed initialization logs before any SystemVerilog fil
   await ensureExplorerVisible(window);
   await expect(window.getByTestId('editor-tab-rtl/core/cpu_top.sv')).toHaveCount(0);
 
-  await window.getByTestId('toggle-bottom-panel').click();
+  await ensureBottomPanelOpen(window);
   await getBottomPanelTab(window, 'lsp').click();
   await expect(window.getByTestId('lsp-panel')).toBeVisible();
 
@@ -4297,7 +4333,7 @@ test('pristine-engine lsp bottom panel filters diagnostics and shows paired requ
     timeout: MONACO_READY_TIMEOUT_MS,
   });
 
-  await window.getByTestId('toggle-bottom-panel').click();
+  await ensureBottomPanelOpen(window);
   await getBottomPanelTab(window, 'lsp').click();
 
   await expect(window.getByTestId('lsp-panel')).toBeVisible();
@@ -5997,6 +6033,8 @@ test('ctrl+p quick open shows recent files in recency order and deduplicates reo
 
   await window.keyboard.press('Control+P');
   await expect(window.getByTestId('quick-open-input')).toBeFocused();
+  await expect(window.getByTestId('quick-open-result-README_md')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect(window.getByTestId('quick-open-result-rtl_core_reg_file_v')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
 
   const recentOrder = await window.locator('[data-testid^="quick-open-result-"]').evaluateAll((elements) => {
     return elements.map((element) => {
@@ -6292,7 +6330,11 @@ test('ctrl+p quick open escape restores the previous editor cursor position and 
 });
 
 test('explorer root toggles first-level children and hides the legacy collapse-all control', async () => {
-  const { app, window } = await launchApp();
+  const { app, projectRoot, window } = await launchApp();
+  if (!projectRoot) {
+    throw new Error('Expected launchApp to create a default E2E project root for explorer root coverage');
+  }
+  const expectedRootName = path.basename(projectRoot);
 
   await ensureExplorerVisible(window);
   const collapseAllButton = window.getByRole('button', { name: 'Collapse All' });
@@ -6305,7 +6347,7 @@ test('explorer root toggles first-level children and hides the legacy collapse-a
   await expect(rootIcon).toHaveClass(/(?:^|\s)h-2\.5(?:\s|$)/);
   await expect(rootIcon).toHaveClass(/(?:^|\s)w-2\.5(?:\s|$)/);
   await expect(window.getByTestId('left-panel-header')).not.toContainText('retroSoC');
-  await expect(rootNode).toContainText(path.basename(fixtureWorkspace));
+  await expect(rootNode).toContainText(expectedRootName);
   await expect(rtlNode).toBeVisible();
 
   await test.step('root row collapses and expands first-level children', async () => {
@@ -6485,6 +6527,15 @@ test('activity bar switches code subpages and menu bar keeps higher-priority pag
   await window.getByTestId('activity-item-explorer').click();
   await expect(window.getByTestId('panel-center-panel')).toBeVisible();
   await expect(window.getByTestId('code-view-factory')).toHaveCount(0);
+
+  if (await window.getByTestId('panel-left-panel').count() > 0) {
+    await window.getByTestId('toggle-left-panel').click();
+  }
+
+  if (await window.getByTestId('panel-right-panel').count() > 0) {
+    await window.getByTestId('toggle-right-panel').click();
+  }
+
   await expect(window.getByTestId('panel-left-panel')).toHaveCount(0);
   await expect(window.getByTestId('panel-right-panel')).toHaveCount(0);
 
@@ -7428,6 +7479,112 @@ test('terminal tab creates a real shell session and shows command output', async
   await expect.poll(async () => readTerminalText(window), {
     timeout: 15000,
   }).toContain(marker);
+
+  await app.close();
+});
+
+test('terminal bottom panel supports split panes with independent terminal lifecycle', async () => {
+  const { app, window } = await launchApp();
+  const marker = '__PRISTINE_TERMINAL_SPLIT_E2E__';
+
+  await openBottomTerminal(window);
+
+  const firstPane = window.getByTestId('bottom-panel-pane-bottom-pane-1');
+  const firstHost = window.getByTestId('terminal-host');
+  await expect(firstPane).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect(firstHost).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect.poll(async () => firstHost.getAttribute('data-terminal-session-id'), {
+    timeout: 15000,
+  }).not.toBe('');
+  const firstSessionId = await firstHost.getAttribute('data-terminal-session-id');
+
+  await expect(window.getByTestId('bottom-panel-split')).toBeEnabled();
+  await window.getByTestId('bottom-panel-split').click();
+
+  const secondPane = window.getByTestId('bottom-panel-pane-bottom-pane-2');
+  await expect(secondPane).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect(window.getByTestId('bottom-panel-open-pane-bottom-pane-2')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+
+  const initialFirstBox = await firstPane.boundingBox();
+  const initialSecondBox = await secondPane.boundingBox();
+  expect(initialFirstBox).not.toBeNull();
+  expect(initialSecondBox).not.toBeNull();
+  expect(initialFirstBox?.width ?? 0).toBeGreaterThan(300);
+  expect(initialSecondBox?.width ?? 0).toBeGreaterThan(300);
+
+  await window.waitForTimeout(350);
+
+  const splitHandle = window.getByTestId('bottom-panel-split-handle-0');
+  const splitHandleBox = await splitHandle.boundingBox();
+  if (!splitHandleBox) {
+    throw new Error('Expected bottom panel split handle geometry to be measurable');
+  }
+  await window.mouse.move(splitHandleBox.x + splitHandleBox.width / 2, splitHandleBox.y + splitHandleBox.height / 2);
+  await window.mouse.down();
+  await window.mouse.move(splitHandleBox.x + splitHandleBox.width / 2 + 80, splitHandleBox.y + splitHandleBox.height / 2, { steps: 8 });
+  await window.mouse.up();
+
+  await expect.poll(async () => {
+    const firstBox = await firstPane.boundingBox();
+    const secondBox = await secondPane.boundingBox();
+    return Math.abs((firstBox?.width ?? 0) - (secondBox?.width ?? 0));
+  }, {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(64);
+
+  await window.getByTestId('bottom-panel-open-pane-bottom-pane-2').click();
+  await window.getByTestId('bottom-panel-open-terminal-bottom-pane-2').click();
+
+  const secondHost = window.getByTestId('terminal-host-bottom-pane-2');
+  await expect(secondHost).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect(window.locator('[data-testid="terminal-host-bottom-pane-2"] .xterm')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect.poll(async () => secondHost.getAttribute('data-terminal-session-id'), {
+    timeout: 15000,
+  }).not.toBe('');
+  const secondSessionId = await secondHost.getAttribute('data-terminal-session-id');
+  expect(secondSessionId).not.toBe(firstSessionId);
+
+  const didWrite = await window.evaluate(async ({ payload, sessionId }) => {
+    const browserGlobal = globalThis as unknown as {
+      electronAPI?: {
+        terminal?: {
+          write: (id: string, data: string) => Promise<boolean>;
+        };
+      };
+    };
+    const api = browserGlobal.electronAPI?.terminal;
+    if (!api || !sessionId) {
+      return false;
+    }
+
+    return api.write(sessionId, payload);
+  }, { payload: `echo ${marker}\r`, sessionId: secondSessionId });
+  expect(didWrite).toBe(true);
+  await expect.poll(async () => secondHost.getAttribute('data-terminal-text'), {
+    timeout: 15000,
+  }).toContain(marker);
+
+  await secondPane.click();
+  await window.getByTestId('bottom-panel-remove-split').click();
+  await expect(window.getByTestId('terminal-host-bottom-pane-2')).toHaveCount(0);
+  await expect(firstHost).toBeVisible();
+  expect(await firstHost.getAttribute('data-terminal-session-id')).toBe(firstSessionId);
+
+  await window.getByTestId('bottom-panel-pane-bottom-pane-1').click();
+  await expect(window.getByTestId('bottom-panel-split')).toBeEnabled();
+  await window.getByTestId('bottom-panel-split').click();
+  await window.getByTestId('bottom-panel-open-pane-bottom-pane-3').click();
+  await window.getByTestId('bottom-panel-open-placeholder-a-bottom-pane-3').click();
+  await expect(window.getByText('Placeholder A')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+
+  await window.getByTestId('bottom-panel-pane-bottom-pane-3').click();
+  await window.getByTestId('bottom-panel-remove-split').click();
+  await window.getByTestId('bottom-panel-pane-bottom-pane-1').click();
+  await expect(window.getByTestId('bottom-panel-split')).toBeEnabled();
+  await window.getByTestId('bottom-panel-split').click();
+  await window.getByTestId('bottom-panel-open-pane-bottom-pane-4').click();
+  await window.getByTestId('bottom-panel-open-placeholder-b-bottom-pane-4').click();
+  await expect(window.getByText('Placeholder B')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
 
   await app.close();
 });

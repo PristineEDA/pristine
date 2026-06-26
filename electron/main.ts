@@ -64,6 +64,7 @@ function configureElectronStoragePaths(): void {
   );
   const sessionDataPath = path.join(userDataPath, 'session-data');
 
+  fs.mkdirSync(userDataPath, { recursive: true });
   fs.mkdirSync(sessionDataPath, { recursive: true });
   app.setPath('userData', userDataPath);
   app.setPath('sessionData', sessionDataPath);

@@ -4,7 +4,9 @@ import {
   ensureTerminalSession,
   getTerminalSessionSnapshot,
   resetTerminalSessionStoreForTests,
+  resizeTerminalSession,
   subscribeTerminalSession,
+  terminateAllTerminalSessions,
   terminateTerminalSession,
   writeTerminalSession,
 } from './terminalSessionStore';
@@ -161,5 +163,79 @@ describe('terminalSessionStore', () => {
       sessionId: null,
     });
     await expect(writeTerminalSession('dir\r')).resolves.toBe(false);
+  });
+
+  it('keeps keyed terminal sessions isolated and terminates one without clearing the other', async () => {
+    let onDataCallback: ((payload: { id: string; data: string }) => void) | undefined;
+    const killMock = vi.fn().mockResolvedValue(true);
+    const resizeMock = vi.fn().mockResolvedValue(true);
+    const writeMock = vi.fn().mockResolvedValue(true);
+    const baseApi = window.electronAPI as ElectronAPI;
+
+    window.electronAPI = {
+      ...baseApi,
+      terminal: {
+        ...baseApi.terminal,
+        create: vi.fn()
+          .mockResolvedValueOnce({ id: 'term-a', pid: 801, shell: 'powershell.exe' })
+          .mockResolvedValueOnce({ id: 'term-b', pid: 802, shell: 'bash' }),
+        kill: killMock,
+        resize: resizeMock,
+        write: writeMock,
+        onData: vi.fn((callback: (payload: { id: string; data: string }) => void) => {
+          onDataCallback = callback;
+          return vi.fn();
+        }),
+        onExit: vi.fn(() => vi.fn()),
+      },
+    };
+
+    await ensureTerminalSession('pane-a', { cols: 90, rows: 20 });
+    await ensureTerminalSession('pane-b', { cols: 100, rows: 24 });
+
+    onDataCallback?.({ id: 'term-a', data: 'A\r\n' });
+    onDataCallback?.({ id: 'term-b', data: 'B\r\n' });
+
+    expect(getTerminalSessionSnapshot('pane-a')).toMatchObject({ sessionId: 'term-a', buffer: 'A\r\n' });
+    expect(getTerminalSessionSnapshot('pane-b')).toMatchObject({ sessionId: 'term-b', buffer: 'B\r\n' });
+
+    await writeTerminalSession('pane-b', 'pwd\r');
+    await resizeTerminalSession('pane-a', 120, 30);
+
+    expect(writeMock).toHaveBeenCalledWith('term-b', 'pwd\r');
+    expect(resizeMock).toHaveBeenCalledWith('term-a', 120, 30);
+
+    await terminateTerminalSession('pane-a');
+
+    expect(killMock).toHaveBeenCalledWith('term-a');
+    expect(getTerminalSessionSnapshot('pane-a')).toMatchObject({ sessionId: null, buffer: '' });
+    expect(getTerminalSessionSnapshot('pane-b')).toMatchObject({ sessionId: 'term-b', buffer: 'B\r\n' });
+  });
+
+  it('terminates all keyed terminal sessions', async () => {
+    const killMock = vi.fn().mockResolvedValue(true);
+    const baseApi = window.electronAPI as ElectronAPI;
+
+    window.electronAPI = {
+      ...baseApi,
+      terminal: {
+        ...baseApi.terminal,
+        create: vi.fn()
+          .mockResolvedValueOnce({ id: 'term-all-a', pid: 901, shell: 'powershell.exe' })
+          .mockResolvedValueOnce({ id: 'term-all-b', pid: 902, shell: 'bash' }),
+        kill: killMock,
+        onData: vi.fn(() => vi.fn()),
+        onExit: vi.fn(() => vi.fn()),
+      },
+    };
+
+    await ensureTerminalSession('pane-all-a');
+    await ensureTerminalSession('pane-all-b');
+    await terminateAllTerminalSessions();
+
+    expect(killMock).toHaveBeenCalledWith('term-all-a');
+    expect(killMock).toHaveBeenCalledWith('term-all-b');
+    expect(getTerminalSessionSnapshot('pane-all-a').sessionId).toBeNull();
+    expect(getTerminalSessionSnapshot('pane-all-b').sessionId).toBeNull();
   });
 });

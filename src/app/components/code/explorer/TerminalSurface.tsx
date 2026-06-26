@@ -14,10 +14,14 @@ import {
 
 interface TerminalSurfaceProps {
   layoutVersion?: string;
+  sessionKey?: string;
+  testId?: string;
 }
 
-export function TerminalSurface({ layoutVersion }: TerminalSurfaceProps) {
-  const [sessionState, setSessionState] = useState(() => getTerminalSessionSnapshot());
+const DEFAULT_TERMINAL_SESSION_KEY = 'default';
+
+export function TerminalSurface({ layoutVersion, sessionKey = DEFAULT_TERMINAL_SESSION_KEY, testId = 'terminal-host' }: TerminalSurfaceProps) {
+  const [sessionState, setSessionState] = useState(() => getTerminalSessionSnapshot(sessionKey));
   const isE2E = window.electronAPI?.isE2E === true;
   const { activeTheme } = useTheme();
   const terminalTheme = useMemo(() => createTerminalThemeFromColorTheme(activeTheme), [activeTheme]);
@@ -103,7 +107,7 @@ export function TerminalSurface({ layoutVersion }: TerminalSurfaceProps) {
       return;
     }
 
-    const snapshot = getTerminalSessionSnapshot();
+    const snapshot = getTerminalSessionSnapshot(sessionKey);
     const term = new Terminal({
       convertEol: true,
       cursorBlink: true,
@@ -126,12 +130,12 @@ export function TerminalSurface({ layoutVersion }: TerminalSurfaceProps) {
 
     const syncSize = () => {
       fitAddon.fit();
-      void resizeTerminalSession(term.cols, term.rows);
+      void resizeTerminalSession(sessionKey, term.cols, term.rows);
     };
     syncSizeRef.current = syncSize;
 
     const syncFromStore = () => {
-      const next = getTerminalSessionSnapshot();
+      const next = getTerminalSessionSnapshot(sessionKey);
       setSessionState(next);
 
       if (next.buffer.length < renderedBufferRef.current) {
@@ -146,9 +150,9 @@ export function TerminalSurface({ layoutVersion }: TerminalSurfaceProps) {
       syncE2EState(next.buffer, next.pid, next.sessionId);
     };
 
-    const unsubscribe = subscribeTerminalSession(syncFromStore);
+    const unsubscribe = subscribeTerminalSession(sessionKey, syncFromStore);
     const inputSubscription = term.onData((data) => {
-      void writeTerminalSession(data);
+      void writeTerminalSession(sessionKey, data);
     });
 
     const observedElements = [
@@ -165,7 +169,7 @@ export function TerminalSurface({ layoutVersion }: TerminalSurfaceProps) {
 
     scheduleSyncSize();
 
-    void ensureTerminalSession({ cols: term.cols, rows: term.rows }).then(() => {
+    void ensureTerminalSession(sessionKey, { cols: term.cols, rows: term.rows }).then(() => {
       syncFromStore();
       scheduleSyncSize(true);
     });
@@ -180,7 +184,7 @@ export function TerminalSurface({ layoutVersion }: TerminalSurfaceProps) {
       term.dispose();
       terminalRef.current = null;
     };
-  }, [cancelScheduledSyncSize, isE2E, scheduleSyncSize, terminalTheme]);
+  }, [cancelScheduledSyncSize, isE2E, scheduleSyncSize, sessionKey, terminalTheme]);
 
   return (
     <div
@@ -189,7 +193,8 @@ export function TerminalSurface({ layoutVersion }: TerminalSurfaceProps) {
     >
       <div
         ref={hostRef}
-        data-testid="terminal-host"
+        data-testid={testId}
+        data-terminal-pane-id={sessionKey}
         className="h-full min-h-0 min-w-0 w-full px-2 py-1"
         onClick={() => terminalRef.current?.focus()}
       />

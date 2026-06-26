@@ -217,4 +217,33 @@ describe('TerminalSurface', () => {
     await waitFor(() => expect(fitMock).toHaveBeenCalled());
     await waitFor(() => expect(resizeMock).toHaveBeenCalledWith('term-layout', 80, 24));
   });
+
+  it('uses the provided session key for startup, writes, resize, and E2E metadata', async () => {
+    const createMock = vi.fn().mockResolvedValue({ id: 'term-pane', pid: 606, shell: 'powershell.exe' });
+    const writeMock = vi.fn().mockResolvedValue(true);
+    const resizeMock = vi.fn().mockResolvedValue(true);
+    const baseApi = window.electronAPI as ElectronAPI;
+
+    window.electronAPI = {
+      ...baseApi,
+      isE2E: true,
+      terminal: {
+        ...baseApi.terminal,
+        create: createMock,
+        write: writeMock,
+        resize: resizeMock,
+      },
+    };
+
+    render(<TerminalSurface sessionKey="pane-custom" testId="terminal-host-pane-custom" />);
+
+    await waitFor(() => expect(createMock).toHaveBeenCalled());
+    await waitFor(() => expect(resizeMock).toHaveBeenCalledWith('term-pane', 80, 24));
+
+    const host = screen.getByTestId('terminal-host-pane-custom');
+    expect(host).toHaveAttribute('data-terminal-pane-id', 'pane-custom');
+
+    fireEvent.click(host);
+    expect(terminalInstances[0]?.focus).toHaveBeenCalled();
+  });
 });

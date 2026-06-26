@@ -378,6 +378,10 @@ describe('electron main entry', () => {
 
     expect(mocks.mockSetName).toHaveBeenCalledWith('Pristine');
     expect(mocks.mockMkdirSync).toHaveBeenCalledWith(
+      userDataPath,
+      { recursive: true },
+    );
+    expect(mocks.mockMkdirSync).toHaveBeenCalledWith(
       path.join(userDataPath, 'session-data'),
       { recursive: true },
     );
@@ -411,6 +415,10 @@ describe('electron main entry', () => {
     expect(mocks.mockSetAsDefaultProtocolClient).toHaveBeenCalledWith('pristine');
     expect(mocks.mockTryOpenStartupProject).toHaveBeenCalledWith(null, expect.any(Function));
     expect(mocks.mockSetProjectRoot).toHaveBeenCalledWith(null);
+    expect(mocks.mockMkdirSync).toHaveBeenCalledWith(
+      path.join(mocks.mockAppDataPath, 'Pristine', 'dev-profile'),
+      { recursive: true },
+    );
     expect(mocks.mockMkdirSync).toHaveBeenCalledWith(
       path.join(mocks.mockAppDataPath, 'Pristine', 'dev-profile', 'session-data'),
       { recursive: true },
