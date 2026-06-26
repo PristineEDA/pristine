@@ -418,6 +418,40 @@ async function waitForMainUi(window: Page) {
   await expect(window.getByTestId('toggle-activity-bar')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
 }
 
+async function waitForStartupWorkspaceReady(page: Page, projectRoot: string | null) {
+  await expect.poll(async () => page.evaluate(async (expectedProjectRoot) => {
+    const browserGlobal = globalThis as typeof globalThis & {
+      electronAPI?: {
+        project?: {
+          getCurrentProject?: () => Promise<{ rootPath: string } | null>;
+        };
+      };
+    };
+    const projectApi = browserGlobal.electronAPI?.project;
+
+    if (!projectApi?.getCurrentProject) {
+      return { ready: true, hasProject: false };
+    }
+
+    const project = await projectApi.getCurrentProject();
+    const hasExpectedProject = expectedProjectRoot === null
+      ? project === null
+      : project?.rootPath === expectedProjectRoot;
+
+    return {
+      ready: hasExpectedProject,
+      hasProject: Boolean(project),
+    };
+  }, projectRoot), { timeout: UI_READY_TIMEOUT_MS }).toMatchObject({ ready: true });
+
+  if (projectRoot === null) {
+    await expect(page.getByText('No Projects Yet')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+    return;
+  }
+
+  await expect(page.getByTestId('editor-empty-open-project')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+}
+
 function isSplashWindow(entry: { title: string | null; url: string }) {
   return entry.title === 'Pristine Loading' || entry.url.endsWith('/splash.html');
 }
@@ -724,12 +758,16 @@ function toWorkspaceTreeTestId(relativePath: string) {
 async function ensureExplorerVisible(window: Awaited<ReturnType<typeof launchApp>>['window']) {
   const leftPanel = window.getByTestId('panel-left-panel');
   const readmeNode = window.getByTestId('file-tree-node-README_md');
+  const leftPanelToggle = window.getByTestId('toggle-left-panel');
 
-  if (await readmeNode.count() === 0) {
-    await window.getByTestId('toggle-left-panel').click();
+  if (await leftPanelToggle.getAttribute('data-state') !== 'on') {
+    await leftPanelToggle.click();
   }
 
   await expect(leftPanel).toBeVisible();
+  await expect.poll(async () => (await leftPanel.boundingBox())?.width ?? 0, {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(100);
   await expect(readmeNode).toBeVisible();
 }
 
@@ -1952,7 +1990,8 @@ test('app launches and shows main UI', async () => {
   expect(title).toContain('Pristine');
 
   await waitForMainUi(window);
-  await window.getByTestId('toggle-left-panel').click();
+  await waitForStartupWorkspaceReady(window, fixtureWorkspace);
+  await ensureExplorerVisible(window);
 
   const mainContentStack = window.getByTestId('main-content-stack');
   const explorerPanel = window.getByTestId('panel-left-panel');
@@ -3555,7 +3594,7 @@ test('No project startup shows an empty project and creating a project restores 
   try {
     await expect(firstLaunch.window.getByText('No Projects Yet')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
     await expect(firstLaunch.window.getByTestId('file-tree-node-root')).toHaveCount(0);
-    await expect(firstLaunch.window.getByText('retroSoC')).toHaveCount(0);
+    await expect(firstLaunch.window.getByTestId('left-panel-explorer-content').getByText('retroSoC')).toHaveCount(0);
 
     await selectMenuBarItem(firstLaunch.window, 'File', 'New Project');
     await firstLaunch.window.getByTestId('create-project-name').fill(projectName);
