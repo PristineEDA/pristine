@@ -17,6 +17,7 @@ const directRuntimeDependencyAttributionIds = new Map([
   ['@xterm/xterm', 'xterm'],
   ['@xyflow/react', 'react-flow'],
   ['ai', 'ai-sdk'],
+  ['better-sqlite3', 'better-sqlite3'],
   ['class-variance-authority', 'class-variance-authority'],
   ['clsx', 'clsx'],
   ['cmdk', 'cmdk'],

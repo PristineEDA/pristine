@@ -124,6 +124,10 @@ export function createElectronApiMock(): ElectronAPI {
         canceled: true,
         filePath: null,
       }),
+      showOpenProjectDirectoryDialog: vi.fn().mockResolvedValue({
+        canceled: true,
+        filePath: null,
+      }),
     },
     git: {
       getStatus: vi.fn().mockResolvedValue({
@@ -282,6 +286,26 @@ export function createElectronApiMock(): ElectronAPI {
     },
     notices: {
       revealBundledFiles: vi.fn().mockResolvedValue(true),
+    },
+    project: {
+      createProject: vi.fn().mockImplementation(async (input) => ({
+        project: {
+          name: input.name,
+          rootPath: `${input.path}\\${input.name}`,
+          session: null,
+        },
+      })),
+      openProject: vi.fn().mockResolvedValue({
+        project: {
+          name: 'project',
+          rootPath: 'C:\\Projects\\project',
+          session: null,
+        },
+      }),
+      closeProject: vi.fn().mockResolvedValue({ closed: true }),
+      getCurrentProject: vi.fn().mockResolvedValue(null),
+      flushSession: vi.fn().mockResolvedValue(undefined),
+      onProjectChanged: vi.fn(() => vi.fn()),
     },
     auth: {
       openAccountPage: vi.fn().mockResolvedValue(true),

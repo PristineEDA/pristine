@@ -634,6 +634,18 @@ export function useWorkspaceFileStore() {
     savedFileContentsRef.current = savedFileContents;
   }, [savedFileContents]);
 
+  const resetFileStore = useCallback(() => {
+    inFlightLoadsRef.current.clear();
+    fileContentsRef.current = {};
+    savedFileContentsRef.current = {};
+    setFileContents({});
+    setSavedFileContents({});
+    setLoadingFiles({});
+    setSavingFiles({});
+    setLoadErrors({});
+    setSaveErrors({});
+  }, []);
+
   return {
     adoptFileState,
     dirtyFileIds,
@@ -648,6 +660,7 @@ export function useWorkspaceFileStore() {
     removeWorkspacePaths,
     renameFileState,
     renameWorkspacePaths,
+    resetFileStore,
     saveErrors,
     saveFileContent,
     saveFiles,

@@ -194,6 +194,7 @@ const EditorGroupLeaf = memo(function EditorGroupLeaf({
   onActiveFileReveal,
   resolveFileId,
   workspaceActionsRef,
+  hasOpenProject,
 }: {
   group: EditorGroup;
   focused: boolean;
@@ -214,6 +215,7 @@ const EditorGroupLeaf = memo(function EditorGroupLeaf({
   onActiveFileReveal?: (fileId: string) => void;
   resolveFileId: (fileId: string) => string;
   workspaceActionsRef: React.MutableRefObject<EditorGroupWorkspaceActions>;
+  hasOpenProject: boolean;
 }) {
   const editorRef = useRef<any>(null);
   const activeTab = group.tabs.find((tab) => tab.id === group.activeTabId);
@@ -293,6 +295,7 @@ const EditorGroupLeaf = memo(function EditorGroupLeaf({
       <EditorArea
         tabs={group.tabs}
         activeTabId={group.activeTabId}
+        hasOpenProject={hasOpenProject}
         documentTabId={activeDocumentId}
         onTabChange={(tabId) => {
           const nextTab = group.tabs.find((tab) => tab.id === tabId);
@@ -353,9 +356,11 @@ const EditorGroupLeaf = memo(function EditorGroupLeaf({
 });
 
 export function EditorSplitLayout({
+  hasOpenProject = true,
   jumpToLine,
   onActiveFileReveal,
 }: {
+  hasOpenProject?: boolean;
   jumpToLine?: number;
   onActiveFileReveal?: (fileId: string) => void;
 }) {
@@ -479,6 +484,7 @@ export function EditorSplitLayout({
         <EditorArea
           tabs={[]}
           activeTabId=""
+          hasOpenProject={hasOpenProject}
           onTabChange={() => undefined}
           onTabClose={() => undefined}
           editorRef={{ current: null }}
@@ -514,6 +520,7 @@ export function EditorSplitLayout({
           onActiveFileReveal={onActiveFileReveal}
           resolveFileId={resolveFileId}
           workspaceActionsRef={workspaceActionsRef}
+          hasOpenProject={hasOpenProject}
         />
       );
     }

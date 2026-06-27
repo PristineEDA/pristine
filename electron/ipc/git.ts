@@ -346,8 +346,8 @@ async function setupWorkspaceChangeWatchers() {
   }
 }
 
-export function setGitProjectRoot(root: string): void {
-  projectRoot = path.resolve(root);
+export function setGitProjectRoot(root: string | null): void {
+  projectRoot = root ? path.resolve(root) : null;
   void setupWorkspaceChangeWatchers();
 }
 
@@ -360,6 +360,15 @@ export function registerGitHandlers(
   }
 
   ipcMain.handle(AsyncChannels.GIT_GET_STATUS, async (): Promise<WorkspaceGitStatusPayload> => {
+    if (!projectRoot) {
+      return {
+        branchName: null,
+        hasProjectFiles: false,
+        isGitRepo: false,
+        pathStates: {},
+      };
+    }
+
     const root = getProjectRoot();
     const projectHasFiles = await hasProjectFiles(root);
 
@@ -394,6 +403,14 @@ export function registerGitHandlers(
 
   ipcMain.handle(AsyncChannels.GIT_GET_FILE_DIFF, async (_event, filePath: unknown): Promise<WorkspaceGitFileDiffPayload> => {
     assertString(filePath, 'filePath');
+
+    if (!projectRoot) {
+      return {
+        currentContent: '',
+        filePath: normalizeGitPath(filePath),
+        originalContent: '',
+      };
+    }
 
     const root = getProjectRoot();
     const normalizedFilePath = normalizeGitPath(filePath);

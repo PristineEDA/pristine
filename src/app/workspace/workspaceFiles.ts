@@ -1,5 +1,4 @@
-export const DEFAULT_STARTUP_PROJECT_ROOT = 'C:\\Users\\maksy\\Desktop\\fpga\\retroSoC';
-export const DEFAULT_STARTUP_PROJECT_NAME = 'retroSoC';
+export const DEFAULT_WORKSPACE_ROOT_NAME = 'Project';
 export const WORKSPACE_ROOT_PATH = '.';
 
 const UNTITLED_FILE_ID_PATTERN = /^untitled-\d+$/i;
@@ -87,7 +86,7 @@ export function getWorkspaceBaseName(filePath: string): string {
   const normalized = normalizeWorkspacePath(filePath);
 
   if (normalized === WORKSPACE_ROOT_PATH) {
-    return DEFAULT_STARTUP_PROJECT_NAME;
+    return DEFAULT_WORKSPACE_ROOT_NAME;
   }
 
   const segments = normalized.split('/');
@@ -151,14 +150,14 @@ export function isWorkspaceRelativeFilePath(filePath: string): boolean {
   return !isUntitledFileId(filePath) && !isAbsoluteFilePath(filePath);
 }
 
-export function getWorkspaceSegments(filePath: string): string[] {
+export function getWorkspaceSegments(filePath: string, rootName = DEFAULT_WORKSPACE_ROOT_NAME): string[] {
   const normalized = normalizeWorkspacePath(filePath);
 
   if (normalized === WORKSPACE_ROOT_PATH) {
-    return [DEFAULT_STARTUP_PROJECT_NAME];
+    return [rootName];
   }
 
-  return [DEFAULT_STARTUP_PROJECT_NAME, ...normalized.split('/')];
+  return [rootName, ...normalized.split('/')];
 }
 
 export function getDisplayPathSegments(filePath: string, displayName?: string): string[] {
@@ -618,11 +617,11 @@ export function createWorkspaceNode(
   };
 }
 
-export function createRootNode(children: WorkspaceTreeNode[]): WorkspaceTreeNode {
+export function createRootNode(children: WorkspaceTreeNode[], name = DEFAULT_WORKSPACE_ROOT_NAME): WorkspaceTreeNode {
   return {
     id: WORKSPACE_ROOT_PATH,
     path: WORKSPACE_ROOT_PATH,
-    name: DEFAULT_STARTUP_PROJECT_NAME,
+    name,
     type: 'folder',
     children,
     hasLoadedChildren: true,

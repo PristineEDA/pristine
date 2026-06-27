@@ -1,5 +1,6 @@
 import { test, expect, _electron as electron, type Locator, type Page } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -281,7 +282,26 @@ function createTerminalScrollFloodCommand(markerPrefix: string, count: number) {
 }
 
 function getE2EUserDataPath() {
-  return test.info().outputPath('electron-user-data');
+  const testTitlePath = test.info().titlePath.join('__');
+  const readableSlug = testTitlePath
+    .replace(/[^A-Za-z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 32) || 'test';
+  const titleHash = createHash('sha1').update(testTitlePath).digest('hex').slice(0, 8);
+
+  return test.info().outputPath(`electron-user-data-${readableSlug}-${titleHash}`);
+}
+
+function getDefaultE2EProjectRoot() {
+  const projectRoot = test.info().outputPath('default-project');
+
+  createWorkspaceCopy(projectRoot);
+
+  return projectRoot;
+}
+
+function prepareE2EUserDataPath(userDataPath: string) {
+  fs.mkdirSync(path.join(userDataPath, 'session-data'), { recursive: true });
 }
 
 function skipIfPristineEngineUnavailable() {
@@ -412,6 +432,91 @@ async function getPageTitleSafely(page: Page) {
 async function waitForMainUi(window: Page) {
   await window.waitForLoadState('domcontentloaded', { timeout: UI_READY_TIMEOUT_MS });
   await expect(window.getByTestId('toggle-activity-bar')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+}
+
+function normalizeProjectRootForComparison(projectRoot: string | null) {
+  if (projectRoot === null) {
+    return null;
+  }
+
+  const normalizedRoot = path
+    .normalize(projectRoot)
+    .replace(/[\\/]+/g, '/')
+    .replace(/\/+$/g, '');
+  return process.platform === 'win32' ? normalizedRoot.toLowerCase() : normalizedRoot;
+}
+
+async function waitForStartupWorkspaceReady(page: Page, projectRoot: string | null) {
+  const expectedProjectRoot = normalizeProjectRootForComparison(projectRoot);
+  let latestReadiness: {
+    expectedRootPath?: string | null;
+    hasProject?: boolean;
+    normalizedRootPath?: string | null;
+    ready: boolean;
+    rootPath?: string | null;
+  } | null = null;
+
+  try {
+    await expect.poll(async () => {
+      latestReadiness = await page.evaluate(async ({ expectedRootPath, isWindows }) => {
+        const browserGlobal = globalThis as typeof globalThis & {
+          electronAPI?: {
+            project?: {
+              getCurrentProject?: () => Promise<{ rootPath: string } | null>;
+            };
+          };
+        };
+        const projectApi = browserGlobal.electronAPI?.project;
+
+        if (!projectApi?.getCurrentProject) {
+          return { ready: true, hasProject: false };
+        }
+
+        const project = await projectApi.getCurrentProject();
+        const rootPath = project?.rootPath ?? null;
+        const normalizeRootPath = (root: string | null) => {
+          if (root === null) {
+            return null;
+          }
+
+          const normalizedRoot = root.replace(/[\\/]+/g, '/').replace(/\/+$/g, '');
+          return isWindows ? normalizedRoot.toLowerCase() : normalizedRoot;
+        };
+        const normalizedRootPath = normalizeRootPath(rootPath);
+        const hasExpectedProject = expectedRootPath === null
+          ? project === null
+          : normalizedRootPath === expectedRootPath;
+
+        return {
+          ready: hasExpectedProject,
+          hasProject: Boolean(project),
+          rootPath,
+          normalizedRootPath,
+          expectedRootPath,
+        };
+      }, {
+        expectedRootPath: expectedProjectRoot,
+        isWindows: process.platform === 'win32',
+      });
+      return latestReadiness.ready;
+    }, { timeout: UI_READY_TIMEOUT_MS }).toBe(true);
+  } catch (error) {
+    const failureMessage = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      [
+        'Timed out waiting for startup workspace project readiness.',
+        `Last readiness: ${JSON.stringify(latestReadiness, null, 2)}`,
+        failureMessage,
+      ].join('\n'),
+    );
+  }
+
+  if (projectRoot === null) {
+    await expect(page.getByText('No Projects Yet')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+    return;
+  }
+
+  await expect(page.getByTestId('editor-empty-open-project')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
 }
 
 function isSplashWindow(entry: { title: string | null; url: string }) {
@@ -552,22 +657,28 @@ const packagedWindowsExecutablePath = findPackagedWindowsExecutablePath();
 
 test.skip(process.platform === 'darwin', 'Custom window controls are hidden on macOS');
 
-async function launchApp(options?: { env?: Record<string, string | undefined>; projectRoot?: string }) {
+async function launchApp(options?: { env?: Record<string, string | undefined>; projectRoot?: string | null }) {
+  const projectRootEnv = options?.projectRoot === null
+    ? undefined
+    : options?.projectRoot ?? getDefaultE2EProjectRoot();
+  const userDataPath = getE2EUserDataPath();
+  prepareE2EUserDataPath(userDataPath);
+
   const app = await electron.launch({
     args: [path.join(__dirname, '..', 'dist-electron', 'main.js')],
     env: {
       ...process.env,
       ...options?.env,
       PRISTINE_E2E: '1',
-      PRISTINE_PROJECT_ROOT: options?.projectRoot ?? fixtureWorkspace,
-      PRISTINE_USER_DATA_PATH: getE2EUserDataPath(),
+      ...(projectRootEnv ? { PRISTINE_PROJECT_ROOT: projectRootEnv } : {}),
+      PRISTINE_USER_DATA_PATH: userDataPath,
     },
   });
 
   const { splashWindow, window } = await resolveStartupWindows(app);
   await waitForMainUi(window);
 
-  return { app, window, splashWindow };
+  return { app, window, splashWindow, projectRoot: projectRootEnv ?? null };
 }
 
 async function setNextSaveDialogPath(
@@ -578,6 +689,16 @@ async function setNextSaveDialogPath(
     void electronApp;
     process.env['PRISTINE_E2E_SAVE_DIALOG_PATH'] = nextFilePath;
   }, filePath);
+}
+
+async function setNextProjectDirectoryPath(
+  app: Awaited<ReturnType<typeof electron.launch>>,
+  directoryPath: string,
+) {
+  await app.evaluate(({ app: electronApp }, nextDirectoryPath) => {
+    void electronApp;
+    process.env['PRISTINE_E2E_PROJECT_DIRECTORY_PATH'] = nextDirectoryPath;
+  }, directoryPath);
 }
 
 function createWorkspaceCopy(targetPath: string) {
@@ -643,13 +764,16 @@ function notifyAppWindowFocused(
 }
 
 async function launchAppForSplashHandoff() {
+  const userDataPath = getE2EUserDataPath();
+  prepareE2EUserDataPath(userDataPath);
+
   const app = await electron.launch({
     args: [path.join(__dirname, '..', 'dist-electron', 'main.js')],
     env: {
       ...process.env,
       PRISTINE_E2E: '1',
       PRISTINE_PROJECT_ROOT: fixtureWorkspace,
-      PRISTINE_USER_DATA_PATH: getE2EUserDataPath(),
+      PRISTINE_USER_DATA_PATH: userDataPath,
     },
   });
 
@@ -663,13 +787,16 @@ async function launchPackagedWindowsApp(options?: { projectRoot?: string }) {
     throw new Error('Packaged Windows executable not found');
   }
 
+  const userDataPath = getE2EUserDataPath();
+  prepareE2EUserDataPath(userDataPath);
+
   const app = await electron.launch({
     executablePath: packagedWindowsExecutablePath,
     env: {
       ...process.env,
       PRISTINE_E2E: '1',
       PRISTINE_PROJECT_ROOT: options?.projectRoot ?? fixtureWorkspace,
-      PRISTINE_USER_DATA_PATH: getE2EUserDataPath(),
+      PRISTINE_USER_DATA_PATH: userDataPath,
     },
   });
 
@@ -707,12 +834,16 @@ function toWorkspaceTreeTestId(relativePath: string) {
 async function ensureExplorerVisible(window: Awaited<ReturnType<typeof launchApp>>['window']) {
   const leftPanel = window.getByTestId('panel-left-panel');
   const readmeNode = window.getByTestId('file-tree-node-README_md');
+  const leftPanelToggle = window.getByTestId('toggle-left-panel');
 
-  if (await readmeNode.count() === 0) {
-    await window.getByTestId('toggle-left-panel').click();
+  if (await leftPanelToggle.getAttribute('data-state') !== 'on') {
+    await leftPanelToggle.click();
   }
 
   await expect(leftPanel).toBeVisible();
+  await expect.poll(async () => (await leftPanel.boundingBox())?.width ?? 0, {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(100);
   await expect(readmeNode).toBeVisible();
 }
 
@@ -1157,15 +1288,7 @@ async function setExplorerRenameInputValue(
 }
 
 async function openBottomTerminal(window: Awaited<ReturnType<typeof launchApp>>['window']) {
-  const toggleBottomPanel = window.getByTestId('toggle-bottom-panel');
-  await expect(toggleBottomPanel).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
-
-  if ((await toggleBottomPanel.getAttribute('aria-pressed')) !== 'true') {
-    await toggleBottomPanel.click();
-  }
-
-  const bottomPanel = window.getByTestId('panel-bottom-panel');
-  await expect(bottomPanel).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  const bottomPanel = await ensureBottomPanelOpen(window);
 
   const terminalTab = bottomPanel.getByTestId('bottom-panel-tab-terminal');
   await expect(terminalTab).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
@@ -1178,6 +1301,19 @@ async function openBottomTerminal(window: Awaited<ReturnType<typeof launchApp>>[
   await expect(window.locator('[data-testid="terminal-host"] .xterm')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
 
   return terminalHost;
+}
+
+async function ensureBottomPanelOpen(window: Awaited<ReturnType<typeof launchApp>>['window']) {
+  const toggleBottomPanel = window.getByTestId('toggle-bottom-panel');
+  await expect(toggleBottomPanel).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+
+  if ((await toggleBottomPanel.getAttribute('aria-pressed')) !== 'true') {
+    await toggleBottomPanel.click();
+  }
+
+  const bottomPanel = window.getByTestId('panel-bottom-panel');
+  await expect(bottomPanel).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  return bottomPanel;
 }
 
 async function waitForTerminalLayoutSettled(window: Awaited<ReturnType<typeof launchApp>>['window']) {
@@ -1908,7 +2044,11 @@ async function selectMenuBarItem(
   const menuContent = window.locator('[data-slot="menubar-content"]').last();
   await expect(menuContent).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
 
-  const menuItem = menuContent.locator('[data-slot="menubar-item"]').filter({ hasText: itemLabel }).first();
+  const menuItemTestId = `menu-item-${`${menuLabel}-${itemLabel}`
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')}`;
+  const menuItem = window.getByTestId(menuItemTestId);
   await expect(menuItem).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
   await menuItem.click();
 }
@@ -1929,13 +2069,14 @@ function isProcessRunning(pid: number) {
 test('app launches and shows main UI', async () => {
   test.slow();
 
-  const { app, window } = await launchApp();
+  const { app, projectRoot, window } = await launchApp();
 
   const title = await window.title();
   expect(title).toContain('Pristine');
 
   await waitForMainUi(window);
-  await window.getByTestId('toggle-left-panel').click();
+  await waitForStartupWorkspaceReady(window, projectRoot);
+  await ensureExplorerVisible(window);
 
   const mainContentStack = window.getByTestId('main-content-stack');
   const explorerPanel = window.getByTestId('panel-left-panel');
@@ -3472,6 +3613,135 @@ test('application menu expands on hover and stays visible when locked', async ()
   await app.close();
 });
 
+test('New Project opens from File menu and Ctrl+Shift+N with project defaults', async () => {
+  const workspaceCopy = test.info().outputPath('new-project-dialog-workspace');
+  const selectedProjectPath = test.info().outputPath('selected-project-directory');
+  const projectName = `chip_lab_${Date.now()}`;
+  const createdProjectPath = path.join(selectedProjectPath, projectName);
+  createWorkspaceCopy(workspaceCopy);
+  fs.mkdirSync(selectedProjectPath, { recursive: true });
+  const primaryModifier = process.platform === 'darwin' ? 'Meta' : 'Control';
+  const { app, window } = await launchApp({ projectRoot: workspaceCopy });
+
+  try {
+    await selectMenuBarItem(window, 'File', 'New Project');
+
+    const dialog = window.getByTestId('create-project-dialog');
+    await expect(dialog).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+    await expect(window.getByRole('heading', { name: 'New Project' })).toBeVisible();
+    await expect(window.getByTestId('create-project-name')).toBeVisible();
+    await expect(window.getByTestId('create-project-name')).toHaveAttribute('placeholder', 'Project name');
+    await expect(window.getByTestId('create-project-path')).toBeVisible();
+    await expect(window.getByTestId('create-project-mode')).toContainText('rtl2gds');
+    await expect(window.getByTestId('create-project-process')).toContainText('ics55');
+    await expect(window.getByTestId('create-project-type')).toContainText('retroSoC');
+    await expect(window.getByTestId('create-project-mgnt')).toContainText('none');
+    await expect(window.getByTestId('create-project-padframe')).toContainText('QFN32');
+
+    await setNextProjectDirectoryPath(app, selectedProjectPath);
+    await window.getByTestId('create-project-browse').click();
+    await expect(window.getByTestId('create-project-path')).toHaveValue(path.resolve(selectedProjectPath));
+
+    await window.getByTestId('create-project-mode').click();
+    await window.getByRole('option', { name: 'rtl', exact: true }).click();
+    await expect(window.getByTestId('create-project-mode')).toContainText('rtl');
+
+    await window.getByTestId('create-project-cancel').click();
+    await expect(dialog).toHaveCount(0);
+
+    await window.keyboard.press(`${primaryModifier}+Shift+N`);
+    await expect(window.getByTestId('create-project-dialog')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+    await window.getByTestId('create-project-name').fill(projectName);
+    await setNextProjectDirectoryPath(app, selectedProjectPath);
+    await window.getByTestId('create-project-browse').click();
+    await expect(window.getByTestId('create-project-path')).toHaveValue(path.resolve(selectedProjectPath));
+    await window.getByTestId('create-project-submit').click();
+
+    await expect(window.getByTestId('create-project-dialog')).toHaveCount(0, { timeout: UI_READY_TIMEOUT_MS });
+    await expect.poll(() => fs.existsSync(path.join(createdProjectPath, '.pristine', 'project.sqlite')), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBe(true);
+    await expect(window.getByTestId('file-tree-node-root')).toContainText(projectName);
+    await expect(window.getByTestId('editor-empty-open-project')).toBeVisible();
+  } finally {
+    await app.close();
+  }
+});
+
+test('No project startup shows an empty project and creating a project restores last project on relaunch', async () => {
+  const selectedProjectPath = test.info().outputPath('no-project-create-root');
+  const projectName = `empty_start_${Date.now()}`;
+  const createdProjectPath = path.join(selectedProjectPath, projectName);
+  fs.mkdirSync(selectedProjectPath, { recursive: true });
+
+  const firstLaunch = await launchApp({ projectRoot: null });
+
+  try {
+    await expect(firstLaunch.window.getByText('No Projects Yet')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+    await expect(firstLaunch.window.getByTestId('file-tree-node-root')).toHaveCount(0);
+    await expect(firstLaunch.window.getByTestId('left-panel-explorer-content').getByText('retroSoC')).toHaveCount(0);
+
+    await selectMenuBarItem(firstLaunch.window, 'File', 'New Project');
+    await firstLaunch.window.getByTestId('create-project-name').fill(projectName);
+    await setNextProjectDirectoryPath(firstLaunch.app, selectedProjectPath);
+    await firstLaunch.window.getByTestId('create-project-browse').click();
+    await firstLaunch.window.getByTestId('create-project-submit').click();
+
+    await expect.poll(() => fs.existsSync(path.join(createdProjectPath, '.pristine', 'project.sqlite')), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBe(true);
+    await expect(firstLaunch.window.getByTestId('file-tree-node-root')).toContainText(projectName);
+  } finally {
+    await firstLaunch.app.close();
+  }
+
+  const relaunched = await launchApp({ projectRoot: null });
+  try {
+    await expect(relaunched.window.getByTestId('file-tree-node-root')).toContainText(projectName, {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await expect(relaunched.window.getByText('No Projects Yet')).toHaveCount(0);
+  } finally {
+    await relaunched.app.close();
+  }
+});
+
+test('Close Project clears the workspace and removes the last project root', async () => {
+  const selectedProjectPath = test.info().outputPath('close-project-root');
+  const projectName = `close_project_${Date.now()}`;
+  const createdProjectPath = path.join(selectedProjectPath, projectName);
+  fs.mkdirSync(selectedProjectPath, { recursive: true });
+
+  const { app, window } = await launchApp({ projectRoot: null });
+
+  try {
+    await selectMenuBarItem(window, 'File', 'New Project');
+    await window.getByTestId('create-project-name').fill(projectName);
+    await setNextProjectDirectoryPath(app, selectedProjectPath);
+    await window.getByTestId('create-project-browse').click();
+    await window.getByTestId('create-project-submit').click();
+
+    await expect.poll(() => fs.existsSync(path.join(createdProjectPath, '.pristine', 'project.sqlite')), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBe(true);
+    await expect(window.getByTestId('file-tree-node-root')).toContainText(projectName);
+
+    await selectMenuBarItem(window, 'File', 'Close Project');
+    await expect(window.getByText('No Projects Yet')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+    await expect(window.getByTestId('file-tree-node-root')).toHaveCount(0);
+  } finally {
+    await app.close();
+  }
+
+  const relaunched = await launchApp({ projectRoot: null });
+  try {
+    await expect(relaunched.window.getByText('No Projects Yet')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+    await expect(relaunched.window.getByTestId('file-tree-node-root')).toHaveCount(0);
+  } finally {
+    await relaunched.app.close();
+  }
+});
+
 test('File > Setting... opens the settings dialog and updates persisted options', async () => {
   const { app, window } = await launchApp();
 
@@ -3873,7 +4143,7 @@ test('pristine-engine lsp smoke resolves a cross-file definition and symbol refe
   await window.getByTestId('outline-node-label-variable-data_ready').click();
   await expect(window.locator('.monaco-editor .line-numbers.active-line-number')).toContainText('6');
 
-  await window.getByTestId('toggle-bottom-panel').click();
+  await ensureBottomPanelOpen(window);
   await getBottomPanelTab(window, 'lsp').click();
   await expect(window.getByTestId('lsp-panel')).toContainText('systemverilog/outline', { timeout: 10000 });
 
@@ -4056,7 +4326,7 @@ test('lsp panel captures initialization logs when hierarchy opens before any edi
   await window.getByTestId('left-panel-secondary-tab-hierarchy').click();
   await expect(window.getByTestId('hierarchy-node-label-cpu_top-root')).toBeVisible({ timeout: 15000 });
 
-  await window.getByTestId('toggle-bottom-panel').click();
+  await ensureBottomPanelOpen(window);
   await getBottomPanelTab(window, 'lsp').click();
   await expect(window.getByTestId('lsp-panel')).toBeVisible();
 
@@ -4078,7 +4348,7 @@ test('lsp panel shows prewarmed initialization logs before any SystemVerilog fil
   await ensureExplorerVisible(window);
   await expect(window.getByTestId('editor-tab-rtl/core/cpu_top.sv')).toHaveCount(0);
 
-  await window.getByTestId('toggle-bottom-panel').click();
+  await ensureBottomPanelOpen(window);
   await getBottomPanelTab(window, 'lsp').click();
   await expect(window.getByTestId('lsp-panel')).toBeVisible();
 
@@ -4112,7 +4382,7 @@ test('pristine-engine lsp bottom panel filters diagnostics and shows paired requ
     timeout: MONACO_READY_TIMEOUT_MS,
   });
 
-  await window.getByTestId('toggle-bottom-panel').click();
+  await ensureBottomPanelOpen(window);
   await getBottomPanelTab(window, 'lsp').click();
 
   await expect(window.getByTestId('lsp-panel')).toBeVisible();
@@ -4385,7 +4655,7 @@ test('Ctrl+N creates an untitled file, Ctrl+S saves it, and explorer refreshes t
     await expect(window.getByTestId(`editor-tab-${savedRelativePath}`)).toBeVisible();
     await expect(window.getByTestId(`editor-tab-${savedRelativePath}`)).toHaveAttribute('data-active', 'true');
     await expect(window.getByTestId(`editor-tab-dirty-indicator-${savedRelativePath}`)).toHaveCount(0);
-    await expect(window.getByTestId('editor-breadcrumb')).toContainText('retroSoC');
+    await expect(window.getByTestId('editor-breadcrumb')).toContainText('Project');
     await expect(window.getByTestId('editor-breadcrumb')).toContainText('rtl');
     await expect(window.getByTestId('editor-breadcrumb')).toContainText('core');
     await expect(window.getByTestId('editor-breadcrumb')).toContainText(savedFileName);
@@ -5812,6 +6082,8 @@ test('ctrl+p quick open shows recent files in recency order and deduplicates reo
 
   await window.keyboard.press('Control+P');
   await expect(window.getByTestId('quick-open-input')).toBeFocused();
+  await expect(window.getByTestId('quick-open-result-README_md')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect(window.getByTestId('quick-open-result-rtl_core_reg_file_v')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
 
   const recentOrder = await window.locator('[data-testid^="quick-open-result-"]').evaluateAll((elements) => {
     return elements.map((element) => {
@@ -6107,7 +6379,11 @@ test('ctrl+p quick open escape restores the previous editor cursor position and 
 });
 
 test('explorer root toggles first-level children and hides the legacy collapse-all control', async () => {
-  const { app, window } = await launchApp();
+  const { app, projectRoot, window } = await launchApp();
+  if (!projectRoot) {
+    throw new Error('Expected launchApp to create a default E2E project root for explorer root coverage');
+  }
+  const expectedRootName = path.basename(projectRoot);
 
   await ensureExplorerVisible(window);
   const collapseAllButton = window.getByRole('button', { name: 'Collapse All' });
@@ -6120,7 +6396,7 @@ test('explorer root toggles first-level children and hides the legacy collapse-a
   await expect(rootIcon).toHaveClass(/(?:^|\s)h-2\.5(?:\s|$)/);
   await expect(rootIcon).toHaveClass(/(?:^|\s)w-2\.5(?:\s|$)/);
   await expect(window.getByTestId('left-panel-header')).not.toContainText('retroSoC');
-  await expect(rootNode).toContainText('retroSoC');
+  await expect(rootNode).toContainText(expectedRootName);
   await expect(rtlNode).toBeVisible();
 
   await test.step('root row collapses and expands first-level children', async () => {
@@ -6300,6 +6576,15 @@ test('activity bar switches code subpages and menu bar keeps higher-priority pag
   await window.getByTestId('activity-item-explorer').click();
   await expect(window.getByTestId('panel-center-panel')).toBeVisible();
   await expect(window.getByTestId('code-view-factory')).toHaveCount(0);
+
+  if (await window.getByTestId('panel-left-panel').count() > 0) {
+    await window.getByTestId('toggle-left-panel').click();
+  }
+
+  if (await window.getByTestId('panel-right-panel').count() > 0) {
+    await window.getByTestId('toggle-right-panel').click();
+  }
+
   await expect(window.getByTestId('panel-left-panel')).toHaveCount(0);
   await expect(window.getByTestId('panel-right-panel')).toHaveCount(0);
 
@@ -7243,6 +7528,112 @@ test('terminal tab creates a real shell session and shows command output', async
   await expect.poll(async () => readTerminalText(window), {
     timeout: 15000,
   }).toContain(marker);
+
+  await app.close();
+});
+
+test('terminal bottom panel supports split panes with independent terminal lifecycle', async () => {
+  const { app, window } = await launchApp();
+  const marker = '__PRISTINE_TERMINAL_SPLIT_E2E__';
+
+  await openBottomTerminal(window);
+
+  const firstPane = window.getByTestId('bottom-panel-pane-bottom-pane-1');
+  const firstHost = window.getByTestId('terminal-host');
+  await expect(firstPane).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect(firstHost).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect.poll(async () => firstHost.getAttribute('data-terminal-session-id'), {
+    timeout: 15000,
+  }).not.toBe('');
+  const firstSessionId = await firstHost.getAttribute('data-terminal-session-id');
+
+  await expect(window.getByTestId('bottom-panel-split')).toBeEnabled();
+  await window.getByTestId('bottom-panel-split').click();
+
+  const secondPane = window.getByTestId('bottom-panel-pane-bottom-pane-2');
+  await expect(secondPane).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect(window.getByTestId('bottom-panel-open-pane-bottom-pane-2')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+
+  const initialFirstBox = await firstPane.boundingBox();
+  const initialSecondBox = await secondPane.boundingBox();
+  expect(initialFirstBox).not.toBeNull();
+  expect(initialSecondBox).not.toBeNull();
+  expect(initialFirstBox?.width ?? 0).toBeGreaterThan(300);
+  expect(initialSecondBox?.width ?? 0).toBeGreaterThan(300);
+
+  await window.waitForTimeout(350);
+
+  const splitHandle = window.getByTestId('bottom-panel-split-handle-0');
+  const splitHandleBox = await splitHandle.boundingBox();
+  if (!splitHandleBox) {
+    throw new Error('Expected bottom panel split handle geometry to be measurable');
+  }
+  await window.mouse.move(splitHandleBox.x + splitHandleBox.width / 2, splitHandleBox.y + splitHandleBox.height / 2);
+  await window.mouse.down();
+  await window.mouse.move(splitHandleBox.x + splitHandleBox.width / 2 + 80, splitHandleBox.y + splitHandleBox.height / 2, { steps: 8 });
+  await window.mouse.up();
+
+  await expect.poll(async () => {
+    const firstBox = await firstPane.boundingBox();
+    const secondBox = await secondPane.boundingBox();
+    return Math.abs((firstBox?.width ?? 0) - (secondBox?.width ?? 0));
+  }, {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(64);
+
+  await window.getByTestId('bottom-panel-open-pane-bottom-pane-2').click();
+  await window.getByTestId('bottom-panel-open-terminal-bottom-pane-2').click();
+
+  const secondHost = window.getByTestId('terminal-host-bottom-pane-2');
+  await expect(secondHost).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect(window.locator('[data-testid="terminal-host-bottom-pane-2"] .xterm')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect.poll(async () => secondHost.getAttribute('data-terminal-session-id'), {
+    timeout: 15000,
+  }).not.toBe('');
+  const secondSessionId = await secondHost.getAttribute('data-terminal-session-id');
+  expect(secondSessionId).not.toBe(firstSessionId);
+
+  const didWrite = await window.evaluate(async ({ payload, sessionId }) => {
+    const browserGlobal = globalThis as unknown as {
+      electronAPI?: {
+        terminal?: {
+          write: (id: string, data: string) => Promise<boolean>;
+        };
+      };
+    };
+    const api = browserGlobal.electronAPI?.terminal;
+    if (!api || !sessionId) {
+      return false;
+    }
+
+    return api.write(sessionId, payload);
+  }, { payload: `echo ${marker}\r`, sessionId: secondSessionId });
+  expect(didWrite).toBe(true);
+  await expect.poll(async () => secondHost.getAttribute('data-terminal-text'), {
+    timeout: 15000,
+  }).toContain(marker);
+
+  await secondPane.click();
+  await window.getByTestId('bottom-panel-remove-split').click();
+  await expect(window.getByTestId('terminal-host-bottom-pane-2')).toHaveCount(0);
+  await expect(firstHost).toBeVisible();
+  expect(await firstHost.getAttribute('data-terminal-session-id')).toBe(firstSessionId);
+
+  await window.getByTestId('bottom-panel-pane-bottom-pane-1').click();
+  await expect(window.getByTestId('bottom-panel-split')).toBeEnabled();
+  await window.getByTestId('bottom-panel-split').click();
+  await window.getByTestId('bottom-panel-open-pane-bottom-pane-3').click();
+  await window.getByTestId('bottom-panel-open-placeholder-a-bottom-pane-3').click();
+  await expect(window.getByText('Placeholder A')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+
+  await window.getByTestId('bottom-panel-pane-bottom-pane-3').click();
+  await window.getByTestId('bottom-panel-remove-split').click();
+  await window.getByTestId('bottom-panel-pane-bottom-pane-1').click();
+  await expect(window.getByTestId('bottom-panel-split')).toBeEnabled();
+  await window.getByTestId('bottom-panel-split').click();
+  await window.getByTestId('bottom-panel-open-pane-bottom-pane-4').click();
+  await window.getByTestId('bottom-panel-open-placeholder-b-bottom-pane-4').click();
+  await expect(window.getByText('Placeholder B')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
 
   await app.close();
 });

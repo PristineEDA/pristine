@@ -16,8 +16,13 @@ export interface OpenThemeDialogResult {
   filePath: string | null;
 }
 
-export function setDialogProjectRoot(root: string): void {
-  projectRoot = path.resolve(root);
+export interface OpenProjectDirectoryDialogResult {
+  canceled: boolean;
+  filePath: string | null;
+}
+
+export function setDialogProjectRoot(root: string | null): void {
+  projectRoot = root ? path.resolve(root) : null;
 }
 
 function getWorkspaceRelativePath(filePath: string): string | null {
@@ -105,5 +110,38 @@ export function registerDialogHandlers(getMainWindow: () => BrowserWindow | null
       canceled: result.canceled,
       filePath: result.canceled ? null : result.filePaths[0] ?? null,
     } satisfies OpenThemeDialogResult;
+  });
+
+  ipcMain.handle(AsyncChannels.DIALOG_SHOW_OPEN_PROJECT_DIRECTORY, async () => {
+    const e2eDirectoryPath = process.env['PRISTINE_E2E_PROJECT_DIRECTORY_PATH'];
+    if (process.env['PRISTINE_E2E'] === '1' && e2eDirectoryPath) {
+      delete process.env['PRISTINE_E2E_PROJECT_DIRECTORY_PATH'];
+      return {
+        canceled: false,
+        filePath: path.resolve(e2eDirectoryPath),
+      } satisfies OpenProjectDirectoryDialogResult;
+    }
+
+    if (process.env['PRISTINE_E2E'] === '1' && process.env['PRISTINE_E2E_PROJECT_DIRECTORY_CANCEL'] === '1') {
+      delete process.env['PRISTINE_E2E_PROJECT_DIRECTORY_CANCEL'];
+      return {
+        canceled: true,
+        filePath: null,
+      } satisfies OpenProjectDirectoryDialogResult;
+    }
+
+    const mainWindow = getMainWindow();
+    const dialogOptions: OpenDialogOptions = {
+      defaultPath: projectRoot ?? undefined,
+      properties: ['openDirectory', 'createDirectory'],
+    };
+    const result = mainWindow
+      ? await dialog.showOpenDialog(mainWindow, dialogOptions)
+      : await dialog.showOpenDialog(dialogOptions);
+
+    return {
+      canceled: result.canceled,
+      filePath: result.canceled ? null : result.filePaths[0] ?? null,
+    } satisfies OpenProjectDirectoryDialogResult;
   });
 }

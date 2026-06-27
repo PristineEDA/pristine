@@ -87,6 +87,7 @@ describe('preload bridge', () => {
     api.setFloatingInfoWindowMode('detail');
     api.gpu.getDiagnostics();
     api.dialog.showSaveDialog('untitled-1');
+    api.dialog.showOpenProjectDirectoryDialog();
     api.fs.readFile('src/main.v', 'utf-8');
     api.fs.readFileAbsolute('C:/external/main.v', 'utf-8');
     api.fs.listFiles('rtl');
@@ -200,6 +201,7 @@ describe('preload bridge', () => {
     expect(mockInvoke).toHaveBeenCalledWith('async:window:set-floating-info-mode', 'detail');
     expect(mockInvoke).toHaveBeenCalledWith('async:platform:get-gpu-diagnostics');
     expect(mockInvoke).toHaveBeenCalledWith('async:dialog:show-save', 'untitled-1');
+    expect(mockInvoke).toHaveBeenCalledWith('async:dialog:show-open-project-directory');
     expect(mockInvoke).toHaveBeenCalledWith('async:fs:read-file', 'src/main.v', 'utf-8');
     expect(mockInvoke).toHaveBeenCalledWith('async:fs:read-file-absolute', 'C:/external/main.v', 'utf-8');
     expect(mockInvoke).toHaveBeenCalledWith('async:fs:list-files', 'rtl');

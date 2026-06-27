@@ -51,6 +51,7 @@ import {
   useWorkspaceDialogs,
   useWorkspaceEditor,
   useWorkspaceFiles,
+  useWorkspaceProject,
   useWorkspaceView,
 } from './context/WorkspaceContext';
 import { CodeViewerLayoutProvider } from './context/CodeViewerLayoutContext';
@@ -111,6 +112,12 @@ function AppLayout() {
     workspaceTreeRefreshToken,
   } = useWorkspaceView();
   const {
+    currentProject,
+    hasOpenProject,
+    projectPanelWidths,
+    setProjectPanelWidth,
+  } = useWorkspaceProject();
+  const {
     activeTabId,
     captureEditorSelectionSnapshot,
     closeActiveTabInFocusedGroup,
@@ -140,12 +147,8 @@ function AppLayout() {
     workspaceClipboard,
   } = useWorkspaceFiles();
   const { openUnsavedChangesDialog } = useWorkspaceDialogs();
-  const [explorerLeftPanelWidthPx, setExplorerLeftPanelWidthPx] = useState(EXPLORER_LEFT_PANEL_DEFAULT_WIDTH_PX);
-  const [explorerAssistantPanelWidthPx, setExplorerAssistantPanelWidthPx] = useState(EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX);
   const [isExplorerLeftPanelSplitVisible, setIsExplorerLeftPanelSplitVisible] = useState(false);
   const [isExplorerRightPanelSplitVisible, setIsExplorerRightPanelSplitVisible] = useState(false);
-  const [physicalLeftPanelWidthPx, setPhysicalLeftPanelWidthPx] = useState(EXPLORER_LEFT_PANEL_DEFAULT_WIDTH_PX);
-  const [physicalRightPanelWidthPx, setPhysicalRightPanelWidthPx] = useState(EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX);
   const [isPhysicalLeftPanelSplitVisible, setIsPhysicalLeftPanelSplitVisible] = useState(false);
   const [isPhysicalRightPanelSplitVisible, setIsPhysicalRightPanelSplitVisible] = useState(false);
   const [physicalLayoutState, setPhysicalLayoutState] = useState<PhysicalWorkspaceLayoutState>({
@@ -166,7 +169,11 @@ function AppLayout() {
   ));
   const physicalLayoutVisibilitySignatureRef = useRef('');
   const [assistantThreadListExpanded, setAssistantThreadListExpanded] = useState(false);
-  const [assistantThreadListWidthPx, setAssistantThreadListWidthPx] = useState(ASSISTANT_THREAD_LIST_DEFAULT_WIDTH_PX);
+  const explorerLeftPanelWidthPx = projectPanelWidths.explorerLeftPanel ?? EXPLORER_LEFT_PANEL_DEFAULT_WIDTH_PX;
+  const explorerAssistantPanelWidthPx = projectPanelWidths.explorerRightPanel ?? EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX;
+  const assistantThreadListWidthPx = projectPanelWidths.explorerAssistantThreadList ?? ASSISTANT_THREAD_LIST_DEFAULT_WIDTH_PX;
+  const physicalLeftPanelWidthPx = projectPanelWidths.physicalLeftPanel ?? EXPLORER_LEFT_PANEL_DEFAULT_WIDTH_PX;
+  const physicalRightPanelWidthPx = projectPanelWidths.physicalRightPanel ?? EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX;
   const [shouldMountWorkflowView, setShouldMountWorkflowView] = useState(mainContentView === 'workflow');
   const [shouldMountWhiteboardView, setShouldMountWhiteboardView] = useState(mainContentView === 'whiteboard');
   const explorerBottomPanelLayoutVersion = `${showLeftPanel}:${showRightPanel}:${showBottomPanel}:${explorerLeftPanelWidthPx}`;
@@ -593,10 +600,14 @@ function AppLayout() {
       useLeftPanelFrame: !isExplorerLeftPanelSplitVisible,
       useRightPanelFrame: !isExplorerRightPanelSplitVisible,
       leftFixedWidthPx: explorerLeftPanelWidthPx,
-      onLeftFixedWidthChange: setExplorerLeftPanelWidthPx,
+      onLeftFixedWidthChange: (nextValue) => {
+        setProjectPanelWidth('explorerLeftPanel', typeof nextValue === 'function'
+          ? (current) => nextValue(current ?? EXPLORER_LEFT_PANEL_DEFAULT_WIDTH_PX)
+          : nextValue);
+      },
       rightFixedWidthPx: explorerRightPanelWidthPx,
       onRightFixedWidthChange: (nextValue) => {
-        setExplorerAssistantPanelWidthPx((currentWidth) => {
+        setProjectPanelWidth('explorerRightPanel', (currentWidth = EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX) => {
           const currentTotalWidth = currentWidth + assistantThreadListExtraWidthPx;
           const nextTotalWidth = typeof nextValue === 'function'
             ? nextValue(currentTotalWidth)
@@ -610,6 +621,7 @@ function AppLayout() {
       leftContent: (
         <LeftSidePanel
           activeFileId={activeTabId}
+          hasOpenProject={hasOpenProject}
           onClearWorkspaceClipboard={clearWorkspaceClipboard}
           onCopyWorkspaceEntry={handleCopyWorkspaceEntry}
           onSplitPanelVisibleChange={setIsExplorerLeftPanelSplitVisible}
@@ -626,9 +638,16 @@ function AppLayout() {
           refreshToken={workspaceTreeRefreshToken}
           revealRequest={quickOpenState.revealRequest}
           workspaceClipboard={workspaceClipboard}
+          workspaceRootName={currentProject?.name ?? null}
         />
       ),
-      topContent: <EditorSplitLayout jumpToLine={jumpToLine} onActiveFileReveal={handleEditorActiveFileReveal} />,
+      topContent: (
+        <EditorSplitLayout
+          hasOpenProject={hasOpenProject}
+          jumpToLine={jumpToLine}
+          onActiveFileReveal={handleEditorActiveFileReveal}
+        />
+      ),
       bottomContent: ({ isMaximized, onMaximizeToggle }) => (
         <BottomPanel
           isMaximized={isMaximized}
@@ -646,7 +665,9 @@ function AppLayout() {
           onLineJump={jumpTo}
           onSplitPanelVisibleChange={setIsExplorerRightPanelSplitVisible}
           onThreadListExpandedChange={setAssistantThreadListExpanded}
-          onThreadListWidthChange={setAssistantThreadListWidthPx}
+          onThreadListWidthChange={(nextValue) => {
+            setProjectPanelWidth('explorerAssistantThreadList', nextValue);
+          }}
         />
       ),
       overlay: (
@@ -694,9 +715,17 @@ function AppLayout() {
       useLeftPanelFrame: !isPhysicalLeftPanelSplitVisible,
       useRightPanelFrame: !isPhysicalRightPanelSplitVisible,
       leftFixedWidthPx: physicalLeftPanelWidthPx,
-      onLeftFixedWidthChange: setPhysicalLeftPanelWidthPx,
+      onLeftFixedWidthChange: (nextValue) => {
+        setProjectPanelWidth('physicalLeftPanel', typeof nextValue === 'function'
+          ? (current) => nextValue(current ?? EXPLORER_LEFT_PANEL_DEFAULT_WIDTH_PX)
+          : nextValue);
+      },
       rightFixedWidthPx: physicalRightPanelWidthPx,
-      onRightFixedWidthChange: setPhysicalRightPanelWidthPx,
+      onRightFixedWidthChange: (nextValue) => {
+        setProjectPanelWidth('physicalRightPanel', typeof nextValue === 'function'
+          ? (current) => nextValue(current ?? EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX)
+          : nextValue);
+      },
       rightFixedMinWidthPx: EXPLORER_RIGHT_PANEL_MIN_WIDTH_PX,
       rightFixedMaxWidthPx: EXPLORER_RIGHT_PANEL_MAX_WIDTH_PX,
       leftContent: (

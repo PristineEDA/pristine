@@ -11,11 +11,12 @@ import { registerConfigHandlers } from './config.js';
 import { registerPlatformHandler } from './platform.js';
 import { registerAuthHandlers } from './auth.js';
 import { registerNoticeHandlers } from './notices.js';
+import { registerProjectHandlers } from './project.js';
 import type { WindowCloseDecision } from '../../src/app/window/windowClose.js';
 import type { FloatingInfoWindowMode } from '../../src/app/window/floatingInfoWindow.js';
 
-export function setProjectRoot(root: string): void {
-  const resolved = path.resolve(root);
+export function setProjectRoot(root: string | null): void {
+  const resolved = root ? path.resolve(root) : null;
   setDialogProjectRoot(resolved);
   setFsRoot(resolved);
   setGitProjectRoot(resolved);
@@ -46,6 +47,7 @@ export function registerAllHandlers(
   registerShellHandlers(getMainWindow);
   registerTerminalHandlers(getMainWindow);
   registerConfigHandlers();
+  registerProjectHandlers(getMainWindow, setProjectRoot);
   registerAuthHandlers();
   registerNoticeHandlers();
 }

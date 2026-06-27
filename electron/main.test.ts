@@ -172,9 +172,11 @@ const mocks = vi.hoisted(() => {
     mockDisposeAllTerminalSessions: vi.fn(),
     mockFlushPendingConfigSave: vi.fn(),
     mockGetConfigValue: vi.fn<(key: string) => unknown>(() => null),
+    mockDisposeProjectService: vi.fn(),
     mockRegisterAllHandlers: vi.fn(),
     mockSetProjectRoot: vi.fn(),
     mockSetupWindowStreams: vi.fn(),
+    mockTryOpenStartupProject: vi.fn(),
     mockHandleAuthCallbackUrl: vi.fn<(url: string) => Promise<void>>(() => Promise.resolve()),
     mockIsAuthProtocolUrl: vi.fn<(value: string) => boolean>((value: string) => value.startsWith('pristine://')),
   };
@@ -238,6 +240,12 @@ vi.mock('./ipc/config.js', () => ({
   getConfigValue: (key: string) => mocks.mockGetConfigValue(key),
 }));
 
+vi.mock('./ipc/project.js', () => ({
+  PROJECT_LAST_ROOT_CONFIG_KEY: 'project.lastProjectRoot',
+  disposeProjectService: (...args: unknown[]) => mocks.mockDisposeProjectService(...args),
+  tryOpenStartupProject: (...args: unknown[]) => mocks.mockTryOpenStartupProject(...args),
+}));
+
 vi.mock('./ipc/auth.js', () => ({
   handleAuthCallbackUrl: (url: string) => mocks.mockHandleAuthCallbackUrl(url),
   isAuthProtocolUrl: (value: string) => mocks.mockIsAuthProtocolUrl(value),
@@ -280,12 +288,18 @@ async function importMain(options?: {
   mocks.mockCreateFromDataURL.mockClear();
   mocks.mockDisposeLspSession.mockClear();
   mocks.mockDisposeAllTerminalSessions.mockClear();
+  mocks.mockDisposeProjectService.mockClear();
   mocks.mockFlushPendingConfigSave.mockClear();
   mocks.mockGetConfigValue.mockReset();
   mocks.mockGetConfigValue.mockImplementation((key: string) => options?.configValues?.[key] ?? null);
   mocks.mockRegisterAllHandlers.mockClear();
   mocks.mockSetProjectRoot.mockClear();
   mocks.mockSetupWindowStreams.mockClear();
+  mocks.mockTryOpenStartupProject.mockClear();
+  mocks.mockTryOpenStartupProject.mockImplementation((_root: string | null, applyProjectRoot: (root: string | null) => void) => {
+    applyProjectRoot(_root);
+    return _root ? { name: path.basename(_root), rootPath: _root, session: null } : null;
+  });
     mocks.mockHandleAuthCallbackUrl.mockClear();
     mocks.mockIsAuthProtocolUrl.mockClear();
     mocks.mockIsAuthProtocolUrl.mockImplementation((value: string) => value.startsWith('pristine://'));
@@ -364,6 +378,10 @@ describe('electron main entry', () => {
 
     expect(mocks.mockSetName).toHaveBeenCalledWith('Pristine');
     expect(mocks.mockMkdirSync).toHaveBeenCalledWith(
+      userDataPath,
+      { recursive: true },
+    );
+    expect(mocks.mockMkdirSync).toHaveBeenCalledWith(
       path.join(userDataPath, 'session-data'),
       { recursive: true },
     );
@@ -395,7 +413,12 @@ describe('electron main entry', () => {
     expect(mocks.mockRegisterAllHandlers).toHaveBeenCalledTimes(1);
     expect(mocks.mockRequestSingleInstanceLock).toHaveBeenCalledTimes(1);
     expect(mocks.mockSetAsDefaultProtocolClient).toHaveBeenCalledWith('pristine');
-    expect(mocks.mockSetProjectRoot).toHaveBeenCalledWith('C:\\Users\\maksy\\Desktop\\fpga\\retroSoC');
+    expect(mocks.mockTryOpenStartupProject).toHaveBeenCalledWith(null, expect.any(Function));
+    expect(mocks.mockSetProjectRoot).toHaveBeenCalledWith(null);
+    expect(mocks.mockMkdirSync).toHaveBeenCalledWith(
+      path.join(mocks.mockAppDataPath, 'Pristine', 'dev-profile'),
+      { recursive: true },
+    );
     expect(mocks.mockMkdirSync).toHaveBeenCalledWith(
       path.join(mocks.mockAppDataPath, 'Pristine', 'dev-profile', 'session-data'),
       { recursive: true },
@@ -466,6 +489,33 @@ describe('electron main entry', () => {
     mainWindow.emit('closed');
     expect(getMainWindow?.()).toBeNull();
     expect(mocks.mockDisposeAllTerminalSessions).not.toHaveBeenCalled();
+  });
+
+  it('uses the last project root from config when no project env override is present', async () => {
+    const configuredRoot = 'C:\\Projects\\chip-lab';
+
+    await importMain({
+      configValues: {
+        'project.lastProjectRoot': configuredRoot,
+      },
+    });
+
+    expect(mocks.mockTryOpenStartupProject).toHaveBeenCalledWith(configuredRoot, expect.any(Function));
+    expect(mocks.mockSetProjectRoot).toHaveBeenCalledWith(configuredRoot);
+  });
+
+  it('prefers the project root env override over the configured last project root', async () => {
+    const envRoot = 'C:\\Projects\\env-chip';
+
+    await importMain({
+      configValues: {
+        'project.lastProjectRoot': 'C:\\Projects\\configured-chip',
+      },
+      projectRoot: envRoot,
+    });
+
+    expect(mocks.mockTryOpenStartupProject).toHaveBeenCalledWith(envRoot, expect.any(Function));
+    expect(mocks.mockSetProjectRoot).toHaveBeenCalledWith(envRoot);
   });
 
   it('uses cached startup and splash background colors from the unified theme config', async () => {
@@ -592,7 +642,7 @@ describe('electron main entry', () => {
     expect(mainWindow.webContents.send).toHaveBeenNthCalledWith(3, 'stream:menu:command', { action: 'undo-editor' });
   });
 
-  it('routes the macOS Settings menu item back into the renderer settings dialog flow', async () => {
+  it('routes macOS New Project and Settings menu items back into renderer dialog flows', async () => {
     const { browserWindowInstances } = await importMain({ platform: 'darwin' });
 
     const mainWindow = browserWindowInstances[1];
@@ -603,13 +653,16 @@ describe('electron main entry', () => {
       }>;
     };
     const fileMenu = applicationMenu.template.find((item) => item.label === 'File');
+    const newProjectItem = fileMenu?.submenu?.find((item) => item.label === 'New Project');
     const settingsItem = fileMenu?.submenu?.find((item) => item.label === 'Setting...');
 
+    newProjectItem?.click?.();
     settingsItem?.click?.();
 
-    expect(mainWindow.show).toHaveBeenCalledTimes(1);
-    expect(mainWindow.focus).toHaveBeenCalledTimes(1);
-    expect(mainWindow.webContents.send).toHaveBeenCalledWith('stream:menu:command', { action: 'open-settings' });
+    expect(mainWindow.show).toHaveBeenCalled();
+    expect(mainWindow.focus).toHaveBeenCalledTimes(2);
+    expect(mainWindow.webContents.send).toHaveBeenNthCalledWith(1, 'stream:menu:command', { action: 'open-new-project' });
+    expect(mainWindow.webContents.send).toHaveBeenNthCalledWith(2, 'stream:menu:command', { action: 'open-settings' });
   });
 
   it('routes macOS About menu items back into the renderer about dialog flow', async () => {
@@ -856,6 +909,7 @@ describe('electron main entry', () => {
     appHandlers.get('before-quit')?.();
 
     expect(mocks.mockFlushPendingConfigSave).toHaveBeenCalledTimes(1);
+    expect(mocks.mockDisposeProjectService).toHaveBeenCalledTimes(1);
     expect(mocks.mockDisposeLspSession).toHaveBeenCalledTimes(1);
     expect(mocks.mockDisposeAllTerminalSessions).toHaveBeenCalledTimes(1);
     expect(trayInstances[0].destroy).toHaveBeenCalledTimes(1);

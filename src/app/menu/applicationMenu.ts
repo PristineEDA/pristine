@@ -1,6 +1,9 @@
 export const APP_DISPLAY_NAME = 'Pristine';
 
 export type AppMenuAction =
+  | 'open-new-project'
+  | 'open-project'
+  | 'close-project'
   | 'open-settings'
   | 'open-about'
   | 'open-notice-files'
@@ -36,8 +39,9 @@ export const applicationMenus: AppMenuSection[] = [
   {
     label: 'File',
     items: [
-      { kind: 'item', name: 'New Project', shortcut: 'Mod+N' },
-      { kind: 'item', name: 'Open Project...', shortcut: 'Mod+O' },
+      { kind: 'item', name: 'New Project', shortcut: 'Shift+Mod+N', action: 'open-new-project' },
+      { kind: 'item', name: 'Open Project...', shortcut: 'Mod+O', action: 'open-project' },
+      { kind: 'item', name: 'Close Project', action: 'close-project' },
       { kind: 'separator' },
       { kind: 'item', name: 'Save', shortcut: 'Mod+S', action: 'save-file' },
       { kind: 'item', name: 'Save All', action: 'save-all-files' },

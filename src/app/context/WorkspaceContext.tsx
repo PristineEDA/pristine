@@ -45,6 +45,7 @@ import {
   type WorkspaceClipboardState,
   type WorkspaceEntryType,
 } from '../workspace/workspaceFiles';
+import type { ProjectSessionSnapshot, ProjectState } from '../../../types/project';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -82,6 +83,15 @@ interface WorkspacePasteResult {
 }
 
 interface WorkspaceState {
+  currentProject: ProjectState | null;
+  hasOpenProject: boolean;
+  captureProjectSessionSnapshot: () => ProjectSessionSnapshot;
+  flushProjectSession: () => Promise<void>;
+  openProject: () => Promise<void>;
+  closeProject: () => Promise<void>;
+  projectPanelWidths: Record<string, number>;
+  setProjectPanelWidth: (key: string, value: number | ((current: number | undefined) => number)) => void;
+
   activeView: CodeView;
   setActiveView: (view: CodeView) => void;
 
@@ -177,6 +187,8 @@ interface WorkspaceState {
 
 type WorkspaceViewState = Pick<
   WorkspaceState,
+  | 'currentProject'
+  | 'hasOpenProject'
   | 'activeView'
   | 'setActiveView'
   | 'mainContentView'
@@ -189,6 +201,18 @@ type WorkspaceViewState = Pick<
   | 'showRightPanel'
   | 'setShowRightPanel'
   | 'workspaceTreeRefreshToken'
+>;
+
+type WorkspaceProjectState = Pick<
+  WorkspaceState,
+  | 'currentProject'
+  | 'hasOpenProject'
+  | 'captureProjectSessionSnapshot'
+  | 'flushProjectSession'
+  | 'openProject'
+  | 'closeProject'
+  | 'projectPanelWidths'
+  | 'setProjectPanelWidth'
 >;
 
 type WorkspaceEditorState = Pick<
@@ -515,6 +539,7 @@ function withModifiedEditorGroupsState(
 
 const WorkspaceContext = createContext<WorkspaceState | null>(null);
 const WorkspaceViewContext = createContext<WorkspaceViewState | null>(null);
+const WorkspaceProjectContext = createContext<WorkspaceProjectState | null>(null);
 const WorkspaceEditorContext = createContext<WorkspaceEditorState | null>(null);
 const WorkspaceFileContext = createContext<WorkspaceFileState | null>(null);
 const WorkspaceDialogContext = createContext<WorkspaceDialogState | null>(null);
@@ -533,6 +558,10 @@ export function useWorkspaceView(): WorkspaceViewState {
   return useRequiredWorkspaceContext(WorkspaceViewContext, 'useWorkspaceView');
 }
 
+export function useWorkspaceProject(): WorkspaceProjectState {
+  return useRequiredWorkspaceContext(WorkspaceProjectContext, 'useWorkspaceProject');
+}
+
 export function useWorkspaceEditor(): WorkspaceEditorState {
   return useRequiredWorkspaceContext(WorkspaceEditorContext, 'useWorkspaceEditor');
 }
@@ -548,8 +577,10 @@ export function useWorkspaceDialogs(): WorkspaceDialogState {
 // ─── Provider ───────────────────────────────────────────────────────────────
 
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
+  const [currentProject, setCurrentProject] = useState<ProjectState | null>(null);
   const [activeView, setActiveView] = useState<CodeView>('explorer');
   const [mainContentView, setMainContentView] = useState<MainContentView>('code');
+  const [projectPanelWidths, setProjectPanelWidths] = useState<Record<string, number>>({});
   const [panelStateByView, setPanelStateByView] = useState<Record<CodeView, PanelVisibilityState>>({
     ...DEFAULT_PANEL_STATE_BY_CODE_VIEW,
   });
@@ -564,11 +595,15 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const deleteConfirmationResolverRef = useRef<((result: boolean) => void) | null>(null);
   const deleteConfirmationActionRef = useRef<(() => Promise<void>) | null>(null);
   const previousEditorGroupsRef = useRef<EditorGroup[]>(EMPTY_EDITOR_GROUPS);
+  const currentProjectRef = useRef<ProjectState | null>(currentProject);
   const layoutPanelsEnabled = canToggleLayoutPanels(mainContentView, activeView);
   const visiblePanelState = layoutPanelsEnabled ? panelStateByView[activeView] : EMPTY_PANEL_STATE;
   const editorWorkspaceRef = useRef(editorWorkspace);
   const fileStoreRef = useRef(fileStore);
   const activeViewRef = useRef(activeView);
+  const mainContentViewRef = useRef(mainContentView);
+  const projectPanelWidthsRef = useRef(projectPanelWidths);
+  const panelStateByViewRef = useRef(panelStateByView);
   const layoutPanelsEnabledRef = useRef(layoutPanelsEnabled);
   const unsavedChangesDialogRef = useRef(unsavedChangesDialog);
   const deleteConfirmationDialogRef = useRef(deleteConfirmationDialog);
@@ -576,9 +611,13 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const untitledFilesRef = useRef(untitledFiles);
   const fileIdRedirectsRef = useRef<Record<string, string>>({});
 
+  currentProjectRef.current = currentProject;
   editorWorkspaceRef.current = editorWorkspace;
   fileStoreRef.current = fileStore;
   activeViewRef.current = activeView;
+  mainContentViewRef.current = mainContentView;
+  projectPanelWidthsRef.current = projectPanelWidths;
+  panelStateByViewRef.current = panelStateByView;
   layoutPanelsEnabledRef.current = layoutPanelsEnabled;
   unsavedChangesDialogRef.current = unsavedChangesDialog;
   deleteConfirmationDialogRef.current = deleteConfirmationDialog;
@@ -614,9 +653,120 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     delete fileIdRedirectsRef.current[fileId];
   }, [resolveCurrentFileId]);
 
+  const resetWorkspaceForProject = useCallback(() => {
+    editorWorkspaceRef.current.resetWorkspace();
+    fileStoreRef.current.resetFileStore();
+    setWorkspaceClipboard(null);
+    setUntitledFiles({});
+    setProjectPanelWidths({});
+    fileIdRedirectsRef.current = {};
+    previousEditorGroupsRef.current = EMPTY_EDITOR_GROUPS;
+  }, []);
+
+  const hydrateProjectSession = useCallback((snapshot: ProjectSessionSnapshot | null | undefined) => {
+    resetWorkspaceForProject();
+
+    if (!snapshot) {
+      setMainContentView('code');
+      setActiveView('explorer');
+      setPanelStateByView({ ...DEFAULT_PANEL_STATE_BY_CODE_VIEW });
+      return;
+    }
+
+    setMainContentView(snapshot.mainContentView);
+    setActiveView(snapshot.activeView);
+    setPanelStateByView({
+      ...DEFAULT_PANEL_STATE_BY_CODE_VIEW,
+      ...snapshot.panelStateByView,
+    });
+    setProjectPanelWidths(snapshot.panelWidths ?? {});
+    editorWorkspaceRef.current.restoreWorkspace({
+      editorGroups: snapshot.editorGroups,
+      editorLayout: snapshot.editorLayout,
+      focusedGroupId: snapshot.focusedGroupId,
+    });
+  }, [resetWorkspaceForProject]);
+
+  const captureProjectSessionSnapshot = useCallback((): ProjectSessionSnapshot => ({
+    activeTabId: resolveCurrentFileId(editorWorkspaceRef.current.activeTabId),
+    activeView: activeViewRef.current,
+    editorGroups: editorWorkspaceRef.current.editorGroups,
+    editorLayout: editorWorkspaceRef.current.editorLayout,
+    focusedGroupId: editorWorkspaceRef.current.focusedGroupId,
+    mainContentView: mainContentViewRef.current,
+    panelStateByView: panelStateByViewRef.current,
+    panelWidths: projectPanelWidthsRef.current,
+    version: 1,
+  }), [resolveCurrentFileId]);
+
+  const setProjectPanelWidth = useCallback((key: string, value: number | ((current: number | undefined) => number)) => {
+    setProjectPanelWidths((current) => {
+      const currentValue = current[key];
+      const nextValue = typeof value === 'function' ? value(currentValue) : value;
+      if (!Number.isFinite(nextValue) || nextValue <= 0 || currentValue === nextValue) {
+        return current;
+      }
+
+      return {
+        ...current,
+        [key]: nextValue,
+      };
+    });
+  }, []);
+
+  const flushProjectSession = useCallback(async () => {
+    if (!currentProjectRef.current || !window.electronAPI?.project?.flushSession) {
+      return;
+    }
+
+    await window.electronAPI.project.flushSession(captureProjectSessionSnapshot());
+  }, [captureProjectSessionSnapshot]);
+
   const bumpWorkspaceTreeRefreshToken = useCallback(() => {
     setWorkspaceTreeRefreshToken((current) => current + 1);
   }, []);
+
+  useEffect(() => {
+    const projectApi = typeof window === 'undefined' ? undefined : window.electronAPI?.project;
+    if (!projectApi) {
+      hydrateProjectSession(null);
+      setCurrentProject(null);
+      return undefined;
+    }
+
+    let disposed = false;
+    void projectApi.getCurrentProject().then((project) => {
+      if (disposed) {
+        return;
+      }
+
+      setCurrentProject(project);
+      hydrateProjectSession(project?.session);
+      if (project) {
+        bumpWorkspaceTreeRefreshToken();
+      }
+      refreshWorkspaceGitStatus();
+    }).catch(() => {
+      if (disposed) {
+        return;
+      }
+
+      setCurrentProject(null);
+      hydrateProjectSession(null);
+    });
+
+    const disposeProjectChanged = projectApi.onProjectChanged((project) => {
+      setCurrentProject(project);
+      hydrateProjectSession(project?.session);
+      bumpWorkspaceTreeRefreshToken();
+      refreshWorkspaceGitStatus();
+    });
+
+    return () => {
+      disposed = true;
+      disposeProjectChanged?.();
+    };
+  }, [bumpWorkspaceTreeRefreshToken, hydrateProjectSession]);
 
   useEffect(() => {
     const electronApi = typeof window === 'undefined' ? undefined : window.electronAPI;
@@ -1062,6 +1212,37 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     return true;
   }, [getDirtyRequestedFileIds, requestUnsavedChangesConfirmation]);
 
+  const openProject = useCallback(async () => {
+    const projectApi = window.electronAPI?.project;
+    if (!projectApi?.openProject) {
+      return;
+    }
+
+    await maybeProceedWithUnsavedChanges(
+      fileStoreRef.current.dirtyFileIds,
+      'close-app',
+      async () => {
+        await flushProjectSession();
+        await projectApi.openProject();
+      },
+    );
+  }, [flushProjectSession, maybeProceedWithUnsavedChanges]);
+
+  const closeProject = useCallback(async () => {
+    const projectApi = window.electronAPI?.project;
+    if (!projectApi?.closeProject || !currentProjectRef.current) {
+      return;
+    }
+
+    await maybeProceedWithUnsavedChanges(
+      fileStoreRef.current.dirtyFileIds,
+      'close-app',
+      async () => {
+        await projectApi.closeProject(captureProjectSessionSnapshot());
+      },
+    );
+  }, [captureProjectSessionSnapshot, maybeProceedWithUnsavedChanges]);
+
   const moveWorkspaceEntry = useCallback(async (
     currentPath: string,
     nextPath: string,
@@ -1415,6 +1596,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       void (async () => {
         const dirtyFileIds = fileStoreRef.current.dirtyFileIds;
         if (dirtyFileIds.length === 0) {
+          await flushProjectSession();
           await electronApi.resolveCloseRequest(request.requestId, 'proceed');
           return;
         }
@@ -1426,6 +1608,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           return;
         }
 
+        await flushProjectSession();
         await electronApi.resolveCloseRequest(request.requestId, 'proceed');
       })();
     });
@@ -1433,7 +1616,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     return () => {
       dispose?.();
     };
-  }, [requestUnsavedChangesConfirmation]);
+  }, [flushProjectSession, requestUnsavedChangesConfirmation]);
 
   const setPanelStateForActiveView = useCallback((nextState: Partial<PanelVisibilityState>) => {
     if (!layoutPanelsEnabledRef.current) {
@@ -1485,6 +1668,14 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   const activeTabId = resolveCurrentFileId(editorWorkspace.activeTabId);
   const workspaceValue = useMemo<WorkspaceState>(() => ({
+    currentProject,
+    hasOpenProject: Boolean(currentProject),
+    captureProjectSessionSnapshot,
+    flushProjectSession,
+    openProject,
+    closeProject,
+    projectPanelWidths,
+    setProjectPanelWidth,
     activeView, setActiveView,
     mainContentView, setMainContentView,
     canToggleLayoutPanels: layoutPanelsEnabled,
@@ -1569,7 +1760,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     activeView,
     cancelDeleteConfirmation,
     cancelUnsavedChanges,
+    captureProjectSessionSnapshot,
     clearWorkspaceClipboard,
+    closeProject,
     closeActiveTabInFocusedGroup,
     closeFile,
     closeFileInGroup,
@@ -1578,6 +1771,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     copyWorkspaceEntry,
     createWorkspaceFile,
     createWorkspaceFolder,
+    currentProject,
     cutWorkspaceEntry,
     deleteConfirmationDialog,
     deleteWorkspaceEntry,
@@ -1623,6 +1817,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     layoutPanelsEnabled,
     loadFileContent,
     mainContentView,
+    openProject,
     openUnsavedChangesDialog,
     openUntitledFile,
     pasteWorkspaceEntry,
@@ -1632,6 +1827,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     saveActiveFile,
     saveAllFiles,
     saveFiles,
+    setProjectPanelWidth,
     setShowBottomPanel,
     setShowLeftPanel,
     setShowRightPanel,
@@ -1644,9 +1840,13 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     visiblePanelState.showRightPanel,
     workspaceClipboard,
     workspaceTreeRefreshToken,
+    flushProjectSession,
+    projectPanelWidths,
   ]);
 
   const workspaceViewValue = useMemo<WorkspaceViewState>(() => ({
+    currentProject: workspaceValue.currentProject,
+    hasOpenProject: workspaceValue.hasOpenProject,
     activeView: workspaceValue.activeView,
     setActiveView: workspaceValue.setActiveView,
     mainContentView: workspaceValue.mainContentView,
@@ -1662,6 +1862,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }), [
     workspaceValue.activeView,
     workspaceValue.canToggleLayoutPanels,
+    workspaceValue.currentProject,
+    workspaceValue.hasOpenProject,
     workspaceValue.mainContentView,
     workspaceValue.setActiveView,
     workspaceValue.setMainContentView,
@@ -1672,6 +1874,26 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     workspaceValue.showLeftPanel,
     workspaceValue.showRightPanel,
     workspaceValue.workspaceTreeRefreshToken,
+  ]);
+
+  const workspaceProjectValue = useMemo<WorkspaceProjectState>(() => ({
+    currentProject: workspaceValue.currentProject,
+    hasOpenProject: workspaceValue.hasOpenProject,
+    captureProjectSessionSnapshot: workspaceValue.captureProjectSessionSnapshot,
+    flushProjectSession: workspaceValue.flushProjectSession,
+    openProject: workspaceValue.openProject,
+    closeProject: workspaceValue.closeProject,
+    projectPanelWidths: workspaceValue.projectPanelWidths,
+    setProjectPanelWidth: workspaceValue.setProjectPanelWidth,
+  }), [
+    workspaceValue.captureProjectSessionSnapshot,
+    workspaceValue.closeProject,
+    workspaceValue.currentProject,
+    workspaceValue.flushProjectSession,
+    workspaceValue.hasOpenProject,
+    workspaceValue.openProject,
+    workspaceValue.projectPanelWidths,
+    workspaceValue.setProjectPanelWidth,
   ]);
 
   const workspaceEditorValue = useMemo<WorkspaceEditorState>(() => ({
@@ -1826,15 +2048,17 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   return (
     <WorkspaceViewContext.Provider value={workspaceViewValue}>
-      <WorkspaceEditorContext.Provider value={workspaceEditorValue}>
-        <WorkspaceFileContext.Provider value={workspaceFileValue}>
-          <WorkspaceDialogContext.Provider value={workspaceDialogValue}>
-            <WorkspaceContext.Provider value={workspaceValue}>
-              {children}
-            </WorkspaceContext.Provider>
-          </WorkspaceDialogContext.Provider>
-        </WorkspaceFileContext.Provider>
-      </WorkspaceEditorContext.Provider>
+      <WorkspaceProjectContext.Provider value={workspaceProjectValue}>
+        <WorkspaceEditorContext.Provider value={workspaceEditorValue}>
+          <WorkspaceFileContext.Provider value={workspaceFileValue}>
+            <WorkspaceDialogContext.Provider value={workspaceDialogValue}>
+              <WorkspaceContext.Provider value={workspaceValue}>
+                {children}
+              </WorkspaceContext.Provider>
+            </WorkspaceDialogContext.Provider>
+          </WorkspaceFileContext.Provider>
+        </WorkspaceEditorContext.Provider>
+      </WorkspaceProjectContext.Provider>
     </WorkspaceViewContext.Provider>
   );
 }

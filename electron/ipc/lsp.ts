@@ -2276,8 +2276,9 @@ function updateDocumentText(session: LspSession, filePath: string, text: string)
   return document;
 }
 
-export function setLspProjectRoot(root: string): void {
-  projectRoot = resolveProjectRootPath(root);
+export function setLspProjectRoot(root: string | null): void {
+  projectRoot = root ? resolveProjectRootPath(root) : null;
+  disposeLspSession();
 }
 
 export function disposeLspSession(): void {

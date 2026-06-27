@@ -4,9 +4,11 @@ const TerminalSurface = lazy(() => import('./TerminalSurface').then((module) => 
 
 interface TerminalPanelProps {
   layoutVersion?: string;
+  sessionKey?: string;
+  testId?: string;
 }
 
-export function TerminalPanel({ layoutVersion }: TerminalPanelProps) {
+export function TerminalPanel({ layoutVersion, sessionKey, testId }: TerminalPanelProps) {
   return (
     <Suspense
       fallback={(
@@ -15,7 +17,7 @@ export function TerminalPanel({ layoutVersion }: TerminalPanelProps) {
         </div>
       )}
     >
-      <TerminalSurface layoutVersion={layoutVersion} />
+      <TerminalSurface layoutVersion={layoutVersion} sessionKey={sessionKey} testId={testId} />
     </Suspense>
   );
 }

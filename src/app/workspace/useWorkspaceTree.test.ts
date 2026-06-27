@@ -49,6 +49,14 @@ describe('useWorkspaceTree', () => {
     });
   });
 
+  it('does not read the filesystem while no project is open', async () => {
+    const { result } = renderHook(() => useWorkspaceTree(undefined, 0, { enabled: false }));
+
+    expect(result.current.workspaceAvailable).toBe(false);
+    expect(result.current.treeNodes).toEqual([]);
+    expect(window.electronAPI!.fs.readDir).not.toHaveBeenCalled();
+  });
+
   it('keeps the expanded folder state stable when revealing within already expanded ancestors', async () => {
     const { result, rerender } = renderHook(
       ({ revealRequest }: { revealRequest?: WorkspaceRevealRequest | null }) => useWorkspaceTree(revealRequest),

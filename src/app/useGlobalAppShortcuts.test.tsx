@@ -101,7 +101,7 @@ describe('useGlobalAppShortcuts', () => {
     expect(screen.getByTestId('right-panel-state')).toHaveTextContent('false');
   });
 
-  it('routes Ctrl+N and Ctrl+W to untitled creation and active-tab closing', () => {
+  it('routes Ctrl+N to untitled creation without handling Ctrl+Shift+N', () => {
     const onOpenUntitledFile = vi.fn();
     const onCloseActiveTab = vi.fn();
 
@@ -113,6 +113,7 @@ describe('useGlobalAppShortcuts', () => {
     );
 
     fireEvent.keyDown(document, { key: 'n', ctrlKey: true });
+    fireEvent.keyDown(document, { key: 'n', ctrlKey: true, shiftKey: true });
     fireEvent.keyDown(document, { key: 'w', ctrlKey: true });
 
     expect(onOpenUntitledFile).toHaveBeenCalledTimes(1);

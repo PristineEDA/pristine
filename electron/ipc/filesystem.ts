@@ -12,8 +12,8 @@ import {
 
 let projectRoot: string | null = null;
 
-export function setProjectRoot(root: string): void {
-  projectRoot = path.resolve(root);
+export function setProjectRoot(root: string | null): void {
+  projectRoot = root ? path.resolve(root) : null;
 }
 
 function getRoot(): string {
@@ -119,6 +119,9 @@ export function registerFilesystemHandlers(): void {
 
   ipcMain.handle(AsyncChannels.FS_LIST_FILES, async (_event, dirPath: unknown = '.') => {
     assertString(dirPath, 'dirPath');
+    if (!projectRoot) {
+      return [];
+    }
     const files = await listFilesRecursive(dirPath);
     return files.sort((left, right) => left.localeCompare(right, undefined, { numeric: true, sensitivity: 'base' }));
   });
@@ -190,6 +193,9 @@ export function registerFilesystemHandlers(): void {
 
   ipcMain.handle(AsyncChannels.FS_READ_DIR, async (_event, dirPath: unknown) => {
     assertString(dirPath, 'dirPath');
+    if (!projectRoot) {
+      return [];
+    }
     const resolved = validatePathWithinRoot(getRoot(), dirPath);
     const entries = await fs.readdir(resolved, { withFileTypes: true });
     return entries.map((e) => ({
@@ -214,6 +220,9 @@ export function registerFilesystemHandlers(): void {
 
   ipcMain.handle(AsyncChannels.FS_EXISTS, async (_event, filePath: unknown) => {
     assertString(filePath, 'filePath');
+    if (!projectRoot) {
+      return false;
+    }
     const resolved = validatePathWithinRoot(getRoot(), filePath);
     try {
       await fs.access(resolved);
