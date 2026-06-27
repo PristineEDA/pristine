@@ -448,47 +448,68 @@ function normalizeProjectRootForComparison(projectRoot: string | null) {
 
 async function waitForStartupWorkspaceReady(page: Page, projectRoot: string | null) {
   const expectedProjectRoot = normalizeProjectRootForComparison(projectRoot);
+  let latestReadiness: {
+    expectedRootPath?: string | null;
+    hasProject?: boolean;
+    normalizedRootPath?: string | null;
+    ready: boolean;
+    rootPath?: string | null;
+  } | null = null;
 
-  await expect.poll(async () => page.evaluate(async ({ expectedRootPath, isWindows }) => {
-    const browserGlobal = globalThis as typeof globalThis & {
-      electronAPI?: {
-        project?: {
-          getCurrentProject?: () => Promise<{ rootPath: string } | null>;
+  try {
+    await expect.poll(async () => {
+      latestReadiness = await page.evaluate(async ({ expectedRootPath, isWindows }) => {
+        const browserGlobal = globalThis as typeof globalThis & {
+          electronAPI?: {
+            project?: {
+              getCurrentProject?: () => Promise<{ rootPath: string } | null>;
+            };
+          };
         };
-      };
-    };
-    const projectApi = browserGlobal.electronAPI?.project;
+        const projectApi = browserGlobal.electronAPI?.project;
 
-    if (!projectApi?.getCurrentProject) {
-      return { ready: true, hasProject: false };
-    }
+        if (!projectApi?.getCurrentProject) {
+          return { ready: true, hasProject: false };
+        }
 
-    const project = await projectApi.getCurrentProject();
-    const rootPath = project?.rootPath ?? null;
-    const normalizeRootPath = (root: string | null) => {
-      if (root === null) {
-        return null;
-      }
+        const project = await projectApi.getCurrentProject();
+        const rootPath = project?.rootPath ?? null;
+        const normalizeRootPath = (root: string | null) => {
+          if (root === null) {
+            return null;
+          }
 
-      const normalizedRoot = root.replace(/[\\/]+/g, '/').replace(/\/+$/g, '');
-      return isWindows ? normalizedRoot.toLowerCase() : normalizedRoot;
-    };
-    const normalizedRootPath = normalizeRootPath(rootPath);
-    const hasExpectedProject = expectedRootPath === null
-      ? project === null
-      : normalizedRootPath === expectedRootPath;
+          const normalizedRoot = root.replace(/[\\/]+/g, '/').replace(/\/+$/g, '');
+          return isWindows ? normalizedRoot.toLowerCase() : normalizedRoot;
+        };
+        const normalizedRootPath = normalizeRootPath(rootPath);
+        const hasExpectedProject = expectedRootPath === null
+          ? project === null
+          : normalizedRootPath === expectedRootPath;
 
-    return {
-      ready: hasExpectedProject,
-      hasProject: Boolean(project),
-      rootPath,
-      normalizedRootPath,
-      expectedRootPath,
-    };
-  }, {
-    expectedRootPath: expectedProjectRoot,
-    isWindows: process.platform === 'win32',
-  }), { timeout: UI_READY_TIMEOUT_MS }).toMatchObject({ ready: true });
+        return {
+          ready: hasExpectedProject,
+          hasProject: Boolean(project),
+          rootPath,
+          normalizedRootPath,
+          expectedRootPath,
+        };
+      }, {
+        expectedRootPath: expectedProjectRoot,
+        isWindows: process.platform === 'win32',
+      });
+      return latestReadiness.ready;
+    }, { timeout: UI_READY_TIMEOUT_MS }).toBe(true);
+  } catch (error) {
+    const failureMessage = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      [
+        'Timed out waiting for startup workspace project readiness.',
+        `Last readiness: ${JSON.stringify(latestReadiness, null, 2)}`,
+        failureMessage,
+      ].join('\n'),
+    );
+  }
 
   if (projectRoot === null) {
     await expect(page.getByText('No Projects Yet')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
