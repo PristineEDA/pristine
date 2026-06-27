@@ -34,7 +34,7 @@ import {
 const SETTINGS_DIALOG_TEST_TIMEOUT_MS = 30000;
 const SETTINGS_PICKER_TEST_TIMEOUT_MS = 15000;
 
-async function openSettingsPage(user: ReturnType<typeof userEvent.setup>, page: 'general' | 'appearance' | 'editor' | 'schematic' | 'window') {
+async function openSettingsPage(user: ReturnType<typeof userEvent.setup>, page: 'general' | 'appearance' | 'editor' | 'design' | 'schematic' | 'eda' | 'pdk' | 'agent' | 'window') {
   await user.click(screen.getByTestId(`settings-nav-${page}`));
   expect(screen.getByTestId(`settings-page-${page}`)).toBeVisible();
 }
@@ -146,6 +146,18 @@ describe('MenuBar settings', () => {
     expect(screen.getByTestId('settings-nav-general')).toHaveClass('leading-4');
     expect(screen.getByTestId('settings-nav-general-icon')).toHaveClass('size-4');
     expect(screen.getByTestId('settings-nav-general-label')).toHaveClass('leading-4');
+    const settingsNav = screen.getByRole('navigation', { name: 'Settings sections' });
+    expect(Array.from(settingsNav.querySelectorAll('button[data-testid^="settings-nav-"]')).map((item) => item.textContent)).toEqual([
+      'General',
+      'Appearance',
+      'Editor',
+      'Design',
+      'Schematic',
+      'EDA',
+      'PDK',
+      'Agent',
+      'Window',
+    ]);
 
     await user.click(screen.getByTestId('settings-code-viewer-layout-combobox'));
     const codeViewerLayoutSearchInput = screen.getByPlaceholderText('Search code viewer layouts...');
@@ -164,6 +176,10 @@ describe('MenuBar settings', () => {
     expect(screen.getByTestId('settings-nav-editor')).toHaveAttribute('aria-current', 'page');
     expect(screen.getByTestId('settings-editor-font-family-combobox')).toBeVisible();
 
+    await openSettingsPage(user, 'design');
+    expect(screen.getByTestId('settings-nav-design')).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByTestId('settings-design-placeholder-description')).toHaveTextContent('Design settings will appear here.');
+
     await openSettingsPage(user, 'schematic');
     expect(screen.getByTestId('settings-nav-schematic')).toHaveAttribute('aria-current', 'page');
     expect(screen.getByTestId('settings-schematic-grid-size-slider')).toBeVisible();
@@ -171,6 +187,18 @@ describe('MenuBar settings', () => {
     expect(screen.getByTestId('settings-schematic-grid-switch')).toHaveAttribute('data-state', 'checked');
     expect(screen.getByTestId('settings-schematic-snap-to-grid-switch')).toHaveAttribute('data-state', 'checked');
     expect(screen.getByTestId('settings-schematic-alignment-guides-switch')).toHaveAttribute('data-state', 'checked');
+
+    await openSettingsPage(user, 'eda');
+    expect(screen.getByTestId('settings-nav-eda')).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByTestId('settings-eda-placeholder-description')).toHaveTextContent('EDA tool settings will appear here.');
+
+    await openSettingsPage(user, 'pdk');
+    expect(screen.getByTestId('settings-nav-pdk')).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByTestId('settings-pdk-placeholder-description')).toHaveTextContent('PDK settings will appear here.');
+
+    await openSettingsPage(user, 'agent');
+    expect(screen.getByTestId('settings-nav-agent')).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByTestId('settings-agent-placeholder-description')).toHaveTextContent('Agent settings will appear here.');
 
     await openSettingsPage(user, 'window');
     expect(screen.getByTestId('settings-nav-window')).toHaveAttribute('aria-current', 'page');

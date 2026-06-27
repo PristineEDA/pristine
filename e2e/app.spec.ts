@@ -28,7 +28,7 @@ const pristineEngineBinaryPath = path.join(
 );
 const MONACO_READY_TIMEOUT_MS = 60000;
 const UI_READY_TIMEOUT_MS = 60000;
-type SettingsPageId = 'general' | 'appearance' | 'editor' | 'schematic' | 'window';
+type SettingsPageId = 'general' | 'appearance' | 'editor' | 'design' | 'schematic' | 'eda' | 'pdk' | 'agent' | 'window';
 
 const physicalLayoutE2eLef = `
 VERSION 5.8 ;
@@ -3775,6 +3775,10 @@ test('settings dialog supports subpage navigation and global search', async () =
   await expect(window.getByTestId('settings-nav-editor')).toHaveAttribute('aria-current', 'page');
   await expect(window.getByTestId('settings-editor-font-family-combobox')).toBeVisible();
 
+  await openSettingsPage(window, 'design');
+  await expect(window.getByTestId('settings-nav-design')).toHaveAttribute('aria-current', 'page');
+  await expect(window.getByTestId('settings-design-placeholder-description')).toHaveText('Design settings will appear here.');
+
   await openSettingsPage(window, 'schematic');
   await expect(window.getByTestId('settings-nav-schematic')).toHaveAttribute('aria-current', 'page');
   await expect(window.getByTestId('settings-schematic-grid-size-slider')).toBeVisible();
@@ -3783,6 +3787,18 @@ test('settings dialog supports subpage navigation and global search', async () =
   await expect.poll(async () => readConfigValue(window, 'schematic.grid.enabled')).toBe(false);
   await setSwitchChecked(window.getByTestId('settings-schematic-grid-switch'), true);
   await expect.poll(async () => readConfigValue(window, 'schematic.grid.enabled')).toBe(true);
+
+  await openSettingsPage(window, 'eda');
+  await expect(window.getByTestId('settings-nav-eda')).toHaveAttribute('aria-current', 'page');
+  await expect(window.getByTestId('settings-eda-placeholder-description')).toHaveText('EDA tool settings will appear here.');
+
+  await openSettingsPage(window, 'pdk');
+  await expect(window.getByTestId('settings-nav-pdk')).toHaveAttribute('aria-current', 'page');
+  await expect(window.getByTestId('settings-pdk-placeholder-description')).toHaveText('PDK settings will appear here.');
+
+  await openSettingsPage(window, 'agent');
+  await expect(window.getByTestId('settings-nav-agent')).toHaveAttribute('aria-current', 'page');
+  await expect(window.getByTestId('settings-agent-placeholder-description')).toHaveText('Agent settings will appear here.');
 
   await openSettingsPage(window, 'window');
   await expect(window.getByTestId('settings-nav-window')).toHaveAttribute('aria-current', 'page');
