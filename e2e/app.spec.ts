@@ -295,9 +295,7 @@ function getE2EUserDataPath() {
 function getDefaultE2EProjectRoot() {
   const projectRoot = test.info().outputPath('default-project');
 
-  if (!fs.existsSync(projectRoot)) {
-    createWorkspaceCopy(projectRoot);
-  }
+  createWorkspaceCopy(projectRoot);
 
   return projectRoot;
 }
@@ -436,8 +434,22 @@ async function waitForMainUi(window: Page) {
   await expect(window.getByTestId('toggle-activity-bar')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
 }
 
+function normalizeProjectRootForComparison(projectRoot: string | null) {
+  if (projectRoot === null) {
+    return null;
+  }
+
+  const normalizedRoot = path
+    .normalize(projectRoot)
+    .replace(/[\\/]+/g, '/')
+    .replace(/\/+$/g, '');
+  return process.platform === 'win32' ? normalizedRoot.toLowerCase() : normalizedRoot;
+}
+
 async function waitForStartupWorkspaceReady(page: Page, projectRoot: string | null) {
-  await expect.poll(async () => page.evaluate(async (expectedProjectRoot) => {
+  const expectedProjectRoot = normalizeProjectRootForComparison(projectRoot);
+
+  await expect.poll(async () => page.evaluate(async ({ expectedRootPath, isWindows }) => {
     const browserGlobal = globalThis as typeof globalThis & {
       electronAPI?: {
         project?: {
@@ -452,15 +464,31 @@ async function waitForStartupWorkspaceReady(page: Page, projectRoot: string | nu
     }
 
     const project = await projectApi.getCurrentProject();
-    const hasExpectedProject = expectedProjectRoot === null
+    const rootPath = project?.rootPath ?? null;
+    const normalizeRootPath = (root: string | null) => {
+      if (root === null) {
+        return null;
+      }
+
+      const normalizedRoot = root.replace(/[\\/]+/g, '/').replace(/\/+$/g, '');
+      return isWindows ? normalizedRoot.toLowerCase() : normalizedRoot;
+    };
+    const normalizedRootPath = normalizeRootPath(rootPath);
+    const hasExpectedProject = expectedRootPath === null
       ? project === null
-      : project?.rootPath === expectedProjectRoot;
+      : normalizedRootPath === expectedRootPath;
 
     return {
       ready: hasExpectedProject,
       hasProject: Boolean(project),
+      rootPath,
+      normalizedRootPath,
+      expectedRootPath,
     };
-  }, projectRoot), { timeout: UI_READY_TIMEOUT_MS }).toMatchObject({ ready: true });
+  }, {
+    expectedRootPath: expectedProjectRoot,
+    isWindows: process.platform === 'win32',
+  }), { timeout: UI_READY_TIMEOUT_MS }).toMatchObject({ ready: true });
 
   if (projectRoot === null) {
     await expect(page.getByText('No Projects Yet')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
