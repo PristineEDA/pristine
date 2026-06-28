@@ -4,9 +4,10 @@ import { Library, ListTree, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useWorkspaceGitStatus } from '../../../git/workspaceGitStatus';
 import { FileTreeNode, type ExplorerContextMenuRequest } from './FileTreeNode';
-import { ExplorerPanelTabs, type ExplorerPanelTab } from './LeftSidePanelChrome';
+import { ExplorerPanelTabs } from './LeftSidePanelChrome';
 import { HierarchyPanel } from './HierarchyPanel';
 import { SPLIT_PANEL_CONTENT_TRANSITION_STYLE, useAnimatedSplitPanelPresence } from './useAnimatedSplitPanelPresence';
+import { useSidePanelSessionStore, type ExplorerSecondaryPanelTab } from './useSidePanelSessionStore';
 import { useCodeViewerLayout } from '../../../context/CodeViewerLayoutContext';
 import { Button } from '../../ui/button';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '../../ui/resizable';
@@ -62,8 +63,6 @@ export {
   getExplorerPasteTargetPath,
   getExplorerRenameTarget,
 } from './LeftSidePanelKeyboard';
-
-type ExplorerSecondaryPanelTab = 'hierarchy' | 'libraries';
 
 const explorerSecondaryPanelTabs = [
   { value: 'hierarchy', label: 'Hierarchy', icon: ListTree, testId: 'left-panel-secondary-tab-hierarchy' },
@@ -126,8 +125,10 @@ export function LeftSidePanel({
   const [treeEditSession, setTreeEditSession] = useState<ExplorerTreeEditSession | null>(null);
   const [contextMenuRequest, setContextMenuRequest] = useState<ExplorerContextMenuRequest | null>(null);
   const [handledRevealRequestToken, setHandledRevealRequestToken] = useState<number | null>(null);
-  const [tab, setTab] = useState<ExplorerPanelTab>('explorer');
-  const [isSplitPanelVisible, setIsSplitPanelVisible] = useState(false);
+  const tab = useSidePanelSessionStore((state) => state.leftPrimaryTab);
+  const setTab = useSidePanelSessionStore((state) => state.setExplorerLeftTab);
+  const isSplitPanelVisible = useSidePanelSessionStore((state) => state.leftSplitVisible);
+  const setIsSplitPanelVisible = useSidePanelSessionStore((state) => state.setExplorerLeftSplitVisible);
   const splitPanelPresence = useAnimatedSplitPanelPresence(isSplitPanelVisible);
   const gitStatus = useWorkspaceGitStatus();
   const {
@@ -689,8 +690,8 @@ export function LeftSidePanel({
   ]);
 
   const handleToggleSplitPanel = useCallback(() => {
-    setIsSplitPanelVisible((current) => !current);
-  }, []);
+    setIsSplitPanelVisible(!isSplitPanelVisible);
+  }, [isSplitPanelVisible, setIsSplitPanelVisible]);
   const splitPanelFrameClassName = getCodeWorkspacePanelFrameClassName(layoutMode, 'flex h-full flex-col bg-ide-bg text-ide-text');
 
   const primaryPanelContent = (
@@ -841,8 +842,10 @@ function ExplorerSecondaryPanel({
   workspaceAvailable: boolean | null;
 }) {
   const { layoutMode } = useCodeViewerLayout();
-  const [secondaryTab, setSecondaryTab] = useState<ExplorerSecondaryPanelTab>('hierarchy');
-  const [hierarchyReloadNonce, setHierarchyReloadNonce] = useState(0);
+  const secondaryTab = useSidePanelSessionStore((state) => state.leftSecondaryTab);
+  const setSecondaryTab = useSidePanelSessionStore((state) => state.setExplorerLeftSecondaryTab);
+  const hierarchyReloadNonce = useSidePanelSessionStore((state) => state.leftHierarchyReloadNonce);
+  const bumpHierarchyReloadNonce = useSidePanelSessionStore((state) => state.bumpExplorerLeftHierarchyReloadNonce);
   const splitPanelFrameClassName = getCodeWorkspacePanelFrameClassName(layoutMode, 'flex h-full flex-col bg-ide-bg text-ide-text');
   const hierarchyRefreshToken = refreshToken + hierarchyReloadNonce;
 
@@ -879,7 +882,7 @@ function ExplorerSecondaryPanel({
               size="icon-xs"
               className="text-ide-text-muted hover:text-ide-text"
               aria-label="Reload module hierarchy"
-              onClick={() => setHierarchyReloadNonce((currentNonce) => currentNonce + 1)}
+              onClick={bumpHierarchyReloadNonce}
             >
               <RefreshCw size={13} />
             </Button>

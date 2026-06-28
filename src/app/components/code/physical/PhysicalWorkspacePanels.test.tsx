@@ -1,11 +1,12 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useEffect, useState, type ReactNode } from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { layoutFixtureGdsGeometry, layoutFixtureGdsOpenResult, layoutFixtureGeometry, layoutFixtureOpenResult } from '../../../../test/layoutFixture';
 import type { LspLayoutCatalog, LspLayoutGeometry } from '../../../../../types/systemverilog-lsp';
 import { CodeViewerLayoutProvider } from '../../../context/CodeViewerLayoutContext';
+import { resetSidePanelSessionStoreForTests, useSidePanelSessionStore } from '../explorer/useSidePanelSessionStore';
 import {
   PhysicalBottomPanel,
   PhysicalLeftPanel,
@@ -266,6 +267,10 @@ function getTestElectronApi() {
 }
 
 describe('PhysicalWorkspacePanels', () => {
+  beforeEach(() => {
+    resetSidePanelSessionStoreForTests();
+  });
+
   it('renders the main physical layout editor content', async () => {
     const onLayoutStateChange = vi.fn();
     const onSelectedTargetChange = vi.fn();
@@ -640,6 +645,7 @@ describe('PhysicalWorkspacePanels', () => {
     await user.click(screen.getByTestId('physical-left-panel-tab-constraints'));
 
     expect(screen.getByTestId('physical-left-panel-constraints-content')).toHaveTextContent('Constraints');
+    expect(useSidePanelSessionStore.getState().physicalLeftTab).toBe('constraints');
   });
 
   it('toggles the physical left lower panel', async () => {
@@ -668,10 +674,12 @@ describe('PhysicalWorkspacePanels', () => {
     expect(screen.getByTestId('physical-left-lower-panel-details-content')).toHaveTextContent('Layer Details');
     expect(screen.getByTestId('physical-left-panel-split-toggle')).toHaveAttribute('aria-label', 'Hide lower physical left panel');
     expect(onSplitPanelVisibleChange).toHaveBeenCalledWith(true);
+    expect(useSidePanelSessionStore.getState().physicalLeftSplitVisible).toBe(true);
 
     await user.click(screen.getByTestId('physical-left-panel-split-toggle'));
 
     expect(screen.getByTestId('physical-left-panel-split-toggle')).toHaveAttribute('aria-label', 'Show lower physical left panel');
+    expect(useSidePanelSessionStore.getState().physicalLeftSplitVisible).toBe(false);
   });
 
   it('renders physical right layer tree and toggles category visibility', async () => {
@@ -728,6 +736,7 @@ describe('PhysicalWorkspacePanels', () => {
     await user.click(screen.getByTestId('physical-right-panel-tab-checks'));
 
     expect(screen.getByTestId('physical-right-panel-checks-content')).toHaveTextContent('Checks');
+    expect(useSidePanelSessionStore.getState().physicalRightTab).toBe('checks');
   });
 
   it('renders DEF layer categories in a compact three-column grid', () => {
@@ -828,10 +837,12 @@ describe('PhysicalWorkspacePanels', () => {
     expect(screen.getByTestId('physical-right-panel-inspector-content')).toHaveTextContent('Inspector');
     expect(screen.getByTestId('physical-right-panel-split-toggle')).toHaveAttribute('aria-label', 'Hide lower physical right panel');
     expect(onSplitPanelVisibleChange).toHaveBeenCalledWith(true);
+    expect(useSidePanelSessionStore.getState().physicalRightSplitVisible).toBe(true);
 
     await user.click(screen.getByTestId('physical-right-panel-split-toggle'));
 
     expect(screen.getByTestId('physical-right-panel-split-toggle')).toHaveAttribute('aria-label', 'Show lower physical right panel');
+    expect(useSidePanelSessionStore.getState().physicalRightSplitVisible).toBe(false);
   });
 
   it('shows selected shape details in the right lower inspector', async () => {
@@ -874,6 +885,7 @@ describe('PhysicalWorkspacePanels', () => {
     await user.click(screen.getByTestId('physical-bottom-panel-tab-console'));
 
     expect(screen.getByTestId('physical-bottom-panel-console-content')).toHaveTextContent('Console');
+    expect(useSidePanelSessionStore.getState().physicalBottomTab).toBe('console');
 
     await user.click(screen.getByTestId('physical-bottom-panel-maximize'));
     await user.click(screen.getByTestId('physical-bottom-panel-close'));

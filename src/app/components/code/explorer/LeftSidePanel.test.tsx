@@ -15,6 +15,7 @@ import {
   getExplorerRenameTarget,
   LeftSidePanel,
 } from './LeftSidePanel';
+import { resetSidePanelSessionStoreForTests, useSidePanelSessionStore } from './useSidePanelSessionStore';
 
 function mockCodeViewerLayoutMode(layoutMode: CodeViewerLayoutMode) {
   vi.mocked(window.electronAPI!.config.get).mockImplementation((key: string) =>
@@ -93,6 +94,7 @@ describe('LeftSidePanel', () => {
 
     testUser = userEvent.setup();
     resetWorkspaceGitStatusStoreForTests();
+    resetSidePanelSessionStoreForTests();
 
     vi.mocked(electronApi.fs.exists).mockResolvedValue(true);
     vi.mocked(electronApi.fs.readDir).mockImplementation(async (dirPath: string) => {
@@ -161,6 +163,7 @@ describe('LeftSidePanel', () => {
 
     expect(screen.getByTestId('left-panel-git-placeholder')).toHaveTextContent('No source control changes');
     expect(screen.queryByTestId('left-panel-explorer-content')).not.toBeInTheDocument();
+    expect(useSidePanelSessionStore.getState().leftPrimaryTab).toBe('git');
   });
 
   it('defaults the lower stacked panel hidden and toggles two independent panel frames', async () => {
@@ -262,11 +265,13 @@ describe('LeftSidePanel', () => {
     expect(screen.getByTestId('left-panel-secondary-tab-libraries')).toHaveAttribute('data-state', 'on');
     expect(screen.getByTestId('left-panel-libraries-placeholder')).toHaveTextContent('Libraries is empty');
     expect(screen.queryByTestId('left-panel-secondary-placeholder')).not.toBeInTheDocument();
+    expect(useSidePanelSessionStore.getState().leftSecondaryTab).toBe('libraries');
 
     await testUser.click(screen.getByTestId('left-panel-secondary-tab-hierarchy'));
     expect(screen.getByTestId('left-panel-secondary-tab-hierarchy')).toHaveAttribute('data-state', 'on');
     expect(await screen.findByTestId('left-panel-secondary-placeholder')).toHaveTextContent('Hierarchy is empty');
     expect(screen.queryByTestId('left-panel-libraries-placeholder')).not.toBeInTheDocument();
+    expect(useSidePanelSessionStore.getState().leftSecondaryTab).toBe('hierarchy');
   });
 
   it('does not render the legacy explorer toolbar buttons', async () => {

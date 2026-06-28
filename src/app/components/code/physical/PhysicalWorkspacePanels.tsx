@@ -27,6 +27,10 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '../../ui/r
 import { Slider } from '../../ui/slider';
 import { SPLIT_PANEL_CONTENT_TRANSITION_STYLE, useAnimatedSplitPanelPresence } from '../explorer/useAnimatedSplitPanelPresence';
 import {
+  useSidePanelSessionStore,
+  type PhysicalBottomPanelTab,
+} from '../explorer/useSidePanelSessionStore';
+import {
   compactIconTabToggleIconSize,
   compactIconTabToggleItemClassName,
   IconTabToggleGroup,
@@ -66,10 +70,7 @@ import {
 } from './physicalLayoutLayers';
 import { selectLayoutTargetShapes, shapeBounds, type PhysicalLayoutTarget } from './physicalLayoutGeometry';
 
-type PhysicalLeftPanelTab = 'layout' | 'constraints';
 type PhysicalLowerPanelTab = 'details' | 'notes';
-type PhysicalRightPanelTab = 'layers' | 'checks';
-type PhysicalBottomPanelTab = 'reports' | 'console';
 
 export interface PhysicalWorkspaceLayoutState {
   catalog: LspLayoutCatalog | null;
@@ -859,8 +860,10 @@ export function PhysicalLeftPanel({
   selectedTarget?: PhysicalLayoutTarget | null;
 }) {
   const { layoutMode } = useCodeViewerLayout();
-  const [tab, setTab] = useState<PhysicalLeftPanelTab>('layout');
-  const [isSplitPanelVisible, setIsSplitPanelVisible] = useState(false);
+  const tab = useSidePanelSessionStore((state) => state.physicalLeftTab);
+  const setTab = useSidePanelSessionStore((state) => state.setPhysicalLeftTab);
+  const isSplitPanelVisible = useSidePanelSessionStore((state) => state.physicalLeftSplitVisible);
+  const setIsSplitPanelVisible = useSidePanelSessionStore((state) => state.setPhysicalLeftSplitVisible);
   const splitPanelPresence = useAnimatedSplitPanelPresence(isSplitPanelVisible);
   const splitPanelFrameClassName = getCodeWorkspacePanelFrameClassName(layoutMode, 'flex h-full flex-col bg-ide-bg text-ide-text');
 
@@ -876,7 +879,7 @@ export function PhysicalLeftPanel({
       isSplitPanelVisible={isSplitPanelVisible}
       items={physicalLeftPanelTabs}
       onTabChange={setTab}
-      onToggleSplitPanel={() => setIsSplitPanelVisible((current) => !current)}
+      onToggleSplitPanel={() => setIsSplitPanelVisible(!isSplitPanelVisible)}
       splitToggleTestId="physical-left-panel-split-toggle"
       splitToggleAriaLabel={{
         hide: 'Hide lower physical left panel',
@@ -1003,8 +1006,10 @@ export function PhysicalRightPanel({
   selectedTarget?: PhysicalLayoutTarget | null;
 }) {
   const { layoutMode } = useCodeViewerLayout();
-  const [tab, setTab] = useState<PhysicalRightPanelTab>('layers');
-  const [isSplitPanelVisible, setIsSplitPanelVisible] = useState(false);
+  const tab = useSidePanelSessionStore((state) => state.physicalRightTab);
+  const setTab = useSidePanelSessionStore((state) => state.setPhysicalRightTab);
+  const isSplitPanelVisible = useSidePanelSessionStore((state) => state.physicalRightSplitVisible);
+  const setIsSplitPanelVisible = useSidePanelSessionStore((state) => state.setPhysicalRightSplitVisible);
   const splitPanelPresence = useAnimatedSplitPanelPresence(isSplitPanelVisible);
   const splitPanelFrameClassName = getCodeWorkspacePanelFrameClassName(layoutMode, 'flex h-full flex-col bg-ide-bg text-ide-text');
 
@@ -1020,7 +1025,7 @@ export function PhysicalRightPanel({
       isSplitPanelVisible={isSplitPanelVisible}
       items={physicalRightPanelTabs}
       onTabChange={setTab}
-      onToggleSplitPanel={() => setIsSplitPanelVisible((current) => !current)}
+      onToggleSplitPanel={() => setIsSplitPanelVisible(!isSplitPanelVisible)}
       splitToggleTestId="physical-right-panel-split-toggle"
       splitToggleAriaLabel={{
         hide: 'Hide lower physical right panel',
@@ -1138,7 +1143,8 @@ export function PhysicalBottomPanel({
   onMaximizeToggle?: () => void;
 }) {
   const { layoutMode } = useCodeViewerLayout();
-  const [tab, setTab] = useState<PhysicalBottomPanelTab>('reports');
+  const tab = useSidePanelSessionStore((state) => state.physicalBottomTab);
+  const setTab = useSidePanelSessionStore((state) => state.setPhysicalBottomTab);
   const MaximizeIcon = isMaximized ? Minimize2 : Maximize;
   const maximizeLabel = isMaximized ? 'Restore Panel' : 'Maximize Panel';
   const panelContent = useMemo<Record<PhysicalBottomPanelTab, ReactNode>>(() => ({
