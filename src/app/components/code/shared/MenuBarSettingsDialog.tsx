@@ -94,6 +94,7 @@ import { cn } from '@/lib/utils';
 import { EditorFontAdvancedDialog } from './EditorFontAdvancedDialog';
 import { EditorThemeAdvancedDialog } from './EditorThemeAdvancedDialog';
 import { ColorThemePreviewCard, EditorFontPreviewCard } from './PickerPreviewCards';
+import { useSettingsDialogSessionStore, type SettingsPageId } from './useSettingsDialogSessionStore';
 
 const CLOSE_ACTION_CONFIG_KEY = 'window.closeActionPreference';
 const FLOATING_INFO_VISIBLE_CONFIG_KEY = 'ui.floatingInfoWindow.visible';
@@ -103,8 +104,6 @@ const settingsSectionTitleClassName = 'text-[13px] font-medium';
 const settingsSectionDescriptionClassName = 'text-[12px] text-muted-foreground';
 
 type ThemePickerLayoutMode = 'grouped' | 'list';
-type SettingsPageId = 'general' | 'appearance' | 'editor' | 'design' | 'schematic' | 'eda' | 'pdk' | 'agent' | 'window';
-
 interface SettingsPageMetadata {
   id: SettingsPageId;
   description: string;
@@ -1004,16 +1003,19 @@ export function MenuBarSettingsDialogs({
     settingsState,
     themeAdvancedDialogOpen,
   } = controller;
-  const [activePageId, setActivePageId] = useState<SettingsPageId>('general');
-  const [settingsSearchQuery, setSettingsSearchQuery] = useState('');
+  const activePageId = useSettingsDialogSessionStore((state) => state.activePageId);
+  const settingsSearchQuery = useSettingsDialogSessionStore((state) => state.settingsSearchQuery);
+  const clearSettingsSearchQuery = useSettingsDialogSessionStore((state) => state.clearSettingsSearchQuery);
+  const setActivePageId = useSettingsDialogSessionStore((state) => state.setActivePageId);
+  const setSettingsSearchQuery = useSettingsDialogSessionStore((state) => state.setSettingsSearchQuery);
   const normalizedSearchQuery = settingsSearchQuery.trim().toLowerCase();
 
   useEffect(() => {
     if (!settingsDialogOpen) {
       setActivePageId('general');
-      setSettingsSearchQuery('');
+      clearSettingsSearchQuery();
     }
-  }, [settingsDialogOpen]);
+  }, [clearSettingsSearchQuery, setActivePageId, settingsDialogOpen]);
 
   const availableThemeOptionsById = useMemo(
     () => new Map(availableThemeOptions.map((option) => [option.value, option])),
@@ -1522,7 +1524,7 @@ export function MenuBarSettingsDialogs({
                       )}
                       onClick={() => {
                         setActivePageId(page.id);
-                        setSettingsSearchQuery('');
+                        clearSettingsSearchQuery();
                       }}
                     >
                       <span className="flex min-w-0 items-end gap-3">

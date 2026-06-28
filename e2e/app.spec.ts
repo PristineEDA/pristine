@@ -3849,6 +3849,19 @@ test('settings dialog supports subpage navigation and global search', async () =
   await expect(window.getByTestId('settings-nav-general')).toHaveAttribute('aria-current', 'page');
   await expect(window.getByTestId('settings-page-general')).toBeVisible();
 
+  await openSettingsPage(window, 'editor');
+  await searchInput.fill('font');
+  await expect(window.getByTestId('settings-page-search')).toBeVisible();
+
+  await window.getByTestId('settings-close-button').click();
+  await expect(window.getByTestId('settings-dialog')).toBeHidden();
+
+  await window.getByTestId('menu-settings-button').click();
+  await expect(window.getByTestId('settings-dialog')).toBeVisible();
+  await expect(window.getByTestId('settings-nav-general')).toHaveAttribute('aria-current', 'page');
+  await expect(window.getByTestId('settings-search-input')).toHaveValue('');
+  await expect(window.getByTestId('settings-page-general')).toBeVisible();
+
   await app.close();
 });
 

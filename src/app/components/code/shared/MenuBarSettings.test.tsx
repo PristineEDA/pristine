@@ -236,7 +236,22 @@ describe('MenuBar settings', () => {
     expect(screen.getByTestId('settings-search-icon')).toHaveClass('opacity-100');
     expect(screen.getByTestId('settings-nav-general')).toHaveAttribute('aria-current', 'page');
     expect(screen.getByTestId('settings-page-general')).toBeVisible();
-  });
+
+    await openSettingsPage(user, 'editor');
+    await user.type(screen.getByTestId('settings-search-input'), 'font');
+    expect(screen.getByTestId('settings-page-search')).toBeVisible();
+
+    await user.click(screen.getByTestId('settings-close-button'));
+    await waitFor(() => {
+      expect(screen.queryByTestId('settings-dialog')).not.toBeInTheDocument();
+    });
+
+    await user.click(screen.getByTestId('menu-settings-button'));
+    expect(await screen.findByTestId('settings-dialog')).toBeVisible();
+    expect(screen.getByTestId('settings-nav-general')).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByTestId('settings-search-input')).toHaveValue('');
+    expect(screen.getByTestId('settings-page-general')).toBeVisible();
+  }, SETTINGS_DIALOG_TEST_TIMEOUT_MS);
 
   it('updates schematic grid and guide preferences from settings', async () => {
     const user = userEvent.setup();
