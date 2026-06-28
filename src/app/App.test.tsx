@@ -6,6 +6,7 @@ import App from './App';
 import { EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX } from './components/code/shared/CodeWorkspaceShell';
 import { resetWorkspaceSessionStoreForTests } from './context/useWorkspaceSessionStore';
 import { resetWorkspaceGitStatusStoreForTests } from './git/workspaceGitStatus';
+import { resetQuickOpenStoreForTests } from './useQuickOpenStore';
 
 let renderRealActivityBar = false;
 
@@ -313,6 +314,7 @@ describe('App', () => {
   beforeEach(() => {
     testUser = userEvent.setup();
     renderRealActivityBar = false;
+    resetQuickOpenStoreForTests();
     resetWorkspaceSessionStoreForTests();
     resetWorkspaceGitStatusStoreForTests();
     vi.clearAllMocks();
