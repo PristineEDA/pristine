@@ -1,4 +1,4 @@
-import { Fragment, Suspense, lazy, useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Fragment, Suspense, lazy, useCallback, useMemo, useRef, type ReactNode } from 'react';
 import {
   Terminal, X, Plus,
   AlertCircle, AlertTriangle, Info, Lightbulb,
@@ -26,6 +26,14 @@ import {
 } from '../shared/IconTabToggleGroup';
 import { useCodeViewerLayout } from '../../../context/CodeViewerLayoutContext';
 import { getBottomPanelClassName, getBottomPanelTabBarClassName } from '../shared/codeViewerLayoutStyles';
+import {
+  MIN_SPLIT_PANE_WIDTH_PX,
+  SPLIT_HANDLE_GAP_PX,
+  useBottomPanelStore,
+  type BottomPanelPane,
+  type BottomPanelTabId,
+  type BottomPaneContent,
+} from './useBottomPanelStore';
 
 const OutputPanel = lazy(() => import('./OutputPanel').then((module) => ({ default: module.OutputPanel })));
 const ProblemsTabPanel = lazy(() => import('./ProblemsTabPanel').then((module) => ({ default: module.ProblemsTabPanel })));
@@ -33,36 +41,6 @@ const LspPanel = lazy(() => import('./LspPanel').then((module) => ({ default: mo
 const AsicSchematicPanel = lazy(() => import('./schematic/AsicSchematicPanel').then((module) => ({ default: module.AsicSchematicPanel })));
 const WaveformPanel = lazy(() => import('./waveform/WaveformPanel').then((module) => ({ default: module.WaveformPanel })));
 const SynthesisPanel = lazy(() => import('./SynthesisPanel').then((module) => ({ default: module.SynthesisPanel })));
-
-type BottomPanelTabId = 'terminal' | 'output' | 'problems' | 'debug' | 'lsp' | 'schematic' | 'waveform' | 'synthesis';
-type BottomPaneContent =
-  | { kind: 'tab'; tab: BottomPanelTabId }
-  | { kind: 'empty' }
-  | { kind: 'placeholder'; label: string; icon: 'file' | 'boxes' };
-
-interface BottomPanelPane {
-  id: string;
-  content: BottomPaneContent;
-  size: number;
-}
-
-const MIN_SPLIT_PANE_WIDTH_PX = 260;
-const SPLIT_HANDLE_GAP_PX = 4;
-const createInitialPane = (): BottomPanelPane => ({
-  id: 'bottom-pane-1',
-  content: { kind: 'tab', tab: 'terminal' },
-  size: 100,
-});
-
-const normalizePaneSizes = (panes: BottomPanelPane[]) => {
-  const total = panes.reduce((sum, pane) => sum + pane.size, 0);
-  if (total <= 0) {
-    const fallbackSize = 100 / panes.length;
-    return panes.map((pane) => ({ ...pane, size: fallbackSize }));
-  }
-
-  return panes.map((pane) => ({ ...pane, size: (pane.size / total) * 100 }));
-};
 
 const BOTTOM_PANEL_TAB_ITEMS = [
   { value: 'terminal', label: 'Terminal', icon: Terminal, testId: 'bottom-panel-tab-terminal' },
@@ -84,11 +62,16 @@ interface BottomPanelProps {
 
 export function BottomPanel({ isMaximized = false, layoutVersion, onClose, onMaximizeToggle }: BottomPanelProps) {
   const { layoutMode } = useCodeViewerLayout();
-  const [panes, setPanes] = useState<BottomPanelPane[]>(() => [createInitialPane()]);
-  const [focusedPaneId, setFocusedPaneId] = useState('bottom-pane-1');
-  const [focusedPaneMeasuredWidth, setFocusedPaneMeasuredWidth] = useState(Number.POSITIVE_INFINITY);
+  const panes = useBottomPanelStore((state) => state.panes);
+  const focusedPaneId = useBottomPanelStore((state) => state.focusedPaneId);
+  const focusedPaneMeasuredWidth = useBottomPanelStore((state) => state.focusedPaneMeasuredWidth);
+  const focusPane = useBottomPanelStore((state) => state.focusPane);
+  const removeFocusedPane = useBottomPanelStore((state) => state.removeFocusedPane);
+  const setFocusedPaneTab = useBottomPanelStore((state) => state.setFocusedPaneTab);
+  const setPaneSize = useBottomPanelStore((state) => state.setPaneSize);
+  const splitFocusedPane = useBottomPanelStore((state) => state.splitFocusedPane);
+  const updatePaneContent = useBottomPanelStore((state) => state.updatePaneContent);
   const paneRefs = useRef(new Map<string, HTMLDivElement>());
-  const nextPaneIndexRef = useRef(2);
   const problemsList = useLspProblems();
   const problemCounts = useMemo(() => summarizeLspProblems(problemsList), [problemsList]);
   const maximizeLabel = isMaximized ? 'Restore Panel' : 'Maximize Panel';
@@ -105,95 +88,32 @@ export function BottomPanel({ isMaximized = false, layoutVersion, onClose, onMax
     });
   };
 
-  const updatePaneContent = useCallback((paneId: string, content: BottomPaneContent) => {
-    setPanes((currentPanes) => currentPanes.map((pane) => (
-      pane.id === paneId ? { ...pane, content } : pane
-    )));
-    setFocusedPaneId(paneId);
-    setFocusedPaneMeasuredWidth(paneRefs.current.get(paneId)?.getBoundingClientRect().width ?? Number.POSITIVE_INFINITY);
-  }, []);
+  const getPaneMeasuredWidth = useCallback((paneId: string) => (
+    paneRefs.current.get(paneId)?.getBoundingClientRect().width ?? Number.POSITIVE_INFINITY
+  ), []);
 
-  const setFocusedPaneTab = useCallback((tab: BottomPanelTabId) => {
-    updatePaneContent(focusedPaneId, { kind: 'tab', tab });
-  }, [focusedPaneId, updatePaneContent]);
+  const handleUpdatePaneContent = useCallback((paneId: string, content: BottomPaneContent) => {
+    updatePaneContent(paneId, content, getPaneMeasuredWidth(paneId));
+  }, [getPaneMeasuredWidth, updatePaneContent]);
+
+  const handleSetFocusedPaneTab = useCallback((tab: BottomPanelTabId) => {
+    setFocusedPaneTab(tab, getPaneMeasuredWidth(focusedPaneId));
+  }, [focusedPaneId, getPaneMeasuredWidth, setFocusedPaneTab]);
 
   const handleSplitFocusedPane = useCallback(() => {
-    const targetPane = paneRefs.current.get(focusedPaneId);
-    const targetWidth = targetPane?.getBoundingClientRect().width ?? Number.POSITIVE_INFINITY;
-
-    if (targetWidth < (MIN_SPLIT_PANE_WIDTH_PX * 2 + SPLIT_HANDLE_GAP_PX)) {
-      return;
-    }
-
-    const nextPaneId = `bottom-pane-${nextPaneIndexRef.current}`;
-    nextPaneIndexRef.current += 1;
-    setPanes((currentPanes) => {
-      const focusedIndex = currentPanes.findIndex((pane) => pane.id === focusedPaneId);
-      if (focusedIndex < 0) {
-        return currentPanes;
-      }
-
-      const focused = currentPanes[focusedIndex];
-      if (!focused) {
-        return currentPanes;
-      }
-
-      const halfSize = focused.size / 2;
-      const nextPanes = [
-        ...currentPanes.slice(0, focusedIndex),
-        { ...focused, size: halfSize },
-        { id: nextPaneId, content: { kind: 'empty' } satisfies BottomPaneContent, size: halfSize },
-        ...currentPanes.slice(focusedIndex + 1),
-      ] satisfies BottomPanelPane[];
-
-      return normalizePaneSizes(nextPanes);
-    });
-    setFocusedPaneId(nextPaneId);
-    setFocusedPaneMeasuredWidth(Number.POSITIVE_INFINITY);
-  }, [focusedPaneId]);
+    splitFocusedPane(getPaneMeasuredWidth(focusedPaneId));
+  }, [focusedPaneId, getPaneMeasuredWidth, splitFocusedPane]);
 
   const handleRemoveFocusedPane = useCallback(() => {
-    if (panes.length <= 1) {
-      return;
+    const removed = removeFocusedPane();
+    if (removed?.pane.content.kind === 'tab' && removed.pane.content.tab === 'terminal') {
+      void terminateTerminalSession(removed.pane.id);
     }
-
-    const focusedIndex = panes.findIndex((pane) => pane.id === focusedPaneId);
-    if (focusedIndex < 0) {
-      return;
-    }
-
-    const removedPane = panes[focusedIndex];
-    if (!removedPane) {
-      return;
-    }
-
-    const nextPanes = normalizePaneSizes(panes.filter((pane) => pane.id !== removedPane.id));
-    const nextFocusedPane = nextPanes[Math.min(focusedIndex, nextPanes.length - 1)] ?? nextPanes[0];
-    if (!nextFocusedPane) {
-      return;
-    }
-
-    if (removedPane.content.kind === 'tab' && removedPane.content.tab === 'terminal') {
-      void terminateTerminalSession(removedPane.id);
-    }
-
-    setPanes(nextPanes);
-    setFocusedPaneId(nextFocusedPane.id);
-    setFocusedPaneMeasuredWidth(paneRefs.current.get(nextFocusedPane.id)?.getBoundingClientRect().width ?? Number.POSITIVE_INFINITY);
-  }, [focusedPaneId, panes]);
+  }, [removeFocusedPane]);
 
   const handlePaneSizeChange = useCallback((paneId: string, size: number) => {
-    setPanes((currentPanes) => {
-      const pane = currentPanes.find((currentPane) => currentPane.id === paneId);
-      if (!pane || Math.abs(pane.size - size) < 0.001) {
-        return currentPanes;
-      }
-
-      return currentPanes.map((currentPane) => (
-        currentPane.id === paneId ? { ...currentPane, size } : currentPane
-      ));
-    });
-  }, []);
+    setPaneSize(paneId, size);
+  }, [setPaneSize]);
 
   const renderTabContent = useCallback((paneId: string, tab: BottomPanelTabId): ReactNode => ({
     terminal: <TerminalPanel layoutVersion={layoutVersion} sessionKey={paneId} testId={paneId === 'bottom-pane-1' ? 'terminal-host' : `terminal-host-${paneId}`} />,
@@ -273,7 +193,7 @@ export function BottomPanel({ isMaximized = false, layoutVersion, onClose, onMax
           <DropdownMenuItem
             className="gap-2"
             data-testid={`bottom-panel-open-terminal-${pane.id}`}
-            onSelect={() => updatePaneContent(pane.id, { kind: 'tab', tab: 'terminal' })}
+            onSelect={() => handleUpdatePaneContent(pane.id, { kind: 'tab', tab: 'terminal' })}
           >
             <Terminal size={13} />
             Terminal
@@ -281,7 +201,7 @@ export function BottomPanel({ isMaximized = false, layoutVersion, onClose, onMax
           <DropdownMenuItem
             className="gap-2"
             data-testid={`bottom-panel-open-placeholder-a-${pane.id}`}
-            onSelect={() => updatePaneContent(pane.id, { kind: 'placeholder', label: 'Placeholder A', icon: 'file' })}
+            onSelect={() => handleUpdatePaneContent(pane.id, { kind: 'placeholder', label: 'Placeholder A', icon: 'file' })}
           >
             <FileText size={13} />
             Placeholder A
@@ -289,7 +209,7 @@ export function BottomPanel({ isMaximized = false, layoutVersion, onClose, onMax
           <DropdownMenuItem
             className="gap-2"
             data-testid={`bottom-panel-open-placeholder-b-${pane.id}`}
-            onSelect={() => updatePaneContent(pane.id, { kind: 'placeholder', label: 'Placeholder B', icon: 'boxes' })}
+            onSelect={() => handleUpdatePaneContent(pane.id, { kind: 'placeholder', label: 'Placeholder B', icon: 'boxes' })}
           >
             <Boxes size={13} />
             Placeholder B
@@ -331,7 +251,7 @@ export function BottomPanel({ isMaximized = false, layoutVersion, onClose, onMax
         <IconTabToggleGroup
           items={BOTTOM_PANEL_TAB_ITEMS}
           value={focusedTab}
-          onValueChange={(nextValue) => setFocusedPaneTab(nextValue as BottomPanelTabId)}
+          onValueChange={(nextValue) => handleSetFocusedPaneTab(nextValue as BottomPanelTabId)}
           groupLabel="Bottom panel tabs"
           groupTestId="bottom-panel-tab-group"
           tooltipSide="top"
@@ -347,7 +267,7 @@ export function BottomPanel({ isMaximized = false, layoutVersion, onClose, onMax
               size="icon-xs"
               aria-label="New Terminal"
               className="text-ide-text-muted hover:text-ide-text"
-              onClick={() => setFocusedPaneTab('terminal')}
+              onClick={() => handleSetFocusedPaneTab('terminal')}
             >
               <Plus size={13} />
             </Button>
@@ -435,12 +355,10 @@ export function BottomPanel({ isMaximized = false, layoutVersion, onClose, onMax
                   className="h-full min-h-0 min-w-0 overflow-hidden bg-ide-bg outline-none focus-visible:ring-1 focus-visible:ring-ide-accent/60 data-[focused=true]:ring-1 data-[focused=true]:ring-ide-accent/35"
                   tabIndex={0}
                   onFocus={() => {
-                    setFocusedPaneId(pane.id);
-                    setFocusedPaneMeasuredWidth(paneRefs.current.get(pane.id)?.getBoundingClientRect().width ?? Number.POSITIVE_INFINITY);
+                    focusPane(pane.id, getPaneMeasuredWidth(pane.id));
                   }}
                   onPointerDown={() => {
-                    setFocusedPaneId(pane.id);
-                    setFocusedPaneMeasuredWidth(paneRefs.current.get(pane.id)?.getBoundingClientRect().width ?? Number.POSITIVE_INFINITY);
+                    focusPane(pane.id, getPaneMeasuredWidth(pane.id));
                   }}
                 >
                   {renderPaneContent(pane)}
