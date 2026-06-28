@@ -1,10 +1,11 @@
-import { useState, type CSSProperties } from 'react';
+import type { CSSProperties } from 'react';
 import { Menu } from 'lucide-react';
 import type { AppMenuAction } from '../../../menu/applicationMenu';
 import { cn } from '@/lib/utils';
 import { useCodeViewerLayout } from '../../../context/CodeViewerLayoutContext';
 import { Toggle } from '../../ui/toggle';
 import { MenuBarApplicationMenu } from './MenuBarApplicationMenu';
+import { isApplicationMenuExpanded, useMenuChromeStore } from './useMenuChromeStore';
 
 interface MenuBarApplicationMenuCollapsibleProps {
   interactiveStyle: CSSProperties;
@@ -17,11 +18,18 @@ export function MenuBarApplicationMenuCollapsible({
   menuStyle,
   onSelectAction,
 }: MenuBarApplicationMenuCollapsibleProps) {
-  const [locked, setLocked] = useState(false);
-  const [hoverExpanded, setHoverExpanded] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
+  const locked = useMenuChromeStore((state) => state.applicationMenuLocked);
+  const hoverExpanded = useMenuChromeStore((state) => state.applicationMenuHoverExpanded);
+  const menuOpen = useMenuChromeStore((state) => state.applicationMenuOpen);
+  const setLocked = useMenuChromeStore((state) => state.setApplicationMenuLocked);
+  const setHoverExpanded = useMenuChromeStore((state) => state.setApplicationMenuHoverExpanded);
+  const setMenuOpen = useMenuChromeStore((state) => state.setApplicationMenuOpen);
   const { layoutMode } = useCodeViewerLayout();
-  const expanded = locked || hoverExpanded || menuOpen;
+  const expanded = isApplicationMenuExpanded({
+    applicationMenuHoverExpanded: hoverExpanded,
+    applicationMenuLocked: locked,
+    applicationMenuOpen: menuOpen,
+  });
   const handleHoverEnter = () => setHoverExpanded(true);
   const handleHoverLeave = () => setHoverExpanded(false);
   const isMinimalLayout = layoutMode === 'minimal';
