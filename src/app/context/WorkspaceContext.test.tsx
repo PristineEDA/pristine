@@ -3,6 +3,8 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { WorkspaceProvider, useWorkspace } from './WorkspaceContext';
+import { resetWorkspaceSessionStoreForTests, useWorkspaceSessionStore } from './useWorkspaceSessionStore';
+import type { ProjectState } from '../../../types/project';
 
 const undoActionRun = vi.fn(() => Promise.resolve());
 const redoActionRun = vi.fn(() => Promise.resolve());
@@ -37,6 +39,8 @@ function WorkspaceHarness() {
       <div data-testid="clipboard-mode">{workspace.workspaceClipboard?.mode ?? ''}</div>
       <div data-testid="clipboard-path">{workspace.workspaceClipboard?.sourcePath ?? ''}</div>
       <div data-testid="workspace-tree-refresh-token">{workspace.workspaceTreeRefreshToken}</div>
+      <div data-testid="current-project-name">{workspace.currentProject?.name ?? ''}</div>
+      <div data-testid="panel-widths">{JSON.stringify(workspace.projectPanelWidths)}</div>
 
       <button onClick={() => workspace.setActiveView('simulation')}>set-view</button>
       <button onClick={() => workspace.openFile('rtl/core/reg_file.v', 'reg_file.v')}>open-reg</button>
@@ -66,6 +70,9 @@ function WorkspaceHarness() {
       <button onClick={() => workspace.jumpTo(42)}>jump</button>
       <button onClick={() => workspace.setCursorPos(8, 16)}>cursor</button>
       <button onClick={() => workspace.setShowBottomPanel(false)}>hide-bottom</button>
+      <button onClick={() => workspace.setShowLeftPanel(true)}>show-left</button>
+      <button onClick={() => workspace.setProjectPanelWidth('explorerLeftPanel', 360)}>set-left-width</button>
+      <button onClick={() => { void workspace.flushProjectSession(); }}>flush-project-session</button>
       <button onClick={() => workspace.updateFileContentInGroup('group-1', 'rtl/core/reg_file.v', 'module reg_file; logic dirty; endmodule')}>edit-reg</button>
       <button onClick={() => workspace.updateFileContentInGroup('group-1', 'rtl/core/alu.v', 'module alu; logic dirty; endmodule')}>edit-alu</button>
       <button onClick={() => workspace.updateFileContent(workspace.activeTabId, 'module untitled; endmodule')}>edit-active</button>
@@ -121,8 +128,23 @@ async function clickHarnessButton(name: string) {
   await testUser.click(screen.getByText(name));
 }
 
+function getProjectChangedHandler() {
+  const calls = vi.mocked(window.electronAPI!.project.onProjectChanged).mock.calls;
+  return calls[calls.length - 1]?.[0];
+}
+
+function createProjectState(overrides: Partial<ProjectState> = {}): ProjectState {
+  return {
+    name: 'chip_lab',
+    rootPath: 'C:\\Projects\\chip_lab',
+    session: null,
+    ...overrides,
+  };
+}
+
 describe('WorkspaceContext', () => {
   beforeEach(() => {
+    resetWorkspaceSessionStoreForTests();
     testUser = userEvent.setup();
     vi.clearAllMocks();
     undoActionRun.mockClear();
@@ -580,6 +602,110 @@ describe('WorkspaceContext', () => {
       expect(screen.getByTestId('dirty-files')).toHaveTextContent('rtl/core/reg_file.v');
       expect(snapshots).toHaveLength(1);
     });
+  });
+
+  it('keeps the workspace facade backed by the Zustand session store for layout state', async () => {
+    render(
+      <WorkspaceProvider>
+        <WorkspaceHarness />
+      </WorkspaceProvider>,
+    );
+
+    await clickHarnessButton('set-view');
+    await clickHarnessButton('show-left');
+    await clickHarnessButton('set-left-width');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('active-view')).toHaveTextContent('simulation');
+      expect(screen.getByTestId('panel-widths')).toHaveTextContent('"explorerLeftPanel":360');
+    });
+
+    const storeState = useWorkspaceSessionStore.getState();
+    expect(storeState.activeView).toBe('simulation');
+    expect(storeState.panelStateByView.simulation.showLeftPanel).toBe(true);
+    expect(storeState.panelWidths.explorerLeftPanel).toBe(360);
+  });
+
+  it('hydrates project session changes through the workspace facade', async () => {
+    render(
+      <WorkspaceProvider>
+        <WorkspaceHarness />
+      </WorkspaceProvider>,
+    );
+
+    await waitFor(() => {
+      expect(window.electronAPI!.project.onProjectChanged).toHaveBeenCalled();
+    });
+
+    const projectChangedHandler = getProjectChangedHandler();
+    const project = createProjectState({
+      session: {
+        activeTabId: 'rtl/top.sv',
+        activeView: 'physical',
+        editorGroups: [],
+        editorLayout: null,
+        focusedGroupId: null,
+        mainContentView: 'workflow',
+        panelStateByView: {
+          ...useWorkspaceSessionStore.getState().panelStateByView,
+          physical: {
+            showLeftPanel: true,
+            showBottomPanel: false,
+            showRightPanel: true,
+          },
+        },
+        panelWidths: {
+          physicalRightPanel: 424,
+        },
+        version: 1,
+      },
+    });
+
+    act(() => {
+      projectChangedHandler?.(project);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('current-project-name')).toHaveTextContent('chip_lab');
+      expect(screen.getByTestId('active-view')).toHaveTextContent('physical');
+      expect(screen.getByTestId('panel-widths')).toHaveTextContent('"physicalRightPanel":424');
+    });
+    expect(useWorkspaceSessionStore.getState().mainContentView).toBe('workflow');
+  });
+
+  it('flushes a session snapshot composed from the Zustand session store and editor state', async () => {
+    vi.mocked(window.electronAPI!.project.getCurrentProject).mockResolvedValueOnce(createProjectState());
+
+    render(
+      <WorkspaceProvider>
+        <WorkspaceHarness />
+      </WorkspaceProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('current-project-name')).toHaveTextContent('chip_lab');
+    });
+
+    await clickHarnessButton('open-reg');
+    await clickHarnessButton('set-view');
+    await clickHarnessButton('show-left');
+    await clickHarnessButton('set-left-width');
+    await clickHarnessButton('flush-project-session');
+
+    await waitFor(() => {
+      expect(window.electronAPI!.project.flushSession).toHaveBeenCalled();
+    });
+
+    expect(window.electronAPI!.project.flushSession).toHaveBeenCalledWith(expect.objectContaining({
+      activeTabId: 'rtl/core/reg_file.v',
+      activeView: 'simulation',
+      editorGroups: expect.any(Array),
+      mainContentView: 'code',
+      panelWidths: {
+        explorerLeftPanel: 360,
+      },
+      version: 1,
+    }));
   });
 
   it('opens a new file and activates it', async () => {

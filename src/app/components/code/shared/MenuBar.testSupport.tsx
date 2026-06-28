@@ -4,6 +4,7 @@ import { beforeEach, expect, vi } from 'vitest';
 import { MenuBar } from './MenuBar';
 import type { DesktopAuthSession } from '../../../auth/types';
 import { WorkspaceProvider, useWorkspace } from '../../../context/WorkspaceContext';
+import { resetWorkspaceSessionStoreForTests } from '../../../context/useWorkspaceSessionStore';
 import { CodeViewerLayoutProvider, type CodeViewerLayoutMode } from '../../../context/CodeViewerLayoutContext';
 import type { ColorThemeOption, ColorThemePreviewPalette, ResolvedColorTheme } from '../../../theme/colorThemeTypes';
 import { SidebarProvider, useSidebar } from '../../ui/sidebar';
@@ -920,6 +921,7 @@ function resetElectronApiMocks() {
 }
 
 beforeEach(() => {
+  resetWorkspaceSessionStoreForTests();
   resetContextMockState();
   resetEditorSettingsMocks();
   resetSchematicSettingsMocks();
