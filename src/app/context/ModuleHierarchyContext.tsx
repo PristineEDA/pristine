@@ -1,4 +1,5 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useContext, useMemo, type ReactNode } from 'react';
+import { useModuleHierarchyStore } from './useModuleHierarchyStore';
 
 export type ModuleHierarchyTopKind = 'auto' | 'manual';
 
@@ -22,7 +23,8 @@ const ModuleHierarchyContext = createContext<ModuleHierarchyContextValue>({
 });
 
 export function ModuleHierarchyProvider({ children }: { children: ReactNode }) {
-  const [top, setTop] = useState<ModuleHierarchyTop | null>(null);
+  const top = useModuleHierarchyStore((state) => state.top);
+  const setTop = useModuleHierarchyStore((state) => state.setTop);
   const value = useMemo<ModuleHierarchyContextValue>(() => ({ top, setTop }), [top]);
 
   return (

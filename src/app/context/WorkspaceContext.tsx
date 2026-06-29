@@ -20,7 +20,6 @@ import {
 import {
   canToggleLayoutPanels,
   type CodeView,
-  DEFAULT_PANEL_STATE_BY_CODE_VIEW,
   EMPTY_PANEL_STATE,
   type MainContentView,
   type PanelVisibilityState,
@@ -31,6 +30,7 @@ import {
   type EditorSelectionSnapshot,
 } from './useWorkspaceEditorState';
 import { useWorkspaceFileStore, type SaveFilesResult } from './useWorkspaceFileStore';
+import { useWorkspaceSessionStore } from './useWorkspaceSessionStore';
 import type { WindowCloseRequest } from '../window/windowClose';
 import { refreshWorkspaceGitStatus } from '../git/workspaceGitStatus';
 import {
@@ -577,20 +577,27 @@ export function useWorkspaceDialogs(): WorkspaceDialogState {
 // ─── Provider ───────────────────────────────────────────────────────────────
 
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
-  const [currentProject, setCurrentProject] = useState<ProjectState | null>(null);
-  const [activeView, setActiveView] = useState<CodeView>('explorer');
-  const [mainContentView, setMainContentView] = useState<MainContentView>('code');
-  const [projectPanelWidths, setProjectPanelWidths] = useState<Record<string, number>>({});
-  const [panelStateByView, setPanelStateByView] = useState<Record<CodeView, PanelVisibilityState>>({
-    ...DEFAULT_PANEL_STATE_BY_CODE_VIEW,
-  });
+  const currentProject = useWorkspaceSessionStore((state) => state.currentProject);
+  const setCurrentProject = useWorkspaceSessionStore((state) => state.setCurrentProject);
+  const activeView = useWorkspaceSessionStore((state) => state.activeView);
+  const setActiveView = useWorkspaceSessionStore((state) => state.setActiveView);
+  const mainContentView = useWorkspaceSessionStore((state) => state.mainContentView);
+  const setMainContentView = useWorkspaceSessionStore((state) => state.setMainContentView);
+  const projectPanelWidths = useWorkspaceSessionStore((state) => state.panelWidths);
+  const panelStateByView = useWorkspaceSessionStore((state) => state.panelStateByView);
+  const workspaceTreeRefreshToken = useWorkspaceSessionStore((state) => state.workspaceTreeRefreshToken);
+  const bumpWorkspaceTreeRefreshToken = useWorkspaceSessionStore((state) => state.bumpWorkspaceTreeRefreshToken);
+  const captureWorkspaceSessionState = useWorkspaceSessionStore((state) => state.captureSessionState);
+  const hydrateWorkspaceProjectSession = useWorkspaceSessionStore((state) => state.hydrateProjectSession);
+  const resetWorkspaceProjectSession = useWorkspaceSessionStore((state) => state.resetProjectSession);
+  const setPanelStateForView = useWorkspaceSessionStore((state) => state.setPanelStateForView);
+  const setProjectPanelWidthInStore = useWorkspaceSessionStore((state) => state.setProjectPanelWidth);
   const editorWorkspace = useWorkspaceEditorState();
   const fileStore = useWorkspaceFileStore();
   const [unsavedChangesDialog, setUnsavedChangesDialog] = useState<UnsavedChangesDialogState | null>(null);
   const [deleteConfirmationDialog, setDeleteConfirmationDialog] = useState<DeleteConfirmationDialogState | null>(null);
   const [workspaceClipboard, setWorkspaceClipboard] = useState<WorkspaceClipboardState | null>(null);
   const [untitledFiles, setUntitledFiles] = useState<Record<string, string>>({});
-  const [workspaceTreeRefreshToken, setWorkspaceTreeRefreshToken] = useState(0);
   const unsavedChangesResolverRef = useRef<((result: 'save' | 'discard' | 'cancel') => void) | null>(null);
   const deleteConfirmationResolverRef = useRef<((result: boolean) => void) | null>(null);
   const deleteConfirmationActionRef = useRef<(() => Promise<void>) | null>(null);
@@ -601,9 +608,6 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const editorWorkspaceRef = useRef(editorWorkspace);
   const fileStoreRef = useRef(fileStore);
   const activeViewRef = useRef(activeView);
-  const mainContentViewRef = useRef(mainContentView);
-  const projectPanelWidthsRef = useRef(projectPanelWidths);
-  const panelStateByViewRef = useRef(panelStateByView);
   const layoutPanelsEnabledRef = useRef(layoutPanelsEnabled);
   const unsavedChangesDialogRef = useRef(unsavedChangesDialog);
   const deleteConfirmationDialogRef = useRef(deleteConfirmationDialog);
@@ -615,9 +619,6 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   editorWorkspaceRef.current = editorWorkspace;
   fileStoreRef.current = fileStore;
   activeViewRef.current = activeView;
-  mainContentViewRef.current = mainContentView;
-  projectPanelWidthsRef.current = projectPanelWidths;
-  panelStateByViewRef.current = panelStateByView;
   layoutPanelsEnabledRef.current = layoutPanelsEnabled;
   unsavedChangesDialogRef.current = unsavedChangesDialog;
   deleteConfirmationDialogRef.current = deleteConfirmationDialog;
@@ -658,61 +659,45 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     fileStoreRef.current.resetFileStore();
     setWorkspaceClipboard(null);
     setUntitledFiles({});
-    setProjectPanelWidths({});
+    resetWorkspaceProjectSession();
     fileIdRedirectsRef.current = {};
     previousEditorGroupsRef.current = EMPTY_EDITOR_GROUPS;
-  }, []);
+  }, [resetWorkspaceProjectSession]);
 
   const hydrateProjectSession = useCallback((snapshot: ProjectSessionSnapshot | null | undefined) => {
     resetWorkspaceForProject();
+    hydrateWorkspaceProjectSession(snapshot);
 
     if (!snapshot) {
-      setMainContentView('code');
-      setActiveView('explorer');
-      setPanelStateByView({ ...DEFAULT_PANEL_STATE_BY_CODE_VIEW });
       return;
     }
 
-    setMainContentView(snapshot.mainContentView);
-    setActiveView(snapshot.activeView);
-    setPanelStateByView({
-      ...DEFAULT_PANEL_STATE_BY_CODE_VIEW,
-      ...snapshot.panelStateByView,
-    });
-    setProjectPanelWidths(snapshot.panelWidths ?? {});
     editorWorkspaceRef.current.restoreWorkspace({
       editorGroups: snapshot.editorGroups,
       editorLayout: snapshot.editorLayout,
       focusedGroupId: snapshot.focusedGroupId,
     });
-  }, [resetWorkspaceForProject]);
+  }, [hydrateWorkspaceProjectSession, resetWorkspaceForProject]);
 
-  const captureProjectSessionSnapshot = useCallback((): ProjectSessionSnapshot => ({
-    activeTabId: resolveCurrentFileId(editorWorkspaceRef.current.activeTabId),
-    activeView: activeViewRef.current,
-    editorGroups: editorWorkspaceRef.current.editorGroups,
-    editorLayout: editorWorkspaceRef.current.editorLayout,
-    focusedGroupId: editorWorkspaceRef.current.focusedGroupId,
-    mainContentView: mainContentViewRef.current,
-    panelStateByView: panelStateByViewRef.current,
-    panelWidths: projectPanelWidthsRef.current,
-    version: 1,
-  }), [resolveCurrentFileId]);
+  const captureProjectSessionSnapshot = useCallback((): ProjectSessionSnapshot => {
+    const sessionState = captureWorkspaceSessionState();
+
+    return {
+      activeTabId: resolveCurrentFileId(editorWorkspaceRef.current.activeTabId),
+      activeView: sessionState.activeView,
+      editorGroups: editorWorkspaceRef.current.editorGroups,
+      editorLayout: editorWorkspaceRef.current.editorLayout,
+      focusedGroupId: editorWorkspaceRef.current.focusedGroupId,
+      mainContentView: sessionState.mainContentView,
+      panelStateByView: sessionState.panelStateByView,
+      panelWidths: sessionState.panelWidths,
+      version: 1,
+    };
+  }, [captureWorkspaceSessionState, resolveCurrentFileId]);
 
   const setProjectPanelWidth = useCallback((key: string, value: number | ((current: number | undefined) => number)) => {
-    setProjectPanelWidths((current) => {
-      const currentValue = current[key];
-      const nextValue = typeof value === 'function' ? value(currentValue) : value;
-      if (!Number.isFinite(nextValue) || nextValue <= 0 || currentValue === nextValue) {
-        return current;
-      }
-
-      return {
-        ...current,
-        [key]: nextValue,
-      };
-    });
-  }, []);
+    setProjectPanelWidthInStore(key, value);
+  }, [setProjectPanelWidthInStore]);
 
   const flushProjectSession = useCallback(async () => {
     if (!currentProjectRef.current || !window.electronAPI?.project?.flushSession) {
@@ -721,10 +706,6 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
     await window.electronAPI.project.flushSession(captureProjectSessionSnapshot());
   }, [captureProjectSessionSnapshot]);
-
-  const bumpWorkspaceTreeRefreshToken = useCallback(() => {
-    setWorkspaceTreeRefreshToken((current) => current + 1);
-  }, []);
 
   useEffect(() => {
     const projectApi = typeof window === 'undefined' ? undefined : window.electronAPI?.project;
@@ -1623,28 +1604,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    setPanelStateByView((currentState) => {
-      const view = activeViewRef.current;
-      const currentPanelState = currentState[view];
-      const nextPanelState = {
-        ...currentPanelState,
-        ...nextState,
-      };
-
-      if (
-        currentPanelState.showLeftPanel === nextPanelState.showLeftPanel
-        && currentPanelState.showBottomPanel === nextPanelState.showBottomPanel
-        && currentPanelState.showRightPanel === nextPanelState.showRightPanel
-      ) {
-        return currentState;
-      }
-
-      return {
-        ...currentState,
-        [view]: nextPanelState,
-      };
-    });
-  }, []);
+    setPanelStateForView(activeViewRef.current, nextState);
+  }, [setPanelStateForView]);
 
   const setShowLeftPanel = useCallback((show: boolean) => {
     setPanelStateForActiveView({ showLeftPanel: show });

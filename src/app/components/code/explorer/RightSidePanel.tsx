@@ -1,11 +1,11 @@
-import { Suspense, lazy, useEffect, useState } from 'react';
+import { Suspense, lazy, useEffect } from 'react';
 import { AlertTriangle, BarChart3, CircuitBoard, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '../../ui/skeleton';
 import { TooltipProvider } from '../../ui/tooltip';
-import { ASSISTANT_THREAD_LIST_DEFAULT_WIDTH_PX } from './assistantPanelLayout';
-import { RightPanelTabs, type RightSidePanelTab } from './RightSidePanelChrome';
+import { RightPanelTabs } from './RightSidePanelChrome';
 import { SPLIT_PANEL_CONTENT_TRANSITION_STYLE, useAnimatedSplitPanelPresence } from './useAnimatedSplitPanelPresence';
+import { useSidePanelSessionStore, type RightPanelSecondaryTab } from './useSidePanelSessionStore';
 import { useCodeViewerLayout } from '../../../context/CodeViewerLayoutContext';
 import { Button } from '../../ui/button';
 import { TooltipIconButton } from '../../ui/tooltip-icon-button';
@@ -21,8 +21,6 @@ import {
   IconTabToggleGroup,
 } from '../shared/IconTabToggleGroup';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '../../ui/resizable';
-
-type RightPanelSecondaryTab = 'module-info' | 'resource-usage' | 'x-propagation';
 
 const RIGHT_PANEL_SECONDARY_TAB_ITEMS = [
   { value: 'module-info', label: 'Module Information', icon: CircuitBoard, testId: 'right-panel-secondary-tab-module-info' },
@@ -116,11 +114,15 @@ export function RightSidePanel({
   onThreadListWidthChange,
 }: RightSidePanelProps) {
   const { layoutMode } = useCodeViewerLayout();
-  const [tab, setTab] = useState<RightSidePanelTab>('ai');
-  const [isSplitPanelVisible, setIsSplitPanelVisible] = useState(false);
+  const tab = useSidePanelSessionStore((state) => state.rightPrimaryTab);
+  const setTab = useSidePanelSessionStore((state) => state.setExplorerRightTab);
+  const isSplitPanelVisible = useSidePanelSessionStore((state) => state.rightSplitVisible);
+  const setIsSplitPanelVisible = useSidePanelSessionStore((state) => state.setExplorerRightSplitVisible);
   const splitPanelPresence = useAnimatedSplitPanelPresence(isSplitPanelVisible);
-  const [threadListExpanded, setThreadListExpanded] = useState(false);
-  const [threadListWidth, setThreadListWidth] = useState(ASSISTANT_THREAD_LIST_DEFAULT_WIDTH_PX);
+  const threadListExpanded = useSidePanelSessionStore((state) => state.assistantThreadListExpanded);
+  const setThreadListExpanded = useSidePanelSessionStore((state) => state.setAssistantThreadListExpanded);
+  const threadListWidth = useSidePanelSessionStore((state) => state.assistantThreadListWidth);
+  const setThreadListWidth = useSidePanelSessionStore((state) => state.setAssistantThreadListWidth);
   const splitPanelFrameClassName = getCodeWorkspacePanelFrameClassName(layoutMode, 'flex h-full flex-col bg-ide-bg text-ide-text');
 
   useEffect(() => {
@@ -134,8 +136,8 @@ export function RightSidePanel({
           <AIAgentPanel
             initialThreadListExpanded={threadListExpanded}
             initialThreadListWidth={threadListWidth}
-            onThreadListExpandedChange={(nextExpanded) => {
-              setThreadListExpanded(nextExpanded);
+              onThreadListExpandedChange={(nextExpanded) => {
+                setThreadListExpanded(nextExpanded);
               onThreadListExpandedChange?.(nextExpanded);
             }}
             onThreadListWidthChange={(nextWidth) => {
@@ -188,7 +190,7 @@ export function RightSidePanel({
               isSplitPanelVisible={isSplitPanelVisible}
               onTabChange={setTab}
               onToggleSplitPanel={() => {
-                setIsSplitPanelVisible((current) => !current);
+                setIsSplitPanelVisible(!isSplitPanelVisible);
               }}
             />
 
@@ -212,7 +214,7 @@ export function RightSidePanel({
                   isSplitPanelVisible={isSplitPanelVisible}
                   onTabChange={setTab}
                   onToggleSplitPanel={() => {
-                    setIsSplitPanelVisible((current) => !current);
+                    setIsSplitPanelVisible(!isSplitPanelVisible);
                   }}
                 />
 
@@ -238,7 +240,8 @@ export function RightSidePanel({
 
 function RightPanelSecondaryPanel({ isExpanded }: { isExpanded: boolean }) {
   const { layoutMode } = useCodeViewerLayout();
-  const [secondaryTab, setSecondaryTab] = useState<RightPanelSecondaryTab>('module-info');
+  const secondaryTab = useSidePanelSessionStore((state) => state.rightSecondaryTab);
+  const setSecondaryTab = useSidePanelSessionStore((state) => state.setExplorerRightSecondaryTab);
   const splitPanelFrameClassName = getCodeWorkspacePanelFrameClassName(layoutMode, 'flex h-full flex-col bg-ide-bg text-ide-text');
   const secondaryContent = RIGHT_PANEL_SECONDARY_COPY[secondaryTab];
 

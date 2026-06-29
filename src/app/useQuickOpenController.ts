@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { EditorSelectionSnapshot } from './context/useWorkspaceEditorState';
 import {
   createQuickOpenFileEntries,
@@ -7,136 +7,10 @@ import {
   type QuickOpenFileEntry,
   type QuickOpenSearchResult,
 } from './quickOpen/quickOpenSearch';
-import type { WorkspaceRevealRequest } from './workspace/useWorkspaceTree';
+import { useQuickOpenStore } from './useQuickOpenStore';
 import { isWorkspaceRelativeFilePath } from './workspace/workspaceFiles';
 
-const QUICK_OPEN_RECENT_LIMIT = 20;
 const EMPTY_QUICK_OPEN_FILES: QuickOpenFileEntry[] = [];
-
-interface QuickOpenState {
-  isVisible: boolean;
-  query: string;
-  selectedIndex: number;
-  workspaceFiles: QuickOpenFileEntry[] | null;
-  isLoading: boolean;
-  errorMessage: string | null;
-  recentFiles: QuickOpenFileEntry[];
-  revealRequest: WorkspaceRevealRequest | null;
-}
-
-type QuickOpenAction =
-  | { type: 'open' }
-  | { type: 'close' }
-  | { type: 'setQuery'; query: string }
-  | { type: 'setSelectedIndex'; index: number }
-  | { type: 'clampSelectedIndex'; resultCount: number }
-  | { type: 'startIndexing' }
-  | { type: 'finishIndexing'; files: QuickOpenFileEntry[] }
-  | { type: 'failIndexing'; errorMessage: string }
-  | { type: 'invalidateWorkspaceFiles' }
-  | { type: 'recordRecentFile'; filePath: string; fileName: string }
-  | { type: 'setRevealRequest'; revealRequest: WorkspaceRevealRequest };
-
-const QUICK_OPEN_INITIAL_STATE: QuickOpenState = {
-  isVisible: false,
-  query: '',
-  selectedIndex: 0,
-  workspaceFiles: null,
-  isLoading: false,
-  errorMessage: null,
-  recentFiles: [],
-  revealRequest: null,
-};
-
-function quickOpenReducer(state: QuickOpenState, action: QuickOpenAction): QuickOpenState {
-  switch (action.type) {
-    case 'open':
-      return {
-        ...state,
-        isVisible: true,
-        query: '',
-        selectedIndex: 0,
-      };
-    case 'close':
-      return {
-        ...state,
-        isVisible: false,
-        query: '',
-        selectedIndex: 0,
-      };
-    case 'setQuery':
-      if (state.query === action.query) {
-        return state;
-      }
-
-      return {
-        ...state,
-        query: action.query,
-      };
-    case 'setSelectedIndex':
-      if (state.selectedIndex === action.index) {
-        return state;
-      }
-
-      return {
-        ...state,
-        selectedIndex: action.index,
-      };
-    case 'clampSelectedIndex': {
-      const nextSelectedIndex = action.resultCount === 0
-        ? 0
-        : Math.min(state.selectedIndex, action.resultCount - 1);
-
-      if (state.selectedIndex === nextSelectedIndex) {
-        return state;
-      }
-
-      return {
-        ...state,
-        selectedIndex: nextSelectedIndex,
-      };
-    }
-    case 'startIndexing':
-      return {
-        ...state,
-        isLoading: true,
-        errorMessage: null,
-      };
-    case 'finishIndexing':
-      return {
-        ...state,
-        workspaceFiles: action.files,
-        isLoading: false,
-      };
-    case 'failIndexing':
-      return {
-        ...state,
-        isLoading: false,
-        errorMessage: action.errorMessage,
-      };
-    case 'invalidateWorkspaceFiles':
-      return {
-        ...state,
-        workspaceFiles: null,
-        errorMessage: null,
-      };
-    case 'recordRecentFile': {
-      const entry = { path: action.filePath, name: action.fileName };
-
-      return {
-        ...state,
-        recentFiles: [entry, ...state.recentFiles.filter((item) => item.path !== action.filePath)].slice(0, QUICK_OPEN_RECENT_LIMIT),
-      };
-    }
-    case 'setRevealRequest':
-      return {
-        ...state,
-        revealRequest: action.revealRequest,
-      };
-    default:
-      return state;
-  }
-}
 
 interface UseQuickOpenControllerOptions {
   activeTabId: string;
@@ -157,36 +31,65 @@ export function useQuickOpenController({
   restoreEditorSelection,
   workspaceTreeRefreshToken,
 }: UseQuickOpenControllerOptions) {
-  const [quickOpenState, dispatchQuickOpen] = useReducer(quickOpenReducer, QUICK_OPEN_INITIAL_STATE);
+  const errorMessage = useQuickOpenStore((state) => state.errorMessage);
+  const isLoading = useQuickOpenStore((state) => state.isLoading);
+  const isVisible = useQuickOpenStore((state) => state.isVisible);
+  const query = useQuickOpenStore((state) => state.query);
+  const recentFiles = useQuickOpenStore((state) => state.recentFiles);
+  const revealRequest = useQuickOpenStore((state) => state.revealRequest);
+  const selectedIndex = useQuickOpenStore((state) => state.selectedIndex);
+  const workspaceFiles = useQuickOpenStore((state) => state.workspaceFiles);
+  const clampSelectedIndex = useQuickOpenStore((state) => state.clampSelectedIndex);
+  const closeQuickOpenState = useQuickOpenStore((state) => state.closeQuickOpenState);
+  const failIndexing = useQuickOpenStore((state) => state.failIndexing);
+  const finishIndexing = useQuickOpenStore((state) => state.finishIndexing);
+  const invalidateWorkspaceFilesState = useQuickOpenStore((state) => state.invalidateWorkspaceFiles);
+  const openQuickOpenState = useQuickOpenStore((state) => state.openQuickOpenState);
+  const recordRecentFileState = useQuickOpenStore((state) => state.recordRecentFile);
+  const setQuery = useQuickOpenStore((state) => state.setQuery);
+  const setRevealRequest = useQuickOpenStore((state) => state.setRevealRequest);
+  const setSelectedIndex = useQuickOpenStore((state) => state.setSelectedIndex);
+  const startIndexing = useQuickOpenStore((state) => state.startIndexing);
   const revealTokenRef = useRef(0);
   const lastHandledActiveFileRevealRef = useRef('');
   const quickOpenEditorSnapshotRef = useRef<EditorSelectionSnapshot | null>(null);
+
+  const quickOpenState = useMemo(() => ({
+    errorMessage,
+    isLoading,
+    isVisible,
+    query,
+    recentFiles,
+    revealRequest,
+    selectedIndex,
+    workspaceFiles,
+  }), [errorMessage, isLoading, isVisible, query, recentFiles, revealRequest, selectedIndex, workspaceFiles]);
 
   const closeQuickOpen = useCallback((options?: { restorePreviousEditor?: boolean }) => {
     const shouldRestorePreviousEditor = options?.restorePreviousEditor ?? true;
     const snapshot = quickOpenEditorSnapshotRef.current;
 
     quickOpenEditorSnapshotRef.current = null;
-    dispatchQuickOpen({ type: 'close' });
+    closeQuickOpenState();
     if (shouldRestorePreviousEditor && snapshot) {
       restoreEditorSelection(snapshot);
     }
 
     restoreActiveEditorFocus();
-  }, [restoreActiveEditorFocus, restoreEditorSelection]);
+  }, [closeQuickOpenState, restoreActiveEditorFocus, restoreEditorSelection]);
 
   const openQuickOpen = useCallback(() => {
     quickOpenEditorSnapshotRef.current = captureEditorSelectionSnapshot();
-    dispatchQuickOpen({ type: 'open' });
-  }, [captureEditorSelectionSnapshot]);
+    openQuickOpenState();
+  }, [captureEditorSelectionSnapshot, openQuickOpenState]);
 
   const invalidateWorkspaceFiles = useCallback(() => {
-    dispatchQuickOpen({ type: 'invalidateWorkspaceFiles' });
-  }, []);
+    invalidateWorkspaceFilesState();
+  }, [invalidateWorkspaceFilesState]);
 
   const recordRecentFile = useCallback((filePath: string, fileName: string) => {
-    dispatchQuickOpen({ type: 'recordRecentFile', filePath, fileName });
-  }, []);
+    recordRecentFileState(filePath, fileName);
+  }, [recordRecentFileState]);
 
   const queueRevealRequest = useCallback((filePath: string, options?: { markActiveFileHandled?: boolean }) => {
     if (!filePath || !isWorkspaceRelativeFilePath(filePath)) {
@@ -198,19 +101,16 @@ export function useQuickOpenController({
     }
 
     revealTokenRef.current += 1;
-    dispatchQuickOpen({
-      type: 'setRevealRequest',
-      revealRequest: { path: filePath, token: revealTokenRef.current },
-    });
-  }, []);
+    setRevealRequest({ path: filePath, token: revealTokenRef.current });
+  }, [setRevealRequest]);
 
   const handleQuickOpenQueryChange = useCallback((query: string) => {
-    dispatchQuickOpen({ type: 'setQuery', query });
-  }, []);
+    setQuery(query);
+  }, [setQuery]);
 
   const handleQuickOpenSelectedIndexChange = useCallback((index: number) => {
-    dispatchQuickOpen({ type: 'setSelectedIndex', index });
-  }, []);
+    setSelectedIndex(index);
+  }, [setSelectedIndex]);
 
   const openWorkspaceFile = useCallback((filePath: string, fileName: string) => {
     queueRevealRequest(filePath, { markActiveFileHandled: true });
@@ -252,18 +152,18 @@ export function useQuickOpenController({
       return undefined;
     }
 
-    if (!quickOpenState.isVisible || quickOpenState.workspaceFiles !== null) {
+    if (!isVisible || workspaceFiles !== null) {
       return;
     }
 
     const fsApi = window.electronAPI?.fs;
     if (!fsApi) {
-      dispatchQuickOpen({ type: 'failIndexing', errorMessage: 'Filesystem API unavailable' });
+      failIndexing('Filesystem API unavailable');
       return;
     }
 
     let cancelled = false;
-    dispatchQuickOpen({ type: 'startIndexing' });
+    startIndexing();
 
     void fsApi.listFiles('.')
       .then((paths) => {
@@ -271,36 +171,33 @@ export function useQuickOpenController({
           return;
         }
 
-        dispatchQuickOpen({ type: 'finishIndexing', files: createQuickOpenFileEntries(paths) });
+        finishIndexing(createQuickOpenFileEntries(paths));
       })
       .catch((error: unknown) => {
         if (cancelled) {
           return;
         }
 
-        dispatchQuickOpen({
-          type: 'failIndexing',
-          errorMessage: error instanceof Error ? error.message : 'Unable to index workspace files',
-        });
+        failIndexing(error instanceof Error ? error.message : 'Unable to index workspace files');
       });
 
     return () => {
       cancelled = true;
     };
-  }, [quickOpenState.isVisible, quickOpenState.workspaceFiles]);
+  }, [failIndexing, finishIndexing, isVisible, startIndexing, workspaceFiles]);
 
-  const isQuickOpenRecentMode = quickOpenState.query.trim().length === 0;
+  const isQuickOpenRecentMode = query.trim().length === 0;
   const quickOpenResults = useMemo(() => {
     if (isQuickOpenRecentMode) {
-      return getRecentQuickOpenFiles(quickOpenState.recentFiles, quickOpenState.workspaceFiles);
+      return getRecentQuickOpenFiles(recentFiles, workspaceFiles);
     }
 
-    return searchQuickOpenFiles(quickOpenState.workspaceFiles ?? EMPTY_QUICK_OPEN_FILES, quickOpenState.query);
-  }, [isQuickOpenRecentMode, quickOpenState.query, quickOpenState.recentFiles, quickOpenState.workspaceFiles]);
+    return searchQuickOpenFiles(workspaceFiles ?? EMPTY_QUICK_OPEN_FILES, query);
+  }, [isQuickOpenRecentMode, query, recentFiles, workspaceFiles]);
 
   useEffect(() => {
-    dispatchQuickOpen({ type: 'clampSelectedIndex', resultCount: quickOpenResults.length });
-  }, [quickOpenResults.length]);
+    clampSelectedIndex(quickOpenResults.length);
+  }, [clampSelectedIndex, quickOpenResults.length]);
 
   const handleQuickOpenSelect = useCallback((result: QuickOpenSearchResult) => {
     openWorkspaceFile(result.path, result.name);

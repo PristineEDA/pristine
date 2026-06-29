@@ -7,6 +7,7 @@ import {
 } from '../../../context/CodeViewerLayoutContext';
 import type { LspProblem } from '../../../lsp/lspProblems';
 import { BottomPanel } from './BottomPanel';
+import { resetBottomPanelStoreForTests } from './useBottomPanelStore';
 
 let mockedProblems: LspProblem[] = [];
 
@@ -162,6 +163,7 @@ async function clickBottomTab(user: TestUser, tabId: BottomPanelTabId) {
 
 describe('BottomPanel', () => {
   beforeEach(() => {
+    resetBottomPanelStoreForTests();
     terminalPanelMockState.reset();
     terminateTerminalSessionMock.mockClear();
     terminateAllTerminalSessionsMock.mockClear();

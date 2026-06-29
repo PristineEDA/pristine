@@ -7,6 +7,7 @@ import {
   type CodeViewerLayoutMode,
 } from '../../../context/CodeViewerLayoutContext';
 import { RightSidePanel } from './RightSidePanel';
+import { resetSidePanelSessionStoreForTests, useSidePanelSessionStore } from './useSidePanelSessionStore';
 
 const PANEL_ITEM_TIMEOUT_MS = 10000;
 const PANEL_TEST_TIMEOUT_MS = 10000;
@@ -45,6 +46,7 @@ function renderRightSidePanelInLayout(layoutMode: CodeViewerLayoutMode) {
 
 describe('RightSidePanel', () => {
   beforeEach(() => {
+    resetSidePanelSessionStoreForTests();
     vi.mocked(window.electronAPI!.lsp.outline).mockResolvedValue({
       uri: 'file:///C:/workspace/Pristine/rtl/core/alu.sv',
       filePath: 'rtl/core/alu.sv',
@@ -286,6 +288,7 @@ describe('RightSidePanel', () => {
     expect(screen.getByTestId('right-panel-secondary-placeholder')).toHaveTextContent('Module Resource Usage');
     expect(screen.getByTestId('right-panel-secondary-placeholder')).toHaveTextContent('Combinational utilization placeholder');
     expect(screen.queryByText('Register map placeholder')).not.toBeInTheDocument();
+    expect(useSidePanelSessionStore.getState().rightSecondaryTab).toBe('resource-usage');
 
     await user.click(screen.getByTestId('right-panel-secondary-tab-x-propagation'));
     expect(screen.getByTestId('right-panel-secondary-tab-resource-usage')).toHaveAttribute('data-state', 'off');
@@ -294,6 +297,7 @@ describe('RightSidePanel', () => {
     expect(screen.getByTestId('right-panel-secondary-placeholder')).toHaveTextContent('X Propagation');
     expect(screen.getByTestId('right-panel-secondary-placeholder')).toHaveTextContent('Propagation path placeholder');
     expect(screen.queryByText('Combinational utilization placeholder')).not.toBeInTheDocument();
+    expect(useSidePanelSessionStore.getState().rightSecondaryTab).toBe('x-propagation');
   }, 10_000);
 
   it('navigates static check items to their source file and line', async () => {

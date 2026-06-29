@@ -4,9 +4,12 @@ import { beforeEach, expect, vi } from 'vitest';
 import { MenuBar } from './MenuBar';
 import type { DesktopAuthSession } from '../../../auth/types';
 import { WorkspaceProvider, useWorkspace } from '../../../context/WorkspaceContext';
+import { resetWorkspaceSessionStoreForTests } from '../../../context/useWorkspaceSessionStore';
 import { CodeViewerLayoutProvider, type CodeViewerLayoutMode } from '../../../context/CodeViewerLayoutContext';
 import type { ColorThemeOption, ColorThemePreviewPalette, ResolvedColorTheme } from '../../../theme/colorThemeTypes';
 import { SidebarProvider, useSidebar } from '../../ui/sidebar';
+import { resetMenuChromeStoreForTests } from './useMenuChromeStore';
+import { resetSettingsDialogSessionForTests } from './useSettingsDialogSessionStore';
 
 export const ensureEditorFontFamilyLoadedMock = vi.fn<(fontFamily: string) => Promise<void>>(() => Promise.resolve());
 export const setEditorFontSizeMock = vi.fn();
@@ -920,6 +923,9 @@ function resetElectronApiMocks() {
 }
 
 beforeEach(() => {
+  resetMenuChromeStoreForTests();
+  resetSettingsDialogSessionForTests();
+  resetWorkspaceSessionStoreForTests();
   resetContextMockState();
   resetEditorSettingsMocks();
   resetSchematicSettingsMocks();

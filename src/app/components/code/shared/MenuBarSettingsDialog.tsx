@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
-import { CircuitBoard, Code2, Monitor, Palette, Search, Settings2, X, type LucideIcon } from 'lucide-react';
+import { Bot, CircuitBoard, Code2, Cpu, Monitor, Palette, Search, Settings2, Shapes, Workflow, X, type LucideIcon } from 'lucide-react';
 import { useEditorSettings } from '../../../context/EditorSettingsContext';
 import { useSchematicSettings } from '../../../context/SchematicSettingsContext';
 import {
@@ -94,6 +94,7 @@ import { cn } from '@/lib/utils';
 import { EditorFontAdvancedDialog } from './EditorFontAdvancedDialog';
 import { EditorThemeAdvancedDialog } from './EditorThemeAdvancedDialog';
 import { ColorThemePreviewCard, EditorFontPreviewCard } from './PickerPreviewCards';
+import { useSettingsDialogSessionStore, type SettingsPageId } from './useSettingsDialogSessionStore';
 
 const CLOSE_ACTION_CONFIG_KEY = 'window.closeActionPreference';
 const FLOATING_INFO_VISIBLE_CONFIG_KEY = 'ui.floatingInfoWindow.visible';
@@ -103,8 +104,6 @@ const settingsSectionTitleClassName = 'text-[13px] font-medium';
 const settingsSectionDescriptionClassName = 'text-[12px] text-muted-foreground';
 
 type ThemePickerLayoutMode = 'grouped' | 'list';
-type SettingsPageId = 'general' | 'appearance' | 'editor' | 'schematic' | 'window';
-
 interface SettingsPageMetadata {
   id: SettingsPageId;
   description: string;
@@ -141,10 +140,34 @@ const settingsPages: SettingsPageMetadata[] = [
     icon: Code2,
   },
   {
+    id: 'design',
+    label: 'Design',
+    description: 'Design workspace preferences.',
+    icon: Shapes,
+  },
+  {
     id: 'schematic',
     label: 'Schematic',
     description: 'Canvas grid, snapping, and alignment preferences.',
     icon: CircuitBoard,
+  },
+  {
+    id: 'eda',
+    label: 'EDA',
+    description: 'EDA tool preferences.',
+    icon: Workflow,
+  },
+  {
+    id: 'pdk',
+    label: 'PDK',
+    description: 'Process design kit preferences.',
+    icon: Cpu,
+  },
+  {
+    id: 'agent',
+    label: 'Agent',
+    description: 'Agent service preferences.',
+    icon: Bot,
   },
   {
     id: 'window',
@@ -570,15 +593,40 @@ function SettingsPageContent({
   items: SettingsItemDefinition[];
   page: SettingsPageMetadata;
 }) {
+  const placeholderDescription = getSettingsPlaceholderDescription(page.id);
+
   return (
     <div className="space-y-4" data-testid={`settings-page-${page.id}`}>
       <div className="space-y-1">
         <p className="text-[18px] font-semibold leading-none text-foreground">{page.label}</p>
         <p className="text-[13px] text-muted-foreground">{page.description}</p>
       </div>
-      <SettingsItemsList items={items} />
+      {placeholderDescription ? (
+        <SettingsInfoSection
+          title={page.label}
+          description={placeholderDescription}
+          testId={`settings-${page.id}-placeholder`}
+        />
+      ) : (
+        <SettingsItemsList items={items} />
+      )}
     </div>
   );
+}
+
+function getSettingsPlaceholderDescription(pageId: SettingsPageId) {
+  switch (pageId) {
+    case 'design':
+      return 'Design settings will appear here.';
+    case 'eda':
+      return 'EDA tool settings will appear here.';
+    case 'pdk':
+      return 'PDK settings will appear here.';
+    case 'agent':
+      return 'Agent settings will appear here.';
+    default:
+      return null;
+  }
 }
 
 function settingMatchesQuery(item: SettingsItemDefinition, page: SettingsPageMetadata, normalizedQuery: string) {
@@ -955,16 +1003,19 @@ export function MenuBarSettingsDialogs({
     settingsState,
     themeAdvancedDialogOpen,
   } = controller;
-  const [activePageId, setActivePageId] = useState<SettingsPageId>('general');
-  const [settingsSearchQuery, setSettingsSearchQuery] = useState('');
+  const activePageId = useSettingsDialogSessionStore((state) => state.activePageId);
+  const settingsSearchQuery = useSettingsDialogSessionStore((state) => state.settingsSearchQuery);
+  const clearSettingsSearchQuery = useSettingsDialogSessionStore((state) => state.clearSettingsSearchQuery);
+  const setActivePageId = useSettingsDialogSessionStore((state) => state.setActivePageId);
+  const setSettingsSearchQuery = useSettingsDialogSessionStore((state) => state.setSettingsSearchQuery);
   const normalizedSearchQuery = settingsSearchQuery.trim().toLowerCase();
 
   useEffect(() => {
     if (!settingsDialogOpen) {
       setActivePageId('general');
-      setSettingsSearchQuery('');
+      clearSettingsSearchQuery();
     }
-  }, [settingsDialogOpen]);
+  }, [clearSettingsSearchQuery, setActivePageId, settingsDialogOpen]);
 
   const availableThemeOptionsById = useMemo(
     () => new Map(availableThemeOptions.map((option) => [option.value, option])),
@@ -1473,7 +1524,7 @@ export function MenuBarSettingsDialogs({
                       )}
                       onClick={() => {
                         setActivePageId(page.id);
-                        setSettingsSearchQuery('');
+                        clearSettingsSearchQuery();
                       }}
                     >
                       <span className="flex min-w-0 items-end gap-3">
