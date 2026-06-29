@@ -5,7 +5,12 @@ type BrowserWindowInstance = {
   options: Record<string, unknown>;
   loadURL: Mock<(url: string) => void>;
   loadFile: Mock<(filePath: string) => void>;
+  getBounds: Mock<() => { x: number; y: number; width: number; height: number }>;
+  getNormalBounds: Mock<() => { x: number; y: number; width: number; height: number }>;
   setBounds: Mock<(bounds: { x: number; y: number; width: number; height: number }, animate?: boolean) => void>;
+  maximize: Mock<() => void>;
+  unmaximize: Mock<() => void>;
+  isMaximized: Mock<() => boolean>;
   webContents: {
     send: Mock<(channel: string, ...args: unknown[]) => void>;
     isDestroyed: Mock<() => boolean>;
@@ -50,12 +55,22 @@ const mocks = vi.hoisted(() => {
     options: Record<string, unknown>;
     loadURL = vi.fn();
     loadFile = vi.fn();
+    getBounds = vi.fn(() => ({ x: 10, y: 20, width: 1440, height: 900 }));
+    getNormalBounds = vi.fn(() => ({ x: 10, y: 20, width: 1440, height: 900 }));
     setBounds = vi.fn();
+    maximize = vi.fn(() => {
+      this.maximized = true;
+    });
+    unmaximize = vi.fn(() => {
+      this.maximized = false;
+    });
+    isMaximized = vi.fn(() => this.maximized);
     webContents = {
       send: vi.fn(),
       isDestroyed: vi.fn(() => false),
     };
     private visible: boolean;
+    private maximized = false;
     show = vi.fn(() => {
       this.visible = true;
     });
@@ -296,8 +311,18 @@ async function importMain(options?: {
   mocks.mockSetProjectRoot.mockClear();
   mocks.mockSetupWindowStreams.mockClear();
   mocks.mockTryOpenStartupProject.mockClear();
-  mocks.mockTryOpenStartupProject.mockImplementation((_root: string | null, applyProjectRoot: (root: string | null) => void) => {
+  mocks.mockTryOpenStartupProject.mockImplementation((
+    _root: string | null,
+    applyProjectRoot: (root: string | null) => void,
+    applyWindowState?: (windowState: unknown) => void,
+  ) => {
     applyProjectRoot(_root);
+    if (_root) {
+      applyWindowState?.({
+        bounds: { height: 720, width: 1280, x: 44, y: 55 },
+        maximized: true,
+      });
+    }
     return _root ? { name: path.basename(_root), rootPath: _root, session: null } : null;
   });
     mocks.mockHandleAuthCallbackUrl.mockClear();
@@ -413,7 +438,7 @@ describe('electron main entry', () => {
     expect(mocks.mockRegisterAllHandlers).toHaveBeenCalledTimes(1);
     expect(mocks.mockRequestSingleInstanceLock).toHaveBeenCalledTimes(1);
     expect(mocks.mockSetAsDefaultProtocolClient).toHaveBeenCalledWith('pristine');
-    expect(mocks.mockTryOpenStartupProject).toHaveBeenCalledWith(null, expect.any(Function));
+    expect(mocks.mockTryOpenStartupProject).toHaveBeenCalledWith(null, expect.any(Function), expect.any(Function));
     expect(mocks.mockSetProjectRoot).toHaveBeenCalledWith(null);
     expect(mocks.mockMkdirSync).toHaveBeenCalledWith(
       path.join(mocks.mockAppDataPath, 'Pristine', 'dev-profile'),
@@ -470,6 +495,8 @@ describe('electron main entry', () => {
         preload: expect.stringMatching(/preload\.mjs$/),
       }),
     });
+    expect(mainWindow.setBounds).not.toHaveBeenCalled();
+    expect(mainWindow.maximize).not.toHaveBeenCalled();
     expect(mocks.mockSetupWindowStreams).toHaveBeenCalledWith(mainWindow);
     expect(mainWindow.loadURL).toHaveBeenCalledWith('http://127.0.0.1:5173');
     expect(mainWindow.loadFile).not.toHaveBeenCalled();
@@ -494,14 +521,17 @@ describe('electron main entry', () => {
   it('uses the last project root from config when no project env override is present', async () => {
     const configuredRoot = 'C:\\Projects\\chip-lab';
 
-    await importMain({
+    const { browserWindowInstances } = await importMain({
       configValues: {
         'project.lastProjectRoot': configuredRoot,
       },
     });
 
-    expect(mocks.mockTryOpenStartupProject).toHaveBeenCalledWith(configuredRoot, expect.any(Function));
+    expect(mocks.mockTryOpenStartupProject).toHaveBeenCalledWith(configuredRoot, expect.any(Function), expect.any(Function));
     expect(mocks.mockSetProjectRoot).toHaveBeenCalledWith(configuredRoot);
+    const mainWindow = browserWindowInstances[1];
+    expect(mainWindow.setBounds).toHaveBeenCalledWith({ height: 720, width: 1280, x: 44, y: 55 }, false);
+    expect(mainWindow.maximize).toHaveBeenCalledTimes(1);
   });
 
   it('prefers the project root env override over the configured last project root', async () => {
@@ -514,7 +544,7 @@ describe('electron main entry', () => {
       projectRoot: envRoot,
     });
 
-    expect(mocks.mockTryOpenStartupProject).toHaveBeenCalledWith(envRoot, expect.any(Function));
+    expect(mocks.mockTryOpenStartupProject).toHaveBeenCalledWith(envRoot, expect.any(Function), expect.any(Function));
     expect(mocks.mockSetProjectRoot).toHaveBeenCalledWith(envRoot);
   });
 

@@ -174,19 +174,32 @@ function createSnapshot(activeView = 'explorer'): ProjectSessionSnapshot {
 describe('project IPC handlers', () => {
   let temporaryDirectory: string;
   let appliedProjectRoots: Array<string | null>;
+  let appliedWindowStates: unknown[];
+  const capturedWindowState = {
+    bounds: { height: 720, width: 1280, x: 32, y: 48 },
+    maximized: true,
+  };
 
   beforeEach(() => {
     temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'pristine-project-ipc-'));
     appliedProjectRoots = [];
+    appliedWindowStates = [];
     mockHandle.mockClear();
     mockSetConfigValue.mockClear();
     mockBrowserWindowGetAllWindows.mockReturnValue([]);
     mockDatabaseFiles.clear();
     MockBetterSqliteDatabase.filenames = [];
     MockBetterSqliteDatabase.stores.clear();
-    registerProjectHandlers(() => null, (root) => {
-      appliedProjectRoots.push(root);
-    });
+    registerProjectHandlers(
+      () => null,
+      (root) => {
+        appliedProjectRoots.push(root);
+      },
+      () => capturedWindowState,
+      (windowState) => {
+        appliedWindowStates.push(windowState);
+      },
+    );
   });
 
   afterEach(() => {
@@ -224,6 +237,7 @@ describe('project IPC handlers', () => {
     expect(fs.existsSync(path.dirname(databasePath))).toBe(true);
     expect(MockBetterSqliteDatabase.filenames).toContain(databasePath);
     expect(appliedProjectRoots).toEqual([rootPath]);
+    expect(appliedWindowStates).toEqual([expect.objectContaining({ maximized: false })]);
     expect(mockSetConfigValue).toHaveBeenCalledWith(PROJECT_LAST_ROOT_CONFIG_KEY, rootPath);
     expect(getCurrentProjectState()).toEqual(expect.objectContaining({ rootPath }));
   });
@@ -260,12 +274,14 @@ describe('project IPC handlers', () => {
     });
     closeCurrentProjectDatabase();
     appliedProjectRoots = [];
+    appliedWindowStates = [];
     mockSetConfigValue.mockClear();
 
     await expect(openHandler({}, rootPath)).resolves.toEqual({
       project: expect.objectContaining({ name: 'openable_project', rootPath }),
     });
     expect(appliedProjectRoots).toEqual([rootPath]);
+    expect(appliedWindowStates).toEqual([expect.objectContaining({ maximized: false })]);
     expect(mockSetConfigValue).toHaveBeenCalledWith(PROJECT_LAST_ROOT_CONFIG_KEY, rootPath);
 
     const emptyRoot = path.join(temporaryDirectory, 'empty');
@@ -294,6 +310,117 @@ describe('project IPC handlers', () => {
       session: expect.objectContaining({
         activeView: 'physical',
         panelWidths: { explorerLeftPanel: 280 },
+        windowState: capturedWindowState,
+      }),
+    }));
+  });
+
+  it('persists side panel, bottom panel, and window session state', async () => {
+    const createHandler = getHandler(AsyncChannels.PROJECT_CREATE);
+    const flushHandler = getHandler(AsyncChannels.PROJECT_FLUSH_SESSION);
+    const getHandlerForCurrentProject = getHandler(AsyncChannels.PROJECT_GET_CURRENT);
+
+    await createHandler({}, {
+      mgnt: 'none',
+      mode: 'rtl2gds',
+      name: 'layout_session_project',
+      padframe: 'QFN32',
+      path: temporaryDirectory,
+      process: 'ics55',
+      type: 'retroSoC',
+    });
+
+    await flushHandler({}, {
+      ...createSnapshot('explorer'),
+      bottomPanelSession: {
+        focusedPaneId: 'bottom-pane-2',
+        nextPaneIndex: 3,
+        panes: [
+          { content: { kind: 'tab', tab: 'terminal' }, id: 'bottom-pane-1', size: 35 },
+          { content: { kind: 'placeholder', icon: 'boxes', label: 'Placeholder B' }, id: 'bottom-pane-2', size: 65 },
+        ],
+      },
+      sidePanelSession: {
+        leftSplitVisible: true,
+        physicalLeftSplitVisible: true,
+        physicalRightSplitVisible: false,
+        rightSplitVisible: true,
+      },
+    });
+
+    await expect(getHandlerForCurrentProject({})).resolves.toEqual(expect.objectContaining({
+      session: expect.objectContaining({
+        bottomPanelSession: expect.objectContaining({
+          focusedPaneId: 'bottom-pane-2',
+          panes: [
+            { content: { kind: 'tab', tab: 'terminal' }, id: 'bottom-pane-1', size: 35 },
+            { content: { kind: 'placeholder', icon: 'boxes', label: 'Placeholder B' }, id: 'bottom-pane-2', size: 65 },
+          ],
+        }),
+        sidePanelSession: {
+          leftSplitVisible: true,
+          physicalLeftSplitVisible: true,
+          physicalRightSplitVisible: false,
+          rightSplitVisible: true,
+        },
+        windowState: capturedWindowState,
+      }),
+    }));
+  });
+
+  it('normalizes invalid persisted project layout session payloads', async () => {
+    const createHandler = getHandler(AsyncChannels.PROJECT_CREATE);
+    const flushHandler = getHandler(AsyncChannels.PROJECT_FLUSH_SESSION);
+    const getHandlerForCurrentProject = getHandler(AsyncChannels.PROJECT_GET_CURRENT);
+
+    await createHandler({}, {
+      mgnt: 'none',
+      mode: 'rtl2gds',
+      name: 'invalid_layout_session_project',
+      padframe: 'QFN32',
+      path: temporaryDirectory,
+      process: 'ics55',
+      type: 'retroSoC',
+    });
+
+    await flushHandler({}, {
+      ...createSnapshot('explorer'),
+      bottomPanelSession: {
+        focusedPaneId: 'missing-pane',
+        nextPaneIndex: 1,
+        panes: [
+          { content: { kind: 'tab', tab: 'not-a-tab' }, id: 'bad-pane', size: -1 },
+          { content: { icon: 'unknown', kind: 'placeholder', label: '' }, id: 'bad-pane', size: 50 },
+        ],
+      },
+      sidePanelSession: {
+        leftSplitVisible: 'yes',
+        physicalLeftSplitVisible: true,
+        physicalRightSplitVisible: 1,
+        rightSplitVisible: true,
+      },
+      windowState: {
+        bounds: { height: 10, width: 10, x: 'bad', y: 0 },
+        maximized: true,
+      },
+    });
+
+    await expect(getHandlerForCurrentProject({})).resolves.toEqual(expect.objectContaining({
+      session: expect.objectContaining({
+        bottomPanelSession: {
+          focusedPaneId: 'bad-pane',
+          nextPaneIndex: 2,
+          panes: [
+            { content: { kind: 'empty' }, id: 'bad-pane', size: 100 },
+          ],
+        },
+        sidePanelSession: {
+          leftSplitVisible: false,
+          physicalLeftSplitVisible: true,
+          physicalRightSplitVisible: false,
+          rightSplitVisible: true,
+        },
+        windowState: capturedWindowState,
       }),
     }));
   });
@@ -348,8 +475,10 @@ describe('project IPC handlers', () => {
     closeCurrentProjectDatabase();
     mockSetConfigValue.mockClear();
 
-    expect(tryOpenStartupProject(rootPath, applyProjectRoot)).toEqual(expect.objectContaining({ rootPath }));
+    const applyWindowState = vi.fn();
+    expect(tryOpenStartupProject(rootPath, applyProjectRoot, applyWindowState)).toEqual(expect.objectContaining({ rootPath }));
     expect(applyProjectRoot).toHaveBeenCalledWith(rootPath);
+    expect(applyWindowState).toHaveBeenCalledWith(expect.objectContaining({ maximized: false }));
 
     applyProjectRoot.mockClear();
     expect(tryOpenStartupProject(null, applyProjectRoot)).toBeNull();

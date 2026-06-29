@@ -18,6 +18,7 @@ import { disposeLspSession } from './ipc/lsp.js';
 import { disposeAllTerminalSessions } from './ipc/terminal.js';
 import type { WindowCloseDecision, WindowCloseRequest } from '../src/app/window/windowClose.js';
 import type { FloatingInfoWindowMode } from '../src/app/window/floatingInfoWindow.js';
+import type { ProjectWindowState } from '../types/project.js';
 import { handleAuthCallbackUrl, isAuthProtocolUrl } from './ipc/auth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -51,6 +52,7 @@ let isQuitting = false;
 let nextWindowCloseRequestId = 1;
 let pendingWindowCloseRequest: WindowCloseRequest | null = null;
 let pendingAuthCallbackUrl: string | null = null;
+let pendingProjectWindowState: ProjectWindowState | null = null;
 
 app.setName(APP_DISPLAY_NAME);
 
@@ -72,6 +74,47 @@ function configureElectronStoragePaths(): void {
 
 function getMainWindow(): BrowserWindow | null {
   return mainWindow;
+}
+
+function getProjectWindowState(): ProjectWindowState | null {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return null;
+  }
+
+  const bounds = mainWindow.isMaximized()
+    ? mainWindow.getNormalBounds()
+    : mainWindow.getBounds();
+
+  return {
+    bounds: {
+      x: Math.round(bounds.x),
+      y: Math.round(bounds.y),
+      width: Math.round(bounds.width),
+      height: Math.round(bounds.height),
+    },
+    maximized: mainWindow.isMaximized(),
+  };
+}
+
+function applyProjectWindowState(windowState: ProjectWindowState | null | undefined): void {
+  pendingProjectWindowState = windowState ?? null;
+
+  if (!pendingProjectWindowState || !mainWindow || mainWindow.isDestroyed()) {
+    return;
+  }
+
+  const bounds = pendingProjectWindowState.bounds;
+  if (bounds) {
+    mainWindow.setBounds(bounds, false);
+  }
+
+  if (pendingProjectWindowState.maximized) {
+    mainWindow.maximize();
+  } else if (mainWindow.isMaximized()) {
+    mainWindow.unmaximize();
+  }
+
+  pendingProjectWindowState = null;
 }
 
 function findAuthCallbackUrl(args: readonly string[]): string | null {
@@ -618,6 +661,7 @@ function createMainWindow(): BrowserWindow {
 
   mainWindow = window;
   setupWindowStreams(window);
+  applyProjectWindowState(pendingProjectWindowState);
 
   // Dev mode: load Vite dev server; Prod mode: load built files
   if (process.env['VITE_DEV_SERVER_URL']) {
@@ -682,7 +726,7 @@ configureElectronStoragePaths();
 tryOpenStartupProject(resolveStartupProjectRoot(
   process.env['PRISTINE_PROJECT_ROOT'],
   getConfigValue(PROJECT_LAST_ROOT_CONFIG_KEY),
-), setProjectRoot);
+), setProjectRoot, applyProjectWindowState);
 registerDeepLinkProtocol();
 
 const singleInstanceLock = app.requestSingleInstanceLock();
@@ -709,6 +753,8 @@ if (!singleInstanceLock) {
     setFloatingInfoWindowExpanded,
     setFloatingInfoWindowMode,
     resolveWindowCloseRequest,
+    getProjectWindowState,
+    applyProjectWindowState,
   );
 
   app.whenReady().then(() => {
@@ -745,7 +791,7 @@ if (!singleInstanceLock) {
   app.on('before-quit', () => {
     isQuitting = true;
     flushPendingConfigSave();
-    disposeProjectService();
+    disposeProjectService(getProjectWindowState);
     disposeLspSession();
     disposeAllTerminalSessions();
     tray?.destroy();

@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { ProjectBottomPanelSession } from '../../../../../types/project';
 
 export type BottomPanelTabId = 'terminal' | 'output' | 'problems' | 'debug' | 'lsp' | 'schematic' | 'waveform' | 'synthesis';
 
@@ -29,7 +30,9 @@ interface BottomPanelState {
 }
 
 interface BottomPanelActions {
+  captureProjectBottomPanelSession: () => ProjectBottomPanelSession;
   focusPane: (paneId: string, measuredWidth?: number) => void;
+  hydrateProjectBottomPanelSession: (snapshot: ProjectBottomPanelSession | null | undefined) => void;
   removeFocusedPane: () => RemovedBottomPanelPane | null;
   resetBottomPanelPanes: () => void;
   setFocusedPaneMeasuredWidth: (measuredWidth: number) => void;
@@ -46,6 +49,100 @@ export const createInitialBottomPanelPane = (): BottomPanelPane => ({
   id: 'bottom-pane-1',
   size: 100,
 });
+
+const VALID_BOTTOM_PANEL_TABS = new Set<BottomPanelTabId>([
+  'terminal',
+  'output',
+  'problems',
+  'debug',
+  'lsp',
+  'schematic',
+  'waveform',
+  'synthesis',
+]);
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function normalizeBottomPaneContent(value: unknown): BottomPaneContent {
+  if (!isPlainObject(value)) {
+    return { kind: 'empty' };
+  }
+
+  if (value['kind'] === 'tab' && typeof value['tab'] === 'string' && VALID_BOTTOM_PANEL_TABS.has(value['tab'] as BottomPanelTabId)) {
+    return { kind: 'tab', tab: value['tab'] as BottomPanelTabId };
+  }
+
+  if (value['kind'] === 'placeholder') {
+    const label = typeof value['label'] === 'string' && value['label'].trim().length > 0
+      ? value['label']
+      : 'Placeholder';
+    const icon = value['icon'] === 'boxes' ? 'boxes' : 'file';
+    return { kind: 'placeholder', icon, label };
+  }
+
+  return { kind: 'empty' };
+}
+
+function normalizeHydratedBottomPanelSession(
+  snapshot: ProjectBottomPanelSession | null | undefined,
+): BottomPanelState {
+  if (!isPlainObject(snapshot) || !Array.isArray(snapshot.panes)) {
+    return createDefaultBottomPanelState();
+  }
+
+  const seenPaneIds = new Set<string>();
+  const panes = snapshot.panes
+    .map((pane, index): BottomPanelPane | null => {
+      if (!isPlainObject(pane)) {
+        return null;
+      }
+
+      const fallbackId = `bottom-pane-${index + 1}`;
+      const id = typeof pane['id'] === 'string' && pane['id'].trim().length > 0
+        ? pane['id']
+        : fallbackId;
+
+      if (seenPaneIds.has(id)) {
+        return null;
+      }
+      seenPaneIds.add(id);
+
+      const size = typeof pane['size'] === 'number' && Number.isFinite(pane['size']) && pane['size'] > 0
+        ? pane['size']
+        : 100;
+
+      return {
+        content: normalizeBottomPaneContent(pane['content']),
+        id,
+        size,
+      };
+    })
+    .filter((pane): pane is BottomPanelPane => Boolean(pane));
+
+  if (panes.length === 0) {
+    return createDefaultBottomPanelState();
+  }
+
+  const normalizedPanes = normalizeBottomPaneSizes(panes);
+  const focusedPaneId = typeof snapshot.focusedPaneId === 'string'
+    && normalizedPanes.some((pane) => pane.id === snapshot.focusedPaneId)
+    ? snapshot.focusedPaneId
+    : normalizedPanes[0]?.id ?? 'bottom-pane-1';
+  const nextPaneIndex = typeof snapshot.nextPaneIndex === 'number'
+    && Number.isInteger(snapshot.nextPaneIndex)
+    && snapshot.nextPaneIndex > normalizedPanes.length
+    ? snapshot.nextPaneIndex
+    : normalizedPanes.length + 1;
+
+  return {
+    focusedPaneId,
+    focusedPaneMeasuredWidth: Number.POSITIVE_INFINITY,
+    nextPaneIndex,
+    panes: normalizedPanes,
+  };
+}
 
 export function normalizeBottomPaneSizes(panes: BottomPanelPane[]): BottomPanelPane[] {
   const total = panes.reduce((sum, pane) => sum + pane.size, 0);
@@ -73,6 +170,19 @@ function canSplitMeasuredWidth(measuredWidth: number): boolean {
 export const useBottomPanelStore = create<BottomPanelStore>((set, get) => ({
   ...createDefaultBottomPanelState(),
 
+  captureProjectBottomPanelSession: () => {
+    const state = get();
+    return {
+      focusedPaneId: state.focusedPaneId,
+      nextPaneIndex: state.nextPaneIndex,
+      panes: state.panes.map((pane) => ({
+        content: { ...pane.content },
+        id: pane.id,
+        size: pane.size,
+      })),
+    };
+  },
+
   focusPane: (paneId, measuredWidth) => {
     set((state) => {
       if (!state.panes.some((pane) => pane.id === paneId)) {
@@ -84,6 +194,10 @@ export const useBottomPanelStore = create<BottomPanelStore>((set, get) => ({
         focusedPaneMeasuredWidth: measuredWidth ?? state.focusedPaneMeasuredWidth,
       };
     });
+  },
+
+  hydrateProjectBottomPanelSession: (snapshot) => {
+    set(normalizeHydratedBottomPanelSession(snapshot));
   },
 
   removeFocusedPane: () => {

@@ -147,7 +147,12 @@ describe('register helpers', () => {
     expect(mockRegisterConfigHandlers).toHaveBeenCalledTimes(1);
     expect(mockRegisterAuthHandlers).toHaveBeenCalledTimes(1);
     expect(mockRegisterNoticeHandlers).toHaveBeenCalledTimes(1);
-    expect(mockRegisterProjectHandlers).toHaveBeenCalledWith(getMainWindow, expect.any(Function));
+    expect(mockRegisterProjectHandlers).toHaveBeenCalledWith(
+      getMainWindow,
+      expect.any(Function),
+      expect.any(Function),
+      expect.any(Function),
+    );
   });
 
   it('re-exports setupWindowStreams', () => {

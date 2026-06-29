@@ -4,6 +4,8 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { WorkspaceProvider, useWorkspace } from './WorkspaceContext';
 import { resetWorkspaceSessionStoreForTests, useWorkspaceSessionStore } from './useWorkspaceSessionStore';
+import { resetBottomPanelStoreForTests, useBottomPanelStore } from '../components/code/explorer/useBottomPanelStore';
+import { resetSidePanelSessionStoreForTests, useSidePanelSessionStore } from '../components/code/explorer/useSidePanelSessionStore';
 import type { ProjectState } from '../../../types/project';
 
 const undoActionRun = vi.fn(() => Promise.resolve());
@@ -145,6 +147,8 @@ function createProjectState(overrides: Partial<ProjectState> = {}): ProjectState
 describe('WorkspaceContext', () => {
   beforeEach(() => {
     resetWorkspaceSessionStoreForTests();
+    resetBottomPanelStoreForTests();
+    resetSidePanelSessionStoreForTests();
     testUser = userEvent.setup();
     vi.clearAllMocks();
     undoActionRun.mockClear();
@@ -657,6 +661,20 @@ describe('WorkspaceContext', () => {
         panelWidths: {
           physicalRightPanel: 424,
         },
+        bottomPanelSession: {
+          focusedPaneId: 'bottom-pane-2',
+          nextPaneIndex: 3,
+          panes: [
+            { content: { kind: 'tab', tab: 'terminal' }, id: 'bottom-pane-1', size: 40 },
+            { content: { kind: 'placeholder', icon: 'file', label: 'Placeholder A' }, id: 'bottom-pane-2', size: 60 },
+          ],
+        },
+        sidePanelSession: {
+          leftSplitVisible: true,
+          physicalLeftSplitVisible: true,
+          physicalRightSplitVisible: false,
+          rightSplitVisible: true,
+        },
         version: 1,
       },
     });
@@ -671,6 +689,20 @@ describe('WorkspaceContext', () => {
       expect(screen.getByTestId('panel-widths')).toHaveTextContent('"physicalRightPanel":424');
     });
     expect(useWorkspaceSessionStore.getState().mainContentView).toBe('workflow');
+    expect(useSidePanelSessionStore.getState()).toMatchObject({
+      leftSplitVisible: true,
+      physicalLeftSplitVisible: true,
+      physicalRightSplitVisible: false,
+      rightSplitVisible: true,
+    });
+    expect(useBottomPanelStore.getState()).toMatchObject({
+      focusedPaneId: 'bottom-pane-2',
+      nextPaneIndex: 3,
+      panes: [
+        { content: { kind: 'tab', tab: 'terminal' }, id: 'bottom-pane-1', size: 40 },
+        { content: { kind: 'placeholder', icon: 'file', label: 'Placeholder A' }, id: 'bottom-pane-2', size: 60 },
+      ],
+    });
   });
 
   it('flushes a session snapshot composed from the Zustand session store and editor state', async () => {
@@ -690,6 +722,16 @@ describe('WorkspaceContext', () => {
     await clickHarnessButton('set-view');
     await clickHarnessButton('show-left');
     await clickHarnessButton('set-left-width');
+    act(() => {
+      useSidePanelSessionStore.getState().setExplorerLeftSplitVisible(true);
+      useSidePanelSessionStore.getState().setExplorerRightSplitVisible(true);
+      useBottomPanelStore.getState().splitFocusedPane(600);
+      useBottomPanelStore.getState().updatePaneContent('bottom-pane-2', {
+        kind: 'placeholder',
+        icon: 'boxes',
+        label: 'Placeholder B',
+      });
+    });
     await clickHarnessButton('flush-project-session');
 
     await waitFor(() => {
@@ -701,8 +743,21 @@ describe('WorkspaceContext', () => {
       activeView: 'simulation',
       editorGroups: expect.any(Array),
       mainContentView: 'code',
+      bottomPanelSession: expect.objectContaining({
+        focusedPaneId: 'bottom-pane-2',
+        panes: [
+          { content: { kind: 'tab', tab: 'terminal' }, id: 'bottom-pane-1', size: 50 },
+          { content: { kind: 'placeholder', icon: 'boxes', label: 'Placeholder B' }, id: 'bottom-pane-2', size: 50 },
+        ],
+      }),
       panelWidths: {
         explorerLeftPanel: 360,
+      },
+      sidePanelSession: {
+        leftSplitVisible: true,
+        physicalLeftSplitVisible: false,
+        physicalRightSplitVisible: false,
+        rightSplitVisible: true,
       },
       version: 1,
     }));

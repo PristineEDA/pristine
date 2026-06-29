@@ -87,4 +87,49 @@ describe('useBottomPanelStore', () => {
       { content: { kind: 'empty' }, id: 'b', size: 50 },
     ]);
   });
+
+  it('captures and hydrates project bottom pane layout', () => {
+    getStore().splitFocusedPane(splitWidth);
+    getStore().updatePaneContent('bottom-pane-2', { kind: 'placeholder', icon: 'boxes', label: 'Placeholder B' });
+    getStore().setPaneSize('bottom-pane-1', 30);
+    getStore().setPaneSize('bottom-pane-2', 70);
+
+    const snapshot = getStore().captureProjectBottomPanelSession();
+    resetBottomPanelStoreForTests();
+    getStore().hydrateProjectBottomPanelSession(snapshot);
+
+    expect(getStore().focusedPaneId).toBe('bottom-pane-2');
+    expect(getStore().nextPaneIndex).toBe(3);
+    expect(getStore().panes).toEqual([
+      { content: { kind: 'tab', tab: 'terminal' }, id: 'bottom-pane-1', size: 30 },
+      { content: { kind: 'placeholder', icon: 'boxes', label: 'Placeholder B' }, id: 'bottom-pane-2', size: 70 },
+    ]);
+    expect(getStore().focusedPaneMeasuredWidth).toBe(Number.POSITIVE_INFINITY);
+  });
+
+  it('normalizes invalid hydrated bottom pane payloads', () => {
+    getStore().hydrateProjectBottomPanelSession({
+      focusedPaneId: 'missing-pane',
+      nextPaneIndex: 1,
+      panes: [
+        { content: { kind: 'tab', tab: 'not-a-tab' } as any, id: 'pane-a', size: 0 },
+        { content: { kind: 'placeholder', icon: 'unknown', label: '' } as any, id: 'pane-b', size: 25 },
+        { content: { kind: 'tab', tab: 'lsp' }, id: 'pane-b', size: 25 },
+      ],
+    });
+
+    expect(getStore().focusedPaneId).toBe('pane-a');
+    expect(getStore().nextPaneIndex).toBe(3);
+    expect(getStore().panes).toEqual([
+      { content: { kind: 'empty' }, id: 'pane-a', size: 80 },
+      { content: { kind: 'placeholder', icon: 'file', label: 'Placeholder' }, id: 'pane-b', size: 20 },
+    ]);
+
+    getStore().hydrateProjectBottomPanelSession(null);
+
+    expect(getStore().focusedPaneId).toBe('bottom-pane-1');
+    expect(getStore().panes).toEqual([
+      { content: { kind: 'tab', tab: 'terminal' }, id: 'bottom-pane-1', size: 100 },
+    ]);
+  });
 });

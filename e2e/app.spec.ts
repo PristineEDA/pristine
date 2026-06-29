@@ -847,6 +847,20 @@ async function ensureExplorerVisible(window: Awaited<ReturnType<typeof launchApp
   await expect(readmeNode).toBeVisible();
 }
 
+async function ensureLeftPanelShellVisible(window: Awaited<ReturnType<typeof launchApp>>['window']) {
+  const leftPanel = window.getByTestId('panel-left-panel');
+  const leftPanelToggle = window.getByTestId('toggle-left-panel');
+
+  if (await leftPanelToggle.getAttribute('data-state') !== 'on') {
+    await leftPanelToggle.click();
+  }
+
+  await expect(leftPanel).toBeVisible();
+  await expect.poll(async () => (await leftPanel.boundingBox())?.width ?? 0, {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toBeGreaterThan(100);
+}
+
 async function ensureExplorerHidden(window: Awaited<ReturnType<typeof launchApp>>['window']) {
   const readmeNode = window.getByTestId('file-tree-node-README_md');
 
@@ -3737,6 +3751,93 @@ test('Close Project clears the workspace and removes the last project root', asy
   try {
     await expect(relaunched.window.getByText('No Projects Yet')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
     await expect(relaunched.window.getByTestId('file-tree-node-root')).toHaveCount(0);
+  } finally {
+    await relaunched.app.close();
+  }
+});
+
+test('project session restores window bounds and panel layout chrome', async () => {
+  const selectedProjectPath = test.info().outputPath('project-layout-session-root');
+  const projectName = `layout_session_${Date.now()}`;
+  const createdProjectPath = path.join(selectedProjectPath, projectName);
+  fs.mkdirSync(selectedProjectPath, { recursive: true });
+
+  const firstLaunch = await launchApp({ projectRoot: null });
+
+  try {
+    await clearRememberedCloseBehavior(firstLaunch.window);
+    await selectMenuBarItem(firstLaunch.window, 'File', 'New Project');
+    await firstLaunch.window.getByTestId('create-project-name').fill(projectName);
+    await setNextProjectDirectoryPath(firstLaunch.app, selectedProjectPath);
+    await firstLaunch.window.getByTestId('create-project-browse').click();
+    await firstLaunch.window.getByTestId('create-project-submit').click();
+
+    await expect.poll(() => fs.existsSync(path.join(createdProjectPath, '.pristine', 'project.sqlite')), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBe(true);
+    await expect(firstLaunch.window.getByTestId('file-tree-node-root')).toContainText(projectName);
+
+    const browserWindow = await firstLaunch.app.browserWindow(firstLaunch.window);
+    await browserWindow.evaluate((win) => {
+      win.unmaximize();
+      win.setBounds({ height: 760, width: 1180, x: 96, y: 84 });
+    });
+
+    await ensureLeftPanelShellVisible(firstLaunch.window);
+
+    const rightPanelToggle = firstLaunch.window.getByTestId('toggle-right-panel');
+    await expect(rightPanelToggle).toBeEnabled();
+    await rightPanelToggle.click();
+    await expect(firstLaunch.window.getByTestId('panel-right-panel')).toBeVisible();
+
+    await firstLaunch.window.getByTestId('left-panel-split-toggle').click();
+    await expect(firstLaunch.window.getByTestId('panel-left-panel-secondary')).toHaveAttribute('aria-hidden', 'false');
+    await firstLaunch.window.getByTestId('right-panel-split-toggle').click();
+    await expect(firstLaunch.window.getByTestId('panel-right-panel-secondary')).toHaveAttribute('aria-hidden', 'false');
+
+    await openBottomTerminal(firstLaunch.window);
+    await expect(firstLaunch.window.getByTestId('bottom-panel-split')).toBeEnabled();
+    await firstLaunch.window.getByTestId('bottom-panel-split').click();
+    await firstLaunch.window.getByTestId('bottom-panel-open-pane-bottom-pane-2').click();
+    await firstLaunch.window.getByTestId('bottom-panel-open-placeholder-b-bottom-pane-2').click();
+    await expect(firstLaunch.window.getByText('Placeholder B')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+
+    const closePromise = firstLaunch.window.waitForEvent('close');
+    await requestWindowClose(firstLaunch.window);
+    await closePromise;
+    await expect.poll(() => firstLaunch.app.windows().length).toBe(0);
+  } catch (error) {
+    await firstLaunch.app.close().catch(() => undefined);
+    throw error;
+  }
+
+  const relaunched = await launchApp({ projectRoot: null });
+  try {
+    await expect(relaunched.window.getByTestId('file-tree-node-root')).toContainText(projectName, {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+
+    await expect.poll(async () => {
+      const bounds = await readBrowserWindowBounds(relaunched.app, relaunched.window);
+      return {
+        height: bounds.height,
+        width: bounds.width,
+      };
+    }, { timeout: UI_READY_TIMEOUT_MS }).toEqual({ height: 760, width: 1180 });
+
+    await ensureLeftPanelShellVisible(relaunched.window);
+    await expect(relaunched.window.getByTestId('panel-left-panel-secondary')).toHaveAttribute('aria-hidden', 'false', {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await expect(relaunched.window.getByTestId('panel-right-panel')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+    await expect(relaunched.window.getByTestId('panel-right-panel-secondary')).toHaveAttribute('aria-hidden', 'false', {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+
+    await ensureBottomPanelOpen(relaunched.window);
+    await expect(relaunched.window.getByTestId('bottom-panel-pane-bottom-pane-1')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+    await expect(relaunched.window.getByTestId('bottom-panel-pane-bottom-pane-2')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+    await expect(relaunched.window.getByText('Placeholder B')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
   } finally {
     await relaunched.app.close();
   }

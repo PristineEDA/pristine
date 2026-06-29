@@ -10,6 +10,7 @@ import {
   ensureProjectDatabase,
   flushCurrentProjectSession,
   getCurrentProjectState,
+  getLastFlushedProjectSessionSnapshot,
   isValidProjectDatabase,
   openCurrentProject,
 } from './projectDatabase.js';
@@ -21,6 +22,7 @@ import type {
   ProjectOpenResult,
   ProjectSessionSnapshot,
   ProjectState,
+  ProjectWindowState,
 } from '../../types/project.js';
 
 export const PROJECT_LAST_ROOT_CONFIG_KEY = 'project.lastProjectRoot';
@@ -30,6 +32,8 @@ const WINDOWS_RESERVED_NAME_PATTERN = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.
 const WINDOWS_INVALID_NAME_CHARS = /[\\/:*?"<>|]/;
 
 type ProjectRootApplier = (root: string | null) => void;
+type ProjectWindowStateProvider = () => ProjectWindowState | null;
+type ProjectWindowStateApplier = (windowState: ProjectWindowState | null | undefined) => void;
 
 function broadcastProjectChanged(payload: ProjectChangedEvent): void {
   BrowserWindow.getAllWindows().forEach((window) => {
@@ -85,7 +89,19 @@ function normalizeProjectRootInput(rootPath: string): string {
   return validateAbsolutePath(rootPath);
 }
 
-function openProjectRoot(rootPath: string, applyProjectRoot: ProjectRootApplier): ProjectState {
+function withWindowState(
+  snapshot: ProjectSessionSnapshot,
+  getWindowState: ProjectWindowStateProvider = () => null,
+): ProjectSessionSnapshot {
+  const windowState = getWindowState();
+  return windowState ? { ...snapshot, windowState } : snapshot;
+}
+
+function openProjectRoot(
+  rootPath: string,
+  applyProjectRoot: ProjectRootApplier,
+  applyWindowState: ProjectWindowStateApplier = () => undefined,
+): ProjectState {
   const resolvedRoot = normalizeProjectRootInput(rootPath);
 
   if (!isValidProjectDatabase(resolvedRoot)) {
@@ -94,12 +110,17 @@ function openProjectRoot(rootPath: string, applyProjectRoot: ProjectRootApplier)
 
   applyProjectRoot(resolvedRoot);
   const project = openCurrentProject(resolvedRoot);
+  applyWindowState(project.session?.windowState);
   setConfigValue(PROJECT_LAST_ROOT_CONFIG_KEY, resolvedRoot);
   broadcastProjectChanged(project);
   return project;
 }
 
-export function tryOpenStartupProject(rootPath: string | null, applyProjectRoot: ProjectRootApplier): ProjectState | null {
+export function tryOpenStartupProject(
+  rootPath: string | null,
+  applyProjectRoot: ProjectRootApplier,
+  applyWindowState: ProjectWindowStateApplier = () => undefined,
+): ProjectState | null {
   if (!rootPath) {
     applyProjectRoot(null);
     return null;
@@ -107,7 +128,7 @@ export function tryOpenStartupProject(rootPath: string | null, applyProjectRoot:
 
   try {
     ensureProjectDatabase(rootPath);
-    return openProjectRoot(rootPath, applyProjectRoot);
+    return openProjectRoot(rootPath, applyProjectRoot, applyWindowState);
   } catch (error) {
     console.warn(error instanceof Error ? error.message : error);
     applyProjectRoot(null);
@@ -115,9 +136,13 @@ export function tryOpenStartupProject(rootPath: string | null, applyProjectRoot:
   }
 }
 
-export function closeProject(applyProjectRoot: ProjectRootApplier, snapshot?: ProjectSessionSnapshot): ProjectCloseResult {
+export function closeProject(
+  applyProjectRoot: ProjectRootApplier,
+  snapshot?: ProjectSessionSnapshot,
+  getWindowState: ProjectWindowStateProvider = () => null,
+): ProjectCloseResult {
   if (snapshot) {
-    flushCurrentProjectSession(snapshot);
+    flushCurrentProjectSession(withWindowState(snapshot, getWindowState));
   }
 
   closeCurrentProjectDatabase();
@@ -127,13 +152,19 @@ export function closeProject(applyProjectRoot: ProjectRootApplier, snapshot?: Pr
   return { closed: true };
 }
 
-export function disposeProjectService(): void {
+export function disposeProjectService(getWindowState: ProjectWindowStateProvider = () => null): void {
+  const snapshot = getLastFlushedProjectSessionSnapshot();
+  if (snapshot) {
+    flushCurrentProjectSession(withWindowState(snapshot, getWindowState));
+  }
   closeCurrentProjectDatabase();
 }
 
 export function registerProjectHandlers(
   getMainWindow: () => BrowserWindow | null,
   applyProjectRoot: ProjectRootApplier,
+  getWindowState: ProjectWindowStateProvider = () => null,
+  applyWindowState: ProjectWindowStateApplier = () => undefined,
 ): void {
   ipcMain.handle(AsyncChannels.PROJECT_CREATE, async (_event, rawInput: unknown): Promise<ProjectCreateResult> => {
     const input = normalizeCreateProjectInput(rawInput);
@@ -149,7 +180,7 @@ export function registerProjectHandlers(
     await fs.mkdir(rootPath, { recursive: false });
     try {
       await createProjectDatabase({ ...input, name: projectName }, rootPath);
-      const project = openProjectRoot(rootPath, applyProjectRoot);
+      const project = openProjectRoot(rootPath, applyProjectRoot, applyWindowState);
       return { project };
     } catch (error) {
       await fs.rm(rootPath, { recursive: true, force: true }).catch(() => undefined);
@@ -184,13 +215,13 @@ export function registerProjectHandlers(
       }
     }
 
-    const project = openProjectRoot(selectedRoot, applyProjectRoot);
+    const project = openProjectRoot(selectedRoot, applyProjectRoot, applyWindowState);
     return { project };
   });
 
   ipcMain.handle(AsyncChannels.PROJECT_CLOSE, async (_event, snapshot?: unknown): Promise<ProjectCloseResult> => {
     const sessionSnapshot = isPlainObject(snapshot) ? snapshot as unknown as ProjectSessionSnapshot : undefined;
-    return closeProject(applyProjectRoot, sessionSnapshot);
+    return closeProject(applyProjectRoot, sessionSnapshot, getWindowState);
   });
 
   ipcMain.handle(AsyncChannels.PROJECT_GET_CURRENT, async (): Promise<ProjectState | null> => getCurrentProjectState());
@@ -200,6 +231,6 @@ export function registerProjectHandlers(
       throw new Error('Expected project session snapshot object');
     }
 
-    flushCurrentProjectSession(snapshot as unknown as ProjectSessionSnapshot);
+    flushCurrentProjectSession(withWindowState(snapshot as unknown as ProjectSessionSnapshot, getWindowState));
   });
 }

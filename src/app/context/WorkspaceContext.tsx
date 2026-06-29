@@ -31,6 +31,8 @@ import {
 } from './useWorkspaceEditorState';
 import { useWorkspaceFileStore, type SaveFilesResult } from './useWorkspaceFileStore';
 import { useWorkspaceSessionStore } from './useWorkspaceSessionStore';
+import { useBottomPanelStore } from '../components/code/explorer/useBottomPanelStore';
+import { useSidePanelSessionStore } from '../components/code/explorer/useSidePanelSessionStore';
 import type { WindowCloseRequest } from '../window/windowClose';
 import { refreshWorkspaceGitStatus } from '../git/workspaceGitStatus';
 import {
@@ -590,6 +592,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const captureWorkspaceSessionState = useWorkspaceSessionStore((state) => state.captureSessionState);
   const hydrateWorkspaceProjectSession = useWorkspaceSessionStore((state) => state.hydrateProjectSession);
   const resetWorkspaceProjectSession = useWorkspaceSessionStore((state) => state.resetProjectSession);
+  const captureBottomPanelSession = useBottomPanelStore((state) => state.captureProjectBottomPanelSession);
+  const hydrateBottomPanelSession = useBottomPanelStore((state) => state.hydrateProjectBottomPanelSession);
+  const captureSidePanelSession = useSidePanelSessionStore((state) => state.captureProjectSidePanelSession);
+  const hydrateSidePanelSession = useSidePanelSessionStore((state) => state.hydrateProjectSidePanelSession);
   const setPanelStateForView = useWorkspaceSessionStore((state) => state.setPanelStateForView);
   const setProjectPanelWidthInStore = useWorkspaceSessionStore((state) => state.setProjectPanelWidth);
   const editorWorkspace = useWorkspaceEditorState();
@@ -660,13 +666,17 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     setWorkspaceClipboard(null);
     setUntitledFiles({});
     resetWorkspaceProjectSession();
+    hydrateBottomPanelSession(null);
+    hydrateSidePanelSession(null);
     fileIdRedirectsRef.current = {};
     previousEditorGroupsRef.current = EMPTY_EDITOR_GROUPS;
-  }, [resetWorkspaceProjectSession]);
+  }, [hydrateBottomPanelSession, hydrateSidePanelSession, resetWorkspaceProjectSession]);
 
   const hydrateProjectSession = useCallback((snapshot: ProjectSessionSnapshot | null | undefined) => {
     resetWorkspaceForProject();
     hydrateWorkspaceProjectSession(snapshot);
+    hydrateBottomPanelSession(snapshot?.bottomPanelSession);
+    hydrateSidePanelSession(snapshot?.sidePanelSession);
 
     if (!snapshot) {
       return;
@@ -677,7 +687,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       editorLayout: snapshot.editorLayout,
       focusedGroupId: snapshot.focusedGroupId,
     });
-  }, [hydrateWorkspaceProjectSession, resetWorkspaceForProject]);
+  }, [hydrateBottomPanelSession, hydrateSidePanelSession, hydrateWorkspaceProjectSession, resetWorkspaceForProject]);
 
   const captureProjectSessionSnapshot = useCallback((): ProjectSessionSnapshot => {
     const sessionState = captureWorkspaceSessionState();
@@ -685,15 +695,17 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     return {
       activeTabId: resolveCurrentFileId(editorWorkspaceRef.current.activeTabId),
       activeView: sessionState.activeView,
+      bottomPanelSession: captureBottomPanelSession(),
       editorGroups: editorWorkspaceRef.current.editorGroups,
       editorLayout: editorWorkspaceRef.current.editorLayout,
       focusedGroupId: editorWorkspaceRef.current.focusedGroupId,
       mainContentView: sessionState.mainContentView,
       panelStateByView: sessionState.panelStateByView,
       panelWidths: sessionState.panelWidths,
+      sidePanelSession: captureSidePanelSession(),
       version: 1,
     };
-  }, [captureWorkspaceSessionState, resolveCurrentFileId]);
+  }, [captureBottomPanelSession, captureSidePanelSession, captureWorkspaceSessionState, resolveCurrentFileId]);
 
   const setProjectPanelWidth = useCallback((key: string, value: number | ((current: number | undefined) => number)) => {
     setProjectPanelWidthInStore(key, value);

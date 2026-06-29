@@ -5,8 +5,11 @@ import type { Database as BetterSqliteDatabase } from 'better-sqlite3';
 import { loadBetterSqlite } from './betterSqlite.js';
 import type {
   CreateProjectInput,
+  ProjectBottomPanelSession,
+  ProjectSidePanelSession,
   ProjectSessionSnapshot,
   ProjectState,
+  ProjectWindowState,
 } from '../../types/project.js';
 
 const PROJECT_DATA_DIRECTORY_NAME = '.pristine';
@@ -16,6 +19,7 @@ const PROJECT_SCHEMA_VERSION = 1;
 
 let currentDatabase: BetterSqliteDatabase | null = null;
 let currentProject: Omit<ProjectState, 'session'> | null = null;
+let lastFlushedSessionSnapshot: ProjectSessionSnapshot | null = null;
 
 function getDatabasePath(projectRoot: string): string {
   return path.join(projectRoot, PROJECT_DATA_DIRECTORY_NAME, PROJECT_DATABASE_FILE_NAME);
@@ -28,6 +32,30 @@ function getProjectName(rootPath: string): string {
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
+
+const DEFAULT_PROJECT_WINDOW_STATE: ProjectWindowState = {
+  bounds: null,
+  maximized: false,
+};
+
+const DEFAULT_PROJECT_SIDE_PANEL_SESSION: ProjectSidePanelSession = {
+  leftSplitVisible: false,
+  physicalLeftSplitVisible: false,
+  physicalRightSplitVisible: false,
+  rightSplitVisible: false,
+};
+
+const DEFAULT_PROJECT_BOTTOM_PANEL_SESSION: ProjectBottomPanelSession = {
+  focusedPaneId: 'bottom-pane-1',
+  nextPaneIndex: 2,
+  panes: [
+    {
+      content: { kind: 'tab', tab: 'terminal' },
+      id: 'bottom-pane-1',
+      size: 100,
+    },
+  ],
+};
 
 export function isValidProjectDatabase(rootPath: string): boolean {
   return fs.existsSync(getDatabasePath(rootPath));
@@ -67,7 +95,10 @@ export function createDefaultProjectSession(): ProjectSessionSnapshot {
         showRightPanel: false,
       },
     },
+    bottomPanelSession: cloneBottomPanelSession(DEFAULT_PROJECT_BOTTOM_PANEL_SESSION),
     version: 1,
+    sidePanelSession: { ...DEFAULT_PROJECT_SIDE_PANEL_SESSION },
+    windowState: cloneWindowState(DEFAULT_PROJECT_WINDOW_STATE),
   };
 }
 
@@ -112,6 +143,7 @@ function writeSession(database: BetterSqliteDatabase, snapshot: ProjectSessionSn
       value_json = excluded.value_json,
       updated_at = excluded.updated_at
   `).run(PROJECT_SESSION_STATE_KEY, JSON.stringify(snapshot), new Date().toISOString());
+  lastFlushedSessionSnapshot = snapshot;
 }
 
 function readSession(database: BetterSqliteDatabase): ProjectSessionSnapshot | null {
@@ -154,6 +186,9 @@ function normalizeProjectSessionSnapshot(value: unknown): ProjectSessionSnapshot
           .filter((entry): entry is [string, number] => typeof entry[1] === 'number' && Number.isFinite(entry[1])),
       )
     : undefined;
+  const sidePanelSession = normalizeSidePanelSession(value['sidePanelSession'], defaultSession.sidePanelSession);
+  const bottomPanelSession = normalizeBottomPanelSession(value['bottomPanelSession'], defaultSession.bottomPanelSession);
+  const windowState = normalizeWindowState(value['windowState']);
 
   return {
     activeTabId: typeof value['activeTabId'] === 'string' ? value['activeTabId'] : undefined,
@@ -168,7 +203,177 @@ function normalizeProjectSessionSnapshot(value: unknown): ProjectSessionSnapshot
     mainContentView,
     panelStateByView,
     panelWidths,
+    bottomPanelSession,
+    sidePanelSession,
     version: 1,
+    windowState,
+  };
+}
+
+function normalizeWindowState(value: unknown): ProjectWindowState {
+  if (!isPlainObject(value)) {
+    return cloneWindowState(DEFAULT_PROJECT_WINDOW_STATE);
+  }
+
+  const rawBounds = value['bounds'];
+  const bounds = isPlainObject(rawBounds)
+    && typeof rawBounds['x'] === 'number'
+    && typeof rawBounds['y'] === 'number'
+    && typeof rawBounds['width'] === 'number'
+    && typeof rawBounds['height'] === 'number'
+    && Number.isFinite(rawBounds['x'])
+    && Number.isFinite(rawBounds['y'])
+    && Number.isFinite(rawBounds['width'])
+    && Number.isFinite(rawBounds['height'])
+    && rawBounds['width'] >= 800
+    && rawBounds['height'] >= 600
+    ? {
+        x: Math.round(rawBounds['x']),
+        y: Math.round(rawBounds['y']),
+        width: Math.round(rawBounds['width']),
+        height: Math.round(rawBounds['height']),
+      }
+    : null;
+
+  return {
+    bounds,
+    maximized: value['maximized'] === true,
+  };
+}
+
+function cloneWindowState(windowState: ProjectWindowState): ProjectWindowState {
+  return {
+    bounds: windowState.bounds ? { ...windowState.bounds } : null,
+    maximized: windowState.maximized,
+  };
+}
+
+function cloneBottomPanelSession(session: ProjectBottomPanelSession): ProjectBottomPanelSession {
+  return {
+    focusedPaneId: session.focusedPaneId,
+    nextPaneIndex: session.nextPaneIndex,
+    panes: session.panes.map((pane) => ({
+      content: { ...pane.content },
+      id: pane.id,
+      size: pane.size,
+    })),
+  };
+}
+
+function normalizeSidePanelSession(
+  value: unknown,
+  fallback = DEFAULT_PROJECT_SIDE_PANEL_SESSION,
+): ProjectSidePanelSession {
+  if (!isPlainObject(value)) {
+    return { ...fallback };
+  }
+
+  return {
+    leftSplitVisible: typeof value['leftSplitVisible'] === 'boolean'
+      ? value['leftSplitVisible']
+      : fallback.leftSplitVisible,
+    physicalLeftSplitVisible: typeof value['physicalLeftSplitVisible'] === 'boolean'
+      ? value['physicalLeftSplitVisible']
+      : fallback.physicalLeftSplitVisible,
+    physicalRightSplitVisible: typeof value['physicalRightSplitVisible'] === 'boolean'
+      ? value['physicalRightSplitVisible']
+      : fallback.physicalRightSplitVisible,
+    rightSplitVisible: typeof value['rightSplitVisible'] === 'boolean'
+      ? value['rightSplitVisible']
+      : fallback.rightSplitVisible,
+  };
+}
+
+function normalizeBottomPaneContent(value: unknown): ProjectBottomPanelSession['panes'][number]['content'] {
+  if (!isPlainObject(value)) {
+    return { kind: 'empty' };
+  }
+
+  if (
+    value['kind'] === 'tab'
+    && (
+      value['tab'] === 'terminal'
+      || value['tab'] === 'output'
+      || value['tab'] === 'problems'
+      || value['tab'] === 'debug'
+      || value['tab'] === 'lsp'
+      || value['tab'] === 'schematic'
+      || value['tab'] === 'waveform'
+      || value['tab'] === 'synthesis'
+    )
+  ) {
+    return { kind: 'tab', tab: value['tab'] };
+  }
+
+  if (value['kind'] === 'placeholder') {
+    const label = typeof value['label'] === 'string' && value['label'].trim().length > 0
+      ? value['label']
+      : 'Placeholder';
+    const icon = value['icon'] === 'boxes' ? 'boxes' : 'file';
+    return { kind: 'placeholder', icon, label };
+  }
+
+  return { kind: 'empty' };
+}
+
+function normalizeBottomPanelSession(
+  value: unknown,
+  fallback = DEFAULT_PROJECT_BOTTOM_PANEL_SESSION,
+): ProjectBottomPanelSession {
+  if (!isPlainObject(value) || !Array.isArray(value['panes'])) {
+    return cloneBottomPanelSession(fallback);
+  }
+
+  const seenPaneIds = new Set<string>();
+  const panes = value['panes']
+    .map((pane, index): ProjectBottomPanelSession['panes'][number] | null => {
+      if (!isPlainObject(pane)) {
+        return null;
+      }
+
+      const id = typeof pane['id'] === 'string' && pane['id'].trim().length > 0
+        ? pane['id']
+        : `bottom-pane-${index + 1}`;
+      if (seenPaneIds.has(id)) {
+        return null;
+      }
+      seenPaneIds.add(id);
+
+      const size = typeof pane['size'] === 'number' && Number.isFinite(pane['size']) && pane['size'] > 0
+        ? pane['size']
+        : 100;
+
+      return {
+        content: normalizeBottomPaneContent(pane['content']),
+        id,
+        size,
+      };
+    })
+    .filter((pane): pane is ProjectBottomPanelSession['panes'][number] => Boolean(pane));
+
+  if (panes.length === 0) {
+    return cloneBottomPanelSession(fallback);
+  }
+
+  const totalSize = panes.reduce((sum, pane) => sum + pane.size, 0);
+  const normalizedPanes = panes.map((pane) => ({
+    ...pane,
+    size: totalSize > 0 ? (pane.size / totalSize) * 100 : 100 / panes.length,
+  }));
+  const focusedPaneId = typeof value['focusedPaneId'] === 'string'
+    && normalizedPanes.some((pane) => pane.id === value['focusedPaneId'])
+    ? value['focusedPaneId']
+    : normalizedPanes[0]?.id ?? fallback.focusedPaneId;
+  const nextPaneIndex = typeof value['nextPaneIndex'] === 'number'
+    && Number.isInteger(value['nextPaneIndex'])
+    && value['nextPaneIndex'] > normalizedPanes.length
+    ? value['nextPaneIndex']
+    : normalizedPanes.length + 1;
+
+  return {
+    focusedPaneId,
+    nextPaneIndex,
+    panes: normalizedPanes,
   };
 }
 
@@ -233,10 +438,11 @@ export function openCurrentProject(rootPath: string): ProjectState {
     name: getProjectName(resolvedRoot),
     rootPath: resolvedRoot,
   };
+  lastFlushedSessionSnapshot = readSession(database);
 
   return {
     ...currentProject,
-    session: readSession(database),
+    session: lastFlushedSessionSnapshot,
   };
 }
 
@@ -259,15 +465,21 @@ export function flushCurrentProjectSession(snapshot: ProjectSessionSnapshot): vo
   writeSession(currentDatabase, snapshot);
 }
 
+export function getLastFlushedProjectSessionSnapshot(): ProjectSessionSnapshot | null {
+  return lastFlushedSessionSnapshot;
+}
+
 export function closeCurrentProjectDatabase(): void {
   if (!currentDatabase) {
     currentProject = null;
+    lastFlushedSessionSnapshot = null;
     return;
   }
 
   currentDatabase.close();
   currentDatabase = null;
   currentProject = null;
+  lastFlushedSessionSnapshot = null;
 }
 
 export function getProjectDatabasePath(rootPath: string): string {

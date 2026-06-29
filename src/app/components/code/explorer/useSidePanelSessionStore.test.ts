@@ -82,6 +82,31 @@ describe('useSidePanelSessionStore', () => {
     expect(getStore().physicalBottomTab).toBe('console');
   });
 
+  it('captures and hydrates project lower panel visibility without tab chrome', () => {
+    getStore().setExplorerLeftTab('git');
+    getStore().setExplorerLeftSplitVisible(true);
+    getStore().setExplorerRightSplitVisible(true);
+    getStore().setPhysicalLeftSplitVisible(true);
+    getStore().setPhysicalRightSplitVisible(true);
+
+    const snapshot = getStore().captureProjectSidePanelSession();
+    resetSidePanelSessionStoreForTests();
+    getStore().hydrateProjectSidePanelSession(snapshot);
+
+    expect(getStore().leftPrimaryTab).toBe('explorer');
+    expect(getStore().leftSplitVisible).toBe(true);
+    expect(getStore().rightSplitVisible).toBe(true);
+    expect(getStore().physicalLeftSplitVisible).toBe(true);
+    expect(getStore().physicalRightSplitVisible).toBe(true);
+
+    getStore().hydrateProjectSidePanelSession(null);
+
+    expect(getStore().leftSplitVisible).toBe(false);
+    expect(getStore().rightSplitVisible).toBe(false);
+    expect(getStore().physicalLeftSplitVisible).toBe(false);
+    expect(getStore().physicalRightSplitVisible).toBe(false);
+  });
+
   it('resets all side panel chrome state to defaults', () => {
     getStore().setExplorerLeftTab('git');
     getStore().setExplorerRightTab('references');
