@@ -7,6 +7,7 @@ import {
   createWorkspaceNode,
   sortDirectoryEntries,
 } from './workspaceFiles';
+import { useExplorerTreeSessionStore } from './useExplorerTreeSessionStore';
 
 export interface WorkspaceRevealRequest {
   path: string;
@@ -104,7 +105,11 @@ export function useWorkspaceTree(
   const rootName = options?.rootName;
   const [rootNode, setRootNode] = useState<WorkspaceTreeNode | null>(null);
   const [workspaceAvailable, setWorkspaceAvailable] = useState<boolean | null>(null);
-  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(() => new Set([WORKSPACE_ROOT_PATH]));
+  const expandedFolderPaths = useExplorerTreeSessionStore((state) => state.expandedPaths);
+  const setExpandedFolders = useExplorerTreeSessionStore((state) => state.setExpandedFolders);
+  const addExpandedFolders = useExplorerTreeSessionStore((state) => state.addExpandedFolders);
+  const toggleExpandedFolder = useExplorerTreeSessionStore((state) => state.toggleExpandedFolder);
+  const expandedFolders = useMemo(() => new Set(expandedFolderPaths), [expandedFolderPaths]);
   const rootNodeRef = useRef<WorkspaceTreeNode | null>(null);
   const workspaceAvailableRef = useRef<boolean | null>(null);
   const expandedFoldersRef = useRef<Set<string>>(new Set([WORKSPACE_ROOT_PATH]));
@@ -150,11 +155,7 @@ export function useWorkspaceTree(
             isLoading: false,
           };
         });
-        setExpandedFolders((current) => {
-          const nextExpandedFolders = new Set(current);
-          nextExpandedFolders.add(WORKSPACE_ROOT_PATH);
-          return nextExpandedFolders;
-        });
+        addExpandedFolders([WORKSPACE_ROOT_PATH]);
         setWorkspaceAvailable(true);
         return;
       }
@@ -194,13 +195,13 @@ export function useWorkspaceTree(
         return nextRootNode;
       });
     }
-  }, [rootName]);
+  }, [addExpandedFolders, rootName]);
 
   const initializeTree = useCallback(async () => {
     if (!enabled) {
       setWorkspaceAvailable(false);
       setRootNode(null);
-      setExpandedFolders(new Set([WORKSPACE_ROOT_PATH]));
+      setExpandedFolders([WORKSPACE_ROOT_PATH]);
       return;
     }
 
@@ -216,7 +217,7 @@ export function useWorkspaceTree(
       if (!exists) {
         setWorkspaceAvailable(false);
         setRootNode(null);
-        setExpandedFolders(new Set([WORKSPACE_ROOT_PATH]));
+        setExpandedFolders([WORKSPACE_ROOT_PATH]);
         return;
       }
 
@@ -224,9 +225,9 @@ export function useWorkspaceTree(
     } catch {
       setWorkspaceAvailable(false);
       setRootNode(null);
-      setExpandedFolders(new Set([WORKSPACE_ROOT_PATH]));
+      setExpandedFolders([WORKSPACE_ROOT_PATH]);
     }
-  }, [enabled, loadDirectory]);
+  }, [enabled, loadDirectory, setExpandedFolders]);
 
   useEffect(() => {
     void initializeTree();
@@ -236,7 +237,7 @@ export function useWorkspaceTree(
     if (!enabled) {
       setWorkspaceAvailable(false);
       setRootNode(null);
-      setExpandedFolders(new Set([WORKSPACE_ROOT_PATH]));
+      setExpandedFolders([WORKSPACE_ROOT_PATH]);
       return;
     }
 
@@ -252,7 +253,7 @@ export function useWorkspaceTree(
       if (!exists) {
         setWorkspaceAvailable(false);
         setRootNode(null);
-        setExpandedFolders(new Set([WORKSPACE_ROOT_PATH]));
+        setExpandedFolders([WORKSPACE_ROOT_PATH]);
         return;
       }
 
@@ -270,9 +271,9 @@ export function useWorkspaceTree(
     } catch {
       setWorkspaceAvailable(false);
       setRootNode(null);
-      setExpandedFolders(new Set([WORKSPACE_ROOT_PATH]));
+      setExpandedFolders([WORKSPACE_ROOT_PATH]);
     }
-  }, [enabled, loadDirectory]);
+  }, [enabled, loadDirectory, setExpandedFolders]);
 
   useEffect(() => {
     if (refreshToken === 0) {
@@ -313,51 +314,25 @@ export function useWorkspaceTree(
 
     const ancestorPaths = getWorkspaceAncestorPaths(revealRequest.path);
 
-    setExpandedFolders((current) => {
-      let next: Set<string> | null = null;
-
-      for (const ancestorPath of ancestorPaths) {
-        if (current.has(ancestorPath)) {
-          continue;
-        }
-
-        if (next === null) {
-          next = new Set(current);
-        }
-
-        next.add(ancestorPath);
-      }
-
-      return next ?? current;
-    });
-  }, [revealRequest, workspaceAvailable]);
+    addExpandedFolders(ancestorPaths);
+  }, [addExpandedFolders, revealRequest, workspaceAvailable]);
 
   const toggleFolder = useCallback((path: string) => {
-    setExpandedFolders((current) => {
-      const next = new Set(current);
-
-      if (next.has(path)) {
-        next.delete(path);
-        return next;
-      }
-
-      next.add(path);
-      return next;
-    });
+    toggleExpandedFolder(path);
 
     const currentNode = findNode(rootNode, path);
     if (currentNode && currentNode.type === 'folder' && !currentNode.hasLoadedChildren && !currentNode.isLoading) {
       void loadDirectory(path);
     }
-  }, [loadDirectory, rootNode]);
+  }, [loadDirectory, rootNode, toggleExpandedFolder]);
 
   const refreshTree = useCallback(() => {
     void initializeTree();
   }, [initializeTree]);
 
   const collapseAll = useCallback(() => {
-    setExpandedFolders(new Set());
-  }, []);
+    setExpandedFolders([WORKSPACE_ROOT_PATH]);
+  }, [setExpandedFolders]);
 
   const treeNodes = useMemo(() => (rootNode ? [rootNode] : []), [rootNode]);
 

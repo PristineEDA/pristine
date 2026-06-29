@@ -33,6 +33,7 @@ import { useWorkspaceFileStore, type SaveFilesResult } from './useWorkspaceFileS
 import { useWorkspaceSessionStore } from './useWorkspaceSessionStore';
 import { useBottomPanelStore } from '../components/code/explorer/useBottomPanelStore';
 import { useSidePanelSessionStore } from '../components/code/explorer/useSidePanelSessionStore';
+import { useExplorerTreeSessionStore } from '../workspace/useExplorerTreeSessionStore';
 import type { WindowCloseRequest } from '../window/windowClose';
 import { refreshWorkspaceGitStatus } from '../git/workspaceGitStatus';
 import {
@@ -596,6 +597,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const hydrateBottomPanelSession = useBottomPanelStore((state) => state.hydrateProjectBottomPanelSession);
   const captureSidePanelSession = useSidePanelSessionStore((state) => state.captureProjectSidePanelSession);
   const hydrateSidePanelSession = useSidePanelSessionStore((state) => state.hydrateProjectSidePanelSession);
+  const captureExplorerTreeSession = useExplorerTreeSessionStore((state) => state.captureProjectExplorerTreeSession);
+  const hydrateExplorerTreeSession = useExplorerTreeSessionStore((state) => state.hydrateProjectExplorerTreeSession);
   const setPanelStateForView = useWorkspaceSessionStore((state) => state.setPanelStateForView);
   const setProjectPanelWidthInStore = useWorkspaceSessionStore((state) => state.setProjectPanelWidth);
   const editorWorkspace = useWorkspaceEditorState();
@@ -668,15 +671,17 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     resetWorkspaceProjectSession();
     hydrateBottomPanelSession(null);
     hydrateSidePanelSession(null);
+    hydrateExplorerTreeSession(null);
     fileIdRedirectsRef.current = {};
     previousEditorGroupsRef.current = EMPTY_EDITOR_GROUPS;
-  }, [hydrateBottomPanelSession, hydrateSidePanelSession, resetWorkspaceProjectSession]);
+  }, [hydrateBottomPanelSession, hydrateExplorerTreeSession, hydrateSidePanelSession, resetWorkspaceProjectSession]);
 
   const hydrateProjectSession = useCallback((snapshot: ProjectSessionSnapshot | null | undefined) => {
     resetWorkspaceForProject();
     hydrateWorkspaceProjectSession(snapshot);
     hydrateBottomPanelSession(snapshot?.bottomPanelSession);
     hydrateSidePanelSession(snapshot?.sidePanelSession);
+    hydrateExplorerTreeSession(snapshot?.explorerTreeSession);
 
     if (!snapshot) {
       return;
@@ -687,7 +692,13 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       editorLayout: snapshot.editorLayout,
       focusedGroupId: snapshot.focusedGroupId,
     });
-  }, [hydrateBottomPanelSession, hydrateSidePanelSession, hydrateWorkspaceProjectSession, resetWorkspaceForProject]);
+  }, [
+    hydrateBottomPanelSession,
+    hydrateExplorerTreeSession,
+    hydrateSidePanelSession,
+    hydrateWorkspaceProjectSession,
+    resetWorkspaceForProject,
+  ]);
 
   const captureProjectSessionSnapshot = useCallback((): ProjectSessionSnapshot => {
     const sessionState = captureWorkspaceSessionState();
@@ -698,6 +709,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       bottomPanelSession: captureBottomPanelSession(),
       editorGroups: editorWorkspaceRef.current.editorGroups,
       editorLayout: editorWorkspaceRef.current.editorLayout,
+      explorerTreeSession: captureExplorerTreeSession(),
       focusedGroupId: editorWorkspaceRef.current.focusedGroupId,
       mainContentView: sessionState.mainContentView,
       panelStateByView: sessionState.panelStateByView,
@@ -705,7 +717,13 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       sidePanelSession: captureSidePanelSession(),
       version: 1,
     };
-  }, [captureBottomPanelSession, captureSidePanelSession, captureWorkspaceSessionState, resolveCurrentFileId]);
+  }, [
+    captureBottomPanelSession,
+    captureExplorerTreeSession,
+    captureSidePanelSession,
+    captureWorkspaceSessionState,
+    resolveCurrentFileId,
+  ]);
 
   const setProjectPanelWidth = useCallback((key: string, value: number | ((current: number | undefined) => number)) => {
     setProjectPanelWidthInStore(key, value);

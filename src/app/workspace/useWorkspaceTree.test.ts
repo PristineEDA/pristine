@@ -1,6 +1,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { type WorkspaceRevealRequest, useWorkspaceTree } from './useWorkspaceTree';
+import { resetExplorerTreeSessionStoreForTests } from './useExplorerTreeSessionStore';
 
 function findNodeByPath(node: { path: string; children?: Array<{ path: string; children?: unknown[] }> } | null | undefined, targetPath: string): any {
   if (!node) {
@@ -30,6 +31,7 @@ describe('useWorkspaceTree', () => {
     const electronApi = window.electronAPI!;
 
     vi.clearAllMocks();
+    resetExplorerTreeSessionStoreForTests();
 
     vi.mocked(electronApi.fs.exists).mockResolvedValue(true);
     vi.mocked(electronApi.fs.readDir).mockImplementation(async (dirPath: string) => {

@@ -13,11 +13,39 @@ export interface ProjectWindowState {
   maximized: boolean;
 }
 
+export type ProjectExplorerLeftTab = 'explorer' | 'git';
+export type ProjectExplorerLeftSecondaryTab = 'hierarchy' | 'libraries';
+export type ProjectExplorerRightTab = 'ai' | 'static' | 'references' | 'outline';
+export type ProjectExplorerRightSecondaryTab = 'module-info' | 'resource-usage' | 'x-propagation';
+export type ProjectPhysicalLeftTab = 'layout' | 'constraints';
+export type ProjectPhysicalRightTab = 'layers' | 'checks';
+export type ProjectPhysicalBottomTab = 'reports' | 'console';
+
 export interface ProjectSidePanelSession {
+  assistantThreadListExpanded: boolean;
+  assistantThreadListWidth: number;
+  leftPrimaryTab: ProjectExplorerLeftTab;
+  leftSecondaryTab: ProjectExplorerLeftSecondaryTab;
   leftSplitVisible: boolean;
+  physicalBottomTab: ProjectPhysicalBottomTab;
   physicalLeftSplitVisible: boolean;
+  physicalLeftTab: ProjectPhysicalLeftTab;
   physicalRightSplitVisible: boolean;
+  physicalRightTab: ProjectPhysicalRightTab;
+  rightPrimaryTab: ProjectExplorerRightTab;
+  rightSecondaryTab: ProjectExplorerRightSecondaryTab;
   rightSplitVisible: boolean;
+}
+
+export interface ProjectExplorerTreeSelectedNode {
+  path: string;
+  type: 'file' | 'folder';
+}
+
+export interface ProjectExplorerTreeSession {
+  expandedPaths: string[];
+  scrollTop: number;
+  selectedNode: ProjectExplorerTreeSelectedNode | null;
 }
 
 export interface ProjectBottomPanelSession {
@@ -53,6 +81,7 @@ export interface ProjectSessionSnapshot {
   bottomPanelSession?: ProjectBottomPanelSession;
   editorGroups: EditorGroup[];
   editorLayout: EditorLayoutNode | null;
+  explorerTreeSession?: ProjectExplorerTreeSession;
   focusedGroupId: string | null;
   mainContentView: MainContentView;
   panelStateByView: Record<CodeView, PanelVisibilityState>;

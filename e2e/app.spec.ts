@@ -2134,9 +2134,9 @@ test('splash window hands off to the main window after the startup delay', async
 
   const elapsedBeforeMidpointCheck = Date.now() - launchStartedAt;
   if (elapsedBeforeMidpointCheck < splashMidpointCheckMs) {
-    await expect.poll(() => Date.now() - launchStartedAt, {
-      timeout: splashMidpointCheckMs - elapsedBeforeMidpointCheck + 1000,
-    }).toBeGreaterThanOrEqual(splashMidpointCheckMs);
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, splashMidpointCheckMs - elapsedBeforeMidpointCheck + 50);
+    });
 
     await expect.poll(async () => isStartupBrowserWindowVisible(app, 'splash')).toBe(true);
     await expect.poll(async () => isStartupBrowserWindowVisible(app, 'main')).toBe(false);
@@ -3838,6 +3838,101 @@ test('project session restores window bounds and panel layout chrome', async () 
     await expect(relaunched.window.getByTestId('bottom-panel-pane-bottom-pane-1')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
     await expect(relaunched.window.getByTestId('bottom-panel-pane-bottom-pane-2')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
     await expect(relaunched.window.getByText('Placeholder B')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  } finally {
+    await relaunched.app.close();
+  }
+});
+
+test('project session restores side panel chrome and explorer tree ui state', async () => {
+  test.slow();
+
+  const workspaceCopy = test.info().outputPath('project-ui-session-workspace');
+  createWorkspaceCopy(workspaceCopy);
+
+  const generatedDir = path.join(workspaceCopy, 'rtl', 'core');
+  fs.mkdirSync(generatedDir, { recursive: true });
+  for (let index = 0; index < 48; index += 1) {
+    const fileName = `zz_project_session_${String(index).padStart(2, '0')}.sv`;
+    fs.writeFileSync(path.join(generatedDir, fileName), `module ${fileName.replace(/\.sv$/, '')};\nendmodule\n`, 'utf-8');
+  }
+
+  const firstLaunch = await launchApp({ projectRoot: workspaceCopy });
+
+  try {
+    await ensureExplorerVisible(firstLaunch.window);
+    await firstLaunch.window.getByTestId('file-tree-node-rtl').click();
+    await firstLaunch.window.getByTestId('file-tree-node-rtl_core').click();
+    const selectedNodeTestId = toWorkspaceTreeTestId('rtl/core/zz_project_session_47.sv');
+    await expect(firstLaunch.window.getByTestId(selectedNodeTestId)).toBeAttached({ timeout: UI_READY_TIMEOUT_MS });
+    await expect.poll(async () => (await scrollExplorerTreeToBottom(firstLaunch.window)).scrollTop, {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(0);
+    await firstLaunch.window.getByTestId(selectedNodeTestId).click();
+
+    await firstLaunch.window.getByTestId('left-panel-split-toggle').click();
+    await expect(firstLaunch.window.getByTestId('panel-left-panel-secondary')).toHaveAttribute('aria-hidden', 'false');
+    await firstLaunch.window.getByTestId('left-panel-secondary-tab-libraries').click();
+    await expect(firstLaunch.window.getByTestId('left-panel-secondary-tab-libraries')).toHaveAttribute('data-state', 'on');
+
+    const rightPanelToggle = firstLaunch.window.getByTestId('toggle-right-panel');
+    if (await rightPanelToggle.getAttribute('data-state') !== 'on') {
+      await rightPanelToggle.click();
+    }
+    await expect(firstLaunch.window.getByTestId('panel-right-panel')).toBeVisible();
+    await firstLaunch.window.getByTestId('right-panel-tab-outline').click();
+    await expect(firstLaunch.window.getByTestId('right-panel-tab-outline')).toHaveAttribute('data-state', 'on');
+    await firstLaunch.window.getByTestId('right-panel-split-toggle').click();
+    await expect(firstLaunch.window.getByTestId('panel-right-panel-secondary')).toHaveAttribute('aria-hidden', 'false');
+    await firstLaunch.window.getByTestId('right-panel-secondary-tab-x-propagation').click();
+    await expect(firstLaunch.window.getByTestId('right-panel-secondary-tab-x-propagation')).toHaveAttribute('data-state', 'on');
+
+    await firstLaunch.window.getByTestId('activity-item-physical').click();
+    await expect(firstLaunch.window.getByTestId('code-view-physical')).toBeVisible();
+    await firstLaunch.window.getByTestId('physical-left-panel-tab-constraints').click();
+    await firstLaunch.window.getByTestId('physical-left-panel-split-toggle').click();
+    await firstLaunch.window.getByTestId('physical-right-panel-tab-checks').click();
+    await firstLaunch.window.getByTestId('physical-right-panel-split-toggle').click();
+    await firstLaunch.window.getByTestId('physical-bottom-panel-tab-console').click();
+
+    const closePromise = firstLaunch.window.waitForEvent('close');
+    await requestWindowClose(firstLaunch.window);
+    await closePromise;
+    await expect.poll(() => firstLaunch.app.windows().length).toBe(0);
+  } catch (error) {
+    await firstLaunch.app.close().catch(() => undefined);
+    throw error;
+  }
+
+  const relaunched = await launchApp({ projectRoot: workspaceCopy });
+  try {
+    await relaunched.window.getByTestId('activity-item-explorer').click();
+    await expect(relaunched.window.getByTestId('code-view-explorer')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+    await ensureExplorerVisible(relaunched.window);
+    await expect(relaunched.window.getByTestId('file-tree-node-rtl')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+    await expect(relaunched.window.getByTestId('file-tree-node-rtl_core')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+    await expect(relaunched.window.getByTestId(toWorkspaceTreeTestId('rtl/core/zz_project_session_47.sv'))).toBeVisible({
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await expect.poll(async () => (await readExplorerTreeScrollTop(relaunched.window)), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBeGreaterThan(0);
+    await expect(relaunched.window.getByTestId(toWorkspaceTreeTestId('rtl/core/zz_project_session_47.sv'))).toHaveAttribute(
+      'data-selected',
+      'true',
+    );
+    await expect(relaunched.window.getByTestId('panel-left-panel-secondary')).toHaveAttribute('aria-hidden', 'false');
+    await expect(relaunched.window.getByTestId('left-panel-secondary-tab-libraries')).toHaveAttribute('data-state', 'on');
+    await expect(relaunched.window.getByTestId('panel-right-panel')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+    await expect(relaunched.window.getByTestId('right-panel-tab-outline')).toHaveAttribute('data-state', 'on');
+    await expect(relaunched.window.getByTestId('panel-right-panel-secondary')).toHaveAttribute('aria-hidden', 'false');
+    await expect(relaunched.window.getByTestId('right-panel-secondary-tab-x-propagation')).toHaveAttribute('data-state', 'on');
+
+    await relaunched.window.getByTestId('activity-item-physical').click();
+    await expect(relaunched.window.getByTestId('physical-left-panel-tab-constraints')).toHaveAttribute('data-state', 'on');
+    await expect(relaunched.window.getByTestId('physical-left-panel-lower-panel')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+    await expect(relaunched.window.getByTestId('physical-right-panel-tab-checks')).toHaveAttribute('data-state', 'on');
+    await expect(relaunched.window.getByTestId('physical-right-panel-lower-panel')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+    await expect(relaunched.window.getByTestId('physical-bottom-panel-tab-console')).toHaveAttribute('data-state', 'on');
   } finally {
     await relaunched.app.close();
   }

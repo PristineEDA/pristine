@@ -6,6 +6,7 @@ import { loadBetterSqlite } from './betterSqlite.js';
 import type {
   CreateProjectInput,
   ProjectBottomPanelSession,
+  ProjectExplorerTreeSession,
   ProjectSidePanelSession,
   ProjectSessionSnapshot,
   ProjectState,
@@ -39,10 +40,25 @@ const DEFAULT_PROJECT_WINDOW_STATE: ProjectWindowState = {
 };
 
 const DEFAULT_PROJECT_SIDE_PANEL_SESSION: ProjectSidePanelSession = {
+  assistantThreadListExpanded: false,
+  assistantThreadListWidth: 140,
+  leftPrimaryTab: 'explorer',
+  leftSecondaryTab: 'hierarchy',
   leftSplitVisible: false,
+  physicalBottomTab: 'reports',
   physicalLeftSplitVisible: false,
+  physicalLeftTab: 'layout',
   physicalRightSplitVisible: false,
+  physicalRightTab: 'layers',
+  rightPrimaryTab: 'ai',
+  rightSecondaryTab: 'module-info',
   rightSplitVisible: false,
+};
+
+const DEFAULT_PROJECT_EXPLORER_TREE_SESSION: ProjectExplorerTreeSession = {
+  expandedPaths: ['.'],
+  scrollTop: 0,
+  selectedNode: null,
 };
 
 const DEFAULT_PROJECT_BOTTOM_PANEL_SESSION: ProjectBottomPanelSession = {
@@ -96,6 +112,7 @@ export function createDefaultProjectSession(): ProjectSessionSnapshot {
       },
     },
     bottomPanelSession: cloneBottomPanelSession(DEFAULT_PROJECT_BOTTOM_PANEL_SESSION),
+    explorerTreeSession: cloneExplorerTreeSession(DEFAULT_PROJECT_EXPLORER_TREE_SESSION),
     version: 1,
     sidePanelSession: { ...DEFAULT_PROJECT_SIDE_PANEL_SESSION },
     windowState: cloneWindowState(DEFAULT_PROJECT_WINDOW_STATE),
@@ -188,6 +205,10 @@ function normalizeProjectSessionSnapshot(value: unknown): ProjectSessionSnapshot
     : undefined;
   const sidePanelSession = normalizeSidePanelSession(value['sidePanelSession'], defaultSession.sidePanelSession);
   const bottomPanelSession = normalizeBottomPanelSession(value['bottomPanelSession'], defaultSession.bottomPanelSession);
+  const explorerTreeSession = normalizeExplorerTreeSession(
+    value['explorerTreeSession'],
+    defaultSession.explorerTreeSession,
+  );
   const windowState = normalizeWindowState(value['windowState']);
 
   return {
@@ -199,6 +220,7 @@ function normalizeProjectSessionSnapshot(value: unknown): ProjectSessionSnapshot
     editorLayout: isPlainObject(value['editorLayout'])
       ? value['editorLayout'] as unknown as ProjectSessionSnapshot['editorLayout']
       : null,
+    explorerTreeSession,
     focusedGroupId: typeof value['focusedGroupId'] === 'string' ? value['focusedGroupId'] : null,
     mainContentView,
     panelStateByView,
@@ -260,6 +282,22 @@ function cloneBottomPanelSession(session: ProjectBottomPanelSession): ProjectBot
   };
 }
 
+function cloneExplorerTreeSession(session: ProjectExplorerTreeSession): ProjectExplorerTreeSession {
+  return {
+    expandedPaths: [...session.expandedPaths],
+    scrollTop: session.scrollTop,
+    selectedNode: session.selectedNode ? { ...session.selectedNode } : null,
+  };
+}
+
+function normalizeStringOption<T extends string>(value: unknown, fallback: T, options: readonly T[]): T {
+  return typeof value === 'string' && options.includes(value as T) ? value as T : fallback;
+}
+
+function normalizePositiveNumber(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
 function normalizeSidePanelSession(
   value: unknown,
   fallback = DEFAULT_PROJECT_SIDE_PANEL_SESSION,
@@ -269,18 +307,97 @@ function normalizeSidePanelSession(
   }
 
   return {
+    assistantThreadListExpanded: typeof value['assistantThreadListExpanded'] === 'boolean'
+      ? value['assistantThreadListExpanded']
+      : fallback.assistantThreadListExpanded,
+    assistantThreadListWidth: normalizePositiveNumber(
+      value['assistantThreadListWidth'],
+      fallback.assistantThreadListWidth,
+    ),
+    leftPrimaryTab: normalizeStringOption(value['leftPrimaryTab'], fallback.leftPrimaryTab, ['explorer', 'git']),
+    leftSecondaryTab: normalizeStringOption(
+      value['leftSecondaryTab'],
+      fallback.leftSecondaryTab,
+      ['hierarchy', 'libraries'],
+    ),
     leftSplitVisible: typeof value['leftSplitVisible'] === 'boolean'
       ? value['leftSplitVisible']
       : fallback.leftSplitVisible,
+    physicalBottomTab: normalizeStringOption(
+      value['physicalBottomTab'],
+      fallback.physicalBottomTab,
+      ['reports', 'console'],
+    ),
     physicalLeftSplitVisible: typeof value['physicalLeftSplitVisible'] === 'boolean'
       ? value['physicalLeftSplitVisible']
       : fallback.physicalLeftSplitVisible,
+    physicalLeftTab: normalizeStringOption(
+      value['physicalLeftTab'],
+      fallback.physicalLeftTab,
+      ['layout', 'constraints'],
+    ),
     physicalRightSplitVisible: typeof value['physicalRightSplitVisible'] === 'boolean'
       ? value['physicalRightSplitVisible']
       : fallback.physicalRightSplitVisible,
+    physicalRightTab: normalizeStringOption(
+      value['physicalRightTab'],
+      fallback.physicalRightTab,
+      ['layers', 'checks'],
+    ),
+    rightPrimaryTab: normalizeStringOption(
+      value['rightPrimaryTab'],
+      fallback.rightPrimaryTab,
+      ['ai', 'static', 'references', 'outline'],
+    ),
+    rightSecondaryTab: normalizeStringOption(
+      value['rightSecondaryTab'],
+      fallback.rightSecondaryTab,
+      ['module-info', 'resource-usage', 'x-propagation'],
+    ),
     rightSplitVisible: typeof value['rightSplitVisible'] === 'boolean'
       ? value['rightSplitVisible']
       : fallback.rightSplitVisible,
+  };
+}
+
+function normalizeExplorerTreeSession(
+  value: unknown,
+  fallback = DEFAULT_PROJECT_EXPLORER_TREE_SESSION,
+): ProjectExplorerTreeSession {
+  if (!isPlainObject(value)) {
+    return cloneExplorerTreeSession(fallback);
+  }
+
+  const expandedPaths = Array.isArray(value['expandedPaths'])
+    ? Array.from(new Set([
+        '.',
+        ...value['expandedPaths'].filter((path): path is string => typeof path === 'string' && path.trim().length > 0),
+      ]))
+    : [...fallback.expandedPaths];
+  const rawSelectedNode = value['selectedNode'];
+  let selectedNode: ProjectExplorerTreeSession['selectedNode'] = fallback.selectedNode
+    ? { ...fallback.selectedNode }
+    : null;
+  if (
+    isPlainObject(rawSelectedNode)
+    && typeof rawSelectedNode['path'] === 'string'
+    && (rawSelectedNode['type'] === 'file' || rawSelectedNode['type'] === 'folder')
+  ) {
+    selectedNode = {
+      path: rawSelectedNode['path'],
+      type: rawSelectedNode['type'],
+    };
+  }
+  const scrollTop = typeof value['scrollTop'] === 'number'
+    && Number.isFinite(value['scrollTop'])
+    && value['scrollTop'] > 0
+    ? Math.round(value['scrollTop'])
+    : fallback.scrollTop;
+
+  return {
+    expandedPaths,
+    scrollTop,
+    selectedNode,
   };
 }
 

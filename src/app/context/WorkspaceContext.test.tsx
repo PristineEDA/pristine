@@ -6,6 +6,7 @@ import { WorkspaceProvider, useWorkspace } from './WorkspaceContext';
 import { resetWorkspaceSessionStoreForTests, useWorkspaceSessionStore } from './useWorkspaceSessionStore';
 import { resetBottomPanelStoreForTests, useBottomPanelStore } from '../components/code/explorer/useBottomPanelStore';
 import { resetSidePanelSessionStoreForTests, useSidePanelSessionStore } from '../components/code/explorer/useSidePanelSessionStore';
+import { resetExplorerTreeSessionStoreForTests, useExplorerTreeSessionStore } from '../workspace/useExplorerTreeSessionStore';
 import type { ProjectState } from '../../../types/project';
 
 const undoActionRun = vi.fn(() => Promise.resolve());
@@ -149,6 +150,7 @@ describe('WorkspaceContext', () => {
     resetWorkspaceSessionStoreForTests();
     resetBottomPanelStoreForTests();
     resetSidePanelSessionStoreForTests();
+    resetExplorerTreeSessionStoreForTests();
     testUser = userEvent.setup();
     vi.clearAllMocks();
     undoActionRun.mockClear();
@@ -670,10 +672,24 @@ describe('WorkspaceContext', () => {
           ],
         },
         sidePanelSession: {
+          assistantThreadListExpanded: true,
+          assistantThreadListWidth: 384,
+          leftPrimaryTab: 'git',
+          leftSecondaryTab: 'libraries',
           leftSplitVisible: true,
+          physicalBottomTab: 'console',
           physicalLeftSplitVisible: true,
+          physicalLeftTab: 'constraints',
           physicalRightSplitVisible: false,
+          physicalRightTab: 'checks',
+          rightPrimaryTab: 'outline',
+          rightSecondaryTab: 'x-propagation',
           rightSplitVisible: true,
+        },
+        explorerTreeSession: {
+          expandedPaths: ['.', 'rtl', 'rtl/core'],
+          scrollTop: 96,
+          selectedNode: { path: 'rtl/core/cpu_top.sv', type: 'file' },
         },
         version: 1,
       },
@@ -690,10 +706,24 @@ describe('WorkspaceContext', () => {
     });
     expect(useWorkspaceSessionStore.getState().mainContentView).toBe('workflow');
     expect(useSidePanelSessionStore.getState()).toMatchObject({
+      assistantThreadListExpanded: true,
+      assistantThreadListWidth: 384,
+      leftPrimaryTab: 'git',
+      leftSecondaryTab: 'libraries',
       leftSplitVisible: true,
+      physicalBottomTab: 'console',
       physicalLeftSplitVisible: true,
+      physicalLeftTab: 'constraints',
       physicalRightSplitVisible: false,
+      physicalRightTab: 'checks',
+      rightPrimaryTab: 'outline',
+      rightSecondaryTab: 'x-propagation',
       rightSplitVisible: true,
+    });
+    expect(useExplorerTreeSessionStore.getState()).toMatchObject({
+      expandedPaths: ['.', 'rtl', 'rtl/core'],
+      scrollTop: 96,
+      selectedNode: { path: 'rtl/core/cpu_top.sv', type: 'file' },
     });
     expect(useBottomPanelStore.getState()).toMatchObject({
       focusedPaneId: 'bottom-pane-2',
@@ -723,7 +753,12 @@ describe('WorkspaceContext', () => {
     await clickHarnessButton('show-left');
     await clickHarnessButton('set-left-width');
     act(() => {
+      useExplorerTreeSessionStore.getState().setExpandedFolders(['rtl', 'rtl/core']);
+      useExplorerTreeSessionStore.getState().setSelectedNode({ path: 'rtl/core/reg_file.v', type: 'file' });
+      useExplorerTreeSessionStore.getState().setScrollTop(88);
+      useSidePanelSessionStore.getState().setExplorerLeftTab('git');
       useSidePanelSessionStore.getState().setExplorerLeftSplitVisible(true);
+      useSidePanelSessionStore.getState().setExplorerRightTab('references');
       useSidePanelSessionStore.getState().setExplorerRightSplitVisible(true);
       useBottomPanelStore.getState().splitFocusedPane(600);
       useBottomPanelStore.getState().updatePaneContent('bottom-pane-2', {
@@ -754,10 +789,24 @@ describe('WorkspaceContext', () => {
         explorerLeftPanel: 360,
       },
       sidePanelSession: {
+        assistantThreadListExpanded: false,
+        assistantThreadListWidth: 140,
+        leftPrimaryTab: 'git',
+        leftSecondaryTab: 'hierarchy',
         leftSplitVisible: true,
+        physicalBottomTab: 'reports',
         physicalLeftSplitVisible: false,
+        physicalLeftTab: 'layout',
         physicalRightSplitVisible: false,
+        physicalRightTab: 'layers',
+        rightPrimaryTab: 'references',
+        rightSecondaryTab: 'module-info',
         rightSplitVisible: true,
+      },
+      explorerTreeSession: {
+        expandedPaths: ['.', 'rtl', 'rtl/core'],
+        scrollTop: 88,
+        selectedNode: { path: 'rtl/core/reg_file.v', type: 'file' },
       },
       version: 1,
     }));

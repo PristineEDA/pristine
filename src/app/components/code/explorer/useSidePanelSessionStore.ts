@@ -78,9 +78,18 @@ export const useSidePanelSessionStore = create<SidePanelSessionStore>((set, get)
   captureProjectSidePanelSession: () => {
     const state = get();
     return {
+      assistantThreadListExpanded: state.assistantThreadListExpanded,
+      assistantThreadListWidth: state.assistantThreadListWidth,
+      leftPrimaryTab: state.leftPrimaryTab,
+      leftSecondaryTab: state.leftSecondaryTab,
       leftSplitVisible: state.leftSplitVisible,
+      physicalBottomTab: state.physicalBottomTab,
       physicalLeftSplitVisible: state.physicalLeftSplitVisible,
+      physicalLeftTab: state.physicalLeftTab,
       physicalRightSplitVisible: state.physicalRightSplitVisible,
+      physicalRightTab: state.physicalRightTab,
+      rightPrimaryTab: state.rightPrimaryTab,
+      rightSecondaryTab: state.rightSecondaryTab,
       rightSplitVisible: state.rightSplitVisible,
     };
   },
@@ -88,9 +97,18 @@ export const useSidePanelSessionStore = create<SidePanelSessionStore>((set, get)
   hydrateProjectSidePanelSession: (snapshot) => {
     const defaults = createDefaultSidePanelSessionState();
     set({
+      assistantThreadListExpanded: snapshot?.assistantThreadListExpanded ?? defaults.assistantThreadListExpanded,
+      assistantThreadListWidth: snapshot?.assistantThreadListWidth ?? defaults.assistantThreadListWidth,
+      leftPrimaryTab: snapshot?.leftPrimaryTab ?? defaults.leftPrimaryTab,
+      leftSecondaryTab: snapshot?.leftSecondaryTab ?? defaults.leftSecondaryTab,
       leftSplitVisible: snapshot?.leftSplitVisible ?? defaults.leftSplitVisible,
+      physicalBottomTab: snapshot?.physicalBottomTab ?? defaults.physicalBottomTab,
       physicalLeftSplitVisible: snapshot?.physicalLeftSplitVisible ?? defaults.physicalLeftSplitVisible,
+      physicalLeftTab: snapshot?.physicalLeftTab ?? defaults.physicalLeftTab,
       physicalRightSplitVisible: snapshot?.physicalRightSplitVisible ?? defaults.physicalRightSplitVisible,
+      physicalRightTab: snapshot?.physicalRightTab ?? defaults.physicalRightTab,
+      rightPrimaryTab: snapshot?.rightPrimaryTab ?? defaults.rightPrimaryTab,
+      rightSecondaryTab: snapshot?.rightSecondaryTab ?? defaults.rightSecondaryTab,
       rightSplitVisible: snapshot?.rightSplitVisible ?? defaults.rightSplitVisible,
     });
   },
