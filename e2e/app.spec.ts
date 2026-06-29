@@ -749,6 +749,24 @@ function initializeGitWorkspaceCopy(targetPath: string, branchName: string) {
   fs.writeFileSync(path.join(targetPath, 'ignored.log'), 'ignored log\n', 'utf-8');
 }
 
+function isGitAvailable() {
+  try {
+    execFileSync('git', ['--version'], { stdio: 'pipe', windowsHide: true });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function initializeNestedGitRepository(targetPath: string, branchName: string) {
+  execFileSync('git', ['init'], { cwd: targetPath, stdio: 'pipe', windowsHide: true });
+  execFileSync('git', ['config', 'user.name', 'Pristine E2E'], { cwd: targetPath, stdio: 'pipe', windowsHide: true });
+  execFileSync('git', ['config', 'user.email', 'pristine-e2e@example.com'], { cwd: targetPath, stdio: 'pipe', windowsHide: true });
+  execFileSync('git', ['add', '.'], { cwd: targetPath, stdio: 'pipe', windowsHide: true });
+  execFileSync('git', ['commit', '-m', 'Initial nested fixture'], { cwd: targetPath, stdio: 'pipe', windowsHide: true });
+  execFileSync('git', ['branch', '-M', branchName], { cwd: targetPath, stdio: 'pipe', windowsHide: true });
+}
+
 function notifyAppWindowFocused(
   app: Awaited<ReturnType<typeof electron.launch>>,
 ) {
@@ -5504,6 +5522,44 @@ test('explorer shows the real git branch and git file decorations for tracked an
     await window.getByTestId('file-tree-node-rtl_core_reg_file_v').dblclick();
 
     await expect(window.getByTestId('editor-tab-title-rtl/core/reg_file.v')).toHaveClass(/text-ide-warning/);
+  } finally {
+    await app.close();
+  }
+});
+
+test('explorer hides Pristine metadata folders and shows first-level child git decorations', async () => {
+  test.skip(!isGitAvailable(), 'git is required for nested repository decoration smoke coverage');
+  test.slow();
+
+  const workspaceCopy = test.info().outputPath('git-nested-status-workspace');
+  createWorkspaceCopy(workspaceCopy);
+  fs.mkdirSync(path.join(workspaceCopy, '.pristine'), { recursive: true });
+  fs.writeFileSync(path.join(workspaceCopy, '.pristine', 'project.sqlite'), '', 'utf-8');
+  fs.mkdirSync(path.join(workspaceCopy, '.prstine'), { recursive: true });
+  fs.writeFileSync(path.join(workspaceCopy, '.prstine', 'legacy.sqlite'), '', 'utf-8');
+  initializeGitWorkspaceCopy(workspaceCopy, 'e2e-root-git');
+
+  const childRepoRoot = path.join(workspaceCopy, 'child-ip');
+  fs.mkdirSync(path.join(childRepoRoot, 'src'), { recursive: true });
+  fs.writeFileSync(path.join(childRepoRoot, 'src', 'child_core.sv'), 'module child_core;\nendmodule\n', 'utf-8');
+  initializeNestedGitRepository(childRepoRoot, 'e2e-child-git');
+  fs.appendFileSync(path.join(childRepoRoot, 'src', 'child_core.sv'), '\n// nested git modified fixture\n', 'utf-8');
+
+  const { app, window } = await launchApp({ projectRoot: workspaceCopy });
+
+  try {
+    await ensureExplorerVisible(window);
+
+    await expect(window.getByTestId('file-tree-node-_pristine')).toHaveCount(0);
+    await expect(window.getByTestId('file-tree-node-_prstine')).toHaveCount(0);
+    await expect(window.getByTestId('status-bar-branch-label')).toHaveText('e2e-root-git');
+
+    await expect(window.getByTestId('file-tree-git-indicator-modified-rtl')).toBeVisible();
+    await expect(window.getByTestId('file-tree-git-indicator-modified-child-ip')).toBeVisible();
+
+    await window.getByTestId('file-tree-node-child-ip').click();
+    await window.getByTestId('file-tree-node-child-ip_src').click();
+    await expect(window.getByTestId('file-tree-git-indicator-modified-child-ip_src_child_core_sv')).toBeVisible();
   } finally {
     await app.close();
   }

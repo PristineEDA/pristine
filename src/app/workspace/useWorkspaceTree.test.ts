@@ -59,6 +59,43 @@ describe('useWorkspaceTree', () => {
     expect(window.electronAPI!.fs.readDir).not.toHaveBeenCalled();
   });
 
+  it('hides Pristine metadata directories only at the workspace root', async () => {
+    vi.mocked(window.electronAPI!.fs.readDir).mockImplementation(async (dirPath: string) => {
+      if (dirPath === '.') {
+        return [
+          { name: '.pristine', isDirectory: true, isFile: false },
+          { name: '.prstine', isDirectory: true, isFile: false },
+          { name: 'rtl', isDirectory: true, isFile: false },
+        ];
+      }
+
+      if (dirPath === 'rtl') {
+        return [
+          { name: '.pristine', isDirectory: true, isFile: false },
+          { name: 'core.sv', isDirectory: false, isFile: true },
+        ];
+      }
+
+      return [];
+    });
+
+    const { result } = renderHook(() => useWorkspaceTree());
+
+    await waitFor(() => {
+      expect(result.current.workspaceAvailable).toBe(true);
+      expect(result.current.treeNodes[0]?.children?.map((child) => child.path)).toEqual(['rtl']);
+    });
+
+    act(() => {
+      result.current.toggleFolder('rtl');
+    });
+
+    await waitFor(() => {
+      expect(findNodeByPath(result.current.treeNodes[0], 'rtl/.pristine')).not.toBeNull();
+      expect(findNodeByPath(result.current.treeNodes[0], 'rtl/core.sv')).not.toBeNull();
+    });
+  });
+
   it('keeps the expanded folder state stable when revealing within already expanded ancestors', async () => {
     const { result, rerender } = renderHook(
       ({ revealRequest }: { revealRequest?: WorkspaceRevealRequest | null }) => useWorkspaceTree(revealRequest),

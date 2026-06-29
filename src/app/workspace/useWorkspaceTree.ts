@@ -9,6 +9,8 @@ import {
 } from './workspaceFiles';
 import { useExplorerTreeSessionStore } from './useExplorerTreeSessionStore';
 
+const HIDDEN_ROOT_DIRECTORY_NAMES = new Set(['.pristine', '.prstine']);
+
 export interface WorkspaceRevealRequest {
   path: string;
   token: number;
@@ -136,7 +138,12 @@ export function useWorkspaceTree(
     }
 
     try {
-      const entries = sortDirectoryEntries(await fsApi.readDir(dirPath));
+      const entries = sortDirectoryEntries(await fsApi.readDir(dirPath))
+        .filter((entry) => (
+          dirPath !== WORKSPACE_ROOT_PATH
+          || !entry.isDirectory
+          || !HIDDEN_ROOT_DIRECTORY_NAMES.has(entry.name)
+        ));
       const children = entries.map((entry) => createWorkspaceNode(dirPath, entry));
 
       if (dirPath === WORKSPACE_ROOT_PATH) {
