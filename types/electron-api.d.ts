@@ -57,6 +57,8 @@ import type {
   ProjectOpenResult,
   ProjectSessionSnapshot,
   ProjectState,
+  ProjectUpdateConfigInput,
+  ProjectUpdateConfigResult,
 } from './project';
 
 export interface ElectronAPI {
@@ -131,6 +133,7 @@ export interface ElectronAPI {
     closeProject: (snapshot?: ProjectSessionSnapshot) => Promise<ProjectCloseResult>;
     getCurrentProject: () => Promise<ProjectState | null>;
     flushSession: (snapshot: ProjectSessionSnapshot) => Promise<void>;
+    updateProjectConfig: (input: ProjectUpdateConfigInput) => Promise<ProjectUpdateConfigResult>;
     onProjectChanged: (callback: (payload: ProjectChangedEvent) => void) => () => void;
   };
 

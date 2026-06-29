@@ -28,11 +28,13 @@ import { useCodeViewerLayout } from '../../../context/CodeViewerLayoutContext';
 
 interface ActivityBarProps {
   activeView: string;
+  canConfigureProject?: boolean;
   onItemSelect: (view: string) => void;
+  onProjectConfigure?: () => void;
 }
 
 const actionItems = [
-  { id: 'compile', icon: Hammer, label: 'Compile' },
+  { id: 'configure', icon: Hammer, label: 'Configure' },
   { id: 'run', icon: Play, label: 'Run' },
 ] as const;
 
@@ -130,7 +132,12 @@ const data = {
 
 const activityBarButtonBaseClass = 'relative min-h-10 rounded-md transition-colors hover:cursor-pointer group-data-[collapsible=icon]:h-10! group-data-[collapsible=icon]:w-full! group-data-[collapsible=icon]:justify-center! group-data-[collapsible=icon]:gap-0! group-data-[collapsible=icon]:px-0!';
 
-export function ActivityBar({ activeView, onItemSelect }: ActivityBarProps) {
+export function ActivityBar({
+  activeView,
+  canConfigureProject = false,
+  onItemSelect,
+  onProjectConfigure,
+}: ActivityBarProps) {
   const { state } = useSidebar();
   const { layoutMode } = useCodeViewerLayout();
   const isExpanded = state === 'expanded';
@@ -145,7 +152,7 @@ export function ActivityBar({ activeView, onItemSelect }: ActivityBarProps) {
     '--sidebar-border': isMinimalLayout ? 'transparent' : 'var(--ide-border)',
     '--sidebar-ring': 'var(--ide-accent)',
   } as CSSProperties;
-  const actionButtonClassName = `${activityBarButtonBaseClass} text-ide-success hover:bg-sidebar-accent hover:text-ide-success ${isExpanded ? 'h-10 w-full justify-start' : 'h-10 w-full justify-center px-0'
+  const actionButtonClassName = `${activityBarButtonBaseClass} text-ide-success hover:bg-sidebar-accent hover:text-ide-success disabled:pointer-events-none disabled:opacity-40 ${isExpanded ? 'h-10 w-full justify-start' : 'h-10 w-full justify-center px-0'
     }`;
 
   return (
@@ -167,19 +174,24 @@ export function ActivityBar({ activeView, onItemSelect }: ActivityBarProps) {
       </SidebarContent>
       <SidebarFooter>
         <SidebarMenu>
-          {actionItems.map(({ id, icon: Icon, label }) => (
+          {actionItems.map(({ id, icon: Icon, label }) => {
+            const isConfigureAction = id === 'configure';
+            return (
             <SidebarMenuItem key={id}>
               <SidebarMenuButton
                 tooltip={label}
                 aria-label={label}
                 data-testid={`activity-action-${id}`}
+                disabled={isConfigureAction && !canConfigureProject}
                 className={`${actionButtonClassName} [&>svg]:size-[18px]`}
+                onClick={isConfigureAction ? onProjectConfigure : undefined}
               >
                 <Icon size={18} strokeWidth={1.7} />
                 {isExpanded ? <span className="text-sm font-medium">{label}</span> : null}
               </SidebarMenuButton>
             </SidebarMenuItem>
-          ))}
+          );
+          })}
         </SidebarMenu>
       </SidebarFooter>
     </Sidebar>

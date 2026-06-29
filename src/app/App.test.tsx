@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
 import { EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX } from './components/code/shared/CodeWorkspaceShell';
+import { resetProjectConfigureStoreForTests } from './components/code/shared/useProjectConfigureStore';
 import { resetWorkspaceSessionStoreForTests } from './context/useWorkspaceSessionStore';
 import { resetWorkspaceGitStatusStoreForTests } from './git/workspaceGitStatus';
 import { resetQuickOpenStoreForTests } from './useQuickOpenStore';
@@ -122,9 +123,26 @@ vi.mock('./components/code/shared/ActivityBar', async () => {
   const actualActivityBar = await vi.importActual<typeof import('./components/code/shared/ActivityBar')>('./components/code/shared/ActivityBar');
 
   return {
-    ActivityBar: ({ activeView, onItemSelect }: { activeView: string; onItemSelect: (view: string) => void }) => {
+    ActivityBar: ({
+      activeView,
+      canConfigureProject = false,
+      onItemSelect,
+      onProjectConfigure,
+    }: {
+      activeView: string;
+      canConfigureProject?: boolean;
+      onItemSelect: (view: string) => void;
+      onProjectConfigure?: () => void;
+    }) => {
       if (renderRealActivityBar) {
-        return <actualActivityBar.ActivityBar activeView={activeView} onItemSelect={onItemSelect} />;
+        return (
+          <actualActivityBar.ActivityBar
+            activeView={activeView}
+            canConfigureProject={canConfigureProject}
+            onItemSelect={onItemSelect}
+            onProjectConfigure={onProjectConfigure}
+          />
+        );
       }
 
       const activityBar = sidebar.useSidebar();
@@ -138,6 +156,13 @@ vi.mock('./components/code/shared/ActivityBar', async () => {
           <button onClick={() => onItemSelect('physical')}>select-physical</button>
           <button onClick={() => onItemSelect('factory')}>select-factory</button>
           <button onClick={() => onItemSelect('explorer')}>select-explorer</button>
+          <button
+            disabled={!canConfigureProject}
+            data-testid="mock-activity-configure"
+            onClick={onProjectConfigure}
+          >
+            configure-project
+          </button>
         </div>
       );
     },
@@ -315,6 +340,7 @@ describe('App', () => {
     testUser = userEvent.setup();
     renderRealActivityBar = false;
     resetQuickOpenStoreForTests();
+    resetProjectConfigureStoreForTests();
     resetWorkspaceSessionStoreForTests();
     resetWorkspaceGitStatusStoreForTests();
     vi.clearAllMocks();
@@ -580,6 +606,51 @@ describe('App', () => {
     } finally {
       renderRealActivityBar = false;
     }
+  });
+
+  it('opens Configure Project from the activity bar only after a project is available', async () => {
+    vi.mocked(window.electronAPI!.project.getCurrentProject).mockResolvedValueOnce(null);
+    render(<App />);
+
+    expect(screen.getByTestId('mock-activity-configure')).toBeDisabled();
+    await waitFor(() => {
+      expect(window.electronAPI!.project.getCurrentProject).toHaveBeenCalled();
+      expect(window.electronAPI!.project.onProjectChanged).toHaveBeenCalled();
+    });
+
+    const project = {
+      config: {
+        mgnt: 'item1',
+        mode: 'rtl',
+        padframe: 'QFN64',
+        process: 'ihp130',
+        type: 'ysyxSoC',
+      },
+      name: 'chip_lab',
+      rootPath: 'C:\\Projects\\chip_lab',
+      session: null,
+    };
+    const projectChangedCalls = vi.mocked(window.electronAPI!.project.onProjectChanged).mock.calls;
+    const projectChangedHandler = projectChangedCalls[projectChangedCalls.length - 1]?.[0];
+    await act(async () => {
+      projectChangedHandler?.(project);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mock-activity-configure')).toBeEnabled();
+    });
+
+    await clickTestId('mock-activity-configure');
+
+    expect(screen.getByTestId('configure-project-dialog')).toBeInTheDocument();
+    expect(screen.getByTestId('configure-project-name')).toHaveTextContent('chip_lab');
+    expect(screen.getByTestId('configure-project-mode')).toHaveTextContent('rtl');
+    expect(screen.getByTestId('configure-project-process')).toHaveTextContent('ihp130');
+    expect(screen.getByTestId('configure-project-padframe')).toHaveTextContent('QFN64');
+
+    await clickTestId('configure-project-submit');
+
+    expect(window.electronAPI!.project.updateProjectConfig).toHaveBeenCalledWith(project.config);
   });
 
   it('toggles the left, bottom, and right panels with Ctrl+B, Ctrl+J, and Ctrl+Alt+B', () => {

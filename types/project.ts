@@ -13,6 +13,14 @@ export interface ProjectWindowState {
   maximized: boolean;
 }
 
+export interface ProjectConfig {
+  mode: string;
+  process: string;
+  type: string;
+  mgnt: string;
+  padframe: string;
+}
+
 export type ProjectExplorerLeftTab = 'explorer' | 'git';
 export type ProjectExplorerLeftSecondaryTab = 'hierarchy' | 'libraries';
 export type ProjectExplorerRightTab = 'ai' | 'static' | 'references' | 'outline';
@@ -92,19 +100,15 @@ export interface ProjectSessionSnapshot {
 }
 
 export interface ProjectState {
+  config: ProjectConfig;
   name: string;
   rootPath: string;
   session: ProjectSessionSnapshot | null;
 }
 
-export interface CreateProjectInput {
+export interface CreateProjectInput extends ProjectConfig {
   name: string;
   path: string;
-  mode: string;
-  process: string;
-  type: string;
-  mgnt: string;
-  padframe: string;
 }
 
 export interface ProjectCreateResult {
@@ -117,6 +121,12 @@ export interface ProjectOpenResult {
 
 export interface ProjectCloseResult {
   closed: boolean;
+}
+
+export type ProjectUpdateConfigInput = ProjectConfig;
+
+export interface ProjectUpdateConfigResult {
+  project: ProjectState;
 }
 
 export type ProjectChangedEvent = ProjectState | null;

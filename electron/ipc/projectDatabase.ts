@@ -5,6 +5,7 @@ import type { Database as BetterSqliteDatabase } from 'better-sqlite3';
 import { loadBetterSqlite } from './betterSqlite.js';
 import type {
   CreateProjectInput,
+  ProjectConfig,
   ProjectBottomPanelSession,
   ProjectExplorerTreeSession,
   ProjectSidePanelSession,
@@ -21,6 +22,14 @@ const PROJECT_SCHEMA_VERSION = 1;
 let currentDatabase: BetterSqliteDatabase | null = null;
 let currentProject: Omit<ProjectState, 'session'> | null = null;
 let lastFlushedSessionSnapshot: ProjectSessionSnapshot | null = null;
+
+const DEFAULT_PROJECT_CONFIG: ProjectConfig = {
+  mode: 'rtl2gds',
+  process: 'ics55',
+  type: 'retroSoC',
+  mgnt: 'none',
+  padframe: 'QFN32',
+};
 
 function getDatabasePath(projectRoot: string): string {
   return path.join(projectRoot, PROJECT_DATA_DIRECTORY_NAME, PROJECT_DATABASE_FILE_NAME);
@@ -150,6 +159,55 @@ function writeMetadata(database: BetterSqliteDatabase, key: string, value: unkno
     VALUES (?, ?)
     ON CONFLICT(key) DO UPDATE SET value = excluded.value
   `).run(key, JSON.stringify(value));
+}
+
+function readMetadataValue(database: BetterSqliteDatabase, key: string): unknown {
+  const row = database.prepare('SELECT value FROM metadata WHERE key = ?')
+    .get(key) as { value: string } | undefined;
+
+  if (!row) {
+    return undefined;
+  }
+
+  try {
+    return JSON.parse(row.value);
+  } catch {
+    return row.value;
+  }
+}
+
+function normalizeProjectConfig(value: unknown): ProjectConfig {
+  if (!isPlainObject(value)) {
+    return { ...DEFAULT_PROJECT_CONFIG };
+  }
+
+  return {
+    mode: typeof value['mode'] === 'string' && value['mode'].trim().length > 0
+      ? value['mode']
+      : DEFAULT_PROJECT_CONFIG.mode,
+    process: typeof value['process'] === 'string' && value['process'].trim().length > 0
+      ? value['process']
+      : DEFAULT_PROJECT_CONFIG.process,
+    type: typeof value['type'] === 'string' && value['type'].trim().length > 0
+      ? value['type']
+      : DEFAULT_PROJECT_CONFIG.type,
+    mgnt: typeof value['mgnt'] === 'string' && value['mgnt'].trim().length > 0
+      ? value['mgnt']
+      : DEFAULT_PROJECT_CONFIG.mgnt,
+    padframe: typeof value['padframe'] === 'string' && value['padframe'].trim().length > 0
+      ? value['padframe']
+      : DEFAULT_PROJECT_CONFIG.padframe,
+  };
+}
+
+function readProjectConfig(database: BetterSqliteDatabase): ProjectConfig {
+  return normalizeProjectConfig(readMetadataValue(database, 'template'));
+}
+
+function writeProjectConfig(database: BetterSqliteDatabase, config: ProjectConfig): ProjectConfig {
+  const normalizedConfig = normalizeProjectConfig(config);
+  writeMetadata(database, 'template', normalizedConfig);
+  return normalizedConfig;
 }
 
 function writeSession(database: BetterSqliteDatabase, snapshot: ProjectSessionSnapshot): void {
@@ -507,21 +565,16 @@ export async function createProjectDatabase(input: CreateProjectInput, rootPath:
 
   const database = openDatabase(rootPath);
   const session = createDefaultProjectSession();
+  const config = writeProjectConfig(database, input);
 
   writeMetadata(database, 'name', input.name);
   writeMetadata(database, 'rootPath', rootPath);
   writeMetadata(database, 'createdAt', new Date().toISOString());
-  writeMetadata(database, 'template', {
-    mgnt: input.mgnt,
-    mode: input.mode,
-    padframe: input.padframe,
-    process: input.process,
-    type: input.type,
-  });
   writeSession(database, session);
   database.close();
 
   return {
+    config,
     name: input.name,
     rootPath,
     session,
@@ -541,6 +594,7 @@ export function ensureProjectDatabase(rootPath: string): void {
   writeMetadata(database, 'name', getProjectName(rootPath));
   writeMetadata(database, 'rootPath', rootPath);
   writeMetadata(database, 'createdAt', new Date().toISOString());
+  writeProjectConfig(database, DEFAULT_PROJECT_CONFIG);
   writeSession(database, session);
   database.close();
 }
@@ -552,6 +606,7 @@ export function openCurrentProject(rootPath: string): ProjectState {
   const database = openDatabase(resolvedRoot);
   currentDatabase = database;
   currentProject = {
+    config: readProjectConfig(database),
     name: getProjectName(resolvedRoot),
     rootPath: resolvedRoot,
   };
@@ -567,6 +622,24 @@ export function getCurrentProjectState(): ProjectState | null {
   if (!currentProject || !currentDatabase) {
     return null;
   }
+
+  return {
+    ...currentProject,
+    config: readProjectConfig(currentDatabase),
+    session: readSession(currentDatabase),
+  };
+}
+
+export function updateCurrentProjectConfig(config: ProjectConfig): ProjectState {
+  if (!currentProject || !currentDatabase) {
+    throw new Error('No project is currently open.');
+  }
+
+  const nextConfig = writeProjectConfig(currentDatabase, config);
+  currentProject = {
+    ...currentProject,
+    config: nextConfig,
+  };
 
   return {
     ...currentProject,

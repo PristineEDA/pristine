@@ -35,6 +35,7 @@ export const AsyncChannels = {
   PROJECT_CLOSE: 'async:project:close',
   PROJECT_GET_CURRENT: 'async:project:get-current',
   PROJECT_FLUSH_SESSION: 'async:project:flush-session',
+  PROJECT_UPDATE_CONFIG: 'async:project:update-config',
   FS_READ_FILE: 'async:fs:read-file',
   FS_READ_FILE_ABSOLUTE: 'async:fs:read-file-absolute',
   FS_LIST_FILES: 'async:fs:list-files',

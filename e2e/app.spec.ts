@@ -3695,8 +3695,65 @@ test('New Project opens from File menu and Ctrl+Shift+N with project defaults', 
     }).toBe(true);
     await expect(window.getByTestId('file-tree-node-root')).toContainText(projectName);
     await expect(window.getByTestId('editor-empty-open-project')).toBeVisible();
+    await expect(window.getByTestId('activity-action-configure')).toBeEnabled();
   } finally {
     await app.close();
+  }
+});
+
+test('Configure Project updates metadata and restores it after relaunch', async () => {
+  const selectedProjectPath = test.info().outputPath('configure-project-root');
+  const projectName = `configure_project_${Date.now()}`;
+  const createdProjectPath = path.join(selectedProjectPath, projectName);
+  fs.mkdirSync(selectedProjectPath, { recursive: true });
+
+  const firstLaunch = await launchApp({ projectRoot: null });
+
+  try {
+    await expect(firstLaunch.window.getByTestId('activity-action-configure')).toBeDisabled();
+
+    await selectMenuBarItem(firstLaunch.window, 'File', 'New Project');
+    await firstLaunch.window.getByTestId('create-project-name').fill(projectName);
+    await setNextProjectDirectoryPath(firstLaunch.app, selectedProjectPath);
+    await firstLaunch.window.getByTestId('create-project-browse').click();
+    await firstLaunch.window.getByTestId('create-project-submit').click();
+
+    await expect.poll(() => fs.existsSync(path.join(createdProjectPath, '.pristine', 'project.sqlite')), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBe(true);
+    await expect(firstLaunch.window.getByTestId('activity-action-configure')).toBeEnabled();
+
+    await firstLaunch.window.getByTestId('activity-action-configure').click();
+    await expect(firstLaunch.window.getByTestId('configure-project-dialog')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+    await expect(firstLaunch.window.getByTestId('configure-project-mode')).toContainText('rtl2gds');
+    await expect(firstLaunch.window.getByTestId('configure-project-process')).toContainText('ics55');
+    await expect(firstLaunch.window.getByTestId('configure-project-padframe')).toContainText('QFN32');
+
+    await firstLaunch.window.getByTestId('configure-project-process').click();
+    await firstLaunch.window.getByRole('option', { name: 'gf180' }).click();
+    await firstLaunch.window.getByTestId('configure-project-padframe').click();
+    await firstLaunch.window.getByRole('option', { name: 'QFN128' }).click();
+    await firstLaunch.window.getByTestId('configure-project-submit').click();
+    await expect(firstLaunch.window.getByTestId('configure-project-dialog')).toHaveCount(0, { timeout: UI_READY_TIMEOUT_MS });
+
+    await firstLaunch.window.getByTestId('activity-action-configure').click();
+    await expect(firstLaunch.window.getByTestId('configure-project-process')).toContainText('gf180');
+    await expect(firstLaunch.window.getByTestId('configure-project-padframe')).toContainText('QFN128');
+  } finally {
+    await firstLaunch.app.close();
+  }
+
+  const relaunched = await launchApp({ projectRoot: null });
+  try {
+    await expect(relaunched.window.getByTestId('file-tree-node-root')).toContainText(projectName, {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await relaunched.window.getByTestId('activity-action-configure').click();
+    await expect(relaunched.window.getByTestId('configure-project-dialog')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+    await expect(relaunched.window.getByTestId('configure-project-process')).toContainText('gf180');
+    await expect(relaunched.window.getByTestId('configure-project-padframe')).toContainText('QFN128');
+  } finally {
+    await relaunched.app.close();
   }
 });
 
@@ -7522,21 +7579,21 @@ test('left panel split shows two stacked panels and keeps the explorer tree scro
   }
 });
 
-test('activity bar shows compile and run action buttons with local selection only', async () => {
+test('activity bar shows configure and run action buttons with local selection only', async () => {
   const { app, window } = await launchApp();
 
-  const compileButton = window.getByTestId('activity-action-compile');
+  const configureButton = window.getByTestId('activity-action-configure');
   const runButton = window.getByTestId('activity-action-run');
 
-  await expect(compileButton).toBeVisible();
+  await expect(configureButton).toBeVisible();
   await expect(runButton).toBeVisible();
   await expect(window.getByTestId('activity-action-debug-action')).toHaveCount(0);
 
-  await expect(compileButton).not.toHaveAttribute('aria-pressed', /.+/);
+  await expect(configureButton).not.toHaveAttribute('aria-pressed', /.+/);
   await expect(runButton).not.toHaveAttribute('aria-pressed', /.+/);
 
   await runButton.click();
-  await expect(compileButton).not.toHaveAttribute('aria-pressed', /.+/);
+  await expect(configureButton).not.toHaveAttribute('aria-pressed', /.+/);
   await expect(runButton).not.toHaveAttribute('aria-pressed', /.+/);
 
   await app.close();
@@ -7547,17 +7604,17 @@ test('menu bar activity trigger expands and preserves the activity bar state acr
 
   const trigger = window.getByTestId('toggle-activity-bar');
   const physicalButton = window.getByTestId('activity-item-physical');
-  const compileButton = window.getByTestId('activity-action-compile');
+  const configureButton = window.getByTestId('activity-action-configure');
   const runButton = window.getByTestId('activity-action-run');
 
   await expect(trigger).toBeVisible();
   await expect(physicalButton.getByText('Physical')).toBeVisible();
-  await expect(compileButton.getByText('Compile')).toHaveCount(0);
+  await expect(configureButton.getByText('Configure')).toHaveCount(0);
 
   await trigger.click();
 
   await expect(physicalButton.getByText('Physical')).toBeVisible();
-  await expect(compileButton.getByText('Compile')).toBeVisible();
+  await expect(configureButton.getByText('Configure')).toBeVisible();
   await expect(runButton.getByText('Run')).toBeVisible();
 
   await switchToWhiteboard(window);
@@ -7568,12 +7625,12 @@ test('menu bar activity trigger expands and preserves the activity bar state acr
   await window.getByLabel('Code').click();
   await expect(window.getByTestId('activity-item-explorer')).toBeVisible();
   await expect(physicalButton.getByText('Physical')).toBeVisible();
-  await expect(compileButton.getByText('Compile')).toBeVisible();
+  await expect(configureButton.getByText('Configure')).toBeVisible();
 
   await trigger.click();
 
   await expect(physicalButton.getByText('Physical')).toBeVisible();
-  await expect(compileButton.getByText('Compile')).toHaveCount(0);
+  await expect(configureButton.getByText('Configure')).toHaveCount(0);
   await expect(runButton.getByText('Run')).toHaveCount(0);
 
   await app.close();

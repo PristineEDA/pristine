@@ -3,6 +3,7 @@ import { MenuBar } from './components/code/shared/MenuBar';
 import { DeleteConfirmationDialog } from './components/code/shared/DeleteConfirmationDialog';
 import { UnsavedChangesDialog } from './components/code/shared/UnsavedChangesDialog';
 import { ActivityBar } from './components/code/shared/ActivityBar';
+import { ConfigureProjectDialog } from './components/code/shared/ConfigureProjectDialog';
 import { LeftSidePanel } from './components/code/explorer/LeftSidePanel';
 import { EditorSplitLayout } from './components/code/shared/EditorSplitLayout';
 import { RightSidePanel } from './components/code/explorer/RightSidePanel';
@@ -62,6 +63,7 @@ import { useGlobalAppShortcuts } from './useGlobalAppShortcuts';
 import { getPathBaseName } from './workspace/workspaceFiles';
 import { useQuickOpenController } from './useQuickOpenController';
 import { preloadDeferredMainContentViews } from './mainContentViewPreload';
+import { useProjectConfigureStore } from './components/code/shared/useProjectConfigureStore';
 
 const WorkflowView = lazy(() => import('./components/workflow/WorkflowView').then((module) => ({ default: module.WorkflowView })));
 const WhiteboardView = lazy(() => import('./components/whiteboard/WhiteboardView').then((module) => ({ default: module.WhiteboardView })));
@@ -357,6 +359,15 @@ function AppLayout() {
   const handleActivityItemSelect = (nextView: string) => {
     setActiveView(nextView as typeof activeView);
   };
+  const openProjectConfigure = useProjectConfigureStore((state) => state.openProjectConfigure);
+
+  const handleProjectConfigure = useCallback(() => {
+    if (!currentProject) {
+      return;
+    }
+
+    openProjectConfigure(currentProject.config);
+  }, [currentProject, openProjectConfigure]);
 
   const restoreActiveEditorFocus = useCallback(() => {
     if (typeof window === 'undefined') {
@@ -511,7 +522,9 @@ function AppLayout() {
   const activityBar = (
     <ActivityBar
       activeView={activeView}
+      canConfigureProject={hasOpenProject}
       onItemSelect={handleActivityItemSelect}
+      onProjectConfigure={handleProjectConfigure}
     />
   );
 
@@ -789,7 +802,9 @@ function AppLayout() {
       <div className="flex flex-1 overflow-hidden">
         <ActivityBar
           activeView={activeView}
+          canConfigureProject={hasOpenProject}
           onItemSelect={handleActivityItemSelect}
+          onProjectConfigure={handleProjectConfigure}
         />
         <div className="flex-1 min-h-0">
           <Suspense fallback={<MainContentFallback />}>
@@ -923,6 +938,7 @@ function AppLayout() {
         onShowBottomPanelChange={setShowBottomPanel}
         onShowRightPanelChange={setShowRightPanel}
       />
+      <ConfigureProjectDialog currentProject={currentProject} />
       <UnsavedChangesDialog />
       <DeleteConfirmationDialog />
 

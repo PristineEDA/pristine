@@ -43,6 +43,11 @@ const { MockBetterSqliteDatabase, mockHandle, mockSetConfigValue, mockBrowserWin
         return valueJson ? { value_json: valueJson } : undefined;
       }
 
+      if (this.sql.includes('SELECT value FROM metadata')) {
+        const value = this.database.metadata.get(String(values[0]));
+        return value ? { value } : undefined;
+      }
+
       return undefined;
     }
   }
@@ -226,6 +231,13 @@ describe('project IPC handlers', () => {
 
     expect(result).toEqual({
       project: expect.objectContaining({
+        config: {
+          mgnt: 'none',
+          mode: 'rtl2gds',
+          padframe: 'QFN32',
+          process: 'ics55',
+          type: 'retroSoC',
+        },
         name: 'chip_lab',
         rootPath,
         session: expect.objectContaining({
@@ -278,7 +290,11 @@ describe('project IPC handlers', () => {
     mockSetConfigValue.mockClear();
 
     await expect(openHandler({}, rootPath)).resolves.toEqual({
-      project: expect.objectContaining({ name: 'openable_project', rootPath }),
+      project: expect.objectContaining({
+        config: expect.objectContaining({ process: 'ics55' }),
+        name: 'openable_project',
+        rootPath,
+      }),
     });
     expect(appliedProjectRoots).toEqual([rootPath]);
     expect(appliedWindowStates).toEqual([expect.objectContaining({ maximized: false })]);
@@ -313,6 +329,77 @@ describe('project IPC handlers', () => {
         windowState: capturedWindowState,
       }),
     }));
+  });
+
+  it('updates current project config metadata and broadcasts project changes', async () => {
+    const createHandler = getHandler(AsyncChannels.PROJECT_CREATE);
+    const updateConfigHandler = getHandler(AsyncChannels.PROJECT_UPDATE_CONFIG);
+    const getHandlerForCurrentProject = getHandler(AsyncChannels.PROJECT_GET_CURRENT);
+    const send = vi.fn();
+    mockBrowserWindowGetAllWindows.mockReturnValue([
+      {
+        isDestroyed: () => false,
+        webContents: {
+          isDestroyed: () => false,
+          send,
+        },
+      },
+    ]);
+
+    await createHandler({}, {
+      mgnt: 'none',
+      mode: 'rtl2gds',
+      name: 'config_project',
+      padframe: 'QFN32',
+      path: temporaryDirectory,
+      process: 'ics55',
+      type: 'retroSoC',
+    });
+
+    const result = await updateConfigHandler({}, {
+      mgnt: 'item2',
+      mode: 'rtl',
+      padframe: 'QFN128',
+      process: 'gf180',
+      type: 'Custom',
+    });
+
+    expect(result).toEqual({
+      project: expect.objectContaining({
+        config: {
+          mgnt: 'item2',
+          mode: 'rtl',
+          padframe: 'QFN128',
+          process: 'gf180',
+          type: 'Custom',
+        },
+        name: 'config_project',
+      }),
+    });
+    await expect(getHandlerForCurrentProject({})).resolves.toEqual(expect.objectContaining({
+      config: {
+        mgnt: 'item2',
+        mode: 'rtl',
+        padframe: 'QFN128',
+        process: 'gf180',
+        type: 'Custom',
+      },
+    }));
+    expect(send).toHaveBeenCalledWith(StreamChannels.PROJECT_CHANGED, expect.objectContaining({
+      config: expect.objectContaining({ process: 'gf180' }),
+    }));
+  });
+
+  it('rejects project config updates when no project is open', async () => {
+    const updateConfigHandler = getHandler(AsyncChannels.PROJECT_UPDATE_CONFIG);
+
+    await expect(updateConfigHandler({}, {
+      mgnt: 'none',
+      mode: 'rtl2gds',
+      padframe: 'QFN32',
+      process: 'ics55',
+      type: 'retroSoC',
+    })).rejects.toThrow('No project is currently open.');
   });
 
   it('persists side panel, bottom panel, and window session state', async () => {

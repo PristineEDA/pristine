@@ -290,6 +290,13 @@ export function createElectronApiMock(): ElectronAPI {
     project: {
       createProject: vi.fn().mockImplementation(async (input) => ({
         project: {
+          config: {
+            mode: input.mode,
+            process: input.process,
+            type: input.type,
+            mgnt: input.mgnt,
+            padframe: input.padframe,
+          },
           name: input.name,
           rootPath: `${input.path}\\${input.name}`,
           session: null,
@@ -297,6 +304,13 @@ export function createElectronApiMock(): ElectronAPI {
       })),
       openProject: vi.fn().mockResolvedValue({
         project: {
+          config: {
+            mode: 'rtl2gds',
+            process: 'ics55',
+            type: 'retroSoC',
+            mgnt: 'none',
+            padframe: 'QFN32',
+          },
           name: 'project',
           rootPath: 'C:\\Projects\\project',
           session: null,
@@ -305,6 +319,14 @@ export function createElectronApiMock(): ElectronAPI {
       closeProject: vi.fn().mockResolvedValue({ closed: true }),
       getCurrentProject: vi.fn().mockResolvedValue(null),
       flushSession: vi.fn().mockResolvedValue(undefined),
+      updateProjectConfig: vi.fn().mockImplementation(async (input) => ({
+        project: {
+          config: input,
+          name: 'project',
+          rootPath: 'C:\\Projects\\project',
+          session: null,
+        },
+      })),
       onProjectChanged: vi.fn(() => vi.fn()),
     },
     auth: {

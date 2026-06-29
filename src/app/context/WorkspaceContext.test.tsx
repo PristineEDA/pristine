@@ -138,6 +138,13 @@ function getProjectChangedHandler() {
 
 function createProjectState(overrides: Partial<ProjectState> = {}): ProjectState {
   return {
+    config: {
+      mgnt: 'none',
+      mode: 'rtl2gds',
+      padframe: 'QFN32',
+      process: 'ics55',
+      type: 'retroSoC',
+    },
     name: 'chip_lab',
     rootPath: 'C:\\Projects\\chip_lab',
     session: null,

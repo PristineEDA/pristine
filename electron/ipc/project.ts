@@ -13,15 +13,18 @@ import {
   getLastFlushedProjectSessionSnapshot,
   isValidProjectDatabase,
   openCurrentProject,
+  updateCurrentProjectConfig,
 } from './projectDatabase.js';
 import type {
   CreateProjectInput,
+  ProjectConfig,
   ProjectChangedEvent,
   ProjectCloseResult,
   ProjectCreateResult,
   ProjectOpenResult,
   ProjectSessionSnapshot,
   ProjectState,
+  ProjectUpdateConfigResult,
   ProjectWindowState,
 } from '../../types/project.js';
 
@@ -69,6 +72,26 @@ function normalizeCreateProjectInput(value: unknown): CreateProjectInput {
   });
 
   return input as CreateProjectInput;
+}
+
+function normalizeProjectConfigInput(value: unknown): ProjectConfig {
+  if (!isPlainObject(value)) {
+    throw new Error('Expected project config object');
+  }
+
+  const input = {
+    mgnt: value['mgnt'],
+    mode: value['mode'],
+    padframe: value['padframe'],
+    process: value['process'],
+    type: value['type'],
+  };
+
+  Object.entries(input).forEach(([key, nextValue]) => {
+    assertString(nextValue, key);
+  });
+
+  return input as ProjectConfig;
 }
 
 function validateProjectName(name: string): string {
@@ -233,4 +256,14 @@ export function registerProjectHandlers(
 
     flushCurrentProjectSession(withWindowState(snapshot as unknown as ProjectSessionSnapshot, getWindowState));
   });
+
+  ipcMain.handle(
+    AsyncChannels.PROJECT_UPDATE_CONFIG,
+    async (_event, rawInput: unknown): Promise<ProjectUpdateConfigResult> => {
+      const input = normalizeProjectConfigInput(rawInput);
+      const project = updateCurrentProjectConfig(input);
+      broadcastProjectChanged(project);
+      return { project };
+    },
+  );
 }

@@ -59,6 +59,8 @@ import type {
   ProjectOpenResult,
   ProjectSessionSnapshot,
   ProjectState,
+  ProjectUpdateConfigInput,
+  ProjectUpdateConfigResult,
 } from '../types/project.js';
 
 // ─── Sync Helpers ─────────────────────────────────────────────────────────────
@@ -195,6 +197,8 @@ const electronAPI = {
       ipcRenderer.invoke(AsyncChannels.PROJECT_GET_CURRENT) as Promise<ProjectState | null>,
     flushSession: (snapshot: ProjectSessionSnapshot) =>
       ipcRenderer.invoke(AsyncChannels.PROJECT_FLUSH_SESSION, snapshot) as Promise<void>,
+    updateProjectConfig: (input: ProjectUpdateConfigInput) =>
+      ipcRenderer.invoke(AsyncChannels.PROJECT_UPDATE_CONFIG, input) as Promise<ProjectUpdateConfigResult>,
     onProjectChanged: (callback: (payload: ProjectChangedEvent) => void) => {
       const handler = (_event: Electron.IpcRendererEvent, payload: ProjectChangedEvent) => callback(payload);
       ipcRenderer.on(StreamChannels.PROJECT_CHANGED, handler);
