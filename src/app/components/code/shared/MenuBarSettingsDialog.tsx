@@ -91,6 +91,7 @@ import { ScrollArea } from '../../ui/scroll-area';
 import { Slider } from '../../ui/slider';
 import { Switch } from '../../ui/switch';
 import { cn } from '@/lib/utils';
+import { setProgressHideCompleted } from '../../../progress/useProgressStore';
 import { EditorFontAdvancedDialog } from './EditorFontAdvancedDialog';
 import { EditorThemeAdvancedDialog } from './EditorThemeAdvancedDialog';
 import { ColorThemePreviewCard, EditorFontPreviewCard } from './PickerPreviewCards';
@@ -99,6 +100,7 @@ import { useSettingsDialogSessionStore, type SettingsPageId } from './useSetting
 const CLOSE_ACTION_CONFIG_KEY = 'window.closeActionPreference';
 const FLOATING_INFO_VISIBLE_CONFIG_KEY = 'ui.floatingInfoWindow.visible';
 const NOTIFICATION_DISMISS_SECONDS_CONFIG_KEY = 'notifications.dismissSeconds';
+const PROGRESS_HIDE_COMPLETED_CONFIG_KEY = 'progress.hideCompleted';
 const DEFAULT_NOTIFICATION_DISMISS_SECONDS = 5;
 const MIN_NOTIFICATION_DISMISS_SECONDS = 1;
 const MAX_NOTIFICATION_DISMISS_SECONDS = 10;
@@ -204,6 +206,7 @@ export interface MenuBarSettingsState {
   closeToTrayEnabled: boolean;
   floatingInfoWindowVisible: boolean;
   notificationDismissSeconds: number;
+  progressHideCompleted: boolean;
   themeId: string;
   themePickerLayoutMode: ThemePickerLayoutMode;
   editorCursorBlinking: ReturnType<typeof getConfiguredEditorCursorBlinking>;
@@ -252,6 +255,10 @@ function parseNotificationDismissSeconds(value: unknown): number {
 
 function getConfiguredNotificationDismissSeconds(): number {
   return parseNotificationDismissSeconds(window.electronAPI?.config.get(NOTIFICATION_DISMISS_SECONDS_CONFIG_KEY));
+}
+
+function getConfiguredProgressHideCompleted(): boolean {
+  return window.electronAPI?.config.get(PROGRESS_HIDE_COMPLETED_CONFIG_KEY) !== false;
 }
 
 function getConfiguredThemeId(): string {
@@ -381,6 +388,7 @@ function getPersistedSettingsState(): MenuBarSettingsState {
     closeToTrayEnabled: getConfiguredCloseAction() === 'tray',
     floatingInfoWindowVisible: getFloatingInfoWindowVisible(),
     notificationDismissSeconds: getConfiguredNotificationDismissSeconds(),
+    progressHideCompleted: getConfiguredProgressHideCompleted(),
     themeId: getConfiguredThemeId(),
     themePickerLayoutMode: getConfiguredThemePickerLayoutMode(),
     editorCursorBlinking: getConfiguredEditorCursorBlinking(),
@@ -828,6 +836,12 @@ export function useMenuBarSettingsController() {
     void window.electronAPI?.config.set(NOTIFICATION_DISMISS_SECONDS_CONFIG_KEY, nextValue);
   };
 
+  const handleProgressHideCompletedChange = (checked: boolean) => {
+    patchSettingsState({ progressHideCompleted: checked });
+    setProgressHideCompleted(checked);
+    void window.electronAPI?.config.set(PROGRESS_HIDE_COMPLETED_CONFIG_KEY, checked);
+  };
+
   const handleThemeChange = useCallback((value: string) => {
     patchSettingsState({ themeId: value });
     setTheme(value);
@@ -1020,6 +1034,7 @@ export function useMenuBarSettingsController() {
     handleEditorWordWrapChange,
     handleFloatingInfoWindowVisibleChange,
     handleNotificationDismissSecondsChange,
+    handleProgressHideCompletedChange,
     handleSchematicAlignmentGuidesEnabledChange,
     handleSchematicGridEnabledChange,
     handleSchematicGridSizeChange,
@@ -1077,6 +1092,7 @@ export function MenuBarSettingsDialogs({
     handleEditorWordWrapChange,
     handleFloatingInfoWindowVisibleChange,
     handleNotificationDismissSecondsChange,
+    handleProgressHideCompletedChange,
     handleSchematicAlignmentGuidesEnabledChange,
     handleSchematicGridEnabledChange,
     handleSchematicGridSizeChange,
@@ -1149,6 +1165,24 @@ export function MenuBarSettingsDialogs({
           description="Choose how long native OS notifications stay open before Pristine asks the system to close them."
           testId="settings-notification-duration-input"
         />
+      ),
+    },
+    {
+      id: 'progress-hide-completed',
+      pageId: 'general',
+      title: 'Hide completed progress',
+      description: 'Hide the status bar progress widget after all active progress sessions finish.',
+      keywords: ['progress', 'status bar', 'complete', 'hide', 'done'],
+      element: (
+        <div className={settingsSectionClassName}>
+          <SettingsSwitchRow
+            checked={settingsState.progressHideCompleted}
+            description="Hide the status bar progress widget after all active progress sessions finish."
+            onCheckedChange={handleProgressHideCompletedChange}
+            testId="settings-progress-hide-completed-switch"
+            title="Hide completed progress"
+          />
+        </div>
       ),
     },
     {
@@ -1573,6 +1607,8 @@ export function MenuBarSettingsDialogs({
     handleEditorTabSizeChange,
     handleEditorWordWrapChange,
     handleFloatingInfoWindowVisibleChange,
+    handleNotificationDismissSecondsChange,
+    handleProgressHideCompletedChange,
     handleSchematicAlignmentGuidesEnabledChange,
     handleSchematicGridEnabledChange,
     handleSchematicGridSizeChange,

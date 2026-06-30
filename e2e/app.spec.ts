@@ -4041,6 +4041,7 @@ test('settings dialog supports subpage navigation and global search', async () =
   await expect(window.getByTestId('settings-notification-duration-input')).toHaveAttribute('min', '1');
   await expect(window.getByTestId('settings-notification-duration-input')).toHaveAttribute('max', '10');
   await expect(window.getByTestId('settings-notification-duration-input')).toHaveAttribute('step', '1');
+  await expect(window.getByTestId('settings-progress-hide-completed-switch')).toHaveAttribute('data-state', 'checked');
   await window.waitForTimeout(1000);
   await expect.poll(async () => {
     const layoutValueColor = await window
@@ -4059,6 +4060,10 @@ test('settings dialog supports subpage navigation and global search', async () =
   }).toBe(true);
   await window.getByTestId('settings-notification-duration-input').fill('1');
   await expect.poll(async () => readConfigValue(window, 'notifications.dismissSeconds')).toBe(1);
+  await setSwitchChecked(window.getByTestId('settings-progress-hide-completed-switch'), false);
+  await expect.poll(async () => readConfigValue(window, 'progress.hideCompleted')).toBe(false);
+  await setSwitchChecked(window.getByTestId('settings-progress-hide-completed-switch'), true);
+  await expect.poll(async () => readConfigValue(window, 'progress.hideCompleted')).toBe(true);
 
   await openSettingsPage(window, 'appearance');
   await expect(window.getByTestId('settings-nav-appearance')).toHaveAttribute('aria-current', 'page');
@@ -7615,6 +7620,13 @@ test('activity bar shows configure and run action buttons with local selection o
     await browserGlobal.electronAPI?.config.set('notifications.dismissSeconds', 1);
   });
 
+  await window.getByTestId('menu-settings-button').click();
+  await expect(window.getByTestId('settings-dialog')).toBeVisible();
+  await openSettingsPage(window, 'general');
+  await setSwitchChecked(window.getByTestId('settings-progress-hide-completed-switch'), false);
+  await window.getByTestId('settings-close-button').click();
+  await expect(window.getByTestId('settings-dialog')).toHaveCount(0);
+
   const configureButton = window.getByTestId('activity-action-configure');
   const runButton = window.getByTestId('activity-action-run');
 
@@ -7626,10 +7638,24 @@ test('activity bar shows configure and run action buttons with local selection o
   await expect(runButton).not.toHaveAttribute('aria-pressed', /.+/);
 
   await runButton.click();
-  await runButton.click();
-  await runButton.click();
   await expect(configureButton).not.toHaveAttribute('aria-pressed', /.+/);
   await expect(runButton).not.toHaveAttribute('aria-pressed', /.+/);
+  await expect(window.getByTestId('status-bar-progress-summary')).toBeVisible();
+  await expect(window.getByTestId('status-bar-progress-title')).toHaveText('Scanning RTL Sources');
+  await expect(window.getByTestId('status-bar-progress-value')).toHaveText(/\d+%/);
+
+  await window.getByTestId('status-bar-progress-summary').hover();
+  await expect(window.getByTestId('status-bar-progress-popover')).toBeVisible();
+  const progressCards = window.locator('article[data-testid^="status-bar-progress-card-"]');
+  await expect(progressCards).toHaveCount(6);
+  await expect(window.getByTestId('status-bar-progress-card-title-progress-session-6')).toHaveText('Synchronizing Waveform Data');
+  await expect(window.getByTestId('status-bar-progress-card-title-progress-session-1')).toHaveText('Scanning RTL Sources');
+  const latestProgressBox = await window.getByTestId('status-bar-progress-card-title-progress-session-6').boundingBox();
+  const oldestProgressBox = await window.getByTestId('status-bar-progress-card-title-progress-session-1').boundingBox();
+  expect(latestProgressBox?.y ?? Number.POSITIVE_INFINITY).toBeLessThan(oldestProgressBox?.y ?? Number.NEGATIVE_INFINITY);
+
+  await runButton.click();
+  await runButton.click();
 
   const notificationHistory = await window.evaluate(async () => {
     const browserGlobal = window as typeof window & {
@@ -7655,6 +7681,15 @@ test('activity bar shows configure and run action buttons with local selection o
 
   await window.locator('[data-testid^="status-bar-notification-dismiss-"]').first().click();
   await expect(notificationCards).toHaveCount(2);
+
+  await expect(window.getByTestId('status-bar-progress-title')).toHaveText('Done', { timeout: 20000 });
+  await expect(window.getByTestId('status-bar-progress-value')).toHaveText('100%');
+  await window.getByTestId('menu-settings-button').click();
+  await expect(window.getByTestId('settings-dialog')).toBeVisible();
+  await openSettingsPage(window, 'general');
+  await setSwitchChecked(window.getByTestId('settings-progress-hide-completed-switch'), true);
+  await window.getByTestId('settings-close-button').click();
+  await expect(window.getByTestId('status-bar-progress-summary')).toHaveCount(0);
 
   await app.close();
 });

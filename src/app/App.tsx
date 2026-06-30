@@ -60,6 +60,7 @@ import { ModuleHierarchyProvider } from './context/ModuleHierarchyContext';
 import { SidebarProvider } from './components/ui/sidebar';
 import { refreshWorkspaceGitStatus } from './git/workspaceGitStatus';
 import { hydrateNotificationHistory, publishNotification } from './notifications/useNotificationStore';
+import { endProgressSession, startProgressSession, updateProgressSession } from './progress/useProgressStore';
 import { useGlobalAppShortcuts } from './useGlobalAppShortcuts';
 import { getPathBaseName } from './workspace/workspaceFiles';
 import { useQuickOpenController } from './useQuickOpenController';
@@ -119,6 +120,15 @@ const demoNotifications = [
     title: 'Error notification',
     body: 'Pristine notification error sample.',
   },
+] as const;
+
+const demoProgressSessions = [
+  { title: 'Scanning RTL Sources', source: 'Run', stepMs: 360, increment: 9, endDelayMs: 4200 },
+  { title: 'Indexing SystemVerilog Symbols', source: 'Run', stepMs: 440, increment: 11, endDelayMs: 5200 },
+  { title: 'Resolving Module Hierarchy', source: 'Run', stepMs: 320, increment: 7, endDelayMs: 6500 },
+  { title: 'Preparing Schematic Graph', source: 'Run', stepMs: 520, increment: 13, endDelayMs: 7800 },
+  { title: 'Checking Timing Reports', source: 'Run', stepMs: 610, increment: 15, endDelayMs: 9200 },
+  { title: 'Synchronizing Waveform Data', source: 'Run', stepMs: 390, increment: 6, endDelayMs: 10800 },
 ] as const;
 
 // ─── AppLayout (consumes context) ────────────────────────────────────────────
@@ -190,6 +200,7 @@ function AppLayout() {
   ));
   const physicalLayoutVisibilitySignatureRef = useRef('');
   const notificationDemoIndexRef = useRef(0);
+  const progressDemoTimersRef = useRef<number[]>([]);
   const [assistantThreadListExpanded, setAssistantThreadListExpanded] = useState(false);
   const explorerLeftPanelWidthPx = projectPanelWidths.explorerLeftPanel ?? EXPLORER_LEFT_PANEL_DEFAULT_WIDTH_PX;
   const explorerAssistantPanelWidthPx = projectPanelWidths.explorerRightPanel ?? EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX;
@@ -562,6 +573,36 @@ function AppLayout() {
     const notification = demoNotifications[notificationDemoIndexRef.current % demoNotifications.length] ?? demoNotifications[0];
     notificationDemoIndexRef.current += 1;
     void publishNotification(notification);
+
+    demoProgressSessions.forEach((demo, index) => {
+      const id = startProgressSession({
+        title: demo.title,
+        source: demo.source,
+        value: 0,
+        message: `Mock progress ${index + 1} of ${demoProgressSessions.length}`,
+      });
+      let value = 0;
+      const intervalId = window.setInterval(() => {
+        value = Math.min(98, value + demo.increment);
+        updateProgressSession(id, { value });
+      }, demo.stepMs);
+      const timeoutId = window.setTimeout(() => {
+        window.clearInterval(intervalId);
+        updateProgressSession(id, { value: 100, message: 'Completed' });
+        endProgressSession(id);
+        progressDemoTimersRef.current = progressDemoTimersRef.current.filter((timerId) => timerId !== intervalId && timerId !== timeoutId);
+      }, demo.endDelayMs);
+
+      progressDemoTimersRef.current.push(intervalId, timeoutId);
+    });
+  }, []);
+
+  useEffect(() => () => {
+    for (const timerId of progressDemoTimersRef.current) {
+      window.clearTimeout(timerId);
+      window.clearInterval(timerId);
+    }
+    progressDemoTimersRef.current = [];
   }, []);
 
   const renderPanelPlaceholder = (title: string, testId: string) => (

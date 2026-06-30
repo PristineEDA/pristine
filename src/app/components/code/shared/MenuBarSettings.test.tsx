@@ -2,6 +2,7 @@ import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { getEditorFontFamilyLabel } from '../../../editor/editorSettings';
+import { useProgressStore } from '../../../progress/useProgressStore';
 import {
   ensureEditorFontFamilyLoadedMock,
   importThemeMock,
@@ -293,6 +294,7 @@ describe('MenuBar settings', () => {
       lineNumbers: 'relative',
       minimapEnabled: false,
       notificationDismissSeconds: 7,
+      progressHideCompleted: false,
       renderControlCharacters: true,
       renderWhitespace: 'all',
       scrollBeyondLastLine: true,
@@ -323,9 +325,13 @@ describe('MenuBar settings', () => {
     expect(screen.getByTestId('settings-notification-duration-input')).toHaveAttribute('min', '1');
     expect(screen.getByTestId('settings-notification-duration-input')).toHaveAttribute('max', '10');
     expect(screen.getByTestId('settings-notification-duration-input')).toHaveAttribute('step', '1');
+    expect(screen.getByTestId('settings-progress-hide-completed-switch')).toHaveAttribute('data-state', 'unchecked');
 
     fireEvent.change(screen.getByTestId('settings-notification-duration-input'), { target: { value: '9' } });
     expect(screen.getByTestId('settings-notification-duration-input')).toHaveValue(9);
+    await user.click(screen.getByTestId('settings-progress-hide-completed-switch'));
+    expect(screen.getByTestId('settings-progress-hide-completed-switch')).toHaveAttribute('data-state', 'checked');
+    expect(useProgressStore.getState().hideCompleted).toBe(true);
 
     await openSettingsPage(user, 'appearance');
     expect(screen.getByTestId('settings-theme-combobox')).toHaveTextContent('Dark 2026');
@@ -418,6 +424,7 @@ describe('MenuBar settings', () => {
     expect(window.electronAPI?.config.set).toHaveBeenCalledWith('window.closeActionPreference', 'quit');
     expect(window.electronAPI?.config.set).toHaveBeenCalledWith('ui.floatingInfoWindow.visible', false);
     expect(window.electronAPI?.config.set).toHaveBeenCalledWith('notifications.dismissSeconds', 9);
+    expect(window.electronAPI?.config.set).toHaveBeenCalledWith('progress.hideCompleted', true);
     expect(window.electronAPI?.setFloatingInfoWindowVisible).toHaveBeenCalledWith(false);
   }, SETTINGS_DIALOG_TEST_TIMEOUT_MS);
 

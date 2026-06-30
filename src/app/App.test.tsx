@@ -7,6 +7,7 @@ import { EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX } from './components/code/shared/
 import { resetProjectConfigureStoreForTests } from './components/code/shared/useProjectConfigureStore';
 import { resetWorkspaceSessionStoreForTests } from './context/useWorkspaceSessionStore';
 import { resetWorkspaceGitStatusStoreForTests } from './git/workspaceGitStatus';
+import { resetProgressStoreForTests, useProgressStore } from './progress/useProgressStore';
 import { resetQuickOpenStoreForTests } from './useQuickOpenStore';
 
 let renderRealActivityBar = false;
@@ -128,11 +129,13 @@ vi.mock('./components/code/shared/ActivityBar', async () => {
       canConfigureProject = false,
       onItemSelect,
       onProjectConfigure,
+      onRunAction,
     }: {
       activeView: string;
       canConfigureProject?: boolean;
       onItemSelect: (view: string) => void;
       onProjectConfigure?: () => void;
+      onRunAction?: () => void;
     }) => {
       if (renderRealActivityBar) {
         return (
@@ -141,6 +144,7 @@ vi.mock('./components/code/shared/ActivityBar', async () => {
             canConfigureProject={canConfigureProject}
             onItemSelect={onItemSelect}
             onProjectConfigure={onProjectConfigure}
+            onRunAction={onRunAction}
           />
         );
       }
@@ -162,6 +166,9 @@ vi.mock('./components/code/shared/ActivityBar', async () => {
             onClick={onProjectConfigure}
           >
             configure-project
+          </button>
+          <button data-testid="mock-activity-run" onClick={onRunAction}>
+            run
           </button>
         </div>
       );
@@ -341,6 +348,7 @@ describe('App', () => {
     renderRealActivityBar = false;
     resetQuickOpenStoreForTests();
     resetProjectConfigureStoreForTests();
+    resetProgressStoreForTests();
     resetWorkspaceSessionStoreForTests();
     resetWorkspaceGitStatusStoreForTests();
     vi.clearAllMocks();
@@ -605,6 +613,46 @@ describe('App', () => {
       expect(screen.getByTestId('code-view-factory')).toHaveTextContent('Coming soon');
     } finally {
       renderRealActivityBar = false;
+    }
+  });
+
+  it('starts notification and progress demos from the real ActivityBar run action', () => {
+    renderRealActivityBar = true;
+    vi.useFakeTimers();
+
+    const { unmount } = render(<App />);
+
+    try {
+      fireEvent.click(screen.getByTestId('activity-action-run'));
+
+      expect(window.electronAPI!.notifications.publish).toHaveBeenCalledWith(expect.objectContaining({
+        level: 'info',
+        title: 'Info notification',
+      }));
+      expect(useProgressStore.getState().sessions.map((session) => session.title)).toEqual([
+        'Scanning RTL Sources',
+        'Indexing SystemVerilog Symbols',
+        'Resolving Module Hierarchy',
+        'Preparing Schematic Graph',
+        'Checking Timing Reports',
+        'Synchronizing Waveform Data',
+      ]);
+
+      act(() => {
+        vi.advanceTimersByTime(4200);
+      });
+
+      expect(useProgressStore.getState().sessions.map((session) => session.title)).not.toContain('Scanning RTL Sources');
+      expect(useProgressStore.getState().lastCompletedSession).toMatchObject({
+        title: 'Scanning RTL Sources',
+        value: 100,
+      });
+    } finally {
+      unmount();
+      vi.clearAllTimers();
+      vi.useRealTimers();
+      renderRealActivityBar = false;
+      resetProgressStoreForTests();
     }
   });
 
