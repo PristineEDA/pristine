@@ -14,6 +14,7 @@ function renderActivityBar({
   canConfigureProject = false,
   onItemSelect = vi.fn(),
   onProjectConfigure = vi.fn(),
+  onRunAction = vi.fn(),
   defaultOpen = false,
   layoutMode = 'compact',
 }: {
@@ -21,6 +22,7 @@ function renderActivityBar({
   canConfigureProject?: boolean;
   onItemSelect?: (view: string) => void;
   onProjectConfigure?: () => void;
+  onRunAction?: () => void;
   defaultOpen?: boolean;
   layoutMode?: CodeViewerLayoutMode;
 } = {}) {
@@ -36,6 +38,7 @@ function renderActivityBar({
           canConfigureProject={canConfigureProject}
           onItemSelect={onItemSelect}
           onProjectConfigure={onProjectConfigure}
+          onRunAction={onRunAction}
         />
       </SidebarProvider>
     </CodeViewerLayoutProvider>,
@@ -68,8 +71,9 @@ describe('ActivityBar', () => {
     const user = userEvent.setup();
     const onItemSelect = vi.fn();
     const onProjectConfigure = vi.fn();
+    const onRunAction = vi.fn();
 
-    renderActivityBar({ canConfigureProject: true, onItemSelect, onProjectConfigure });
+    renderActivityBar({ canConfigureProject: true, onItemSelect, onProjectConfigure, onRunAction });
 
     const configureButton = screen.getByTestId('activity-action-configure');
     const runButton = screen.getByTestId('activity-action-run');
@@ -84,6 +88,7 @@ describe('ActivityBar', () => {
     expect(runButton).not.toHaveAttribute('aria-pressed');
     expect(onItemSelect).not.toHaveBeenCalled();
     expect(onProjectConfigure).toHaveBeenCalledTimes(1);
+    expect(onRunAction).toHaveBeenCalledTimes(1);
   });
 
   it('disables configure while no project is open', async () => {

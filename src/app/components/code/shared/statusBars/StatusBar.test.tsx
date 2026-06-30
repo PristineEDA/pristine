@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LspProblem } from '../../../../lsp/lspProblems';
+import { resetNotificationStoreForTests, useNotificationStore } from '../../../../notifications/useNotificationStore';
 import { StatusBar } from './StatusBar';
 
 const HOVER_CARD_TEST_OPEN_DELAY_MS = 200;
@@ -100,6 +101,7 @@ vi.mock('../../../../git/workspaceGitStatus', () => ({
 
 describe('StatusBar', () => {
   beforeEach(() => {
+    resetNotificationStoreForTests();
     mockedGitStatus.branchName = 'feature/git-ui';
     mockedGitStatus.hasProjectFiles = true;
     mockedGitStatus.isGitRepo = true;
@@ -218,6 +220,80 @@ describe('StatusBar', () => {
     expect(screen.queryByTestId('status-bar-language-icon')).not.toBeInTheDocument();
     expect(screen.queryByText('UTF-8')).not.toBeInTheDocument();
     expect(screen.queryByText('LF')).not.toBeInTheDocument();
+  });
+
+  it('shows notification history cards and dismisses individual records', async () => {
+    useHoverCardFakeTimers();
+    vi.mocked(window.electronAPI!.notifications.dismiss).mockResolvedValue(undefined);
+    useNotificationStore.getState().hydrate([
+      {
+        body: 'Timing path warning',
+        createdAt: 200,
+        expiresAt: 5200,
+        id: 'warning-1',
+        level: 'warning',
+        title: 'Warning notification',
+      },
+      {
+        body: 'Build info',
+        createdAt: 100,
+        expiresAt: 5100,
+        id: 'info-1',
+        level: 'info',
+        title: 'Info notification',
+      },
+    ]);
+
+    try {
+      render(
+        <StatusBar activeFileId="" cursorLine={1} cursorCol={1} />,
+      );
+
+      const notificationsTrigger = screen.getByTestId('status-bar-notifications').closest('[data-slot="hover-card-trigger"]');
+      expect(notificationsTrigger).not.toBeNull();
+
+      fireEvent.pointerEnter(notificationsTrigger as HTMLElement, { pointerType: 'mouse' });
+      await advanceHoverCardOpenDelay();
+
+      expect(screen.getByTestId('status-bar-notifications-popover')).toBeInTheDocument();
+      expect(screen.getByText('Warning notification')).toBeInTheDocument();
+      expect(screen.getByText('Info notification')).toBeInTheDocument();
+      expect(screen.getByText('Warning notification').compareDocumentPosition(
+        screen.getByText('Info notification'),
+      )).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+      expect(screen.getByTestId('status-bar-notification-card-warning')).toBeInTheDocument();
+      expect(screen.getByTestId('status-bar-notifications-list')).toHaveClass('overflow-y-auto');
+
+      fireEvent.click(screen.getByTestId('status-bar-notification-dismiss-warning-1'));
+
+      expect(window.electronAPI!.notifications.dismiss).toHaveBeenCalledWith('warning-1');
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(screen.queryByText('Warning notification')).not.toBeInTheDocument();
+    } finally {
+      await cleanupHoverCardTimers();
+    }
+  });
+
+  it('shows an empty notification history state', async () => {
+    useHoverCardFakeTimers();
+
+    try {
+      render(
+        <StatusBar activeFileId="" cursorLine={1} cursorCol={1} />,
+      );
+
+      const notificationsTrigger = screen.getByTestId('status-bar-notifications').closest('[data-slot="hover-card-trigger"]');
+      expect(notificationsTrigger).not.toBeNull();
+
+      fireEvent.pointerEnter(notificationsTrigger as HTMLElement, { pointerType: 'mouse' });
+      await advanceHoverCardOpenDelay();
+
+      expect(screen.getByTestId('status-bar-notifications-empty')).toHaveTextContent('No notifications yet.');
+    } finally {
+      await cleanupHoverCardTimers();
+    }
   });
 
   it('adds stronger hover highlights, delays hover card open, and closes it immediately on leave', async () => {

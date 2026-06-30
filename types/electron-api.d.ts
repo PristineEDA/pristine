@@ -49,6 +49,7 @@ import type { WindowCloseDecision, WindowCloseRequest } from '../src/app/window/
 import type { FloatingInfoWindowMode } from '../src/app/window/floatingInfoWindow';
 import type { AuthView, DesktopAuthSession } from '../src/app/auth/types';
 import type { ElectronGpuDiagnostics } from './electron-gpu';
+import type { NotificationPublishInput, NotificationRecord } from './notification';
 import type {
   CreateProjectInput,
   ProjectChangedEvent,
@@ -237,6 +238,13 @@ export interface ElectronAPI {
 
   notices: {
     revealBundledFiles: () => Promise<boolean>;
+  };
+
+  notifications: {
+    publish: (input: NotificationPublishInput) => Promise<NotificationRecord>;
+    dismiss: (id: string) => Promise<void>;
+    getHistory: () => Promise<NotificationRecord[]>;
+    onHistoryChanged: (callback: (records: NotificationRecord[]) => void) => () => void;
   };
 
   auth: {

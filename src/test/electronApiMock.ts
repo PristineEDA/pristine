@@ -287,6 +287,19 @@ export function createElectronApiMock(): ElectronAPI {
     notices: {
       revealBundledFiles: vi.fn().mockResolvedValue(true),
     },
+    notifications: {
+      publish: vi.fn().mockImplementation(async (input) => ({
+        body: input.body ?? '',
+        createdAt: Date.now(),
+        expiresAt: Date.now() + 5000,
+        id: 'notification-test-id',
+        level: input.level,
+        title: input.title,
+      })),
+      dismiss: vi.fn().mockResolvedValue(undefined),
+      getHistory: vi.fn().mockResolvedValue([]),
+      onHistoryChanged: vi.fn(() => vi.fn()),
+    },
     project: {
       createProject: vi.fn().mockImplementation(async (input) => ({
         project: {

@@ -4037,6 +4037,28 @@ test('settings dialog supports subpage navigation and global search', async () =
   await expect(window.getByTestId('settings-dialog')).toBeVisible();
   await expect(window.getByTestId('settings-nav-general')).toHaveAttribute('aria-current', 'page');
   await expect(window.getByTestId('settings-page-general')).toBeVisible();
+  await expect(window.getByTestId('settings-notification-duration-input')).toHaveValue('5');
+  await expect(window.getByTestId('settings-notification-duration-input')).toHaveAttribute('min', '1');
+  await expect(window.getByTestId('settings-notification-duration-input')).toHaveAttribute('max', '10');
+  await expect(window.getByTestId('settings-notification-duration-input')).toHaveAttribute('step', '1');
+  await window.waitForTimeout(1000);
+  await expect.poll(async () => {
+    const layoutValueColor = await window
+      .getByTestId('settings-code-viewer-layout-combobox')
+      .evaluate((element) => {
+        const view = (element as any).ownerDocument?.defaultView;
+        return view?.getComputedStyle(element).color ?? '';
+      });
+    const notificationValueColor = await window
+      .getByTestId('settings-notification-duration-input')
+      .evaluate((element) => {
+        const view = (element as any).ownerDocument?.defaultView;
+        return view?.getComputedStyle(element).color ?? '';
+      });
+    return notificationValueColor === layoutValueColor;
+  }).toBe(true);
+  await window.getByTestId('settings-notification-duration-input').fill('1');
+  await expect.poll(async () => readConfigValue(window, 'notifications.dismissSeconds')).toBe(1);
 
   await openSettingsPage(window, 'appearance');
   await expect(window.getByTestId('settings-nav-appearance')).toHaveAttribute('aria-current', 'page');
@@ -7581,6 +7603,17 @@ test('left panel split shows two stacked panels and keeps the explorer tree scro
 
 test('activity bar shows configure and run action buttons with local selection only', async () => {
   const { app, window } = await launchApp();
+  await window.evaluate(async () => {
+    const browserGlobal = window as typeof window & {
+      electronAPI?: {
+        config: {
+          set: (key: string, value: unknown) => Promise<void>;
+        };
+      };
+    };
+
+    await browserGlobal.electronAPI?.config.set('notifications.dismissSeconds', 1);
+  });
 
   const configureButton = window.getByTestId('activity-action-configure');
   const runButton = window.getByTestId('activity-action-run');
@@ -7593,8 +7626,35 @@ test('activity bar shows configure and run action buttons with local selection o
   await expect(runButton).not.toHaveAttribute('aria-pressed', /.+/);
 
   await runButton.click();
+  await runButton.click();
+  await runButton.click();
   await expect(configureButton).not.toHaveAttribute('aria-pressed', /.+/);
   await expect(runButton).not.toHaveAttribute('aria-pressed', /.+/);
+
+  const notificationHistory = await window.evaluate(async () => {
+    const browserGlobal = window as typeof window & {
+      electronAPI?: {
+        notifications: {
+          getHistory: () => Promise<Array<{ createdAt: number; expiresAt: number; level: string }>>;
+        };
+      };
+    };
+
+    return browserGlobal.electronAPI?.notifications.getHistory() ?? [];
+  });
+  expect(notificationHistory?.[0]?.level).toBe('error');
+  expect(notificationHistory?.[0]?.expiresAt - notificationHistory?.[0]?.createdAt).toBe(1000);
+
+  await window.getByTestId('status-bar-notifications').hover();
+  await expect(window.getByTestId('status-bar-notifications-popover')).toBeVisible();
+  const notificationCards = window.locator('[data-testid^="status-bar-notification-card-"]');
+  await expect(notificationCards).toHaveCount(3);
+  await expect(notificationCards.nth(0)).toHaveAttribute('data-testid', 'status-bar-notification-card-error');
+  await expect(notificationCards.nth(1)).toHaveAttribute('data-testid', 'status-bar-notification-card-warning');
+  await expect(notificationCards.nth(2)).toHaveAttribute('data-testid', 'status-bar-notification-card-info');
+
+  await window.locator('[data-testid^="status-bar-notification-dismiss-"]').first().click();
+  await expect(notificationCards).toHaveCount(2);
 
   await app.close();
 });

@@ -98,6 +98,10 @@ import { useSettingsDialogSessionStore, type SettingsPageId } from './useSetting
 
 const CLOSE_ACTION_CONFIG_KEY = 'window.closeActionPreference';
 const FLOATING_INFO_VISIBLE_CONFIG_KEY = 'ui.floatingInfoWindow.visible';
+const NOTIFICATION_DISMISS_SECONDS_CONFIG_KEY = 'notifications.dismissSeconds';
+const DEFAULT_NOTIFICATION_DISMISS_SECONDS = 5;
+const MIN_NOTIFICATION_DISMISS_SECONDS = 1;
+const MAX_NOTIFICATION_DISMISS_SECONDS = 10;
 const THEME_PICKER_LAYOUT_MODE_CONFIG_KEY = 'workbench.themePickerLayoutMode';
 const settingsSectionClassName = 'overflow-hidden rounded-md border border-border/75 bg-background/35';
 const settingsSectionTitleClassName = 'text-[13px] font-medium';
@@ -199,6 +203,7 @@ export interface MenuBarSettingsState {
   codeViewerLayoutMode: CodeViewerLayoutMode;
   closeToTrayEnabled: boolean;
   floatingInfoWindowVisible: boolean;
+  notificationDismissSeconds: number;
   themeId: string;
   themePickerLayoutMode: ThemePickerLayoutMode;
   editorCursorBlinking: ReturnType<typeof getConfiguredEditorCursorBlinking>;
@@ -232,6 +237,21 @@ function getConfiguredCloseAction(): 'quit' | 'tray' {
 
 function getFloatingInfoWindowVisible(): boolean {
   return window.electronAPI?.config.get(FLOATING_INFO_VISIBLE_CONFIG_KEY) === true;
+}
+
+function parseNotificationDismissSeconds(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return DEFAULT_NOTIFICATION_DISMISS_SECONDS;
+  }
+
+  return Math.min(
+    MAX_NOTIFICATION_DISMISS_SECONDS,
+    Math.max(MIN_NOTIFICATION_DISMISS_SECONDS, Math.round(value)),
+  );
+}
+
+function getConfiguredNotificationDismissSeconds(): number {
+  return parseNotificationDismissSeconds(window.electronAPI?.config.get(NOTIFICATION_DISMISS_SECONDS_CONFIG_KEY));
 }
 
 function getConfiguredThemeId(): string {
@@ -360,6 +380,7 @@ function getPersistedSettingsState(): MenuBarSettingsState {
     codeViewerLayoutMode: getConfiguredCodeViewerLayoutMode(),
     closeToTrayEnabled: getConfiguredCloseAction() === 'tray',
     floatingInfoWindowVisible: getFloatingInfoWindowVisible(),
+    notificationDismissSeconds: getConfiguredNotificationDismissSeconds(),
     themeId: getConfiguredThemeId(),
     themePickerLayoutMode: getConfiguredThemePickerLayoutMode(),
     editorCursorBlinking: getConfiguredEditorCursorBlinking(),
@@ -492,6 +513,62 @@ function SettingsSliderSection({
           </p>
         </div>
         {children}
+      </div>
+    </div>
+  );
+}
+
+function SettingsNumberSection({
+  description,
+  max,
+  min,
+  onValueChange,
+  step,
+  testId,
+  title,
+  unit,
+  value,
+}: {
+  description: string;
+  max: number;
+  min: number;
+  onValueChange: (value: number) => void;
+  step: number;
+  testId: string;
+  title: string;
+  unit: string;
+  value: number;
+}) {
+  return (
+    <div className={settingsSectionClassName}>
+      <div className="grid gap-3 px-4 py-3 md:grid-cols-[minmax(0,1fr)_minmax(220px,320px)] md:items-center">
+        <div className="min-w-0 space-y-1">
+          <p className={settingsSectionTitleClassName}>{title}</p>
+          <p className={settingsSectionDescriptionClassName} data-testid={`${testId}-description`}>
+            {description}
+          </p>
+        </div>
+        <label
+          className={cn(
+            'flex h-9 min-w-0 items-center gap-2 rounded-md border border-ide-border bg-ide-tab-bg px-3',
+            'text-ide-text',
+          )}
+          data-testid={`${testId}-control`}
+        >
+          <input
+            aria-label={title}
+            className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[13px] font-normal text-[var(--ide-text)] outline-none placeholder:text-ide-text-muted"
+            data-testid={testId}
+            max={max}
+            min={min}
+            onChange={(event) => onValueChange(Number(event.currentTarget.value))}
+            step={step}
+            style={{ color: 'var(--ide-text)' }}
+            type="number"
+            value={value}
+          />
+          <span className="shrink-0 text-[12px] font-medium text-ide-text-muted">{unit}</span>
+        </label>
       </div>
     </div>
   );
@@ -745,6 +822,12 @@ export function useMenuBarSettingsController() {
     void window.electronAPI?.setFloatingInfoWindowVisible(checked);
   };
 
+  const handleNotificationDismissSecondsChange = (value: number) => {
+    const nextValue = parseNotificationDismissSeconds(value);
+    patchSettingsState({ notificationDismissSeconds: nextValue });
+    void window.electronAPI?.config.set(NOTIFICATION_DISMISS_SECONDS_CONFIG_KEY, nextValue);
+  };
+
   const handleThemeChange = useCallback((value: string) => {
     patchSettingsState({ themeId: value });
     setTheme(value);
@@ -936,6 +1019,7 @@ export function useMenuBarSettingsController() {
     handleThemeImport,
     handleEditorWordWrapChange,
     handleFloatingInfoWindowVisibleChange,
+    handleNotificationDismissSecondsChange,
     handleSchematicAlignmentGuidesEnabledChange,
     handleSchematicGridEnabledChange,
     handleSchematicGridSizeChange,
@@ -992,6 +1076,7 @@ export function MenuBarSettingsDialogs({
     handleThemeImport,
     handleEditorWordWrapChange,
     handleFloatingInfoWindowVisibleChange,
+    handleNotificationDismissSecondsChange,
     handleSchematicAlignmentGuidesEnabledChange,
     handleSchematicGridEnabledChange,
     handleSchematicGridSizeChange,
@@ -1043,6 +1128,26 @@ export function MenuBarSettingsDialogs({
           searchPlaceholder="Search code viewer layouts..."
           emptyText="No code viewer layout found."
           testId="settings-code-viewer-layout-combobox"
+        />
+      ),
+    },
+    {
+      id: 'notification-duration',
+      pageId: 'general',
+      title: 'Notification duration',
+      description: 'Choose how long native OS notifications stay open before Pristine asks the system to close them.',
+      keywords: ['notification', 'duration', 'timeout', 'system', 'os'],
+      element: (
+        <SettingsNumberSection
+          value={settingsState.notificationDismissSeconds}
+          onValueChange={handleNotificationDismissSecondsChange}
+          min={MIN_NOTIFICATION_DISMISS_SECONDS}
+          max={MAX_NOTIFICATION_DISMISS_SECONDS}
+          step={1}
+          unit="seconds"
+          title="Notification duration"
+          description="Choose how long native OS notifications stay open before Pristine asks the system to close them."
+          testId="settings-notification-duration-input"
         />
       ),
     },

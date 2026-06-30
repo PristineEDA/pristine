@@ -292,6 +292,7 @@ describe('MenuBar settings', () => {
       indentGuides: false,
       lineNumbers: 'relative',
       minimapEnabled: false,
+      notificationDismissSeconds: 7,
       renderControlCharacters: true,
       renderWhitespace: 'all',
       scrollBeyondLastLine: true,
@@ -306,6 +307,25 @@ describe('MenuBar settings', () => {
 
     expect(await screen.findByTestId('settings-dialog')).toBeVisible();
     expect(screen.getByTestId('settings-code-viewer-layout-combobox')).toHaveTextContent('Minimal');
+    expect(screen.getByTestId('settings-notification-duration-input-control')).toHaveClass(
+      'border-ide-border',
+      'bg-ide-tab-bg',
+      'text-ide-text',
+    );
+    expect(screen.getByTestId('settings-notification-duration-input-control')).not.toHaveClass('focus-within:border-ide-accent');
+    expect(screen.getByTestId('settings-notification-duration-input')).toHaveClass(
+      'bg-transparent',
+      'text-[var(--ide-text)]',
+      'placeholder:text-ide-text-muted',
+    );
+    expect(screen.getByTestId('settings-notification-duration-input')).toHaveStyle('color: var(--ide-text)');
+    expect(screen.getByTestId('settings-notification-duration-input')).toHaveValue(7);
+    expect(screen.getByTestId('settings-notification-duration-input')).toHaveAttribute('min', '1');
+    expect(screen.getByTestId('settings-notification-duration-input')).toHaveAttribute('max', '10');
+    expect(screen.getByTestId('settings-notification-duration-input')).toHaveAttribute('step', '1');
+
+    fireEvent.change(screen.getByTestId('settings-notification-duration-input'), { target: { value: '9' } });
+    expect(screen.getByTestId('settings-notification-duration-input')).toHaveValue(9);
 
     await openSettingsPage(user, 'appearance');
     expect(screen.getByTestId('settings-theme-combobox')).toHaveTextContent('Dark 2026');
@@ -397,6 +417,7 @@ describe('MenuBar settings', () => {
     expect(setThemeMock).toHaveBeenCalledWith('vscode-2026-light');
     expect(window.electronAPI?.config.set).toHaveBeenCalledWith('window.closeActionPreference', 'quit');
     expect(window.electronAPI?.config.set).toHaveBeenCalledWith('ui.floatingInfoWindow.visible', false);
+    expect(window.electronAPI?.config.set).toHaveBeenCalledWith('notifications.dismissSeconds', 9);
     expect(window.electronAPI?.setFloatingInfoWindowVisible).toHaveBeenCalledWith(false);
   }, SETTINGS_DIALOG_TEST_TIMEOUT_MS);
 

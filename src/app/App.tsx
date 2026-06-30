@@ -59,6 +59,7 @@ import { CodeViewerLayoutProvider } from './context/CodeViewerLayoutContext';
 import { ModuleHierarchyProvider } from './context/ModuleHierarchyContext';
 import { SidebarProvider } from './components/ui/sidebar';
 import { refreshWorkspaceGitStatus } from './git/workspaceGitStatus';
+import { hydrateNotificationHistory, publishNotification } from './notifications/useNotificationStore';
 import { useGlobalAppShortcuts } from './useGlobalAppShortcuts';
 import { getPathBaseName } from './workspace/workspaceFiles';
 import { useQuickOpenController } from './useQuickOpenController';
@@ -101,6 +102,24 @@ const codeViewPlaceholderConfig = {
 } as const;
 
 type PlaceholderWorkspaceView = 'simulation' | 'synthesis';
+
+const demoNotifications = [
+  {
+    level: 'info',
+    title: 'Info notification',
+    body: 'Pristine notification info sample.',
+  },
+  {
+    level: 'warning',
+    title: 'Warning notification',
+    body: 'Pristine notification warning sample.',
+  },
+  {
+    level: 'error',
+    title: 'Error notification',
+    body: 'Pristine notification error sample.',
+  },
+] as const;
 
 // ─── AppLayout (consumes context) ────────────────────────────────────────────
 function AppLayout() {
@@ -170,6 +189,7 @@ function AppLayout() {
     createEmptyPhysicalLayoutVisibility()
   ));
   const physicalLayoutVisibilitySignatureRef = useRef('');
+  const notificationDemoIndexRef = useRef(0);
   const [assistantThreadListExpanded, setAssistantThreadListExpanded] = useState(false);
   const explorerLeftPanelWidthPx = projectPanelWidths.explorerLeftPanel ?? EXPLORER_LEFT_PANEL_DEFAULT_WIDTH_PX;
   const explorerAssistantPanelWidthPx = projectPanelWidths.explorerRightPanel ?? EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX;
@@ -515,6 +535,35 @@ function AppLayout() {
     });
   }, []);
 
+  useEffect(() => {
+    const notificationsApi = window.electronAPI?.notifications;
+    if (!notificationsApi) {
+      return undefined;
+    }
+
+    let disposed = false;
+    void notificationsApi.getHistory().then((records) => {
+      if (!disposed) {
+        hydrateNotificationHistory(records);
+      }
+    });
+
+    const dispose = notificationsApi.onHistoryChanged((records) => {
+      hydrateNotificationHistory(records);
+    });
+
+    return () => {
+      disposed = true;
+      dispose();
+    };
+  }, []);
+
+  const handleRunNotificationDemo = useCallback(() => {
+    const notification = demoNotifications[notificationDemoIndexRef.current % demoNotifications.length] ?? demoNotifications[0];
+    notificationDemoIndexRef.current += 1;
+    void publishNotification(notification);
+  }, []);
+
   const renderPanelPlaceholder = (title: string, testId: string) => (
     <PlaceholderView title={title} testId={testId} />
   );
@@ -525,6 +574,7 @@ function AppLayout() {
       canConfigureProject={hasOpenProject}
       onItemSelect={handleActivityItemSelect}
       onProjectConfigure={handleProjectConfigure}
+      onRunAction={handleRunNotificationDemo}
     />
   );
 
@@ -805,6 +855,7 @@ function AppLayout() {
           canConfigureProject={hasOpenProject}
           onItemSelect={handleActivityItemSelect}
           onProjectConfigure={handleProjectConfigure}
+          onRunAction={handleRunNotificationDemo}
         />
         <div className="flex-1 min-h-0">
           <Suspense fallback={<MainContentFallback />}>

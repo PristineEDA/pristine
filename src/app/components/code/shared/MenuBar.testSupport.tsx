@@ -951,6 +951,7 @@ export type PersistedSettingsOptions = {
   indentGuides?: boolean;
   lineNumbers?: string;
   minimapEnabled?: boolean;
+  notificationDismissSeconds?: number;
   renderControlCharacters?: boolean;
   renderWhitespace?: string;
   scrollBeyondLastLine?: boolean;
@@ -979,6 +980,7 @@ export function mockPersistedSettingsConfig(options: PersistedSettingsOptions = 
     indentGuides: true,
     lineNumbers: 'on',
     minimapEnabled: true,
+    notificationDismissSeconds: 5,
     renderControlCharacters: false,
     renderWhitespace: 'selection',
     scrollBeyondLastLine: false,
@@ -1031,6 +1033,8 @@ export function mockPersistedSettingsConfig(options: PersistedSettingsOptions = 
         return persisted.lineNumbers;
       case 'editor.minimap.enabled':
         return persisted.minimapEnabled;
+      case 'notifications.dismissSeconds':
+        return persisted.notificationDismissSeconds;
       case 'editor.renderControlCharacters':
         return persisted.renderControlCharacters;
       case 'editor.renderWhitespace':

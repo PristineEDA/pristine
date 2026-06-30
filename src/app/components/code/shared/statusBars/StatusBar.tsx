@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import {
-  GitBranch, AlertCircle, AlertTriangle, Bell, CheckCircle2,
+  GitBranch, AlertCircle, AlertTriangle, Bell, CheckCircle2, CircleX, Info, TriangleAlert, X,
   AlignHorizontalSpaceAround,
   Briefcase,
   ClipboardType,
@@ -13,6 +13,9 @@ import { getWorkspaceGitBranchLabel, useWorkspaceGitStatus } from '../../../../g
 import { summarizeLspProblems, useLspProblems } from '../../../../lsp/lspProblems';
 import { getEditorLanguageLabel, getPathBaseName } from '../../../../workspace/workspaceFiles';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '../../../ui/hover-card';
+import { cn } from '@/lib/utils';
+import { useNotificationStore } from '../../../../notifications/useNotificationStore';
+import type { NotificationLevel, NotificationRecord } from '../../../../../../types/notification';
 import { WorkspaceFileIcon } from '../WorkspaceEntryIcon';
 import { StatusBarFrame } from './StatusBarFrame';
 
@@ -34,8 +37,7 @@ type StatusBarHoverKey =
   | 'cursor'
   | 'indentation'
   | 'fileFormat'
-  | 'language'
-  | 'notifications';
+  | 'language';
 
 const STATUS_BAR_HOVER_COPY: Record<StatusBarHoverKey, StatusBarHoverCopy> = {
   branch: {
@@ -98,11 +100,6 @@ const STATUS_BAR_HOVER_COPY: Record<StatusBarHoverKey, StatusBarHoverCopy> = {
     description: 'Placeholder details about the active editor language.',
     meta: 'Preview content only',
   },
-  notifications: {
-    title: 'Notifications',
-    description: 'Placeholder details about editor and workspace alerts.',
-    meta: 'Preview content only',
-  },
 };
 
 const STATUS_BAR_HOVER_OPEN_DELAY_MS = 160;
@@ -137,6 +134,124 @@ function StatusBarHoverItem({
       </HoverCardTrigger>
       <HoverCardContent side="top" className={STATUS_BAR_HOVER_CONTENT_CLASS_NAME}>
         <StatusBarHoverDetails copy={copy} />
+      </HoverCardContent>
+    </HoverCard>
+  );
+}
+
+const notificationLevelMeta: Record<NotificationLevel, {
+  accentClassName: string;
+  icon: LucideIcon;
+  label: string;
+}> = {
+  error: {
+    accentClassName: 'text-ide-error',
+    icon: CircleX,
+    label: 'Error',
+  },
+  info: {
+    accentClassName: 'text-ide-info',
+    icon: Info,
+    label: 'Info',
+  },
+  warning: {
+    accentClassName: 'text-ide-warning',
+    icon: TriangleAlert,
+    label: 'Warning',
+  },
+};
+
+function formatNotificationTime(timestamp: number): string {
+  return new Date(timestamp).toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function NotificationHistoryCard({ record }: { record: NotificationRecord }) {
+  const dismiss = useNotificationStore((state) => state.dismiss);
+  const meta = notificationLevelMeta[record.level];
+  const Icon = meta.icon;
+
+  return (
+    <article
+      className="rounded-md border border-ide-border bg-ide-bg/95 px-3 py-2 shadow-sm"
+      data-testid={`status-bar-notification-card-${record.level}`}
+    >
+      <div className="flex items-start gap-2">
+        <Icon className={cn('mt-0.5 size-3.5 shrink-0', meta.accentClassName)} aria-hidden="true" />
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 items-center gap-2">
+            <p className="truncate text-[12px] font-semibold leading-4 text-ide-text">{record.title}</p>
+            <span className={cn('shrink-0 text-[10px] font-medium uppercase leading-3', meta.accentClassName)}>
+              {meta.label}
+            </span>
+          </div>
+          {record.body ? (
+            <p className="mt-1 text-[11px] leading-4 text-ide-text-muted">{record.body}</p>
+          ) : null}
+          <p className="mt-1 text-[10px] leading-3 text-ide-text-muted">{formatNotificationTime(record.createdAt)}</p>
+        </div>
+        <button
+          type="button"
+          aria-label={`Dismiss ${record.title}`}
+          className="rounded-sm p-0.5 text-ide-text-muted transition-colors hover:bg-ide-hover hover:text-ide-text"
+          data-testid={`status-bar-notification-dismiss-${record.id}`}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            void dismiss(record.id);
+          }}
+        >
+          <X className="size-3" />
+        </button>
+      </div>
+    </article>
+  );
+}
+
+function StatusBarNotifications({ itemClassName }: { itemClassName: string }) {
+  const history = useNotificationStore((state) => state.history);
+  const hasNotifications = history.length > 0;
+
+  return (
+    <HoverCard openDelay={STATUS_BAR_HOVER_OPEN_DELAY_MS} closeDelay={0}>
+      <HoverCardTrigger asChild>
+        <div className={STATUS_BAR_HOVER_TRIGGER_CLASS_NAME} tabIndex={0}>
+          <div
+            className={cn(itemClassName, hasNotifications ? 'text-ide-info' : undefined)}
+            data-testid="status-bar-notifications"
+          >
+            <Bell size={12} />
+          </div>
+        </div>
+      </HoverCardTrigger>
+      <HoverCardContent
+        align="end"
+        side="top"
+        className={cn(STATUS_BAR_HOVER_CONTENT_CLASS_NAME, 'w-80 p-0')}
+        data-testid="status-bar-notifications-popover"
+      >
+        <div className="border-b border-ide-border px-3 py-2">
+          <p className="text-[12px] font-semibold leading-4 text-ide-text">Notifications</p>
+          <p className="text-[11px] leading-4 text-ide-text-muted">
+            {hasNotifications ? `${history.length} recent notification${history.length === 1 ? '' : 's'}` : 'No notifications yet.'}
+          </p>
+        </div>
+        {hasNotifications ? (
+          <div
+            className="max-h-72 space-y-2 overflow-y-auto p-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            data-testid="status-bar-notifications-list"
+          >
+            {history.map((record) => (
+              <NotificationHistoryCard key={record.id} record={record} />
+            ))}
+          </div>
+        ) : (
+          <div className="px-3 py-5 text-center text-[12px] text-ide-text-muted" data-testid="status-bar-notifications-empty">
+            No notifications yet.
+          </div>
+        )}
       </HoverCardContent>
     </HoverCard>
   );
@@ -329,11 +444,7 @@ export function StatusBar({
               </StatusBarHoverItem>
             </>
           )}
-          <StatusBarHoverItem copy={STATUS_BAR_HOVER_COPY.notifications}>
-            <div className={compactTextItemClassName} data-testid="status-bar-notifications">
-              <Bell size={12} />
-            </div>
-          </StatusBarHoverItem>
+          <StatusBarNotifications itemClassName={compactTextItemClassName} />
         </>
       )}
     />

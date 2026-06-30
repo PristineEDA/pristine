@@ -51,6 +51,7 @@ import type { WindowCloseDecision, WindowCloseRequest } from '../src/app/window/
 import type { FloatingInfoWindowMode } from '../src/app/window/floatingInfoWindow.js';
 import type { AuthView, DesktopAuthSession } from '../src/app/auth/types.js';
 import type { ElectronGpuDiagnostics } from '../types/electron-gpu.js';
+import type { NotificationPublishInput, NotificationRecord } from '../types/notification.js';
 import type {
   CreateProjectInput,
   ProjectChangedEvent,
@@ -414,6 +415,20 @@ const electronAPI = {
   notices: {
     revealBundledFiles: () =>
       ipcRenderer.invoke(AsyncChannels.NOTICES_REVEAL_BUNDLED_FILES) as Promise<boolean>,
+  },
+
+  notifications: {
+    publish: (input: NotificationPublishInput) =>
+      ipcRenderer.invoke(AsyncChannels.NOTIFICATIONS_PUBLISH, input) as Promise<NotificationRecord>,
+    dismiss: (id: string) =>
+      ipcRenderer.invoke(AsyncChannels.NOTIFICATIONS_DISMISS, id) as Promise<void>,
+    getHistory: () =>
+      ipcRenderer.invoke(AsyncChannels.NOTIFICATIONS_GET_HISTORY) as Promise<NotificationRecord[]>,
+    onHistoryChanged: (callback: (records: NotificationRecord[]) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, records: NotificationRecord[]) => callback(records);
+      ipcRenderer.on(StreamChannels.NOTIFICATIONS_HISTORY_CHANGED, handler);
+      return () => { ipcRenderer.removeListener(StreamChannels.NOTIFICATIONS_HISTORY_CHANGED, handler); };
+    },
   },
 
   auth: {

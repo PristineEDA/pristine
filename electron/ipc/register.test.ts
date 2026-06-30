@@ -18,6 +18,7 @@ const {
   mockRegisterConfigHandlers,
   mockRegisterAuthHandlers,
   mockRegisterNoticeHandlers,
+  mockRegisterNotificationHandlers,
   mockRegisterPlatformHandler,
   mockRegisterProjectHandlers,
 } = vi.hoisted(() => ({
@@ -38,6 +39,7 @@ const {
   mockRegisterConfigHandlers: vi.fn(),
   mockRegisterAuthHandlers: vi.fn(),
   mockRegisterNoticeHandlers: vi.fn(),
+  mockRegisterNotificationHandlers: vi.fn(),
   mockRegisterPlatformHandler: vi.fn(),
   mockRegisterProjectHandlers: vi.fn(),
 }));
@@ -87,6 +89,10 @@ vi.mock('./auth.js', () => ({
 
 vi.mock('./notices.js', () => ({
   registerNoticeHandlers: () => mockRegisterNoticeHandlers(),
+}));
+
+vi.mock('./notifications.js', () => ({
+  registerNotificationHandlers: (...args: unknown[]) => mockRegisterNotificationHandlers(...args),
 }));
 
 vi.mock('./platform.js', () => ({
@@ -147,6 +153,7 @@ describe('register helpers', () => {
     expect(mockRegisterConfigHandlers).toHaveBeenCalledTimes(1);
     expect(mockRegisterAuthHandlers).toHaveBeenCalledTimes(1);
     expect(mockRegisterNoticeHandlers).toHaveBeenCalledTimes(1);
+    expect(mockRegisterNotificationHandlers).toHaveBeenCalledWith(getMainWindow);
     expect(mockRegisterProjectHandlers).toHaveBeenCalledWith(
       getMainWindow,
       expect.any(Function),

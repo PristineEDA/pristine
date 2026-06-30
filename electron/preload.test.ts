@@ -75,6 +75,7 @@ describe('preload bridge', () => {
     const onLspDiagnostics = vi.fn();
     const onLspState = vi.fn();
     const onMenuCommand = vi.fn();
+    const onNotificationsHistoryChanged = vi.fn();
 
     api.minimize();
     api.maximize();
@@ -170,6 +171,9 @@ describe('preload bridge', () => {
     api.lsp.layoutClose('layout-1');
     api.lsp.getDebugEvents();
     api.notices.revealBundledFiles();
+    api.notifications.publish({ level: 'info', title: 'Info notification', body: 'hello' });
+    api.notifications.dismiss('notification-1');
+    api.notifications.getHistory();
     api.auth.openAccountPage('login');
     api.auth.getSession();
     api.auth.signOut();
@@ -190,6 +194,7 @@ describe('preload bridge', () => {
     const disposeLspDiagnostics = api.lsp.onDiagnostics(onLspDiagnostics);
     const disposeLspState = api.lsp.onState(onLspState);
     const disposeMenuCommand = api.menu.onCommand(onMenuCommand);
+    const disposeNotificationsHistory = api.notifications.onHistoryChanged(onNotificationsHistoryChanged);
     const onAuthStateChanged = vi.fn();
     const onAuthError = vi.fn();
     const onConfigChange = vi.fn();
@@ -286,6 +291,9 @@ describe('preload bridge', () => {
     expect(mockInvoke).toHaveBeenCalledWith('async:lsp:layout-close', 'layout-1');
     expect(mockInvoke).toHaveBeenCalledWith('async:lsp:get-debug-events');
     expect(mockInvoke).toHaveBeenCalledWith('async:notices:reveal-bundled-files');
+    expect(mockInvoke).toHaveBeenCalledWith('async:notifications:publish', { level: 'info', title: 'Info notification', body: 'hello' });
+    expect(mockInvoke).toHaveBeenCalledWith('async:notifications:dismiss', 'notification-1');
+    expect(mockInvoke).toHaveBeenCalledWith('async:notifications:get-history');
     expect(mockInvoke).toHaveBeenCalledWith('async:auth:open-account-page', 'login');
     expect(mockInvoke).toHaveBeenCalledWith('async:auth:get-session');
     expect(mockInvoke).toHaveBeenCalledWith('async:auth:sign-out');
@@ -305,6 +313,7 @@ describe('preload bridge', () => {
     expect(mockOn).toHaveBeenCalledWith('stream:lsp:diagnostics', expect.any(Function));
     expect(mockOn).toHaveBeenCalledWith('stream:lsp:state', expect.any(Function));
     expect(mockOn).toHaveBeenCalledWith('stream:menu:command', expect.any(Function));
+    expect(mockOn).toHaveBeenCalledWith('stream:notifications:history-changed', expect.any(Function));
     expect(mockOn).toHaveBeenCalledWith('stream:auth:state-changed', expect.any(Function));
     expect(mockOn).toHaveBeenCalledWith('stream:auth:error', expect.any(Function));
     expect(mockOn).toHaveBeenCalledWith('stream:config:changed', expect.any(Function));
@@ -328,6 +337,12 @@ describe('preload bridge', () => {
     const workspaceChangeHandler = mockOn.mock.calls.find((call) => call[0] === 'stream:workspace:change')?.[1];
     workspaceChangeHandler({}, { refreshGitStatus: true, refreshWorkspaceTree: true });
     expect(onWorkspaceChange).toHaveBeenCalledWith({ refreshGitStatus: true, refreshWorkspaceTree: true });
+
+    const notificationsHandler = mockOn.mock.calls.find((call) => call[0] === 'stream:notifications:history-changed')?.[1];
+    notificationsHandler({}, [{ id: 'notification-1', level: 'info', title: 'Info', body: '', createdAt: 1, expiresAt: 2 }]);
+    expect(onNotificationsHistoryChanged).toHaveBeenCalledWith([
+      { id: 'notification-1', level: 'info', title: 'Info', body: '', createdAt: 1, expiresAt: 2 },
+    ]);
 
     const stdoutHandler = mockOn.mock.calls.find((call) => call[0] === 'stream:shell:stdout')?.[1];
     stdoutHandler({}, { id: 'shell-1', data: 'ok' });
@@ -391,6 +406,7 @@ describe('preload bridge', () => {
     disposeLspDiagnostics();
     disposeLspState();
     disposeMenuCommand();
+    disposeNotificationsHistory();
     disposeAuthState();
     disposeAuthError();
     disposeConfigChange();

@@ -18,6 +18,9 @@ export const AsyncChannels = {
   AUTH_SIGN_OUT: 'async:auth:sign-out',
   AUTH_SYNC_CONFIG: 'async:auth:sync-config',
   NOTICES_REVEAL_BUNDLED_FILES: 'async:notices:reveal-bundled-files',
+  NOTIFICATIONS_DISMISS: 'async:notifications:dismiss',
+  NOTIFICATIONS_GET_HISTORY: 'async:notifications:get-history',
+  NOTIFICATIONS_PUBLISH: 'async:notifications:publish',
   DIALOG_SHOW_SAVE: 'async:dialog:show-save',
   DIALOG_SHOW_OPEN_THEME: 'async:dialog:show-open-theme',
   DIALOG_SHOW_OPEN_PROJECT_DIRECTORY: 'async:dialog:show-open-project-directory',
@@ -104,6 +107,7 @@ export const AsyncChannels = {
 export const StreamChannels = {
   AUTH_STATE_CHANGED: 'stream:auth:state-changed',
   AUTH_ERROR: 'stream:auth:error',
+  NOTIFICATIONS_HISTORY_CHANGED: 'stream:notifications:history-changed',
   CONFIG_CHANGED: 'stream:config:changed',
   WORKSPACE_CHANGE: 'stream:workspace:change',
   SHELL_STDOUT: 'stream:shell:stdout',

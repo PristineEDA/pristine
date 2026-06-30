@@ -31,6 +31,7 @@ interface ActivityBarProps {
   canConfigureProject?: boolean;
   onItemSelect: (view: string) => void;
   onProjectConfigure?: () => void;
+  onRunAction?: () => void;
 }
 
 const actionItems = [
@@ -137,6 +138,7 @@ export function ActivityBar({
   canConfigureProject = false,
   onItemSelect,
   onProjectConfigure,
+  onRunAction,
 }: ActivityBarProps) {
   const { state } = useSidebar();
   const { layoutMode } = useCodeViewerLayout();
@@ -176,6 +178,7 @@ export function ActivityBar({
         <SidebarMenu>
           {actionItems.map(({ id, icon: Icon, label }) => {
             const isConfigureAction = id === 'configure';
+            const handleActionClick = isConfigureAction ? onProjectConfigure : onRunAction;
             return (
             <SidebarMenuItem key={id}>
               <SidebarMenuButton
@@ -184,7 +187,7 @@ export function ActivityBar({
                 data-testid={`activity-action-${id}`}
                 disabled={isConfigureAction && !canConfigureProject}
                 className={`${actionButtonClassName} [&>svg]:size-[18px]`}
-                onClick={isConfigureAction ? onProjectConfigure : undefined}
+                onClick={handleActionClick}
               >
                 <Icon size={18} strokeWidth={1.7} />
                 {isExpanded ? <span className="text-sm font-medium">{label}</span> : null}

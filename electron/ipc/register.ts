@@ -11,6 +11,7 @@ import { registerConfigHandlers } from './config.js';
 import { registerPlatformHandler } from './platform.js';
 import { registerAuthHandlers } from './auth.js';
 import { registerNoticeHandlers } from './notices.js';
+import { registerNotificationHandlers } from './notifications.js';
 import { registerProjectHandlers } from './project.js';
 import type { WindowCloseDecision } from '../../src/app/window/windowClose.js';
 import type { FloatingInfoWindowMode } from '../../src/app/window/floatingInfoWindow.js';
@@ -50,6 +51,7 @@ export function registerAllHandlers(
   registerShellHandlers(getMainWindow);
   registerTerminalHandlers(getMainWindow);
   registerConfigHandlers();
+  registerNotificationHandlers(getMainWindow);
   registerProjectHandlers(getMainWindow, setProjectRoot, getProjectWindowState, applyProjectWindowState);
   registerAuthHandlers();
   registerNoticeHandlers();
