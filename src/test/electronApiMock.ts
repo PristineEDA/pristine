@@ -84,6 +84,7 @@ export function createElectronApiMock(): ElectronAPI {
     show: vi.fn(),
     hide: vi.fn(),
     close: vi.fn(),
+    markWorkspaceReady: vi.fn().mockResolvedValue(true),
     resolveCloseRequest: vi.fn(),
     setFloatingInfoWindowVisible: vi.fn(),
     setFloatingInfoWindowExpanded: vi.fn(),

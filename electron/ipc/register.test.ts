@@ -127,6 +127,9 @@ describe('register helpers', () => {
     const setFloatingInfoWindowExpanded = vi.fn(() => false);
     const setFloatingInfoWindowMode = vi.fn(() => false);
     const resolveCloseRequest = vi.fn(() => false);
+    const getProjectWindowState = vi.fn(() => null);
+    const applyProjectWindowState = vi.fn();
+    const markWorkspaceReady = vi.fn();
 
     registerAllHandlers(
       getMainWindow,
@@ -134,6 +137,9 @@ describe('register helpers', () => {
       setFloatingInfoWindowExpanded,
       setFloatingInfoWindowMode,
       resolveCloseRequest,
+      getProjectWindowState,
+      applyProjectWindowState,
+      markWorkspaceReady,
     );
 
     expect(mockRegisterPlatformHandler).toHaveBeenCalledTimes(1);
@@ -144,6 +150,7 @@ describe('register helpers', () => {
       setFloatingInfoWindowExpanded,
       setFloatingInfoWindowMode,
       resolveCloseRequest,
+      markWorkspaceReady,
     );
     expect(mockRegisterFilesystemHandlers).toHaveBeenCalledTimes(1);
     expect(mockRegisterGitHandlers).toHaveBeenCalledTimes(1);
@@ -157,8 +164,8 @@ describe('register helpers', () => {
     expect(mockRegisterProjectHandlers).toHaveBeenCalledWith(
       getMainWindow,
       expect.any(Function),
-      expect.any(Function),
-      expect.any(Function),
+      getProjectWindowState,
+      applyProjectWindowState,
     );
   });
 

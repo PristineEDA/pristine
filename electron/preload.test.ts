@@ -82,6 +82,7 @@ describe('preload bridge', () => {
     api.show();
     api.hide();
     api.close();
+    api.markWorkspaceReady();
     api.resolveCloseRequest(3, 'proceed');
     api.setFloatingInfoWindowVisible(true);
     api.setFloatingInfoWindowExpanded(true);
@@ -207,6 +208,7 @@ describe('preload bridge', () => {
     expect(mockInvoke).toHaveBeenCalledWith('async:window:show');
     expect(mockInvoke).toHaveBeenCalledWith('async:window:hide');
     expect(mockInvoke).toHaveBeenCalledWith('async:window:close');
+    expect(mockInvoke).toHaveBeenCalledWith('async:window:mark-workspace-ready');
     expect(mockInvoke).toHaveBeenCalledWith('async:window:resolve-close-request', 3, 'proceed');
     expect(mockInvoke).toHaveBeenCalledWith('async:window:set-floating-info-visibility', true);
     expect(mockInvoke).toHaveBeenCalledWith('async:window:set-floating-info-expanded', true);

@@ -781,7 +781,10 @@ function notifyAppWindowFocused(
   });
 }
 
-async function launchAppForSplashHandoff() {
+async function launchAppForSplashHandoff(options?: { projectRoot?: string | null }) {
+  const projectRootEnv = options?.projectRoot === null
+    ? undefined
+    : options?.projectRoot ?? fixtureWorkspace;
   const userDataPath = getE2EUserDataPath();
   prepareE2EUserDataPath(userDataPath);
 
@@ -790,7 +793,7 @@ async function launchAppForSplashHandoff() {
     env: {
       ...process.env,
       PRISTINE_E2E: '1',
-      PRISTINE_PROJECT_ROOT: fixtureWorkspace,
+      ...(projectRootEnv ? { PRISTINE_PROJECT_ROOT: projectRootEnv } : {}),
       PRISTINE_USER_DATA_PATH: userDataPath,
     },
   });
@@ -2172,6 +2175,77 @@ test('splash window hands off to the main window after the startup delay', async
   await expect(window.getByTestId('activity-item-explorer')).toBeVisible();
 
   await app.close();
+});
+
+test('restored maximized project keeps the splash visible until the startup delay', async () => {
+  test.slow();
+
+  const selectedProjectPath = test.info().outputPath('maximized-project-splash-root');
+  const projectName = `maximized_splash_${Date.now()}`;
+  const createdProjectPath = path.join(selectedProjectPath, projectName);
+  fs.mkdirSync(selectedProjectPath, { recursive: true });
+
+  const firstLaunch = await launchApp({ projectRoot: null });
+
+  try {
+    await clearRememberedCloseBehavior(firstLaunch.window);
+    await selectMenuBarItem(firstLaunch.window, 'File', 'New Project');
+    await firstLaunch.window.getByTestId('create-project-name').fill(projectName);
+    await setNextProjectDirectoryPath(firstLaunch.app, selectedProjectPath);
+    await firstLaunch.window.getByTestId('create-project-browse').click();
+    await firstLaunch.window.getByTestId('create-project-submit').click();
+
+    await expect.poll(() => fs.existsSync(path.join(createdProjectPath, '.pristine', 'project.sqlite')), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBe(true);
+    await expect(firstLaunch.window.getByTestId('file-tree-node-root')).toContainText(projectName);
+
+    const browserWindow = await firstLaunch.app.browserWindow(firstLaunch.window);
+    await browserWindow.evaluate((window) => {
+      window.maximize();
+    });
+    await expect.poll(async () => browserWindow.evaluate((window) => window.isMaximized())).toBe(true);
+
+    const closePromise = firstLaunch.window.waitForEvent('close');
+    await requestWindowClose(firstLaunch.window);
+    await closePromise;
+    await expect.poll(() => firstLaunch.app.windows().length).toBe(0);
+  } catch (error) {
+    await firstLaunch.app.close().catch(() => undefined);
+    throw error;
+  }
+
+  const launchStartedAt = Date.now();
+  const splashMidpointCheckMs = 2000;
+  const { app, windowPromise } = await launchAppForSplashHandoff({ projectRoot: null });
+
+  try {
+    await expect.poll(async () => isStartupBrowserWindowVisible(app, 'splash')).toBe(true);
+    await expect.poll(async () => isStartupBrowserWindowVisible(app, 'main')).toBe(false);
+
+    const elapsedBeforeMidpointCheck = Date.now() - launchStartedAt;
+    if (elapsedBeforeMidpointCheck < splashMidpointCheckMs) {
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, splashMidpointCheckMs - elapsedBeforeMidpointCheck + 50);
+      });
+
+      await expect.poll(async () => isStartupBrowserWindowVisible(app, 'splash')).toBe(true);
+      await expect.poll(async () => isStartupBrowserWindowVisible(app, 'main')).toBe(false);
+    }
+
+    await expect.poll(async () => isStartupBrowserWindowVisible(app, 'splash'), {
+      timeout: 60000,
+    }).toBe(false);
+    const window = await windowPromise;
+
+    expect(Date.now() - launchStartedAt).toBeGreaterThanOrEqual(3000);
+    await expect.poll(async () => isStartupBrowserWindowVisible(app, 'main')).toBe(true);
+    await expect(window.getByTestId('file-tree-node-root')).toContainText(projectName, {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+  } finally {
+    await app.close();
+  }
 });
 
 test('packaged Windows app keeps the splash handoff working during startup', async () => {

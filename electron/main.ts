@@ -23,6 +23,7 @@ import { handleAuthCallbackUrl, isAuthProtocolUrl } from './ipc/auth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MINIMUM_SPLASH_DURATION_MS = 3000;
+const WORKSPACE_READY_TIMEOUT_MS = 1500;
 const CLOSE_ACTION_CONFIG_KEY = 'window.closeActionPreference';
 const FLOATING_INFO_VISIBLE_CONFIG_KEY = 'ui.floatingInfoWindow.visible';
 const WORKBENCH_COLOR_THEME_KIND_CONFIG_KEY = 'workbench.colorThemeKind';
@@ -53,8 +54,22 @@ let nextWindowCloseRequestId = 1;
 let pendingWindowCloseRequest: WindowCloseRequest | null = null;
 let pendingAuthCallbackUrl: string | null = null;
 let pendingProjectWindowState: ProjectWindowState | null = null;
+let resolveWorkspaceReady: (() => void) | null = null;
+let workspaceReadyPromise: Promise<void> = Promise.resolve();
 
 app.setName(APP_DISPLAY_NAME);
+
+function resetWorkspaceReadyWait(): Promise<void> {
+  workspaceReadyPromise = new Promise((resolve) => {
+    resolveWorkspaceReady = resolve;
+  });
+  return workspaceReadyPromise;
+}
+
+function markWorkspaceReady(): void {
+  resolveWorkspaceReady?.();
+  resolveWorkspaceReady = null;
+}
 
 function configureElectronStoragePaths(): void {
   const isDev = Boolean(process.env['VITE_DEV_SERVER_URL']);
@@ -107,11 +122,17 @@ function applyProjectWindowState(windowState: ProjectWindowState | null | undefi
   if (bounds) {
     mainWindow.setBounds(bounds, false);
   }
+}
+
+function applyPendingProjectWindowVisibilityState(window: BrowserWindow): void {
+  if (!pendingProjectWindowState || mainWindow !== window || window.isDestroyed()) {
+    return;
+  }
 
   if (pendingProjectWindowState.maximized) {
-    mainWindow.maximize();
-  } else if (mainWindow.isMaximized()) {
-    mainWindow.unmaximize();
+    window.maximize();
+  } else if (window.isMaximized()) {
+    window.unmaximize();
   }
 
   pendingProjectWindowState = null;
@@ -703,9 +724,19 @@ function waitForMinimumSplashDuration(): Promise<void> {
   });
 }
 
+function waitForWorkspaceReady(): Promise<void> {
+  return Promise.race([
+    workspaceReadyPromise,
+    new Promise<void>((resolve) => {
+      setTimeout(resolve, WORKSPACE_READY_TIMEOUT_MS);
+    }),
+  ]);
+}
+
 function showMainWindowWhenReady(window: BrowserWindow, splash: BrowserWindow): void {
-  void Promise.all([waitForWindowReady(window), waitForMinimumSplashDuration()]).then(() => {
+  void Promise.all([waitForWindowReady(window), waitForMinimumSplashDuration(), waitForWorkspaceReady()]).then(() => {
     if (mainWindow === window) {
+      applyPendingProjectWindowVisibilityState(window);
       window.show();
     }
 
@@ -716,6 +747,7 @@ function showMainWindowWhenReady(window: BrowserWindow, splash: BrowserWindow): 
 }
 
 function createStartupWindows(): void {
+  resetWorkspaceReadyWait();
   const splash = createSplashWindow();
   const window = createMainWindow();
 
@@ -755,6 +787,7 @@ if (!singleInstanceLock) {
     resolveWindowCloseRequest,
     getProjectWindowState,
     applyProjectWindowState,
+    markWorkspaceReady,
   );
 
   app.whenReady().then(() => {

@@ -78,6 +78,7 @@ export interface ElectronAPI {
   show: () => Promise<void>;
   hide: () => Promise<void>;
   close: () => Promise<void>;
+  markWorkspaceReady: () => Promise<boolean>;
   resolveCloseRequest: (requestId: number, decision: WindowCloseDecision) => Promise<boolean>;
   setFloatingInfoWindowVisible: (visible: boolean) => Promise<boolean>;
   setFloatingInfoWindowExpanded: (expanded: boolean) => Promise<boolean>;

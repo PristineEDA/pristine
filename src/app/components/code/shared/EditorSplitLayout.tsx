@@ -195,6 +195,7 @@ const EditorGroupLeaf = memo(function EditorGroupLeaf({
   resolveFileId,
   workspaceActionsRef,
   hasOpenProject,
+  workspaceBootstrapStatus,
 }: {
   group: EditorGroup;
   focused: boolean;
@@ -216,6 +217,7 @@ const EditorGroupLeaf = memo(function EditorGroupLeaf({
   resolveFileId: (fileId: string) => string;
   workspaceActionsRef: React.MutableRefObject<EditorGroupWorkspaceActions>;
   hasOpenProject: boolean;
+  workspaceBootstrapStatus: 'bootstrapping' | 'ready';
 }) {
   const editorRef = useRef<any>(null);
   const activeTab = group.tabs.find((tab) => tab.id === group.activeTabId);
@@ -296,6 +298,7 @@ const EditorGroupLeaf = memo(function EditorGroupLeaf({
         tabs={group.tabs}
         activeTabId={group.activeTabId}
         hasOpenProject={hasOpenProject}
+        workspaceBootstrapStatus={workspaceBootstrapStatus}
         documentTabId={activeDocumentId}
         onTabChange={(tabId) => {
           const nextTab = group.tabs.find((tab) => tab.id === tabId);
@@ -357,10 +360,12 @@ const EditorGroupLeaf = memo(function EditorGroupLeaf({
 
 export function EditorSplitLayout({
   hasOpenProject = true,
+  workspaceBootstrapStatus = 'ready',
   jumpToLine,
   onActiveFileReveal,
 }: {
   hasOpenProject?: boolean;
+  workspaceBootstrapStatus?: 'bootstrapping' | 'ready';
   jumpToLine?: number;
   onActiveFileReveal?: (fileId: string) => void;
 }) {
@@ -485,6 +490,7 @@ export function EditorSplitLayout({
           tabs={[]}
           activeTabId=""
           hasOpenProject={hasOpenProject}
+          workspaceBootstrapStatus={workspaceBootstrapStatus}
           onTabChange={() => undefined}
           onTabClose={() => undefined}
           editorRef={{ current: null }}
@@ -521,6 +527,7 @@ export function EditorSplitLayout({
           resolveFileId={resolveFileId}
           workspaceActionsRef={workspaceActionsRef}
           hasOpenProject={hasOpenProject}
+          workspaceBootstrapStatus={workspaceBootstrapStatus}
         />
       );
     }

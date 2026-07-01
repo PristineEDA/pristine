@@ -97,6 +97,7 @@ const electronAPI = {
   show: () => ipcRenderer.invoke(AsyncChannels.WINDOW_SHOW),
   hide: () => ipcRenderer.invoke(AsyncChannels.WINDOW_HIDE),
   close: () => ipcRenderer.invoke(AsyncChannels.WINDOW_CLOSE),
+  markWorkspaceReady: () => ipcRenderer.invoke(AsyncChannels.WINDOW_MARK_WORKSPACE_READY) as Promise<boolean>,
   resolveCloseRequest: (requestId: number, decision: WindowCloseDecision) =>
     ipcRenderer.invoke(AsyncChannels.WINDOW_RESOLVE_CLOSE_REQUEST, requestId, decision) as Promise<boolean>,
   setFloatingInfoWindowVisible: (visible: boolean) =>

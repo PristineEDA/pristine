@@ -35,6 +35,7 @@ export function registerAllHandlers(
   resolveCloseRequest: (requestId: number, decision: WindowCloseDecision) => boolean = () => false,
   getProjectWindowState: () => ProjectWindowState | null = () => null,
   applyProjectWindowState: (windowState: ProjectWindowState | null | undefined) => void = () => undefined,
+  markWorkspaceReady: () => void = () => undefined,
 ): void {
   registerPlatformHandler();
   registerDialogHandlers(getMainWindow);
@@ -44,6 +45,7 @@ export function registerAllHandlers(
     setFloatingInfoWindowExpanded,
     setFloatingInfoWindowMode,
     resolveCloseRequest,
+    markWorkspaceReady,
   );
   registerFilesystemHandlers();
   registerGitHandlers(getMainWindow);

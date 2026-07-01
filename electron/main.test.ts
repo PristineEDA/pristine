@@ -363,6 +363,7 @@ async function importMain(options?: {
     setFloatingInfoExpanded: mocks.mockRegisterAllHandlers.mock.calls[0]?.[2] as ((expanded: boolean) => boolean) | undefined,
     setFloatingInfoMode: mocks.mockRegisterAllHandlers.mock.calls[0]?.[3] as ((mode: 'collapsed' | 'expanded' | 'detail') => boolean) | undefined,
     resolveCloseRequest: mocks.mockRegisterAllHandlers.mock.calls[0]?.[4] as ((requestId: number, decision: 'proceed' | 'cancel') => boolean) | undefined,
+    markWorkspaceReady: mocks.mockRegisterAllHandlers.mock.calls[0]?.[5] as (() => void) | undefined,
   };
 }
 
@@ -531,7 +532,62 @@ describe('electron main entry', () => {
     expect(mocks.mockSetProjectRoot).toHaveBeenCalledWith(configuredRoot);
     const mainWindow = browserWindowInstances[1];
     expect(mainWindow.setBounds).toHaveBeenCalledWith({ height: 720, width: 1280, x: 44, y: 55 }, false);
+    expect(mainWindow.maximize).not.toHaveBeenCalled();
+    expect(mainWindow.show).not.toHaveBeenCalled();
+  });
+
+  it('shows the startup window after renderer workspace readiness and the minimum splash duration', async () => {
+    const { browserWindowInstances, markWorkspaceReady } = await importMain({
+      platform: 'win32',
+      devServerUrl: 'http://127.0.0.1:5173',
+    });
+    const splashWindow = browserWindowInstances[0];
+    const mainWindow = browserWindowInstances[1];
+
+    mainWindow.emit('ready-to-show');
+    await vi.advanceTimersByTimeAsync(1000);
+    markWorkspaceReady?.();
+    await Promise.resolve();
+
+    expect(mainWindow.show).not.toHaveBeenCalled();
+    expect(splashWindow.close).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(2000);
+    await Promise.resolve();
+
+    expect(mainWindow.show).toHaveBeenCalledTimes(1);
+    expect(splashWindow.close).toHaveBeenCalledTimes(1);
+  });
+
+  it('defers restored maximized project window state until the splash handoff is ready', async () => {
+    const { browserWindowInstances, markWorkspaceReady } = await importMain({
+      configValues: {
+        'project.lastProjectRoot': 'C:\\Projects\\chip-lab',
+      },
+      platform: 'win32',
+      devServerUrl: 'http://127.0.0.1:5173',
+    });
+    const splashWindow = browserWindowInstances[0];
+    const mainWindow = browserWindowInstances[1];
+
+    expect(mainWindow.setBounds).toHaveBeenCalledWith({ height: 720, width: 1280, x: 44, y: 55 }, false);
+    expect(mainWindow.maximize).not.toHaveBeenCalled();
+    expect(mainWindow.show).not.toHaveBeenCalled();
+
+    mainWindow.emit('ready-to-show');
+    await vi.advanceTimersByTimeAsync(1000);
+    markWorkspaceReady?.();
+    await Promise.resolve();
+
+    expect(mainWindow.maximize).not.toHaveBeenCalled();
+    expect(mainWindow.show).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(2000);
+    await Promise.resolve();
+
     expect(mainWindow.maximize).toHaveBeenCalledTimes(1);
+    expect(mainWindow.show).toHaveBeenCalledTimes(1);
+    expect(splashWindow.close).toHaveBeenCalledTimes(1);
   });
 
   it('prefers the project root env override over the configured last project root', async () => {

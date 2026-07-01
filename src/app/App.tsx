@@ -140,6 +140,7 @@ function AppLayout() {
     showLeftPanel, setShowLeftPanel,
     showBottomPanel, setShowBottomPanel,
     showRightPanel, setShowRightPanel,
+    workspaceBootstrapStatus,
     workspaceTreeRefreshToken,
   } = useWorkspaceView();
   const {
@@ -748,6 +749,7 @@ function AppLayout() {
       topContent: (
         <EditorSplitLayout
           hasOpenProject={hasOpenProject}
+          workspaceBootstrapStatus={workspaceBootstrapStatus}
           jumpToLine={jumpToLine}
           onActiveFileReveal={handleEditorActiveFileReveal}
         />

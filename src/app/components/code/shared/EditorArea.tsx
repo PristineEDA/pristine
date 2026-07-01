@@ -70,6 +70,7 @@ interface EditorAreaProps {
   tabs: EditorAreaTab[];
   activeTabId: string;
   hasOpenProject?: boolean;
+  workspaceBootstrapStatus?: 'bootstrapping' | 'ready';
   documentTabId?: string;
   onTabChange: (id: string) => void;
   onTabClose: (id: string) => void;
@@ -302,6 +303,7 @@ export function EditorArea({
   tabs,
   activeTabId,
   hasOpenProject = true,
+  workspaceBootstrapStatus = 'ready',
   documentTabId,
   onTabChange,
   onTabClose,
@@ -513,6 +515,20 @@ export function EditorArea({
   }, []);
 
   if (tabs.length === 0) {
+    if (workspaceBootstrapStatus === 'bootstrapping') {
+      return (
+        <div
+          data-testid="editor-workspace-restoring"
+          className="flex h-full w-full items-center justify-center bg-ide-editor-bg text-center text-ide-text-muted"
+        >
+          <div>
+            <p className="text-[14px] font-medium text-ide-text-muted">Restoring workspace...</p>
+            <p className="mt-1 text-[12px]">Preparing the last project session.</p>
+          </div>
+        </div>
+      );
+    }
+
     if (!hasOpenProject) {
       return (
         <EmptyProject />

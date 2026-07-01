@@ -43,6 +43,7 @@ function WorkspaceHarness() {
       <div data-testid="clipboard-path">{workspace.workspaceClipboard?.sourcePath ?? ''}</div>
       <div data-testid="workspace-tree-refresh-token">{workspace.workspaceTreeRefreshToken}</div>
       <div data-testid="current-project-name">{workspace.currentProject?.name ?? ''}</div>
+      <div data-testid="workspace-bootstrap-status">{workspace.workspaceBootstrapStatus}</div>
       <div data-testid="panel-widths">{JSON.stringify(workspace.projectPanelWidths)}</div>
 
       <button onClick={() => workspace.setActiveView('simulation')}>set-view</button>
@@ -739,6 +740,61 @@ describe('WorkspaceContext', () => {
         { content: { kind: 'tab', tab: 'terminal' }, id: 'bottom-pane-1', size: 40 },
         { content: { kind: 'placeholder', icon: 'file', label: 'Placeholder A' }, id: 'bottom-pane-2', size: 60 },
       ],
+    });
+  });
+
+  it('marks the workspace ready after initial project bootstrap completes without a project', async () => {
+    vi.mocked(window.electronAPI!.project.getCurrentProject).mockResolvedValueOnce(null);
+
+    render(
+      <WorkspaceProvider>
+        <WorkspaceHarness />
+      </WorkspaceProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('workspace-bootstrap-status')).toHaveTextContent('ready');
+      expect(window.electronAPI!.markWorkspaceReady).toHaveBeenCalledTimes(1);
+    });
+    expect(screen.getByTestId('current-project-name')).toHaveTextContent('');
+  });
+
+  it('hydrates the initial project session before marking the workspace ready', async () => {
+    vi.mocked(window.electronAPI!.project.getCurrentProject).mockResolvedValueOnce(createProjectState({
+      session: {
+        activeTabId: '',
+        activeView: 'physical',
+        editorGroups: [],
+        editorLayout: null,
+        focusedGroupId: null,
+        mainContentView: 'code',
+        panelStateByView: {
+          ...useWorkspaceSessionStore.getState().panelStateByView,
+          physical: {
+            showLeftPanel: true,
+            showBottomPanel: false,
+            showRightPanel: true,
+          },
+        },
+        panelWidths: {
+          physicalLeftPanel: 340,
+        },
+        version: 1,
+      },
+    }));
+
+    render(
+      <WorkspaceProvider>
+        <WorkspaceHarness />
+      </WorkspaceProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('workspace-bootstrap-status')).toHaveTextContent('ready');
+      expect(screen.getByTestId('current-project-name')).toHaveTextContent('chip_lab');
+      expect(screen.getByTestId('active-view')).toHaveTextContent('physical');
+      expect(screen.getByTestId('panel-widths')).toHaveTextContent('"physicalLeftPanel":340');
+      expect(window.electronAPI!.markWorkspaceReady).toHaveBeenCalledTimes(1);
     });
   });
 

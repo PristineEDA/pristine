@@ -230,6 +230,24 @@ describe('EditorArea', () => {
     expect(screen.queryByTestId('monaco-editor')).not.toBeInTheDocument();
   });
 
+  it('renders a restoring workspace placeholder while bootstrap is pending', () => {
+    render(
+      <EditorArea
+        tabs={[]}
+        activeTabId=""
+        onTabChange={vi.fn()}
+        onTabClose={vi.fn()}
+        editorRef={createRef()}
+        hasOpenProject={false}
+        workspaceBootstrapStatus="bootstrapping"
+      />,
+    );
+
+    expect(screen.getByTestId('editor-workspace-restoring')).toHaveTextContent('Restoring workspace...');
+    expect(screen.queryByText('No Projects Yet')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('monaco-editor')).not.toBeInTheDocument();
+  });
+
   it('switches tabs and closes a tab through the tab strip', () => {
     const onTabChange = vi.fn();
     const onTabClose = vi.fn();

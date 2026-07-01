@@ -88,6 +88,7 @@ interface WorkspacePasteResult {
 interface WorkspaceState {
   currentProject: ProjectState | null;
   hasOpenProject: boolean;
+  workspaceBootstrapStatus: 'bootstrapping' | 'ready';
   captureProjectSessionSnapshot: () => ProjectSessionSnapshot;
   flushProjectSession: () => Promise<void>;
   openProject: () => Promise<void>;
@@ -192,6 +193,7 @@ type WorkspaceViewState = Pick<
   WorkspaceState,
   | 'currentProject'
   | 'hasOpenProject'
+  | 'workspaceBootstrapStatus'
   | 'activeView'
   | 'setActiveView'
   | 'mainContentView'
@@ -210,6 +212,7 @@ type WorkspaceProjectState = Pick<
   WorkspaceState,
   | 'currentProject'
   | 'hasOpenProject'
+  | 'workspaceBootstrapStatus'
   | 'captureProjectSessionSnapshot'
   | 'flushProjectSession'
   | 'openProject'
@@ -582,6 +585,8 @@ export function useWorkspaceDialogs(): WorkspaceDialogState {
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const currentProject = useWorkspaceSessionStore((state) => state.currentProject);
   const setCurrentProject = useWorkspaceSessionStore((state) => state.setCurrentProject);
+  const workspaceBootstrapStatus = useWorkspaceSessionStore((state) => state.workspaceBootstrapStatus);
+  const setWorkspaceBootstrapStatus = useWorkspaceSessionStore((state) => state.setWorkspaceBootstrapStatus);
   const activeView = useWorkspaceSessionStore((state) => state.activeView);
   const setActiveView = useWorkspaceSessionStore((state) => state.setActiveView);
   const mainContentView = useWorkspaceSessionStore((state) => state.mainContentView);
@@ -739,9 +744,15 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const projectApi = typeof window === 'undefined' ? undefined : window.electronAPI?.project;
+    const markBootstrapReady = () => {
+      setWorkspaceBootstrapStatus('ready');
+      void window.electronAPI?.markWorkspaceReady?.();
+    };
+
     if (!projectApi) {
       hydrateProjectSession(null);
       setCurrentProject(null);
+      markBootstrapReady();
       return undefined;
     }
 
@@ -757,6 +768,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         bumpWorkspaceTreeRefreshToken();
       }
       refreshWorkspaceGitStatus();
+      markBootstrapReady();
     }).catch(() => {
       if (disposed) {
         return;
@@ -764,6 +776,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
       setCurrentProject(null);
       hydrateProjectSession(null);
+      markBootstrapReady();
     });
 
     const disposeProjectChanged = projectApi.onProjectChanged((project) => {
@@ -777,7 +790,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       disposed = true;
       disposeProjectChanged?.();
     };
-  }, [bumpWorkspaceTreeRefreshToken, hydrateProjectSession]);
+  }, [bumpWorkspaceTreeRefreshToken, hydrateProjectSession, setCurrentProject, setWorkspaceBootstrapStatus]);
 
   useEffect(() => {
     const electronApi = typeof window === 'undefined' ? undefined : window.electronAPI;
@@ -1661,6 +1674,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const workspaceValue = useMemo<WorkspaceState>(() => ({
     currentProject,
     hasOpenProject: Boolean(currentProject),
+    workspaceBootstrapStatus,
     captureProjectSessionSnapshot,
     flushProjectSession,
     openProject,
@@ -1833,11 +1847,13 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     workspaceTreeRefreshToken,
     flushProjectSession,
     projectPanelWidths,
+    workspaceBootstrapStatus,
   ]);
 
   const workspaceViewValue = useMemo<WorkspaceViewState>(() => ({
     currentProject: workspaceValue.currentProject,
     hasOpenProject: workspaceValue.hasOpenProject,
+    workspaceBootstrapStatus: workspaceValue.workspaceBootstrapStatus,
     activeView: workspaceValue.activeView,
     setActiveView: workspaceValue.setActiveView,
     mainContentView: workspaceValue.mainContentView,
@@ -1855,6 +1871,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     workspaceValue.canToggleLayoutPanels,
     workspaceValue.currentProject,
     workspaceValue.hasOpenProject,
+    workspaceValue.workspaceBootstrapStatus,
     workspaceValue.mainContentView,
     workspaceValue.setActiveView,
     workspaceValue.setMainContentView,
@@ -1870,6 +1887,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const workspaceProjectValue = useMemo<WorkspaceProjectState>(() => ({
     currentProject: workspaceValue.currentProject,
     hasOpenProject: workspaceValue.hasOpenProject,
+    workspaceBootstrapStatus: workspaceValue.workspaceBootstrapStatus,
     captureProjectSessionSnapshot: workspaceValue.captureProjectSessionSnapshot,
     flushProjectSession: workspaceValue.flushProjectSession,
     openProject: workspaceValue.openProject,
@@ -1882,6 +1900,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     workspaceValue.currentProject,
     workspaceValue.flushProjectSession,
     workspaceValue.hasOpenProject,
+    workspaceValue.workspaceBootstrapStatus,
     workspaceValue.openProject,
     workspaceValue.projectPanelWidths,
     workspaceValue.setProjectPanelWidth,
