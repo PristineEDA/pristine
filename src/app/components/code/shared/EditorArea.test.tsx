@@ -206,6 +206,9 @@ describe('EditorArea', () => {
   });
 
   it('renders the empty state when no tabs are open', () => {
+    const handleCreateProject = vi.fn();
+    const handleOpenProject = vi.fn();
+
     render(
       <EditorArea
         tabs={[]}
@@ -214,6 +217,8 @@ describe('EditorArea', () => {
         onTabClose={vi.fn()}
         editorRef={createRef()}
         hasOpenProject={false}
+        onCreateProject={handleCreateProject}
+        onOpenProject={handleOpenProject}
       />,
     );
 
@@ -228,6 +233,12 @@ describe('EditorArea', () => {
     expect(screen.getByRole('button', { name: 'Create Project' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Open Project' })).toBeInTheDocument();
     expect(screen.queryByTestId('monaco-editor')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('empty-project-create-project'));
+    fireEvent.click(screen.getByTestId('empty-project-open-project'));
+
+    expect(handleCreateProject).toHaveBeenCalledTimes(1);
+    expect(handleOpenProject).toHaveBeenCalledTimes(1);
   });
 
   it('renders a restoring workspace placeholder while bootstrap is pending', () => {

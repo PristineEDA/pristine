@@ -93,6 +93,8 @@ interface EditorAreaProps {
   onNewShortcut?: () => void;
   onCloseShortcut?: () => void;
   onSaveShortcut?: () => void;
+  onCreateProject?: () => void;
+  onOpenProject?: () => void;
   onContentChange?: (fileId: string, content: string) => void;
   onEditorMount?: (editor: any) => void;
   onNavigateToLocation?: (fileId: string, line: number, col: number) => void;
@@ -328,6 +330,8 @@ export function EditorArea({
   onNewShortcut,
   onCloseShortcut,
   onSaveShortcut,
+  onCreateProject,
+  onOpenProject,
   onContentChange,
   onEditorMount,
   onNavigateToLocation,
@@ -533,7 +537,7 @@ export function EditorArea({
 
     if (!hasOpenProject) {
       return (
-        <EmptyProject />
+        <EmptyProject onCreateProject={onCreateProject} onOpenProject={onOpenProject} />
       );
     }
 

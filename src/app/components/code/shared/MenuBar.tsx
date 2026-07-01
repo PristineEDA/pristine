@@ -21,6 +21,7 @@ import { MenuBarSettingsDialogs, useMenuBarSettingsController } from './MenuBarS
 import { UserAccountPopover } from './MenuBarUserAccountPopover';
 import { MenuBarViewSwitcher } from './MenuBarViewSwitcher';
 import { MenuBarWindowControls } from './MenuBarWindowControls';
+import { useProjectDialogStore } from './useProjectDialogStore';
 
 const noDrag = { WebkitAppRegion: 'no-drag' as const };
 const noDragInteractive = {
@@ -153,7 +154,9 @@ export function MenuBar({
   const { state: activityBarState, toggleSidebar } = useSidebar();
   const ref = useRef<HTMLDivElement>(null);
   const [aboutDialogOpen, setAboutDialogOpen] = useState(false);
-  const [createProjectDialogOpen, setCreateProjectDialogOpen] = useState(false);
+  const createProjectDialogOpen = useProjectDialogStore((state) => state.createProjectDialogOpen);
+  const openCreateProjectDialog = useProjectDialogStore((state) => state.openCreateProjectDialog);
+  const setCreateProjectDialogOpen = useProjectDialogStore((state) => state.setCreateProjectDialogOpen);
   const layoutIconsEnabled = canUseLayoutPanels(mainContentView, activeView);
   const activityBarToggleEnabled = mainContentView === 'code';
   const isMinimalLayout = layoutMode === 'minimal';
@@ -184,10 +187,6 @@ export function MenuBar({
   ].join(' ');
   const openAboutDialog = () => {
     setAboutDialogOpen(true);
-  };
-
-  const openCreateProjectDialog = () => {
-    setCreateProjectDialogOpen(true);
   };
 
   const openProjectDialog = () => {

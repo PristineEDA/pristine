@@ -9,7 +9,8 @@ import {
 } from 'react';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '../../ui/resizable';
 import { EditorArea } from './EditorArea';
-import { useWorkspaceEditor, useWorkspaceFiles } from '../../../context/WorkspaceContext';
+import { useWorkspaceEditor, useWorkspaceFiles, useWorkspaceProject } from '../../../context/WorkspaceContext';
+import { useProjectDialogStore } from './useProjectDialogStore';
 import {
   getEditorTabDocumentId,
   getEditorTabSourceFileId,
@@ -196,6 +197,8 @@ const EditorGroupLeaf = memo(function EditorGroupLeaf({
   workspaceActionsRef,
   hasOpenProject,
   workspaceBootstrapStatus,
+  onCreateProject,
+  onOpenProject,
 }: {
   group: EditorGroup;
   focused: boolean;
@@ -218,6 +221,8 @@ const EditorGroupLeaf = memo(function EditorGroupLeaf({
   workspaceActionsRef: React.MutableRefObject<EditorGroupWorkspaceActions>;
   hasOpenProject: boolean;
   workspaceBootstrapStatus: 'bootstrapping' | 'ready';
+  onCreateProject?: () => void;
+  onOpenProject?: () => void;
 }) {
   const editorRef = useRef<any>(null);
   const activeTab = group.tabs.find((tab) => tab.id === group.activeTabId);
@@ -299,6 +304,8 @@ const EditorGroupLeaf = memo(function EditorGroupLeaf({
         activeTabId={group.activeTabId}
         hasOpenProject={hasOpenProject}
         workspaceBootstrapStatus={workspaceBootstrapStatus}
+        onCreateProject={onCreateProject}
+        onOpenProject={onOpenProject}
         documentTabId={activeDocumentId}
         onTabChange={(tabId) => {
           const nextTab = group.tabs.find((tab) => tab.id === tabId);
@@ -399,6 +406,14 @@ export function EditorSplitLayout({
     saveActiveFile,
     updateFileContentInGroup,
   } = useWorkspaceFiles();
+  const { openProject } = useWorkspaceProject();
+  const openCreateProjectDialog = useProjectDialogStore((state) => state.openCreateProjectDialog);
+  const handleCreateProject = useCallback(() => {
+    openCreateProjectDialog();
+  }, [openCreateProjectDialog]);
+  const handleOpenProject = useCallback(() => {
+    void openProject();
+  }, [openProject]);
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [dropTarget, setDropTarget] = useState<DropTargetState | null>(null);
   const moveTabRef = useRef(moveTab);
@@ -491,6 +506,8 @@ export function EditorSplitLayout({
           activeTabId=""
           hasOpenProject={hasOpenProject}
           workspaceBootstrapStatus={workspaceBootstrapStatus}
+          onCreateProject={handleCreateProject}
+          onOpenProject={handleOpenProject}
           onTabChange={() => undefined}
           onTabClose={() => undefined}
           editorRef={{ current: null }}
@@ -525,10 +542,12 @@ export function EditorSplitLayout({
           dragState={dragState}
           onActiveFileReveal={onActiveFileReveal}
           resolveFileId={resolveFileId}
-          workspaceActionsRef={workspaceActionsRef}
-          hasOpenProject={hasOpenProject}
-          workspaceBootstrapStatus={workspaceBootstrapStatus}
-        />
+            workspaceActionsRef={workspaceActionsRef}
+            hasOpenProject={hasOpenProject}
+            workspaceBootstrapStatus={workspaceBootstrapStatus}
+            onCreateProject={handleCreateProject}
+            onOpenProject={handleOpenProject}
+          />
       );
     }
 

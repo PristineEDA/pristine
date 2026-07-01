@@ -701,6 +701,16 @@ async function setNextProjectDirectoryPath(
   }, directoryPath);
 }
 
+async function setNextOpenProjectPath(
+  app: Awaited<ReturnType<typeof electron.launch>>,
+  projectPath: string,
+) {
+  await app.evaluate(({ app: electronApp }, nextProjectPath) => {
+    void electronApp;
+    process.env['PRISTINE_E2E_OPEN_PROJECT_PATH'] = nextProjectPath;
+  }, projectPath);
+}
+
 function createWorkspaceCopy(targetPath: string) {
   fs.rmSync(targetPath, { recursive: true, force: true });
   fs.cpSync(fixtureWorkspace, targetPath, { recursive: true });
@@ -3770,6 +3780,46 @@ test('New Project opens from File menu and Ctrl+Shift+N with project defaults', 
     await expect(window.getByTestId('file-tree-node-root')).toContainText(projectName);
     await expect(window.getByTestId('editor-empty-open-project')).toBeVisible();
     await expect(window.getByTestId('activity-action-configure')).toBeEnabled();
+  } finally {
+    await app.close();
+  }
+});
+
+test('empty project actions create and open projects through shared project flows', async () => {
+  const selectedProjectPath = test.info().outputPath('empty-project-actions-root');
+  const projectName = `empty_actions_${Date.now()}`;
+  const createdProjectPath = path.join(selectedProjectPath, projectName);
+  fs.mkdirSync(selectedProjectPath, { recursive: true });
+
+  const { app, window } = await launchApp({ projectRoot: null });
+
+  try {
+    await expect(window.getByText('No Projects Yet')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+    await window.getByTestId('empty-project-create-project').click();
+    await expect(window.getByTestId('create-project-dialog')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+
+    await window.getByTestId('create-project-name').fill(projectName);
+    await setNextProjectDirectoryPath(app, selectedProjectPath);
+    await window.getByTestId('create-project-browse').click();
+    await window.getByTestId('create-project-submit').click();
+
+    await expect(window.getByTestId('create-project-dialog')).toHaveCount(0, { timeout: UI_READY_TIMEOUT_MS });
+    await expect.poll(() => fs.existsSync(path.join(createdProjectPath, '.pristine', 'project.sqlite')), {
+      timeout: UI_READY_TIMEOUT_MS,
+    }).toBe(true);
+    await expect(window.getByTestId('file-tree-node-root')).toContainText(projectName);
+
+    await selectMenuBarItem(window, 'File', 'Close Project');
+    await expect(window.getByText('No Projects Yet')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+    await expect(window.getByTestId('file-tree-node-root')).toHaveCount(0);
+
+    await setNextOpenProjectPath(app, createdProjectPath);
+    await window.getByTestId('empty-project-open-project').click();
+
+    await expect(window.getByTestId('file-tree-node-root')).toContainText(projectName, {
+      timeout: UI_READY_TIMEOUT_MS,
+    });
+    await expect(window.getByText('No Projects Yet')).toHaveCount(0);
   } finally {
     await app.close();
   }

@@ -9,6 +9,7 @@ import { CodeViewerLayoutProvider, type CodeViewerLayoutMode } from '../../../co
 import type { ColorThemeOption, ColorThemePreviewPalette, ResolvedColorTheme } from '../../../theme/colorThemeTypes';
 import { SidebarProvider, useSidebar } from '../../ui/sidebar';
 import { resetMenuChromeStoreForTests } from './useMenuChromeStore';
+import { resetProjectDialogStoreForTests } from './useProjectDialogStore';
 import { resetSettingsDialogSessionForTests } from './useSettingsDialogSessionStore';
 
 export const ensureEditorFontFamilyLoadedMock = vi.fn<(fontFamily: string) => Promise<void>>(() => Promise.resolve());
@@ -924,6 +925,7 @@ function resetElectronApiMocks() {
 
 beforeEach(() => {
   resetMenuChromeStoreForTests();
+  resetProjectDialogStoreForTests();
   resetSettingsDialogSessionForTests();
   resetWorkspaceSessionStoreForTests();
   resetContextMockState();
