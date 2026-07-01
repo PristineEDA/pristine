@@ -7,6 +7,7 @@ import {
   createWorkspaceNode,
   sortDirectoryEntries,
 } from './workspaceFiles';
+import { useLazyRef } from '@/hooks/use-lazy-ref';
 import { useExplorerTreeSessionStore } from './useExplorerTreeSessionStore';
 
 const HIDDEN_ROOT_DIRECTORY_NAMES = new Set(['.pristine', '.prstine']);
@@ -114,7 +115,7 @@ export function useWorkspaceTree(
   const expandedFolders = useMemo(() => new Set(expandedFolderPaths), [expandedFolderPaths]);
   const rootNodeRef = useRef<WorkspaceTreeNode | null>(null);
   const workspaceAvailableRef = useRef<boolean | null>(null);
-  const expandedFoldersRef = useRef<Set<string>>(new Set([WORKSPACE_ROOT_PATH]));
+  const expandedFoldersRef = useLazyRef(() => new Set([WORKSPACE_ROOT_PATH]));
 
   rootNodeRef.current = rootNode;
   workspaceAvailableRef.current = workspaceAvailable;

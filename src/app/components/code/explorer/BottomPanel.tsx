@@ -1,4 +1,4 @@
-import { Fragment, Suspense, lazy, useCallback, useMemo, useRef, type ReactNode } from 'react';
+import { Fragment, Suspense, lazy, useCallback, useMemo, type ReactNode } from 'react';
 import {
   Terminal, X, Plus,
   AlertCircle, AlertTriangle, Info, Lightbulb,
@@ -24,6 +24,7 @@ import {
   IconTabToggleGroup,
   type IconTabToggleGroupItem,
 } from '../shared/IconTabToggleGroup';
+import { useLazyRef } from '@/hooks/use-lazy-ref';
 import { useCodeViewerLayout } from '../../../context/CodeViewerLayoutContext';
 import { getBottomPanelClassName, getBottomPanelTabBarClassName } from '../shared/codeViewerLayoutStyles';
 import {
@@ -71,7 +72,7 @@ export function BottomPanel({ isMaximized = false, layoutVersion, onClose, onMax
   const setPaneSize = useBottomPanelStore((state) => state.setPaneSize);
   const splitFocusedPane = useBottomPanelStore((state) => state.splitFocusedPane);
   const updatePaneContent = useBottomPanelStore((state) => state.updatePaneContent);
-  const paneRefs = useRef(new Map<string, HTMLDivElement>());
+  const paneRefs = useLazyRef(() => new Map<string, HTMLDivElement>());
   const problemsList = useLspProblems();
   const problemCounts = useMemo(() => summarizeLspProblems(problemsList), [problemsList]);
   const maximizeLabel = isMaximized ? 'Restore Panel' : 'Maximize Panel';

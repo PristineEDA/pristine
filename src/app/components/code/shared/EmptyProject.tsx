@@ -42,7 +42,7 @@ function InfoContent() {
         className="text-ide-text-muted"
         size="sm"
       >
-        <a href="#">
+        <a href="https://github.com/maksyuki/pristine" target="_blank" rel="noreferrer">
           Learn More <ArrowUpRightIcon />
         </a>
       </Button>

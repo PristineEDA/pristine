@@ -214,6 +214,7 @@ function EditorTab({
             className="fill-ide-text text-ide-text shrink-0 transition-opacity group-hover:opacity-0"
           />
           <button
+            type="button"
             data-testid={`editor-tab-close-${tab.id}`}
             className="absolute inset-0 flex items-center justify-center rounded opacity-0 transition-opacity group-hover:opacity-100 hover:bg-ide-border"
             onClick={(e) => { e.stopPropagation(); onClose(); }}
@@ -227,6 +228,7 @@ function EditorTab({
       )}
       {!tab.modified && (
         <button
+          type="button"
           data-testid={`editor-tab-close-${tab.id}`}
           className={`shrink-0 p-0.5 rounded hover:bg-ide-border transition-opacity ${trailingControlClassName}`}
           onClick={(e) => { e.stopPropagation(); onClose(); }}
@@ -569,6 +571,7 @@ export function EditorArea({
         <div className="flex-1" />
         <TooltipIconButton content="Split Editor Right">
           <button
+            type="button"
             data-testid="editor-split-right"
             aria-label="Split Editor Right"
             onClick={() => onSplitEditor?.('horizontal')}
@@ -579,6 +582,7 @@ export function EditorArea({
         </TooltipIconButton>
         <TooltipIconButton content="Split Editor Down">
           <button
+            type="button"
             data-testid="editor-split-down"
             aria-label="Split Editor Down"
             onClick={() => onSplitEditor?.('vertical')}
@@ -587,7 +591,7 @@ export function EditorArea({
             <Split size={14} className="rotate-90" />
           </button>
         </TooltipIconButton>
-        <button className="px-2 text-ide-text-muted hover:text-ide-text transition-colors shrink-0 cursor-pointer">
+        <button type="button" className="px-2 text-ide-text-muted hover:text-ide-text transition-colors shrink-0 cursor-pointer">
           <MoreHorizontal size={14} />
         </button>
       </div>

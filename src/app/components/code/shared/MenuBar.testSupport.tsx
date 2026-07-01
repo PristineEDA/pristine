@@ -1112,17 +1112,17 @@ function WorkspaceControls() {
 
   return (
     <div>
-      <button onClick={() => setActiveView('simulation')}>set-simulation</button>
-      <button onClick={() => setActiveView('synthesis')}>set-synthesis</button>
-      <button onClick={() => setActiveView('physical')}>set-physical</button>
-      <button onClick={() => setActiveView('factory')}>set-factory</button>
-      <button onClick={() => setMainContentView('whiteboard')}>set-whiteboard</button>
-      <button onClick={() => setMainContentView('code')}>set-code</button>
-      <button onClick={() => openFile('rtl/core/reg_file.v', 'reg_file.v')}>open-reg</button>
-      <button onClick={() => openFile('rtl/core/alu.v', 'alu.v')}>open-alu</button>
-      <button onClick={() => updateFileContentInGroup('group-1', 'rtl/core/reg_file.v', 'module reg_file; logic dirty; endmodule')}>edit-reg</button>
-      <button onClick={() => updateFileContentInGroup('group-1', 'rtl/core/alu.v', 'module alu; logic dirty; endmodule')}>edit-alu</button>
-      <button onClick={() => registerEditorRef('group-1', {
+      <button type="button" onClick={() => setActiveView('simulation')}>set-simulation</button>
+      <button type="button" onClick={() => setActiveView('synthesis')}>set-synthesis</button>
+      <button type="button" onClick={() => setActiveView('physical')}>set-physical</button>
+      <button type="button" onClick={() => setActiveView('factory')}>set-factory</button>
+      <button type="button" onClick={() => setMainContentView('whiteboard')}>set-whiteboard</button>
+      <button type="button" onClick={() => setMainContentView('code')}>set-code</button>
+      <button type="button" onClick={() => openFile('rtl/core/reg_file.v', 'reg_file.v')}>open-reg</button>
+      <button type="button" onClick={() => openFile('rtl/core/alu.v', 'alu.v')}>open-alu</button>
+      <button type="button" onClick={() => updateFileContentInGroup('group-1', 'rtl/core/reg_file.v', 'module reg_file; logic dirty; endmodule')}>edit-reg</button>
+      <button type="button" onClick={() => updateFileContentInGroup('group-1', 'rtl/core/alu.v', 'module alu; logic dirty; endmodule')}>edit-alu</button>
+      <button type="button" onClick={() => registerEditorRef('group-1', {
         getAction: (actionId: string) => ({ run: actionId === 'undo' ? undoActionRun : redoActionRun }),
       })}>register-editor</button>
     </div>
