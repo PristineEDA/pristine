@@ -114,6 +114,7 @@ const PanelRightIcon = ({ size = 15, filled = false }: { size?: number; filled?:
 );
 
 interface MenuBarProps {
+  onNotificationProgressDemo?: () => void;
   showLeftPanel?: boolean;
   showBottomPanel?: boolean;
   showRightPanel?: boolean;
@@ -123,6 +124,7 @@ interface MenuBarProps {
 }
 
 export function MenuBar({
+  onNotificationProgressDemo,
   showLeftPanel = false,
   showBottomPanel = false,
   showRightPanel = false,
@@ -236,6 +238,11 @@ export function MenuBar({
       return;
     }
 
+    if (action === 'run-notification-progress-demo') {
+      onNotificationProgressDemo?.();
+      return;
+    }
+
     if (action === 'save-file') {
       void saveActiveFile();
       return;
@@ -289,6 +296,11 @@ export function MenuBar({
 
     if (payload.action === 'open-notice-files') {
       revealBundledNoticeFiles();
+      return;
+    }
+
+    if (payload.action === 'run-notification-progress-demo') {
+      onNotificationProgressDemo?.();
       return;
     }
 

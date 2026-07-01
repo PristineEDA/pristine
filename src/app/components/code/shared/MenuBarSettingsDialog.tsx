@@ -92,6 +92,7 @@ import { Slider } from '../../ui/slider';
 import { Switch } from '../../ui/switch';
 import { cn } from '@/lib/utils';
 import { setProgressHideCompleted } from '../../../progress/useProgressStore';
+import { parseWslUbuntuDistro, wslUbuntuDistroOptions, type WslUbuntuDistro } from '../../../../../types/wsl';
 import { EditorFontAdvancedDialog } from './EditorFontAdvancedDialog';
 import { EditorThemeAdvancedDialog } from './EditorThemeAdvancedDialog';
 import { ColorThemePreviewCard, EditorFontPreviewCard } from './PickerPreviewCards';
@@ -101,6 +102,7 @@ const CLOSE_ACTION_CONFIG_KEY = 'window.closeActionPreference';
 const FLOATING_INFO_VISIBLE_CONFIG_KEY = 'ui.floatingInfoWindow.visible';
 const NOTIFICATION_DISMISS_SECONDS_CONFIG_KEY = 'notifications.dismissSeconds';
 const PROGRESS_HIDE_COMPLETED_CONFIG_KEY = 'progress.hideCompleted';
+export const EDA_WSL_UBUNTU_DISTRO_CONFIG_KEY = 'eda.wslUbuntuDistro';
 const DEFAULT_NOTIFICATION_DISMISS_SECONDS = 5;
 const MIN_NOTIFICATION_DISMISS_SECONDS = 1;
 const MAX_NOTIFICATION_DISMISS_SECONDS = 10;
@@ -201,12 +203,25 @@ const codeViewerLayoutModeOptions: Array<{
   },
 ];
 
+const wslUbuntuDistroSettingOptions: Array<{
+  value: WslUbuntuDistro;
+  label: string;
+  description: string;
+}> = wslUbuntuDistroOptions.map((value) => ({
+  value,
+  label: value,
+  description: value === 'Ubuntu-24.04'
+    ? 'Use Ubuntu 24.04 for the Pristine EDA WSL environment.'
+    : 'Use Ubuntu 22.04 for the Pristine EDA WSL environment.',
+}));
+
 export interface MenuBarSettingsState {
   codeViewerLayoutMode: CodeViewerLayoutMode;
   closeToTrayEnabled: boolean;
   floatingInfoWindowVisible: boolean;
   notificationDismissSeconds: number;
   progressHideCompleted: boolean;
+  wslUbuntuDistro: WslUbuntuDistro;
   themeId: string;
   themePickerLayoutMode: ThemePickerLayoutMode;
   editorCursorBlinking: ReturnType<typeof getConfiguredEditorCursorBlinking>;
@@ -259,6 +274,10 @@ function getConfiguredNotificationDismissSeconds(): number {
 
 function getConfiguredProgressHideCompleted(): boolean {
   return window.electronAPI?.config.get(PROGRESS_HIDE_COMPLETED_CONFIG_KEY) !== false;
+}
+
+export function getConfiguredWslUbuntuDistro(): WslUbuntuDistro {
+  return parseWslUbuntuDistro(window.electronAPI?.config.get(EDA_WSL_UBUNTU_DISTRO_CONFIG_KEY));
 }
 
 function getConfiguredThemeId(): string {
@@ -389,6 +408,7 @@ function getPersistedSettingsState(): MenuBarSettingsState {
     floatingInfoWindowVisible: getFloatingInfoWindowVisible(),
     notificationDismissSeconds: getConfiguredNotificationDismissSeconds(),
     progressHideCompleted: getConfiguredProgressHideCompleted(),
+    wslUbuntuDistro: getConfiguredWslUbuntuDistro(),
     themeId: getConfiguredThemeId(),
     themePickerLayoutMode: getConfiguredThemePickerLayoutMode(),
     editorCursorBlinking: getConfiguredEditorCursorBlinking(),
@@ -703,8 +723,6 @@ function getSettingsPlaceholderDescription(pageId: SettingsPageId) {
   switch (pageId) {
     case 'design':
       return 'Design settings will appear here.';
-    case 'eda':
-      return 'EDA tool settings will appear here.';
     case 'pdk':
       return 'PDK settings will appear here.';
     case 'agent':
@@ -840,6 +858,12 @@ export function useMenuBarSettingsController() {
     patchSettingsState({ progressHideCompleted: checked });
     setProgressHideCompleted(checked);
     void window.electronAPI?.config.set(PROGRESS_HIDE_COMPLETED_CONFIG_KEY, checked);
+  };
+
+  const handleWslUbuntuDistroChange = (value: string) => {
+    const nextDistro = parseWslUbuntuDistro(value);
+    patchSettingsState({ wslUbuntuDistro: nextDistro });
+    void window.electronAPI?.config.set(EDA_WSL_UBUNTU_DISTRO_CONFIG_KEY, nextDistro);
   };
 
   const handleThemeChange = useCallback((value: string) => {
@@ -1035,6 +1059,7 @@ export function useMenuBarSettingsController() {
     handleFloatingInfoWindowVisibleChange,
     handleNotificationDismissSecondsChange,
     handleProgressHideCompletedChange,
+    handleWslUbuntuDistroChange,
     handleSchematicAlignmentGuidesEnabledChange,
     handleSchematicGridEnabledChange,
     handleSchematicGridSizeChange,
@@ -1093,6 +1118,7 @@ export function MenuBarSettingsDialogs({
     handleFloatingInfoWindowVisibleChange,
     handleNotificationDismissSecondsChange,
     handleProgressHideCompletedChange,
+    handleWslUbuntuDistroChange,
     handleSchematicAlignmentGuidesEnabledChange,
     handleSchematicGridEnabledChange,
     handleSchematicGridSizeChange,
@@ -1557,6 +1583,25 @@ export function MenuBarSettingsDialogs({
       ),
     },
     {
+      id: 'eda-wsl-ubuntu-distro',
+      pageId: 'eda',
+      title: 'WSL Ubuntu distribution',
+      description: 'Choose which Ubuntu release Pristine installs for the local EDA WSL environment.',
+      keywords: ['eda', 'wsl', 'ubuntu', 'linux', 'distribution'],
+      element: (
+        <SettingsComboboxSection
+          value={settingsState.wslUbuntuDistro}
+          onValueChange={handleWslUbuntuDistroChange}
+          options={wslUbuntuDistroSettingOptions}
+          title="WSL Ubuntu distribution"
+          description="Choose which Ubuntu release Pristine installs for the local EDA WSL environment."
+          searchPlaceholder="Search Ubuntu distributions..."
+          emptyText="No Ubuntu distribution found."
+          testId="settings-eda-wsl-ubuntu-distro-combobox"
+        />
+      ),
+    },
+    {
       id: 'close-to-tray',
       pageId: 'window',
       title: 'Close to tray',
@@ -1609,6 +1654,7 @@ export function MenuBarSettingsDialogs({
     handleFloatingInfoWindowVisibleChange,
     handleNotificationDismissSecondsChange,
     handleProgressHideCompletedChange,
+    handleWslUbuntuDistroChange,
     handleSchematicAlignmentGuidesEnabledChange,
     handleSchematicGridEnabledChange,
     handleSchematicGridSizeChange,

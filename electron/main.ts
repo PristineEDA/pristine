@@ -269,7 +269,7 @@ function showMainWindow(): void {
 }
 
 function dispatchRendererMenuActionFromApplicationMenu(
-  action: Extract<AppMenuAction, 'open-new-project' | 'open-project' | 'close-project' | 'open-settings' | 'open-about' | 'open-notice-files'>,
+  action: Extract<AppMenuAction, 'open-new-project' | 'open-project' | 'close-project' | 'open-settings' | 'open-about' | 'open-notice-files' | 'run-notification-progress-demo'>,
 ): void {
   const existingWindow = mainWindow;
 
@@ -300,6 +300,7 @@ function handleApplicationMenuAction(action: AppMenuAction): void {
     || action === 'open-settings'
     || action === 'open-about'
     || action === 'open-notice-files'
+    || action === 'run-notification-progress-demo'
   ) {
     dispatchRendererMenuActionFromApplicationMenu(action);
     return;

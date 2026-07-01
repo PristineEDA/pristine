@@ -15,6 +15,7 @@ const {
   mockSetShellProjectRoot,
   mockRegisterTerminalHandlers,
   mockSetTerminalProjectRoot,
+  mockRegisterWslHandlers,
   mockRegisterConfigHandlers,
   mockRegisterAuthHandlers,
   mockRegisterNoticeHandlers,
@@ -36,6 +37,7 @@ const {
   mockSetShellProjectRoot: vi.fn(),
   mockRegisterTerminalHandlers: vi.fn(),
   mockSetTerminalProjectRoot: vi.fn(),
+  mockRegisterWslHandlers: vi.fn(),
   mockRegisterConfigHandlers: vi.fn(),
   mockRegisterAuthHandlers: vi.fn(),
   mockRegisterNoticeHandlers: vi.fn(),
@@ -77,6 +79,10 @@ vi.mock('./shell.js', () => ({
 vi.mock('./terminal.js', () => ({
   registerTerminalHandlers: (...args: unknown[]) => mockRegisterTerminalHandlers(...args),
   setTerminalProjectRoot: (root: string) => mockSetTerminalProjectRoot(root),
+}));
+
+vi.mock('./wsl.js', () => ({
+  registerWslHandlers: () => mockRegisterWslHandlers(),
 }));
 
 vi.mock('./config.js', () => ({
@@ -157,6 +163,7 @@ describe('register helpers', () => {
     expect(mockRegisterLspHandlers).toHaveBeenCalledWith(getMainWindow);
     expect(mockRegisterShellHandlers).toHaveBeenCalledWith(getMainWindow);
     expect(mockRegisterTerminalHandlers).toHaveBeenCalledWith(getMainWindow);
+    expect(mockRegisterWslHandlers).toHaveBeenCalledTimes(1);
     expect(mockRegisterConfigHandlers).toHaveBeenCalledTimes(1);
     expect(mockRegisterAuthHandlers).toHaveBeenCalledTimes(1);
     expect(mockRegisterNoticeHandlers).toHaveBeenCalledTimes(1);

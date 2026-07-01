@@ -50,6 +50,7 @@ import type { FloatingInfoWindowMode } from '../src/app/window/floatingInfoWindo
 import type { AuthView, DesktopAuthSession } from '../src/app/auth/types';
 import type { ElectronGpuDiagnostics } from './electron-gpu';
 import type { NotificationPublishInput, NotificationRecord } from './notification';
+import type { WslEnvironmentStatus, WslStartInput, WslStartResult, WslStopResult } from './wsl';
 import type {
   CreateProjectInput,
   ProjectChangedEvent,
@@ -157,7 +158,7 @@ export interface ElectronAPI {
   };
 
   terminal: {
-    create: (options?: { cwd?: string; cols?: number; rows?: number }) => Promise<{
+    create: (options?: { cwd?: string; cols?: number; rows?: number; profile?: 'default' | 'wsl-pristine-eda' }) => Promise<{
       id: string;
       pid: number;
       shell: string;
@@ -167,6 +168,12 @@ export interface ElectronAPI {
     kill: (id: string) => Promise<boolean>;
     onData: (callback: (data: { id: string; data: string }) => void) => () => void;
     onExit: (callback: (data: { id: string; exitCode: number; signal: number }) => void) => () => void;
+  };
+
+  wsl: {
+    startPristineEdaEnvironment: (input: WslStartInput) => Promise<WslStartResult>;
+    stopPristineEdaEnvironment: () => Promise<WslStopResult>;
+    getPristineEdaEnvironmentStatus: () => Promise<WslEnvironmentStatus>;
   };
 
   lsp: {

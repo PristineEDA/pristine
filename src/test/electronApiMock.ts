@@ -158,6 +158,24 @@ export function createElectronApiMock(): ElectronAPI {
       onData: vi.fn(() => vi.fn()),
       onExit: vi.fn(() => vi.fn()),
     },
+    wsl: {
+      startPristineEdaEnvironment: vi.fn().mockResolvedValue({
+        ok: true,
+        distroName: 'pristine-eda-env',
+        installed: true,
+        status: { distroName: 'pristine-eda-env', installed: true, state: 'running' },
+      }),
+      stopPristineEdaEnvironment: vi.fn().mockResolvedValue({
+        ok: true,
+        distroName: 'pristine-eda-env',
+        status: { distroName: 'pristine-eda-env', installed: true, state: 'stopped' },
+      }),
+      getPristineEdaEnvironmentStatus: vi.fn().mockResolvedValue({
+        distroName: 'pristine-eda-env',
+        installed: true,
+        state: 'stopped',
+      }),
+    },
     lsp: {
       ensureInitialized: vi.fn().mockResolvedValue(undefined),
       openDocument: vi.fn().mockResolvedValue(undefined),

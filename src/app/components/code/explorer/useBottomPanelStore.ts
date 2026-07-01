@@ -1,10 +1,11 @@
 import { create } from 'zustand';
 import type { ProjectBottomPanelSession } from '../../../../../types/project';
+import type { TerminalProfile } from './terminalSessionStore';
 
 export type BottomPanelTabId = 'terminal' | 'output' | 'problems' | 'debug' | 'lsp' | 'schematic' | 'waveform' | 'synthesis';
 
 export type BottomPaneContent =
-  | { kind: 'tab'; tab: BottomPanelTabId }
+  | { kind: 'tab'; tab: BottomPanelTabId; terminalProfile?: TerminalProfile }
   | { kind: 'empty' }
   | { kind: 'placeholder'; label: string; icon: 'file' | 'boxes' };
 
@@ -176,7 +177,9 @@ export const useBottomPanelStore = create<BottomPanelStore>((set, get) => ({
       focusedPaneId: state.focusedPaneId,
       nextPaneIndex: state.nextPaneIndex,
       panes: state.panes.map((pane) => ({
-        content: { ...pane.content },
+        content: pane.content.kind === 'tab' && pane.content.tab === 'terminal'
+          ? { kind: 'tab', tab: 'terminal' }
+          : { ...pane.content },
         id: pane.id,
         size: pane.size,
       })),

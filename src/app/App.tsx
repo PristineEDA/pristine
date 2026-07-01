@@ -66,6 +66,13 @@ import { getPathBaseName } from './workspace/workspaceFiles';
 import { useQuickOpenController } from './useQuickOpenController';
 import { preloadDeferredMainContentViews } from './mainContentViewPreload';
 import { useProjectConfigureStore } from './components/code/shared/useProjectConfigureStore';
+import { useBottomPanelStore } from './components/code/explorer/useBottomPanelStore';
+import { getConfiguredWslUbuntuDistro } from './components/code/shared/MenuBarSettingsDialog';
+import { getTerminalSessionSnapshot, subscribeTerminalSession, terminateTerminalSession } from './components/code/explorer/terminalSessionStore';
+import {
+  WSL_TERMINAL_SESSION_KEY,
+  useWslDevelopmentEnvironmentStore,
+} from './wsl/useWslDevelopmentEnvironmentStore';
 
 const WorkflowView = lazy(() => import('./components/workflow/WorkflowView').then((module) => ({ default: module.WorkflowView })));
 const WhiteboardView = lazy(() => import('./components/whiteboard/WhiteboardView').then((module) => ({ default: module.WhiteboardView })));
@@ -202,6 +209,13 @@ function AppLayout() {
   const physicalLayoutVisibilitySignatureRef = useRef('');
   const notificationDemoIndexRef = useRef(0);
   const progressDemoTimersRef = useRef<number[]>([]);
+  const wslTerminalHadSessionRef = useRef(false);
+  const wslStatus = useWslDevelopmentEnvironmentStore((state) => state.status);
+  const setWslStatus = useWslDevelopmentEnvironmentStore((state) => state.setWslDevelopmentEnvironmentStatus);
+  const setWslError = useWslDevelopmentEnvironmentStore((state) => state.setWslDevelopmentEnvironmentError);
+  const setWslUbuntuDistro = useWslDevelopmentEnvironmentStore((state) => state.setWslUbuntuDistro);
+  const focusedBottomPaneId = useBottomPanelStore((state) => state.focusedPaneId);
+  const updateBottomPaneContent = useBottomPanelStore((state) => state.updatePaneContent);
   const [assistantThreadListExpanded, setAssistantThreadListExpanded] = useState(false);
   const explorerLeftPanelWidthPx = projectPanelWidths.explorerLeftPanel ?? EXPLORER_LEFT_PANEL_DEFAULT_WIDTH_PX;
   const explorerAssistantPanelWidthPx = projectPanelWidths.explorerRightPanel ?? EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX;
@@ -570,7 +584,7 @@ function AppLayout() {
     };
   }, []);
 
-  const handleRunNotificationDemo = useCallback(() => {
+  const handleNotificationProgressDemo = useCallback(() => {
     const notification = demoNotifications[notificationDemoIndexRef.current % demoNotifications.length] ?? demoNotifications[0];
     notificationDemoIndexRef.current += 1;
     void publishNotification(notification);
@@ -598,6 +612,100 @@ function AppLayout() {
     });
   }, []);
 
+  const publishWslErrorNotification = useCallback((body: string) => {
+    void publishNotification({
+      level: 'error',
+      title: 'WSL development environment failed',
+      body,
+    });
+  }, []);
+
+  const openWslTerminalPane = useCallback(() => {
+    setActiveView('explorer');
+    setShowBottomPanel(true);
+    updateBottomPaneContent(focusedBottomPaneId, {
+      kind: 'tab',
+      tab: 'terminal',
+      terminalProfile: 'wsl-pristine-eda',
+    });
+  }, [focusedBottomPaneId, setActiveView, setShowBottomPanel, updateBottomPaneContent]);
+
+  const stopWslDevelopmentEnvironment = useCallback(async () => {
+    if (wslStatus === 'idle' || wslStatus === 'stopping') {
+      return;
+    }
+
+    setWslStatus('stopping');
+    await terminateTerminalSession(WSL_TERMINAL_SESSION_KEY);
+    const result = await window.electronAPI?.wsl?.stopPristineEdaEnvironment();
+
+    if (result && !result.ok) {
+      const errorMessage = result.error ?? 'Failed to stop Pristine WSL development environment.';
+      setWslError(errorMessage);
+      publishWslErrorNotification(errorMessage);
+      return;
+    }
+
+    setWslStatus('idle');
+  }, [publishWslErrorNotification, setWslError, setWslStatus, wslStatus]);
+
+  const handleRunWslDevelopmentEnvironment = useCallback(async () => {
+    if (!hasOpenProject || wslStatus === 'checking' || wslStatus === 'installing' || wslStatus === 'starting' || wslStatus === 'stopping') {
+      return;
+    }
+
+    if (wslStatus === 'running') {
+      await stopWslDevelopmentEnvironment();
+      return;
+    }
+
+    const ubuntuDistro = getConfiguredWslUbuntuDistro();
+    setWslUbuntuDistro(ubuntuDistro);
+    setWslStatus('checking');
+
+    try {
+      const result = await window.electronAPI?.wsl?.startPristineEdaEnvironment({ ubuntuDistro });
+
+      if (!result || !result.ok) {
+        const errorMessage = result?.error ?? 'Failed to start Pristine WSL development environment.';
+        setWslError(errorMessage);
+        publishWslErrorNotification(errorMessage);
+        return;
+      }
+
+      setWslStatus('starting');
+      openWslTerminalPane();
+      setWslStatus('running');
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to start Pristine WSL development environment.';
+      setWslError(errorMessage);
+      publishWslErrorNotification(errorMessage);
+    }
+  }, [
+    hasOpenProject,
+    openWslTerminalPane,
+    publishWslErrorNotification,
+    setWslError,
+    setWslStatus,
+    setWslUbuntuDistro,
+    stopWslDevelopmentEnvironment,
+    wslStatus,
+  ]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeTerminalSession(WSL_TERMINAL_SESSION_KEY, () => {
+      const snapshot = getTerminalSessionSnapshot(WSL_TERMINAL_SESSION_KEY);
+      const hadSession = wslTerminalHadSessionRef.current;
+      wslTerminalHadSessionRef.current = Boolean(snapshot.sessionId);
+
+      if (hadSession && !snapshot.sessionId && useWslDevelopmentEnvironmentStore.getState().status === 'running') {
+        void stopWslDevelopmentEnvironment();
+      }
+    });
+
+    return unsubscribe;
+  }, [stopWslDevelopmentEnvironment]);
+
   useEffect(() => () => {
     for (const timerId of progressDemoTimersRef.current) {
       window.clearTimeout(timerId);
@@ -614,9 +722,11 @@ function AppLayout() {
     <ActivityBar
       activeView={activeView}
       canConfigureProject={hasOpenProject}
+      canRunDevelopmentEnvironment={hasOpenProject && wslStatus !== 'checking' && wslStatus !== 'installing' && wslStatus !== 'starting' && wslStatus !== 'stopping'}
+      isDevelopmentEnvironmentActive={wslStatus !== 'idle' && wslStatus !== 'error'}
       onItemSelect={handleActivityItemSelect}
       onProjectConfigure={handleProjectConfigure}
-      onRunAction={handleRunNotificationDemo}
+      onRunAction={handleRunWslDevelopmentEnvironment}
     />
   );
 
@@ -896,9 +1006,11 @@ function AppLayout() {
         <ActivityBar
           activeView={activeView}
           canConfigureProject={hasOpenProject}
+          canRunDevelopmentEnvironment={hasOpenProject && wslStatus !== 'checking' && wslStatus !== 'installing' && wslStatus !== 'starting' && wslStatus !== 'stopping'}
+          isDevelopmentEnvironmentActive={wslStatus !== 'idle' && wslStatus !== 'error'}
           onItemSelect={handleActivityItemSelect}
           onProjectConfigure={handleProjectConfigure}
-          onRunAction={handleRunNotificationDemo}
+          onRunAction={handleRunWslDevelopmentEnvironment}
         />
         <div className="flex-1 min-h-0">
           <Suspense fallback={<MainContentFallback />}>
@@ -1025,6 +1137,7 @@ function AppLayout() {
       className="flex h-screen min-h-0 flex-col bg-background text-foreground overflow-hidden"
     >
       <MenuBar
+        onNotificationProgressDemo={handleNotificationProgressDemo}
         showLeftPanel={showLeftPanel}
         showBottomPanel={showBottomPanel}
         showRightPanel={showRightPanel}

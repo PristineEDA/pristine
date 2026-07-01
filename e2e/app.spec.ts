@@ -4212,7 +4212,8 @@ test('settings dialog supports subpage navigation and global search', async () =
 
   await openSettingsPage(window, 'eda');
   await expect(window.getByTestId('settings-nav-eda')).toHaveAttribute('aria-current', 'page');
-  await expect(window.getByTestId('settings-eda-placeholder-description')).toHaveText('EDA tool settings will appear here.');
+  await expect(window.getByTestId('settings-eda-wsl-ubuntu-distro-combobox')).toBeVisible();
+  await expect(window.getByTestId('settings-eda-wsl-ubuntu-distro-combobox')).toHaveText('Ubuntu-22.04');
 
   await openSettingsPage(window, 'pdk');
   await expect(window.getByTestId('settings-nav-pdk')).toHaveAttribute('aria-current', 'page');
@@ -7732,6 +7733,22 @@ test('left panel split shows two stacked panels and keeps the explorer tree scro
 
 test('activity bar shows configure and run action buttons with local selection only', async () => {
   const { app, window } = await launchApp();
+
+  const configureButton = window.getByTestId('activity-action-configure');
+  const runButton = window.getByTestId('activity-action-run');
+
+  await expect(configureButton).toBeVisible();
+  await expect(runButton).toBeVisible();
+  await expect(window.getByTestId('activity-action-debug-action')).toHaveCount(0);
+
+  await expect(configureButton).not.toHaveAttribute('aria-pressed', /.+/);
+  await expect(runButton).not.toHaveAttribute('aria-pressed', /.+/);
+
+  await app.close();
+});
+
+test('File notif triggers notification and progress demos', async () => {
+  const { app, window } = await launchApp();
   await window.evaluate(async () => {
     const browserGlobal = window as typeof window & {
       electronAPI?: {
@@ -7751,19 +7768,7 @@ test('activity bar shows configure and run action buttons with local selection o
   await window.getByTestId('settings-close-button').click();
   await expect(window.getByTestId('settings-dialog')).toHaveCount(0);
 
-  const configureButton = window.getByTestId('activity-action-configure');
-  const runButton = window.getByTestId('activity-action-run');
-
-  await expect(configureButton).toBeVisible();
-  await expect(runButton).toBeVisible();
-  await expect(window.getByTestId('activity-action-debug-action')).toHaveCount(0);
-
-  await expect(configureButton).not.toHaveAttribute('aria-pressed', /.+/);
-  await expect(runButton).not.toHaveAttribute('aria-pressed', /.+/);
-
-  await runButton.click();
-  await expect(configureButton).not.toHaveAttribute('aria-pressed', /.+/);
-  await expect(runButton).not.toHaveAttribute('aria-pressed', /.+/);
+  await selectMenuBarItem(window, 'File', 'notif');
   await expect(window.getByTestId('status-bar-progress-summary')).toBeVisible();
   await expect(window.getByTestId('status-bar-progress-title')).toHaveText('Scanning RTL Sources');
   await expect(window.getByTestId('status-bar-progress-value')).toHaveText(/\d+%/);
@@ -7778,8 +7783,8 @@ test('activity bar shows configure and run action buttons with local selection o
   const oldestProgressBox = await window.getByTestId('status-bar-progress-card-title-progress-session-1').boundingBox();
   expect(latestProgressBox?.y ?? Number.POSITIVE_INFINITY).toBeLessThan(oldestProgressBox?.y ?? Number.NEGATIVE_INFINITY);
 
-  await runButton.click();
-  await runButton.click();
+  await selectMenuBarItem(window, 'File', 'notif');
+  await selectMenuBarItem(window, 'File', 'notif');
 
   const notificationHistory = await window.evaluate(async () => {
     const browserGlobal = window as typeof window & {
@@ -7814,6 +7819,40 @@ test('activity bar shows configure and run action buttons with local selection o
   await setSwitchChecked(window.getByTestId('settings-progress-hide-completed-switch'), true);
   await window.getByTestId('settings-close-button').click();
   await expect(window.getByTestId('status-bar-progress-summary')).toHaveCount(0);
+
+  await app.close();
+});
+
+test('activity bar Run starts and stops the mocked WSL development environment', async () => {
+  const { app, window } = await launchApp({ env: { PRISTINE_E2E_MOCK_WSL: '1' } });
+
+  const runButton = window.getByTestId('activity-action-run');
+  await expect(runButton).toBeEnabled({ timeout: UI_READY_TIMEOUT_MS });
+  await expect(runButton).toHaveAttribute('aria-label', 'Run');
+
+  await runButton.click();
+  await expect(runButton).toHaveAttribute('aria-label', 'Pause', { timeout: UI_READY_TIMEOUT_MS });
+  await expect(window.getByTestId('panel-bottom-panel')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect(window.getByTestId('bottom-panel-tab-terminal')).toHaveAttribute('data-state', 'on', {
+    timeout: UI_READY_TIMEOUT_MS,
+  });
+  await expect(window.getByTestId('terminal-host')).toHaveAttribute('data-terminal-pane-id', 'wsl-pristine-eda-env', {
+    timeout: UI_READY_TIMEOUT_MS,
+  });
+
+  await runButton.click();
+  await expect(runButton).toHaveAttribute('aria-label', 'Run', { timeout: UI_READY_TIMEOUT_MS });
+
+  await app.close();
+});
+
+test('activity bar Run is disabled without a project', async () => {
+  const { app, window } = await launchApp({
+    env: { PRISTINE_E2E_MOCK_WSL: '1' },
+    projectRoot: null,
+  });
+
+  await expect(window.getByTestId('activity-action-run')).toBeDisabled();
 
   await app.close();
 });

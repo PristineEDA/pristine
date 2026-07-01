@@ -52,6 +52,7 @@ import type { FloatingInfoWindowMode } from '../src/app/window/floatingInfoWindo
 import type { AuthView, DesktopAuthSession } from '../src/app/auth/types.js';
 import type { ElectronGpuDiagnostics } from '../types/electron-gpu.js';
 import type { NotificationPublishInput, NotificationRecord } from '../types/notification.js';
+import type { WslEnvironmentStatus, WslStartInput, WslStartResult, WslStopResult } from '../types/wsl.js';
 import type {
   CreateProjectInput,
   ProjectChangedEvent,
@@ -247,7 +248,7 @@ const electronAPI = {
   },
 
   terminal: {
-    create: (options?: { cwd?: string; cols?: number; rows?: number }) =>
+    create: (options?: { cwd?: string; cols?: number; rows?: number; profile?: 'default' | 'wsl-pristine-eda' }) =>
       ipcRenderer.invoke(AsyncChannels.TERMINAL_CREATE, options) as Promise<{
         id: string;
         pid: number;
@@ -273,6 +274,15 @@ const electronAPI = {
       ipcRenderer.on(StreamChannels.TERMINAL_EXIT, handler);
       return () => { ipcRenderer.removeListener(StreamChannels.TERMINAL_EXIT, handler); };
     },
+  },
+
+  wsl: {
+    startPristineEdaEnvironment: (input: WslStartInput) =>
+      ipcRenderer.invoke(AsyncChannels.WSL_START_PRISTINE_EDA_ENVIRONMENT, input) as Promise<WslStartResult>,
+    stopPristineEdaEnvironment: () =>
+      ipcRenderer.invoke(AsyncChannels.WSL_STOP_PRISTINE_EDA_ENVIRONMENT) as Promise<WslStopResult>,
+    getPristineEdaEnvironmentStatus: () =>
+      ipcRenderer.invoke(AsyncChannels.WSL_GET_PRISTINE_EDA_ENVIRONMENT_STATUS) as Promise<WslEnvironmentStatus>,
   },
 
   lsp: {

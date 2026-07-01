@@ -51,6 +51,7 @@ vi.mock('./components/code/shared/MenuBar', async () => {
 
   return {
     MenuBar: ({
+    onNotificationProgressDemo,
     showLeftPanel,
     showBottomPanel,
     showRightPanel,
@@ -76,6 +77,7 @@ vi.mock('./components/code/shared/MenuBar', async () => {
         <button onClick={() => workspace.setMainContentView('code')}>switch-code</button>
         <button onClick={() => workspace.setMainContentView('whiteboard')}>switch-whiteboard</button>
         <button onClick={() => workspace.setMainContentView('workflow')}>switch-workflow</button>
+        <button data-testid="mock-menu-notif" onClick={onNotificationProgressDemo}>notif</button>
       </div>
     );
   },
@@ -130,9 +132,13 @@ vi.mock('./components/code/shared/ActivityBar', async () => {
       onItemSelect,
       onProjectConfigure,
       onRunAction,
+      canRunDevelopmentEnvironment,
+      isDevelopmentEnvironmentActive,
     }: {
       activeView: string;
       canConfigureProject?: boolean;
+      canRunDevelopmentEnvironment?: boolean;
+      isDevelopmentEnvironmentActive?: boolean;
       onItemSelect: (view: string) => void;
       onProjectConfigure?: () => void;
       onRunAction?: () => void;
@@ -167,8 +173,13 @@ vi.mock('./components/code/shared/ActivityBar', async () => {
           >
             configure-project
           </button>
-          <button data-testid="mock-activity-run" onClick={onRunAction}>
-            run
+          <button
+            data-testid="mock-activity-run"
+            disabled={!canRunDevelopmentEnvironment}
+            data-active={isDevelopmentEnvironmentActive ? 'true' : 'false'}
+            onClick={onRunAction}
+          >
+            {isDevelopmentEnvironmentActive ? 'pause' : 'run'}
           </button>
         </div>
       );
@@ -616,14 +627,13 @@ describe('App', () => {
     }
   });
 
-  it('starts notification and progress demos from the real ActivityBar run action', () => {
-    renderRealActivityBar = true;
+  it('starts notification and progress demos from the File notif action', () => {
     vi.useFakeTimers();
 
     const { unmount } = render(<App />);
 
     try {
-      fireEvent.click(screen.getByTestId('activity-action-run'));
+      fireEvent.click(screen.getByTestId('mock-menu-notif'));
 
       expect(window.electronAPI!.notifications.publish).toHaveBeenCalledWith(expect.objectContaining({
         level: 'info',
@@ -651,7 +661,6 @@ describe('App', () => {
       unmount();
       vi.clearAllTimers();
       vi.useRealTimers();
-      renderRealActivityBar = false;
       resetProgressStoreForTests();
     }
   });
@@ -699,6 +708,46 @@ describe('App', () => {
     await clickTestId('configure-project-submit');
 
     expect(window.electronAPI!.project.updateProjectConfig).toHaveBeenCalledWith(project.config);
+  });
+
+  it('starts the WSL development environment from Run only after a project is available', async () => {
+    vi.mocked(window.electronAPI!.project.getCurrentProject).mockResolvedValueOnce(null);
+    render(<App />);
+
+    expect(screen.getByTestId('mock-activity-run')).toBeDisabled();
+    await waitFor(() => {
+      expect(window.electronAPI!.project.getCurrentProject).toHaveBeenCalled();
+      expect(window.electronAPI!.project.onProjectChanged).toHaveBeenCalled();
+    });
+
+    const project = {
+      config: {
+        mgnt: 'none',
+        mode: 'rtl2gds',
+        padframe: 'QFN32',
+        process: 'ics55',
+        type: 'retroSoC',
+      },
+      name: 'chip_lab',
+      rootPath: 'C:\\Projects\\chip_lab',
+      session: null,
+    };
+    const projectChangedCalls = vi.mocked(window.electronAPI!.project.onProjectChanged).mock.calls;
+    const projectChanged = projectChangedCalls[projectChangedCalls.length - 1]?.[0];
+    await act(async () => {
+      projectChanged?.(project);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mock-activity-run')).toBeEnabled();
+    });
+
+    fireEvent.click(screen.getByTestId('mock-activity-run'));
+
+    await waitFor(() => {
+      expect(window.electronAPI!.wsl.startPristineEdaEnvironment).toHaveBeenCalledWith({ ubuntuDistro: 'Ubuntu-22.04' });
+    });
+    expect(screen.getByTestId('mock-activity-run')).toHaveAttribute('data-active', 'true');
   });
 
   it('toggles the left, bottom, and right panels with Ctrl+B, Ctrl+J, and Ctrl+Alt+B', () => {

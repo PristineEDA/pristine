@@ -1,5 +1,5 @@
 import {
-  FileCode, BugPlay, Cog, LucideLayers3, Grid2X2Plus, Hammer, Play,
+  FileCode, BugPlay, Cog, LucideLayers3, Grid2X2Plus, Hammer, Pause, Play,
   // BookOpen,
   Package,
   Frame,
@@ -29,6 +29,8 @@ import { useCodeViewerLayout } from '../../../context/CodeViewerLayoutContext';
 interface ActivityBarProps {
   activeView: string;
   canConfigureProject?: boolean;
+  canRunDevelopmentEnvironment?: boolean;
+  isDevelopmentEnvironmentActive?: boolean;
   onItemSelect: (view: string) => void;
   onProjectConfigure?: () => void;
   onRunAction?: () => void;
@@ -136,6 +138,8 @@ const activityBarButtonBaseClass = 'relative min-h-10 rounded-md transition-colo
 export function ActivityBar({
   activeView,
   canConfigureProject = false,
+  canRunDevelopmentEnvironment = false,
+  isDevelopmentEnvironmentActive = false,
   onItemSelect,
   onProjectConfigure,
   onRunAction,
@@ -178,19 +182,25 @@ export function ActivityBar({
         <SidebarMenu>
           {actionItems.map(({ id, icon: Icon, label }) => {
             const isConfigureAction = id === 'configure';
+            const isRunAction = id === 'run';
+            const ActionIcon = isRunAction && isDevelopmentEnvironmentActive ? Pause : Icon;
+            const actionLabel = isRunAction && isDevelopmentEnvironmentActive ? 'Pause' : label;
             const handleActionClick = isConfigureAction ? onProjectConfigure : onRunAction;
+            const isDisabled = isConfigureAction
+              ? !canConfigureProject
+              : isRunAction && !canRunDevelopmentEnvironment;
             return (
             <SidebarMenuItem key={id}>
               <SidebarMenuButton
-                tooltip={label}
-                aria-label={label}
+                tooltip={actionLabel}
+                aria-label={actionLabel}
                 data-testid={`activity-action-${id}`}
-                disabled={isConfigureAction && !canConfigureProject}
+                disabled={isDisabled}
                 className={`${actionButtonClassName} [&>svg]:size-[18px]`}
                 onClick={handleActionClick}
               >
-                <Icon size={18} strokeWidth={1.7} />
-                {isExpanded ? <span className="text-sm font-medium">{label}</span> : null}
+                <ActionIcon size={18} strokeWidth={1.7} />
+                {isExpanded ? <span className="text-sm font-medium">{actionLabel}</span> : null}
               </SidebarMenuButton>
             </SidebarMenuItem>
           );

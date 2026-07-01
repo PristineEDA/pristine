@@ -12,6 +12,8 @@ import { SidebarProvider } from '../../ui/sidebar';
 function renderActivityBar({
   activeView = 'explorer',
   canConfigureProject = false,
+  canRunDevelopmentEnvironment = false,
+  isDevelopmentEnvironmentActive = false,
   onItemSelect = vi.fn(),
   onProjectConfigure = vi.fn(),
   onRunAction = vi.fn(),
@@ -20,6 +22,8 @@ function renderActivityBar({
 }: {
   activeView?: string;
   canConfigureProject?: boolean;
+  canRunDevelopmentEnvironment?: boolean;
+  isDevelopmentEnvironmentActive?: boolean;
   onItemSelect?: (view: string) => void;
   onProjectConfigure?: () => void;
   onRunAction?: () => void;
@@ -36,6 +40,8 @@ function renderActivityBar({
         <ActivityBar
           activeView={activeView}
           canConfigureProject={canConfigureProject}
+          canRunDevelopmentEnvironment={canRunDevelopmentEnvironment}
+          isDevelopmentEnvironmentActive={isDevelopmentEnvironmentActive}
           onItemSelect={onItemSelect}
           onProjectConfigure={onProjectConfigure}
           onRunAction={onRunAction}
@@ -73,7 +79,7 @@ describe('ActivityBar', () => {
     const onProjectConfigure = vi.fn();
     const onRunAction = vi.fn();
 
-    renderActivityBar({ canConfigureProject: true, onItemSelect, onProjectConfigure, onRunAction });
+    renderActivityBar({ canConfigureProject: true, canRunDevelopmentEnvironment: true, onItemSelect, onProjectConfigure, onRunAction });
 
     const configureButton = screen.getByTestId('activity-action-configure');
     const runButton = screen.getByTestId('activity-action-run');
@@ -103,6 +109,31 @@ describe('ActivityBar', () => {
     await user.click(configureButton);
 
     expect(onProjectConfigure).not.toHaveBeenCalled();
+  });
+
+  it('disables run while no project is open', async () => {
+    const user = userEvent.setup();
+    const onRunAction = vi.fn();
+
+    renderActivityBar({ canRunDevelopmentEnvironment: false, onRunAction });
+
+    const runButton = screen.getByTestId('activity-action-run');
+    expect(runButton).toBeDisabled();
+
+    await user.click(runButton);
+
+    expect(onRunAction).not.toHaveBeenCalled();
+  });
+
+  it('shows pause semantics while the development environment is active', () => {
+    renderActivityBar({
+      canRunDevelopmentEnvironment: true,
+      defaultOpen: true,
+      isDevelopmentEnvironmentActive: true,
+    });
+
+    expect(screen.getByTestId('activity-action-run')).toHaveAttribute('aria-label', 'Pause');
+    expect(screen.getByText('Pause')).toBeInTheDocument();
   });
 
   it('forwards clicked item ids to the shared selection handler', async () => {

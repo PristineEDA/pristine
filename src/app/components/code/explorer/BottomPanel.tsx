@@ -9,6 +9,7 @@ import { summarizeLspProblems, useLspProblems } from '../../../lsp/lspProblems';
 import { TerminalPanel } from './TerminalPanel';
 import { DebugConsole } from './DebugConsole';
 import { terminateAllTerminalSessions, terminateTerminalSession } from './terminalSessionStore';
+import { WSL_TERMINAL_SESSION_KEY } from '../../../wsl/useWslDevelopmentEnvironmentStore';
 import { Button } from '../../ui/button';
 import { TooltipIconButton } from '../../ui/tooltip-icon-button';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '../../ui/resizable';
@@ -108,7 +109,11 @@ export function BottomPanel({ isMaximized = false, layoutVersion, onClose, onMax
   const handleRemoveFocusedPane = useCallback(() => {
     const removed = removeFocusedPane();
     if (removed?.pane.content.kind === 'tab' && removed.pane.content.tab === 'terminal') {
-      void terminateTerminalSession(removed.pane.id);
+      void terminateTerminalSession(
+        removed.pane.content.terminalProfile === 'wsl-pristine-eda'
+          ? WSL_TERMINAL_SESSION_KEY
+          : removed.pane.id,
+      );
     }
   }, [removeFocusedPane]);
 
@@ -116,8 +121,19 @@ export function BottomPanel({ isMaximized = false, layoutVersion, onClose, onMax
     setPaneSize(paneId, size);
   }, [setPaneSize]);
 
-  const renderTabContent = useCallback((paneId: string, tab: BottomPanelTabId): ReactNode => ({
-    terminal: <TerminalPanel layoutVersion={layoutVersion} sessionKey={paneId} testId={paneId === 'bottom-pane-1' ? 'terminal-host' : `terminal-host-${paneId}`} />,
+  const renderTabContent = useCallback((
+    paneId: string,
+    tab: BottomPanelTabId,
+    content?: Extract<BottomPaneContent, { kind: 'tab' }>,
+  ): ReactNode => ({
+    terminal: (
+      <TerminalPanel
+        layoutVersion={layoutVersion}
+        profile={content?.terminalProfile}
+        sessionKey={content?.terminalProfile === 'wsl-pristine-eda' ? WSL_TERMINAL_SESSION_KEY : paneId}
+        testId={paneId === 'bottom-pane-1' ? 'terminal-host' : `terminal-host-${paneId}`}
+      />
+    ),
     output: (
       <Suspense fallback={<div className="flex h-full items-center justify-center text-ide-text-muted text-[12px]">Loading output...</div>}>
         <OutputPanel />
@@ -242,7 +258,7 @@ export function BottomPanel({ isMaximized = false, layoutVersion, onClose, onMax
       return renderPlaceholderPane(pane.content);
     }
 
-    return renderTabContent(pane.id, pane.content.tab);
+    return renderTabContent(pane.id, pane.content.tab, pane.content);
   };
 
   return (

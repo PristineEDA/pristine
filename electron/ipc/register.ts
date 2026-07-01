@@ -7,6 +7,7 @@ import { registerGitHandlers, setGitProjectRoot } from './git.js';
 import { registerLspHandlers, setLspProjectRoot } from './lsp.js';
 import { registerShellHandlers, setShellProjectRoot } from './shell.js';
 import { registerTerminalHandlers, setTerminalProjectRoot } from './terminal.js';
+import { registerWslHandlers } from './wsl.js';
 import { registerConfigHandlers } from './config.js';
 import { registerPlatformHandler } from './platform.js';
 import { registerAuthHandlers } from './auth.js';
@@ -52,6 +53,7 @@ export function registerAllHandlers(
   registerLspHandlers(getMainWindow);
   registerShellHandlers(getMainWindow);
   registerTerminalHandlers(getMainWindow);
+  registerWslHandlers();
   registerConfigHandlers();
   registerNotificationHandlers(getMainWindow);
   registerProjectHandlers(getMainWindow, setProjectRoot, getProjectWindowState, applyProjectWindowState);

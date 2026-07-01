@@ -191,7 +191,8 @@ describe('MenuBar settings', () => {
 
     await openSettingsPage(user, 'eda');
     expect(screen.getByTestId('settings-nav-eda')).toHaveAttribute('aria-current', 'page');
-    expect(screen.getByTestId('settings-eda-placeholder-description')).toHaveTextContent('EDA tool settings will appear here.');
+    expect(screen.getByTestId('settings-eda-wsl-ubuntu-distro-combobox')).toBeVisible();
+    expect(screen.getByTestId('settings-eda-wsl-ubuntu-distro-combobox')).toHaveTextContent('Ubuntu-22.04');
 
     await openSettingsPage(user, 'pdk');
     expect(screen.getByTestId('settings-nav-pdk')).toHaveAttribute('aria-current', 'page');
