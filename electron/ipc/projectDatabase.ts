@@ -7,6 +7,8 @@ import type {
   CreateProjectInput,
   ProjectConfig,
   ProjectBottomPanelSession,
+  ProjectBottomPanelTabId,
+  ProjectBottomPanelTabLayout,
   ProjectExplorerTreeSession,
   ProjectSidePanelSession,
   ProjectSessionSnapshot,
@@ -70,17 +72,49 @@ const DEFAULT_PROJECT_EXPLORER_TREE_SESSION: ProjectExplorerTreeSession = {
   selectedNode: null,
 };
 
-const DEFAULT_PROJECT_BOTTOM_PANEL_SESSION: ProjectBottomPanelSession = {
-  focusedPaneId: 'bottom-pane-1',
-  nextPaneIndex: 2,
-  panes: [
-    {
-      content: { kind: 'tab', tab: 'terminal' },
-      id: 'bottom-pane-1',
-      size: 100,
-    },
-  ],
-};
+const PROJECT_BOTTOM_PANEL_TABS = [
+  'terminal',
+  'output',
+  'problems',
+  'debug',
+  'lsp',
+  'schematic',
+  'waveform',
+  'synthesis',
+] as const satisfies readonly ProjectBottomPanelTabId[];
+
+function createBottomPaneId(tab: ProjectBottomPanelTabId, index: number): string {
+  return tab === 'terminal' ? `bottom-pane-${index}` : `bottom-pane-${tab}-${index}`;
+}
+
+function createDefaultBottomTabLayout(tab: ProjectBottomPanelTabId): ProjectBottomPanelTabLayout {
+  const pane = {
+    content: { kind: 'tab' as const, tab },
+    id: createBottomPaneId(tab, 1),
+    size: 100,
+  };
+  return {
+    focusedPaneId: pane.id,
+    nextPaneIndex: 2,
+    panes: [pane],
+  };
+}
+
+function createDefaultBottomPanelSession(): ProjectBottomPanelSession {
+  return {
+    activeTab: 'terminal',
+    tabs: Object.fromEntries(PROJECT_BOTTOM_PANEL_TABS.map((tab) => [
+      tab,
+      createDefaultBottomTabLayout(tab),
+    ])) as Record<ProjectBottomPanelTabId, ProjectBottomPanelTabLayout>,
+  };
+}
+
+const DEFAULT_PROJECT_BOTTOM_PANEL_SESSION: ProjectBottomPanelSession = createDefaultBottomPanelSession();
+
+function getDefaultBottomTabLayout(tab: ProjectBottomPanelTabId): ProjectBottomPanelTabLayout {
+  return DEFAULT_PROJECT_BOTTOM_PANEL_SESSION.tabs[tab] ?? createDefaultBottomTabLayout(tab);
+}
 
 export function isValidProjectDatabase(rootPath: string): boolean {
   return fs.existsSync(getDatabasePath(rootPath));
@@ -330,9 +364,23 @@ function cloneWindowState(windowState: ProjectWindowState): ProjectWindowState {
 
 function cloneBottomPanelSession(session: ProjectBottomPanelSession): ProjectBottomPanelSession {
   return {
-    focusedPaneId: session.focusedPaneId,
-    nextPaneIndex: session.nextPaneIndex,
-    panes: session.panes.map((pane) => ({
+    activeTab: session.activeTab,
+    tabs: cloneBottomTabs(session),
+  };
+}
+
+function cloneBottomTabs(session: ProjectBottomPanelSession): Record<ProjectBottomPanelTabId, ProjectBottomPanelTabLayout> {
+  return Object.fromEntries(PROJECT_BOTTOM_PANEL_TABS.map((tab) => [
+      tab,
+      cloneBottomTabLayout(session.tabs[tab] ?? getDefaultBottomTabLayout(tab)),
+    ])) as Record<ProjectBottomPanelTabId, ProjectBottomPanelTabLayout>;
+}
+
+function cloneBottomTabLayout(layout: ProjectBottomPanelTabLayout): ProjectBottomPanelTabLayout {
+  return {
+    focusedPaneId: layout.focusedPaneId,
+    nextPaneIndex: layout.nextPaneIndex,
+    panes: layout.panes.map((pane) => ({
       content: { ...pane.content },
       id: pane.id,
       size: pane.size,
@@ -459,24 +507,16 @@ function normalizeExplorerTreeSession(
   };
 }
 
-function normalizeBottomPaneContent(value: unknown): ProjectBottomPanelSession['panes'][number]['content'] {
+function isProjectBottomPanelTabId(value: unknown): value is ProjectBottomPanelTabId {
+  return typeof value === 'string' && PROJECT_BOTTOM_PANEL_TABS.includes(value as ProjectBottomPanelTabId);
+}
+
+function normalizeBottomPaneContent(value: unknown): ProjectBottomPanelTabLayout['panes'][number]['content'] {
   if (!isPlainObject(value)) {
     return { kind: 'empty' };
   }
 
-  if (
-    value['kind'] === 'tab'
-    && (
-      value['tab'] === 'terminal'
-      || value['tab'] === 'output'
-      || value['tab'] === 'problems'
-      || value['tab'] === 'debug'
-      || value['tab'] === 'lsp'
-      || value['tab'] === 'schematic'
-      || value['tab'] === 'waveform'
-      || value['tab'] === 'synthesis'
-    )
-  ) {
+  if (value['kind'] === 'tab' && isProjectBottomPanelTabId(value['tab'])) {
     return { kind: 'tab', tab: value['tab'] };
   }
 
@@ -491,24 +531,50 @@ function normalizeBottomPaneContent(value: unknown): ProjectBottomPanelSession['
   return { kind: 'empty' };
 }
 
-function normalizeBottomPanelSession(
+function normalizeBottomPaneSizes<T extends { size: number }>(panes: T[]): T[] {
+  const totalSize = panes.reduce((sum, pane) => sum + pane.size, 0);
+  return panes.map((pane) => ({
+    ...pane,
+    size: totalSize > 0 ? (pane.size / totalSize) * 100 : 100 / panes.length,
+  }));
+}
+
+function inferBottomNextPaneIndex(
+  panes: ProjectBottomPanelTabLayout['panes'],
+  rawNextPaneIndex: unknown,
+): number {
+  const maxPaneIndex = panes.reduce((maxIndex, pane) => {
+    const match = pane.id.match(/(\d+)$/);
+    const index = match ? Number.parseInt(match[1] ?? '', 10) : Number.NaN;
+    return Number.isFinite(index) ? Math.max(maxIndex, index) : maxIndex;
+  }, panes.length);
+  const fallback = Math.max(maxPaneIndex + 1, panes.length + 1, 2);
+  return typeof rawNextPaneIndex === 'number'
+    && Number.isInteger(rawNextPaneIndex)
+    && rawNextPaneIndex >= fallback
+    ? rawNextPaneIndex
+    : fallback;
+}
+
+function normalizeBottomTabLayout(
+  tab: ProjectBottomPanelTabId,
   value: unknown,
-  fallback = DEFAULT_PROJECT_BOTTOM_PANEL_SESSION,
-): ProjectBottomPanelSession {
+  fallback = getDefaultBottomTabLayout(tab),
+): ProjectBottomPanelTabLayout {
   if (!isPlainObject(value) || !Array.isArray(value['panes'])) {
-    return cloneBottomPanelSession(fallback);
+    return cloneBottomTabLayout(fallback);
   }
 
   const seenPaneIds = new Set<string>();
   const panes = value['panes']
-    .map((pane, index): ProjectBottomPanelSession['panes'][number] | null => {
+    .map((pane, index): ProjectBottomPanelTabLayout['panes'][number] | null => {
       if (!isPlainObject(pane)) {
         return null;
       }
 
       const id = typeof pane['id'] === 'string' && pane['id'].trim().length > 0
         ? pane['id']
-        : `bottom-pane-${index + 1}`;
+        : createBottomPaneId(tab, index + 1);
       if (seenPaneIds.has(id)) {
         return null;
       }
@@ -524,32 +590,83 @@ function normalizeBottomPanelSession(
         size,
       };
     })
-    .filter((pane): pane is ProjectBottomPanelSession['panes'][number] => Boolean(pane));
+    .filter((pane): pane is ProjectBottomPanelTabLayout['panes'][number] => Boolean(pane));
 
   if (panes.length === 0) {
-    return cloneBottomPanelSession(fallback);
+    return cloneBottomTabLayout(fallback);
   }
 
-  const totalSize = panes.reduce((sum, pane) => sum + pane.size, 0);
-  const normalizedPanes = panes.map((pane) => ({
-    ...pane,
-    size: totalSize > 0 ? (pane.size / totalSize) * 100 : 100 / panes.length,
-  }));
+  const normalizedPanes = normalizeBottomPaneSizes(panes);
   const focusedPaneId = typeof value['focusedPaneId'] === 'string'
     && normalizedPanes.some((pane) => pane.id === value['focusedPaneId'])
     ? value['focusedPaneId']
     : normalizedPanes[0]?.id ?? fallback.focusedPaneId;
-  const nextPaneIndex = typeof value['nextPaneIndex'] === 'number'
-    && Number.isInteger(value['nextPaneIndex'])
-    && value['nextPaneIndex'] > normalizedPanes.length
-    ? value['nextPaneIndex']
-    : normalizedPanes.length + 1;
 
   return {
     focusedPaneId,
-    nextPaneIndex,
+    nextPaneIndex: inferBottomNextPaneIndex(normalizedPanes, value['nextPaneIndex']),
     panes: normalizedPanes,
   };
+}
+
+function normalizeLegacyBottomPanelSession(
+  value: Record<string, unknown>,
+  fallback = DEFAULT_PROJECT_BOTTOM_PANEL_SESSION,
+): ProjectBottomPanelSession {
+  const flatLayout = normalizeBottomTabLayout('terminal', value, fallback.tabs.terminal ?? getDefaultBottomTabLayout('terminal'));
+  const focusedPane = flatLayout.panes.find((pane) => pane.id === flatLayout.focusedPaneId);
+  const activeTab = focusedPane?.content.kind === 'tab' ? focusedPane.content.tab : fallback.activeTab;
+  const groupedPanes = new Map<ProjectBottomPanelTabId, ProjectBottomPanelTabLayout['panes']>();
+
+  flatLayout.panes.forEach((pane) => {
+    const tab = pane.content.kind === 'tab' ? pane.content.tab : activeTab;
+    groupedPanes.set(tab, [...(groupedPanes.get(tab) ?? []), pane]);
+  });
+
+  const tabs = cloneBottomTabs(fallback);
+  groupedPanes.forEach((panes, tab) => {
+    const normalizedPanes = normalizeBottomPaneSizes(panes);
+    tabs[tab] = {
+      focusedPaneId: normalizedPanes.some((pane) => pane.id === flatLayout.focusedPaneId)
+        ? flatLayout.focusedPaneId
+        : normalizedPanes[0]?.id ?? tabs[tab]?.focusedPaneId ?? getDefaultBottomTabLayout(tab).focusedPaneId,
+      nextPaneIndex: inferBottomNextPaneIndex(normalizedPanes, value['nextPaneIndex']),
+      panes: normalizedPanes,
+    };
+  });
+
+  return {
+    activeTab,
+    tabs,
+  };
+}
+
+function normalizeBottomPanelSession(
+  value: unknown,
+  fallback = DEFAULT_PROJECT_BOTTOM_PANEL_SESSION,
+): ProjectBottomPanelSession {
+  if (!isPlainObject(value)) {
+    return cloneBottomPanelSession(fallback);
+  }
+
+  if (isPlainObject(value['tabs'])) {
+    const rawTabs = value['tabs'];
+    const tabs = Object.fromEntries(PROJECT_BOTTOM_PANEL_TABS.map((tab) => [
+      tab,
+      normalizeBottomTabLayout(tab, rawTabs[tab], fallback.tabs[tab] ?? getDefaultBottomTabLayout(tab)),
+    ])) as Record<ProjectBottomPanelTabId, ProjectBottomPanelTabLayout>;
+
+    return {
+      activeTab: isProjectBottomPanelTabId(value['activeTab']) ? value['activeTab'] : fallback.activeTab,
+      tabs,
+    };
+  }
+
+  if (Array.isArray(value['panes'])) {
+    return normalizeLegacyBottomPanelSession(value, fallback);
+  }
+
+  return cloneBottomPanelSession(fallback);
 }
 
 function openDatabase(projectRoot: string): BetterSqliteDatabase {

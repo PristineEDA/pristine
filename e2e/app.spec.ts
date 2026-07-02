@@ -8172,6 +8172,13 @@ test('terminal bottom panel supports split panes with independent terminal lifec
   expect(initialFirstBox?.width ?? 0).toBeGreaterThan(300);
   expect(initialSecondBox?.width ?? 0).toBeGreaterThan(300);
 
+  await getBottomPanelTab(window, 'lsp').click();
+  await expect(window.getByTestId('bottom-panel-pane-bottom-pane-lsp-1')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+  await expect(window.getByTestId('bottom-panel-pane-bottom-pane-2')).toHaveCount(0);
+
+  await getBottomPanelTab(window, 'terminal').click();
+  await expect(secondPane).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
+
   await window.waitForTimeout(350);
 
   const splitHandle = window.getByTestId('bottom-panel-split-handle-0');

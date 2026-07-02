@@ -64,11 +64,13 @@ interface BottomPanelProps {
 
 export function BottomPanel({ isMaximized = false, layoutVersion, onClose, onMaximizeToggle }: BottomPanelProps) {
   const { layoutMode } = useCodeViewerLayout();
+  const activeTab = useBottomPanelStore((state) => state.activeTab);
   const panes = useBottomPanelStore((state) => state.panes);
   const focusedPaneId = useBottomPanelStore((state) => state.focusedPaneId);
   const focusedPaneMeasuredWidth = useBottomPanelStore((state) => state.focusedPaneMeasuredWidth);
   const focusPane = useBottomPanelStore((state) => state.focusPane);
   const removeFocusedPane = useBottomPanelStore((state) => state.removeFocusedPane);
+  const setActiveTab = useBottomPanelStore((state) => state.setActiveTab);
   const setFocusedPaneTab = useBottomPanelStore((state) => state.setFocusedPaneTab);
   const setPaneSize = useBottomPanelStore((state) => state.setPaneSize);
   const splitFocusedPane = useBottomPanelStore((state) => state.splitFocusedPane);
@@ -79,7 +81,6 @@ export function BottomPanel({ isMaximized = false, layoutVersion, onClose, onMax
   const maximizeLabel = isMaximized ? 'Restore Panel' : 'Maximize Panel';
   const MaximizeIcon = isMaximized ? Minimize2 : Maximize;
   const focusedPane = panes.find((pane) => pane.id === focusedPaneId) ?? panes[0];
-  const focusedTab = focusedPane?.content.kind === 'tab' ? focusedPane.content.tab : '';
   const canRemoveFocusedPane = panes.length > 1;
   const focusedPaneWidth = focusedPane ? focusedPaneMeasuredWidth : 0;
   const canSplitFocusedPane = focusedPaneWidth >= (MIN_SPLIT_PANE_WIDTH_PX * 2 + SPLIT_HANDLE_GAP_PX);
@@ -98,9 +99,14 @@ export function BottomPanel({ isMaximized = false, layoutVersion, onClose, onMax
     updatePaneContent(paneId, content, getPaneMeasuredWidth(paneId));
   }, [getPaneMeasuredWidth, updatePaneContent]);
 
-  const handleSetFocusedPaneTab = useCallback((tab: BottomPanelTabId) => {
-    setFocusedPaneTab(tab, getPaneMeasuredWidth(focusedPaneId));
-  }, [focusedPaneId, getPaneMeasuredWidth, setFocusedPaneTab]);
+  const handleSetActiveTab = useCallback((tab: BottomPanelTabId) => {
+    setActiveTab(tab);
+  }, [setActiveTab]);
+
+  const handleNewTerminal = useCallback(() => {
+    setActiveTab('terminal');
+    setFocusedPaneTab('terminal');
+  }, [setActiveTab, setFocusedPaneTab]);
 
   const handleSplitFocusedPane = useCallback(() => {
     splitFocusedPane(getPaneMeasuredWidth(focusedPaneId));
@@ -207,14 +213,20 @@ export function BottomPanel({ isMaximized = false, layoutVersion, onClose, onMax
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="center" className="w-44">
-          <DropdownMenuItem
-            className="gap-2"
-            data-testid={`bottom-panel-open-terminal-${pane.id}`}
-            onSelect={() => handleUpdatePaneContent(pane.id, { kind: 'tab', tab: 'terminal' })}
-          >
-            <Terminal size={13} />
-            Terminal
-          </DropdownMenuItem>
+          {BOTTOM_PANEL_TAB_ITEMS.map((item) => {
+            const ItemIcon = item.icon;
+            return (
+              <DropdownMenuItem
+                key={item.value}
+                className="gap-2"
+                data-testid={`bottom-panel-open-${item.value}-${pane.id}`}
+                onSelect={() => handleUpdatePaneContent(pane.id, { kind: 'tab', tab: item.value as BottomPanelTabId })}
+              >
+                <ItemIcon size={13} />
+                {item.label}
+              </DropdownMenuItem>
+            );
+          })}
           <DropdownMenuItem
             className="gap-2"
             data-testid={`bottom-panel-open-placeholder-a-${pane.id}`}
@@ -267,8 +279,8 @@ export function BottomPanel({ isMaximized = false, layoutVersion, onClose, onMax
       <div data-testid="bottom-panel-tab-bar" className={getBottomPanelTabBarClassName(layoutMode)}>
         <IconTabToggleGroup
           items={BOTTOM_PANEL_TAB_ITEMS}
-          value={focusedTab}
-          onValueChange={(nextValue) => handleSetFocusedPaneTab(nextValue as BottomPanelTabId)}
+          value={activeTab}
+          onValueChange={(nextValue) => handleSetActiveTab(nextValue as BottomPanelTabId)}
           groupLabel="Bottom panel tabs"
           groupTestId="bottom-panel-tab-group"
           tooltipSide="top"
@@ -284,7 +296,7 @@ export function BottomPanel({ isMaximized = false, layoutVersion, onClose, onMax
               size="icon-xs"
               aria-label="New Terminal"
               className="text-ide-text-muted hover:text-ide-text"
-              onClick={() => handleSetFocusedPaneTab('terminal')}
+              onClick={handleNewTerminal}
             >
               <Plus size={13} />
             </Button>

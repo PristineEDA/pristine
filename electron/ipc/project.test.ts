@@ -420,12 +420,17 @@ describe('project IPC handlers', () => {
     await flushHandler({}, {
       ...createSnapshot('explorer'),
       bottomPanelSession: {
-        focusedPaneId: 'bottom-pane-2',
-        nextPaneIndex: 3,
-        panes: [
-          { content: { kind: 'tab', tab: 'terminal' }, id: 'bottom-pane-1', size: 35 },
-          { content: { kind: 'placeholder', icon: 'boxes', label: 'Placeholder B' }, id: 'bottom-pane-2', size: 65 },
-        ],
+        activeTab: 'terminal',
+        tabs: {
+          terminal: {
+            focusedPaneId: 'bottom-pane-2',
+            nextPaneIndex: 3,
+            panes: [
+              { content: { kind: 'tab', tab: 'terminal' }, id: 'bottom-pane-1', size: 35 },
+              { content: { kind: 'placeholder', icon: 'boxes', label: 'Placeholder B' }, id: 'bottom-pane-2', size: 65 },
+            ],
+          },
+        },
       },
       sidePanelSession: {
         assistantThreadListExpanded: true,
@@ -452,11 +457,17 @@ describe('project IPC handlers', () => {
     await expect(getHandlerForCurrentProject({})).resolves.toEqual(expect.objectContaining({
       session: expect.objectContaining({
         bottomPanelSession: expect.objectContaining({
-          focusedPaneId: 'bottom-pane-2',
-          panes: [
-            { content: { kind: 'tab', tab: 'terminal' }, id: 'bottom-pane-1', size: 35 },
-            { content: { kind: 'placeholder', icon: 'boxes', label: 'Placeholder B' }, id: 'bottom-pane-2', size: 65 },
-          ],
+          activeTab: 'terminal',
+          tabs: expect.objectContaining({
+            terminal: {
+              focusedPaneId: 'bottom-pane-2',
+              nextPaneIndex: 3,
+              panes: [
+                { content: { kind: 'tab', tab: 'terminal' }, id: 'bottom-pane-1', size: 35 },
+                { content: { kind: 'placeholder', icon: 'boxes', label: 'Placeholder B' }, id: 'bottom-pane-2', size: 65 },
+              ],
+            },
+          }),
         }),
         sidePanelSession: {
           assistantThreadListExpanded: true,
@@ -537,11 +548,16 @@ describe('project IPC handlers', () => {
     await expect(getHandlerForCurrentProject({})).resolves.toEqual(expect.objectContaining({
       session: expect.objectContaining({
         bottomPanelSession: {
-          focusedPaneId: 'bad-pane',
-          nextPaneIndex: 2,
-          panes: [
-            { content: { kind: 'empty' }, id: 'bad-pane', size: 100 },
-          ],
+          activeTab: 'terminal',
+          tabs: expect.objectContaining({
+            terminal: {
+              focusedPaneId: 'bad-pane',
+              nextPaneIndex: 2,
+              panes: [
+                { content: { kind: 'empty' }, id: 'bad-pane', size: 100 },
+              ],
+            },
+          }),
         },
         sidePanelSession: {
           assistantThreadListExpanded: false,

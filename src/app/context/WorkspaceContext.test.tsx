@@ -613,9 +613,14 @@ describe('WorkspaceContext', () => {
     expect(useBottomPanelStore.getState().panes[0]?.content).toEqual({ kind: 'tab', tab: 'terminal' });
     expect(window.electronAPI!.project.flushSession).toHaveBeenCalledWith(expect.objectContaining({
       bottomPanelSession: expect.objectContaining({
-        panes: [
-          { content: { kind: 'tab', tab: 'terminal' }, id: 'bottom-pane-1', size: 100 },
-        ],
+        activeTab: 'terminal',
+        tabs: expect.objectContaining({
+          terminal: expect.objectContaining({
+            panes: [
+              { content: { kind: 'tab', tab: 'terminal' }, id: 'bottom-pane-1', size: 100 },
+            ],
+          }),
+        }),
       }),
     }));
   });
@@ -721,12 +726,17 @@ describe('WorkspaceContext', () => {
           physicalRightPanel: 424,
         },
         bottomPanelSession: {
-          focusedPaneId: 'bottom-pane-2',
-          nextPaneIndex: 3,
-          panes: [
-            { content: { kind: 'tab', tab: 'terminal' }, id: 'bottom-pane-1', size: 40 },
-            { content: { kind: 'placeholder', icon: 'file', label: 'Placeholder A' }, id: 'bottom-pane-2', size: 60 },
-          ],
+          activeTab: 'terminal',
+          tabs: {
+            terminal: {
+              focusedPaneId: 'bottom-pane-2',
+              nextPaneIndex: 3,
+              panes: [
+                { content: { kind: 'tab', tab: 'terminal' }, id: 'bottom-pane-1', size: 40 },
+                { content: { kind: 'placeholder', icon: 'file', label: 'Placeholder A' }, id: 'bottom-pane-2', size: 60 },
+              ],
+            },
+          },
         },
         sidePanelSession: {
           assistantThreadListExpanded: true,
@@ -783,6 +793,7 @@ describe('WorkspaceContext', () => {
       selectedNode: { path: 'rtl/core/cpu_top.sv', type: 'file' },
     });
     expect(useBottomPanelStore.getState()).toMatchObject({
+      activeTab: 'terminal',
       focusedPaneId: 'bottom-pane-2',
       nextPaneIndex: 3,
       panes: [
@@ -891,11 +902,16 @@ describe('WorkspaceContext', () => {
       editorGroups: expect.any(Array),
       mainContentView: 'code',
       bottomPanelSession: expect.objectContaining({
-        focusedPaneId: 'bottom-pane-2',
-        panes: [
-          { content: { kind: 'tab', tab: 'terminal' }, id: 'bottom-pane-1', size: 50 },
-          { content: { kind: 'placeholder', icon: 'boxes', label: 'Placeholder B' }, id: 'bottom-pane-2', size: 50 },
-        ],
+        activeTab: 'terminal',
+        tabs: expect.objectContaining({
+          terminal: expect.objectContaining({
+            focusedPaneId: 'bottom-pane-2',
+            panes: [
+              { content: { kind: 'tab', tab: 'terminal' }, id: 'bottom-pane-1', size: 50 },
+              { content: { kind: 'placeholder', icon: 'boxes', label: 'Placeholder B' }, id: 'bottom-pane-2', size: 50 },
+            ],
+          }),
+        }),
       }),
       panelWidths: {
         explorerLeftPanel: 360,

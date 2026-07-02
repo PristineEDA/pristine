@@ -56,10 +56,15 @@ export interface ProjectExplorerTreeSession {
   selectedNode: ProjectExplorerTreeSelectedNode | null;
 }
 
-export interface ProjectBottomPanelSession {
+export interface ProjectBottomPanelTabLayout {
   focusedPaneId: string;
   nextPaneIndex: number;
   panes: ProjectBottomPanelPane[];
+}
+
+export interface ProjectBottomPanelSession {
+  activeTab: ProjectBottomPanelTabId;
+  tabs: Partial<Record<ProjectBottomPanelTabId, ProjectBottomPanelTabLayout>>;
 }
 
 export type ProjectBottomPanelTabId =
