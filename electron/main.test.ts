@@ -30,6 +30,7 @@ type BrowserWindowInstance = {
 };
 
 type TrayInstance = {
+  icon: unknown;
   setToolTip: Mock<(tooltip: string) => void>;
   setContextMenu: Mock<(menu: unknown) => void>;
   popUpContextMenu: Mock<(menu?: unknown) => void>;
@@ -144,7 +145,10 @@ const mocks = vi.hoisted(() => {
     destroy = vi.fn();
     private handlers = new Map<string, (...args: unknown[]) => void>();
 
-    constructor() {
+    icon: unknown;
+
+    constructor(icon: unknown) {
+      this.icon = icon;
       trayInstances.push(this as unknown as TrayInstance);
     }
 
@@ -182,7 +186,10 @@ const mocks = vi.hoisted(() => {
     mockRequestSingleInstanceLock: vi.fn(() => true),
     mockBuildFromTemplate: vi.fn((template: unknown[]) => ({ template })),
     mockSetApplicationMenu: vi.fn(),
-    mockCreateFromDataURL: vi.fn(() => ({ kind: 'native-image' })),
+    mockExistsSync: vi.fn<(filePath: string) => boolean>(() => true),
+    mockCreateFromDataURL: vi.fn(() => ({ kind: 'native-image-data-url' })),
+    mockCreateFromPath: vi.fn((filePath: string) => ({ kind: 'native-image-path', path: filePath })),
+    mockCreateEmpty: vi.fn(() => ({ kind: 'native-image-empty' })),
     mockDisposeLspSession: vi.fn(),
     mockDisposeAllTerminalSessions: vi.fn(),
     mockFlushPendingConfigSave: vi.fn(),
@@ -200,6 +207,7 @@ const mocks = vi.hoisted(() => {
 
 vi.mock('node:fs', () => ({
   default: {
+    existsSync: (filePath: string) => mocks.mockExistsSync(filePath),
     mkdirSync: (...args: unknown[]) => mocks.mockMkdirSync(...args),
   },
 }));
@@ -224,6 +232,8 @@ vi.mock('electron', () => ({
   Tray: mocks.TrayMock,
   nativeImage: {
     createFromDataURL: mocks.mockCreateFromDataURL,
+    createFromPath: mocks.mockCreateFromPath,
+    createEmpty: mocks.mockCreateEmpty,
   },
   screen: {
     getPrimaryDisplay: () => ({
@@ -305,7 +315,11 @@ async function importMain(options?: {
   mocks.mockQuit.mockClear();
   mocks.mockBuildFromTemplate.mockClear();
   mocks.mockSetApplicationMenu.mockClear();
+  mocks.mockExistsSync.mockReset();
+  mocks.mockExistsSync.mockImplementation(() => true);
   mocks.mockCreateFromDataURL.mockClear();
+  mocks.mockCreateFromPath.mockClear();
+  mocks.mockCreateEmpty.mockClear();
   mocks.mockDisposeLspSession.mockClear();
   mocks.mockDisposeAllTerminalSessions.mockClear();
   mocks.mockStopPristineEdaEnvironment.mockClear();
@@ -465,7 +479,13 @@ describe('electron main entry', () => {
 
     expect(getMainWindow?.()).toBe(mainWindow);
     expect(trayInstances[0].setToolTip).toHaveBeenCalledWith('Pristine');
-    expect(mocks.mockCreateFromDataURL).toHaveBeenCalledTimes(1);
+    expect(trayInstances[0].icon).toMatchObject({
+      kind: 'native-image-path',
+      path: expect.stringMatching(/logo-v1-32\.png$/),
+    });
+    expect(mocks.mockCreateFromPath).toHaveBeenCalledWith(expect.stringMatching(/logo-v1-32\.png$/));
+    expect(mocks.mockCreateFromPath).toHaveBeenCalledWith(expect.stringMatching(/logo-v1-256\.png$/));
+    expect(mocks.mockCreateEmpty).not.toHaveBeenCalled();
     expect(mocks.mockBuildFromTemplate).toHaveBeenCalledWith([
       expect.objectContaining({ label: 'Open Pristine' }),
       { type: 'separator' },
@@ -474,6 +494,7 @@ describe('electron main entry', () => {
     expect(splashWindow.options).toMatchObject({
       width: 720,
       height: 405,
+      icon: expect.objectContaining({ kind: 'native-image-path' }),
       frame: false,
       resizable: false,
       skipTaskbar: true,
@@ -493,6 +514,7 @@ describe('electron main entry', () => {
       minHeight: 600,
       backgroundColor: '#121314',
       frame: false,
+      icon: expect.objectContaining({ kind: 'native-image-path' }),
       show: false,
       webPreferences: expect.objectContaining({
         nodeIntegration: false,

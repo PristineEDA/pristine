@@ -12,15 +12,31 @@ const workspaceRoot = process.cwd()
 const generatedDir = path.join(workspaceRoot, 'public', 'generated')
 const wallpaperTargetPath = path.join(generatedDir, 'empty-wallpaper.png')
 const generatedFontsDir = path.join(generatedDir, 'fonts')
+const generatedLogoDir = path.join(generatedDir, 'logo')
+const buildResourcesDir = path.join(workspaceRoot, 'build')
 
 const defaultAssetUrl = 'https://raw.githubusercontent.com/PristineEDA/pristine-res/main/images/empty-wallpaper.png'
 const assetUrl = process.env.PRISTINE_EMPTY_WALLPAPER_URL ?? defaultAssetUrl
 const defaultFontAssetBaseUrl = 'https://raw.githubusercontent.com/PristineEDA/pristine-res/main/fonts'
 const fontAssetBaseUrl = process.env.PRISTINE_FONT_ASSET_BASE_URL ?? defaultFontAssetBaseUrl
+const defaultLogoAssetBaseUrl = 'https://raw.githubusercontent.com/PristineEDA/pristine-res/main/images/logo'
+const logoAssetBaseUrl = process.env.PRISTINE_LOGO_ASSET_BASE_URL ?? defaultLogoAssetBaseUrl
 const defaultLocalResourceRoot = path.resolve(workspaceRoot, '..', 'pristine-res')
 const localResourceRoot = process.env.PRISTINE_RES_LOCAL_DIR ?? defaultLocalResourceRoot
 const localWallpaperSourcePath = path.join(localResourceRoot, 'images', 'empty-wallpaper.png')
 const localFontSourceDir = path.join(localResourceRoot, 'fonts')
+const localLogoSourceDir = path.join(localResourceRoot, 'images', 'logo')
+
+const logoPngFiles = [
+  'logo-v1.png',
+  'logo-v1-16.png',
+  'logo-v1-32.png',
+  'logo-v1-64.png',
+  'logo-v1-128.png',
+  'logo-v1-256.png',
+  'logo-v1-512.png',
+]
+const logoIcoFile = 'logo-v1.ico'
 
 const fontAssets = [
   {
@@ -161,6 +177,61 @@ async function copyLocalAsset(sourcePath, targetPath, label) {
   console.log(`Prepared ${label} from local source: ${path.relative(workspaceRoot, sourcePath)}`)
 }
 
+async function tryDownloadRemoteLogo(fileName, targetPath) {
+  try {
+    await downloadRemoteFile(joinRemoteUrl(logoAssetBaseUrl, fileName), targetPath, `logo asset ${fileName}`)
+    return true
+  } catch (error) {
+    console.warn(error instanceof Error ? error.message : String(error))
+    return false
+  }
+}
+
+async function resolveLogoAssetSource(fileName, tempRoot) {
+  const localSourcePath = path.join(localLogoSourceDir, fileName)
+  if (await hasContent(localSourcePath)) {
+    return localSourcePath
+  }
+
+  const remoteTargetPath = path.join(tempRoot, fileName)
+  return await tryDownloadRemoteLogo(fileName, remoteTargetPath) ? remoteTargetPath : null
+}
+
+async function prepareLogoAssets() {
+  await ensureDirectory(generatedLogoDir)
+  await ensureDirectory(buildResourcesDir)
+
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'pristine-logo-assets-'))
+
+  try {
+    const logoSourcePath = await resolveLogoAssetSource('logo-v1.png', tempRoot)
+    if (!logoSourcePath) {
+      throw new Error(
+        `Missing Pristine logo source: ${path.relative(workspaceRoot, path.join(localLogoSourceDir, 'logo-v1.png'))}`,
+      )
+    }
+
+    for (const fileName of logoPngFiles) {
+      const sourcePath = await resolveLogoAssetSource(fileName, tempRoot) ?? logoSourcePath
+      await copyLocalAsset(sourcePath, path.join(generatedLogoDir, fileName), `logo asset ${fileName}`)
+    }
+
+    const packagePngSourcePath = await resolveLogoAssetSource('logo-v1-512.png', tempRoot) ?? logoSourcePath
+    await copyLocalAsset(packagePngSourcePath, path.join(buildResourcesDir, 'icon.png'), 'packaged PNG icon')
+
+    const icoSourcePath = await resolveLogoAssetSource(logoIcoFile, tempRoot)
+    if (!icoSourcePath) {
+      throw new Error(
+        `Missing Windows app icon: ${path.relative(workspaceRoot, path.join(localLogoSourceDir, logoIcoFile))}. Generate it from logo-v1.png in pristine-res before packaging.`,
+      )
+    }
+
+    await copyLocalAsset(icoSourcePath, path.join(buildResourcesDir, 'icon.ico'), 'packaged Windows icon')
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true })
+  }
+}
+
 async function getLocalFontSourcePath(sourceFile) {
   const localSourcePath = path.join(localFontSourceDir, sourceFile)
   return (await hasContent(localSourcePath)) ? localSourcePath : null
@@ -289,6 +360,7 @@ async function prepareFontAssets() {
 async function main() {
   await ensureDirectory(generatedDir)
   await prepareFontAssets()
+  await prepareLogoAssets()
 
   if (await hasContent(wallpaperTargetPath)) {
     console.log(`Empty wallpaper already available: ${path.relative(workspaceRoot, wallpaperTargetPath)}`)

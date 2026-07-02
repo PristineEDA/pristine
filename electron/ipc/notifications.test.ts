@@ -9,12 +9,22 @@ interface MockBrowserWindow {
   };
 }
 
-const { mockHandle, mockGetAllWindows, mockSetAppUserModelId, mockNotificationShow, mockNotificationClose } = vi.hoisted(() => ({
+const {
+  mockHandle,
+  mockGetAllWindows,
+  mockSetAppUserModelId,
+  mockSetName,
+  mockNotificationShow,
+  mockNotificationClose,
+  mockCreateAppLogoNativeImage,
+} = vi.hoisted(() => ({
   mockHandle: vi.fn(),
   mockGetAllWindows: vi.fn<() => MockBrowserWindow[]>(() => []),
   mockSetAppUserModelId: vi.fn(),
+  mockSetName: vi.fn(),
   mockNotificationShow: vi.fn(),
   mockNotificationClose: vi.fn(),
+  mockCreateAppLogoNativeImage: vi.fn<(size?: number) => { kind: string }>(() => ({ kind: 'app-logo-native-image' })),
 }));
 
 class NotificationMock {
@@ -48,6 +58,7 @@ class NotificationMock {
 
 vi.mock('electron', () => ({
   app: {
+    setName: (...args: unknown[]) => mockSetName(...args),
     setAppUserModelId: (...args: unknown[]) => mockSetAppUserModelId(...args),
   },
   BrowserWindow: {
@@ -56,10 +67,11 @@ vi.mock('electron', () => ({
   ipcMain: {
     handle: (...args: unknown[]) => mockHandle(...args),
   },
-  nativeImage: {
-    createFromDataURL: (url: string) => ({ url }),
-  },
   Notification: NotificationMock,
+}));
+
+vi.mock('../appLogo.js', () => ({
+  createAppLogoNativeImage: (size?: number) => mockCreateAppLogoNativeImage(size),
 }));
 
 vi.mock('./config.js', () => ({
@@ -101,6 +113,7 @@ describe('notification IPC handlers', () => {
     const { registerNotificationHandlers } = await importModule();
     registerNotificationHandlers(() => null);
 
+    expect(mockSetName).toHaveBeenCalledWith('Pristine');
     expect(mockSetAppUserModelId).toHaveBeenCalledWith('com.pristine.ide');
     expect(mockHandle).toHaveBeenCalledWith(AsyncChannels.NOTIFICATIONS_PUBLISH, expect.any(Function));
     expect(mockHandle).toHaveBeenCalledWith(AsyncChannels.NOTIFICATIONS_DISMISS, expect.any(Function));
@@ -135,9 +148,11 @@ describe('notification IPC handlers', () => {
       title: 'Warn',
     });
     expect(mockNotificationShow).toHaveBeenCalledWith(expect.objectContaining({
-      body: 'Timing drift',
-      title: 'Warn',
+      body: 'Warn\nTiming drift',
+      icon: { kind: 'app-logo-native-image' },
+      title: 'Pristine',
     }));
+    expect(mockCreateAppLogoNativeImage).toHaveBeenCalledWith(64);
     expect(send).toHaveBeenCalledWith(StreamChannels.NOTIFICATIONS_HISTORY_CHANGED, [record]);
 
     vi.advanceTimersByTime(2_000);

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, Tray, nativeImage, screen, type MenuItemConstructorOptions } from 'electron';
+import { app, BrowserWindow, Menu, Tray, screen, type MenuItemConstructorOptions } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -21,6 +21,7 @@ import type { WindowCloseDecision, WindowCloseRequest } from '../src/app/window/
 import type { FloatingInfoWindowMode } from '../src/app/window/floatingInfoWindow.js';
 import type { ProjectWindowState } from '../types/project.js';
 import { handleAuthCallbackUrl, isAuthProtocolUrl } from './ipc/auth.js';
+import { createAppLogoNativeImage } from './appLogo.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MINIMUM_SPLASH_DURATION_MS = 3000;
@@ -239,17 +240,6 @@ function withRendererSurfaceQuery(rendererUrl: string, backgroundColor: string):
   }
 
   return url.toString();
-}
-
-function createTrayIcon() {
-  const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
-      <rect width="16" height="16" rx="4" fill="#0f172a"/>
-      <path d="M5 3.5h3.9c2.04 0 3.1 1.03 3.1 2.78 0 1.16-.52 1.96-1.47 2.39.79.28 1.72 1.01 1.72 2.59 0 2.03-1.32 3.24-3.64 3.24H5V3.5Zm2.08 4.44h1.52c.89 0 1.38-.45 1.38-1.25 0-.77-.49-1.17-1.38-1.17H7.08v2.42Zm0 4.54h1.73c1.05 0 1.58-.46 1.58-1.37 0-.9-.53-1.34-1.58-1.34H7.08v2.71Z" fill="#f8fafc"/>
-    </svg>
-  `.trim();
-
-  return nativeImage.createFromDataURL(`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`);
 }
 
 function showMainWindow(): void {
@@ -474,6 +464,7 @@ function createFloatingInfoWindow(): BrowserWindow {
     show: false,
     title: FLOATING_INFO_WINDOW_TITLE,
     backgroundColor,
+    icon: createAppLogoNativeImage(256),
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -603,7 +594,7 @@ function createTray(): Tray {
     return tray;
   }
 
-  const nextTray = new Tray(createTrayIcon());
+  const nextTray = new Tray(createAppLogoNativeImage(32));
   const trayMenu = createTrayMenu();
 
   nextTray.setToolTip('Pristine');
@@ -634,6 +625,7 @@ function createSplashWindow(): BrowserWindow {
     skipTaskbar: true,
     backgroundColor,
     autoHideMenuBar: true,
+    icon: createAppLogoNativeImage(256),
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -673,6 +665,7 @@ function createMainWindow(): BrowserWindow {
     backgroundColor,
     titleBarStyle: isMac ? 'hiddenInset' : undefined,
     trafficLightPosition: isMac ? { x: 12, y: 10 } : undefined,
+    icon: createAppLogoNativeImage(256),
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,

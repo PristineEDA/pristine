@@ -1,7 +1,8 @@
-import { BrowserWindow, Notification, app, ipcMain, nativeImage } from 'electron';
+import { BrowserWindow, Notification, app, ipcMain } from 'electron';
 import { AsyncChannels, StreamChannels } from './channels.js';
 import { getConfigValue } from './config.js';
 import type { NotificationLevel, NotificationPublishInput, NotificationRecord } from '../../types/notification.js';
+import { createAppLogoNativeImage } from '../appLogo.js';
 
 export const NOTIFICATION_DISMISS_SECONDS_CONFIG_KEY = 'notifications.dismissSeconds';
 export const DEFAULT_NOTIFICATION_DISMISS_SECONDS = 5;
@@ -13,6 +14,7 @@ const closeTimers = new Map<string, ReturnType<typeof setTimeout>>();
 let history: NotificationRecord[] = [];
 let getMainWindowForNotifications: (() => BrowserWindow | null) | null = null;
 let nextNotificationId = 1;
+const PRISTINE_NOTIFICATION_TITLE = 'Pristine';
 
 export function parseNotificationDismissSeconds(value: unknown): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
@@ -66,20 +68,6 @@ function broadcastHistoryChanged(): void {
   });
 }
 
-function getNotificationIcon(level: NotificationLevel): Electron.NativeImage {
-  const color = level === 'error' ? '#ef4444' : level === 'warning' ? '#f59e0b' : '#38bdf8';
-  const mark = level === 'error' ? '!' : level === 'warning' ? '!' : 'i';
-  const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
-      <rect width="64" height="64" rx="14" fill="#121314"/>
-      <circle cx="32" cy="32" r="19" fill="${color}"/>
-      <text x="32" y="42" fill="#ffffff" font-family="Arial, sans-serif" font-size="28" font-weight="700" text-anchor="middle">${mark}</text>
-    </svg>
-  `.trim();
-
-  return nativeImage.createFromDataURL(`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`);
-}
-
 function focusMainWindow(): void {
   const window = getMainWindowForNotifications?.();
   if (!window || window.isDestroyed()) {
@@ -119,11 +107,14 @@ function showNativeNotification(record: NotificationRecord): void {
   }
 
   try {
+    const body = record.body.trim().length > 0
+      ? `${record.title}\n${record.body}`
+      : record.title;
     const notification = new Notification({
-      body: record.body,
-      icon: getNotificationIcon(record.level),
+      body,
+      icon: createAppLogoNativeImage(64),
       silent: false,
-      title: record.title,
+      title: PRISTINE_NOTIFICATION_TITLE,
     });
 
     activeNotifications.set(record.id, notification);
@@ -199,6 +190,7 @@ export function resetNotificationServiceForTests(): void {
 
 export function registerNotificationHandlers(getMainWindow: () => BrowserWindow | null): void {
   getMainWindowForNotifications = getMainWindow;
+  app.setName(PRISTINE_NOTIFICATION_TITLE);
 
   if (process.platform === 'win32') {
     app.setAppUserModelId('com.pristine.ide');
