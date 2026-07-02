@@ -321,12 +321,14 @@ describe('StatusBar', () => {
     vi.mocked(window.electronAPI!.notifications.dismiss).mockResolvedValue(undefined);
     useNotificationStore.getState().hydrate([
       {
+        actions: [{ label: 'Mark as Read' }, { label: 'Delete' }],
         body: 'Timing path warning',
         createdAt: 200,
         expiresAt: 5200,
         id: 'warning-1',
         level: 'warning',
         title: 'Warning notification',
+        variant: 'actions',
       },
       {
         body: 'Build info',
@@ -335,6 +337,7 @@ describe('StatusBar', () => {
         id: 'info-1',
         level: 'info',
         title: 'Info notification',
+        variant: 'standard',
       },
     ]);
 
@@ -357,6 +360,12 @@ describe('StatusBar', () => {
       )).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
       expect(screen.getByTestId('status-bar-notification-card-warning')).toBeInTheDocument();
       expect(screen.getByTestId('status-bar-notifications-list')).toHaveClass('overflow-y-auto');
+      expect(screen.getByTestId('status-bar-notification-actions-warning-1')).toBeInTheDocument();
+      expect(screen.getByTestId('status-bar-notification-action-warning-1-mark-as-read')).toHaveTextContent('Mark as Read');
+      expect(screen.getByTestId('status-bar-notification-action-warning-1-delete')).toHaveTextContent('Delete');
+
+      fireEvent.click(screen.getByTestId('status-bar-notification-action-warning-1-mark-as-read'));
+      expect(window.electronAPI!.notifications.dismiss).not.toHaveBeenCalled();
 
       fireEvent.click(screen.getByTestId('status-bar-notification-dismiss-warning-1'));
 

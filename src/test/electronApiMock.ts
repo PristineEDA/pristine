@@ -314,6 +314,8 @@ export function createElectronApiMock(): ElectronAPI {
         id: 'notification-test-id',
         level: input.level,
         title: input.title,
+        variant: input.variant ?? 'standard',
+        ...(input.actions ? { actions: input.actions } : {}),
       })),
       dismiss: vi.fn().mockResolvedValue(undefined),
       getHistory: vi.fn().mockResolvedValue([]),

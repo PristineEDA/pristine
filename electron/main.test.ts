@@ -186,6 +186,7 @@ const mocks = vi.hoisted(() => {
     mockRequestSingleInstanceLock: vi.fn(() => true),
     mockBuildFromTemplate: vi.fn((template: unknown[]) => ({ template })),
     mockSetApplicationMenu: vi.fn(),
+    mockWriteShortcutLink: vi.fn(() => true),
     mockExistsSync: vi.fn<(filePath: string) => boolean>(() => true),
     mockCreateFromDataURL: vi.fn(() => ({ kind: 'native-image-data-url' })),
     mockCreateFromPath: vi.fn((filePath: string) => ({ kind: 'native-image-path', path: filePath })),
@@ -230,6 +231,9 @@ vi.mock('electron', () => ({
     setApplicationMenu: mocks.mockSetApplicationMenu,
   },
   Tray: mocks.TrayMock,
+  shell: {
+    writeShortcutLink: mocks.mockWriteShortcutLink,
+  },
   nativeImage: {
     createFromDataURL: mocks.mockCreateFromDataURL,
     createFromPath: mocks.mockCreateFromPath,
@@ -315,6 +319,7 @@ async function importMain(options?: {
   mocks.mockQuit.mockClear();
   mocks.mockBuildFromTemplate.mockClear();
   mocks.mockSetApplicationMenu.mockClear();
+  mocks.mockWriteShortcutLink.mockClear();
   mocks.mockExistsSync.mockReset();
   mocks.mockExistsSync.mockImplementation(() => true);
   mocks.mockCreateFromDataURL.mockClear();
@@ -473,6 +478,18 @@ describe('electron main entry', () => {
     expect(mocks.mockSetPath).toHaveBeenCalledWith('sessionData', path.join(mocks.mockAppDataPath, 'Pristine', 'dev-profile', 'session-data'));
     expect(trayInstances).toHaveLength(1);
     expect(browserWindowInstances).toHaveLength(2);
+    expect(mocks.mockWriteShortcutLink).toHaveBeenCalledWith(
+      path.join(mocks.mockAppDataPath, 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Pristine.lnk'),
+      'update',
+      expect.objectContaining({
+        appUserModelId: 'com.pristine.ide',
+        description: 'Pristine',
+        icon: process.execPath,
+        iconIndex: 0,
+        target: process.execPath,
+        cwd: path.dirname(process.execPath),
+      }),
+    );
 
     const splashWindow = browserWindowInstances[0];
     const mainWindow = browserWindowInstances[1];

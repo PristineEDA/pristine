@@ -7790,7 +7790,7 @@ test('File notif triggers notification and progress demos', async () => {
     const browserGlobal = window as typeof window & {
       electronAPI?: {
         notifications: {
-          getHistory: () => Promise<Array<{ createdAt: number; expiresAt: number; level: string }>>;
+          getHistory: () => Promise<Array<{ actions?: Array<{ label: string }>; createdAt: number; expiresAt: number; level: string; variant: string }>>;
         };
       };
     };
@@ -7798,6 +7798,9 @@ test('File notif triggers notification and progress demos', async () => {
     return browserGlobal.electronAPI?.notifications.getHistory() ?? [];
   });
   expect(notificationHistory?.[0]?.level).toBe('error');
+  expect(notificationHistory?.[0]?.variant).toBe('standard');
+  expect(notificationHistory?.[1]?.variant).toBe('actions');
+  expect(notificationHistory?.[1]?.actions?.map((action) => action.label)).toEqual(['Mark as Read', 'Delete']);
   expect(notificationHistory?.[0]?.expiresAt - notificationHistory?.[0]?.createdAt).toBe(1000);
 
   await window.getByTestId('status-bar-notifications').hover();
@@ -7807,6 +7810,11 @@ test('File notif triggers notification and progress demos', async () => {
   await expect(notificationCards.nth(0)).toHaveAttribute('data-testid', 'status-bar-notification-card-error');
   await expect(notificationCards.nth(1)).toHaveAttribute('data-testid', 'status-bar-notification-card-warning');
   await expect(notificationCards.nth(2)).toHaveAttribute('data-testid', 'status-bar-notification-card-info');
+  await expect(notificationCards.nth(1).getByRole('button', { name: 'Mark as Read' })).toBeVisible();
+  await expect(notificationCards.nth(1).getByRole('button', { name: 'Delete' })).toBeVisible();
+
+  await notificationCards.nth(1).getByRole('button', { name: 'Mark as Read' }).click();
+  await expect(notificationCards).toHaveCount(3);
 
   await window.locator('[data-testid^="status-bar-notification-dismiss-"]').first().click();
   await expect(notificationCards).toHaveCount(2);

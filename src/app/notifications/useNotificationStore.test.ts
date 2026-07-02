@@ -10,8 +10,8 @@ describe('useNotificationStore', () => {
 
   it('hydrates notification history in newest-first order', () => {
     useNotificationStore.getState().hydrate([
-      { id: 'older', level: 'info', title: 'Older', body: '', createdAt: 10, expiresAt: 20 },
-      { id: 'newer', level: 'warning', title: 'Newer', body: '', createdAt: 30, expiresAt: 40 },
+      { id: 'older', level: 'info', title: 'Older', body: '', createdAt: 10, expiresAt: 20, variant: 'standard' },
+      { id: 'newer', level: 'warning', title: 'Newer', body: '', createdAt: 30, expiresAt: 40, variant: 'standard' },
     ]);
 
     expect(useNotificationStore.getState().history.map((record) => record.id)).toEqual(['newer', 'older']);
@@ -25,6 +25,7 @@ describe('useNotificationStore', () => {
       body: 'Failed',
       createdAt: 100,
       expiresAt: 5100,
+      variant: 'standard',
     });
 
     await publishNotification({ level: 'error', title: 'Error notification', body: 'Failed' });
@@ -40,7 +41,7 @@ describe('useNotificationStore', () => {
 
   it('dismisses through electron API and removes the record locally', async () => {
     useNotificationStore.getState().hydrate([
-      { id: 'notification-1', level: 'info', title: 'Info', body: '', createdAt: 1, expiresAt: 2 },
+      { id: 'notification-1', level: 'info', title: 'Info', body: '', createdAt: 1, expiresAt: 2, variant: 'standard' },
     ]);
 
     await useNotificationStore.getState().dismiss('notification-1');

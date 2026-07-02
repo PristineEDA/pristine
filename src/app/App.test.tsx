@@ -648,6 +648,7 @@ describe('App', () => {
       expect(window.electronAPI!.notifications.publish).toHaveBeenCalledWith(expect.objectContaining({
         level: 'info',
         title: 'Info notification',
+        variant: 'standard',
       }));
       expect(useProgressStore.getState().sessions.map((session) => session.title)).toEqual([
         'Scanning RTL Sources',
@@ -667,6 +668,14 @@ describe('App', () => {
         title: 'Scanning RTL Sources',
         value: 100,
       });
+
+      fireEvent.click(screen.getByTestId('mock-menu-notif'));
+      expect(window.electronAPI!.notifications.publish).toHaveBeenLastCalledWith(expect.objectContaining({
+        actions: [{ label: 'Mark as Read' }, { label: 'Delete' }],
+        level: 'warning',
+        title: 'Warning notification',
+        variant: 'actions',
+      }));
     } finally {
       unmount();
       vi.clearAllTimers();

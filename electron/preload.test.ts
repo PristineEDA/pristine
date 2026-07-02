@@ -347,9 +347,9 @@ describe('preload bridge', () => {
     expect(onWorkspaceChange).toHaveBeenCalledWith({ refreshGitStatus: true, refreshWorkspaceTree: true });
 
     const notificationsHandler = mockOn.mock.calls.find((call) => call[0] === 'stream:notifications:history-changed')?.[1];
-    notificationsHandler({}, [{ id: 'notification-1', level: 'info', title: 'Info', body: '', createdAt: 1, expiresAt: 2 }]);
+    notificationsHandler({}, [{ id: 'notification-1', level: 'info', title: 'Info', body: '', createdAt: 1, expiresAt: 2, variant: 'standard' }]);
     expect(onNotificationsHistoryChanged).toHaveBeenCalledWith([
-      { id: 'notification-1', level: 'info', title: 'Info', body: '', createdAt: 1, expiresAt: 2 },
+      { id: 'notification-1', level: 'info', title: 'Info', body: '', createdAt: 1, expiresAt: 2, variant: 'standard' },
     ]);
 
     const stdoutHandler = mockOn.mock.calls.find((call) => call[0] === 'stream:shell:stdout')?.[1];

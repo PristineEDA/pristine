@@ -22,6 +22,7 @@ import type { FloatingInfoWindowMode } from '../src/app/window/floatingInfoWindo
 import type { ProjectWindowState } from '../types/project.js';
 import { handleAuthCallbackUrl, isAuthProtocolUrl } from './ipc/auth.js';
 import { createAppLogoNativeImage } from './appLogo.js';
+import { ensureWindowsNotificationShortcut } from './windowsNotificationIdentity.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MINIMUM_SPLASH_DURATION_MS = 3000;
@@ -787,6 +788,7 @@ if (!singleInstanceLock) {
 
   app.whenReady().then(() => {
     installApplicationMenu();
+    ensureWindowsNotificationShortcut();
     createTray();
     createStartupWindows();
 

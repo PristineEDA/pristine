@@ -1,5 +1,5 @@
 import { createReadStream, createWriteStream } from 'node:fs'
-import { access, copyFile, mkdir, mkdtemp, rm, stat } from 'node:fs/promises'
+import { access, copyFile, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { pipeline } from 'node:stream/promises'
@@ -37,6 +37,16 @@ const logoPngFiles = [
   'logo-v1-512.png',
 ]
 const logoIcoFile = 'logo-v1.ico'
+const logoIcnsFile = 'logo-v1.icns'
+
+const logoIcnsChunks = [
+  ['icp4', 'logo-v1-16.png'],
+  ['icp5', 'logo-v1-32.png'],
+  ['icp6', 'logo-v1-64.png'],
+  ['ic07', 'logo-v1-128.png'],
+  ['ic08', 'logo-v1-256.png'],
+  ['ic09', 'logo-v1-512.png'],
+]
 
 const fontAssets = [
   {
@@ -177,6 +187,31 @@ async function copyLocalAsset(sourcePath, targetPath, label) {
   console.log(`Prepared ${label} from local source: ${path.relative(workspaceRoot, sourcePath)}`)
 }
 
+async function writeIcnsFromGeneratedPngAssets(targetPath) {
+  const chunks = []
+
+  for (const [type, fileName] of logoIcnsChunks) {
+    const sourcePath = path.join(generatedLogoDir, fileName)
+    if (!(await hasContent(sourcePath))) {
+      throw new Error(`Cannot generate macOS app icon because ${path.relative(workspaceRoot, sourcePath)} is missing.`)
+    }
+
+    const data = await readFile(sourcePath)
+    const header = Buffer.alloc(8)
+    header.write(type, 0, 'ascii')
+    header.writeUInt32BE(data.length + 8, 4)
+    chunks.push(Buffer.concat([header, data]))
+  }
+
+  const body = Buffer.concat(chunks)
+  const header = Buffer.alloc(8)
+  header.write('icns', 0, 'ascii')
+  header.writeUInt32BE(body.length + 8, 4)
+  await ensureDirectory(path.dirname(targetPath))
+  await writeFile(targetPath, Buffer.concat([header, body]))
+  console.log(`Prepared packaged macOS icon from generated PNG logo assets: ${path.relative(workspaceRoot, targetPath)}`)
+}
+
 async function tryDownloadRemoteLogo(fileName, targetPath) {
   try {
     await downloadRemoteFile(joinRemoteUrl(logoAssetBaseUrl, fileName), targetPath, `logo asset ${fileName}`)
@@ -227,6 +262,15 @@ async function prepareLogoAssets() {
     }
 
     await copyLocalAsset(icoSourcePath, path.join(buildResourcesDir, 'icon.ico'), 'packaged Windows icon')
+
+    const icnsSourcePath = await resolveLogoAssetSource(logoIcnsFile, tempRoot)
+    if (icnsSourcePath) {
+      await copyLocalAsset(icnsSourcePath, path.join(generatedLogoDir, logoIcnsFile), `logo asset ${logoIcnsFile}`)
+      await copyLocalAsset(icnsSourcePath, path.join(buildResourcesDir, 'icon.icns'), 'packaged macOS icon')
+    } else {
+      await writeIcnsFromGeneratedPngAssets(path.join(generatedLogoDir, logoIcnsFile))
+      await copyLocalAsset(path.join(generatedLogoDir, logoIcnsFile), path.join(buildResourcesDir, 'icon.icns'), 'packaged macOS icon')
+    }
   } finally {
     await rm(tempRoot, { recursive: true, force: true })
   }

@@ -192,6 +192,7 @@ linux:
       arch: [x64]
   category: Development
 mac:
+  icon: icon.icns
   target:
     - target: dmg
       arch: [x64, arm64]

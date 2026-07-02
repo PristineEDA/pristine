@@ -278,6 +278,7 @@ function NotificationHistoryCard({ record }: { record: NotificationRecord }) {
   const dismiss = useNotificationStore((state) => state.dismiss);
   const meta = notificationLevelMeta[record.level];
   const Icon = meta.icon;
+  const actionButtons = record.variant === 'actions' ? record.actions ?? [] : [];
 
   return (
     <article
@@ -295,6 +296,24 @@ function NotificationHistoryCard({ record }: { record: NotificationRecord }) {
           </div>
           {record.body ? (
             <p className="mt-1 text-[11px] leading-4 text-ide-text-muted">{record.body}</p>
+          ) : null}
+          {actionButtons.length > 0 ? (
+            <div className="mt-2 grid grid-cols-2 gap-2" data-testid={`status-bar-notification-actions-${record.id}`}>
+              {actionButtons.map((action) => (
+                <button
+                  key={action.label}
+                  type="button"
+                  className="h-7 rounded-md border border-ide-border bg-ide-tab-bg px-2 text-[11px] font-medium text-ide-text transition-colors hover:bg-ide-hover"
+                  data-testid={`status-bar-notification-action-${record.id}-${action.label.toLowerCase().replace(/\s+/g, '-')}`}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                  }}
+                >
+                  {action.label}
+                </button>
+              ))}
+            </div>
           ) : null}
           <p className="mt-1 text-[10px] leading-3 text-ide-text-muted">{formatNotificationTime(record.createdAt)}</p>
         </div>

@@ -17,6 +17,7 @@ const {
   mockNotificationShow,
   mockNotificationClose,
   mockCreateAppLogoNativeImage,
+  mockGetAppLogoPath,
 } = vi.hoisted(() => ({
   mockHandle: vi.fn(),
   mockGetAllWindows: vi.fn<() => MockBrowserWindow[]>(() => []),
@@ -25,6 +26,7 @@ const {
   mockNotificationShow: vi.fn(),
   mockNotificationClose: vi.fn(),
   mockCreateAppLogoNativeImage: vi.fn<(size?: number) => { kind: string }>(() => ({ kind: 'app-logo-native-image' })),
+  mockGetAppLogoPath: vi.fn<(size?: number) => string | null>(() => 'C:\\Pristine\\logo-v1-64.png'),
 }));
 
 class NotificationMock {
@@ -67,11 +69,15 @@ vi.mock('electron', () => ({
   ipcMain: {
     handle: (...args: unknown[]) => mockHandle(...args),
   },
+  shell: {
+    writeShortcutLink: vi.fn(),
+  },
   Notification: NotificationMock,
 }));
 
 vi.mock('../appLogo.js', () => ({
   createAppLogoNativeImage: (size?: number) => mockCreateAppLogoNativeImage(size),
+  getAppLogoPath: (size?: number) => mockGetAppLogoPath(size),
 }));
 
 vi.mock('./config.js', () => ({
@@ -96,6 +102,7 @@ describe('notification IPC handlers', () => {
     vi.clearAllMocks();
     mockGetAllWindows.mockReturnValue([]);
     NotificationMock.isSupported.mockReturnValue(true);
+    mockGetAppLogoPath.mockReturnValue('C:\\Pristine\\logo-v1-64.png');
     delete process.env['PRISTINE_E2E'];
   });
 
@@ -146,6 +153,7 @@ describe('notification IPC handlers', () => {
       expiresAt: 12_000,
       level: 'warning',
       title: 'Warn',
+      variant: 'standard',
     });
     expect(mockNotificationShow).toHaveBeenCalledWith(expect.objectContaining({
       body: 'Warn\nTiming drift',
@@ -157,6 +165,70 @@ describe('notification IPC handlers', () => {
 
     vi.advanceTimersByTime(2_000);
     expect(mockNotificationClose).toHaveBeenCalled();
+  });
+
+  it('uses Windows toast XML with action buttons for action-style native notifications', async () => {
+    const originalPlatform = process.platform;
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+
+    try {
+      const { registerNotificationHandlers } = await importModule();
+      registerNotificationHandlers(() => null);
+
+      const handler = getHandler(AsyncChannels.NOTIFICATIONS_PUBLISH);
+      const record = await handler({}, {
+        body: 'You missed messages in OpenPencil from Discord',
+        level: 'info',
+        title: 'maksyuki@qq.com received 1 new message',
+        variant: 'actions',
+      });
+
+      expect(record).toMatchObject({
+        actions: [{ label: 'Mark as Read' }, { label: 'Delete' }],
+        variant: 'actions',
+      });
+      expect(mockNotificationShow).toHaveBeenCalledWith({
+        toastXml: expect.stringContaining('<text>Pristine</text>'),
+      });
+      const toastXml = (mockNotificationShow.mock.calls[0]?.[0] as { toastXml: string }).toastXml;
+      expect(toastXml).toContain('maksyuki@qq.com received 1 new message');
+      expect(toastXml).toContain('You missed messages in OpenPencil from Discord');
+      expect(toastXml).toContain('Mark as Read');
+      expect(toastXml).toContain('Delete');
+      expect(toastXml).toContain('file:///C:/Pristine/logo-v1-64.png');
+    } finally {
+      Object.defineProperty(process, 'platform', { value: originalPlatform });
+    }
+  });
+
+  it('uses macOS notification actions for action-style native notifications', async () => {
+    const originalPlatform = process.platform;
+    Object.defineProperty(process, 'platform', { value: 'darwin' });
+
+    try {
+      const { registerNotificationHandlers } = await importModule();
+      registerNotificationHandlers(() => null);
+
+      const handler = getHandler(AsyncChannels.NOTIFICATIONS_PUBLISH);
+      await handler({}, {
+        body: 'Review generated layout warnings',
+        level: 'warning',
+        title: 'Layout warning',
+        variant: 'actions',
+      });
+
+      expect(mockNotificationShow).toHaveBeenCalledWith(expect.objectContaining({
+        actions: [
+          { text: 'Mark as Read', type: 'button' },
+          { text: 'Delete', type: 'button' },
+        ],
+        body: 'Layout warning\nReview generated layout warnings',
+        icon: { kind: 'app-logo-native-image' },
+        title: 'Pristine',
+      }));
+    } finally {
+      Object.defineProperty(process, 'platform', { value: originalPlatform });
+    }
   });
 
   it('keeps history when native notifications are unsupported or skipped for e2e', async () => {

@@ -310,14 +310,16 @@ describe('release workflow contract', () => {
     expect(workflow).toContain("target=\"release-assets/${artifact_name}-${file_name}\"")
   })
 
-  it('uses generated Pristine logo assets for packaged Windows and Linux icons', () => {
+  it('uses generated Pristine logo assets for packaged Windows, Linux, and macOS icons', () => {
     const electronBuilderConfig = fs.readFileSync(electronBuilderConfigPath, 'utf8')
     const preparePackageAppScript = fs.readFileSync(preparePackageAppScriptPath, 'utf8')
 
     expect(electronBuilderConfig).toMatch(/win:\r?\n  icon: icon\.ico/)
     expect(electronBuilderConfig).toMatch(/linux:\r?\n  icon: icon\.png/)
+    expect(electronBuilderConfig).toMatch(/mac:\r?\n  icon: icon\.icns/)
     expect(preparePackageAppScript).toContain('buildResources: ../../build')
     expect(preparePackageAppScript).toMatch(/win:\r?\n  icon: icon\.ico/)
     expect(preparePackageAppScript).toMatch(/linux:\r?\n  icon: icon\.png/)
+    expect(preparePackageAppScript).toMatch(/mac:\r?\n  icon: icon\.icns/)
   })
 })

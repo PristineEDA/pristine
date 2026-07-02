@@ -130,6 +130,11 @@ const demoNotifications = [
   },
 ] as const;
 
+const demoNotificationActions = [
+  { label: 'Mark as Read' },
+  { label: 'Delete' },
+] as const;
+
 const demoProgressSessions = [
   { title: 'Scanning RTL Sources', source: 'Run', stepMs: 360, increment: 9, endDelayMs: 4200 },
   { title: 'Indexing SystemVerilog Symbols', source: 'Run', stepMs: 440, increment: 11, endDelayMs: 5200 },
@@ -586,9 +591,15 @@ function AppLayout() {
   }, []);
 
   const handleNotificationProgressDemo = useCallback(() => {
-    const notification = demoNotifications[notificationDemoIndexRef.current % demoNotifications.length] ?? demoNotifications[0];
+    const notificationDemoIndex = notificationDemoIndexRef.current;
+    const notification = demoNotifications[notificationDemoIndex % demoNotifications.length] ?? demoNotifications[0];
+    const variant = notificationDemoIndex % 2 === 0 ? 'standard' : 'actions';
     notificationDemoIndexRef.current += 1;
-    void publishNotification(notification);
+    void publishNotification({
+      ...notification,
+      actions: variant === 'actions' ? [...demoNotificationActions] : undefined,
+      variant,
+    });
 
     demoProgressSessions.forEach((demo, index) => {
       const id = startProgressSession({
