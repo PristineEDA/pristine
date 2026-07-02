@@ -15,6 +15,11 @@ export interface BottomPanelPane {
   size: number;
 }
 
+export interface WslPaneOverride {
+  paneId: string;
+  previousContent: BottomPaneContent;
+}
+
 export const MIN_SPLIT_PANE_WIDTH_PX = 260;
 export const SPLIT_HANDLE_GAP_PX = 4;
 
@@ -28,6 +33,7 @@ interface BottomPanelState {
   focusedPaneMeasuredWidth: number;
   nextPaneIndex: number;
   panes: BottomPanelPane[];
+  wslPaneOverride: WslPaneOverride | null;
 }
 
 interface BottomPanelActions {
@@ -35,10 +41,12 @@ interface BottomPanelActions {
   focusPane: (paneId: string, measuredWidth?: number) => void;
   hydrateProjectBottomPanelSession: (snapshot: ProjectBottomPanelSession | null | undefined) => void;
   removeFocusedPane: () => RemovedBottomPanelPane | null;
+  restoreWslPaneOverride: () => boolean;
   resetBottomPanelPanes: () => void;
   setFocusedPaneMeasuredWidth: (measuredWidth: number) => void;
   setFocusedPaneTab: (tab: BottomPanelTabId, measuredWidth?: number) => void;
   setPaneSize: (paneId: string, size: number) => void;
+  showWslTerminalInPane: (paneId: string, measuredWidth?: number) => boolean;
   splitFocusedPane: (measuredWidth: number) => boolean;
   updatePaneContent: (paneId: string, content: BottomPaneContent, measuredWidth?: number) => void;
 }
@@ -84,6 +92,30 @@ function normalizeBottomPaneContent(value: unknown): BottomPaneContent {
   }
 
   return { kind: 'empty' };
+}
+
+function isWslTerminalContent(content: BottomPaneContent): boolean {
+  return content.kind === 'tab'
+    && content.tab === 'terminal'
+    && content.terminalProfile === 'wsl-pristine-eda';
+}
+
+function normalizePaneContentForSession(content: BottomPaneContent): BottomPaneContent {
+  return content.kind === 'tab' && content.tab === 'terminal'
+    ? { kind: 'tab', tab: 'terminal' }
+    : { ...content };
+}
+
+function getProjectSessionPanes(state: BottomPanelState): BottomPanelPane[] {
+  if (!state.wslPaneOverride) {
+    return state.panes;
+  }
+
+  return state.panes.map((pane) => (
+    pane.id === state.wslPaneOverride?.paneId && isWslTerminalContent(pane.content)
+      ? { ...pane, content: state.wslPaneOverride.previousContent }
+      : pane
+  ));
 }
 
 function normalizeHydratedBottomPanelSession(
@@ -142,6 +174,7 @@ function normalizeHydratedBottomPanelSession(
     focusedPaneMeasuredWidth: Number.POSITIVE_INFINITY,
     nextPaneIndex,
     panes: normalizedPanes,
+    wslPaneOverride: null,
   };
 }
 
@@ -161,6 +194,7 @@ function createDefaultBottomPanelState(): BottomPanelState {
     focusedPaneMeasuredWidth: Number.POSITIVE_INFINITY,
     nextPaneIndex: 2,
     panes: [createInitialBottomPanelPane()],
+    wslPaneOverride: null,
   };
 }
 
@@ -173,13 +207,12 @@ export const useBottomPanelStore = create<BottomPanelStore>((set, get) => ({
 
   captureProjectBottomPanelSession: () => {
     const state = get();
+    const panes = getProjectSessionPanes(state);
     return {
       focusedPaneId: state.focusedPaneId,
       nextPaneIndex: state.nextPaneIndex,
-      panes: state.panes.map((pane) => ({
-        content: pane.content.kind === 'tab' && pane.content.tab === 'terminal'
-          ? { kind: 'tab', tab: 'terminal' }
-          : { ...pane.content },
+      panes: panes.map((pane) => ({
+        content: normalizePaneContentForSession(pane.content),
         id: pane.id,
         size: pane.size,
       })),
@@ -229,12 +262,42 @@ export const useBottomPanelStore = create<BottomPanelStore>((set, get) => ({
       focusedPaneId: nextFocusedPane.id,
       focusedPaneMeasuredWidth: Number.POSITIVE_INFINITY,
       panes: nextPanes,
+      wslPaneOverride: state.wslPaneOverride?.paneId === removedPane.id ? null : state.wslPaneOverride,
     });
 
     return {
       nextFocusedPaneId: nextFocusedPane.id,
       pane: removedPane,
     };
+  },
+
+  restoreWslPaneOverride: () => {
+    const state = get();
+    const override = state.wslPaneOverride;
+    if (!override) {
+      return false;
+    }
+
+    let restored = false;
+    const panes = state.panes.map((pane) => {
+      if (pane.id !== override.paneId) {
+        return pane;
+      }
+
+      if (!isWslTerminalContent(pane.content)) {
+        return pane;
+      }
+
+      restored = true;
+      return { ...pane, content: override.previousContent };
+    });
+
+    set({
+      panes,
+      wslPaneOverride: null,
+    });
+
+    return restored;
   },
 
   resetBottomPanelPanes: () => {
@@ -262,6 +325,52 @@ export const useBottomPanelStore = create<BottomPanelStore>((set, get) => ({
         )),
       };
     });
+  },
+
+  showWslTerminalInPane: (paneId, measuredWidth) => {
+    const state = get();
+    const pane = state.panes.find((currentPane) => currentPane.id === paneId);
+    if (!pane) {
+      return false;
+    }
+
+    if (isWslTerminalContent(pane.content) && !state.wslPaneOverride) {
+      set({
+        focusedPaneId: paneId,
+        focusedPaneMeasuredWidth: measuredWidth ?? state.focusedPaneMeasuredWidth,
+      });
+      return true;
+    }
+
+    const wslContent: BottomPaneContent = {
+      kind: 'tab',
+      tab: 'terminal',
+      terminalProfile: 'wsl-pristine-eda',
+    };
+    const previousContent = state.wslPaneOverride?.paneId === paneId
+      ? state.wslPaneOverride.previousContent
+      : pane.content;
+    const restoredPanes = state.wslPaneOverride && state.wslPaneOverride.paneId !== paneId
+      ? state.panes.map((currentPane) => (
+        currentPane.id === state.wslPaneOverride?.paneId && isWslTerminalContent(currentPane.content)
+          ? { ...currentPane, content: state.wslPaneOverride.previousContent }
+          : currentPane
+      ))
+      : state.panes;
+
+    set({
+      focusedPaneId: paneId,
+      focusedPaneMeasuredWidth: measuredWidth ?? state.focusedPaneMeasuredWidth,
+      panes: restoredPanes.map((currentPane) => (
+        currentPane.id === paneId ? { ...currentPane, content: wslContent } : currentPane
+      )),
+      wslPaneOverride: {
+        paneId,
+        previousContent,
+      },
+    });
+
+    return true;
   },
 
   splitFocusedPane: (measuredWidth) => {
@@ -311,6 +420,9 @@ export const useBottomPanelStore = create<BottomPanelStore>((set, get) => ({
         panes: state.panes.map((pane) => (
           pane.id === paneId ? { ...pane, content } : pane
         )),
+        wslPaneOverride: state.wslPaneOverride?.paneId === paneId && !isWslTerminalContent(content)
+          ? null
+          : state.wslPaneOverride,
       };
     });
   },

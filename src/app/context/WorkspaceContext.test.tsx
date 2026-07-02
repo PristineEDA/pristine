@@ -7,6 +7,11 @@ import { resetWorkspaceSessionStoreForTests, useWorkspaceSessionStore } from './
 import { resetBottomPanelStoreForTests, useBottomPanelStore } from '../components/code/explorer/useBottomPanelStore';
 import { resetSidePanelSessionStoreForTests, useSidePanelSessionStore } from '../components/code/explorer/useSidePanelSessionStore';
 import { resetExplorerTreeSessionStoreForTests, useExplorerTreeSessionStore } from '../workspace/useExplorerTreeSessionStore';
+import {
+  WSL_TERMINAL_SESSION_KEY,
+  resetWslDevelopmentEnvironmentStoreForTests,
+  useWslDevelopmentEnvironmentStore,
+} from '../wsl/useWslDevelopmentEnvironmentStore';
 import type { ProjectState } from '../../../types/project';
 
 const undoActionRun = vi.fn(() => Promise.resolve());
@@ -159,6 +164,7 @@ describe('WorkspaceContext', () => {
     resetBottomPanelStoreForTests();
     resetSidePanelSessionStoreForTests();
     resetExplorerTreeSessionStoreForTests();
+    resetWslDevelopmentEnvironmentStoreForTests();
     testUser = userEvent.setup();
     vi.clearAllMocks();
     undoActionRun.mockClear();
@@ -569,6 +575,49 @@ describe('WorkspaceContext', () => {
 
     expect(window.electronAPI?.fs.writeFile).toHaveBeenCalledWith('rtl/core/reg_file.v', 'module reg_file; logic dirty; endmodule');
     expect(window.electronAPI?.resolveCloseRequest).toHaveBeenCalledWith(7, 'proceed');
+  });
+
+  it('deactivates WSL and restores transient terminal pane before flushing on app close', async () => {
+    vi.mocked(window.electronAPI!.project.getCurrentProject).mockResolvedValueOnce(createProjectState());
+    useWslDevelopmentEnvironmentStore.getState().setWslDevelopmentEnvironmentStatus('running');
+    useBottomPanelStore.getState().showWslTerminalInPane('bottom-pane-1');
+
+    render(
+      <WorkspaceProvider>
+        <WorkspaceHarness />
+      </WorkspaceProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('current-project-name')).toHaveTextContent('chip_lab');
+      expect(vi.mocked(window.electronAPI!.onCloseRequested).mock.calls.length).toBeGreaterThan(0);
+    });
+
+    const closeRequestCalls = vi.mocked(window.electronAPI!.onCloseRequested).mock.calls;
+    const closeRequestHandler = closeRequestCalls[closeRequestCalls.length - 1]?.[0];
+
+    await act(async () => {
+      closeRequestHandler?.({ requestId: 11, action: 'quit' });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(window.electronAPI!.wsl.stopPristineEdaEnvironment).toHaveBeenCalled();
+      expect(window.electronAPI!.project.flushSession).toHaveBeenCalled();
+      expect(window.electronAPI?.resolveCloseRequest).toHaveBeenCalledWith(11, 'proceed');
+    });
+
+    expect(window.electronAPI!.terminal.kill).not.toHaveBeenCalledWith(WSL_TERMINAL_SESSION_KEY);
+    expect(useBottomPanelStore.getState().wslPaneOverride).toBeNull();
+    expect(useBottomPanelStore.getState().panes[0]?.content).toEqual({ kind: 'tab', tab: 'terminal' });
+    expect(window.electronAPI!.project.flushSession).toHaveBeenCalledWith(expect.objectContaining({
+      bottomPanelSession: expect.objectContaining({
+        panes: [
+          { content: { kind: 'tab', tab: 'terminal' }, id: 'bottom-pane-1', size: 100 },
+        ],
+      }),
+    }));
   });
 
   it('keeps the window-close listener registered once across workspace file updates', async () => {

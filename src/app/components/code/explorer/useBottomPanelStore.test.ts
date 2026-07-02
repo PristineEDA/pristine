@@ -107,6 +107,52 @@ describe('useBottomPanelStore', () => {
     expect(getStore().focusedPaneMeasuredWidth).toBe(Number.POSITIVE_INFINITY);
   });
 
+  it('temporarily overrides a pane with WSL terminal content and restores the previous terminal content', () => {
+    expect(getStore().showWslTerminalInPane('bottom-pane-1', 640)).toBe(true);
+
+    expect(getStore().focusedPaneId).toBe('bottom-pane-1');
+    expect(getStore().focusedPaneMeasuredWidth).toBe(640);
+    expect(getStore().wslPaneOverride).toEqual({
+      paneId: 'bottom-pane-1',
+      previousContent: { kind: 'tab', tab: 'terminal' },
+    });
+    expect(getStore().panes[0]?.content).toEqual({
+      kind: 'tab',
+      tab: 'terminal',
+      terminalProfile: 'wsl-pristine-eda',
+    });
+    expect(getStore().captureProjectBottomPanelSession().panes[0]?.content).toEqual({ kind: 'tab', tab: 'terminal' });
+
+    expect(getStore().restoreWslPaneOverride()).toBe(true);
+
+    expect(getStore().wslPaneOverride).toBeNull();
+    expect(getStore().panes[0]?.content).toEqual({ kind: 'tab', tab: 'terminal' });
+  });
+
+  it('does not force restore when the WSL pane was changed by the user', () => {
+    expect(getStore().showWslTerminalInPane('bottom-pane-1')).toBe(true);
+
+    getStore().updatePaneContent('bottom-pane-1', { kind: 'placeholder', icon: 'file', label: 'Placeholder A' });
+
+    expect(getStore().wslPaneOverride).toBeNull();
+    expect(getStore().restoreWslPaneOverride()).toBe(false);
+    expect(getStore().panes[0]?.content).toEqual({ kind: 'placeholder', icon: 'file', label: 'Placeholder A' });
+  });
+
+  it('clears WSL override when the overridden pane is removed', () => {
+    getStore().splitFocusedPane(splitWidth);
+    expect(getStore().showWslTerminalInPane('bottom-pane-2')).toBe(true);
+
+    const removed = getStore().removeFocusedPane();
+
+    expect(removed?.pane.id).toBe('bottom-pane-2');
+    expect(getStore().wslPaneOverride).toBeNull();
+    expect(getStore().restoreWslPaneOverride()).toBe(false);
+    expect(getStore().panes).toEqual([
+      { content: { kind: 'tab', tab: 'terminal' }, id: 'bottom-pane-1', size: 100 },
+    ]);
+  });
+
   it('normalizes invalid hydrated bottom pane payloads', () => {
     getStore().hydrateProjectBottomPanelSession({
       focusedPaneId: 'missing-pane',

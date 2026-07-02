@@ -3,12 +3,19 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
+import { resetBottomPanelStoreForTests, useBottomPanelStore } from './components/code/explorer/useBottomPanelStore';
+import {
+  ensureTerminalSession,
+  getTerminalSessionSnapshot,
+  resetTerminalSessionStoreForTests,
+} from './components/code/explorer/terminalSessionStore';
 import { EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX } from './components/code/shared/CodeWorkspaceShell';
 import { resetProjectConfigureStoreForTests } from './components/code/shared/useProjectConfigureStore';
 import { resetWorkspaceSessionStoreForTests } from './context/useWorkspaceSessionStore';
 import { resetWorkspaceGitStatusStoreForTests } from './git/workspaceGitStatus';
 import { resetProgressStoreForTests, useProgressStore } from './progress/useProgressStore';
 import { resetQuickOpenStoreForTests } from './useQuickOpenStore';
+import { WSL_TERMINAL_SESSION_KEY, resetWslDevelopmentEnvironmentStoreForTests } from './wsl/useWslDevelopmentEnvironmentStore';
 
 let renderRealActivityBar = false;
 
@@ -358,8 +365,11 @@ describe('App', () => {
     testUser = userEvent.setup();
     renderRealActivityBar = false;
     resetQuickOpenStoreForTests();
+    resetBottomPanelStoreForTests();
+    resetTerminalSessionStoreForTests();
     resetProjectConfigureStoreForTests();
     resetProgressStoreForTests();
+    resetWslDevelopmentEnvironmentStoreForTests();
     resetWorkspaceSessionStoreForTests();
     resetWorkspaceGitStatusStoreForTests();
     vi.clearAllMocks();
@@ -710,7 +720,7 @@ describe('App', () => {
     expect(window.electronAPI!.project.updateProjectConfig).toHaveBeenCalledWith(project.config);
   });
 
-  it('starts the WSL development environment from Run only after a project is available', async () => {
+  it('starts the WSL development environment from Run and restores the focused terminal pane on Pause', async () => {
     vi.mocked(window.electronAPI!.project.getCurrentProject).mockResolvedValueOnce(null);
     render(<App />);
 
@@ -742,12 +752,35 @@ describe('App', () => {
       expect(screen.getByTestId('mock-activity-run')).toBeEnabled();
     });
 
+    await act(async () => {
+      await ensureTerminalSession('bottom-pane-1');
+    });
+    expect(getTerminalSessionSnapshot('bottom-pane-1').sessionId).toBe('terminal-1');
+
     fireEvent.click(screen.getByTestId('mock-activity-run'));
 
     await waitFor(() => {
       expect(window.electronAPI!.wsl.startPristineEdaEnvironment).toHaveBeenCalledWith({ ubuntuDistro: 'Ubuntu-22.04' });
     });
     expect(screen.getByTestId('mock-activity-run')).toHaveAttribute('data-active', 'true');
+    expect(useBottomPanelStore.getState().panes[0]?.content).toEqual({
+      kind: 'tab',
+      tab: 'terminal',
+      terminalProfile: 'wsl-pristine-eda',
+    });
+    expect(getTerminalSessionSnapshot('bottom-pane-1').sessionId).toBe('terminal-1');
+
+    fireEvent.click(screen.getByTestId('mock-activity-run'));
+
+    await waitFor(() => {
+      expect(window.electronAPI!.wsl.stopPristineEdaEnvironment).toHaveBeenCalled();
+    });
+
+    expect(window.electronAPI!.terminal.kill).not.toHaveBeenCalledWith('terminal-1');
+    expect(window.electronAPI!.terminal.kill).not.toHaveBeenCalledWith(WSL_TERMINAL_SESSION_KEY);
+    expect(getTerminalSessionSnapshot('bottom-pane-1').sessionId).toBe('terminal-1');
+    expect(useBottomPanelStore.getState().panes[0]?.content).toEqual({ kind: 'tab', tab: 'terminal' });
+    expect(screen.getByTestId('mock-activity-run')).toHaveAttribute('data-active', 'false');
   });
 
   it('toggles the left, bottom, and right panels with Ctrl+B, Ctrl+J, and Ctrl+Alt+B', () => {

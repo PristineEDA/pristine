@@ -7830,6 +7830,15 @@ test('activity bar Run starts and stops the mocked WSL development environment',
   await expect(runButton).toBeEnabled({ timeout: UI_READY_TIMEOUT_MS });
   await expect(runButton).toHaveAttribute('aria-label', 'Run');
 
+  await openBottomTerminal(window);
+  await expect(window.getByTestId('terminal-host')).toHaveAttribute('data-terminal-pane-id', 'bottom-pane-1', {
+    timeout: UI_READY_TIMEOUT_MS,
+  });
+  await writeTerminalCommand(window, 'echo PRISTINE_WSL_RESTORE_MARKER');
+  await expect.poll(async () => readTerminalText(window), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toContain('PRISTINE_WSL_RESTORE_MARKER');
+
   await runButton.click();
   await expect(runButton).toHaveAttribute('aria-label', 'Pause', { timeout: UI_READY_TIMEOUT_MS });
   await expect(window.getByTestId('panel-bottom-panel')).toBeVisible({ timeout: UI_READY_TIMEOUT_MS });
@@ -7842,6 +7851,12 @@ test('activity bar Run starts and stops the mocked WSL development environment',
 
   await runButton.click();
   await expect(runButton).toHaveAttribute('aria-label', 'Run', { timeout: UI_READY_TIMEOUT_MS });
+  await expect(window.getByTestId('terminal-host')).toHaveAttribute('data-terminal-pane-id', 'bottom-pane-1', {
+    timeout: UI_READY_TIMEOUT_MS,
+  });
+  await expect.poll(async () => readTerminalText(window), {
+    timeout: UI_READY_TIMEOUT_MS,
+  }).toContain('PRISTINE_WSL_RESTORE_MARKER');
 
   await app.close();
 });

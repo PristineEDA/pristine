@@ -34,6 +34,7 @@ import { useWorkspaceSessionStore } from './useWorkspaceSessionStore';
 import { useBottomPanelStore } from '../components/code/explorer/useBottomPanelStore';
 import { useSidePanelSessionStore } from '../components/code/explorer/useSidePanelSessionStore';
 import { useExplorerTreeSessionStore } from '../workspace/useExplorerTreeSessionStore';
+import { stopWslDevelopmentEnvironmentAndRestore } from '../wsl/wslDevelopmentEnvironmentLifecycle';
 import type { WindowCloseRequest } from '../window/windowClose';
 import { refreshWorkspaceGitStatus } from '../git/workspaceGitStatus';
 import {
@@ -1620,6 +1621,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       void (async () => {
         const dirtyFileIds = fileStoreRef.current.dirtyFileIds;
         if (dirtyFileIds.length === 0) {
+          await stopWslDevelopmentEnvironmentAndRestore({ notifyOnError: true });
           await flushProjectSession();
           await electronApi.resolveCloseRequest(request.requestId, 'proceed');
           return;
@@ -1632,6 +1634,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           return;
         }
 
+        await stopWslDevelopmentEnvironmentAndRestore({ notifyOnError: true });
         await flushProjectSession();
         await electronApi.resolveCloseRequest(request.requestId, 'proceed');
       })();

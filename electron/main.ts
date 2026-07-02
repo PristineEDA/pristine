@@ -16,6 +16,7 @@ import { flushPendingConfigSave, getConfigValue } from './ipc/config.js';
 import { PROJECT_LAST_ROOT_CONFIG_KEY, disposeProjectService, tryOpenStartupProject } from './ipc/project.js';
 import { disposeLspSession } from './ipc/lsp.js';
 import { disposeAllTerminalSessions } from './ipc/terminal.js';
+import { stopPristineEdaEnvironment } from './ipc/wsl.js';
 import type { WindowCloseDecision, WindowCloseRequest } from '../src/app/window/windowClose.js';
 import type { FloatingInfoWindowMode } from '../src/app/window/floatingInfoWindow.js';
 import type { ProjectWindowState } from '../types/project.js';
@@ -824,6 +825,7 @@ if (!singleInstanceLock) {
 
   app.on('before-quit', () => {
     isQuitting = true;
+    void stopPristineEdaEnvironment().catch(() => undefined);
     flushPendingConfigSave();
     disposeProjectService(getProjectWindowState);
     disposeLspSession();

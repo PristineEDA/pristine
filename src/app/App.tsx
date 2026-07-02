@@ -68,11 +68,12 @@ import { preloadDeferredMainContentViews } from './mainContentViewPreload';
 import { useProjectConfigureStore } from './components/code/shared/useProjectConfigureStore';
 import { useBottomPanelStore } from './components/code/explorer/useBottomPanelStore';
 import { getConfiguredWslUbuntuDistro } from './components/code/shared/MenuBarSettingsDialog';
-import { getTerminalSessionSnapshot, subscribeTerminalSession, terminateTerminalSession } from './components/code/explorer/terminalSessionStore';
+import { getTerminalSessionSnapshot, subscribeTerminalSession } from './components/code/explorer/terminalSessionStore';
 import {
   WSL_TERMINAL_SESSION_KEY,
   useWslDevelopmentEnvironmentStore,
 } from './wsl/useWslDevelopmentEnvironmentStore';
+import { stopWslDevelopmentEnvironmentAndRestore } from './wsl/wslDevelopmentEnvironmentLifecycle';
 
 const WorkflowView = lazy(() => import('./components/workflow/WorkflowView').then((module) => ({ default: module.WorkflowView })));
 const WhiteboardView = lazy(() => import('./components/whiteboard/WhiteboardView').then((module) => ({ default: module.WhiteboardView })));
@@ -215,7 +216,7 @@ function AppLayout() {
   const setWslError = useWslDevelopmentEnvironmentStore((state) => state.setWslDevelopmentEnvironmentError);
   const setWslUbuntuDistro = useWslDevelopmentEnvironmentStore((state) => state.setWslUbuntuDistro);
   const focusedBottomPaneId = useBottomPanelStore((state) => state.focusedPaneId);
-  const updateBottomPaneContent = useBottomPanelStore((state) => state.updatePaneContent);
+  const showWslTerminalInPane = useBottomPanelStore((state) => state.showWslTerminalInPane);
   const [assistantThreadListExpanded, setAssistantThreadListExpanded] = useState(false);
   const explorerLeftPanelWidthPx = projectPanelWidths.explorerLeftPanel ?? EXPLORER_LEFT_PANEL_DEFAULT_WIDTH_PX;
   const explorerAssistantPanelWidthPx = projectPanelWidths.explorerRightPanel ?? EXPLORER_RIGHT_PANEL_DEFAULT_WIDTH_PX;
@@ -623,31 +624,16 @@ function AppLayout() {
   const openWslTerminalPane = useCallback(() => {
     setActiveView('explorer');
     setShowBottomPanel(true);
-    updateBottomPaneContent(focusedBottomPaneId, {
-      kind: 'tab',
-      tab: 'terminal',
-      terminalProfile: 'wsl-pristine-eda',
-    });
-  }, [focusedBottomPaneId, setActiveView, setShowBottomPanel, updateBottomPaneContent]);
+    showWslTerminalInPane(focusedBottomPaneId);
+  }, [focusedBottomPaneId, setActiveView, setShowBottomPanel, showWslTerminalInPane]);
 
   const stopWslDevelopmentEnvironment = useCallback(async () => {
     if (wslStatus === 'idle' || wslStatus === 'stopping') {
       return;
     }
 
-    setWslStatus('stopping');
-    await terminateTerminalSession(WSL_TERMINAL_SESSION_KEY);
-    const result = await window.electronAPI?.wsl?.stopPristineEdaEnvironment();
-
-    if (result && !result.ok) {
-      const errorMessage = result.error ?? 'Failed to stop Pristine WSL development environment.';
-      setWslError(errorMessage);
-      publishWslErrorNotification(errorMessage);
-      return;
-    }
-
-    setWslStatus('idle');
-  }, [publishWslErrorNotification, setWslError, setWslStatus, wslStatus]);
+    await stopWslDevelopmentEnvironmentAndRestore({ notifyOnError: true });
+  }, [wslStatus]);
 
   const handleRunWslDevelopmentEnvironment = useCallback(async () => {
     if (!hasOpenProject || wslStatus === 'checking' || wslStatus === 'installing' || wslStatus === 'starting' || wslStatus === 'stopping') {

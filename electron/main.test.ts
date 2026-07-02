@@ -188,6 +188,7 @@ const mocks = vi.hoisted(() => {
     mockFlushPendingConfigSave: vi.fn(),
     mockGetConfigValue: vi.fn<(key: string) => unknown>(() => null),
     mockDisposeProjectService: vi.fn(),
+    mockStopPristineEdaEnvironment: vi.fn(() => Promise.resolve({ ok: true })),
     mockRegisterAllHandlers: vi.fn(),
     mockSetProjectRoot: vi.fn(),
     mockSetupWindowStreams: vi.fn(),
@@ -244,6 +245,10 @@ vi.mock('./ipc/register.js', () => ({
 
 vi.mock('./ipc/terminal.js', () => ({
   disposeAllTerminalSessions: (...args: unknown[]) => mocks.mockDisposeAllTerminalSessions(...args),
+}));
+
+vi.mock('./ipc/wsl.js', () => ({
+  stopPristineEdaEnvironment: () => mocks.mockStopPristineEdaEnvironment(),
 }));
 
 vi.mock('./ipc/lsp.js', () => ({
@@ -303,6 +308,7 @@ async function importMain(options?: {
   mocks.mockCreateFromDataURL.mockClear();
   mocks.mockDisposeLspSession.mockClear();
   mocks.mockDisposeAllTerminalSessions.mockClear();
+  mocks.mockStopPristineEdaEnvironment.mockClear();
   mocks.mockDisposeProjectService.mockClear();
   mocks.mockFlushPendingConfigSave.mockClear();
   mocks.mockGetConfigValue.mockReset();
@@ -998,6 +1004,7 @@ describe('electron main entry', () => {
     expect(mocks.mockDisposeProjectService).toHaveBeenCalledTimes(1);
     expect(mocks.mockDisposeLspSession).toHaveBeenCalledTimes(1);
     expect(mocks.mockDisposeAllTerminalSessions).toHaveBeenCalledTimes(1);
+    expect(mocks.mockStopPristineEdaEnvironment).toHaveBeenCalledTimes(1);
     expect(trayInstances[0].destroy).toHaveBeenCalledTimes(1);
   });
 });
